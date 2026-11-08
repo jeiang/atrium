@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS drafts (
     in_reply_to TEXT NOT NULL DEFAULT '',
     refs TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'draft',
+    revision INTEGER NOT NULL DEFAULT 0,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL,
     sent_at REAL,

@@ -129,6 +129,7 @@ type activityRowData struct {
 type DraftView struct {
 	ID                 int64    `json:"id"`
 	Status             string   `json:"status"`
+	Revision           int64    `json:"revision"`
 	Account            string   `json:"account"`
 	InReplyToMessageID *int64   `json:"in_reply_to_message_id"`
 	ThreadID           *int64   `json:"thread_id"`
@@ -143,7 +144,7 @@ type DraftView struct {
 
 func draftView(row drafts.Row, unexpected []string) DraftView {
 	return DraftView{
-		ID: row.ID, Status: row.Status, Account: row.Account, InReplyToMessageID: row.InReplyToMessageID, ThreadID: row.ThreadID,
+		ID: row.ID, Status: string(row.Status), Revision: row.Revision, Account: row.Account, InReplyToMessageID: row.InReplyToMessageID, ThreadID: row.ThreadID,
 		UpdatedAt: row.UpdatedAt, Unexpected: unexpected, ToAddrs: row.ToAddrs, CcAddrs: row.CcAddrs, Subject: row.Subject,
 		Body: row.Body, SMTPResult: row.SMTPResult,
 	}

@@ -134,7 +134,7 @@ func TestServeRecoversStuckDraftsAndStopsOnCancel(t *testing.T) {
 	}
 	defer func() { _ = after.Close() }()
 	var status string
-	if err := after.Read.QueryRow("SELECT status FROM drafts").Scan(&status); err != nil || status != drafts.Unknown {
+	if err := after.Read.QueryRow("SELECT status FROM drafts").Scan(&status); err != nil || status != string(drafts.Unknown) {
 		t.Errorf("stuck draft status = %q, %v", status, err)
 	}
 }
@@ -247,14 +247,14 @@ func TestServeRecoversADraftThatGoesStaleWhileRunning(t *testing.T) {
 	waitForHealthz(t, "http://127.0.0.1:"+port)
 	status := ""
 	for range 200 {
-		if err := d.Read.QueryRow("SELECT status FROM drafts").Scan(&status); err == nil && status == drafts.Unknown {
+		if err := d.Read.QueryRow("SELECT status FROM drafts").Scan(&status); err == nil && status == string(drafts.Unknown) {
 			break
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
 	cancel()
 	<-done
-	if status != drafts.Unknown {
+	if status != string(drafts.Unknown) {
 		t.Errorf("draft status = %q, want %q", status, drafts.Unknown)
 	}
 }

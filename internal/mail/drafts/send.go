@@ -9,6 +9,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/mail/smtp"
 	"github.com/jeiang/atrium/internal/safety"
 )
@@ -54,21 +55,17 @@ func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Mess
 	return "copy filed in Sent", nil
 }
 
-func stripMsgID(id string) string {
-	out := msgidJunkRE.ReplaceAllString(id, "")
-	return out
-}
-
 func (s *Store) abandon(ctx context.Context, id int64, cause error) {
-	if _, err := s.exec(ctx, "UPDATE drafts SET status = ?, smtp_result = ?, updated_at = ? WHERE id = ?",
-		Draft, "send failed: "+cause.Error(), s.now(), id); err != nil {
+	if err := s.transition(ctx, id, Sending, Draft, func(u *updateSet) {
+		u.set("smtp_result", "send failed: "+cause.Error())
+	}); err != nil {
 		log.Warn(fmt.Sprintf("draft %d could not be reset after a failed send: %s", id, err))
 	}
 }
 
-func (s *Store) Send(ctx context.Context, id int64, reviewedAt float64) (Result, error) {
-	n, err := s.exec(ctx, "UPDATE drafts SET status = ?, updated_at = ? WHERE id = ? AND status = ? AND updated_at = ?",
-		Sending, s.now(), id, Draft, reviewedAt)
+func (s *Store) Send(ctx context.Context, id int64, reviewedRevision int64) (Result, error) {
+	n, err := s.exec(ctx, "UPDATE drafts SET status = ?, updated_at = ?, revision = revision + 1 WHERE id = ? AND status = ? AND revision = ?",
+		string(Sending), s.now(), id, string(Draft), reviewedRevision)
 	if err != nil {
 		return Result{}, err
 	}
@@ -90,16 +87,18 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedAt float64) (Result,
 	msg, refused, err := s.submit(ctx, draft)
 	var unknown *smtp.OutcomeUnknown
 	if errors.As(err, &unknown) {
-		if _, uerr := s.exec(ctx, "UPDATE drafts SET status = ?, smtp_result = ?, updated_at = ? WHERE id = ?",
-			Unknown, "send outcome unknown: "+unknown.Error(), s.now(), id); uerr != nil {
+		if uerr := s.transition(ctx, id, Sending, Unknown, func(u *updateSet) {
+			u.set("smtp_result", "send outcome unknown: "+unknown.Error())
+		}); uerr != nil {
 			return Result{}, uerr
 		}
 		return Result{}, OutcomeUnknown("the mail may have been sent (" + unknown.Error() + "); check before you choose Back to draft")
 	}
 	var serr smtp.SendError
 	if errors.As(err, &serr) {
-		if _, uerr := s.exec(ctx, "UPDATE drafts SET status = ?, smtp_result = ?, updated_at = ? WHERE id = ?",
-			Draft, "send failed: "+serr.Error(), s.now(), id); uerr != nil {
+		if uerr := s.transition(ctx, id, Sending, Draft, func(u *updateSet) {
+			u.set("smtp_result", "send failed: "+serr.Error())
+		}); uerr != nil {
 			return Result{}, uerr
 		}
 		return Result{}, serr
@@ -112,8 +111,11 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedAt float64) (Result,
 	if len(refused) > 0 {
 		result += "; refused: " + refusalsJSON(refused)
 	}
-	if _, err := s.exec(ctx, "UPDATE drafts SET status = ?, sent_at = ?, smtp_result = ?, updated_at = ?, sent_msgid = ? WHERE id = ?",
-		Sent, s.now(), result, s.now(), stripMsgID(msg.Get("Message-ID")), id); err != nil {
+	if err := s.transition(ctx, id, Sending, Sent, func(u *updateSet) {
+		u.set("sent_at", s.now())
+		u.set("smtp_result", result)
+		u.set("sent_msgid", mime.ParseMsgID(msg.Get("Message-ID")).Bare())
+	}); err != nil {
 		return Result{}, err
 	}
 	filed, err := s.fileSentCopy(ctx, draft.Account, msg)
@@ -121,7 +123,7 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedAt float64) (Result,
 		log.Warn(fmt.Sprintf("sent copy for draft %d not filed: %s", id, err))
 		filed = "Sent copy failed: " + err.Error()
 	}
-	if _, err := s.exec(ctx, "UPDATE drafts SET smtp_result = ? WHERE id = ?", result+"; "+filed, id); err != nil {
+	if _, err := s.exec(ctx, "UPDATE drafts SET smtp_result = ? WHERE id = ? AND status = ?", result+"; "+filed, id, string(Sent)); err != nil {
 		return Result{}, err
 	}
 	return Result{Refused: refused, Filed: filed}, nil
@@ -141,7 +143,8 @@ func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusal
 	msg := smtp.BuildMessage(sender, smtp.Fields{
 		ToAddrs: d.ToAddrs, CcAddrs: d.CcAddrs, Subject: d.Subject, Body: d.Body, InReplyTo: d.InReplyTo, Refs: d.Refs,
 	}, s.now(), makeID(domain))
-	refused, err := smtp.Send(ctx, s.Cfg, d.Account, msg, s.SMTP)
+	recipients := append(addresses(d.ToAddrs), addresses(d.CcAddrs)...)
+	refused, err := smtp.Send(ctx, s.Cfg, d.Account, msg, recipients, s.SMTP)
 	return msg, refused, err
 }
 

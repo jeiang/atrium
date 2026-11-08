@@ -3,7 +3,6 @@ package drafts
 import (
 	"context"
 	"database/sql"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +10,7 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -27,18 +27,31 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
+type Status string
+
 const (
-	Draft     = "draft"
-	Sending   = "sending"
-	Sent      = "sent"
-	Discarded = "discarded"
-	Unknown   = "unknown"
+	Draft     Status = "draft"
+	Sending   Status = "sending"
+	Sent      Status = "sent"
+	Discarded Status = "discarded"
+	Unknown   Status = "unknown"
+	Invalid   Status = "invalid"
 
 	SendingStaleSeconds = 600
 	maxAddresses        = 2000
 )
 
-var Statuses = [...]string{Draft, Sending, Sent, Discarded, Unknown}
+func (s Status) Valid() bool {
+	switch s {
+	case Draft, Sending, Sent, Discarded, Unknown, Invalid:
+		return true
+	}
+	return false
+}
+
+type Stale struct{}
+
+func (Stale) Error() string { return "draft changed, review again" }
 
 var log = logx.Logger("atrium.drafts")
 
@@ -61,7 +74,8 @@ type Row struct {
 	InReplyToMessageID *int64   `json:"in_reply_to_message_id"`
 	InReplyTo          string   `json:"in_reply_to"`
 	Refs               string   `json:"refs"`
-	Status             string   `json:"status"`
+	Status             Status   `json:"status"`
+	Revision           int64    `json:"revision"`
 	CreatedAt          float64  `json:"created_at"`
 	UpdatedAt          float64  `json:"updated_at"`
 	SentAt             *float64 `json:"sent_at"`
@@ -86,7 +100,7 @@ func (s *Store) now() float64 {
 }
 
 const columns = "id, thread_id, account, to_addrs, cc_addrs, subject, body, in_reply_to_message_id, in_reply_to, refs, " +
-	"status, created_at, updated_at, sent_at, smtp_result, sent_msgid"
+	"status, revision, created_at, updated_at, sent_at, smtp_result, sent_msgid"
 
 type scanner interface{ Scan(dest ...any) error }
 
@@ -95,8 +109,9 @@ func scanRow(sc scanner) (Row, error) {
 	var thread, replyTo sql.NullInt64
 	var sentAt sql.NullFloat64
 	var result, msgid sql.NullString
+	var status string
 	err := sc.Scan(&r.ID, &thread, &r.Account, &r.ToAddrs, &r.CcAddrs, &r.Subject, &r.Body, &replyTo, &r.InReplyTo, &r.Refs,
-		&r.Status, &r.CreatedAt, &r.UpdatedAt, &sentAt, &result, &msgid)
+		&status, &r.Revision, &r.CreatedAt, &r.UpdatedAt, &sentAt, &result, &msgid)
 	if err != nil {
 		return Row{}, err
 	}
@@ -114,6 +129,10 @@ func scanRow(sc scanner) (Row, error) {
 	}
 	if msgid.Valid {
 		r.SentMsgID = &msgid.String
+	}
+	r.Status = Status(status)
+	if !r.Status.Valid() {
+		r.Status = Invalid
 	}
 	return r, nil
 }
@@ -149,7 +168,7 @@ func (s *Store) Get(ctx context.Context, id int64) (*Row, error) {
 func (s *Store) ForMessage(ctx context.Context, messageID int64) (*Row, error) {
 	r, err := scanRow(s.DB.Read.QueryRowContext(ctx,
 		"SELECT d.id, d.thread_id, d.account, d.to_addrs, d.cc_addrs, d.subject, d.body, d.in_reply_to_message_id, "+
-			"d.in_reply_to, d.refs, d.status, d.created_at, d.updated_at, d.sent_at, d.smtp_result, d.sent_msgid "+
+			"d.in_reply_to, d.refs, d.status, d.revision, d.created_at, d.updated_at, d.sent_at, d.smtp_result, d.sent_msgid "+
 			"FROM drafts d JOIN messages m ON m.msgid = d.sent_msgid WHERE m.id = ? AND d.sent_msgid != '' AND d.thread_id IS NOT NULL",
 		messageID))
 	if errors.Is(err, sql.ErrNoRows) {
@@ -161,17 +180,14 @@ func (s *Store) ForMessage(ctx context.Context, messageID int64) (*Row, error) {
 	return &r, nil
 }
 
-func (s *Store) List(ctx context.Context, status string, limit int) ([]Row, error) {
+func (s *Store) List(ctx context.Context, status Status, limit int) ([]Row, error) {
 	if status != "" {
-		return s.queryRows(ctx, "SELECT "+columns+" FROM drafts WHERE status = ? ORDER BY updated_at DESC LIMIT ?", status, limit)
+		return s.queryRows(ctx, "SELECT "+columns+" FROM drafts WHERE status = ? ORDER BY updated_at DESC LIMIT ?", string(status), limit)
 	}
 	return s.queryRows(ctx, "SELECT "+columns+" FROM drafts ORDER BY updated_at DESC LIMIT ?", limit)
 }
 
-var (
-	lineBreakRE = regexp.MustCompile(`[\r\n]`)
-	msgidJunkRE = regexp.MustCompile(`[<>\s]`)
-)
+var lineBreakRE = regexp.MustCompile(`[\r\n]`)
 
 func accountError() Error {
 	names := make([]string, len(config.Accounts()))
@@ -234,64 +250,19 @@ func NormalizeAddresses(name string, value any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	parsed := mime.ParseAddresses(text)
-	if len(parsed) == 0 {
+	parsed, err := mime.ParseAddressList(text)
+	if err != nil || len(parsed) == 0 {
 		return "", Error(name + " has an invalid address")
-	}
-	for _, p := range parsed {
-		if p.Address == "" || !strings.Contains(p.Address, "@") || strings.Contains(p.Address, " ") {
-			return "", Error(name + " has an invalid address")
-		}
 	}
 	out := make([]string, len(parsed))
 	for i, p := range parsed {
-		if p.Name == "" {
-			out[i] = p.Address
-			continue
-		}
-		f, err := formatAddr(p.Name, p.Address)
+		f, err := mime.FormatAddress(p)
 		if err != nil {
-			return "", err
+			return "", Error(name + " has an invalid address")
 		}
 		out[i] = f
 	}
 	return strings.Join(out, ", "), nil
-}
-
-func formatAddr(name, address string) (string, error) {
-	if !isASCII(address) {
-		return "", Error("address must be ASCII")
-	}
-	if !isASCII(name) {
-		return headerEncode([]byte(name)) + " <" + address + ">", nil
-	}
-	quote := ""
-	if strings.ContainsAny(name, `][\()<>@,:;".`) {
-		quote = `"`
-	}
-	name = strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(name)
-	return quote + name + quote + " <" + address + ">", nil
-}
-
-func qpHeaderByte(c byte) string {
-	switch {
-	case c == ' ':
-		return "_"
-	case c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || strings.IndexByte("-!*+/", c) >= 0:
-		return string(c)
-	}
-	return fmt.Sprintf("=%02X", c)
-}
-
-func headerEncode(b []byte) string {
-	var q strings.Builder
-	for _, c := range b {
-		q.WriteString(qpHeaderByte(c))
-	}
-	if base64.StdEncoding.EncodedLen(len(b)) < q.Len() {
-		return "=?utf-8?b?" + base64.StdEncoding.EncodeToString(b) + "?="
-	}
-	return "=?utf-8?q?" + q.String() + "?="
 }
 
 type reply struct {
@@ -360,23 +331,21 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 			headers["From"] = fromName + " <" + fromAddr + ">"
 		}
 	}
-	id := stripMsgID(msgid.String)
+	id := mime.ParseMsgID(msgid.String)
 	if id == "" {
-		id = stripMsgID(headers["Message-ID"])
+		id = mime.ParseMsgID(headers["Message-ID"])
 	}
-	inReplyTo := ""
-	if id != "" {
-		inReplyTo = "<" + id + ">"
-	}
-	references := ""
+	inReplyTo := id.String()
+	var chain []mime.MsgID
 	if raw != nil {
-		references = strings.Join(strings.Fields(raw.Header("References")), " ")
+		chain = mime.ParseMsgIDs(raw.Header("References"))
 	}
-	var chain []string
-	for _, x := range [...]string{references, inReplyTo} {
-		if x != "" {
-			chain = append(chain, x)
-		}
+	if id != "" && !slices.Contains(chain, id) {
+		chain = append(chain, id)
+	}
+	refs := make([]string, len(chain))
+	for i, mid := range chain {
+		refs[i] = mid.String()
 	}
 	people := []string{fromAddr, headers["From"], headers["To"], headers["Cc"], headers["Reply-To"]}
 	if toAddrs.String != "" {
@@ -388,11 +357,11 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 	}
 	participants := map[string]bool{}
 	for _, p := range people {
-		for _, a := range smtp.SplitAddresses(p) {
+		for _, a := range addresses(p) {
 			participants[strings.ToLower(a)] = true
 		}
 	}
-	return reply{inReplyTo: inReplyTo, refs: strings.Join(chain, " "), participants: participants, account: account}, nil
+	return reply{inReplyTo: inReplyTo, refs: strings.Join(refs, " "), participants: participants, account: account}, nil
 }
 
 func (s *Store) limits(ctx context.Context) (maxBody, maxSubject int, err error) {
@@ -444,8 +413,8 @@ func (s *Store) Create(ctx context.Context, threadID *int64, account string, to,
 	ts := s.now()
 	res, err := s.DB.Write.ExecContext(ctx,
 		"INSERT INTO drafts (thread_id, account, to_addrs, cc_addrs, subject, body, in_reply_to_message_id, "+
-			"in_reply_to, refs, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		threadID, account, toAddrs, ccAddrs, subject, text, replyID, r.inReplyTo, r.refs, Draft, ts, ts)
+			"in_reply_to, refs, status, revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		threadID, account, toAddrs, ccAddrs, subject, text, replyID, r.inReplyTo, r.refs, string(Draft), 1, ts, ts)
 	if err != nil {
 		return 0, err
 	}
@@ -568,11 +537,47 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 		return nil, Error("nothing to change")
 	}
 	set("updated_at", s.now())
-	args = append(args, id, Draft)
-	if _, err := s.DB.Write.ExecContext(ctx, "UPDATE drafts SET "+strings.Join(sets, ", ")+" WHERE id = ? AND status = ?", args...); err != nil {
+	sets = append(sets, "revision = revision + 1")
+	args = append(args, id, string(Draft))
+	res, err := s.DB.Write.ExecContext(ctx, "UPDATE drafts SET "+strings.Join(sets, ", ")+" WHERE id = ? AND status = ?", args...)
+	if err != nil {
 		return nil, err
 	}
+	if n, err := res.RowsAffected(); err != nil {
+		return nil, err
+	} else if n == 0 {
+		return nil, Stale{}
+	}
 	return s.Get(ctx, id)
+}
+
+type updateSet struct {
+	sets []string
+	args []any
+}
+
+func (u *updateSet) set(col string, v any) {
+	u.sets = append(u.sets, col+" = ?")
+	u.args = append(u.args, v)
+}
+
+func (s *Store) transition(ctx context.Context, id int64, from, to Status, apply func(*updateSet)) error {
+	u := &updateSet{}
+	u.set("status", string(to))
+	u.set("updated_at", s.now())
+	u.sets = append(u.sets, "revision = revision + 1")
+	if apply != nil {
+		apply(u)
+	}
+	args := append(u.args, id, string(from))
+	n, err := s.exec(ctx, "UPDATE drafts SET "+strings.Join(u.sets, ", ")+" WHERE id = ? AND status = ?", args...)
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return Stale{}
+	}
+	return nil
 }
 
 func (s *Store) exec(ctx context.Context, query string, args ...any) (int64, error) {
@@ -584,22 +589,22 @@ func (s *Store) exec(ctx context.Context, query string, args ...any) (int64, err
 }
 
 func (s *Store) Discard(ctx context.Context, id int64) error {
-	n, err := s.exec(ctx, "UPDATE drafts SET status = ?, updated_at = ? WHERE id = ? AND status = ?", Discarded, s.now(), id, Draft)
-	if err != nil {
+	if err := s.transition(ctx, id, Draft, Discarded, nil); err != nil {
+		var stale Stale
+		if errors.As(err, &stale) {
+			return Error("only an unsent draft can be discarded")
+		}
 		return err
-	}
-	if n == 0 {
-		return Error("only an unsent draft can be discarded")
 	}
 	return nil
 }
 
 func (s *Store) RecoverStuck(ctx context.Context) (int64, error) {
-	return s.exec(ctx, "UPDATE drafts SET status = ?, smtp_result = ?, updated_at = ? WHERE status = ? AND updated_at < ?",
-		Unknown, "send interrupted; outcome unknown", s.now(), Sending, s.now()-SendingStaleSeconds)
+	return s.exec(ctx, "UPDATE drafts SET status = ?, smtp_result = ?, updated_at = ?, revision = revision + 1 WHERE status = ? AND updated_at < ?",
+		string(Unknown), "send interrupted; outcome unknown", s.now(), string(Sending), s.now()-SendingStaleSeconds)
 }
 
-func (s *Store) ResolveUnknown(ctx context.Context, id int64, status string) error {
+func (s *Store) ResolveUnknown(ctx context.Context, id int64, status Status) error {
 	if status != Sent && status != Draft {
 		return Error("an unknown draft can only be marked sent or returned to draft")
 	}
@@ -608,9 +613,9 @@ func (s *Store) ResolveUnknown(ctx context.Context, id int64, status string) err
 		note = "marked sent by operator"
 	}
 	n, err := s.exec(ctx,
-		"UPDATE drafts SET status = ?, sent_at = CASE WHEN ? = ? THEN ? ELSE sent_at END, smtp_result = ?, updated_at = ? "+
+		"UPDATE drafts SET status = ?, sent_at = CASE WHEN ? = ? THEN ? ELSE sent_at END, smtp_result = ?, updated_at = ?, revision = revision + 1 "+
 			"WHERE id = ? AND status = ?",
-		status, status, Sent, s.now(), note, s.now(), id, Unknown)
+		string(status), string(status), string(Sent), s.now(), note, s.now(), id, string(Unknown))
 	if err != nil {
 		return err
 	}
@@ -633,8 +638,8 @@ func (s *Store) UnexpectedRecipients(ctx context.Context, d Row) ([]string, erro
 	if err != nil {
 		return nil, err
 	}
-	to := smtp.SplitAddresses(d.ToAddrs)
-	cc := smtp.SplitAddresses(d.CcAddrs)
+	to := addresses(d.ToAddrs)
+	cc := addresses(d.CcAddrs)
 	seen := map[string]bool{}
 	for _, a := range append(to, cc...) {
 		if seen[a] {
@@ -648,13 +653,18 @@ func (s *Store) UnexpectedRecipients(ctx context.Context, d Row) ([]string, erro
 	return out, nil
 }
 
-func isASCII(s string) bool {
-	for i := range len(s) {
-		if s[i] >= 0x80 {
-			return false
+func addresses(text string) []string {
+	parsed, err := mime.ParseAddressList(text)
+	if err != nil {
+		return nil
+	}
+	out := make([]string, 0, len(parsed))
+	for _, a := range parsed {
+		if a.Address != "" {
+			out = append(out, a.Address)
 		}
 	}
-	return true
+	return out
 }
 
 func truthy(v any) bool {

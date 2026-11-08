@@ -7,11 +7,8 @@ import (
 	"strings"
 	"time"
 
-	"regexp"
-
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail/mime"
 )
 
 const (
@@ -33,28 +30,10 @@ func SenderAddress(account, user string) string {
 	return user
 }
 
-var commaRunRE = regexp.MustCompile(`[\s,]*,[\s,]*`)
-
-func SplitAddresses(text string) []string {
-	text = commaRunRE.ReplaceAllString(text, ", ")
-	text = strings.Trim(strings.TrimSpace(text), ",")
-	out := []string{}
-	for _, a := range mime.ParseAddresses(text) {
-		if strings.Contains(a.Address, "@") && !strings.Contains(a.Address, " ") {
-			out = append(out, a.Address)
-		}
-	}
-	return out
-}
-
-func Send(ctx context.Context, creds Credentials, account string, msg *Message, factory Factory) (Refusals, error) {
+func Send(ctx context.Context, creds Credentials, account string, msg *Message, recipients []string, factory Factory) (Refusals, error) {
 	user, password, ok := creds.Credential(account)
 	if !ok {
 		return nil, SendError(account + " is not configured: no enabled account with a login and password")
-	}
-	var recipients []string
-	for _, h := range [...]string{"To", "Cc"} {
-		recipients = append(recipients, SplitAddresses(msg.Get(h))...)
 	}
 	if len(recipients) == 0 {
 		return nil, SendError("no recipients")
