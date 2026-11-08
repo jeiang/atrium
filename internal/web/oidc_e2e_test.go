@@ -5,17 +5,13 @@ import (
 	"context"
 	"net/http"
 	"net/url"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/auth/oidc/oidctest"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
-	"github.com/jeiang/atrium/internal/testutil/golden"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -660,62 +656,6 @@ func TestOIDCProviderUnreachable(t *testing.T) {
 	expect(t, b.startLogin(""), http.StatusBadGateway, "The provider did not respond.")
 	r.idp.Down = false
 	r.browser().mustSignIn(r, "admin")
-}
-
-func TestOIDCSessionTablesMigrateAGoldenDatabase(t *testing.T) {
-	ctx := context.Background()
-	src := filepath.Join(golden.Dir(), "atrium.db")
-	data, err := os.ReadFile(src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	path := filepath.Join(t.TempDir(), "atrium.db")
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		t.Fatal(err)
-	}
-	d, err := db.Connect(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = d.Close() })
-	tables := []string{"threads", "messages", "settings", "proposals", "usage"}
-	counts := func() map[string]int {
-		out := map[string]int{}
-		for _, table := range tables {
-			var n int
-			if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table).Scan(&n); err != nil {
-				continue
-			}
-			out[table] = n
-		}
-		return out
-	}
-	before := counts()
-	if err := db.Migrate(ctx, d, path); err != nil {
-		t.Fatal(err)
-	}
-	after := counts()
-	for table, n := range before {
-		if after[table] != n {
-			t.Fatalf("%s rows changed: %d -> %d", table, n, after[table])
-		}
-	}
-	if len(before) == 0 {
-		t.Fatal("golden database holds none of the expected tables")
-	}
-	r := newRig(t, rigOpts{preset: "generic", db: d})
-	r.idp.AddUser(oidctest.User{Name: "admin", Groups: []string{"atrium_admin"}})
-	b := r.browser()
-	b.mustSignIn(r, "admin")
-	expect(t, b.get("/settings/ping"), http.StatusOK, "admin=yes")
-	var applied int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = 8").Scan(&applied); err != nil || applied != 1 {
-		t.Fatalf("migration 8 applied %d: %v", applied, err)
-	}
-	if err := db.Migrate(ctx, d, path); err != nil {
-		t.Fatalf("second migrate: %v", err)
-	}
-	expect(t, b.get("/ping"), http.StatusOK)
 }
 
 func runServe(t *testing.T, args ...string) (int, string) {

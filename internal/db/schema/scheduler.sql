@@ -14,7 +14,8 @@ CREATE TABLE IF NOT EXISTS jobs (
     created_by TEXT NOT NULL,
     created_in_thread INTEGER,
     created_at REAL NOT NULL,
-    last_run_id INTEGER
+    last_run_id INTEGER,
+    prompt_by TEXT
 );
 CREATE INDEX IF NOT EXISTS jobs_due ON jobs (enabled, cancelled, next_due);
 CREATE TABLE IF NOT EXISTS job_runs (

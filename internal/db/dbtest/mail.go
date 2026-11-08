@@ -10,20 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-func Mail(t testing.TB) *db.DB {
-	t.Helper()
-	d := Schema(t)
-	for i, account := range []string{"icloud", "gmail"} {
-		if _, err := d.Write.Exec("INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", account, account); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := d.Write.Exec("INSERT INTO mailboxes (id, account, name, imap_name, role) VALUES (?, ?, 'box', 'box', 'filed')", i+1, account); err != nil {
-			t.Fatal(err)
-		}
-	}
-	return d
-}
-
 func AddMessage(t testing.TB, d *db.DB, uid int, body string, fields map[string]any) int64 {
 	t.Helper()
 	row := map[string]any{

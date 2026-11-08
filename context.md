@@ -102,7 +102,13 @@ not claims about the running application.
   recording the retired key id in `db_key_history`; it refuses unless it can
   take exclusive access, so the atrium units and timers using the database must be stopped), writes encrypted
   DB-only backups through the SQLite backup API, runs SQL from standard
-  input, and checks integrity with FTS5 and vec0 counts. Every settings write and secret change appends
+  input, and checks integrity with FTS5 and vec0 counts. The v2 schema is
+  one baseline in `internal/db/schema/`, edited in place until v2 ships and
+  additive afterwards. `atrium db import-v1` is the only path from a v1
+  database: it copies the learned rules, corrections, routing decisions and
+  the unsent message history their derivation reads into a fresh v2
+  database; mail, threads, drafts, proposals, media, Notion, calendar and
+  settings are rebuilt by re-sync or re-entry. Every settings write and secret change appends
   a row to the append-only `settings_audit` table (old and new value, or
   only `changed` for secrets; actor and source), listed read-only in
   `/activity`. Known secret values are scrubbed from log output and

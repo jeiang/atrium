@@ -59,8 +59,8 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 	if err := d.Read.QueryRow("SELECT value FROM secrets WHERE name = ?", secrets.ActionLinkKey).Scan(&stored); err != nil || stored != value {
 		t.Fatalf("stored secret = %q, %v", stored, err)
 	}
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = 3").Scan(&versions); err != nil || versions != 1 {
-		t.Fatalf("migration 3 rows = %d, %v", versions, err)
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = 1").Scan(&versions); err != nil || versions != 1 {
+		t.Fatalf("baseline migration rows = %d, %v", versions, err)
 	}
 
 	if del := runSecrets(t, "", "delete", secrets.ActionLinkKey); del.code != cli.ExitOK || del.stdout != "action_link_key: unset\n" {

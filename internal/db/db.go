@@ -27,12 +27,8 @@ const (
 
 var log = logx.Logger("atrium.db")
 
-func connPragmas(foreignKeys bool) []string {
-	fk := "PRAGMA foreign_keys = OFF"
-	if foreignKeys {
-		fk = "PRAGMA foreign_keys = ON"
-	}
-	return []string{busyPragma(busyTimeout), fk, "PRAGMA synchronous = FULL", "PRAGMA journal_size_limit = 67108864", "PRAGMA temp_store = MEMORY"}
+func connPragmas() []string {
+	return []string{busyPragma(busyTimeout), "PRAGMA foreign_keys = ON", "PRAGMA synchronous = FULL", "PRAGMA journal_size_limit = 67108864", "PRAGMA temp_store = MEMORY"}
 }
 
 func busyPragma(d time.Duration) string {
@@ -73,13 +69,9 @@ type DB struct {
 
 func (d *DB) Encrypted() bool { return d.encrypted }
 
-func Connect(path string, opts ...Option) (*DB, error) { return connect(path, true, opts) }
+func Connect(path string, opts ...Option) (*DB, error) { return connect(path, opts) }
 
-func ConnectNoForeignKeys(path string, opts ...Option) (*DB, error) {
-	return connect(path, false, opts)
-}
-
-func connect(path string, foreignKeys bool, opts []Option) (*DB, error) {
+func connect(path string, opts []Option) (*DB, error) {
 	if strings.ContainsAny(path, "?#") {
 		return nil, fmt.Errorf("db: path %q contains '?' or '#'", path)
 	}
@@ -98,7 +90,7 @@ func connect(path string, foreignKeys bool, opts []Option) (*DB, error) {
 	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
 		return nil, err
 	}
-	pragmas := connPragmas(foreignKeys)
+	pragmas := connPragmas()
 	w := Open(writeDSN, append(append([]string{}, pragmas...), cachePragma(smallCacheKiB))...)
 	w.SetMaxOpenConns(1)
 	if err := guardEngine(w, key); err != nil {
