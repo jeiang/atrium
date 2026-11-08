@@ -24,7 +24,7 @@ func (s *Set) enabled(name string) bool {
 }
 
 func (s *Set) Pages() []web.Page {
-	pages := []web.Page{{Globals: map[string]any{"module_enabled": s.enabled}}, s.modulesPage()}
+	pages := []web.Page{{Globals: map[string]any{"module_enabled": s.enabled}}}
 	for _, r := range s.regs {
 		for _, p := range r.Pages {
 			if p.Module == nil && p.Start == nil && len(p.Nav) == 0 {

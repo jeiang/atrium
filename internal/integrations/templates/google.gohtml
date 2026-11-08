@@ -60,6 +60,7 @@
       <span class="badge" data-variant="{{if eq $d.Health "ok"}}secondary{{else if eq $d.Health "untested"}}outline{{else}}destructive{{end}}">{{replace "_" " " (or $d.Health "untested")}}</span>
       {{with $d.Reason}}<span class="text-xs text-muted-foreground">{{.}}</span>{{end}}
     </div>
+    {{template "module_hold" $d.Hold}}
     <p class="text-xs text-muted-foreground">If the OAuth consent screen is in <strong>Testing</strong>, Google expires refresh tokens after 7 days. Publish the app to Production for long-lived tokens.</p>
     <form method="post" action="/settings/integrations/google/test">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">

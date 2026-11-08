@@ -303,7 +303,6 @@ func TestServeRendersAssistantPages(t *testing.T) {
 		{"/library/wiki", 200, "No wiki pages yet"},
 		{"/settings/assistant", 200, "Default effort"},
 		{"/settings/usage", 200, "No usage yet"},
-		{"/settings/subagents", 200, `data-agent="mail"`},
 		{"/settings/notifications", 200, "Channels"},
 	} {
 		status, body, _ := fetch(t, client, "GET", base+tc.path, nil)

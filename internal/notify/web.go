@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
@@ -35,6 +36,7 @@ type listing struct {
 	Encrypted bool        `json:"encrypted"`
 	Error     string      `json:"error"`
 	Push      pushListing `json:"push"`
+	Phone     any         `json:"phone"`
 }
 
 type pushListing struct {
@@ -53,16 +55,25 @@ const (
 	inboxPage = "/inbox"
 )
 
-type handlers struct{ d *web.Deps }
+type Section func(context.Context, db.Querier) (any, error)
 
-func Module(r chi.Router, d *web.Deps) {
+type handlers struct {
+	d     *web.Deps
+	phone Section
+}
+
+func Module(phone Section) web.Module {
+	return func(_ chi.Router, d *web.Deps) { serve(d, phone) }
+}
+
+func serve(d *web.Deps, phone Section) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
 		watchStale(d.Ctx, d.DB, d.Env, d.Stopping)
 	}()
 	d.OnClose(func() { <-done })
-	h := handlers{d}
+	h := handlers{d, phone}
 	d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
 		if !f.Auth.Admin {
 			return nil
@@ -128,6 +139,9 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toa
 	data.Push.Subject = subject != ""
 	if data.Push.Key, err = PushPublicKey(ctx, h.d.DB.Write); err != nil {
 		data.Push.Problem = err.Error()
+	}
+	if data.Phone, err = h.phone(ctx, h.d.DB.Read); err != nil {
+		panic(err)
 	}
 	f, err := h.d.Render.Frame(r, "settings", data)
 	if err != nil {

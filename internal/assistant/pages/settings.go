@@ -9,24 +9,15 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
-	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 const settingsFrame = "settings"
-
-func init() {
-	settings.Claim("/settings/assistant", assistant.KeyDefaultModel, assistant.KeyDefaultEffort, assistant.KeyDefaultContextLimit)
-	for _, e := range prompts.Editables {
-		settings.Claim("/settings/prompts", e.Key)
-	}
-}
 
 type AssistantData struct {
 	Models        []pricing.Model `json:"models"`
@@ -51,13 +42,6 @@ func (p *pages) settingsRoutes(r chi.Router) {
 	p.deps.Admin(http.MethodGet, "/settings/assistant", p.assistantSettings)
 	p.deps.Admin(http.MethodPost, "/settings/assistant", p.assistantSave)
 	p.deps.Admin(http.MethodGet, "/settings/usage", p.usagePage)
-	p.deps.Admin(http.MethodGet, "/settings/subagents", p.subagentsIndex)
-	p.deps.Admin(http.MethodPost, "/settings/subagents", p.subagentSave)
-	p.deps.Admin(http.MethodPost, "/settings/subagents/{name}/toggle", p.subagentToggle)
-	p.deps.Admin(http.MethodPost, "/settings/subagents/{name}/delete", p.subagentDelete)
-	p.deps.Admin(http.MethodGet, "/settings/prompts", p.promptsIndex)
-	p.deps.Admin(http.MethodPost, "/settings/prompts/{key}", p.promptSave)
-	p.deps.Admin(http.MethodPost, "/settings/prompts/{key}/reset", p.promptReset)
 }
 
 func (p *pages) settings(w http.ResponseWriter, r *http.Request, status int, name string, data any, toast *tpl.Toast) {

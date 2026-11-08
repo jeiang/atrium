@@ -13,6 +13,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/actionlink"
 	"github.com/jeiang/atrium/internal/actionlink/policy"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
@@ -29,26 +30,27 @@ func Templates() fs.FS {
 	return sub
 }
 
-const page = "/settings/phone-actions"
+const (
+	page = "/settings/phone-actions"
+	back = "/settings/notifications#phone-actions"
+)
 
 type kindRow struct {
-	Name    string
-	On      bool
-	WebOnly bool
+	Name    string `json:"name"`
+	On      bool   `json:"on"`
+	WebOnly bool   `json:"web_only"`
 }
 
 type listing struct {
-	Enabled     bool
-	Kinds       []kindRow
-	Outstanding int
-	Error       string
+	Enabled     bool      `json:"enabled"`
+	Kinds       []kindRow `json:"kinds"`
+	Outstanding int       `json:"outstanding"`
 }
 
 type handlers struct{ d *web.Deps }
 
 func Module(r chi.Router, d *web.Deps) {
 	h := handlers{d}
-	d.Admin(http.MethodGet, page, h.index)
 	d.Admin(http.MethodPost, page, h.save)
 	d.Admin(http.MethodPost, page+"/revoke", h.revoke)
 }
@@ -59,14 +61,14 @@ func (h handlers) ctx(r *http.Request) context.Context {
 
 func now() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
-func (h handlers) load(ctx context.Context) (listing, error) {
-	pol, err := policy.Load(ctx, h.d.DB.Read)
+func Load(ctx context.Context, q db.Querier) (any, error) {
+	pol, err := policy.Load(ctx, q)
 	if err != nil {
-		return listing{}, err
+		return nil, err
 	}
-	outstanding, err := actionlink.Outstanding(ctx, h.d.DB.Read, now())
+	outstanding, err := actionlink.Outstanding(ctx, q, now())
 	if err != nil {
-		return listing{}, err
+		return nil, err
 	}
 	names := map[string]bool{}
 	for _, kind := range policy.DefaultKinds {
@@ -84,15 +86,6 @@ func (h handlers) load(ctx context.Context) (listing, error) {
 	}
 	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
 	return listing{Enabled: pol.Enabled, Kinds: rows, Outstanding: outstanding}, nil
-}
-
-func (h handlers) index(w http.ResponseWriter, r *http.Request) {
-	data, err := h.load(r.Context())
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	h.render(w, r, data)
 }
 
 func (h handlers) save(w http.ResponseWriter, r *http.Request) {
@@ -116,7 +109,7 @@ func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	http.Redirect(w, r, page, http.StatusSeeOther)
+	http.Redirect(w, r, back, http.StatusSeeOther)
 }
 
 func (h handlers) revoke(w http.ResponseWriter, r *http.Request) {
@@ -124,16 +117,5 @@ func (h handlers) revoke(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	http.Redirect(w, r, page, http.StatusSeeOther)
-}
-
-func (h handlers) render(w http.ResponseWriter, r *http.Request, data listing) {
-	f, err := h.d.Render.Frame(r, "settings", data)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	if err := h.d.Render.Page(w, r, http.StatusOK, "phone_actions.gohtml", f); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-	}
+	http.Redirect(w, r, back, http.StatusSeeOther)
 }

@@ -17,6 +17,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
@@ -37,11 +38,12 @@ type googleCapability struct {
 	Label  string `json:"label"`
 	Scope  string `json:"scope"`
 	Secret string `json:"secret"`
+	Module string `json:"module"`
 }
 
 var googleCapabilities = []googleCapability{
-	{"calendar", "Calendar", "https://www.googleapis.com/auth/calendar.events", secrets.GoogleCalendarRefreshToken},
-	{"gmail", "Gmail", "https://mail.google.com/", secrets.GoogleGmailRefreshToken},
+	{"calendar", "Calendar", "https://www.googleapis.com/auth/calendar.events", secrets.GoogleCalendarRefreshToken, module.Calendar},
+	{"gmail", "Gmail", "https://mail.google.com/", secrets.GoogleGmailRefreshToken, module.Mail},
 }
 
 func capability(name string) (googleCapability, bool) {
@@ -63,6 +65,7 @@ type googlePage struct {
 	Reason          string             `json:"reason"`
 	Error           string             `json:"error"`
 	Paste           string             `json:"paste"`
+	Hold            module.Hold        `json:"hold"`
 }
 
 func (h handlers) googleRedirect(r *http.Request) string {
@@ -109,7 +112,14 @@ func (h handlers) googleRender(w http.ResponseWriter, r *http.Request, status in
 }
 
 func (h handlers) google(w http.ResponseWriter, r *http.Request) {
-	h.googleRender(w, r, http.StatusOK, nil, h.googlePage(r))
+	page := h.googlePage(r)
+	if cap, ok := capability(r.URL.Query().Get("connected")); ok {
+		page.Hold = h.held(r.Context(), cap.Module)
+		if page.Hold.Result == "" && r.URL.Query().Get("module") == module.HoldDone {
+			page.Hold.Result = module.HoldDone
+		}
+	}
+	h.googleRender(w, r, http.StatusOK, nil, page)
 }
 
 func (h handlers) googleSave(w http.ResponseWriter, r *http.Request) {
@@ -204,7 +214,11 @@ func (h handlers) googleComplete(w http.ResponseWriter, r *http.Request, state, 
 		h.googleRender(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not connected", Description: page.Error}, page)
 		return
 	}
-	w.Header().Set("Location", googlePath+"?connected="+cap.Name)
+	location := googlePath + "?connected=" + cap.Name
+	if hold := h.enable(h.ctx(r), cap.Module); hold.Result != "" {
+		location += "&module=" + url.QueryEscape(hold.Result)
+	}
+	w.Header().Set("Location", location)
 	w.WriteHeader(http.StatusSeeOther)
 }
 

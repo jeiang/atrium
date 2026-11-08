@@ -19,6 +19,7 @@
     {{with .Help}}<p class="text-xs text-muted-foreground" data-help>{{.}}</p>{{end}}
     {{with .Reason}}<p class="text-xs text-muted-foreground">{{.}}</p>{{end}}
     {{if and (eq $d.Failed .Name) $d.Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$d.Error}}</p>{{end}}
+    {{if eq $d.HoldFor .Name}}{{template "module_hold" $d.Hold}}{{end}}
     <div class="grid gap-3 sm:grid-cols-2">
       {{if .URLKey}}
       <div role="group" class="field">
