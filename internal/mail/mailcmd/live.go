@@ -64,7 +64,7 @@ func liveBacklog(x *exec) error {
 
 func rebaseline(x *exec) error {
 	return x.Exclusive(func() error {
-		if err := x.Pass.SyncAll(x.Ctx); err != nil {
+		if err := x.SyncAll(x.Ctx); err != nil {
 			return err
 		}
 		baseline, err := x.Live.Rebaseline(x.Ctx)

@@ -21,7 +21,7 @@ func (commitments) Items(ctx context.Context, q db.Querier, now float64) ([]atte
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []attention.Item
 	for rows.Next() {
 		var id int64

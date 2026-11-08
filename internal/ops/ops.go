@@ -209,7 +209,7 @@ func (s *server) readyz(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(map[string]any{"status": state, "checks": out})
 }
 
-func (s *server) run(ctx context.Context, c Check) error {
+func (s *server) run(_ context.Context, c Check) error {
 	if c.Remote {
 		s.mu.Lock()
 		got, ok := s.third[c.Name]

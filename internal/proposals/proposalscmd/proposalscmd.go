@@ -189,7 +189,7 @@ func Command(o Options) *cli.Command {
 					parsed, err := jsonx.Loads([]byte(*selection))
 					if err != nil {
 						if strings.TrimSpace(*selection) == "{" {
-							return errors.New("Expecting property name enclosed in double quotes: line 1 column 2 (char 1)")
+							return errors.New("Expecting property name enclosed in double quotes: line 1 column 2 (char 1)") //nolint:staticcheck // the CLI contract keeps the py-compatible wording
 						}
 						return err
 					}

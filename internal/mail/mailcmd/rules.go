@@ -82,7 +82,7 @@ func importJSONError(data []byte, err error) error {
 			col++
 		}
 	}
-	return fmt.Errorf("Expecting value: line %d column %d (char %d)", line, col, i)
+	return fmt.Errorf("Expecting value: line %d column %d (char %d)", line, col, i) //nolint:staticcheck // the CLI contract keeps the py-compatible wording
 }
 
 func (o Options) ShadowReportCommand() *cli.Command {

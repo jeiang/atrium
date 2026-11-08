@@ -164,7 +164,7 @@ func messageRows(ctx context.Context, tc *tool.Context, ids []int64) (map[int64]
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	owners, subjects, senders, dates := map[int64]string{}, map[int64]string{}, map[int64]string{}, map[int64]float64{}
 	for rows.Next() {
 		var id int64

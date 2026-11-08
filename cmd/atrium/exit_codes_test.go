@@ -118,7 +118,7 @@ func cliExitProcessArgs(t *testing.T, args []string) *exec.Cmd {
 	}
 	cmd := exec.Command(os.Args[0], "-test.run=^TestCLIExitProcess$")
 	cmd.Env = append(os.Environ(), "ATRIUM_CLI_EXIT_E2E=1", "ATRIUM_CLI_EXIT_ARGS="+string(encoded))
-	inherited := testEnv
+	var inherited map[string]string
 	if f := fixtureFor(t); f != nil {
 		inherited = f.env
 	} else {

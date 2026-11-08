@@ -235,7 +235,7 @@ func completeGoogle(ctx context.Context, d *db.DB, env config.Env, clientID, sta
 	token, err := conf.Exchange(exchange, code, oauth2.VerifierOption(verifier))
 	if err != nil || token.RefreshToken == "" {
 		if err == nil {
-			err = errors.New("Google returned no refresh token; revoke the app's access and retry")
+			err = errors.New("Google returned no refresh token; revoke the app's access and retry") //nolint:staticcheck // the CLI contract keeps this wording
 		}
 		_ = RecordResult(ctx, d, env, "google", "Google", NeedsReauth, err.Error(), stamp())
 		return googleCapability{}, err

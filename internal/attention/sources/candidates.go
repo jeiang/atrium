@@ -19,7 +19,7 @@ func (candidates) Items(ctx context.Context, q db.Querier, _ float64) ([]attenti
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []attention.Item
 	for rows.Next() {
 		var id int64

@@ -203,7 +203,7 @@ func counts(ctx context.Context, q Querier, query string, args ...any) (map[stri
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	out := map[string]any{}
 	for rows.Next() {
 		var key string

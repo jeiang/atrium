@@ -42,7 +42,7 @@ func stale(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	pages := []any{}
 	for rows.Next() {
 		var id, title, reviewed string

@@ -21,7 +21,7 @@ func (loops) Items(ctx context.Context, q db.Querier, now float64) ([]attention.
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var items []attention.Item
 	for rows.Next() {
 		var key, state, subject, counterpart string

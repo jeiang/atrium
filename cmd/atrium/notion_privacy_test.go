@@ -19,8 +19,8 @@ func TestNotionSyncTreatsAFormulaPrivacyValueAsPrivate(t *testing.T) {
 			_, _ = w.Write([]byte(`{"object":"error","status":401,"code":"unauthorized","message":"API token is invalid."}`))
 			return
 		}
-		switch {
-		case r.URL.Path == "/v1/search":
+		switch r.URL.Path {
+		case "/v1/search":
 			var body struct {
 				Filter struct {
 					Value string `json:"value"`
@@ -32,7 +32,7 @@ func TestNotionSyncTreatsAFormulaPrivacyValueAsPrivate(t *testing.T) {
 				return
 			}
 			_, _ = w.Write([]byte(`{"object":"list","results":[{"object":"page","id":"` + pageID + `","url":"https://notion.example/secret","last_edited_time":"2026-01-01T00:00:00.000Z","in_trash":false,"parent":{"type":"workspace"},"properties":{"title":{"type":"title","title":[{"plain_text":"Secret page"}]},"sensitivity":{"type":"formula","formula":{"type":"string","string":"private"}}}}],"has_more":false,"next_cursor":null}`))
-		case r.URL.Path == "/v1/pages/"+pageID+"/markdown":
+		case "/v1/pages/" + pageID + "/markdown":
 			_, _ = w.Write([]byte(`{"markdown":"secret alpha beta","truncated":false}`))
 		default:
 			w.WriteHeader(http.StatusNotFound)

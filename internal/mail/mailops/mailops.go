@@ -314,7 +314,7 @@ func TrashMailbox(ctx context.Context, client mail.Client, account string) (stri
 	found := ""
 	for _, info := range boxes {
 		for _, f := range info.Flags {
-			if strings.ToLower(f) == strings.ToLower(TrashLabel) {
+			if strings.EqualFold(f, TrashLabel) {
 				return info.IMAPName, nil
 			}
 		}

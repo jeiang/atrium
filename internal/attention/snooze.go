@@ -24,7 +24,7 @@ func snoozed(ctx context.Context, q db.Querier, now float64) (map[string]bool, e
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	hidden := map[string]bool{}
 	for rows.Next() {
 		var kind, sourceID string

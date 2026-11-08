@@ -286,7 +286,7 @@ type pollView struct {
 func (r PollResult) Dict() pollView {
 	added := make([]addedView, len(r.Added))
 	for i, a := range r.Added {
-		added[i] = addedView{Channel: a.Channel, Title: a.Title, Hash: a.Hash, SizeBytes: a.SizeBytes}
+		added[i] = addedView(a)
 	}
 	errors := r.Errors
 	if errors == nil {
