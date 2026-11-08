@@ -15,17 +15,8 @@ CREATE TABLE IF NOT EXISTS packages (
 );
 CREATE INDEX IF NOT EXISTS packages_tracking ON packages (tracking_number);
 CREATE INDEX IF NOT EXISTS packages_order ON packages (merchant_key, order_ref);
-CREATE TABLE IF NOT EXISTS watch_scans (
-    watch TEXT NOT NULL,
-    message_id INTEGER NOT NULL,
-    ts REAL NOT NULL,
-    found INTEGER NOT NULL DEFAULT 0,
-    PRIMARY KEY (watch, message_id)
-);
 CREATE TABLE IF NOT EXISTS watch_dismissed (
-    kind TEXT NOT NULL,
-    key TEXT NOT NULL,
+    key TEXT PRIMARY KEY,
     occurrence TEXT NOT NULL,
-    ts REAL NOT NULL,
-    PRIMARY KEY (kind, key)
+    ts REAL NOT NULL
 );

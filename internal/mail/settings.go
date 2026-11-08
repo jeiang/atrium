@@ -92,7 +92,6 @@ const (
 	KeyLoopsRemindAheadDays   = "openloops_remind_ahead_days"
 	KeyLoopsRemindOverdueDays = "openloops_remind_overdue_days"
 	KeyLoopsRemindHour        = "openloops_remind_hour"
-	KeyLoopsBackfillLimit     = "openloops_backfill_limit"
 	KeyLoopsSnoozeDefaultDays = "openloops_snooze_default_days"
 	KeyWatchesScanLimit       = "watches_scan_limit"
 	KeyWatchesPackageWindow   = "watches_package_window_days"
@@ -194,7 +193,6 @@ func init() {
 		count(KeyLoopsRemindAheadDays, 1),
 		count(KeyLoopsRemindOverdueDays, 14),
 		ui(KeyLoopsRemindHour, settings.Int, "9", settings.Between(0, 23)),
-		count(KeyLoopsBackfillLimit, 2000),
 		count(KeyLoopsSnoozeDefaultDays, 3),
 		count(KeyWatchesScanLimit, 25),
 		count(KeyWatchesPackageWindow, 60),

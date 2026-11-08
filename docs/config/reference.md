@@ -258,7 +258,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `mail_search_snippet_chars` | int | `220` | advanced | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_CHARS` |
 | `mail_search_snippet_tokens` | int | `24` | advanced | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_TOKENS` |
 | `mailops_batch` | int | `100` | advanced | `ATRIUM_MAIL_MAILOPS_BATCH` |
-| `openloops_backfill_limit` | int | `2000` | advanced | `ATRIUM_MAIL_OPENLOOPS_BACKFILL_LIMIT` |
 | `openloops_commitment_scan_limit` | int | `20` | advanced | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_SCAN_LIMIT` |
 | `openloops_commitment_window_days` | int | `14` | advanced | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_WINDOW_DAYS` |
 | `openloops_commitments_per_message` | int | `5` | advanced | `ATRIUM_MAIL_OPENLOOPS_COMMITMENTS_PER_MESSAGE` |
@@ -337,6 +336,12 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `tmdb_ca_file` | string | none | advanced | `ATRIUM_MEDIA_TMDB_CA_FILE` |
 | `tmdb_proxy` | string | none | advanced | `ATRIUM_MEDIA_TMDB_PROXY` |
 
+## memory
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `node_bytes` | int | `512` | advanced | `ATRIUM_MEMORY_NODE_BYTES` |
+
 ## notify
 
 | Key | Type | Default | Class | Environment variable |
@@ -406,3 +411,9 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `project_thread_limit` | int | `100` | advanced | `ATRIUM_WEB_PROJECT_THREAD_LIMIT` |
 | `run_history` | int | `30` | advanced | `ATRIUM_WEB_RUN_HISTORY` |
 | `snooze_choices` | string | `1,3,7,14` | advanced | `ATRIUM_WEB_SNOOZE_CHOICES` |
+
+## web_search
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `dynamic_filtering` | bool | `false` | advanced | `ATRIUM_WEB_SEARCH_DYNAMIC_FILTERING` |

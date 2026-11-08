@@ -98,7 +98,7 @@ func (s *service) loopSnooze(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	found, err := openloops.Snooze(r.Context(), s.deps.DB.Write, id, s.now()+float64(days)*openloops.Day)
+	found, err := openloops.Snooze(r.Context(), s.deps.DB.Write, id, s.now()+float64(days)*openloops.Day, s.now())
 	check(err)
 	if !s.notFound(w, r, found, "loop") {
 		return
@@ -111,7 +111,7 @@ func (s *service) loopDismiss(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	found, err := openloops.Dismiss(r.Context(), s.deps.DB.Write, id)
+	found, err := openloops.Dismiss(r.Context(), s.deps.DB.Write, id, s.now())
 	check(err)
 	if !s.notFound(w, r, found, "loop") {
 		return
@@ -129,7 +129,7 @@ func (s *service) loopDismissAll(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, http.StatusBadRequest, "unknown state")
 		return
 	}
-	count, err := openloops.DismissAll(r.Context(), s.deps.DB.Write, state)
+	count, err := openloops.DismissAll(r.Context(), s.deps.DB.Write, state, s.now())
 	check(err)
 	s.showLoops(w, r, toast("success", "Dismissed", plural(count, "loop")+" cleared."))
 }

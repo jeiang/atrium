@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -113,6 +114,7 @@ func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, e
 		payload := py.Dict{
 			{Key: "commitment_id", Value: c.id}, {Key: "text", Value: c.text}, {Key: "due", Value: c.due},
 			{Key: "owner", Value: c.owner}, {Key: "message_id", Value: c.messageID}, {Key: "tz", Value: tz},
+			{Key: "remind_at", Value: remindAt},
 		}
 		subject := ""
 		if c.subject != nil {
@@ -123,7 +125,7 @@ func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, e
 		sum := sha256.Sum256([]byte(py.JSONDumps([]any{KindReminder, c.id})))
 		fingerprint := hex.EncodeToString(sum[:])[:32]
 		title := fmt.Sprintf("Remind me: %s (due %s)", py.Clip(c.text, 80), c.due)
-		pid, created, err := proposals.Create(ctx, r.DB, KindReminder, nil, title, payload, preview, fingerprint, r.now())
+		pid, created, err := proposals.Create(ctx, r.DB, KindReminder, nil, title, payload, preview, fingerprint, now)
 		if err != nil {
 			return made, err
 		}
@@ -145,6 +147,23 @@ func payloadField(d py.Dict, key string) (any, error) {
 		return nil, fmt.Errorf("%w: %s", httpx.ErrMissing, strconv.Quote(key))
 	}
 	return v, nil
+}
+
+func payloadNumber(d py.Dict, key string) (float64, error) {
+	v, err := payloadField(d, key)
+	if err != nil {
+		return 0, err
+	}
+	switch n := v.(type) {
+	case float64:
+		return n, nil
+	case int64:
+		return float64(n), nil
+	case *big.Int:
+		f, _ := new(big.Float).SetInt(n).Float64()
+		return f, nil
+	}
+	return 0, fmt.Errorf("%w: %s must be a number", httpx.ErrShape, key)
 }
 
 func payloadString(d py.Dict, key string) (string, error) {
@@ -172,7 +191,7 @@ func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (
 	if err != nil {
 		return nil, err
 	}
-	due, err := payloadString(payload, "due")
+	remindAt, err := payloadNumber(payload, "remind_at")
 	if err != nil {
 		return nil, err
 	}
@@ -189,15 +208,6 @@ func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (
 		return nil, err
 	}
 	current := r.now()
-	set := mail.Read(ctx, r.DB.Read)
-	hour := set.Int(mail.KeyLoopsRemindHour)
-	if err := set.Err(); err != nil {
-		return nil, err
-	}
-	remindAt, err := ReminderTime(due, tz, hour, current)
-	if err != nil {
-		return nil, err
-	}
 	loc, err := scheduler.Zone(tz)
 	if err != nil {
 		return nil, err

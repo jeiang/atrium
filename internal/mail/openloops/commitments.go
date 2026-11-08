@@ -3,7 +3,6 @@ package openloops
 import (
 	"context"
 	"database/sql"
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -14,7 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/message"
+	"github.com/jeiang/atrium/internal/mail/mailscan"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -95,42 +94,10 @@ func JudgeCommitments(ctx context.Context, env config.Env, url string, m Message
 	return httpx.Key(answer, "commitments")
 }
 
-func scannable(ctx context.Context, q db.Querier, now float64, window, limit int) ([]Message, error) {
-	rows, err := q.QueryContext(ctx,
-		"SELECT m."+strings.ReplaceAll(messageColumns, ", ", ", m.")+" FROM messages m WHERE m.gone_at IS NULL AND m.date_ts >= ? "+
-			"AND NOT EXISTS (SELECT 1 FROM messages o JOIN commitment_scans s ON s.message_id = o.id "+
-			"WHERE o.account = m.account AND o.digest = m.digest) ORDER BY m.date_ts DESC LIMIT ?",
-		now-float64(window)*Day, limit*4)
-	if err != nil {
-		return nil, err
-	}
-	all, err := db.Collect(rows, scanMessage)
-	if err != nil {
-		return nil, err
-	}
-	var out []Message
-	for _, m := range all {
-		draft, err := IsDraft(m.Labels, m.Flags)
-		if err != nil {
-			return nil, err
-		}
-		if draft {
-			continue
-		}
-		human := true
-		if !m.Sent {
-			if human, err = m.HumanSender(); err != nil {
-				return nil, err
-			}
-		}
-		if human {
-			out = append(out, m)
-		}
-	}
-	if len(out) > limit {
-		out = out[:limit]
-	}
-	return out, nil
+func messageOf(m mailscan.Message) Message {
+	return Message{ID: m.ID, Account: m.Account, DateTS: m.DateTS, Sent: m.Sent, Subject: m.Subject, FromName: m.FromName,
+		FromAddr: m.FromAddr, ToAddrs: m.ToAddrs, ListID: m.ListID, Precedence: m.Precedence, Category: m.Category,
+		Labels: m.Labels, Flags: m.Flags}
 }
 
 func commitmentItems(found any, perMail int) ([]any, error) {
@@ -167,45 +134,40 @@ func ScanCommitments(ctx context.Context, d *db.DB, env config.Env, now float64,
 	if err != nil {
 		return 0, err
 	}
-	rows, err := scannable(ctx, d.Read, now, window, limit)
-	if err != nil {
-		return 0, err
-	}
-	var stored int64
-rows:
-	for _, row := range rows {
-		body, err := message.Body(ctx, d.Read, row.ID)
-		if err != nil {
-			return stored, err
-		}
-		found, err := judge(ctx, env, chatURL, row, body)
-		var unavailable *httpx.ServiceUnavailable
-		switch {
-		case errors.As(err, &unavailable):
-			log.Warn(fmt.Sprintf("chat unavailable, deferring commitment scan: %s", unavailable))
-			break rows
-		case errors.Is(err, httpx.ErrPayload) || errors.Is(err, httpx.ErrMissing) || errors.Is(err, httpx.ErrShape):
-			log.Warn(fmt.Sprintf("message %d: unusable commitment answer: %s", row.ID, httpx.Message(err)))
-			found = nil
-		case err != nil:
-			return stored, err
-		}
-		items, err := commitmentItems(found, perMail)
-		if err != nil {
-			return stored, err
-		}
-		for _, item := range items {
-			n, err := storeCommitment(ctx, d, row.ID, item, now)
-			if err != nil {
-				return stored, err
+	result, err := mailscan.Run(ctx, d, now, mailscan.Spec{
+		Kind: "commitments", Hint: "1", WindowDays: window, FetchLimit: limit * 4, Limit: limit,
+		Eligible: func(m mailscan.Message) (bool, error) {
+			draft, err := IsDraft(m.Labels, m.Flags)
+			if err != nil || draft {
+				return false, err
 			}
-			stored += n
-		}
-		if _, err := d.Write.ExecContext(ctx, "INSERT OR REPLACE INTO commitment_scans (message_id, ts) VALUES (?, ?)", row.ID, now); err != nil {
-			return stored, err
-		}
-	}
-	return stored, nil
+			msg := messageOf(m)
+			if msg.Sent {
+				return true, nil
+			}
+			return msg.HumanSender()
+		},
+		Judge: func(ctx context.Context, row mailscan.Message, body string) (int, error) {
+			found, err := judge(ctx, env, chatURL, messageOf(row), body)
+			if err != nil {
+				return 0, err
+			}
+			items, err := commitmentItems(found, perMail)
+			if err != nil {
+				return 0, err
+			}
+			var stored int64
+			for _, item := range items {
+				n, err := storeCommitment(ctx, d, row.ID, item, now)
+				if err != nil {
+					return int(stored), err
+				}
+				stored += n
+			}
+			return int(stored), nil
+		},
+	})
+	return int64(result.Found), err
 }
 
 func storeCommitment(ctx context.Context, d *db.DB, messageID int64, item any, now float64) (int64, error) {

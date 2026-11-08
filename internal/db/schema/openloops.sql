@@ -6,11 +6,16 @@ CREATE TABLE IF NOT EXISTS open_loops (
     since REAL NOT NULL,
     counterpart TEXT NOT NULL DEFAULT '',
     subject TEXT NOT NULL DEFAULT '',
+    updated_ts REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS open_loops_state ON open_loops (state);
+CREATE TABLE IF NOT EXISTS loop_overrides (
+    thread_key TEXT PRIMARY KEY,
+    last_message_id INTEGER NOT NULL,
     snoozed_until REAL,
     dismissed INTEGER NOT NULL DEFAULT 0,
     updated_ts REAL NOT NULL
 );
-CREATE INDEX IF NOT EXISTS open_loops_state ON open_loops (state, dismissed);
 CREATE TABLE IF NOT EXISTS commitments (
     id INTEGER PRIMARY KEY,
     message_id INTEGER NOT NULL,
@@ -23,7 +28,3 @@ CREATE TABLE IF NOT EXISTS commitments (
     UNIQUE (message_id, text)
 );
 CREATE INDEX IF NOT EXISTS commitments_status ON commitments (status, due);
-CREATE TABLE IF NOT EXISTS commitment_scans (
-    message_id INTEGER PRIMARY KEY,
-    ts REAL NOT NULL
-);

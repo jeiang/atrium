@@ -65,7 +65,7 @@ func TestSnoozeClampsItsDays(t *testing.T) {
 	mustContain(t, status(t, s.post(target, form("days", "0")), http.StatusOK), "Hidden for 1 day.")
 	mustContain(t, status(t, s.post(target, form("days", "500")), http.StatusOK), "Hidden for 60 days.")
 	var until float64
-	if err := s.db.Write.QueryRow("SELECT snoozed_until FROM open_loops WHERE rowid = ?", id).Scan(&until); err != nil {
+	if err := s.db.Write.QueryRow("SELECT snoozed_until FROM loop_overrides WHERE thread_key = ?", "a").Scan(&until); err != nil {
 		t.Fatal(err)
 	}
 	if want := s.clock + 60*day; until < want-100 || until > want+100 {

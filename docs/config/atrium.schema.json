@@ -2108,17 +2108,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "openloops_backfill_limit": {
-          "default": 2000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "openloops_backfill_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "openloops_commitment_scan_limit": {
           "default": 20,
           "type": [
@@ -2849,6 +2838,23 @@
       },
       "type": "object"
     },
+    "memory": {
+      "additionalProperties": false,
+      "properties": {
+        "node_bytes": {
+          "default": 512,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "node_bytes_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "notify": {
       "additionalProperties": false,
       "properties": {
@@ -3338,6 +3344,23 @@
           "type": "string"
         },
         "snooze_choices_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "web_search": {
+      "additionalProperties": false,
+      "properties": {
+        "dynamic_filtering": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "dynamic_filtering_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
