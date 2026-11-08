@@ -140,7 +140,9 @@ behavior-parity target.
   monthly budget defaults to $150 with scheduled runs paused at 80% and chat at
   100%; each model has its own run cost cap, checked against the next request
   written cold at the thread's cache lifetime, as is a $10 thread cost cap
-  over all runs of a thread, and an Anthropic spend-cap 429
+  over all runs of a thread and its subagent threads. A run's spend includes
+  its subagent runs, and every subagent request is also checked against each
+  parent run's cap. An Anthropic spend-cap 429
   stops the run as a budget stop. The
   catalog also records whether a model accepts a forced `tool_choice`
   (`any` or a named tool): only Haiku does, and the loop sends the request
@@ -285,16 +287,23 @@ behavior-parity target.
   permission granted by the existing tools.
 - The registry restricts tools by run kind. Scheduled runs read, propose,
   and notify; nightly runs may also update Notion and the profile with undo.
-  Research subagents have restricted tools and bounded runs.
+  Research subagents have restricted tools and bounded runs, and their system
+  prompt omits the operator profile and project block.
 - Notion edits are free: the Notion page Edit and Link buttons write
   directly through the same path as `notion_update_page`, with Undo on
   Done; approvals are only for external or costly actions. Old
   `notion_link` and `notion_edit` proposals stay readable and dismissable.
 - A successful call to a `private_data` or `web` tool taints its thread
-  (`threads.tainted_at`). From the next model request of the same run on,
-  and in every later run of that thread in any process, the thread is not
+  (`threads.tainted_at`), as does a response carrying a server
+  `web_search_tool_result`. The Grafana tools are `private_data` and
+  `untrusted_output`. The nightly `threads_today` read taints only when a
+  thread it returns is tainted. From the next model request of the same run
+  on, and in every later run of that thread in any process, the thread is not
   offered `external_effect`, `notify` or `write_undo` tools. Branches
-  inherit the taint. `untrusted_output` alone does not taint.
+  inherit the taint. `untrusted_output` alone does not taint. The first web
+  read therefore removes the web tools for the rest of the thread, a web
+  subagent included; this is kept because the `web` subagent can also call
+  `recall`.
 - The public web service accepts an authenticating reverse proxy
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Local requests are
   administrators; a proxy request or OIDC session is an administrator only

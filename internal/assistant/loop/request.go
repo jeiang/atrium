@@ -48,18 +48,21 @@ type request struct {
 	fixedTokens int64
 }
 
-func (r *Runner) systemBlocks(ctx context.Context, q db.Querier, thread threads.Thread, cc prompts.CacheControl, extra string) ([]prompts.Block, error) {
+func (r *Runner) systemBlocks(ctx context.Context, q db.Querier, thread threads.Thread, kind tool.Kind, cc prompts.CacheControl, extra string) ([]prompts.Block, error) {
 	var p prompts.Parts
 	var err error
 	if p.System, err = prompts.Text(ctx, q, prompts.KeySystem); err != nil {
 		return nil, err
+	}
+	p.Extra = extra
+	if kind == tool.Sub {
+		return prompts.SystemBlocks(p, cc), nil
 	}
 	if r.Profile != nil {
 		if p.Profile, err = r.Profile(ctx, q); err != nil {
 			return nil, err
 		}
 	}
-	p.Extra = extra
 	project, err := projects.SystemBlock(ctx, q, thread)
 	if err != nil {
 		return nil, err
@@ -72,7 +75,7 @@ func (r *Runner) systemBlocks(ctx context.Context, q db.Querier, thread threads.
 
 func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Thread, kind tool.Kind, model, effort string, set registry.Set,
 	cc prompts.CacheControl, extra string, webSearchMaxUses int, dynamicFiltering bool) (request, error) {
-	system, err := r.systemBlocks(ctx, q, thread, cc, extra)
+	system, err := r.systemBlocks(ctx, q, thread, kind, cc, extra)
 	if err != nil {
 		return request{}, err
 	}

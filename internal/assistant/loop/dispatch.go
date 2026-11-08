@@ -114,7 +114,11 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 	}
 	value, err = x.call(ctx, t, tool.Args(args))
 	if err == nil {
-		if registry.Taints(*t) {
+		tainted, dynamic := value.(tool.Tainted)
+		if dynamic {
+			value = tainted.Value
+		}
+		if dynamic || registry.Taints(*t) {
 			if err := threads.Taint(context.WithoutCancel(ctx), x.d.Write, x.tc.ThreadID, x.now()); err != nil {
 				return nil, nil, err
 			}

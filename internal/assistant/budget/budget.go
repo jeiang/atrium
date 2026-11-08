@@ -141,7 +141,11 @@ func ThreadCap(ctx context.Context, q db.Querier, threadID int64) (spent, limit 
 	if limit, err = found.Float(); err != nil {
 		return 0, 0, err
 	}
-	err = q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE thread_id = ?", threadID).Scan(&spent)
+	err = q.QueryRowContext(ctx,
+		"WITH RECURSIVE up(id, parent) AS (SELECT id, parent_thread_id FROM threads WHERE id = ? "+
+			"UNION SELECT t.id, t.parent_thread_id FROM threads t JOIN up ON t.id = up.parent), "+
+			"tree(id) AS (SELECT id FROM up WHERE parent IS NULL UNION SELECT t.id FROM threads t JOIN tree ON t.parent_thread_id = tree.id) "+
+			"SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE thread_id IN (SELECT id FROM tree)", threadID).Scan(&spent)
 	return spent, limit, err
 }
 
