@@ -49,12 +49,9 @@ func BackfillHeaders(ctx context.Context, d *db.DB, cfg config.Config, now float
 			if err != nil {
 				return 0, err
 			}
-			msg, err := mime.ParseHeaders(data)
-			if err != nil {
-				return 0, err
-			}
-			inReplyTo = strings.Join(features.MsgIDList(features.Header(msg, "In-Reply-To")), " ")
-			refs = strings.Join(features.MsgIDList(features.Header(msg, "References")), " ")
+			msg := mime.Parse(data)
+			inReplyTo = strings.Join(features.MsgIDList(msg.Header("In-Reply-To")), " ")
+			refs = strings.Join(features.MsgIDList(msg.Header("References")), " ")
 		}
 		if _, err := d.Write.ExecContext(ctx, "UPDATE messages SET in_reply_to = ?, refs = ? WHERE id = ?", inReplyTo, refs, r.id); err != nil {
 			return 0, err

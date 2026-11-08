@@ -13,13 +13,13 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/mail"
 	"os"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -447,11 +447,7 @@ func decodeChallenge(s string) ([]byte, error) {
 }
 
 func quoteaddr(addr string) (string, error) {
-	parsed, err := mime.ParseAddr(addr)
-	if err != nil {
-		return "", err
-	}
-	if parsed != (mime.Addr{}) {
+	if parsed, err := mail.ParseAddress(addr); err == nil {
 		return "<" + parsed.Address + ">", nil
 	}
 	if strings.HasPrefix(strings.TrimSpace(addr), "<") {
@@ -540,10 +536,7 @@ func (s *session) SendMessage(msg *Message, from string, to []string) (Refusals,
 		}
 		mailOptions = []string{"SMTPUTF8", "BODY=8BITMIME"}
 	}
-	flat, err := msg.Bytes("\r\n", international)
-	if err != nil {
-		return nil, err
-	}
+	flat := msg.Bytes("\r\n", international)
 	var opts []string
 	if s.doesESMTP {
 		if s.hasExtn("size") {

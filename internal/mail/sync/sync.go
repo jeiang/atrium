@@ -542,10 +542,7 @@ func (s *Syncer) ingest(ctx context.Context, tx *sql.Tx, account string, mbx mai
 			attachments[i] = features.Attachment{Type: a.Kind, Name: a.Name}
 		}
 	}
-	feats, err := features.Extract(item.Header, item.Text, attachments, internalTS(item.InternalDate), ftsBodyChars)
-	if err != nil {
-		return err
-	}
+	feats := features.Extract(item.Header, item.Text, attachments, internalTS(item.InternalDate), ftsBodyChars)
 	digest := features.ContentDigest(item.Header, item.Text)
 	relative, absolute := RawLocation(s.Cfg, account, mbx.ID, validity, item.UID)
 	raw := make([]byte, 0, len(item.Header)+len(item.Text))

@@ -3,17 +3,14 @@ package features
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"fmt"
 	"html"
 	"slices"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/mime"
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
 )
-
-var log = logx.Logger("atrium.features")
 
 const month = `(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?`
 
@@ -122,7 +119,7 @@ func prefix(s string, n int) string {
 }
 
 func SubjectTemplate(subject string) string {
-	s := mime.Strip(subject)
+	s := py.Strip(subject)
 	for {
 		n := sub(replyPrefixRE, "", s)
 		if n == s {
@@ -130,14 +127,14 @@ func SubjectTemplate(subject string) string {
 		}
 		s = n
 	}
-	s = mime.Lower(s)
+	s = strings.ToLower(s)
 	s = sub(amountRE, "<amt>", s)
 	s = sub(monthDayRE, "<date>", s)
 	s = sub(dayMonthRE, "<date>", s)
 	s = sub(numericDateRE, "<date>", s)
 	s = sub(numberWordRE, "<n>", s)
 	s = sub(hashNumberRE, "<n>", s)
-	return mime.Strip(sub(spaceRE, " ", s))
+	return py.Strip(sub(spaceRE, " ", s))
 }
 
 func DomainOf(addr string) string {
@@ -145,16 +142,16 @@ func DomainOf(addr string) string {
 	if i < 0 {
 		return ""
 	}
-	return strings.Trim(mime.Lower(addr[i+1:]), "<>")
+	return strings.Trim(strings.ToLower(addr[i+1:]), "<>")
 }
 
 func StripMarkup(text string) string {
 	text = sub(scriptStyleRE, " ", text)
 	text = sub(tagRE, " ", text)
-	return mime.Strip(sub(spaceRE, " ", html.UnescapeString(text)))
+	return py.Strip(sub(spaceRE, " ", html.UnescapeString(text)))
 }
 
-func FilenamePattern(name string) string { return sub(digitsRE, "#", mime.Lower(name)) }
+func FilenamePattern(name string) string { return sub(digitsRE, "#", strings.ToLower(name)) }
 
 func NormalizeMsgID(value string) string { return sub(msgidStripRE, "", value) }
 
@@ -177,38 +174,22 @@ func ContentDigest(header, text []byte) string {
 
 func EmailTS(value string) (float64, bool) { return mime.ParseDate(value) }
 
-func Header(msg *mime.Message, name string) string {
-	v, ok, err := msg.Get(name)
-	if !ok || err != nil {
-		return ""
-	}
-	return v
-}
-
-func addresses(msg *mime.Message, names ...string) ([]string, error) {
+func addresses(msg *mime.Message, names ...string) []string {
 	var out []string
 	for _, name := range names {
-		values, err := msg.GetAll(name)
-		if err != nil {
-			values = nil
-		}
-		addrs, err := mime.GetAddresses(values)
-		if err != nil {
-			return nil, err
-		}
-		for _, a := range addrs {
+		for _, a := range msg.Addresses(name) {
 			if a.Address != "" {
-				out = append(out, mime.Lower(a.Address))
+				out = append(out, strings.ToLower(a.Address))
 			}
 		}
 	}
-	return out, nil
+	return out
 }
 
 func espOf(msg *mime.Message) []string {
 	set := map[string]bool{}
 	for _, key := range msg.Keys() {
-		k := mime.Lower(key)
+		k := strings.ToLower(key)
 		if esp, ok := espExact[k]; ok {
 			set[esp] = true
 			continue
@@ -221,7 +202,7 @@ func espOf(msg *mime.Message) []string {
 				break
 			}
 		}
-		if !matched && strings.Contains(prefix(mime.Lower(Header(msg, key)), 200), "amazonses") {
+		if !matched && strings.Contains(prefix(strings.ToLower(msg.Header(key)), 200), "amazonses") {
 			set["ses"] = true
 		}
 	}
@@ -242,19 +223,15 @@ func bodyText(msg *mime.Message) string {
 		kind    string
 		convert func(string) string
 	}{
-		{"plain", func(t string) string { return mime.Strip(sub(spaceRE, " ", t)) }},
+		{"plain", func(t string) string { return py.Strip(sub(spaceRE, " ", t)) }},
 		{"html", StripMarkup},
 	}
 	for _, c := range converters {
-		part, err := msg.Body(c.kind)
-		if err != nil || part == nil {
+		part := msg.Body(c.kind)
+		if part == nil {
 			continue
 		}
-		content, err := part.Content()
-		if err != nil {
-			continue
-		}
-		if text := c.convert(content); text != "" {
+		if text := c.convert(part.Content()); text != "" {
 			return text
 		}
 	}
@@ -262,55 +239,35 @@ func bodyText(msg *mime.Message) string {
 }
 
 func mimeAttachments(msg *mime.Message) []Attachment {
-	parts, _ := msg.Attachments()
+	parts := msg.Attachments()
 	out := make([]Attachment, 0, len(parts))
 	for _, p := range parts {
-		name, _, err := p.Filename()
-		if err != nil {
-			break
-		}
-		out = append(out, Attachment{Type: p.ContentType(), Name: name})
+		out = append(out, Attachment{Type: p.ContentType(), Name: p.Filename()})
 	}
 	return out
 }
 
-func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, ftsBodyChars int) (f Features, err error) {
-	defer func() {
-		if r := recover(); r != nil {
-			log.Error("features: recovered from a panic in extract", logx.Err, fmt.Sprint(r))
-			f, err = Features{}, fmt.Errorf("features: internal error: %v", r)
-		}
-	}()
-	msg, err := mime.Parse(append(slices.Clip(header), text...))
-	if err != nil {
-		return Features{}, err
+func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, ftsBodyChars int) Features {
+	msg := mime.Parse(append(slices.Clip(header), text...))
+	fromName, fromAddr := "", ""
+	if addrs := msg.Addresses("From"); len(addrs) > 0 {
+		fromName, fromAddr = addrs[0].Name, addrs[0].Address
 	}
-	from, err := mime.ParseAddr(Header(msg, "From"))
-	if err != nil {
-		return Features{}, err
-	}
-	addr := mime.Lower(from.Address)
-	dateTS, ok := EmailTS(Header(msg, "Date"))
+	addr := strings.ToLower(fromAddr)
+	dateTS, ok := EmailTS(msg.Header("Date"))
 	if !ok {
 		dateTS = fallbackTS
 	}
-	subject := Header(msg, "Subject")
+	subject := msg.Header("Subject")
 	body := bodyText(msg)
 	head := prefix(body, 4000)
-	low := mime.Lower(head)
-	replyTo, err := addresses(msg, "Reply-To")
-	if err != nil {
-		return Features{}, err
-	}
-	rpath, err := addresses(msg, "Return-Path")
-	if err != nil {
-		return Features{}, err
-	}
+	low := strings.ToLower(head)
+	replyTo := addresses(msg, "Reply-To")
+	rpath := addresses(msg, "Return-Path")
 	dkim := map[string]bool{}
-	values, _ := msg.GetAll("DKIM-Signature")
-	for _, v := range values {
+	for _, v := range msg.Headers("DKIM-Signature") {
 		if m, _ := dkimDomainRE.Search(v); m != nil {
-			dkim[mime.Lower(m.Group(1))] = true
+			dkim[strings.ToLower(m.Group(1))] = true
 		}
 	}
 	if attachments == nil {
@@ -328,26 +285,22 @@ func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, 
 		attNames = attNames[:3]
 	}
 	to := map[string]bool{}
-	tos, err := addresses(msg, "To", "Delivered-To", "X-Original-To", "Cc")
-	if err != nil {
-		return Features{}, err
-	}
-	for _, a := range tos {
+	for _, a := range addresses(msg, "To", "Delivered-To", "X-Original-To", "Cc") {
 		to[a] = true
 	}
-	msgid := NormalizeMsgID(Header(msg, "Message-ID"))
-	f = Features{
+	msgid := NormalizeMsgID(msg.Header("Message-ID"))
+	f := Features{
 		MsgID:       msgid,
 		MsgIDDomain: DomainOf(msgid),
-		InReplyTo:   strings.Join(MsgIDList(Header(msg, "In-Reply-To")), " "),
-		Refs:        strings.Join(MsgIDList(Header(msg, "References")), " "),
+		InReplyTo:   strings.Join(MsgIDList(msg.Header("In-Reply-To")), " "),
+		Refs:        strings.Join(MsgIDList(msg.Header("References")), " "),
 		DateTS:      dateTS,
 		FromAddr:    addr,
 		FromDomain:  DomainOf(addr),
-		FromName:    from.Name,
+		FromName:    fromName,
 		ToAddrs:     sortedSet(to),
-		ListID:      mime.Lower(mime.Strip(Header(msg, "List-Id"))),
-		Precedence:  mime.Lower(mime.Strip(Header(msg, "Precedence"))),
+		ListID:      strings.ToLower(py.Strip(msg.Header("List-Id"))),
+		Precedence:  strings.ToLower(py.Strip(msg.Header("Precedence"))),
 		Subject:     subject,
 		SubjectTmpl: SubjectTemplate(subject),
 		DKIMD:       sortedSet(dkim),
@@ -369,5 +322,5 @@ func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, 
 	if len(rpath) > 0 {
 		f.RPathDomain = DomainOf(rpath[0])
 	}
-	return f, nil
+	return f
 }

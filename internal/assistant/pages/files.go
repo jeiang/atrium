@@ -21,7 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	mailmime "github.com/jeiang/atrium/internal/mail/mime"
+	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -372,10 +372,7 @@ func previewOf(found files.Row, previewBytes int) (render any, text string, rows
 		truncated = len(raw) > previewBytes
 		head := raw[:min(len(raw), sniffBytes)]
 		if strings.HasPrefix(media, "text/") || media == "application/json" || media == "application/xml" || bytes.IndexByte(head, 0) < 0 {
-			decoded, decodeErr := mailmime.DecodeReplace(raw[:min(len(raw), previewBytes)], "utf-8")
-			if decodeErr != nil {
-				return nil, "", nil, false, decodeErr
-			}
+			decoded := httpx.DecodeReplace(raw[:min(len(raw), previewBytes)])
 			body = &decoded
 		}
 	} else if utf8.RuneCountInString(*found.Text) > previewBytes {

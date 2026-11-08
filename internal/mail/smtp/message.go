@@ -67,14 +67,10 @@ func (m *Message) Get(name string) string {
 	return ""
 }
 
-func (m *Message) Bytes(linesep string, utf8 bool) ([]byte, error) {
+func (m *Message) Bytes(linesep string, utf8 bool) []byte {
 	var b bytes.Buffer
 	for _, h := range m.headers {
-		folded, err := mime.FoldHeader(h[0], h[1], linesep, utf8)
-		if err != nil {
-			return nil, err
-		}
-		b.WriteString(folded)
+		b.WriteString(mime.FoldHeader(h[0], h[1], linesep, utf8))
 	}
 	b.WriteString(linesep)
 	lines := splitNewlines(m.payload)
@@ -84,7 +80,7 @@ func (m *Message) Bytes(linesep string, utf8 bool) ([]byte, error) {
 			b.WriteString(linesep)
 		}
 	}
-	return b.Bytes(), nil
+	return b.Bytes()
 }
 
 func splitNewlines(b []byte) [][]byte {

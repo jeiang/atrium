@@ -207,8 +207,7 @@ func Snapshots(ctx context.Context, q Querier, ids []int64) ([]Snapshot, error) 
 }
 
 func ServerMsgID(header []byte) string {
-	value, _ := mime.Compat32Header(header, "Message-ID")
-	return features.NormalizeMsgID(value)
+	return features.NormalizeMsgID(mime.RawHeader(header, "Message-ID"))
 }
 
 type boxKey struct {

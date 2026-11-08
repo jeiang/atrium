@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"net/mail"
 	"os"
 	"strings"
 
@@ -72,20 +73,24 @@ func RawFile(cacheDir, rawPath string) (string, bool) {
 	return resolved, true
 }
 
+func displayAddresses(addrs []mail.Address) string {
+	parts := make([]string, len(addrs))
+	for i, a := range addrs {
+		parts[i] = a.String()
+	}
+	return strings.Join(parts, ", ")
+}
+
 func plainBody(msg *mime.Message) string {
 	for _, c := range [...]struct {
 		kind    string
 		convert func(string) string
 	}{{"plain", py.Strip}, {"html", features.StripMarkup}} {
-		part, err := msg.Body(c.kind)
-		if err != nil || part == nil {
+		part := msg.Body(c.kind)
+		if part == nil {
 			continue
 		}
-		content, err := part.Content()
-		if err != nil {
-			continue
-		}
-		if text := c.convert(content); text != "" {
+		if text := c.convert(part.Content()); text != "" {
 			return text
 		}
 	}
@@ -94,21 +99,12 @@ func plainBody(msg *mime.Message) string {
 
 func attachments(msg *mime.Message) []Attachment {
 	found := []Attachment{}
-	parts, _ := msg.Attachments()
-	for _, part := range parts {
+	for _, part := range msg.Attachments() {
 		size := 0
 		if !part.IsMultipart() {
-			payload, err := part.Payload()
-			if err != nil {
-				break
-			}
-			size = len(payload)
+			size = len(part.Payload())
 		}
-		name, _, err := part.Filename()
-		if err != nil {
-			break
-		}
-		found = append(found, Attachment{Filename: name, ContentType: part.ContentType(), Size: size})
+		found = append(found, Attachment{Filename: part.Filename(), ContentType: part.ContentType(), Size: size})
 	}
 	return found
 }
@@ -199,13 +195,13 @@ func Get(ctx context.Context, q Querier, cacheDir string, messageID int64) (*Vie
 		if err != nil {
 			return nil, err
 		}
-		msg, err := mime.Parse(data)
-		if err != nil {
-			return nil, err
-		}
+		msg := mime.Parse(data)
 		for _, name := range Headers {
-			if value, _, err := msg.Get(name); err == nil {
-				v.Headers[name] = value
+			switch name {
+			case "From", "To", "Cc", "Reply-To":
+				v.Headers[name] = displayAddresses(msg.Addresses(name))
+			default:
+				v.Headers[name] = msg.Header(name)
 			}
 		}
 		v.Body, v.Attachments, v.BodySource = plainBody(msg), attachments(msg), SourceRaw
