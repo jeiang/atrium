@@ -15,7 +15,10 @@
         modules = [
           self.nixosModules.default
           {
-            nixpkgs.hostPlatform = "x86_64-linux";
+            nixpkgs.hostPlatform =
+              if pkgs.stdenv.hostPlatform.isLinux
+              then pkgs.stdenv.hostPlatform.system
+              else "x86_64-linux";
             system.stateVersion = "25.11";
             services.atrium = {enable = true;} // atrium;
           }
