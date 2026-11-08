@@ -95,6 +95,7 @@ func (r *Research) Tool() tool.Tool {
 		Handler:     r.handle,
 		Effect:      tool.Read,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
+		Parallel:    true,
 	}
 }
 
@@ -269,51 +270,4 @@ func (r *Research) runChild(ctx context.Context, tc *tool.Context, child int64, 
 		return tool.Error(fmt.Sprintf("%s research not started: %s", role, exceeded))
 	}
 	return err
-}
-
-func (r *Research) Batch(ctx context.Context, tc *tool.Context, uses []loop.ToolUse) (map[string]loop.Outcome, error) {
-	out := make(map[string]loop.Outcome, len(uses))
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	for _, use := range uses {
-		wg.Go(func() {
-			o := r.one(ctx, tc, use)
-			mu.Lock()
-			out[use.ID] = o
-			mu.Unlock()
-		})
-	}
-	wg.Wait()
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (r *Research) one(ctx context.Context, tc *tool.Context, use loop.ToolUse) (o loop.Outcome) {
-	defer func() {
-		if p := recover(); p != nil {
-			log.Error("research panicked", logx.RunID, tc.RunID, logx.Err, fmt.Sprint(p))
-			o = loop.Outcome{Error: "research failed: internal error"}
-		}
-	}()
-	_, input, err := use.Args()
-	if err != nil {
-		return loop.Outcome{Error: "research failed: " + loop.ClassName(err)}
-	}
-	args, ok := input.(py.Dict)
-	if !ok {
-		return loop.Outcome{Error: "research failed: tool input must be an object"}
-	}
-	value, err := r.handle(ctx, tc, args)
-	if err == nil {
-		return loop.Outcome{OK: true, Value: value}
-	}
-	if text, ok := tool.Message(err); ok {
-		return loop.Outcome{Error: text}
-	}
-	if ctx.Err() == nil {
-		log.Error("research failed", logx.RunID, tc.RunID, logx.Err, err)
-	}
-	return loop.Outcome{Error: "research failed: " + loop.ClassName(err)}
 }
