@@ -267,64 +267,68 @@ type recreateUndo struct {
 	Spec     any    `json:"spec"`
 }
 
-func undoDelete(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
-	var u deleteUndo
-	if err := json.Unmarshal(raw, &u); err != nil {
-		return nil, writes.UndoError("calendar undo payload is invalid")
-	}
-	target, uid := u.Calendar, u.UID
-	set, err := calendar.LoadSettings(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-	if err := calendar.DeleteEvent(ctx, config.OS, set, target, uid); err != nil {
-		var failed calendar.Error
-		if errors.As(err, &failed) {
-			return nil, writes.UndoError(failed.Error())
+func undoDelete(env config.Env) writes.Undoer {
+	return func(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
+		var u deleteUndo
+		if err := json.Unmarshal(raw, &u); err != nil {
+			return nil, writes.UndoError("calendar undo payload is invalid")
 		}
-		return nil, err
+		target, uid := u.Calendar, u.UID
+		set, err := calendar.LoadSettings(ctx, q)
+		if err != nil {
+			return nil, err
+		}
+		if err := calendar.DeleteEvent(ctx, env, set, target, uid); err != nil {
+			var failed calendar.Error
+			if errors.As(err, &failed) {
+				return nil, writes.UndoError(failed.Error())
+			}
+			return nil, err
+		}
+		if err := calendar.Untrack(ctx, q, uid, nowSeconds()); err != nil {
+			return nil, err
+		}
+		return map[string]any{"deleted": uid}, nil
 	}
-	if err := calendar.Untrack(ctx, q, uid, nowSeconds()); err != nil {
-		return nil, err
-	}
-	return map[string]any{"deleted": uid}, nil
 }
 
-func undoRecreate(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
-	var u recreateUndo
-	if err := json.Unmarshal(raw, &u); err != nil {
-		return nil, writes.UndoError("calendar undo payload is invalid")
-	}
-	target := u.Calendar
-	restored, err := calendar.SpecOf(u.Spec)
-	if err != nil {
-		return nil, err
-	}
-	restored.UID = calendar.NewUID()
-	tz, err := calendar.Zone(config.OS)
-	if err != nil {
-		return nil, err
-	}
-	set, err := calendar.LoadSettings(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := calendar.CreateEvent(ctx, config.OS, set, target, restored, tz); err != nil {
-		var failed calendar.Error
-		if errors.As(err, &failed) {
-			return nil, writes.UndoError(failed.Error())
+func undoRecreate(env config.Env) writes.Undoer {
+	return func(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
+		var u recreateUndo
+		if err := json.Unmarshal(raw, &u); err != nil {
+			return nil, writes.UndoError("calendar undo payload is invalid")
 		}
-		return nil, err
+		target := u.Calendar
+		restored, err := calendar.SpecOf(u.Spec)
+		if err != nil {
+			return nil, err
+		}
+		restored.UID = calendar.NewUID()
+		tz, err := calendar.Zone(env)
+		if err != nil {
+			return nil, err
+		}
+		set, err := calendar.LoadSettings(ctx, q)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := calendar.CreateEvent(ctx, env, set, target, restored, tz); err != nil {
+			var failed calendar.Error
+			if errors.As(err, &failed) {
+				return nil, writes.UndoError(failed.Error())
+			}
+			return nil, err
+		}
+		if err := calendar.Track(ctx, q, restored, target, nil, nowSeconds()); err != nil {
+			return nil, err
+		}
+		return map[string]any{"created": restored.UID}, nil
 	}
-	if err := calendar.Track(ctx, q, restored, target, nil, nowSeconds()); err != nil {
-		return nil, err
-	}
-	return map[string]any{"created": restored.UID}, nil
 }
 
-func RegisterUndoers(r *writes.Registry) {
-	r.Register("calendar_delete", undoDelete)
-	r.Register("calendar_recreate", undoRecreate)
+func RegisterUndoers(r *writes.Registry, env config.Env) {
+	r.Register("calendar_delete", undoDelete(env))
+	r.Register("calendar_recreate", undoRecreate(env))
 }
 
 func schema(properties string, required string) json.RawMessage {

@@ -12,7 +12,7 @@ import (
 func Undoers(env config.Env) *writes.Registry {
 	r := writes.NewRegistry()
 	profiletools.RegisterUndoer(r)
-	calendartools.RegisterUndoers(r)
+	calendartools.RegisterUndoers(r, env)
 	mediatools.RegisterUndoer(r, env)
 	notiontools.RegisterUndoers(r, env)
 	return r
