@@ -18,28 +18,6 @@ type migration struct {
 
 var migrations = []migration{
 	{1, func(ctx context.Context, tx *sql.Tx) error { return initSchema(ctx, tx) }},
-	{2, func(ctx context.Context, tx *sql.Tx) error { return upgradeJobsState(ctx, tx) }},
-}
-
-func upgradeJobsState(ctx context.Context, tx *sql.Tx) error {
-	var n int
-	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM pragma_table_info('jobs') WHERE name = 'state'").Scan(&n); err != nil {
-		return err
-	}
-	if n > 0 {
-		return nil
-	}
-	if _, err := tx.ExecContext(ctx, "ALTER TABLE jobs ADD COLUMN state TEXT NOT NULL DEFAULT 'active'"); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, "UPDATE jobs SET state = CASE WHEN cancelled = 1 THEN 'cancelled' WHEN enabled = 0 THEN 'disabled' ELSE 'active' END"); err != nil {
-		return err
-	}
-	if _, err := tx.ExecContext(ctx, "UPDATE jobs SET next_due = NULL WHERE state != 'active'"); err != nil {
-		return err
-	}
-	_, err := tx.ExecContext(ctx, "CREATE INDEX IF NOT EXISTS jobs_state_due ON jobs (state, next_due)")
-	return err
 }
 
 type ModuleMigration struct {
