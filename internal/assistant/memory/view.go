@@ -69,22 +69,9 @@ func ViewSettings(ctx context.Context, q db.Querier) (low, high, tail int, err e
 // the summary or message count changed; otherwise the persisted batch is
 // returned unchanged, so a settings change applies to the next batch.
 func Build(ctx context.Context, q db.Querier, threadID int64, now float64) (*View, error) {
-	low, high, tail, err := ViewSettings(ctx, q)
-	if err != nil {
+	low, high, tail, ok, err := bounds(ctx, q, threadID)
+	if err != nil || !ok {
 		return nil, err
-	}
-	thread, err := threads.Get(ctx, q, threadID)
-	if err != nil {
-		return nil, err
-	}
-	if thread == nil {
-		return nil, nil
-	}
-	if limit := threads.ContextLimitOf(*thread); limit > 0 && limit*4 < int64(high) {
-		high = int(limit * 4)
-	}
-	if low > high {
-		low = high
 	}
 	summaryCount, err := count(ctx, q, "SELECT COUNT(*) FROM memory_nodes WHERE thread_id = ? AND state IN (?, ?)", threadID, Summary, Fallback)
 	if err != nil {
@@ -111,6 +98,40 @@ func Build(ctx context.Context, q db.Querier, threadID int64, now float64) (*Vie
 		return nil, err
 	}
 	return v, nil
+}
+
+func Older(ctx context.Context, q db.Querier, threadID, before int64) ([]Line, error) {
+	low, high, tail, ok, err := bounds(ctx, q, threadID)
+	if err != nil || !ok {
+		return nil, err
+	}
+	nodes, err := Tree(ctx, q, threadID)
+	if err != nil {
+		return nil, err
+	}
+	kept := nodes[:0]
+	for _, n := range nodes {
+		if n.ToSeq < before {
+			kept = append(kept, n)
+		}
+	}
+	lines, _ := reduce(kept, low, high, tail)
+	return lines, nil
+}
+
+func bounds(ctx context.Context, q db.Querier, threadID int64) (low, high, tail int, ok bool, err error) {
+	low, high, tail, err = ViewSettings(ctx, q)
+	if err != nil {
+		return 0, 0, 0, false, err
+	}
+	thread, err := threads.Get(ctx, q, threadID)
+	if err != nil || thread == nil {
+		return 0, 0, 0, false, err
+	}
+	if limit := threads.ContextLimitOf(*thread); limit > 0 && limit*4 < int64(high) {
+		high = int(limit * 4)
+	}
+	return min(low, high), high, tail, true, nil
 }
 
 func reduce(nodes []Node, low, high, tail int) ([]Line, bool) {

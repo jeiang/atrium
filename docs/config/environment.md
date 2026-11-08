@@ -319,6 +319,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MEMORY_MODEL` | `memory.model` |
 | `ATRIUM_MEMORY_NODE_BYTES` | `memory.node_bytes` |
 | `ATRIUM_MEMORY_TAIL_MESSAGES` | `memory.tail_messages` |
+| `ATRIUM_MEMORY_VERBATIM_TOKENS` | `memory.verbatim_tokens` |
 | `ATRIUM_MEMORY_VIEW_HIGH` | `memory.view_high` |
 | `ATRIUM_MEMORY_VIEW_LOW` | `memory.view_low` |
 | `ATRIUM_NOTIFY_NOTIFY_BODY_CHARS` | `notify.notify_body_chars` |

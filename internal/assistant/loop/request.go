@@ -3,13 +3,16 @@ package loop
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"slices"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/assistant/block"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
@@ -134,20 +137,180 @@ func fixedPart(system json.RawMessage, tools []json.RawMessage) (map[string]any,
 	return fixed, nil
 }
 
-func withProjectFiles(ctx context.Context, q db.Querier, thread threads.Thread, active []actx.Message) ([]actx.Message, error) {
-	if thread.ProjectID == nil || *thread.ProjectID == 0 {
-		return active, nil
+type history struct {
+	from   int64
+	prefix []json.RawMessage
+}
+
+func (s *state) history(ctx context.Context) (*history, error) {
+	if s.hist != nil {
+		return s.hist, nil
 	}
-	head, err := files.ProjectBlocks(ctx, q, *thread.ProjectID)
-	if err != nil || head == nil {
-		return active, err
+	if err := memory.Rebuild(ctx, s.d.Write, s.thread.ID, s.now()); err != nil {
+		return nil, err
 	}
-	if len(active) > 0 && active[0].Role == journal.User {
-		first := active[0]
-		first.Content = append(slices.Clone(head), first.Content...)
-		return append([]actx.Message{first}, active[1:]...), nil
+	messages, err := journal.MessagesOf(ctx, s.d.Read, s.thread.ID)
+	if err != nil {
+		return nil, err
 	}
-	return append([]actx.Message{{Role: journal.User, Content: head}}, active...), nil
+	budget, err := memory.VerbatimTokens(ctx, s.d.Read)
+	if err != nil {
+		return nil, err
+	}
+	from, err := verbatimFrom(messages, s.run.ID, min(budget, (s.limits.Hard-s.req.fixedTokens)/4))
+	if err != nil {
+		return nil, err
+	}
+	lines, err := memory.Older(ctx, s.d.Read, s.thread.ID, from)
+	if err != nil {
+		return nil, err
+	}
+	var prefix []json.RawMessage
+	if s.thread.ProjectID != nil && *s.thread.ProjectID != 0 {
+		head, err := files.ProjectBlocks(ctx, s.d.Read, *s.thread.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+		prefix = append(prefix, head...)
+	}
+	if len(lines) > 0 {
+		prefix = append(prefix, actx.TextBlock("Memory view of this thread's older history (message ranges and zoom ids):"))
+		for _, line := range lines {
+			prefix = append(prefix, actx.TextBlock(fmt.Sprintf("[%d..%d] zoom id %d n %d (%s)\n%s", line.From, line.To, line.From, 1<<line.Level, line.State, line.Text)))
+		}
+	}
+	if n := len(prefix); n > 0 {
+		if prefix[n-1], err = actx.SetField(prefix[n-1], "cache_control", cacheControlDict(s.req.cc)); err != nil {
+			return nil, err
+		}
+	}
+	s.hist = &history{from: from, prefix: prefix}
+	return s.hist, nil
+}
+
+func verbatimFrom(messages []journal.Message, runID, budget int64) (int64, error) {
+	n := len(messages)
+	if n == 0 {
+		return 0, nil
+	}
+	back := func(i int) (int, error) {
+		for ; i > 0; i-- {
+			if messages[i].Role != journal.User {
+				continue
+			}
+			results, err := block.HasKind(messages[i].Content, block.ToolResult)
+			if err != nil || !results {
+				return i, err
+			}
+		}
+		return 0, nil
+	}
+	start := n
+	for i, m := range messages {
+		if m.RunID != nil && *m.RunID == runID {
+			start = i
+			break
+		}
+	}
+	var err error
+	if start < n {
+		if start, err = back(start); err != nil {
+			return 0, err
+		}
+	}
+	var spent int64
+	for start > 0 {
+		j, err := back(start - 1)
+		if err != nil {
+			return 0, err
+		}
+		for _, m := range messages[j:start] {
+			t, err := messageTokens(actx.Message{Content: m.Content})
+			if err != nil {
+				return 0, err
+			}
+			spent += t
+		}
+		if spent > budget {
+			break
+		}
+		start = j
+	}
+	if start < n {
+		return messages[start].Seq, nil
+	}
+	return messages[n-1].Seq + 1, nil
+}
+
+func (s *state) active(ctx context.Context, loc *time.Location, h *history) ([]actx.Message, error) {
+	messages, err := journal.MessagesOf(ctx, s.d.Read, s.thread.ID)
+	if err != nil {
+		return nil, err
+	}
+	runs, err := journal.RunsOf(ctx, s.d.Read, s.thread.ID)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[int64]journal.Run, len(runs))
+	for _, r := range runs {
+		byID[r.ID] = r
+	}
+	var out []actx.Message
+	for _, m := range messages {
+		if m.Seq < h.from {
+			continue
+		}
+		content := m.Content
+		run, known := journal.Run{}, m.RunID != nil
+		if known {
+			run, known = byID[*m.RunID]
+		}
+		switch m.Role {
+		case journal.User:
+			text, err := journal.HasText(content)
+			if err != nil {
+				return nil, err
+			}
+			if text && known {
+				content = append(slices.Clone(content), actx.TextBlock(TimeStamp(run.StartedAt, loc)))
+			}
+		case journal.Assistant:
+			if s.keepsThinking(m, run, known) {
+				break
+			}
+			if content, err = actx.StripThinking(content); err != nil {
+				return nil, err
+			}
+			if len(content) == 0 {
+				continue
+			}
+		}
+		seq := m.Seq
+		if n := len(out); n > 0 && out[n-1].Role == m.Role {
+			out[n-1].Content = append(slices.Clone(out[n-1].Content), content...)
+			out[n-1].Seq = &seq
+			continue
+		}
+		out = append(out, actx.Message{Role: m.Role, Content: content, Seq: &seq, RunID: m.RunID})
+	}
+	if len(h.prefix) == 0 {
+		return out, nil
+	}
+	if len(out) > 0 && out[0].Role == journal.User {
+		out[0].Content = append(slices.Clone(h.prefix), out[0].Content...)
+		return out, nil
+	}
+	return append([]actx.Message{{Role: journal.User, Content: h.prefix}}, out...), nil
+}
+
+func (s *state) keepsThinking(m journal.Message, run journal.Run, known bool) bool {
+	if s.thread.Thinking == "disabled" {
+		return false
+	}
+	if known && run.ID == s.run.ID {
+		return true
+	}
+	return known && run.Model == s.run.Model && m.SystemSig != nil && *m.SystemSig == s.req.sig
 }
 
 type anchor struct {

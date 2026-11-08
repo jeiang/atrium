@@ -372,6 +372,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `model` | string | `claude-haiku-5-5` | advanced | `ATRIUM_MEMORY_MODEL` |
 | `node_bytes` | int | `512` | advanced | `ATRIUM_MEMORY_NODE_BYTES` |
 | `tail_messages` | int | `6` | advanced | `ATRIUM_MEMORY_TAIL_MESSAGES` |
+| `verbatim_tokens` | int | `16000` | advanced | `ATRIUM_MEMORY_VERBATIM_TOKENS` |
 | `view_high` | int | `128000` | advanced | `ATRIUM_MEMORY_VIEW_HIGH` |
 | `view_low` | int | `64000` | advanced | `ATRIUM_MEMORY_VIEW_LOW` |
 

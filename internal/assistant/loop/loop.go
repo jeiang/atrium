@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"strings"
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
@@ -92,6 +91,7 @@ type state struct {
 	invalid       error
 	toolChoice    *anthropic.ToolChoice
 	admission     admission
+	hist          *history
 }
 
 type admission struct {
@@ -414,37 +414,9 @@ func (s *state) injectQueued(ctx context.Context) (bool, error) {
 	return len(taken) > 0, nil
 }
 
-const memoryPrompt = "\n\nMemory view: the history above is a memory tree, not raw messages. " +
-	"Each line carries a message range and a zoom id; call zoom(id, n) to open a summary's two children, " +
-	"or zoom(id, 1) to read one message's source, when the summary is not enough."
-
-func (s *state) viewMessages(ctx context.Context, loc *time.Location) ([]actx.Message, error) {
-	if err := memory.Rebuild(ctx, s.d.Write, s.thread.ID, s.now()); err != nil {
-		return nil, err
-	}
-	v, err := memory.Build(ctx, s.d.Write, s.thread.ID, s.now())
-	if err != nil {
-		return nil, err
-	}
-	if v == nil || len(v.Lines) == 0 {
-		return nil, nil
-	}
-	var b strings.Builder
-	b.WriteString("Memory view of this thread (message ranges and zoom ids):")
-	for _, line := range v.Lines {
-		n := 1 << line.Level
-		fmt.Fprintf(&b, "\n\n[%d..%d] zoom id %d n %d (%s)\n%s", line.From, line.To, line.From, n, line.State, line.Text)
-	}
-	return []actx.Message{{Role: "user", Content: []json.RawMessage{actx.TextBlock(b.String())}}}, nil
-}
-
-func (s *state) size(ctx context.Context, active []actx.Message, a *anchor) (int64, error) {
-	sent, err := withProjectFiles(ctx, s.d.Read, s.thread, active)
-	if err != nil {
-		return 0, err
-	}
-	return s.req.estimate(sent, a)
-}
+const memoryPrompt = "\n\nMemory view: the first user message opens with this thread's older history as a memory tree; " +
+	"the messages after it are verbatim. Each memory line carries a message range and a zoom id; call zoom(id, n) to open " +
+	"a summary's two children, or zoom(id, 1) to read one message's source, when the summary is not enough."
 
 func (s *state) stream(ctx context.Context, messages []json.RawMessage) (*anthropic.Message, int64, error) {
 	params := s.req.params
@@ -562,11 +534,15 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if spent >= s.maxCost {
 		return false, nil, RunLimit(fmt.Sprintf("run cost ceiling reached ($%s of $%s)", strconv.FormatFloat(spent, 'f', 2, 64), strconv.FormatFloat(s.maxCost, 'f', 2, 64)))
 	}
-	active, err := s.viewMessages(ctx, loc)
+	h, err := s.history(ctx)
 	if err != nil {
 		return false, nil, err
 	}
-	size, err := s.size(ctx, active, last)
+	active, err := s.active(ctx, loc, h)
+	if err != nil {
+		return false, nil, err
+	}
+	size, err := s.req.estimate(active, last)
 	if err != nil {
 		return false, nil, err
 	}
@@ -577,11 +553,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if err := s.reserve(ctx, size); err != nil {
 		return false, nil, err
 	}
-	sent, err := withProjectFiles(ctx, s.d.Read, s.thread, active)
-	if err != nil {
-		return false, nil, err
-	}
-	messages, err := s.req.buildMessages(ctx, s.d.Read, files.ScopeOf(s.thread.ID, s.thread.ProjectID), sent)
+	messages, err := s.req.buildMessages(ctx, s.d.Read, files.ScopeOf(s.thread.ID, s.thread.ProjectID), active)
 	if err != nil {
 		return false, nil, err
 	}
