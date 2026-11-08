@@ -303,11 +303,10 @@ func TorrentHash(data []byte) (string, error) {
 type Qbit struct {
 	base, key string
 	http      *http.Client
-	Tuning
 }
 
-func NewQbit(base, key string, client *http.Client, t Tuning) *Qbit {
-	return &Qbit{base: strings.TrimRight(base, "/"), key: key, http: client, Tuning: t}
+func NewQbit(base, key string, client *http.Client) *Qbit {
+	return &Qbit{base: strings.TrimRight(base, "/"), key: key, http: client}
 }
 
 func (q *Qbit) do(ctx context.Context, method, path string, params []param, body io.Reader, contentType string) ([]byte, error) {

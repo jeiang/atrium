@@ -300,5 +300,5 @@ func (s Settings) Qbit() (*Qbit, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewQbit(base, s.QbitKey, s.QbitHTTP, s.Tuning), nil
+	return NewQbit(base, s.QbitKey, s.QbitHTTP), nil
 }

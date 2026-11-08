@@ -400,7 +400,7 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, 
 				result.Errors = append(result.Errors, "ntfy: "+sent.Error)
 			}
 		}
-		if _, err := SelectFiles(ctx, qb, nil); err != nil {
+		if _, err := settings.SelectFiles(ctx, qb, nil); err != nil {
 			return result, err
 		}
 	}

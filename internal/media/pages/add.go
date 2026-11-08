@@ -87,7 +87,7 @@ func (s *service) dlAdd(r *http.Request, set media.Settings, magnet, name string
 		err = client.AddMagnet(ctx, magnet, tags)
 	}
 	if err == nil && tags != "" {
-		_, err = media.SelectFiles(ctx, client, nil)
+		_, err = set.SelectFiles(ctx, client, nil)
 	}
 	if err != nil {
 		return "", err

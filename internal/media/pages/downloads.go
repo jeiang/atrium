@@ -94,13 +94,13 @@ func (s *service) dlQueue(ctx context.Context, set media.Settings, edited *media
 	if err != nil {
 		return views, err.Error()
 	}
-	found, errText, err := media.Items(ctx, client, root)
+	found, errText, err := set.Items(ctx, client, root)
 	dlCheck(err)
 	for _, it := range found {
 		if edited != nil && edited.ID() == it.ID {
 			views = append(views, queueView(*edited))
 		} else {
-			views = append(views, queueView(client.Planned(client.Defaults(it, root), root)))
+			views = append(views, queueView(set.Planned(set.Defaults(it, root), root)))
 		}
 	}
 	return views, errText
@@ -234,7 +234,7 @@ func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
 func (s *service) dlFilePost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	form := dlLastValues(web.FormValues(r))
-	client, root, item, err := s.dlFind(ctx, form["id"])
+	set, client, root, item, err := s.dlFind(ctx, form["id"])
 	if err != nil {
 		text, soft := dlSoftPlan(err)
 		if !soft {
@@ -243,7 +243,7 @@ func (s *service) dlFilePost(w http.ResponseWriter, r *http.Request) {
 		s.dlDownloads(w, r, &tpl.Toast{Category: "error", Title: "Not filed", Description: text}, http.StatusUnprocessableEntity, nil)
 		return
 	}
-	plan := client.Plan(client.Edited(item, root, form), root)
+	plan := set.Plan(set.Edited(item, root, form), root)
 	view := plan.View
 	if plan.Error != "" {
 		view.Error = plan.Error
@@ -255,7 +255,7 @@ func (s *service) dlFilePost(w http.ResponseWriter, r *http.Request) {
 		s.dlDownloads(w, r, nil, http.StatusOK, &view)
 		return
 	}
-	if err := client.Apply(ctx, item, ops, root); err != nil {
+	if err := set.Apply(ctx, client, item, ops, root); err != nil {
 		view.Error = err.Error()
 		s.dlDownloads(w, r, nil, http.StatusBadGateway, &view)
 		return
@@ -275,18 +275,18 @@ func dlSoftPlan(err error) (string, bool) {
 	return dlSoft(err)
 }
 
-func (s *service) dlFind(ctx context.Context, id string) (*media.Qbit, string, media.Item, error) {
+func (s *service) dlFind(ctx context.Context, id string) (media.Settings, *media.Qbit, string, media.Item, error) {
 	set := s.settings(ctx)
 	client, err := set.Qbit()
 	if err != nil {
-		return nil, "", media.Item{}, err
+		return set, nil, "", media.Item{}, err
 	}
 	root, err := set.NeedRoot()
 	if err != nil {
-		return nil, "", media.Item{}, err
+		return set, nil, "", media.Item{}, err
 	}
-	item, err := media.Find(ctx, client, root, id)
-	return client, root, item, err
+	item, err := set.Find(ctx, client, root, id)
+	return set, client, root, item, err
 }
 
 func (s *service) dlIgnorePost(w http.ResponseWriter, r *http.Request) {
@@ -296,7 +296,7 @@ func (s *service) dlIgnorePost(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, web.Missing("body", "id"))
 		return
 	}
-	client, _, item, err := s.dlFind(r.Context(), id)
+	_, client, _, item, err := s.dlFind(r.Context(), id)
 	if err == nil {
 		err = media.Ignore(r.Context(), client, item)
 	}

@@ -54,7 +54,7 @@ var sweep = skippable(func(ctx context.Context, d *db.DB, env config.Env, now fu
 	if err != nil {
 		return nil, err
 	}
-	selected, err := media.SelectFiles(ctx, qb, nil)
+	selected, err := settings.SelectFiles(ctx, qb, nil)
 	if err != nil {
 		return nil, err
 	}

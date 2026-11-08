@@ -179,7 +179,7 @@ func mediaDownloads(ctx context.Context, tc *tool.Context, _ tool.Args) (any, er
 	}
 	waiting := []media.Item{}
 	if settings.Root != "" {
-		if waiting, _, err = media.Items(ctx, qb, settings.Root); err != nil {
+		if waiting, _, err = settings.Items(ctx, qb, settings.Root); err != nil {
 			return nil, err
 		}
 	}
@@ -289,7 +289,7 @@ func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 		return nil, qbitFailed(err)
 	}
 	if asMedia {
-		if _, err := media.SelectFiles(ctx, qb, nil); err != nil {
+		if _, err := settings.SelectFiles(ctx, qb, nil); err != nil {
 			return nil, qbitFailed(err)
 		}
 	}
