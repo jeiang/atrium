@@ -16,9 +16,6 @@ type Staged struct {
 
 func Stage(dest string, perm fs.FileMode) (*Staged, error) {
 	dir := filepath.Dir(dest)
-	if err := os.MkdirAll(dir, 0o777); err != nil {
-		return nil, err
-	}
 	f, err := os.CreateTemp(dir, "."+filepath.Base(dest)+".*")
 	if err != nil {
 		return nil, err
