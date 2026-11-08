@@ -1,8 +1,6 @@
 package dbtest
 
 import (
-	"io"
-	"os"
 	"path/filepath"
 	"testing"
 
@@ -13,27 +11,6 @@ func Schema(t testing.TB) *db.DB {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "atrium.db")
 	return migrate(t, path)
-}
-
-func Copy(t testing.TB, src string) (*db.DB, string) {
-	t.Helper()
-	path := filepath.Join(t.TempDir(), "atrium.db")
-	in, err := os.Open(src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = in.Close() }()
-	out, err := os.Create(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := io.Copy(out, in); err != nil {
-		t.Fatal(err)
-	}
-	if err := out.Close(); err != nil {
-		t.Fatal(err)
-	}
-	return migrate(t, path), path
 }
 
 func migrate(t testing.TB, path string) *db.DB {
