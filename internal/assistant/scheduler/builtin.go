@@ -52,6 +52,7 @@ const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untruste
 	"5) Commitments due in the next 7 days or overdue: commitments status=open, compared with today's date. " +
 	"6) Next week: upcoming_birthdays days=7 and the calendar for the next 7 days. " +
 	"7) Packages in transit: packages active_only=true. " +
+	"8) Stale wiki pages: call stale_wiki and list them with their last-reviewed dates. " +
 	"Cite message ids for each item so the operator can open the source. Say plainly when a section is empty " +
 	"or when a date is only inferred. Finish by calling notify exactly once with a title and a two-line summary " +
 	"of the most important items."

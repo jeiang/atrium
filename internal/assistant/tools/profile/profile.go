@@ -8,15 +8,22 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 )
 
-const UndoOp = "profile_restore"
+const (
+	UndoOp            = "profile_restore"
+	KindProfileUpdate = "profile_update"
+	UndoProfileUpdate = "profile_update_undo"
+)
 
 type Entry struct {
 	Key       string
@@ -190,4 +197,63 @@ func Tools() []tool.Tool {
 			Contexts:  tool.Kinds{tool.Chat, tool.Nightly},
 		},
 	}
+}
+
+type UpdateExecutor struct {
+	DB  *db.DB
+	Now func() float64
+}
+
+func (e *UpdateExecutor) now() float64 {
+	if e.Now != nil {
+		return e.Now()
+	}
+	return float64(time.Now().UnixNano()) / 1e9
+}
+
+func (e *UpdateExecutor) Execute(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
+	var payload struct {
+		Key      string `json:"key"`
+		Value    string `json:"value"`
+		Previous string `json:"previous"`
+	}
+	if err := json.Unmarshal([]byte(p.Payload), &payload); err != nil {
+		return nil, err
+	}
+	if _, err := e.DB.Write.ExecContext(ctx,
+		"INSERT INTO agent_profile (key, value, updated_at) VALUES (?, ?, ?) "+
+			"ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+		payload.Key, payload.Value, e.now()); err != nil {
+		return nil, err
+	}
+	action := py.Dict{{Key: "type", Value: KindProfileUpdate}, {Key: "key", Value: payload.Key}}
+	undo := py.Dict{{Key: "op", Value: UndoProfileUpdate}, {Key: "key", Value: payload.Key}, {Key: "previous", Value: payload.Previous}}
+	if _, err := proposals.RecordAction(ctx, e.DB.Write, p.ID, "write", nil, action, undo, ledger.OK, nil, e.now()); err != nil {
+		return nil, err
+	}
+	return py.Dict{{Key: "summary", Value: "Profile updated: " + payload.Key}}, nil
+}
+
+func (e *UpdateExecutor) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, error) {
+	var info struct {
+		Key      string `json:"key"`
+		Previous string `json:"previous"`
+	}
+	if err := json.Unmarshal(plan, &info); err != nil {
+		return nil, err
+	}
+	if info.Previous == "" {
+		if _, err := e.DB.Write.ExecContext(ctx, "DELETE FROM agent_profile WHERE key = ?", info.Key); err != nil {
+			return nil, err
+		}
+	} else if _, err := e.DB.Write.ExecContext(ctx, "UPDATE agent_profile SET value = ?, updated_at = ? WHERE key = ?", info.Previous, e.now(), info.Key); err != nil {
+		return nil, err
+	}
+	return py.Dict{{Key: "restored", Value: info.Key}}, nil
+}
+
+func RegisterProposal(reg *proposals.Registry, e *UpdateExecutor, owner string) {
+	reg.Executors[KindProfileUpdate] = e.Execute
+	reg.Undoers[UndoProfileUpdate] = e.Undo
+	reg.AddKind(proposals.Kind{Name: KindProfileUpdate, Module: owner, Label: "Profile update", Icon: "user-round"})
 }

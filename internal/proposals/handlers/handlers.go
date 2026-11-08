@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -26,4 +27,5 @@ func Register(r *proposals.Registry, deps Deps) {
 	calendar.Register(r, &calendar.Proposals{DB: deps.DB, Now: deps.Now, Env: deps.Env}, module.Calendar)
 	(&notion.Applier{DB: deps.DB, Env: deps.Env, Now: deps.Now}).Register(r, module.Notion)
 	openloops.Register(r, &openloops.Reminders{DB: deps.DB, Now: deps.Now}, module.Mail)
+	profiletools.RegisterProposal(r, &profiletools.UpdateExecutor{DB: deps.DB, Now: deps.Now}, module.Assistant)
 }
