@@ -62,6 +62,13 @@ func stripMsgID(id string) string {
 	return out
 }
 
+func (s *Store) abandon(ctx context.Context, id int64, cause error) {
+	if _, err := s.exec(ctx, "UPDATE drafts SET status = ?, smtp_result = ?, updated_at = ? WHERE id = ?",
+		Draft, "send failed: "+cause.Error(), s.now(), id); err != nil {
+		log.Warn(fmt.Sprintf("draft %d could not be reset after a failed send: %s", id, err))
+	}
+}
+
 func (s *Store) Send(ctx context.Context, id int64, reviewedAt float64) (Result, error) {
 	n, err := s.exec(ctx, "UPDATE drafts SET status = ?, updated_at = ? WHERE id = ? AND status = ? AND updated_at = ?",
 		Sending, s.now(), id, Draft, reviewedAt)
@@ -80,6 +87,7 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedAt float64) (Result,
 	}
 	draft, err := s.Get(ctx, id)
 	if err != nil {
+		s.abandon(ctx, id, err)
 		return Result{}, err
 	}
 	msg, refused, err := s.submit(ctx, draft)
@@ -100,6 +108,7 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedAt float64) (Result,
 		return Result{}, serr
 	}
 	if err != nil {
+		s.abandon(ctx, id, err)
 		return Result{}, err
 	}
 	result := "sent"
