@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
 )
@@ -18,13 +19,20 @@ type Builder struct {
 	Build       func(ctx context.Context, tc *tool.Context, payload map[string]any) (*int64, error)
 }
 
-var kinds = map[string]Builder{}
+var (
+	mu    sync.RWMutex
+	kinds = map[string]Builder{}
+)
 
 func Register(kind, description string, build func(ctx context.Context, tc *tool.Context, payload map[string]any) (*int64, error)) {
+	mu.Lock()
+	defer mu.Unlock()
 	kinds[kind] = Builder{Description: description, Build: build}
 }
 
 func Kinds() []string {
+	mu.RLock()
+	defer mu.RUnlock()
 	out := make([]string, 0, len(kinds))
 	for k := range kinds {
 		out = append(out, k)
@@ -34,10 +42,13 @@ func Kinds() []string {
 }
 
 func describe() string {
+	mu.RLock()
+	defer mu.RUnlock()
 	parts := make([]string, 0, len(kinds))
-	for _, k := range Kinds() {
-		parts = append(parts, k+" "+kinds[k].Description)
+	for k, b := range kinds {
+		parts = append(parts, k+" "+b.Description)
 	}
+	slices.Sort(parts)
 	return strings.Join(parts, "; ")
 }
 
@@ -51,7 +62,9 @@ func propose(ctx context.Context, tc *tool.Context, args tool.Args) (any, error)
 	var fn Builder
 	if ok {
 		shown = strconv.Quote(kind)
+		mu.RLock()
 		fn = kinds[kind]
+		mu.RUnlock()
 	}
 	if fn.Build == nil {
 		return nil, tool.Error("unknown proposal kind " + shown + "; allowed: " + strings.Join(Kinds(), ", "))
