@@ -17,7 +17,16 @@ CREATE TABLE IF NOT EXISTS threads (
     parent_run_id INTEGER,
     project_id INTEGER,
     deleted_at REAL,
-    model TEXT NOT NULL DEFAULT 'claude-haiku-5-5'
+    model TEXT NOT NULL DEFAULT 'claude-haiku-5-5',
+    thinking TEXT NOT NULL DEFAULT 'adaptive',
+    web_search INTEGER NOT NULL DEFAULT 1,
+    cost_cap_usd REAL,
+    environment TEXT,
+    repo TEXT,
+    base_branch TEXT,
+    agent TEXT,
+    beta_set TEXT,
+    speed TEXT
 );
 CREATE INDEX IF NOT EXISTS threads_updated ON threads (archived, updated_at);
 CREATE INDEX IF NOT EXISTS threads_parent_run ON threads (parent_run_id);
