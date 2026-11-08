@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS auto_actions (
     account TEXT NOT NULL,
     message_id INTEGER NOT NULL,
     digest TEXT NOT NULL DEFAULT '',
-    kind TEXT NOT NULL CHECK (kind IN ('file','flag','trash','correct')),
+    kind TEXT NOT NULL CHECK (kind IN ('file','flag','trash','correct','snooze_return')),
     src TEXT,
     dest TEXT,
     before TEXT,

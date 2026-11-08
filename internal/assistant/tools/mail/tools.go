@@ -12,6 +12,7 @@ import (
 )
 
 func Tools() []tool.Tool {
+	RegisterProposalKinds()
 	var out []tool.Tool
 	for _, group := range [][]tool.Tool{mailTools(), draftTools(), openLoopTools(), watchTools()} {
 		out = append(out, group...)

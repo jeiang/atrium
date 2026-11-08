@@ -27,10 +27,11 @@ import (
 var log = logx.Logger("atrium.live")
 
 const (
-	File    = "file"
-	Flag    = "flag"
-	Trash   = "trash"
-	Correct = "correct"
+	File         = "file"
+	Flag         = "flag"
+	Trash        = "trash"
+	Correct      = "correct"
+	SnoozeReturn = "snooze_return"
 
 	GoliveKey   = "golive_ts"
 	DeletionKey = "deletion_pass_ts"
@@ -39,7 +40,7 @@ const (
 	UndoHeldText = "cancelled, write outcome unknown: write in flight"
 )
 
-var Kinds = [...]string{File, Flag, Trash, Correct}
+var Kinds = [...]string{File, Flag, Trash, Correct, SnoozeReturn}
 
 const NotBlocked = "NOT EXISTS (SELECT 1 FROM auto_actions a WHERE a.account = m.account AND a.digest = m.digest " +
 	"AND a.kind IN ('file', 'trash') AND a.state IN ('applied', 'held', 'interrupted', 'unknown')) " +

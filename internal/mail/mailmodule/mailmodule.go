@@ -95,6 +95,9 @@ func (m Module) Register(mc module.Context) module.Registration {
 			"live status":     {Always: true},
 			"endpoints probe": {Always: true},
 		},
-		Tools: func(r *registry.Registry) error { return r.Add(mailtools.Tools()...) },
+		Tools: func(r *registry.Registry) error {
+			mailtools.RegisterProposalKinds()
+			return r.Add(mailtools.Tools()...)
+		},
 	}
 }
