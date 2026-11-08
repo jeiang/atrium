@@ -708,13 +708,17 @@ func (s *state) reserveUSD(ctx context.Context, next float64, what string) error
 		}
 		parentID = parent.ParentRunID
 	}
-	threadSpent, limit, err := budget.ThreadCap(ctx, s.d.Read, s.thread.ID)
+	threadSpent, limit, own, err := budget.ThreadCap(ctx, s.d.Read, s.thread.ID)
 	if err != nil {
 		return err
 	}
 	if threadSpent+next > limit {
-		return RunLimit(fmt.Sprintf("thread cost cap: %s, with $%s of $%s already spent in this thread and its subagents; raise %s to continue",
-			what, strconv.FormatFloat(threadSpent, 'f', 2, 64), strconv.FormatFloat(limit, 'f', 2, 64), budget.ThreadCapKey))
+		remedy := "raise " + budget.ThreadCapKey + " to continue"
+		if own {
+			remedy = "this is the cost cap chosen when the thread was created; start a new thread to continue"
+		}
+		return RunLimit(fmt.Sprintf("thread cost cap: %s, with $%s of $%s already spent in this thread and its subagents; %s",
+			what, strconv.FormatFloat(threadSpent, 'f', 2, 64), strconv.FormatFloat(limit, 'f', 2, 64), remedy))
 	}
 	return nil
 }

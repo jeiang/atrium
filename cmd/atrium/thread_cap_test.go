@@ -3,13 +3,18 @@ package main
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
@@ -89,4 +94,50 @@ func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 	if fresh := agentRun(t, "--text", "elsewhere"); fresh.State != "done" {
 		t.Errorf("a new thread under the same cap: %+v", fresh)
 	}
+}
+
+func TestComposerThreadCostCapRefusesTheNextRequest(t *testing.T) {
+	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, settingEnv(assistant.KeyDefaultModel), pricing.HaikuID)
+	warm(t, api, nil)
+	base, _, stop := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
+		t.Fatalf("GET /chat = %d", status)
+	}
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("costly")).WithUsage(anthropictest.Usage{Input: 1000, Output: 120_000}))
+	if status, body, _ := fetch(t, client, "POST", base+"/chat", url.Values{"text": {"hello"}, "cost_cap": {"0.05"}}); status != http.StatusSeeOther {
+		t.Fatalf("POST /chat = %d: %s", status, body)
+	}
+	thread := latestThread(t, dir)
+	for deadline := time.Now().Add(20 * time.Second); !runDone(t, dir, thread); {
+		if time.Now().After(deadline) {
+			t.Fatal("first run did not finish")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	stop()
+	sent := len(api.Requests())
+	refused := agentRun(t, "--thread", fmt.Sprint(thread), "--text", "again")
+	if len(api.Requests()) != sent {
+		t.Fatalf("%d model requests past the thread's own cost cap, want 0", len(api.Requests())-sent)
+	}
+	if refused.State != "failed" || refused.Error == nil || !strings.Contains(*refused.Error, "thread cost cap") || !strings.Contains(*refused.Error, "of $0.05") {
+		t.Errorf("run over the thread's own $0.05 cap: %+v", refused)
+	}
+}
+
+func runDone(t *testing.T, dir string, thread int64) bool {
+	t.Helper()
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	var n int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM runs WHERE thread_id = ? AND state = 'done'", thread).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	return n > 0
 }

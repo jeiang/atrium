@@ -140,7 +140,8 @@ behavior-parity target.
   monthly budget defaults to $150 with scheduled runs paused at 80% and chat at
   100%; each model has its own run cost cap, checked against the next request
   written cold at the thread's cache lifetime, as is a $10 thread cost cap
-  over all runs of a thread and its subagent threads. A run's spend includes
+  over all runs of a thread and its subagent threads, lowered by the cost cap
+  chosen in the composer when the thread was created. A run's spend includes
   its subagent runs, and every subagent request is also checked against each
   parent run's cap. An Anthropic spend-cap 429
   stops the run as a budget stop. The
