@@ -5,16 +5,17 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/emersion/go-ical"
-	"github.com/emersion/go-webdav/caldav"
 	gcal "google.golang.org/api/calendar/v3"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -34,8 +35,8 @@ var Responses = []string{Accepted, Declined, Tentative}
 var icsPartstat = map[string]string{Accepted: "ACCEPTED", Declined: "DECLINED", Tentative: "TENTATIVE"}
 
 type icloudObject struct {
-	client *caldav.Client
-	path   string
+	client *davmirror.Client
+	path   *url.URL
 	cal    *ical.Calendar
 	raw    string
 }
@@ -49,38 +50,36 @@ func encodeICS(cal *ical.Calendar) (string, error) {
 }
 
 func findICloud(ctx context.Context, env config.Env, set Settings, uid string) (*icloudObject, error) {
-	client, calendars, err := icloudCalendars(ctx, env, set)
+	client, collections, err := icloudCalendars(ctx, env, set)
 	if err != nil {
 		return nil, err
 	}
-	query := &caldav.CalendarQuery{
-		CompRequest: caldav.CalendarCompRequest{Name: "VCALENDAR", AllProps: true, AllComps: true},
-		CompFilter: caldav.CompFilter{Name: "VCALENDAR", Comps: []caldav.CompFilter{{
-			Name:  "VEVENT",
-			Props: []caldav.PropFilter{{Name: "UID", TextMatch: &caldav.TextMatch{Text: uid}}},
-		}}},
-	}
-	for _, c := range calendars {
-		objects, err := client.QueryCalendar(ctx, c.Path, query)
+	for _, collection := range collections {
+		objects, err := client.Query(ctx, collection.URL, davmirror.Calendars, uid)
 		if err != nil {
 			return nil, remote(err)
 		}
-		for _, o := range objects {
-			if hasUID(o.Data, uid) {
-				raw, err := encodeICS(o.Data)
-				if err != nil {
-					return nil, err
-				}
-				return &icloudObject{client: client, path: o.Path, cal: o.Data, raw: raw}, nil
+		for _, object := range objects {
+			cal, err := decodeICS(object.Body)
+			if err != nil || !hasUID(cal, uid) {
+				continue
 			}
+			raw, err := encodeICS(cal)
+			if err != nil {
+				return nil, err
+			}
+			return &icloudObject{client: client, path: object.URL, cal: cal, raw: raw}, nil
 		}
 	}
 	return nil, Error(fmt.Sprintf("no iCloud event with uid %q", uid))
 }
 
 func (o *icloudObject) put(ctx context.Context, cal *ical.Calendar) error {
-	_, err := o.client.PutCalendarObject(ctx, o.path, cal)
-	return remote(err)
+	body, err := encodeICS(cal)
+	if err != nil {
+		return err
+	}
+	return remote(o.client.Put(ctx, o.path, []byte(body), "text/calendar; charset=utf-8"))
 }
 
 func eventOf(cal *ical.Calendar) *ical.Component {

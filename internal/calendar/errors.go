@@ -13,6 +13,8 @@ import (
 
 	"golang.org/x/oauth2"
 	"google.golang.org/api/googleapi"
+
+	"github.com/jeiang/atrium/internal/davmirror"
 )
 
 type Error string
@@ -67,6 +69,10 @@ func remote(err error) error {
 		return &Remote{Text: fmt.Sprintf("calendar API %d: %s", api.Code, reason), Unknown: api.Code >= 500}
 	case errors.As(err, &refused):
 		return &Remote{Text: "calendar refresh failed: " + strings.TrimSpace(string(refused.Body))}
+	}
+	var dav *davmirror.StatusError
+	if errors.As(err, &dav) {
+		return &Remote{Text: dav.Error(), Unknown: dav.Status >= 500}
 	}
 	if code := statusCode(err.Error()); code != 0 {
 		return &Remote{Text: err.Error(), Unknown: code >= 500}
