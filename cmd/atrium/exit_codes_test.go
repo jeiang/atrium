@@ -51,19 +51,9 @@ func TestCLISignalExitCodes(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			dir := t.TempDir()
-			listener, err := net.Listen("tcp", "127.0.0.1:0")
-			if err != nil {
-				t.Fatal(err)
-			}
-			_, port, err := net.SplitHostPort(listener.Addr().String())
-			if err != nil {
-				t.Fatal(err)
-			}
-			if err := listener.Close(); err != nil {
-				t.Fatal(err)
-			}
-			cmd := cliExitProcessArgs(t, []string{"serve", "--host", "127.0.0.1", "--port", port, "--auth", "local"})
-			cmd.Env = append(cmd.Env, "ATRIUM_DB="+filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR="+filepath.Join(dir, "cache"), "ATRIUM_PUBLIC_HOST=")
+			addrFile := filepath.Join(dir, "serve-addr")
+			cmd := cliExitProcessArgs(t, []string{"serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local"})
+			cmd.Env = append(envWithout(cmd.Env, "ATRIUM_SERVE_ADDR_FILE="), "ATRIUM_DB="+filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR="+filepath.Join(dir, "cache"), "ATRIUM_PUBLIC_HOST=", "ATRIUM_SERVE_ADDR_FILE="+addrFile)
 			var stdout, stderr bytes.Buffer
 			cmd.Stdout, cmd.Stderr = &stdout, &stderr
 			if err := cmd.Start(); err != nil {
@@ -75,22 +65,24 @@ func TestCLISignalExitCodes(t *testing.T) {
 					_ = cmd.Wait()
 				}
 			})
-			address := net.JoinHostPort("127.0.0.1", port)
+			address := ""
 			deadline := time.Now().Add(30 * time.Second)
-			for {
-				conn, err := net.DialTimeout("tcp", address, 100*time.Millisecond)
+			for address == "" {
+				raw, err := os.ReadFile(addrFile)
 				if err == nil {
-					_ = conn.Close()
+					address = strings.TrimSpace(string(raw))
 					break
 				}
 				if time.Now().After(deadline) {
-					t.Fatalf("serve did not start: %v, stderr %q", err, stderr.String())
+					t.Fatalf("serve did not report its address: %v, stderr %q", err, stderr.String())
 				}
-				if cmd.ProcessState != nil {
-					t.Fatalf("serve exited early: %v, stderr %q", cmd.ProcessState, stderr.String())
-				}
-				time.Sleep(25 * time.Millisecond)
+				time.Sleep(10 * time.Millisecond)
 			}
+			conn, err := net.DialTimeout("tcp", address, 100*time.Millisecond)
+			if err != nil {
+				t.Fatalf("serve did not accept connections at %s: %v, stderr %q", address, err, stderr.String())
+			}
+			_ = conn.Close()
 			if err := cmd.Process.Signal(tc.sig); err != nil {
 				t.Fatal(err)
 			}
@@ -135,4 +127,14 @@ func exitCode(err error) int {
 		return exit.ExitCode()
 	}
 	return 0
+}
+
+func envWithout(env []string, prefix string) []string {
+	out := make([]string, 0, len(env))
+	for _, entry := range env {
+		if !strings.HasPrefix(entry, prefix) {
+			out = append(out, entry)
+		}
+	}
+	return out
 }
