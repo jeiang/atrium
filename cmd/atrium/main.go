@@ -36,13 +36,19 @@ func main() {
 }
 
 func newApp(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module) *cli.App {
+	return newAppWith(env, reg, st, mods, imapclient.Opener, nil)
+}
+
+func newAppWith(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64) *cli.App {
+	set := newSet(env, reg, st, mods, clients, now)
 	app := cli.New("atrium", logx.Setup)
 	app.Version = version
 	app.Env = env
 	app.Settings = reg
 	app.State = st
+	app.SetupContext = func(ctx context.Context) context.Context { return module.WithSet(ctx, set) }
 	app.Bootstrap = bootstrap(env, reg)
-	app.Add(commands(env, reg, st, mods, imapclient.Opener, nil)...)
+	app.Add(append(set.Commands(), web.ServeCommand(set, set.Pages()...))...)
 	return app
 }
 
@@ -67,9 +73,4 @@ func newSet(env config.Env, reg *settings.Registry, st *config.State, mods []mod
 		panic(err)
 	}
 	return set
-}
-
-func commands(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64) []*cli.Command {
-	set := newSet(env, reg, st, mods, clients, now)
-	return append(set.Commands(), web.ServeCommand(set, set.Pages()...))
 }

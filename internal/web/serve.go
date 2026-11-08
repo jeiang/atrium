@@ -212,7 +212,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 	if err != nil {
 		return err
 	}
-	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Settings: a.settings, State: a.state, Auth: a.auth, Policy: &policy, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, Home: home, OnReady: func(deps *Deps) error {
+	srv, err := New(Options{Ctx: ctx, Cfg: cfg, Env: a.env, DB: d, Settings: a.settings, State: a.state, Auth: a.auth, Policy: &policy, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, Home: home, OnReady: func(deps *Deps) error {
 		if err := a.boot.Start(ctx, deps); err != nil {
 			return err
 		}

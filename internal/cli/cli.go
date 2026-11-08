@@ -167,14 +167,15 @@ func (e *Env) UsageError(format string, a ...any) int {
 }
 
 type App struct {
-	Version   string
-	Stdin     io.Reader
-	Env       config.Env
-	Settings  *settings.Registry
-	State     *config.State
-	Bootstrap func(ctx context.Context, stderr io.Writer) error
-	root      Command
-	setup     func(stderr io.Writer)
+	Version      string
+	Stdin        io.Reader
+	Env          config.Env
+	Settings     *settings.Registry
+	State        *config.State
+	SetupContext func(context.Context) context.Context
+	Bootstrap    func(ctx context.Context, stderr io.Writer) error
+	root         Command
+	setup        func(stderr io.Writer)
 }
 
 func New(name string, setup func(stderr io.Writer)) *App {
@@ -208,6 +209,9 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 	if a.State != nil {
 		ctx = config.With(ctx, a.State)
+	}
+	if a.SetupContext != nil {
+		ctx = a.SetupContext(ctx)
 	}
 	if a.Bootstrap != nil {
 		if err := a.Bootstrap(ctx, stderr); err != nil {

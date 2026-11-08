@@ -388,7 +388,7 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, 
 		if len(result.Added) != 1 {
 			title = fmt.Sprintf("Added %d releases", len(result.Added))
 		}
-		if notify.Enabled() {
+		if notify.Enabled(ctx) {
 			message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Channel: notify.Media}
 			if settings.PublicURL != "" {
 				message.Click = settings.PublicURL + DownloadsPage

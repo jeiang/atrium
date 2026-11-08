@@ -21,10 +21,19 @@ type Set struct {
 	cur  atomic.Pointer[Snapshot]
 }
 
-var active atomic.Pointer[Set]
+type setKey struct{}
 
-func IsEnabled(name string) bool {
-	s := active.Load()
+func WithSet(ctx context.Context, s *Set) context.Context {
+	return context.WithValue(ctx, setKey{}, s)
+}
+
+func SetFrom(ctx context.Context) *Set {
+	s, _ := ctx.Value(setKey{}).(*Set)
+	return s
+}
+
+func IsEnabled(ctx context.Context, name string) bool {
+	s := SetFrom(ctx)
 	if s == nil {
 		return false
 	}
@@ -47,7 +56,6 @@ func NewSet(reg *settings.Registry, st *config.State, env config.Env, mods ...Mo
 		return nil, err
 	}
 	s.regs = ordered
-	active.Store(s)
 	return s, nil
 }
 

@@ -12,7 +12,7 @@ import (
 )
 
 func PauseChanged(ctx context.Context, d *db.DB, env config.Env, paused bool) error {
-	if !Enabled() {
+	if !Enabled(ctx) {
 		return nil
 	}
 	title := "atrium: mail writes resumed"

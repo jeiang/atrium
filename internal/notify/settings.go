@@ -46,8 +46,8 @@ func init() {
 	)
 }
 
-func Enabled() bool {
-	return modules.IsEnabled(modules.Notifications)
+func Enabled(ctx context.Context) bool {
+	return modules.IsEnabled(ctx, modules.Notifications)
 }
 
 func text(ctx context.Context, q db.Querier, key string) (string, error) {
