@@ -69,41 +69,6 @@ func TypeName(v any) string {
 	return fmt.Sprintf("%T", v)
 }
 
-func Truthy(v any) bool {
-	switch t := v.(type) {
-	case nil:
-		return false
-	case bool:
-		return t
-	case float64:
-		return t != 0
-	case string:
-		switch strings.ToLower(strings.TrimSpace(t)) {
-		case "true", "1", "yes":
-			return true
-		}
-		return false
-	case []any:
-		return len(t) > 0
-	case map[string]any:
-		return len(t) > 0
-	}
-	return true
-}
-
-func Float(v any) (float64, error) {
-	switch t := v.(type) {
-	case float64:
-		return t, nil
-	case bool:
-		if t {
-			return 1, nil
-		}
-		return 0, nil
-	}
-	return 0, fmt.Errorf("%w: %s is not a number", ErrShape, TypeName(v))
-}
-
 func Message(err error) string {
 	text := err.Error()
 	for _, class := range []error{ErrPayload, ErrMissing, ErrRange, ErrShape} {

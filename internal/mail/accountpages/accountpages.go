@@ -35,8 +35,6 @@ func Templates() fs.FS {
 	return sub
 }
 
-const path = "/settings/mail"
-
 type refusal string
 
 func (e refusal) Error() string { return string(e) }

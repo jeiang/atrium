@@ -405,17 +405,6 @@ func (s *Service) supersede(ctx context.Context, threadID, fromSeq int64, keepMe
 	})
 }
 
-func (s *Service) StopRun(ctx context.Context, threadID, runID int64) (bool, error) {
-	found, err := journal.GetRun(ctx, s.DB.Read, runID)
-	if err != nil {
-		return false, err
-	}
-	if found == nil || found.ThreadID != threadID {
-		return false, UnknownThread(threadID)
-	}
-	return journal.RequestStop(ctx, s.DB.Write, runID)
-}
-
 func (s *Service) DeleteThread(ctx context.Context, threadID int64) error {
 	thread, err := threads.Get(ctx, s.DB.Read, threadID)
 	if err != nil {

@@ -38,10 +38,6 @@ type MovieResult struct {
 	Year       string
 }
 
-func NewTMDB(token string, client *http.Client) *TMDB {
-	return NewTMDBAt(token, client, defaultTMDBAPI, defaultTMDBImages)
-}
-
 func NewTMDBAt(token string, client *http.Client, api, images string) *TMDB {
 	if token == "" {
 		return nil

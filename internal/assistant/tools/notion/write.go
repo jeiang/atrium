@@ -348,26 +348,6 @@ func createPage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	return out, nil
 }
 
-func newMarkdown(previous string, replace, appendText *string, section string) (string, error) {
-	if section != "" {
-		if replace != nil {
-			updated, ok, err := notion.ReplaceSection(previous, section, *replace)
-			if err != nil {
-				return "", err
-			}
-			if !ok {
-				return "", tool.Error("page has no section titled " + strconv.Quote(section) + "; use append_markdown to add one")
-			}
-			return updated, nil
-		}
-		return notion.AppendToSection(previous, section, *appendText)
-	}
-	if replace != nil {
-		return *replace, nil
-	}
-	return strings.TrimRight(previous, "\n") + "\n\n" + *appendText, nil
-}
-
 func optionalString(args tool.Args, name string) (*string, error) {
 	v := dictGet(args, name)
 	if v == nil {

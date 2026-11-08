@@ -41,13 +41,13 @@ func AutomaticWrites(ctx context.Context, pausePath string) context.Context {
 	return context.WithValue(ctx, automaticKey{}, pausePath)
 }
 
-func ApprovedProposal(ctx context.Context) (string, bool) {
+func approvedProposal(ctx context.Context) (string, bool) {
 	id, ok := ctx.Value(approvedKey{}).(string)
 	return id, ok
 }
 
 func ApprovalIsConsent(ctx context.Context) bool {
-	_, ok := ApprovedProposal(ctx)
+	_, ok := approvedProposal(ctx)
 	return ok
 }
 

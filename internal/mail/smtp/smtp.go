@@ -4,13 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail/mime"
 )
 
 const (
@@ -21,9 +19,7 @@ const (
 
 var log = logx.Logger("atrium.smtp")
 
-type Credentials interface {
-	Credential(ctx context.Context, account string) (user, password string, ok bool)
-}
+type Credentials func(ctx context.Context, account string) (user, password string, ok bool)
 
 func SenderAddress(preset, user string) string {
 	if preset == config.ICloud && !strings.Contains(user, "@") {
@@ -32,22 +28,8 @@ func SenderAddress(preset, user string) string {
 	return user
 }
 
-var commaRunRE = regexp.MustCompile(`[\s,]*,[\s,]*`)
-
-func SplitAddresses(text string) []string {
-	text = commaRunRE.ReplaceAllString(text, ", ")
-	text = strings.Trim(strings.TrimSpace(text), ",")
-	out := []string{}
-	for _, a := range mime.ParseAddresses(text) {
-		if strings.Contains(a.Address, "@") && !strings.Contains(a.Address, " ") {
-			out = append(out, a.Address)
-		}
-	}
-	return out
-}
-
 func Send(ctx context.Context, creds Credentials, account string, msg *Message, recipients []string, factory Factory) (Refusals, error) {
-	user, password, ok := creds.Credential(ctx, account)
+	user, password, ok := creds(ctx, account)
 	if !ok {
 		return nil, &Failure{Kind: "Config", Msg: account + " is not configured: no enabled account with a login and password"}
 	}

@@ -107,19 +107,6 @@ func Decide(rules []Rule, kind tool.Kind, effect tool.Effect) Decision {
 	return decision
 }
 
-func ValidateAnnotations(tools []tool.Tool) error {
-	var missing []string
-	for _, t := range tools {
-		if !t.Annotated {
-			missing = append(missing, t.Name)
-		}
-	}
-	if len(missing) > 0 {
-		return InvalidError("tools missing annotations: " + strings.Join(missing, ", "))
-	}
-	return nil
-}
-
 func (r *Registry) Bind(name string, b Binder) { r.binders[name] = b }
 
 func (r *Registry) All() ([]tool.Tool, error) {

@@ -89,7 +89,6 @@ type state struct {
 	steps   int
 	maxCost float64
 	ttl     string
-	savings int64
 
 	callsKey string
 	repeats  int

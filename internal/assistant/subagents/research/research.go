@@ -23,7 +23,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -37,8 +36,6 @@ const schemaFormat = `{"type":"object","properties":{"role":%s,"task":{"type":"s
 	`"description":"Self-contained brief: question, constraints, what to return."},` +
 	`"context_ids":{"type":"array","items":{"type":["string","integer"]},"maxItems":20}},` +
 	`"required":["role","task"],"additionalProperties":false}`
-
-var log = logx.Logger("atrium.agent.research")
 
 type gate struct {
 	mu     sync.Mutex

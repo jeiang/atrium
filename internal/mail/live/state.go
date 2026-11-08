@@ -353,13 +353,6 @@ func List(ctx context.Context, q Querier, account, kind string, limit, offset in
 	return out, err
 }
 
-func Count(ctx context.Context, q Querier, account, kind string) (int64, error) {
-	where, args := filters("", account, kind)
-	var n int64
-	err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM auto_actions"+where, args...).Scan(&n)
-	return n, err
-}
-
 type UndoResult struct {
 	ID        int64   `json:"id"`
 	Undone    bool    `json:"undone"`

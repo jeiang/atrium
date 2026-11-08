@@ -27,8 +27,6 @@ func New(getenv func(string) string) *Notifier {
 	return n
 }
 
-func FromEnv() *Notifier { return New(os.Getenv) }
-
 func (n *Notifier) Enabled() bool { return n != nil && n.addr != "" }
 
 func (n *Notifier) Interval() time.Duration {

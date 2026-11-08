@@ -7,8 +7,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 )
 
-const defaultRunLimit = 30
-
 type ListedRun struct {
 	ID        int64    `json:"id"`
 	JobID     int64    `json:"job_id"`

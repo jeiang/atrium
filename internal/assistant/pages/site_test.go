@@ -93,8 +93,6 @@ func allTools(t *testing.T, fetchers ...*webfetch.Fetcher) *registry.Registry {
 
 type siteOption func(*site)
 
-func withRunner(r *loop.Runner) siteOption { return func(s *site) { s.runner = r } }
-
 func withWebfetch(f *webfetch.Fetcher) siteOption { return func(s *site) { s.fetch = f } }
 
 func assistantNav() []web.NavItem {
@@ -166,12 +164,6 @@ func (s *site) now() float64 {
 	defer s.mu.Unlock()
 	s.clock++
 	return s.clock
-}
-
-func (s *site) setClock(at float64) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.clock = at
 }
 
 type reply struct {
@@ -333,15 +325,6 @@ func mustNotContain(t *testing.T, body string, unwanted ...string) {
 			t.Errorf("body contains %q", bad)
 		}
 	}
-}
-
-func detail(t *testing.T, body string) any {
-	t.Helper()
-	var out map[string]any
-	if err := json.Unmarshal([]byte(body), &out); err != nil {
-		t.Fatalf("not JSON: %s", body)
-	}
-	return out["detail"]
 }
 
 func reply1(blocks ...json.RawMessage) anthropictest.Response {

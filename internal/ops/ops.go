@@ -99,11 +99,10 @@ type server struct {
 	env config.Env
 	ctx context.Context
 
-	mu       sync.Mutex
-	scraped  time.Time
-	body     []byte
-	third    map[string]result
-	thirdAge time.Time
+	mu      sync.Mutex
+	scraped time.Time
+	body    []byte
+	third   map[string]result
 }
 
 type result struct {

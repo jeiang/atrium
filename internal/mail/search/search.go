@@ -192,8 +192,6 @@ type Part struct {
 	Highlighted bool
 }
 
-func (p Part) MarshalJSON() ([]byte, error) { return json.Marshal([]any{p.Text, p.Highlighted}) }
-
 func SnippetParts(marked string) []Part {
 	parts := []Part{}
 	for _, chunk := range strings.Split(marked, start) {

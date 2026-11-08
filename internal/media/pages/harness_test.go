@@ -20,8 +20,6 @@ import (
 
 const host = "testserver"
 
-var hx = [2]string{"HX-Request", "true"}
-
 type site struct {
 	t        *testing.T
 	db       *db.DB

@@ -180,15 +180,6 @@ func (m Model) tier(t Tokens) (string, Rates) {
 	return TierLow, m.Rates
 }
 
-func TierOf(model string, t Tokens) (string, error) {
-	m, err := Lookup(model)
-	if err != nil {
-		return "", err
-	}
-	tier, _ := m.tier(t)
-	return tier, nil
-}
-
 func CostUSD(model string, t Tokens, searches int64) (float64, error) {
 	m, err := Lookup(model)
 	if err != nil {

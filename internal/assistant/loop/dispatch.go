@@ -294,5 +294,3 @@ func (x *dispatcher) settle(ctx context.Context, use ToolUse, call *journal.Tool
 	}
 	return toolResult(use.ID, Verify, true), nil
 }
-
-func ClassName(err error) string { return className(err) }

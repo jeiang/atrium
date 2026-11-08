@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"net/netip"
 	"net/url"
-	"slices"
 	"strconv"
 	"strings"
 
@@ -36,14 +35,6 @@ type URLParts struct {
 const (
 	whatwgControlOrSpace = "\x00\x01\x02\x03\x04\x05\x06\x07\x08\t\n\x0b\x0c\r\x0e\x0f\x10\x11\x12\x13\x14\x15\x16\x17\x18\x19\x1a\x1b\x1c\x1d\x1e\x1f "
 	schemeChars          = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789+-."
-)
-
-var (
-	usesRelative = []string{"", "ftp", "http", "gopher", "nntp", "imap", "wais", "file", "https", "shttp", "mms", "prospero",
-		"rtsp", "rtsps", "rtspu", "sftp", "svn", "svn+ssh", "ws", "wss"}
-	usesNetloc = []string{"", "ftp", "http", "gopher", "nntp", "telnet", "imap", "wais", "file", "mms", "https", "shttp",
-		"snews", "prospero", "rtsp", "rtsps", "rtspu", "rsync", "svn", "svn+ssh", "sftp", "nfs", "git", "git+ssh", "ws", "wss",
-		"itms-services"}
 )
 
 func isASCII(s string) bool {
@@ -196,131 +187,4 @@ func (p URLParts) Hostname() (string, bool) {
 		return name + "%" + zone, true
 	}
 	return name, true
-}
-
-func (p URLParts) Port() (port int, ok bool, err error) {
-	_, text, has := p.hostinfo()
-	if !has {
-		return 0, false, nil
-	}
-	for i := range len(text) {
-		if text[i] < '0' || text[i] > '9' {
-			return 0, false, fmt.Errorf("port could not be cast to integer value as %s", strconv.Quote(text))
-		}
-	}
-	n, convErr := strconv.Atoi(text)
-	if convErr != nil || n > 65535 {
-		return 0, false, fmt.Errorf("port out of range 0-65535")
-	}
-	return n, true, nil
-}
-
-func URLUnsplit(scheme, netloc, path, query, fragment string) string {
-	hasNetloc := netloc != ""
-	if !hasNetloc && scheme != "" && slices.Contains(usesNetloc, scheme) && (path == "" || path[0] == '/') {
-		hasNetloc = true
-	}
-	return unsplit(scheme, netloc, hasNetloc, path, query, query != "", fragment, fragment != "")
-}
-
-func unsplit(scheme, netloc string, hasNetloc bool, path, query string, hasQuery bool, fragment string, hasFragment bool) string {
-	if hasNetloc {
-		if path != "" && path[0] != '/' {
-			path = "/" + path
-		}
-		path = "//" + netloc + path
-	} else if strings.HasPrefix(path, "//") {
-		path = "//" + path
-	}
-	if scheme != "" {
-		path = scheme + ":" + path
-	}
-	if hasQuery {
-		path += "?" + query
-	}
-	if hasFragment {
-		path += "#" + fragment
-	}
-	return path
-}
-
-func URLJoin(base, url string) (string, error) {
-	if base == "" {
-		return url, nil
-	}
-	if url == "" {
-		return base, nil
-	}
-	b, err := URLSplit(base)
-	if err != nil {
-		return "", err
-	}
-	u, err := URLSplit(url)
-	if err != nil {
-		return "", err
-	}
-	scheme, hasScheme := u.Scheme, u.HasScheme
-	if !hasScheme {
-		scheme = b.Scheme
-	}
-	if scheme != b.Scheme || scheme != "" && !slices.Contains(usesRelative, scheme) {
-		return url, nil
-	}
-	netloc, hasNetloc := u.Netloc, u.HasNetloc
-	if scheme == "" || slices.Contains(usesNetloc, scheme) {
-		if netloc != "" {
-			return unsplit(scheme, netloc, hasNetloc, u.Path, u.Query, u.HasQuery, u.Fragment, u.HasFragment), nil
-		}
-		netloc, hasNetloc = b.Netloc, b.HasNetloc
-	}
-	path, query, hasQuery, fragment, hasFragment := u.Path, u.Query, u.HasQuery, u.Fragment, u.HasFragment
-	if path == "" {
-		path = b.Path
-		if !hasQuery {
-			query, hasQuery = b.Query, b.HasQuery
-			if !hasFragment {
-				fragment, hasFragment = b.Fragment, b.HasFragment
-			}
-		}
-		return unsplit(scheme, netloc, hasNetloc, path, query, hasQuery, fragment, hasFragment), nil
-	}
-	baseParts := strings.Split(b.Path, "/")
-	if baseParts[len(baseParts)-1] != "" {
-		baseParts = baseParts[:len(baseParts)-1]
-	}
-	var segments []string
-	if path[0] == '/' {
-		segments = strings.Split(path, "/")
-	} else {
-		segments = append(baseParts, strings.Split(path, "/")...)
-		if len(segments) > 2 {
-			kept := segments[:1]
-			for _, s := range segments[1 : len(segments)-1] {
-				if s != "" {
-					kept = append(kept, s)
-				}
-			}
-			segments = append(kept, segments[len(segments)-1])
-		}
-	}
-	var resolved []string
-	for _, seg := range segments {
-		switch seg {
-		case "..":
-			if len(resolved) > 0 {
-				resolved = resolved[:len(resolved)-1]
-			}
-		case ".":
-		default:
-			resolved = append(resolved, seg)
-		}
-	}
-	if last := segments[len(segments)-1]; last == "." || last == ".." {
-		resolved = append(resolved, "")
-	}
-	joined := strings.Join(resolved, "/")
-	if joined == "" {
-		joined = "/"
-	}
-	return unsplit(scheme, netloc, hasNetloc, joined, query, hasQuery, fragment, hasFragment), nil
 }

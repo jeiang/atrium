@@ -92,9 +92,8 @@ type Watcher struct {
 
 	Notify *sdnotify.Notifier
 
-	mu       sync.Mutex
-	migrated bool
-	beats    map[string]*sdnotify.Heartbeat
+	mu    sync.Mutex
+	beats map[string]*sdnotify.Heartbeat
 }
 
 func (w *Watcher) heartbeat(account string) *sdnotify.Heartbeat {
@@ -252,7 +251,7 @@ func (w *Watcher) cycle(ctx context.Context, account string, wait *retryBackoff)
 }
 
 func Watch(ctx context.Context, env config.Env, cfg config.Config, requested string, open mail.OpenFunc) error {
-	accounts, err := SelectAccounts(ctx, cfg, requested)
+	accounts, err := SelectAccounts(ctx, requested)
 	if err != nil {
 		return err
 	}

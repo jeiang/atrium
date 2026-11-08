@@ -99,7 +99,7 @@ func setPaused(paused bool) body {
 
 func liveDeletions(x *exec) error {
 	return x.Exclusive(func() error {
-		accounts, err := run.SelectAccounts(x.Ctx, x.Cfg, "")
+		accounts, err := run.SelectAccounts(x.Ctx, "")
 		if err != nil {
 			return err
 		}
@@ -164,11 +164,4 @@ func resolveAction(x *exec, id int64, outcome string) error {
 	}
 	x.JSON(py.Dict{{Key: "id", Value: result.ID}, {Key: "outcome", Value: result.Outcome}})
 	return nil
-}
-
-func nullable[T any](v *T) any {
-	if v == nil {
-		return nil
-	}
-	return *v
 }

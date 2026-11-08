@@ -221,15 +221,6 @@ func LookupOf(key string) (Def, bool) {
 	return Def{}, false
 }
 
-func DefaultOf(key string) (string, bool) {
-	for _, d := range definitions {
-		if d.Key == key {
-			return d.Default, true
-		}
-	}
-	return "", false
-}
-
 func RangeOf(key string) (int64, int64, bool) {
 	for _, d := range definitions {
 		if d.Key == key {
