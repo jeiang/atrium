@@ -138,7 +138,7 @@ func ServerCompacted(ctx gocontext.Context, q db.Querier, threadID, runID int64,
 	if err != nil {
 		return 0, err
 	}
-	return saveProjection(ctx, q, threadID, runID, KindServer, base, base, base, head, 0, now)
+	return saveProjection(ctx, q, threadID, runID, base, base, base, head, 0, now)
 }
 
 func nextSeq(ctx gocontext.Context, q db.Querier, threadID int64) (int64, error) {
@@ -363,5 +363,5 @@ func ClientCompact(ctx gocontext.Context, d *db.DB, client *anthropic.Client, mo
 		return 0, err
 	}
 	head := []Message{{Role: journal.User, Content: content}}
-	return saveProjection(ctx, d.Write, threadID, runID, KindClient, base, base, base, head, max(before-after, 0), now)
+	return saveProjection(ctx, d.Write, threadID, runID, base, base, base, head, max(before-after, 0), now)
 }

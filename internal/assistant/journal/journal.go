@@ -379,8 +379,8 @@ func AppendMessageTx(ctx context.Context, q db.Querier, threadID int64, runID *i
 
 func StoreResult(ctx context.Context, q db.Querier, runID, callID int64, tool, body string, tokens int64, now float64) (int64, error) {
 	res, err := q.ExecContext(ctx,
-		"INSERT INTO tool_results (run_id, tool_call_id, tool, tokens, bytes, sha256, body, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		runID, callID, tool, tokens, 0, "", body, now)
+		"INSERT INTO tool_results (run_id, tool_call_id, tool, tokens, body, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+		runID, callID, tool, tokens, body, now)
 	if err != nil {
 		return 0, err
 	}

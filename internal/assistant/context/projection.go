@@ -85,15 +85,15 @@ func dumpHead(head []Message) (string, error) {
 	return py.JSONDumps(items, compactJSON), nil
 }
 
-func saveProjection(ctx gocontext.Context, q db.Querier, threadID, runID int64, kind string, baseSeq, stripFromSeq, stripBeforeSeq int64, head []Message, savedTokens int64, now float64) (int64, error) {
+func saveProjection(ctx gocontext.Context, q db.Querier, threadID, runID int64, baseSeq, stripFromSeq, stripBeforeSeq int64, head []Message, savedTokens int64, now float64) (int64, error) {
 	body, err := dumpHead(head)
 	if err != nil {
 		return 0, err
 	}
 	res, err := q.ExecContext(ctx,
-		"INSERT INTO context_projections (thread_id, run_id, ts, kind, base_seq, strip_from_seq, strip_before_seq, head_json, saved_tokens) "+
-			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		threadID, runID, now, kind, baseSeq, stripFromSeq, stripBeforeSeq, body, savedTokens)
+		"INSERT INTO context_projections (thread_id, run_id, ts, base_seq, strip_from_seq, strip_before_seq, head_json, saved_tokens) "+
+			"VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		threadID, runID, now, baseSeq, stripFromSeq, stripBeforeSeq, body, savedTokens)
 	if err != nil {
 		return 0, err
 	}

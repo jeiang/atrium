@@ -58,8 +58,6 @@ const (
 	StagedFold = "staged_fold"
 	Dropped    = "dropped"
 	Folded     = "folded"
-	KindServer = "server"
-	KindClient = "client"
 	KindCommit = "commit"
 )
 
