@@ -377,58 +377,14 @@ func LearnedRulesSummary(ctx context.Context, q rules.Querier, account string, l
 	if err != nil {
 		return nil, err
 	}
+	groups, err := rules.LearnedGroups(ctx, q, account)
+	if err != nil {
+		return nil, err
+	}
 	found := []LearnedRule{}
-	for _, level := range rules.LearnedLevels {
-		nonblank := make([]string, len(level.Columns))
-		for i, c := range level.Columns {
-			nonblank[i] = c + " != ''"
-		}
-		selectCols := strings.Join(level.Columns, ", ")
-		rows, err := q.QueryContext(ctx,
-			"SELECT "+selectCols+", folder, COUNT(*) AS n FROM filed_messages WHERE account = ? AND "+
-				strings.Join(nonblank, " AND ")+" GROUP BY "+selectCols+", folder", account)
-		if err != nil {
-			return nil, err
-		}
-		type group struct {
-			key    string
-			counts map[string]int
-		}
-		var order [][2]string
-		groups := map[[2]string]*group{}
-		err = func() error {
-			defer func() { _ = rows.Close() }()
-			for rows.Next() {
-				parts := make([]string, len(level.Columns))
-				var folder string
-				var n int
-				dest := make([]any, 0, len(parts)+2)
-				for i := range parts {
-					dest = append(dest, &parts[i])
-				}
-				if err := rows.Scan(append(dest, &folder, &n)...); err != nil {
-					return err
-				}
-				var tuple [2]string
-				copy(tuple[:], parts)
-				g := groups[tuple]
-				if g == nil {
-					g = &group{strings.Join(parts, " | "), map[string]int{}}
-					groups[tuple] = g
-					order = append(order, tuple)
-				}
-				g.counts[folder] = n
-			}
-			return rows.Err()
-		}()
-		if err != nil {
-			return nil, err
-		}
-		for _, k := range order {
-			g := groups[k]
-			if p, ok := rules.PickPure(g.counts, thresholds); ok {
-				found = append(found, LearnedRule{level.Name, g.key, p.Folder, p.Purity, p.Total})
-			}
+	for _, g := range groups {
+		if p, ok := rules.PickPure(g.Counts, thresholds); ok {
+			found = append(found, LearnedRule{g.Level, g.Key, p.Folder, p.Purity, p.Total})
 		}
 	}
 	slices.SortStableFunc(found, func(a, b LearnedRule) int {

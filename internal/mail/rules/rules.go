@@ -792,6 +792,62 @@ func PickPure(counts map[string]int, t Thresholds) (Picked, bool) {
 	return Picked{folder, purity, total}, true
 }
 
+type LearnedGroup struct {
+	Level  string
+	Key    string
+	Counts map[string]int
+}
+
+func LearnedGroups(ctx context.Context, q Querier, account string) ([]LearnedGroup, error) {
+	var out []LearnedGroup
+	for _, level := range LearnedLevels {
+		nonblank := make([]string, len(level.Columns))
+		for i, c := range level.Columns {
+			nonblank[i] = c + " != ''"
+		}
+		selectCols := strings.Join(level.Columns, ", ")
+		rows, err := q.QueryContext(ctx,
+			"SELECT "+selectCols+", folder, COUNT(*) AS n FROM filed_messages WHERE account = ? AND "+
+				strings.Join(nonblank, " AND ")+" GROUP BY "+selectCols+", folder", account)
+		if err != nil {
+			return nil, err
+		}
+		seen := map[string]*LearnedGroup{}
+		var order []string
+		err = func() error {
+			defer func() { _ = rows.Close() }()
+			for rows.Next() {
+				parts := make([]string, len(level.Columns))
+				var folder string
+				var n int
+				dest := make([]any, 0, len(parts)+2)
+				for i := range parts {
+					dest = append(dest, &parts[i])
+				}
+				if err := rows.Scan(append(dest, &folder, &n)...); err != nil {
+					return err
+				}
+				key := strings.Join(parts, " | ")
+				g := seen[key]
+				if g == nil {
+					g = &LearnedGroup{Level: level.Name, Key: key, Counts: map[string]int{}}
+					seen[key] = g
+					order = append(order, key)
+				}
+				g.Counts[folder] = n
+			}
+			return rows.Err()
+		}()
+		if err != nil {
+			return nil, err
+		}
+		for _, key := range order {
+			out = append(out, *seen[key])
+		}
+	}
+	return out, nil
+}
+
 func LearnedCounts(ctx context.Context, q Querier, account string, columns []string, values []string, excludeID int64) (map[string]int, error) {
 	where := make([]string, len(columns))
 	for i, c := range columns {
