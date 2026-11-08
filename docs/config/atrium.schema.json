@@ -591,6 +591,14 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "agent_schedule_memory_work": {
+          "default": "*/2 * * * *",
+          "type": "string"
+        },
+        "agent_schedule_memory_work_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "agent_schedule_min_interval_seconds": {
           "default": 3600,
           "type": [
@@ -2857,6 +2865,40 @@
     "memory": {
       "additionalProperties": false,
       "properties": {
+        "backfill_done": {
+          "type": "string"
+        },
+        "backfill_done_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "concurrency": {
+          "default": 4,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "concurrency_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "effort": {
+          "default": "low",
+          "type": "string"
+        },
+        "effort_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "model": {
+          "default": "claude-haiku-5-5",
+          "type": "string"
+        },
+        "model_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "node_bytes": {
           "default": 512,
           "type": [
@@ -2865,6 +2907,39 @@
           ]
         },
         "node_bytes_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tail_messages": {
+          "default": 6,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "tail_messages_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "view_high": {
+          "default": 128000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "view_high_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "view_low": {
+          "default": 64000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "view_low_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }

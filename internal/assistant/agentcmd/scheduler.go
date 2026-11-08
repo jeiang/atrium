@@ -3,6 +3,7 @@ package agentcmd
 import (
 	"fmt"
 
+	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
@@ -18,6 +19,9 @@ func callables() map[string]worker.Callable {
 		out[name] = call
 	}
 	for name, call := range mediacmd.Callables() {
+		out[name] = call
+	}
+	for name, call := range memorycmd.Callables() {
 		out[name] = call
 	}
 	return out

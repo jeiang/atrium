@@ -61,6 +61,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_CHANNELS` | `assistant.agent_schedule_media_channels` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_SWEEP` | `assistant.agent_schedule_media_sweep` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_THUMBNAILS` | `assistant.agent_schedule_media_thumbnails` |
+| `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEMORY_WORK` | `assistant.agent_schedule_memory_work` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MIN_INTERVAL_SECONDS` | `assistant.agent_schedule_min_interval_seconds` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_NIGHTLY` | `assistant.agent_schedule_nightly` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_WEEKLY_REVIEW` | `assistant.agent_schedule_weekly_review` |
@@ -286,7 +287,14 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MEDIA_QBITTORRENT_PROXY` | `media.qbittorrent_proxy` |
 | `ATRIUM_MEDIA_TMDB_CA_FILE` | `media.tmdb_ca_file` |
 | `ATRIUM_MEDIA_TMDB_PROXY` | `media.tmdb_proxy` |
+| `ATRIUM_MEMORY_BACKFILL_DONE` | `memory.backfill_done` |
+| `ATRIUM_MEMORY_CONCURRENCY` | `memory.concurrency` |
+| `ATRIUM_MEMORY_EFFORT` | `memory.effort` |
+| `ATRIUM_MEMORY_MODEL` | `memory.model` |
 | `ATRIUM_MEMORY_NODE_BYTES` | `memory.node_bytes` |
+| `ATRIUM_MEMORY_TAIL_MESSAGES` | `memory.tail_messages` |
+| `ATRIUM_MEMORY_VIEW_HIGH` | `memory.view_high` |
+| `ATRIUM_MEMORY_VIEW_LOW` | `memory.view_low` |
 | `ATRIUM_NOTIFY_NOTIFY_BODY_CHARS` | `notify.notify_body_chars` |
 | `ATRIUM_NOTIFY_NOTIFY_NIGHTLY_CAP` | `notify.notify_nightly_cap` |
 | `ATRIUM_NOTIFY_NOTIFY_PER_RUN_CAP` | `notify.notify_per_run_cap` |

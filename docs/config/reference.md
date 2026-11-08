@@ -72,6 +72,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_schedule_media_channels` | string | `*/30 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_CHANNELS` |
 | `agent_schedule_media_sweep` | string | `*/10 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_SWEEP` |
 | `agent_schedule_media_thumbnails` | string | `daily 04:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_THUMBNAILS` |
+| `agent_schedule_memory_work` | string | `*/2 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEMORY_WORK` |
 | `agent_schedule_min_interval_seconds` | int | `3600` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MIN_INTERVAL_SECONDS` |
 | `agent_schedule_nightly` | string | `daily 02:30` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_NIGHTLY` |
 | `agent_schedule_weekly_review` | string | `weekly sun 18:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_WEEKLY_REVIEW` |
@@ -342,7 +343,14 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
+| `backfill_done` | string | none | advanced | `ATRIUM_MEMORY_BACKFILL_DONE` |
+| `concurrency` | int | `4` | advanced | `ATRIUM_MEMORY_CONCURRENCY` |
+| `effort` | string | `low` | advanced | `ATRIUM_MEMORY_EFFORT` |
+| `model` | string | `claude-haiku-5-5` | advanced | `ATRIUM_MEMORY_MODEL` |
 | `node_bytes` | int | `512` | advanced | `ATRIUM_MEMORY_NODE_BYTES` |
+| `tail_messages` | int | `6` | advanced | `ATRIUM_MEMORY_TAIL_MESSAGES` |
+| `view_high` | int | `128000` | advanced | `ATRIUM_MEMORY_VIEW_HIGH` |
+| `view_low` | int | `64000` | advanced | `ATRIUM_MEMORY_VIEW_LOW` |
 
 ## notify
 

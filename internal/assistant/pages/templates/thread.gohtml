@@ -17,6 +17,9 @@
     <div role="tabpanel" id="panel-work" aria-labelledby="panel-tab-work" tabindex="-1" aria-selected="true" class="flex flex-col gap-4" hx-get="/chat/{{$t.id}}/work" hx-trigger="work-changed" hx-swap="innerHTML">
       {{template "chat_work" $d.work}}
     </div>
+    {{if $d.history}}<div role="tabpanel" id="panel-history" aria-labelledby="panel-tab-history" tabindex="-1" aria-selected="false" hidden>
+      <div id="history-body" hx-get="/chat/{{$t.id}}/history" hx-trigger="load" hx-swap="innerHTML"></div>
+    </div>{{end}}
     <div role="tabpanel" id="panel-preview" aria-labelledby="panel-tab-preview" tabindex="-1" aria-selected="false" hidden>
       <div id="preview-body" data-loading="reader-loading" class="flex flex-col gap-4">
         <p class="text-sm text-muted-foreground">Open an email, a draft, a Notion page or a file from the conversation or the Work tab to read it here.</p>
