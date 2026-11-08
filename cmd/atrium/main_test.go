@@ -134,7 +134,9 @@ func startServeAppOnce(t *testing.T, app *cli.App, logs *lockedBuffer) (string, 
 	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); {
 		if resp, err := http.Get(base + "/healthz"); err == nil {
 			_ = resp.Body.Close()
-			return base, logs, stop, nil
+			if resp.StatusCode == http.StatusOK {
+				return base, logs, stop, nil
+			}
 		}
 		if code := exitCode.Load(); code >= 0 {
 			cancel()
