@@ -19,13 +19,11 @@ import (
 	assistantpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/registry"
-	notiontools "github.com/jeiang/atrium/internal/assistant/tools/notion"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -228,6 +226,7 @@ func (s *site) hubOf(id string) *string { return s.projectOf(id).WikiHubID }
 
 type fakeNotion struct {
 	mu       sync.Mutex
+	srv      *httptest.Server
 	pages    map[string]map[string]any
 	titles   map[string]string
 	parents  map[string]string
@@ -239,15 +238,8 @@ func newFakeNotion(t *testing.T) *fakeNotion {
 	t.Helper()
 	f := &fakeNotion{pages: map[string]map[string]any{}, titles: map[string]string{}, parents: map[string]string{}, markdown: map[string]string{}}
 	srv := httptest.NewServer(f)
+	f.srv = srv
 	t.Cleanup(srv.Close)
-	previous := notiontools.NewClient
-	notiontools.NewClient = func(token string) *notion.Client {
-		c := notion.NewClient(token)
-		c.BaseURL = srv.URL
-		c.Sleep = func(context.Context, float64) error { return nil }
-		return c
-	}
-	t.Cleanup(func() { notiontools.NewClient = previous })
 	return f
 }
 

@@ -8,7 +8,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/notion"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var readKinds = tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub}
@@ -143,7 +142,7 @@ func searchKnowledge(ctx context.Context, tc *tool.Context, args tool.Args) (any
 }
 
 func livePage(ctx context.Context, tc *tool.Context, pageID string) (map[string]any, error) {
-	client, err := makeClient(ctx, tc.DB.Read)
+	client, err := makeClient(ctx, tc.DB.Read, tc.Env)
 	if err != nil {
 		return nil, err
 	}
@@ -151,19 +150,18 @@ func livePage(ctx context.Context, tc *tool.Context, pageID string) (map[string]
 	if err != nil {
 		return nil, notionError(err)
 	}
-	properties, _ := dictGet(page, "properties").(py.Dict)
 	sensitivity, err := notion.LoadSensitivity(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
-	if sensitivity.IsPrivate(sensitivity.Of(properties)) {
+	if sensitivity.IsPrivate(sensitivity.Of(page.Properties)) {
 		return nil, tool.Error("page is private")
 	}
 	markdown, err := notion.FetchMarkdown(ctx, client, pageID)
 	if err != nil {
 		return nil, notionError(err)
 	}
-	return map[string]any{"page_id": normalize(pageID), "title": notion.PageTitle(page), "url": str(page, "url"), "markdown": markdown}, nil
+	return map[string]any{"page_id": normalize(pageID), "title": page.Title(), "url": page.URL, "markdown": markdown}, nil
 }
 
 func fetchKnowledge(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {

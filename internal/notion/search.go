@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
@@ -17,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/search"
 	"github.com/jeiang/atrium/internal/notionid"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const Account = "notion"
@@ -25,11 +23,10 @@ const Account = "notion"
 const hitSelect = "SELECT rid, id, title, path, url, last_edited_time, edited_ts, private FROM notion_pages " +
 	"WHERE in_trash = 0 AND rid IN (SELECT value FROM json_each(?))"
 
-type Querier = search.Querier
+type Querier = db.Querier
 
 type PathPart struct {
-	ID    *string `json:"id"`
-	Title string  `json:"title"`
+	Title string `json:"title"`
 }
 
 type PageRef struct {
@@ -57,9 +54,6 @@ func pageRef(id, title, url, path string, private bool) PageRef {
 type Page struct {
 	RID            int64   `json:"rid"`
 	ID             string  `json:"id"`
-	ParentType     string  `json:"parent_type"`
-	ParentID       string  `json:"parent_id"`
-	DataSourceID   string  `json:"data_source_id"`
 	Title          string  `json:"title"`
 	Path           string  `json:"path"`
 	URL            string  `json:"url"`
@@ -68,21 +62,19 @@ type Page struct {
 	LastEditedTime string  `json:"last_edited_time"`
 	EditedTS       float64 `json:"edited_ts"`
 	InTrash        int64   `json:"in_trash"`
-	Sensitivity    string  `json:"sensitivity"`
 	Private        int64   `json:"private"`
 	Links          string  `json:"links"`
-	Embedded       int64   `json:"embedded"`
 	SyncedAt       float64 `json:"synced_at"`
 }
 
 func GetPage(ctx context.Context, q Querier, pageID string) (*Page, error) {
 	var p Page
 	err := q.QueryRowContext(ctx,
-		"SELECT rid, id, parent_type, parent_id, data_source_id, title, path, url, properties, markdown, last_edited_time, "+
-			"edited_ts, in_trash, sensitivity, private, links, embedded, synced_at FROM notion_pages WHERE id = ?",
+		"SELECT rid, id, title, path, url, properties, markdown, last_edited_time, "+
+			"edited_ts, in_trash, private, links, synced_at FROM notion_pages WHERE id = ?",
 		notionid.Normalize(pageID)).
-		Scan(&p.RID, &p.ID, &p.ParentType, &p.ParentID, &p.DataSourceID, &p.Title, &p.Path, &p.URL, &p.Properties,
-			&p.Markdown, &p.LastEditedTime, &p.EditedTS, &p.InTrash, &p.Sensitivity, &p.Private, &p.Links, &p.Embedded, &p.SyncedAt)
+		Scan(&p.RID, &p.ID, &p.Title, &p.Path, &p.URL, &p.Properties,
+			&p.Markdown, &p.LastEditedTime, &p.EditedTS, &p.InTrash, &p.Private, &p.Links, &p.SyncedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -94,65 +86,20 @@ type PropertyRow struct {
 	Value string `json:"value"`
 }
 
-func propertyText(prop py.Dict) string {
-	kind, _ := field(prop, "type").(string)
-	value := field(prop, kind)
-	switch kind {
-	case "title", "rich_text":
-		items, _ := value.([]any)
-		return richText(items)
-	case "select", "status":
-		return text(asDict(value), "name")
-	case "multi_select":
-		var names []string
-		items, _ := value.([]any)
-		for _, v := range items {
-			names = append(names, text(asDict(v), "name"))
-		}
-		return strings.Join(names, ", ")
-	case "date":
-		d := asDict(value)
-		var parts []string
-		for _, k := range []string{"start", "end"} {
-			if s := field(d, k); truthy(s) {
-				parts = append(parts, pyStr(s))
-			}
-		}
-		return strings.Join(parts, " → ")
-	case "relation":
-		items, _ := value.([]any)
-		if len(items) > 0 {
-			return strconv.Itoa(len(items)) + " linked"
-		}
-		return ""
-	case "people":
-		var names []string
-		items, _ := value.([]any)
-		for _, v := range items {
-			names = append(names, text(asDict(v), "name"))
-		}
-		return strings.Join(names, ", ")
-	}
-	switch value.(type) {
-	case nil, py.Dict, []any:
-		return ""
-	}
-	return pyStr(value)
-}
+func propertyText(prop Property) string { return prop.Text() }
 
 func propertyRows(properties string) ([]PropertyRow, error) {
-	v, err := py.JSONLoads([]byte(properties))
-	if err != nil {
+	var props map[string]Property
+	if err := json.Unmarshal([]byte(properties), &props); err != nil {
 		return nil, err
 	}
 	rows := []PropertyRow{}
-	for _, p := range asDict(v) {
-		prop := asDict(p.Value)
-		if text(prop, "type") == "title" {
+	for name, prop := range props {
+		if prop.Type == "title" {
 			continue
 		}
-		if value := propertyText(prop); value != "" {
-			rows = append(rows, PropertyRow{Name: p.Key, Value: value})
+		if value := prop.Text(); value != "" {
+			rows = append(rows, PropertyRow{Name: name, Value: value})
 		}
 	}
 	return rows, nil
@@ -364,22 +311,12 @@ func heads(ctx context.Context, q Querier, limits SearchLimits, rids []int64) (m
 
 type Hit struct {
 	PageRef
-	Account        string        `json:"account"`
-	Subject        string        `json:"subject"`
-	Folder         string        `json:"folder"`
-	LastEditedTime string        `json:"last_edited_time"`
-	EditedTS       float64       `json:"edited_ts"`
-	DateTS         float64       `json:"date_ts"`
-	FromAddr       string        `json:"from_addr"`
-	FromName       string        `json:"from_name"`
-	Seen           bool          `json:"seen"`
-	Flagged        bool          `json:"flagged"`
-	HasAttachment  bool          `json:"has_attachment"`
-	Score          *float64      `json:"score"`
-	LexicalRank    *int          `json:"lexical_rank"`
-	SemanticRank   *int          `json:"semantic_rank"`
-	Snippet        string        `json:"snippet"`
-	SnippetParts   []search.Part `json:"snippet_parts"`
+	Folder       string        `json:"folder"`
+	Score        *float64      `json:"score"`
+	LexicalRank  *int          `json:"lexical_rank"`
+	SemanticRank *int          `json:"semantic_rank"`
+	Snippet      string        `json:"snippet"`
+	SnippetParts []search.Part `json:"snippet_parts"`
 }
 
 func newHit(info hitInfo, score *float64, lexRank, semRank *int, head string, marked *string) Hit {
@@ -395,9 +332,8 @@ func newHit(info hitInfo, score *float64, lexRank, semRank *int, head string, ma
 		snippet.WriteString(p.Text)
 	}
 	return Hit{
-		PageRef: pageRef(info.id, info.title, info.url, info.path, info.private), Account: Account, Subject: info.title,
-		Folder: info.path, LastEditedTime: info.lastEditedTime, EditedTS: info.editedTS, DateTS: info.editedTS,
-		Seen: true, Score: score, LexicalRank: lexRank, SemanticRank: semRank, Snippet: snippet.String(), SnippetParts: parts,
+		PageRef: pageRef(info.id, info.title, info.url, info.path, info.private),
+		Folder:  info.path, Score: score, LexicalRank: lexRank, SemanticRank: semRank, Snippet: snippet.String(), SnippetParts: parts,
 	}
 }
 
@@ -428,16 +364,9 @@ func recent(ctx context.Context, q Querier, limits SearchLimits, includePrivate 
 	return hits, nil
 }
 
-type Filters struct {
-	Account        string `json:"account"`
-	IncludePrivate bool   `json:"include_private"`
-}
-
 type Result struct {
-	Hits     []Hit   `json:"hits"`
-	Semantic bool    `json:"semantic"`
-	Error    *string `json:"error"`
-	Filters  Filters `json:"filters"`
+	Hits     []Hit `json:"hits"`
+	Semantic bool  `json:"semantic"`
 }
 
 func rank(list []int64) map[int64]int {
@@ -457,10 +386,9 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 		return Result{}, err
 	}
 	query = strings.TrimSpace(query)
-	filters := Filters{Account: Account, IncludePrivate: includePrivate}
 	if query == "" {
 		hits, err := recent(ctx, q, limits, includePrivate, limit)
-		return Result{Hits: hits, Filters: filters}, err
+		return Result{Hits: hits}, err
 	}
 	match, err := search.FTSQuery(query)
 	if err != nil {
@@ -473,7 +401,6 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 		}
 	}
 	var sem []int64
-	var failure *string
 	available := true
 	embedURL, err := mail.EmbedURL(ctx, q)
 	if err != nil {
@@ -497,8 +424,6 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 			return Result{}, err
 		}
 		available = false
-		msg := httpx.Message(err)
-		failure = &msg
 		sem = nil
 	}
 	lexRank := map[int64]int{}
@@ -558,7 +483,7 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 		score := s.Score
 		hits = append(hits, newHit(i, &score, lr, sr, head[s.ID], m))
 	}
-	return Result{Hits: hits, Semantic: available, Error: failure, Filters: filters}, nil
+	return Result{Hits: hits, Semantic: available}, nil
 }
 
 type Related struct {

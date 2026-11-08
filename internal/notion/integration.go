@@ -2,25 +2,17 @@ package notion
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
 const TokenKey = "notion_token"
-
-var apiBase = BaseURL
-
-func UseBaseURL(u string) func() {
-	saved := apiBase
-	apiBase = u
-	return func() { apiBase = saved }
-}
 
 func init() {
 	settings.MustRegister(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: TokenKey, Module: "notion", Type: settings.String}))
@@ -37,17 +29,22 @@ func Token(ctx context.Context, q db.Querier) (string, error) {
 	return token, nil
 }
 
-func SharedPages(ctx context.Context, token string, hc *http.Client) (shared int, more bool, err error) {
-	client := NewClient(token)
-	client.HTTP = hc
-	client.API.MaxRetries = 0
-	if _, err := client.Request(ctx, http.MethodGet, "/v1/users/me", nil, nil); err != nil {
-		return 0, false, err
-	}
-	filter := py.Dict{{Key: "property", Value: "object"}, {Key: "value", Value: "page"}}
-	reply, err := client.Request(ctx, http.MethodPost, "/v1/search", py.Dict{{Key: "filter", Value: filter}, {Key: pagedKeyPerPage, Value: 100}}, nil)
+func SharedPages(ctx context.Context, q db.Querier, env config.Env, token string, hc *http.Client) (shared int, more bool, err error) {
+	client, err := newCandidate(ctx, q, env, token, hc)
 	if err != nil {
 		return 0, false, err
 	}
-	return len(list(reply, "results")), truthy(field(reply, "has_more")), nil
+	client.API.MaxRetries = 0
+	if err := client.do(ctx, http.MethodGet, "/v1/users/me", nil, nil); err != nil {
+		return 0, false, err
+	}
+	var reply struct {
+		Results []json.RawMessage `json:"results"`
+		HasMore bool              `json:"has_more"`
+	}
+	body := map[string]any{"filter": map[string]any{"property": "object", "value": "page"}, pagedKeyPerPage: 100}
+	if err := client.do(ctx, http.MethodPost, "/v1/search", body, &reply); err != nil {
+		return 0, false, err
+	}
+	return len(reply.Results), reply.HasMore, nil
 }

@@ -53,7 +53,7 @@ func fresh(ctx context.Context, client *notion.Client, pageID, applied string) e
 	if err != nil {
 		return err
 	}
-	if dictGet(live, "last_edited_time") != applied {
+	if live.LastEditedTime != applied {
 		return writes.UndoError("the page changed in Notion after this write; refusing to overwrite it")
 	}
 	return nil
@@ -61,7 +61,7 @@ func fresh(ctx context.Context, client *notion.Client, pageID, applied string) e
 
 func guarded(env config.Env, fn func(ctx context.Context, q db.Querier, client *notion.Client, payload json.RawMessage) (any, error)) writes.Undoer {
 	return func(ctx context.Context, q db.Querier, payload json.RawMessage) (any, error) {
-		client, err := makeClient(ctx, q)
+		client, err := makeClient(ctx, q, env)
 		if err != nil {
 			return nil, refuse(err)
 		}
@@ -82,7 +82,7 @@ func trashing(value bool, key string) func(context.Context, db.Querier, *notion.
 		if err := fresh(ctx, client, u.PageID, u.AppliedEditedTime); err != nil {
 			return nil, err
 		}
-		if _, err := client.SetTrash(ctx, u.PageID, value); err != nil {
+		if err := client.SetTrash(ctx, u.PageID, value); err != nil {
 			return nil, err
 		}
 		if err := notion.UpsertWiki(ctx, q, u.PageID, now(), notion.WikiFields{InTrash: &value}); err != nil {
@@ -100,7 +100,7 @@ func undoRestorePage(ctx context.Context, _ db.Querier, client *notion.Client, p
 	if err := fresh(ctx, client, u.PageID, u.AppliedEditedTime); err != nil {
 		return nil, err
 	}
-	if _, err := client.UpdateMarkdown(ctx, u.PageID, replaceContent(u.PreviousMarkdown)); err != nil {
+	if err := client.UpdateMarkdown(ctx, u.PageID, replaceContent(u.PreviousMarkdown)); err != nil {
 		return nil, err
 	}
 	return map[string]any{"restored": u.PageID}, nil
@@ -114,7 +114,7 @@ func undoMovePage(ctx context.Context, q db.Querier, client *notion.Client, payl
 	if err := fresh(ctx, client, u.PageID, u.AppliedEditedTime); err != nil {
 		return nil, err
 	}
-	if _, err := client.MovePage(ctx, u.PageID, map[string]any{"type": "page_id", "page_id": u.PreviousParentID}); err != nil {
+	if err := client.MovePage(ctx, u.PageID, map[string]any{"type": "page_id", "page_id": u.PreviousParentID}); err != nil {
 		return nil, err
 	}
 	if err := notion.UpsertWiki(ctx, q, u.PageID, now(), notion.WikiFields{HubID: &u.PreviousParentID}); err != nil {

@@ -2,7 +2,6 @@ package notion
 
 import (
 	"context"
-	"strconv"
 	"strings"
 	"time"
 
@@ -145,29 +144,6 @@ type APILimits struct {
 	Timeout        time.Duration
 	PageSize       int
 	BlockDepth     int
-}
-
-func defaultAPI() APILimits {
-	def := func(key string) string {
-		d, _ := settings.Default.Lookup(key)
-		return d.Default
-	}
-	asInt := func(key string) int {
-		n, _ := strconv.ParseInt(strings.TrimSpace(def(key)), 10, 64)
-		return int(n)
-	}
-	asFloat := func(key string) float64 {
-		f, _ := strconv.ParseFloat(strings.TrimSpace(def(key)), 64)
-		return f
-	}
-	return APILimits{
-		RetryAfterBase: asFloat(RetryAfterBaseKey),
-		RetryAfterMax:  asFloat(RetryAfterMaxKey),
-		MaxRetries:     asInt(MaxRetriesKey),
-		Timeout:        time.Duration(asInt(TimeoutKey)) * time.Second,
-		PageSize:       asInt(PageSizeKey),
-		BlockDepth:     asInt(BlockDepthKey),
-	}
 }
 
 func LoadAPI(ctx context.Context, q db.Querier) (APILimits, error) {

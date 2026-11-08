@@ -9,7 +9,7 @@
     <section class="flex flex-col gap-3" aria-labelledby="edit-title">
       <header class="flex flex-col gap-1">
         <h2 id="edit-title" class="text-sm font-medium">Draft an edit</h2>
-        <p class="text-xs text-muted-foreground">The 9B drafts the change as a proposal. Notion stays untouched until you approve it.</p>
+        <p class="text-xs text-muted-foreground">The model drafts the change as a proposal. Notion stays untouched until you approve it.</p>
       </header>
       <form class="flex flex-col items-start gap-2" hx-post="/notion/{{urlencode $p.id}}/edit" hx-target="#edit-result" hx-disabled-elt="find button[type=submit]">
         <div role="group" class="field w-full">
@@ -24,7 +24,7 @@
     <section class="flex flex-col gap-3 border-t pt-6" aria-labelledby="related-title">
       <header class="flex flex-col gap-1">
         <h2 id="related-title" class="text-sm font-medium">Related pages</h2>
-        <p class="text-xs text-muted-foreground">Closest in meaning. Propose a link and the 9B picks a relation or a mention.</p>
+        <p class="text-xs text-muted-foreground">Closest in meaning. Propose a link and the model picks a relation or a mention.</p>
       </header>
       <div id="link-result" data-loading="action-loading" aria-live="polite" class="empty:hidden"></div>
       {{if $d.related}}
@@ -58,7 +58,7 @@
 
 <template id="action-loading">
   <div class="flex items-center gap-2 rounded-lg border bg-card p-3 text-sm text-muted-foreground" role="status">
-    {{icon "loader-circle" "size-4 shrink-0 animate-spin"}}The 9B is drafting a proposal. This takes 10 to 20 seconds.
+    {{icon "loader-circle" "size-4 shrink-0 animate-spin"}}The model is drafting a proposal. This can take a few seconds.
   </div>
 </template>
 {{- end}}

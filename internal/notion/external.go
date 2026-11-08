@@ -3,8 +3,6 @@ package notion
 import (
 	"regexp"
 	"strings"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var mediaSrcRe = regexp.MustCompile(`(?is)<(?:img|image|audio|video|file|pdf|embed|iframe)\b[^>]*?\bsrc="([^"]*)"`)
@@ -43,4 +41,4 @@ func ExternalURLs(markdown string) ([]string, error) {
 	return out, nil
 }
 
-func ParentRef(parent py.Dict) (kind, id string) { return parentRef(parent) }
+func ParentRef(parent Parent) (kind, id string) { return parent.Ref() }

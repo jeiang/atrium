@@ -159,6 +159,7 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	vars["ATRIUM_MEDIA_ROOT"] = filepath.Join(dir, "media")
 	vars["ATRIUM_CHAT_URL"] = srv.URL + "/v1"
 	vars["ATRIUM_EMBED_URL"] = srv.URL + "/v1"
+	vars["ATRIUM_NOTION_BASE_URL"] = "http://127.0.0.1:9"
 	for k, v := range extraEnv {
 		vars[k] = v
 	}

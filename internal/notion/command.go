@@ -11,13 +11,11 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/passrun"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type Options struct {
-	Env       config.Env
-	NewClient func(token string) *Client
-	Embed     embed.TextsFunc
+	Env   config.Env
+	Embed embed.TextsFunc
 }
 
 func (o Options) env() config.Env {
@@ -25,13 +23,6 @@ func (o Options) env() config.Env {
 		return config.OS
 	}
 	return o.Env
-}
-
-func (o Options) client(token string) *Client {
-	if o.NewClient == nil {
-		return NewClient(token)
-	}
-	return o.NewClient(token)
 }
 
 func Command(o Options) *cli.Command {
@@ -79,12 +70,8 @@ func (o Options) sync(ctx context.Context, d *db.DB, cfg config.Config, env *cli
 }
 
 func (o Options) syncPass(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env) error {
-	token, err := Token(ctx, d.Read)
+	client, err := NewClient(ctx, d.Read, o.env())
 	if err != nil {
-		return err
-	}
-	client := o.client(token)
-	if err := client.Configure(ctx, d.Read); err != nil {
 		return err
 	}
 	stats, err := o.locked(ctx, d, cfg, client)
@@ -95,12 +82,19 @@ func (o Options) syncPass(ctx context.Context, d *db.DB, cfg config.Config, env 
 	if err != nil {
 		return err
 	}
-	out := py.Dict{
-		{Key: "sources", Value: counts.Sources}, {Key: "pages", Value: counts.Pages}, {Key: "new", Value: stats.New},
-		{Key: "updated", Value: stats.Updated}, {Key: "unchanged", Value: stats.Unchanged}, {Key: "trashed", Value: stats.Trashed},
-		{Key: "failed", Value: stats.Failed}, {Key: "embedded", Value: counts.Embedded}, {Key: "seconds", Value: stats.Seconds},
-		{Key: "live", Value: counts.Live}, {Key: "private", Value: counts.Private},
-	}
+	out := struct {
+		Sources   int64   `json:"sources"`
+		Pages     int64   `json:"pages"`
+		New       int     `json:"new"`
+		Updated   int     `json:"updated"`
+		Unchanged int     `json:"unchanged"`
+		Trashed   int     `json:"trashed"`
+		Failed    int     `json:"failed"`
+		Embedded  int64   `json:"embedded"`
+		Seconds   float64 `json:"seconds"`
+		Live      int64   `json:"live"`
+		Private   int64   `json:"private"`
+	}{counts.Sources, counts.Pages, stats.New, stats.Updated, stats.Unchanged, stats.Trashed, stats.Failed, counts.Embedded, stats.Seconds, counts.Live, counts.Private}
 	encoded, err := json.Marshal(out)
 	if err != nil {
 		return err
