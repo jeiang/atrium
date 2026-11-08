@@ -28,6 +28,7 @@ const (
 	ItemActivity   = "activity"
 	ItemAssistant  = "assistant"
 	ItemDraft      = "draft"
+	ItemProposal   = "proposal"
 	ItemCompaction = "compaction"
 )
 
@@ -71,15 +72,16 @@ type Step struct {
 }
 
 type Item struct {
-	Seq       int64          `json:"seq"`
-	RunID     *int64         `json:"run_id"`
-	CreatedAt float64        `json:"created_at"`
-	Kind      string         `json:"kind"`
-	Text      string         `json:"text"`
-	Files     []Attachment   `json:"files"`
-	Steps     []*Step        `json:"steps"`
-	Citations []Citation     `json:"citations"`
-	Draft     map[string]any `json:"draft"`
+	Seq        int64          `json:"seq"`
+	RunID      *int64         `json:"run_id"`
+	CreatedAt  float64        `json:"created_at"`
+	Kind       string         `json:"kind"`
+	Text       string         `json:"text"`
+	Files      []Attachment   `json:"files"`
+	Steps      []*Step        `json:"steps"`
+	Citations  []Citation     `json:"citations"`
+	Draft      map[string]any `json:"draft"`
+	ProposalID int64          `json:"proposal_id,omitempty"`
 }
 
 func get(d map[string]any, key string, fallback any) any {
@@ -271,6 +273,11 @@ func Items(messages []journal.Message, calls []journal.ToolCall, drafts map[int6
 							items = append(items, &item)
 						}
 					}
+				}
+				if id, ok := draftKey(get(detail, "proposal_id", nil)); ok && !isError {
+					item := base
+					item.Kind, item.ProposalID = ItemProposal, id
+					items = append(items, &item)
 				}
 			case b.Kind == block.WebSearchResult:
 				content := b.Get("content")

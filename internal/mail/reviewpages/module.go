@@ -104,6 +104,7 @@ func Module(o Options) web.Module {
 		})
 
 		r.Get("/proposals", s.proposalsPage)
+		r.Get("/proposals/{proposal_id}/card", s.proposalCard)
 		r.Post("/proposals/{proposal_id}/approve", s.proposalApprove)
 		r.Post("/proposals/{proposal_id}/dismiss", s.proposalDismiss)
 		r.Post("/proposals/{proposal_id}/undo", s.proposalUndo)
@@ -118,6 +119,7 @@ func Module(o Options) web.Module {
 
 		r.Get("/drafts", s.draftsPage)
 		r.Get("/drafts/{draft_id}", s.draftPage)
+		r.Get("/drafts/{draft_id}/card", s.draftCardPage)
 		r.Post("/drafts/{draft_id}", s.draftUpdate)
 		r.Post("/drafts/{draft_id}/discard", s.draftDiscard)
 		r.Post("/drafts/{draft_id}/send", s.draftSend)

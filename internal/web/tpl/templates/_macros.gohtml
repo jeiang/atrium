@@ -95,7 +95,7 @@
 {{define "branch_button"}}<form method="post" action="/chat/{{.thread.ID}}/branch" class="inline">
   <input type="hidden" name="csrf_token" value="{{.csrf}}">
   <input type="hidden" name="seq" value="{{.seq}}">
-  <button type="submit" class="btn" data-size="sm" data-variant="ghost" title="Start a new thread with the conversation up to here">{{icon "git-branch" "size-3.5"}}Branch</button>
+  {{if opt . "compact" false}}<button type="submit" class="btn" data-size="icon-sm" data-variant="ghost" aria-label="Branch" title="Start a new thread with the conversation up to here">{{icon "git-branch" "size-3.5"}}</button>{{else}}<button type="submit" class="btn" data-size="sm" data-variant="ghost" title="Start a new thread with the conversation up to here">{{icon "git-branch" "size-3.5"}}Branch</button>{{end}}
 </form>{{end}}
 
 {{define "file_icon"}}{{$name := "file-text"}}{{if hasprefix .media_type "image/"}}{{$name = "image"}}{{end}}{{icon $name (opt . "class" "size-3.5 shrink-0 text-muted-foreground")}}{{end}}
@@ -162,8 +162,8 @@
     {{if $thread}}{{template "file_chips" (dict "thread_id" $thread.ID "files" ($item.Files))}}{{end}}
     {{if and $thread (eq $thread.Kind "chat")}}
     <div class="msg-actions">
-      {{if and (eq $item.Seq (int $last_seq)) (not $busy)}}<button type="button" class="btn" data-size="sm" data-variant="ghost" data-action="edit-message">{{icon "pencil" "size-3.5"}}Edit</button>{{end}}
-      {{template "branch_button" (dict "thread" $thread "seq" $item.Seq "csrf" $csrf)}}
+      {{if and (eq $item.Seq (int $last_seq)) (not $busy)}}<button type="button" class="btn" data-size="icon-sm" data-variant="ghost" data-action="edit-message" aria-label="Edit" title="Edit message">{{icon "pencil" "size-3.5"}}</button>{{end}}
+      {{template "branch_button" (dict "thread" $thread "seq" $item.Seq "csrf" $csrf "compact" true)}}
     </div>
     {{end}}
   </div>
@@ -205,7 +205,7 @@
 </li>
 {{else if eq $item.Kind "draft"}}
 {{$d := $item.Draft}}
-<li class="msg-indent" data-seq="{{$item.Seq}}" data-draft="{{get $d "id"}}">
+<li id="draft-{{get $d "id"}}" class="msg-indent" data-seq="{{$item.Seq}}" data-draft="{{get $d "id"}}" hx-get="/drafts/{{get $d "id"}}/card" hx-trigger="load" hx-swap="outerHTML">
   <a class="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 text-sm hover:border-line-strong" {{template "preview_attrs" (printf "/drafts/%v" (get $d "id"))}}>
     {{icon "mail" "size-4 shrink-0 text-muted-foreground"}}
     <span class="flex min-w-0 flex-1 flex-col">
@@ -213,6 +213,12 @@
       <span class="truncate text-xs text-muted-foreground">to {{get $d "to_addrs"}}</span>
     </span>
     <span class="badge" data-variant="{{if eq $d.status "sent"}}secondary{{else}}outline{{end}}">{{get $d "status"}}</span>
+  </a>
+</li>
+{{else if eq $item.Kind "proposal"}}
+<li id="proposal-{{$item.ProposalID}}" class="msg-indent" data-seq="{{$item.Seq}}" hx-get="/proposals/{{$item.ProposalID}}/card" hx-trigger="load" hx-swap="outerHTML">
+  <a class="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 text-sm hover:border-line-strong" href="/proposals#proposal-{{$item.ProposalID}}">
+    {{icon "list-checks" "size-4 shrink-0 text-muted-foreground"}}<span class="truncate font-medium">Proposal #{{$item.ProposalID}}</span>
   </a>
 </li>
 {{else if eq $item.Kind "queued"}}

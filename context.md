@@ -31,8 +31,11 @@ behavior-parity target.
   and one static script under a strict CSP. A sidebar holds New chat, the
   thread list (pinned, by day, by project) and the module pages, and
   collapses to a rail; chat uses a centred reading column with serif
-  assistant prose. The light, dark or system theme and the rail state are
-  cookies the server applies on the next render.
+  assistant prose. Drafts and proposals the assistant creates are cards in
+  the thread that act through the Drafts and Proposals endpoints, so the
+  send gate and approval pipeline are unchanged. The light, dark or system
+  theme and the rail state are cookies the server applies on the next
+  render.
 - The system prompt and subagent rules are operator-editable settings over
   built-in defaults; the untrusted-data preamble is fixed in code and always
   comes first. Edits apply to every thread's next request until the

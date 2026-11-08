@@ -97,6 +97,14 @@ func (s *service) draftPage(w http.ResponseWriter, r *http.Request) {
 		draftsPage{Drafts: []DraftView{view}, Status: view.Status, Statuses: statusNames(), Configured: configured}, nil)
 }
 
+func (s *service) draftCardPage(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "draft_id")
+	if !ok {
+		return
+	}
+	s.draftCard(w, r, id, http.StatusOK, nil)
+}
+
 func (s *service) draftUpdate(w http.ResponseWriter, r *http.Request) {
 	id, errs := pathInt(r, "draft_id")
 	form := web.FormValues(r)

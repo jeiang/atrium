@@ -135,6 +135,14 @@ func selectionOf(p *proposals.Proposal, kind proposals.Kind, form url.Values) (m
 	return nil, nil
 }
 
+func (s *service) proposalCard(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "proposal_id")
+	if !ok {
+		return
+	}
+	s.card(w, r, id, nil)
+}
+
 func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r, "proposal_id")
 	if !ok {
