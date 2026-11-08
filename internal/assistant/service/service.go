@@ -119,18 +119,24 @@ func (s *Service) now() float64 {
 }
 
 type Start struct {
-	Kind        string
+	Kind        threads.Kind
 	Operator    bool
 	ParentRunID *int64
 	Limits      journal.Limits
 	Files       []json.RawMessage
 }
 
-func (o Start) kind() string {
-	if o.Kind == "" {
-		return threads.Chat
+func (o Start) kind() tool.Kind {
+	switch o.Kind {
+	case threads.Cron:
+		return tool.Cron
+	case threads.Nightly:
+		return tool.Nightly
+	case threads.Subagent:
+		return tool.Sub
+	default:
+		return tool.Chat
 	}
-	return o.Kind
 }
 
 func emptyLimits(l journal.Limits) bool {
@@ -171,7 +177,7 @@ func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now 
 	if err != nil {
 		return 0, err
 	}
-	runID, err := journal.StartRun(ctx, s.DB, threadID, o.kind(), thread.Model, thread.Effort, now, o.ParentRunID, new(journal.NewOwner()))
+	runID, err := journal.StartRun(ctx, s.DB, threadID, string(o.kind()), thread.Model, thread.Effort, now, o.ParentRunID, new(journal.NewOwner()))
 	if errors.Is(err, journal.ErrRunActive) {
 		return 0, RunActive(fmt.Sprintf("thread %d already has a run in progress", threadID))
 	}
@@ -226,7 +232,7 @@ func (s *Service) PrepareRerun(ctx context.Context, threadID int64, now float64)
 	if err := progress.ClearThread(ctx, s.DB.Write, threadID); err != nil {
 		return 0, err
 	}
-	runID, err := journal.StartRun(ctx, s.DB, threadID, threads.Chat, thread.Model, thread.Effort, now, nil, new(journal.NewOwner()))
+	runID, err := journal.StartRun(ctx, s.DB, threadID, string(tool.Chat), thread.Model, thread.Effort, now, nil, new(journal.NewOwner()))
 	if errors.Is(err, journal.ErrRunActive) {
 		return 0, RunActive(fmt.Sprintf("thread %d already has a run in progress", threadID))
 	}

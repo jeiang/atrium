@@ -24,22 +24,30 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 )
 
+type Kind string
+
 const (
-	Chat     = "chat"
-	Cron     = "cron"
-	Nightly  = "nightly"
-	Sub      = "sub"
-	Subagent = "subagent"
+	Chat     Kind = "chat"
+	Cron     Kind = "cron"
+	Nightly  Kind = "nightly"
+	Subagent Kind = "subagent"
 )
 
-var effortKeys = map[string]string{
+func ParseKind(value string) (Kind, bool) {
+	switch Kind(value) {
+	case Chat, Cron, Nightly, Subagent:
+		return Kind(value), true
+	}
+	return "", false
+}
+
+var effortKeys = map[Kind]string{
 	Cron:     assistant.KeyEffortCron,
 	Nightly:  assistant.KeyEffortNightly,
 	Subagent: assistant.KeyEffortSubagent,
-	Sub:      assistant.KeyEffortSub,
 }
 
-func EffortOf(ctx context.Context, q db.Querier, kind string) (string, bool, error) {
+func EffortOf(ctx context.Context, q db.Querier, kind Kind) (string, bool, error) {
 	key, ok := effortKeys[kind]
 	if !ok {
 		return "", false, nil
@@ -249,7 +257,7 @@ func TitleFrom(text string) string {
 }
 
 type Spec struct {
-	Kind                 string
+	Kind                 Kind
 	Title                *string
 	ParentID             *int64
 	JobID                *int64
@@ -264,7 +272,7 @@ type Spec struct {
 	BranchedFromSeq      *int64
 }
 
-func resolve(ctx context.Context, q db.Querier, kind string, projectID *int64, explicit Options) (Options, error) {
+func resolve(ctx context.Context, q db.Querier, kind Kind, projectID *int64, explicit Options) (Options, error) {
 	chosen, err := Defaults(ctx, q)
 	if err != nil {
 		return Options{}, err
@@ -291,7 +299,7 @@ func resolve(ctx context.Context, q db.Querier, kind string, projectID *int64, e
 			return Options{}, err
 		}
 		if !ok {
-			return Options{}, fmt.Errorf("threads: no effort for kind %s", strconv.Quote(kind))
+			return Options{}, fmt.Errorf("threads: no effort for kind %s", strconv.Quote(string(kind)))
 		}
 		chosen.Effort, chosen.Model = effort, pricing.DefaultModel
 		projectEffort = false
@@ -376,7 +384,7 @@ func SetOptions(ctx context.Context, q db.Querier, threadID int64, model, effort
 
 type Thread struct {
 	ID                   int64      `json:"id"`
-	Kind                 string     `json:"kind"`
+	Kind                 Kind       `json:"kind"`
 	Title                *string    `json:"title"`
 	JobID                *int64     `json:"job_id"`
 	ParentThreadID       *int64     `json:"parent_thread_id"`
@@ -440,8 +448,8 @@ func SetTitle(ctx context.Context, q db.Querier, threadID int64, title string) e
 	return journal.ReindexThread(ctx, q, threadID)
 }
 
-func RootKind(ctx context.Context, q db.Querier, threadID int64) (string, error) {
-	kind := ""
+func RootKind(ctx context.Context, q db.Querier, threadID int64) (Kind, error) {
+	kind := Kind("")
 	seen := map[int64]bool{}
 	for next := &threadID; next != nil && !seen[*next]; {
 		seen[*next] = true
@@ -454,7 +462,7 @@ func RootKind(ctx context.Context, q db.Querier, threadID int64) (string, error)
 		if err != nil {
 			return "", err
 		}
-		kind, next = k, parent
+		kind, next = Kind(k), parent
 	}
 	return kind, nil
 }

@@ -269,7 +269,7 @@ var statusOfRun = map[string]string{
 func runCard(ctx context.Context, q db.Querier, t threads.Thread, run *journal.Run, now float64) (Card, error) {
 	elapsed := max(now-t.CreatedAt, 0)
 	card := Card{
-		ThreadID: t.ID, Kind: t.Kind, Role: t.Role, Title: t.Title, Effort: t.Effort, ParentRunID: t.ParentRunID,
+		ThreadID: t.ID, Kind: string(t.Kind), Role: t.Role, Title: t.Title, Effort: t.Effort, ParentRunID: t.ParentRunID,
 		Status: Queued, Elapsed: &elapsed,
 	}
 	if run == nil {

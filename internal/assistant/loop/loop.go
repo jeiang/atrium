@@ -169,7 +169,10 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if thread == nil {
 		return nil, fmt.Errorf("loop: run %d: no thread %d", runID, found.ThreadID)
 	}
-	kind := tool.Kind(found.Kind)
+	kind, ok := tool.ParseKind(found.Kind)
+	if !ok {
+		return nil, fmt.Errorf("loop: run %d has unknown kind %q", runID, found.Kind)
+	}
 	allow := registry.All()
 	if o.Limits.AllowedTools != nil {
 		allow = registry.Only(o.Limits.AllowedTools)
@@ -292,7 +295,7 @@ func (s *state) heartbeat(ctx context.Context) func() {
 func (s *state) runStart(ctx context.Context) error {
 	return s.writer.Event(ctx, progress.RunStart, py.Dict{
 		{Key: "thread_id", Value: s.thread.ID},
-		{Key: "thread_kind", Value: s.thread.Kind},
+		{Key: "thread_kind", Value: string(s.thread.Kind)},
 		{Key: "role", Value: optional(s.thread.Role)},
 		{Key: "title", Value: optional(s.thread.Title)},
 		{Key: "effort", Value: s.run.Effort},

@@ -8,13 +8,21 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/runner"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 )
 
-var Kinds = []string{threads.Chat, threads.Cron, threads.Nightly, threads.Sub}
+var Kinds = []string{string(tool.Chat), string(tool.Cron), string(tool.Nightly), string(tool.Sub)}
+
+func threadKind(run string) threads.Kind {
+	if run == string(tool.Sub) {
+		return threads.Subagent
+	}
+	return threads.Kind(run)
+}
 
 func Command(tools registry.Source, enabled func(module string) bool) *cli.Command {
 	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(config.OS, tools, enabled), runCommand(config.OS, tools)}}
@@ -26,7 +34,7 @@ func runCommand(cfgEnv config.Env, tools registry.Source) *cli.Command {
 		Setup: func(args *cli.Args) cli.Handler {
 			thread := args.Int("thread", 0, cli.Opt{Help: "existing thread id; omitted creates a new thread of --kind"})
 			text := args.String("text", "", cli.Opt{Required: true})
-			kind := args.String("kind", threads.Chat, cli.Opt{Choices: Kinds})
+			kind := args.String("kind", string(threads.Chat), cli.Opt{Choices: Kinds})
 			toolChoice := args.String("tool-choice", "", cli.Opt{Help: "force the first request to call a tool: any, or a tool name; models that reject forcing get the request without it"})
 			return func(env *cli.Env) int {
 				var threadID *int64
@@ -65,13 +73,13 @@ func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64
 	svc := service.New(ctx, d, cfg, cfgEnv, r)
 	if threadID == nil {
 		now := float64(time.Now().UnixMicro()) / 1e6
-		id, err := threads.Create(ctx, d.Write, now, threads.Spec{Kind: kind})
+		id, err := threads.Create(ctx, d.Write, now, threads.Spec{Kind: threadKind(kind)})
 		if err != nil {
 			return err
 		}
 		threadID = &id
 	}
-	start := service.Start{Kind: kind}
+	start := service.Start{Kind: threadKind(kind)}
 	if toolChoice != "" {
 		start.Limits.ToolChoice = &toolChoice
 	}
