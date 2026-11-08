@@ -67,6 +67,7 @@ type Frame struct {
 	Nav               []NavGroup
 	Settings          []NavItem
 	SettingsURL       string
+	Typed             bool
 	Data              any
 }
 
@@ -138,7 +139,9 @@ func (e *Engine) Fragment(w io.Writer, name string, f *Frame) error {
 
 func execute(w io.Writer, set *template.Template, name string, f *Frame) error {
 	root := *f
-	root.Data = View(f.Data)
+	if !root.Typed {
+		root.Data = View(f.Data)
+	}
 	var b bytes.Buffer
 	if err := set.ExecuteTemplate(&b, name, &root); err != nil {
 		return err

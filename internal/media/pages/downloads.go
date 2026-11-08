@@ -42,6 +42,7 @@ func dlLastValues(form url.Values) map[string]string {
 func (s *service) dlPageOut(w http.ResponseWriter, r *http.Request, status int, page, name string, data any, toast *tpl.Toast) {
 	f, err := s.deps.Render.Frame(r, page, data)
 	dlCheck(err)
+	f.Typed = true
 	f.Toast = toast
 	dlCheck(s.deps.Render.Page(w, r, status, name, f))
 }
@@ -49,6 +50,7 @@ func (s *service) dlPageOut(w http.ResponseWriter, r *http.Request, status int, 
 func (s *service) dlFragmentOut(w http.ResponseWriter, r *http.Request, status int, name string, data any, toast *tpl.Toast) {
 	f, err := s.deps.Render.Frame(r, "", data)
 	dlCheck(err)
+	f.Typed = true
 	f.Toast = toast
 	dlCheck(s.deps.Render.Fragment(w, r, status, name, f))
 }

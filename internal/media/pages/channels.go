@@ -59,6 +59,7 @@ func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toa
 	if err != nil {
 		panic(err)
 	}
+	f.Typed = true
 	f.Toast = notice
 	if err := s.deps.Render.Page(w, r, status, "media_channels.gohtml", f); err != nil {
 		panic(err)
@@ -201,6 +202,7 @@ func (s *service) channelPreview(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic(err)
 	}
+	f.Typed = true
 	if err := s.deps.Render.Fragment(w, r, http.StatusOK, "_media_preview.gohtml", f); err != nil {
 		panic(err)
 	}

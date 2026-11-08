@@ -240,6 +240,12 @@ func strs(l any) []string {
 
 func toFloat(v any) (float64, error) {
 	rv := reflect.ValueOf(v)
+	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
+		if rv.IsNil() {
+			return 0, fmt.Errorf("not a number: %T", v)
+		}
+		rv = rv.Elem()
+	}
 	switch rv.Kind() {
 	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
 		return float64(rv.Int()), nil
