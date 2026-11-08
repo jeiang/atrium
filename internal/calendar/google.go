@@ -118,7 +118,7 @@ func googleTime(dateTime, date string, tz *time.Location) (string, error) {
 	if !ok {
 		return "", valueError("invalid ISO-8601 date/time")
 	}
-	instant := time.Unix(timex.WallToUnix(time.Local, stamp.t.Unix()), 0)
+	instant := time.Unix(timex.WallToUnix(tz, stamp.t.Unix()), 0)
 	if stamp.aware {
 		instant = time.Unix(stamp.t.Unix(), 0)
 	}

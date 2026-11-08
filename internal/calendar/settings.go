@@ -92,6 +92,8 @@ func LoadSettings(ctx context.Context, q db.Querier) (Settings, error) {
 			return Settings{}, err
 		}
 	}
+	out.AppleID = strings.TrimSpace(out.AppleID)
+	out.Account = strings.TrimSpace(out.Account)
 	out.ICloudCalendar = strings.ToLower(strings.TrimSpace(out.ICloudCalendar))
 	return out, nil
 }

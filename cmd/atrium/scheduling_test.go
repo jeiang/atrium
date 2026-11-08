@@ -173,3 +173,28 @@ func TestRSVPAndUpdateProposalsWriteOnlyOnApprovalAndUndo(t *testing.T) {
 		t.Errorf("undo did not restore the event: %q", body)
 	}
 }
+
+func TestCalendarListFiltersByTargetAndCollection(t *testing.T) {
+	dir, _ := moduleFixture(t, flagsExcept("", ""))
+	mirror := filepath.Join(dir, "calendars")
+	setEnv(t, settingEnv(calendar.CalendarDirKey), mirror)
+	if err := os.MkdirAll(filepath.Join(mirror, "home"), 0o750); err != nil {
+		t.Fatal(err)
+	}
+	body := event("a", "DTSTART:20261110T170000Z", "DTEND:20261110T180000Z")
+	if err := os.WriteFile(filepath.Join(mirror, "home", "a.ics"), []byte(body), 0o640); err != nil {
+		t.Fatal(err)
+	}
+	input := map[string]any{"start": "2026-11-10T00:00:00", "end": "2026-11-11T00:00:00", "calendar": "icloud"}
+	if got := unescape(toolResult(t, "calendar_list", input)); !strings.Contains(got, `"uid": "a"`) {
+		t.Errorf("calendar_list(calendar=icloud) did not list the mirror: %s", got)
+	}
+	input["calendar"] = "home"
+	if got := unescape(toolResult(t, "calendar_list", input)); !strings.Contains(got, `"uid": "a"`) {
+		t.Errorf("calendar_list(calendar=home) did not list the collection: %s", got)
+	}
+	input["calendar"] = "google"
+	if got := unescape(toolResult(t, "calendar_list", input)); strings.Contains(got, `"uid": "a"`) {
+		t.Errorf("calendar_list(calendar=google) listed the iCloud mirror: %s", got)
+	}
+}

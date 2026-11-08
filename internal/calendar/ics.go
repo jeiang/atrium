@@ -374,7 +374,7 @@ func occurrenceEnd(ev *icsEvent, start, end, occ Value, tz *time.Location) (Valu
 	}
 	if occ.isDate() {
 		if !end.isDate() || !start.isDate() {
-			return Value{}, fmt.Errorf("unsupported operand type(s) for -: 'datetime.datetime' and 'datetime.date'")
+			return Value{}, fmt.Errorf("cannot subtract a date from a datetime")
 		}
 		return dateValue(occ.t.Year(), occ.t.Month(), occ.t.Day()+int(end.t.Sub(start.t).Hours()/24)), nil
 	}
@@ -384,7 +384,7 @@ func occurrenceEnd(ev *icsEvent, start, end, occ Value, tz *time.Location) (Valu
 func longestSpan(master *icsEvent, start, end Value, tz *time.Location) (time.Duration, error) {
 	if !start.isDatetime() {
 		if !end.isDate() {
-			return 0, fmt.Errorf("unsupported operand type(s) for -: 'datetime.datetime' and 'datetime.date'")
+			return 0, fmt.Errorf("cannot subtract a date from a datetime")
 		}
 		return naiveLocal(end, tz).Sub(naiveLocal(start, tz)), nil
 	}

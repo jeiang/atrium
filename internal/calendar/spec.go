@@ -1,7 +1,6 @@
 package calendar
 
 import (
-	"bytes"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
@@ -168,18 +167,6 @@ func GoogleBody(s Spec, tz *time.Location) (*gcal.Event, error) {
 	body.Location = s.Location
 	body.Description = s.Notes
 	return body, nil
-}
-
-func BuildICS(s Spec, tz *time.Location, dtstamp time.Time) (string, error) {
-	cal, err := buildCalendar(s, tz, dtstamp)
-	if err != nil {
-		return "", err
-	}
-	var out bytes.Buffer
-	if err := ical.NewEncoder(&out).Encode(cal); err != nil {
-		return "", err
-	}
-	return out.String(), nil
 }
 
 func buildCalendar(s Spec, tz *time.Location, dtstamp time.Time) (*ical.Calendar, error) {

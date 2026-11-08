@@ -68,7 +68,7 @@ func parseByDay(value string) ([]rrule.Weekday, error) {
 	var out []rrule.Weekday
 	for _, item := range strings.Split(value, ",") {
 		if item == "" {
-			return nil, ruleError("Invalid (empty) BYDAY specification.")
+			return nil, ruleError("empty BYDAY specification")
 		}
 		var w string
 		var n int
@@ -132,7 +132,7 @@ func parseRule(text string) (*parsedRule, error) {
 	for _, pair := range strings.Split(value, ";") {
 		name, val, ok := strings.Cut(pair, "=")
 		if !ok || strings.Contains(val, "=") {
-			return nil, ruleError("not enough values to unpack (expected 2, got 1)")
+			return nil, ruleError("expected two values")
 		}
 		var good = true
 		switch name {
@@ -226,9 +226,9 @@ func ruleSource(r *rrule.RRule, convert func(time.Time) time.Time) *source {
 
 func mixError(dts, v Value) error {
 	if v.isDatetime() {
-		return ruleError("can't compare offset-naive and offset-aware datetimes")
+		return ruleError("cannot compare a naive and an aware datetime")
 	}
-	return ruleError("can't compare datetime.datetime to datetime.date")
+	return ruleError("cannot compare a datetime to a date")
 }
 
 func occurrences(m *icsEvent, start Value, ws, we time.Time, tz *time.Location, notes *[]string, maxOccurrences int) ([]Value, error) {
