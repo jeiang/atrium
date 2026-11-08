@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/executors"
+	"github.com/jeiang/atrium/internal/tasks"
 )
 
 type Deps struct {
@@ -26,4 +27,5 @@ func Register(r *proposals.Registry, deps Deps) {
 	calendar.Register(r, &calendar.Proposals{DB: deps.DB, Now: deps.Now, Env: deps.Env}, module.Calendar)
 	(&notion.Applier{DB: deps.DB, Env: deps.Env, Now: deps.Now}).Register(r, module.Notion)
 	openloops.Register(r, &openloops.Reminders{DB: deps.DB, Now: deps.Now}, module.Mail)
+	tasks.Register(r, &tasks.Executor{DB: deps.DB, Now: deps.Now}, module.Core)
 }

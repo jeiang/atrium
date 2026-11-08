@@ -23,6 +23,7 @@ import (
 	recalltools "github.com/jeiang/atrium/internal/assistant/tools/recall"
 	scheduletools "github.com/jeiang/atrium/internal/assistant/tools/schedule"
 	skillstools "github.com/jeiang/atrium/internal/assistant/tools/skills"
+	taskstools "github.com/jeiang/atrium/internal/assistant/tools/tasks"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -108,7 +109,7 @@ func addTools(r *registry.Registry) error {
 	for _, tools := range [][]tool.Tool{
 		askoperator.Tools(), filetools.Tools(), memorytools.Tools(),
 		nightly.Tools(), webfetch.Tools(), recalltools.Tools(), plantools.Tools(),
-		profiletools.Tools(), proposetools.Tools(), scheduletools.Tools(), skillstools.Tools(),
+		profiletools.Tools(), proposetools.Tools(), scheduletools.Tools(), skillstools.Tools(), taskstools.Tools(),
 	} {
 		if err := r.Add(tools...); err != nil {
 			return err
