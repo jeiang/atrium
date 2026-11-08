@@ -441,7 +441,11 @@ func Sync(ctx context.Context, d *db.DB, client *Client, embedTexts embed.TextsF
 			return nil
 		}
 		seen[notionid.Normalize(page.ID)] = true
-		err := upsertPage(ctx, d.Write, client, sensitivity, page.RemotePage(), &stats, stamp)
+		remote, err := page.RemotePage()
+		if err != nil {
+			return err
+		}
+		err = upsertPage(ctx, d.Write, client, sensitivity, remote, &stats, stamp)
 		var refused *Error
 		if errors.As(err, &refused) {
 			stats.Failed++
