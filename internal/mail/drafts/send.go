@@ -9,6 +9,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/accounts"
+	"github.com/jeiang/atrium/internal/mail/gmailauth"
 	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/mail/smtp"
 	"github.com/jeiang/atrium/internal/safety"
@@ -156,9 +158,18 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedRevision int64) (Res
 }
 
 func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusals, error) {
+	method, source, err := gmailauth.Resolve(ctx, s.DB.Read, d.Account)
+	if err != nil {
+		return nil, nil, err
+	}
 	user, _, ok := config.Credential(ctx, d.Account)
-	if !ok {
+	if !ok && method != accounts.XOAUTH2 {
 		return nil, nil, &smtp.Failure{Kind: "Config", Msg: d.Account + " is not configured"}
+	}
+	if user == "" {
+		if spec, known := config.From(ctx).Account(d.Account); known {
+			user = spec.Login
+		}
 	}
 	sender := smtp.SenderAddress(config.From(ctx).Preset(d.Account), user)
 	makeID := s.MsgID
@@ -170,7 +181,12 @@ func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusal
 		ToAddrs: d.ToAddrs, CcAddrs: d.CcAddrs, Subject: d.Subject, Body: d.Body, InReplyTo: d.InReplyTo, Refs: d.Refs,
 	}, s.now(), makeID(domain))
 	recipients := append(addresses(d.ToAddrs), addresses(d.CcAddrs)...)
-	refused, err := smtp.Send(ctx, config.Credential, d.Account, msg, recipients, s.SMTP)
+	var refused smtp.Refusals
+	if method == accounts.XOAUTH2 {
+		refused, err = smtp.SendXOAUTH2(ctx, d.Account, user, msg, recipients, s.SMTP, source.Token, source.Invalidate)
+	} else {
+		refused, err = smtp.Send(ctx, config.Credential, d.Account, msg, recipients, s.SMTP)
+	}
 	return msg, refused, err
 }
 
