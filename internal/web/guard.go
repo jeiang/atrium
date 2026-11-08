@@ -1,7 +1,6 @@
 package web
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/subtle"
@@ -58,25 +57,24 @@ func bodyCap(ctx context.Context) int {
 }
 
 type Guard struct {
-	auth     AuthSet
+	auth     Policy
 	hosts    map[string]struct{}
 	public   func(*http.Request) bool
 	bodyCap  func(context.Context) (int, error)
 	sessions *oidc.Service
 	errPage  ErrorPage
-	noAuth   bool
 	admin    func(context.Context) string
 	secure   func(*http.Request) bool
 }
 
-func NewGuard(auth AuthSet, allowedHosts []string, public func(*http.Request) bool) *Guard {
+func NewGuard(auth Policy, allowedHosts []string, public func(*http.Request) bool) *Guard {
 	hosts := map[string]struct{}{}
 	switch {
 	case len(allowedHosts) > 0:
 		for _, h := range allowedHosts {
 			hosts[hostname(h)] = struct{}{}
 		}
-	case auth.Local:
+	case auth.Local():
 		for _, h := range localHosts {
 			hosts[h] = struct{}{}
 		}
@@ -114,24 +112,6 @@ func isUnsafe(method string) bool {
 		return true
 	}
 	return false
-}
-
-func cookieToken(r *http.Request) (string, bool) {
-	token, found := "", false
-	for _, line := range r.Header.Values("Cookie") {
-		for pair := range strings.SplitSeq(line, ";") {
-			name, value, ok := strings.Cut(pair, "=")
-			if !ok || py.Strip(name) != CSRFCookie {
-				continue
-			}
-			value = py.Strip(value)
-			if len(value) >= 2 && value[0] == '"' && value[len(value)-1] == '"' {
-				value = value[1 : len(value)-1]
-			}
-			token, found = value, true
-		}
-	}
-	return token, found
 }
 
 func isHTTPS(r *http.Request) bool {
@@ -179,17 +159,20 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 		case errors.Is(err, errUnavailable):
 			deny(w, http.StatusServiceUnavailable, "Service Unavailable")
 			return
-		case err != nil && !static && !g.public(r) && (!g.auth.OIDC || !signInPath(r)):
+		case err != nil && !static && !g.public(r) && (!g.auth.OIDC() || !signInPath(r)):
 			g.unauthenticated(w, r, err)
 			return
 		}
-		token, found := cookieToken(r)
+		token, found := "", false
+		if c, err := r.Cookie(CSRFCookie); err == nil {
+			token, found = c.Value, true
+		}
 		fresh := !found
 		if fresh {
 			token = newToken()
 		}
 		if err == nil {
-			who.NoAuth = who.Source == SourceLocal && g.noAuth
+			who.NoAuth = who.Source == SourceLocal && g.auth.Open
 			r = r.WithContext(context.WithValue(r.Context(), identityKey{}, who))
 			if !who.Admin && adminRoute(r) {
 				setSecurityHeaders(w.Header())
@@ -222,13 +205,20 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			if values := r.Header.Values(CSRFHeader); len(values) > 0 {
 				supplied, has = values[0], true
 			} else if mediaType, _, _ := strings.Cut(r.Header.Get("Content-Type"), ";"); py.Lower(py.Strip(mediaType)) == formType {
-				body, err := io.ReadAll(io.LimitReader(r.Body, int64(limit)+1))
-				if err != nil || len(body) > limit {
-					deny(w, http.StatusRequestEntityTooLarge, "Request too large")
+				r.Body = http.MaxBytesReader(w, r.Body, int64(limit))
+				if err := r.ParseForm(); err != nil {
+					var tooLarge *http.MaxBytesError
+					if errors.As(err, &tooLarge) {
+						deny(w, http.StatusRequestEntityTooLarge, "Request too large")
+					} else {
+						deny(w, http.StatusForbidden, "Forbidden: missing or stale form token")
+					}
 					return
 				}
-				supplied, has = formField(string(body), CSRFField)
-				r.Body = io.NopCloser(bytes.NewReader(body))
+				supplied, has = r.PostForm.Get(CSRFField), r.PostForm.Has(CSRFField)
+				if supplied == "" {
+					has = false
+				}
 			}
 			if !has || subtle.ConstantTimeCompare([]byte(supplied), []byte(token)) != 1 {
 				deny(w, http.StatusForbidden, "Forbidden: missing or stale form token")

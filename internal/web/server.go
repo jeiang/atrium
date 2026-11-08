@@ -52,11 +52,11 @@ type Options struct {
 	Modules      []Module
 	OIDC         *oidc.Service
 	LoginLinks   *loginlink.Service
-	NoAuth       bool
+	Policy       *Policy
 }
 
 type Server struct {
-	auth     AuthSet
+	auth     Policy
 	oidc     *oidc.Service
 	links    *loginlink.Service
 	render   *Renderer
@@ -71,9 +71,18 @@ type Server struct {
 }
 
 func New(o Options) (*Server, error) {
-	auth, err := ParseAuth(o.Auth)
-	if err != nil {
-		return nil, err
+	var auth Policy
+	if o.Policy != nil {
+		auth = *o.Policy
+	} else {
+		var err error
+		auth, err = ParseAuth(o.Auth)
+		if err != nil {
+			return nil, err
+		}
+	}
+	if auth.Open && !auth.Local() {
+		return nil, errors.New("open authentication requires local mode")
 	}
 	if o.Static == nil {
 		o.Static = Static
@@ -81,7 +90,7 @@ func New(o Options) (*Server, error) {
 	if o.Env == nil {
 		o.Env = config.OS
 	}
-	if auth.OIDC && (o.OIDC == nil || o.Render == nil || (o.LoginLinks == nil && o.DB == nil)) {
+	if auth.OIDC() && (o.OIDC == nil || o.Render == nil || (o.LoginLinks == nil && o.DB == nil)) {
 		return nil, errors.New("oidc auth needs a session service, a renderer and a database")
 	}
 	s := &Server{mux: chi.NewRouter(), errPage: o.ErrorPage, oidc: o.OIDC, render: o.Render, auth: auth, links: o.LoginLinks}
@@ -118,7 +127,7 @@ func New(o Options) (*Server, error) {
 	s.secure = func(r *http.Request) bool {
 		return hasSecureTransport(r, strings.HasPrefix(config.PublicURL(o.Env), "https://"))
 	}
-	if auth.OIDC {
+	if auth.OIDC() {
 		o.Render.oidcOn.Store(true)
 		s.registerAuthRoutes()
 	}
@@ -129,7 +138,6 @@ func New(o Options) (*Server, error) {
 	guard.secure = s.secure
 	guard.sessions = o.OIDC
 	guard.errPage = s.errPage
-	guard.noAuth = o.NoAuth
 	if o.DB != nil {
 		guard.admin = func(ctx context.Context) string { return oidc.AdminGroup(ctx, o.DB.Read) }
 		guard.bodyCap = func(ctx context.Context) (int, error) { return config.Limit(ctx, o.DB.Read, config.KeyBodyCap) }

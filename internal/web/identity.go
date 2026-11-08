@@ -62,13 +62,13 @@ func signInPath(r *http.Request) bool {
 }
 
 func (g *Guard) identify(r *http.Request) (Identity, error) {
-	if g.auth.Local {
+	if g.auth.Local() {
 		return Identity{Source: SourceLocal, Admin: true}, nil
 	}
-	if g.auth.Proxy && hasGroup(r.Header.Get("Remote-Groups"), Group) {
+	if g.auth.Proxy() && hasGroup(r.Header.Get("Remote-Groups"), Group) {
 		return Identity{Source: SourceProxy, Admin: hasGroup(r.Header.Get("Remote-Groups"), g.adminGroup(r.Context()))}, nil
 	}
-	if g.auth.OIDC {
+	if g.auth.OIDC() {
 		if token := cookieValue(r, sessionCookie, g.secure(r)); token != "" {
 			s, err := g.sessions.Authenticate(r.Context(), token)
 			switch {
@@ -88,7 +88,7 @@ func (g *Guard) identify(r *http.Request) (Identity, error) {
 }
 
 func (g *Guard) unauthenticated(w http.ResponseWriter, r *http.Request, why error) {
-	if !g.auth.OIDC {
+	if !g.auth.OIDC() {
 		deny(w, http.StatusForbidden, "Forbidden")
 		return
 	}

@@ -174,7 +174,7 @@ func (s *Server) stateFor(v oidc.View) stateView {
 		}
 	}
 	modes := []string{"OIDC"}
-	if s.auth.Proxy {
+	if s.auth.Proxy() {
 		modes = append(modes, "Proxy")
 	}
 	return stateView{Name: name, Active: v.Active, Modes: modes}

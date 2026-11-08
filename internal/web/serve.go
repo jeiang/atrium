@@ -8,7 +8,6 @@ import (
 	"maps"
 	"net"
 	"net/http"
-	"slices"
 	"strconv"
 	"time"
 
@@ -95,7 +94,6 @@ type serveArgs struct {
 	env   config.Env
 
 	forceDisableAuth bool
-	authDisabled     bool
 }
 
 func publicHosts(given []string, env config.Env) []string {
@@ -110,7 +108,7 @@ func publicHosts(given []string, env config.Env) []string {
 
 func serve(env *cli.Env, a serveArgs) int {
 	hosts := publicHosts(a.hosts, a.env)
-	a, ok := resolveAuth(env.Stderr, a, hosts)
+	a, policy, ok := resolveAuth(env.Stderr, a, hosts)
 	if !ok {
 		return cli.ExitError
 	}
@@ -123,14 +121,14 @@ func serve(env *cli.Env, a serveArgs) int {
 		_, _ = fmt.Fprintf(env.Stderr, "error: the tz setting is not a time zone: %s. Use an IANA name such as America/Port_of_Spain.\n", strconv.Quote(config.TZName(a.env)))
 		return cli.ExitError
 	}
-	if err := run(env.Ctx, cfg, a, hosts); err != nil {
+	if err := run(env.Ctx, cfg, a, hosts, policy); err != nil {
 		log.Error("serve failed", logx.Err, err.Error())
 		return cli.ExitError
 	}
 	return cli.ExitOK
 }
 
-func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) error {
+func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string, policy Policy) error {
 	d, err := db.Connect(cfg.DBPath)
 	if err != nil {
 		return err
@@ -173,7 +171,7 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 		maps.Copy(globals, p.Globals)
 	}
 	var sessions *oidc.Service
-	if slices.Contains(a.auth, AuthOIDC) {
+	if policy.OIDC() {
 		sessions = oidc.New(d, a.env)
 		if err := sessions.Check(ctx); err != nil {
 			log.Warn("oidc sign-in is not set up; nobody can sign in until it is", logx.Err, err.Error())
@@ -183,7 +181,7 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 	if err != nil {
 		return err
 	}
-	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, NoAuth: a.authDisabled})
+	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, Policy: &policy, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions})
 	if err != nil {
 		return err
 	}
