@@ -55,7 +55,7 @@ AND m.gone_at IS NULL AND f.contacts_match = 1
 AND NOT EXISTS (SELECT 1 FROM auto_actions a WHERE a.message_id = m.id AND a.kind = 'flag' AND a.ok IS NOT 0)
 AND (SELECT COUNT(*) FROM auto_actions a WHERE a.message_id = m.id AND a.kind = 'flag' AND a.ok = 0) < :attempts
 ORDER BY m.id`
-	deletionCandidates = `SELECT ` + rules.MessageColumns + `, m.seen, m.digest FROM messages m
+	deletionCandidates = `SELECT ` + rules.MessageColumns + ` FROM messages m
 WHERE m.account = :account AND m.gone_at IS NULL AND m.sent = 0 AND m.flagged = 0
 AND m.mailbox_id IN (SELECT mb.id FROM mailboxes mb WHERE mb.role NOT IN ('drafts', 'junk', 'sent', 'system', 'trash'))
 AND ` + noCorrection + ` AND ` + deletionNotBlocked + `
@@ -904,14 +904,6 @@ func hasAge(rule *rules.Rule) bool {
 	return slices.ContainsFunc(rule.Conditions, func(c rules.Condition) bool { return c.Field() == rules.AgeField })
 }
 
-type withExtra struct {
-	rows   *sql.Rows
-	seen   *bool
-	digest *string
-}
-
-func (s withExtra) Scan(dest ...any) error { return s.rows.Scan(append(dest, s.seen, s.digest)...) }
-
 func (a *Applier) deletionIntents(ctx context.Context, account string, budget *Budget) ([]Intent, error) {
 	ruleset, err := rules.LoadRules(ctx, a.Live.DB.Write, account)
 	if err != nil {
@@ -925,13 +917,11 @@ func (a *Applier) deletionIntents(ctx context.Context, account string, budget *B
 		return nil, err
 	}
 	type row struct {
-		msg    rules.Message
-		seen   bool
-		digest string
+		msg rules.Message
 	}
 	all, err := db.Collect(rows, func(r *sql.Rows) (row, error) {
 		var x row
-		m, err := rules.ScanMessage(withExtra{r, &x.seen, &x.digest})
+		m, err := rules.ScanMessage(r)
 		x.msg = m
 		return x, err
 	})
@@ -948,7 +938,7 @@ func (a *Applier) deletionIntents(ctx context.Context, account string, budget *B
 		if err != nil {
 			return nil, err
 		}
-		if rule != nil && rule.Action == rules.ActionDelete && (x.seen || hasAge(rule)) {
+		if rule != nil && rule.Action == rules.ActionDelete && (x.msg.Seen || hasAge(rule)) {
 			matched = append(matched, match{x, rule})
 		}
 	}
@@ -958,7 +948,7 @@ func (a *Applier) deletionIntents(ctx context.Context, account string, budget *B
 		if hasAge(m.rule) {
 			c = unflagged
 		}
-		out = append(out, Intent{ID: m.row.msg.ID, Digest: m.row.digest, Kind: live.Trash, check: c})
+		out = append(out, Intent{ID: m.row.msg.ID, Digest: m.row.msg.Digest, Kind: live.Trash, check: c})
 	}
 	return out, nil
 }

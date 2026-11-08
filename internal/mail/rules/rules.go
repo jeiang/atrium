@@ -147,11 +147,17 @@ type Message struct {
 	Embedded    bool
 	Folder      string
 	Location    string
+	Seen        bool
+	Flagged     bool
+	Digest      string
+	OTP6        bool
+	VCode       bool
+	Gone        bool
 }
 
 const MessageColumns = "id, account, from_addr, from_domain, from_name, reply_to, rpath_domain, list_id, subject, " +
 	"subject_tmpl, msgid_domain, precedence, category, to_addrs, dkim_d, esp, att_types, att_names, date_ts, " +
-	"in_inbox, embedded, COALESCE(folder, ''), location"
+	"in_inbox, embedded, COALESCE(folder, ''), location, seen, flagged, digest, k_otp6, k_vcode, gone_at IS NOT NULL"
 
 type Scanner interface{ Scan(dest ...any) error }
 
@@ -161,7 +167,8 @@ func ScanMessage(s Scanner) (Message, error) {
 	var inbox, embedded int64
 	err := s.Scan(&m.ID, &m.Account, &m.FromAddr, &m.FromDomain, &m.FromName, &m.ReplyTo, &m.RpathDomain, &m.ListID,
 		&m.Subject, &m.SubjectTmpl, &m.MsgidDomain, &m.Precedence, &m.Category, &m.ToAddrs, &m.DKIMD, &m.ESP,
-		&m.AttTypes, &m.AttNames, &dateTS, &inbox, &embedded, &m.Folder, &m.Location)
+		&m.AttTypes, &m.AttNames, &dateTS, &inbox, &embedded, &m.Folder, &m.Location,
+		&m.Seen, &m.Flagged, &m.Digest, &m.OTP6, &m.VCode, &m.Gone)
 	m.DateTS = dateTS.Float64
 	m.InInbox = inbox != 0
 	m.Embedded = embedded != 0
