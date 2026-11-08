@@ -203,8 +203,12 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	app.Stdin = strings.NewReader(stdin)
 	copyFile(t, filepath.Join(golden.Dir(), "world.db"), filepath.Join(dir, "atrium.db"))
 	f := &fixture{t: t, dir: dir, env: vars, app: app}
+	envMu.Lock()
 	activeFixture = f
+	envMu.Unlock()
 	t.Cleanup(func() {
+		envMu.Lock()
+		defer envMu.Unlock()
 		if activeFixture == f {
 			activeFixture = nil
 		}
@@ -217,14 +221,19 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 }
 
 func (f *fixture) lookup(name string) (string, bool) {
-	if v, ok := f.env[name]; ok {
+	envMu.RLock()
+	v, ok := f.env[name]
+	envMu.RUnlock()
+	if ok {
 		return v, true
 	}
 	return testLookup(name)
 }
 
 func (f *fixture) loadPins() {
+	envMu.RLock()
 	pins, err := config.LoadPins(config.Map(f.env), settings.Default)
+	envMu.RUnlock()
 	if err != nil {
 		f.t.Fatal(err)
 	}

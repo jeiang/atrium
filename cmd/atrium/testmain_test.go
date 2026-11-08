@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic"
@@ -63,7 +64,11 @@ var testEnv = func() map[string]string {
 	return env
 }()
 
+var envMu sync.RWMutex
+
 func testLookup(name string) (string, bool) {
+	envMu.RLock()
+	defer envMu.RUnlock()
 	if activeFixture != nil {
 		if v, ok := activeFixture.env[name]; ok {
 			return v, true
@@ -79,13 +84,17 @@ var testApp = newApp(testLookup, settings.Default, nil)
 
 func setEnv(t *testing.T, name, value string) {
 	t.Helper()
+	envMu.Lock()
 	target := testEnv
 	if activeFixture != nil {
 		target = activeFixture.env
 	}
 	old, had := target[name]
 	target[name] = value
+	envMu.Unlock()
 	t.Cleanup(func() {
+		envMu.Lock()
+		defer envMu.Unlock()
 		if had {
 			target[name] = old
 			return

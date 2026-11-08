@@ -51,9 +51,9 @@
       done
     '';
     testTags = tags: ''
-      set -o pipefail
       log=$TMPDIR/go-test.log
-      if ! go test -race -timeout 30m -tags ${tags} ./... 2>&1 | tee "$log"; then
+      if ! go test -race -timeout 30m -tags ${tags} ./... >"$log" 2>&1; then
+        cat "$log"
         echo "=== go-test failure summary ==="
         grep -E -- '^(--- FAIL|FAIL[[:space:]]|panic:)|DATA RACE|^[[:space:]]+[A-Za-z0-9_]+_test\.go:[0-9]+:' "$log" | sort -u
         awk 'race && /^==================$/ { exit } race && (/^[A-Z]/ || /jeiang\/atrium/) { sub(/ \+0x[0-9a-f]+$/, ""); print } /WARNING: DATA RACE/ { race = 1 }' "$log" | head -n 22
