@@ -56,11 +56,15 @@ func nonZero(p *int64) *int64 {
 }
 
 func items(ctx gocontext.Context, q db.Querier, threadID int64) ([]item, error) {
-	p, err := getProjection(ctx, q, threadID)
+	ledger, err := loadLedger(ctx, q, threadID)
 	if err != nil {
 		return nil, err
 	}
-	ledger, err := loadLedger(ctx, q, threadID)
+	return itemsOf(ctx, q, threadID, ledger)
+}
+
+func itemsOf(ctx gocontext.Context, q db.Querier, threadID int64, ledger Ledger) ([]item, error) {
+	p, err := getProjection(ctx, q, threadID)
 	if err != nil {
 		return nil, err
 	}

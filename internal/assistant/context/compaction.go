@@ -20,7 +20,7 @@ func manifest(ctx gocontext.Context, q db.Querier, threadID int64, t Tuning) (st
 	if err != nil {
 		return "", err
 	}
-	found, err := items(ctx, q, threadID)
+	found, err := itemsOf(ctx, q, threadID, ledger)
 	if err != nil {
 		return "", err
 	}
