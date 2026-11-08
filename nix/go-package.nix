@@ -29,7 +29,7 @@ in
     ];
     env = {
       CGO_ENABLED = "1";
-      CGO_CFLAGS = "-O2${lib.optionalString isx86_64 " -mavx2"} -I${sqlcipherLib}/include";
+      CGO_CFLAGS = "-O2${lib.optionalString isx86_64 " -mavx2"}${lib.optionalString stdenv.hostPlatform.isAarch64 " -flax-vector-conversions"} -I${sqlcipherLib}/include";
       CGO_LDFLAGS = "-L${sqlcipherLib}/lib";
     };
 
