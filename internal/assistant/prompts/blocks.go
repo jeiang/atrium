@@ -51,18 +51,13 @@ type Parts struct {
 }
 
 func SystemBlocks(p Parts, cc CacheControl) []Block {
-	blocks := []Block{{Type: "text", Text: WithPreamble(p.System), CacheControl: &cc}}
-	for _, text := range []string{p.Profile, p.Extra} {
+	blocks := []Block{{Type: "text", Text: WithPreamble(p.System)}}
+	for _, text := range []string{p.Profile, p.Extra, p.Project} {
 		if text != "" {
 			blocks = append(blocks, Block{Type: "text", Text: text})
 		}
 	}
-	if len(blocks) > 1 {
-		blocks[len(blocks)-1].CacheControl = &cc
-	}
-	if p.Project != "" {
-		blocks = append(blocks, Block{Type: "text", Text: p.Project})
-	}
+	blocks[len(blocks)-1].CacheControl = &cc
 	return blocks
 }
 

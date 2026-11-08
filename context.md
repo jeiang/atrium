@@ -57,11 +57,19 @@ behavior-parity target.
   built-in defaults; the untrusted-data preamble is fixed in code and always
   comes first. Edits apply to every thread's next request until the
   frozen-prefix work lands.
-- Assistant history is a per-thread memory tree. The request carries the
-  current view: older message ranges as summaries, the newest messages
-  verbatim, each line with a zoom id. The `zoom` tool opens a summary's two
-  children or one message's source. Client- and server-side transcript
-  compaction are gone; the old projection and ledger rows stay untouched.
+- Assistant history is a per-thread memory tree. A run sends its own
+  messages and, newest first, earlier whole exchanges within
+  `verbatim_tokens` (default 16,000, at most a quarter of the context left
+  after the tools and system prompt) verbatim, tool calls and results
+  included; each operator message ends with its run's start time in the
+  configured time zone. Older messages come first as memory-tree lines,
+  summaries for older ranges, each with a zoom id; the `zoom` tool opens a
+  summary's two children or one message's source. The tools, the system
+  prompt with the profile and project block, and the older-history lines
+  are fixed for the run and carry the cache breakpoints, so later steps read
+  them from the prompt cache and write only the new tail. Client- and
+  server-side transcript compaction are gone; the old projection and ledger
+  rows stay untouched.
 - Memory is profile, then nightly observations, then wiki. A nightly run
   records durable observations: a first sighting proposes a "sometimes
   uses" note, a different value first seen at least 14 days earlier proposes

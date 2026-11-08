@@ -1,6 +1,9 @@
 package memory
 
 import (
+	"context"
+
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -31,9 +34,10 @@ func init() {
 const BackfillDoneKey = "backfill_done"
 
 const (
-	ViewLowKey      = "view_low"
-	ViewHighKey     = "view_high"
-	TailMessagesKey = "tail_messages"
+	ViewLowKey        = "view_low"
+	ViewHighKey       = "view_high"
+	TailMessagesKey   = "tail_messages"
+	VerbatimTokensKey = "verbatim_tokens"
 )
 
 func init() {
@@ -49,10 +53,22 @@ func init() {
 		Key: TailMessagesKey, Module: "memory", Type: settings.Int, Default: "6",
 		Min: 0, Max: 100, Check: settings.Between(0, 100),
 	}))
+	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
+		Key: VerbatimTokensKey, Module: "memory", Type: settings.Int, Default: "16000",
+		Min: 0, Max: 200000, Check: settings.Between(0, 200000),
+	}))
 }
 
 func init() {
 	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
 		Key: BackfillDoneKey, Module: "memory", Type: settings.String, Default: "",
 	}))
+}
+
+func VerbatimTokens(ctx context.Context, q db.Querier) (int64, error) {
+	found, err := settings.From(ctx).Resolve(ctx, q, VerbatimTokensKey)
+	if err != nil {
+		return 0, err
+	}
+	return found.Int()
 }

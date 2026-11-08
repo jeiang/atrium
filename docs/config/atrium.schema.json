@@ -3093,6 +3093,17 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "verbatim_tokens": {
+          "default": 16000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "verbatim_tokens_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "view_high": {
           "default": 128000,
           "type": [

@@ -17,7 +17,7 @@ func TestMemoryViewReplacesCompaction(t *testing.T) {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	if _, err := d.Write.Exec("UPDATE threads SET context_limit = 20000 WHERE id = 1"); err != nil {
+	if _, err := d.Write.Exec("UPDATE threads SET context_limit = 90000 WHERE id = 1"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.Write.Exec("DELETE FROM memory_nodes WHERE thread_id = 1"); err != nil {
@@ -63,7 +63,7 @@ func TestMemoryViewReplacesCompaction(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(string(raw), "Memory view") || !strings.Contains(string(raw), "zoom id") {
+	if !strings.Contains(string(raw), "Memory view") || !strings.Contains(string(raw), "zoom id") || !strings.Contains(string(raw), `"continue"`) {
 		t.Errorf("request misses the memory view lines: %s", raw)
 	}
 	var projections int
