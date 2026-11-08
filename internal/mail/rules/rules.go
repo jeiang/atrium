@@ -12,6 +12,7 @@ import (
 	"regexp"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/py"
@@ -884,7 +885,7 @@ type Thresholds struct {
 }
 
 func ReadThresholds(ctx context.Context, q Querier) (Thresholds, error) {
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	t := Thresholds{MinN: r.Int(mail.KeyRuleMinN), MinPurity: r.Float(mail.KeyRuleMinPurity)}
 	return t, r.Err()
 }

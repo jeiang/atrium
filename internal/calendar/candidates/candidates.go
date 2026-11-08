@@ -13,10 +13,11 @@ import (
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/py"
@@ -194,11 +195,11 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 	if err != nil {
 		return 0, 0, err
 	}
-	chatURL, err := mail.ChatURL(ctx, d.Read)
+	chatURL, err := endpoint.ChatURL(ctx, d.Read)
 	if err != nil {
 		return 0, 0, err
 	}
-	ctx, err = mail.WithModels(ctx, d.Read)
+	ctx, err = embed.WithModels(ctx, d.Read)
 	if err != nil {
 		return 0, 0, err
 	}

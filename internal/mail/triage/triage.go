@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/report"
@@ -225,7 +226,7 @@ type Summary struct {
 }
 
 func Summarize(ctx context.Context, q report.Querier, env config.Env, account string, since *string, at time.Time) (Summary, error) {
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	topDests := r.Int(mail.KeyTriageTopDests)
 	if err := r.Err(); err != nil {
 		return Summary{}, err

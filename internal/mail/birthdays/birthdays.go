@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/py"
@@ -28,7 +29,7 @@ func Date(year int, month time.Month, day int) time.Time {
 }
 
 func Limits(ctx context.Context, q db.Querier) (defaultDays, maxDays int, err error) {
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	defaultDays = r.Int(mail.KeyBirthdaysDefaultDays)
 	maxDays = r.Int(mail.KeyBirthdaysMaxDays)
 	return defaultDays, maxDays, r.Err()

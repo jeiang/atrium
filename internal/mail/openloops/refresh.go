@@ -9,6 +9,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
@@ -18,7 +19,7 @@ import (
 )
 
 func BackfillHeaders(ctx context.Context, d *db.DB, cfg config.Config, now float64) (int, error) {
-	r := mail.Read(ctx, d.Read)
+	r := endpoint.Read(ctx, d.Read)
 	window := r.Int(mail.KeyLoopsWindowDays)
 	limit := r.Int(mail.KeyLoopsBackfillLimit)
 	if err := r.Err(); err != nil {

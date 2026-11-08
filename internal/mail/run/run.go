@@ -153,11 +153,11 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 			return err
 		}
 	}
-	embedURL, err := mail.EmbedURL(ctx, p.DB.Read)
+	embedURL, err := embed.EmbedURL(ctx, p.DB.Read)
 	if err != nil {
 		return err
 	}
-	ctx, err = mail.WithModels(ctx, p.DB.Read)
+	ctx, err = embed.WithModels(ctx, p.DB.Read)
 	if err != nil {
 		return err
 	}

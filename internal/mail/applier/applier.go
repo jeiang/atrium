@@ -13,6 +13,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
@@ -213,7 +214,7 @@ func (a *Applier) cap(ctx context.Context) (int, error) {
 	if a.Cap != 0 {
 		return a.Cap, nil
 	}
-	r := mail.Read(ctx, a.Live.DB.Read)
+	r := endpoint.Read(ctx, a.Live.DB.Read)
 	n := r.Int(mail.KeyWriteCap)
 	return n, r.Err()
 }
@@ -969,7 +970,7 @@ func (a *Applier) deletionDue(ctx context.Context, account string) (bool, error)
 	if err != nil {
 		return false, err
 	}
-	r := mail.Read(ctx, a.Live.DB.Read)
+	r := endpoint.Read(ctx, a.Live.DB.Read)
 	interval := r.Int(mail.KeyDeletionInterval)
 	if err := r.Err(); err != nil {
 		return false, err

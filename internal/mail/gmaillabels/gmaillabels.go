@@ -10,6 +10,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
@@ -44,7 +45,7 @@ func (m mailbox) labels() []string {
 
 func load(ctx context.Context, q proposals.Querier, account string) (mailbox, error) {
 	m := mailbox{members: map[string][]int64{}, rows: map[int64]scanutil.Message{}}
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	m.maxMessages = r.Int(mail.KeyGmailLabelsMaxMessages)
 	m.minTarget = r.Int(mail.KeyGmailLabelsMinTarget)
 	m.minOverlap = r.Float(mail.KeyGmailLabelsMinOverlap)

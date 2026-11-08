@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
@@ -73,7 +74,7 @@ func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, e
 	if err != nil {
 		return 0, err
 	}
-	set := mail.Read(ctx, r.DB.Read)
+	set := endpoint.Read(ctx, r.DB.Read)
 	ahead := set.Int(mail.KeyLoopsRemindAheadDays)
 	overdue := set.Int(mail.KeyLoopsRemindOverdueDays)
 	hour := set.Int(mail.KeyLoopsRemindHour)
@@ -189,7 +190,7 @@ func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (
 		return nil, err
 	}
 	current := r.now()
-	set := mail.Read(ctx, r.DB.Read)
+	set := endpoint.Read(ctx, r.DB.Read)
 	hour := set.Int(mail.KeyLoopsRemindHour)
 	if err := set.Err(); err != nil {
 		return nil, err

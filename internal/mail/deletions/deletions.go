@@ -7,6 +7,7 @@ import (
 	"slices"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
@@ -32,7 +33,7 @@ type params struct {
 }
 
 func readParams(ctx context.Context, q db.Querier) (params, error) {
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	p := params{
 		minGroup:         r.Int(mail.KeyDeletionsMinGroup),
 		minDeletedShare:  r.Float(mail.KeyDeletionsMinShare),

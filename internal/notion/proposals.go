@@ -15,9 +15,10 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/difflib"
+	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/llm"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -77,11 +78,11 @@ func (p *Proposer) chat(ctx context.Context, system, user, schema string, maxTok
 	if call == nil {
 		call = llm.ChatJSON
 	}
-	chatURL, err := mail.ChatURL(ctx, p.DB.Read)
+	chatURL, err := endpoint.ChatURL(ctx, p.DB.Read)
 	if err != nil {
 		return nil, err
 	}
-	ctx, err = mail.WithModels(ctx, p.DB.Read)
+	ctx, err = embed.WithModels(ctx, p.DB.Read)
 	if err != nil {
 		return nil, err
 	}

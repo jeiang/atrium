@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
@@ -56,7 +57,7 @@ type Tuning struct {
 }
 
 func ReadTuning(ctx context.Context, q Querier, account string) (Tuning, error) {
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	t := Tuning{
 		KNNK: r.Int(mail.KeyKNNK), KNNMinShare: r.Float(mail.KeyKNNMinShare), KNNMax: r.Int(mail.KeyKNNMax),
 		LLMNeighbors: r.Int(mail.KeyLLMNeighbors), FolderMin: r.Int(mail.KeyFolderMinMessages),
@@ -343,11 +344,11 @@ func (r *Router) RouteAccount(ctx context.Context, account string) (int, error) 
 	if err != nil {
 		return 0, err
 	}
-	ctx, err = mail.WithModels(ctx, r.DB.Read)
+	ctx, err = embed.WithModels(ctx, r.DB.Read)
 	if err != nil {
 		return 0, err
 	}
-	chatURL, err := mail.ChatURL(ctx, r.DB.Read)
+	chatURL, err := endpoint.ChatURL(ctx, r.DB.Read)
 	if err != nil {
 		return 0, err
 	}

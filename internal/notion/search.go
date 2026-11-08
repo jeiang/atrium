@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/search"
 	"github.com/jeiang/atrium/internal/notionid"
 )
@@ -402,11 +401,11 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 	}
 	var sem []int64
 	available := true
-	embedURL, err := mail.EmbedURL(ctx, q)
+	embedURL, err := embed.EmbedURL(ctx, q)
 	if err != nil {
 		return Result{}, err
 	}
-	modelCtx, err := mail.WithModels(ctx, q)
+	modelCtx, err := embed.WithModels(ctx, q)
 	if err != nil {
 		return Result{}, err
 	}

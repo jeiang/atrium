@@ -21,24 +21,24 @@ func EmbedIndexes(ctx context.Context, d *db.DB) ([]embed.Index, error) {
 }
 
 func ReembedStep(ctx context.Context, d *db.DB) (bool, error) {
-	endpoints, err := Endpoints(ctx, d.Read)
+	endpoints, err := endpoint.Endpoints(ctx, d.Read)
 	if err != nil {
 		return false, err
 	}
-	target, ok := endpointOf(endpoints, EndpointEmbed)
+	target, ok := endpoint.Of(endpoints, endpoint.EndpointEmbed)
 	if !ok || target.URL == "" {
 		return false, nil
 	}
-	ctx, err = withEndpoints(ctx, d.Read, []Endpoint{target})
+	ctx, err = endpoint.WithEndpoints(ctx, d.Read, []endpoint.Endpoint{target})
 	if err != nil {
 		return false, err
 	}
-	r := Read(ctx, d.Read)
-	s := endpoint.Settings{EmbedBodyChars: r.Int(KeyEmbedBodyChars), Batch: r.Int(KeyEmbedBatch)}
+	r := endpoint.Read(ctx, d.Read)
+	s := endpoint.Settings{EmbedBodyChars: r.Int(endpoint.KeyEmbedBodyChars), Batch: r.Int(endpoint.KeyEmbedBatch)}
 	if r.Err() != nil {
 		return false, r.Err()
 	}
 	return embed.Rebuild(ctx, d, target.URL, target.Model, s, func(ctx context.Context, url, model string) (string, int) {
-		return probeEmbed(ctx, Endpoint{Kind: EndpointEmbed, URL: url, Model: model})
+		return probeEmbed(ctx, endpoint.Endpoint{Kind: endpoint.EndpointEmbed, URL: url, Model: model})
 	})
 }

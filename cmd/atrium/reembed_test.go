@@ -19,7 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
@@ -140,9 +140,9 @@ func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, pa
 		t.Fatal(err)
 	}
 	seedNotionVectors(t, path)
-	setEnv(t, settingEnv(mail.KeyEmbedURL), fake.URL+"/v1")
-	setEnv(t, settingEnv(mail.KeyEmbedModel), model)
-	setEnv(t, settingEnv(mail.KeyEmbedBatch), "40")
+	setEnv(t, settingEnv(endpoint.KeyEmbedURL), fake.URL+"/v1")
+	setEnv(t, settingEnv(endpoint.KeyEmbedModel), model)
+	setEnv(t, settingEnv(endpoint.KeyEmbedBatch), "40")
 	return dir, path
 }
 
@@ -196,7 +196,7 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 		t.Fatalf("search with an unchanged embedder: %q, was %q (model %q)", after, before, fake.lastModel())
 	}
 
-	setEnv(t, settingEnv(mail.KeyEmbedModel), bigModel)
+	setEnv(t, settingEnv(endpoint.KeyEmbedModel), bigModel)
 	fake.release(1)
 	base, _, stop = startServeStoppable(t, dir)
 	var first, total int

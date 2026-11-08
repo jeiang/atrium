@@ -13,10 +13,11 @@ import (
 
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/message"
 )
 
@@ -114,11 +115,11 @@ func FlagAccount(ctx context.Context, d *db.DB, account string, judge Judge, now
 	if err != nil {
 		return 0, err
 	}
-	chatURL, err := mail.ChatURL(ctx, d.Read)
+	chatURL, err := endpoint.ChatURL(ctx, d.Read)
 	if err != nil {
 		return 0, err
 	}
-	ctx, err = mail.WithModels(ctx, d.Read)
+	ctx, err = embed.WithModels(ctx, d.Read)
 	if err != nil {
 		return 0, err
 	}

@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
@@ -85,7 +86,7 @@ func (p Params) Args() []any {
 }
 
 func QueryParams(ctx context.Context, q Querier, account string) (Params, error) {
-	r := mail.Read(ctx, q)
+	r := endpoint.Read(ctx, q)
 	p := Params{Account: account, Attempts: r.Int(mail.KeyWriteAttempts), Golive: math.Inf(1)}
 	if err := r.Err(); err != nil {
 		return Params{}, err
