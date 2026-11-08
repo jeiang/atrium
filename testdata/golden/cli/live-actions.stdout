@@ -1,7 +1,7 @@
 [
   {
     "id": 10,
-    "ts": 1792094400.0,
+    "ts": 1792094400,
     "account": "icloud",
     "kind": "correct",
     "status": "applied",
@@ -13,7 +13,7 @@
   },
   {
     "id": 9,
-    "ts": 1792090800.0,
+    "ts": 1792090800,
     "account": "gmail",
     "kind": "file",
     "status": "applied",
@@ -25,7 +25,7 @@
   },
   {
     "id": 8,
-    "ts": 1792090800.0,
+    "ts": 1792090800,
     "account": "gmail",
     "kind": "file",
     "status": "applied",
@@ -37,7 +37,7 @@
   },
   {
     "id": 7,
-    "ts": 1792090800.0,
+    "ts": 1792090800,
     "account": "icloud",
     "kind": "file",
     "status": "applied",
@@ -49,7 +49,7 @@
   },
   {
     "id": 6,
-    "ts": 1792090800.0,
+    "ts": 1792090800,
     "account": "icloud",
     "kind": "file",
     "status": "applied",
@@ -61,7 +61,7 @@
   },
   {
     "id": 5,
-    "ts": 1792090800.0,
+    "ts": 1792090800,
     "account": "icloud",
     "kind": "file",
     "status": "undone",
@@ -73,7 +73,7 @@
   },
   {
     "id": 4,
-    "ts": 1792087200.0,
+    "ts": 1792087200,
     "account": "gmail",
     "kind": "flag",
     "status": "applied",
@@ -85,7 +85,7 @@
   },
   {
     "id": 3,
-    "ts": 1792087200.0,
+    "ts": 1792087200,
     "account": "icloud",
     "kind": "trash",
     "status": "applied",
@@ -97,7 +97,7 @@
   },
   {
     "id": 2,
-    "ts": 1792087200.0,
+    "ts": 1792087200,
     "account": "icloud",
     "kind": "flag",
     "status": "applied",
@@ -109,7 +109,7 @@
   },
   {
     "id": 1,
-    "ts": 1792087200.0,
+    "ts": 1792087200,
     "account": "icloud",
     "kind": "flag",
     "status": "applied",

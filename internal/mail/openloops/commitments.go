@@ -3,6 +3,7 @@ package openloops
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -52,7 +53,7 @@ func DueDate(value any) (string, bool) {
 	if !isStr {
 		return "", false
 	}
-	year, month, day, ok := py.DateFromISOFormat(py.Clip(py.Strip(text), 10))
+	year, month, day, ok := py.DateFromISOFormat(py.Clip(strings.TrimSpace(text), 10))
 	if !ok {
 		return "", false
 	}
@@ -82,12 +83,12 @@ func JudgeCommitments(ctx context.Context, env config.Env, url string, m Message
 	if err != nil {
 		return nil, err
 	}
-	answer, err := py.JSONLoads(raw)
-	if err != nil {
+	var answer any
+	if err := json.Unmarshal(raw, &answer); err != nil {
 		return nil, fmt.Errorf("%w: %w", httpx.ErrPayload, err)
 	}
-	if reply, ok := answer.(py.Dict); ok {
-		found, ok := reply.Get("commitments")
+	if reply, ok := answer.(map[string]any); ok {
+		found, ok := reply["commitments"]
 		if !ok {
 			return nil, fmt.Errorf("%w: 'commitments'", httpx.ErrMissing)
 		}
@@ -111,7 +112,7 @@ func commitmentItems(found any, perMail int) ([]any, error) {
 		return v[:min(len(v), perMail)], nil
 	case string:
 		return nil, nil
-	case py.Dict, map[string]any:
+	case map[string]any:
 		return nil, fmt.Errorf("%w: commitment list must be a list", httpx.ErrShape)
 	}
 	return nil, fmt.Errorf("%w: %s is not a list", httpx.ErrShape, py.TypeName(found))
@@ -173,24 +174,24 @@ func ScanCommitments(ctx context.Context, d *db.DB, env config.Env, now float64,
 }
 
 func storeCommitment(ctx context.Context, d *db.DB, messageID int64, item any, now float64) (int64, error) {
-	entry, ok := item.(py.Dict)
+	entry, ok := item.(map[string]any)
 	if !ok {
 		return 0, nil
 	}
 	text := ""
-	if v, _ := entry.Get("text"); py.Truthy(v) {
+	if v := entry["text"]; py.Truthy(v) {
 		s, isStr := v.(string)
 		if !isStr {
 			return 0, fmt.Errorf("%w: commitment text is not a string", httpx.ErrShape)
 		}
-		text = py.Strip(s)
+		text = strings.TrimSpace(s)
 	}
-	owner, _ := entry.Get("owner")
+	owner, _ := entry["owner"].(string)
 	if text == "" || (owner != "me" && owner != "them") {
 		return 0, nil
 	}
 	var due *string
-	raw, _ := entry.Get("due")
+	raw := entry["due"]
 	if s, ok := DueDate(raw); ok {
 		due = &s
 	}

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"slices"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/features"
 	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/py"
+	"golang.org/x/text/cases"
 )
 
 const (
@@ -321,7 +323,7 @@ func TrashMailbox(ctx context.Context, client mail.Client, account string) (stri
 				return info.IMAPName, nil
 			}
 		}
-		if config.From(ctx).Preset(account) != config.Gmail && found == "" && trashNames[py.Casefold(info.Name)] {
+		if config.From(ctx).Preset(account) != config.Gmail && found == "" && trashNames[cases.Fold().String(info.Name)] {
 			found = info.IMAPName
 		}
 	}
@@ -457,7 +459,8 @@ func RelabelPlan(items []Verified, add, remove []string) []Relabel {
 				wantRemove = append(wantRemove, l)
 			}
 		}
-		key := py.JSONDumps([]any{wantAdd, wantRemove})
+		raw, _ := json.Marshal([]any{wantAdd, wantRemove})
+		key := string(raw)
 		i, ok := index[key]
 		if !ok {
 			i = len(out)

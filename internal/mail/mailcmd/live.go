@@ -1,6 +1,8 @@
 package mailcmd
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -11,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func (o Options) LiveCommand() *cli.Command {
@@ -48,10 +49,6 @@ func (o Options) LiveCommand() *cli.Command {
 	)
 }
 
-func backlogDict(r backlog.Result) py.Dict {
-	return py.Dict{{Key: "created", Value: r.Created}, {Key: "accounts", Value: r.Accounts}}
-}
-
 func liveBacklog(x *exec) error {
 	result, err := backlog.Backlog(x.Ctx, x.DB, x.Now())
 	if err != nil {
@@ -61,7 +58,7 @@ func liveBacklog(x *exec) error {
 		}
 		return err
 	}
-	x.JSON(backlogDict(result))
+	x.JSON(result)
 	return nil
 }
 
@@ -78,7 +75,7 @@ func rebaseline(x *exec) error {
 		if err != nil {
 			return err
 		}
-		x.JSON(append(py.Dict{{Key: "baseline", Value: baseline}}, backlogDict(refreshed)...))
+		x.JSON(rebaselineResult{Baseline: baseline, Created: refreshed.Created, Accounts: refreshed.Accounts})
 		return nil
 	})
 }
@@ -92,7 +89,7 @@ func setPaused(paused bool) body {
 		if err := notify.PauseChanged(x.Ctx, x.DB, x.opts.env(), paused); err != nil {
 			_, _ = fmt.Fprintln(x.Stderr, "warning: pause notice failed:", err)
 		}
-		x.JSON(py.Dict{{Key: "paused", Value: l.Paused()}})
+		x.JSON(map[string]any{"paused": l.Paused()})
 		return nil
 	}
 }
@@ -104,16 +101,13 @@ func liveDeletions(x *exec) error {
 			return err
 		}
 		syncer := x.Syncer
-		out := py.Dict{}
+		out := accountResults{}
 		for _, account := range accounts {
 			done, err := applier.New(x.Live, x.Open, syncer).DeletionPass(x.Ctx, account, true)
 			if err != nil {
 				return err
 			}
-			out = out.Set(account, py.Dict{
-				{Key: "ran", Value: done.Ran}, {Key: "trashed", Value: done.Kind(live.Trash)},
-				{Key: "skipped", Value: done.Skipped}, {Key: "failed", Value: done.Failed},
-			})
+			out = append(out, accountResult{name: account, result: deletionResult{Ran: done.Ran, Trashed: done.Kind(live.Trash), Skipped: done.Skipped, Failed: done.Failed}})
 		}
 		x.JSON(out)
 		return nil
@@ -125,13 +119,10 @@ func listActions(x *exec, limit int, kind string) error {
 	if err != nil {
 		return err
 	}
-	out := make([]any, len(actions))
+	out := make([]actionJSON, len(actions))
 	for i, a := range actions {
-		out[i] = py.Dict{
-			{Key: "id", Value: a.ID}, {Key: "ts", Value: a.TS}, {Key: "account", Value: a.Account}, {Key: "kind", Value: a.Kind},
-			{Key: "status", Value: a.Status}, {Key: "src", Value: py.Nullable(a.Src)}, {Key: "dest", Value: py.Nullable(a.Dest)},
-			{Key: "subject", Value: py.Nullable(a.Subject)}, {Key: "error", Value: py.Nullable(a.Error)}, {Key: "undoable", Value: a.Undoable},
-		}
+		out[i] = actionJSON{ID: a.ID, TS: a.TS, Account: a.Account, Kind: a.Kind, Status: a.Status,
+			Src: nullable(a.Src), Dest: nullable(a.Dest), Subject: nullable(a.Subject), Error: nullable(a.Error), Undoable: a.Undoable}
 	}
 	x.JSON(out)
 	return nil
@@ -146,10 +137,7 @@ func undoAction(x *exec, id int64) error {
 		}
 		return err
 	}
-	x.JSON(py.Dict{
-		{Key: "id", Value: result.ID}, {Key: "undone", Value: result.Undone}, {Key: "detail", Value: result.Detail},
-		{Key: "sync_error", Value: py.Nullable(result.SyncError)},
-	})
+	x.JSON(undoJSON{ID: result.ID, Undone: result.Undone, Detail: result.Detail, SyncError: result.SyncError})
 	return nil
 }
 
@@ -162,6 +150,76 @@ func resolveAction(x *exec, id int64, outcome string) error {
 		}
 		return err
 	}
-	x.JSON(py.Dict{{Key: "id", Value: result.ID}, {Key: "outcome", Value: result.Outcome}})
+	x.JSON(map[string]any{"id": result.ID, "outcome": result.Outcome})
 	return nil
+}
+
+type rebaselineResult struct {
+	Baseline any              `json:"baseline"`
+	Created  []int64          `json:"created"`
+	Accounts backlog.Accounts `json:"accounts"`
+}
+
+type accountResult struct {
+	name   string
+	result deletionResult
+}
+
+type accountResults []accountResult
+
+func (r accountResults) MarshalJSON() ([]byte, error) {
+	var b bytes.Buffer
+	b.WriteByte('{')
+	for i, entry := range r {
+		if i > 0 {
+			b.WriteByte(',')
+		}
+		key, err := json.Marshal(entry.name)
+		if err != nil {
+			return nil, err
+		}
+		value, err := json.Marshal(entry.result)
+		if err != nil {
+			return nil, err
+		}
+		b.Write(key)
+		b.WriteByte(':')
+		b.Write(value)
+	}
+	b.WriteByte('}')
+	return b.Bytes(), nil
+}
+
+type deletionResult struct {
+	Ran     bool `json:"ran"`
+	Trashed int  `json:"trashed"`
+	Skipped int  `json:"skipped"`
+	Failed  int  `json:"failed"`
+}
+
+type actionJSON struct {
+	ID       int64   `json:"id"`
+	TS       float64 `json:"ts"`
+	Account  string  `json:"account"`
+	Kind     string  `json:"kind"`
+	Status   string  `json:"status"`
+	Src      any     `json:"src"`
+	Dest     any     `json:"dest"`
+	Subject  any     `json:"subject"`
+	Error    any     `json:"error"`
+	Undoable bool    `json:"undoable"`
+}
+
+type undoJSON struct {
+	ID        int64   `json:"id"`
+	Undone    bool    `json:"undone"`
+	Detail    any     `json:"detail"`
+	SyncError *string `json:"sync_error"`
+}
+
+func nullable[T any](v *T) any {
+	if v == nil {
+		return nil
+	}
+	return *v
 }

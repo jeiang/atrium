@@ -25,7 +25,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/mail/smtp"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type Status string
@@ -479,7 +478,7 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 	}
 	if v, ok := changes["account"]; ok {
 		switch v.(type) {
-		case []any, []string, py.Dict, map[string]any:
+		case []any, []string, map[string]any:
 			return nil, Error("account must be a single name")
 		}
 		name, valid := validAccount(ctx, v)

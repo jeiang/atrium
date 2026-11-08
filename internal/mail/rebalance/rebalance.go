@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -287,7 +288,11 @@ func (c *clusterer) dot(a, b []float32) float64 {
 	for i := range a {
 		c.terms = append(c.terms, float64(a[i])*float64(b[i]))
 	}
-	return py.Sum(c.terms)
+	var total float64
+	for _, term := range c.terms {
+		total += term
+	}
+	return total
 }
 
 func (c *clusterer) centroid(members [][]float32) []float32 {
@@ -297,9 +302,17 @@ func (c *clusterer) centroid(members [][]float32) []float32 {
 		for _, m := range members {
 			c.terms = append(c.terms, float64(m[i]))
 		}
-		total[i] = py.Sum(c.terms)
+		var sum float64
+		for _, term := range c.terms {
+			sum += term
+		}
+		total[i] = sum
 	}
-	norm := math.Sqrt(py.SumSq(total))
+	var sumSq float64
+	for _, x := range total {
+		sumSq += x * x
+	}
+	norm := math.Sqrt(sumSq)
 	if norm == 0 {
 		norm = 1.0
 	}
@@ -586,7 +599,7 @@ func (p params) termsOf(rows []*row) []string {
 func cleanName(value string, maxChars int) string {
 	name := junkRE.ReplaceAllString(value, " ")
 	name = spacesRE.ReplaceAllString(name, " ")
-	return py.Strip(py.Clip(py.Strip(name), maxChars))
+	return strings.TrimSpace(py.Clip(strings.TrimSpace(name), maxChars))
 }
 
 type Namer func(ctx context.Context, folder string, domains, terms []string, maxChars int) (string, error)
@@ -604,9 +617,10 @@ func SuggestName(chatURL string) Namer {
 		case err != nil:
 			return "", err
 		default:
-			answer, _ := py.JSONLoads(raw)
-			if fields, ok := answer.(py.Dict); ok {
-				if value, _ := fields.Get("name"); value != nil {
+			var answer any
+			_ = json.Unmarshal(raw, &answer)
+			if fields, ok := answer.(map[string]any); ok {
+				if value := fields["name"]; value != nil {
 					if s, isString := value.(string); isString {
 						name = cleanName(s, maxChars)
 					}
@@ -626,12 +640,15 @@ func SuggestName(chatURL string) Namer {
 type groupPreview struct {
 	Domains []string
 	Terms   []string
-	dict    py.Dict
+	dict    map[string]any
 }
 
-func (g groupPreview) Dict() py.Dict { return g.dict }
+func (g groupPreview) Dict() map[string]any { return g.dict }
 
-func (g groupPreview) WithName(name string) py.Dict { return g.dict.Set("name", name) }
+func (g groupPreview) WithName(name string) map[string]any {
+	g.dict["name"] = name
+	return g.dict
+}
 
 func (p params) preview(rows []*row, name string) groupPreview {
 	domains := make([]string, len(rows))
@@ -645,10 +662,10 @@ func (p params) preview(rows []*row, name string) groupPreview {
 	terms := p.termsOf(rows)
 	return groupPreview{
 		Domains: p.limits.TopLabelsOf(domains), Terms: terms,
-		dict: py.Dict{
-			{Key: "name", Value: name}, {Key: "count", Value: len(rows)}, {Key: "senders", Value: p.limits.TopCounts(domains)},
-			{Key: "terms", Value: terms},
-			{Key: "subjects", Value: p.limits.SampleSubjectsOf(messages)}, {Key: "messages", Value: views},
+		dict: map[string]any{
+			"name": name, "count": len(rows), "senders": p.limits.TopCounts(domains),
+			"terms":    terms,
+			"subjects": p.limits.SampleSubjectsOf(messages), "messages": views,
 		},
 	}
 }

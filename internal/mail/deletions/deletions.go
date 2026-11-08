@@ -186,19 +186,19 @@ func compareKeys(a, b groupKey) int {
 	return strings.Compare(a.tmpl, b.tmpl)
 }
 
-func buildRule(account string, lv level, key, tmpl string, olderThanDays int) py.Dict {
+func buildRule(account string, lv level, key, tmpl string, olderThanDays int) map[string]any {
 	when := []any{
-		py.Dict{{Key: "field", Value: lv.column}, {Key: "op", Value: lv.op}, {Key: "value", Value: key}},
-		py.Dict{{Key: "field", Value: "subject_tmpl"}, {Key: "op", Value: "eq"}, {Key: "value", Value: tmpl}},
+		map[string]any{"field": lv.column, "op": lv.op, "value": key},
+		map[string]any{"field": "subject_tmpl", "op": "eq", "value": tmpl},
 	}
 	reason := ReasonDeleted
 	if olderThanDays != 0 {
-		when = append(when, py.Dict{{Key: "field", Value: rules.AgeField}, {Key: "op", Value: rules.AgeOp}, {Key: "value", Value: olderThanDays}})
+		when = append(when, map[string]any{"field": rules.AgeField, "op": rules.AgeOp, "value": olderThanDays})
 		reason = ReasonOTP
 	}
-	return py.Dict{
-		{Key: "id", Value: "del-" + scanutil.Digest(account, reason, lv.name, key, tmpl)[:10]},
-		{Key: "account", Value: account}, {Key: "action", Value: "delete"}, {Key: "when", Value: when},
+	return map[string]any{
+		"id":      "del-" + scanutil.Digest(account, reason, lv.name, key, tmpl)[:10],
+		"account": account, "action": "delete", "when": when,
 	}
 }
 
@@ -248,7 +248,7 @@ func (p params) build(ctx context.Context, q proposals.Querier, everyone []*row,
 	if err != nil {
 		return nil, err
 	}
-	when, ok := rule.Get("when")
+	when, ok := rule["when"]
 	if !ok {
 		return nil, fmt.Errorf("%w: rule has no conditions", httpx.ErrShape)
 	}

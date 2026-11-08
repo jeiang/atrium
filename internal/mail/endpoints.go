@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func Hosted(raw string) bool {
@@ -43,18 +42,6 @@ type ProbeResult struct {
 	Dimension int      `json:"dimension,omitempty"`
 	Models    []string `json:"models"`
 	Hosted    bool     `json:"hosted"`
-}
-
-func (r ProbeResult) Dict() py.Dict {
-	d := py.Dict{
-		{Key: "kind", Value: r.Kind}, {Key: "url", Value: r.URL}, {Key: "model", Value: r.Model},
-		{Key: "ok", Value: r.OK}, {Key: "reason", Value: r.Reason}, {Key: "models", Value: r.Models},
-		{Key: "hosted", Value: r.Hosted},
-	}
-	if r.Dimension != 0 {
-		d = append(d[:5], append(py.Dict{{Key: "dimension", Value: r.Dimension}}, d[5:]...)...)
-	}
-	return d
 }
 
 func discover(ctx context.Context, base string) []string {

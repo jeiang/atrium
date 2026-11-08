@@ -22,7 +22,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
 	"github.com/jeiang/atrium/internal/mail/rules"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type limits struct {
@@ -489,10 +488,10 @@ func (s *Syncer) refreshFlags(ctx context.Context, client mail.Client, account s
 		if err := json.Unmarshal([]byte(state.Flags), &newFlags); err != nil {
 			return err
 		}
-		detail := py.Dict{
-			{Key: "flags", Value: []any{nonNil(oldFlags), nonNil(newFlags)}},
-			{Key: "location", Value: []any{row.Location, state.Location}},
-			{Key: "in_inbox", Value: []any{row.InInbox, state.InInbox}},
+		detail := map[string]any{
+			"flags":    []any{nonNil(oldFlags), nonNil(newFlags)},
+			"location": []any{row.Location, state.Location},
+			"in_inbox": []any{row.InInbox, state.InInbox},
 		}
 		kind := "flags"
 		if state.Labels != row.Labels {
@@ -505,7 +504,7 @@ func (s *Syncer) refreshFlags(ctx context.Context, client mail.Client, account s
 				return err
 			}
 			_, err := tx.ExecContext(ctx, "INSERT INTO events (ts, account, kind, message_id, detail) VALUES (?, ?, ?, ?, ?)",
-				ts, account, kind, row.ID, py.JSONDumps(detail))
+				ts, account, kind, row.ID, jsonString(detail))
 			if err != nil {
 				return err
 			}
@@ -627,11 +626,11 @@ func (s *Syncer) ingest(ctx context.Context, tx *sql.Tx, account string, mbx mai
 		GmMsgID: item.GmMsgID, GmThrID: item.GmThrID, InternalDate: item.InternalDate, DateTS: feats.DateTS,
 		Size: item.Size, RawPath: relative, Flags: state.Flags, Seen: state.Seen, Flagged: state.Flagged, Labels: state.Labels,
 		InInbox: state.InInbox, Sent: state.Sent, Location: state.Location, Folder: state.Folder,
-		FromAddr: feats.FromAddr, FromDomain: feats.FromDomain, FromName: feats.FromName, ToAddrs: py.JSONDumps(nonNil(feats.ToAddrs)),
+		FromAddr: feats.FromAddr, FromDomain: feats.FromDomain, FromName: feats.FromName, ToAddrs: jsonString(nonNil(feats.ToAddrs)),
 		ReplyTo: feats.ReplyTo, RPathDomain: feats.RPathDomain, ListID: feats.ListID, Precedence: feats.Precedence,
 		Subject: feats.Subject, SubjectTmpl: feats.SubjectTmpl, MsgIDDomain: feats.MsgIDDomain, InReplyTo: feats.InReplyTo,
-		Refs: feats.Refs, DKIMD: py.JSONDumps(nonNil(feats.DKIMD)), ESP: py.JSONDumps(nonNil(feats.ESP)),
-		AttTypes: py.JSONDumps(nonNil(feats.AttTypes)), AttNames: py.JSONDumps(nonNil(feats.AttNames)),
+		Refs: feats.Refs, DKIMD: jsonString(nonNil(feats.DKIMD)), ESP: jsonString(nonNil(feats.ESP)),
+		AttTypes: jsonString(nonNil(feats.AttTypes)), AttNames: jsonString(nonNil(feats.AttNames)),
 		KOrder: feats.KOrder, KVCode: feats.KVCode, KOTP6: feats.KOTP6, FirstSeen: run,
 	})
 	if err != nil {
@@ -643,6 +642,11 @@ func (s *Syncer) ingest(ctx context.Context, tx *sql.Tx, account string, mbx mai
 		return err
 	}
 	return storeRaw(absolute, raw)
+}
+
+func jsonString(v any) string {
+	b, _ := json.Marshal(v)
+	return string(b)
 }
 
 func (s *Syncer) reconcile(ctx context.Context, account string, goneIDs []int64, run float64) error {
@@ -660,18 +664,18 @@ func (s *Syncer) reconcile(ctx context.Context, account string, goneIDs []int64,
 			"SELECT id, location FROM messages WHERE account = ? AND digest = ? AND gone_at IS NULL AND mailbox_id != ? ORDER BY id DESC LIMIT 1",
 			account, digest, mailboxID).Scan(&destID, &destLocation)
 		kind := "move"
-		var detail py.Dict
+		var detail map[string]any
 		switch {
 		case err == nil:
-			detail = py.Dict{{Key: "from", Value: location}, {Key: "to", Value: destLocation}, {Key: "to_id", Value: destID}}
+			detail = map[string]any{"from": location, "to": destLocation, "to_id": destID}
 		case errors.Is(err, sql.ErrNoRows):
 			kind = "delete"
-			detail = py.Dict{{Key: "from", Value: location}}
+			detail = map[string]any{"from": location}
 		default:
 			return err
 		}
 		if _, err := s.DB.Write.ExecContext(ctx, "INSERT INTO events (ts, account, kind, message_id, detail) VALUES (?, ?, ?, ?, ?)",
-			ts, account, kind, id, py.JSONDumps(detail)); err != nil {
+			ts, account, kind, id, jsonString(detail)); err != nil {
 			return err
 		}
 	}

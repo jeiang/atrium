@@ -23,7 +23,6 @@ import (
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/handlers"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -210,8 +209,6 @@ func truthy(v any) bool {
 	case []any:
 		return len(v) > 0
 	case map[string]any:
-		return len(v) > 0
-	case py.Dict:
 		return len(v) > 0
 	}
 	return true

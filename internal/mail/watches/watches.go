@@ -3,6 +3,7 @@ package watches
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailscan"
 	"github.com/jeiang/atrium/internal/py"
+	"golang.org/x/text/cases"
 )
 
 var log = logx.Logger("atrium.watches")
@@ -98,12 +100,12 @@ var packageSchema = map[string]any{
 }
 
 func merchantKey(name string) string {
-	text := nonAlnum.ReplaceAllString(py.Casefold(name), " ")
-	return strings.Join(py.Split(text), " ")
+	text := nonAlnum.ReplaceAllString(cases.Fold().String(name), " ")
+	return strings.Join(strings.Fields(text), " ")
 }
 
 func clip(text string, limit int) string {
-	text = strings.Join(py.Split(text), " ")
+	text = strings.Join(strings.Fields(text), " ")
 	if utf8.RuneCountInString(text) <= limit {
 		return text
 	}
@@ -127,8 +129,8 @@ func chatJSON(ctx context.Context, url, system, user string, schema any, maxToke
 	if err != nil {
 		return nil, err
 	}
-	answer, err := py.JSONLoads(raw)
-	if err != nil {
+	var answer any
+	if err := json.Unmarshal(raw, &answer); err != nil {
 		return nil, fmt.Errorf("%w: %w", httpx.ErrPayload, err)
 	}
 	return answer, nil
@@ -144,7 +146,7 @@ func (o Options) chat() Chat {
 type tracking struct{ Carrier, Number string }
 
 func findTracking(text string) []tracking {
-	low := py.Casefold(text)
+	low := cases.Fold().String(text)
 	var found []tracking
 	add := func(carrier string, pattern *regexp.Regexp) {
 		for _, loc := range pattern.FindAllStringSubmatchIndex(text, -1) {
@@ -202,7 +204,7 @@ func classifyStatus(subject, body string) string {
 }
 
 func senderMerchant(row mailscan.Message, carrierDomains []string) string {
-	domain := py.Casefold(row.FromDomain)
+	domain := cases.Fold().String(row.FromDomain)
 	for _, d := range carrierDomains {
 		if domain == d || strings.HasSuffix(domain, "."+d) {
 			return ""
@@ -247,23 +249,23 @@ func pyStr(v any) string {
 }
 
 func cleanPackage(answer any, text string) (item, bool, error) {
-	reply, isDict := answer.(py.Dict)
+	reply, isDict := answer.(map[string]any)
 	if !isDict {
 		return item{}, false, nil
 	}
-	if v, _ := reply.Get("is_order"); !py.Truthy(v) {
+	if v := reply["is_order"]; !py.Truthy(v) {
 		return item{}, false, nil
 	}
-	field := func(key string) any { v, _ := reply.Get(key); return v }
+	field := func(key string) any { return reply[key] }
 	tracking := spaceRuns.ReplaceAllString(pyStr(field("tracking_number")), "")
 	if tracking != "" {
 		loc := trackingRef.FindStringIndex(tracking)
-		if loc == nil || loc[0] != 0 || loc[1] != len(tracking) || !strings.Contains(py.Casefold(strings.ReplaceAll(text, " ", "")), py.Casefold(tracking)) {
+		if loc == nil || loc[0] != 0 || loc[1] != len(tracking) || !strings.Contains(cases.Fold().String(strings.ReplaceAll(text, " ", "")), cases.Fold().String(tracking)) {
 			tracking = ""
 		}
 	}
-	orderRef := py.Upper(py.Strip(pyStr(field("order_ref"))))
-	if orderRef != "" && !strings.Contains(py.Casefold(text), py.Casefold(orderRef)) {
+	orderRef := py.Upper(strings.TrimSpace(pyStr(field("order_ref"))))
+	if orderRef != "" && !strings.Contains(cases.Fold().String(text), cases.Fold().String(orderRef)) {
 		orderRef = ""
 	}
 	if tracking == "" && orderRef == "" {
@@ -514,11 +516,15 @@ func DismissPackage(ctx context.Context, q db.Querier, id int64) (bool, error) {
 	return n == 1, err
 }
 
-func Refresh(ctx context.Context, d *db.DB, now float64, o Options) (py.Dict, error) {
+type refreshResult struct {
+	Packages scanResult `json:"packages"`
+}
+
+func Refresh(ctx context.Context, d *db.DB, now float64, o Options) (refreshResult, error) {
 	result, err := ScanPackages(ctx, d, now, o)
 	if err != nil {
 		log.Error(packages+" scan failed", logx.Err, err.Error())
-		return nil, err
+		return refreshResult{}, err
 	}
-	return py.Dict{{Key: packages, Value: py.Dict{{Key: "scanned", Value: result.Scanned}, {Key: "found", Value: result.Found}}}}, nil
+	return refreshResult{Packages: result}, nil
 }
