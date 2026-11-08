@@ -133,6 +133,8 @@ func Module(o Options) web.Module {
 		r.Post("/chat/{thread_id}/stop", p.chatStop)
 		r.Post("/chat/{thread_id}/branch", p.chatBranch)
 		r.Get("/chat/{thread_id}/work", p.chatWork)
+		r.Get("/chat/{thread_id}/history", p.history)
+		r.Get("/chat/{thread_id}/history/{start}/{n}", p.historyZoom)
 		r.Get("/chat/{thread_id}/events", p.chatEvents)
 		r.Get("/chat/{thread_id}/runs/{run_id}", p.chatRun)
 		r.Post("/chat/{thread_id}/runs/{run_id}/resume", p.chatResume)

@@ -59,7 +59,7 @@ func (p *pages) threadContext(w http.ResponseWriter, r *http.Request, threadID i
 	}
 	t := threadOf(view)
 	return map[string]any{
-		"view": view, "thread_id": threadID,
+		"view": view, "thread_id": threadID, "history": p.hasHistory(r.Context(), threadID),
 		"composer": composerData(t.Model, t.Effort, threads.ContextLimitOf(t), threadID),
 	}, true
 }
