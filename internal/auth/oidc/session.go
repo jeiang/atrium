@@ -13,6 +13,7 @@ import (
 )
 
 type row struct {
+	id int64
 	Session
 	idleExpires     float64
 	absoluteExpires float64
@@ -32,7 +33,7 @@ func (s *Service) loadRow(ctx context.Context, hash string) (row, error) {
 	var r row
 	var admin, verified int
 	err := s.d.Read.QueryRowContext(ctx, "SELECT "+sessionColumns+" FROM auth_sessions WHERE token_hash = ?", hash).
-		Scan(&r.ID, &r.Subject, &r.Email, &r.Name, &admin, &r.idleExpires, &r.absoluteExpires, &r.lastSeen, &r.rechecked, &r.accessToken, &r.accessExpires, &r.refreshToken, &verified, &r.hosted, &r.origin)
+		Scan(&r.id, &r.Subject, &r.Email, &r.Name, &admin, &r.idleExpires, &r.absoluteExpires, &r.lastSeen, &r.rechecked, &r.accessToken, &r.accessExpires, &r.refreshToken, &verified, &r.hosted, &r.origin)
 	r.emailVerified = verified == 1
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, ErrNoSession
@@ -74,7 +75,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 	}
 	now := s.unix()
 	if now >= r.absoluteExpires || now >= r.idleExpires {
-		return Session{}, s.drop(ctx, r.ID)
+		return Session{}, s.drop(ctx, r.id)
 	}
 	t, err := s.timing(ctx)
 	if err != nil {
@@ -87,21 +88,44 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 	}
 	if now-r.lastSeen >= slideInterval.Seconds() {
 		idle := min(now+t.idle.Seconds(), r.absoluteExpires)
-		if _, err := s.d.Write.ExecContext(ctx, "UPDATE auth_sessions SET last_seen_at = ?, idle_expires_at = ? WHERE id = ?", now, idle, r.ID); err != nil {
+		if _, err := s.d.Write.ExecContext(ctx, "UPDATE auth_sessions SET last_seen_at = ?, idle_expires_at = ? WHERE id = ?", now, idle, r.id); err != nil {
 			return Session{}, err
 		}
 	}
 	return r.Session, nil
 }
 
+func (s *Service) forget(ids ...int64) {
+	s.mu.Lock()
+	for _, id := range ids {
+		delete(s.locks, id)
+		delete(s.retry, id)
+	}
+	s.mu.Unlock()
+}
+
+func expiredIDs(ctx context.Context, tx *sql.Tx, now float64) ([]int64, error) {
+	rows, err := tx.QueryContext(ctx, "SELECT id FROM auth_sessions WHERE absolute_expires_at < ? OR idle_expires_at < ?", now, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
+
 func (s *Service) drop(ctx context.Context, id int64) error {
 	if _, err := s.d.Write.ExecContext(ctx, "DELETE FROM auth_sessions WHERE id = ?", id); err != nil {
 		return err
 	}
-	s.mu.Lock()
-	delete(s.locks, id)
-	delete(s.retry, id)
-	s.mu.Unlock()
+	s.forget(id)
 	return ErrNoSession
 }
 
@@ -109,8 +133,19 @@ func (s *Service) End(ctx context.Context, token string) error {
 	if token == "" {
 		return nil
 	}
-	_, err := s.d.Write.ExecContext(ctx, "DELETE FROM auth_sessions WHERE token_hash = ?", digest(token))
-	return err
+	var id int64
+	err := s.d.Read.QueryRowContext(ctx, "SELECT id FROM auth_sessions WHERE token_hash = ?", digest(token)).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if _, err := s.d.Write.ExecContext(ctx, "DELETE FROM auth_sessions WHERE id = ?", id); err != nil {
+		return err
+	}
+	s.forget(id)
+	return nil
 }
 
 func (s *Service) lockFor(id int64) *sync.Mutex {
@@ -125,11 +160,14 @@ func (s *Service) lockFor(id int64) *sync.Mutex {
 }
 
 func (s *Service) recheck(ctx context.Context, hash string, seen row, t timing) (row, error) {
-	lock := s.lockFor(seen.ID)
+	lock := s.lockFor(seen.id)
 	lock.Lock()
 	defer lock.Unlock()
 	r, err := s.loadRow(ctx, hash)
 	if err != nil {
+		if errors.Is(err, ErrNoSession) {
+			s.forget(seen.id)
+		}
 		return r, err
 	}
 	now := s.unix()
@@ -139,10 +177,10 @@ func (s *Service) recheck(ctx context.Context, hash string, seen row, t timing) 
 	cfg, err := load(ctx, s.d.Read, s.env, s.d.Encrypted())
 	if err != nil {
 		log.Warn("session ended: oidc configuration is unusable", "sub", r.Subject)
-		return r, s.drop(ctx, r.ID)
+		return r, s.drop(ctx, r.id)
 	}
 	s.mu.Lock()
-	next := s.retry[r.ID]
+	next := s.retry[r.id]
 	s.mu.Unlock()
 	if s.now().Before(next) && now < r.rechecked+t.recheck.Seconds()+recheckGrace.Seconds() {
 		return r, nil
@@ -163,12 +201,12 @@ func (s *Service) recheck(ctx context.Context, hash string, seen row, t timing) 
 	case errors.Is(err, ErrProvider) && now < r.rechecked+t.recheck.Seconds()+recheckGrace.Seconds():
 		log.Warn("group re-check could not reach the provider; keeping the session for now", "sub", r.Subject)
 		s.mu.Lock()
-		s.retry[r.ID] = s.now().Add(retryGap)
+		s.retry[r.id] = s.now().Add(retryGap)
 		s.mu.Unlock()
 		return r, nil
 	default:
 		log.Warn("session ended by group re-check", "sub", r.Subject, "reason", describe(err))
-		dropped := s.drop(ctx, r.ID)
+		dropped := s.drop(ctx, r.id)
 		if errors.Is(err, ErrDenied) && errors.Is(dropped, ErrNoSession) {
 			return r, ErrRevoked
 		}
@@ -238,19 +276,9 @@ func (s *Service) refresh(ctx context.Context, cfg Config, r row) (recheckOutcom
 	}
 	id := stored
 	if claims != nil {
-		fresh := identityOf(claims, cfg)
-		id.Groups, id.HasGroups = fresh.Groups, fresh.HasGroups
-		if fresh.Email != "" {
-			id.Email, id.EmailVerified = fresh.Email, fresh.EmailVerified
-		}
-		if fresh.Hosted != "" {
-			id.Hosted = fresh.Hosted
-		}
-		if fresh.Name != "" {
-			id.Name = fresh.Name
-		}
+		id = id.signed(claims, cfg)
 	}
-	if (needGroups && !id.HasGroups || claims == nil) && p.userinfoURL != "" {
+	if needsUserinfo(id, cfg) && p.userinfoURL != "" {
 		info, err := s.userinfo(ctx, p, access)
 		if err != nil {
 			return out, err
@@ -258,19 +286,7 @@ func (s *Service) refresh(ctx context.Context, cfg Config, r row) (recheckOutcom
 		if claimString(info, "sub") != r.Subject {
 			return out, fmt.Errorf("%w: userinfo subject differs from the session", ErrToken)
 		}
-		extra := identityOf(info, cfg)
-		if !id.HasGroups {
-			id.Groups, id.HasGroups = extra.Groups, extra.HasGroups
-		}
-		if extra.Email != "" {
-			id.Email, id.EmailVerified = extra.Email, extra.EmailVerified
-		}
-		if extra.Hosted != "" {
-			id.Hosted = extra.Hosted
-		}
-		if extra.Name != "" {
-			id.Name = extra.Name
-		}
+		id = id.absorb(info, cfg)
 	}
 	if needGroups && !id.HasGroups {
 		return out, fmt.Errorf("%w: no group information available", ErrDenied)
@@ -290,6 +306,6 @@ func (s *Service) decideRecheck(cfg Config, id identity, out recheckOutcome) (re
 
 func (s *Service) saveRecheck(ctx context.Context, sl *sealer, r row, now float64) error {
 	_, err := s.d.Write.ExecContext(ctx, "UPDATE auth_sessions SET rechecked_at = ?, admin = ?, email = ?, name = ?, access_token = ?, access_expires_at = ?, refresh_token = ?, email_verified = ?, hosted_domain = ? WHERE id = ?",
-		now, boolInt(r.Admin), r.Email, r.Name, sl.seal(r.accessToken), r.accessExpires, sl.seal(r.refreshToken), boolInt(r.emailVerified), r.hosted, r.ID)
+		now, boolInt(r.Admin), r.Email, r.Name, sl.seal(r.accessToken), r.accessExpires, sl.seal(r.refreshToken), boolInt(r.emailVerified), r.hosted, r.id)
 	return err
 }

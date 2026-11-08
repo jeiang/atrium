@@ -34,7 +34,7 @@ func (s *staticHandler) serve(w http.ResponseWriter, r *http.Request, fail func(
 		fail(http.StatusMethodNotAllowed, "Method Not Allowed")
 		return
 	}
-	name := strings.TrimPrefix(r.URL.Path, StaticPrefix)
+	name := strings.TrimPrefix(r.URL.Path, staticPrefix)
 	if !fs.ValidPath(name) || name == "." {
 		notFound()
 		return

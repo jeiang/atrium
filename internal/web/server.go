@@ -107,7 +107,7 @@ func New(o Options) (*Server, error) {
 		auth = *o.Policy
 	} else {
 		var err error
-		auth, err = ParseAuth(o.Auth)
+		auth, err = parseAuth(o.Auth)
 		if err != nil {
 			return nil, err
 		}
@@ -134,14 +134,14 @@ func New(o Options) (*Server, error) {
 	static := newStaticHandler(Static)
 	s.mux.NotFound(s.notFound)
 	s.mux.MethodNotAllowed(s.methodNotAllowed)
-	s.mux.Get(HealthPath, func(w http.ResponseWriter, _ *http.Request) {
+	s.mux.Get(healthPath, func(w http.ResponseWriter, _ *http.Request) {
 		if s.starting.Load() || s.stopped() {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	s.mux.Handle(StaticPrefix+"*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	s.mux.Handle(staticPrefix+"*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		static.serve(w, r, func(status int, detail string) { s.Error(w, r, status, detail) })
 	}))
 	home := o.Home
@@ -179,12 +179,12 @@ func New(o Options) (*Server, error) {
 	for _, register := range o.Modules {
 		register(s.mux, deps)
 	}
-	guard := NewGuard(auth, o.AllowedHosts, o.Public, s.access)
+	guard := newGuard(auth, o.AllowedHosts, o.Public, s.access)
 	guard.secure = s.secure
 	guard.sessions = o.OIDC
 	guard.errPage = s.errPage
 	if o.DB != nil {
-		guard.admin = func(ctx context.Context) string { return oidc.AdminGroup(ctx, o.DB.Read) }
+		guard.admin = func(ctx context.Context) (string, error) { return oidc.AdminGroup(ctx, o.DB.Read) }
 		guard.bodyCap = func(ctx context.Context) (int, error) { return config.Limit(ctx, o.DB.Read, config.KeyBodyCap) }
 	}
 	s.handler = guard.Middleware(Gzip(recoverer(s.mux)))

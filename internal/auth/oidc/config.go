@@ -31,9 +31,7 @@ type Config struct {
 	AdminDomains  []string
 	Idle          time.Duration
 	Max           time.Duration
-	Recheck       time.Duration
 	RedirectURI   string
-	Secure        bool
 }
 
 type ConfigError struct{ Problems []string }
@@ -41,8 +39,6 @@ type ConfigError struct{ Problems []string }
 func (e *ConfigError) Error() string {
 	return "oidc is not configured: " + strings.Join(e.Problems, "; ")
 }
-
-func (c Config) rechecks() bool { return c.GroupsClaim != "" }
 
 func list(value string) []string {
 	var out []string
@@ -54,10 +50,7 @@ func list(value string) []string {
 	return out
 }
 
-var valueKeys = []string{
-	KeyPreset, KeyIssuer, KeyClientID, KeyScopes, KeyGroupsClaim, KeyAccessGroup, KeyAdminGroup,
-	KeyAccessEmails, KeyAdminEmails, KeyAccessDomains, KeyAdminDomains, KeyIdleDays, KeyMaxDays, KeyRecheckMinutes,
-}
+var valueKeys = append([]string{KeyPreset}, append(wizardKeys, KeyIdleDays, KeyMaxDays, KeyRecheckMinutes)...)
 
 type values map[string]string
 
@@ -84,10 +77,13 @@ func load(ctx context.Context, q db.Querier, env config.Env, encrypted bool) (Co
 }
 
 func assemble(get values, secret string, env config.Env, encrypted bool, problems []string) (Config, error) {
-	days := func(key string, unit time.Duration) time.Duration {
+	days := func(key string, unit time.Duration, low, high int64) time.Duration {
 		n, err := strconv.ParseInt(strings.TrimSpace(get[key]), 10, 64)
-		if err != nil {
+		switch {
+		case err != nil:
 			problems = append(problems, key+" is not a number")
+		case n < low || n > high:
+			problems = append(problems, fmt.Sprintf("%s must be between %d and %d", key, low, high))
 		}
 		return time.Duration(n) * unit
 	}
@@ -108,9 +104,8 @@ func assemble(get values, secret string, env config.Env, encrypted bool, problem
 		AdminEmails:   list(strings.ToLower(get[KeyAdminEmails])),
 		AccessDomains: list(strings.ToLower(get[KeyAccessDomains])),
 		AdminDomains:  list(strings.ToLower(get[KeyAdminDomains])),
-		Idle:          days(KeyIdleDays, 24*time.Hour),
-		Max:           days(KeyMaxDays, 24*time.Hour),
-		Recheck:       days(KeyRecheckMinutes, time.Minute),
+		Idle:          days(KeyIdleDays, 24*time.Hour, 1, 365),
+		Max:           days(KeyMaxDays, 24*time.Hour, 1, 365),
 	}
 	if preset.Issuer != "" && c.Issuer == "" {
 		c.Issuer = preset.Issuer
@@ -136,7 +131,6 @@ func assemble(get values, secret string, env config.Env, encrypted bool, problem
 		problems = append(problems, config.KeyPublicURL+" is not set")
 	} else {
 		c.RedirectURI = public + CallbackPath
-		c.Secure = strings.HasPrefix(public, "https://")
 	}
 	if c.GroupsClaim == "" && len(c.AccessEmails) == 0 && len(c.AdminEmails) == 0 && len(c.AccessDomains) == 0 && len(c.AdminDomains) == 0 {
 		problems = append(problems, fmt.Sprintf("nothing grants access: set %s, %s or %s", KeyGroupsClaim, KeyAccessEmails, KeyAccessDomains))
@@ -153,10 +147,13 @@ func assemble(get values, secret string, env config.Env, encrypted bool, problem
 	return c, nil
 }
 
-func AdminGroup(ctx context.Context, q db.Querier) string {
+func AdminGroup(ctx context.Context, q db.Querier) (string, error) {
 	found, err := settings.Default.Resolve(ctx, q, KeyAdminGroup)
-	if err != nil || strings.TrimSpace(found.Value) == "" {
-		return DefaultAdminGroup
+	if err != nil {
+		return "", err
 	}
-	return strings.TrimSpace(found.Value)
+	if strings.TrimSpace(found.Value) == "" {
+		return DefaultAdminGroup, nil
+	}
+	return strings.TrimSpace(found.Value), nil
 }

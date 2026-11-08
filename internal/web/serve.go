@@ -24,7 +24,7 @@ import (
 )
 
 const (
-	DefaultHost     = "127.0.0.1"
+	defaultHost     = "127.0.0.1"
 	shutdownTimeout = 10 * time.Second
 )
 
@@ -100,9 +100,9 @@ func ServeCommand(boot Boot, pages ...Page) *cli.Command {
 	return &cli.Command{
 		Name: "serve",
 		Setup: func(args *cli.Args) cli.Handler {
-			host := args.String("host", DefaultHost, cli.Opt{})
+			host := args.String("host", defaultHost, cli.Opt{})
 			port := args.Int("port", 0, cli.Opt{Required: true})
-			modes := args.Repeated("auth", cli.Opt{Choices: AuthModes[:], Help: "authentication mode; repeatable (proxy and oidc combine; default proxy)"})
+			modes := args.Repeated("auth", cli.Opt{Choices: authModes[:], Help: "authentication mode; repeatable (proxy and oidc combine; default proxy)"})
 			hosts := args.Repeated("allowed-host", cli.Opt{Help: "accepted Host header; repeatable (proxy mode requires one, or ATRIUM_PUBLIC_HOST)"})
 			force := args.Bool("force-disable-auth", cli.Opt{Help: "start without authentication when none is configured"})
 			return func(env *cli.Env) int {

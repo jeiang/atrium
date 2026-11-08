@@ -66,10 +66,6 @@ type Draft struct {
 	fingerprint string
 }
 
-func (d Draft) Config() Config { return d.cfg }
-
-func (d Draft) Fingerprint() string { return d.fingerprint }
-
 type View struct {
 	Preset       Preset
 	PresetPinned bool
@@ -81,9 +77,9 @@ type View struct {
 	Public       string
 }
 
-func (s *Service) pinned(key string) bool {
-	_, ok, _ := settings.Default.Pinned(key)
-	return ok
+func (s *Service) pinned(key string) (bool, error) {
+	_, ok, err := settings.Default.Pinned(key)
+	return ok, err
 }
 
 func (s *Service) View(ctx context.Context, presetName string) (View, error) {
@@ -93,7 +89,11 @@ func (s *Service) View(ctx context.Context, presetName string) (View, error) {
 	}
 	v := View{Values: vals, Pinned: map[string]bool{}}
 	for _, key := range valueKeys {
-		v.Pinned[key] = s.pinned(key)
+		pinned, err := s.pinned(key)
+		if err != nil {
+			return View{}, err
+		}
+		v.Pinned[key] = pinned
 	}
 	v.PresetPinned = v.Pinned[KeyPreset]
 	active, _ := presetNamed(vals[KeyPreset])
@@ -119,12 +119,8 @@ func (s *Service) View(ctx context.Context, presetName string) (View, error) {
 	} else if preset.Placeholder != "" && vals[KeyAccessGroup] == DefaultAccessGroup && vals[KeyAdminGroup] == DefaultAdminGroup {
 		vals[KeyAccessGroup], vals[KeyAdminGroup] = "", ""
 	}
-	if preset.Name == PresetEntra {
-		tenant := strings.TrimSuffix(strings.TrimPrefix(vals[KeyIssuer], EntraIssuerPrefix), EntraIssuerSuffix)
-		if tenant == vals[KeyIssuer] {
-			tenant = ""
-		}
-		vals[KeyIssuer] = tenant
+	if preset.Name == PresetEntra && strings.HasPrefix(vals[KeyIssuer], EntraIssuerPrefix) && strings.HasSuffix(vals[KeyIssuer], EntraIssuerSuffix) {
+		vals[KeyIssuer] = strings.TrimSuffix(strings.TrimPrefix(vals[KeyIssuer], EntraIssuerPrefix), EntraIssuerSuffix)
 	}
 	if preset.Issuer != "" {
 		vals[KeyIssuer] = preset.Issuer
@@ -140,7 +136,12 @@ func (s *Service) View(ctx context.Context, presetName string) (View, error) {
 		return View{}, err
 	}
 	v.SecretSet, v.SecretPinned = status != settings.Unset, status == settings.Pinned
-	v.Active = s.Check(ctx) == nil
+	secret, err := secrets.Credential(ctx, s.d.Read, secrets.OIDCClientSecret)
+	if err != nil {
+		return View{}, err
+	}
+	_, activeErr := assemble(vals, strings.TrimSpace(secret), s.env, s.d.Encrypted(), nil)
+	v.Active = activeErr == nil
 	v.Public = config.PublicURL(s.env)
 	return v, nil
 }
@@ -159,9 +160,9 @@ func (f Form) shown(preset Preset) map[string]string {
 	if preset.Issuer == "" {
 		issuer := f.Issuer
 		if preset.Name == PresetEntra {
-			issuer = EntraIssuerPrefix + strings.TrimSpace(f.Issuer) + EntraIssuerSuffix
-			if strings.TrimSpace(f.Issuer) == "" {
-				issuer = ""
+			issuer = strings.TrimSpace(f.Issuer)
+			if issuer != "" && !strings.HasPrefix(issuer, EntraIssuerPrefix) {
+				issuer = EntraIssuerPrefix + issuer + EntraIssuerSuffix
 			}
 		}
 		out[KeyIssuer] = issuer
@@ -189,7 +190,11 @@ func (s *Service) draftFrom(ctx context.Context, q db.Querier, f Form) (Draft, e
 		return Draft{}, errors.New(strings.Join(problems, "; "))
 	}
 	preset, ok := presetNamed(f.Preset)
-	if s.pinned(KeyPreset) {
+	presetPinned, err := s.pinned(KeyPreset)
+	if err != nil {
+		return Draft{}, err
+	}
+	if presetPinned {
 		preset, ok = presetNamed(active[KeyPreset])
 	}
 	if !ok {
@@ -220,8 +225,13 @@ func (s *Service) draftFrom(ctx context.Context, q db.Querier, f Form) (Draft, e
 	if next[KeyGroupsClaim] == preset.GroupsClaim {
 		next[KeyGroupsClaim] = ""
 	}
-	for key, value := range next {
-		if s.pinned(key) {
+	for _, key := range append([]string{KeyPreset}, wizardKeys...) {
+		value := next[key]
+		pinned, err := s.pinned(key)
+		if err != nil {
+			return Draft{}, err
+		}
+		if pinned {
 			continue
 		}
 		if value != "" || key == KeyAccessGroup || key == KeyAdminGroup {
@@ -239,7 +249,11 @@ func (s *Service) draftFrom(ctx context.Context, q db.Querier, f Form) (Draft, e
 		return Draft{}, err
 	}
 	d.secret = strings.TrimSpace(stored)
-	if given := strings.TrimSpace(f.ClientSecret); given != "" && !s.pinned(secrets.OIDCClientSecret) {
+	secretPinned, err := s.pinned(secrets.OIDCClientSecret)
+	if err != nil {
+		return Draft{}, err
+	}
+	if given := strings.TrimSpace(f.ClientSecret); given != "" && !secretPinned {
 		if !s.d.Encrypted() {
 			return Draft{}, ErrNeedsCipher
 		}
@@ -301,7 +315,7 @@ func (s *Service) failTest(run *testRun, status int, reason string) TestResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	run.state = ""
-	run.result = TestResult{Status: TestFailed, Reason: reason, HTTP: status, Fingerprint: run.draft.fingerprint}
+	run.result = TestResult{Status: TestFailed, Reason: reason, HTTP: status, Fingerprint: run.draft.fingerprint, Seq: run.seq}
 	return run.result
 }
 
@@ -395,13 +409,15 @@ func (s *Service) CompleteTest(ctx context.Context, state, code, providerError, 
 		s.mu.Unlock()
 		return TestResult{Status: TestFailed, HTTP: 400, Reason: "The provider response was not valid."}
 	}
-	run.state = ""
 	matched := run.binding == digest(binding) && binding != ""
 	expired := s.now().Sub(run.created) > loginTTL
+	if matched && !expired {
+		run.state = ""
+	}
 	s.mu.Unlock()
 	switch {
 	case !matched:
-		return s.failTest(run, 400, "The provider response was not valid.")
+		return TestResult{Status: TestFailed, HTTP: 400, Reason: "The provider response was not valid."}
 	case expired:
 		return s.failTest(run, 400, "Sign-in timed out.")
 	case providerError != "":
@@ -446,7 +462,7 @@ func (s *Service) CompleteTest(ctx context.Context, state, code, providerError, 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	run.passedAt = s.now()
-	run.result = TestResult{Status: TestPassed, HTTP: 200, Groups: seen, Fingerprint: run.draft.fingerprint}
+	run.result = TestResult{Status: TestPassed, HTTP: 200, Groups: seen, Fingerprint: run.draft.fingerprint, Seq: run.seq}
 	return run.result
 }
 

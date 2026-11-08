@@ -1,7 +1,7 @@
 {{define "title"}}Usage · Settings{{end}}
 {{define "heading"}}Settings · Usage{{end}}
 {{define "content"}}{{$d := .Data}}{{$s := $d.summary}}{{$b := $d.budget}}
-{{template "settings_tabs" "usage"}}
+{{template "settings_tabs" (dict "Tab" "usage" "Auth" .Auth)}}
 <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="This month">
   <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
     <span class="text-xs text-muted-foreground">Spent this month</span>

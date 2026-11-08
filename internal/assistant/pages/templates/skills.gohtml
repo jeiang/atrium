@@ -5,7 +5,7 @@
 {{define "skills_refs"}}{{range $i, $r := .}}{{if $i}}, {{end}}<code class="font-mono">{{$r}}</code>{{end}}{{end}}
 
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
-{{template "settings_tabs" "skills"}}
+{{template "settings_tabs" (dict "Tab" "skills" "Auth" .Auth)}}
 <p class="text-sm text-muted-foreground">Markdown playbooks the assistant can load by name. Only the name and one-line description are in every conversation; the body is read on demand. A skill may reference another as <code class="font-mono">/skill:name</code> or <code class="font-mono">[[skill:name]]</code>; the same tokens in a chat message or schedule prompt expand the skill into the message before the run. The assistant cannot edit skills.</p>
 
 <div class="flex flex-wrap items-end justify-between gap-2 text-sm">

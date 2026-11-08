@@ -43,7 +43,6 @@ func NewRenderer(extra tpl.Config) (*Renderer, error) {
 	if _, ok := extra.Globals["module_enabled"]; !ok {
 		extra.Globals["module_enabled"] = func(string) bool { return true }
 	}
-	extra.Globals["auth_enabled"] = func() bool { return rd.oidcOn.Load() }
 	engine, err := tpl.New(extra)
 	if err != nil {
 		return nil, err
@@ -53,9 +52,9 @@ func NewRenderer(extra tpl.Config) (*Renderer, error) {
 }
 
 func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, error) {
-	var auth tpl.AuthView
+	auth := tpl.AuthView{Settings: rd.oidcOn.Load()}
 	if who, ok := IdentityOf(r.Context()); ok {
-		auth = tpl.AuthView{Admin: who.Admin, SignOut: who.Source == SourceOIDC, NoAuth: who.NoAuth}
+		auth.Admin, auth.SignOut, auth.NoAuth = who.Admin, who.Source == SourceOIDC, who.NoAuth
 	}
 	f := &tpl.Frame{
 		Auth: auth,
@@ -98,7 +97,7 @@ func write(w http.ResponseWriter, status int, b *bytes.Buffer) error {
 }
 
 func (rd *Renderer) ErrorPage(w http.ResponseWriter, r *http.Request, status int, problem string) {
-	view := tpl.ErrorView{Status: status, Problem: problem, Path: r.URL.Path, AdminOnly: AdminOnly(r.Context())}
+	view := tpl.ErrorView{Status: status, Problem: problem, Path: r.URL.Path, AdminOnly: adminOnly(r.Context())}
 	f, err := rd.Frame(r, "", view)
 	if err == nil && !IsPartial(r) {
 		err = rd.Page(w, r, status, "error.gohtml", f)

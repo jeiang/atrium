@@ -20,7 +20,7 @@ func isLoopbackHost(host string) bool {
 }
 
 func resolveAuth(stderr io.Writer, a serveArgs, hosts []string) (serveArgs, Policy, bool) {
-	policy, err := ParseAuth(a.auth)
+	policy, err := parseAuth(a.auth)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "error: %v\n", err)
 		return a, Policy{}, false

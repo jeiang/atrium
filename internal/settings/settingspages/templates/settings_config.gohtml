@@ -1,7 +1,7 @@
 {{define "title"}}Configuration · Settings{{end}}
 {{define "heading"}}Settings · Configuration{{end}}
 {{define "content"}}{{$d := .Data}}
-{{template "settings_tabs" "config"}}
+{{template "settings_tabs" (dict "Tab" "config" "Auth" .Auth)}}
 <div class="flex flex-col gap-4 md:flex-row">
   <nav aria-label="Modules" class="flex flex-wrap gap-1 text-sm md:w-44 md:flex-col md:flex-nowrap">
     {{range $d.modules}}<a href="/settings/config/{{.}}" class="rounded-md px-3 py-1.5 {{if eq . $d.module}}bg-accent font-medium text-foreground{{else}}text-muted-foreground hover:text-foreground{{end}}"{{if eq . $d.module}} aria-current="page"{{end}}>{{replace "_" " " .}}</a>{{end}}
