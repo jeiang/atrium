@@ -9,8 +9,6 @@
     <li class="flex items-start gap-2">{{if .Done}}{{icon "check" "mt-0.5 size-3.5 shrink-0 text-success"}}{{else}}{{icon "circle-dot" "mt-0.5 size-3.5 shrink-0 text-muted-foreground"}}{{end}}<span class="{{if .Done}}text-muted-foreground line-through{{end}}">{{.Text}}</span></li>
     {{end}}
   </ol>
-  {{else}}
-  <p class="text-xs text-muted-foreground">The assistant posts a checklist here for longer tasks.</p>
   {{end}}
 </section>
 
@@ -27,8 +25,6 @@
     </li>
     {{end}}
   </ul>
-  {{else}}
-  <p class="text-xs text-muted-foreground">Pages, mail and Notion pages the assistant reads show up here.</p>
   {{end}}
 </section>
 
@@ -49,8 +45,6 @@
     </li>
     {{end}}
   </ul>
-  {{else}}
-  <p class="text-xs text-muted-foreground">Research the assistant delegates appears here; each transcript opens from its card.</p>
   {{end}}
 </section>
 
@@ -68,8 +62,6 @@
     <li><a class="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-accent" {{template "preview_attrs" (printf "/drafts/%v" .ID)}}>{{icon "mail" "size-3.5 shrink-0 text-muted-foreground"}}<span class="truncate">{{or .Subject "(no subject)"}}</span>{{$ds := .Status}}{{with badge "draft_status" $ds}}<span class="badge ms-auto shrink-0" data-variant="{{.Variant}}">{{.Label}}</span>{{else}}<span class="badge ms-auto shrink-0" data-variant="outline">{{$ds}}</span>{{end}}</a></li>
     {{end}}
   </ul>
-  {{else}}
-  <p class="text-xs text-muted-foreground">Files you attach, files the sandbox produces and drafts made in this thread are listed here.</p>
   {{end}}
 </section>
 {{- end}}

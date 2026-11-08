@@ -73,22 +73,22 @@
   color-scheme: light;
   --radius: 0.5rem;
 
-  --bg: oklch(0.985 0.004 85);
-  --surface: oklch(0.998 0.002 85);
-  --surface-2: oklch(0.962 0.006 85);
-  --ink: oklch(0.22 0.01 70);
-  --ink-2: oklch(0.45 0.012 70);
-  --ink-3: oklch(0.55 0.012 75);
-  --line: oklch(0.9 0.008 80);
-  --line-strong: oklch(0.84 0.01 80);
-  --clay: oklch(0.56 0.115 45);
-  --clay-hover: oklch(0.52 0.115 45);
-  --clay-ink: oklch(0.998 0.002 85);
-  --clay-soft: oklch(0.94 0.03 55);
-  --success: oklch(0.55 0.115 155);
-  --warning: oklch(0.55 0.12 70);
-  --danger: oklch(0.55 0.16 25);
-  --info: oklch(0.55 0.1 250);
+  --bg: #fbfaf7;
+  --surface: #fffefd;
+  --surface-2: #f4f2ee;
+  --ink: #1e1a16;
+  --ink-2: #5a544e;
+  --ink-3: #76716a;
+  --line: #e1ddd8;
+  --line-strong: #cecac3;
+  --clay: #ab5c37;
+  --clay-hover: #9e502b;
+  --clay-ink: #fffefd;
+  --clay-soft: #fce6d9;
+  --success: #2b8553;
+  --warning: #a8711c;
+  --danger: #bd413f;
+  --info: #4075aa;
 
   --background: var(--bg);
   --foreground: var(--ink);
@@ -101,7 +101,7 @@
   --secondary: var(--surface-2);
   --secondary-foreground: var(--ink);
   --muted: var(--surface-2);
-  --muted-foreground: var(--ink-2);
+  --muted-foreground: var(--ink-3);
   --accent: var(--surface-2);
   --accent-foreground: var(--ink);
   --destructive: var(--danger);
@@ -125,22 +125,22 @@
 
   @variant dark {
     color-scheme: dark;
-    --bg: oklch(0.18 0.006 70);
-    --surface: oklch(0.215 0.007 70);
-    --surface-2: oklch(0.255 0.008 70);
-    --ink: oklch(0.94 0.006 85);
-    --ink-2: oklch(0.75 0.01 80);
-    --ink-3: oklch(0.62 0.01 80);
-    --line: oklch(0.3 0.008 70);
-    --line-strong: oklch(0.36 0.01 70);
-    --clay: oklch(0.72 0.11 45);
-    --clay-hover: oklch(0.75 0.11 45);
-    --clay-ink: oklch(0.18 0.006 70);
-    --clay-soft: oklch(0.3 0.05 45);
-    --success: oklch(0.75 0.12 155);
-    --warning: oklch(0.82 0.12 80);
-    --danger: oklch(0.7 0.14 25);
-    --info: oklch(0.72 0.09 250);
+    --bg: #13110f;
+    --surface: #1c1916;
+    --surface-2: #25221f;
+    --ink: #edebe7;
+    --ink-2: #b1ada7;
+    --ink-3: #898680;
+    --line: #302d2a;
+    --line-strong: #413c38;
+    --clay: #de8e69;
+    --clay-hover: #e89772;
+    --clay-ink: #13110f;
+    --clay-soft: #422518;
+    --success: #6ac48c;
+    --warning: #edbb64;
+    --danger: #e97871;
+    --info: #79a9db;
     --chart-1: oklch(0.38 0.03 60);
     --chart-2: oklch(0.52 0.07 55);
     --chart-3: oklch(0.66 0.1 45);
@@ -479,6 +479,134 @@
     }
     & details > summary {
       @apply cursor-pointer font-medium;
+    }
+  }
+
+  .msg {
+    @apply flex gap-3;
+  }
+  .msg-avatar {
+    @apply mt-0.5 grid size-7 shrink-0 place-items-center rounded-full bg-surface-2 text-[11px] font-semibold text-ink-2;
+
+    & svg {
+      @apply size-3.5;
+    }
+    &[data-role="assistant"] {
+      @apply bg-ink font-mono text-xs text-background;
+    }
+  }
+  .msg-body {
+    @apply flex min-w-0 flex-1 flex-col gap-1.5;
+  }
+  .msg-user {
+    @apply max-w-full self-start rounded-xl bg-surface-2 px-3.5 py-2.5 text-[15px]/6 break-words whitespace-pre-wrap text-ink;
+  }
+  .msg-actions {
+    @apply flex items-center gap-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100;
+  }
+  .msg-indent {
+    @apply ps-10;
+  }
+
+  .activity > summary {
+    @apply flex w-fit cursor-pointer list-none items-center gap-2 rounded-lg py-1 text-[13px] text-ink-2 hover:text-ink;
+
+    &::-webkit-details-marker {
+      display: none;
+    }
+  }
+  .activity-chevron {
+    @apply size-3.5 transition-transform;
+  }
+  .activity[open] > summary .activity-chevron {
+    @apply rotate-90;
+  }
+  .activity-steps {
+    @apply mt-2 flex flex-col gap-2;
+  }
+  .activity-steps > [data-step="thinking"] > div,
+  .trace[data-kind="thinking"] .trace-body {
+    @apply font-serif text-sm/6 text-ink-2 italic;
+  }
+  .activity-steps > [data-step="note"] {
+    @apply font-serif text-[15px]/relaxed text-ink;
+  }
+
+  .trace {
+    @apply rounded-xl border bg-surface text-[13px];
+
+    & > summary {
+      @apply flex cursor-pointer list-none items-center gap-2 px-2.5 py-2 text-ink-2 hover:text-ink;
+
+      &::-webkit-details-marker {
+        display: none;
+      }
+    }
+    &[open] > summary {
+      @apply text-ink;
+    }
+  }
+  .trace-icon {
+    @apply grid size-5.5 shrink-0 place-items-center rounded-md bg-surface-2 text-ink-2;
+
+    & svg {
+      @apply size-3.5;
+    }
+  }
+  .trace-label {
+    @apply shrink-0 font-medium text-ink;
+  }
+  .trace-args {
+    @apply min-w-0 truncate font-mono text-xs text-ink-3;
+  }
+  .trace-body {
+    @apply border-t px-3 py-2.5 text-ink-2;
+  }
+  .trace-code {
+    @apply max-h-80 overflow-auto font-mono text-xs/5 break-words whitespace-pre-wrap;
+  }
+  .trace-link {
+    @apply block border-t px-3 py-2 text-clay underline underline-offset-4;
+  }
+
+  .prose-assistant {
+    @apply max-w-none gap-3.5 font-serif text-base/[1.62] text-ink;
+
+    & :is(h1, h2, h3, h4, h5, h6) {
+      @apply mt-4 font-serif font-semibold tracking-[-0.01em];
+    }
+    & h1 {
+      @apply text-2xl;
+    }
+    & h2 {
+      @apply text-xl;
+    }
+    & h3 {
+      @apply text-lg;
+    }
+    & strong {
+      @apply font-semibold;
+    }
+    & li::marker {
+      color: var(--ink-3);
+    }
+    & blockquote {
+      @apply border-clay/40 text-ink-2 italic;
+    }
+    & code {
+      @apply rounded bg-surface-2 text-[0.84em];
+    }
+    & pre {
+      @apply rounded-xl border bg-surface-2 p-4 font-mono text-[13px]/6;
+    }
+    & table {
+      @apply font-sans text-sm;
+    }
+    & :is(th, td) {
+      @apply px-3 py-1.5;
+    }
+    & th {
+      @apply bg-surface-2;
     }
   }
 }

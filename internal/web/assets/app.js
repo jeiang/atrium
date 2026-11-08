@@ -516,10 +516,17 @@ const refreshWork = () => {
 
 const escapeHtml = (text) => text.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
 
+const toolVerb = (name) => {
+  const words = String(name).split(/[_\-.\s]+/).filter(Boolean);
+  if (!words.length) return String(name);
+  words[0] = words[0][0].toUpperCase() + words[0].slice(1);
+  return words.join(" ");
+};
+
 const toolMarkup = (data) => `
-  <details class="rounded-md border bg-card">
-    <summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-muted-foreground"><code class="font-mono text-foreground">${escapeHtml(data.name)}</code><span class="truncate font-mono">${escapeHtml(data.args || "")}</span><span class="badge ms-auto" data-variant="outline" data-tool-state>running</span></summary>
-    <div class="border-t px-3 py-2 font-mono whitespace-pre-wrap break-words" data-tool-result>(no result yet)</div>
+  <details class="trace">
+    <summary><span class="trace-label">${escapeHtml(toolVerb(data.name))}</span><span class="trace-args">${escapeHtml(data.args || "")}</span><span class="badge ms-auto" data-variant="outline" data-tool-state>running</span></summary>
+    <div class="trace-body trace-code" data-tool-result>(no result yet)</div>
   </details>`;
 
 const liveRuns = new Map();
@@ -598,10 +605,10 @@ const connectLive = (li) => {
   on("user", (data) => {
     const queued = document.querySelector(`[data-queued="${data.queue_id}"]`);
     const bubble = document.createElement("li");
-    bubble.className = "flex gap-3";
+    bubble.className = "msg";
     bubble.dataset.liveUser = runId;
-    bubble.innerHTML = `<span class="mt-1 size-7 shrink-0 rounded-full bg-secondary" aria-hidden="true"></span><div class="min-w-0 flex-1 rounded-lg bg-secondary/60 px-4 py-3 text-sm whitespace-pre-wrap break-words"></div>`;
-    bubble.lastElementChild.textContent = data.text;
+    bubble.innerHTML = `<span class="msg-avatar" aria-hidden="true"></span><div class="msg-body"><div class="msg-user"></div></div>`;
+    bubble.querySelector(".msg-user").textContent = data.text;
     li.before(bubble);
     if (queued) queued.remove();
   });

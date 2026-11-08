@@ -115,28 +115,33 @@
 
 {{define "activity_step"}}{{$state := .State}}
 {{if eq .Kind "thinking"}}
-<li class="flex gap-2" data-step="thinking">{{icon "brain" "mt-0.5 size-3.5 shrink-0"}}<div class="min-w-0 whitespace-pre-wrap break-words text-muted-foreground">{{.Text}}</div></li>
+<li data-step="thinking">
+  <details class="trace" data-kind="thinking">
+    <summary><span class="trace-icon">{{icon "brain"}}</span><span class="trace-label">Thinking</span></summary>
+    <div class="trace-body whitespace-pre-wrap break-words">{{.Text}}</div>
+  </details>
+</li>
 {{else if eq .Kind "note"}}
-<li class="flex gap-2" data-step="note">{{icon "bot" "mt-0.5 size-3.5 shrink-0"}}<div class="markdown min-w-0">{{markdown .Text}}</div></li>
+<li class="trace-note" data-step="note"><div class="markdown prose-assistant min-w-0">{{markdown .Text}}</div></li>
 {{else if eq .Kind "tool"}}
 <li data-step="tool" data-tool-id="{{.ID}}">
-  <details class="rounded-md border bg-card">
-    <summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-muted-foreground">
-      {{icon (ternary (eq .Name "research") "users" "wrench") "size-3.5 shrink-0"}}<code class="font-mono text-foreground">{{.Name}}</code>
-      <span class="truncate font-mono">{{.Args}}</span>
+  <details class="trace">
+    <summary>
+      <span class="trace-icon">{{icon (ternary (eq .Name "research") "users" "wrench")}}</span><span class="trace-label">{{toolverb .Name}}</span>
+      <span class="trace-args">{{.Args}}</span>
       {{if eq (str $state) "unknown"}}<span class="badge ms-auto" data-variant="destructive">unverified</span>
       {{else if .IsError}}<span class="badge ms-auto" data-variant="destructive">error</span>
       {{else if eq (str $state) "started"}}<span class="badge ms-auto" data-variant="outline">{{icon "loader-circle" "animate-spin"}}running</span>{{end}}
     </summary>
-    <div class="border-t px-3 py-2 font-mono whitespace-pre-wrap break-words">{{or (.Result) "(no result yet)"}}</div>
-    {{with .ChildThreadID}}<a class="block border-t px-3 py-1.5 underline underline-offset-4" href="/chat/{{.}}">Subagent transcript</a>{{end}}
+    <div class="trace-body trace-code">{{or (.Result) "(no result yet)"}}</div>
+    {{with .ChildThreadID}}<a class="trace-link" href="/chat/{{.}}">Subagent transcript</a>{{end}}
   </details>
 </li>
 {{else if eq .Kind "web_search"}}
 <li data-step="web_search">
-  <details class="rounded-md border bg-card">
-    <summary class="flex cursor-pointer items-center gap-2 px-3 py-1.5 text-muted-foreground">{{icon "globe" "size-3.5"}}web search: {{len .Results}} results{{with .Error}} <span class="badge ms-auto" data-variant="destructive">{{.}}</span>{{end}}</summary>
-    <ul class="flex flex-col gap-1 border-t px-3 py-2">
+  <details class="trace">
+    <summary><span class="trace-icon">{{icon "globe"}}</span><span class="trace-label">Searched the web</span><span class="trace-args">{{len .Results}} results</span>{{with .Error}} <span class="badge ms-auto" data-variant="destructive">{{.}}</span>{{end}}</summary>
+    <ul class="trace-body flex flex-col gap-1">
       {{range .Results}}<li><a class="underline underline-offset-4" {{template "external" .URL}}>{{truncate 80 .Title}}</a></li>{{end}}
     </ul>
   </details>
@@ -144,15 +149,19 @@
 {{end}}
 {{- end}}
 
+{{define "activity_summary"}}{{$thought := false}}{{$tools := 0}}{{range .}}{{if eq .Kind "thinking"}}{{$thought = true}}{{else if or (eq .Kind "tool") (eq .Kind "web_search")}}{{$tools = inc $tools}}{{end}}{{end -}}
+{{if $thought}}Thought{{end}}{{if and $thought $tools}} · {{end}}{{if $tools}}{{$tools}} tool{{if ne $tools 1}}s{{end}}{{end}}{{if not (or $thought $tools)}}Worked{{end}}
+{{- end}}
+
 {{define "chat_item"}}{{$item := .Item}}{{$thread := opt . "thread" nil}}{{$last_seq := opt . "last_seq" nil}}{{$busy := opt . "busy" false}}{{$csrf := opt . "csrf" ""}}
 {{if eq $item.Kind "user"}}
-<li class="group flex gap-3" data-seq="{{$item.Seq}}">
-  <span class="mt-1 grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-secondary-foreground" aria-hidden="true">{{icon "user" "size-4"}}</span>
-  <div class="flex min-w-0 flex-1 flex-col gap-1">
-    <div class="rounded-lg bg-secondary/60 px-4 py-3 text-sm whitespace-pre-wrap break-words" data-text>{{$item.Text}}</div>
+<li class="msg group" data-role="user" data-seq="{{$item.Seq}}">
+  <span class="msg-avatar" aria-hidden="true">{{icon "user"}}</span>
+  <div class="msg-body">
+    <div class="msg-user" data-text>{{$item.Text}}</div>
     {{if $thread}}{{template "file_chips" (dict "thread_id" $thread.ID "files" ($item.Files))}}{{end}}
     {{if and $thread (eq $thread.Kind "chat")}}
-    <div class="flex items-center gap-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+    <div class="msg-actions">
       {{if and (eq $item.Seq (int $last_seq)) (not $busy)}}<button type="button" class="btn" data-size="sm" data-variant="ghost" data-action="edit-message">{{icon "pencil" "size-3.5"}}Edit</button>{{end}}
       {{template "branch_button" (dict "thread" $thread "seq" $item.Seq "csrf" $csrf)}}
     </div>
@@ -160,10 +169,10 @@
   </div>
 </li>
 {{else if eq $item.Kind "assistant"}}
-<li class="group flex gap-3" data-seq="{{$item.Seq}}">
-  <span class="mt-1 grid size-7 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground" aria-hidden="true">{{icon "bot" "size-4"}}</span>
-  <div class="min-w-0 flex-1 flex flex-col gap-2 px-1 py-2">
-    <div class="markdown">{{markdown $item.Text}}</div>
+<li class="msg group" data-role="assistant" data-seq="{{$item.Seq}}">
+  <span class="msg-avatar" data-role="assistant" aria-hidden="true">a</span>
+  <div class="msg-body">
+    <div class="markdown prose-assistant">{{markdown $item.Text}}</div>
     {{with $item.Citations}}
     <ol class="flex flex-wrap gap-2 text-xs" aria-label="Sources">
       {{range $i, $c := .}}
@@ -176,7 +185,7 @@
     </ol>
     {{end}}
     {{if and $thread (eq $thread.Kind "chat")}}
-    <div class="flex items-center gap-1 text-xs opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
+    <div class="msg-actions">
       {{if and $last_seq (gt $item.Seq (int $last_seq)) (not $busy)}}
       <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/chat/{{$thread.ID}}/regenerate" hx-target="#transcript" hx-swap="innerHTML" hx-disabled-elt="this">{{icon "refresh-cw" "size-3.5"}}Regenerate</button>
       {{end}}
@@ -186,18 +195,18 @@
   </div>
 </li>
 {{else if eq $item.Kind "activity"}}
-<li class="ps-10" data-seq="{{$item.Seq}}" data-run="{{str $item.RunID}}">
-  <details class="activity text-xs">
-    <summary class="flex cursor-pointer items-center gap-2 text-muted-foreground">{{icon "chevron-down" "size-3.5"}}{{len $item.Steps}} step{{if ne (len $item.Steps) 1}}s{{end}}</summary>
-    <ol class="mt-2 flex flex-col gap-1.5 border-s ps-3">
+<li class="msg-indent" data-seq="{{$item.Seq}}" data-run="{{str $item.RunID}}">
+  <details class="activity">
+    <summary>{{icon "chevron-right" "activity-chevron"}}<span>{{template "activity_summary" $item.Steps}}</span><span class="text-ink-3">{{len $item.Steps}} step{{if ne (len $item.Steps) 1}}s{{end}}</span></summary>
+    <ol class="activity-steps">
       {{range $item.Steps}}{{template "activity_step" .}}{{end}}
     </ol>
   </details>
 </li>
 {{else if eq $item.Kind "draft"}}
 {{$d := $item.Draft}}
-<li class="ps-10" data-seq="{{$item.Seq}}" data-draft="{{get $d "id"}}">
-  <a class="flex items-center gap-3 rounded-lg border bg-card px-3 py-2 text-sm hover:bg-accent" {{template "preview_attrs" (printf "/drafts/%v" (get $d "id"))}}>
+<li class="msg-indent" data-seq="{{$item.Seq}}" data-draft="{{get $d "id"}}">
+  <a class="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 text-sm hover:border-line-strong" {{template "preview_attrs" (printf "/drafts/%v" (get $d "id"))}}>
     {{icon "mail" "size-4 shrink-0 text-muted-foreground"}}
     <span class="flex min-w-0 flex-1 flex-col">
       <span class="truncate font-medium">{{or (get $d "subject") "(no subject)"}}</span>
@@ -207,10 +216,10 @@
   </a>
 </li>
 {{else if eq $item.Kind "queued"}}
-<li class="flex gap-3" data-queued="{{$item.ID}}">
-  <span class="mt-1 grid size-7 shrink-0 place-items-center rounded-full bg-secondary text-secondary-foreground" aria-hidden="true">{{icon "user" "size-4"}}</span>
-  <div class="flex min-w-0 flex-1 flex-col gap-1">
-    <div class="rounded-lg border border-dashed px-4 py-3 text-sm whitespace-pre-wrap break-words">{{$item.Text}}</div>
+<li class="msg" data-queued="{{$item.ID}}">
+  <span class="msg-avatar" aria-hidden="true">{{icon "user"}}</span>
+  <div class="msg-body">
+    <div class="msg-user border border-dashed border-line-strong bg-transparent">{{$item.Text}}</div>
     {{if $item.Files}}<span class="text-xs text-muted-foreground">{{icon "paperclip" "size-3"}} {{join ", " (mapattr "name" $item.Files)}}</span>{{end}}
     <span class="text-xs text-muted-foreground">{{icon "clock" "size-3"}} Queued: joins the conversation at the assistant's next step</span>
   </div>

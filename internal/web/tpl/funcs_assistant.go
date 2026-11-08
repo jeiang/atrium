@@ -3,10 +3,20 @@ package tpl
 import (
 	"fmt"
 	"reflect"
+	"strings"
 )
 
 func init() {
-	registerFuncs(map[string]any{"has": has, "ctxlabel": ctxlabel})
+	registerFuncs(map[string]any{"has": has, "ctxlabel": ctxlabel, "toolverb": toolverb})
+}
+
+func toolverb(name string) string {
+	words := strings.Fields(strings.NewReplacer("_", " ", "-", " ", ".", " ").Replace(name))
+	if len(words) == 0 {
+		return name
+	}
+	words[0] = strings.ToUpper(words[0][:1]) + words[0][1:]
+	return strings.Join(words, " ")
 }
 
 func has(list, item any) bool {

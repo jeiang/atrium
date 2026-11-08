@@ -14,7 +14,7 @@
 </li>
 {{end}}{{end}}
 {{if not $v.Items}}
-<li>{{template "empty_state" (dict "icon_name" "messages-square" "title" "Say something" "body" "The assistant can search your mail, contacts, Notion and the web, and read what it finds.")}}</li>
+<li>{{template "empty_state" (dict "icon_name" "messages-square" "title" "Say something")}}</li>
 {{end}}
 {{if $busy}}
 {{template "chat_run_live" (dict "thread_id" $t.ID "run_id" $active.ID "after" (ternary $v.Items (opt (last $v.Items) "seq" 0) 0))}}
