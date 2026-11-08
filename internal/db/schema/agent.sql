@@ -26,8 +26,7 @@ CREATE TABLE IF NOT EXISTS threads (
     base_branch TEXT,
     agent TEXT,
     beta_set TEXT,
-    speed TEXT,
-    tainted_at REAL
+    speed TEXT
 );
 CREATE INDEX IF NOT EXISTS threads_updated ON threads (archived, updated_at);
 CREATE INDEX IF NOT EXISTS threads_parent_run ON threads (parent_run_id);

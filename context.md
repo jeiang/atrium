@@ -157,8 +157,10 @@ behavior-parity target.
   take exclusive access, so the atrium units and timers using the database must be stopped), writes encrypted
   DB-only backups through the SQLite backup API, runs SQL from standard
   input, and checks integrity with FTS5 and vec0 counts. The v2 schema is
-  one baseline in `internal/db/schema/`, edited in place until v2 ships and
-  additive afterwards. `atrium db import-v1` is the only path from a v1
+  the baseline in `internal/db/schema/` (migration 1, frozen since v2
+  shipped to artemis on 2026-11-08) plus additive migrations in
+  `internal/db/migrate.go`; migration 2 adds `threads.tainted_at`.
+  `atrium db import-v1` is the only path from a v1
   database: it copies the learned rules, corrections, routing decisions and
   the unsent message history their derivation reads into a fresh v2
   database; mail, threads, drafts, proposals, media, Notion, calendar and
