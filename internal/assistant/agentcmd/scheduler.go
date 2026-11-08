@@ -1,16 +1,20 @@
 package agentcmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/media/mediacmd"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/sdnotify"
+	"github.com/jeiang/atrium/internal/tasks/remind"
 )
 
 func callables() map[string]worker.Callable {
@@ -23,6 +27,13 @@ func callables() map[string]worker.Callable {
 	}
 	for name, call := range memorycmd.Callables() {
 		out[name] = call
+	}
+	out[scheduler.TaskRemindersName] = worker.Callable{
+		Modules: []string{module.Assistant},
+		Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
+			_, err := remind.Due(ctx, e.Service.DB, e.Service.Env, e.Now())
+			return worker.Result{}, err
+		},
 	}
 	return out
 }

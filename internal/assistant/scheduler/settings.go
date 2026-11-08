@@ -21,6 +21,7 @@ const (
 	KeyMediaChannels   = "agent_schedule_media_channels"
 	KeyMediaSweep      = "agent_schedule_media_sweep"
 	KeyMediaThumbnails = "agent_schedule_media_thumbnails"
+	KeyTaskReminders   = "agent_schedule_task_reminders"
 	KeyMemoryWork      = "agent_schedule_memory_work"
 )
 
