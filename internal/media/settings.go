@@ -11,7 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations/transport"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -99,7 +98,7 @@ func init() {
 
 func wholeBetween(lo, hi int64) func(string) error {
 	return func(value string) error {
-		n, ok := py.ParseInt(value)
+		n, ok := parseInt(value)
 		if !ok {
 			return settings.Invalid("must be a whole number")
 		}
@@ -111,7 +110,7 @@ func wholeBetween(lo, hi int64) func(string) error {
 }
 
 func httpURL(value string) error {
-	value = py.Strip(value)
+	value = strings.TrimSpace(value)
 	if value == "" {
 		return nil
 	}
@@ -119,7 +118,7 @@ func httpURL(value string) error {
 }
 
 func requiredHTTPURL(value string) error {
-	u, err := url.Parse(py.Strip(value))
+	u, err := url.Parse(strings.TrimSpace(value))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return settings.Invalid("must be an http or https URL")
 	}
@@ -136,12 +135,12 @@ func extensionsCheck(value string) error {
 func extensionSet(value string) (map[string]bool, error) {
 	out := map[string]bool{}
 	for part := range strings.SplitSeq(value, ",") {
-		part = py.Strip(part)
+		part = strings.TrimSpace(part)
 		if part == "" {
 			continue
 		}
-		if len(part) < 2 || part[0] != '.' || strings.ContainsAny(part, "/\\ \t") || part != py.Lower(part) {
-			return nil, settings.Invalid("must be comma-separated lowercase extensions such as .mkv, got " + py.Repr(part))
+		if len(part) < 2 || part[0] != '.' || strings.ContainsAny(part, "/\\ \t") || part != strings.ToLower(part) {
+			return nil, settings.Invalid("must be comma-separated lowercase extensions such as .mkv, got " + strconv.Quote(part))
 		}
 		out[part] = true
 	}
@@ -200,7 +199,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		failure = err
 		return found
 	}
-	text := func(key string) string { return py.Strip(resolve(key).Value) }
+	text := func(key string) string { return strings.TrimSpace(resolve(key).Value) }
 	link := func(key string) string { return strings.TrimRight(text(key), "/") }
 	whole := func(key string) int64 {
 		found := resolve(key)

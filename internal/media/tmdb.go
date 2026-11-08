@@ -113,11 +113,11 @@ func idOf(d py.Dict) (int64, bool) {
 	case int64:
 		return n, true
 	case float64:
-		i, err := py.Int(n)
-		if err != nil || !i.IsInt64() {
+		i, ok := intOf(n)
+		if !ok {
 			return 0, false
 		}
-		return i.Int64(), true
+		return i, true
 	}
 	return 0, false
 }

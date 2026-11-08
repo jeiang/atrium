@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/textutil"
 )
 
 const (
@@ -142,7 +142,7 @@ func (t Tuning) showYear(root, title string) string {
 	for _, entry := range entries {
 		r := t.ParseRelease(entry.Name())
 		info, err := os.Stat(filepath.Join(tv, entry.Name()))
-		if err == nil && info.IsDir() && r.Year != "" && py.Casefold(r.Title) == py.Casefold(title) {
+		if err == nil && info.IsDir() && r.Year != "" && textutil.Casefold(r.Title) == textutil.Casefold(title) {
 			return r.Year
 		}
 	}
@@ -215,12 +215,12 @@ func Plan(view *View, root string) ([]Op, error) {
 		for i := range view.Files {
 			fv := &view.Files[i]
 			src := view.Item.Files[i]
-			if py.Strip(fv.Episode) == "" {
+			if strings.TrimSpace(fv.Episode) == "" {
 				fv.Dest = Skipped
 				continue
 			}
-			season, okSeason := py.ParseInt(fv.Season)
-			episode, okEpisode := py.ParseInt(fv.Episode)
+			season, okSeason := parseInt(fv.Season)
+			episode, okEpisode := parseInt(fv.Episode)
 			if !okSeason || !okEpisode {
 				return nil, PlanError(fv.Rel + ": season and episode must be numbers")
 			}
@@ -309,11 +309,11 @@ func (t Tuning) Edited(item Item, root string, form map[string]string) View {
 	if k := form["kind"]; slices.Contains(Kinds, k) {
 		view.Kind = k
 	}
-	view.Title, view.Year = py.Strip(form["title"]), py.Strip(form["year"])
+	view.Title, view.Year = strings.TrimSpace(form["title"]), strings.TrimSpace(form["year"])
 	for i := range view.Files {
 		if _, ok := form[fmt.Sprintf("e%d", i)]; ok {
-			view.Files[i].Season = py.Strip(form[fmt.Sprintf("s%d", i)])
-			view.Files[i].Episode = py.Strip(form[fmt.Sprintf("e%d", i)])
+			view.Files[i].Season = strings.TrimSpace(form[fmt.Sprintf("s%d", i)])
+			view.Files[i].Episode = strings.TrimSpace(form[fmt.Sprintf("e%d", i)])
 		}
 	}
 	return view

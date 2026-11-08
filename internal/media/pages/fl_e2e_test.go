@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -40,6 +39,22 @@ var (
 	flPlaceholder = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 2 3"><rect width="2" height="3" fill="#80808033"/></svg>`
 	flMovieBody   = flBody()
 )
+
+func urlQuote(s string) string {
+	const hex = "0123456789ABCDEF"
+	var b strings.Builder
+	for i := range len(s) {
+		c := s[i]
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '.' || c == '-' || c == '~' || c == '/' {
+			b.WriteByte(c)
+			continue
+		}
+		b.WriteByte('%')
+		b.WriteByte(hex[c>>4])
+		b.WriteByte(hex[c&15])
+	}
+	return b.String()
+}
 
 func flBody() []byte {
 	out := make([]byte, 100)
@@ -93,7 +108,7 @@ func flWrite(t *testing.T, path string, data []byte) {
 }
 
 func flSigned(key, rel string, exp int64) string {
-	return fmt.Sprintf("%s%s?exp=%d&sig=%s", media.FilePrefix, py.URLQuote(rel), exp, media.Sign([]byte(key), rel, exp))
+	return fmt.Sprintf("%s%s?exp=%d&sig=%s", media.FilePrefix, urlQuote(rel), exp, media.Sign([]byte(key), rel, exp))
 }
 
 func flRange(spec string) [2]string { return [2]string{"Range", spec} }
@@ -156,11 +171,11 @@ func TestFlSignedFileChecklist(t *testing.T) {
 			"tampered signature": flBadLast(good),
 			"tampered expiry":    strings.Replace(good, fmt.Sprint(flFar), fmt.Sprint(flFar+1), 1),
 			"expired":            flSigned(flKey, w.movieRel, 1_000_000_000),
-			"unsigned":           media.FilePrefix + py.URLQuote(w.movieRel),
+			"unsigned":           media.FilePrefix + urlQuote(w.movieRel),
 			"wrong path":         strings.Replace(good, "Dune%20%282021%29.mkv", "Dune%20%282021%29.mkvx", 1),
-			"non-numeric expiry": media.FilePrefix + py.URLQuote(w.movieRel) + "?exp=soon&sig=00",
-			"huge expiry":        media.FilePrefix + py.URLQuote(w.movieRel) + "?exp=" + strings.Repeat("9", 5000) + "&sig=00",
-			"empty signature":    media.FilePrefix + py.URLQuote(w.movieRel) + "?exp=4000000000&sig=",
+			"non-numeric expiry": media.FilePrefix + urlQuote(w.movieRel) + "?exp=soon&sig=00",
+			"huge expiry":        media.FilePrefix + urlQuote(w.movieRel) + "?exp=" + strings.Repeat("9", 5000) + "&sig=00",
+			"empty signature":    media.FilePrefix + urlQuote(w.movieRel) + "?exp=4000000000&sig=",
 		}
 		for name, target := range cases {
 			rec := w.get(target)
@@ -436,7 +451,7 @@ func TestFlGuardAdmitsSignedLinksOnly(t *testing.T) {
 	w := flNew(t, nil, Options{})
 	proxy := flProxy(t, w.site)
 	good := flSigned(flKey, w.movieRel, flFar)
-	bare := media.FilePrefix + py.URLQuote(w.movieRel)
+	bare := media.FilePrefix + urlQuote(w.movieRel)
 	group := [2]string{"Remote-Groups", flGroup}
 
 	status(t, flGetHost(proxy, good, host), 200, "signed link without group")
@@ -449,7 +464,7 @@ func TestFlGuardAdmitsSignedLinksOnly(t *testing.T) {
 	status(t, flGetHost(proxy, "/media/downloads", host, group), 200, "page with group")
 	status(t, flGetHost(proxy, good, host, group), 200, "signed link with group")
 	status(t, flGetHost(proxy, bare, host, group), 403, "unsigned link with group is still checked by the route")
-	thumb := "/media/thumb/" + py.URLQuote(w.episodeRel)
+	thumb := "/media/thumb/" + urlQuote(w.episodeRel)
 	sig := media.Sign([]byte(flKey), w.episodeRel, flFar)
 	status(t, flGetHost(proxy, fmt.Sprintf("%s?exp=%d&sig=%s", thumb, flFar, sig), host), 403, "signature does not unlock other paths")
 	status(t, flGetHost(proxy, flSigned(flKey, w.movieRel, flFar), host, flRange("bytes=10-19")), 206, "range through the guard")
@@ -598,13 +613,13 @@ func TestFlPostersAndThumbnails(t *testing.T) {
 	ff := &flFFmpeg{duration: "1200.5"}
 	w := flNew(t, nil, Options{Exec: ff.run})
 
-	flImage(t, w.get("/media/art/movie/"+py.URLQuote("Dune (2021)")), "movie poster")
-	flImage(t, w.get("/media/art/show/"+py.URLQuote("Lanterns (2026)")), "show poster")
-	flImage(t, w.get("/media/art/season/"+py.URLQuote("Lanterns (2026)")+"/1"), "season poster")
+	flImage(t, w.get("/media/art/movie/"+urlQuote("Dune (2021)")), "movie poster")
+	flImage(t, w.get("/media/art/show/"+urlQuote("Lanterns (2026)")), "show poster")
+	flImage(t, w.get("/media/art/season/"+urlQuote("Lanterns (2026)")+"/1"), "season poster")
 	if got := tmdb.imageCount(); got != 3 {
 		t.Fatalf("%d image fetches, want 3", got)
 	}
-	flImage(t, w.get("/media/art/movie/"+py.URLQuote("Dune (2021)")), "cached poster")
+	flImage(t, w.get("/media/art/movie/"+urlQuote("Dune (2021)")), "cached poster")
 	if got := tmdb.imageCount(); got != 3 {
 		t.Fatalf("cached poster fetched again: %d", got)
 	}
@@ -613,16 +628,16 @@ func TestFlPostersAndThumbnails(t *testing.T) {
 		t.Errorf("poster not cached: %v", err)
 	}
 
-	flPlaceholderCheck(t, w.get("/media/art/movie/"+py.URLQuote("Unknown (1999)")), "unknown movie")
+	flPlaceholderCheck(t, w.get("/media/art/movie/"+urlQuote("Unknown (1999)")), "unknown movie")
 	if _, err := os.Stat(filepath.Join(w.cfg.MediaCacheDir(), "posters", "movie", "Unknown (1999).none")); err != nil {
 		t.Errorf("miss not remembered: %v", err)
 	}
 	hits := tmdb.hitCount()
-	flPlaceholderCheck(t, w.get("/media/art/movie/"+py.URLQuote("Unknown (1999)")), "remembered miss")
+	flPlaceholderCheck(t, w.get("/media/art/movie/"+urlQuote("Unknown (1999)")), "remembered miss")
 	if tmdb.hitCount() != hits {
 		t.Errorf("remembered miss looked up again")
 	}
-	flPlaceholderCheck(t, w.get("/media/art/season/"+py.URLQuote("Lanterns (2026)")+"/2"), "season without poster")
+	flPlaceholderCheck(t, w.get("/media/art/season/"+urlQuote("Lanterns (2026)")+"/2"), "season without poster")
 
 	status(t, w.get("/media/art/bogus/x"), 404, "unknown kind")
 	status(t, w.get("/media/art/season/x"), 404, "season with one segment")
@@ -631,7 +646,7 @@ func TestFlPostersAndThumbnails(t *testing.T) {
 	body := status(t, rec, 422, "non-integer season")
 	contains(t, body, `"int_parsing"`, `"number"`)
 
-	flImage(t, w.get("/media/thumb/"+py.URLQuote(w.episodeRel)), "thumbnail")
+	flImage(t, w.get("/media/thumb/"+urlQuote(w.episodeRel)), "thumbnail")
 	if len(ff.calls) != 2 {
 		t.Fatalf("%d ffmpeg calls, want 2", len(ff.calls))
 	}
@@ -641,7 +656,7 @@ func TestFlPostersAndThumbnails(t *testing.T) {
 	if ff.calls[1][3] != "ffmpeg" || !flHas(ff.calls[1], "120.05") {
 		t.Errorf("ffmpeg call %v", ff.calls[1])
 	}
-	flImage(t, w.get("/media/thumb/"+py.URLQuote(w.episodeRel)), "cached thumbnail")
+	flImage(t, w.get("/media/thumb/"+urlQuote(w.episodeRel)), "cached thumbnail")
 	if ff.count() != 2 {
 		t.Errorf("cached thumbnail ran ffmpeg again: %d calls", ff.count())
 	}
@@ -668,7 +683,7 @@ func flHas(list []string, want string) bool {
 func TestFlThumbnailFailureIsRemembered(t *testing.T) {
 	ff := &flFFmpeg{duration: "1200.5", fail: true}
 	w := flNew(t, nil, Options{Exec: ff.run})
-	target := "/media/thumb/" + py.URLQuote(w.episodeRel)
+	target := "/media/thumb/" + urlQuote(w.episodeRel)
 	flPlaceholderCheck(t, w.get(target), "failed ffmpeg")
 	if ff.count() != 2 {
 		t.Fatalf("%d calls, want probe and ffmpeg", ff.count())
@@ -697,7 +712,7 @@ func TestFlThumbnailsRunOneAtATime(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			recs[i] = w.get("/media/thumb/" + py.URLQuote(rel))
+			recs[i] = w.get("/media/thumb/" + urlQuote(rel))
 		}()
 	}
 	wg.Wait()
@@ -716,8 +731,8 @@ func TestFlWithoutTMDBOrRoot(t *testing.T) {
 	tmdb := flServeTMDB(t)
 	ff := &flFFmpeg{duration: "10"}
 	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "", "ATRIUM_MEDIA_MEDIA_ROOT": ""}, Options{Exec: ff.run})
-	flPlaceholderCheck(t, w.get("/media/art/movie/"+py.URLQuote("Dune (2021)")), "poster without a TMDB key")
-	flPlaceholderCheck(t, w.get("/media/thumb/"+py.URLQuote("tv/Lanterns (2026)/Season 01/x.mkv")), "thumbnail without a root")
+	flPlaceholderCheck(t, w.get("/media/art/movie/"+urlQuote("Dune (2021)")), "poster without a TMDB key")
+	flPlaceholderCheck(t, w.get("/media/thumb/"+urlQuote("tv/Lanterns (2026)/Season 01/x.mkv")), "thumbnail without a root")
 	if tmdb.hitCount() != 0 || ff.count() != 0 {
 		t.Errorf("unconfigured backends were used: %d TMDB requests, %d runs", tmdb.hitCount(), ff.count())
 	}
@@ -726,7 +741,7 @@ func TestFlWithoutTMDBOrRoot(t *testing.T) {
 func TestFlTMDBFailureGivesPlaceholderWithoutMarker(t *testing.T) {
 	tmdb := flServeTMDB(t)
 	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "wrong"}, Options{})
-	flPlaceholderCheck(t, w.get("/media/art/movie/"+py.URLQuote("Dune (2021)")), "TMDB rejects the key")
+	flPlaceholderCheck(t, w.get("/media/art/movie/"+urlQuote("Dune (2021)")), "TMDB rejects the key")
 	if tmdb.imageCount() != 0 {
 		t.Errorf("image fetched after TMDB error")
 	}

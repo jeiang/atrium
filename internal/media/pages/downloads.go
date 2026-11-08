@@ -11,7 +11,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -195,14 +194,14 @@ func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
 	var index int64
 	if raw, found := web.FormField(form, "index"); !found {
 		errs = append(errs, web.Missing("body", "index"))
-	} else if n, ok := py.LaxInt64(raw); ok {
+	} else if n, ok := laxInt64(raw); ok {
 		index = n
 	} else {
 		errs = append(errs, web.BadInt("body", "index", raw))
 	}
 	wanted := int64(1)
 	if raw, found := web.FormField(form, "wanted"); found {
-		if n, ok := py.LaxInt64(raw); ok {
+		if n, ok := laxInt64(raw); ok {
 			wanted = n
 		} else {
 			errs = append(errs, web.BadInt("body", "wanted", raw))

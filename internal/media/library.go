@@ -8,7 +8,7 @@ import (
 
 	"regexp"
 
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/textutil"
 )
 
 var (
@@ -177,12 +177,12 @@ func episodeNumber(name string) (*int, *int) {
 	if loc == nil {
 		return nil, nil
 	}
-	season, errSeason := py.IntString(text[loc[2]:loc[3]])
-	episode, errEpisode := py.IntString(text[loc[4]:loc[5]])
-	if errSeason != nil || errEpisode != nil {
+	season, okSeason := parseInt(text[loc[2]:loc[3]])
+	episode, okEpisode := parseInt(text[loc[4]:loc[5]])
+	if !okSeason || !okEpisode {
 		return nil, nil
 	}
-	s, e := int(season.Int64()), int(episode.Int64())
+	s, e := int(season), int(episode)
 	return &s, &e
 }
 
@@ -195,8 +195,8 @@ func (t Tuning) Show(root, name string) (ShowView, error) {
 	for _, d := range dirsOf(path) {
 		season := Season{Dir: d, Episodes: []Episode{}}
 		if loc := seasonDir.FindStringSubmatchIndex(d); loc != nil && loc[0] == 0 {
-			if n, err := py.IntString(d[loc[2]:loc[3]]); err == nil {
-				v := int(n.Int64())
+			if n, ok := parseInt(d[loc[2]:loc[3]]); ok {
+				v := int(n)
 				season.Number = &v
 			}
 		}
@@ -239,15 +239,15 @@ func containsAll(hay string, words []string) bool {
 
 func (t Tuning) Search(root, query string, limit int) []SearchResult {
 	var words []string
-	for _, w := range py.Split(query) {
-		words = append(words, py.Casefold(w))
+	for _, w := range strings.Fields(query) {
+		words = append(words, textutil.Casefold(w))
 	}
 	out := []SearchResult{}
 	if len(words) == 0 {
 		return out
 	}
 	for _, m := range t.MovieEntries(root) {
-		if !containsAll(py.Casefold(m.Dir), words) {
+		if !containsAll(textutil.Casefold(m.Dir), words) {
 			continue
 		}
 		view, _ := t.Movie(root, m.Dir)
@@ -259,7 +259,7 @@ func (t Tuning) Search(root, query string, limit int) []SearchResult {
 	}
 	for _, s := range t.ShowEntries(root) {
 		for _, rel := range t.EpisodeFilesOf(root, s.Dir) {
-			if containsAll(py.Casefold(s.Dir+" "+filepath.Base(rel)), words) {
+			if containsAll(textutil.Casefold(s.Dir+" "+filepath.Base(rel)), words) {
 				out = append(out, SearchResult{Kind: "episode", Title: s.Title, Year: s.Year, Dir: s.Dir, Files: []string{rel}})
 			}
 		}

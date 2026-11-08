@@ -2,6 +2,7 @@ package mediacmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -137,7 +138,8 @@ func handler(run job, clock func() float64) func(*cli.Args) cli.Handler {
 			if err != nil {
 				return cli.Fail(env, err)
 			}
-			_, _ = fmt.Fprintln(env.Stdout, py.JSONDumps(out, py.JSONOpts{Indent: 2}))
+			body, _ := json.MarshalIndent(out, "", "  ")
+			_, _ = fmt.Fprintln(env.Stdout, string(body))
 			return cli.ExitOK
 		}
 	}

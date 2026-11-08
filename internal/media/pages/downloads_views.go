@@ -1,14 +1,15 @@
 package pages
 
 import (
+	"encoding/base64"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -117,13 +118,13 @@ func dlHumanSizeFloat(n float64) string {
 	for _, unit := range []string{"B", "KB", "MB", "GB"} {
 		if n < 1024 || unit == "GB" {
 			if unit == "B" {
-				return py.FormatFixed(n, 0) + " " + unit
+				return strconv.FormatFloat(n, 'f', 0, 64) + " " + unit
 			}
-			return py.FormatFixed(n, 1) + " " + unit
+			return strconv.FormatFloat(n, 'f', 1, 64) + " " + unit
 		}
 		n /= 1024
 	}
-	return py.FormatFixed(n, 1) + " GB"
+	return strconv.FormatFloat(n, 'f', 1, 64) + " GB"
 }
 
 func dlHumanETA(seconds *int64) string {
@@ -163,7 +164,7 @@ func torrentView(t media.Torrent) TorrentView {
 	return TorrentView{
 		Hash: t.Hash, Name: t.Name, Kind: kind, Label: label, Size: dlHumanSize(t.Size),
 		Down: dlSpeedText(t.DLSpeed), Up: dlSpeedText(t.UpSpeed), ETA: dlHumanETA(t.ETA),
-		Percent: int64(py.Round(t.Progress*100, 0)),
+		Percent: int64(math.RoundToEven(t.Progress * 100)),
 		Filed:   t.HasTag(media.TagFiled), Ignored: t.HasTag(media.TagIgnored),
 		Active: slices.Contains(dlActiveStates, state),
 	}
@@ -172,7 +173,7 @@ func torrentView(t media.Torrent) TorrentView {
 func fileView(f media.TorrentFile) FileView {
 	return FileView{
 		Index: f.Index, Wanted: f.Priority != media.PrioritySkip, Name: f.Name,
-		SizeText: dlHumanSize(f.Size), Percent: int64(py.Round(f.Progress*100, 0)),
+		SizeText: dlHumanSize(f.Size), Percent: int64(math.RoundToEven(f.Progress * 100)),
 	}
 }
 
@@ -188,7 +189,7 @@ func queueView(v media.View) QueueView {
 }
 
 func dlDecodeTorrent(b64 string, limit int) (data []byte, present bool, err error) {
-	b64 = strings.Join(py.Split(b64), "")
+	b64 = strings.Join(strings.Fields(b64), "")
 	if b64 == "" {
 		return nil, false, nil
 	}
@@ -198,7 +199,7 @@ func dlDecodeTorrent(b64 string, limit int) (data []byte, present bool, err erro
 	}
 	b64 = strings.NewReplacer("-", "+", "_", "/").Replace(b64)
 	b64 += strings.Repeat("=", (4-n%4)%4)
-	data, err = py.B64Decode(b64)
+	data, err = base64.StdEncoding.DecodeString(b64)
 	if err != nil {
 		return nil, false, dlTorrentError("the torrent data is not base64")
 	}

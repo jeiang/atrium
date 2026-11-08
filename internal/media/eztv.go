@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"regexp"
 
@@ -30,12 +31,34 @@ type Release struct {
 }
 
 func IMDBDigits(value string) (string, bool) {
-	text := py.Strip(value)
+	text := strings.TrimSpace(value)
 	loc := imdbRe.FindStringSubmatchIndex(text)
 	if loc == nil {
 		return "", false
 	}
 	return text[loc[2]:loc[3]], true
+}
+
+func truthy(v any) bool {
+	switch v := v.(type) {
+	case nil:
+		return false
+	case string:
+		return v != ""
+	case bool:
+		return v
+	case int64:
+		return v != 0
+	case float64:
+		return v != 0
+	case []any:
+		return len(v) > 0
+	case map[string]any:
+		return len(v) > 0
+	case py.Dict:
+		return len(v) > 0
+	}
+	return true
 }
 
 func sizeOf(v any) int64 {
@@ -47,7 +70,7 @@ func sizeOf(v any) int64 {
 		if v == "" {
 			return 0
 		}
-		parsed, err := py.ParseFloat(v)
+		parsed, err := strconv.ParseFloat(strings.TrimSpace(v), 64)
 		if err != nil {
 			return 0
 		}
@@ -64,11 +87,11 @@ func sizeOf(v any) int64 {
 	default:
 		return 0
 	}
-	n, err := py.Int(f)
-	if err != nil || !n.IsInt64() {
+	n, ok := intOf(f)
+	if !ok {
 		return 0
 	}
-	return n.Int64()
+	return n
 }
 
 func pyText(v any) string {
@@ -80,11 +103,11 @@ func pyText(v any) string {
 	case int64:
 		return strconv.FormatInt(v, 10)
 	}
-	return py.ReprValue(v)
+	return fmt.Sprint(v)
 }
 
 func orEmpty(v any) string {
-	if !py.Truthy(v) {
+	if !truthy(v) {
 		return ""
 	}
 	return pyText(v)
@@ -122,7 +145,7 @@ func (t Tuning) FetchReleases(ctx context.Context, imdb string) ([]Release, erro
 		}
 		hash, _ := t.Get("hash")
 		magnet, _ := t.Get("magnet_url")
-		if !py.Truthy(hash) || !py.Truthy(magnet) {
+		if !truthy(hash) || !truthy(magnet) {
 			continue
 		}
 		title, _ := t.Get("title")
@@ -130,7 +153,7 @@ func (t Tuning) FetchReleases(ctx context.Context, imdb string) ([]Release, erro
 		season, _ := t.Get("season")
 		episode, _ := t.Get("episode")
 		out = append(out, Release{
-			Hash:      py.Lower(pyText(hash)),
+			Hash:      strings.ToLower(pyText(hash)),
 			Title:     orEmpty(title),
 			MagnetURL: pyText(magnet),
 			SizeBytes: sizeOf(size),
