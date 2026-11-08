@@ -35,6 +35,7 @@ type Conn struct {
 	URL, Secret string
 	HTTP        *http.Client
 	DB          *db.DB
+	Env         config.Env
 }
 
 type Integration struct {
@@ -159,7 +160,7 @@ func Records(ctx context.Context, q db.Querier) ([]Record, error) {
 	return out, nil
 }
 
-func current(ctx context.Context, d *db.DB, q db.Querier, i Integration) (Conn, error) {
+func current(ctx context.Context, d *db.DB, q db.Querier, i Integration, env config.Env) (Conn, error) {
 	u, err := text(ctx, q, i.URLKey)
 	if err != nil {
 		return Conn{}, err
@@ -170,7 +171,7 @@ func current(ctx context.Context, d *db.DB, q db.Querier, i Integration) (Conn, 
 			return Conn{}, err
 		}
 	}
-	return Conn{URL: strings.TrimRight(u, "/"), Secret: secret, DB: d}, nil
+	return Conn{URL: strings.TrimRight(u, "/"), Secret: secret, DB: d, Env: env}, nil
 }
 
 func run(ctx context.Context, q db.Querier, i Integration, c Conn) (state, reason string, expires *time.Time, err error) {
@@ -215,7 +216,7 @@ func record(ctx context.Context, d *db.DB, env config.Env, i Integration, state,
 	stale := false
 	if err := d.WithTx(ctx, func(tx *sql.Tx) error {
 		if tested != nil {
-			c, err := current(ctx, d, tx, i)
+			c, err := current(ctx, d, tx, i, env)
 			if err != nil {
 				return err
 			}
@@ -256,7 +257,7 @@ func Check(ctx context.Context, d *db.DB, env config.Env, name string, now float
 	if !ok {
 		return "", Unknown(name)
 	}
-	c, err := current(ctx, d, d.Read, i)
+	c, err := current(ctx, d, d.Read, i, env)
 	if err != nil {
 		return "", err
 	}
@@ -301,7 +302,7 @@ func TestAndSave(ctx context.Context, d *db.DB, env config.Env, name string, can
 	if !ok {
 		return Unknown(name)
 	}
-	c, err := current(ctx, d, d.Read, i)
+	c, err := current(ctx, d, d.Read, i, env)
 	if err != nil {
 		return err
 	}

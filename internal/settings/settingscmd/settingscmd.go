@@ -24,8 +24,8 @@ func (r *Refused) Error() string { return r.Err.Error() }
 
 func (r *Refused) Unwrap() error { return r.Err }
 
-func Command(guard Guard) *cli.Command {
-	s := &service{env: config.OS, reg: settings.Default, guard: guard}
+func Command(env config.Env, guard Guard) *cli.Command {
+	s := &service{env: env, reg: settings.Default, guard: guard}
 	return &cli.Command{
 		Name: "settings",
 		Commands: []*cli.Command{

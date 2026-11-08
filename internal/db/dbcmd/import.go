@@ -37,7 +37,7 @@ type importReport struct {
 func (s *service) importV1(a *cli.Args) cli.Handler {
 	src := a.Arg("path", cli.Opt{Help: "path to the v1 database to copy the learned-rule data from"})
 	return func(e *cli.Env) int {
-		cfg, err := config.Load(config.OS)
+		cfg, err := config.Load(s.env)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
@@ -45,7 +45,7 @@ func (s *service) importV1(a *cli.Args) cli.Handler {
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		if err := importV1(e.Ctx, cfg, *src, key); err != nil {
+		if err := importV1(e.Ctx, s.env, cfg, *src, key); err != nil {
 			return cli.Fail(e, err)
 		}
 		report, err := importCounts(e.Ctx, cfg.DBPath, key)
@@ -59,7 +59,7 @@ func (s *service) importV1(a *cli.Args) cli.Handler {
 	}
 }
 
-func importV1(ctx context.Context, cfg config.Config, source string, key db.Key) error {
+func importV1(ctx context.Context, env config.Env, cfg config.Config, source string, key db.Key) error {
 	if cfg.DBPath == source {
 		return errors.New("db import-v1: the source and the target database are the same file")
 	}
@@ -71,7 +71,7 @@ func importV1(ctx context.Context, cfg config.Config, source string, key db.Key)
 	if err := requireV2(ctx, d.Read); err != nil {
 		return err
 	}
-	if err := config.Boot(ctx, config.OS, d, cfg); err != nil {
+	if err := config.Boot(ctx, env, d, cfg); err != nil {
 		return err
 	}
 	if err := refusePopulated(ctx, d.Read); err != nil {

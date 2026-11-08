@@ -38,7 +38,11 @@ func init() {
 }
 
 func testAnthropic(ctx context.Context, c integrations.Conn) (string, error) {
-	client, err := anthropic.New(c.Secret, config.OS, anthropic.HTTPClient(c.HTTP))
+	env := c.Env
+	if env == nil {
+		env = config.OS
+	}
+	client, err := anthropic.New(c.Secret, env, anthropic.HTTPClient(c.HTTP))
 	if err != nil {
 		return "", err
 	}
@@ -66,7 +70,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 		Name:     module.Assistant,
 		Requires: []module.Requirement{{Name: secrets.AnthropicAPIKey, Check: anthropicKey}},
 		Pages:    []web.Page{{Module: chatpages.Module(chat), Templates: chatpages.Templates()}},
-		Commands: []*cli.Command{agentcmd.Command(mc.Tools, mc.Enabled), skillscmd.Command()},
+		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled), skillscmd.Command(mc.Env)},
 		Tools:    addTools,
 	}
 }

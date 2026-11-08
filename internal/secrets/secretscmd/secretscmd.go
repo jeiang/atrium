@@ -17,8 +17,8 @@ const actor = "operator"
 
 const maxValue = 1 << 20
 
-func Command() *cli.Command {
-	s := &service{env: config.OS}
+func Command(env config.Env) *cli.Command {
+	s := &service{env: env}
 	return &cli.Command{
 		Name: "secrets",
 		Commands: []*cli.Command{

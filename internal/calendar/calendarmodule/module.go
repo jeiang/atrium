@@ -17,7 +17,7 @@ import (
 type Module struct{}
 
 func (Module) Register(mc module.Context) module.Registration {
-	command := calendarcmd.Command(mc.Tools)
+	command := calendarcmd.Command(mc.Env, mc.Tools)
 	return module.Registration{
 		Name:     module.Calendar,
 		Soft:     []string{module.Mail},

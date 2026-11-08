@@ -17,8 +17,10 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 type moduleCase struct {
@@ -60,10 +62,18 @@ type appRun struct {
 	stdout, stderr string
 }
 
-func runApp(args ...string) appRun {
+var activeFixture *fixture
+
+func runApp(args ...string) appRun { return runAppWith(nil, args...) }
+
+func runAppWith(mods []module.Module, args ...string) appRun {
+	env := config.OS
+	if activeFixture != nil {
+		env = activeFixture.lookup
+	}
 	var out bytes.Buffer
 	var errs lockedBuffer
-	code := newApp().Run(context.Background(), args, &out, &errs)
+	code := newApp(env, settings.Default, mods).Run(context.Background(), args, &out, &errs)
 	return appRun{code, out.String(), errs.String()}
 }
 
@@ -88,19 +98,30 @@ func moduleFixture(t *testing.T, flags map[string]string) (dir string, api *mode
 		defer api.mu.Unlock()
 		api.seen = append(api.seen, r)
 	}
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	t.Setenv("ATRIUM_PUBLIC_HOST", "")
-	t.Setenv("ATRIUM_CONFIG", "")
-	t.Setenv("ATRIUM_CORE_TZ", "America/Port_of_Spain")
-	for name, value := range requirementEnv(filepath.Join(dir, "media")) {
-		t.Setenv(name, value)
+	env := map[string]string{
+		"ATRIUM_DB":          filepath.Join(dir, "atrium.db"),
+		"ATRIUM_CACHE_DIR":   filepath.Join(dir, "cache"),
+		"ATRIUM_PUBLIC_HOST": "",
+		"ATRIUM_CONFIG":      "",
+		"ATRIUM_CORE_TZ":     "America/Port_of_Spain",
+		"ANTHROPIC_API_KEY":  anthropictest.APIKey,
+		anthropic.BaseURLEnv: api.URL,
 	}
-	t.Setenv("ANTHROPIC_API_KEY", anthropictest.APIKey)
-	t.Setenv(anthropic.BaseURLEnv, api.URL)
+	for name, value := range moduleEnv(dir) {
+		env[name] = value
+	}
 	for _, name := range moduleNames {
-		t.Setenv(flagEnv(name), flags[name])
+		env[flagEnv(name)] = flags[name]
 	}
+	settings.Default.SetPins(nil)
+	f := &fixture{t: t, dir: dir, env: env}
+	f.app = newApp(f.lookup, settings.Default, nil)
+	activeFixture = f
+	t.Cleanup(func() {
+		if activeFixture == f {
+			activeFixture = nil
+		}
+	})
 	return dir, api
 }
 

@@ -14,8 +14,8 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 )
 
-func Command() *cli.Command {
-	return &cli.Command{Name: "skills", Commands: []*cli.Command{exportCommand(config.OS), importCommand(config.OS)}}
+func Command(env config.Env) *cli.Command {
+	return &cli.Command{Name: "skills", Commands: []*cli.Command{exportCommand(env), importCommand(env)}}
 }
 
 func open(env *cli.Env, cfgEnv config.Env) (*db.DB, error) {

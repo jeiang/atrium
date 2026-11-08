@@ -25,8 +25,16 @@ import (
 type Clients = run.Clients
 
 type Options struct {
+	Env     config.Env
 	Clients Clients
 	Now     func() float64
+}
+
+func (o Options) env() config.Env {
+	if o.Env != nil {
+		return o.Env
+	}
+	return config.OS
 }
 
 func (o Options) now() float64 {
@@ -121,7 +129,7 @@ func (o Options) execute(env *cli.Env, run body) int {
 }
 
 func (o Options) run(env *cli.Env, run body) error {
-	cfg, err := config.Load(config.OS)
+	cfg, err := config.Load(o.env())
 	if err != nil {
 		return err
 	}
@@ -130,7 +138,7 @@ func (o Options) run(env *cli.Env, run body) error {
 		return err
 	}
 	defer func() { _ = d.Close() }()
-	if err := config.Boot(env.Ctx, config.OS, d, cfg); err != nil {
+	if err := config.Boot(env.Ctx, o.env(), d, cfg); err != nil {
 		return err
 	}
 	return run(&Exec{Ctx: env.Ctx, Cfg: cfg, DB: d, Stdin: env.Stdin, Stdout: env.Stdout, Stderr: env.Stderr, opts: o})

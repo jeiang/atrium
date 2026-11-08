@@ -24,7 +24,7 @@ func NewSet(reg *settings.Registry, env config.Env, mods ...Module) (*Set, error
 	s := &Set{reg: reg, env: env}
 	var regs []Registration
 	for _, m := range mods {
-		regs = append(regs, m.Register(Context{Current: s.Current}))
+		regs = append(regs, m.Register(Context{Current: s.Current, Env: env}))
 	}
 	s.regs = byNeeds(regs)
 	if err := s.validate(); err != nil {

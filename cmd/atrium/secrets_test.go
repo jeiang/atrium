@@ -17,7 +17,7 @@ import (
 func runSecrets(t *testing.T, stdin string, args ...string) settingsRun {
 	t.Helper()
 	var out, errs bytes.Buffer
-	app := newApp()
+	app := defaultApp()
 	app.Stdin = strings.NewReader(stdin)
 	code := app.Run(context.Background(), append([]string{"secrets"}, args...), &out, &errs)
 	return settingsRun{code, out.String(), errs.String()}

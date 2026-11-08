@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail/applier"
 	"github.com/jeiang/atrium/internal/mail/backlog"
 	"github.com/jeiang/atrium/internal/mail/live"
@@ -68,7 +67,7 @@ func liveBacklog(x *Exec) error {
 
 func rebaseline(x *Exec) error {
 	return x.Exclusive(func() error {
-		if err := run.New(x.DB, x.Cfg, x.Open(), x.opts.Now).SyncAll(x.Ctx); err != nil {
+		if err := run.New(x.opts.env(), x.DB, x.Cfg, x.Open(), x.opts.Now).SyncAll(x.Ctx); err != nil {
 			return err
 		}
 		baseline, err := x.Live().Rebaseline(x.Ctx)
@@ -90,7 +89,7 @@ func setPaused(paused bool) body {
 		if err := l.SetPaused(paused); err != nil {
 			return err
 		}
-		if err := notify.PauseChanged(x.Ctx, x.DB, config.OS, paused); err != nil {
+		if err := notify.PauseChanged(x.Ctx, x.DB, x.opts.env(), paused); err != nil {
 			_, _ = fmt.Fprintln(x.Stderr, "warning: pause notice failed:", err)
 		}
 		x.JSON(py.Dict{{Key: "paused", Value: l.Paused()}})

@@ -167,7 +167,7 @@ func newLinkSite(t *testing.T) *linkSite {
 func (s *linkSite) link(t *testing.T, args ...string) string {
 	t.Helper()
 	var out, errs bytes.Buffer
-	code := newApp().Run(context.Background(), append([]string{"login-link"}, args...), &out, &errs)
+	code := defaultApp().Run(context.Background(), append([]string{"login-link"}, args...), &out, &errs)
 	if code != cli.ExitOK {
 		t.Fatalf("login-link exit %d: %s", code, errs.String())
 	}
@@ -317,13 +317,13 @@ func TestLoginLinkRefusesBadLifetimesAndMissingPublicURL(t *testing.T) {
 	newLinkSite(t)
 	for _, minutes := range []string{"0", "999"} {
 		var out, errs bytes.Buffer
-		if code := newApp().Run(context.Background(), []string{"login-link", "--minutes", minutes}, &out, &errs); code != cli.ExitUsage || out.Len() != 0 {
+		if code := defaultApp().Run(context.Background(), []string{"login-link", "--minutes", minutes}, &out, &errs); code != cli.ExitUsage || out.Len() != 0 {
 			t.Fatalf("%s minutes: %d %q", minutes, code, out.String())
 		}
 	}
 	t.Setenv("ATRIUM_CORE_PUBLIC_URL", "")
 	var out, errs bytes.Buffer
-	if code := newApp().Run(context.Background(), []string{"login-link"}, &out, &errs); code != cli.ExitError || out.Len() != 0 || !strings.Contains(errs.String(), "public") {
+	if code := defaultApp().Run(context.Background(), []string{"login-link"}, &out, &errs); code != cli.ExitError || out.Len() != 0 || !strings.Contains(errs.String(), "public") {
 		t.Fatalf("no public URL: %d %q %q", code, out.String(), errs.String())
 	}
 }
@@ -380,7 +380,7 @@ func TestLoginLinkMigratesAGoldenDatabaseCopy(t *testing.T) {
 	t.Setenv("ATRIUM_CORE_PUBLIC_URL", "https://atrium.example")
 	t.Cleanup(func() { settings.Default.SetPins(nil) })
 	var imported, importErrs bytes.Buffer
-	if code := newApp().Run(context.Background(), []string{"db", "import-v1", filepath.Join(golden.Dir(), "atrium.db")}, &imported, &importErrs); code != cli.ExitOK {
+	if code := defaultApp().Run(context.Background(), []string{"db", "import-v1", filepath.Join(golden.Dir(), "atrium.db")}, &imported, &importErrs); code != cli.ExitOK {
 		t.Fatalf("import-v1 on a golden copy: %d %s", code, importErrs.String())
 	}
 
@@ -405,7 +405,7 @@ func TestLoginLinkMigratesAGoldenDatabaseCopy(t *testing.T) {
 	}
 
 	var out, errs bytes.Buffer
-	if code := newApp().Run(context.Background(), []string{"login-link"}, &out, &errs); code != cli.ExitOK {
+	if code := defaultApp().Run(context.Background(), []string{"login-link"}, &out, &errs); code != cli.ExitOK {
 		t.Fatalf("login-link on a golden copy: %d %s", code, errs.String())
 	}
 	if !strings.HasPrefix(out.String(), "https://atrium.example/login/link#") {
@@ -436,7 +436,7 @@ func TestLoginLinkMigratesAGoldenDatabaseCopy(t *testing.T) {
 		t.Fatalf("session origin %q: %v", origin, err)
 	}
 	out.Reset()
-	if code := newApp().Run(context.Background(), []string{"login-link"}, &out, &errs); code != cli.ExitOK {
+	if code := defaultApp().Run(context.Background(), []string{"login-link"}, &out, &errs); code != cli.ExitOK {
 		t.Fatalf("second login-link: %d %s", code, errs.String())
 	}
 }
