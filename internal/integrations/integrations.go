@@ -43,6 +43,7 @@ type Conn struct {
 
 type Integration struct {
 	Name, Label, Module string
+	Enables             string
 	URLKey, SecretKey   string
 	Help                string
 	Test                func(ctx context.Context, c Conn) (string, error)
@@ -99,6 +100,13 @@ func Get(name string) (Integration, bool) {
 		}
 	}
 	return Integration{}, false
+}
+
+func (i Integration) gate() string {
+	if i.Enables != "" {
+		return i.Enables
+	}
+	return i.Module
 }
 
 func text(ctx context.Context, q db.Querier, key string) (string, error) {
@@ -309,14 +317,14 @@ type TestFailed struct{ State, Reason string }
 
 func (e *TestFailed) Error() string { return "test failed (" + e.State + "): " + e.Reason }
 
-func TestAndSave(ctx context.Context, d *db.DB, env config.Env, name string, cand Candidate, by string, now float64) error {
+func TestAndSave(ctx context.Context, d *db.DB, env config.Env, name string, cand Candidate, by string, now float64) (bool, error) {
 	i, ok := Get(name)
 	if !ok {
-		return Unknown(name)
+		return false, Unknown(name)
 	}
 	c, err := current(ctx, d, d.Read, i, env)
 	if err != nil {
-		return err
+		return false, err
 	}
 	urlChanged := false
 	if u := strings.TrimRight(strings.TrimSpace(cand.URL), "/"); i.URLKey != "" && u != "" && u != c.URL {
@@ -327,19 +335,19 @@ func TestAndSave(ctx context.Context, d *db.DB, env config.Env, name string, can
 	}
 	state, reason, expires, err := run(ctx, d.Read, i, c)
 	if err != nil {
-		return err
+		return false, err
 	}
 	changed := urlChanged || cand.HasSecret
 	if !changed {
 		if err := record(ctx, d, env, i, state, reason, expires, now, &c); err != nil {
-			return err
+			return false, err
 		}
 	}
 	if state != OK && state != Expiring {
-		return &TestFailed{State: state, Reason: reason}
+		return false, &TestFailed{State: state, Reason: reason}
 	}
 	if !changed {
-		return nil
+		return false, nil
 	}
 	err = d.WithTx(ctx, func(tx *sql.Tx) error {
 		if urlChanged {
@@ -353,9 +361,9 @@ func TestAndSave(ctx context.Context, d *db.DB, env config.Env, name string, can
 		return nil
 	})
 	if err != nil {
-		return err
+		return false, err
 	}
-	return record(ctx, d, env, i, state, reason, expires, now, &c)
+	return true, record(ctx, d, env, i, state, reason, expires, now, &c)
 }
 
 func Disconnect(ctx context.Context, d *db.DB, name string) error {

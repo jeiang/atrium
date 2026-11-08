@@ -103,8 +103,8 @@ behavior-parity target.
   minted per hour; `POST /actions/{token}` redeems it without a session, and
   the resolution is recorded with source `phone` and shown as "approved via
   phone" in `/activity`. Rotating the generated `action_link_key` invalidates
-  outstanding links; the Phone actions settings page shows the outstanding
-  count and rotates the key.
+  outstanding links; the phone action section of the Notifications settings
+  tab shows the outstanding count and rotates the key.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs. Mail accounts are records with a stable
@@ -179,10 +179,9 @@ behavior-parity target.
   registry (`settings.New()`); an `ATRIUM_<MODULE>_<KEY>` variable or
   configuration-file value pins a setting, otherwise a value
   stored in the database applies, and every command reads the same stored
-  values. Every setting that is not a generated secret appears on one
-  generated Configuration page per module, editable there unless pinned,
-  read-only by class, or claimed by a specialist page; the Modules page
-  toggles module flags and the Audit page lists `settings_audit`.
+  values. Settings outside the six settings tabs are set through the CLI,
+  env or Nix; saving a working integration turns its module on, and the
+  settings audit rows show on the Done page.
   Secrets set through `atrium secrets` are stored write-only in the database
   and are never read back or shown; admin keys are refused on a plaintext
   database. A database key (`db.key_file` in the configuration file,

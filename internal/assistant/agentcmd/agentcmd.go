@@ -32,7 +32,7 @@ func threadKind(run string) threads.Kind {
 }
 
 func Command(env config.Env, tools registry.Source, enabled func(module string) bool) *cli.Command {
-	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(env, tools, enabled), runCommand(env, tools)}}
+	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(env, tools, enabled), runCommand(env, tools), subagentsCommand(env, tools)}}
 }
 
 func runCommand(cfgEnv config.Env, tools registry.Source) *cli.Command {

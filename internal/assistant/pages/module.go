@@ -44,7 +44,6 @@ type Options struct {
 	Poll      time.Duration
 	KeepAlive time.Duration
 	Tools     registry.Source
-	Registry  *registry.Registry
 }
 
 type pages struct {
@@ -53,7 +52,6 @@ type pages struct {
 	now       func() float64
 	poll      time.Duration
 	keepalive time.Duration
-	reg       *registry.Registry
 }
 
 const (
@@ -104,15 +102,7 @@ func Module(o Options) web.Module {
 		if keepalive == 0 {
 			keepalive = 15 * time.Second
 		}
-		reg := o.Registry
-		if reg == nil {
-			made, err := o.Tools()
-			if err != nil {
-				panic(err)
-			}
-			reg = made
-		}
-		p := &pages{deps: d, svc: svc, now: now, poll: poll, keepalive: keepalive, reg: reg}
+		p := &pages{deps: d, svc: svc, now: now, poll: poll, keepalive: keepalive}
 		d.OnFrame(p.sidebar)
 		tz := config.From(base).TZName(d.Env)
 		stamp := now()

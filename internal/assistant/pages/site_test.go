@@ -100,10 +100,8 @@ func assistantNav() []web.NavItem {
 		{Section: "library", Label: "Files", URL: "/library/files", Icon: "paperclip", Page: "library_files", Order: 20},
 		{Section: "library", Label: "Scheduled", URL: "/scheduled", Icon: "clock", Page: "scheduled", Order: 40},
 		{Label: "Assistant", URL: "/settings/assistant", Page: "assistant", Settings: true, Primary: true, PrimaryURL: "/settings", Order: 10},
-		{Label: "Subagents", URL: "/settings/subagents", Page: "subagents", Settings: true, Order: 30},
-		{Label: "Prompts", URL: "/settings/prompts", Page: "prompts", Settings: true, Order: 40},
-		{Label: "Notifications", URL: "/settings/notifications", Page: "notifications", Settings: true, Order: 60},
-		{Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 80},
+		{Label: "Notifications", URL: "/settings/notifications", Page: "notifications", Settings: true, Order: 40},
+		{Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 60},
 	}
 }
 
@@ -135,7 +133,7 @@ func newSiteOn(t *testing.T, d *db.DB, options ...siteOption) *site {
 	reg := allTools(t, s.fetch)
 	s.runner.Registry = reg
 	s.runner.Undoers = toolset.Undoers(config.OS)
-	module := Module(Options{Runner: s.runner, Registry: reg, Client: s.api.Client(), Now: s.now, Poll: 10 * time.Millisecond, KeepAlive: 200 * time.Millisecond})
+	module := Module(Options{Runner: s.runner, Client: s.api.Client(), Now: s.now, Poll: 10 * time.Millisecond, KeepAlive: 200 * time.Millisecond})
 	s.srv, err = web.New(web.Options{Cfg: cfg, Env: env, DB: d, Settings: settingsReg, State: st, Auth: []string{web.AuthLocal}, Render: render, Modules: []web.Module{module}})
 	if err != nil {
 		t.Fatal(err)

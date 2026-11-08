@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
@@ -38,9 +39,11 @@ const (
 var log = logx.Logger("atrium.integrations")
 
 type page struct {
-	Records []Record `json:"records"`
-	Failed  string   `json:"failed"`
-	Error   string   `json:"error"`
+	Records []Record    `json:"records"`
+	Failed  string      `json:"failed"`
+	Error   string      `json:"error"`
+	HoldFor string      `json:"hold_for"`
+	Hold    module.Hold `json:"hold"`
 }
 
 type handlers struct{ d *web.Deps }
@@ -173,18 +176,46 @@ func (h handlers) ctx(r *http.Request) context.Context {
 	return audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
 }
 
+func (h handlers) enable(ctx context.Context, name string) module.Hold {
+	set := module.SetFrom(h.d.Ctx)
+	if set == nil || name == "" {
+		return module.Hold{}
+	}
+	hold, err := set.Enable(ctx, h.d.DB, name)
+	if err != nil {
+		panic(err)
+	}
+	return hold
+}
+
+func (h handlers) held(ctx context.Context, name string) module.Hold {
+	set := module.SetFrom(h.d.Ctx)
+	if set == nil {
+		return module.Hold{}
+	}
+	hold, err := set.Held(ctx, h.d.DB.Read, name)
+	if err != nil {
+		panic(err)
+	}
+	return hold
+}
+
 func (h handlers) test(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	form := web.FormValues(r)
 	secret := web.FormString(form, "secret", "")
-	err := TestAndSave(h.ctx(r), h.d.DB, h.d.Env, name, Candidate{URL: web.FormString(form, "url", ""), Secret: secret, HasSecret: secret != ""}, "ui", stamp())
+	saved, err := TestAndSave(h.ctx(r), h.d.DB, h.d.Env, name, Candidate{URL: web.FormString(form, "url", ""), Secret: secret, HasSecret: secret != ""}, "ui", stamp())
 	if err != nil && h.refuse(w, r, name, err) {
 		return
 	}
 	if err != nil {
 		panic(err)
 	}
-	h.render(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: "Connection works"}, page{})
+	data := page{}
+	if i, _ := Get(name); saved {
+		data.HoldFor, data.Hold = name, h.enable(h.ctx(r), i.gate())
+	}
+	h.render(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: "Connection works"}, data)
 }
 
 func (h handlers) disconnect(w http.ResponseWriter, r *http.Request) {

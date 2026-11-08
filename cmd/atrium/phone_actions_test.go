@@ -22,11 +22,12 @@ import (
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
-func TestPhoneActionsPageShowsOutstandingAndRevokes(t *testing.T) {
+func TestPhoneActionsControlsLiveOnTheNotificationsPage(t *testing.T) {
 	dir := t.TempDir()
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	db := filepath.Join(dir, "atrium.db")
+	d := mustConnect(t, db)
 	ctx := settings.With(context.Background(), settings.New())
 	now := float64(time.Now().Unix())
 	approve, _, err := actionlink.MintPair(ctx, d.Write, 1, "fp", now)
@@ -35,21 +36,44 @@ func TestPhoneActionsPageShowsOutstandingAndRevokes(t *testing.T) {
 	}
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
-	code, body, _ := fetch(t, client, http.MethodGet, base+"/settings/phone-actions", nil)
+	code, body, _ := fetch(t, client, http.MethodGet, base+"/settings/notifications", nil)
 	if code != http.StatusOK {
-		t.Fatalf("page = %d", code)
+		t.Fatalf("notifications page = %d", code)
 	}
-	for _, want := range []string{"Phone actions", "1 outstanding link", "web only", "Revoke all"} {
+	for _, want := range []string{`id="phone-actions"`, "1 outstanding link", "web only", "Revoke all", `action="/settings/phone-actions"`} {
 		if !contains(body, want) {
-			t.Fatalf("page misses %q", want)
+			t.Fatalf("notifications page misses %q", want)
 		}
 	}
-	if code, _, _ := fetch(t, client, http.MethodPost, base+"/settings/phone-actions/revoke", url.Values{}); code != http.StatusOK {
-		t.Fatalf("revoke = %d", code)
+	if strings.Contains(body, `href="/settings/phone-actions"`) {
+		t.Error("the settings tabs still link the phone actions page")
 	}
-	_, body, _ = fetch(t, client, http.MethodGet, base+"/settings/phone-actions", nil)
+	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/phone-actions", nil); code == http.StatusOK {
+		t.Errorf("GET /settings/phone-actions = %d, want it gone", code)
+	}
+
+	noFollow := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	code, _, header := fetch(t, noFollow, http.MethodPost, base+"/settings/phone-actions", url.Values{"enabled": {"1"}, "kind": {"reminder", "gmail_label_merge"}})
+	if code != http.StatusSeeOther || header.Get("Location") != "/settings/notifications#phone-actions" {
+		t.Fatalf("save = %d to %q", code, header.Get("Location"))
+	}
+	if v, _ := storedSetting(t, db, policy.EnabledKey); v != "true" {
+		t.Fatalf("stored %s = %q", policy.EnabledKey, v)
+	}
+	if v, _ := storedSetting(t, db, policy.KindsKey); v != "reminder" {
+		t.Fatalf("stored %s = %q, want the web-only kind dropped", policy.KindsKey, v)
+	}
+	_, body, _ = fetch(t, client, http.MethodGet, base+"/settings/notifications", nil)
+	if !contains(body, `name="enabled" value="1" checked`) || !contains(body, `name="kind" value="reminder" checked`) || contains(body, `name="kind" value="memory" checked`) {
+		t.Fatal("notifications page does not show the saved phone actions policy")
+	}
+
+	code, body, _ = fetch(t, client, http.MethodPost, base+"/settings/phone-actions/revoke", url.Values{})
+	if code != http.StatusOK || !contains(body, `id="phone-actions"`) {
+		t.Fatalf("revoke = %d, want the notifications page back", code)
+	}
 	if !contains(body, "0 outstanding") {
-		t.Fatalf("page after revoke misses the zero count")
+		t.Fatalf("notifications page after revoke misses the zero count")
 	}
 	if _, err := actionlink.Verify(ctx, d.Read, approve, now); err != actionlink.ErrInvalid {
 		t.Fatalf("link after revoke = %v, want ErrInvalid", err)
@@ -88,7 +112,7 @@ func TestActionLinkEndpointRefusesReplayAlterationRotationAndDisallowedKinds(t *
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, page, _ := fetch(t, client, http.MethodGet, base+"/settings/phone-actions", nil)
+	_, page, _ := fetch(t, client, http.MethodGet, base+"/settings/notifications", nil)
 	var enabled string
 	_ = d.Read.QueryRow("SELECT value FROM settings WHERE key = ?", policy.EnabledKey).Scan(&enabled)
 	code, postBody, _ := fetch(t, client, http.MethodPost, base+"/actions/"+dismiss, nil)

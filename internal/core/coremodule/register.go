@@ -30,7 +30,6 @@ import (
 	"github.com/jeiang/atrium/internal/proposals/proposalscmd"
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
-	"github.com/jeiang/atrium/internal/settings/settingspages"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -67,17 +66,11 @@ func (m Module) Register(mc module.Context) module.Registration {
 			{Start: startOps},
 			{Module: startEmbed},
 			{Module: integrations.Module, Templates: integrations.Templates(), Nav: []web.NavItem{
-				{Label: "Integrations", URL: "/settings/integrations", Page: "integrations", Settings: true, Order: 70},
+				{Label: "Integrations", URL: "/settings/integrations", Page: "integrations", Settings: true, Order: 30},
 			}},
-			{Module: settingspages.Module, Templates: settingspages.Templates(), Nav: []web.NavItem{
-				{Label: "Configuration", URL: "/settings/config", Page: "config", Settings: true, Order: 110},
-				{Label: "Audit", URL: "/settings/audit", Page: "audit", Settings: true, Order: 120},
-			}},
-			{Module: actionlinkpages.Module, Templates: actionlinkpages.Templates(), Nav: []web.NavItem{
-				{Label: "Phone actions", URL: "/settings/phone-actions", Page: "phone_actions", Settings: true, Order: 61},
-			}},
+			{Module: actionlinkpages.Module, Templates: actionlinkpages.Templates()},
 			{Nav: []web.NavItem{
-				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Auth: true, Order: 90},
+				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Auth: true, Order: 50},
 			}},
 		},
 		Commands: []*cli.Command{

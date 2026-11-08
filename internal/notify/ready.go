@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations"
+	modules "github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/ops"
 )
 
@@ -17,7 +18,7 @@ const Integration = "ntfy"
 func init() {
 	ops.Ready(ops.Check{Name: "ntfy", Remote: true, Run: health})
 	integrations.Register(integrations.Integration{
-		Name: Integration, Label: "ntfy", Module: module, URLKey: KeyURL,
+		Name: Integration, Label: "ntfy", Module: module, Enables: modules.Notifications, URLKey: KeyURL,
 		Help: "Your ntfy server; the token is optional.",
 		Test: func(ctx context.Context, c integrations.Conn) (string, error) {
 			return "", healthOf(ctx, c.HTTP, c.URL)
