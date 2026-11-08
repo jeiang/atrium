@@ -13,6 +13,7 @@ func TestHistoryTabAndZoomRoutes(t *testing.T) {
 	s.api.Push(reply1(anthropictest.Text("hi")))
 	thread := s.startThread("hello")
 	s.exec("DELETE FROM memory_nodes WHERE thread_id = ?", thread)
+	s.exec("DELETE FROM memory_views WHERE thread_id = ?", thread)
 	s.exec("INSERT INTO memory_nodes (thread_id, level, idx, text, bytes, state, src_from_seq, src_to_seq, created_at) VALUES (?, 0, 0, 'first', 5, 'direct', 1, 1, 0), (?, 0, 1, 'second', 6, 'direct', 2, 2, 0), (?, 1, 0, 'summary one', 11, 'summary', 1, 2, 0)", thread, thread, thread)
 	page := status(t, s.get(fmt.Sprintf("/chat/%d", thread)), http.StatusOK)
 	mustContain(t, page, "panel-tab-history")
