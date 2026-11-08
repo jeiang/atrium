@@ -4,8 +4,6 @@ import (
 	"strings"
 
 	"regexp"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var (
@@ -15,7 +13,7 @@ var (
 )
 
 func Normalize(value string) string {
-	text := py.Strip(value)
+	text := strings.TrimSpace(value)
 	if loc := dashed.FindStringIndex(text); loc != nil && loc[0] == 0 && loc[1] == len(text) {
 		return strings.ToLower(text)
 	}

@@ -7,7 +7,7 @@
     <nav class="breadcrumb" aria-label="Location in Notion">
       <ol class="flex flex-wrap items-center">
         {{range $p.path}}
-        <li class="inline-flex items-center">{{if .id}}<a href="/notion/{{urlencode .id}}">{{.title}}</a>{{else}}<span>{{.title}}</span>{{end}}</li>
+        <li class="inline-flex items-center"><span>{{.title}}</span></li>
         <li aria-hidden="true" class="inline-flex items-center"><span>/</span></li>
         {{end}}
         <li class="inline-flex items-center"><span aria-current="page" class="text-foreground">{{or $p.title "Untitled"}}</span></li>

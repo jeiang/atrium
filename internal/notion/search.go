@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"slices"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
@@ -17,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/search"
 	"github.com/jeiang/atrium/internal/notionid"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const Account = "notion"
@@ -25,11 +23,10 @@ const Account = "notion"
 const hitSelect = "SELECT rid, id, title, path, url, last_edited_time, edited_ts, private FROM notion_pages " +
 	"WHERE in_trash = 0 AND rid IN (SELECT value FROM json_each(?))"
 
-type Querier = search.Querier
+type Querier = db.Querier
 
 type PathPart struct {
-	ID    *string `json:"id"`
-	Title string  `json:"title"`
+	Title string `json:"title"`
 }
 
 type PageRef struct {
@@ -94,65 +91,20 @@ type PropertyRow struct {
 	Value string `json:"value"`
 }
 
-func propertyText(prop py.Dict) string {
-	kind, _ := field(prop, "type").(string)
-	value := field(prop, kind)
-	switch kind {
-	case "title", "rich_text":
-		items, _ := value.([]any)
-		return richText(items)
-	case "select", "status":
-		return text(asDict(value), "name")
-	case "multi_select":
-		var names []string
-		items, _ := value.([]any)
-		for _, v := range items {
-			names = append(names, text(asDict(v), "name"))
-		}
-		return strings.Join(names, ", ")
-	case "date":
-		d := asDict(value)
-		var parts []string
-		for _, k := range []string{"start", "end"} {
-			if s := field(d, k); truthy(s) {
-				parts = append(parts, pyStr(s))
-			}
-		}
-		return strings.Join(parts, " → ")
-	case "relation":
-		items, _ := value.([]any)
-		if len(items) > 0 {
-			return strconv.Itoa(len(items)) + " linked"
-		}
-		return ""
-	case "people":
-		var names []string
-		items, _ := value.([]any)
-		for _, v := range items {
-			names = append(names, text(asDict(v), "name"))
-		}
-		return strings.Join(names, ", ")
-	}
-	switch value.(type) {
-	case nil, py.Dict, []any:
-		return ""
-	}
-	return pyStr(value)
-}
+func propertyText(prop Property) string { return prop.Text() }
 
 func propertyRows(properties string) ([]PropertyRow, error) {
-	v, err := py.JSONLoads([]byte(properties))
-	if err != nil {
+	var props map[string]Property
+	if err := json.Unmarshal([]byte(properties), &props); err != nil {
 		return nil, err
 	}
 	rows := []PropertyRow{}
-	for _, p := range asDict(v) {
-		prop := asDict(p.Value)
-		if text(prop, "type") == "title" {
+	for name, prop := range props {
+		if prop.Type == "title" {
 			continue
 		}
-		if value := propertyText(prop); value != "" {
-			rows = append(rows, PropertyRow{Name: p.Key, Value: value})
+		if value := prop.Text(); value != "" {
+			rows = append(rows, PropertyRow{Name: name, Value: value})
 		}
 	}
 	return rows, nil

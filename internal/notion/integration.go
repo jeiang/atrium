@@ -2,12 +2,12 @@ package notion
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -41,13 +41,16 @@ func SharedPages(ctx context.Context, token string, hc *http.Client) (shared int
 	client := NewClient(token)
 	client.HTTP = hc
 	client.API.MaxRetries = 0
-	if _, err := client.Request(ctx, http.MethodGet, "/v1/users/me", nil, nil); err != nil {
+	if err := client.do(ctx, http.MethodGet, "/v1/users/me", nil, nil); err != nil {
 		return 0, false, err
 	}
-	filter := py.Dict{{Key: "property", Value: "object"}, {Key: "value", Value: "page"}}
-	reply, err := client.Request(ctx, http.MethodPost, "/v1/search", py.Dict{{Key: "filter", Value: filter}, {Key: pagedKeyPerPage, Value: 100}}, nil)
-	if err != nil {
+	var reply struct {
+		Results []json.RawMessage `json:"results"`
+		HasMore bool              `json:"has_more"`
+	}
+	body := map[string]any{"filter": map[string]any{"property": "object", "value": "page"}, pagedKeyPerPage: 100}
+	if err := client.do(ctx, http.MethodPost, "/v1/search", body, &reply); err != nil {
 		return 0, false, err
 	}
-	return len(list(reply, "results")), truthy(field(reply, "has_more")), nil
+	return len(reply.Results), reply.HasMore, nil
 }

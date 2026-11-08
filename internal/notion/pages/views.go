@@ -10,8 +10,7 @@ import (
 )
 
 type crumb struct {
-	ID    *string `json:"id"`
-	Title string  `json:"title"`
+	Title string `json:"title"`
 }
 
 type property struct {
@@ -77,7 +76,7 @@ type hubView struct {
 func crumbs(path []notion.PathPart) []crumb {
 	out := make([]crumb, len(path))
 	for i, part := range path {
-		out[i] = crumb{ID: part.ID, Title: part.Title}
+		out[i] = crumb{Title: part.Title}
 	}
 	return out
 }

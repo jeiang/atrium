@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notionid"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/textutil"
 	"github.com/jeiang/atrium/internal/timex"
 )
@@ -561,16 +560,16 @@ func (w Wiki) LogPageID(ctx context.Context, d *db.DB, client *Client, root stri
 	err = d.Read.QueryRowContext(ctx,
 		"SELECT id FROM notion_pages WHERE in_trash = 0 AND parent_type = 'page_id' AND parent_id = ? AND title = ?", root, w.LogTitle).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
-		page, err := client.CreatePage(ctx, py.Dict{
-			{Key: "parent", Value: py.Dict{{Key: "page_id", Value: root}}},
-			{Key: "properties", Value: py.Dict{{Key: "title", Value: py.Dict{{Key: "title", Value: []any{
-				py.Dict{{Key: "type", Value: "text"}, {Key: "text", Value: py.Dict{{Key: "content", Value: w.LogTitle}}}}}}}}}},
-			{Key: "markdown", Value: ""},
+		page, err := client.CreatePage(ctx, map[string]any{
+			"parent": map[string]any{"page_id": root},
+			"properties": map[string]any{"title": map[string]any{"title": []any{
+				map[string]any{"type": "text", "text": map[string]any{"content": w.LogTitle}}}}},
+			"markdown": "",
 		})
 		if err != nil {
 			return "", err
 		}
-		id = notionid.Normalize(text(page, "id"))
+		id = notionid.Normalize(page.ID)
 	} else if err != nil {
 		return "", err
 	}
@@ -584,17 +583,17 @@ func PrependLog(ctx context.Context, client *Client, logID string, lines []strin
 	if err != nil {
 		return "", err
 	}
-	if truthy(field(current, "truncated")) {
+	if current.Truncated {
 		return "", WikiError("the Wiki Log page is too large to update safely; archive it and let atrium start a new one")
 	}
-	previous := text(current, "markdown")
+	previous := current.Markdown
 	updated := strings.Join(lines, "\n")
 	if strings.TrimSpace(previous) != "" {
 		updated += "\n" + strings.TrimLeft(previous, "\n")
 	}
-	_, err = client.UpdateMarkdown(ctx, logID, py.Dict{
-		{Key: "type", Value: "replace_content"},
-		{Key: "replace_content", Value: py.Dict{{Key: "new_str", Value: updated}}},
+	err = client.UpdateMarkdown(ctx, logID, map[string]any{
+		"type":            "replace_content",
+		"replace_content": map[string]any{"new_str": updated},
 	})
 	return previous, err
 }

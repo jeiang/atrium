@@ -15,7 +15,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations/transport"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -77,10 +76,6 @@ func (c *Client) Configure(ctx context.Context, q db.Querier) error {
 	c.API, c.HTTP = limits, client
 	return nil
 }
-
-func (c *Client) String() string { return "NotionClient()" }
-
-func (c *Client) GoString() string { return "NotionClient()" }
 
 var epoch = time.Now()
 
@@ -161,254 +156,180 @@ func (c *Client) retryDelay(status int, headers http.Header, attempt int) float6
 
 func refusal(status int, raw []byte) *Error {
 	e := &Error{Status: status, Code: "error"}
-	if payload, ok := mustDict(raw); ok {
-		if v, ok := payload.Get("code"); ok {
-			e.Code = pyStr(v)
+	var payload struct {
+		Code    string `json:"code"`
+		Message string `json:"message"`
+	}
+	if json.Unmarshal(raw, &payload) == nil {
+		if payload.Code != "" {
+			e.Code = payload.Code
 		}
-		if v, ok := payload.Get("message"); ok {
-			e.Message = pyStr(v)
-		}
+		e.Message = payload.Message
 	}
 	return e
 }
 
-func mustDict(raw []byte) (py.Dict, bool) {
-	v, err := py.JSONLoads(raw)
-	if err != nil {
-		return nil, false
-	}
-	d, ok := v.(py.Dict)
-	return d, ok
-}
-
-func pyStr(v any) string {
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return fmt.Sprint(v)
-}
-
-func truthy(v any) bool {
-	switch x := v.(type) {
-	case nil:
-		return false
-	case bool:
-		return x
-	case string:
-		return x != ""
-	case float64:
-		return x != 0
-	case int:
-		return x != 0
-	case int64:
-		return x != 0
-	case []any:
-		return len(x) > 0
-	case py.Dict:
-		return len(x) > 0
-	case map[string]any:
-		return len(x) > 0
-	}
-	return true
-}
-
-type Query []py.Pair
-
-func (q Query) encode() string {
-	var parts []string
-	for _, p := range q {
-		if p.Value == nil {
-			continue
-		}
-		parts = append(parts, url.QueryEscape(p.Key)+"="+url.QueryEscape(pyStr(p.Value)))
-	}
-	return strings.Join(parts, "&")
-}
-
-func (c *Client) Request(ctx context.Context, method, path string, body any, query Query) (py.Dict, error) {
+func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
 	target := c.BaseURL + path
-	if enc := query.encode(); enc != "" {
-		target += "?" + enc
-	}
 	var data []byte
 	if body != nil {
 		encoded, err := json.Marshal(body)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		data = encoded
 	}
 	for attempt := 0; ; attempt++ {
 		if err := c.pace(ctx); err != nil {
-			return nil, err
+			return err
 		}
 		status, headers, raw, err := c.send(ctx, method, target, data)
 		if err != nil {
-			return nil, err
+			return err
 		}
 		if status < 300 {
-			if len(raw) == 0 {
-				return py.Dict{}, nil
+			if out == nil || len(raw) == 0 {
+				return nil
 			}
-			v, err := py.JSONLoads(raw)
-			if err != nil {
-				return nil, err
-			}
-			d, _ := v.(py.Dict)
-			return d, nil
+			return json.Unmarshal(raw, out)
 		}
 		if retryable(status) && attempt < c.API.MaxRetries {
 			if err := c.Sleep(ctx, c.retryDelay(status, headers, attempt)); err != nil {
-				return nil, err
+				return err
 			}
 			c.last = c.Clock()
 			continue
 		}
-		return nil, refusal(status, raw)
+		return refusal(status, raw)
 	}
 }
 
-func (c *Client) Each(ctx context.Context, method, path string, body py.Dict, query Query, fn func(py.Dict) error) error {
+func paged(body any, cursor string, size int) (any, error) {
+	fields := map[string]any{}
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal(encoded, &fields); err != nil {
+			return nil, err
+		}
+	}
+	fields[pagedKeyPerPage] = size
+	if cursor != "" {
+		fields[pagedKeyCursor] = cursor
+	}
+	return fields, nil
+}
+
+func (c *Client) Each(ctx context.Context, method, path string, body any, query url.Values, fn func(json.RawMessage) error) error {
 	cursor := ""
 	for {
-		var reply py.Dict
+		var reply struct {
+			Results    []json.RawMessage `json:"results"`
+			NextCursor string            `json:"next_cursor"`
+			HasMore    bool              `json:"has_more"`
+		}
 		var err error
 		if method == http.MethodPost {
-			paged := append(append(py.Dict{}, body...), py.Pair{Key: pagedKeyPerPage, Value: c.API.PageSize})
-			if cursor != "" {
-				paged = append(paged, py.Pair{Key: pagedKeyCursor, Value: cursor})
+			pagedBody, pageErr := paged(body, cursor, c.API.PageSize)
+			if pageErr != nil {
+				return pageErr
 			}
-			reply, err = c.Request(ctx, method, path, paged, nil)
+			err = c.do(ctx, method, path, pagedBody, &reply)
 		} else {
-			paged := append(append(Query{}, query...), py.Pair{Key: pagedKeyPerPage, Value: c.API.PageSize})
-			if cursor != "" {
-				paged = append(paged, py.Pair{Key: pagedKeyCursor, Value: cursor})
+			q := url.Values{}
+			for key, values := range query {
+				q[key] = append(q[key], values...)
 			}
-			reply, err = c.Request(ctx, method, path, nil, paged)
+			q.Set(pagedKeyPerPage, strconv.Itoa(c.API.PageSize))
+			if cursor != "" {
+				q.Set(pagedKeyCursor, cursor)
+			}
+			err = c.do(ctx, method, path+"?"+q.Encode(), nil, &reply)
 		}
 		if err != nil {
 			return err
 		}
-		for _, item := range list(reply, "results") {
-			if err := fn(asDict(item)); err != nil {
+		for _, item := range reply.Results {
+			if err := fn(item); err != nil {
 				return err
 			}
 		}
-		next, _ := reply.Get("next_cursor")
-		cursor, _ = next.(string)
-		if !truthy(field(reply, "has_more")) || cursor == "" {
+		if !reply.HasMore || reply.NextCursor == "" {
 			return nil
 		}
+		cursor = reply.NextCursor
 	}
 }
 
-func (c *Client) Search(ctx context.Context, object string, inTrash bool, fn func(py.Dict) error) error {
-	filter := py.Dict{{Key: "property", Value: "object"}, {Key: "value", Value: object}}
-	if inTrash {
-		filter = append(filter, py.Pair{Key: "in_trash", Value: true})
-	}
-	return c.Each(ctx, http.MethodPost, "/v1/search", py.Dict{{Key: "filter", Value: filter}}, nil, fn)
-}
-
-func (c *Client) GetPage(ctx context.Context, pageID string) (py.Dict, error) {
-	return c.Request(ctx, http.MethodGet, "/v1/pages/"+pageID, nil, nil)
-}
-
-func (c *Client) PageMarkdown(ctx context.Context, pageID string) (py.Dict, error) {
-	return c.Request(ctx, http.MethodGet, "/v1/pages/"+pageID+"/markdown", nil, nil)
-}
-
-func (c *Client) UpdateMarkdown(ctx context.Context, pageID string, payload any) (py.Dict, error) {
-	return c.Request(ctx, http.MethodPatch, "/v1/pages/"+pageID+"/markdown", payload, nil)
-}
-
-func (c *Client) PatchProperties(ctx context.Context, pageID string, properties any) (py.Dict, error) {
-	return c.Request(ctx, http.MethodPatch, "/v1/pages/"+pageID, py.Dict{{Key: "properties", Value: properties}}, nil)
-}
-
-func (c *Client) MovePage(ctx context.Context, pageID string, parent any) (py.Dict, error) {
-	return c.Request(ctx, http.MethodPost, "/v1/pages/"+pageID+"/move", py.Dict{{Key: "parent", Value: parent}}, nil)
-}
-
-func (c *Client) SetDatabaseTrash(ctx context.Context, databaseID string, inTrash bool) (py.Dict, error) {
-	return c.Request(ctx, http.MethodPatch, "/v1/databases/"+databaseID, py.Dict{{Key: "in_trash", Value: inTrash}}, nil)
-}
-
-func (c *Client) CreatePage(ctx context.Context, body any) (py.Dict, error) {
-	return c.Request(ctx, http.MethodPost, "/v1/pages", body, nil)
-}
-
-func (c *Client) SetTrash(ctx context.Context, pageID string, inTrash bool) (py.Dict, error) {
-	return c.Request(ctx, http.MethodPatch, "/v1/pages/"+pageID, py.Dict{{Key: "in_trash", Value: inTrash}}, nil)
-}
-
-func (c *Client) AppendChildren(ctx context.Context, blockID string, children any) (py.Dict, error) {
-	return c.Request(ctx, http.MethodPatch, "/v1/blocks/"+blockID+"/children", py.Dict{{Key: "children", Value: children}}, nil)
-}
-
-func (c *Client) BlockChildren(ctx context.Context, blockID string, fn func(py.Dict) error) error {
-	return c.Each(ctx, http.MethodGet, "/v1/blocks/"+blockID+"/children", nil, nil, fn)
-}
-
-func (c *Client) PropertyItems(ctx context.Context, pageID, propertyID string, fn func(py.Dict) error) error {
-	return c.Each(ctx, http.MethodGet, "/v1/pages/"+pageID+"/properties/"+quote(propertyID), nil, nil, fn)
-}
-
-func quote(s string) string {
-	var b strings.Builder
-	for _, c := range []byte(s) {
-		switch {
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9', c == '_', c == '.', c == '-', c == '~':
-			b.WriteByte(c)
-		default:
-			b.WriteString("%" + strings.ToUpper(strconv.FormatInt(int64(c)+0x100, 16)[1:]))
+func (c *Client) Search(ctx context.Context, object string, fn func(SearchResult) error) error {
+	body := map[string]any{"filter": map[string]any{"property": "object", "value": object}}
+	return c.Each(ctx, http.MethodPost, "/v1/search", body, nil, func(raw json.RawMessage) error {
+		result, err := decode[SearchResult](raw)
+		if err != nil {
+			return err
 		}
-	}
-	return b.String()
+		return fn(result)
+	})
 }
 
-func asDict(v any) py.Dict {
-	d, _ := v.(py.Dict)
-	return d
+func (c *Client) GetPage(ctx context.Context, pageID string) (RemotePage, error) {
+	var page RemotePage
+	err := c.do(ctx, http.MethodGet, "/v1/pages/"+pageID, nil, &page)
+	return page, err
 }
 
-func field(d py.Dict, key string) any {
-	v, _ := d.Get(key)
-	return v
+func (c *Client) PageMarkdown(ctx context.Context, pageID string) (Markdown, error) {
+	var markdown Markdown
+	err := c.do(ctx, http.MethodGet, "/v1/pages/"+pageID+"/markdown", nil, &markdown)
+	return markdown, err
 }
 
-func text(d py.Dict, key string) string {
-	s, _ := field(d, key).(string)
-	return s
+func (c *Client) UpdateMarkdown(ctx context.Context, pageID string, payload any) error {
+	return c.do(ctx, http.MethodPatch, "/v1/pages/"+pageID+"/markdown", payload, nil)
 }
 
-func list(d py.Dict, key string) []any {
-	l, _ := field(d, key).([]any)
-	return l
+func (c *Client) MovePage(ctx context.Context, pageID string, parent any) error {
+	return c.do(ctx, http.MethodPost, "/v1/pages/"+pageID+"/move", map[string]any{"parent": parent}, nil)
 }
 
-func richText(items []any) string {
-	var b strings.Builder
-	for _, item := range items {
-		b.WriteString(text(asDict(item), "plain_text"))
-	}
-	return b.String()
+func (c *Client) CreatePage(ctx context.Context, body any) (RemotePage, error) {
+	var page RemotePage
+	err := c.do(ctx, http.MethodPost, "/v1/pages", body, &page)
+	return page, err
+}
+
+func (c *Client) SetTrash(ctx context.Context, pageID string, inTrash bool) error {
+	return c.do(ctx, http.MethodPatch, "/v1/pages/"+pageID, map[string]any{"in_trash": inTrash}, nil)
+}
+
+func (c *Client) AppendChildren(ctx context.Context, blockID string, children any) error {
+	return c.do(ctx, http.MethodPatch, "/v1/blocks/"+blockID+"/children", map[string]any{"children": children}, nil)
+}
+
+func (c *Client) BlockChildren(ctx context.Context, blockID string, fn func(Block) error) error {
+	return c.Each(ctx, http.MethodGet, "/v1/blocks/"+blockID+"/children", nil, nil, func(raw json.RawMessage) error {
+		block, err := decode[Block](raw)
+		if err != nil {
+			return err
+		}
+		return fn(block)
+	})
 }
 
 func (c *Client) BlocksMarkdown(ctx context.Context, blockID string, depth int) (string, error) {
 	var lines []string
 	number := 0
-	err := c.BlockChildren(ctx, blockID, func(block py.Dict) error {
-		kind, _ := field(block, "type").(string)
-		data := asDict(field(block, kind))
-		body := richText(list(data, "rich_text"))
-		if kind == "numbered_list_item" {
+	err := c.BlockChildren(ctx, blockID, func(block Block) error {
+		body := block.text()
+		if block.Type == "numbered_list_item" {
 			number++
 		} else {
 			number = 0
 		}
 		line := body
-		switch kind {
+		switch block.Type {
 		case "heading_1":
 			line = "# " + body
 		case "heading_2":
@@ -421,7 +342,7 @@ func (c *Client) BlocksMarkdown(ctx context.Context, blockID string, depth int) 
 			line = strconv.Itoa(number) + ". " + body
 		case "to_do":
 			mark := " "
-			if truthy(field(data, "checked")) {
+			if block.ToDo != nil && block.ToDo.Checked {
 				mark = "x"
 			}
 			line = "- [" + mark + "] " + body
@@ -433,8 +354,8 @@ func (c *Client) BlocksMarkdown(ctx context.Context, blockID string, depth int) 
 		if line != "" {
 			lines = append(lines, strings.Repeat("  ", depth)+line)
 		}
-		if truthy(field(block, "has_children")) && depth < c.API.BlockDepth && kind != "child_page" {
-			nested, err := c.BlocksMarkdown(ctx, text(block, "id"), depth+1)
+		if block.HasChildren && depth < c.API.BlockDepth && block.Type != "child_page" {
+			nested, err := c.BlocksMarkdown(ctx, block.ID, depth+1)
 			if err != nil {
 				return err
 			}

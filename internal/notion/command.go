@@ -11,7 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/passrun"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type Options struct {
@@ -95,12 +94,19 @@ func (o Options) syncPass(ctx context.Context, d *db.DB, cfg config.Config, env 
 	if err != nil {
 		return err
 	}
-	out := py.Dict{
-		{Key: "sources", Value: counts.Sources}, {Key: "pages", Value: counts.Pages}, {Key: "new", Value: stats.New},
-		{Key: "updated", Value: stats.Updated}, {Key: "unchanged", Value: stats.Unchanged}, {Key: "trashed", Value: stats.Trashed},
-		{Key: "failed", Value: stats.Failed}, {Key: "embedded", Value: counts.Embedded}, {Key: "seconds", Value: stats.Seconds},
-		{Key: "live", Value: counts.Live}, {Key: "private", Value: counts.Private},
-	}
+	out := struct {
+		Sources   int64   `json:"sources"`
+		Pages     int64   `json:"pages"`
+		New       int     `json:"new"`
+		Updated   int     `json:"updated"`
+		Unchanged int     `json:"unchanged"`
+		Trashed   int     `json:"trashed"`
+		Failed    int     `json:"failed"`
+		Embedded  int64   `json:"embedded"`
+		Seconds   float64 `json:"seconds"`
+		Live      int64   `json:"live"`
+		Private   int64   `json:"private"`
+	}{counts.Sources, counts.Pages, stats.New, stats.Updated, stats.Unchanged, stats.Trashed, stats.Failed, counts.Embedded, stats.Seconds, counts.Live, counts.Private}
 	encoded, err := json.Marshal(out)
 	if err != nil {
 		return err

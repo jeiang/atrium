@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notionid"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -43,8 +42,6 @@ func truthy(v any) bool {
 	case []any:
 		return len(v) > 0
 	case map[string]any:
-		return len(v) > 0
-	case py.Dict:
 		return len(v) > 0
 	}
 	return true
@@ -88,42 +85,40 @@ func wikiOf(ctx context.Context, tc *tool.Context) (notion.Wiki, error) {
 	return wiki, nil
 }
 
-func livePageOf(ctx context.Context, q db.Querier, client *notion.Client, pageID string) (py.Dict, error) {
+func livePageOf(ctx context.Context, q db.Querier, client *notion.Client, pageID string) (notion.RemotePage, error) {
 	page, err := client.GetPage(ctx, pageID)
 	if err != nil {
-		return nil, err
+		return notion.RemotePage{}, err
 	}
-	if truthy(dictGet(page, "in_trash")) {
-		return nil, tool.Error("page is in the trash")
+	if page.InTrash {
+		return notion.RemotePage{}, tool.Error("page is in the trash")
 	}
-	properties, _ := dictGet(page, "properties").(py.Dict)
 	sensitivity, err := notion.LoadSensitivity(ctx, q)
 	if err != nil {
-		return nil, err
+		return notion.RemotePage{}, err
 	}
-	if sensitivity.IsPrivate(sensitivity.Of(properties)) {
-		return nil, tool.Error("page is private")
+	if sensitivity.IsPrivate(sensitivity.Of(page.Properties)) {
+		return notion.RemotePage{}, tool.Error("page is private")
 	}
 	return page, nil
 }
 
 func richText(text string) []any {
-	return []any{py.Dict{{Key: "type", Value: "text"}, {Key: "text", Value: py.Dict{{Key: "content", Value: text}}}}}
+	return []any{map[string]any{"type": "text", "text": map[string]any{"content": text}}}
 }
 
 type summary struct{ pageID, title, url string }
 
-func summarize(page py.Dict) summary {
-	return summary{normalize(str(page, "id")), notion.PageTitle(page), str(page, "url")}
+func summarize(page notion.RemotePage) summary {
+	return summary{normalize(page.ID), page.Title(), page.URL}
 }
 
 func (s summary) dict() map[string]any {
 	return map[string]any{"page_id": s.pageID, "title": s.title, "url": s.url}
 }
 
-func parentID(page py.Dict) string {
-	parent, _ := dictGet(page, "parent").(py.Dict)
-	kind, id := notion.ParentRef(parent)
+func parentID(page notion.RemotePage) string {
+	kind, id := page.Parent.Ref()
 	if kind == "page_id" {
 		return id
 	}
@@ -237,12 +232,12 @@ func notionOnly(err error) bool {
 	return notionError(err) != err
 }
 
-func editedTime(ctx context.Context, client *notion.Client, pageID string) (any, error) {
+func editedTime(ctx context.Context, client *notion.Client, pageID string) (string, error) {
 	page, err := client.GetPage(ctx, pageID)
 	if err != nil {
-		return nil, err
+		return "", err
 	}
-	return dictGet(page, "last_edited_time"), nil
+	return page.LastEditedTime, nil
 }
 
 func strs(values []string) []any {
@@ -323,10 +318,10 @@ func createPage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	if err != nil {
 		return nil, err
 	}
-	page, err := client.CreatePage(ctx, py.Dict{
-		{Key: "parent", Value: py.Dict{{Key: "page_id", Value: parent}}},
-		{Key: "properties", Value: py.Dict{{Key: "title", Value: py.Dict{{Key: "title", Value: richText(title)}}}}},
-		{Key: "markdown", Value: body},
+	page, err := client.CreatePage(ctx, map[string]any{
+		"parent":     map[string]any{"page_id": parent},
+		"properties": map[string]any{"title": map[string]any{"title": richText(title)}},
+		"markdown":   body,
 	})
 	if err != nil {
 		_ = writes.Discard(ctx, tc.DB.Write, id)
@@ -456,7 +451,7 @@ func updatePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	s := summarize(page)
 	w := write{
 		id: id, tool: "notion_update_page", target: pageID,
-		before: py.Dict{{Key: "markdown", Value: previous}}, after: py.Dict{{Key: "markdown", Value: updated}},
+		before: map[string]any{"markdown": previous}, after: map[string]any{"markdown": updated},
 		undo: restoreUndo{pageUndo: pageUndo{Op: undoRestore, PageID: pageID, AppliedEditedTime: editedText(edited)}, PreviousMarkdown: previous},
 	}
 	id, err = w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
@@ -474,7 +469,7 @@ func updatePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 }
 
 func rewrite(ctx context.Context, q db.Querier, wiki notion.Wiki, client *notion.Client, pageID string, replace, appendText *string, section, date string, sources []string) (
-	page py.Dict, previous, updated string, merged []string, edited any, err error) {
+	page notion.RemotePage, previous, updated string, merged []string, edited string, err error) {
 	if page, err = livePageOf(ctx, q, client, pageID); err != nil {
 		return
 	}
@@ -482,11 +477,11 @@ func rewrite(ctx context.Context, q db.Querier, wiki notion.Wiki, client *notion
 	if err != nil {
 		return
 	}
-	if truthy(dictGet(current, "truncated")) {
+	if current.Truncated {
 		err = tool.Error("page is too large to rewrite safely")
 		return
 	}
-	previous = str(current, "markdown")
+	previous = current.Markdown
 	body, _, prior, err := notion.SplitFooter(previous)
 	if err != nil {
 		return
@@ -507,15 +502,15 @@ func rewrite(ctx context.Context, q db.Querier, wiki notion.Wiki, client *notion
 		err = tool.Error("page would exceed " + strconv.Itoa(maxMarkdown) + " characters")
 		return
 	}
-	if _, err = client.UpdateMarkdown(ctx, pageID, replaceContent(updated)); err != nil {
+	if err = client.UpdateMarkdown(ctx, pageID, replaceContent(updated)); err != nil {
 		return
 	}
 	edited, err = editedTime(ctx, client, pageID)
 	return
 }
 
-func replaceContent(text string) py.Dict {
-	return py.Dict{{Key: "type", Value: "replace_content"}, {Key: "replace_content", Value: py.Dict{{Key: "new_str", Value: text}}}}
+func replaceContent(text string) map[string]any {
+	return map[string]any{"type": "replace_content", "replace_content": map[string]any{"new_str": text}}
 }
 
 func movePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -565,7 +560,7 @@ func movePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	s := summarize(page)
 	w := write{
 		id: id, tool: "notion_move_page", target: pageID,
-		before: py.Dict{{Key: "parent_page_id", Value: previous}}, after: py.Dict{{Key: "parent_page_id", Value: parent}},
+		before: map[string]any{"parent_page_id": previous}, after: map[string]any{"parent_page_id": parent},
 		undo: moveUndo{pageUndo: pageUndo{Op: undoMove, PageID: pageID, AppliedEditedTime: editedText(edited)}, PreviousParentID: previous},
 	}
 	id, err = w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
@@ -580,7 +575,7 @@ func movePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	return out, nil
 }
 
-func relocate(ctx context.Context, q db.Querier, client *notion.Client, pageID, parent string) (page py.Dict, previous string, edited any, err error) {
+func relocate(ctx context.Context, q db.Querier, client *notion.Client, pageID, parent string) (page notion.RemotePage, previous, edited string, err error) {
 	if page, err = livePageOf(ctx, q, client, pageID); err != nil {
 		return
 	}
@@ -592,7 +587,7 @@ func relocate(ctx context.Context, q db.Querier, client *notion.Client, pageID, 
 		err = tool.Error("the page is already under that parent")
 		return
 	}
-	if _, err = client.MovePage(ctx, pageID, py.Dict{{Key: "type", Value: "page_id"}, {Key: "page_id", Value: parent}}); err != nil {
+	if err = client.MovePage(ctx, pageID, map[string]any{"type": "page_id", "page_id": parent}); err != nil {
 		return
 	}
 	edited, err = editedTime(ctx, client, pageID)
@@ -627,7 +622,7 @@ func archivePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, er
 	s := summarize(page)
 	w := write{
 		id: id, tool: "notion_archive_page", target: pageID,
-		before: py.Dict{{Key: "title", Value: s.title}, {Key: "markdown", Value: str(previous, "markdown")}}, after: py.Dict{{Key: "in_trash", Value: true}},
+		before: map[string]any{"title": s.title, "markdown": previous.Markdown}, after: map[string]any{"in_trash": true},
 		undo: pageUndo{Op: undoUntrash, PageID: pageID, AppliedEditedTime: editedText(edited)},
 	}
 	id, err = w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
@@ -642,14 +637,14 @@ func archivePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, er
 	return out, nil
 }
 
-func trash(ctx context.Context, q db.Querier, client *notion.Client, pageID string) (page, previous py.Dict, edited any, err error) {
+func trash(ctx context.Context, q db.Querier, client *notion.Client, pageID string) (page notion.RemotePage, previous notion.Markdown, edited string, err error) {
 	if page, err = livePageOf(ctx, q, client, pageID); err != nil {
 		return
 	}
 	if previous, err = client.PageMarkdown(ctx, pageID); err != nil {
 		return
 	}
-	if _, err = client.SetTrash(ctx, pageID, true); err != nil {
+	if err = client.SetTrash(ctx, pageID, true); err != nil {
 		return
 	}
 	edited, err = editedTime(ctx, client, pageID)
@@ -717,7 +712,7 @@ func addAlias(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	}
 	w := write{
 		id: id, tool: "notion_add_alias", target: pageID,
-		before: py.Dict{{Key: "aliases", Value: previous}}, after: py.Dict{{Key: "aliases", Value: aliases}},
+		before: map[string]any{"aliases": previous}, after: map[string]any{"aliases": aliases},
 		undo: aliasesUndo{Op: undoAliases, PageID: pageID, PreviousAliases: previous},
 	}
 	id, err = w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
