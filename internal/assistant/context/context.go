@@ -55,10 +55,6 @@ const (
 	KindCommit = "commit"
 )
 
-type ContextError string
-
-func (e ContextError) Error() string { return string(e) }
-
 var (
 	compactJSON = py.JSONOpts{Compact: true, NoEnsureASCII: true}
 	valueJSON   = py.JSONOpts{NoEnsureASCII: true}
@@ -162,10 +158,6 @@ func LimitsFor(contextLimit int64, t Tuning) Limits {
 	}
 }
 
-func typed(kind string, value int64) py.Dict {
-	return py.Dict{{Key: "type", Value: kind}, {Key: "value", Value: value}}
-}
-
 func ClearsOf(m *anthropic.Message) (int64, int64) {
 	if m == nil || m.ContextManagement == nil {
 		return 0, 0
@@ -204,10 +196,3 @@ func decodeAll(content []json.RawMessage) ([]any, error) {
 }
 
 func encode(v any) json.RawMessage { return json.RawMessage(py.JSONDumps(v, compactJSON)) }
-
-func str(v any) string {
-	if s, ok := v.(string); ok {
-		return s
-	}
-	return fmt.Sprint(v)
-}

@@ -84,6 +84,10 @@ func Failure(status int, errType, message string) Response {
 	return Response{Status: status, ErrorBody: ErrorBody(errType, message)}
 }
 
+func StreamFailure(errType, message string) Response {
+	return Response{ErrorBody: ErrorBody(errType, message)}
+}
+
 func ErrorBody(errType, message string) json.RawMessage {
 	return json.RawMessage(fmt.Sprintf(`{"type":"error","error":{"type":%s,"message":%s}}`, mustJSON(errType), mustJSON(message)))
 }

@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
-	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
@@ -25,11 +24,6 @@ func MaxTokensFor(effort string) int64 {
 		return MaxTokensDeep
 	}
 	return MaxTokens
-}
-
-func TimeStamp(startedAt float64, loc *time.Location) string {
-	sec, us := py.SplitTimestamp(startedAt)
-	return "Current date and time: " + time.Unix(sec, us*1000).In(loc).Format("Monday 2006-01-02 15:04 MST")
 }
 
 func cacheControlDict(cc prompts.CacheControl) py.Dict {
@@ -135,33 +129,6 @@ func fixedPart(system json.RawMessage, tools []json.RawMessage) (py.Dict, error)
 		}
 	}
 	return append(fixed, py.Pair{Key: "tools", Value: list}), nil
-}
-
-func stampMessages(active []actx.Message, runs []journal.Run, loc *time.Location) ([]actx.Message, error) {
-	started := make(map[int64]float64, len(runs))
-	for _, r := range runs {
-		started[r.ID] = r.StartedAt
-	}
-	out := make([]actx.Message, len(active))
-	for i, m := range active {
-		out[i] = m
-		if m.Role != journal.User || m.RunID == nil {
-			continue
-		}
-		has, err := journal.HasText(m.Content)
-		if err != nil {
-			return nil, err
-		}
-		if !has {
-			continue
-		}
-		at, ok := started[*m.RunID]
-		if !ok {
-			continue
-		}
-		out[i].Content = append(slices.Clone(m.Content), actx.TextBlock(TimeStamp(at, loc)))
-	}
-	return out, nil
 }
 
 func withProjectFiles(ctx context.Context, q db.Querier, thread threads.Thread, active []actx.Message) ([]actx.Message, error) {

@@ -127,10 +127,6 @@ func ColdRequestUSD(model string, tokens int64, ttl string) (float64, error) {
 	return pricing.CostUSD(model, write, 0)
 }
 
-func UncachedRequestUSD(model string, input, output int64) (float64, error) {
-	return pricing.CostUSD(model, pricing.Tokens{Input: input, Output: output}, 0)
-}
-
 const SpendCapText = "Anthropic spend limit reached: the organization's API usage cap refused the request. Raise the cap or wait for it to reset in the Anthropic console."
 
 func SpendCap() BudgetExceeded { return BudgetExceeded(SpendCapText) }
