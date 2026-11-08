@@ -57,7 +57,7 @@ linux check *args:
   set -euo pipefail
   host=${ARTEMIS_HOST:-artemis}
   exec nix build --eval-store auto --store "ssh-ng://$host" --no-link -L \
-    ".#checks.x86_64-linux.{{check}}" "$@"
+    {{args}} ".#checks.x86_64-linux.{{check}}"
 
 # Build every x86_64-linux check on artemis; flake sources are git-tracked files only, so git add new files first
 linux-all *args:
@@ -66,7 +66,7 @@ linux-all *args:
   host=${ARTEMIS_HOST:-artemis}
   mapfile -t checks < <(nix eval --json '.#checks.x86_64-linux' --apply builtins.attrNames | tr -d '[]"' | tr ',' '\n')
   exec nix build --eval-store auto --store "ssh-ng://$host" --no-link -L \
-    "${checks[@]/#/.#checks.x86_64-linux.}" "$@"
+    {{args}} "${checks[@]/#/.#checks.x86_64-linux.}"
 
 fmt:
   nix fmt
