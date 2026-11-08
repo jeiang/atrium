@@ -210,7 +210,8 @@ func UpdateJob(ctx context.Context, q db.Querier, id int64, now float64, u JobUp
 	}
 	bypass := u.Actor == Operator
 	enabling := state == StateActive && job.State != StateActive
-	needsDue := u.Schedule != nil || enabling
+	disabling := u.Enabled != nil && !*u.Enabled
+	needsDue := u.Schedule != nil || enabling || disabling
 	var due float64
 	if needsDue && state == StateActive {
 		_, due, err = Validate(ctx, q, schedule, job.TZ, now, !bypass)
