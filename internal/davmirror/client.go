@@ -155,10 +155,14 @@ func Fetch(ctx context.Context, client *http.Client, endpoint string, k Kind) ([
 	homeRef := ""
 	for _, r := range found {
 		p := r.prop()
-		for _, h := range []string{p.CalHome.Href, p.CardHome.Href} {
-			if h != "" {
-				homeRef = h
-			}
+		switch k.homeProp {
+		case Calendars.homeProp:
+			homeRef = p.CalHome.Href
+		case Contacts.homeProp:
+			homeRef = p.CardHome.Href
+		}
+		if homeRef != "" {
+			break
 		}
 	}
 	if homeRef == "" {
