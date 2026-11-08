@@ -3,7 +3,6 @@ package backup
 import (
 	"archive/tar"
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -28,7 +27,7 @@ import (
 )
 
 const (
-	formatVersion = 1
+	formatVersion = 2
 	headerEntry   = "header.json"
 	entriesEntry  = "entries.json"
 	macEntry      = "manifest.mac"
@@ -50,22 +49,26 @@ const (
 	ErrTampered       KeyError = "backup: the archive is corrupt or was modified"
 	ErrNotArchive     KeyError = "backup: the file is not an atrium backup archive"
 	ErrNewerFormat    KeyError = "backup: the archive uses a newer archive format than this atrium understands"
+	ErrOldFormat      KeyError = "backup: this is a v1 archive, which v2 does not read; decrypt or extract it with the v1 binary and import the database with atrium db import-v1"
 	ErrNewerSchema    KeyError = "backup: the archive holds a newer database schema than this atrium knows; run the atrium release that made it"
 	ErrArchiveKey     KeyError = "backup: the key does not match the key the archive was made under"
 	ErrPlaintextKeyed KeyError = "backup: the archive holds a plaintext database but a database key is configured; clear the " + db.KeySetting + " setting or restore an encrypted archive"
 )
 
 type Header struct {
-	Format    int      `json:"format"`
-	CreatedAt string   `json:"created_at"`
-	Schema    int      `json:"schema"`
-	Encrypted bool     `json:"encrypted"`
-	KeyID     string   `json:"key_id,omitempty"`
-	KeyIDs    []string `json:"key_ids,omitempty"`
-	Verifier  string   `json:"verifier,omitempty"`
-	Salt      string   `json:"salt,omitempty"`
-	Files     int      `json:"files"`
-	Stored    int64    `json:"stored_bytes"`
+	Format    int    `json:"format"`
+	CreatedAt string `json:"created_at"`
+	Schema    int    `json:"schema"`
+	Seal      *Seal  `json:"seal,omitempty"`
+	Files     int    `json:"files"`
+	Stored    int64  `json:"stored_bytes"`
+}
+
+type Seal struct {
+	KeyID    string   `json:"key_id"`
+	KeyIDs   []string `json:"key_ids"`
+	Verifier string   `json:"verifier"`
+	Salt     string   `json:"salt"`
 }
 
 type Entry struct {
@@ -94,8 +97,11 @@ func macOf(key db.Key, header, entries []byte) string {
 	return hex.EncodeToString(m.Sum(nil))
 }
 
-func newAEAD(key db.Key, saltHex string) (cipher.AEAD, error) {
-	salt, err := hex.DecodeString(saltHex)
+func newAEAD(key db.Key, seal *Seal) (cipher.AEAD, error) {
+	if seal == nil {
+		return nil, fmt.Errorf("%w: the header carries no seal", ErrTampered)
+	}
+	salt, err := hex.DecodeString(seal.Salt)
 	if err != nil || len(salt) != saltLen {
 		return nil, fmt.Errorf("%w: the header carries no valid salt", ErrTampered)
 	}
@@ -266,8 +272,8 @@ func writeEntry(tw *tar.Writer, name string, size int64, mode uint32, fill func(
 	return Entry{Name: name, Size: size, SHA256: hw.sum(), Mode: mode}, nil
 }
 
-func storedSize(key db.Key, size int64) int64 {
-	if key.IsZero() {
+func storedSize(seal *Seal, size int64) int64 {
+	if seal == nil {
 		return size
 	}
 	return sealedSize(size)
@@ -283,8 +289,8 @@ func writeArchive(out io.Writer, header Header, key db.Key, snapshot string, fil
 		return err
 	}
 	var aead cipher.AEAD
-	if !key.IsZero() {
-		if aead, err = newAEAD(key, header.Salt); err != nil {
+	if header.Seal != nil {
+		if aead, err = newAEAD(key, header.Seal); err != nil {
 			return err
 		}
 	}
@@ -370,6 +376,9 @@ func readHeader(tr *tar.Reader) (Header, []byte, error) {
 	if h.Format > formatVersion {
 		return Header{}, nil, ErrNewerFormat
 	}
+	if h.Format < formatVersion {
+		return Header{}, nil, ErrOldFormat
+	}
 	return h, raw, nil
 }
 
@@ -407,10 +416,10 @@ func openArchive(archive string) (*opened, error) {
 func (o *opened) Close() error { return o.file.Close() }
 
 func checkKey(h Header, key db.Key) error {
-	if h.Encrypted != !key.IsZero() {
+	if (h.Seal == nil) != key.IsZero() {
 		return ErrArchiveKey
 	}
-	if h.Encrypted && (dbkey.ID(key) != h.KeyID || dbkey.BackupVerifier(key) != h.Verifier || h.Salt == "") {
+	if h.Seal != nil && (dbkey.ID(key) != h.Seal.KeyID || dbkey.BackupVerifier(key) != h.Seal.Verifier || h.Seal.Salt == "") {
 		return ErrArchiveKey
 	}
 	return nil
@@ -418,9 +427,9 @@ func checkKey(h Header, key db.Key) error {
 
 func (o *opened) unpack(ctx context.Context, key db.Key, stage string) (map[string]Entry, error) {
 	var aead cipher.AEAD
-	if !key.IsZero() {
+	if o.header.Seal != nil {
 		var err error
-		if aead, err = newAEAD(key, o.header.Salt); err != nil {
+		if aead, err = newAEAD(key, o.header.Seal); err != nil {
 			return nil, err
 		}
 	}
@@ -544,5 +553,3 @@ func (o *opened) unpack(ctx context.Context, key db.Key, stage string) (map[stri
 	}
 	return listed, nil
 }
-
-func sameBytes(a, b []byte) bool { return bytes.Equal(a, b) }

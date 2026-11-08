@@ -1,6 +1,7 @@
 package backup
 
 import (
+	"bytes"
 	"context"
 	"encoding/hex"
 	"errors"
@@ -78,7 +79,7 @@ func restoreSetup(a *cli.Args) cli.Handler {
 			return cli.Fail(e, fmt.Errorf("restore %s: %w", *archive, err))
 		}
 		defer func() { _ = o.Close() }()
-		if !sameBytes(o.rawHead, firstHead) {
+		if !bytes.Equal(o.rawHead, firstHead) {
 			return cli.Fail(e, fmt.Errorf("restore %s: %w: the archive changed while it was being read; nothing was changed", *archive, ErrTampered))
 		}
 		entries, err := o.unpack(e.Ctx, key, stage)
@@ -144,7 +145,10 @@ func readKeyFile(path string) (db.Key, error) {
 }
 
 func archiveKey(h Header, configured db.Key, keyFile string) (db.Key, error) {
-	if !h.Encrypted {
+	if h.Seal == nil {
+		if keyFile != "" {
+			return db.Key{}, errors.New("--key-file was given but the archive is plaintext")
+		}
 		if !configured.IsZero() {
 			return db.Key{}, ErrPlaintextKeyed
 		}
@@ -159,9 +163,9 @@ func archiveKey(h Header, configured db.Key, keyFile string) (db.Key, error) {
 	}
 	switch {
 	case key.IsZero():
-		return db.Key{}, fmt.Errorf("%w: the archive is encrypted under key id %s and no key is configured; set the %s setting or pass --key-file", ErrArchiveKey, h.KeyID, db.KeySetting)
-	case dbkey.ID(key) != h.KeyID:
-		return db.Key{}, fmt.Errorf("%w: the archive is encrypted under key id %s (key ids it records: %s) but the key given has id %s; pass --key-file with the key whose id is %s", ErrArchiveKey, h.KeyID, strings.Join(h.KeyIDs, ", "), dbkey.ID(key), h.KeyID)
+		return db.Key{}, fmt.Errorf("%w: the archive is encrypted under key id %s and no key is configured; set the %s setting or pass --key-file", ErrArchiveKey, h.Seal.KeyID, db.KeySetting)
+	case dbkey.ID(key) != h.Seal.KeyID:
+		return db.Key{}, fmt.Errorf("%w: the archive is encrypted under key id %s (key ids it records: %s) but the key given has id %s; pass --key-file with the key whose id is %s", ErrArchiveKey, h.Seal.KeyID, strings.Join(h.Seal.KeyIDs, ", "), dbkey.ID(key), h.Seal.KeyID)
 	}
 	if err := checkKey(h, key); err != nil {
 		return db.Key{}, err
@@ -249,8 +253,8 @@ func printReport(w io.Writer, archive string, rep report) {
 	} else {
 		_, _ = fmt.Fprintf(w, "schema: %04d, migrated to %04d\n", rep.from, rep.to)
 	}
-	if h.Encrypted {
-		_, _ = fmt.Fprintf(w, "encryption: encrypted, key id %s (key ids: %s)\n", h.KeyID, strings.Join(h.KeyIDs, ", "))
+	if h.Seal != nil {
+		_, _ = fmt.Fprintf(w, "encryption: encrypted, key id %s (key ids: %s)\n", h.Seal.KeyID, strings.Join(h.Seal.KeyIDs, ", "))
 	} else {
 		_, _ = fmt.Fprintln(w, "encryption: plaintext")
 	}
@@ -262,10 +266,6 @@ func printReport(w io.Writer, archive string, rep report) {
 		_, _ = fmt.Fprintf(w, "knn %s: ok\n", name)
 	}
 	_, _ = fmt.Fprintf(w, "files: %d\n", rep.files)
-}
-
-func isKeyError(err error) bool {
-	return errors.Is(err, db.ErrWrongKey) || errors.Is(err, db.ErrKeyMissing) || errors.Is(err, db.ErrPlaintextDB)
 }
 
 func holdExisting(ctx context.Context, path string, replaceUnopenable bool, keys ...db.Key) (func(), error) {

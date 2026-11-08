@@ -108,7 +108,7 @@ func writeBackup(ctx context.Context, cfg config.Config, key db.Key, dest string
 	header.Files = len(files)
 	header.Stored = info.Size()
 	for _, f := range files {
-		header.Stored += storedSize(key, f.size)
+		header.Stored += storedSize(header.Seal, f.size)
 	}
 	out, err := os.OpenFile(partial, os.O_WRONLY|os.O_TRUNC, 0o600)
 	if err != nil {
@@ -143,7 +143,7 @@ func snapshotHeader(ctx context.Context, snapshot string, key db.Key) (Header, e
 	if err != nil {
 		return Header{}, err
 	}
-	h := Header{Format: formatVersion, CreatedAt: time.Now().UTC().Format(time.RFC3339), Schema: schema, Encrypted: !key.IsZero()}
+	h := Header{Format: formatVersion, CreatedAt: time.Now().UTC().Format(time.RFC3339), Schema: schema}
 	if key.IsZero() {
 		return h, nil
 	}
@@ -155,15 +155,14 @@ func snapshotHeader(ctx context.Context, snapshot string, key db.Key) (Header, e
 	if _, err := rand.Read(salt); err != nil {
 		return Header{}, err
 	}
-	h.Salt = hex.EncodeToString(salt)
-	h.KeyID = dbkey.ID(key)
-	h.Verifier = dbkey.BackupVerifier(key)
+	seal := &Seal{KeyID: dbkey.ID(key), Verifier: dbkey.BackupVerifier(key), Salt: hex.EncodeToString(salt)}
 	for _, id := range retired {
-		if id != h.KeyID && !slices.Contains(h.KeyIDs, id) {
-			h.KeyIDs = append(h.KeyIDs, id)
+		if id != seal.KeyID && !slices.Contains(seal.KeyIDs, id) {
+			seal.KeyIDs = append(seal.KeyIDs, id)
 		}
 	}
-	h.KeyIDs = append(h.KeyIDs, h.KeyID)
+	seal.KeyIDs = append(seal.KeyIDs, seal.KeyID)
+	h.Seal = seal
 	return h, nil
 }
 
