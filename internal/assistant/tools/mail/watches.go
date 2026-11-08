@@ -64,6 +64,7 @@ func packages(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 			item["aggregator"] = p.Aggregator
 			item["last_sync"] = p.LastSync
 			item["last_event"] = tool.Clip(p.LastEvent, 200)
+			item["last_event_description"] = tool.Clip(p.LastEventDescription, 200)
 		}
 		out[i] = item
 	}

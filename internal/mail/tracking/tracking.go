@@ -96,6 +96,52 @@ type QuotaError string
 
 func (e QuotaError) Error() string { return string(e) }
 
+var (
+	ErrTrackerGone = errors.New("the tracker is gone")
+	ErrBadReply    = errors.New("Ship24 returned an unexpected reply")
+)
+
+type StatusError struct {
+	Status  int
+	Message string
+}
+
+func (e *StatusError) Error() string {
+	if e.Message != "" {
+		return fmt.Sprintf("Ship24 answered %d: %s", e.Status, e.Message)
+	}
+	return fmt.Sprintf("Ship24 answered %d", e.Status)
+}
+
+type RateLimitError struct{ Status int }
+
+func (e *RateLimitError) Error() string {
+	return fmt.Sprintf("Ship24 rate limited the request (%d)", e.Status)
+}
+
+type TransportError struct{ Err error }
+
+func (e *TransportError) Error() string { return "Ship24 is unreachable" }
+func (e *TransportError) Unwrap() error { return e.Err }
+
+func OutcomeUnknown(err error) bool {
+	var transport *TransportError
+	if errors.As(err, &transport) {
+		return true
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return true
+	}
+	if errors.Is(err, ErrBadReply) {
+		return true
+	}
+	var status *StatusError
+	if errors.As(err, &status) {
+		return status.Status >= 500
+	}
+	return false
+}
+
 type Settings struct {
 	URL, Key            string
 	Quota, Timeout      int
@@ -158,6 +204,7 @@ type Tracker struct {
 type Event struct {
 	EventID            string `json:"eventId"`
 	Status             string `json:"status"`
+	Description        string `json:"description"`
 	OccurrenceDatetime string `json:"occurrenceDatetime"`
 	Location           string `json:"location"`
 	StatusCode         string `json:"statusCode"`
@@ -188,11 +235,13 @@ func (c *Client) Create(ctx context.Context, number, courier, country, postcode 
 	if err != nil {
 		return Tracker{}, err
 	}
-	if status == http.StatusUnauthorized || status == http.StatusForbidden {
+	switch {
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
 		return Tracker{}, Error("Ship24 refused the API key")
-	}
-	if status != http.StatusCreated && status != http.StatusOK {
-		return Tracker{}, Error(fmt.Sprintf("Ship24 answered %d: %s", status, clip(string(raw), 200)))
+	case status == http.StatusTooManyRequests:
+		return Tracker{}, &RateLimitError{Status: status}
+	case status != http.StatusCreated && status != http.StatusOK:
+		return Tracker{}, &StatusError{Status: status, Message: clip(string(raw), 200)}
 	}
 	var reply struct {
 		Data struct {
@@ -200,7 +249,7 @@ func (c *Client) Create(ctx context.Context, number, courier, country, postcode 
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &reply); err != nil || reply.Data.Tracker.TrackerID == "" {
-		return Tracker{}, Error("Ship24 returned an unexpected tracker")
+		return Tracker{}, fmt.Errorf("%w: no tracker id", ErrBadReply)
 	}
 	return reply.Data.Tracker, nil
 }
@@ -210,14 +259,15 @@ func (c *Client) Results(ctx context.Context, trackerID string) (Tracking, error
 	if err != nil {
 		return Tracking{}, err
 	}
-	if status == http.StatusUnauthorized || status == http.StatusForbidden {
+	switch {
+	case status == http.StatusUnauthorized || status == http.StatusForbidden:
 		return Tracking{}, Error("Ship24 refused the API key")
-	}
-	if status == http.StatusNotFound {
-		return Tracking{}, Error("the tracker is gone")
-	}
-	if status != http.StatusOK {
-		return Tracking{}, Error(fmt.Sprintf("Ship24 answered %d", status))
+	case status == http.StatusNotFound:
+		return Tracking{}, fmt.Errorf("%w: %s", ErrTrackerGone, trackerID)
+	case status == http.StatusTooManyRequests:
+		return Tracking{}, &RateLimitError{Status: status}
+	case status != http.StatusOK:
+		return Tracking{}, &StatusError{Status: status}
 	}
 	var reply struct {
 		Data struct {
@@ -225,7 +275,7 @@ func (c *Client) Results(ctx context.Context, trackerID string) (Tracking, error
 		} `json:"data"`
 	}
 	if err := json.Unmarshal(raw, &reply); err != nil || len(reply.Data.Trackings) == 0 {
-		return Tracking{}, Error("Ship24 returned no tracking results")
+		return Tracking{}, fmt.Errorf("%w: no tracking results", ErrBadReply)
 	}
 	return reply.Data.Trackings[0], nil
 }
@@ -235,11 +285,13 @@ func (c *Client) Unsubscribe(ctx context.Context, trackerID string) error {
 	if err != nil {
 		return err
 	}
-	if status == http.StatusNotFound {
+	switch {
+	case status == http.StatusNotFound:
 		return nil
-	}
-	if status != http.StatusOK {
-		return Error(fmt.Sprintf("Ship24 answered %d", status))
+	case status == http.StatusTooManyRequests:
+		return &RateLimitError{Status: status}
+	case status != http.StatusOK:
+		return &StatusError{Status: status}
 	}
 	return nil
 }
@@ -267,7 +319,7 @@ func (c *Client) do(ctx context.Context, method, path string, body any) (int, []
 		if ctx.Err() != nil {
 			return 0, nil, ctx.Err()
 		}
-		return 0, nil, Error("Ship24 is unreachable")
+		return 0, nil, &TransportError{Err: err}
 	}
 	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
@@ -360,8 +412,17 @@ func Resolve(ctx context.Context, d *db.DB, env config.Env, now float64, package
 	if err != nil {
 		return Target{}, Settings{}, err
 	}
+	var blocked int
+	if err := d.Read.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM agent_writes WHERE tool = 'track_package' AND target = ? AND state IN ('held', 'unknown')",
+		fmt.Sprintf("package:%d", t.ID)).Scan(&blocked); err != nil {
+		return Target{}, Settings{}, err
+	}
+	if blocked > 0 {
+		return Target{}, Settings{}, Error("the previous track_package for this package has an unknown outcome; resolve it with 'atrium writes resolve <id>' before retrying")
+	}
 	var used int
-	if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM packages WHERE tracker_registered_ts >= ?", monthStart).Scan(&used); err != nil {
+	if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_writes WHERE tool = 'track_package' AND ts >= ?", monthStart).Scan(&used); err != nil {
 		return Target{}, Settings{}, err
 	}
 	if used >= s.Quota {
@@ -404,12 +465,15 @@ func Register(ctx context.Context, d *db.DB, now float64, t Target, s Settings) 
 	}
 	tracking, terr := client.Results(ctx, tracker.TrackerID)
 	if terr != nil {
-		tracking = Tracking{}
+		if err := saveRegistration(ctx, d, now, t.ID, tracker.TrackerID); err != nil {
+			return Result{}, err
+		}
+		return Result{PackageID: t.ID, TrackerID: tracker.TrackerID, Status: t.Status, StatusText: t.StatusText}, nil
 	}
 	if _, err := save(ctx, d, now, t.ID, tracker.TrackerID, tracking, false, nil); err != nil {
 		return Result{}, err
 	}
-	return Result{PackageID: t.ID, TrackerID: tracker.TrackerID, Status: statusOf(tracking), StatusText: textOf(tracking), Events: tracking.Events}, nil
+	return Result{PackageID: t.ID, TrackerID: tracker.TrackerID, Status: advance(t.Status, statusOf(tracking)), StatusText: textOf(tracking), Events: tracking.Events}, nil
 }
 
 func Refresh(ctx context.Context, d *db.DB, now float64, t Target, s Settings, env config.Env) (Result, bool, error) {
@@ -426,7 +490,7 @@ func Refresh(ctx context.Context, d *db.DB, now float64, t Target, s Settings, e
 	if err != nil {
 		return Result{}, false, err
 	}
-	return Result{PackageID: t.ID, TrackerID: t.TrackerID, Status: statusOf(tracking), StatusText: textOf(tracking), Events: tracking.Events}, notified, nil
+	return Result{PackageID: t.ID, TrackerID: t.TrackerID, Status: advance(t.Status, statusOf(tracking)), StatusText: textOf(tracking), Events: tracking.Events}, notified, nil
 }
 
 type PollResult struct {
@@ -443,11 +507,6 @@ func Poll(ctx context.Context, d *db.DB, env config.Env, now float64) (PollResul
 	if err != nil {
 		return PollResult{}, err
 	}
-	client, err := clientFor(ctx, d.Read, s)
-	if err != nil {
-		return PollResult{}, err
-	}
-	defer client.Close()
 	cutoff := now - float64(s.PollDays)*86400
 	rows, err := d.Read.QueryContext(ctx,
 		"SELECT id, tracking_number, carrier, status, status_text, aggregator, tracker_id, last_event, last_event_hash, "+
@@ -466,22 +525,36 @@ func Poll(ctx context.Context, d *db.DB, env config.Env, now float64) (PollResul
 	if err != nil {
 		return PollResult{}, err
 	}
+	if len(targets) == 0 {
+		return PollResult{}, nil
+	}
+	client, err := clientFor(ctx, d.Read, s)
+	if err != nil {
+		var missing config.NotConfigured
+		if errors.As(err, &missing) {
+			return PollResult{}, nil
+		}
+		return PollResult{}, err
+	}
+	defer client.Close()
 	var out PollResult
 	for _, t := range targets {
 		out.Checked++
 		tracking, err := client.Results(ctx, t.TrackerID)
 		if err != nil {
-			if strings.Contains(err.Error(), "gone") {
+			switch {
+			case errors.Is(err, ErrTrackerGone):
 				if _, uerr := d.Write.ExecContext(ctx, "UPDATE packages SET aggregator = '', tracker_id = '' WHERE id = ?", t.ID); uerr != nil {
 					out.Errors = append(out.Errors, uerr.Error())
 				}
-				continue
+			default:
+				var limited *RateLimitError
+				if errors.As(err, &limited) {
+					out.RateLimited = true
+					return out, nil
+				}
+				out.Errors = append(out.Errors, err.Error())
 			}
-			if strings.Contains(err.Error(), "429") {
-				out.RateLimited = true
-				break
-			}
-			out.Errors = append(out.Errors, err.Error())
 			continue
 		}
 		notified, err := save(ctx, d, now, t.ID, t.TrackerID, tracking, true, env)
@@ -504,27 +577,32 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 		return false, err
 	}
 	next := statusOf(tracking)
+	advanced := advance(previous, next)
 	latest := latestEvent(tracking)
 	text := textOf(tracking)
 	eventTS := eventTime(latest, now)
 	key := eventKey(latest)
+	hasData := next != "" || len(tracking.Events) > 0
 	notified := false
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
 		for _, e := range tracking.Events {
 			if _, err := tx.ExecContext(ctx,
 				"INSERT OR IGNORE INTO package_events (package_id, tracker_id, event_key, event_ts, status, status_code, status_milestone, description, location, created_ts) "+
 					"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-				id, trackerID, eventKey(e), eventTime(e, now), e.Status, e.StatusCode, e.StatusMilestone, e.Status, e.Location, now); err != nil {
+				id, trackerID, eventKey(e), eventTime(e, now), e.Status, e.StatusCode, e.StatusMilestone, descriptionOf(e), e.Location, now); err != nil {
 				return err
 			}
 		}
-		sets := []string{"aggregator = 'ship24'", "tracker_id = ?", "last_sync_ts = ?", "status = ?", "status_text = ?",
-			"last_event = ?", "last_event_ts = ?", "last_event_hash = ?",
+		sets := []string{"aggregator = 'ship24'", "tracker_id = ?", "last_sync_ts = ?",
 			"tracker_registered_ts = CASE WHEN tracker_registered_ts = 0 THEN ? ELSE tracker_registered_ts END"}
-		args := []any{trackerID, now, next, text, text, eventTS, key, now}
-		if notifyTransition && (next == delivered || next == exception) && next != previous && next != notifiedStatus {
+		args := []any{trackerID, now, now}
+		if hasData {
+			sets = append(sets, "status = ?", "status_text = ?", "last_event = ?", "last_event_ts = ?", "last_event_hash = ?")
+			args = append(args, advanced, text, text, eventTS, key)
+		}
+		if notifyTransition && next != "" && (advanced == delivered || advanced == exception) && advanced != previous && advanced != notifiedStatus {
 			sets = append(sets, "notified_status = ?")
-			args = append(args, next)
+			args = append(args, advanced)
 			notified = true
 		}
 		_, err := tx.ExecContext(ctx, "UPDATE packages SET "+strings.Join(sets, ", ")+" WHERE id = ?", append(args, id)...)
@@ -535,12 +613,12 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 	}
 	if notified && notify.Enabled(ctx) {
 		title := "Package delivered"
-		if next == exception {
+		if advanced == exception {
 			title = "Package exception"
 		}
 		body := text
 		if body == "" {
-			body = "Status " + next
+			body = "Status " + advanced
 		}
 		if _, err := notify.Send(ctx, d.Write, env, notify.Message{
 			Title: title, Body: body, Channel: notify.Assistant, Now: func() float64 { return now },
@@ -549,6 +627,46 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 		}
 	}
 	return notified, nil
+}
+
+func saveRegistration(ctx context.Context, d *db.DB, now float64, id int64, trackerID string) error {
+	_, err := d.Write.ExecContext(ctx,
+		"UPDATE packages SET aggregator = 'ship24', tracker_id = ?, last_sync_ts = ?, "+
+			"tracker_registered_ts = CASE WHEN tracker_registered_ts = 0 THEN ? ELSE tracker_registered_ts END WHERE id = ?",
+		trackerID, now, now, id)
+	return err
+}
+
+func advance(previous, next string) string {
+	if next == "" {
+		return previous
+	}
+	if previous == delivered {
+		return delivered
+	}
+	if next == delivered {
+		return delivered
+	}
+	if statusRank(next) < statusRank(previous) {
+		return previous
+	}
+	return next
+}
+
+func statusRank(status string) int {
+	switch status {
+	case ordered:
+		return 0
+	case shipped:
+		return 1
+	case inTransit:
+		return 2
+	case outForDelivery, exception:
+		return 3
+	case delivered:
+		return 4
+	}
+	return -1
 }
 
 func statusOf(t Tracking) string {
@@ -564,7 +682,7 @@ func statusOf(t Tracking) string {
 	case "info_received":
 		return shipped
 	}
-	return ordered
+	return ""
 }
 
 func latestEvent(t Tracking) Event {
@@ -589,6 +707,13 @@ func eventTime(e Event, now float64) float64 {
 		}
 	}
 	return now
+}
+
+func descriptionOf(e Event) string {
+	if e.Description != "" {
+		return e.Description
+	}
+	return e.Status
 }
 
 func eventKey(e Event) string {
@@ -620,25 +745,33 @@ type Undo struct {
 	Before    Target `json:"before"`
 }
 
-func Untrack(ctx context.Context, q db.Querier, now float64, u Undo) (any, error) {
+func Untrack(ctx context.Context, q db.Querier, u Undo) (any, error) {
 	s, err := Load(ctx, q)
-	if err == nil && s.Key != "" && u.TrackerID != "" {
-		if client, cerr := clientFor(ctx, q, s); cerr == nil {
-			if uerr := client.Unsubscribe(ctx, u.TrackerID); uerr != nil {
-				client.Close()
-				return nil, Error(uerr.Error())
-			}
-			client.Close()
-		}
+	if err != nil {
+		return nil, err
+	}
+	if s.Key == "" {
+		return nil, config.NotConfigured(KeyShip24APIKey + " is not set; the Ship24 tracker is still subscribed")
+	}
+	if u.TrackerID == "" {
+		return nil, Error("the tracker id is missing; the Ship24 tracker is still subscribed")
+	}
+	client, err := clientFor(ctx, q, s)
+	if err != nil {
+		return nil, err
+	}
+	defer client.Close()
+	if err := client.Unsubscribe(ctx, u.TrackerID); err != nil {
+		return nil, err
 	}
 	if _, err := q.ExecContext(ctx, "DELETE FROM package_events WHERE package_id = ?", u.PackageID); err != nil {
 		return nil, err
 	}
 	if _, err := q.ExecContext(ctx,
 		"UPDATE packages SET status = ?, status_text = ?, aggregator = ?, tracker_id = ?, last_event = ?, last_event_ts = ?, "+
-			"last_event_hash = ?, last_sync_ts = ?, notified_status = ?, tracker_registered_ts = ? WHERE id = ?",
+			"last_event_hash = ?, last_sync_ts = ?, notified_status = ? WHERE id = ?",
 		u.Before.Status, u.Before.StatusText, u.Before.Aggregator, u.Before.TrackerID, u.Before.LastEvent, u.Before.LastEventTS,
-		u.Before.LastEventHash, u.Before.LastSyncTS, u.Before.NotifiedStatus, u.Before.TrackerRegisteredTS, u.PackageID); err != nil {
+		u.Before.LastEventHash, u.Before.LastSyncTS, u.Before.NotifiedStatus, u.PackageID); err != nil {
 		return nil, err
 	}
 	return map[string]any{"untracked": u.TrackerID}, nil
@@ -654,7 +787,7 @@ func Events(ctx context.Context, q db.Querier, packageID int64) ([]Event, error)
 	return db.Collect(rows, func(r *sql.Rows) (Event, error) {
 		var e Event
 		var ts float64
-		err := r.Scan(&e.EventID, &e.Status, &e.StatusCode, &e.StatusMilestone, &e.Status, &e.Location, &ts)
+		err := r.Scan(&e.EventID, &e.Status, &e.StatusCode, &e.StatusMilestone, &e.Description, &e.Location, &ts)
 		if err == nil {
 			e.OccurrenceDatetime = time.Unix(int64(ts), 0).UTC().Format(time.RFC3339)
 		}

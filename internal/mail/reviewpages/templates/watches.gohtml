@@ -22,7 +22,7 @@
           {{.StatusText}} · <span class="tabular-nums">{{.Updated}}</span> ·
           <a class="underline" href="/messages/{{.LastMessageID}}">latest mail</a>
         </p>
-        {{if .LastEvent}}<p class="text-xs text-muted-foreground">{{.LastEvent}}{{if .LastSync}} · {{.LastSync}}{{end}}</p>{{end}}
+        {{if .LastEvent}}<p class="text-xs text-muted-foreground">{{.LastEvent}}{{if .LastEventDescription}} · {{.LastEventDescription}}{{end}}{{if .LastSync}} · {{.LastSync}}{{end}}</p>{{end}}
       </div>
       <form method="post" action="/watches/packages/{{.ID}}/dismiss">
         <input type="hidden" name="csrf_token" value="{{$csrf}}">
