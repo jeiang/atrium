@@ -87,7 +87,7 @@ func (w *Worker) Tick(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	claims, skipped, err := scheduler.ClaimDue(ctx, d, loc, stamp, w.Owner)
+	claims, skipped, err := scheduler.ClaimDue(ctx, d, w.Service.Cfg, loc, stamp, w.Owner)
 	if err != nil {
 		return err
 	}

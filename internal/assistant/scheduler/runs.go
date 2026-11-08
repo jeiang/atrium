@@ -10,8 +10,10 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/usage"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/safety"
 )
 
 var log = logx.Logger("atrium.agent.scheduler")
@@ -44,7 +46,8 @@ type Skipped struct {
 	Status   Status
 }
 
-func ClaimDue(ctx context.Context, d *db.DB, loc *time.Location, now float64, owner string) ([]Claim, []Skipped, error) {
+func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Location, now float64, owner string) ([]Claim, []Skipped, error) {
+	paused := safety.IsPaused(cfg.PausePath())
 	overBudget := false
 	if _, err := budget.Check(ctx, d.Read, now, loc, true); err != nil {
 		if !errors.As(err, new(budget.BudgetExceeded)) {
@@ -95,8 +98,11 @@ func ClaimDue(ctx context.Context, d *db.DB, loc *time.Location, now float64, ow
 					log.Warn(fmt.Sprintf("job %d has no next occurrence; disabling it", job.ID), logx.Job, job.ID)
 				}
 			}
-			if overBudget {
+			if paused || overBudget {
 				status := StatusSkippedBudget
+				if paused {
+					status = StatusSkippedPause
+				}
 				res, err := tx.ExecContext(ctx, "INSERT INTO job_runs (job_id, due_at, started_at, ended_at, status) VALUES (?, ?, ?, ?, ?)",
 					job.ID, dueAt, now, now, status)
 				if err != nil {
