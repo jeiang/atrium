@@ -131,7 +131,7 @@ func embedProgress(t *testing.T, base string) (done, total int, page string) {
 func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, path string) {
 	t.Helper()
 	dir, _ = moduleFixture(t, flagsExcept("", ""))
-	data, err := os.ReadFile(filepath.Join(golden.Dir(), "atrium.db"))
+	data, err := os.ReadFile(filepath.Join(golden.Dir(), "world.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
