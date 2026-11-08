@@ -82,7 +82,7 @@ func TestNotionActionsCreateProposalsOrReportErrors(t *testing.T) {
 
 	s.answer(`{"updates": [{"old_str": "text", "new_str": "shorter text"}], "summary": "shorten"}`)
 	made := status(t, s.post("/notion/"+pageID+"/edit", form("instruction", "shorten")), http.StatusOK)
-	mustContain(t, made, "Review proposal #1", "Edit Plan", "Notion edit proposed", `href="/proposals?kind=notion_edit#proposal-1"`)
+	mustContain(t, made, "Review proposal #1", "Edit Plan", "Notion edit proposed", `href="/proposals/1"`)
 	var kind, title, state string
 	if err := s.db.Read.QueryRow("SELECT kind, title, status FROM proposals WHERE id = 1").Scan(&kind, &title, &state); err != nil {
 		t.Fatal(err)

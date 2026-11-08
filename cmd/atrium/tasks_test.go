@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -39,8 +40,8 @@ func TestTaskAddUndoAndRegistryMatrix(t *testing.T) {
 	}
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); code != http.StatusOK {
-		t.Fatalf("activity page = %d", code)
+	if code, body, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); code != http.StatusOK || !strings.Contains(body, "/activity/write/"+strconv.FormatInt(writeID, 10)+"/undo") {
+		t.Fatalf("activity page = %d, want an undo for the task_add write: %.400s", code, body)
 	}
 	if code, body, _ := fetch(t, client, http.MethodPost, base+"/activity/write/"+strconv.FormatInt(writeID, 10)+"/undo", url.Values{}); code != http.StatusOK {
 		t.Fatalf("undo = %d %s", code, body)
@@ -58,15 +59,30 @@ func TestTaskAddUndoAndRegistryMatrix(t *testing.T) {
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
 	nightly := runApp(t, "agent", "run", "--kind", "nightly", "--text", "hi")
 	nightlyNames := offeredTools(t, api, nightly)
-	for _, name := range []string{"task_list", "task_propose"} {
+	for _, name := range []string{"task_list", "task_add"} {
 		if !containsName(cronNames, name) || !containsName(nightlyNames, name) {
 			t.Fatalf("%s missing from cron/nightly: %v %v", name, cronNames, nightlyNames)
 		}
 	}
-	for _, name := range []string{"task_add", "task_update", "task_done"} {
+	for _, name := range []string{"task_propose", "task_update", "task_done"} {
 		if containsName(cronNames, name) || containsName(nightlyNames, name) {
 			t.Fatalf("%s offered to an unattended run", name)
 		}
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("t2", "task_add", map[string]any{"title": "Renew the passport"})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("added")))
+	if ran := runApp(t, "agent", "run", "--kind", "cron", "--text", "add a task"); ran.code != cli.ExitOK {
+		t.Fatalf("cron task_add run: %d %s", ran.code, ran.stderr)
+	}
+	var cronTasks, proposed int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM tasks WHERE title = 'Renew the passport'").Scan(&cronTasks); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposals").Scan(&proposed); err != nil {
+		t.Fatal(err)
+	}
+	if cronTasks != 1 || proposed != 0 {
+		t.Fatalf("cron task_add made %d tasks and %d proposals, want one direct task", cronTasks, proposed)
 	}
 }
 

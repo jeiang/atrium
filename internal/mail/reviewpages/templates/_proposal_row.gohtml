@@ -1,0 +1,17 @@
+{{define "proposal_row"}}{{$p := .p}}{{$pending := eq $p.Status "pending"}}
+<li id="needs-{{$p.ID}}" class="flex flex-col gap-2 rounded-md border px-3 py-2 text-sm" data-card="proposal" data-status="{{$p.Status}}" tabindex="-1"{{if $pending}} hx-get="/proposals/{{$p.ID}}/card?poll=1&amp;view=row" hx-trigger="every 20s" hx-swap="outerHTML"{{end}}>
+  <a class="flex min-w-0 items-center gap-2 underline-offset-4 hover:underline" href="#proposal-{{$p.ID}}">{{icon (or $p.KindIcon "list-checks") "size-3.5 shrink-0 text-muted-foreground"}}<span class="truncate">{{$p.Title}}</span></a>
+  {{if $pending}}
+  <span class="flex items-center gap-1">
+    <button type="button" class="btn" data-size="sm" hx-post="/proposals/{{$p.ID}}/approve" hx-vals='{"all": "1", "view": "row"}' hx-target="#needs-{{$p.ID}}" hx-swap="outerHTML" hx-disabled-elt="this" data-card-approve>{{icon "check"}}Approve</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.ID}}/dismiss" hx-vals='{"view": "row"}' hx-target="#needs-{{$p.ID}}" hx-swap="outerHTML" hx-disabled-elt="this" data-card-dismiss>Deny</button>
+  </span>
+  {{else}}
+  <span>{{template "status_badge" $p.Status}}</span>
+  {{end}}
+</li>
+{{if .pending_oob}}{{template "pending_badge" (dict "count" .pending_count "oob" true)}}{{end}}
+{{with .toast}}{{template "_toast.gohtml" (dict "Toast" .)}}{{end}}
+{{end}}
+
+{{template "proposal_row" (dict "p" .Data.Proposal "toast" .Toast "pending_oob" .Data.PendingOOB "pending_count" .PendingCount)}}

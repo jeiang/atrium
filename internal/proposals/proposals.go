@@ -33,6 +33,7 @@ type Kind struct {
 	Group    bool
 	Messages bool
 	CountKey string
+	Approval bool
 }
 
 type Registry struct {

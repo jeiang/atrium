@@ -24,7 +24,16 @@ type Flags struct {
 	UntrustedOutput bool
 	PrivateData     bool
 	ExternalEffect  bool
+	Cost            bool
 	Web             bool
+}
+
+type Approval struct {
+	Apply  Handler
+	Label  string
+	Icon   string
+	Module string
+	Detail string
 }
 
 type Tool struct {
@@ -39,6 +48,7 @@ type Tool struct {
 	Contexts    Kinds
 	Server      bool
 	Parallel    bool
+	Approval    *Approval
 }
 
 type Context struct {

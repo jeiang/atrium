@@ -14,15 +14,22 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/workspace"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/proposals"
 )
 
 type WorkView struct {
+	Needs     []NeedView         `json:"needs"`
 	Plan      *workspace.Plan    `json:"plan"`
 	Sources   []workspace.Source `json:"sources"`
 	Subagents []subagents.Card   `json:"subagents"`
 	Files     []files.Row        `json:"files"`
 	Drafts    []map[string]any   `json:"drafts"`
 	Code      []any              `json:"code"`
+}
+
+type NeedView struct {
+	ID    int64  `json:"id"`
+	Title string `json:"title"`
 }
 
 func workView(ctx context.Context, q db.Querier, threadID int64, now float64) (WorkView, error) {
@@ -52,6 +59,14 @@ func workView(ctx context.Context, q db.Querier, threadID int64, now float64) (W
 		return WorkView{}, err
 	}
 	w.Drafts = rows
+	pending, err := proposals.PendingInThread(ctx, q, threadID)
+	if err != nil {
+		return WorkView{}, err
+	}
+	w.Needs = make([]NeedView, len(pending))
+	for i, p := range pending {
+		w.Needs[i] = NeedView{ID: p.ID, Title: p.Title}
+	}
 	if w.Sources == nil {
 		w.Sources = []workspace.Source{}
 	}

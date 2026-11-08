@@ -80,7 +80,7 @@ func propose(ctx context.Context, tc *tool.Context, args tool.Args) (any, error)
 	if id == nil {
 		return map[string]any{"proposal_id": nil, "note": "an identical proposal already exists"}, nil
 	}
-	return map[string]any{"proposal_id": *id, "status": "pending", "note": "the operator approves it on the Proposals page"}, nil
+	return map[string]any{"proposal_id": *id, "status": "pending", "note": "the operator approves or dismisses the card"}, nil
 }
 
 func Tools() []tool.Tool {

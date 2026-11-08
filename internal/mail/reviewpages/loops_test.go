@@ -183,11 +183,3 @@ func TestPathAndBodyErrorsAreReportedTogether(t *testing.T) {
 		t.Errorf("update detail = %s", update.Body)
 	}
 }
-
-func TestKindFilterAcceptsEveryRegisteredKind(t *testing.T) {
-	s := newSite(t)
-	for _, kind := range s.registry.Kinds() {
-		status(t, s.get("/proposals?kind="+kind.Name), http.StatusOK)
-	}
-	status(t, s.get("/proposals?kind=bogus"), http.StatusUnprocessableEntity)
-}

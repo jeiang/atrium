@@ -3,22 +3,16 @@ package tasks
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/proposals"
 )
 
 const (
 	StatusOpen      = "open"
 	StatusDone      = "done"
 	StatusDismissed = "dismissed"
-
-	KindTask = "task"
-	UndoTask = "task_delete"
 )
 
 type Task struct {
@@ -129,56 +123,6 @@ func Delete(ctx context.Context, q db.Querier, id int64) (bool, error) {
 	}
 	n, err := res.RowsAffected()
 	return n == 1, err
-}
-
-type Executor struct {
-	DB  *db.DB
-	Now func() float64
-}
-
-type ExecuteResult struct {
-	Summary string `json:"summary"`
-	TaskID  int64  `json:"task_id"`
-}
-
-type UndoResult struct {
-	Deleted int64 `json:"deleted"`
-}
-
-func (e *Executor) Execute(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
-	var s Spec
-	if err := json.Unmarshal([]byte(p.Payload), &s); err != nil {
-		return nil, err
-	}
-	id, err := Add(ctx, e.DB.Write, e.Now(), s)
-	if err != nil {
-		return nil, err
-	}
-	action := map[string]any{"type": KindTask, "task_id": id}
-	undo := map[string]any{"op": UndoTask, "id": id}
-	if _, err := proposals.RecordAction(ctx, e.DB.Write, p.ID, "write", nil, action, undo, ledger.OK, nil, e.Now()); err != nil {
-		return nil, err
-	}
-	return ExecuteResult{Summary: "Task added: " + s.Title, TaskID: id}, nil
-}
-
-func (e *Executor) Undo(ctx context.Context, plan json.RawMessage) (any, error) {
-	var info struct {
-		ID int64 `json:"id"`
-	}
-	if err := json.Unmarshal(plan, &info); err != nil {
-		return nil, err
-	}
-	if _, err := Delete(ctx, e.DB.Write, info.ID); err != nil {
-		return nil, err
-	}
-	return UndoResult{Deleted: info.ID}, nil
-}
-
-func Register(reg *proposals.Registry, e *Executor, owner string) {
-	reg.Executors[KindTask] = e.Execute
-	reg.Undoers[UndoTask] = e.Undo
-	reg.AddKind(proposals.Kind{Name: KindTask, Module: owner, Label: "Task", Icon: "list-todo"})
 }
 
 func IDString(id int64) string { return strconv.FormatInt(id, 10) }

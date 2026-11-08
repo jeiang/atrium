@@ -4,7 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -43,7 +45,7 @@ func (f *fakeWiki) handler(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
-func TestNightlyObservationsBecomeWikiAndProfileProposals(t *testing.T) {
+func TestNightlyObservationsWriteTheWikiAndProfileDirectlyAndUndo(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	wiki := &fakeWiki{edited: "t0"}
 	srv := httptest.NewServer(http.HandlerFunc(wiki.handler))
@@ -58,68 +60,78 @@ func TestNightlyObservationsBecomeWikiAndProfileProposals(t *testing.T) {
 	if _, err := d.Write.Exec("INSERT OR REPLACE INTO notion_state (key, value) VALUES ('wiki_log_page', 'log1')"); err != nil {
 		t.Fatal(err)
 	}
-	run := func(subject, value string) {
+	run := func(subject, value string) int64 {
 		t.Helper()
 		api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("o1", "nightly_observe", map[string]any{"subject": subject, "value": value})))
 		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
 		if ran := runApp(t, "agent", "run", "--kind", "nightly", "--text", "nightly"); ran.code != cli.ExitOK {
 			t.Fatalf("nightly run: %d %s", ran.code, ran.stderr)
 		}
-	}
-	pending := func(kind string) int64 {
-		t.Helper()
 		var id int64
-		if err := d.Read.QueryRow("SELECT id FROM proposals WHERE kind = ? AND status = 'pending' ORDER BY id DESC LIMIT 1", kind).Scan(&id); err != nil {
-			t.Fatalf("no pending %s proposal: %v", kind, err)
+		if err := d.Read.QueryRow("SELECT id FROM agent_writes WHERE tool = 'nightly_observe' AND state = 'ok' AND undone_at IS NULL ORDER BY id DESC LIMIT 1").Scan(&id); err != nil {
+			t.Fatalf("no nightly_observe write: %v", err)
 		}
 		return id
 	}
-	run("tea", "green")
-	capture := pending("notion_capture")
-	if ran := runApp(t, "proposals", "approve", fmt.Sprint(capture)); ran.code != cli.ExitOK {
-		t.Fatalf("approve capture: %d %s", ran.code, ran.stderr)
+	logBody := func() string {
+		wiki.mu.Lock()
+		defer wiki.mu.Unlock()
+		return wiki.markdown
 	}
-	wiki.mu.Lock()
-	body := wiki.markdown
-	wiki.mu.Unlock()
-	if !strings.Contains(body, "sometimes uses green") {
+	profile := func() string {
+		t.Helper()
+		var value string
+		if err := d.Read.QueryRow("SELECT value FROM agent_profile WHERE key = 'tea'").Scan(&value); err != nil {
+			t.Fatal(err)
+		}
+		return value
+	}
+
+	capture := run("tea", "green")
+	if body := logBody(); !strings.Contains(body, "sometimes uses green") {
 		t.Fatalf("wiki log = %q", body)
 	}
-	if ran := runApp(t, "proposals", "undo", fmt.Sprint(capture)); ran.code != cli.ExitOK {
-		t.Fatalf("undo capture: %d %s", ran.code, ran.stderr)
+	var proposed int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposals").Scan(&proposed); err != nil || proposed != 0 {
+		t.Fatalf("nightly observation made %d proposals (%v), want a direct write", proposed, err)
 	}
-	wiki.mu.Lock()
-	body = wiki.markdown
-	wiki.mu.Unlock()
-	if body != "" {
+	base, _, stop := startServeStoppable(t, dir)
+	defer stop()
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	if code, body, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); code != http.StatusOK || !strings.Contains(body, fmt.Sprintf("/activity/write/%d/undo", capture)) {
+		t.Fatalf("activity = %d, want an undo for write %d: %.400s", code, capture, body)
+	}
+	undo := func(id int64) {
+		t.Helper()
+		if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/activity/write/%d/undo", base, id), url.Values{}); code != http.StatusOK {
+			t.Fatalf("undo %d = %d %.400s", id, code, body)
+		}
+	}
+	undo(capture)
+	if body := logBody(); body != "" {
 		t.Fatalf("undo did not restore the wiki log: %q", body)
 	}
+
 	if _, err := d.Write.Exec("INSERT OR REPLACE INTO agent_profile (key, value, updated_at) VALUES ('tea', 'black', 0)"); err != nil {
 		t.Fatal(err)
 	}
-	run("tea", "green")
-	update := pending("profile_update")
-	if ran := runApp(t, "proposals", "approve", fmt.Sprint(update)); ran.code != cli.ExitOK {
-		t.Fatalf("approve profile update: %d %s", ran.code, ran.stderr)
+	update := run("tea", "green")
+	if got := profile(); got != "green" {
+		t.Fatalf("profile = %q, want green", got)
 	}
-	var value string
-	if err := d.Read.QueryRow("SELECT value FROM agent_profile WHERE key = 'tea'").Scan(&value); err != nil {
-		t.Fatal(err)
+	undo(update)
+	if got := profile(); got != "black" {
+		t.Fatalf("profile after undo = %q, want black", got)
 	}
-	if value != "green" {
-		t.Fatalf("profile = %q", value)
-	}
+
 	old := float64(time.Now().Unix()) - 15*86400
 	if _, err := d.Write.Exec("INSERT INTO nightly_observations (subject, value, first_seen, last_seen, count) VALUES ('coffee', 'black', ?, ?, 1)", old, old); err != nil {
 		t.Fatal(err)
 	}
 	run("coffee", "green")
-	var note string
-	if err := d.Read.QueryRow("SELECT payload FROM proposals WHERE kind = 'notion_capture' AND status = 'pending' ORDER BY id DESC LIMIT 1").Scan(&note); err != nil {
-		t.Fatal(err)
-	}
-	if !strings.Contains(note, "now uses green (was black)") {
-		t.Fatalf("replace proposal payload = %q", note)
+	if body := logBody(); !strings.Contains(body, "now uses green (was black)") {
+		t.Fatalf("replacement note missing from the wiki log: %q", body)
 	}
 }
 

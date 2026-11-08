@@ -77,8 +77,6 @@ type Rule struct {
 }
 
 var Policy = []Rule{
-	{Kind: tool.Cron, Effect: tool.WriteUndo, Decision: Denied},
-	{Kind: tool.Nightly, Effect: tool.WriteUndo, Decision: Denied},
 	{Kind: tool.Sub, Effect: tool.WriteUndo, Decision: Denied},
 }
 
@@ -159,7 +157,7 @@ func (r *Registry) Admit(ctx context.Context, threadID int64, kind tool.Kind, al
 		if Decide(Policy, kind, t.Effect) == Denied {
 			continue
 		}
-		if tainted && (t.Flags.ExternalEffect || t.Effect == tool.Notify || t.Effect == tool.WriteUndo) {
+		if tainted && (t.Flags.ExternalEffect || t.Flags.Cost || t.Effect == tool.Notify || t.Effect == tool.WriteUndo) {
 			continue
 		}
 		enabled, err := r.enabled(ctx, q, t.Name)
@@ -227,6 +225,12 @@ func validate(t tool.Tool) error {
 		return InvalidError(fmt.Sprintf("tool %s has unknown effect %q", t.Name, t.Effect))
 	case len(t.Contexts) == 0:
 		return InvalidError(fmt.Sprintf("tool %s has no run kinds", t.Name))
+	case t.Effect == tool.WriteUndo && (t.Flags.ExternalEffect || t.Flags.Cost):
+		return InvalidError(fmt.Sprintf("tool %s writes directly but has an external effect or cost; it must ask for approval", t.Name))
+	case t.Effect == tool.WriteUndo && t.Contexts.Has(tool.Sub):
+		return InvalidError(fmt.Sprintf("tool %s writes directly in sub-agent runs", t.Name))
+	case t.Approval != nil && (t.Effect != tool.Propose || t.Approval.Apply == nil || t.Approval.Label == "" || t.Approval.Module == ""):
+		return InvalidError(fmt.Sprintf("tool %s has an incomplete approval", t.Name))
 	}
 	for _, k := range t.Contexts {
 		if !k.Valid() {

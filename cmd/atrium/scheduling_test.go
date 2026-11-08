@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -281,35 +280,40 @@ func TestCalendarUnknownWriteStaysBlocked(t *testing.T) {
 	}
 }
 
-func TestDirectCalendarUnknownWriteBlocksUntilResolved(t *testing.T) {
+func TestCalendarCreateUnknownWriteBlocksUntilResolved(t *testing.T) {
 	dir, srv := davFixture(t)
 	srv.FailPuts = 1
 	srv.PutStatus = http.StatusInternalServerError
 	input := map[string]any{"calendar": "icloud", "title": "Blocked", "start": "2026-11-10T12:00:00", "end": "2026-11-10T13:00:00"}
-	first := unescape(toolResult(t, "calendar_create", input))
-	if !strings.Contains(first, "500") {
-		t.Fatalf("first create did not report the failed remote write: %s", first)
+	id := proposalID(t, toolResult(t, "calendar_create", input))
+	if srv.PutAttempts != 0 {
+		t.Fatalf("asking reached the remote: %d attempts", srv.PutAttempts)
+	}
+	if got := runApp(t, "proposals", "approve", id); got.code == cli.ExitOK {
+		t.Fatalf("approve with a failing remote write exited 0: %q", got.stdout)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	var id int64
-	if err := d.Read.QueryRow("SELECT id FROM agent_writes WHERE state = 'unknown' AND tool = 'calendar_create' ORDER BY id DESC LIMIT 1").Scan(&id); err != nil {
-		t.Fatalf("no unknown write: %v", err)
+	unknown := func() int {
+		t.Helper()
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposal_actions WHERE proposal_id = ? AND state = 'unknown'", id).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
 	}
-	second := unescape(toolResult(t, "calendar_create", input))
-	if !strings.Contains(second, "unknown outcome") || !strings.Contains(second, "writes resolve") {
-		t.Fatalf("second create was not refused with the resolve hint: %s", second)
+	if unknown() != 1 {
+		t.Fatal("the failed create did not leave an unknown write")
+	}
+	if got := runApp(t, "proposals", "approve", id); got.code == cli.ExitOK || !strings.Contains(got.stderr, "resolve it in the mailbox") {
+		t.Fatalf("second approve = %d %q, want an unresolved-write refusal", got.code, got.stderr)
 	}
 	if srv.PutAttempts != 1 {
-		t.Fatalf("the refused create reached the remote: %d attempts", srv.PutAttempts)
+		t.Fatalf("the refused approve reached the remote: %d attempts", srv.PutAttempts)
 	}
-	if got := runApp(t, "writes", "resolve", strconv.FormatInt(id, 10)); got.code != cli.ExitOK || !strings.Contains(got.stdout, `"resolved": true`) {
-		t.Fatalf("writes resolve: %d %q %q", got.code, got.stdout, got.stderr)
+	if got := runApp(t, "proposals", "resolve", id); got.code != cli.ExitOK {
+		t.Fatalf("proposals resolve: %d %q %q", got.code, got.stdout, got.stderr)
 	}
-	third := unescape(toolResult(t, "calendar_create", input))
-	if !strings.Contains(third, `"uid"`) {
-		t.Fatalf("create after resolve failed: %s", third)
-	}
-	if srv.PutAttempts != 2 {
-		t.Fatalf("%d PUT attempts after resolve, want 2", srv.PutAttempts)
+	if unknown() != 0 {
+		t.Fatal("resolve left the write unknown")
 	}
 }

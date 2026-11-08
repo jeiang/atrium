@@ -104,7 +104,7 @@ func Module(o Options) web.Module {
 
 		r.Get("/review", s.needsPage)
 
-		r.Get("/proposals", s.proposalsPage)
+		r.Get("/proposals/{proposal_id}", s.proposalLink)
 		r.Get("/proposals/{proposal_id}/card", s.proposalCard)
 		r.Post("/proposals/{proposal_id}/approve", s.proposalApprove)
 		r.Post("/proposals/{proposal_id}/dismiss", s.proposalDismiss)

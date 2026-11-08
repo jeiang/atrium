@@ -2,12 +2,12 @@ package notiontools
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
-	"strings"
+	"errors"
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
-	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -142,49 +142,53 @@ func RegisterUndoers(r *writes.Registry, env config.Env) {
 	r.Register(undoAliases, undoAliasList)
 }
 
-func pageArg(payload map[string]any, key string) (string, error) {
-	v, _ := payload[key].(string)
-	if strings.TrimSpace(v) == "" {
-		return "", tool.Error("payload." + key + " must be a Notion page id")
-	}
-	return strings.TrimSpace(v), nil
-}
-
-func proposed(err error) error {
-	return tool.Domain[notion.ProposalError, tool.Error](err)
-}
-
-func proposer(tc *tool.Context) *notion.Proposer {
-	return &notion.Proposer{DB: tc.DB, Now: tc.Now}
-}
-
-func proposeEdit(ctx context.Context, tc *tool.Context, payload map[string]any) (*int64, error) {
-	instruction, _ := payload["instruction"].(string)
-	if strings.TrimSpace(instruction) == "" {
-		return nil, tool.Error("payload.instruction must be text")
-	}
-	page, err := pageArg(payload, "page_id")
+func Capture(ctx context.Context, tc *tool.Context, name, note string) (map[string]any, error) {
+	wiki, err := wikiOf(ctx, tc)
 	if err != nil {
 		return nil, err
 	}
-	id, err := proposer(tc).ProposeEdit(ctx, page, instruction)
-	return id, proposed(err)
-}
-
-func proposeLink(ctx context.Context, tc *tool.Context, payload map[string]any) (*int64, error) {
-	source, err := pageArg(payload, "source_id")
+	date, err := today(ctx, tc)
 	if err != nil {
 		return nil, err
 	}
-	target, err := pageArg(payload, "target_id")
+	client, err := makeClient(ctx, tc.DB.Read, tc.Env)
 	if err != nil {
 		return nil, err
 	}
-	id, err := proposer(tc).ProposeLink(ctx, source, target)
-	return id, proposed(err)
-}
-
-func RegisterProposalKinds() {
-	proposetools.Register(notion.KindEdit, "{page_id, instruction}: propose an edit to a Notion page for the operator to approve", proposeEdit)
-	proposetools.Register(notion.KindLink, "{source_id, target_id}: propose linking two related Notion pages", proposeLink)
+	logID, err := wiki.LogPageID(ctx, tc.DB, client, wiki.Root)
+	if err != nil {
+		return nil, notionError(err)
+	}
+	before, err := client.PageMarkdown(ctx, logID)
+	if err != nil {
+		return nil, notionError(err)
+	}
+	if before.Truncated {
+		return nil, tool.Error("the Wiki Log page is too large to update safely; archive it and let atrium start a new one")
+	}
+	id, err := beginWrite(ctx, tc, name, logID)
+	if err != nil {
+		return nil, err
+	}
+	writer := &notion.Writer{DB: tc.DB, Client: client}
+	if err := writer.Capture(ctx, []string{notion.LogLine(date, "note", note, "")}); err != nil {
+		var failure notion.WikiError
+		if errors.As(err, &failure) {
+			_ = writes.Discard(ctx, tc.DB.Write, id)
+		}
+		return nil, notionError(err)
+	}
+	edited, err := editedTime(ctx, client, logID)
+	if err != nil {
+		return nil, notionError(err)
+	}
+	w := write{
+		id: id, tool: name, target: logID,
+		before: map[string]any{"markdown": before.Markdown}, after: map[string]any{"note": note},
+		undo: restoreUndo{pageUndo: pageUndo{Op: undoRestore, PageID: logID, AppliedEditedTime: edited}, PreviousMarkdown: before.Markdown},
+	}
+	if _, err := w.commit(ctx, tc, func(*sql.Tx) error { return nil }); err != nil {
+		return nil, err
+	}
+	return map[string]any{"note": note, "page_id": logID, "write_id": id}, nil
 }

@@ -26,7 +26,7 @@ func NotifyCreated(ctx context.Context, d *db.DB, p *proposals.Proposal) {
 	}
 	title, body := Text(p.Kind, p.ID)
 	_, _ = notify.Send(ctx, d.Write, config.Map(nil), notify.Message{
-		Channel: notify.Assistant, Title: title, Body: body,
+		Channel: notify.Assistant, Title: title, Body: body, Click: fmt.Sprintf("/proposals/%d", p.ID),
 		Actions: []notify.Action{
 			{Action: "view", Label: "Approve", URL: "/actions/" + approve, Method: "POST"},
 			{Action: "view", Label: "Dismiss", URL: "/actions/" + dismiss, Method: "POST"},

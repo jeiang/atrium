@@ -390,8 +390,8 @@ func TestFirstStartAdoptsAPhaseADatabaseAndKeepsAnEmptyOneToCore(t *testing.T) {
 				}
 			}
 		}
-		if status, _, _ := fetch(t, http.DefaultClient, "GET", base+"/proposals", nil); status != http.StatusOK {
-			t.Errorf("GET /proposals = %d, want the core review page", status)
+		if status, _, _ := fetch(t, http.DefaultClient, "GET", base+"/review", nil); status != http.StatusOK {
+			t.Errorf("GET /review = %d, want the core review page", status)
 		}
 	})
 }

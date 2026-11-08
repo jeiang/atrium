@@ -25,7 +25,7 @@ const (
 	undoAliases = "notion_aliases_restore"
 )
 
-var writeKinds = tool.Kinds{tool.Chat, tool.Nightly}
+var writeKinds = tool.Kinds{tool.Chat}
 
 func truthy(v any) bool {
 	switch v := v.(type) {
@@ -689,7 +689,7 @@ func writeTools() []tool.Tool {
 	}
 }
 
-func Tools() []tool.Tool { return append(readTools(), writeTools()...) }
+func Tools() []tool.Tool { return append(append(readTools(), writeTools()...), observeTool()) }
 
 func CreatePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	return createPage(ctx, tc, args)

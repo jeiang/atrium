@@ -181,9 +181,9 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, body, _ := fetch(t, client, "GET", base+"/proposals?status=failed", nil); status != http.StatusOK || !strings.Contains(body, "/proposals/"+id(viaWeb)+"/resolve") ||
+	if status, body, _ := fetch(t, client, "GET", base+"/review", nil); status != http.StatusOK || !strings.Contains(body, "/proposals/"+id(viaWeb)+"/resolve") ||
 		strings.Count(body, ">Mark checked<") != 1 || strings.Count(body, ">Messages are back<") != 1 || !strings.Contains(body, `role="group" aria-label="Record what you found in the mailbox"`) {
-		t.Fatalf("GET /proposals?status=failed = %d, want Mark checked on the blocked write and Messages are back only on the blocked undo: %.400s", status, body)
+		t.Fatalf("GET /review = %d, want Mark checked on the blocked write and Messages are back only on the blocked undo: %.400s", status, body)
 	}
 	if got := runApp(t, "proposals", "resolve", id(undoHeld), "--outcome", "not-undone"); got.code != cli.ExitOK {
 		t.Fatalf("proposals resolve of a blocked undo = %d %q", got.code, got.stderr)
@@ -211,7 +211,7 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 	if status, body, _ := fetch(t, client, "POST", base+"/activity/mail/"+id(undoWeb)+"/resolve", url.Values{"outcome": {"undone"}}); status != http.StatusConflict {
 		t.Errorf("second activity resolve = %d, want 409: %.400s", status, body)
 	}
-	if status, body, _ := fetch(t, client, "GET", base+"/proposals?status=failed", nil); status != http.StatusOK || strings.Contains(body, "/proposals/"+id(viaWeb)+"/resolve") {
+	if status, body, _ := fetch(t, client, "GET", base+"/review", nil); status != http.StatusOK || strings.Contains(body, "/proposals/"+id(viaWeb)+"/resolve") {
 		t.Errorf("settled proposal still offers resolve (status %d)", status)
 	}
 

@@ -41,6 +41,18 @@ func Undoers(env config.Env) *writes.Registry {
 	return r
 }
 
+func Approvals() []tool.Tool {
+	var out []tool.Tool
+	for _, group := range [][]tool.Tool{mailtools.Tools(), calendartools.Tools(), mediatools.Tools()} {
+		for _, t := range group {
+			if t.Approval != nil {
+				out = append(out, t)
+			}
+		}
+	}
+	return out
+}
+
 // Registry loads every production tool package into one registry. The
 // assistant module builds the live registry from the same packages; this
 // entry point exists so the catalog generator can see the whole set.

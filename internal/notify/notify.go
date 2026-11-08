@@ -168,6 +168,13 @@ func deliver(ctx context.Context, q db.Querier, env config.Env, m delivery) (del
 		}
 		actions[i] = action
 	}
+	click := m.click
+	if strings.HasPrefix(click, "/") {
+		click = ""
+		if base := config.From(ctx).PublicURL(env); base != "" {
+			click = base + m.click
+		}
+	}
 	payload := struct {
 		Topic    string   `json:"topic"`
 		Title    string   `json:"title"`
@@ -175,7 +182,7 @@ func deliver(ctx context.Context, q db.Querier, env config.Env, m delivery) (del
 		Click    string   `json:"click,omitempty"`
 		Priority int      `json:"priority,omitempty"`
 		Actions  []Action `json:"actions,omitempty"`
-	}{Topic: c.Topic, Title: title, Message: body, Click: m.click, Actions: actions}
+	}{Topic: c.Topic, Title: title, Message: body, Click: click, Actions: actions}
 	if m.priority >= 1 && m.priority <= 5 {
 		payload.Priority = m.priority
 	}

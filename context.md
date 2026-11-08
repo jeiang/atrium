@@ -36,8 +36,15 @@ behavior-parity target.
   beyond create and edit. The sidebar collapses to a rail; chat uses a
   centred reading column with serif
   assistant prose. Drafts and proposals the assistant creates are cards in
-  the thread that act through the Drafts and Proposals endpoints, so the
-  send gate and approval pipeline are unchanged. The light, dark or system
+  the thread that act through the Drafts and `/proposals/{id}/…` endpoints,
+  so the send gate and approval pipeline are unchanged. There is no
+  Proposals page: pending approvals show in their thread, in the thread's
+  Work panel and on Review Needs you, which also lists blocked proposals.
+  The agent acts directly on internal, undoable actions (tasks, Notion and
+  profile edits, nightly observations, mail folders and moves) and records
+  undo on Done; external, irreversible or paid actions ask with an approval
+  card, and the tool registry enforces this from each tool's effect. The
+  light, dark or system
   theme and the rail state are cookies the server applies on the next
   render.
 - The system prompt and subagent rules are operator-editable settings over
@@ -319,8 +326,7 @@ behavior-parity target.
 ### Life-management redesign
 
 - **Chat is home.** Five navigation entries: chat and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings.
-- **The agent acts directly** on internal, undoable actions and offers undo: tasks, wiki and Notion edits, mail folders and moves. Actions that leave the systems, are irreversible, or spend money need inline approval in chat.
-- **The Proposals page is removed.** Drafts are written, edited and sent in chat.
+- **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
 - **No tutorial text.** A welcome screen appears on first start; guidance uses tooltips.
 - **Settings has six tabs:** Assistant, Mail accounts, Integrations, Notifications, Sign-in, and Usage. Advanced settings move to Nix, the CLI, or the agent.
