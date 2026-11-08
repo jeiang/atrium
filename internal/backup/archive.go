@@ -3,7 +3,6 @@ package backup
 import (
 	"archive/tar"
 	"bufio"
-	"bytes"
 	"context"
 	"crypto/aes"
 	"crypto/cipher"
@@ -28,7 +27,7 @@ import (
 )
 
 const (
-	formatVersion = 1
+	formatVersion = 2
 	headerEntry   = "header.json"
 	entriesEntry  = "entries.json"
 	macEntry      = "manifest.mac"
@@ -50,22 +49,27 @@ const (
 	ErrTampered       KeyError = "backup: the archive is corrupt or was modified"
 	ErrNotArchive     KeyError = "backup: the file is not an atrium backup archive"
 	ErrNewerFormat    KeyError = "backup: the archive uses a newer archive format than this atrium understands"
+	ErrOldFormat      KeyError = "backup: this is a v1 archive, which v2 does not read; decrypt or extract it with the v1 binary and import the database with atrium db import-v1"
 	ErrNewerSchema    KeyError = "backup: the archive holds a newer database schema than this atrium knows; run the atrium release that made it"
 	ErrArchiveKey     KeyError = "backup: the key does not match the key the archive was made under"
 	ErrPlaintextKeyed KeyError = "backup: the archive holds a plaintext database but a database key is configured; clear the " + db.KeySetting + " setting or restore an encrypted archive"
 )
 
 type Header struct {
-	Format    int      `json:"format"`
-	CreatedAt string   `json:"created_at"`
-	Schema    int      `json:"schema"`
-	Encrypted bool     `json:"encrypted"`
-	KeyID     string   `json:"key_id,omitempty"`
-	KeyIDs    []string `json:"key_ids,omitempty"`
-	Verifier  string   `json:"verifier,omitempty"`
-	Salt      string   `json:"salt,omitempty"`
-	Files     int      `json:"files"`
-	Stored    int64    `json:"stored_bytes"`
+	Format    int    `json:"format"`
+	CreatedAt string `json:"created_at"`
+	Schema    int    `json:"schema"`
+	Seal      *Seal  `json:"seal,omitempty"`
+	Files     int    `json:"files"`
+	Dirs      int    `json:"dirs"`
+	Stored    int64  `json:"stored_bytes"`
+}
+
+type Seal struct {
+	KeyID    string   `json:"key_id"`
+	KeyIDs   []string `json:"key_ids"`
+	Verifier string   `json:"verifier"`
+	Salt     string   `json:"salt"`
 }
 
 type Entry struct {
@@ -73,6 +77,7 @@ type Entry struct {
 	Size   int64  `json:"size"`
 	SHA256 string `json:"sha256"`
 	Mode   uint32 `json:"mode,omitempty"`
+	Dir    bool   `json:"dir,omitempty"`
 }
 
 type entryList struct {
@@ -94,8 +99,11 @@ func macOf(key db.Key, header, entries []byte) string {
 	return hex.EncodeToString(m.Sum(nil))
 }
 
-func newAEAD(key db.Key, saltHex string) (cipher.AEAD, error) {
-	salt, err := hex.DecodeString(saltHex)
+func newAEAD(key db.Key, seal *Seal) (cipher.AEAD, error) {
+	if seal == nil {
+		return nil, fmt.Errorf("%w: the header carries no seal", ErrTampered)
+	}
+	salt, err := hex.DecodeString(seal.Salt)
 	if err != nil || len(salt) != saltLen {
 		return nil, fmt.Errorf("%w: the header carries no valid salt", ErrTampered)
 	}
@@ -215,6 +223,7 @@ type source struct {
 	path string
 	size int64
 	mode uint32
+	dir  bool
 }
 
 func listFiles(root string) ([]source, error) {
@@ -226,9 +235,6 @@ func listFiles(root string) ([]source, error) {
 			}
 			return err
 		}
-		if d.IsDir() {
-			return nil
-		}
 		info, err := d.Info()
 		if errors.Is(err, fs.ErrNotExist) {
 			return nil
@@ -236,14 +242,22 @@ func listFiles(root string) ([]source, error) {
 		if err != nil {
 			return err
 		}
-		if !info.Mode().IsRegular() {
-			return fmt.Errorf("backup: %s is not a regular file; files/ holds only regular files", p)
-		}
 		rel, err := filepath.Rel(root, p)
 		if err != nil {
 			return err
 		}
-		out = append(out, source{name: filesPrefix + filepath.ToSlash(rel), path: p, size: info.Size(), mode: uint32(info.Mode().Perm())})
+		name := filesPrefix + filepath.ToSlash(rel)
+		if d.IsDir() {
+			if rel == "." {
+				return nil
+			}
+			out = append(out, source{name: name + "/", path: p, mode: uint32(info.Mode().Perm()), dir: true})
+			return nil
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("backup: %s is not a regular file; files/ holds only regular files", p)
+		}
+		out = append(out, source{name: name, path: p, size: info.Size(), mode: uint32(info.Mode().Perm())})
 		return nil
 	})
 	if errors.Is(err, fs.ErrNotExist) {
@@ -266,8 +280,8 @@ func writeEntry(tw *tar.Writer, name string, size int64, mode uint32, fill func(
 	return Entry{Name: name, Size: size, SHA256: hw.sum(), Mode: mode}, nil
 }
 
-func storedSize(key db.Key, size int64) int64 {
-	if key.IsZero() {
+func storedSize(seal *Seal, size int64) int64 {
+	if seal == nil {
 		return size
 	}
 	return sealedSize(size)
@@ -283,8 +297,8 @@ func writeArchive(out io.Writer, header Header, key db.Key, snapshot string, fil
 		return err
 	}
 	var aead cipher.AEAD
-	if !key.IsZero() {
-		if aead, err = newAEAD(key, header.Salt); err != nil {
+	if header.Seal != nil {
+		if aead, err = newAEAD(key, header.Seal); err != nil {
 			return err
 		}
 	}
@@ -307,12 +321,16 @@ func writeArchive(out io.Writer, header Header, key db.Key, snapshot string, fil
 	}
 	entries = append(entries, e)
 	for _, f := range files {
-		src, err := os.Open(f.path)
-		if errors.Is(err, fs.ErrNotExist) {
+		if f.dir {
+			if err := tw.WriteHeader(&tar.Header{Name: f.name, Mode: int64(f.mode), Typeflag: tar.TypeDir}); err != nil {
+				return err
+			}
+			entries = append(entries, Entry{Name: f.name, Mode: f.mode, Dir: true})
 			continue
 		}
+		src, err := os.Open(f.path)
 		if err != nil {
-			return err
+			return fmt.Errorf("backup: %s vanished or could not be read: %w", f.name, err)
 		}
 		stored := f.size
 		fill := func(w io.Writer) error {
@@ -370,6 +388,9 @@ func readHeader(tr *tar.Reader) (Header, []byte, error) {
 	if h.Format > formatVersion {
 		return Header{}, nil, ErrNewerFormat
 	}
+	if h.Format < formatVersion {
+		return Header{}, nil, ErrOldFormat
+	}
 	return h, raw, nil
 }
 
@@ -407,10 +428,10 @@ func openArchive(archive string) (*opened, error) {
 func (o *opened) Close() error { return o.file.Close() }
 
 func checkKey(h Header, key db.Key) error {
-	if h.Encrypted != !key.IsZero() {
+	if (h.Seal == nil) != key.IsZero() {
 		return ErrArchiveKey
 	}
-	if h.Encrypted && (dbkey.ID(key) != h.KeyID || dbkey.BackupVerifier(key) != h.Verifier || h.Salt == "") {
+	if h.Seal != nil && (dbkey.ID(key) != h.Seal.KeyID || dbkey.BackupVerifier(key) != h.Seal.Verifier || h.Seal.Salt == "") {
 		return ErrArchiveKey
 	}
 	return nil
@@ -418,9 +439,9 @@ func checkKey(h Header, key db.Key) error {
 
 func (o *opened) unpack(ctx context.Context, key db.Key, stage string) (map[string]Entry, error) {
 	var aead cipher.AEAD
-	if !key.IsZero() {
+	if o.header.Seal != nil {
 		var err error
-		if aead, err = newAEAD(key, o.header.Salt); err != nil {
+		if aead, err = newAEAD(key, o.header.Seal); err != nil {
 			return nil, err
 		}
 	}
@@ -429,7 +450,7 @@ func (o *opened) unpack(ctx context.Context, key db.Key, stage string) (map[stri
 	var mac string
 	var staged []string
 	remaining := o.header.Stored
-	budget := o.header.Files + 1
+	budget := o.header.Files + o.header.Dirs + 1
 	for {
 		if err := ctx.Err(); err != nil {
 			return nil, err
@@ -441,7 +462,7 @@ func (o *opened) unpack(ctx context.Context, key db.Key, stage string) (map[stri
 		if err != nil {
 			return nil, fmt.Errorf("%w: %v", ErrTampered, err)
 		}
-		if hdr.Typeflag != tar.TypeReg {
+		if hdr.Typeflag != tar.TypeReg && hdr.Typeflag != tar.TypeDir {
 			return nil, fmt.Errorf("%w: %s is not a regular entry", ErrTampered, hdr.Name)
 		}
 		for k := range hdr.PAXRecords {
@@ -470,6 +491,19 @@ func (o *opened) unpack(ctx context.Context, key db.Key, stage string) (map[stri
 		budget--
 		if _, dup := seen[hdr.Name]; dup {
 			return nil, fmt.Errorf("%w: %s appears twice", ErrTampered, hdr.Name)
+		}
+		if hdr.Typeflag == tar.TypeDir {
+			rel, ok := validFilesName(strings.TrimSuffix(hdr.Name, "/"))
+			if !ok {
+				return nil, fmt.Errorf("%w: unexpected directory %q", ErrTampered, hdr.Name)
+			}
+			if stage != "" {
+				if err := os.MkdirAll(filepath.Join(stage, "files", filepath.FromSlash(rel)), fs.FileMode(hdr.Mode)&0o777); err != nil {
+					return nil, err
+				}
+			}
+			seen[hdr.Name] = Entry{Name: hdr.Name, Mode: uint32(hdr.Mode) & 0o777, Dir: true}
+			continue
 		}
 		var dest string
 		sealed := false
@@ -541,8 +575,18 @@ func (o *opened) unpack(ctx context.Context, key db.Key, stage string) (map[stri
 				}
 			}
 		}
+		for name, entry := range listed {
+			if !entry.Dir {
+				continue
+			}
+			rel, ok := validFilesName(strings.TrimSuffix(name, "/"))
+			if !ok {
+				continue
+			}
+			if err := os.Chmod(filepath.Join(stage, "files", filepath.FromSlash(rel)), fs.FileMode(entry.Mode)&0o777); err != nil {
+				return nil, err
+			}
+		}
 	}
 	return listed, nil
 }
-
-func sameBytes(a, b []byte) bool { return bytes.Equal(a, b) }
