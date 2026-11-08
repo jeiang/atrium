@@ -201,8 +201,8 @@ func TestCreateWikiHubLinksTheNewPage(t *testing.T) {
 
 	project := s.projectOf(id)
 	block, err := projects.SystemBlock(t.Context(), s.db.Read, threads.Thread{ProjectID: &project.ID})
-	if err != nil || block == nil || !strings.Contains(*block, "wiki-capture") {
-		t.Errorf("system block = %v, %v; want it to name wiki-capture", block, err)
+	if err != nil || block == nil || !strings.Contains(*block, *hub) || !strings.Contains(*block, "durable project knowledge") {
+		t.Errorf("system block = %v, %v; want it to name the wiki hub %s", block, err, *hub)
 	}
 
 	second := status(t, s.post("/projects/"+id+"/wiki-hub", nil, hx, "true"), http.StatusOK)
