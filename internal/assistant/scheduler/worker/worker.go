@@ -162,21 +162,20 @@ func (w *Worker) ExecuteClaim(ctx context.Context, claim scheduler.Claim) (statu
 	}()
 	job := claim.Job
 	if call, isCallable := w.callable(job); isCallable {
+		if call == nil {
+			return w.failedRun(ctx, claim, nil, fmt.Errorf("no callable registered for %s", job.Name))
+		}
 		return w.executeCallable(ctx, claim, call)
 	}
 	return w.executePrompt(ctx, claim)
 }
 
 func (w *Worker) callable(job scheduler.Job) (Callable, bool) {
-	if job.Kind != scheduler.JobBuiltin {
+	spec, ok := scheduler.BuiltinFor(job.Name)
+	if !ok || spec.Run != scheduler.CallableRun {
 		return nil, false
 	}
-	for _, name := range scheduler.CallableNames {
-		if name == job.Name {
-			return w.Callables[name], true
-		}
-	}
-	return nil, false
+	return w.Callables[job.Name], true
 }
 
 func (w *Worker) finish(ctx context.Context, claim scheduler.Claim, o scheduler.Outcome) error {
@@ -227,10 +226,8 @@ func (w *Worker) executePrompt(ctx context.Context, claim scheduler.Claim) strin
 	if job.Kind == scheduler.JobNightly {
 		kind, prompt = threads.Nightly, nightly.Prompt
 	}
-	if job.Kind == scheduler.JobBuiltin {
-		if code, ok := scheduler.BuiltinPrompt(job.Name); ok {
-			prompt = code
-		}
+	if spec, ok := scheduler.BuiltinFor(job.Name); ok && spec.Run == scheduler.PromptRun {
+		prompt = spec.Prompt
 	}
 	operator := job.Kind == scheduler.JobCron && job.PromptBy != nil && *job.PromptBy == scheduler.Operator
 	var threadID *int64
