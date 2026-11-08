@@ -134,11 +134,13 @@ func loadGoldenData(t *testing.T) goldenData {
 }
 
 type fixture struct {
-	t    *testing.T
-	dir  string
-	env  map[string]string
-	app  *cli.App
-	base string
+	t        *testing.T
+	dir      string
+	env      map[string]string
+	app      *cli.App
+	settings *settings.Registry
+	state    *config.State
+	base     string
 }
 
 func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin string) *fixture {
@@ -189,26 +191,25 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 		delete(vars, name)
 	}
 	env := config.Map(vars)
-	t.Cleanup(func() { settings.Default.SetPins(nil) })
 	fakes := data.world.fakes()
 	clients := func(config.Config) mail.OpenFunc {
 		return func(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
 			return mail.Gated(fakes[opts.Account], opts.Q), nil
 		}
 	}
+	reg := settings.New()
+	st := config.NewState(reg)
 	app := cli.New("atrium", logx.Setup)
 	app.Env = env
-	app.Bootstrap = bootstrap(env, settings.Default)
-	app.Add(commands(env, settings.Default, nil, clients, func() float64 { return data.world.Clock })...)
+	app.Settings = reg
+	app.State = st
+	app.Bootstrap = bootstrap(env, reg)
+	app.Add(commands(env, reg, st, nil, clients, func() float64 { return data.world.Clock })...)
 	app.Stdin = strings.NewReader(stdin)
 	copyFile(t, filepath.Join(golden.Dir(), "world.db"), filepath.Join(dir, "atrium.db"))
-	f := &fixture{t: t, dir: dir, env: vars, app: app}
-	envMu.Lock()
+	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: reg, state: st}
 	activeFixture = f
-	envMu.Unlock()
 	t.Cleanup(func() {
-		envMu.Lock()
-		defer envMu.Unlock()
 		if activeFixture == f {
 			activeFixture = nil
 		}
@@ -221,23 +222,18 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 }
 
 func (f *fixture) lookup(name string) (string, bool) {
-	envMu.RLock()
-	v, ok := f.env[name]
-	envMu.RUnlock()
-	if ok {
+	if v, ok := f.env[name]; ok {
 		return v, true
 	}
 	return testLookup(name)
 }
 
 func (f *fixture) loadPins() {
-	envMu.RLock()
-	pins, err := config.LoadPins(config.Map(f.env), settings.Default)
-	envMu.RUnlock()
+	pins, err := config.LoadPins(config.Map(f.env), f.settings)
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	settings.Default.SetPins(pins)
+	f.settings.SetPins(pins)
 }
 
 func (f *fixture) Run(ctx context.Context, argv ...string) (code int, stdout, stderr string) {

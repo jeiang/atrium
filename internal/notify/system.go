@@ -24,7 +24,7 @@ func PauseChanged(ctx context.Context, d *db.DB, env config.Env, paused bool) er
 }
 
 func noticeBudget(ctx context.Context, d *db.DB, env config.Env, now float64) error {
-	loc, err := config.Location(env)
+	loc, err := config.From(ctx).Location(env)
 	if err != nil {
 		return err
 	}

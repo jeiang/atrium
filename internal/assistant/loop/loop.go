@@ -433,7 +433,7 @@ func (s *state) body(ctx context.Context) error {
 	if err := s.settlePending(ctx); err != nil {
 		return err
 	}
-	loc, err := config.Location(s.env)
+	loc, err := config.From(ctx).Location(s.env)
 	if err != nil {
 		return err
 	}

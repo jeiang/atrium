@@ -8,17 +8,17 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 )
 
-func PinMode(t testing.TB, mode string) {
+func PinMode(t testing.TB, reg *settings.Registry, mode string) {
 	t.Helper()
-	pins, err := config.LoadPins(config.Map(map[string]string{config.EnvName(modeDef(t)): mode}), settings.Default)
+	pins, err := config.LoadPins(config.Map(map[string]string{config.EnvName(modeDef(t, reg)): mode}), reg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	settings.Default.SetPins(pins)
-	t.Cleanup(func() { settings.Default.SetPins(nil) })
+	reg.SetPins(pins)
+	t.Cleanup(func() { reg.SetPins(nil) })
 }
 
-func UseAccounts(t testing.TB, logins map[string]string) {
+func UseAccounts(t testing.TB, st *config.State, logins map[string]string) {
 	t.Helper()
 	var list []config.AccountSpec
 	passwords := map[string]string{}
@@ -34,12 +34,12 @@ func UseAccounts(t testing.TB, logins map[string]string) {
 		passwords[a.Name] = "pw"
 		list = append(list, a)
 	}
-	t.Cleanup(config.UseAccounts(list, passwords))
+	t.Cleanup(st.UseAccounts(list, passwords))
 }
 
-func modeDef(t testing.TB) settings.Def {
+func modeDef(t testing.TB, reg *settings.Registry) settings.Def {
 	t.Helper()
-	d, ok := settings.Default.Lookup(mail.KeyMode)
+	d, ok := reg.Lookup(mail.KeyMode)
 	if !ok {
 		t.Fatal("mail mode is not registered")
 	}

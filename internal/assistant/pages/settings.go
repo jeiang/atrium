@@ -22,9 +22,9 @@ import (
 const settingsFrame = "settings"
 
 func init() {
-	settings.Default.Claim("/settings/assistant", assistant.KeyDefaultModel, assistant.KeyDefaultEffort, assistant.KeyDefaultContextLimit)
+	settings.Claim("/settings/assistant", assistant.KeyDefaultModel, assistant.KeyDefaultEffort, assistant.KeyDefaultContextLimit)
 	for _, e := range prompts.Editables {
-		settings.Default.Claim("/settings/prompts", e.Key)
+		settings.Claim("/settings/prompts", e.Key)
 	}
 }
 
@@ -102,7 +102,7 @@ func settingsRedirect(w http.ResponseWriter, location string) {
 
 func (p *pages) usagePage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	loc, err := config.Location(p.deps.Env)
+	loc, err := config.From(ctx).Location(p.deps.Env)
 	check(err)
 	now := p.now()
 	status, err := budget.StatusAt(ctx, p.deps.DB.Read, now, loc)

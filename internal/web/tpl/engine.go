@@ -11,6 +11,8 @@ import (
 	"path"
 	"slices"
 	"strings"
+
+	"github.com/jeiang/atrium/internal/config"
 )
 
 //go:embed templates/*.gohtml templates/basecoat/*.gohtml
@@ -25,6 +27,7 @@ type Config struct {
 	AssetVersion string
 	Globals      map[string]any
 	Modules      []fs.FS
+	State        *config.State
 }
 
 type Toast struct {
@@ -89,6 +92,7 @@ type Engine struct {
 	assetVersion string
 	shared       *template.Template
 	pages        map[string]*template.Template
+	state        *config.State
 }
 
 func AssetURL(version, path string) string {
@@ -100,6 +104,7 @@ func New(cfg Config) (*Engine, error) {
 		globals:      maps.Clone(cfg.Globals),
 		assetVersion: cfg.AssetVersion,
 		pages:        map[string]*template.Template{},
+		state:        cfg.State,
 	}
 	sources, err := collect(cfg)
 	if err != nil {

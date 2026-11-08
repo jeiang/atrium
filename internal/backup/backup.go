@@ -49,7 +49,7 @@ func backupSetup(a *cli.Args) cli.Handler {
 		if _, err := os.Stat(cfg.DBPath); err != nil {
 			return cli.Fail(e, fmt.Errorf("database %s: %w", cfg.DBPath, err))
 		}
-		key, err := dbkey.Load(e.Env, settings.Default)
+		key, err := dbkey.Load(e.Env, settings.From(e.Ctx))
 		if err != nil {
 			return cli.Fail(e, err)
 		}

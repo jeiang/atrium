@@ -255,7 +255,7 @@ func Mode(ctx context.Context, q db.Querier) (string, error) {
 }
 
 func UncertainDest(ctx context.Context, q db.Querier, account string) (string, error) {
-	spec, ok := config.Account(account)
+	spec, ok := config.From(ctx).Account(account)
 	if !ok || spec.UncertainDest() == "" {
 		return "", nil
 	}

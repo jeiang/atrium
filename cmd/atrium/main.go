@@ -29,21 +29,24 @@ var version = "dev"
 
 func main() {
 	ctx, stop := cli.SignalContext(context.Background())
-	code := newApp(config.OS, settings.Default, sdk.Modules()).Run(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	reg := settings.New()
+	code := newApp(config.OS, reg, config.NewState(reg), sdk.Modules()).Run(ctx, os.Args[1:], os.Stdout, os.Stderr)
 	stop()
 	os.Exit(code)
 }
 
-func newApp(env config.Env, reg *settings.Registry, mods []module.Module) *cli.App {
+func newApp(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module) *cli.App {
 	app := cli.New("atrium", logx.Setup)
 	app.Version = version
 	app.Env = env
+	app.Settings = reg
+	app.State = st
 	app.Bootstrap = bootstrap(env, reg)
-	app.Add(commands(env, reg, mods, imapclient.Opener, nil)...)
+	app.Add(commands(env, reg, st, mods, imapclient.Opener, nil)...)
 	return app
 }
 
-func newSet(env config.Env, reg *settings.Registry, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64) *module.Set {
+func newSet(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64) *module.Set {
 	var set *module.Set
 	guard := func(ctx context.Context, q db.Querier, key, value string) error {
 		return set.Guard(ctx, q, key, value)
@@ -59,14 +62,14 @@ func newSet(env config.Env, reg *settings.Registry, mods []module.Module, client
 		notifymodule.Module{},
 		grafanamodule.Module{},
 	}, mods...)
-	set, err := module.NewSet(reg, env, all...)
+	set, err := module.NewSet(reg, st, env, all...)
 	if err != nil {
 		panic(err)
 	}
 	return set
 }
 
-func commands(env config.Env, reg *settings.Registry, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64) []*cli.Command {
-	set := newSet(env, reg, mods, clients, now)
+func commands(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64) []*cli.Command {
+	set := newSet(env, reg, st, mods, clients, now)
 	return append(set.Commands(), web.ServeCommand(set, set.Pages()...))
 }

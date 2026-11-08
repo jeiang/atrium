@@ -52,7 +52,7 @@ func (s *service) open(e *cli.Env) (*db.DB, string, db.Key, int) {
 	if err != nil {
 		return nil, "", db.Key{}, cli.Fail(e, err)
 	}
-	key, err := s.currentKey()
+	key, err := s.currentKey(e)
 	if err != nil {
 		return nil, "", db.Key{}, cli.Fail(e, err)
 	}
@@ -63,8 +63,8 @@ func (s *service) open(e *cli.Env) (*db.DB, string, db.Key, int) {
 	return d, path, key, cli.ExitOK
 }
 
-func (s *service) currentKey() (db.Key, error) {
-	return dbkey.Load(s.env, settings.Default)
+func (s *service) currentKey(e *cli.Env) (db.Key, error) {
+	return dbkey.Load(s.env, settings.From(e.Ctx))
 }
 
 func readKey(path string, stdin io.Reader) (db.Key, error) {
@@ -130,7 +130,7 @@ func (s *service) check(*cli.Args) cli.Handler {
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		key, err := s.currentKey()
+		key, err := s.currentKey(e)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
@@ -160,7 +160,7 @@ func (s *service) rekey(a *cli.Args) cli.Handler {
 	keyFile := a.String("new-key-file", "", cli.Opt{Metavar: "PATH", Help: "file holding the new 64-hex-digit key; standard input is read when omitted"})
 	a.RejectExtras("the new key must come from --new-key-file or standard input, not the command line")
 	return func(e *cli.Env) int {
-		old, err := s.currentKey()
+		old, err := s.currentKey(e)
 		if err != nil {
 			return cli.Fail(e, err)
 		}

@@ -1,6 +1,7 @@
 package config
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"path/filepath"
@@ -61,12 +62,13 @@ func (c Config) sibling(name string) string {
 	return filepath.Join(filepath.Dir(c.DBPath), name)
 }
 
-func (c Config) Credential(account string) (user, password string, ok bool) {
-	a, found := Account(account)
+func (c Config) Credential(ctx context.Context, account string) (user, password string, ok bool) {
+	st := From(ctx)
+	a, found := st.Account(account)
 	if !found || !a.Enabled || a.Login == "" {
 		return "", "", false
 	}
-	password, ok = Password(a.Name)
+	password, ok = st.Password(a.Name)
 	if !ok {
 		return "", "", false
 	}

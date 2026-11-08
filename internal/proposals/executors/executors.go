@@ -485,7 +485,7 @@ func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int6
 	if err != nil {
 		return 0, err
 	}
-	if config.Preset(account) != config.Gmail {
+	if config.From(ctx).Preset(account) != config.Gmail {
 		return e.moveItems(ctx, client, pid, account, items, trash)
 	}
 	trashed := 0
@@ -603,7 +603,7 @@ func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, sel
 				continue
 			}
 			var n int
-			if config.Preset(account) == config.Gmail {
+			if config.From(ctx).Preset(account) == config.Gmail {
 				n, err = e.relabelItems(ctx, client, p.ID, account, items, []string{step.name}, []string{payload.Folder})
 			} else {
 				dest := mail.UTF7Encode(step.name)

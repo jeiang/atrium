@@ -64,7 +64,7 @@ func Register(i Integration) {
 		settings.Value(settings.Advanced, settings.Def{Key: transport.CAKey(i.Name), Module: i.Module, Type: settings.String}),
 		settings.Value(settings.Advanced, settings.Def{Key: transport.ProxyKey(i.Name), Module: i.Module, Type: settings.String, Check: proxyCheck}),
 	)
-	settings.Default.Claim(path, i.URLKey, i.SecretKey)
+	settings.Claim(path, i.URLKey, i.SecretKey)
 	registry = append(registry, i)
 }
 
@@ -102,7 +102,7 @@ func text(ctx context.Context, q db.Querier, key string) (string, error) {
 	if key == "" {
 		return "", nil
 	}
-	found, err := settings.Default.Resolve(ctx, q, key)
+	found, err := settings.From(ctx).Resolve(ctx, q, key)
 	return strings.TrimSpace(found.Value), err
 }
 
@@ -127,15 +127,15 @@ func (r Record) Configured() bool { return r.URLKey == "" && r.SecretSet || r.UR
 
 func Records(ctx context.Context, q db.Querier) ([]Record, error) {
 	var out []Record
-	store := secrets.NewIn(nil, q, nil)
+	store := secrets.NewIn(settings.From(ctx), nil, q, nil)
 	for _, i := range All() {
 		r := Record{Name: i.Name, Label: i.Label, Module: i.Module, Help: i.Help, URLKey: i.URLKey, SecretKey: i.SecretKey, State: Untested}
 		if i.URLKey != "" {
-			found, err := settings.Default.Resolve(ctx, q, i.URLKey)
+			found, err := settings.From(ctx).Resolve(ctx, q, i.URLKey)
 			if err != nil {
 				return nil, err
 			}
-			def, _ := settings.Default.Lookup(i.URLKey)
+			def, _ := settings.From(ctx).Lookup(i.URLKey)
 			r.URL, r.URLPinned = found.Value, found.Pinned() || !def.Editable()
 		}
 		if i.SecretKey != "" {
@@ -167,7 +167,7 @@ func current(ctx context.Context, d *db.DB, q db.Querier, i Integration, env con
 	}
 	var secret string
 	if i.SecretKey != "" {
-		if secret, err = secrets.NewIn(nil, q, nil).Value(ctx, i.SecretKey); err != nil {
+		if secret, err = secrets.NewIn(settings.From(ctx), nil, q, nil).Value(ctx, i.SecretKey); err != nil {
 			return Conn{}, err
 		}
 	}
@@ -331,12 +331,12 @@ func TestAndSave(ctx context.Context, d *db.DB, env config.Env, name string, can
 	}
 	err = d.WithTx(ctx, func(tx *sql.Tx) error {
 		if urlChanged {
-			if err := settings.Default.Set(ctx, tx, i.URLKey, c.URL); err != nil {
+			if err := settings.From(ctx).Set(ctx, tx, i.URLKey, c.URL); err != nil {
 				return err
 			}
 		}
 		if cand.HasSecret {
-			return secrets.NewIn(d, tx, d).Set(ctx, i.SecretKey, c.Secret, by)
+			return secrets.NewIn(settings.From(ctx), d, tx, d).Set(ctx, i.SecretKey, c.Secret, by)
 		}
 		return nil
 	})
@@ -353,12 +353,12 @@ func Disconnect(ctx context.Context, d *db.DB, name string) error {
 	}
 	return d.WithTx(ctx, func(tx *sql.Tx) error {
 		if i.URLKey != "" {
-			if err := settings.Default.Unset(ctx, tx, i.URLKey); err != nil {
+			if err := settings.From(ctx).Unset(ctx, tx, i.URLKey); err != nil {
 				return err
 			}
 		}
 		if i.SecretKey != "" {
-			store := secrets.NewIn(d, tx, d)
+			store := secrets.NewIn(settings.From(ctx), d, tx, d)
 			if status, err := store.Status(ctx, i.SecretKey); err != nil {
 				return err
 			} else if status == settings.Pinned {

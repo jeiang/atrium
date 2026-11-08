@@ -14,6 +14,7 @@ import (
 	"regexp"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const (
@@ -149,13 +150,14 @@ func (a *Args) Has(name string) bool {
 }
 
 type Env struct {
-	Ctx    context.Context
-	Stdin  io.Reader
-	Stdout io.Writer
-	Stderr io.Writer
-	Env    config.Env
-	p      *parser
-	width  int
+	Ctx      context.Context
+	Stdin    io.Reader
+	Stdout   io.Writer
+	Stderr   io.Writer
+	Env      config.Env
+	Settings *settings.Registry
+	p        *parser
+	width    int
 }
 
 func (e *Env) UsageError(format string, a ...any) int {
@@ -168,6 +170,8 @@ type App struct {
 	Version   string
 	Stdin     io.Reader
 	Env       config.Env
+	Settings  *settings.Registry
+	State     *config.State
 	Bootstrap func(ctx context.Context, stderr io.Writer) error
 	root      Command
 	setup     func(stderr io.Writer)
@@ -199,6 +203,12 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if a.setup != nil {
 		a.setup(stderr)
 	}
+	if a.Settings != nil {
+		ctx = settings.With(ctx, a.Settings)
+	}
+	if a.State != nil {
+		ctx = config.With(ctx, a.State)
+	}
 	if a.Bootstrap != nil {
 		if err := a.Bootstrap(ctx, stderr); err != nil {
 			_, _ = fmt.Fprintf(stderr, "error: %v\n", err)
@@ -213,7 +223,7 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if env == nil {
 		env = config.OS
 	}
-	return s.handler(&Env{Ctx: ctx, Stdin: stdin, Stdout: stdout, Stderr: stderr, Env: env, p: s.leaf, width: s.width})
+	return s.handler(&Env{Ctx: ctx, Stdin: stdin, Stdout: stdout, Stderr: stderr, Env: env, Settings: a.Settings, p: s.leaf, width: s.width})
 }
 
 func formatWidth() int {

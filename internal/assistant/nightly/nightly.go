@@ -76,7 +76,7 @@ func threadsToday(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 	if ok {
 		dateArg = &date
 	}
-	loc, err := config.Location(tc.Env)
+	loc, err := config.From(ctx).Location(tc.Env)
 	if err != nil {
 		return nil, tool.Error("invalid time zone")
 	}

@@ -21,7 +21,7 @@ type icloudCalendar struct {
 }
 
 func icloudCalendars(ctx context.Context, env config.Env, set Settings) (*davmirror.Client, []davmirror.CollectionRef, error) {
-	login, err := ICloudLogin(set)
+	login, err := ICloudLogin(ctx, set)
 	if err != nil {
 		return nil, nil, err
 	}

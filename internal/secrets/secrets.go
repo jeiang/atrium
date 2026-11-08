@@ -25,20 +25,14 @@ func init() {
 	)
 }
 
-func init() {
-	db.OnReady(func(ctx context.Context, d *db.DB) error {
-		return settings.NewStore(settings.Default, d, d).Load(ctx)
-	})
+func New(reg *settings.Registry, d *db.DB, cipher settings.Cipher) *settings.Store {
+	return settings.NewStore(reg, d, cipher)
 }
 
-func New(d *db.DB, cipher settings.Cipher) *settings.Store {
-	return settings.NewStore(settings.Default, d, cipher)
-}
-
-func NewIn(d *db.DB, q db.Querier, cipher settings.Cipher) *settings.Store {
-	return settings.NewStoreIn(settings.Default, d, q, cipher)
+func NewIn(reg *settings.Registry, d *db.DB, q db.Querier, cipher settings.Cipher) *settings.Store {
+	return settings.NewStoreIn(reg, d, q, cipher)
 }
 
 func Credential(ctx context.Context, q db.Querier, name string) (string, error) {
-	return settings.NewStoreIn(settings.Default, nil, q, nil).Credential(ctx, name)
+	return settings.NewStoreIn(settings.From(ctx), nil, q, nil).Credential(ctx, name)
 }

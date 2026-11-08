@@ -26,7 +26,7 @@ func (s *service) showWatches(w http.ResponseWriter, r *http.Request, notice *tp
 	now := s.now()
 	packages, err := watches.ListPackages(ctx, s.deps.DB.Read, s.deps.Env, now, true, false)
 	check(err)
-	zone, err := config.Location(s.deps.Env)
+	zone, err := config.From(ctx).Location(s.deps.Env)
 	check(err)
 	sec, _ := timex.SplitTimestamp(now)
 	year, month, day := time.Unix(sec, 0).In(zone).Date()

@@ -190,20 +190,21 @@ func (s *Store) List(ctx context.Context, status Status, limit int) ([]Row, erro
 
 var lineBreakRE = regexp.MustCompile(`[\r\n]`)
 
-func accountError() Error {
-	names := make([]string, len(config.Accounts()))
-	for i, a := range config.Accounts() {
+func accountError(ctx context.Context) Error {
+	accounts := config.From(ctx).Accounts()
+	names := make([]string, len(accounts))
+	for i, a := range accounts {
 		names[i] = a.Name
 	}
 	return Error("account must be one of " + strings.Join(names, ", "))
 }
 
-func validAccount(v any) (string, bool) {
+func validAccount(ctx context.Context, v any) (string, bool) {
 	name, ok := v.(string)
 	if !ok {
 		return "", false
 	}
-	_, found := config.Account(name)
+	_, found := config.From(ctx).Account(name)
 	return name, found
 }
 
@@ -377,8 +378,8 @@ func (s *Store) Create(ctx context.Context, threadID *int64, account string, to,
 	if err != nil {
 		return 0, err
 	}
-	if _, ok := validAccount(account); !ok {
-		return 0, accountError()
+	if _, ok := validAccount(ctx, account); !ok {
+		return 0, accountError(ctx)
 	}
 	toAddrs, err := NormalizeAddresses("to", to)
 	if err != nil {
@@ -481,9 +482,9 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 		case []any, []string, py.Dict, map[string]any:
 			return nil, Error("account must be a single name")
 		}
-		name, valid := validAccount(v)
+		name, valid := validAccount(ctx, v)
 		if !valid {
-			return nil, accountError()
+			return nil, accountError(ctx)
 		}
 		set("account", name)
 	}

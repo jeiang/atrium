@@ -37,14 +37,14 @@ type Source struct {
 }
 
 func Resolve(ctx context.Context, q db.Querier) (Source, error) {
-	on, err := settings.Default.Resolve(ctx, q, module.FlagKey(module.Contacts))
+	on, err := settings.From(ctx).Resolve(ctx, q, module.FlagKey(module.Contacts))
 	if err != nil {
 		return Source{}, err
 	}
 	if on.Value != "true" {
 		return Source{State: Off}, nil
 	}
-	found, err := settings.Default.Resolve(ctx, q, DirKey)
+	found, err := settings.From(ctx).Resolve(ctx, q, DirKey)
 	if err != nil {
 		return Source{}, err
 	}
@@ -63,7 +63,7 @@ func Dir(ctx context.Context, q db.Querier) (string, error) {
 }
 
 func MaxResults(ctx context.Context, q db.Querier) (int64, error) {
-	found, err := settings.Default.Resolve(ctx, q, MaxResultsKey)
+	found, err := settings.From(ctx).Resolve(ctx, q, MaxResultsKey)
 	if err != nil {
 		return 0, err
 	}

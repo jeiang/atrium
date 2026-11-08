@@ -508,9 +508,9 @@ func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64
 	if len(out) == 0 {
 		return out, nil
 	}
-	zone, err := config.Zone(config.TZName(env))
+	zone, err := config.Zone(config.From(ctx).TZName(env))
 	if err != nil {
-		return nil, fmt.Errorf("unknown time zone %q", config.TZName(env))
+		return nil, fmt.Errorf("unknown time zone %q", config.From(ctx).TZName(env))
 	}
 	for i := range out {
 		sec, _ := py.SplitTimestamp(out[i].UpdatedTS)

@@ -136,7 +136,7 @@ func (e *Engine) funcs(set func() *template.Template) template.FuncMap {
 		"pct":       pct,
 		"place":     place,
 		"proposal":  proposal,
-		"noun":      noun,
+		"noun":      e.noun,
 		"sender":    sender,
 		"page_path": pagePath,
 		"isnil":     func(v any) bool { return v == nil },

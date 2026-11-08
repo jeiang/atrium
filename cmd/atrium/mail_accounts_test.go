@@ -76,9 +76,12 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 		}
 	}
 	run := func(args ...string) appRun {
+		reg := settings.New()
 		app := cli.New("atrium", logx.Setup)
-		app.Bootstrap = bootstrap(testLookup, settings.Default)
-		app.Add(commands(testLookup, settings.Default, nil, clients, nil)...)
+		app.Settings = reg
+		app.State = config.NewState(reg)
+		app.Bootstrap = bootstrap(testLookup, reg)
+		app.Add(commands(testLookup, reg, app.State, nil, clients, nil)...)
 		var out, errs bytes.Buffer
 		code := app.Run(context.Background(), args, &out, &errs)
 		return appRun{code, out.String(), errs.String()}

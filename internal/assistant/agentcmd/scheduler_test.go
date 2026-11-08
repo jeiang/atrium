@@ -31,6 +31,10 @@ func TestSchedulerRunsUntilCancelledAndExitsZero(t *testing.T) {
 	}
 	env := config.Map(vars)
 	a := cli.New("atrium", func(io.Writer) {})
+	a.Settings = testRegistry
+	a.State = config.NewState(testRegistry)
+	a.Settings = testRegistry
+	a.State = config.NewState(testRegistry)
 	a.Add(&cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(env, noTools, func(string) bool { return true })}})
 	ctx, cancel := context.WithCancel(t.Context())
 	done := make(chan int)
@@ -74,7 +78,7 @@ func TestResumedRunSupersedesTheOriginalLoop(t *testing.T) {
 		anthropictest.Reply("end_turn", anthropictest.Text("done")),
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("call-1", "count", nil)),
 	)
-	anthropictest.PinKey(t)
+	anthropictest.PinKey(t, testRegistry)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	env := config.Map(map[string]string{
@@ -83,7 +87,7 @@ func TestResumedRunSupersedesTheOriginalLoop(t *testing.T) {
 	})
 	var calls atomic.Int32
 	tools := func() (*registry.Registry, error) {
-		r := registry.New()
+		r := registry.New(testRegistry)
 		err := r.Add(tool.Tool{
 			Name: "count", Description: "Count invocations", InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
 			Effect: tool.Write, Annotated: true, Contexts: tool.Kinds{tool.Cron},
@@ -112,6 +116,8 @@ func TestResumedRunSupersedesTheOriginalLoop(t *testing.T) {
 		}
 	}
 	a := cli.New("atrium", func(io.Writer) {})
+	a.Settings = testRegistry
+	a.State = config.NewState(testRegistry)
 	a.Add(&cli.Command{Name: "agent", Commands: []*cli.Command{runCommand(env, tools), schedulerCommand(env, tools, func(string) bool { return true })}})
 	var runOut, runErr bytes.Buffer
 	runDone := make(chan int)

@@ -37,7 +37,7 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, 
 		match, err = search.FTSQuery(q)
 		check(err)
 	}
-	limit, err := config.Limit(r.Context(), p.deps.DB.Read, config.KeyChatThreadLimit)
+	limit, err := config.From(r.Context()).Limit(r.Context(), p.deps.DB.Read, config.KeyChatThreadLimit)
 	check(err)
 	found, err := threads.ListThreads(r.Context(), p.deps.DB.Read, threads.ListOpts{Match: match, Limit: limit, Archived: view == archived, ProjectID: projectID})
 	check(err)

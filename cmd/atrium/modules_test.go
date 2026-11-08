@@ -70,7 +70,7 @@ func runAppWith(mods []module.Module, args ...string) appRun {
 	}
 	var out bytes.Buffer
 	var errs lockedBuffer
-	code := newApp(env, settings.Default, mods).Run(context.Background(), args, &out, &errs)
+	code := newTestApp(env, mods).Run(context.Background(), args, &out, &errs)
 	return appRun{code, out.String(), errs.String()}
 }
 
@@ -110,9 +110,10 @@ func moduleFixture(t *testing.T, flags map[string]string) (dir string, api *mode
 	for _, name := range moduleNames {
 		env[flagEnv(name)] = flags[name]
 	}
-	settings.Default.SetPins(nil)
-	f := &fixture{t: t, dir: dir, env: env}
-	f.app = newApp(f.lookup, settings.Default, nil)
+	reg := settings.New()
+	st := config.NewState(reg)
+	f := &fixture{t: t, dir: dir, env: env, settings: reg, state: st}
+	f.app = newApp(f.lookup, reg, st, nil)
 	activeFixture = f
 	t.Cleanup(func() {
 		if activeFixture == f {

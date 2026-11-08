@@ -340,7 +340,7 @@ func (p *pages) projectFileDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func filePreview(ctx context.Context, q db.Querier, found files.Row) (map[string]any, error) {
-	limit, err := config.Limit(ctx, q, config.KeyPreviewBytes)
+	limit, err := config.From(ctx).Limit(ctx, q, config.KeyPreviewBytes)
 	if err != nil {
 		return nil, err
 	}

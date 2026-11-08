@@ -26,7 +26,7 @@ import (
 var moduleNames = module.Builtins
 
 func settingEnv(key string) string {
-	d, ok := settings.Default.Lookup(key)
+	d, ok := settings.LookupOf(key)
 	if !ok {
 		panic("unregistered setting " + key)
 	}
@@ -80,7 +80,9 @@ func testLookup(name string) (string, bool) {
 	return config.OS(name)
 }
 
-var testApp = newApp(testLookup, settings.Default, nil)
+var testRegistry = settings.New()
+var testState = config.NewState(testRegistry)
+var testApp = newApp(testLookup, testRegistry, testState, nil)
 
 func setEnv(t *testing.T, name, value string) {
 	t.Helper()
@@ -146,6 +148,11 @@ func init() {
 		}
 	}
 	testEnv["ATRIUM_NOTION_BASE_URL"] = "http://127.0.0.1:9"
+}
+
+func newTestApp(env config.Env, mods []module.Module) *cli.App {
+	reg := settings.New()
+	return newApp(env, reg, config.NewState(reg), mods)
 }
 
 func defaultApp() *cli.App {

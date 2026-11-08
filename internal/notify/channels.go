@@ -128,7 +128,7 @@ func ListChannels(ctx context.Context, q db.Querier) ([]Channel, error) {
 		if err != nil {
 			return nil, err
 		}
-		status, err := settings.NewStoreIn(settings.Default, nil, q, nil).Status(ctx, TokenKey(name))
+		status, err := settings.NewStoreIn(settings.From(ctx), nil, q, nil).Status(ctx, TokenKey(name))
 		if err != nil {
 			return nil, err
 		}

@@ -65,12 +65,12 @@ type Settings struct {
 func LoadSettings(ctx context.Context, q db.Querier) (Settings, error) {
 	var out Settings
 	text := func(key string, into *string) error {
-		found, err := settings.Default.Resolve(ctx, q, key)
+		found, err := settings.From(ctx).Resolve(ctx, q, key)
 		*into = found.Value
 		return err
 	}
 	whole := func(key string, into *int) error {
-		found, err := settings.Default.Resolve(ctx, q, key)
+		found, err := settings.From(ctx).Resolve(ctx, q, key)
 		if err != nil {
 			return err
 		}
@@ -103,7 +103,7 @@ func CandidateLimits(ctx context.Context, q db.Querier) (scan, draft int, err er
 		key  string
 		into *int
 	}{{CandidateScanKey, &scan}, {CandidateDraftKey, &draft}} {
-		found, err := settings.Default.Resolve(ctx, q, step.key)
+		found, err := settings.From(ctx).Resolve(ctx, q, step.key)
 		if err != nil {
 			return 0, 0, err
 		}
@@ -123,9 +123,9 @@ func missingCredentials(missing []string) error {
 	return NotConfigured(strings.Join(missing, ", ") + " not set")
 }
 
-func ICloudLogin(set Settings) (config.CalDAVLogin, error) {
+func ICloudLogin(ctx context.Context, set Settings) (config.CalDAVLogin, error) {
 	var found []config.AccountSpec
-	for _, a := range config.Accounts() {
+	for _, a := range config.From(ctx).Accounts() {
 		if a.Enabled && a.Preset == config.ICloud && (set.Account == "" || a.Name == set.Account) {
 			found = append(found, a)
 		}
@@ -142,7 +142,7 @@ func ICloudLogin(set Settings) (config.CalDAVLogin, error) {
 	if apple == "" {
 		apple = found[0].Login
 	}
-	password, _ := config.Password(found[0].Name)
+	password, _ := config.From(ctx).Password(found[0].Name)
 	return config.CalDAVLogin{AppleID: apple, Password: password}, nil
 }
 

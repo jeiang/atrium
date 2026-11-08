@@ -2,6 +2,7 @@ package settings
 
 import (
 	"fmt"
+	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -114,23 +115,36 @@ type Registry struct {
 	pins   PinSource
 }
 
-func New() *Registry { return &Registry{defs: map[string]Def{}, claims: map[string]string{}} }
+var (
+	definitions []Def
+	claims      = map[string]string{}
+)
 
-func (r *Registry) Claim(page string, keys ...string) {
-	r.mu.Lock()
-	defer r.mu.Unlock()
+func New() *Registry {
+	r := &Registry{defs: make(map[string]Def, len(definitions)), claims: maps.Clone(claims)}
+	for _, d := range definitions {
+		r.defs[d.Key] = d
+	}
+	return r
+}
+
+func Claim(page string, keys ...string) {
 	for _, k := range keys {
 		if k != "" {
-			r.claims[k] = page
+			claims[k] = page
 		}
 	}
 }
 
-var Default = New()
-
 func MustRegister(defs ...Def) {
-	if err := Default.Register(defs...); err != nil {
-		panic(err)
+	for _, d := range defs {
+		if slices.ContainsFunc(definitions, func(e Def) bool { return e.Key == d.Key }) {
+			panic(DuplicateKey(d.Key))
+		}
+		if err := d.valid(); err != nil {
+			panic(err)
+		}
+		definitions = append(definitions, d)
 	}
 }
 
@@ -198,12 +212,34 @@ func (r *Registry) Lookup(key string) (Def, bool) {
 	return r.claimed(d).clone(), ok
 }
 
-func (r *Registry) Range(key string) (int64, int64, bool) {
-	d, ok := r.Lookup(key)
-	if !ok || d.Max <= 0 {
-		return 0, 0, false
+func LookupOf(key string) (Def, bool) {
+	for _, d := range definitions {
+		if d.Key == key {
+			return d.clone(), true
+		}
 	}
-	return d.Min, d.Max, true
+	return Def{}, false
+}
+
+func DefaultOf(key string) (string, bool) {
+	for _, d := range definitions {
+		if d.Key == key {
+			return d.Default, true
+		}
+	}
+	return "", false
+}
+
+func RangeOf(key string) (int64, int64, bool) {
+	for _, d := range definitions {
+		if d.Key == key {
+			if d.Max <= 0 {
+				return 0, 0, false
+			}
+			return d.Min, d.Max, true
+		}
+	}
+	return 0, 0, false
 }
 
 func (r *Registry) claimed(d Def) Def {

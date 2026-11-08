@@ -77,8 +77,6 @@ const (
 	Advanced = settings.Advanced
 )
 
-var Settings = settings.Default
-
 var modules []Module
 
 func Register(name string, m Module) {

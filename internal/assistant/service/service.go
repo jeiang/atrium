@@ -163,7 +163,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env, threadID int64, now
 	if err != nil {
 		return nil, err
 	}
-	loc, err := config.Location(env)
+	loc, err := config.From(ctx).Location(env)
 	if err != nil {
 		return nil, err
 	}

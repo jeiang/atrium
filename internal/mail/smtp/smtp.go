@@ -20,18 +20,32 @@ const (
 var log = logx.Logger("atrium.smtp")
 
 type Credentials interface {
-	Credential(account string) (user, password string, ok bool)
+	Credential(ctx context.Context, account string) (user, password string, ok bool)
 }
 
-func SenderAddress(account, user string) string {
-	if config.Preset(account) == config.ICloud && !strings.Contains(user, "@") {
+func SenderAddress(preset, user string) string {
+	if preset == config.ICloud && !strings.Contains(user, "@") {
 		return user + "@" + ICloudDomain
 	}
 	return user
 }
 
+var commaRunRE = regexp.MustCompile(`[\s,]*,[\s,]*`)
+
+func SplitAddresses(text string) []string {
+	text = commaRunRE.ReplaceAllString(text, ", ")
+	text = strings.Trim(strings.TrimSpace(text), ",")
+	out := []string{}
+	for _, a := range mime.ParseAddresses(text) {
+		if strings.Contains(a.Address, "@") && !strings.Contains(a.Address, " ") {
+			out = append(out, a.Address)
+		}
+	}
+	return out
+}
+
 func Send(ctx context.Context, creds Credentials, account string, msg *Message, recipients []string, factory Factory) (Refusals, error) {
-	user, password, ok := creds.Credential(account)
+	user, password, ok := creds.Credential(ctx, account)
 	if !ok {
 		return nil, &Failure{Kind: "Config", Msg: account + " is not configured: no enabled account with a login and password"}
 	}
@@ -53,7 +67,7 @@ func Send(ctx context.Context, creds Credentials, account string, msg *Message, 
 }
 
 func send(ctx context.Context, factory Factory, account, user, password string, msg *Message, recipients []string) (refused Refusals, err error) {
-	spec, _ := config.Account(account)
+	spec, _ := config.From(ctx).Account(account)
 	server, err := factory(ctx, spec.SMTPHost(), Port, Timeout)
 	if err != nil {
 		return nil, err
@@ -79,7 +93,7 @@ func send(ctx context.Context, factory Factory, account, user, password string, 
 	if err := server.Login(user, password); err != nil {
 		return nil, err
 	}
-	refused, err = server.SendMessage(msg, SenderAddress(account, user), recipients)
+	refused, err = server.SendMessage(msg, SenderAddress(spec.Preset, user), recipients)
 	accepted = err == nil
 	return refused, err
 }

@@ -82,9 +82,9 @@ func Module(r chi.Router, d *web.Deps) {
 
 func shown(d settings.Def) bool { return !d.Generated }
 
-func modules() []string {
+func modules(ctx context.Context) []string {
 	var out []string
-	for _, d := range settings.Default.Defs() {
+	for _, d := range settings.From(ctx).Defs() {
 		if shown(d) && !slices.Contains(out, d.Module) {
 			out = append(out, d.Module)
 		}
@@ -94,19 +94,19 @@ func modules() []string {
 }
 
 func (h handlers) first(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Location", path+"/"+modules()[0])
+	w.Header().Set("Location", path+"/"+modules(r.Context())[0])
 	w.WriteHeader(http.StatusSeeOther)
 }
 
 func fields(ctx context.Context, q db.Querier, module string) ([]field, error) {
 	var out []field
-	store := secrets.NewIn(nil, q, nil)
-	for _, d := range settings.Default.Defs() {
+	store := secrets.NewIn(settings.From(ctx), nil, q, nil)
+	for _, d := range settings.From(ctx).Defs() {
 		if d.Module != module || !shown(d) {
 			continue
 		}
 		f := field{Key: d.Key, Type: string(d.Type), Choices: d.Choices, Default: d.Default, Secret: d.IsSecret(), Page: d.Page}
-		if source, pinned, err := settings.Default.Pinned(d.Key); err != nil {
+		if source, pinned, err := settings.From(ctx).Pinned(d.Key); err != nil {
 			return nil, err
 		} else if pinned {
 			f.Pinned = source
@@ -121,7 +121,7 @@ func fields(ctx context.Context, q db.Querier, module string) ([]field, error) {
 			out = append(out, f)
 			continue
 		}
-		found, err := settings.Default.Resolve(ctx, q, d.Key)
+		found, err := settings.From(ctx).Resolve(ctx, q, d.Key)
 		if err != nil {
 			return nil, err
 		}
@@ -133,7 +133,7 @@ func fields(ctx context.Context, q db.Querier, module string) ([]field, error) {
 }
 
 func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, data page) {
-	if !slices.Contains(modules(), data.Module) {
+	if !slices.Contains(modules(r.Context()), data.Module) {
 		http.NotFound(w, r)
 		return
 	}
@@ -146,7 +146,7 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toa
 			list[i].Value = data.Entered[len(data.Entered)-1]
 		}
 	}
-	data.Modules, data.Fields = modules(), list
+	data.Modules, data.Fields = modules(r.Context()), list
 	h.page(w, r, status, toast, "settings_config.gohtml", data)
 }
 
@@ -180,7 +180,7 @@ func (e *keyError) Unwrap() error { return e.err }
 
 func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 	module := chi.URLParam(r, "module")
-	if !slices.Contains(modules(), module) {
+	if !slices.Contains(modules(r.Context()), module) {
 		http.NotFound(w, r)
 		return
 	}
@@ -215,7 +215,7 @@ func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 func apply(ctx context.Context, d *db.DB, tx *sql.Tx, f field, form url.Values) error {
 	reset := slices.Contains(form["reset"], f.Key)
 	if f.Secret {
-		store := secrets.NewIn(d, tx, d)
+		store := secrets.NewIn(settings.From(ctx), d, tx, d)
 		if value := web.FormString(form, "v."+f.Key, ""); value != "" {
 			return store.Set(ctx, f.Key, value, "ui")
 		}
@@ -226,7 +226,7 @@ func apply(ctx context.Context, d *db.DB, tx *sql.Tx, f field, form url.Values) 
 	}
 	if reset {
 		if f.Stored {
-			return settings.Default.Unset(ctx, tx, f.Key)
+			return settings.From(ctx).Unset(ctx, tx, f.Key)
 		}
 		return nil
 	}
@@ -234,7 +234,7 @@ func apply(ctx context.Context, d *db.DB, tx *sql.Tx, f field, form url.Values) 
 	if !ok || value == f.Value {
 		return nil
 	}
-	return settings.Default.Set(ctx, tx, f.Key, value)
+	return settings.From(ctx).Set(ctx, tx, f.Key, value)
 }
 
 func refused(err error) bool {

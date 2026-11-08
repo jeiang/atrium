@@ -104,7 +104,7 @@ func (r *resolver) value(key string) string {
 	if r.err != nil {
 		return ""
 	}
-	found, err := settings.Default.Resolve(r.ctx, r.q, key)
+	found, err := settings.From(r.ctx).Resolve(r.ctx, r.q, key)
 	r.err = err
 	return found.Value
 }
@@ -113,7 +113,7 @@ func (r *resolver) int(key string) int {
 	if r.err != nil {
 		return 0
 	}
-	found, err := settings.Default.Resolve(r.ctx, r.q, key)
+	found, err := settings.From(r.ctx).Resolve(r.ctx, r.q, key)
 	if err != nil {
 		r.err = err
 		return 0
@@ -127,7 +127,7 @@ func (r *resolver) float(key string) float64 {
 	if r.err != nil {
 		return 0
 	}
-	found, err := settings.Default.Resolve(r.ctx, r.q, key)
+	found, err := settings.From(r.ctx).Resolve(r.ctx, r.q, key)
 	if err != nil {
 		r.err = err
 		return 0

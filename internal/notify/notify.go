@@ -24,6 +24,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const notConfigured = "ntfy not configured (" + KeyURL + ")"
@@ -117,7 +118,7 @@ func deliver(ctx context.Context, q db.Querier, env config.Env, m delivery) (boo
 	if err != nil {
 		return false, "", err
 	}
-	token, err := secrets.NewIn(nil, q, nil).Value(ctx, TokenKey(m.channel))
+	token, err := secrets.NewIn(settings.From(ctx), nil, q, nil).Value(ctx, TokenKey(m.channel))
 	if err != nil {
 		return false, "", err
 	}

@@ -35,19 +35,19 @@ type UnknownAccount string
 
 func (e UnknownAccount) Error() string { return "unknown mail account " + string(e) }
 
-func SelectAccounts(cfg config.Config, requested string) ([]string, error) {
+func SelectAccounts(ctx context.Context, cfg config.Config, requested string) ([]string, error) {
 	if requested != "" {
-		if _, known := config.Account(requested); !known {
+		if _, known := config.From(ctx).Account(requested); !known {
 			return nil, UnknownAccount(requested)
 		}
-		if _, _, ok := cfg.Credential(requested); !ok {
+		if _, _, ok := cfg.Credential(ctx, requested); !ok {
 			return nil, MissingCredentials(requested)
 		}
 		return []string{requested}, nil
 	}
 	var out []string
-	for _, spec := range config.Accounts() {
-		if _, _, ok := cfg.Credential(spec.Name); ok {
+	for _, spec := range config.From(ctx).Accounts() {
+		if _, _, ok := cfg.Credential(ctx, spec.Name); ok {
 			out = append(out, spec.Name)
 		}
 	}
@@ -131,7 +131,7 @@ func (p *Pass) SyncOne(ctx context.Context, account string) error {
 }
 
 func (p *Pass) SyncAll(ctx context.Context) error {
-	accounts, err := SelectAccounts(p.Cfg, "")
+	accounts, err := SelectAccounts(ctx, p.Cfg, "")
 	if err != nil {
 		return err
 	}
@@ -248,7 +248,7 @@ func (p *Pass) checkpoint(ctx context.Context) {
 }
 
 func Sync(ctx context.Context, env config.Env, cfg config.Config, requested string, open mail.OpenFunc) ([]string, error) {
-	accounts, err := SelectAccounts(cfg, requested)
+	accounts, err := SelectAccounts(ctx, cfg, requested)
 	if err != nil {
 		return nil, err
 	}

@@ -26,6 +26,7 @@ import (
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/handlers"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -47,6 +48,8 @@ type site struct {
 	imap     *mailtest.FakeClient
 	clock    float64
 	store    *drafts.Store
+	settings *settings.Registry
+	state    *config.State
 }
 
 type siteOption func(env map[string]string)
@@ -77,11 +80,13 @@ func newSite(t *testing.T, options ...siteOption) *site {
 	if err != nil {
 		t.Fatal(err)
 	}
-	mailtest.PinMode(t, vars["ATRIUM_MODE"])
-	mailtest.UseAccounts(t, map[string]string{config.ICloud: vars[config.ICloud], config.Gmail: vars[config.Gmail]})
+	reg := settings.New()
+	st := config.NewState(reg)
+	mailtest.PinMode(t, reg, vars["ATRIUM_MODE"])
+	mailtest.UseAccounts(t, st, map[string]string{config.ICloud: vars[config.ICloud], config.Gmail: vars[config.Gmail]})
 	s := &site{
 		t: t, db: d, cfg: cfg, env: env, registry: proposals.NewRegistry(), writes: toolset.Undoers(env), smtp: &smtptest.Server{},
-		imap: mailtest.NewFakeClient(), clock: 1_000_000,
+		imap: mailtest.NewFakeClient(), clock: 1_000_000, settings: reg, state: st,
 	}
 	s.imap.AddBox("INBOX", mailtest.NewBox(1))
 	s.imap.AddBox("Sent Messages", mailtest.NewBox(1), `\Sent`)
@@ -97,12 +102,12 @@ func newSite(t *testing.T, options ...siteOption) *site {
 	}
 	handlers.Register(s.registry, handlers.Deps{DB: d, Open: open, Now: tick, Env: env})
 	s.store = &drafts.Store{DB: d, Cfg: cfg, Now: tick}
-	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}}, reviewNav()...)
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}, State: st})
 	if err != nil {
 		t.Fatal(err)
 	}
 	srv, err := web.New(web.Options{
-		Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, AllowedHosts: []string{"testserver"}, Render: render,
+		Cfg: cfg, Env: env, DB: d, Settings: reg, State: st, Auth: []string{web.AuthLocal}, AllowedHosts: []string{"testserver"}, Render: render,
 		Modules: []web.Module{Module(Options{Open: open, Now: tick, Writes: s.writes, Registry: s.registry, SMTP: s.smtp.Factory}), mailpages.PauseModule},
 	})
 	if err != nil {
@@ -111,6 +116,10 @@ func newSite(t *testing.T, options ...siteOption) *site {
 	s.srv = srv
 	s.token = s.fetchToken()
 	return s
+}
+
+func (s *site) ctx() context.Context {
+	return config.With(settings.With(context.Background(), s.settings), s.state)
 }
 
 func (s *site) fetchToken() string {

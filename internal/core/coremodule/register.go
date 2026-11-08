@@ -98,7 +98,7 @@ func startOps(ctx context.Context, d *web.Deps) error {
 const embedEvery = time.Minute
 
 func startEmbed(_ chi.Router, d *web.Deps) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(d.Ctx)
 	done := make(chan struct{})
 	go func() {
 		defer close(done)

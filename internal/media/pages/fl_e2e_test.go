@@ -130,13 +130,13 @@ func flProxy(t *testing.T, s *site) *site {
 		t.Fatal(err)
 	}
 	srv, err := web.New(web.Options{
-		Cfg: s.cfg, Env: s.env, DB: s.db, Auth: []string{web.AuthProxy}, AllowedHosts: []string{host}, Public: PublicCheck(s.cfg, s.env, s.db),
+		Cfg: s.cfg, Env: s.env, DB: s.db, Settings: s.settings, State: s.state, Auth: []string{web.AuthProxy}, AllowedHosts: []string{host}, Public: PublicCheck(s.cfg, s.env, s.db, s.settings),
 		Render: render, Modules: []web.Module{Module(Options{})},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &site{t: t, db: s.db, cfg: s.cfg, env: s.env, dir: s.dir, srv: srv}
+	return &site{t: t, db: s.db, cfg: s.cfg, env: s.env, dir: s.dir, settings: s.settings, state: s.state, srv: srv}
 }
 
 func flGetHost(s *site, target, requestHost string, headers ...[2]string) *httptest.ResponseRecorder {
@@ -389,13 +389,13 @@ func TestFlRotatedAndGeneratedKeys(t *testing.T) {
 			t.Errorf("key file written: %v", err)
 		}
 		req := httptest.NewRequest("GET", path, nil)
-		if !PublicCheck(w.cfg, w.env, w.db)(req) {
+		if !PublicCheck(w.cfg, w.env, w.db, w.settings)(req) {
 			t.Fatal("guard hook rejects the link")
 		}
 		if _, err := w.db.Write.Exec("DELETE FROM secrets WHERE name = ?", media.KeyLinkKey); err != nil {
 			t.Fatal(err)
 		}
-		if PublicCheck(w.cfg, w.env, w.db)(req) {
+		if PublicCheck(w.cfg, w.env, w.db, w.settings)(req) {
 			t.Error("guard hook accepts the link after the stored key was deleted")
 		}
 		if fresh, _, _ := flStoredKey(t, w); len(fresh) != 64 || fresh == value {
@@ -418,7 +418,7 @@ func TestFlRotatedAndGeneratedKeys(t *testing.T) {
 		if _, err := os.Stat(legacy); !os.IsNotExist(err) {
 			t.Errorf("legacy key file left behind: %v", err)
 		}
-		if !PublicCheck(w.cfg, w.env, w.db)(httptest.NewRequest("GET", link, nil)) {
+		if !PublicCheck(w.cfg, w.env, w.db, w.settings)(httptest.NewRequest("GET", link, nil)) {
 			t.Error("guard hook rejects the link after the file is gone")
 		}
 		status(t, w.get(flSigned("other", w.movieRel, flFar)), 403, "link signed with another key")

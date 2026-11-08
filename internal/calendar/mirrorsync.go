@@ -12,7 +12,7 @@ func icloudMirror(ctx context.Context, set Settings, endpoint, dir string, k dav
 	if dir == "" {
 		return davmirror.Stats{}, Error("the mirror directory is not set")
 	}
-	login, err := ICloudLogin(set)
+	login, err := ICloudLogin(ctx, set)
 	if err != nil {
 		return davmirror.Stats{}, err
 	}

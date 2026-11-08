@@ -19,7 +19,7 @@ func init() {
 }
 
 func Token(ctx context.Context, q db.Querier) (string, error) {
-	token, err := secrets.NewIn(nil, q, nil).Value(ctx, TokenKey)
+	token, err := secrets.NewIn(settings.From(ctx), nil, q, nil).Value(ctx, TokenKey)
 	if err != nil {
 		return "", err
 	}

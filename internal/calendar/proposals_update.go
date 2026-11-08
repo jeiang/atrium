@@ -271,7 +271,7 @@ func (p *Proposals) ProposeUpdate(ctx context.Context, raw py.Dict) (int64, bool
 	if err != nil {
 		return 0, false, err
 	}
-	tz, err := Zone(p.env())
+	tz, err := Zone(ctx, p.env())
 	if err != nil {
 		return 0, false, err
 	}
@@ -325,7 +325,7 @@ func (p *Proposals) ExecuteUpdate(ctx context.Context, prop *proposals.Proposal,
 		return nil, err
 	}
 	env := p.env()
-	tz, err := Zone(env)
+	tz, err := Zone(ctx, env)
 	if err != nil {
 		return nil, err
 	}

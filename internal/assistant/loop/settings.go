@@ -23,7 +23,7 @@ func init() {
 }
 
 func cacheTTL(ctx context.Context, q db.Querier) (string, error) {
-	found, err := settings.Default.Resolve(ctx, q, CacheTTLKey)
+	found, err := settings.From(ctx).Resolve(ctx, q, CacheTTLKey)
 	return found.Value, err
 }
 
@@ -34,7 +34,7 @@ func readWebSearchMaxUses(ctx context.Context, q db.Querier) (int, error) {
 }
 
 func readWebSearchDynamicFiltering(ctx context.Context, q db.Querier) (bool, error) {
-	found, err := settings.Default.Resolve(ctx, q, registry.DynamicFilteringKey)
+	found, err := settings.From(ctx).Resolve(ctx, q, registry.DynamicFilteringKey)
 	if err != nil {
 		return false, err
 	}

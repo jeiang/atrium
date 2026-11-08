@@ -213,7 +213,7 @@ func Verify(ctx context.Context, q db.Querier, client mail.Client, account strin
 		}
 		survivors[key] = append(survivors[key], snap)
 	}
-	items := mail.FetchRequest{Mode: mail.FetchHeaders, Labels: config.Preset(account) == config.Gmail}
+	items := mail.FetchRequest{Mode: mail.FetchHeaders, Labels: config.From(ctx).Preset(account) == config.Gmail}
 	for _, key := range order {
 		group := survivors[key]
 		st, err := client.Status(ctx, key.imapName)
@@ -321,7 +321,7 @@ func TrashMailbox(ctx context.Context, client mail.Client, account string) (stri
 				return info.IMAPName, nil
 			}
 		}
-		if config.Preset(account) != config.Gmail && found == "" && trashNames[py.Casefold(info.Name)] {
+		if config.From(ctx).Preset(account) != config.Gmail && found == "" && trashNames[py.Casefold(info.Name)] {
 			found = info.IMAPName
 		}
 	}

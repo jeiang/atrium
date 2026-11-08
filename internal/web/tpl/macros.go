@@ -50,8 +50,8 @@ func proposal(action, dest any) string {
 	return str(dest)
 }
 
-func noun(account any) string {
-	if config.Preset(str(account)) == config.Gmail {
+func (e *Engine) noun(account any) string {
+	if e.state != nil && e.state.Preset(str(account)) == config.Gmail {
 		return "label"
 	}
 	return "folder"

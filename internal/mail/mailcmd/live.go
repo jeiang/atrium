@@ -99,7 +99,7 @@ func setPaused(paused bool) body {
 
 func liveDeletions(x *exec) error {
 	return x.Exclusive(func() error {
-		accounts, err := run.SelectAccounts(x.Cfg, "")
+		accounts, err := run.SelectAccounts(x.Ctx, x.Cfg, "")
 		if err != nil {
 			return err
 		}

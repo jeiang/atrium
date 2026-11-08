@@ -38,11 +38,11 @@ type Access struct {
 }
 
 func Load(ctx context.Context, q db.Querier) (Access, error) {
-	found, err := settings.Default.Resolve(ctx, q, KeyURL)
+	found, err := settings.From(ctx).Resolve(ctx, q, KeyURL)
 	if err != nil {
 		return Access{}, err
 	}
-	token, err := secrets.NewIn(nil, q, nil).Value(ctx, KeyToken)
+	token, err := secrets.NewIn(settings.From(ctx), nil, q, nil).Value(ctx, KeyToken)
 	if err != nil {
 		return Access{}, err
 	}

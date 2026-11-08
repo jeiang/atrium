@@ -1,7 +1,6 @@
 package reviewpages
 
 import (
-	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -120,7 +119,7 @@ func (s *site) profileSet(run int64, key, value string) map[string]any {
 	reg := writes.NewRegistry()
 	profiletools.RegisterUndoer(reg)
 	tc := &tool.Context{DB: s.db, Cfg: s.cfg, Env: s.env, Kind: tool.Chat, ThreadID: 1, RunID: run, Now: func() float64 { return 100 }, Undoers: reg}
-	out, err := tools[i].Handler(context.Background(), tc, tool.Args{"key": key, "value": value})
+	out, err := tools[i].Handler(s.ctx(), tc, tool.Args{"key": key, "value": value})
 	if err != nil {
 		s.t.Fatal(err)
 	}
@@ -143,7 +142,7 @@ func (s *site) profile(key string) any {
 func TestUndoingAProfileSetRestoresThePreviousValue(t *testing.T) {
 	s := newSite(t)
 	s.thread()
-	run, err := journal.StartRun(context.Background(), s.db, 1, "chat", "m", "medium", 100, nil, nil)
+	run, err := journal.StartRun(s.ctx(), s.db, 1, "chat", "m", "medium", 100, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -51,12 +51,12 @@ func Enabled() bool {
 }
 
 func text(ctx context.Context, q db.Querier, key string) (string, error) {
-	found, err := settings.Default.Resolve(ctx, q, key)
+	found, err := settings.From(ctx).Resolve(ctx, q, key)
 	return strings.TrimSpace(found.Value), err
 }
 
 func whole(ctx context.Context, q db.Querier, key string) (int, error) {
-	found, err := settings.Default.Resolve(ctx, q, key)
+	found, err := settings.From(ctx).Resolve(ctx, q, key)
 	if err != nil {
 		return 0, err
 	}

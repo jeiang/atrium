@@ -45,7 +45,7 @@ type Result struct {
 }
 
 func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Message) (Filed, error) {
-	if config.Preset(account) != config.ICloud {
+	if config.From(ctx).Preset(account) != config.ICloud {
 		return FiledByServer, nil
 	}
 	if s.Open == nil {
@@ -62,7 +62,7 @@ func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Mess
 	}
 	sent := ""
 	for _, b := range boxes {
-		if mail.MailboxRole(b.Name, b.Flags, config.Preset(account)) == "sent" {
+		if mail.MailboxRole(b.Name, b.Flags, config.From(ctx).Preset(account)) == "sent" {
 			sent = b.IMAPName
 			break
 		}
@@ -156,11 +156,11 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedRevision int64) (Res
 }
 
 func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusals, error) {
-	user, _, ok := s.Cfg.Credential(d.Account)
+	user, _, ok := s.Cfg.Credential(ctx, d.Account)
 	if !ok {
 		return nil, nil, &smtp.Failure{Kind: "Config", Msg: d.Account + " is not configured"}
 	}
-	sender := smtp.SenderAddress(d.Account, user)
+	sender := smtp.SenderAddress(config.From(ctx).Preset(d.Account), user)
 	makeID := s.MsgID
 	if makeID == nil {
 		makeID = smtp.MakeMsgID

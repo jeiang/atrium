@@ -233,10 +233,11 @@ func pathID(w http.ResponseWriter, r *http.Request, name string) (int64, bool) {
 	return id, true
 }
 
-func accountConfigured(cfg config.Config) map[string]bool {
-	out := make(map[string]bool, len(config.Accounts()))
-	for _, spec := range config.Accounts() {
-		_, _, ok := cfg.Credential(spec.Name)
+func accountConfigured(ctx context.Context, cfg config.Config) map[string]bool {
+	accounts := config.From(ctx).Accounts()
+	out := make(map[string]bool, len(accounts))
+	for _, spec := range accounts {
+		_, _, ok := cfg.Credential(ctx, spec.Name)
 		out[spec.Name] = ok
 	}
 	return out

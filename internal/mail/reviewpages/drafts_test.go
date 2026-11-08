@@ -36,7 +36,7 @@ func (s *site) draft(account string, to, cc any, subject, body string, replyTo *
 	if replyTo != nil {
 		reply = *replyTo
 	}
-	id, err := s.store.Create(s.t.Context(), nil, account, to, cc, subject, body, reply)
+	id, err := s.store.Create(s.ctx(), nil, account, to, cc, subject, body, reply)
 	if err != nil {
 		s.t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestSendRequiresTheReviewedVersionAndConfirmationIsNotInline(t *testing.T) 
 	if !strings.Contains(page, `name="revision" value="`+stale+`"`) {
 		t.Errorf("page misses the revision %s", stale)
 	}
-	if _, err := s.store.Update(t.Context(), id, map[string]any{"to": []any{"attacker@x.test"}}); err != nil {
+	if _, err := s.store.Update(s.ctx(), id, map[string]any{"to": []any{"attacker@x.test"}}); err != nil {
 		t.Fatal(err)
 	}
 	target := fmt.Sprintf("/drafts/%d/send", id)

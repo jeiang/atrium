@@ -95,7 +95,9 @@ func snapshot() ([]Metric, []Check) {
 }
 
 type server struct {
-	d *db.DB
+	d   *db.DB
+	env config.Env
+	ctx context.Context
 
 	mu       sync.Mutex
 	scraped  time.Time
@@ -109,8 +111,8 @@ type result struct {
 	err error
 }
 
-func Handler(d *db.DB, withPprof bool) http.Handler {
-	s := &server{d: d, third: map[string]result{}}
+func Handler(ctx context.Context, d *db.DB, withPprof bool, env config.Env) http.Handler {
+	s := &server{d: d, env: env, ctx: config.WithEnv(ctx, env), third: map[string]result{}}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /metrics", s.metrics)
 	mux.HandleFunc("GET /readyz", s.readyz)
@@ -130,7 +132,7 @@ func (s *server) metrics(w http.ResponseWriter, r *http.Request) {
 	body := s.body
 	s.mu.Unlock()
 	if expired {
-		body = append(render(r.Context(), s.d), s.readiness(r.Context())...)
+		body = append(render(s.ctx, s.d), s.readiness(s.ctx)...)
 		s.mu.Lock()
 		s.body, s.scraped = body, time.Now()
 		s.mu.Unlock()
@@ -217,7 +219,7 @@ func (s *server) run(ctx context.Context, c Check) error {
 			return got.err
 		}
 	}
-	ctx, cancel := context.WithTimeout(ctx, checkWait)
+	ctx, cancel := context.WithTimeout(config.WithEnv(s.ctx, s.env), checkWait)
 	defer cancel()
 	err := c.Run(ctx, s.d)
 	if c.Remote {
@@ -228,8 +230,6 @@ func (s *server) run(ctx context.Context, c Check) error {
 	return err
 }
 
-var checkEnv = config.OS
-
 func init() {
 	Ready(Check{Name: "db", Critical: true, Run: func(ctx context.Context, d *db.DB) error {
 		if err := d.Read.PingContext(ctx); err != nil {
@@ -237,27 +237,24 @@ func init() {
 		}
 		return db.RefuseFutureSchema(ctx, d.Read)
 	}})
-	Ready(Check{Name: "config", Critical: true, Run: func(context.Context, *db.DB) error {
-		if _, err := config.Load(checkEnv); err != nil {
+	Ready(Check{Name: "config", Critical: true, Run: func(ctx context.Context, _ *db.DB) error {
+		if _, err := config.Load(config.EnvFrom(ctx)); err != nil {
 			return err
 		}
-		_, err := config.Location(checkEnv)
+		_, err := config.From(ctx).Location(config.EnvFrom(ctx))
 		return err
 	}})
 }
 
 func Start(ctx context.Context, d *db.DB, env config.Env) (stop func(), err error) {
-	if env != nil {
-		checkEnv = env
-	}
-	addr, err := settings.Default.Resolve(ctx, d.Read, ListenKey)
+	addr, err := settings.From(ctx).Resolve(ctx, d.Read, ListenKey)
 	if err != nil {
 		return nil, err
 	}
 	if addr.Value == Off {
 		return func() {}, nil
 	}
-	withPprof, err := settings.Default.Resolve(ctx, d.Read, PprofKey)
+	withPprof, err := settings.From(ctx).Resolve(ctx, d.Read, PprofKey)
 	if err != nil {
 		return nil, err
 	}
@@ -265,7 +262,7 @@ func Start(ctx context.Context, d *db.DB, env config.Env) (stop func(), err erro
 	if err != nil {
 		return nil, fmt.Errorf("ops listener: %w", err)
 	}
-	srv := &http.Server{Handler: Handler(d, withPprof.Value == "true"), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: Handler(ctx, d, withPprof.Value == "true", env), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		if err := srv.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("ops listener stopped", logx.Err, err.Error())

@@ -33,7 +33,7 @@ func Command() *cli.Command {
 				if err := config.Boot(e.Ctx, e.Env, d, cfg); err != nil {
 					return cli.Fail(e, err)
 				}
-				base := config.PublicURL(e.Env)
+				base := config.From(e.Ctx).PublicURL(e.Env)
 				if base == "" {
 					_, _ = fmt.Fprintf(e.Stderr, "error: %s is not set; the link needs the public URL\n", config.KeyPublicURL)
 					return cli.ExitError

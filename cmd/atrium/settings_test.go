@@ -12,7 +12,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 type settingRow struct {
@@ -80,7 +79,7 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 		listed = append(listed, row.Key)
 	}
 	var registered []string
-	for _, def := range settings.Default.Defs() {
+	for _, def := range testRegistry.Defs() {
 		registered = append(registered, def.Key)
 	}
 	if !slices.Equal(listed, registered) || !slices.Contains(listed, "monthly_budget_usd") || !slices.Contains(listed, "cache_ttl_chat") {
@@ -112,7 +111,7 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 		{"monthly_budget_usd", "0"},
 		{"cache_ttl_chat", "10m"},
 	} {
-		wantMessage := settings.Default.Validate(tc.key, tc.value)
+		wantMessage := testRegistry.Validate(tc.key, tc.value)
 		if wantMessage == nil {
 			t.Fatalf("registry accepts %s=%s", tc.key, tc.value)
 		}

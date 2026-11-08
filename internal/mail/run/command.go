@@ -45,7 +45,7 @@ func execute(env *cli.Env, cfgEnv config.Env, requested string, run runner, clie
 	var unknown UnknownAccount
 	if errors.As(err, &unknown) {
 		var names []string
-		for _, a := range config.Accounts() {
+		for _, a := range config.From(env.Ctx).Accounts() {
 			names = append(names, strconv.Quote(a.Name))
 		}
 		slices.Sort(names)

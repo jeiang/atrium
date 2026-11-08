@@ -306,7 +306,7 @@ func (r *Reader) resolve(key string) settings.Resolved {
 	if r.err != nil {
 		return settings.Resolved{}
 	}
-	found, err := settings.Default.Resolve(r.ctx, r.q, key)
+	found, err := settings.From(r.ctx).Resolve(r.ctx, r.q, key)
 	r.err = err
 	return found
 }

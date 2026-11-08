@@ -412,7 +412,7 @@ func (p *Pipeline) sync(ctx context.Context, prop *Proposal) *string {
 	if p.Registry == nil || p.Registry.Sync == nil || prop.Account == nil {
 		return nil
 	}
-	if _, known := config.Account(*prop.Account); !known {
+	if _, known := config.From(ctx).Account(*prop.Account); !known {
 		return nil
 	}
 	if err := p.Registry.Sync(ctx, *prop.Account); err != nil {

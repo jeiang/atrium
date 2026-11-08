@@ -93,7 +93,7 @@ func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	var job *scheduler.Job
 	err := tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
 		id, err := scheduler.CreateJob(ctx, tx, scheduler.NewJob{
-			Name: fields[0], Prompt: fields[1], Schedule: fields[2], TZ: config.TZName(tc.Env), Now: tc.Now(),
+			Name: fields[0], Prompt: fields[1], Schedule: fields[2], TZ: config.From(ctx).TZName(tc.Env), Now: tc.Now(),
 			CreatedBy: scheduler.Agent, PromptBy: scheduler.Agent, ThreadID: &tc.ThreadID,
 		})
 		if err != nil {

@@ -8,7 +8,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
@@ -38,9 +37,13 @@ func NewRenderer(extra tpl.Config, nav ...tpl.NavItem) (*Renderer, error) {
 	if extra.Globals == nil {
 		extra.Globals = map[string]any{}
 	}
-	accounts := make([]string, len(config.Accounts()))
-	for i, spec := range config.Accounts() {
-		accounts[i] = spec.Name
+	var accounts []string
+	if extra.State != nil {
+		specs := extra.State.Accounts()
+		accounts = make([]string, len(specs))
+		for i, spec := range specs {
+			accounts[i] = spec.Name
+		}
 	}
 	extra.Globals["accounts"] = accounts
 	if _, ok := extra.Globals["module_enabled"]; !ok {

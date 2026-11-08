@@ -21,7 +21,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/secrets"
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -122,7 +121,7 @@ func newLinkSite(t *testing.T) *linkSite {
 	setEnv(t, "ATRIUM_MODE", "shadow")
 	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", base)
 	setEnv(t, settingEnv(secrets.OIDCClientSecret), "s3cret-for-the-test")
-	t.Cleanup(func() { settings.Default.SetPins(nil) })
+	t.Cleanup(func() { testRegistry.SetPins(nil) })
 	site := &linkSite{t: t, base: base}
 	site.idp = oidctest.New(t, oidctest.Options{ClientSecret: "s3cret-for-the-test"})
 	site.idp.AddUser(oidctest.User{Name: "owner", Email: "owner@example.com", Groups: []string{"atrium_access", "atrium_admin"}})
@@ -140,7 +139,7 @@ func newLinkSite(t *testing.T) *linkSite {
 	if err != nil {
 		t.Fatal(err)
 	}
-	render, err := web.NewRenderer(tpl.Config{})
+	render, err := web.NewRenderer(tpl.Config{State: testState})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -148,7 +147,7 @@ func newLinkSite(t *testing.T) *linkSite {
 	site.clock = &now
 	links := loginlink.New(d, loginlink.WithNow(func() time.Time { return *site.clock }))
 	app, err := web.New(web.Options{
-		Cfg: cfg, Env: testLookup, DB: d, Auth: []string{web.AuthOIDC}, AllowedHosts: []string{"127.0.0.1"},
+		Cfg: cfg, Env: testLookup, DB: d, Settings: testRegistry, State: testState, Auth: []string{web.AuthOIDC}, AllowedHosts: []string{"127.0.0.1"},
 		Render: render, OIDC: oidc.New(d, testLookup), LoginLinks: links,
 	})
 	if err != nil {
@@ -377,7 +376,7 @@ func TestLoginLinkMigratesAGoldenDatabaseCopy(t *testing.T) {
 	setEnv(t, "ATRIUM_DB", path)
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", "https://atrium.example")
-	t.Cleanup(func() { settings.Default.SetPins(nil) })
+	t.Cleanup(func() { testRegistry.SetPins(nil) })
 	var imported, importErrs bytes.Buffer
 	if code := defaultApp().Run(context.Background(), []string{"db", "import-v1", filepath.Join(golden.Dir(), "atrium.db")}, &imported, &importErrs); code != cli.ExitOK {
 		t.Fatalf("import-v1 on a golden copy: %d %s", code, importErrs.String())

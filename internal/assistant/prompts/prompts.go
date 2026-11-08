@@ -82,7 +82,7 @@ func check(value string) error {
 }
 
 func Effective(ctx context.Context, q db.Querier, key string) (text string, custom, pinned bool, err error) {
-	found, err := settings.Default.Resolve(ctx, q, key)
+	found, err := settings.From(ctx).Resolve(ctx, q, key)
 	if err != nil {
 		return "", false, false, err
 	}

@@ -79,7 +79,7 @@ func Module(o Options) web.Module {
 		if poll == 0 {
 			poll = 300 * time.Millisecond
 		}
-		base, cancel := context.WithCancel(context.Background())
+		base, cancel := context.WithCancel(d.Ctx)
 		svc := service.New(base, d.DB, d.Cfg, d.Env, run)
 		svc.Client = o.Client
 		svc.Now = o.Now
@@ -113,7 +113,7 @@ func Module(o Options) web.Module {
 			reg = made
 		}
 		p := &pages{deps: d, svc: svc, now: now, poll: poll, keepalive: keepalive, reg: reg}
-		tz := config.TZName(d.Env)
+		tz := config.From(base).TZName(d.Env)
 		stamp := now()
 		check(d.DB.WithTx(base, func(tx *sql.Tx) error {
 			return scheduler.Ensure(base, tx, tz, stamp)

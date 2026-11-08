@@ -111,11 +111,11 @@ type Slots struct {
 }
 
 func FindSlots(ctx context.Context, q db.Querier, env config.Env, set Settings, start, end any, need time.Duration, filter Filter) (Slots, error) {
-	tz, err := Zone(env)
+	tz, err := Zone(ctx, env)
 	if err != nil {
 		return Slots{}, err
 	}
-	hours, err := settings.Default.Resolve(ctx, q, WorkHoursKey)
+	hours, err := settings.From(ctx).Resolve(ctx, q, WorkHoursKey)
 	if err != nil {
 		return Slots{}, err
 	}
@@ -123,7 +123,7 @@ func FindSlots(ctx context.Context, q db.Querier, env config.Env, set Settings, 
 	if err != nil {
 		return Slots{}, err
 	}
-	daysSetting, err := settings.Default.Resolve(ctx, q, WorkDaysKey)
+	daysSetting, err := settings.From(ctx).Resolve(ctx, q, WorkDaysKey)
 	if err != nil {
 		return Slots{}, err
 	}

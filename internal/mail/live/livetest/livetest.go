@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/safety"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const (
@@ -36,6 +37,8 @@ type World struct {
 	Mode     string
 	DB       *db.DB
 	Cfg      config.Config
+	Settings *settings.Registry
+	State    *config.State
 	Fake     *mailtest.FakeClient
 	Syncer   *mailsync.Syncer
 	Registry *proposals.Registry
@@ -44,6 +47,12 @@ type World struct {
 	Synced   []string
 	Opened   int
 }
+
+func (w *World) Context() context.Context {
+	return config.With(settings.With(context.Background(), w.Settings), w.State)
+}
+
+func (w *World) ctx() context.Context { return w.Context() }
 
 func newWorld(t *testing.T, account, mode string, boxes func(*mailtest.FakeClient), seed func(*World)) *World {
 	t.Helper()
@@ -56,9 +65,10 @@ func newWorld(t *testing.T, account, mode string, boxes func(*mailtest.FakeClien
 	if err != nil {
 		t.Fatal(err)
 	}
-	w := &World{T: t, Account: account, Mode: mode, DB: dbtest.Schema(t), Cfg: cfg, Fake: mailtest.NewFakeClient(), Clock: 1_792_080_000}
-	mailtest.PinMode(t, mode)
-	mailtest.UseAccounts(t, map[string]string{config.ICloud: "me", config.Gmail: "me@gmail.test"})
+	reg := settings.New()
+	w := &World{T: t, Account: account, Mode: mode, DB: dbtest.Schema(t), Cfg: cfg, Settings: reg, State: config.NewState(reg), Fake: mailtest.NewFakeClient(), Clock: 1_792_080_000}
+	mailtest.PinMode(t, w.Settings, mode)
+	mailtest.UseAccounts(t, w.State, map[string]string{config.ICloud: "me", config.Gmail: "me@gmail.test"})
 	for _, a := range [...]string{config.ICloud, config.Gmail} {
 		w.exec("INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", a, a)
 	}
@@ -75,7 +85,7 @@ func newWorld(t *testing.T, account, mode string, boxes func(*mailtest.FakeClien
 	boxes(w.Fake)
 	seed(w)
 	w.Sync()
-	if _, err := w.Live.EnsureGolive(context.Background(), nil); err != nil {
+	if _, err := w.Live.EnsureGolive(w.ctx(), nil); err != nil {
 		t.Fatal(err)
 	}
 	w.Clock += 60
@@ -130,7 +140,7 @@ func (w *World) add(box *mailtest.FakeBox, subject, sender string, flags, labels
 }
 
 func (w *World) InboxBox() *mailtest.FakeBox {
-	if config.Preset(w.Account) == config.Gmail {
+	if w.State.Preset(w.Account) == config.Gmail {
 		return w.Fake.Boxes[config.GmailAllMail].Box
 	}
 	return w.Fake.Boxes[config.Inbox].Box
@@ -139,7 +149,7 @@ func (w *World) InboxBox() *mailtest.FakeBox {
 func (w *World) Arrive(subject string, flags ...string) uint32 {
 	w.T.Helper()
 	var labels []string
-	if config.Preset(w.Account) == config.Gmail {
+	if w.State.Preset(w.Account) == config.Gmail {
 		labels = []string{mailops.InboxLabel}
 	}
 	if flags == nil {
@@ -152,7 +162,7 @@ func (w *World) Arrive(subject string, flags ...string) uint32 {
 
 func (w *World) Sync() {
 	w.T.Helper()
-	if _, err := w.Syncer.Account(context.Background(), w.Account, w.Client()); err != nil {
+	if _, err := w.Syncer.Account(w.ctx(), w.Account, w.Client()); err != nil {
 		w.T.Fatal(err)
 	}
 }
@@ -190,7 +200,7 @@ func (w *World) Actions() []live.Action {
 	}
 	out := make([]live.Action, len(ids))
 	for i, id := range ids {
-		a, err := live.Get(context.Background(), w.DB.Read, id)
+		a, err := live.Get(w.ctx(), w.DB.Read, id)
 		if err != nil || a == nil {
 			w.T.Fatalf("action %d: %v", id, err)
 		}
@@ -200,16 +210,16 @@ func (w *World) Actions() []live.Action {
 }
 
 func (w *World) Automatic() context.Context {
-	return safety.AutomaticWrites(context.Background(), w.Cfg.PausePath())
+	return safety.AutomaticWrites(w.ctx(), w.Cfg.PausePath())
 }
 
 func (w *World) verified(subject string) mailops.Verified {
 	w.T.Helper()
-	snaps, err := mailops.Snapshots(context.Background(), w.DB.Read, []int64{w.MID(subject)})
+	snaps, err := mailops.Snapshots(w.ctx(), w.DB.Read, []int64{w.MID(subject)})
 	if err != nil {
 		w.T.Fatal(err)
 	}
-	ok, skipped, err := mailops.Verify(context.Background(), w.DB.Read, w.Client(), w.Account, snaps)
+	ok, skipped, err := mailops.Verify(w.ctx(), w.DB.Read, w.Client(), w.Account, snaps)
 	if err != nil || len(ok) != 1 {
 		w.T.Fatalf("verify %q: %v %v %v", subject, ok, skipped, err)
 	}
@@ -225,7 +235,7 @@ func before(v mailops.Verified) py.Dict {
 
 func (w *World) begin(v mailops.Verified, kind string, dest *string) int64 {
 	w.T.Helper()
-	id, ok, err := w.Live.Begin(context.Background(), w.Account, v.ID, v.Digest, kind, new(v.IMAPName), dest, before(v), nil)
+	id, ok, err := w.Live.Begin(w.ctx(), w.Account, v.ID, v.Digest, kind, new(v.IMAPName), dest, before(v), nil)
 	if err != nil || !ok {
 		w.T.Fatalf("begin %s: %v %v", kind, ok, err)
 	}

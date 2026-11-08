@@ -67,7 +67,7 @@ ORDER BY m.id`
 
 const alreadyThere = "already there"
 
-type check func(account string, item mailops.Verified) string
+type check func(preset, account string, item mailops.Verified) string
 
 type Intent struct {
 	ID         int64
@@ -113,48 +113,48 @@ func (o Outcome) Kind(kind string) int {
 	return v
 }
 
-func inInbox(account string, item mailops.Verified) bool {
-	if config.Preset(account) == config.Gmail {
+func inInbox(preset string, item mailops.Verified) bool {
+	if preset == config.Gmail {
 		return slices.Contains(item.Labels, mailops.InboxLabel)
 	}
 	return py.Casefold(item.IMAPName) == py.Casefold(config.Inbox)
 }
 
-func leftInbox(account string, item mailops.Verified) string {
-	if inInbox(account, item) {
+func leftInbox(preset, account string, item mailops.Verified) string {
+	if inInbox(preset, item) {
 		return ""
 	}
 	return "left the inbox"
 }
 
-func readInbox(account string, item mailops.Verified) string {
+func readInbox(preset, account string, item mailops.Verified) string {
 	if !slices.Contains(item.Flags, mailops.Seen) {
 		return "unread"
 	}
 	if slices.Contains(item.Flags, mailops.Flagged) {
 		return "flagged"
 	}
-	return leftInbox(account, item)
+	return leftInbox(preset, account, item)
 }
 
-func unreadInbox(account string, item mailops.Verified) string {
+func unreadInbox(preset, account string, item mailops.Verified) string {
 	if slices.Contains(item.Flags, mailops.Seen) {
 		return "read"
 	}
 	if slices.Contains(item.Flags, mailops.Flagged) {
 		return "flagged"
 	}
-	return leftInbox(account, item)
+	return leftInbox(preset, account, item)
 }
 
-func unflagged(_ string, item mailops.Verified) string {
+func unflagged(_, _ string, item mailops.Verified) string {
 	if slices.Contains(item.Flags, mailops.Flagged) {
 		return "flagged"
 	}
 	return ""
 }
 
-func unflaggedRead(_ string, item mailops.Verified) string {
+func unflaggedRead(_, _ string, item mailops.Verified) string {
 	if slices.Contains(item.Flags, mailops.Flagged) {
 		return "flagged"
 	}
@@ -164,7 +164,7 @@ func unflaggedRead(_ string, item mailops.Verified) string {
 	return "unread"
 }
 
-func anywhere(string, mailops.Verified) string { return "" }
+func anywhere(_, _ string, _ mailops.Verified) string { return "" }
 
 func protectedNames(ctx context.Context, client mail.Client) (map[string]bool, error) {
 	boxes, err := client.ListMailboxes(ctx)
@@ -692,7 +692,7 @@ func (a *Applier) execute(ctx context.Context, client mail.Client, account strin
 		return err
 	}
 	folders := map[string]string{}
-	if config.Preset(account) != config.Gmail {
+	if config.From(ctx).Preset(account) != config.Gmail {
 		boxes, err := client.ListMailboxes(ctx)
 		if err != nil {
 			return err
@@ -705,7 +705,7 @@ func (a *Applier) execute(ctx context.Context, client mail.Client, account strin
 	var moves, labels, trashes, flagging groups
 	for _, item := range items {
 		in := byID[item.ID]
-		reason := in.check(account, item)
+		reason := in.check(config.From(ctx).Preset(account), account, item)
 		if reason == "" && protected[item.IMAPName] {
 			reason = "protected mailbox"
 		}
@@ -719,7 +719,7 @@ func (a *Applier) execute(ctx context.Context, client mail.Client, account strin
 			switch {
 			case !safeLabel(dest):
 				reason = "unsafe destination"
-			case config.Preset(account) == config.Gmail:
+			case config.From(ctx).Preset(account) == config.Gmail:
 				if !slices.Contains(item.Labels, dest) {
 					added = []string{dest}
 				}
@@ -781,11 +781,11 @@ func (a *Applier) execute(ctx context.Context, client mail.Client, account strin
 		switch {
 		case in.Kind == live.Flag:
 			flagging.add(boxKey(item.IMAPName, item.UIDValidity), box(a.flagGroup, ""), e)
-		case in.Kind == live.Trash && config.Preset(account) == config.Gmail:
+		case in.Kind == live.Trash && config.From(ctx).Preset(account) == config.Gmail:
 			trashes.add(boxKey(item.IMAPName, item.UIDValidity, trash), box(a.gmailTrashGroup, trash), e)
 		case in.Kind == live.Trash:
 			moves.add(boxKey(item.IMAPName, item.UIDValidity, trash), box(a.moveGroup, trash), e)
-		case config.Preset(account) == config.Gmail:
+		case config.From(ctx).Preset(account) == config.Gmail:
 			labels.add(boxKey(item.IMAPName, item.UIDValidity, added, removed), box(a.labelGroup, ""), e)
 		default:
 			moves.add(boxKey(item.IMAPName, item.UIDValidity, destIMAP), box(a.moveGroup, destIMAP), e)
@@ -861,7 +861,7 @@ func (a *Applier) correctionIntents(ctx context.Context, account string, budget 
 	var pending []row
 	for _, x := range all {
 		var atTarget bool
-		if config.Preset(account) == config.Gmail {
+		if config.From(ctx).Preset(account) == config.Gmail {
 			var labels []string
 			if err := json.Unmarshal([]byte(x.labels.String), &labels); err != nil {
 				return nil, err
@@ -877,7 +877,7 @@ func (a *Applier) correctionIntents(ctx context.Context, account string, budget 
 	var out []Intent
 	for _, x := range take(budget, pending, "corrections") {
 		var remove []string
-		if config.Preset(account) == config.Gmail {
+		if config.From(ctx).Preset(account) == config.Gmail {
 			var prior sql.NullString
 			err := a.Live.DB.Write.QueryRowContext(ctx, priorLabel, account, x.digest).Scan(&prior)
 			if err != nil && !errors.Is(err, sql.ErrNoRows) {

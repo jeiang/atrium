@@ -32,11 +32,11 @@ func IsEnabled(name string) bool {
 	return snap != nil && snap.Enabled(name)
 }
 
-func NewSet(reg *settings.Registry, env config.Env, mods ...Module) (*Set, error) {
+func NewSet(reg *settings.Registry, st *config.State, env config.Env, mods ...Module) (*Set, error) {
 	s := &Set{reg: reg, env: env}
 	var regs []Registration
 	for _, m := range mods {
-		regs = append(regs, m.Register(Context{Current: s.Current, Evaluate: s.Evaluate, Env: env}))
+		regs = append(regs, m.Register(Context{Current: s.Current, Evaluate: s.Evaluate, Env: env, Settings: reg, State: st}))
 	}
 	s.regs = regs
 	if err := s.validate(); err != nil {
@@ -234,7 +234,7 @@ func (n *Snapshot) Registry() (*registry.Registry, error) {
 }
 
 func (n *Snapshot) buildRegistry() (*registry.Registry, error) {
-	out := registry.New()
+	out := registry.New(n.set.reg)
 	for _, r := range n.set.regs {
 		if r.Tools == nil || !n.Enabled(r.Name) {
 			continue

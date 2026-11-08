@@ -51,7 +51,7 @@ type nodeSpec struct {
 }
 
 func NodeBytes(ctx context.Context, q db.Querier) (int, error) {
-	found, err := settings.Default.Resolve(ctx, q, NodeBytesKey)
+	found, err := settings.From(ctx).Resolve(ctx, q, NodeBytesKey)
 	if err != nil {
 		return 0, err
 	}

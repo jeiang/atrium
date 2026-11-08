@@ -45,7 +45,7 @@ func Module(r chi.Router, d *web.Deps) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		watchStale(d.DB, d.Env, d.Stopping)
+		watchStale(d.Ctx, d.DB, d.Env, d.Stopping)
 	}()
 	d.OnClose(func() { <-done })
 	h := handlers{d}

@@ -83,7 +83,7 @@ func (p *Proposals) Propose(ctx context.Context, raw py.Dict, source py.Dict, ke
 		}
 		target = parsed
 	}
-	tz, err := Zone(p.env())
+	tz, err := Zone(ctx, p.env())
 	if err != nil {
 		return 0, false, err
 	}
@@ -199,7 +199,7 @@ func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any
 		return nil, err
 	}
 	env := p.env()
-	tz, err := Zone(env)
+	tz, err := Zone(ctx, env)
 	if err != nil {
 		return nil, err
 	}

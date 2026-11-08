@@ -38,13 +38,16 @@ func newHarness(t *testing.T, script ...anthropictest.Response) *harness {
 	srv := anthropictest.New(t, script...)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
-	anthropictest.PinKey(t)
+	t.Setenv("ATRIUM_DB", path)
+	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	t.Setenv("ATRIUM_MODE", "shadow")
+	anthropictest.PinKey(t, testRegistry)
 	env := config.Map(map[string]string{
 		"ATRIUM_DB": path, "ATRIUM_CACHE_DIR": filepath.Join(dir, "cache"), "ATRIUM_MODE": "shadow",
 		"ANTHROPIC_API_KEY": anthropictest.APIKey, anthropic.BaseURLEnv: srv.URL,
 	})
 	tools := func() (*registry.Registry, error) {
-		r := registry.New()
+		r := registry.New(testRegistry)
 		err := r.Add(tool.Tool{
 			Name: "probe", Description: "Return a fixed result", InputSchema: json.RawMessage(`{"type":"object","properties":{"n":{"type":"integer"}}}`),
 			Effect: tool.Read, Annotated: true, Contexts: tool.Kinds{tool.Chat, tool.Cron},
@@ -53,7 +56,9 @@ func newHarness(t *testing.T, script ...anthropictest.Response) *harness {
 		return r, err
 	}
 	a := cli.New("atrium", func(io.Writer) {})
-	a.Add(&cli.Command{Name: "agent", Commands: []*cli.Command{runCommand(env, tools)}}, settingscmd.Command(env, nil))
+	a.Settings = testRegistry
+	a.State = config.NewState(testRegistry)
+	a.Add(&cli.Command{Name: "agent", Commands: []*cli.Command{runCommand(env, tools)}}, settingscmd.Command(config.OS, nil))
 	d, err := db.Connect(path)
 	if err != nil {
 		t.Fatal(err)
