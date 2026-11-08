@@ -164,7 +164,13 @@ func Command(o Options) *cli.Command {
 					if err != nil {
 						return err
 					}
-					chosen = parsed
+					b, err := json.Marshal(parsed)
+					if err != nil {
+						return err
+					}
+					if err := json.Unmarshal(b, &chosen); err != nil {
+						return err
+					}
 				}
 				approved, err := x.Pipeline().ApproveAndApply(x.Ctx, int64(*id), chosen, operator)
 				if err != nil {
