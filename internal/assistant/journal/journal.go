@@ -104,18 +104,32 @@ func changed(res sql.Result, err error) (bool, error) {
 	return n > 0, err
 }
 
-func StartRun(ctx context.Context, q db.Querier, threadID int64, kind, model, effort string, now float64, parentRunID *int64, owner *string) (int64, error) {
-	lease, err := leaseSeconds(ctx, q)
+var ErrRunActive = errors.New("journal: thread already has an active run")
+
+func StartRun(ctx context.Context, d *db.DB, threadID int64, kind, model, effort string, now float64, parentRunID *int64, owner *string) (int64, error) {
+	lease, err := leaseSeconds(ctx, d.Read)
 	if err != nil {
 		return 0, err
 	}
-	res, err := q.ExecContext(ctx,
-		"INSERT INTO runs (thread_id, parent_run_id, kind, model, effort, state, started_at, owner, lease_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		threadID, parentRunID, kind, model, effort, Running, now, owner, now+lease)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
+	var id int64
+	err = d.WithTx(ctx, func(tx *sql.Tx) error {
+		active, err := ActiveRun(ctx, tx, threadID)
+		if err != nil {
+			return err
+		}
+		if active != nil {
+			return ErrRunActive
+		}
+		res, err := tx.ExecContext(ctx,
+			"INSERT INTO runs (thread_id, parent_run_id, kind, model, effort, state, started_at, owner, lease_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			threadID, parentRunID, kind, model, effort, Running, now, owner, now+lease)
+		if err != nil {
+			return err
+		}
+		id, err = res.LastInsertId()
+		return err
+	})
+	return id, err
 }
 
 type Limits struct {
@@ -372,25 +386,34 @@ func ReindexThread(ctx context.Context, q db.Querier, threadID int64) error {
 	return nil
 }
 
-func AppendMessage(ctx context.Context, d *db.DB, threadID int64, runID *int64, role string, content []json.RawMessage, now float64, systemSig *string) (int64, error) {
+func AppendMessageTx(ctx context.Context, q db.Querier, threadID int64, runID *int64, role string, content []json.RawMessage, now float64, systemSig *string) (int64, error) {
 	body, err := Dumps(content)
 	if err != nil {
 		return 0, err
 	}
 	var seq int64
-	err = d.WithTx(ctx, func(tx *sql.Tx) error {
-		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(seq), 0) + 1 FROM thread_messages WHERE thread_id = ?", threadID).Scan(&seq); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO thread_messages (thread_id, run_id, seq, role, content_json, created_at, system_sig) VALUES (?, ?, ?, ?, ?, ?, ?)",
-			threadID, runID, seq, role, body, now, systemSig); err != nil {
-			return err
-		}
-		if err := ReindexThread(ctx, tx, threadID); err != nil {
-			return err
-		}
-		_, err := tx.ExecContext(ctx, "UPDATE threads SET updated_at = ? WHERE id = ?", now, threadID)
+	if err := q.QueryRowContext(ctx, "SELECT COALESCE(MAX(seq), 0) + 1 FROM thread_messages WHERE thread_id = ?", threadID).Scan(&seq); err != nil {
+		return 0, err
+	}
+	if _, err := q.ExecContext(ctx,
+		"INSERT INTO thread_messages (thread_id, run_id, seq, role, content_json, created_at, system_sig) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		threadID, runID, seq, role, body, now, systemSig); err != nil {
+		return 0, err
+	}
+	if err := ReindexThread(ctx, q, threadID); err != nil {
+		return 0, err
+	}
+	if _, err := q.ExecContext(ctx, "UPDATE threads SET updated_at = ? WHERE id = ?", now, threadID); err != nil {
+		return 0, err
+	}
+	return seq, nil
+}
+
+func AppendMessage(ctx context.Context, d *db.DB, threadID int64, runID *int64, role string, content []json.RawMessage, now float64, systemSig *string) (int64, error) {
+	var seq int64
+	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		seq, err = AppendMessageTx(ctx, tx, threadID, runID, role, content, now, systemSig)
 		return err
 	})
 	return seq, err
@@ -553,17 +576,28 @@ func Queued(ctx context.Context, q db.Querier, threadID int64) ([]QueuedMessage,
 	})
 }
 
-func TakeQueued(ctx context.Context, q db.Querier, threadID, runID int64, now float64) ([]QueuedMessage, error) {
-	rows, err := Queued(ctx, q, threadID)
+func ConsumeQueued(ctx context.Context, d *db.DB, threadID, runID int64, now float64, appendFn func(q db.Querier, m QueuedMessage) error) ([]QueuedMessage, error) {
+	var taken []QueuedMessage
+	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		rows, err := Queued(ctx, tx, threadID)
+		if err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if err := appendFn(tx, row); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, "UPDATE thread_queue SET consumed_at = ?, run_id = ? WHERE id = ?", now, runID, row.ID); err != nil {
+				return err
+			}
+			taken = append(taken, row)
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	for _, r := range rows {
-		if _, err := q.ExecContext(ctx, "UPDATE thread_queue SET consumed_at = ?, run_id = ? WHERE id = ?", now, runID, r.ID); err != nil {
-			return nil, err
-		}
-	}
-	return rows, nil
+	return taken, nil
 }
 
 type ToolCall struct {

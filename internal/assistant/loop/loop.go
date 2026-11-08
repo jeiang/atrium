@@ -353,27 +353,35 @@ func (s *state) allowURLs(ctx context.Context, urls []string) error {
 }
 
 func (s *state) injectQueued(ctx context.Context) (bool, error) {
-	rows, err := journal.TakeQueued(ctx, s.d.Write, s.thread.ID, s.run.ID, s.now())
+	queued, err := journal.Queued(ctx, s.d.Read, s.thread.ID)
 	if err != nil {
 		return false, err
 	}
-	for _, row := range rows {
-		text := row.Text
-		if err := s.allowURLs(ctx, threads.URLsIn(text)); err != nil {
-			return false, err
-		}
-		if text, _, err = s.r.Expand(ctx, s.d.Write, s.kind, text); err != nil {
-			return false, err
-		}
-		content := append(append([]json.RawMessage{}, row.Files...), actx.TextBlock(text))
-		if _, err := journal.AppendMessage(ctx, s.d, s.thread.ID, &s.run.ID, journal.User, content, s.now(), nil); err != nil {
-			return false, err
-		}
-		if err := s.writer.Event(ctx, progress.User, py.Dict{{Key: "text", Value: text}, {Key: "queue_id", Value: row.ID}}); err != nil {
+	for _, row := range queued {
+		if err := s.allowURLs(ctx, threads.URLsIn(row.Text)); err != nil {
 			return false, err
 		}
 	}
-	return len(rows) > 0, nil
+	texts := make(map[int64]string, len(queued))
+	taken, err := journal.ConsumeQueued(ctx, s.d, s.thread.ID, s.run.ID, s.now(), func(q db.Querier, row journal.QueuedMessage) error {
+		text, _, err := s.r.Expand(ctx, q, s.kind, row.Text)
+		if err != nil {
+			return err
+		}
+		texts[row.ID] = text
+		content := append(append([]json.RawMessage{}, row.Files...), actx.TextBlock(text))
+		_, err = journal.AppendMessageTx(ctx, q, s.thread.ID, &s.run.ID, journal.User, content, s.now(), nil)
+		return err
+	})
+	if err != nil {
+		return false, err
+	}
+	for _, row := range taken {
+		if err := s.writer.Event(ctx, progress.User, py.Dict{{Key: "text", Value: texts[row.ID]}, {Key: "queue_id", Value: row.ID}}); err != nil {
+			return false, err
+		}
+	}
+	return len(taken) > 0, nil
 }
 
 func (s *state) active(ctx context.Context, loc *time.Location) ([]actx.Message, error) {
