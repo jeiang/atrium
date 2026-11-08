@@ -134,7 +134,7 @@ func (t Tuning) MovieEntries(root string) []Entry {
 	dirs := dirsOf(filepath.Join(root, Movies))
 	out := []Entry{}
 	for _, d := range dirs[:min(t.ChildLimit, len(dirs))] {
-		out = append(out, t.entryOf(Movies, d))
+		out = append(out, t.entryOf(KindMovie, d))
 	}
 	return out
 }
@@ -143,7 +143,7 @@ func (t Tuning) ShowEntries(root string) []Entry {
 	dirs := dirsOf(filepath.Join(root, TV))
 	out := []Entry{}
 	for _, d := range dirs[:min(t.ChildLimit, len(dirs))] {
-		out = append(out, t.entryOf(TV, d))
+		out = append(out, t.entryOf(KindShow, d))
 	}
 	return out
 }
@@ -263,7 +263,7 @@ func (t Tuning) Search(root, query string, limit int) []SearchResult {
 	for _, s := range t.ShowEntries(root) {
 		for _, rel := range t.EpisodeFilesOf(root, s.Dir) {
 			if containsAll(textutil.Casefold(s.Dir+" "+filepath.Base(rel)), words) {
-				out = append(out, SearchResult{Kind: "episode", Title: s.Title, Year: s.Year, Dir: s.Dir, Files: []string{rel}})
+				out = append(out, SearchResult{Kind: KindEpisode, Title: s.Title, Year: s.Year, Dir: s.Dir, Files: []string{rel}})
 			}
 		}
 		if len(out) >= limit {
