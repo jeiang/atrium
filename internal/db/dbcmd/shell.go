@@ -15,7 +15,7 @@ import (
 
 func (s *service) shell(*cli.Args) cli.Handler {
 	return func(e *cli.Env) int {
-		d, _, code := s.open(e)
+		d, _, _, code := s.open(e)
 		if code != cli.ExitOK {
 			return code
 		}
@@ -165,10 +165,10 @@ func splitStatements(text string) ([]string, string) {
 			i += j + 3
 		case c == ';':
 			stmt := strings.TrimSpace(text[start : i+1])
-			if openTrigger(stmt) {
+			if triggerDepth(stmt) > 0 {
 				continue
 			}
-			if stmt != ";" {
+			if hasSQL(stmt) {
 				stmts = append(stmts, stmt)
 			}
 			start = i + 1
@@ -177,13 +177,76 @@ func splitStatements(text string) ([]string, string) {
 	return stmts, text[start:]
 }
 
-func openTrigger(stmt string) bool {
-	words := strings.Fields(strings.ToUpper(strings.TrimSuffix(stmt, ";")))
+func isTrigger(stmt string) bool {
+	words := strings.Fields(strings.ToUpper(stmt))
 	if len(words) < 2 || words[0] != "CREATE" {
 		return false
 	}
 	if words[1] == "TEMP" || words[1] == "TEMPORARY" {
 		words = words[1:]
 	}
-	return len(words) > 1 && words[1] == "TRIGGER" && words[len(words)-1] != "END"
+	return len(words) > 1 && words[1] == "TRIGGER"
+}
+
+func triggerDepth(stmt string) int {
+	if !isTrigger(stmt) {
+		return 0
+	}
+	depth := 0
+	for _, word := range strings.Fields(stripQuoted(stmt)) {
+		switch strings.ToUpper(strings.Trim(word, ";(),")) {
+		case "BEGIN", "CASE":
+			depth++
+		case "END":
+			depth--
+		}
+	}
+	return depth
+}
+
+func stripQuoted(text string) string {
+	var b strings.Builder
+	var quote byte
+	for i := 0; i < len(text); i++ {
+		c := text[i]
+		if quote != 0 {
+			if c == quote {
+				quote = 0
+			}
+			b.WriteByte(' ')
+			continue
+		}
+		if c == '\'' || c == '"' || c == '`' {
+			quote = c
+			b.WriteByte(' ')
+			continue
+		}
+		b.WriteByte(c)
+	}
+	return b.String()
+}
+
+func hasSQL(stmt string) bool {
+	text := stmt
+	for {
+		text = strings.TrimSpace(text)
+		switch {
+		case strings.HasPrefix(text, "--"):
+			if i := strings.IndexByte(text, '\n'); i >= 0 {
+				text = text[i+1:]
+				continue
+			}
+			return false
+		case strings.HasPrefix(text, "/*"):
+			if i := strings.Index(text[2:], "*/"); i >= 0 {
+				text = text[i+4:]
+				continue
+			}
+			return false
+		case text == "" || text == ";":
+			return false
+		default:
+			return true
+		}
+	}
 }
