@@ -8,7 +8,6 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/mail/smtp"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -26,11 +25,11 @@ func statusNames() []string {
 }
 
 func (s *service) draftViews(r *http.Request, rows []drafts.Row) []DraftView {
+	unexpected, err := s.drafts.UnexpectedRecipientsBatch(r.Context(), rows)
+	check(err)
 	out := make([]DraftView, len(rows))
 	for i, row := range rows {
-		unexpected, err := s.drafts.UnexpectedRecipients(r.Context(), row)
-		check(err)
-		out[i] = draftView(row, unexpected)
+		out[i] = draftView(row, unexpected[i])
 	}
 	return out
 }
@@ -190,13 +189,18 @@ func (s *service) draftSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var refused drafts.Error
-	var failed smtp.SendError
-	if errors.As(err, &refused) || errors.As(err, &failed) {
+	if errors.As(err, &refused) {
 		s.reply(w, r, id, drafts.Draft, http.StatusConflict, toast("error", "Not sent", err.Error()))
 		return
 	}
-	check(err)
-	detail := result.Filed
+	if err != nil {
+		s.reply(w, r, id, drafts.Draft, http.StatusConflict, toast("error", "Not sent", err.Error()))
+		return
+	}
+	detail := result.Filed.String()
+	if result.FiledError != "" {
+		detail += ": " + result.FiledError
+	}
 	if len(result.Refused) > 0 {
 		addrs := make([]string, len(result.Refused))
 		for i, refusal := range result.Refused {

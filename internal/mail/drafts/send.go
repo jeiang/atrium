@@ -14,26 +14,51 @@ import (
 	"github.com/jeiang/atrium/internal/safety"
 )
 
-type Result struct {
-	Refused smtp.Refusals
-	Filed   string
+type Filed int
+
+const (
+	FiledNone Filed = iota
+	FiledCopy
+	FiledByServer
+	FiledNoMailbox
+	FiledFailed
+)
+
+func (f Filed) String() string {
+	switch f {
+	case FiledCopy:
+		return "copy filed in Sent"
+	case FiledByServer:
+		return "gmail files Sent itself"
+	case FiledNoMailbox:
+		return "no Sent mailbox found; copy not filed"
+	case FiledFailed:
+		return "Sent copy failed"
+	}
+	return ""
 }
 
-func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Message) (string, error) {
+type Result struct {
+	Refused    smtp.Refusals
+	Filed      Filed
+	FiledError string
+}
+
+func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Message) (Filed, error) {
 	if config.Preset(account) != config.ICloud {
-		return "gmail files Sent itself", nil
+		return FiledByServer, nil
 	}
 	if s.Open == nil {
-		return "", errors.New("no IMAP opener")
+		return FiledFailed, errors.New("no IMAP opener")
 	}
 	client, err := s.Open(ctx, mail.OpenOptions{Account: account, Q: s.DB.Read})
 	if err != nil {
-		return "", err
+		return FiledFailed, err
 	}
 	defer client.Close()
 	boxes, err := client.ListMailboxes(ctx)
 	if err != nil {
-		return "", err
+		return FiledFailed, err
 	}
 	sent := ""
 	for _, b := range boxes {
@@ -43,16 +68,16 @@ func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Mess
 		}
 	}
 	if sent == "" {
-		return "no Sent mailbox found; copy not filed", nil
+		return FiledNoMailbox, nil
 	}
 	raw := msg.Bytes("\r\n", false)
 	if err := client.Append(safety.OperatorSend(ctx, sent), sent, raw, `\Seen`); err != nil {
 		if _, unknown := errors.AsType[*mail.WriteInterrupted](err); unknown {
-			return "", errors.New("the copy in Sent may exist: check Sent before filing it again")
+			return FiledFailed, errors.New("the copy in Sent may exist: check Sent before filing it again")
 		}
-		return "", err
+		return FiledFailed, err
 	}
-	return "copy filed in Sent", nil
+	return FiledCopy, nil
 }
 
 func (s *Store) abandon(ctx context.Context, id int64, cause error) {
@@ -94,17 +119,12 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedRevision int64) (Res
 		}
 		return Result{}, OutcomeUnknown("the mail may have been sent (" + unknown.Error() + "); check before you choose Back to draft")
 	}
-	var serr smtp.SendError
-	if errors.As(err, &serr) {
+	if err != nil {
 		if uerr := s.transition(ctx, id, Sending, Draft, func(u *updateSet) {
-			u.set("smtp_result", "send failed: "+serr.Error())
+			u.set("smtp_result", "send failed: "+err.Error())
 		}); uerr != nil {
 			return Result{}, uerr
 		}
-		return Result{}, serr
-	}
-	if err != nil {
-		s.abandon(ctx, id, err)
 		return Result{}, err
 	}
 	result := "sent"
@@ -118,21 +138,27 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedRevision int64) (Res
 	}); err != nil {
 		return Result{}, err
 	}
-	filed, err := s.fileSentCopy(ctx, draft.Account, msg)
-	if err != nil {
-		log.Warn(fmt.Sprintf("sent copy for draft %d not filed: %s", id, err))
-		filed = "Sent copy failed: " + err.Error()
+	filed, ferr := s.fileSentCopy(ctx, draft.Account, msg)
+	filedError := ""
+	if ferr != nil {
+		log.Warn(fmt.Sprintf("sent copy for draft %d not filed: %s", id, ferr))
+		filed = FiledFailed
+		filedError = ferr.Error()
 	}
-	if _, err := s.exec(ctx, "UPDATE drafts SET smtp_result = ? WHERE id = ? AND status = ?", result+"; "+filed, id, string(Sent)); err != nil {
+	detail := filed.String()
+	if filedError != "" {
+		detail += ": " + filedError
+	}
+	if _, err := s.exec(ctx, "UPDATE drafts SET smtp_result = ? WHERE id = ? AND status = ?", result+"; "+detail, id, string(Sent)); err != nil {
 		return Result{}, err
 	}
-	return Result{Refused: refused, Filed: filed}, nil
+	return Result{Refused: refused, Filed: filed, FiledError: filedError}, nil
 }
 
 func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusals, error) {
 	user, _, ok := s.Cfg.Credential(d.Account)
 	if !ok {
-		return nil, nil, smtp.SendError(d.Account + " is not configured")
+		return nil, nil, &smtp.Failure{Kind: "Config", Msg: d.Account + " is not configured"}
 	}
 	sender := smtp.SenderAddress(d.Account, user)
 	makeID := s.MsgID

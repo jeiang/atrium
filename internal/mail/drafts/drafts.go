@@ -169,7 +169,7 @@ func (s *Store) ForMessage(ctx context.Context, messageID int64) (*Row, error) {
 	r, err := scanRow(s.DB.Read.QueryRowContext(ctx,
 		"SELECT d.id, d.thread_id, d.account, d.to_addrs, d.cc_addrs, d.subject, d.body, d.in_reply_to_message_id, "+
 			"d.in_reply_to, d.refs, d.status, d.revision, d.created_at, d.updated_at, d.sent_at, d.smtp_result, d.sent_msgid "+
-			"FROM drafts d JOIN messages m ON m.msgid = d.sent_msgid WHERE m.id = ? AND d.sent_msgid != '' AND d.thread_id IS NOT NULL",
+			"FROM drafts d JOIN messages m ON m.msgid = d.sent_msgid AND m.account = d.account WHERE m.id = ? AND d.sent_msgid != '' AND d.thread_id IS NOT NULL",
 		messageID))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -394,12 +394,9 @@ func (s *Store) Create(ctx context.Context, threadID *int64, account string, to,
 	if err != nil {
 		return 0, err
 	}
-	text, _ := body.(string)
-	if strings.TrimSpace(text) == "" {
-		return 0, Error("body is required")
-	}
-	if utf8.RuneCountInString(text) > maxBody {
-		return 0, Error(fmt.Sprintf("body is limited to %d characters", maxBody))
+	text, ok := body.(string)
+	if !ok || strings.TrimSpace(text) == "" || utf8.RuneCountInString(text) > maxBody {
+		return 0, Error(fmt.Sprintf("body must be 1..%d characters", maxBody))
 	}
 	var r reply
 	var replyID any
@@ -524,14 +521,20 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 		}
 		set("body", body)
 	}
-	if v := changes["in_reply_to_message_id"]; v != nil {
-		replyTo, r, err := s.replyFor(ctx, v)
-		if err != nil {
-			return nil, err
+	if v, ok := changes["in_reply_to_message_id"]; ok {
+		if v == nil {
+			set("in_reply_to_message_id", nil)
+			set("in_reply_to", "")
+			set("refs", "")
+		} else {
+			replyTo, r, err := s.replyFor(ctx, v)
+			if err != nil {
+				return nil, err
+			}
+			set("in_reply_to_message_id", replyTo)
+			set("in_reply_to", r.inReplyTo)
+			set("refs", r.refs)
 		}
-		set("in_reply_to_message_id", replyTo)
-		set("in_reply_to", r.inReplyTo)
-		set("refs", r.refs)
 	}
 	if len(sets) == 0 {
 		return nil, Error("nothing to change")
@@ -626,22 +629,50 @@ func (s *Store) ResolveUnknown(ctx context.Context, id int64, status Status) err
 }
 
 func (s *Store) UnexpectedRecipients(ctx context.Context, d Row) ([]string, error) {
-	out := []string{}
 	if d.InReplyToMessageID == nil {
-		return out, nil
+		return []string{}, nil
 	}
 	r, err := s.replyContext(ctx, *d.InReplyToMessageID)
 	var derr Error
 	if errors.As(err, &derr) {
-		return out, nil
+		return []string{}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	to := addresses(d.ToAddrs)
-	cc := addresses(d.CcAddrs)
+	return unexpectedFrom(r, d), nil
+}
+
+func (s *Store) UnexpectedRecipientsBatch(ctx context.Context, rows []Row) ([][]string, error) {
+	out := make([][]string, len(rows))
+	cache := map[int64]reply{}
+	for i, row := range rows {
+		if row.InReplyToMessageID == nil {
+			out[i] = []string{}
+			continue
+		}
+		id := *row.InReplyToMessageID
+		r, ok := cache[id]
+		if !ok {
+			var err error
+			r, err = s.replyContext(ctx, id)
+			var derr Error
+			if errors.As(err, &derr) {
+				r = reply{}
+			} else if err != nil {
+				return nil, err
+			}
+			cache[id] = r
+		}
+		out[i] = unexpectedFrom(r, row)
+	}
+	return out, nil
+}
+
+func unexpectedFrom(r reply, d Row) []string {
+	out := []string{}
 	seen := map[string]bool{}
-	for _, a := range append(to, cc...) {
+	for _, a := range append(addresses(d.ToAddrs), addresses(d.CcAddrs)...) {
 		if seen[a] {
 			continue
 		}
@@ -650,7 +681,7 @@ func (s *Store) UnexpectedRecipients(ctx context.Context, d Row) ([]string, erro
 			out = append(out, a)
 		}
 	}
-	return out, nil
+	return out
 }
 
 func addresses(text string) []string {

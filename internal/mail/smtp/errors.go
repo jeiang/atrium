@@ -5,10 +5,6 @@ import (
 	"strings"
 )
 
-type SendError string
-
-func (e SendError) Error() string { return string(e) }
-
 type OutcomeUnknown struct{ Err error }
 
 func (e *OutcomeUnknown) Error() string { return e.Err.Error() }
