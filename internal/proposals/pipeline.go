@@ -280,7 +280,6 @@ type Action struct {
 	UndoOf *int64
 	Action any
 	Undo   any
-	Plan   json.RawMessage
 	State  ledger.State
 	Error  *string
 }
@@ -300,9 +299,6 @@ func Actions(ctx context.Context, q Querier, proposalID int64) ([]Action, error)
 		var err error
 		if a.Action, err = py.JSONLoads([]byte(action)); err != nil {
 			return a, err
-		}
-		if undo != nil {
-			a.Plan = json.RawMessage(*undo)
 		}
 		a.Undo, err = loads(undo)
 		return a, err
@@ -541,7 +537,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		}
 		detail, err := func() (py.Dict, error) {
 			defer KeepActionAlive(p.DB.Write, p.now, held)()
-			return undoer(approved, entry.Plan)
+			return undoer(approved, json.RawMessage(py.JSONDumps(entry.Undo)))
 		}()
 		if err != nil {
 			state := ledger.UndoFailed
