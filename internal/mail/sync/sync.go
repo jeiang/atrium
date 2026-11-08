@@ -316,7 +316,10 @@ func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account st
 	_, err = s.DB.Write.ExecContext(ctx,
 		"UPDATE mailboxes SET uidvalidity = ?, highest_uid = ?, highestmodseq = ?, synced_at = ? WHERE id = ?",
 		validity, top, modseq, run, mbx.ID)
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Syncer) storedRows(ctx context.Context, mailboxID, validity int64) ([]stored, error) {
@@ -431,7 +434,10 @@ func (s *Syncer) refreshFlags(ctx context.Context, client mail.Client, account s
 			}
 			_, err := tx.ExecContext(ctx, "INSERT INTO events (ts, account, kind, message_id, detail) VALUES (?, ?, ?, ?, ?)",
 				ts, account, kind, row.ID, py.JSONDumps(detail))
-			return err
+			if err != nil {
+				return err
+			}
+			return nil
 		})
 		if err != nil {
 			return err
@@ -557,14 +563,14 @@ func (s *Syncer) ingest(ctx context.Context, tx *sql.Tx, account string, mbx mai
 			size, raw_path, flags, seen, flagged, labels, in_inbox, sent, location, folder,
 			from_addr, from_domain, from_name, to_addrs, reply_to, rpath_domain, list_id, precedence,
 			subject, subject_tmpl, msgid_domain, in_reply_to, refs, dkim_d, esp, att_types, att_names,
-			has_money, k_statement, k_receipt, k_order, k_vcode, k_otp6, body_len, first_seen
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+			k_order, k_vcode, k_otp6, first_seen
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		account, mbx.ID, validity, item.UID, feats.MsgID, digest, nullable(item.GmMsgID), nullable(item.GmThrID), item.InternalDate, feats.DateTS,
 		item.Size, relative, state.Flags, state.Seen, state.Flagged, state.Labels, state.InInbox, state.Sent, state.Location, state.Folder,
 		feats.FromAddr, feats.FromDomain, feats.FromName, py.JSONDumps(nonNil(feats.ToAddrs)), feats.ReplyTo, feats.RPathDomain, feats.ListID, feats.Precedence,
 		feats.Subject, feats.SubjectTmpl, feats.MsgIDDomain, feats.InReplyTo, feats.Refs, py.JSONDumps(nonNil(feats.DKIMD)), py.JSONDumps(nonNil(feats.ESP)),
 		py.JSONDumps(nonNil(feats.AttTypes)), py.JSONDumps(nonNil(feats.AttNames)),
-		bit(feats.HasMoney), bit(feats.KStatement), bit(feats.KReceipt), bit(feats.KOrder), bit(feats.KVCode), bit(feats.KOTP6), feats.BodyLen, s.now())
+		bit(feats.KOrder), bit(feats.KVCode), bit(feats.KOTP6), s.now())
 	if err != nil {
 		return err
 	}
@@ -574,7 +580,10 @@ func (s *Syncer) ingest(ctx context.Context, tx *sql.Tx, account string, mbx mai
 	}
 	_, err = tx.ExecContext(ctx, "INSERT INTO message_fts (rowid, subject, sender, body) VALUES (?, ?, ?, ?)",
 		id, feats.Subject, feats.FromName+" <"+feats.FromAddr+">", feats.Body)
-	return err
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *Syncer) reconcile(ctx context.Context, account string, goneIDs []int64) error {

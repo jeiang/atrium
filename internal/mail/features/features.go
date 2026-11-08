@@ -15,10 +15,6 @@ import (
 const month = `(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?`
 
 var (
-	currencyRE = rx.MustCompile(
-		`(?:[$€£]\s?\d[\d,]*\.\d{2})|(?:\b(?:usd|ttd|tt\$|cad)\s?\d[\d,]*(?:\.\d{2})?)|(?:\b\d[\d,]*\.\d{2}\s?(?:usd|ttd|cad)\b)`,
-		rx.IgnoreCase,
-	)
 	otpRE         = rx.MustCompile(`(?<![\d.,$#-])\d{6}(?![\d.,-])`, 0)
 	vcodeRE       = rx.MustCompile(`verification code|security code|one[- ]time|passcode|your code|login code`, 0)
 	replyPrefixRE = rx.MustCompile(`^\s*(re|fwd?|fw|aw)\s*:\s*`, rx.IgnoreCase)
@@ -87,13 +83,9 @@ type Features struct {
 	ESP         []string `json:"esp"`
 	AttTypes    []string `json:"att_types"`
 	AttNames    []string `json:"att_names"`
-	HasMoney    bool     `json:"has_money"`
-	KStatement  bool     `json:"k_statement"`
-	KReceipt    bool     `json:"k_receipt"`
 	KOrder      bool     `json:"k_order"`
 	KVCode      bool     `json:"k_vcode"`
 	KOTP6       bool     `json:"k_otp6"`
-	BodyLen     int      `json:"body_len"`
 	Body        string   `json:"body"`
 }
 
@@ -307,13 +299,9 @@ func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, 
 		ESP:         espOf(msg),
 		AttTypes:    sortedSet(types),
 		AttNames:    attNames,
-		HasMoney:    found(currencyRE, head),
-		KStatement:  strings.Contains(low, "statement"),
-		KReceipt:    strings.Contains(low, "receipt"),
 		KOrder:      strings.Contains(low, "order"),
 		KVCode:      found(vcodeRE, low),
 		KOTP6:       found(otpRE, prefix(body, 600)),
-		BodyLen:     len([]rune(body)),
 		Body:        prefix(body, ftsBodyChars),
 	}
 	if len(replyTo) > 0 {

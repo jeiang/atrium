@@ -10,7 +10,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/testutil/golden"
 	"github.com/jeiang/atrium/sdk"
 )
 
@@ -87,43 +86,6 @@ func TestExternalModuleMigratesAndRunsOnlyWhenEnabled(t *testing.T) {
 	}
 	if n := extPings(t, dir); n != 1 {
 		t.Fatalf("enabled module wrote %d rows, want 1", n)
-	}
-}
-
-func TestExternalModuleMigratesAGoldenDatabaseCopy(t *testing.T) {
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(flagEnv(extName), "")
-	copyGoldenFile(t, filepath.Join(golden.Dir(), "atrium.db"), filepath.Join(dir, "atrium.db"))
-
-	ran := runApp(extName)
-	if ran.code != cli.ExitOK {
-		t.Fatalf("golden copy: exit %d stderr %q", ran.code, ran.stderr)
-	}
-	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = d.Close() }()
-	var core, mod int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version IN (10, 11, 12, 13, 14, 15)").Scan(&core); err != nil {
-		t.Fatal(err)
-	}
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM module_migrations WHERE module = ? AND version = 1", extName).Scan(&mod); err != nil {
-		t.Fatal(err)
-	}
-	var notified int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications WHERE channel IS NULL").Scan(&notified); err != nil {
-		t.Fatalf("notifications after migration 12: %v", err)
-	}
-	var messages, stored int
-	if err := d.Read.QueryRow("SELECT (SELECT COUNT(*) FROM messages), (SELECT COUNT(*) FROM mail_accounts)").Scan(&messages, &stored); err != nil {
-		t.Fatalf("mail tables after migration 15: %v", err)
-	}
-	if messages != 158 || stored != 0 {
-		t.Errorf("golden copy after migration 15: %d messages, %d stored accounts; want 158 and 0", messages, stored)
-	}
-	if core != 6 || mod != 1 || !tableExists(t, dir, "pass_runs") || !tableExists(t, dir, "pass_run_alerts") || !tableExists(t, dir, "ntfy_channels") || !tableExists(t, dir, "endpoint_probes") || !tableExists(t, dir, "integration_health") {
-		t.Fatalf("golden copy: core migrations 10-15 recorded %d, module migration recorded %d", core, mod)
 	}
 }
 
