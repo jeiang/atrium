@@ -21,18 +21,20 @@ func PinMode(t testing.TB, mode string) {
 func UseAccounts(t testing.TB, logins map[string]string) {
 	t.Helper()
 	var list []config.AccountSpec
+	passwords := map[string]string{}
 	for _, preset := range []string{config.ICloud, config.Gmail} {
 		login, ok := logins[preset]
 		if !ok {
 			continue
 		}
-		a, err := config.NewAccount(preset, "", preset, login, "pw", true)
+		a, err := config.NewAccount(preset, "", preset, login, true)
 		if err != nil {
 			t.Fatal(err)
 		}
+		passwords[a.Name] = "pw"
 		list = append(list, a)
 	}
-	t.Cleanup(config.UseAccounts(list))
+	t.Cleanup(config.UseAccounts(list, passwords))
 }
 
 func modeDef(t testing.TB) settings.Def {

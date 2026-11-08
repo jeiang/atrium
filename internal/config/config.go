@@ -63,10 +63,14 @@ func (c Config) sibling(name string) string {
 
 func (c Config) Credential(account string) (user, password string, ok bool) {
 	a, found := Account(account)
-	if !found || !a.Enabled || a.Login == "" || a.Password == "" {
+	if !found || !a.Enabled || a.Login == "" {
 		return "", "", false
 	}
-	return a.Login, a.Password, true
+	password, ok = Password(a.Name)
+	if !ok {
+		return "", "", false
+	}
+	return a.Login, password, true
 }
 
 func (c Config) LogValue() slog.Value {

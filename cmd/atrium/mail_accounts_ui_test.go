@@ -43,8 +43,8 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	h, x := mailtest.RawWith("Standup", "lead@work.test", "<work-1@work.test>", "Moved to 10.")
 	all.Add(h, x, nil, []string{`\Inbox`})
 	passwords := map[string]string{"me@icloud.test": "home-pass", "me@work.test": "work-pass"}
-	t.Cleanup(imapclient.UseDialer(func(_ context.Context, a config.AccountSpec) (mail.Conn, error) {
-		if passwords[a.Login] != a.Password {
+	t.Cleanup(imapclient.UseDialer(func(_ context.Context, a config.AccountSpec, password string) (mail.Conn, error) {
+		if passwords[a.Login] != password {
 			return nil, errors.New("AUTHENTICATIONFAILED Invalid credentials")
 		}
 		return mailtest.NewFakeClient(), nil
@@ -92,7 +92,7 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	if code, body := post("/accounts", add); code != http.StatusUnprocessableEntity || !strings.Contains(body, "AUTHENTICATIONFAILED") {
 		t.Fatalf("a failed Test: %d", code)
 	}
-	if n := count("SELECT COUNT(*) FROM mail_accounts"); n != 0 {
+	if n := count("SELECT COUNT(*) FROM mail_accounts WHERE pinned = 0"); n != 0 {
 		t.Fatalf("a failed Test stored %d accounts", n)
 	}
 	add.Set("password", "work-pass")
@@ -137,7 +137,7 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	if code, _ := post("/accounts/work/remove", nil); code != http.StatusOK {
 		t.Fatalf("remove: %d", code)
 	}
-	if count("SELECT COUNT(*) FROM mail_accounts") != 0 || count("SELECT COUNT(*) FROM secrets WHERE name = ?", config.PasswordKey("work")) != 0 {
+	if count("SELECT COUNT(*) FROM mail_accounts WHERE pinned = 0") != 0 || count("SELECT COUNT(*) FROM secrets WHERE name = ?", config.PasswordKey("work")) != 0 {
 		t.Error("remove left the account or its password")
 	}
 	if n := count("SELECT COUNT(*) FROM messages WHERE account = 'work'"); n != 1 {
