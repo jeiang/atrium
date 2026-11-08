@@ -2,12 +2,10 @@ package pages
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -105,9 +103,8 @@ func (s *service) libraryShow(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) libMissing(w http.ResponseWriter, r *http.Request, err error) {
-	var gone media.NotFound
-	var unset config.NotConfigured
-	if !errors.As(err, &gone) && !errors.As(err, &unset) {
+	_, kind := mustClassify(err)
+	if kind != notFoundError && kind != backendError {
 		panic(err)
 	}
 	s.deps.Error(w, r, http.StatusNotFound, "not found")

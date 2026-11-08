@@ -52,8 +52,8 @@ func (s *service) dlAddPost(w http.ResponseWriter, r *http.Request) {
 	}
 	shown, err := s.dlAdd(r, set, magnet, name, data, present, tags)
 	if err != nil {
-		text, soft := dlSoft(err)
-		if !soft {
+		text, kind := mustClassify(err)
+		if kind != backendError {
 			panic(err)
 		}
 		s.dlAddPage(w, r, magnet, name, mode, text, http.StatusBadGateway)
