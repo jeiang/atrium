@@ -444,7 +444,7 @@ func (s *Service) DeleteThread(ctx context.Context, threadID int64) error {
 		return err
 	}
 	for _, row := range append(children, *thread) {
-		if _, err := files.DeleteOwned(ctx, s.DB.Write, s.Cfg.FilesDir(), remote, files.Owner{ThreadID: row.ID}); err != nil {
+		if _, err := files.DeleteOwned(ctx, s.DB.Write, s.Cfg.FilesDir(), remote, files.ThreadOwner(row.ID)); err != nil {
 			return err
 		}
 		if err := threads.Purge(ctx, s.DB.Write, row.ID, s.now()); err != nil {

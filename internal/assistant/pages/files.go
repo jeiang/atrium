@@ -145,7 +145,12 @@ func (p *pages) threadFile(w http.ResponseWriter, r *http.Request) (*files.Row, 
 	}
 	found, err := files.Get(r.Context(), p.deps.DB.Read, fileID)
 	check(err)
-	if found == nil || found.ThreadID == nil || *found.ThreadID != threadID {
+	if found == nil {
+		p.fail(w, r, http.StatusNotFound, "unknown file")
+		return nil, "", false
+	}
+	owner, owned := files.OwnerOf(found)
+	if !owned || owner != files.ThreadOwner(threadID) {
 		p.fail(w, r, http.StatusNotFound, "unknown file")
 		return nil, "", false
 	}
@@ -276,7 +281,7 @@ func (p *pages) projectFilesUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	if err == nil {
 		limit := project.ContextLimit
-		_, err = files.IngestUploads(detached(r), p.deps.DB.Write, p.deps.Cfg.FilesDir(), uploads, p.now(), files.Owner{ProjectID: projectID}, &limit)
+		_, err = files.IngestUploads(detached(r), p.deps.DB.Write, p.deps.Cfg.FilesDir(), uploads, p.now(), files.ProjectOwner(projectID), &limit)
 	}
 	var refused files.FileError
 	if errors.As(err, &refused) {
@@ -304,7 +309,12 @@ func (p *pages) projectFile(w http.ResponseWriter, r *http.Request) (int64, *fil
 	}
 	found, err := files.Get(r.Context(), p.deps.DB.Read, fileID)
 	check(err)
-	if found == nil || found.ProjectID == nil || *found.ProjectID != projectID {
+	if found == nil {
+		p.fail(w, r, http.StatusNotFound, "unknown file")
+		return 0, nil, false
+	}
+	owner, owned := files.OwnerOf(found)
+	if !owned || owner != files.ProjectOwner(projectID) {
 		p.fail(w, r, http.StatusNotFound, "unknown file")
 		return 0, nil, false
 	}

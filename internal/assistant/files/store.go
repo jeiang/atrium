@@ -39,23 +39,53 @@ func scan(r interface{ Scan(...any) error }) (Row, error) {
 	return f, err
 }
 
+type ownerKind uint8
+
+const (
+	threadOwner ownerKind = iota + 1
+	projectOwner
+)
+
 type Owner struct {
-	ThreadID  int64
-	ProjectID int64
+	kind ownerKind
+	id   int64
 }
+
+func ThreadOwner(id int64) Owner  { return Owner{kind: threadOwner, id: id} }
+func ProjectOwner(id int64) Owner { return Owner{kind: projectOwner, id: id} }
 
 func (o Owner) dirName() string {
-	if o.ProjectID != 0 {
-		return "p" + strconv.FormatInt(o.ProjectID, 10)
+	if o.kind == projectOwner {
+		return "p" + strconv.FormatInt(o.id, 10)
 	}
-	return strconv.FormatInt(o.ThreadID, 10)
+	return strconv.FormatInt(o.id, 10)
 }
 
-func (o Owner) column() (string, int64) {
-	if o.ProjectID != 0 {
-		return "project_id", o.ProjectID
+func (o Owner) where() (string, int64) {
+	if o.kind == projectOwner {
+		return "project_id", o.id
 	}
-	return "thread_id", o.ThreadID
+	return "thread_id", o.id
+}
+
+func (o Owner) columns() (any, any) {
+	switch o.kind {
+	case threadOwner:
+		return o.id, nil
+	case projectOwner:
+		return nil, o.id
+	}
+	return nil, nil
+}
+
+func OwnerOf(r *Row) (Owner, bool) {
+	switch {
+	case r.ThreadID != nil:
+		return ThreadOwner(*r.ThreadID), true
+	case r.ProjectID != nil:
+		return ProjectOwner(*r.ProjectID), true
+	}
+	return Owner{}, false
 }
 
 func nullable(n int64) any {
@@ -116,10 +146,11 @@ func Store(ctx context.Context, q db.Querier, dir string, f NewFile, now float64
 	if err != nil {
 		return 0, err
 	}
+	threadID, projectID := f.Owner.columns()
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO thread_files (thread_id, project_id, run_id, name, media_type, bytes, path, origin, created_at, anthropic_file_id, text, tokens) "+
 			"VALUES (?, ?, ?, ?, ?, ?, '', ?, ?, NULL, ?, ?)",
-		nullable(f.Owner.ThreadID), nullable(f.Owner.ProjectID), nullable(f.RunID), f.Name, f.MediaType, len(f.Data), f.Origin, now, f.Text, f.Tokens)
+		threadID, projectID, nullable(f.RunID), f.Name, f.MediaType, len(f.Data), f.Origin, now, f.Text, f.Tokens)
 	if err != nil {
 		return 0, err
 	}
@@ -231,7 +262,7 @@ func clone(ctx context.Context, q db.Querier, from Scope, fileID, threadID int64
 	if err != nil {
 		return 0, false, err
 	}
-	path := filepath.Join(filepath.Dir(filepath.Dir(found.Path)), strconv.FormatInt(threadID, 10), strconv.FormatInt(id, 10)+"-"+SafeName(found.Name, chars))
+	path := filepath.Join(filepath.Dir(filepath.Dir(found.Path)), ThreadOwner(threadID).dirName(), strconv.FormatInt(id, 10)+"-"+SafeName(found.Name, chars))
 	if info, err := os.Stat(found.Path); err == nil && info.Mode().IsRegular() {
 		if err := copyFile(found.Path, path); err != nil {
 			return 0, false, err
@@ -272,7 +303,7 @@ func deleteRemote(ctx context.Context, remote RemoteDeleter, id *string) {
 }
 
 func DeleteOwned(ctx context.Context, q db.Querier, dir string, remote RemoteDeleter, owner Owner) (int, error) {
-	column, id := owner.column()
+	column, id := owner.where()
 	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM thread_files WHERE "+column+" = ?", id)
 	if err != nil {
 		return 0, err
@@ -284,7 +315,12 @@ func DeleteOwned(ctx context.Context, q db.Querier, dir string, remote RemoteDel
 	for _, r := range found {
 		deleteRemote(ctx, remote, r.AnthropicFileID)
 	}
-	_ = os.RemoveAll(filepath.Join(dir, owner.dirName()))
+	if _, err := q.ExecContext(ctx, "DELETE FROM thread_files WHERE "+column+" = ?", id); err != nil {
+		return 0, err
+	}
+	if err := os.RemoveAll(filepath.Join(dir, owner.dirName())); err != nil {
+		return len(found), err
+	}
 	return len(found), nil
 }
 

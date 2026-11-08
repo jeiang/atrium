@@ -540,7 +540,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if err != nil {
 		return false, nil, err
 	}
-	messages, err := s.req.buildMessages(ctx, s.d.Read, files.Scope{ThreadID: s.thread.ID, ProjectID: s.thread.ProjectID}, sent)
+	messages, err := s.req.buildMessages(ctx, s.d.Read, files.ScopeOf(s.thread.ID, s.thread.ProjectID), sent)
 	if err != nil {
 		return false, nil, err
 	}

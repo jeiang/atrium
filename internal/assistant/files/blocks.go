@@ -89,15 +89,19 @@ func unavailable(d py.Dict) (json.RawMessage, error) {
 }
 
 type Scope struct {
-	ThreadID  int64
-	ProjectID *int64
+	thread  int64
+	project *int64
+}
+
+func ScopeOf(threadID int64, projectID *int64) Scope {
+	return Scope{thread: threadID, project: projectID}
 }
 
 func (s Scope) owns(r *Row) bool {
-	if r.ThreadID != nil && *r.ThreadID == s.ThreadID {
+	if r.ThreadID != nil && *r.ThreadID == s.thread {
 		return true
 	}
-	return s.ProjectID != nil && r.ProjectID != nil && *r.ProjectID == *s.ProjectID
+	return s.project != nil && r.ProjectID != nil && *r.ProjectID == *s.project
 }
 
 func apiBlocks(ctx context.Context, q db.Querier, scope Scope, d py.Dict) ([]json.RawMessage, error) {
