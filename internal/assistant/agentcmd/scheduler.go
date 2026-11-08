@@ -8,8 +8,8 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
+	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/attention/digest"
-	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -17,6 +17,14 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/sdnotify"
 )
+
+func attentionSources(ctx context.Context) []attention.Source {
+	set := module.SetFrom(ctx)
+	if set == nil || set.Current() == nil {
+		return nil
+	}
+	return set.Current().Attention()
+}
 
 func callables() map[string]worker.Callable {
 	out := map[string]worker.Callable{}
@@ -32,7 +40,7 @@ func callables() map[string]worker.Callable {
 	out[scheduler.DailyNudgesName] = worker.Callable{
 		Modules: []string{module.Assistant},
 		Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
-			_, _, err := digest.Send(ctx, e.Service.DB.Write, e.Service.Env, e.Now(), attentionsources.Enabled(ctx, module.IsEnabled))
+			_, _, err := digest.Send(ctx, e.Service.DB.Write, e.Service.Env, e.Now(), attentionSources(ctx))
 			return worker.Result{}, err
 		},
 	}

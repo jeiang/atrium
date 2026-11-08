@@ -34,6 +34,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/tasks"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -76,7 +77,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 	chat.Tools = mc.Tools
 	return module.Registration{
 		Name:      module.Assistant,
-		Attention: []attention.Source{attentionsources.Plans()},
+		Attention: []attention.Source{attentionsources.Plans(), tasks.AttentionSource()},
 		Requires:  []module.Requirement{{Name: secrets.AnthropicAPIKey, Check: anthropicKey}},
 		Pages: []web.Page{{
 			Module:    chatpages.Module(chat),
