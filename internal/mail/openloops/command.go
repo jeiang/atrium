@@ -14,7 +14,7 @@ func Command(env config.Env, clock func() float64) *cli.Command {
 	if clock == nil {
 		clock = wallClock
 	}
-	return refreshcmd.Command("loops", func(ctx context.Context, d *db.DB, cfg config.Config) py.Dict {
+	return refreshcmd.Command(env, "loops", func(ctx context.Context, d *db.DB, cfg config.Config) py.Dict {
 		return Refresh(ctx, d, cfg, clock(), Options{Env: env, Clock: clock})
 	})
 }

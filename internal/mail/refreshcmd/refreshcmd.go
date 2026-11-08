@@ -12,13 +12,13 @@ import (
 
 type Run func(ctx context.Context, d *db.DB, cfg config.Config) py.Dict
 
-func Command(group string, run Run) *cli.Command {
+func Command(env config.Env, group string, run Run) *cli.Command {
 	return &cli.Command{
 		Name: group,
 		Commands: []*cli.Command{{
 			Name: "refresh",
 			Setup: func(*cli.Args) cli.Handler {
-				return func(env *cli.Env) int { return Execute(env, config.OS, run) }
+				return func(e *cli.Env) int { return Execute(e, env, run) }
 			},
 		}},
 	}

@@ -17,7 +17,7 @@ func gauge(name, help string, collect func(ctx context.Context, q db.Querier) ([
 func one(v float64) []Sample { return []Sample{{Value: v}} }
 
 func budgetStatus(ctx context.Context, q db.Querier) (budget.Status, error) {
-	loc, err := config.Location(config.OS)
+	loc, err := config.Location(checkEnv)
 	if err != nil {
 		return budget.Status{}, err
 	}
