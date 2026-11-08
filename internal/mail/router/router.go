@@ -43,10 +43,7 @@ type LLMContext struct {
 	Down      bool
 }
 
-type Querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
+type Querier = db.Querier
 
 type Tuning struct {
 	Learned      rules.Thresholds

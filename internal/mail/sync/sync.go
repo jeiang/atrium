@@ -28,7 +28,7 @@ type limits struct {
 	fetchBatch, flagBatch, sentBackfillDays, ftsBodyChars int
 }
 
-func readLimits(ctx context.Context, q mail.Querier) (limits, error) {
+func readLimits(ctx context.Context, q db.Querier) (limits, error) {
 	r := mail.Read(ctx, q)
 	l := limits{fetchBatch: r.Int(mail.KeyFetchBatch), flagBatch: r.Int(mail.KeyFlagBatch), sentBackfillDays: r.Int(mail.KeySentBackfillDays), ftsBodyChars: r.Int(mail.KeyFTSBodyChars)}
 	return l, r.Err()
@@ -59,10 +59,8 @@ func (s *Syncer) now() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }
 
-type Opener func(ctx context.Context, account string) (mail.Client, error)
-
-func (s *Syncer) One(ctx context.Context, account string, open Opener) (Stats, error) {
-	client, err := open(ctx, account)
+func (s *Syncer) One(ctx context.Context, account string, open mail.OpenFunc) (Stats, error) {
+	client, err := open(ctx, mail.OpenOptions{Account: account, Q: s.DB.Read})
 	if err != nil {
 		return Stats{}, err
 	}
@@ -123,7 +121,7 @@ func (s *Syncer) upsertMailboxes(ctx context.Context, account string, client mai
 	}
 	var picked []chosen
 	for _, info := range listed {
-		role := mail.MailboxRole(info.Name, info.Flags, account)
+		role := mail.MailboxRole(info.Name, info.Flags, config.Preset(account))
 		if (systemRoles[role] && !indexedSystemRoles[role]) || role == "system" {
 			continue
 		}
@@ -284,7 +282,7 @@ func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account st
 	slices.Sort(fresh)
 	for start := 0; start < len(fresh); start += lim.fetchBatch {
 		batch := fresh[start:min(start+lim.fetchBatch, len(fresh))]
-		fetched, err := client.UIDFetch(ctx, mail.UIDs(batch...), mail.FetchItems{Labels: gmail, Header: true, Body: true})
+		fetched, err := client.UIDFetch(ctx, mail.UIDs(batch...), mail.FetchRequest{Mode: mail.FetchFull, Labels: gmail})
 		if err != nil {
 			return err
 		}
@@ -370,7 +368,7 @@ func (s *Syncer) refreshFlags(ctx context.Context, client mail.Client, account s
 		return nil
 	}
 	gmail := config.Preset(account) == config.Gmail
-	items := mail.FetchItems{Labels: gmail}
+	items := mail.FetchRequest{Mode: mail.FetchFlags, Labels: gmail}
 	var updates []mail.Message
 	if client.HasCapability("CONDSTORE") && modseq != nil && storedModseq != nil {
 		if *modseq == *storedModseq {

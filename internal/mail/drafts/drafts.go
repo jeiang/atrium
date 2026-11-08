@@ -69,12 +69,10 @@ type Row struct {
 	SentMsgID          *string  `json:"sent_msgid"`
 }
 
-type Opener func(ctx context.Context, account string) (mail.Client, error)
-
 type Store struct {
 	DB    *db.DB
 	Cfg   config.Config
-	Open  Opener
+	Open  mail.OpenFunc
 	SMTP  smtp.Factory
 	MsgID func(domain string) string
 	Now   func() float64

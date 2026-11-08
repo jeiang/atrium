@@ -9,7 +9,6 @@ import (
 	"math"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -52,10 +51,7 @@ type UndoError string
 
 func (e UndoError) Error() string { return string(e) }
 
-type Querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
+type Querier = db.Querier
 
 type Execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
@@ -113,7 +109,7 @@ func (l *Live) now() float64 {
 	if l.Now != nil {
 		return l.Now()
 	}
-	return float64(time.Now().UnixNano()) / 1e9
+	return mail.WallClock()
 }
 
 func (l *Live) TakeBaseline(ctx context.Context) error {
@@ -158,18 +154,11 @@ func nullJSON(v any) any {
 	return py.JSONDumps(v)
 }
 
-func nullable[T any](v *T) any {
-	if v == nil {
-		return nil
-	}
-	return *v
-}
-
 func (l *Live) Begin(ctx context.Context, account string, messageID int64, digest, kind string, src, dest *string,
 	before any, decisionID *int64) (id int64, ok bool, err error) {
 	res, err := l.DB.Write.ExecContext(ctx, "INSERT INTO auto_actions (ts, account, message_id, digest, kind, src, dest, before, decision_id, state) "+
-		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", l.now(), account, messageID, digest, kind, nullable(src), nullable(dest),
-		py.JSONDumps(before), nullable(decisionID), ledger.Held)
+		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", l.now(), account, messageID, digest, kind, py.Nullable(src), py.Nullable(dest),
+		py.JSONDumps(before), py.Nullable(decisionID), ledger.Held)
 	if db.IsConstraint(err) {
 		return 0, false, nil
 	}
@@ -182,7 +171,7 @@ func (l *Live) Begin(ctx context.Context, account string, messageID int64, diges
 
 func (l *Live) Finish(ctx context.Context, id int64, after, undo any, note *string) error {
 	_, err := l.DB.Write.ExecContext(ctx, "UPDATE auto_actions SET state = ?, error = ?, after = ?, undo = ? WHERE id = ?",
-		ledger.Applied, nullable(note), nullJSON(after), nullJSON(undo), id)
+		ledger.Applied, py.Nullable(note), nullJSON(after), nullJSON(undo), id)
 	return err
 }
 
@@ -263,8 +252,8 @@ func (l *Live) Discard(ctx context.Context, id int64) error {
 func (l *Live) Skip(ctx context.Context, account string, messageID int64, digest, kind string, src, dest *string,
 	reason string, decisionID *int64) error {
 	_, err := l.DB.Write.ExecContext(ctx, "INSERT INTO auto_actions (ts, account, message_id, digest, kind, src, dest, decision_id, state, error) "+
-		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", l.now(), account, messageID, digest, kind, nullable(src), nullable(dest),
-		nullable(decisionID), ledger.Skipped, "skipped: "+reason)
+		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", l.now(), account, messageID, digest, kind, py.Nullable(src), py.Nullable(dest),
+		py.Nullable(decisionID), ledger.Skipped, "skipped: "+reason)
 	return err
 }
 
@@ -522,7 +511,7 @@ func (l *Live) Status(ctx context.Context) (py.Dict, error) {
 		return nil, err
 	}
 	return py.Dict{
-		{Key: "mode", Value: mode}, {Key: "paused", Value: l.Paused()}, {Key: "golive_ts", Value: nullable(golive)},
+		{Key: "mode", Value: mode}, {Key: "paused", Value: l.Paused()}, {Key: "golive_ts", Value: py.Nullable(golive)},
 		{Key: "baseline", Value: baseline}, {Key: "actions", Value: counts},
 	}, nil
 }

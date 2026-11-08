@@ -190,7 +190,9 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	t.Cleanup(func() { settings.Default.SetPins(nil) })
 	fakes := data.world.fakes()
 	clients := func(config.Config) mail.OpenFunc {
-		return func(_ context.Context, account string) (mail.Client, error) { return fakes[account], nil }
+		return func(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
+			return mail.Gated(fakes[opts.Account], opts.Q), nil
+		}
 	}
 	app := cli.New("atrium", logx.Setup)
 	app.Env = env

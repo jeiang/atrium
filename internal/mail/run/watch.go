@@ -39,7 +39,7 @@ func newBackoff() *retryBackoff {
 	return &retryBackoff{start: config.BackoffStart, ceiling: config.BackoffMax}
 }
 
-func (b *retryBackoff) refresh(ctx context.Context, q mail.Querier) error {
+func (b *retryBackoff) refresh(ctx context.Context, q db.Querier) error {
 	r := mail.Read(ctx, q)
 	start, ceiling := r.Int(mail.KeyBackoffStartSeconds), r.Int(mail.KeyBackoffMaxSeconds)
 	if err := r.Err(); err != nil {
@@ -60,8 +60,7 @@ func (b *retryBackoff) next() int {
 
 func ConnectionLost(err error) bool {
 	var interrupted *mail.WriteInterrupted
-	var imapErr *imapclient.Error
-	if errors.As(err, &interrupted) || errors.As(err, &imapErr) && imapErr.Kind == "readonly" {
+	if errors.As(err, &interrupted) || errors.Is(err, imapclient.ErrReadonly) {
 		return true
 	}
 	var (
@@ -86,7 +85,7 @@ func ConnectionLost(err error) bool {
 type Watcher struct {
 	Env   config.Env
 	Cfg   config.Config
-	Open  mailops.Opener
+	Open  mail.OpenFunc
 	Pass  func(d *db.DB) *Pass
 	Sleep func(ctx context.Context, d time.Duration)
 
@@ -145,41 +144,16 @@ func waiting(h *sdnotify.Heartbeat, fn func()) {
 }
 
 func (w *Watcher) connect(ctx context.Context) (*Pass, func(), error) {
-	d, err := db.Connect(w.Cfg.DBPath)
-	if err != nil {
-		return nil, nil, err
-	}
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if !w.migrated {
-		if err := config.Boot(ctx, w.Env, d, w.Cfg); err != nil {
-			_ = d.Close()
-			return nil, nil, err
-		}
-		w.migrated = true
-		w.Notify.Ready()
-		w.Notify.Status("watching")
-	} else if err := db.Ready(ctx, d); err != nil {
-		_ = d.Close()
-		return nil, nil, err
-	}
-	if w.Pass != nil {
-		return w.Pass(d), func() { _ = d.Close() }, nil
-	}
-	return New(w.Env, d, w.Cfg, w.Open, nil), func() { _ = d.Close() }, nil
+	return Open(ctx, w.Env, w.Cfg, w.Open, nil)
 }
 
-func settleFor(ctx context.Context, q mail.Querier) (time.Duration, error) {
+func settleFor(ctx context.Context, q db.Querier) (time.Duration, error) {
 	r := mail.Read(ctx, q)
 	seconds := r.Int(mail.KeyIdleSettleSeconds)
 	return time.Duration(seconds) * time.Second, r.Err()
 }
 
 func (w *Watcher) sleep(ctx context.Context, d time.Duration) {
-	if w.Sleep != nil {
-		w.Sleep(ctx, d)
-		return
-	}
 	sleepCtx(ctx, d)
 }
 
@@ -245,7 +219,7 @@ func (w *Watcher) cycle(ctx context.Context, account string, wait *retryBackoff)
 	}
 	w.Notify.Status("watching")
 	h := w.heartbeat(account)
-	return mailops.Session(ctx, pass.Open, account, func(client mail.Client) error {
+	return mailops.Session(ctx, pass.Open, pass.DB.Read, account, func(client mail.Client) error {
 		wait.current = 0
 		for ctx.Err() == nil {
 			h.Beat()
@@ -276,7 +250,11 @@ func (w *Watcher) cycle(ctx context.Context, account string, wait *retryBackoff)
 	})
 }
 
-func Watch(ctx context.Context, env config.Env, cfg config.Config, requested string, open mailops.Opener) error {
+func Watch(ctx context.Context, env config.Env, cfg config.Config, requested string, open mail.OpenFunc) error {
+	accounts, err := SelectAccounts(cfg, requested)
+	if err != nil {
+		return err
+	}
 	notifier := sdnotify.FromEnv()
 	w := &Watcher{Env: env, Cfg: cfg, Open: open, Notify: notifier}
 	_, release, err := w.connect(ctx)
@@ -284,10 +262,8 @@ func Watch(ctx context.Context, env config.Env, cfg config.Config, requested str
 		return err
 	}
 	release()
-	accounts, err := SelectAccounts(cfg, requested)
-	if err != nil {
-		return err
-	}
+	notifier.Ready()
+	notifier.Status("watching")
 	for _, account := range accounts {
 		w.heartbeat(account)
 	}

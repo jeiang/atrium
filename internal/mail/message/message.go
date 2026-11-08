@@ -9,6 +9,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/features"
 	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/py"
@@ -48,10 +49,7 @@ type View struct {
 	FlagDecision map[string]any    `json:"flag_decision"`
 }
 
-type Querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
+type Querier = db.Querier
 
 type Execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)

@@ -17,13 +17,13 @@ import (
 	"github.com/emersion/go-imap/v2"
 	"github.com/emersion/go-imap/v2/imapclient"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 )
 
 const (
 	port          = "993"
-	bodyCapBytes  = 65536
 	dialTimeout   = 30 * time.Second
 	readTimeout   = 2 * time.Minute
 	writeTimeout  = 2 * time.Minute
@@ -47,9 +47,11 @@ var (
 	idleChanges = []string{"EXISTS", "EXPUNGE", "FETCH", "RECENT"}
 )
 
-func New(host, user, password string) mail.Client {
-	return mail.Gated(newConn(host, user, password))
+func New(host, user, password string) *conn {
+	return newConn(host, user, password)
 }
+
+func (c *conn) setBodyCap(n int) { c.bodyCap = n }
 
 func newConn(host, user, password string) *conn {
 	c := &conn{
@@ -61,6 +63,7 @@ func newConn(host, user, password string) *conn {
 		readTimeout:   readTimeout,
 		writeTimeout:  writeTimeout,
 		idleKeepalive: idleKeepalive,
+		bodyCap:       config.BodyCapBytes,
 	}
 	c.dial = c.dialTLS
 	return c
@@ -94,6 +97,7 @@ type conn struct {
 	lastCode      string
 	sentPos       int
 	idleKeepalive time.Duration
+	bodyCap       int
 	inflight      *inflight
 }
 
@@ -253,7 +257,7 @@ func decodeReplace(b []byte, ascii bool) string {
 func wrapCommand(name string, err error) error {
 	var e *Error
 	if errors.As(err, &e) {
-		return &Error{Kind: e.Kind, Msg: fmt.Sprintf("command: %s => %s", name, e.Msg)}
+		return &Error{Err: e.Err, Msg: fmt.Sprintf("command: %s => %s", name, e.Msg)}
 	}
 	return err
 }
@@ -268,7 +272,7 @@ func (c *conn) ignoreAfterReply(command string, werr error) {
 
 func (c *conn) interrupted(command, name string, err error) error {
 	var e *Error
-	if errors.As(err, &e) && e.Kind == "abort" && c.tap.written(name, c.sentPos) {
+	if errors.As(err, &e) && errors.Is(e, ErrAbort) && c.tap.written(name, c.sentPos) {
 		return &mail.WriteInterrupted{Command: command, Err: err}
 	}
 	return err
@@ -523,7 +527,9 @@ func (c *conn) Close() {
 	if c.cl == nil {
 		return
 	}
-	_ = c.await(context.Background(), func() error {
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = c.await(ctx, func() error {
 		c.state = "LOGOUT"
 		return c.cl.Logout().Wait()
 	})
@@ -694,31 +700,27 @@ func (c *conn) UIDSearch(ctx context.Context, criteria mail.SearchCriteria) ([]u
 	return out, err
 }
 
-func fetchOptions(items mail.FetchItems) *imap.FetchOptions {
-	opts := &imap.FetchOptions{UID: true, Flags: true, ChangedSince: items.ChangedSince}
-	opts.Gmail.Labels = items.Labels
-	bodyCap := int64(bodyCapBytes)
-	if items.BodyCap > 0 {
-		bodyCap = int64(items.BodyCap)
-	}
-	switch {
-	case items.Header || items.Body:
+func (c *conn) fetchOptions(req mail.FetchRequest) *imap.FetchOptions {
+	opts := &imap.FetchOptions{UID: true, Flags: true, ChangedSince: req.ChangedSince}
+	opts.Gmail.Labels = req.Labels
+	switch req.Mode {
+	case mail.FetchFull:
 		opts.InternalDate = true
 		opts.RFC822Size = true
 		opts.BodyStructure = &imap.FetchItemBodyStructure{Extended: true}
-		opts.Gmail.MsgID = items.Labels
-		opts.Gmail.ThrID = items.Labels
+		opts.Gmail.MsgID = req.Labels
+		opts.Gmail.ThrID = req.Labels
 		opts.BodySection = []*imap.FetchItemBodySection{
 			{Specifier: imap.PartSpecifierHeader, Peek: true},
-			{Specifier: imap.PartSpecifierText, Peek: true, Partial: &imap.SectionPartial{Offset: 0, Size: bodyCap}},
+			{Specifier: imap.PartSpecifierText, Peek: true, Partial: &imap.SectionPartial{Offset: 0, Size: int64(c.bodyCap)}},
 		}
-	case items.HeaderOnly:
+	case mail.FetchHeaders:
 		opts.BodySection = []*imap.FetchItemBodySection{{Specifier: imap.PartSpecifierHeader, Peek: true}}
 	}
 	return opts
 }
 
-func (c *conn) UIDFetch(ctx context.Context, uids mail.UIDSet, items mail.FetchItems) ([]mail.Message, error) {
+func (c *conn) UIDFetch(ctx context.Context, uids mail.UIDSet, req mail.FetchRequest) ([]mail.Message, error) {
 	var out []mail.Message
 	err := c.run(ctx, func() error {
 		set, err := uidSet(uids)
@@ -728,7 +730,7 @@ func (c *conn) UIDFetch(ctx context.Context, uids mail.UIDSet, items mail.FetchI
 		if err := c.beginUID("FETCH"); err != nil {
 			return err
 		}
-		werr := c.cl.Fetch(set, fetchOptions(items)).Close()
+		werr := c.cl.Fetch(set, c.fetchOptions(req)).Close()
 		typ, dat, err := c.complete("UID")
 		if err != nil {
 			return err
@@ -787,7 +789,11 @@ func (c *conn) Copy(ctx context.Context, uids mail.UIDSet, destIMAPName string) 
 		if err != nil {
 			return err
 		}
-		out, err = parseCopyUID(data)
+		limit := len(uids.List())
+		if uids.All() {
+			limit = maxUIDExpansion
+		}
+		out, err = parseCopyUID(data, limit)
 		return err
 	})
 	return out, err

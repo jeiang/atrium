@@ -42,7 +42,7 @@ type params struct {
 	limits                                             scanutil.Limits
 }
 
-func readParams(ctx context.Context, q mail.Querier) (params, error) {
+func readParams(ctx context.Context, q db.Querier) (params, error) {
 	r := mail.Read(ctx, q)
 	p := params{
 		minFolder:          r.Int(mail.KeyRebalanceMinFolder),

@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
-	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/mail/rules"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
@@ -62,7 +61,7 @@ func Globals() map[string]any {
 }
 
 type Options struct {
-	Open mailops.Opener
+	Open mail.OpenFunc
 	Now  func() float64
 }
 
@@ -86,7 +85,6 @@ func Module(o Options) web.Module {
 		if open == nil {
 			open = imapclient.Opener(d.Cfg)
 		}
-		open = mailops.Opener(mail.BindMode(open, d.DB.Read))
 		now := o.Now
 		if now == nil {
 			now = wallClock

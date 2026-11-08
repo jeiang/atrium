@@ -13,9 +13,9 @@ import (
 	"github.com/jeiang/atrium/internal/core/coremodule"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailmodule"
-	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/media/mediamodule"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify/notifymodule"
@@ -43,7 +43,7 @@ func newApp(env config.Env, reg *settings.Registry, mods []module.Module) *cli.A
 	return app
 }
 
-func newSet(env config.Env, reg *settings.Registry, mods []module.Module, clients run.Clients, now func() float64) *module.Set {
+func newSet(env config.Env, reg *settings.Registry, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64) *module.Set {
 	var set *module.Set
 	guard := func(ctx context.Context, q db.Querier, key, value string) error {
 		return set.Guard(ctx, q, key, value)
@@ -66,7 +66,7 @@ func newSet(env config.Env, reg *settings.Registry, mods []module.Module, client
 	return set
 }
 
-func commands(env config.Env, reg *settings.Registry, mods []module.Module, clients run.Clients, now func() float64) []*cli.Command {
+func commands(env config.Env, reg *settings.Registry, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64) []*cli.Command {
 	set := newSet(env, reg, mods, clients, now)
 	return append(set.Commands(), web.ServeCommand(set, set.Pages()...))
 }

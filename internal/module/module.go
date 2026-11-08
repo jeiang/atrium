@@ -32,8 +32,9 @@ type Module interface {
 }
 
 type Context struct {
-	Current func() *Snapshot
-	Env     config.Env
+	Current  func() *Snapshot
+	Evaluate func(context.Context, db.Querier) (*Snapshot, error)
+	Env      config.Env
 }
 
 func (c Context) Enabled(name string) bool {

@@ -48,6 +48,13 @@ func JSONDumps(v any, opts ...JSONOpts) string {
 	return b.String()
 }
 
+func Nullable[T any](v *T) any {
+	if v == nil {
+		return nil
+	}
+	return *v
+}
+
 func JSONRedump(raw []byte, opts ...JSONOpts) (string, error) {
 	v, err := JSONLoads(raw)
 	if err != nil {

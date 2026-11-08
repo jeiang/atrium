@@ -62,9 +62,9 @@ func (p *Proposal) AccountName() string {
 
 func (p *Proposal) Dict() py.Dict {
 	out := py.Dict{
-		{Key: "id", Value: p.ID}, {Key: "kind", Value: p.Kind}, {Key: "account", Value: nullable(p.Account)},
+		{Key: "id", Value: p.ID}, {Key: "kind", Value: p.Kind}, {Key: "account", Value: py.Nullable(p.Account)},
 		{Key: "status", Value: p.Status}, {Key: "created_ts", Value: p.CreatedTS},
-		{Key: "decided_ts", Value: nullable(p.DecidedTS)}, {Key: "applied_ts", Value: nullable(p.AppliedTS)},
+		{Key: "decided_ts", Value: py.Nullable(p.DecidedTS)}, {Key: "applied_ts", Value: py.Nullable(p.AppliedTS)},
 		{Key: "title", Value: p.Title}, {Key: "preview", Value: p.Preview}, {Key: "result", Value: p.Result},
 		{Key: "fingerprint", Value: p.Fingerprint},
 	}
@@ -73,13 +73,6 @@ func (p *Proposal) Dict() py.Dict {
 		out = append(out, py.Pair{Key: "payload", Value: payload})
 	}
 	return append(out, py.Pair{Key: "undoable", Value: p.Undoable})
-}
-
-func nullable[T any](v *T) any {
-	if v == nil {
-		return nil
-	}
-	return *v
 }
 
 func loads(text *string) (any, error) {
@@ -220,7 +213,7 @@ func RecordAction(ctx context.Context, x Execer, proposalID int64, kind string, 
 	}
 	res, err := x.ExecContext(context.WithoutCancel(ctx), "INSERT INTO proposal_actions "+
 		"(proposal_id, ts, lease, kind, undo_of, action, undo, state, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		proposalID, ts, ts, kind, nullable(undoOf), py.JSONDumps(action), plan, state, errText)
+		proposalID, ts, ts, kind, py.Nullable(undoOf), py.JSONDumps(action), plan, state, errText)
 	if err != nil {
 		return 0, err
 	}
@@ -374,6 +367,18 @@ type Pipeline struct {
 	DB       *db.DB
 	Registry *Registry
 	Now      func() float64
+	Enabled  func(context.Context, db.Querier, string) (bool, error)
+}
+
+func (p *Pipeline) enabled(ctx context.Context, kind string) (bool, error) {
+	if p.Registry == nil || p.Enabled == nil {
+		return true, nil
+	}
+	k, ok := p.Registry.Kind(kind)
+	if !ok || k.Module == "" {
+		return true, nil
+	}
+	return p.Enabled(ctx, p.DB.Read, k.Module)
 }
 
 func (p *Pipeline) now() float64 {
@@ -419,6 +424,13 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any,
 	}
 	if prop == nil {
 		return nil, ProposalError(fmt.Sprintf("unknown proposal %d", id))
+	}
+	on, err := p.enabled(ctx, prop.Kind)
+	if err != nil {
+		return nil, err
+	}
+	if !on {
+		return nil, ProposalError(fmt.Sprintf("the %s module is disabled", p.Registry.mustKind(prop.Kind).Module))
 	}
 	var executor Executor
 	if p.Registry != nil {
@@ -489,13 +501,22 @@ func (r UndoResult) Dict() py.Dict {
 	for i, o := range r.Outcomes {
 		outcomes[i] = o
 	}
-	return py.Dict{{Key: "undone", Value: r.Undone}, {Key: "outcomes", Value: outcomes}, {Key: "sync_error", Value: nullable(r.SyncError)}}
+	return py.Dict{{Key: "undone", Value: r.Undone}, {Key: "outcomes", Value: outcomes}, {Key: "sync_error", Value: py.Nullable(r.SyncError)}}
 }
 
 func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	prop, err := Get(ctx, p.DB.Write, id)
 	if err != nil {
 		return UndoResult{}, err
+	}
+	if prop != nil {
+		on, err := p.enabled(ctx, prop.Kind)
+		if err != nil {
+			return UndoResult{}, err
+		}
+		if !on {
+			return UndoResult{}, ProposalError(fmt.Sprintf("the %s module is disabled", p.Registry.mustKind(prop.Kind).Module))
+		}
 	}
 	if prop == nil || (prop.Status != Applied && prop.Status != Failed) {
 		return UndoResult{}, ProposalError(fmt.Sprintf("proposal %d is not applied", id))

@@ -57,7 +57,6 @@ func newWorld(t *testing.T, account, mode string, boxes func(*mailtest.FakeClien
 		t.Fatal(err)
 	}
 	w := &World{T: t, Account: account, Mode: mode, DB: dbtest.Schema(t), Cfg: cfg, Fake: mailtest.NewFakeClient(), Clock: 1_792_080_000}
-	w.Fake.BindMode(w.DB.Read)
 	mailtest.PinMode(t, mode)
 	mailtest.UseAccounts(t, map[string]string{config.ICloud: "me", config.Gmail: "me@gmail.test"})
 	for _, a := range [...]string{config.ICloud, config.Gmail} {
@@ -66,10 +65,10 @@ func newWorld(t *testing.T, account, mode string, boxes func(*mailtest.FakeClien
 	clock := func() float64 { return w.Clock }
 	w.Syncer = &mailsync.Syncer{DB: w.DB, Cfg: cfg, Now: clock}
 	w.Registry = proposals.NewRegistry()
-	live.RegisterUndoers(w.Registry, w.Open)
+	live.RegisterUndoers(w.Registry, w.Open, w.DB.Read)
 	w.Registry.Sync = func(ctx context.Context, account string) error {
 		w.Synced = append(w.Synced, account)
-		_, err := w.Syncer.Account(ctx, account, w.Fake)
+		_, err := w.Syncer.Account(ctx, account, w.Client())
 		return err
 	}
 	w.Live = &live.Live{DB: w.DB, Cfg: cfg, Registry: w.Registry, Now: clock}
@@ -92,7 +91,7 @@ func ICloud(t *testing.T, mode string, seed ...Seed) *World {
 		f.AddBox("Sent Messages", mailtest.NewBox(5), `\Sent`)
 	}, func(w *World) {
 		for _, s := range seed {
-			w.add(w.Fake.Boxes[config.Inbox], s.Subject, "a@x.test", s.Flags, nil)
+			w.add(w.Fake.Boxes[config.Inbox].Box, s.Subject, "a@x.test", s.Flags, nil)
 		}
 	})
 }
@@ -104,7 +103,7 @@ func Gmail(t *testing.T, mode string, seed ...Seed) *World {
 		f.AddBox("[Gmail]/Trash", mailtest.NewBox(5), `\Trash`)
 	}, func(w *World) {
 		for _, s := range seed {
-			w.add(w.Fake.Boxes[config.GmailAllMail], s.Subject, "a@x.test", s.Flags, s.Labels)
+			w.add(w.Fake.Boxes[config.GmailAllMail].Box, s.Subject, "a@x.test", s.Flags, s.Labels)
 		}
 	})
 }
@@ -118,9 +117,11 @@ func (w *World) exec(query string, args ...any) {
 
 func (w *World) Exec(query string, args ...any) { w.T.Helper(); w.exec(query, args...) }
 
-func (w *World) Open(context.Context, string) (mail.Client, error) {
+func (w *World) Client() mail.Client { return mail.Gated(w.Fake, w.DB.Read) }
+
+func (w *World) Open(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
 	w.Opened++
-	return w.Fake, nil
+	return mail.Gated(w.Fake, opts.Q), nil
 }
 
 func (w *World) add(box *mailtest.FakeBox, subject, sender string, flags, labels []string) uint32 {
@@ -130,9 +131,9 @@ func (w *World) add(box *mailtest.FakeBox, subject, sender string, flags, labels
 
 func (w *World) InboxBox() *mailtest.FakeBox {
 	if config.Preset(w.Account) == config.Gmail {
-		return w.Fake.Boxes[config.GmailAllMail]
+		return w.Fake.Boxes[config.GmailAllMail].Box
 	}
-	return w.Fake.Boxes[config.Inbox]
+	return w.Fake.Boxes[config.Inbox].Box
 }
 
 func (w *World) Arrive(subject string, flags ...string) uint32 {
@@ -151,7 +152,7 @@ func (w *World) Arrive(subject string, flags ...string) uint32 {
 
 func (w *World) Sync() {
 	w.T.Helper()
-	if _, err := w.Syncer.Account(context.Background(), w.Account, w.Fake); err != nil {
+	if _, err := w.Syncer.Account(context.Background(), w.Account, w.Client()); err != nil {
 		w.T.Fatal(err)
 	}
 }
@@ -208,7 +209,7 @@ func (w *World) verified(subject string) mailops.Verified {
 	if err != nil {
 		w.T.Fatal(err)
 	}
-	ok, skipped, err := mailops.Verify(context.Background(), w.DB.Read, w.Fake, w.Account, snaps)
+	ok, skipped, err := mailops.Verify(context.Background(), w.DB.Read, w.Client(), w.Account, snaps)
 	if err != nil || len(ok) != 1 {
 		w.T.Fatalf("verify %q: %v %v %v", subject, ok, skipped, err)
 	}
@@ -236,7 +237,7 @@ func (w *World) File(subject, kind, dest string) int64 {
 	v := w.verified(subject)
 	id := w.begin(v, kind, &dest)
 	ctx := w.Automatic()
-	err := mailops.MoveUIDs(ctx, w.Fake, v.IMAPName, dest, v.UIDValidity, []uint32{v.UID}, mailops.Batch, func(_ []uint32, copied *mail.CopyUID) error {
+	err := mailops.MoveUIDs(ctx, w.Client(), v.IMAPName, dest, v.UIDValidity, []uint32{v.UID}, mailops.Batch, func(_ []uint32, copied *mail.CopyUID) error {
 		var validity, destUID any
 		if copied != nil {
 			validity = copied.UIDValidity
@@ -263,7 +264,7 @@ func (w *World) Relabel(subject, dest string) int64 {
 	v := w.verified(subject)
 	id := w.begin(v, live.File, &dest)
 	ctx := w.Automatic()
-	if err := mailops.StoreLabels(ctx, w.Fake, v.IMAPName, v.UIDValidity, []uint32{v.UID}, mailops.Batch, []string{dest}, []string{mailops.InboxLabel}); err != nil {
+	if err := mailops.StoreLabels(ctx, w.Client(), v.IMAPName, v.UIDValidity, []uint32{v.UID}, mailops.Batch, []string{dest}, []string{mailops.InboxLabel}); err != nil {
 		w.T.Fatal(err)
 	}
 	undo := py.Dict{
@@ -282,7 +283,7 @@ func (w *World) Flag(subject string) int64 {
 	v := w.verified(subject)
 	id := w.begin(v, live.Flag, nil)
 	ctx := w.Automatic()
-	if err := mailops.StoreFlag(ctx, w.Fake, v.IMAPName, v.UIDValidity, []uint32{v.UID}, mailops.Batch, mailops.Flagged, true); err != nil {
+	if err := mailops.StoreFlag(ctx, w.Client(), v.IMAPName, v.UIDValidity, []uint32{v.UID}, mailops.Batch, mailops.Flagged, true); err != nil {
 		w.T.Fatal(err)
 	}
 	undo := py.Dict{
@@ -299,15 +300,15 @@ func (w *World) GmailTrash(subject string) int64 {
 	w.T.Helper()
 	v := w.verified(subject)
 	ctx := w.Automatic()
-	trash, err := mailops.TrashMailbox(ctx, w.Fake, w.Account)
+	trash, err := mailops.TrashMailbox(ctx, w.Client(), w.Account)
 	if err != nil {
 		w.T.Fatal(err)
 	}
 	id := w.begin(v, live.Trash, &trash)
-	if err := mailops.SelectRW(ctx, w.Fake, v.IMAPName, v.UIDValidity); err != nil {
+	if err := mailops.SelectRW(ctx, w.Client(), v.IMAPName, v.UIDValidity); err != nil {
 		w.T.Fatal(err)
 	}
-	copied, err := mailops.CopyUIDs(ctx, w.Fake, trash, []uint32{v.UID})
+	copied, err := mailops.CopyUIDs(ctx, w.Client(), trash, []uint32{v.UID})
 	if err != nil || copied == nil {
 		w.T.Fatalf("copy: %v %v", copied, err)
 	}

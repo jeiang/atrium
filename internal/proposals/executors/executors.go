@@ -167,7 +167,7 @@ func resolveGroups(groups []group, selection any) ([]planned, error) {
 
 type Executors struct {
 	DB   *db.DB
-	Open mailops.Opener
+	Open mail.OpenFunc
 	Now  func() float64
 }
 
@@ -586,7 +586,7 @@ func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, sel
 	}
 	account := p.AccountName()
 	moved, skipped, dests := 0, []mailops.Skip{}, []any{}
-	err = mailops.Session(ctx, e.Open, account, func(client mail.Client) error {
+	err = mailops.Session(ctx, e.Open, e.DB.Read, account, func(client mail.Client) error {
 		for _, step := range plan {
 			if len(step.snaps) == 0 {
 				continue
@@ -698,7 +698,7 @@ func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, 
 	trashed, skipped := 0, []mailops.Skip{}
 	if len(snaps) > 0 {
 		account := p.AccountName()
-		err := mailops.Session(ctx, e.Open, account, func(client mail.Client) error {
+		err := mailops.Session(ctx, e.Open, e.DB.Read, account, func(client mail.Client) error {
 			items, skips, err := mailops.Verify(ctx, e.DB.Read, client, account, snaps)
 			if err != nil {
 				return err
@@ -748,7 +748,7 @@ func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal
 	var skipped []mailops.Skip
 	deleted := false
 	keptReason := ""
-	err = mailops.Session(ctx, e.Open, account, func(client mail.Client) error {
+	err = mailops.Session(ctx, e.Open, e.DB.Read, account, func(client mail.Client) error {
 		items, skips, err := mailops.Verify(ctx, e.DB.Read, client, account, snaps)
 		if err != nil {
 			return err
@@ -812,7 +812,7 @@ func (e *Executors) UndoDeleteFolder(ctx context.Context, raw json.RawMessage) (
 		return nil, err
 	}
 	var deleted bool
-	err := mailops.Session(ctx, e.Open, plan.Account, func(client mail.Client) error {
+	err := mailops.Session(ctx, e.Open, e.DB.Read, plan.Account, func(client mail.Client) error {
 		var err error
 		deleted, err = mailops.DeleteFolderIfEmpty(ctx, client, plan.IMAPName)
 		return err
@@ -835,30 +835,30 @@ func (e *Executors) UndoRuleDelete(ctx context.Context, raw json.RawMessage) (py
 	return py.Dict{{Key: "deleted", Value: deleted}}, nil
 }
 
-func SyncAfter(syncer *mailsync.Syncer, open mailops.Opener) proposals.SyncHook {
+func SyncAfter(syncer *mailsync.Syncer, open mail.OpenFunc) proposals.SyncHook {
 	return func(ctx context.Context, account string) error {
 		lock, err := db.Exclusive(ctx, syncer.Cfg.DBPath, db.ShortLockWait)
 		if err != nil {
 			return err
 		}
 		defer func() { _ = lock.Close() }()
-		_, err = syncer.One(ctx, account, mailsync.Opener(open))
+		_, err = syncer.One(ctx, account, open)
 		return err
 	}
 }
 
-func Register(r *proposals.Registry, e *Executors, syncer *mailsync.Syncer) {
+func Register(r *proposals.Registry, e *Executors, syncer *mailsync.Syncer, owner string) {
 	r.Executors[RebalanceSplit] = e.ExecuteMoves
 	r.Executors[RebalanceMerge] = e.ExecuteMoves
 	r.Executors[DeletionRule] = e.ExecuteDeletion
 	r.Executors[GmailLabelMerge] = e.ExecuteLabelMerge
 	r.Executors[InboxBacklog] = e.ExecuteMoves
-	r.AddKind(proposals.Kind{Name: RebalanceSplit, Label: "Split folder", Icon: "split", Picker: true, Groups: true})
-	r.AddKind(proposals.Kind{Name: RebalanceMerge, Label: "Merge folders", Icon: "merge", Picker: true, Group: true})
-	r.AddKind(proposals.Kind{Name: DeletionRule, Label: "Deletion rule", Icon: "trash-2", Picker: true, Messages: true, CountKey: "backlog"})
-	r.AddKind(proposals.Kind{Name: GmailLabelMerge, Label: "Merge labels", Icon: "tag", Picker: true, Messages: true, CountKey: "from_count"})
-	r.AddKind(proposals.Kind{Name: InboxBacklog, Label: "Inbox backlog", Icon: "inbox", Picker: true, Groups: true})
-	live.RegisterUndoers(r, e.Open)
+	r.AddKind(proposals.Kind{Name: RebalanceSplit, Module: owner, Label: "Split folder", Icon: "split", Picker: true, Groups: true})
+	r.AddKind(proposals.Kind{Name: RebalanceMerge, Module: owner, Label: "Merge folders", Icon: "merge", Picker: true, Group: true})
+	r.AddKind(proposals.Kind{Name: DeletionRule, Module: owner, Label: "Deletion rule", Icon: "trash-2", Picker: true, Messages: true, CountKey: "backlog"})
+	r.AddKind(proposals.Kind{Name: GmailLabelMerge, Module: owner, Label: "Merge labels", Icon: "tag", Picker: true, Messages: true, CountKey: "from_count"})
+	r.AddKind(proposals.Kind{Name: InboxBacklog, Module: owner, Label: "Inbox backlog", Icon: "inbox", Picker: true, Groups: true})
+	live.RegisterUndoers(r, e.Open, e.DB.Read)
 	r.Undoers[OpDeleteFolder] = e.UndoDeleteFolder
 	r.Undoers[OpRuleDelete] = e.UndoRuleDelete
 	r.Sync = SyncAfter(syncer, e.Open)

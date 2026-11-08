@@ -11,13 +11,14 @@ import (
 	"github.com/jeiang/atrium/internal/auth/loginlink"
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
 	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	mailpages "github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
-	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals/proposalscmd"
@@ -30,25 +31,32 @@ import (
 type Module struct {
 	Version string
 	Guard   settingscmd.Guard
-	Clients run.Clients
+	Clients func(config.Config) mail.OpenFunc
 	Now     func() float64
 }
 
 func (m Module) Register(mc module.Context) module.Registration {
+	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
+		snap, err := mc.Evaluate(ctx, q)
+		if err != nil {
+			return false, err
+		}
+		return snap.Enabled(name), nil
+	}
 	return module.Registration{
 		Name: module.Core,
 		Core: true,
 		Pages: []web.Page{
 			{Module: about.Module(m.Version), Templates: about.Templates()},
 			{Module: mailpages.PauseModule},
-			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(mc.Env)}), Templates: reviewpages.Templates()},
+			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(mc.Env), Enabled: enabled}), Templates: reviewpages.Templates()},
 			{Start: startOps},
 			{Module: startEmbed},
 			{Module: integrations.Module, Templates: integrations.Templates()},
 			{Module: settingspages.Module, Templates: settingspages.Templates()},
 		},
 		Commands: []*cli.Command{
-			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now}),
+			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled}),
 			settingscmd.Command(mc.Env, m.Guard),
 			loginlink.Command(),
 			secretscmd.Command(mc.Env),

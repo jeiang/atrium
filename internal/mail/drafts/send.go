@@ -25,7 +25,7 @@ func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Mess
 	if s.Open == nil {
 		return "", errors.New("no IMAP opener")
 	}
-	client, err := s.Open(ctx, account)
+	client, err := s.Open(ctx, mail.OpenOptions{Account: account, Q: s.DB.Read})
 	if err != nil {
 		return "", err
 	}
@@ -36,7 +36,7 @@ func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Mess
 	}
 	sent := ""
 	for _, b := range boxes {
-		if mail.MailboxRole(b.Name, b.Flags, account) == "sent" {
+		if mail.MailboxRole(b.Name, b.Flags, config.Preset(account)) == "sent" {
 			sent = b.IMAPName
 			break
 		}

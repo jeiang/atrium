@@ -13,11 +13,11 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
-	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/smtp"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -46,10 +46,11 @@ func Templates() fs.FS {
 }
 
 type Options struct {
-	Open     mailops.Opener
+	Open     mail.OpenFunc
 	Now      func() float64
 	Writes   *writes.Registry
 	Registry *proposals.Registry
+	Enabled  func(context.Context, db.Querier, string) (bool, error)
 	SMTP     smtp.Factory
 }
 
@@ -71,7 +72,6 @@ func Module(o Options) web.Module {
 		if open == nil {
 			open = imapclient.Opener(d.Cfg)
 		}
-		open = mailops.Opener(mail.BindMode(open, d.DB.Read))
 		now := o.Now
 		if now == nil {
 			now = wallClock
@@ -89,10 +89,10 @@ func Module(o Options) web.Module {
 		s := &service{
 			deps:     d,
 			now:      now,
-			pipeline: &proposals.Pipeline{DB: d.DB, Registry: registry, Now: now},
+			pipeline: &proposals.Pipeline{DB: d.DB, Registry: registry, Now: now, Enabled: o.Enabled},
 			live:     &live.Live{DB: d.DB, Cfg: d.Cfg, Registry: registry, Now: now},
 			writes:   undo,
-			drafts:   &drafts.Store{DB: d.DB, Cfg: d.Cfg, Open: drafts.Opener(open), SMTP: o.SMTP, Now: now},
+			drafts:   &drafts.Store{DB: d.DB, Cfg: d.Cfg, Open: open, SMTP: o.SMTP, Now: now},
 			registry: registry,
 		}
 

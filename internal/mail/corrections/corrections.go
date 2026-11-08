@@ -34,10 +34,7 @@ type Correction struct {
 	Source    string  `json:"source"`
 }
 
-type Querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
+type Querier = db.Querier
 
 func Get(ctx context.Context, q Querier, messageID int64) (*Correction, error) {
 	var c Correction

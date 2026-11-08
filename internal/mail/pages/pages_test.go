@@ -59,7 +59,7 @@ func TestCorrectFormRendersAccountFolders(t *testing.T) {
 
 func TestCorrectionFromRowRecordsWithoutMailboxWrite(t *testing.T) {
 	opened := 0
-	s := seeded(t, "shadow", Options{Open: func(_ context.Context, _ string) (mail.Client, error) {
+	s := seeded(t, "shadow", Options{Open: func(_ context.Context, _ mail.OpenOptions) (mail.Client, error) {
 		opened++
 		return nil, errors.New("no mailbox in shadow mode")
 	}})

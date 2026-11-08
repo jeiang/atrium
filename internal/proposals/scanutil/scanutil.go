@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"slices"
 
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/py"
@@ -17,7 +18,7 @@ type Limits struct {
 	TopLabels      int
 }
 
-func ReadLimits(ctx context.Context, q mail.Querier) (Limits, error) {
+func ReadLimits(ctx context.Context, q db.Querier) (Limits, error) {
 	r := mail.Read(ctx, q)
 	l := Limits{SampleSubjects: r.Int(mail.KeyScanSampleSubjects), TopLabels: r.Int(mail.KeyScanTopLabels)}
 	return l, r.Err()

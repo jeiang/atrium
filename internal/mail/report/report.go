@@ -33,10 +33,7 @@ var ActualSQL = fmt.Sprintf(liveCopy, "location") + " AS actual, " + fmt.Sprintf
 var OutcomeSQL = "SELECT d.id AS decision_id, d.stage, d.action, d.dest, m.id AS message_id, m.msgid, m.from_domain, " +
 	ActualSQL + " FROM decisions d JOIN messages m ON m.id = d.message_id WHERE d.account = ? AND d.ts >= ? ORDER BY d.id"
 
-type Querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
+type Querier = db.Querier
 
 type SinceError string
 

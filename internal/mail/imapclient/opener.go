@@ -9,17 +9,27 @@ import (
 )
 
 func Opener(cfg config.Config) mail.OpenFunc {
-	return func(ctx context.Context, account string) (mail.Client, error) {
-		user, password, ok := cfg.Credential(account)
-		spec, known := config.Account(account)
+	return func(ctx context.Context, opts mail.OpenOptions) (mail.Client, error) {
+		_, password, ok := cfg.Credential(opts.Account)
+		spec, known := config.Account(opts.Account)
 		if !ok || !known {
-			return nil, errors.New("missing credentials for " + account)
+			return nil, errors.New("missing credentials for " + opts.Account)
 		}
-		client := New(spec.Host(), user, password)
-		if err := client.Connect(ctx); err != nil {
-			client.Close()
+		bodyCap := config.BodyCapBytes
+		if opts.Q != nil {
+			r := mail.Read(ctx, opts.Q)
+			bodyCap = r.Int(mail.KeyBodyCapBytes)
+			if err := r.Err(); err != nil {
+				return nil, err
+			}
+		}
+		conn, err := dial(ctx, spec, password)
+		if err != nil {
 			return nil, err
 		}
-		return client, nil
+		if c, ok := conn.(interface{ setBodyCap(int) }); ok {
+			c.setBodyCap(bodyCap)
+		}
+		return mail.Gated(conn, opts.Q), nil
 	}
 }

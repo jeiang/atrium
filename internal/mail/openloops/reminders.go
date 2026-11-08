@@ -237,8 +237,8 @@ func (r *Reminders) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, er
 	return py.Dict{{Key: "cancelled", Value: info.JobID}}, nil
 }
 
-func Register(reg *proposals.Registry, r *Reminders) {
+func Register(reg *proposals.Registry, r *Reminders, owner string) {
 	reg.Executors[KindReminder] = r.Execute
 	reg.Undoers[UndoReminder] = r.Undo
-	reg.AddKind(proposals.Kind{Name: KindReminder, Label: "Reminder", Icon: "scroll-text"})
+	reg.AddKind(proposals.Kind{Name: KindReminder, Module: owner, Label: "Reminder", Icon: "scroll-text"})
 }

@@ -1,7 +1,6 @@
 package mailcmd
 
 import (
-	"encoding/json"
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/cli"
@@ -23,11 +22,11 @@ func (o Options) EndpointsCommand() *cli.Command {
 					}
 					failed = failed || !r.OK
 				}
-				out, err := json.MarshalIndent(results, "", "  ")
-				if err != nil {
-					return err
+				out := make([]any, len(results))
+				for i, r := range results {
+					out[i] = r.Dict()
 				}
-				x.Print(string(out) + "\n")
+				x.JSON(out)
 				if failed {
 					return &exitError{code: cli.ExitError, text: "an endpoint probe failed"}
 				}

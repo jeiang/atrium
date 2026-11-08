@@ -51,10 +51,7 @@ const baseSelect = "SELECT m.id, m.account, COALESCE(c.folder, m.folder, m.locat
 	"m.subject, m.date_ts, m.seen, m.flagged, (m.att_types != '[]') AS has_attachment " +
 	"FROM messages m LEFT JOIN corrections c ON c.message_id = m.id"
 
-type Querier interface {
-	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
+type Querier = db.Querier
 
 func FTSQuery(text string) (string, error) { return FTSQueryLimit(text, MaxTerms) }
 
