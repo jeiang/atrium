@@ -6,8 +6,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"net"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
@@ -32,6 +34,19 @@ type AccountSpec struct {
 }
 
 func (a AccountSpec) Host() string { return presets[a.Preset].host }
+
+// IMAPEndpoint returns the dial address and TLS server name for host. The
+// ATRIUM_IMAP_ADDR and ATRIUM_IMAP_CA overrides exist for the test entry
+// point, which points the binary at a local TLS fake.
+func IMAPEndpoint(host string) (addr, serverName string) {
+	if v, ok := OS("ATRIUM_IMAP_ADDR"); ok && v != "" {
+		if h, _, err := net.SplitHostPort(v); err == nil {
+			return v, h
+		}
+		return v, host
+	}
+	return net.JoinHostPort(host, strconv.Itoa(IMAPPort)), host
+}
 
 func (a AccountSpec) SMTPHost() string { return presets[a.Preset].smtpHost }
 
