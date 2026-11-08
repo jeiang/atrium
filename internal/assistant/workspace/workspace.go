@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/py"
@@ -23,9 +24,6 @@ const (
 	WebFetch       = "web_fetch"
 	MailRead       = "mail_read"
 	FetchKnowledge = "fetch_knowledge"
-
-	toolResult   = "tool_result"
-	webSearchRes = "web_search_tool_result"
 
 	KindWeb    = "web"
 	KindMail   = "mail"
@@ -149,29 +147,28 @@ func first(values ...string) string {
 	return ""
 }
 
-type resultBlock struct {
-	Type      string          `json:"type"`
-	ToolUseID string          `json:"tool_use_id"`
-	Content   json.RawMessage `json:"content"`
-}
-
-func resultBodies(histories []journal.History) map[string]string {
+func resultBodies(histories []journal.History) (map[string]string, error) {
 	bodies := map[string]string{}
 	for _, h := range histories {
 		for _, m := range h.Messages {
 			if m.Role != journal.User {
 				continue
 			}
-			for _, raw := range m.Content {
-				var b resultBlock
-				var text string
-				if json.Unmarshal(raw, &b) == nil && b.Type == toolResult && json.Unmarshal(b.Content, &text) == nil {
-					bodies[b.ToolUseID] = text
+			blocks, err := block.DecodeAll(m.Content)
+			if err != nil {
+				return nil, err
+			}
+			for _, b := range blocks {
+				if b.Kind != block.ToolResult {
+					continue
+				}
+				if text, ok := b.Get("content").(string); ok {
+					bodies[b.String("tool_use_id")] = text
 				}
 			}
 		}
 	}
-	return bodies
+	return bodies, nil
 }
 
 func inList(ids []int64) (string, []any) {
@@ -204,28 +201,40 @@ func storedBodies(ctx context.Context, q db.Querier, threadIDs []int64) (map[str
 	return bodies, nil
 }
 
-func searchSources(histories []journal.History, roles map[int64]*string) []Source {
+func searchSources(histories []journal.History, roles map[int64]*string) ([]Source, error) {
 	var found []Source
 	for _, h := range histories {
 		for _, m := range h.Messages {
-			for _, raw := range m.Content {
-				var b resultBlock
-				var results []json.RawMessage
-				if json.Unmarshal(raw, &b) != nil || b.Type != webSearchRes || json.Unmarshal(b.Content, &results) != nil {
+			blocks, err := block.DecodeAll(m.Content)
+			if err != nil {
+				return nil, err
+			}
+			for _, b := range blocks {
+				if b.Kind != block.WebSearchResult {
+					continue
+				}
+				results, ok := b.Get("content").([]any)
+				if !ok {
 					continue
 				}
 				for _, r := range results {
-					var hit map[string]any
-					if json.Unmarshal(r, &hit) != nil || str(hit, "url") == "" {
+					hit, ok := r.(py.Dict)
+					if !ok {
 						continue
 					}
-					url := str(hit, "url")
-					found = append(found, Source{Kind: KindWeb, Key: url, Title: first(str(hit, "title"), url), URL: url, Via: roles[h.ThreadID]})
+					url, _ := hit.Get("url")
+					link, _ := url.(string)
+					if link == "" {
+						continue
+					}
+					title, _ := hit.Get("title")
+					label, _ := title.(string)
+					found = append(found, Source{Kind: KindWeb, Key: link, Title: first(label, link), URL: link, Via: roles[h.ThreadID]})
 				}
 			}
 		}
 	}
-	return found
+	return found, nil
 }
 
 func isInt(v any) (int64, bool) {
@@ -292,7 +301,10 @@ func SourcesWith(ctx context.Context, q db.Querier, threadID int64, children []t
 		}
 	}
 	slices.SortFunc(calls, func(a, b ownedCall) int { return cmp.Compare(a.ID, b.ID) })
-	bodies := resultBodies(histories)
+	bodies, err := resultBodies(histories)
+	if err != nil {
+		return nil, err
+	}
 	stored, err := storedBodies(ctx, q, ids)
 	if err != nil {
 		return nil, err
@@ -315,7 +327,11 @@ func SourcesWith(ctx context.Context, q db.Querier, threadID int64, children []t
 		}
 		found = append(found, *s)
 	}
-	found = append(found, searchSources(histories, roles)...)
+	searched, err := searchSources(histories, roles)
+	if err != nil {
+		return nil, err
+	}
+	found = append(found, searched...)
 	out := []Source{}
 	seen := map[string]bool{}
 	for _, s := range found {
