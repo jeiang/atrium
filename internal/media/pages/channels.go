@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -25,7 +24,7 @@ func chToast(category, title, description string) *tpl.Toast {
 	return &tpl.Toast{Category: category, Title: title, Description: description}
 }
 
-func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toast, status int, q string, form *ChannelForm, results *[]SearchHit) {
+func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toast, status int, q string, form *ChannelForm, results []SearchHit, searched bool) {
 	ctx := r.Context()
 	set := s.settings(ctx)
 	rows, err := media.ListChannels(ctx, s.deps.DB.Read)
@@ -50,6 +49,7 @@ func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toa
 		TMDB:     set.TMDBToken != "",
 		Q:        q,
 		Results:  results,
+		Searched: searched,
 		Form:     ChannelForm{Backfill: true},
 	}
 	if form != nil {
@@ -74,7 +74,8 @@ func (s *service) channelsIndex(w http.ResponseWriter, r *http.Request) {
 	pattern := web.QueryValue(query, "pattern")
 	set := s.settings(r.Context())
 	client := set.TMDB()
-	var results *[]SearchHit
+	var results []SearchHit
+	searched := false
 	var notice *tpl.Toast
 	err := func() error {
 		ctx := r.Context()
@@ -83,11 +84,11 @@ func (s *service) channelsIndex(w http.ResponseWriter, r *http.Request) {
 			if err != nil {
 				return err
 			}
-			hits := make([]SearchHit, len(found))
+			results = make([]SearchHit, len(found))
 			for i, f := range found {
-				hits[i] = SearchHit{TmdbID: f.TmdbID, Name: f.Name, Year: f.Year}
+				results[i] = SearchHit{TmdbID: f.TmdbID, Name: f.Name, Year: f.Year}
 			}
-			results = &hits
+			searched = true
 		}
 		if id, ok := parseInt(tmdbID); isDigits(tmdbID) && ok && imdb == "" && client != nil {
 			digits, found, err := client.ImdbOf(ctx, id)
@@ -103,14 +104,14 @@ func (s *service) channelsIndex(w http.ResponseWriter, r *http.Request) {
 		return nil
 	}()
 	if err != nil {
-		var failed media.TmdbError
-		if !errors.As(err, &failed) {
+		text, kind := mustClassify(err)
+		if kind != tmdbError {
 			panic(err)
 		}
-		notice = chToast("error", "TMDB failed", failed.Error())
+		notice = chToast("error", "TMDB failed", text)
 	}
 	form := ChannelForm{IMDb: imdb, Name: strings.TrimSpace(name), TmdbID: tmdbID, Pattern: pattern, Backfill: true}
-	s.chPage(w, r, notice, http.StatusOK, q, &form, results)
+	s.chPage(w, r, notice, http.StatusOK, q, &form, results, searched)
 }
 
 func (s *service) channelAdd(w http.ResponseWriter, r *http.Request) {
@@ -132,28 +133,27 @@ func (s *service) channelAdd(w http.ResponseWriter, r *http.Request) {
 	set := s.settings(ctx)
 	row, err := set.AddChannel(ctx, s.deps.DB.Write, name, imdb, pattern, caseSensitive, tmdb)
 	if err != nil {
-		var refused media.ChannelError
-		if !errors.As(err, &refused) {
+		text, kind := mustClassify(err)
+		if kind != channelError {
 			panic(err)
 		}
-		s.chPage(w, r, chToast("error", "Not saved", refused.Error()), http.StatusUnprocessableEntity, "", &form, nil)
+		s.chPage(w, r, chToast("error", "Not saved", text), http.StatusUnprocessableEntity, "", &form, nil, false)
 		return
 	}
 	if !backfill {
-		s.chPage(w, r, chToast("success", "Watching "+row.Name, "The first poll only records what is already out; later matches are downloaded."), http.StatusOK, "", nil, nil)
+		s.chPage(w, r, chToast("success", "Watching "+row.Name, "The first poll only records what is already out; later matches are downloaded."), http.StatusOK, "", nil, nil, false)
 		return
 	}
 	out, err := media.Poll(ctx, s.deps.DB.Write, s.deps.Env, set, media.PollOptions{Now: s.now, Only: &row.ID, Force: true})
 	if err != nil {
-		var missing config.NotConfigured
-		var qbitErr media.QbitError
-		if !errors.As(err, &missing) && !errors.As(err, &qbitErr) {
+		text, kind := mustClassify(err)
+		if kind != backendError {
 			panic(err)
 		}
-		s.chPage(w, r, chToast("error", "Watching "+row.Name, "Nothing downloaded: "+err.Error()), http.StatusOK, "", nil, nil)
+		s.chPage(w, r, chToast("error", "Watching "+row.Name, "Nothing downloaded: "+text), http.StatusOK, "", nil, nil, false)
 		return
 	}
-	s.chPage(w, r, chPolled("Watching "+row.Name, "no matching releases yet", out), http.StatusOK, "", nil, nil)
+	s.chPage(w, r, chPolled("Watching "+row.Name, "no matching releases yet", out), http.StatusOK, "", nil, nil, false)
 }
 
 func chPolled(title, idle string, out media.PollResult) *tpl.Toast {
@@ -227,12 +227,10 @@ func chExpected(err error) error {
 	if err == nil {
 		return nil
 	}
-	var eztv media.EztvError
-	var refused media.ChannelError
-	if errors.As(err, &eztv) || errors.As(err, &refused) {
-		return err
+	if _, kind, ok := classifyError(err); !ok || kind != channelError {
+		panic(err)
 	}
-	panic(err)
+	return err
 }
 
 func (s *service) channelDelete(w http.ResponseWriter, r *http.Request) {
@@ -251,20 +249,19 @@ func (s *service) channelDelete(w http.ResponseWriter, r *http.Request) {
 		s.deps.Error(w, r, http.StatusNotFound, refused.Error())
 		return
 	}
-	s.chPage(w, r, chToast("success", "Removed "+row.Name, ""), http.StatusOK, "", nil, nil)
+	s.chPage(w, r, chToast("success", "Removed "+row.Name, ""), http.StatusOK, "", nil, nil, false)
 }
 
 func (s *service) channelPoll(w http.ResponseWriter, r *http.Request) {
 	settings := s.settings(r.Context())
 	out, err := media.Poll(r.Context(), s.deps.DB.Write, s.deps.Env, settings, media.PollOptions{Now: s.now})
 	if err != nil {
-		var missing config.NotConfigured
-		var qbitErr media.QbitError
-		if !errors.As(err, &missing) && !errors.As(err, &qbitErr) {
+		text, kind := mustClassify(err)
+		if kind != backendError {
 			panic(err)
 		}
-		s.chPage(w, r, chToast("error", "Not polled", err.Error()), http.StatusUnprocessableEntity, "", nil, nil)
+		s.chPage(w, r, chToast("error", "Not polled", text), http.StatusUnprocessableEntity, "", nil, nil, false)
 		return
 	}
-	s.chPage(w, r, chPolled("Polled", "nothing new", out), http.StatusOK, "", nil, nil)
+	s.chPage(w, r, chPolled("Polled", "nothing new", out), http.StatusOK, "", nil, nil, false)
 }

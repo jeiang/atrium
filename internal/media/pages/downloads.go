@@ -2,14 +2,12 @@ package pages
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"net/url"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -31,15 +29,6 @@ func dlCheck(err error) {
 	if err != nil {
 		panic(err)
 	}
-}
-
-func dlSoft(err error) (string, bool) {
-	var notConfigured config.NotConfigured
-	var qbitErr media.QbitError
-	if errors.As(err, &notConfigured) || errors.As(err, &qbitErr) {
-		return err.Error(), true
-	}
-	return "", false
 }
 
 func dlLastValues(form url.Values) map[string]string {
@@ -72,8 +61,8 @@ func (s *service) dlTorrents(ctx context.Context, set media.Settings) ([]Torrent
 		found, err = client.Torrents(ctx, "", "", "")
 	}
 	if err != nil {
-		text, soft := dlSoft(err)
-		if !soft {
+		text, kind := mustClassify(err)
+		if kind != backendError {
 			panic(err)
 		}
 		return rows, text
@@ -162,8 +151,8 @@ func (s *service) dlFiles(w http.ResponseWriter, r *http.Request, hash string, t
 		files, err = client.Files(ctx, hash)
 	}
 	if err != nil {
-		text, soft := dlSoft(err)
-		if !soft {
+		text, kind := mustClassify(err)
+		if kind != backendError {
 			panic(err)
 		}
 		s.dlFilesError(w, r, hash, text)
@@ -221,8 +210,8 @@ func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
 		err = client.SetPriority(ctx, hash, []int{int(index)}, priority)
 	}
 	if err != nil {
-		text, soft := dlSoft(err)
-		if !soft {
+		text, kind := mustClassify(err)
+		if kind != backendError {
 			panic(err)
 		}
 		s.dlFilesError(w, r, hash, text)
@@ -236,10 +225,7 @@ func (s *service) dlFilePost(w http.ResponseWriter, r *http.Request) {
 	form := dlLastValues(web.FormValues(r))
 	set, client, root, item, err := s.dlFind(ctx, form["id"])
 	if err != nil {
-		text, soft := dlSoftPlan(err)
-		if !soft {
-			panic(err)
-		}
+		text, _ := mustClassify(err)
 		s.dlDownloads(w, r, &tpl.Toast{Category: "error", Title: "Not filed", Description: text}, http.StatusUnprocessableEntity, nil)
 		return
 	}
@@ -265,14 +251,6 @@ func (s *service) dlFilePost(w http.ResponseWriter, r *http.Request) {
 		dests[i] = op.Dst
 	}
 	s.dlDownloads(w, r, &tpl.Toast{Category: "success", Title: "Filed " + item.Name, Description: strings.Join(dests, "; ")}, http.StatusOK, nil)
-}
-
-func dlSoftPlan(err error) (string, bool) {
-	var planErr media.PlanError
-	if errors.As(err, &planErr) {
-		return err.Error(), true
-	}
-	return dlSoft(err)
 }
 
 func (s *service) dlFind(ctx context.Context, id string) (media.Settings, *media.Qbit, string, media.Item, error) {
@@ -301,10 +279,7 @@ func (s *service) dlIgnorePost(w http.ResponseWriter, r *http.Request) {
 		err = media.Ignore(r.Context(), client, item)
 	}
 	if err != nil {
-		text, soft := dlSoftPlan(err)
-		if !soft {
-			panic(err)
-		}
+		text, _ := mustClassify(err)
 		s.dlDownloads(w, r, &tpl.Toast{Category: "error", Title: "Not ignored", Description: text}, http.StatusUnprocessableEntity, nil)
 		return
 	}

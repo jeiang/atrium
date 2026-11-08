@@ -34,7 +34,8 @@ type ChannelsPage struct {
 	Status   ChannelStatusView `json:"status"`
 	TMDB     bool              `json:"tmdb"`
 	Q        string            `json:"q"`
-	Results  *[]SearchHit      `json:"results"`
+	Results  []SearchHit       `json:"results"`
+	Searched bool              `json:"searched"`
 	Form     ChannelForm       `json:"form"`
 }
 

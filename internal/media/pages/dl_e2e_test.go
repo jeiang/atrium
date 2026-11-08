@@ -267,8 +267,8 @@ func dlCompletedMedia(t *testing.T, root string, qb *dlQbitFake, hash, name stri
 func TestDlAddPagePrefillAndSubmit(t *testing.T) {
 	s, qb, _ := dlWorld(t, nil)
 	magnet := "magnet:?xt=urn:btih:" + dlHashA + "&dn=Lanterns.S01E08"
-	page := status(t, s.get("/media/add?magnet="+url.QueryEscape(magnet)), 200, "add page")
-	contains(t, page, `value="`+strings.ReplaceAll(magnet, "&", "&amp;")+`"`, `name="torrent"`, `value="media" checked`)
+	page := status(t, s.get("/media/add?magnet="+url.QueryEscape(magnet)+"&name=Lanterns.S01E08.torrent"), 200, "add page")
+	contains(t, page, `value="`+strings.ReplaceAll(magnet, "&", "&amp;")+`"`, `name="torrent"`, `value="media" checked`, `value="Lanterns.S01E08.torrent"`)
 
 	done := status(t, s.post("/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}), 200, "add magnet")
 	contains(t, done, "Added the magnet link")

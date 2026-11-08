@@ -19,9 +19,6 @@ import (
 )
 
 const (
-	KindShow   = "show"
-	KindSeason = "season"
-
 	postersDir = "posters"
 	thumbsDir  = "thumbs"
 )

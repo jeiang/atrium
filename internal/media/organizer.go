@@ -15,14 +15,10 @@ import (
 )
 
 const (
-	KindMovie  = "movie"
-	KindTV     = "tv"
 	Skipped    = "(skipped)"
 	importPref = Import + "/"
 	dirMode    = 0o775
 )
-
-var Kinds = []string{KindMovie, KindTV}
 
 type PlanError string
 
