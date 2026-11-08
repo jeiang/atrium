@@ -11,10 +11,11 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 func Command(cfgEnv config.Env) *cli.Command {
-	return &cli.Command{Name: "memory", Commands: []*cli.Command{treeCommand(cfgEnv), workCommand(cfgEnv), viewCommand(cfgEnv)}}
+	return &cli.Command{Name: "memory", Commands: []*cli.Command{treeCommand(cfgEnv), workCommand(cfgEnv), viewCommand(cfgEnv), backfillCommand(cfgEnv)}}
 }
 
 func open(env *cli.Env, cfgEnv config.Env) (*db.DB, error) {
@@ -143,6 +144,69 @@ func viewCommand(cfgEnv config.Env) *cli.Command {
 				for i, line := range v.Lines {
 					_, _ = fmt.Fprintf(env.Stdout, "line %d: %s\n", i, line.Describe())
 				}
+				return cli.ExitOK
+			}
+		},
+	}
+}
+
+func backfillCommand(cfgEnv config.Env) *cli.Command {
+	return &cli.Command{
+		Name: "backfill",
+		Help: "Build and summarize the memory trees of existing threads",
+		Setup: func(args *cli.Args) cli.Handler {
+			estimate := args.Bool("estimate", cli.Opt{Help: "print counts and cost without writing or calling"})
+			thread := args.Int("thread", 0, cli.Opt{Help: "only this thread"})
+			return func(env *cli.Env) int {
+				d, err := open(env, cfgEnv)
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				defer func() { _ = d.Close() }()
+				now := assistant.Now()
+				if *estimate {
+					e, err := memory.EstimateBackfill(env.Ctx, d.Read)
+					if err != nil {
+						return cli.Fail(env, err)
+					}
+					_, _ = fmt.Fprintf(env.Stdout, "threads: %d, nodes: %d, estimated cost: $%.2f\n", e.Threads, e.Nodes, e.CostUSD)
+					return cli.ExitOK
+				}
+				if !args.Has("thread") {
+					done, err := memory.BackfillDone(env.Ctx, d.Read)
+					if err != nil {
+						return cli.Fail(env, err)
+					}
+					if done != "" {
+						return cli.Fail(env, fmt.Errorf("backfill already completed at %s; use --thread to redo one thread", done))
+					}
+				}
+				key, err := secrets.Credential(env.Ctx, d.Read, secrets.AnthropicAPIKey)
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				client, err := anthropic.New(py.Strip(key), cfgEnv)
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				model, err := memory.Model(env.Ctx, d.Read)
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				effort, err := memory.Effort(env.Ctx, d.Read)
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				var target *int64
+				if args.Has("thread") {
+					id := int64(*thread)
+					target = &id
+				}
+				n, err := memory.Backfill(audit.With(env.Ctx, "operator", audit.CLI), d, target, client, model, effort, now)
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				_, _ = fmt.Fprintf(env.Stdout, "summarized %d nodes\n", n)
 				return cli.ExitOK
 			}
 		},

@@ -28,6 +28,8 @@ func init() {
 	}))
 }
 
+const BackfillDoneKey = "backfill_done"
+
 const (
 	ViewLowKey      = "view_low"
 	ViewHighKey     = "view_high"
@@ -46,5 +48,11 @@ func init() {
 	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
 		Key: TailMessagesKey, Module: "memory", Type: settings.Int, Default: "6",
 		Min: 0, Max: 100, Check: settings.Between(0, 100),
+	}))
+}
+
+func init() {
+	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
+		Key: BackfillDoneKey, Module: "memory", Type: settings.String, Default: "",
 	}))
 }
