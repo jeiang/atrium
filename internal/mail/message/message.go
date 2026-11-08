@@ -101,15 +101,18 @@ func RawFile(cacheDir, rawPath string) (string, bool) {
 	if err != nil {
 		return "", false
 	}
-	target := rawPath
-	if !strings.HasPrefix(rawPath, "/") {
-		target = root + "/" + rawPath
+	if root, err = filepath.EvalSymlinks(root); err != nil {
+		return "", false
 	}
-	resolved, err := filepath.Abs(target)
+	target := rawPath
+	if !filepath.IsAbs(rawPath) {
+		target = filepath.Join(root, rawPath)
+	}
+	resolved, err := filepath.EvalSymlinks(target)
 	if err != nil {
 		return "", false
 	}
-	if resolved != root && !strings.HasPrefix(resolved, strings.TrimSuffix(root, "/")+"/") {
+	if resolved != root && !strings.HasPrefix(resolved, root+string(filepath.Separator)) {
 		return "", false
 	}
 	info, err := os.Stat(resolved)

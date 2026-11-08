@@ -55,7 +55,7 @@ func DueDate(value any) (string, bool) {
 	if !isStr {
 		return "", false
 	}
-	parsed, ok := timex.ParseISO(textx.Clip(strings.TrimSpace(text), 10))
+	parsed, ok := timex.ParseDay(textx.Clip(strings.TrimSpace(text), 10))
 	if !ok {
 		return "", false
 	}

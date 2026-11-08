@@ -147,7 +147,7 @@ func UpcomingFor(ctx context.Context, q db.Querier, today time.Time, days int) (
 }
 
 func Dismiss(ctx context.Context, q db.Querier, key, occurrenceDate string, ts float64) error {
-	if _, ok := timex.ParseISO(occurrenceDate); !ok {
+	if _, ok := timex.ParseDay(occurrenceDate); !ok {
 		return fmt.Errorf("%w: Invalid isoformat string: %s", httpx.ErrPayload, strconv.Quote(occurrenceDate))
 	}
 	_, err := q.ExecContext(ctx,

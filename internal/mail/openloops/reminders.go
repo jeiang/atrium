@@ -55,7 +55,7 @@ func ReminderTime(due, tz string, hour int, now float64) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	parsed, ok := timex.ParseISO(due)
+	parsed, ok := timex.ParseDay(due)
 	if !ok {
 		return 0, fmt.Errorf("%w: Invalid isoformat string: %s", httpx.ErrPayload, strconv.Quote(due))
 	}
