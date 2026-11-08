@@ -361,17 +361,21 @@ func TestEditRegenerateBranch(t *testing.T) {
 		t.Errorf("%d edit buttons", n)
 	}
 	s.api.Push(reply1(anthropictest.Text("Answer two")))
+	release := s.hold()
 	edited := s.multipart(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "second", "edit": "1"}, nil, hx, "true")
 	mustContain(t, status(t, edited, http.StatusOK), "second", "data-live-run")
 	if edited.Header.Get("HX-Reswap") != "innerHTML" {
 		t.Errorf("HX-Reswap %q", edited.Header.Get("HX-Reswap"))
 	}
+	release()
 	s.settle(s.lastRun(thread))
 	page = status(t, s.get(fmt.Sprintf("/chat/%d", thread)), http.StatusOK)
 	mustContain(t, page, "Answer two")
 	mustNotContain(t, page, "Answer one", "data-text>first<")
 	s.api.Push(reply1(anthropictest.Text("Answer three")))
+	release = s.hold()
 	mustContain(t, status(t, s.post(fmt.Sprintf("/chat/%d/regenerate", thread), nil, hx, "true"), http.StatusOK), "data-live-run")
+	release()
 	s.settle(s.lastRun(thread))
 	mustContain(t, status(t, s.get(fmt.Sprintf("/chat/%d", thread)), http.StatusOK), "Answer three")
 	var seq int64
