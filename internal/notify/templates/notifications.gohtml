@@ -1,7 +1,7 @@
 {{define "title"}}Notifications · Settings{{end}}
 {{define "heading"}}Settings · Notifications{{end}}
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
-{{template "settings_tabs" "notifications"}}
+{{template "settings_tabs" (dict "Tab" "notifications" "Auth" .Auth)}}
 {{with $d.error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.}}</p>{{end}}
 {{if $d.ntfy_sh}}<p class="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning" data-ntfy-sh>{{icon "circle-alert"}}<span>On ntfy.sh anyone who knows a topic name can read it unless the topic is reserved. Treat each topic as a secret.</span></p>{{end}}
 

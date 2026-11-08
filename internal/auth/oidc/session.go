@@ -95,11 +95,30 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 	return r.Session, nil
 }
 
-func (s *Service) forget(id int64) {
+func (s *Service) forget(ids ...int64) {
 	s.mu.Lock()
-	delete(s.locks, id)
-	delete(s.retry, id)
+	for _, id := range ids {
+		delete(s.locks, id)
+		delete(s.retry, id)
+	}
 	s.mu.Unlock()
+}
+
+func expiredIDs(ctx context.Context, tx *sql.Tx, now float64) ([]int64, error) {
+	rows, err := tx.QueryContext(ctx, "SELECT id FROM auth_sessions WHERE absolute_expires_at < ? OR idle_expires_at < ?", now, now)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []int64
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }
 
 func (s *Service) drop(ctx context.Context, id int64) error {

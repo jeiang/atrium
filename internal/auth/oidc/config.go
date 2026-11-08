@@ -50,10 +50,7 @@ func list(value string) []string {
 	return out
 }
 
-var valueKeys = []string{
-	KeyPreset, KeyIssuer, KeyClientID, KeyScopes, KeyGroupsClaim, KeyAccessGroup, KeyAdminGroup,
-	KeyAccessEmails, KeyAdminEmails, KeyAccessDomains, KeyAdminDomains, KeyIdleDays, KeyMaxDays, KeyRecheckMinutes,
-}
+var valueKeys = append([]string{KeyPreset}, append(wizardKeys, KeyIdleDays, KeyMaxDays, KeyRecheckMinutes)...)
 
 type values map[string]string
 

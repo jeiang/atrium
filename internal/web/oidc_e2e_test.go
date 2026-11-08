@@ -181,6 +181,18 @@ func TestOIDCLoginStateIsBoundAndSingleUse(t *testing.T) {
 	}
 }
 
+func TestOIDCPendingLoginIsSealedAtRest(t *testing.T) {
+	r := shapes[0].rig(t)
+	r.browser().startLogin("")
+	var nonce, verifier string
+	if err := r.db.Read.QueryRow("SELECT nonce, verifier FROM auth_logins").Scan(&nonce, &verifier); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(nonce, "v1:") || !strings.HasPrefix(verifier, "v1:") {
+		t.Fatalf("pending login is not sealed: nonce %q verifier %q", nonce, verifier)
+	}
+}
+
 func TestOIDCLoginStateExpires(t *testing.T) {
 	r := shapes[0].rig(t)
 	b := r.browser()

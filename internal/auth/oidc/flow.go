@@ -256,12 +256,17 @@ func (s *Service) Complete(ctx context.Context, state, code, binding string) (Gr
 		accessExpires = now + float64(reply.ExpiresIn)
 	}
 	err = s.d.WithTx(ctx, func(tx *sql.Tx) error {
+		expired, err := expiredIDs(ctx, tx, now)
+		if err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx, "DELETE FROM auth_sessions WHERE absolute_expires_at < ? OR idle_expires_at < ?", now, now); err != nil {
 			return err
 		}
+		s.forget(expired...)
 		absolute := now + cfg.Max.Seconds()
 		idle := min(now+cfg.Idle.Seconds(), absolute)
-		_, err := tx.ExecContext(ctx, "INSERT INTO auth_sessions (token_hash, subject, email, name, admin, created_at, last_seen_at, idle_expires_at, absolute_expires_at, rechecked_at, access_token, access_expires_at, refresh_token, email_verified, hosted_domain) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		_, err = tx.ExecContext(ctx, "INSERT INTO auth_sessions (token_hash, subject, email, name, admin, created_at, last_seen_at, idle_expires_at, absolute_expires_at, rechecked_at, access_token, access_expires_at, refresh_token, email_verified, hosted_domain) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			digest(token), id.Subject, id.Email, id.Name, boolInt(admin), now, now, idle, absolute, now, sl.seal(reply.AccessToken), accessExpires, sl.seal(reply.RefreshToken), boolInt(id.EmailVerified), id.Hosted)
 		return err
 	})

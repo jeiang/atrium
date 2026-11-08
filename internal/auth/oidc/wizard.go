@@ -315,7 +315,7 @@ func (s *Service) failTest(run *testRun, status int, reason string) TestResult {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	run.state = ""
-	run.result = TestResult{Status: TestFailed, Reason: reason, HTTP: status, Fingerprint: run.draft.fingerprint}
+	run.result = TestResult{Status: TestFailed, Reason: reason, HTTP: status, Fingerprint: run.draft.fingerprint, Seq: run.seq}
 	return run.result
 }
 
@@ -462,7 +462,7 @@ func (s *Service) CompleteTest(ctx context.Context, state, code, providerError, 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	run.passedAt = s.now()
-	run.result = TestResult{Status: TestPassed, HTTP: 200, Groups: seen, Fingerprint: run.draft.fingerprint}
+	run.result = TestResult{Status: TestPassed, HTTP: 200, Groups: seen, Fingerprint: run.draft.fingerprint, Seq: run.seq}
 	return run.result
 }
 

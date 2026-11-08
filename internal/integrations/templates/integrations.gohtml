@@ -1,7 +1,7 @@
 {{define "title"}}Integrations · Settings{{end}}
 {{define "heading"}}Settings · Integrations{{end}}
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
-{{template "settings_tabs" "integrations"}}
+{{template "settings_tabs" (dict "Tab" "integrations" "Auth" .Auth)}}
 <div class="flex flex-col gap-3">
   {{range $d.records}}
   <form method="post" action="/settings/integrations/{{.name}}/test" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" data-integration="{{.name}}" data-state="{{.state}}" autocomplete="off">

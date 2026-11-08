@@ -24,7 +24,7 @@
 {{end}}
 
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
-{{template "settings_tabs" "subagents"}}
+{{template "settings_tabs" (dict "Tab" "subagents" "Auth" .Auth)}}
 <p class="text-sm text-muted-foreground">Research subagents the assistant can delegate to with <code class="font-mono">research(role=…)</code>. Each runs in its own thread with only the tools listed here (read-only; never write, notify, schedule or spawn), at its own effort level. Built-in agents can be edited and disabled but not deleted.</p>
 
 <div class="flex flex-col gap-4">
