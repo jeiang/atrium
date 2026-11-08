@@ -7,7 +7,7 @@
   <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "x"}}Dismiss all</button>
 </form>
 {{end}}{{end}}
-{{define "loops_list"}}{{$csrf := .csrf}}{{$choices := .snooze_choices}}
+{{define "loops_list"}}{{$csrf := .csrf}}{{$choices := .snooze_choices}}{{$default := .snooze_default}}
 {{if .items}}
 <ul class="flex flex-col gap-3" role="list" aria-label="{{.label}}">
   {{range .items}}
@@ -27,7 +27,7 @@
       <form method="post" action="/loops/{{.id}}/snooze" class="flex items-center gap-2">
         <input type="hidden" name="csrf_token" value="{{$csrf}}">
         <select name="days" aria-label="Snooze for" class="select">
-          {{range $choices}}<option value="{{.}}"{{if eq . 3}} selected{{end}}>{{.}} day{{if ne . 1}}s{{end}}</option>{{end}}
+          {{range $choices}}<option value="{{.}}"{{if eq . $default}} selected{{end}}>{{.}} day{{if ne . 1}}s{{end}}</option>{{end}}
         </select>
         <button type="submit" class="btn" data-size="sm" data-variant="outline">Snooze</button>
       </form>
@@ -48,14 +48,14 @@
     <h2 id="owe-h" class="text-sm font-medium">You owe a reply ({{len $d.owe}})</h2>
     {{template "loops_dismiss_all" (dict "state" "owe_reply" "items" $d.owe "csrf" $csrf)}}
   </div>
-  {{template "loops_list" (dict "items" $d.owe "label" "Owe a reply" "empty" "No one is waiting on you." "csrf" $csrf "snooze_choices" $d.snooze_choices)}}
+  {{template "loops_list" (dict "items" $d.owe "label" "Owe a reply" "empty" "No one is waiting on you." "csrf" $csrf "snooze_choices" $d.snooze_choices "snooze_default" $d.snooze_default)}}
 </section>
 <section class="flex flex-col gap-3" aria-labelledby="waiting-h">
   <div class="flex items-center justify-between gap-2">
     <h2 id="waiting-h" class="text-sm font-medium">Waiting on them ({{len $d.waiting}})</h2>
     {{template "loops_dismiss_all" (dict "state" "waiting_on_them" "items" $d.waiting "csrf" $csrf)}}
   </div>
-  {{template "loops_list" (dict "items" $d.waiting "label" "Waiting on them" "empty" "No sent mail is waiting for an answer." "csrf" $csrf "snooze_choices" $d.snooze_choices)}}
+  {{template "loops_list" (dict "items" $d.waiting "label" "Waiting on them" "empty" "No sent mail is waiting for an answer." "csrf" $csrf "snooze_choices" $d.snooze_choices "snooze_default" $d.snooze_default)}}
 </section>
 <section class="flex flex-col gap-3" aria-labelledby="commit-h">
   <h2 id="commit-h" class="text-sm font-medium">Commitments ({{len $d.commitments}})</h2>
