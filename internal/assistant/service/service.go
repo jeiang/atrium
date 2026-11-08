@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/loop"
+	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -256,7 +257,13 @@ func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error
 	if err != nil {
 		return nil, err
 	}
-	return s.Runner.Run(ctx, s.DB, s.Cfg, s.Env, client, runID, loop.Options{Now: s.now, Embed: s.embed, Limits: stored})
+	run, err := s.Runner.Run(ctx, s.DB, s.Cfg, s.Env, client, runID, loop.Options{Now: s.now, Embed: s.embed, Limits: stored})
+	if run != nil {
+		if rerr := memory.Rebuild(ctx, s.DB.Write, run.ThreadID, s.now()); rerr != nil {
+			log.Error(fmt.Sprintf("thread %d memory tree rebuild failed", run.ThreadID), logx.RunID, run.ID, logx.Err, rerr)
+		}
+	}
+	return run, err
 }
 
 func (s *Service) embed(ctx context.Context, texts []string) ([][]float64, error) {
@@ -398,7 +405,10 @@ func (s *Service) supersede(ctx context.Context, threadID, fromSeq int64, keepMe
 		if err := journal.Supersede(ctx, tx, threadID, fromSeq, keepMessage); err != nil {
 			return err
 		}
-		return actx.Supersede(ctx, tx, threadID, fromSeq)
+		if err := actx.Supersede(ctx, tx, threadID, fromSeq); err != nil {
+			return err
+		}
+		return memory.Rebuild(ctx, tx, threadID, s.now())
 	})
 }
 
