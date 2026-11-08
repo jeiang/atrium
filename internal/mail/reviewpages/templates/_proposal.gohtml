@@ -112,6 +112,14 @@
 </div>
 {{template "proposal_group_picker" (dict "p" $p "i" 0 "g" (get $v "group") "editable" false "pending" $.pending "picker" $.picker)}}
 
+{{else if eq $kind "mail_triage"}}
+<p class="text-sm text-muted-foreground">Archive, label or snooze the messages below. Anything not picked stays where it is.</p>
+<fieldset class="flex flex-col gap-2" data-group>
+  <legend class="sr-only">Messages</legend>
+  {{template "proposal_toggle" (dict "uid" (printf "%v-0" $p.ID) "g" (dict "messages" (get $v "messages") "count" (get $v "count")))}}
+  {{template "proposal_message_list" (dict "i" 0 "messages" (get $v "messages") "verb" "change")}}
+</fieldset>
+
 {{else if eq $kind "deletion_rule"}}
 {{$rule := get $v "rule"}}{{$reason := pyattr $v "reason"}}
 <div class="grid gap-4 md:grid-cols-2">
@@ -285,7 +293,7 @@
 {{if or (eq $p.Kind "rebalance_split") (eq $p.Kind "inbox_backlog")}}{{$picks = selattr "messages" (get $v "groups")}}
 {{else if eq $p.Kind "rebalance_merge"}}{{$picks = selattr "messages" (list (get $v "group"))}}
 {{else if eq $p.Kind "deletion_rule"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "backlog")))}}
-{{else if eq $p.Kind "gmail_label_merge"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "from_count")))}}{{end}}
+{{else if eq $p.Kind "gmail_label_merge"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "from_count")))}}{{else if eq $p.Kind "mail_triage"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "count")))}}{{end}}
 {{$picker := and $pending (gt (len $picks) 0)}}
 {{$ctx := dict "p" $p "v" $v "pending" $pending "picks" $picks "picker" $picker "mode" .mode}}
 <li id="proposal-{{$p.ID}}" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring {{if or (eq $p.Status "dismissed") (eq $p.Status "suppressed")}}opacity-80{{end}}">

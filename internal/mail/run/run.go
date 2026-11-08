@@ -180,6 +180,10 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 			log.Info("event scan done", "account", account, "invites", invites, "candidates", candidates)
 		}
 		applied, deleted, err := p.Applier.ApplyAll(ctx, account)
+		if _, serr := p.Applier.ApplySnoozes(ctx, account); serr != nil {
+			log.Error("snooze return failed", "account", account, logx.Err, serr.Error())
+			failed = append(failed, account)
+		}
 		switch {
 		case err != nil:
 			log.Error("live pass failed", "account", account, logx.Err, err.Error())

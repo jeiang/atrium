@@ -33,6 +33,7 @@ const (
 
 	OpDeleteFolder = "delete_folder"
 	OpRuleDelete   = "rule_delete"
+	OpCancelSnooze = "cancel_snooze"
 )
 
 func chosenSnapshots(messages []mailops.Snapshot, wanted any) ([]mailops.Snapshot, error) {
@@ -849,13 +850,16 @@ func Register(r *proposals.Registry, e *Executors, syncer *mailsync.Syncer, owne
 	r.Executors[DeletionRule] = e.ExecuteDeletion
 	r.Executors[GmailLabelMerge] = e.ExecuteLabelMerge
 	r.Executors[InboxBacklog] = e.ExecuteMoves
+	r.Executors[MailTriage] = e.ExecuteTriage
 	r.AddKind(proposals.Kind{Name: RebalanceSplit, Module: owner, Label: "Split folder", Icon: "split", Picker: true, Groups: true})
 	r.AddKind(proposals.Kind{Name: RebalanceMerge, Module: owner, Label: "Merge folders", Icon: "merge", Picker: true, Group: true})
 	r.AddKind(proposals.Kind{Name: DeletionRule, Module: owner, Label: "Deletion rule", Icon: "trash-2", Picker: true, Messages: true, CountKey: "backlog"})
 	r.AddKind(proposals.Kind{Name: GmailLabelMerge, Module: owner, Label: "Merge labels", Icon: "tag", Picker: true, Messages: true, CountKey: "from_count"})
 	r.AddKind(proposals.Kind{Name: InboxBacklog, Module: owner, Label: "Inbox backlog", Icon: "inbox", Picker: true, Groups: true})
+	r.AddKind(proposals.Kind{Name: MailTriage, Module: owner, Label: "Mail triage", Icon: "inbox", Picker: true, Messages: true, CountKey: "count"})
 	live.RegisterUndoers(r, e.Open, e.DB.Read)
 	r.Undoers[OpDeleteFolder] = e.UndoDeleteFolder
 	r.Undoers[OpRuleDelete] = e.UndoRuleDelete
+	r.Undoers[OpCancelSnooze] = e.UndoCancelSnooze
 	r.Sync = SyncAfter(syncer, e.Open)
 }

@@ -160,3 +160,17 @@ func TestUndoOfAProposalThatIsNotAppliedReportsNotUndone(t *testing.T) {
 	body := status(t, s.post("/proposals/"+itoa(int(id))+"/undo", nil, hx, "true"), http.StatusOK)
 	mustContain(t, body, "Not undone", "is not applied")
 }
+
+func TestTriageProposalRendersTheMessagePicker(t *testing.T) {
+	s := newSite(t)
+	preview := py.Dict{
+		{Key: "count", Value: int64(1)},
+		{Key: "messages", Value: []any{py.Dict{
+			{Key: "id", Value: int64(5)}, {Key: "subject", Value: "Quarterly invoice"},
+			{Key: "action", Value: "archive"},
+		}}},
+	}
+	s.propose("mail_triage", "icloud", "Triage 1 messages", preview, "triage")
+	page := status(t, s.get("/proposals"), http.StatusOK)
+	mustContain(t, page, "Mail triage", "Triage 1 messages", "Quarterly invoice", "Approve all")
+}
