@@ -145,9 +145,6 @@ func setCookie(w http.ResponseWriter, name, value string, maxAge int, secure boo
 
 func expireCookie(w http.ResponseWriter, name string, secure bool) {
 	setCookie(w, name, "", -1, secure)
-	if secure {
-		setCookie(w, name, "", -1, false)
-	}
 }
 
 func hasSecureTransport(r *http.Request, publicSecure bool) bool { return publicSecure || isHTTPS(r) }

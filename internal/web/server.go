@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/fs"
 	"net/http"
 	"net/url"
 	"strings"
@@ -47,9 +46,7 @@ type Options struct {
 	Auth         []string
 	AllowedHosts []string
 	Public       func(*http.Request) bool
-	ErrorPage    ErrorPage
 	Render       *Renderer
-	Static       fs.FS
 	Modules      []Module
 	OIDC         *oidc.Service
 	LoginLinks   *loginlink.Service
@@ -85,16 +82,13 @@ func New(o Options) (*Server, error) {
 	if auth.Open && !auth.Local() {
 		return nil, errors.New("open authentication requires local mode")
 	}
-	if o.Static == nil {
-		o.Static = Static
-	}
 	if o.Env == nil {
 		o.Env = config.OS
 	}
 	if auth.OIDC() && (o.OIDC == nil || o.Render == nil || (o.LoginLinks == nil && o.DB == nil)) {
 		return nil, errors.New("oidc auth needs a session service, a renderer and a database")
 	}
-	s := &Server{mux: chi.NewRouter(), errPage: o.ErrorPage, oidc: o.OIDC, render: o.Render, auth: auth, links: o.LoginLinks}
+	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, links: o.LoginLinks}
 	if s.links == nil && o.DB != nil {
 		s.links = loginlink.New(o.DB)
 	}
@@ -104,7 +98,7 @@ func New(o Options) (*Server, error) {
 	if s.errPage == nil {
 		s.errPage = plainErrorPage
 	}
-	static := newStaticHandler(o.Static)
+	static := newStaticHandler(Static)
 	s.mux.NotFound(s.notFound)
 	s.mux.MethodNotAllowed(s.methodNotAllowed)
 	s.mux.Get(HealthPath, func(w http.ResponseWriter, _ *http.Request) {
@@ -118,7 +112,7 @@ func New(o Options) (*Server, error) {
 		static.serve(w, r, func(status int, detail string) { s.Error(w, r, status, detail) })
 	}))
 	s.mux.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		http.Redirect(w, r, "/chat", http.StatusSeeOther)
+		http.Redirect(w, r, "/about", http.StatusSeeOther)
 	})
 	s.stop = make(chan struct{})
 	deps := &Deps{
