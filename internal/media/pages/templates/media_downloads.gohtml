@@ -2,7 +2,7 @@
 {{define "heading"}}Media · Downloads{{end}}
 {{define "content"}}{{$csrf := .CSRF}}
 <div class="flex flex-wrap items-center justify-between gap-3">
-  <p class="text-sm text-muted-foreground">qBittorrent on artemis. <strong>media</strong> torrents are filed into the library from here once complete; <strong>plain</strong> ones stay in downloads/.</p>
+  <p class="text-sm text-muted-foreground"><strong>media</strong> torrents are filed into the library from here once complete; <strong>plain</strong> ones stay in downloads/.</p>
   <a class="btn" data-size="sm" href="/media/add">{{icon "plus"}}Add torrent</a>
 </div>
 

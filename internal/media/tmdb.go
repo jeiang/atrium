@@ -5,13 +5,14 @@ import (
 	"errors"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/py"
 )
 
-var (
-	TMDBAPI    = "https://api.themoviedb.org/3"
-	TMDBImages = "https://image.tmdb.org/t/p/w342"
+const (
+	defaultTMDBAPI    = "https://api.themoviedb.org/3"
+	defaultTMDBImages = "https://image.tmdb.org/t/p/w342"
 )
 
 type TmdbError string
@@ -19,8 +20,10 @@ type TmdbError string
 func (e TmdbError) Error() string { return string(e) }
 
 type TMDB struct {
-	token string
-	http  *http.Client
+	token  string
+	http   *http.Client
+	api    string
+	images string
 }
 
 type TVResult struct {
@@ -32,17 +35,28 @@ type TVResult struct {
 
 type MovieResult struct {
 	PosterPath string
+	Year       string
 }
 
 func NewTMDB(token string, client *http.Client) *TMDB {
+	return NewTMDBAt(token, client, defaultTMDBAPI, defaultTMDBImages)
+}
+
+func NewTMDBAt(token string, client *http.Client, api, images string) *TMDB {
 	if token == "" {
 		return nil
 	}
-	return &TMDB{token: token, http: client}
+	if api == "" {
+		api = defaultTMDBAPI
+	}
+	if images == "" {
+		images = defaultTMDBImages
+	}
+	return &TMDB{token: token, http: client, api: strings.TrimRight(api, "/"), images: strings.TrimRight(images, "/")}
 }
 
 func (t *TMDB) get(ctx context.Context, path string, params ...param) (any, error) {
-	target := TMDBAPI + "/" + path
+	target := t.api + "/" + path
 	if len(params) > 0 {
 		target += "?" + encodeParams(params)
 	}
@@ -156,7 +170,7 @@ func (t *TMDB) SearchMovie(ctx context.Context, query, year string) ([]MovieResu
 	}
 	out := []MovieResult{}
 	for _, r := range listOf(body, "results") {
-		out = append(out, MovieResult{PosterPath: textOf(r, "poster_path")})
+		out = append(out, MovieResult{PosterPath: textOf(r, "poster_path"), Year: yearOf(textOf(r, "release_date"))})
 	}
 	return out, nil
 }
@@ -195,7 +209,7 @@ func (t *TMDB) Season(ctx context.Context, tmdbID, number int64) (py.Dict, error
 }
 
 func (t *TMDB) Image(ctx context.Context, posterPath string) ([]byte, error) {
-	req, err := http.NewRequest(http.MethodGet, TMDBImages+posterPath, nil)
+	req, err := http.NewRequest(http.MethodGet, t.images+posterPath, nil)
 	if err != nil {
 		return nil, TmdbError("TMDB images unreachable: invalid URL")
 	}

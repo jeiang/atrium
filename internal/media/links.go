@@ -141,7 +141,7 @@ func signText(secret []byte, rel, exp string) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func Sign(secret []byte, rel string, exp int64) string {
+func sign(secret []byte, rel string, exp int64) string {
 	return signText(secret, rel, strconv.FormatInt(exp, 10))
 }
 
@@ -185,7 +185,7 @@ func (l *Links) PublicURL(ctx context.Context, base, rel string, now float64, tt
 		return "", errEmptyLinkKey
 	}
 	exp := int64(now + float64(ttl))
-	return base + FilePrefix + urlQuote(rel) + "?exp=" + strconv.FormatInt(exp, 10) + "&sig=" + Sign(secret, rel, exp), nil
+	return base + FilePrefix + urlQuote(rel) + "?exp=" + strconv.FormatInt(exp, 10) + "&sig=" + sign(secret, rel, exp), nil
 }
 
 func (s Settings) VPNURL(rel string) string {
@@ -203,13 +203,11 @@ func (s Settings) VPNURL(rel string) string {
 	return base + "/" + urlQuote(rest)
 }
 
-func firstQuery(values []string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
+func QueryValue(values []string) string {
+	if len(values) == 0 {
+		return ""
 	}
-	return ""
+	return values[len(values)-1]
 }
 
 func (l *Links) Verifier() func(*http.Request) bool {
@@ -219,6 +217,6 @@ func (l *Links) Verifier() func(*http.Request) bool {
 			return false
 		}
 		query := r.URL.Query()
-		return l.Verify(r.Context(), rest, firstQuery(query["exp"]), firstQuery(query["sig"]), Now())
+		return l.Verify(r.Context(), rest, QueryValue(query["exp"]), QueryValue(query["sig"]), Now())
 	}
 }

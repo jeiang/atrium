@@ -3,7 +3,10 @@ package pages
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +17,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -107,8 +111,14 @@ func flWrite(t *testing.T, path string, data []byte) {
 	}
 }
 
+func flSign(key, rel string, exp int64) string {
+	mac := hmac.New(sha256.New, []byte(key))
+	_, _ = mac.Write([]byte(rel + "\n" + strconv.FormatInt(exp, 10)))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
 func flSigned(key, rel string, exp int64) string {
-	return fmt.Sprintf("%s%s?exp=%d&sig=%s", media.FilePrefix, urlQuote(rel), exp, media.Sign([]byte(key), rel, exp))
+	return fmt.Sprintf("%s%s?exp=%d&sig=%s", media.FilePrefix, urlQuote(rel), exp, flSign(key, rel, exp))
 }
 
 func flRange(spec string) [2]string { return [2]string{"Range", spec} }
@@ -291,7 +301,7 @@ func TestFlPathTraversalAndRoot(t *testing.T) {
 	flWrite(t, filepath.Join(filepath.Dir(w.root), "atrium.db"), []byte("database"))
 	signedPath := func(rel string) string { return flSigned(flKey, rel, flFar) }
 	rawPath := func(rel, rawRel string) string {
-		return fmt.Sprintf("%s%s?exp=%d&sig=%s", media.FilePrefix, rawRel, flFar, media.Sign([]byte(flKey), rel, flFar))
+		return fmt.Sprintf("%s%s?exp=%d&sig=%s", media.FilePrefix, rawRel, flFar, flSign(flKey, rel, flFar))
 	}
 	cases := map[string]string{
 		"parent traversal":         signedPath("movies/../../atrium.db"),
@@ -465,7 +475,7 @@ func TestFlGuardAdmitsSignedLinksOnly(t *testing.T) {
 	status(t, flGetHost(proxy, good, host, group), 200, "signed link with group")
 	status(t, flGetHost(proxy, bare, host, group), 403, "unsigned link with group is still checked by the route")
 	thumb := "/media/thumb/" + urlQuote(w.episodeRel)
-	sig := media.Sign([]byte(flKey), w.episodeRel, flFar)
+	sig := flSign(flKey, w.episodeRel, flFar)
 	status(t, flGetHost(proxy, fmt.Sprintf("%s?exp=%d&sig=%s", thumb, flFar, sig), host), 403, "signature does not unlock other paths")
 	status(t, flGetHost(proxy, flSigned(flKey, w.movieRel, flFar), host, flRange("bytes=10-19")), 206, "range through the guard")
 }
@@ -515,6 +525,7 @@ type flTMDB struct {
 	mu     sync.Mutex
 	images int
 	hits   int
+	URL    string
 }
 
 func flServeTMDB(t *testing.T) *flTMDB {
@@ -559,12 +570,8 @@ func flServeTMDB(t *testing.T) *flTMDB {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	}))
-	api, images := media.TMDBAPI, media.TMDBImages
-	media.TMDBAPI, media.TMDBImages = srv.URL+"/3", srv.URL+"/t/p/w342"
-	t.Cleanup(func() {
-		media.TMDBAPI, media.TMDBImages = api, images
-		srv.Close()
-	})
+	fake.URL = srv.URL
+	t.Cleanup(srv.Close)
 	return fake
 }
 
@@ -611,7 +618,7 @@ func flPlaceholderCheck(t *testing.T, rec *httptest.ResponseRecorder, label stri
 func TestFlPostersAndThumbnails(t *testing.T) {
 	tmdb := flServeTMDB(t)
 	ff := &flFFmpeg{duration: "1200.5"}
-	w := flNew(t, nil, Options{Exec: ff.run})
+	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_URL": tmdb.URL + "/3", "ATRIUM_MEDIA_MEDIA_TMDB_IMAGES_URL": tmdb.URL + "/t/p/w342"}, Options{Exec: ff.run})
 
 	flImage(t, w.get("/media/art/movie/"+urlQuote("Dune (2021)")), "movie poster")
 	flImage(t, w.get("/media/art/show/"+urlQuote("Lanterns (2026)")), "show poster")
@@ -730,7 +737,7 @@ func TestFlThumbnailsRunOneAtATime(t *testing.T) {
 func TestFlWithoutTMDBOrRoot(t *testing.T) {
 	tmdb := flServeTMDB(t)
 	ff := &flFFmpeg{duration: "10"}
-	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "", "ATRIUM_MEDIA_MEDIA_ROOT": ""}, Options{Exec: ff.run})
+	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "", "ATRIUM_MEDIA_MEDIA_ROOT": "", "ATRIUM_MEDIA_MEDIA_TMDB_URL": tmdb.URL + "/3", "ATRIUM_MEDIA_MEDIA_TMDB_IMAGES_URL": tmdb.URL + "/t/p/w342"}, Options{Exec: ff.run})
 	flPlaceholderCheck(t, w.get("/media/art/movie/"+urlQuote("Dune (2021)")), "poster without a TMDB key")
 	flPlaceholderCheck(t, w.get("/media/thumb/"+urlQuote("tv/Lanterns (2026)/Season 01/x.mkv")), "thumbnail without a root")
 	if tmdb.hitCount() != 0 || ff.count() != 0 {
@@ -740,7 +747,7 @@ func TestFlWithoutTMDBOrRoot(t *testing.T) {
 
 func TestFlTMDBFailureGivesPlaceholderWithoutMarker(t *testing.T) {
 	tmdb := flServeTMDB(t)
-	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "wrong"}, Options{})
+	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "wrong", "ATRIUM_MEDIA_MEDIA_TMDB_URL": tmdb.URL + "/3", "ATRIUM_MEDIA_MEDIA_TMDB_IMAGES_URL": tmdb.URL + "/t/p/w342"}, Options{})
 	flPlaceholderCheck(t, w.get("/media/art/movie/"+urlQuote("Dune (2021)")), "TMDB rejects the key")
 	if tmdb.imageCount() != 0 {
 		t.Errorf("image fetched after TMDB error")

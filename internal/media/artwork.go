@@ -131,6 +131,13 @@ func (a *Artwork) posterPath(ctx context.Context, kind, name string, season int6
 		if err != nil || len(found) == 0 {
 			return "", err
 		}
+		if parsed.Year != "" {
+			for _, movie := range found {
+				if movie.Year == parsed.Year {
+					return movie.PosterPath, nil
+				}
+			}
+		}
 		return found[0].PosterPath, nil
 	}
 	shows, err := a.TMDB.SearchTV(ctx, title, a.ShowSearchLimit)
@@ -279,7 +286,16 @@ func (a *Artwork) Thumbnail(ctx context.Context, root, rel string) (string, bool
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fail(err)
 	}
-	tmp := strings.TrimSuffix(path, ".jpg") + ".tmp.jpg"
+	tmpFile, err := os.CreateTemp(filepath.Dir(path), ".thumb-*.jpg")
+	if err != nil {
+		return fail(err)
+	}
+	tmp := tmpFile.Name()
+	if err := tmpFile.Close(); err != nil {
+		_ = os.Remove(tmp)
+		return fail(err)
+	}
+	defer func() { _ = os.Remove(tmp) }()
 	_, stderr, code, err := a.run(ctx, a.niced("ffmpeg", "-v", "error", "-y", "-ss", seekText(at), "-i", full, "-frames:v", "1", "-vf", fmt.Sprintf("scale=%d:-2", a.ThumbWidth), "-q:v", "4", tmp))
 	if err != nil {
 		return fail(err)

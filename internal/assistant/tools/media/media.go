@@ -188,7 +188,7 @@ func mediaDownloads(ctx context.Context, tc *tool.Context, _ tool.Args) (any, er
 	}
 	waiting := []media.Item{}
 	if settings.Root != "" {
-		if waiting, _, err = media.Items(ctx, qb, settings.Root); err != nil {
+		if waiting, _, err = settings.Items(ctx, qb, settings.Root); err != nil {
 			return nil, err
 		}
 	}
@@ -298,7 +298,7 @@ func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 		return nil, qbitFailed(err)
 	}
 	if asMedia {
-		if _, err := media.SelectFiles(ctx, qb, nil); err != nil {
+		if _, err := settings.SelectFiles(ctx, qb, nil); err != nil {
 			return nil, qbitFailed(err)
 		}
 	}
@@ -404,7 +404,7 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any
 	var writeID int64
 	err = tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
 		var err error
-		if row, err = settings.AddChannel(ctx, tx, name, imdb, pattern, caseSensitive, stored, tc.Now, false); err != nil {
+		if row, err = settings.AddChannel(ctx, tx, name, imdb, pattern, caseSensitive, stored); err != nil {
 			return err
 		}
 		writeID, err = writes.Record(ctx, tx, tc.Undoers, writes.New{

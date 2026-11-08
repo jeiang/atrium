@@ -45,7 +45,7 @@ type ReleaseView struct {
 }
 
 type PreviewView struct {
-	Error    string         `json:"error"`
-	Matched  int            `json:"matched"`
-	Releases *[]ReleaseView `json:"releases"`
+	Error    string        `json:"error"`
+	Matched  int           `json:"matched"`
+	Releases []ReleaseView `json:"releases"`
 }

@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -10,18 +11,12 @@ import (
 	"github.com/jeiang/atrium/internal/web"
 )
 
-var fileVideoTypes = map[string]string{
-	".mkv": "video/x-matroska",
-	".mp4": "video/mp4",
-	".m4v": "video/x-m4v",
-	".avi": "video/x-msvideo",
-	".mov": "video/quicktime",
-	".ts":  "video/mp2t",
-	".wmv": "video/x-ms-wmv",
-}
-
-func fileVideoType(path string) string {
-	if kind, ok := fileVideoTypes[strings.ToLower(filepath.Ext(path))]; ok {
+func fileVideoType(path string, video map[string]bool) string {
+	ext := strings.ToLower(filepath.Ext(path))
+	if !video[ext] {
+		return "application/octet-stream"
+	}
+	if kind := mime.TypeByExtension(ext); kind != "" {
 		return kind
 	}
 	return "application/octet-stream"
@@ -30,11 +25,12 @@ func fileVideoType(path string) string {
 func (s *service) serveFile(w http.ResponseWriter, r *http.Request) {
 	rel := web.PathParam(r, "*")
 	query := r.URL.Query()
-	if !s.links.Verify(r.Context(), rel, web.QueryValue(query, "exp"), web.QueryValue(query, "sig"), s.now()) {
+	if !s.links.Verify(r.Context(), rel, media.QueryValue(query["exp"]), media.QueryValue(query["sig"]), s.now()) {
 		s.deps.Error(w, r, http.StatusForbidden, "the link is invalid or has expired")
 		return
 	}
-	root, err := s.settings(r.Context()).NeedRoot()
+	set := s.settings(r.Context())
+	root, err := set.NeedRoot()
 	if err != nil {
 		s.deps.Error(w, r, http.StatusNotFound, err.Error())
 		return
@@ -55,6 +51,6 @@ func (s *service) serveFile(w http.ResponseWriter, r *http.Request) {
 		s.deps.Error(w, r, http.StatusNotFound, "not found")
 		return
 	}
-	w.Header().Set("Content-Type", fileVideoType(full))
+	w.Header().Set("Content-Type", fileVideoType(full, set.VideoExts))
 	http.ServeContent(w, r, info.Name(), info.ModTime(), f)
 }

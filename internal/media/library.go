@@ -256,6 +256,9 @@ func (t Tuning) Search(root, query string, limit int) []SearchResult {
 			files = append(files, f.Rel)
 		}
 		out = append(out, SearchResult{Kind: KindMovie, Title: m.Title, Year: m.Year, Dir: m.Dir, Files: files})
+		if len(out) >= limit {
+			return out[:limit]
+		}
 	}
 	for _, s := range t.ShowEntries(root) {
 		for _, rel := range t.EpisodeFilesOf(root, s.Dir) {
