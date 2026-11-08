@@ -3,13 +3,14 @@ package settingscmd
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
@@ -49,7 +50,7 @@ func (s *service) list(*cli.Args) cli.Handler {
 			if err != nil {
 				return 0, err
 			}
-			rows := make([]any, 0)
+			rows := make([]settingRow, 0)
 			for _, def := range settings.From(e.Ctx).Defs() {
 				row, err := s.row(e.Ctx, store, snap, def.Key)
 				if err != nil {
@@ -57,7 +58,7 @@ func (s *service) list(*cli.Args) cli.Handler {
 				}
 				rows = append(rows, row)
 			}
-			_, _ = fmt.Fprintln(e.Stdout, py.JSONDumps(rows, py.JSONOpts{Indent: 2}))
+			writeRows(e.Stdout, rows)
 			return cli.ExitOK, nil
 		})
 	}
@@ -121,7 +122,7 @@ func (s *service) keyed(e *cli.Env, key string, act func(*db.DB, *settings.Store
 		if err != nil {
 			return 0, err
 		}
-		_, _ = fmt.Fprintln(e.Stdout, py.JSONDumps(row, py.JSONOpts{Indent: 2}))
+		writeRows(e.Stdout, row)
 		return cli.ExitOK, nil
 	})
 }
@@ -151,20 +152,31 @@ func (s *service) with(e *cli.Env, run func(*db.DB, *settings.Store) (int, error
 	return code
 }
 
-func (s *service) row(ctx context.Context, store *settings.Store, snap *settings.Snapshot, key string) (py.Dict, error) {
+type settingRow struct {
+	Key       string `json:"key"`
+	Value     any    `json:"value"`
+	Source    any    `json:"source"`
+	PinSource string `json:"pin_source,omitempty"`
+	Class     string `json:"class"`
+}
+
+func writeRows(w io.Writer, v any) {
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	_ = enc.Encode(v)
+}
+
+func (s *service) row(ctx context.Context, store *settings.Store, snap *settings.Snapshot, key string) (settingRow, error) {
 	def, _ := settings.From(ctx).Lookup(key)
 	if def.IsSecret() {
-		return py.Dict{{Key: "key", Value: key}, {Key: "value", Value: nil}, {Key: "source", Value: nil}, {Key: "class", Value: def.Class()}}, nil
+		return settingRow{Key: key, Value: nil, Source: nil, Class: def.Class()}, nil
 	}
 	found, err := store.Resolve(ctx, snap, key)
 	if err != nil {
-		return nil, err
+		return settingRow{}, err
 	}
-	row := py.Dict{{Key: "key", Value: key}, {Key: "value", Value: found.Value}, {Key: "source", Value: source(found)}}
-	if found.Pinned() {
-		row = append(row, py.Pair{Key: "pin_source", Value: found.PinSource})
-	}
-	return append(row, py.Pair{Key: "class", Value: def.Class()}), nil
+	return settingRow{Key: key, Value: found.Value, Source: source(found), PinSource: found.PinSource, Class: def.Class()}, nil
 }
 
 func source(r settings.Resolved) string {

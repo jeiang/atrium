@@ -20,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -435,6 +434,23 @@ func restoreUndo(pageID, previous, edited string) map[string]any {
 	return map[string]any{"op": UndoRestoreOp, "page_id": pageID, "previous_markdown": previous, "applied_edited_time": edited}
 }
 
+type LinkResult struct {
+	Linked any `json:"linked"`
+}
+
+type EditResult struct {
+	EditedTime string `json:"edited_time"`
+}
+
+type RestoreResult struct {
+	Restored string `json:"restored"`
+}
+
+type CaptureResult struct {
+	Summary string `json:"summary"`
+	PageID  string `json:"page_id"`
+}
+
 func (a *Applier) failed(ctx context.Context, p *proposals.Proposal, action any, err error) (any, error) {
 	if rerr := a.record(ctx, p, action, nil, false, err); rerr != nil {
 		return nil, rerr
@@ -461,7 +477,7 @@ func (a *Applier) ExecuteLink(ctx context.Context, p *proposals.Proposal, _ any)
 	if err := a.record(ctx, p, map[string]any{"type": KindLink, "page_id": source}, undo, true, nil); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "linked", Value: payload["target_id"]}}, nil
+	return LinkResult{Linked: payload["target_id"]}, nil
 }
 
 func (a *Applier) applyLink(ctx context.Context, client *Client, payload map[string]any) (string, RemotePage, error) {
@@ -516,7 +532,7 @@ func (a *Applier) ExecuteEdit(ctx context.Context, p *proposals.Proposal, _ any)
 	if err := a.record(ctx, p, action, restoreUndo(pageID, previous, after.LastEditedTime), true, nil); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "edited_time", Value: after.LastEditedTime}}, nil
+	return EditResult{EditedTime: after.LastEditedTime}, nil
 }
 
 func (a *Applier) applyEdit(ctx context.Context, client *Client, payload map[string]any) (string, RemotePage, error) {
@@ -576,7 +592,7 @@ func (a *Applier) UndoRestore(ctx context.Context, plan json.RawMessage) (any, e
 	}); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "restored", Value: pageID}}, nil
+	return RestoreResult{Restored: pageID}, nil
 }
 
 func (a *Applier) ExecuteCapture(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
@@ -629,7 +645,7 @@ func (a *Applier) ExecuteCapture(ctx context.Context, p *proposals.Proposal, _ a
 	if err := proposals.SettleAction(ctx, a.DB.Write, id, action, restoreUndo(logID, before.Markdown, after.LastEditedTime), ledger.OK, nil, a.now()); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "summary", Value: "Wiki note added: " + payload.Note}, {Key: "page_id", Value: logID}}, nil
+	return CaptureResult{Summary: "Wiki note added: " + payload.Note, PageID: logID}, nil
 }
 
 func (a *Applier) Register(r *proposals.Registry, owner string) {

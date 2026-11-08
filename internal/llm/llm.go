@@ -11,7 +11,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/textutil"
 )
 
 const (
@@ -109,15 +109,15 @@ func FolderCatalog(ctx context.Context, rows []FolderSender) string {
 func FolderPrompt(ctx context.Context, catalog string, neighbors []Neighbor, m Message, body string) string {
 	similar := make([]string, len(neighbors))
 	for i, n := range neighbors {
-		similar[i] = fmt.Sprintf("%d. [%s] from %s: %s", i+1, n.Folder, n.FromDomain, py.Clip(n.Subject, 100))
+		similar[i] = fmt.Sprintf("%d. [%s] from %s: %s", i+1, n.Folder, n.FromDomain, textutil.Clip(n.Subject, 100))
 	}
 	return "Allowed folders:\n" + catalog + "\n\nSimilar filed messages (folder in brackets):\n" + strings.Join(similar, "\n") + "\n\n" +
 		"Message to file:\nSubject: " + m.Subject + "\nFrom: " + m.FromName + " <" + m.FromAddr + ">\n" +
-		"Body:\n" + py.Clip(body, endpoint.From(ctx).LLMBodyChars)
+		"Body:\n" + textutil.Clip(body, endpoint.From(ctx).LLMBodyChars)
 }
 
 func messagePrompt(ctx context.Context, m Message, body string) string {
-	return "From: " + m.FromName + " <" + m.FromAddr + ">\nSubject: " + m.Subject + "\nBody:\n" + py.Clip(body, endpoint.From(ctx).LLMBodyChars)
+	return "From: " + m.FromName + " <" + m.FromAddr + ">\nSubject: " + m.Subject + "\nBody:\n" + textutil.Clip(body, endpoint.From(ctx).LLMBodyChars)
 }
 
 type chatRequest struct {

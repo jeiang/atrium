@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type Module struct{}
@@ -92,18 +91,18 @@ func contactsLookup(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 	found := contacts.Search(src.Dir, query, int(limit))
 	results := make([]any, len(found))
 	for i, c := range found {
-		card := py.Dict{}
+		card := map[string]any{}
 		if c.Name != "" {
-			card = append(card, py.Pair{Key: "name", Value: c.Name})
+			card["name"] = c.Name
 		}
 		if len(c.Emails) > 0 {
-			card = append(card, py.Pair{Key: "emails", Value: c.Emails})
+			card["emails"] = c.Emails
 		}
 		if len(c.Phones) > 0 {
-			card = append(card, py.Pair{Key: "phones", Value: c.Phones})
+			card["phones"] = c.Phones
 		}
 		if c.Org != "" {
-			card = append(card, py.Pair{Key: "org", Value: c.Org})
+			card["org"] = c.Org
 		}
 		if len(c.Dates) > 0 {
 			dates := make([]any, len(c.Dates))
@@ -112,12 +111,12 @@ func contactsLookup(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 				if d.Year != nil {
 					year = int64(*d.Year)
 				}
-				dates[j] = py.Dict{{Key: "kind", Value: d.Kind}, {Key: "label", Value: d.Label}, {Key: "month", Value: int64(d.Month)},
-					{Key: "day", Value: int64(d.Day)}, {Key: "year", Value: year}}
+				dates[j] = map[string]any{"kind": d.Kind, "label": d.Label, "month": int64(d.Month),
+					"day": int64(d.Day), "year": year}
 			}
-			card = append(card, py.Pair{Key: "dates", Value: dates})
+			card["dates"] = dates
 		}
 		results[i] = card
 	}
-	return py.Dict{{Key: "results", Value: results}}, nil
+	return map[string]any{"results": results}, nil
 }

@@ -14,7 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const timeNote = "ISO-8601 (2026-10-16T09:00 or 2026-10-16); times without an offset are in the operator's timezone."
@@ -69,8 +68,6 @@ func truthy(v any) bool {
 		return len(v) > 0
 	case map[string]any:
 		return len(v) > 0
-	case py.Dict:
-		return len(v) > 0
 	}
 	return true
 }
@@ -92,13 +89,13 @@ func requiredText(args tool.Args, name string) (any, error) {
 }
 
 func spec(args tool.Args, tz *time.Location, defaultMinutes int) (calendar.Target, calendar.Spec, error) {
-	raw := py.Dict{}
+	raw := map[string]any{}
 	for _, name := range []string{"end", "location", "notes"} {
 		v, err := optionalText(args, name)
 		if err != nil {
 			return "", calendar.Spec{}, err
 		}
-		raw = raw.Set(name, v)
+		raw[name] = v
 	}
 	title, err := requiredText(args, "title")
 	if err != nil {
@@ -109,7 +106,7 @@ func spec(args tool.Args, tz *time.Location, defaultMinutes int) (calendar.Targe
 		return "", calendar.Spec{}, err
 	}
 	flag, _ := args.Get("all_day")
-	raw = raw.Set("title", title).Set("start", start).Set("all_day", truthy(flag))
+	raw["title"], raw["start"], raw["all_day"] = title, start, truthy(flag)
 	chosen, _ := args.Get("calendar")
 	text, _ := chosen.(string)
 	target, err := calendar.ParseTarget(text)
@@ -199,13 +196,13 @@ func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 		return nil, err
 	}
 	out := map[string]any{}
-	for _, p := range ref.Dict() {
-		out[p.Key] = p.Value
+	for k, v := range ref.Dict() {
+		out[k] = v
 	}
 	normalizedDict := normalized.Dict()
 	out["title"] = normalized.Title
-	out["start"], _ = normalizedDict.Get("start")
-	out["end"], _ = normalizedDict.Get("end")
+	out["start"] = normalizedDict["start"]
+	out["end"] = normalizedDict["end"]
 	return out, nil
 }
 
@@ -274,24 +271,24 @@ func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 }
 
 func propose(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	raw := py.Dict{}
+	raw := map[string]any{}
 	for _, name := range []string{"title", "start", "end", "location", "notes"} {
 		v, err := optionalText(args, name)
 		if err != nil {
 			return nil, err
 		}
-		raw = raw.Set(name, v)
+		raw[name] = v
 	}
 	flag, _ := args.Get("all_day")
 	target, _ := args.Get("calendar")
-	raw = raw.Set("all_day", truthy(flag)).Set("calendar", target)
-	source := py.Dict{}
+	raw["all_day"], raw["calendar"] = truthy(flag), target
+	source := map[string]any{}
 	if _, hasID := args.Get("source_message_id"); hasID {
 		messageID, _, err := tool.IntArg(args, "source_message_id", true)
 		if err != nil {
 			return nil, err
 		}
-		source = source.Set("message_id", messageID)
+		source["message_id"] = messageID
 	}
 	proposals := &calendar.Proposals{DB: tc.DB, Now: tc.Now, Env: tc.Env}
 	id, created, err := proposals.Propose(ctx, raw, source, "")
@@ -305,7 +302,7 @@ func propose(ctx context.Context, tc *tool.Context, args tool.Args) (any, error)
 	if !created {
 		return map[string]any{"proposed": false, "reason": "an identical proposal already exists"}, nil
 	}
-	if stored, ok := source.Get("message_id"); ok {
+	if stored, ok := source["message_id"]; ok {
 		messageID, _ := stored.(int64)
 		if _, err := candidates.Drafted(ctx, tc.DB, messageID, tc.Now()); err != nil {
 			return nil, err

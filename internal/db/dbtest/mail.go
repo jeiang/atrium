@@ -1,13 +1,13 @@
 package dbtest
 
 import (
+	"encoding/json"
 	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func AddMessage(t testing.TB, d *db.DB, uid int, body string, fields map[string]any) int64 {
@@ -19,7 +19,8 @@ func AddMessage(t testing.TB, d *db.DB, uid int, body string, fields map[string]
 	row["digest"] = fmt.Sprintf("d%d", uid)
 	for k, v := range fields {
 		if list, ok := v.([]string); ok {
-			v = py.JSONDumps(list)
+			encoded, _ := json.Marshal(list)
+			v = string(encoded)
 		}
 		row[k] = v
 	}

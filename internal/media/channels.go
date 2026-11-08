@@ -17,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -272,16 +271,28 @@ func gb(size int64) string {
 	return " (" + strconv.FormatFloat(float64(size)/1e9, 'f', 1, 64) + " GB)"
 }
 
-func (r PollResult) Dict() py.Dict {
-	added := make([]any, len(r.Added))
+type addedView struct {
+	Channel   string `json:"channel"`
+	Title     string `json:"title"`
+	Hash      string `json:"hash"`
+	SizeBytes int64  `json:"size_bytes"`
+}
+
+type pollView struct {
+	Added  []addedView `json:"added"`
+	Errors []string    `json:"errors"`
+}
+
+func (r PollResult) Dict() pollView {
+	added := make([]addedView, len(r.Added))
 	for i, a := range r.Added {
-		added[i] = py.Dict{{Key: "channel", Value: a.Channel}, {Key: "title", Value: a.Title}, {Key: "hash", Value: a.Hash}, {Key: "size_bytes", Value: a.SizeBytes}}
+		added[i] = addedView{Channel: a.Channel, Title: a.Title, Hash: a.Hash, SizeBytes: a.SizeBytes}
 	}
-	errs := make([]any, len(r.Errors))
-	for i, e := range r.Errors {
-		errs[i] = e
+	errors := r.Errors
+	if errors == nil {
+		errors = []string{}
 	}
-	return py.Dict{{Key: "added", Value: added}, {Key: "errors", Value: errs}}
+	return pollView{Added: added, Errors: errors}
 }
 
 func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, opts PollOptions) (PollResult, error) {

@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -231,9 +230,9 @@ func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (
 		for i, f := range r.Files {
 			files[i], urls[i] = f, settings.VPNURL(f)
 		}
-		results = append(results, py.Dict{
-			{Key: "kind", Value: r.Kind}, {Key: "title", Value: r.Title}, {Key: "year", Value: r.Year}, {Key: "dir", Value: r.Dir},
-			{Key: "files", Value: files}, {Key: "vpn_urls", Value: urls},
+		results = append(results, map[string]any{
+			"kind": r.Kind, "title": r.Title, "year": r.Year, "dir": r.Dir,
+			"files": files, "vpn_urls": urls,
 		})
 	}
 	return map[string]any{"results": results, "note": "Paths are relative to the media root; VPN URLs work on the mesh. Public links are made on the Library page."}, nil
@@ -324,10 +323,8 @@ func showFromTMDB(ctx context.Context, client *media.TMDB, tmdbID int64) (string
 	if !found || len(show) == 0 {
 		return "", "", tool.Error(fmt.Sprintf("TMDB show %d has no IMDb id", tmdbID))
 	}
-	if name, ok := show.Get("name"); ok {
-		if text, isText := name.(string); isText && text != "" {
-			return imdb, text, nil
-		}
+	if text, isText := show["name"].(string); isText && text != "" {
+		return imdb, text, nil
 	}
 	return imdb, "tt" + imdb, nil
 }

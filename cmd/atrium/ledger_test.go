@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -31,15 +30,15 @@ func TestASecondUndoIsRefusedWhileTheFirstRunsAndAPartialUndoBlocksAnother(t *te
 		t.Fatal(err)
 	}
 	now := float64(time.Now().UnixNano()) / 1e9
-	id, _, err := proposals.Create(ctx, d, "test_kind", nil, "title", py.Dict{}, py.Dict{}, "fp", now-100)
+	id, _, err := proposals.Create(ctx, d, "test_kind", nil, "title", map[string]any{}, map[string]any{}, "fp", now-100)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.Write.Exec("UPDATE proposals SET status = 'applied', applied_ts = ? WHERE id = ?", now-50, id); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := proposals.RecordAction(ctx, d.Write, id, "write", nil, py.Dict{{Key: "op", Value: "move"}},
-		py.Dict{{Key: "op", Value: "partial"}}, ledger.OK, nil, now-40); err != nil {
+	if _, err := proposals.RecordAction(ctx, d.Write, id, "write", nil, map[string]any{"op": "move"},
+		map[string]any{"op": "partial"}, ledger.OK, nil, now-40); err != nil {
 		t.Fatal(err)
 	}
 	started := make(chan struct{})

@@ -9,7 +9,6 @@ import (
 
 	"github.com/emersion/go-ical"
 	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/py"
 	gcal "google.golang.org/api/calendar/v3"
 )
 
@@ -23,27 +22,21 @@ type Spec struct {
 	Notes    string
 }
 
-func (s Spec) Dict() py.Dict {
-	return py.Dict{
-		{Key: "uid", Value: s.UID}, {Key: "title", Value: s.Title}, {Key: "start", Value: s.Start.iso()}, {Key: "end", Value: s.End.iso()},
-		{Key: "all_day", Value: s.AllDay}, {Key: "location", Value: s.Location}, {Key: "notes", Value: s.Notes},
+func (s Spec) Dict() map[string]any {
+	return map[string]any{
+		"uid": s.UID, "title": s.Title, "start": s.Start.iso(), "end": s.End.iso(),
+		"all_day": s.AllDay, "location": s.Location, "notes": s.Notes,
 	}
 }
 
 func SpecOf(v any) (Spec, error) {
-	d, ok := v.(py.Dict)
+	d, ok := v.(map[string]any)
 	if !ok {
-		if m, isMap := v.(map[string]any); isMap {
-			for k, val := range m {
-				d = append(d, py.Pair{Key: k, Value: val})
-			}
-		} else {
-			return Spec{}, fmt.Errorf("%w: spec is %T, not an object", httpx.ErrShape, v)
-		}
+		return Spec{}, fmt.Errorf("%w: spec is %T, not an object", httpx.ErrShape, v)
 	}
 	var s Spec
 	text := func(key string) (string, error) {
-		val, found := d.Get(key)
+		val, found := d[key]
 		if !found {
 			return "", fmt.Errorf("%w: %q", httpx.ErrMissing, key)
 		}
@@ -62,7 +55,7 @@ func SpecOf(v any) (Spec, error) {
 			return Spec{}, err
 		}
 	}
-	allDay, found := d.Get("all_day")
+	allDay, found := d["all_day"]
 	if !found {
 		return Spec{}, fmt.Errorf("%w: 'all_day'", httpx.ErrMissing)
 	}
@@ -90,8 +83,8 @@ func NewUID() string {
 	return hex.EncodeToString(b[:])
 }
 
-func textField(raw py.Dict, key string) (string, error) {
-	v, _ := raw.Get(key)
+func textField(raw map[string]any, key string) (string, error) {
+	v := raw[key]
 	if v == nil || v == "" {
 		return "", nil
 	}
@@ -102,7 +95,7 @@ func textField(raw py.Dict, key string) (string, error) {
 	return strings.TrimSpace(s), nil
 }
 
-func NormalizeSpec(raw py.Dict, tz *time.Location, uid string, defaultMinutes int) (Spec, error) {
+func NormalizeSpec(raw map[string]any, tz *time.Location, uid string, defaultMinutes int) (Spec, error) {
 	title, err := textField(raw, "title")
 	if err != nil {
 		return Spec{}, err
@@ -110,16 +103,14 @@ func NormalizeSpec(raw py.Dict, tz *time.Location, uid string, defaultMinutes in
 	if title == "" {
 		return Spec{}, Error("title is required")
 	}
-	flag, _ := raw.Get("all_day")
-	allDay, _ := flag.(bool)
-	startRaw, _ := raw.Get("start")
+	allDay, _ := raw["all_day"].(bool)
+	startRaw := raw["start"]
 	start, err := ParseWhen(startRaw, tz, allDay)
 	if err != nil {
 		return Spec{}, err
 	}
 	var end Value
-	endRaw, _ := raw.Get("end")
-	given, _ := endRaw.(string)
+	given, _ := raw["end"].(string)
 	switch {
 	case given != "":
 		if end, err = ParseWhen(given, tz, allDay); err != nil {
@@ -134,8 +125,7 @@ func NormalizeSpec(raw py.Dict, tz *time.Location, uid string, defaultMinutes in
 		return Spec{}, Error("end must be after start")
 	}
 	if uid == "" {
-		given, _ := raw.Get("uid")
-		if s, ok := given.(string); ok {
+		if s, ok := raw["uid"].(string); ok {
 			uid = s
 		}
 	}

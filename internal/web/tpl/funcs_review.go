@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"html/template"
 	"reflect"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func init() {
@@ -33,8 +31,13 @@ func pyAttr(m any, key string) (string, error) {
 	switch x := m.(type) {
 	case map[string]any:
 		v, found = x[key]
-	case py.Dict:
-		v, found = x.Get(key)
+	case []entry:
+		for i := len(x) - 1; i >= 0; i-- {
+			if x[i].Key == key {
+				v, found = x[i].Value, true
+				break
+			}
+		}
 	}
 	if !found {
 		return "", nil
@@ -47,7 +50,7 @@ func pyLen(v any) int {
 		return 0
 	}
 	switch x := v.(type) {
-	case py.Dict:
+	case []entry:
 		return len(x)
 	case string:
 		return len([]rune(x))

@@ -1,14 +1,23 @@
 package settings
 
 import (
+	"fmt"
 	"math"
 	"strconv"
-
-	"github.com/jeiang/atrium/internal/py"
+	"strings"
 )
 
+func parseFloat(value string) (float64, error) {
+	text := strings.TrimSpace(value)
+	body := strings.TrimLeft(text, "+-")
+	if strings.HasPrefix(body, "0x") || strings.HasPrefix(body, "0X") {
+		return 0, fmt.Errorf("could not convert string to float: %s", strconv.Quote(value))
+	}
+	return strconv.ParseFloat(text, 64)
+}
+
 func number(value string) (float64, error) {
-	f, err := py.ParseFloat(value)
+	f, err := parseFloat(value)
 	if err != nil || math.IsNaN(f) || math.IsInf(f, 0) {
 		return 0, Invalid("must be a number")
 	}
@@ -57,7 +66,7 @@ func Between(lo, hi float64) func(string) error {
 }
 
 func NonEmpty(value string) error {
-	if py.Strip(value) == "" {
+	if strings.TrimSpace(value) == "" {
 		return Invalid("must not be empty")
 	}
 	return nil

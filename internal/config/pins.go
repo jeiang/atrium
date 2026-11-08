@@ -11,7 +11,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -65,7 +64,7 @@ func pinFromEnv(env Env, reg *settings.Registry, d settings.Def) (pin, bool, err
 	var found []pin
 	var used []string
 	for _, name := range names {
-		value := py.Strip(get(env, name))
+		value := strings.TrimSpace(get(env, name))
 		fileName := name + strings.ToUpper(fileSuffix)
 		if path, set := env(fileName); set {
 			if value != "" {
@@ -75,7 +74,7 @@ func pinFromEnv(env Env, reg *settings.Registry, d settings.Def) (pin, bool, err
 			if err != nil {
 				return pin{}, false, fmt.Errorf("config: %s: %w", fileName, err)
 			}
-			value, name = py.Strip(string(raw)), fileName
+			value, name = strings.TrimSpace(string(raw)), fileName
 			if err := reg.Validate(d.Key, value); err != nil {
 				return pin{}, false, fmt.Errorf("config: %s: %w", name, err)
 			}
@@ -162,7 +161,7 @@ func (p *Pins) add(env Env, reg *settings.Registry, d settings.Def, path, dotted
 		if err != nil {
 			return fmt.Errorf("config: %s: %w", dotted, err)
 		}
-		value = py.Strip(string(secret))
+		value = strings.TrimSpace(string(secret))
 	}
 	if err := reg.Validate(d.Key, value); err != nil {
 		return fmt.Errorf("config: %s: %w", dotted, err)

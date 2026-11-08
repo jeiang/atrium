@@ -13,26 +13,25 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/py"
 )
 
-type job func(ctx context.Context, d *db.DB, env config.Env, now func() float64) (py.Dict, error)
+type job func(ctx context.Context, d *db.DB, env config.Env, now func() float64) (any, error)
 
 func skippable(run job) job {
-	return func(ctx context.Context, d *db.DB, env config.Env, now func() float64) (py.Dict, error) {
+	return func(ctx context.Context, d *db.DB, env config.Env, now func() float64) (any, error) {
 		out, err := run(ctx, d, env, now)
 		var missing config.NotConfigured
 		if errors.As(err, &missing) {
-			return py.Dict{{Key: "skipped", Value: missing.Error()}}, nil
+			return map[string]any{"skipped": missing.Error()}, nil
 		}
 		return out, err
 	}
 }
 
-var channels = skippable(func(ctx context.Context, d *db.DB, env config.Env, now func() float64) (py.Dict, error) {
+var channels = skippable(func(ctx context.Context, d *db.DB, env config.Env, now func() float64) (any, error) {
 	found, err := media.ListChannels(ctx, d.Write)
 	if err != nil || len(found) == 0 {
-		return py.Dict{}, err
+		return map[string]any{}, err
 	}
 	settings, err := media.Load(ctx, d.Read, env)
 	if err != nil {
@@ -45,7 +44,7 @@ var channels = skippable(func(ctx context.Context, d *db.DB, env config.Env, now
 	return result.Dict(), nil
 })
 
-var sweep = skippable(func(ctx context.Context, d *db.DB, env config.Env, now func() float64) (py.Dict, error) {
+var sweep = skippable(func(ctx context.Context, d *db.DB, env config.Env, now func() float64) (any, error) {
 	settings, err := media.Load(ctx, d.Read, env)
 	if err != nil {
 		return nil, err
@@ -62,7 +61,7 @@ var sweep = skippable(func(ctx context.Context, d *db.DB, env config.Env, now fu
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "selected", Value: anys(selected)}, {Key: "removed", Value: anys(swept.Removed)}, {Key: "errors", Value: anys(swept.Errors)}}, nil
+	return map[string]any{"selected": anys(selected), "removed": anys(swept.Removed), "errors": anys(swept.Errors)}, nil
 })
 
 func anys(items []string) []any {
@@ -84,7 +83,7 @@ func callable(run job) worker.Callable {
 }
 
 func thumbnails(cfg config.Config) job {
-	return skippable(func(ctx context.Context, d *db.DB, env config.Env, _ func() float64) (py.Dict, error) {
+	return skippable(func(ctx context.Context, d *db.DB, env config.Env, _ func() float64) (any, error) {
 		settings, err := media.Load(ctx, d.Read, env)
 		if err != nil {
 			return nil, err
@@ -94,7 +93,7 @@ func thumbnails(cfg config.Config) job {
 			return nil, err
 		}
 		generated, remaining := media.NewArtwork(cfg.MediaCacheDir(), nil, settings.Tuning).ThumbnailPass(ctx, root, settings.ThumbPassLimit)
-		return py.Dict{{Key: "generated", Value: int64(generated)}, {Key: "remaining", Value: int64(remaining)}}, nil
+		return map[string]any{"generated": int64(generated), "remaining": int64(remaining)}, nil
 	})
 }
 

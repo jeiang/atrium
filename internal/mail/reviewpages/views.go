@@ -29,8 +29,26 @@ func proposalView(p *proposals.Proposal, kind proposals.Kind) ProposalView {
 	return ProposalView{
 		ID: p.ID, Kind: p.Kind, KindLabel: kind.Label, KindIcon: kind.Icon, Status: p.Status, Account: p.Account, Title: p.Title,
 		CreatedTS: p.CreatedTS, DecidedTS: p.DecidedTS, AppliedTS: p.AppliedTS, Undoable: p.Undoable, Blocked: p.Blocked,
-		BlockedUndo: p.BlockedUndo, Preview: p.Preview, Result: p.Result,
+		BlockedUndo: p.BlockedUndo, Preview: plainJSON(p.Preview), Result: plainJSON(p.Result),
 	}
+}
+
+func plainJSON(v any) any {
+	switch x := v.(type) {
+	case py.Dict:
+		out := make(map[string]any, len(x))
+		for _, pair := range x {
+			out[pair.Key] = plainJSON(pair.Value)
+		}
+		return out
+	case []any:
+		out := make([]any, len(x))
+		for i, e := range x {
+			out[i] = plainJSON(e)
+		}
+		return out
+	}
+	return v
 }
 
 func proposalViews(list []*proposals.Proposal, registry *proposals.Registry) []ProposalView {

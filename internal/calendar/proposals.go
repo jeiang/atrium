@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -28,6 +27,70 @@ const (
 type ProposalError string
 
 func (e ProposalError) Error() string { return string(e) }
+
+type specPayload struct {
+	UID      string `json:"uid"`
+	Title    string `json:"title"`
+	Start    string `json:"start"`
+	End      string `json:"end"`
+	AllDay   bool   `json:"all_day"`
+	Location string `json:"location"`
+	Notes    string `json:"notes"`
+}
+
+func (s Spec) payload() specPayload {
+	return specPayload{UID: s.UID, Title: s.Title, Start: s.Start.iso(), End: s.End.iso(), AllDay: s.AllDay, Location: s.Location, Notes: s.Notes}
+}
+
+type proposalPayload struct {
+	Calendar string         `json:"calendar"`
+	Spec     specPayload    `json:"spec"`
+	Source   map[string]any `json:"source"`
+}
+
+type proposalPreview struct {
+	Calendar string         `json:"calendar"`
+	Title    string         `json:"title"`
+	Start    string         `json:"start"`
+	End      string         `json:"end"`
+	AllDay   bool           `json:"all_day"`
+	Location string         `json:"location"`
+	Notes    string         `json:"notes"`
+	Source   map[string]any `json:"source"`
+}
+
+type actionPayload struct {
+	Type     string `json:"type"`
+	Calendar string `json:"calendar"`
+	UID      string `json:"uid"`
+	Response string `json:"response,omitempty"`
+}
+
+type undoPlan struct {
+	Op       string `json:"op"`
+	Calendar string `json:"calendar"`
+	UID      string `json:"uid"`
+	ICS      string `json:"ics,omitempty"`
+	Google   string `json:"google,omitempty"`
+}
+
+type ExecuteResult struct {
+	Summary  string `json:"summary"`
+	Calendar string `json:"calendar"`
+	UID      string `json:"uid"`
+}
+
+type SummaryResult struct {
+	Summary string `json:"summary"`
+}
+
+type UndoResult struct {
+	Deleted string `json:"deleted"`
+}
+
+type RestoreResult struct {
+	Restored string `json:"restored"`
+}
 
 type Proposals struct {
 	DB  *db.DB
@@ -73,10 +136,9 @@ func clip(s string, n int) string {
 	return s
 }
 
-func (p *Proposals) Propose(ctx context.Context, raw py.Dict, source py.Dict, key string) (id int64, created bool, err error) {
-	chosen, _ := raw.Get("calendar")
+func (p *Proposals) Propose(ctx context.Context, raw map[string]any, source map[string]any, key string) (id int64, created bool, err error) {
 	target := Target(ICloud)
-	if s, ok := chosen.(string); ok && s != "" {
+	if s, ok := raw["calendar"].(string); ok && s != "" {
 		parsed, err := ParseTarget(s)
 		if err != nil {
 			return 0, false, ProposalError(err.Error())
@@ -99,13 +161,13 @@ func (p *Proposals) Propose(ctx context.Context, raw py.Dict, source py.Dict, ke
 		return 0, false, err
 	}
 	if source == nil {
-		source = py.Dict{}
+		source = map[string]any{}
 	}
-	payload := py.Dict{{Key: "calendar", Value: string(target)}, {Key: "spec", Value: spec.Dict()}, {Key: "source", Value: source}}
-	preview := py.Dict{
-		{Key: "calendar", Value: string(target)}, {Key: "title", Value: spec.Title}, {Key: "start", Value: spec.Start.iso()},
-		{Key: "end", Value: spec.End.iso()}, {Key: "all_day", Value: spec.AllDay}, {Key: "location", Value: spec.Location},
-		{Key: "notes", Value: spec.Notes}, {Key: "source", Value: source},
+	payload := proposalPayload{Calendar: string(target), Spec: spec.payload(), Source: source}
+	preview := proposalPreview{
+		Calendar: string(target), Title: spec.Title, Start: spec.Start.iso(),
+		End: spec.End.iso(), AllDay: spec.AllDay, Location: spec.Location,
+		Notes: spec.Notes, Source: source,
 	}
 	fp := fingerprint(Kind, string(target), spec.Title, spec.Start.iso(), spec.End.iso(), spec.Location, spec.Notes)
 	if key != "" {
@@ -159,11 +221,11 @@ func (p *Proposals) guard(ctx context.Context, target Target) error {
 	return Error(fmt.Sprintf("calendar write %d has an unknown outcome; resolve it with `atrium writes resolve %d` before writing to the %s calendar again", id, id, target))
 }
 
-func (p *Proposals) begin(ctx context.Context, prop *proposals.Proposal, action py.Dict) (int64, error) {
+func (p *Proposals) begin(ctx context.Context, prop *proposals.Proposal, action any) (int64, error) {
 	return proposals.BeginAction(ctx, p.DB.Write, prop.ID, action, p.now())
 }
 
-func (p *Proposals) settle(ctx context.Context, id int64, action, undo py.Dict, state ledger.State, text *string) error {
+func (p *Proposals) settle(ctx context.Context, id int64, action any, undo *undoPlan, state ledger.State, text *string) error {
 	var plan any
 	if undo != nil {
 		plan = undo
@@ -171,7 +233,7 @@ func (p *Proposals) settle(ctx context.Context, id int64, action, undo py.Dict, 
 	return proposals.SettleAction(ctx, p.DB.Write, id, action, plan, state, text, p.now())
 }
 
-func (p *Proposals) fail(ctx context.Context, id int64, action py.Dict, err error) error {
+func (p *Proposals) fail(ctx context.Context, id int64, action any, err error) error {
 	text := err.Error()
 	state := ledger.Failed
 	if OutcomeUnknown(err) {
@@ -183,14 +245,12 @@ func (p *Proposals) fail(ctx context.Context, id int64, action py.Dict, err erro
 	return err
 }
 
-func (p *Proposals) settleRecord(ctx context.Context, id int64, kind string, undo py.Dict, summary string) (any, error) {
-	calendarName, _ := undo.Get("calendar")
-	uid, _ := undo.Get("uid")
-	action := py.Dict{{Key: "type", Value: kind}, {Key: "calendar", Value: calendarName}, {Key: "uid", Value: uid}}
-	if err := p.settle(ctx, id, action, undo, ledger.OK, nil); err != nil {
-		return nil, err
+func (p *Proposals) settleRecord(ctx context.Context, id int64, kind string, undo undoPlan, summary string) (SummaryResult, error) {
+	action := actionPayload{Type: kind, Calendar: undo.Calendar, UID: undo.UID}
+	if err := p.settle(ctx, id, action, &undo, ledger.OK, nil); err != nil {
+		return SummaryResult{}, err
 	}
-	return py.Dict{{Key: "summary", Value: summary}}, nil
+	return SummaryResult{Summary: summary}, nil
 }
 
 func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any) (any, error) {
@@ -210,7 +270,7 @@ func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any
 	if err := p.guard(ctx, target); err != nil {
 		return nil, err
 	}
-	action := py.Dict{{Key: "type", Value: Kind}, {Key: "calendar", Value: string(target)}, {Key: "uid", Value: spec.UID}}
+	action := actionPayload{Type: Kind, Calendar: string(target), UID: spec.UID}
 	intent, err := p.begin(ctx, prop, action)
 	if err != nil {
 		return nil, err
@@ -222,19 +282,16 @@ func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any
 	if err := Track(ctx, p.DB.Write, spec, target, &prop.ID, p.now()); err != nil {
 		return nil, p.fail(ctx, intent, action, &Partial{Err: err})
 	}
-	undo := py.Dict{{Key: "op", Value: UndoOp}, {Key: "calendar", Value: string(target)}, {Key: "uid", Value: spec.UID}}
-	settled := append(py.Dict{{Key: "type", Value: Kind}}, ref.Dict()...)
-	if err := p.settle(ctx, intent, settled, undo, ledger.OK, nil); err != nil {
+	undo := undoPlan{Op: UndoOp, Calendar: string(target), UID: spec.UID}
+	settled := actionPayload{Type: Kind, Calendar: ref.Calendar, UID: ref.UID}
+	if err := p.settle(ctx, intent, settled, &undo, ledger.OK, nil); err != nil {
 		return nil, err
 	}
-	return append(py.Dict{{Key: "summary", Value: fmt.Sprintf("Added to the %s calendar", target)}}, ref.Dict()...), nil
+	return ExecuteResult{Summary: fmt.Sprintf("Added to the %s calendar", target), Calendar: ref.Calendar, UID: ref.UID}, nil
 }
 
 func (p *Proposals) Undo(ctx context.Context, plan json.RawMessage) (any, error) {
-	var info struct {
-		Calendar string `json:"calendar"`
-		UID      string `json:"uid"`
-	}
+	var info undoPlan
 	if err := json.Unmarshal(plan, &info); err != nil {
 		return nil, err
 	}
@@ -255,7 +312,7 @@ func (p *Proposals) Undo(ctx context.Context, plan json.RawMessage) (any, error)
 	if err := Untrack(ctx, p.DB.Write, info.UID, p.now()); err != nil {
 		return nil, &Partial{Err: err}
 	}
-	return py.Dict{{Key: "deleted", Value: info.UID}}, nil
+	return UndoResult{Deleted: info.UID}, nil
 }
 
 func Register(reg *proposals.Registry, p *Proposals, owner string) {

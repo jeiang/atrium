@@ -13,7 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/textutil"
 )
 
 const (
@@ -35,14 +35,14 @@ func DocumentText(ctx context.Context, subject, name, addr, body string) string 
 	if name != "" {
 		from = name + " <" + addr + ">"
 	}
-	return "title: " + subject + " | text: From: " + from + "\n\n" + py.Clip(body, endpoint.From(ctx).EmbedBodyChars)
+	return "title: " + subject + " | text: From: " + from + "\n\n" + textutil.Clip(body, endpoint.From(ctx).EmbedBodyChars)
 }
 
 func NotionDocumentText(ctx context.Context, title, path, markdown string) string {
 	if title == "" {
 		title = "none"
 	}
-	return "title: " + title + " | text: " + path + "\n\n" + py.Clip(markdown, endpoint.From(ctx).EmbedBodyChars)
+	return "title: " + title + " | text: " + path + "\n\n" + textutil.Clip(markdown, endpoint.From(ctx).EmbedBodyChars)
 }
 
 func QueryText(query string) string {
@@ -90,7 +90,11 @@ func Texts(ctx context.Context, url string, texts []string) ([][]float64, error)
 }
 
 func Normalize(vector []float64) []float64 {
-	norm := math.Sqrt(py.SumSq(vector))
+	var sum float64
+	for _, x := range vector {
+		sum += x * x
+	}
+	norm := math.Sqrt(sum)
 	if norm == 0 {
 		norm = 1
 	}

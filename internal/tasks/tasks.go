@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -137,6 +136,15 @@ type Executor struct {
 	Now func() float64
 }
 
+type ExecuteResult struct {
+	Summary string `json:"summary"`
+	TaskID  int64  `json:"task_id"`
+}
+
+type UndoResult struct {
+	Deleted int64 `json:"deleted"`
+}
+
 func (e *Executor) Execute(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
 	var s Spec
 	if err := json.Unmarshal([]byte(p.Payload), &s); err != nil {
@@ -146,12 +154,12 @@ func (e *Executor) Execute(ctx context.Context, p *proposals.Proposal, _ any) (a
 	if err != nil {
 		return nil, err
 	}
-	action := py.Dict{{Key: "type", Value: KindTask}, {Key: "task_id", Value: id}}
-	undo := py.Dict{{Key: "op", Value: UndoTask}, {Key: "id", Value: id}}
+	action := map[string]any{"type": KindTask, "task_id": id}
+	undo := map[string]any{"op": UndoTask, "id": id}
 	if _, err := proposals.RecordAction(ctx, e.DB.Write, p.ID, "write", nil, action, undo, ledger.OK, nil, e.Now()); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "summary", Value: "Task added: " + s.Title}, {Key: "task_id", Value: id}}, nil
+	return ExecuteResult{Summary: "Task added: " + s.Title, TaskID: id}, nil
 }
 
 func (e *Executor) Undo(ctx context.Context, plan json.RawMessage) (any, error) {
@@ -164,7 +172,7 @@ func (e *Executor) Undo(ctx context.Context, plan json.RawMessage) (any, error) 
 	if _, err := Delete(ctx, e.DB.Write, info.ID); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "deleted", Value: info.ID}}, nil
+	return UndoResult{Deleted: info.ID}, nil
 }
 
 func Register(reg *proposals.Registry, e *Executor, owner string) {

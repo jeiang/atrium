@@ -19,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/mime"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var log = logx.Logger("atrium.event_candidates")
@@ -157,7 +156,7 @@ func collect(part *mime.Message, now time.Time, seen map[string]bool, out *[]cal
 func proposeInvites(ctx context.Context, p *calendar.Proposals, r row, invites []calendar.Invite) (int, error) {
 	made := 0
 	for _, invite := range invites {
-		source := py.Dict{{Key: "message_id", Value: r.id}, {Key: "subject", Value: r.subject}, {Key: "from", Value: r.fromAddr}, {Key: "invitation", Value: true}}
+		source := map[string]any{"message_id": r.id, "subject": r.subject, "from": r.fromAddr, "invitation": true}
 		_, created, err := p.Propose(ctx, invite.Raw(defaultCalendar(ctx, r.account)), source, "ics:"+invite.UID)
 		var refused calendar.ProposalError
 		if errors.As(err, &refused) {
