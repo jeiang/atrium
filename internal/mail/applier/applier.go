@@ -818,7 +818,7 @@ func (a *Applier) inboxIntents(ctx context.Context, account string, budget *Budg
 		err := r.Scan(&in.ID, &in.Digest, &decisionID, &action, &in.Dest)
 		in.DecisionID = &decisionID
 		in.check = readInbox
-		if action == rules.ActionDelete {
+		if rules.Action(action) == rules.ActionDelete {
 			in.Kind, in.Dest = live.Trash, nil
 		} else {
 			in.Kind = live.File
@@ -901,7 +901,7 @@ func (a *Applier) flagIntents(ctx context.Context, account string, budget *Budge
 }
 
 func hasAge(rule *rules.Rule) bool {
-	return slices.ContainsFunc(rule.Conditions, func(c rules.Condition) bool { return c.Field == rules.AgeField })
+	return slices.ContainsFunc(rule.Conditions, func(c rules.Condition) bool { return c.Field() == rules.AgeField })
 }
 
 type withExtra struct {

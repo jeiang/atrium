@@ -20,9 +20,14 @@ const (
 	AgeField      = "age_days"
 	AgeOp         = "gte"
 	secondsPerDay = 86400
-	ActionFile    = "file"
-	ActionDelete  = "delete"
-	ActionNone    = "none"
+)
+
+type Action string
+
+const (
+	ActionFile   Action = "file"
+	ActionDelete Action = "delete"
+	ActionNone   Action = "none"
 )
 
 var log = logx.Logger("atrium.rules")
@@ -54,7 +59,6 @@ var (
 	}
 	Ops          = []string{"eq", "in", "suffix", "re", "present", "absent"}
 	ValuelessOps = []string{"present", "absent"}
-	Actions      = []string{ActionFile, ActionDelete}
 )
 
 type LearnedLevel struct {
@@ -79,25 +83,30 @@ func (RuleError) PyModule() string { return "atrium.rules" }
 func ruleErrorf(format string, args ...any) error { return RuleError(fmt.Sprintf(format, args...)) }
 
 type Condition struct {
-	Field    string
-	Op       string
-	Value    any
-	HasValue bool
+	field    string
+	op       string
+	value    any
+	hasValue bool
 	matcher  *regexp.Regexp
 }
+
+func (c Condition) Field() string      { return c.field }
+func (c Condition) Op() string         { return c.op }
+func (c Condition) HasValue() bool     { return c.hasValue }
+func (c Condition) Value() (any, bool) { return c.value, c.hasValue }
 
 type Rule struct {
 	ID         string
 	Account    *string
-	Action     string
+	Action     Action
 	Dest       *string
 	Conditions []Condition
 }
 
 func (c Condition) Dict() py.Dict {
-	d := py.Dict{{Key: "field", Value: c.Field}, {Key: "op", Value: c.Op}}
-	if c.HasValue {
-		d = append(d, py.Pair{Key: "value", Value: c.Value})
+	d := py.Dict{{Key: "field", Value: c.field}, {Key: "op", Value: c.op}}
+	if c.hasValue {
+		d = append(d, py.Pair{Key: "value", Value: c.value})
 	}
 	return d
 }
@@ -276,26 +285,26 @@ func number(v any) (float64, bool) {
 func compilePattern(value string) (*regexp.Regexp, error) { return regexp.Compile("(?i)" + value) }
 
 func (c Condition) Matches(m *Message, now float64) (bool, error) {
-	if c.Field == AgeField {
-		days, ok := number(c.Value)
+	if c.field == AgeField {
+		days, ok := number(c.value)
 		if !ok {
-			return false, fmt.Errorf("age_days value %s: not a number", py.ReprValue(c.Value))
+			return false, fmt.Errorf("age_days value %s: not a number", py.ReprValue(c.value))
 		}
 		return ageMatches(m, days, now), nil
 	}
-	values, err := FieldValues(m, c.Field)
+	values, err := FieldValues(m, c.field)
 	if err != nil {
 		return false, err
 	}
-	switch c.Op {
+	switch c.op {
 	case "present":
 		return anyNonEmpty(values), nil
 	case "absent":
 		return !anyNonEmpty(values), nil
 	case "eq":
-		target, ok := c.Value.(string)
+		target, ok := c.value.(string)
 		if !ok {
-			return false, fmt.Errorf("op eq: value %s: not a string", py.ReprValue(c.Value))
+			return false, fmt.Errorf("op eq: value %s: not a string", py.ReprValue(c.value))
 		}
 		target = py.Casefold(target)
 		for _, v := range values {
@@ -305,7 +314,7 @@ func (c Condition) Matches(m *Message, now float64) (bool, error) {
 		}
 		return false, nil
 	case "in":
-		list, err := members(c.Value)
+		list, err := members(c.value)
 		if err != nil {
 			return false, err
 		}
@@ -320,7 +329,7 @@ func (c Condition) Matches(m *Message, now float64) (bool, error) {
 		}
 		return false, nil
 	case "suffix":
-		list, err := members(c.Value)
+		list, err := members(c.value)
 		if err != nil {
 			return false, err
 		}
@@ -343,7 +352,7 @@ func (c Condition) Matches(m *Message, now float64) (bool, error) {
 	case "re":
 		re := c.matcher
 		if re == nil {
-			return false, fmt.Errorf("op re: pattern %s was not compiled", py.ReprValue(c.Value))
+			return false, fmt.Errorf("op re: pattern %s was not compiled", py.ReprValue(c.value))
 		}
 		for _, v := range values {
 			if v == "" {
@@ -355,7 +364,7 @@ func (c Condition) Matches(m *Message, now float64) (bool, error) {
 		}
 		return false, nil
 	}
-	return false, fmt.Errorf("unknown op %q", c.Op)
+	return false, fmt.Errorf("unknown op %q", c.op)
 }
 
 func anyNonEmpty(values []string) bool {
@@ -453,7 +462,7 @@ func ValidateCondition(raw any) (Condition, error) {
 		if _, isBool := value.(bool); !opIsStr || op != AgeOp || isBool || !isNum || days <= 0 {
 			return Condition{}, ruleErrorf("%s needs op %s and a positive number of days", AgeField, AgeOp)
 		}
-		return Condition{Field: field, Op: op, Value: value, HasValue: true}, nil
+		return Condition{field: field, op: op, value: value, hasValue: true}, nil
 	}
 	if !fieldIsStr || (ListFields[field] == "" && ScalarFields[field] == "") {
 		return Condition{}, ruleErrorf("unknown field %s", py.ReprValue(fieldV))
@@ -465,7 +474,7 @@ func ValidateCondition(raw any) (Condition, error) {
 		if value != nil {
 			return Condition{}, ruleErrorf("op %s takes no value", op)
 		}
-		return Condition{Field: field, Op: op}, nil
+		return Condition{field: field, op: op}, nil
 	}
 	text, isStr := value.(string)
 	if (op == "eq" || op == "re") && !isStr {
@@ -489,12 +498,20 @@ func ValidateCondition(raw any) (Condition, error) {
 		if isList {
 			value = list
 		}
-		return Condition{Field: field, Op: op, Value: value, HasValue: true, matcher: re}, nil
+		return Condition{field: field, op: op, value: value, hasValue: true, matcher: re}, nil
 	}
 	if isList {
 		value = list
 	}
-	return Condition{Field: field, Op: op, Value: value, HasValue: true}, nil
+	return Condition{field: field, op: op, value: value, hasValue: true}, nil
+}
+
+func NewCondition(field, op string, value any) (Condition, error) {
+	raw := py.Dict{{Key: "field", Value: field}, {Key: "op", Value: op}}
+	if value != nil {
+		raw = append(raw, py.Pair{Key: "value", Value: value})
+	}
+	return ValidateCondition(raw)
 }
 
 func ValidateRule(raw any) (Rule, error) {
@@ -507,20 +524,20 @@ func ValidateRule(raw any) (Rule, error) {
 	if !ok || id == "" {
 		return Rule{}, ruleErrorf("rule needs a string id")
 	}
-	action := any(ActionFile)
+	action := any(string(ActionFile))
 	if v, found := get("action"); found {
 		action = v
 	}
 	act, _ := action.(string)
-	if !inList(act, Actions) {
+	if Action(act) != ActionFile && Action(act) != ActionDelete {
 		return Rule{}, ruleErrorf("%s: unknown action %s", id, py.ReprValue(action))
 	}
 	destV, _ := get("dest")
 	dest, destIsStr := destV.(string)
-	if act == ActionFile && (!destIsStr || dest == "") {
+	if Action(act) == ActionFile && (!destIsStr || dest == "") {
 		return Rule{}, ruleErrorf("%s: file rule needs dest", id)
 	}
-	if act == ActionDelete && destV != nil {
+	if Action(act) == ActionDelete && destV != nil {
 		return Rule{}, ruleErrorf("%s: delete rule takes no dest", id)
 	}
 	accountV, _ := get("account")
@@ -541,7 +558,7 @@ func ValidateRule(raw any) (Rule, error) {
 	if len(items) == 0 {
 		return Rule{}, ruleErrorf("%s: when must be a non-empty list", id)
 	}
-	rule := Rule{ID: id, Action: act}
+	rule := Rule{ID: id, Action: Action(act)}
 	if accountIsStr {
 		rule.Account = &account
 	}
@@ -602,7 +619,7 @@ func ImportRules(ctx context.Context, d *db.DB, document any) (int, error) {
 		for i, r := range parsed {
 			if _, err := tx.ExecContext(ctx,
 				"INSERT INTO rules (position, id, account, action, dest, conditions) VALUES (?, ?, ?, ?, ?, ?)",
-				i, r.ID, nullable(r.Account), r.Action, nullable(r.Dest), ConditionsJSON(r.Conditions)); err != nil {
+				i, r.ID, nullable(r.Account), string(r.Action), nullable(r.Dest), ConditionsJSON(r.Conditions)); err != nil {
 				return err
 			}
 		}
@@ -632,7 +649,7 @@ func loadRules(ctx context.Context, q Querier, keep func(account sql.NullString)
 		if !keep(account) {
 			continue
 		}
-		r := Rule{ID: id, Action: action}
+		r := Rule{ID: id, Action: Action(action)}
 		if account.Valid {
 			r.Account = &account.String
 		}
@@ -662,13 +679,13 @@ func ValidateStored(row StoredRule) error {
 	if row.ID == "" {
 		return ruleErrorf("rule needs a string id")
 	}
-	if row.Action != ActionFile && row.Action != ActionDelete {
+	if Action(row.Action) != ActionFile && Action(row.Action) != ActionDelete {
 		return ruleErrorf("%s: unknown action %q", row.ID, row.Action)
 	}
-	if row.Action == ActionFile && (row.Dest == nil || *row.Dest == "") {
+	if Action(row.Action) == ActionFile && (row.Dest == nil || *row.Dest == "") {
 		return ruleErrorf("%s: file rule needs dest", row.ID)
 	}
-	if row.Action == ActionDelete && row.Dest != nil {
+	if Action(row.Action) == ActionDelete && row.Dest != nil {
 		return ruleErrorf("%s: delete rule takes no dest", row.ID)
 	}
 	if _, err := parseStored(row.Conditions); err != nil {
@@ -716,7 +733,7 @@ func ExportRules(ctx context.Context, q Querier) (py.Dict, error) {
 		if r.Account != nil && *r.Account != "" {
 			d = append(d, py.Pair{Key: "account", Value: *r.Account})
 		}
-		d = append(d, py.Pair{Key: "action", Value: r.Action})
+		d = append(d, py.Pair{Key: "action", Value: string(r.Action)})
 		if r.Dest != nil && *r.Dest != "" {
 			d = append(d, py.Pair{Key: "dest", Value: *r.Dest})
 		}

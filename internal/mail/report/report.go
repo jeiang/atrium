@@ -172,10 +172,10 @@ func Count(rows []Row) Tally {
 	var t Tally
 	for _, r := range rows {
 		t.Stages.Add(r.Stage)
-		if r.Action == rules.ActionFile && r.Dest.String != "" {
+		if rules.Action(r.Action) == rules.ActionFile && r.Dest.String != "" {
 			t.Dests.Add(r.Dest.String)
 		}
-		switch r.Action {
+		switch rules.Action(r.Action) {
 		case rules.ActionDelete:
 			t.Deletes++
 		case rules.ActionNone:

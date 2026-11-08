@@ -92,7 +92,7 @@ func store(r rules.Rule) []any {
 	if r.Dest != nil {
 		dest = *r.Dest
 	}
-	return []any{account, r.Action, dest, rules.ConditionsJSON(r.Conditions)}
+	return []any{account, string(r.Action), dest, rules.ConditionsJSON(r.Conditions)}
 }
 
 type RuleDict struct {
@@ -104,7 +104,7 @@ type RuleDict struct {
 }
 
 func ruleDict(r rules.Rule) RuleDict {
-	return RuleDict{r.ID, r.Account, r.Action, r.Dest, slices.Clone(r.Conditions)}
+	return RuleDict{r.ID, r.Account, string(r.Action), r.Dest, slices.Clone(r.Conditions)}
 }
 
 func ListRules(ctx context.Context, q rules.Querier, account *string) ([]RuleDict, error) {
@@ -318,7 +318,11 @@ func MessageFeatures(ctx context.Context, q rules.Querier, messageID int64) (Fea
 	found := []rules.Condition{}
 	for _, f := range featureFields {
 		if v := scalarOf(&m, f.field); v != "" {
-			found = append(found, rules.Condition{Field: f.field, Op: f.op, Value: v, HasValue: true})
+			cond, err := rules.NewCondition(f.field, f.op, v)
+			if err != nil {
+				return Features{}, err
+			}
+			found = append(found, cond)
 		}
 	}
 	for _, f := range listFeatures {
@@ -327,7 +331,11 @@ func MessageFeatures(ctx context.Context, q rules.Querier, messageID int64) (Fea
 			return Features{}, err
 		}
 		if len(values) > 0 {
-			found = append(found, rules.Condition{Field: f.field, Op: f.op, Value: values, HasValue: true})
+			cond, err := rules.NewCondition(f.field, f.op, values)
+			if err != nil {
+				return Features{}, err
+			}
+			found = append(found, cond)
 		}
 	}
 	var dest sql.NullString
@@ -341,7 +349,7 @@ func MessageFeatures(ctx context.Context, q rules.Querier, messageID int64) (Fea
 		out.Dest = &dest.String
 	}
 	for _, c := range found {
-		if c.Field == "from_addr" {
+		if c.Field() == "from_addr" {
 			out.Default = append(out.Default, c)
 			break
 		}
