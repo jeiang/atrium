@@ -284,7 +284,7 @@ func sample(count, limit int) ([]int, error) {
 	return slices.Compact(out), nil
 }
 
-func compactFrame(frameValue any, rowCap, cellChars int) (py.Dict, error) {
+func compactFrame(frameValue any, rowCap, cellChars int) (map[string]any, error) {
 	frame, err := attr(frameValue)
 	if err != nil {
 		return nil, err
@@ -361,12 +361,12 @@ func compactFrame(frameValue any, rowCap, cellChars int) (py.Dict, error) {
 		}
 		names = append(names, orDefault(fields[i], "name", ""))
 	}
-	out := py.Dict{{Key: "fields", Value: names}, {Key: "rows", Value: rows}, {Key: "total_rows", Value: int64(total)}}
+	out := map[string]any{"fields": names, "rows": rows, "total_rows": int64(total)}
 	if name := get(schema, "name"); truthy(name) {
-		out = append(out, py.Pair{Key: "name", Value: name})
+		out["name"] = name
 	}
 	if len(labels) > 0 {
-		out = append(out, py.Pair{Key: "labels", Value: labels})
+		out["labels"] = labels
 	}
 	return out, nil
 }
@@ -407,7 +407,7 @@ func compactResults(payloadValue any, rowCap int, lim limits) (any, error) {
 		}
 		series = append(series, c)
 	}
-	return py.Dict{{Key: "series", Value: series}, {Key: "total_series", Value: int64(len(frames))}}, nil
+	return map[string]any{"series": series, "total_series": int64(len(frames))}, nil
 }
 
 func datasources(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
@@ -429,9 +429,9 @@ func datasources(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, py.Dict{{Key: "uid", Value: get(d, "uid")}, {Key: "name", Value: get(d, "name")}, {Key: "type", Value: get(d, "type")}})
+		out = append(out, map[string]any{"uid": get(d, "uid"), "name": get(d, "name"), "type": get(d, "type")})
 	}
-	return py.Dict{{Key: "datasources", Value: out}}, nil
+	return map[string]any{"datasources": out}, nil
 }
 
 func query(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -549,14 +549,14 @@ func alerts(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 		if !ok {
 			return nil, tool.Error("grafana returned an unexpected value")
 		}
-		out = append(out, py.Dict{
-			{Key: "labels", Value: orDefault(a, "labels", py.Dict{})},
-			{Key: "summary", Value: tool.Clip(text, lim.cellChars)},
-			{Key: "active_at", Value: get(a, "activeAt")},
-			{Key: "value", Value: get(a, "value")},
+		out = append(out, map[string]any{
+			"labels":    orDefault(a, "labels", py.Dict{}),
+			"summary":   tool.Clip(text, lim.cellChars),
+			"active_at": get(a, "activeAt"),
+			"value":     get(a, "value"),
 		})
 	}
-	return py.Dict{{Key: "total_firing", Value: int64(len(firing))}, {Key: "alerts", Value: out}}, nil
+	return map[string]any{"total_firing": int64(len(firing)), "alerts": out}, nil
 }
 
 func searchDashboards(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -583,15 +583,15 @@ func searchDashboards(ctx context.Context, tc *tool.Context, args tool.Args) (an
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, py.Dict{
-			{Key: "title", Value: get(d, "title")},
-			{Key: "uid", Value: get(d, "uid")},
-			{Key: "url", Value: get(d, "url")},
-			{Key: "folder", Value: get(d, "folderTitle")},
-			{Key: "tags", Value: orDefault(d, "tags", []any{})},
+		out = append(out, map[string]any{
+			"title":  get(d, "title"),
+			"uid":    get(d, "uid"),
+			"url":    get(d, "url"),
+			"folder": get(d, "folderTitle"),
+			"tags":   orDefault(d, "tags", []any{}),
 		})
 	}
-	return py.Dict{{Key: "dashboards", Value: out}}, nil
+	return map[string]any{"dashboards": out}, nil
 }
 
 const emptySchema = `{"type": "object", "properties": {}, "required": [], "additionalProperties": false}`

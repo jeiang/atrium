@@ -117,8 +117,8 @@ func summarize(page py.Dict) summary {
 	return summary{normalize(str(page, "id")), notion.PageTitle(page), str(page, "url")}
 }
 
-func (s summary) dict() py.Dict {
-	return py.Dict{{Key: "page_id", Value: s.pageID}, {Key: "title", Value: s.title}, {Key: "url", Value: s.url}}
+func (s summary) dict() map[string]any {
+	return map[string]any{"page_id": s.pageID, "title": s.title, "url": s.url}
 }
 
 func parentID(page py.Dict) string {
@@ -332,9 +332,13 @@ func createPage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	if err != nil {
 		return nil, notionError(err)
 	}
+	after := s.dict()
+	after["parent_page_id"] = parent
+	after["markdown"] = body
+	after["aliases"] = aliases
 	w := write{
 		tool: "notion_create_page", target: s.pageID,
-		after: append(s.dict(), py.Pair{Key: "parent_page_id", Value: parent}, py.Pair{Key: "markdown", Value: body}, py.Pair{Key: "aliases", Value: aliases}),
+		after: after,
 		undo:  pageUndo{Op: undoTrash, PageID: s.pageID, AppliedEditedTime: editedText(edited)},
 	}
 	id, err := w.finish(ctx, tc, client, wiki, func(tx *sql.Tx) error {
@@ -346,7 +350,11 @@ func createPage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	if err != nil {
 		return nil, err
 	}
-	return append(s.dict(), py.Pair{Key: "parent_page_id", Value: parent}, py.Pair{Key: "aliases", Value: aliases}, py.Pair{Key: "write_id", Value: id}), nil
+	out := s.dict()
+	out["parent_page_id"] = parent
+	out["aliases"] = aliases
+	out["write_id"] = id
+	return out, nil
 }
 
 func newMarkdown(previous string, replace, appendText *string, section string) (string, error) {
@@ -446,7 +454,10 @@ func updatePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	if err != nil {
 		return nil, err
 	}
-	return append(s.dict(), py.Pair{Key: "write_id", Value: id}, py.Pair{Key: "changed", Value: []any{"markdown"}}), nil
+	out := s.dict()
+	out["write_id"] = id
+	out["changed"] = []any{"markdown"}
+	return out, nil
 }
 
 func rewrite(ctx context.Context, q db.Querier, wiki notion.Wiki, client *notion.Client, pageID string, replace, appendText *string, section, date string, sources []string) (
@@ -542,7 +553,10 @@ func movePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	if err != nil {
 		return nil, err
 	}
-	return append(s.dict(), py.Pair{Key: "parent_page_id", Value: parent}, py.Pair{Key: "write_id", Value: id}), nil
+	out := s.dict()
+	out["parent_page_id"] = parent
+	out["write_id"] = id
+	return out, nil
 }
 
 func relocate(ctx context.Context, q db.Querier, client *notion.Client, pageID, parent string) (page py.Dict, previous string, edited any, err error) {
@@ -597,7 +611,10 @@ func archivePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, er
 	if err != nil {
 		return nil, err
 	}
-	return append(s.dict(), py.Pair{Key: "archived", Value: true}, py.Pair{Key: "write_id", Value: id}), nil
+	out := s.dict()
+	out["archived"] = true
+	out["write_id"] = id
+	return out, nil
 }
 
 func trash(ctx context.Context, q db.Querier, client *notion.Client, pageID string) (page, previous py.Dict, edited any, err error) {
@@ -682,7 +699,10 @@ func addAlias(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	if err != nil {
 		return nil, err
 	}
-	return append(s.dict(), py.Pair{Key: "aliases", Value: aliases}, py.Pair{Key: "write_id", Value: id}), nil
+	out := s.dict()
+	out["aliases"] = aliases
+	out["write_id"] = id
+	return out, nil
 }
 
 const (

@@ -145,12 +145,12 @@ func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool strin
 	if err != nil {
 		return "", nil, err
 	}
-	stub := py.Dict{
-		{Key: "result_id", Value: resultID},
-		{Key: "tool", Value: tool},
-		{Key: "tokens", Value: tokens},
-		{Key: "preview", Value: py.Clip(body, t.PreviewChars)},
-		{Key: "note", Value: StubNote},
+	stub := map[string]any{
+		"result_id": resultID,
+		"tool":      tool,
+		"tokens":    tokens,
+		"preview":   py.Clip(body, t.PreviewChars),
+		"note":      StubNote,
 	}
 	return py.JSONDumps(stub, valueJSON), &resultID, nil
 }

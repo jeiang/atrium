@@ -9,7 +9,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/workspace"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const Name = "plan"
@@ -22,7 +21,7 @@ func plan(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 		if items, err = workspace.SetPlan(ctx, tx, tc.ThreadID, &tc.RunID, raw, tc.Now()); err != nil {
 			return err
 		}
-		return progress.Emit(ctx, tx, tc.RunID, progress.Plan, py.Dict{{Key: "items", Value: dicts(items)}}, tc.Now())
+		return progress.Emit(ctx, tx, tc.RunID, progress.Plan, map[string]any{"items": dicts(items)}, tc.Now())
 	})
 	var pe workspace.PlanError
 	if errors.As(err, &pe) {
@@ -37,13 +36,13 @@ func plan(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 			done++
 		}
 	}
-	return py.Dict{{Key: "items", Value: dicts(items)}, {Key: "done", Value: done}, {Key: "total", Value: len(items)}}, nil
+	return map[string]any{"items": dicts(items), "done": done, "total": len(items)}, nil
 }
 
 func dicts(items []workspace.PlanItem) []any {
 	out := make([]any, len(items))
 	for i, it := range items {
-		out[i] = py.Dict{{Key: "text", Value: it.Text}, {Key: "done", Value: it.Done}}
+		out[i] = map[string]any{"text": it.Text, "done": it.Done}
 	}
 	return out
 }

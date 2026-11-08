@@ -6,7 +6,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/calendar"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func findSlot(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -36,13 +35,13 @@ func findSlot(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	}
 	windows := make([]any, len(found.Windows))
 	for i, w := range found.Windows {
-		windows[i] = py.Dict{{Key: "start", Value: w.Start.Format(time.RFC3339)}, {Key: "end", Value: w.End.Format(time.RFC3339)}}
+		windows[i] = map[string]any{"start": w.Start.Format(time.RFC3339), "end": w.End.Format(time.RFC3339)}
 	}
 	notes := make([]any, len(found.Notes))
 	for i, n := range found.Notes {
 		notes[i] = n
 	}
-	return py.Dict{{Key: "windows", Value: windows}, {Key: "notes", Value: notes}}, nil
+	return map[string]any{"windows": windows, "notes": notes}, nil
 }
 
 var durationBound = tool.NewCeiling(30, 5, 1440)

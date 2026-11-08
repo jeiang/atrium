@@ -68,7 +68,7 @@ func selfDiagnose(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 		return nil, err
 	}
 	from := "now-" + strconv.FormatInt(minutes, 10) + "m"
-	out := py.Dict{{Key: "untrusted", Value: true}}
+	out := map[string]any{"untrusted": true}
 	if scope != "logs" {
 		if metricsUID == "" {
 			return nil, tool.NotConfigured(KeyMetricsUID + " is not set")
@@ -88,7 +88,7 @@ func selfDiagnose(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, py.Pair{Key: "metrics", Value: metrics})
+		out["metrics"] = metrics
 	}
 	if scope != "metrics" {
 		if logsUID == "" {
@@ -109,7 +109,8 @@ func selfDiagnose(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, py.Pair{Key: "logs_dialect", Value: logsType}, py.Pair{Key: "logs", Value: logs})
+		out["logs_dialect"] = logsType
+		out["logs"] = logs
 	}
 	return out, nil
 }

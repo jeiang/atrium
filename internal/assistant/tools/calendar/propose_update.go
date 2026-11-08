@@ -16,9 +16,9 @@ func proposed(id int64, created bool, err error) (any, error) {
 		return nil, wrap(err)
 	}
 	if !created {
-		return py.Dict{{Key: "proposed", Value: false}, {Key: "reason", Value: "an identical proposal already exists"}}, nil
+		return map[string]any{"proposed": false, "reason": "an identical proposal already exists"}, nil
 	}
-	return py.Dict{{Key: "proposed", Value: true}, {Key: "proposal_id", Value: id}}, nil
+	return map[string]any{"proposed": true, "proposal_id": id}, nil
 }
 
 func proposeUpdate(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {

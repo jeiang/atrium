@@ -87,12 +87,7 @@ func threadsToday(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{
-		{Key: "untrusted", Value: true},
-		{Key: "from", Value: localISO(start, loc)},
-		{Key: "to", Value: localISO(end, loc)},
-		{Key: "threads", Value: found},
-	}, nil
+	return map[string]any{"untrusted": true, "from": localISO(start, loc), "to": localISO(end, loc), "threads": found}, nil
 }
 
 type threadRow struct {

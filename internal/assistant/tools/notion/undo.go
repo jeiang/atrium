@@ -12,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notion"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func now() float64 { return float64(time.Now().UnixNano()) / 1e9 }
@@ -89,7 +88,7 @@ func trashing(value bool, key string) func(context.Context, db.Querier, *notion.
 		if err := notion.UpsertWiki(ctx, q, u.PageID, now(), notion.WikiFields{InTrash: &value}); err != nil {
 			return nil, err
 		}
-		return py.Dict{{Key: key, Value: u.PageID}}, nil
+		return map[string]any{key: u.PageID}, nil
 	}
 }
 
@@ -104,7 +103,7 @@ func undoRestorePage(ctx context.Context, _ db.Querier, client *notion.Client, p
 	if _, err := client.UpdateMarkdown(ctx, u.PageID, replaceContent(u.PreviousMarkdown)); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "restored", Value: u.PageID}}, nil
+	return map[string]any{"restored": u.PageID}, nil
 }
 
 func undoMovePage(ctx context.Context, q db.Querier, client *notion.Client, payload json.RawMessage) (any, error) {
@@ -115,13 +114,13 @@ func undoMovePage(ctx context.Context, q db.Querier, client *notion.Client, payl
 	if err := fresh(ctx, client, u.PageID, u.AppliedEditedTime); err != nil {
 		return nil, err
 	}
-	if _, err := client.MovePage(ctx, u.PageID, py.Dict{{Key: "type", Value: "page_id"}, {Key: "page_id", Value: u.PreviousParentID}}); err != nil {
+	if _, err := client.MovePage(ctx, u.PageID, map[string]any{"type": "page_id", "page_id": u.PreviousParentID}); err != nil {
 		return nil, err
 	}
 	if err := notion.UpsertWiki(ctx, q, u.PageID, now(), notion.WikiFields{HubID: &u.PreviousParentID}); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "moved", Value: u.PageID}, {Key: "parent_page_id", Value: u.PreviousParentID}}, nil
+	return map[string]any{"moved": u.PageID, "parent_page_id": u.PreviousParentID}, nil
 }
 
 func undoAliasList(ctx context.Context, q db.Querier, payload json.RawMessage) (any, error) {
@@ -132,7 +131,7 @@ func undoAliasList(ctx context.Context, q db.Querier, payload json.RawMessage) (
 	if err := notion.UpsertWiki(ctx, q, u.PageID, now(), notion.WikiFields{Aliases: u.PreviousAliases, SetAliases: true}); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "aliases", Value: strs(u.PreviousAliases)}}, nil
+	return map[string]any{"aliases": strs(u.PreviousAliases)}, nil
 }
 
 func RegisterUndoers(r *writes.Registry, env config.Env) {

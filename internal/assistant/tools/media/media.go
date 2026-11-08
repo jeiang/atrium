@@ -145,12 +145,8 @@ func optionalInt(p *int64) any {
 	return *p
 }
 
-func channelDict(c media.Channel) py.Dict {
-	return py.Dict{
-		{Key: "id", Value: c.ID}, {Key: "name", Value: c.Name}, {Key: "imdb", Value: c.IMDB}, {Key: "tmdb_id", Value: optionalInt(c.TMDBID)},
-		{Key: "pattern", Value: c.Pattern}, {Key: "case_sensitive", Value: c.CaseSensitive}, {Key: "primed", Value: c.Primed},
-		{Key: "created", Value: c.Created},
-	}
+func channelDict(c media.Channel) map[string]any {
+	return map[string]any{"id": c.ID, "name": c.Name, "imdb": c.IMDB, "tmdb_id": optionalInt(c.TMDBID), "pattern": c.Pattern, "case_sensitive": c.CaseSensitive, "primed": c.Primed, "created": c.Created}
 }
 
 func kindOf(isMedia bool) string {
@@ -160,22 +156,12 @@ func kindOf(isMedia bool) string {
 	return "plain"
 }
 
-func torrentDict(t media.Torrent) py.Dict {
+func torrentDict(t media.Torrent) map[string]any {
 	state := t.State
 	if label, ok := media.StateLabels[t.State]; ok {
 		state = label
 	}
-	return py.Dict{
-		{Key: "hash", Value: t.Hash},
-		{Key: "name", Value: t.Name},
-		{Key: "state", Value: state},
-		{Key: "progress_percent", Value: int64(math.RoundToEven(t.Progress * 100))},
-		{Key: "size_bytes", Value: optionalInt(t.Size)},
-		{Key: "download_bytes_per_second", Value: optionalInt(t.DLSpeed)},
-		{Key: "eta_seconds", Value: optionalInt(t.ETA)},
-		{Key: "kind", Value: kindOf(t.HasTag(media.TagMedia))},
-		{Key: "filed", Value: t.HasTag(media.TagFiled)},
-	}
+	return map[string]any{"hash": t.Hash, "name": t.Name, "state": state, "progress_percent": int64(math.RoundToEven(t.Progress * 100)), "size_bytes": optionalInt(t.Size), "download_bytes_per_second": optionalInt(t.DLSpeed), "eta_seconds": optionalInt(t.ETA), "kind": kindOf(t.HasTag(media.TagMedia)), "filed": t.HasTag(media.TagFiled)}
 }
 
 func mediaDownloads(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
@@ -208,13 +194,9 @@ func mediaDownloads(ctx context.Context, tc *tool.Context, _ tool.Args) (any, er
 	}
 	queue := []any{}
 	for _, it := range waiting {
-		queue = append(queue, py.Dict{{Key: "id", Value: it.ID}, {Key: "name", Value: it.Name}, {Key: "torrent", Value: it.Torrent}})
+		queue = append(queue, map[string]any{"id": it.ID, "name": it.Name, "torrent": it.Torrent})
 	}
-	return py.Dict{
-		{Key: "torrents", Value: shown},
-		{Key: "waiting_to_file", Value: queue},
-		{Key: "note", Value: "Only torrents of kind media are filed into the library, from the Media downloads page."},
-	}, nil
+	return map[string]any{"torrents": shown, "waiting_to_file": queue, "note": "Only torrents of kind media are filed into the library, from the Media downloads page."}, nil
 }
 
 func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -245,10 +227,7 @@ func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (
 			{Key: "files", Value: files}, {Key: "vpn_urls", Value: urls},
 		})
 	}
-	return py.Dict{
-		{Key: "results", Value: results},
-		{Key: "note", Value: "Paths are relative to the media root; VPN URLs work on the mesh. Public links are made on the Library page."},
-	}, nil
+	return map[string]any{"results": results, "note": "Paths are relative to the media root; VPN URLs work on the mesh. Public links are made on the Library page."}, nil
 }
 
 func mediaChannels(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
@@ -268,7 +247,7 @@ func mediaChannels(ctx context.Context, tc *tool.Context, _ tool.Args) (any, err
 	for i, e := range status.Errors {
 		errs[i] = e
 	}
-	return py.Dict{{Key: "channels", Value: listed}, {Key: "last_check", Value: status.LastCheck}, {Key: "errors", Value: errs}}, nil
+	return map[string]any{"channels": listed, "last_check": status.LastCheck, "errors": errs}, nil
 }
 
 func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -315,7 +294,7 @@ func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "hash", Value: hash}, {Key: "kind", Value: kindOf(asMedia)}, {Key: "write_id", Value: id}}, nil
+	return map[string]any{"hash": hash, "kind": kindOf(asMedia), "write_id": id}, nil
 }
 
 func showFromTMDB(ctx context.Context, client *media.TMDB, tmdbID int64) (string, string, error) {
@@ -427,8 +406,9 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any
 		}
 		return nil, err
 	}
-	out := append(channelDict(*row), py.Pair{Key: "write_id", Value: writeID},
-		py.Pair{Key: "note", Value: "The first poll only records current releases; later matches are added."})
+	out := channelDict(*row)
+	out["write_id"] = writeID
+	out["note"] = "The first poll only records current releases; later matches are added."
 	return out, nil
 }
 
@@ -460,5 +440,5 @@ func mediaChannelRemove(ctx context.Context, tc *tool.Context, args tool.Args) (
 		}
 		return nil, err
 	}
-	return py.Dict{{Key: "removed", Value: id}, {Key: "name", Value: row.Name}, {Key: "write_id", Value: writeID}}, nil
+	return map[string]any{"removed": id, "name": row.Name, "write_id": writeID}, nil
 }

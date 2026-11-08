@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const Name = "propose"
@@ -66,9 +65,9 @@ func propose(ctx context.Context, tc *tool.Context, args tool.Args) (any, error)
 		return nil, err
 	}
 	if id == nil {
-		return py.Dict{{Key: "proposal_id", Value: nil}, {Key: "note", Value: "an identical proposal already exists"}}, nil
+		return map[string]any{"proposal_id": nil, "note": "an identical proposal already exists"}, nil
 	}
-	return py.Dict{{Key: "proposal_id", Value: *id}, {Key: "status", Value: "pending"}, {Key: "note", Value: "the operator approves it on the Proposals page"}}, nil
+	return map[string]any{"proposal_id": *id, "status": "pending", "note": "the operator approves it on the Proposals page"}, nil
 }
 
 func Tools() []tool.Tool {

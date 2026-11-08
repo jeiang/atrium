@@ -60,7 +60,7 @@ func PreviewOf(content any) string {
 	return py.Clip(text, PreviewChars-1) + "…"
 }
 
-func Emit(ctx context.Context, q db.Querier, runID int64, kind string, data py.Dict, now float64) error {
+func Emit(ctx context.Context, q db.Querier, runID int64, kind string, data any, now float64) error {
 	_, err := q.ExecContext(ctx, "INSERT INTO run_events (run_id, ts, kind, data_json) VALUES (?, ?, ?, ?)", runID, now, kind, py.JSONDumps(data, dataOpts))
 	return err
 }

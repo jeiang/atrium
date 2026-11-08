@@ -10,7 +10,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func slice(s string, offset, limit int64) string {
@@ -64,13 +63,7 @@ func recall(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if end < total {
 		next = end
 	}
-	return py.Dict{
-		{Key: "result_id", Value: resultID},
-		{Key: "offset", Value: offset},
-		{Key: "total_chars", Value: total},
-		{Key: "text", Value: text},
-		{Key: "next_offset", Value: next},
-	}, nil
+	return map[string]any{"result_id": resultID, "offset": offset, "total_chars": total, "text": text, "next_offset": next}, nil
 }
 
 func Tools() []tool.Tool {

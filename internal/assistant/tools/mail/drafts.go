@@ -6,7 +6,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const notSent = "Draft saved only. Nothing is sent: the operator reviews and sends it from the Drafts page."
@@ -87,7 +86,7 @@ func draftEmailCreate(ctx context.Context, tc *tool.Context, args tool.Args) (an
 	if err != nil {
 		return nil, draftFailed(err)
 	}
-	return py.Dict{{Key: "draft_id", Value: id}, {Key: "status", Value: drafts.Draft}, {Key: "note", Value: notSent}}, nil
+	return map[string]any{"draft_id": id, "status": drafts.Draft, "note": notSent}, nil
 }
 
 func draftEmailUpdate(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -115,5 +114,5 @@ func draftEmailUpdate(ctx context.Context, tc *tool.Context, args tool.Args) (an
 	if err != nil {
 		return nil, draftFailed(err)
 	}
-	return py.Dict{{Key: "draft_id", Value: row.ID}, {Key: "status", Value: row.Status}, {Key: "note", Value: notSent}}, nil
+	return map[string]any{"draft_id": row.ID, "status": row.Status, "note": notSent}, nil
 }

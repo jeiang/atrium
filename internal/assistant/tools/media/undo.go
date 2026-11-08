@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type torrentUndo struct {
@@ -85,7 +84,7 @@ func undoTorrent(env config.Env) writes.Undoer {
 		if err != nil {
 			return nil, err
 		}
-		return py.Dict{{Key: "deleted", Value: hash}}, nil
+		return map[string]any{"deleted": hash}, nil
 	}
 }
 
@@ -102,7 +101,7 @@ func undoChannelDelete(ctx context.Context, q db.Querier, raw json.RawMessage) (
 	if _, err := media.DeleteChannel(ctx, q, id); err != nil {
 		return nil, channelFailed(err)
 	}
-	return py.Dict{{Key: "removed", Value: id}}, nil
+	return map[string]any{"removed": id}, nil
 }
 
 func undoChannelRestore(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
@@ -113,5 +112,5 @@ func undoChannelRestore(ctx context.Context, q db.Querier, raw json.RawMessage) 
 	if _, err := media.RestoreChannel(ctx, q, u.Row.channel()); err != nil {
 		return nil, channelFailed(err)
 	}
-	return py.Dict{{Key: "restored", Value: u.Row.ID}}, nil
+	return map[string]any{"restored": u.Row.ID}, nil
 }

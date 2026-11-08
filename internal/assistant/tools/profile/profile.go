@@ -83,7 +83,7 @@ func get(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 		}
 		entries = append(entries, py.Dict{{Key: "key", Value: e.Key}, {Key: "value", Value: e.Value}})
 	}
-	return py.Dict{{Key: "entries", Value: entries}}, nil
+	return map[string]any{"entries": entries}, nil
 }
 
 var (
@@ -133,7 +133,7 @@ func set(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "key", Value: key}, {Key: "value", Value: value}, {Key: "previous", Value: optional(previous)}, {Key: "write_id", Value: writeID}}, nil
+	return map[string]any{"key": key, "value": value, "previous": optional(previous), "write_id": writeID}, nil
 }
 
 type profileUndo struct {
@@ -163,7 +163,7 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "key", Value: u.Key}, {Key: "restored", Value: optional(u.Previous)}}, nil
+	return map[string]any{"key": u.Key, "restored": optional(u.Previous)}, nil
 }
 
 func RegisterUndoer(r *writes.Registry) { r.Register(UndoOp, undo) }

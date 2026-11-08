@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/timex"
 )
 
@@ -26,7 +25,7 @@ func raised(err error) error {
 	return tool.Domain[scheduler.Error, tool.Error](err)
 }
 
-func describe(ctx context.Context, q db.Querier, job *scheduler.Job) (py.Dict, error) {
+func describe(ctx context.Context, q db.Querier, job *scheduler.Job) (map[string]any, error) {
 	var due any
 	if job.NextDue != nil {
 		loc, err := scheduler.Zone(job.TZ)
@@ -36,15 +35,7 @@ func describe(ctx context.Context, q db.Querier, job *scheduler.Job) (py.Dict, e
 		sec, us := timex.SplitTimestamp(*job.NextDue)
 		due = time.Unix(sec, us*1000).In(loc).Format("2006-01-02T15:04-07:00")
 	}
-	found := py.Dict{
-		{Key: "id", Value: job.ID},
-		{Key: "name", Value: job.Name},
-		{Key: "prompt", Value: job.Prompt},
-		{Key: "schedule", Value: job.Schedule},
-		{Key: "enabled", Value: job.State.Active()},
-		{Key: "next_due", Value: due},
-		{Key: "created_by", Value: job.CreatedBy},
-	}
+	found := map[string]any{"id": job.ID, "name": job.Name, "prompt": job.Prompt, "schedule": job.Schedule, "enabled": job.State.Active(), "next_due": due, "created_by": job.CreatedBy}
 	if q == nil {
 		return found, nil
 	}
@@ -56,9 +47,9 @@ func describe(ctx context.Context, q db.Querier, job *scheduler.Job) (py.Dict, e
 	if err != nil {
 		return nil, err
 	}
-	found = append(found, py.Pair{Key: "skills", Value: known})
+	found["skills"] = known
 	if len(unknown) > 0 {
-		found = append(found, py.Pair{Key: "note", Value: "unknown skills in prompt (left as text): " + strings.Join(unknown, ", ")})
+		found["note"] = "unknown skills in prompt (left as text): " + strings.Join(unknown, ", ")
 	}
 	return found, nil
 }
@@ -162,7 +153,7 @@ func cancel(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "cancelled", Value: id}}, nil
+	return map[string]any{"cancelled": id}, nil
 }
 
 func list(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
@@ -181,7 +172,7 @@ func list(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 		}
 		out = append(out, d)
 	}
-	return py.Dict{{Key: "schedules", Value: out}}, nil
+	return map[string]any{"schedules": out}, nil
 }
 
 func Tools() []tool.Tool {

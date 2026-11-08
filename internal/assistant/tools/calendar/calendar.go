@@ -156,7 +156,7 @@ func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 		_, err := writes.Record(ctx, tx, tc.Undoers, writes.New{
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_create",
 			Target: target + ":" + normalized.UID,
-			After:  py.Dict{{Key: "calendar", Value: target}, {Key: "spec", Value: normalized.Dict()}},
+			After:  map[string]any{"calendar": target, "spec": normalized.Dict()},
 			Undo:   deleteUndo{Op: "calendar_delete", Calendar: target, UID: normalized.UID},
 		})
 		return err
@@ -164,8 +164,14 @@ func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if err != nil {
 		return nil, err
 	}
-	return append(ref.Dict(), py.Pair{Key: "title", Value: normalized.Title}, py.Pair{Key: "start", Value: normalized.Start},
-		py.Pair{Key: "end", Value: normalized.End}), nil
+	out := map[string]any{}
+	for _, p := range ref.Dict() {
+		out[p.Key] = p.Value
+	}
+	out["title"] = normalized.Title
+	out["start"] = normalized.Start
+	out["end"] = normalized.End
+	return out, nil
 }
 
 func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -198,7 +204,7 @@ func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 		_, err := writes.Record(ctx, tx, tc.Undoers, writes.New{
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_delete",
 			Target: row.Calendar + ":" + uid,
-			Before: py.Dict{{Key: "calendar", Value: row.Calendar}, {Key: "spec", Value: stored}},
+			Before: map[string]any{"calendar": row.Calendar, "spec": stored},
 			Undo:   recreateUndo{Op: "calendar_recreate", Calendar: row.Calendar, Spec: stored},
 		})
 		return err
@@ -206,7 +212,7 @@ func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "deleted", Value: uid}, {Key: "calendar", Value: row.Calendar}}, nil
+	return map[string]any{"deleted": uid, "calendar": row.Calendar}, nil
 }
 
 func propose(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -239,14 +245,14 @@ func propose(ctx context.Context, tc *tool.Context, args tool.Args) (any, error)
 		return nil, wrap(err)
 	}
 	if !created {
-		return py.Dict{{Key: "proposed", Value: false}, {Key: "reason", Value: "an identical proposal already exists"}}, nil
+		return map[string]any{"proposed": false, "reason": "an identical proposal already exists"}, nil
 	}
 	if messageID, ok := source.Get("message_id"); ok {
 		if err := candidates.Mark(ctx, tc.DB, messageID, candidates.Drafted, tc.Now()); err != nil {
 			return nil, err
 		}
 	}
-	return py.Dict{{Key: "proposed", Value: true}, {Key: "proposal_id", Value: id}}, nil
+	return map[string]any{"proposed": true, "proposal_id": id}, nil
 }
 
 type deleteUndo struct {
@@ -281,7 +287,7 @@ func undoDelete(ctx context.Context, q db.Querier, raw json.RawMessage) (any, er
 	if err := calendar.Untrack(ctx, q, uid, nowSeconds()); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "deleted", Value: uid}}, nil
+	return map[string]any{"deleted": uid}, nil
 }
 
 func undoRecreate(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
@@ -313,7 +319,7 @@ func undoRecreate(ctx context.Context, q db.Querier, raw json.RawMessage) (any, 
 	if err := calendar.Track(ctx, q, restored, target, nil, nowSeconds()); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "created", Value: restored.UID}}, nil
+	return map[string]any{"created": restored.UID}, nil
 }
 
 func RegisterUndoers(r *writes.Registry) {
