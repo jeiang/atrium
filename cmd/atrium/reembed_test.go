@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
@@ -140,10 +141,23 @@ func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, pa
 		t.Fatal(err)
 	}
 	seedNotionVectors(t, path)
+	seedPendingMessage(t, path)
 	setEnv(t, settingEnv(endpoint.KeyEmbedURL), fake.URL+"/v1")
 	setEnv(t, settingEnv(endpoint.KeyEmbedModel), model)
 	setEnv(t, settingEnv(endpoint.KeyEmbedBatch), "40")
 	return dir, path
+}
+
+func seedPendingMessage(t *testing.T, path string) {
+	t.Helper()
+	d, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	dbtest.AddMessage(t, d, 900000, "a pending message for the re-embedding build", map[string]any{
+		"subject": "Pending re-embedding message", "from_addr": "seed@x.test",
+	})
 }
 
 func TestAFirstServeWithANewDimensionRebuildsTheIndexInsteadOfAdoptingIt(t *testing.T) {
@@ -203,11 +217,12 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 	base, _, stop = startServeStoppable(t, dir)
 	var first, total int
 	waitFor(t, func() bool {
-		first, total, _ = embedProgress(t, base)
-		return first > 0
+		var page string
+		first, total, page = embedProgress(t, base)
+		return first > 0 && first < total && strings.Contains(page, "embeddinggemma · 768 dimensions")
 	})
 	if during := search(); during != before || fake.lastModel() != "embeddinggemma" {
-		t.Fatalf("search while re-embedding: %q, was %q (query model %q)", during, before, fake.lastModel())
+		t.Fatalf("search while re-embedding (%d of %d): %q, was %q (query model %q)", first, total, during, before, fake.lastModel())
 	}
 	fake.release(1)
 	waitFor(t, func() bool {
