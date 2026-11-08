@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 )
 
@@ -101,6 +102,9 @@ func (s *Service) Branch(ctx context.Context, threadID, seq int64) (int64, error
 		if _, err := journal.AppendMessage(ctx, s.DB, child, nil, m.Role, content, s.now(), m.SystemSig); err != nil {
 			return 0, err
 		}
+	}
+	if err := memory.Rebuild(ctx, s.DB.Write, child, s.now()); err != nil {
+		return 0, err
 	}
 	return child, nil
 }
