@@ -13,12 +13,10 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_CLEAR_AT_LEAST_SHARE` | `assistant.agent_clear_at_least_share` |
 | `ATRIUM_ASSISTANT_AGENT_CLEAR_KEEP` | `assistant.agent_clear_keep` |
 | `ATRIUM_ASSISTANT_AGENT_CLEAR_SHARE` | `assistant.agent_clear_share` |
-| `ATRIUM_ASSISTANT_AGENT_COMMIT_SAVINGS` | `assistant.agent_commit_savings` |
 | `ATRIUM_ASSISTANT_AGENT_COMPACT_SHARE` | `assistant.agent_compact_share` |
 | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_IDS` | `assistant.agent_context_max_ids` |
 | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_SOURCES` | `assistant.agent_context_max_sources` |
 | `ATRIUM_ASSISTANT_AGENT_CONTEXT_SUMMARY_CHARS` | `assistant.agent_context_summary_chars` |
-| `ATRIUM_ASSISTANT_AGENT_DASHBOARD_ITEMS` | `assistant.agent_dashboard_items` |
 | `ATRIUM_ASSISTANT_AGENT_EFFORT_CRON` | `assistant.agent_effort_cron` |
 | `ATRIUM_ASSISTANT_AGENT_EFFORT_NIGHTLY` | `assistant.agent_effort_nightly` |
 | `ATRIUM_ASSISTANT_AGENT_EFFORT_SUB` | `assistant.agent_effort_sub` |
@@ -60,6 +58,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_RECALL_PAGE_CHARS` | `assistant.agent_recall_page_chars` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_CALENDAR_CANDIDATES` | `assistant.agent_schedule_calendar_candidates` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_DAILY_NUDGES` | `assistant.agent_schedule_daily_nudges` |
+| `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MAX_ACTIVE_JOBS` | `assistant.agent_schedule_max_active_jobs` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_CHANNELS` | `assistant.agent_schedule_media_channels` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_SWEEP` | `assistant.agent_schedule_media_sweep` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_THUMBNAILS` | `assistant.agent_schedule_media_thumbnails` |
