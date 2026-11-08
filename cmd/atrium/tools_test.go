@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
@@ -121,5 +122,42 @@ func TestFileToolsReadSearchAndTraversal(t *testing.T) {
 		if !strings.Contains(all.String(), want) {
 			t.Errorf("tool results miss %q: %s", want, all.String())
 		}
+	}
+}
+
+func TestMemorySpendDoesNotPauseChat(t *testing.T) {
+	dir, api := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp("agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	if _, err := d.Write.Exec("DELETE FROM usage"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('monthly_budget_usd', '1')"); err != nil {
+		t.Fatal(err)
+	}
+	now := float64(time.Now().Unix())
+	insert := "INSERT INTO usage (ts, thread_id, run_id, kind, model, effort, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) VALUES (?, 1, 1, ?, 'm', 'low', 0, 0, 0, 0, 0, 0, 'low', ?)"
+	if _, err := d.Write.Exec(insert, now, "chat", 1.0); err != nil {
+		t.Fatal(err)
+	}
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
+	if ran := runApp("agent", "run", "--thread", "1", "--text", "hi"); !strings.Contains(ran.stdout+ran.stderr, "monthly budget") {
+		t.Fatalf("chat did not pause at the threshold: code=%d stdout=%s stderr=%s", ran.code, ran.stdout, ran.stderr)
+	}
+	if _, err := d.Write.Exec(insert, now, "memory", 100.0); err != nil {
+		t.Fatal(err)
+	}
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
+	if ran := runApp("agent", "run", "--thread", "1", "--text", "hi"); !strings.Contains(ran.stdout+ran.stderr, "monthly budget") {
+		t.Fatalf("a memory row changed the pause decision: code=%d stdout=%s stderr=%s", ran.code, ran.stdout, ran.stderr)
+	}
+	if _, err := d.Write.Exec("UPDATE usage SET cost_usd = 0.5 WHERE kind = 'chat'"); err != nil {
+		t.Fatal(err)
+	}
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
+	if ran := runApp("agent", "run", "--thread", "1", "--text", "hi"); ran.code != cli.ExitOK {
+		t.Fatalf("chat stayed paused with a large memory row: %d %s", ran.code, ran.stderr)
 	}
 }
