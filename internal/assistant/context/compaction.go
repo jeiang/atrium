@@ -15,12 +15,12 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-func Manifest(ctx gocontext.Context, q db.Querier, threadID int64, t Tuning) (string, error) {
-	ledger, err := LedgerRows(ctx, q, threadID)
+func manifest(ctx gocontext.Context, q db.Querier, threadID int64, t Tuning) (string, error) {
+	ledger, err := loadLedger(ctx, q, threadID)
 	if err != nil {
 		return "", err
 	}
-	found, err := Items(ctx, q, threadID)
+	found, err := itemsOf(ctx, q, threadID, ledger)
 	if err != nil {
 		return "", err
 	}
@@ -29,31 +29,27 @@ func Manifest(ctx gocontext.Context, q db.Querier, threadID int64, t Tuning) (st
 		tools[it.ID] = it.Tool
 	}
 	lines := []string{"Context manifest (maintained by atrium; ids are exact):"}
-	if pinned := ledger.withState(Pinned); len(pinned) > 0 {
+	if pinned := ledger.withState(StatePinned); len(pinned) > 0 {
 		parts := make([]string, len(pinned))
-		for i, r := range pinned {
-			parts[i] = r.ItemID
-			if tool, ok := tools[r.ItemID]; ok {
-				parts[i] = fmt.Sprintf("%s (%s)", r.ItemID, tool)
+		for i, e := range pinned {
+			parts[i] = e.ID
+			if tool, ok := tools[e.ID]; ok {
+				parts[i] = fmt.Sprintf("%s (%s)", e.ID, tool)
 			}
 		}
 		lines = append(lines, "Pinned: "+strings.Join(parts, ", "))
 	}
-	if dropped := ledger.withState(Dropped); len(dropped) > 0 {
+	if dropped := ledger.withState(StateDropped); len(dropped) > 0 {
 		parts := make([]string, len(dropped))
-		for i, r := range dropped {
-			parts[i] = fmt.Sprintf("%s -> result_id %s", r.ItemID, optInt(r.ResultID))
+		for i, e := range dropped {
+			parts[i] = fmt.Sprintf("%s -> result_id %d", e.ID, deref(e.ResultID))
 		}
 		lines = append(lines, "Dropped (page back with recall): "+strings.Join(parts, ", "))
 	}
-	for _, r := range ledger.withState(Folded) {
-		sources, err := r.sources()
-		if err != nil {
-			return "", err
-		}
-		line := fmt.Sprintf("Fold seq %s-%s: %s", optInt(r.FromSeq), optInt(r.ToSeq), optStr(r.Synopsis))
-		if len(sources) > 0 {
-			line += " [sources: " + joinStr(sources) + "]"
+	for _, e := range ledger.withState(StateFolded) {
+		line := fmt.Sprintf("Fold seq %d-%d: %s", e.Fold.From, e.Fold.To, e.Fold.Synopsis)
+		if len(e.Fold.Sources) > 0 {
+			line += " [sources: " + joinStr(e.Fold.Sources) + "]"
 		}
 		lines = append(lines, line)
 	}
@@ -75,12 +71,11 @@ func Manifest(ctx gocontext.Context, q db.Querier, threadID int64, t Tuning) (st
 	if len(stored) > 0 {
 		lines = append(lines, "Stored results (recall(result_id, offset, limit)): "+strings.Join(stored, ", "))
 	}
-	lines = append(lines, "context_status() shows the live dashboard; context_pin/context_drop/context_fold manage it.")
 	return strings.Join(lines, "\n"), nil
 }
 
-func ManifestBlock(ctx gocontext.Context, q db.Querier, threadID int64, t Tuning) (json.RawMessage, error) {
-	text, err := Manifest(ctx, q, threadID, t)
+func manifestBlock(ctx gocontext.Context, q db.Querier, threadID int64, t Tuning) (json.RawMessage, error) {
+	text, err := manifest(ctx, q, threadID, t)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +86,7 @@ func unitStart(m Message) bool {
 	return m.Role == journal.Assistant || !hasType(m.Content, ToolResult)
 }
 
-func Preserved(sent []Message, t Tuning) []Message {
+func preserved(sent []Message, t Tuning) []Message {
 	start := max(len(sent)-t.PreserveMessages, 0)
 	for start < len(sent) && !unitStart(sent[start]) {
 		start++
@@ -112,22 +107,19 @@ func Preserved(sent []Message, t Tuning) []Message {
 }
 
 func ServerCompacted(ctx gocontext.Context, q db.Querier, threadID, runID int64, blocks []json.RawMessage, sent []Message, now float64, t Tuning) (int64, error) {
-	if _, err := Commit(ctx, q, threadID, runID, now, true); err != nil {
-		return 0, err
-	}
-	manifest, err := ManifestBlock(ctx, q, threadID, t)
+	body, err := manifestBlock(ctx, q, threadID, t)
 	if err != nil {
 		return 0, err
 	}
 	head := append([]Message{
 		{Role: journal.Assistant, Content: blocks},
-		{Role: journal.User, Content: []json.RawMessage{manifest}},
-	}, Preserved(sent, t)...)
+		{Role: journal.User, Content: []json.RawMessage{body}},
+	}, preserved(sent, t)...)
 	base, err := nextSeq(ctx, q, threadID)
 	if err != nil {
 		return 0, err
 	}
-	return SaveProjection(ctx, q, threadID, runID, KindServer, base, base, base, head, 0, now)
+	return saveProjection(ctx, q, threadID, runID, KindServer, base, base, base, head, 0, now)
 }
 
 func nextSeq(ctx gocontext.Context, q db.Querier, threadID int64) (int64, error) {
@@ -174,7 +166,7 @@ func flatten(b py.Dict) py.Dict {
 			rest = append(rest, p)
 		}
 	}
-	return py.Dict{{Key: "type", Value: Text}, {Key: "text", Value: "[" + str(kind) + "] " + Serialize(rest)}}
+	return py.Dict{{Key: "type", Value: Text}, {Key: "text", Value: "[" + str(kind) + "] " + serialize(rest)}}
 }
 
 type shrunk struct {
@@ -190,7 +182,7 @@ func dictValues(content []py.Dict) []any {
 	return out
 }
 
-func Shrink(messages []Message, limit int64, previewChars int) ([]Message, error) {
+func shrink(messages []Message, limit int64, previewChars int) ([]Message, error) {
 	var out []shrunk
 	for _, m := range messages {
 		var content []py.Dict
@@ -266,9 +258,9 @@ func lastOperatorBlocks(sent []Message) []json.RawMessage {
 	return nil
 }
 
-func SummaryParams(model string, active []Message, hardLimit int64, t Tuning) (anthropic.Params, error) {
+func summaryParams(model string, active []Message, hardLimit int64, t Tuning) (anthropic.Params, error) {
 	request := SummaryRequest(t.Summary)
-	messages, err := Shrink(active, hardLimit-int64(t.SummaryMaxTokens)-EstimateTokens(request)-1000, t.PreviewChars)
+	messages, err := shrink(active, hardLimit-int64(t.SummaryMaxTokens)-EstimateTokens(request)-1000, t.PreviewChars)
 	if err != nil {
 		return anthropic.Params{}, err
 	}
@@ -291,8 +283,8 @@ func SummaryParams(model string, active []Message, hardLimit int64, t Tuning) (a
 	}, nil
 }
 
-func ClientCompact(ctx gocontext.Context, q db.Querier, client *anthropic.Client, model string, active []Message, threadID, runID int64, kind string, hardLimit int64, now float64, t Tuning) (int64, error) {
-	params, err := SummaryParams(model, active, hardLimit, t)
+func ClientCompact(ctx gocontext.Context, d *db.DB, client *anthropic.Client, model string, active []Message, threadID, runID int64, kind string, hardLimit int64, now float64, t Tuning) (int64, error) {
+	params, err := summaryParams(model, active, hardLimit, t)
 	if err != nil {
 		return 0, err
 	}
@@ -301,7 +293,7 @@ func ClientCompact(ctx gocontext.Context, q db.Querier, client *anthropic.Client
 		return 0, err
 	}
 	entry := usage.Entry{TS: now, ThreadID: threadID, RunID: runID, Kind: kind, Model: model, Effort: SummaryEffort, Compaction: 1}
-	if _, err := usage.Record(ctx, q, entry, response.Usage); err != nil {
+	if _, err := usage.Record(ctx, d, entry, response.Usage); err != nil {
 		return 0, err
 	}
 	var texts []string
@@ -322,13 +314,13 @@ func ClientCompact(ctx gocontext.Context, q db.Querier, client *anthropic.Client
 	if summary == "" {
 		return 0, ContextError("compaction summary was empty")
 	}
-	manifest, err := ManifestBlock(ctx, q, threadID, t)
+	manifest, err := manifestBlock(ctx, d.Read, threadID, t)
 	if err != nil {
 		return 0, err
 	}
 	content := []json.RawMessage{TextBlock("[Context summary written at compaction; earlier messages are no longer shown]\n" + summary), manifest}
 	content = append(content, lastOperatorBlocks(active)...)
-	base, err := nextSeq(ctx, q, threadID)
+	base, err := nextSeq(ctx, d.Read, threadID)
 	if err != nil {
 		return 0, err
 	}
@@ -341,5 +333,5 @@ func ClientCompact(ctx gocontext.Context, q db.Querier, client *anthropic.Client
 		return 0, err
 	}
 	head := []Message{{Role: journal.User, Content: content}}
-	return SaveProjection(ctx, q, threadID, runID, KindClient, base, base, base, head, max(before-after, 0), now)
+	return saveProjection(ctx, d.Write, threadID, runID, KindClient, base, base, base, head, max(before-after, 0), now)
 }

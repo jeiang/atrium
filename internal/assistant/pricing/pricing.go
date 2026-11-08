@@ -45,6 +45,7 @@ type Model struct {
 	Rates         Rates      `json:"rates"`
 	LongRates     *Rates     `json:"long_rates"`
 	ForcedTools   bool       `json:"forced_tools"`
+	RunCapUSD     float64    `json:"run_cap_usd"`
 }
 
 const (
@@ -59,18 +60,18 @@ var Efforts = []string{Low, Medium, High, XHigh, Max}
 
 var catalog = []Model{
 	{
-		ID: HaikuID, Name: "Haiku 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: Efforts, ForcedTools: true,
+		ID: HaikuID, Name: "Haiku 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: Efforts, ForcedTools: true, RunCapUSD: 2,
 		Thinking:  []Thinking{{Type: "adaptive"}, {Type: "disabled", MaxEffort: "high"}},
 		Rates:     Rates{Input: 0.10, Output: 0.50, CacheWrite5m: 0.125, CacheWrite1h: 0.20, CacheRead: 0.01},
 		LongRates: &Rates{Input: 0.50, Output: 2.50, CacheWrite5m: 0.625, CacheWrite1h: 1.00, CacheRead: 0.05},
 	},
 	{
-		ID: SonnetID, Name: "Sonnet 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: Efforts,
+		ID: SonnetID, Name: "Sonnet 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: Efforts, RunCapUSD: 6,
 		Thinking: []Thinking{{Type: "adaptive"}, {Type: "between_tools", MaxEffort: "high"}},
 		Rates:    Rates{Input: 2, Output: 10, CacheWrite5m: 2.50, CacheWrite1h: 4, CacheRead: 0.10},
 	},
 	{
-		ID: OpusID, Name: "Opus 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: Efforts,
+		ID: OpusID, Name: "Opus 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: Efforts, RunCapUSD: 10,
 		Thinking: []Thinking{{Type: "adaptive"}},
 		Rates:    Rates{Input: 4, Output: 20, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20},
 	},
@@ -81,6 +82,14 @@ type UnknownModel string
 func (e UnknownModel) Error() string { return fmt.Sprintf("model %q is not in the catalog", string(e)) }
 
 func Models() []Model { return slices.Clone(catalog) }
+
+func MaxContextWindow() int64 {
+	var out int64
+	for _, m := range catalog {
+		out = max(out, m.ContextWindow)
+	}
+	return out
+}
 
 func IDs() []string {
 	out := make([]string, len(catalog))
@@ -100,8 +109,6 @@ func Lookup(id string) (Model, error) {
 }
 
 func (m Model) SupportsEffort(effort string) bool { return slices.Contains(m.Efforts, effort) }
-
-func (m Model) Tiered() bool { return m.LongRates != nil }
 
 type Tokens struct{ Input, CacheWrite5m, CacheWrite1h, CacheRead, Output int64 }
 

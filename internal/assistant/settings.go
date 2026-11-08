@@ -32,12 +32,10 @@ const (
 	KeyCompactShare      = "agent_compact_share"
 	KeyPreflightShare    = "agent_preflight_share"
 	KeyClearKeep         = "agent_clear_keep"
-	KeyCommitSavings     = "agent_commit_savings"
 	KeyPreserveMessages  = "agent_preserve_messages"
 	KeySummaryMaxTokens  = "agent_summary_max_tokens"
 	KeyStubTokens        = "agent_stub_tokens"
 	KeyPreviewChars      = "agent_preview_chars"
-	KeyDashboardItems    = "agent_dashboard_items"
 	KeyManifestResults   = "agent_manifest_results"
 
 	KeyJournalLeaseSeconds = "agent_journal_lease_seconds"
@@ -176,12 +174,10 @@ func init() {
 		share(KeyCompactShare, "0.875", Ordered(true, []string{KeyClearShare}, []string{KeyPreflightShare})),
 		share(KeyPreflightShare, "0.95", Ordered(true, []string{KeyCompactShare}, nil)),
 		adv(KeyClearKeep, settings.Int, "3", settings.Between(1, 50)),
-		adv(KeyCommitSavings, settings.Int, "20000", settings.Between(1000, 1000000)),
 		adv(KeyPreserveMessages, settings.Int, "3", settings.Between(1, 50)),
 		adv(KeySummaryMaxTokens, settings.Int, "8192", settings.Between(512, 32000)),
 		adv(KeyStubTokens, settings.Int, "2000", settings.Between(100, 50000)),
 		adv(KeyPreviewChars, settings.Int, "600", settings.Between(50, 10000)),
-		count(KeyDashboardItems, 60, 1, 500),
 		count(KeyManifestResults, 30, 1, 500),
 
 		adv(KeyJournalLeaseSeconds, settings.Int, "1800", settings.Between(1800, 86400)),

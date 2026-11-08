@@ -101,12 +101,10 @@ func Pool(reg *registry.Registry) ([]PoolTool, error) {
 	if err != nil {
 		return nil, err
 	}
-	found := make([]PoolTool, 0, len(open)+1)
+	found := make([]PoolTool, 0, len(open))
 	for _, t := range open {
 		found = append(found, PoolTool{Name: t.Name, Description: t.Description})
 	}
-	found = append(found, PoolTool{Name: registry.WebSearchName, Description: "Anthropic web search (server tool); pair it with web_fetch to read results."})
-	slices.SortFunc(found, func(a, b PoolTool) int { return strings.Compare(a.Name, b.Name) })
 	return found, nil
 }
 

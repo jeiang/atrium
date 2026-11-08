@@ -22,8 +22,6 @@ func (ks Kinds) Has(k Kind) bool { return slices.Contains(ks, k) }
 
 func (k Kind) Valid() bool { return AllKinds.Has(k) }
 
-func (k Kind) Unattended() bool { return k == Cron || k == Nightly }
-
 type Effect string
 
 const (

@@ -52,7 +52,6 @@ type Runner struct {
 	SkillsIndex   func(ctx context.Context, q db.Querier) (string, error)
 	ExpandSkills  func(ctx context.Context, q db.Querier, text string) (expanded string, used []string, err error)
 	ResearchBatch Batch
-	CommitSavings int64
 }
 
 func (r *Runner) Expand(ctx context.Context, q db.Querier, kind tool.Kind, text string) (string, []string, error) {
@@ -165,13 +164,16 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		return nil, fmt.Errorf("loop: run %d: no thread %d", runID, found.ThreadID)
 	}
 	kind := tool.Kind(found.Kind)
-	allow := o.Limits.AllowedTools
-	tools, err := r.Registry.Run(ctx, kind, allow, d.Read)
+	allow := registry.All()
+	if o.Limits.AllowedTools != nil {
+		allow = registry.Only(o.Limits.AllowedTools)
+	}
+	set, err := r.Registry.Admit(ctx, kind, allow, d.Read)
 	if err != nil {
 		return nil, err
 	}
-	byName := make(map[string]tool.Tool, len(tools))
-	for _, t := range tools {
+	byName := make(map[string]tool.Tool, len(set.Dispatch))
+	for _, t := range set.Dispatch {
 		byName[t.Name] = t
 	}
 	ttl := prompts.TTL5m
@@ -205,7 +207,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		return nil, err
 	}
 	limits := actx.LimitsFor(min(threads.ContextLimitOf(*thread), model.ContextWindow), tuning)
-	req, err := r.request(ctx, d.Read, *thread, kind, model.ID, found.Effort, tools, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), allow, limits, webSearchMaxUses)
+	req, err := r.request(ctx, d.Read, *thread, kind, model.ID, found.Effort, set, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), limits, webSearchMaxUses)
 	if err != nil {
 		return nil, err
 	}
@@ -228,7 +230,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	}
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, limits: limits, req: req,
-		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, maxCost: maxCost, ttl: ttl, savings: int64(tuning.CommitSavings),
+		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, maxCost: maxCost, ttl: ttl,
 		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch, tuning: tuning},
 	}
 	s.x.guard = s.renew
@@ -236,12 +238,9 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if o.Limits.MaxSteps != nil {
 		s.steps = int(*o.Limits.MaxSteps)
 	}
-	s.toolChoice, s.invalid = forcedToolChoice(o.Limits.ToolChoice, model, byName, len(registry.ServerTools(kind, allow, webSearchMaxUses)) > 0)
+	s.toolChoice, s.invalid = forcedToolChoice(o.Limits.ToolChoice, model, set)
 	if o.Limits.MaxCostUSD != nil {
 		s.maxCost = *o.Limits.MaxCostUSD
-	}
-	if r.CommitSavings != 0 {
-		s.savings = r.CommitSavings
 	}
 	return s, nil
 }
@@ -292,14 +291,6 @@ func (s *state) runStart(ctx context.Context) error {
 		{Key: "title", Value: optional(s.thread.Title)},
 		{Key: "effort", Value: s.run.Effort},
 	})
-}
-
-func (s *state) freshTurn(ctx context.Context) (bool, error) {
-	last, err := journal.LastMessage(ctx, s.d.Read, s.thread.ID)
-	if err != nil || last == nil {
-		return false, err
-	}
-	return last.Role == journal.User && journal.HasText(last.Content), nil
 }
 
 func PendingUses(ctx context.Context, q db.Querier, threadID int64) (*journal.Message, []ToolUse, error) {
@@ -385,7 +376,7 @@ func (s *state) injectQueued(ctx context.Context) (bool, error) {
 }
 
 func (s *state) active(ctx context.Context, loc *time.Location) ([]actx.Message, error) {
-	active, _, err := actx.ActiveMessages(ctx, s.d.Read, s.thread.ID, s.req.sig)
+	active, err := actx.ActiveMessages(ctx, s.d.Read, s.thread.ID, s.req.sig)
 	if err != nil {
 		return nil, err
 	}
@@ -442,14 +433,7 @@ func (s *state) body(ctx context.Context) error {
 	if err := s.runStart(ctx); err != nil {
 		return err
 	}
-	boundary, err := s.freshTurn(ctx)
-	if err != nil {
-		return err
-	}
 	if err := s.settlePending(ctx); err != nil {
-		return err
-	}
-	if _, err := actx.Commit(ctx, s.d.Write, s.thread.ID, s.run.ID, s.now(), boundary); err != nil {
 		return err
 	}
 	loc, err := config.Location(s.env)
@@ -519,7 +503,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		if err := s.reserveUSD(ctx, summary, fmt.Sprintf("the summary request is about %d tokens, up to $%s uncached", summaryIn, py.FormatFixed(summary, 2))); err != nil {
 			return false, nil, err
 		}
-		if _, err := actx.ClientCompact(ctx, s.d.Write, s.client, s.run.Model, active, s.thread.ID, s.run.ID, string(s.kind), s.limits.Hard, s.now(), s.limits.Tuning); err != nil {
+		if _, err := actx.ClientCompact(ctx, s.d, s.client, s.run.Model, active, s.thread.ID, s.run.ID, string(s.kind), s.limits.Hard, s.now(), s.limits.Tuning); err != nil {
 			return false, nil, err
 		}
 		last = nil
@@ -565,7 +549,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		TS: s.now(), ThreadID: s.thread.ID, RunID: s.run.ID, Kind: string(s.kind), Model: s.run.Model, Effort: s.run.Effort,
 		ClearEdits: clearEdits, ClearedTokens: cleared, Compaction: int64(store.Bit(compacted)),
 	}
-	if _, err := usage.Record(context.WithoutCancel(ctx), s.d.Write, entry, response.Usage); err != nil {
+	if _, err := usage.Record(context.WithoutCancel(ctx), s.d, entry, response.Usage); err != nil {
 		return false, nil, err
 	}
 	if err := s.renew(ctx); err != nil {
@@ -591,7 +575,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		return false, nil, err
 	}
 	if len(uses) > 0 {
-		err := s.answer(ctx, uses, &next)
+		err := s.answer(ctx, uses)
 		return false, next, err
 	}
 	if response.StopReason == anthropic.StopPauseTurn {
@@ -629,7 +613,7 @@ func (s *state) reserveUSD(ctx context.Context, next float64, what string) error
 	return nil
 }
 
-func (s *state) answer(ctx context.Context, uses []ToolUse, next **anchor) error {
+func (s *state) answer(ctx context.Context, uses []ToolUse) error {
 	results, err := s.x.executeAll(ctx, uses)
 	if err != nil {
 		return err
@@ -640,16 +624,5 @@ func (s *state) answer(ctx context.Context, uses []ToolUse, next **anchor) error
 	if _, err := journal.AppendMessage(ctx, s.d, s.thread.ID, &s.run.ID, journal.User, results, s.now(), nil); err != nil {
 		return err
 	}
-	if err := s.repeat(uses, results); err != nil {
-		return err
-	}
-	staged, err := actx.StagedSavings(ctx, s.d.Read, s.thread.ID)
-	if err != nil || staged < s.savings {
-		return err
-	}
-	committed, err := actx.Commit(ctx, s.d.Write, s.thread.ID, s.run.ID, s.now(), false)
-	if committed != nil {
-		*next = nil
-	}
-	return err
+	return s.repeat(uses, results)
 }

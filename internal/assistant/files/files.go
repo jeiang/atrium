@@ -14,6 +14,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/py"
@@ -96,7 +97,7 @@ func ReadLimits(ctx context.Context, q db.Querier) (Limits, error) {
 func (l Limits) tuning() actx.Tuning { return actx.Tuning{CompactShare: l.CompactShare} }
 
 func (l Limits) textBytes() int {
-	return int(4 * actx.CharsPerToken * compactBudget(actx.ModelContext, l))
+	return int(4 * actx.CharsPerToken * compactBudget(pricing.MaxContextWindow(), l))
 }
 
 func compactBudget(contextLimit int64, l Limits) int64 {
