@@ -20,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
+	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -557,24 +558,18 @@ func (s *Syncer) ingest(ctx context.Context, tx *sql.Tx, account string, mbx mai
 		return err
 	}
 	state := MessageState(account, mbx.Role, mbx.Name, item.Flags, item.Labels)
-	res, err := tx.ExecContext(ctx, `
-		INSERT INTO messages (
-			account, mailbox_id, uidvalidity, uid, msgid, digest, gm_msgid, gm_thrid, internaldate, date_ts,
-			size, raw_path, flags, seen, flagged, labels, in_inbox, sent, location, folder,
-			from_addr, from_domain, from_name, to_addrs, reply_to, rpath_domain, list_id, precedence,
-			subject, subject_tmpl, msgid_domain, in_reply_to, refs, dkim_d, esp, att_types, att_names,
-			k_order, k_vcode, k_otp6, first_seen
-		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		account, mbx.ID, validity, item.UID, feats.MsgID, digest, nullable(item.GmMsgID), nullable(item.GmThrID), item.InternalDate, feats.DateTS,
-		item.Size, relative, state.Flags, state.Seen, state.Flagged, state.Labels, state.InInbox, state.Sent, state.Location, state.Folder,
-		feats.FromAddr, feats.FromDomain, feats.FromName, py.JSONDumps(nonNil(feats.ToAddrs)), feats.ReplyTo, feats.RPathDomain, feats.ListID, feats.Precedence,
-		feats.Subject, feats.SubjectTmpl, feats.MsgIDDomain, feats.InReplyTo, feats.Refs, py.JSONDumps(nonNil(feats.DKIMD)), py.JSONDumps(nonNil(feats.ESP)),
-		py.JSONDumps(nonNil(feats.AttTypes)), py.JSONDumps(nonNil(feats.AttNames)),
-		bit(feats.KOrder), bit(feats.KVCode), bit(feats.KOTP6), s.now())
-	if err != nil {
-		return err
-	}
-	id, err := res.LastInsertId()
+	id, err := rules.InsertMessage(ctx, tx, rules.MessageInsert{
+		Account: account, MailboxID: mbx.ID, UIDValidity: validity, UID: item.UID, MsgID: feats.MsgID, Digest: digest,
+		GmMsgID: item.GmMsgID, GmThrID: item.GmThrID, InternalDate: item.InternalDate, DateTS: feats.DateTS,
+		Size: item.Size, RawPath: relative, Flags: state.Flags, Seen: state.Seen, Flagged: state.Flagged, Labels: state.Labels,
+		InInbox: state.InInbox, Sent: state.Sent, Location: state.Location, Folder: state.Folder,
+		FromAddr: feats.FromAddr, FromDomain: feats.FromDomain, FromName: feats.FromName, ToAddrs: py.JSONDumps(nonNil(feats.ToAddrs)),
+		ReplyTo: feats.ReplyTo, RPathDomain: feats.RPathDomain, ListID: feats.ListID, Precedence: feats.Precedence,
+		Subject: feats.Subject, SubjectTmpl: feats.SubjectTmpl, MsgIDDomain: feats.MsgIDDomain, InReplyTo: feats.InReplyTo,
+		Refs: feats.Refs, DKIMD: py.JSONDumps(nonNil(feats.DKIMD)), ESP: py.JSONDumps(nonNil(feats.ESP)),
+		AttTypes: py.JSONDumps(nonNil(feats.AttTypes)), AttNames: py.JSONDumps(nonNil(feats.AttNames)),
+		KOrder: feats.KOrder, KVCode: feats.KVCode, KOTP6: feats.KOTP6, FirstSeen: s.now(),
+	})
 	if err != nil {
 		return err
 	}
