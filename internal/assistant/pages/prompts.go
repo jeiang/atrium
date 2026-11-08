@@ -42,12 +42,9 @@ func editable(key string) (prompts.Editable, bool) {
 func (p *pages) promptsPage(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, draft *PromptView) {
 	views := make([]PromptView, len(prompts.Editables))
 	for i, e := range prompts.Editables {
-		found, err := settings.Default.Resolve(r.Context(), p.deps.DB.Read, e.Key, 0)
+		text, custom, pinned, err := prompts.Effective(r.Context(), p.deps.DB.Read, e.Key)
 		check(err)
-		views[i] = PromptView{Key: e.Key, Label: e.Label, Text: e.Default, Custom: found.Value != "", Pinned: found.Pinned()}
-		if found.Value != "" {
-			views[i].Text = found.Value
-		}
+		views[i] = PromptView{Key: e.Key, Label: e.Label, Text: text, Custom: custom, Pinned: pinned}
 		if draft != nil && draft.Key == e.Key {
 			views[i].Text, views[i].Error = draft.Text, draft.Error
 		}

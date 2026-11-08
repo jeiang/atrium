@@ -83,20 +83,25 @@ func check(value string) error {
 	return nil
 }
 
-func Text(ctx context.Context, q db.Querier, key string) (string, error) {
+func Effective(ctx context.Context, q db.Querier, key string) (text string, custom, pinned bool, err error) {
 	found, err := settings.Default.Resolve(ctx, q, key, 0)
 	if err != nil {
-		return "", err
+		return "", false, false, err
 	}
 	if found.Value != "" {
-		return found.Value, nil
+		return found.Value, true, found.Pinned(), nil
 	}
 	for _, e := range Editables {
 		if e.Key == key {
-			return e.Default, nil
+			return e.Default, false, false, nil
 		}
 	}
-	return "", settings.UnknownKey(key)
+	return "", false, false, settings.UnknownKey(key)
+}
+
+func Text(ctx context.Context, q db.Querier, key string) (string, error) {
+	text, _, _, err := Effective(ctx, q, key)
+	return text, err
 }
 
 func WithPreamble(body string) string { return Preamble + "\n\n" + body }
