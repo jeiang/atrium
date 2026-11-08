@@ -3,8 +3,10 @@ package media
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -69,7 +71,7 @@ type PollOptions struct {
 func Now() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
 
 func (t Tuning) CompilePattern(pattern string, caseSensitive bool) (*regexp.Regexp, error) {
-	pattern = py.Strip(pattern)
+	pattern = strings.TrimSpace(pattern)
 	if pattern == "" {
 		return nil, ChannelError("pattern is empty")
 	}
@@ -82,7 +84,7 @@ func (t Tuning) CompilePattern(pattern string, caseSensitive bool) (*regexp.Rege
 	}
 	re, err := regexp.Compile(expr)
 	if err != nil {
-		return nil, ChannelError(fmt.Sprintf("pattern %s: %v", py.Repr(pattern), err))
+		return nil, ChannelError(fmt.Sprintf("pattern %q: %v", pattern, err))
 	}
 	return re, nil
 }
@@ -130,7 +132,7 @@ func flag(b bool) int {
 }
 
 func (t Tuning) AddChannel(ctx context.Context, q db.Querier, name, imdb, pattern string, caseSensitive bool, tmdbID *int64, now func() float64, primed bool) (*Channel, error) {
-	name = strings.Join(py.Split(name), " ")
+	name = strings.Join(strings.Fields(name), " ")
 	if runes := []rune(name); len(runes) > t.NameChars {
 		name = string(runes[:t.NameChars])
 	}
@@ -139,7 +141,7 @@ func (t Tuning) AddChannel(ctx context.Context, q db.Querier, name, imdb, patter
 		return nil, ChannelError("name is empty")
 	}
 	if !ok {
-		return nil, ChannelError(fmt.Sprintf("IMDb ID %s is not tt followed by 7 to 9 digits", py.Repr(imdb)))
+		return nil, ChannelError(fmt.Sprintf("IMDb ID %q is not tt followed by 7 to 9 digits", imdb))
 	}
 	if _, err := t.CompilePattern(pattern, caseSensitive); err != nil {
 		return nil, err
@@ -153,7 +155,7 @@ func (t Tuning) AddChannel(ctx context.Context, q db.Querier, name, imdb, patter
 	}
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO media_channels (name, imdb, tmdb_id, pattern, case_sensitive, primed, created) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		name, digits, tmdb, py.Strip(pattern), flag(caseSensitive), flag(primed), now())
+		name, digits, tmdb, strings.TrimSpace(pattern), flag(caseSensitive), flag(primed), now())
 	if err != nil {
 		return nil, err
 	}
@@ -235,7 +237,11 @@ func (t Tuning) expireSeen(ctx context.Context, q db.Querier, now float64) error
 }
 
 func setState(ctx context.Context, q db.Querier, key string, value any) error {
-	_, err := q.ExecContext(ctx, "INSERT OR REPLACE INTO media_state (key, value) VALUES (?, ?)", key, py.JSONDumps(value))
+	body, err := json.Marshal(value)
+	if err != nil {
+		return err
+	}
+	_, err = q.ExecContext(ctx, "INSERT OR REPLACE INTO media_state (key, value) VALUES (?, ?)", key, string(body))
 	return err
 }
 
@@ -253,8 +259,8 @@ func ChannelStatus(ctx context.Context, q db.Querier) (Status, error) {
 	}
 	out := Status{Errors: []string{}}
 	for _, kv := range state {
-		v, err := py.JSONLoads([]byte(kv[1]))
-		if err != nil {
+		var v any
+		if err := json.Unmarshal([]byte(kv[1]), &v); err != nil {
 			return Status{}, err
 		}
 		switch kv[0] {
@@ -275,7 +281,7 @@ func gb(size int64) string {
 	if size <= 0 {
 		return ""
 	}
-	return " (" + py.FormatFixed(float64(size)/1e9, 1) + " GB)"
+	return " (" + strconv.FormatFloat(float64(size)/1e9, 'f', 1, 64) + " GB)"
 }
 
 func (r PollResult) Dict() py.Dict {

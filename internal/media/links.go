@@ -18,7 +18,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 )
 
@@ -119,6 +118,22 @@ func (l *Links) load(ctx context.Context) ([]byte, error) {
 	return []byte(value), nil
 }
 
+func urlQuote(s string) string {
+	const hex = "0123456789ABCDEF"
+	var b strings.Builder
+	for i := range len(s) {
+		c := s[i]
+		if c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' || c >= '0' && c <= '9' || c == '_' || c == '.' || c == '-' || c == '~' || c == '/' {
+			b.WriteByte(c)
+			continue
+		}
+		b.WriteByte('%')
+		b.WriteByte(hex[c>>4])
+		b.WriteByte(hex[c&15])
+	}
+	return b.String()
+}
+
 func signText(secret []byte, rel, exp string) string {
 	mac := hmac.New(sha256.New, secret)
 	mac.Write([]byte(rel + "\n" + exp))
@@ -130,15 +145,15 @@ func Sign(secret []byte, rel string, exp int64) string {
 }
 
 func verifyWith(secret []byte, rel, exp, sig string, now float64) bool {
-	n, err := py.IntString(exp)
-	if err != nil {
+	n, ok := new(big.Int).SetString(strings.TrimSpace(exp), 10)
+	if !ok {
 		return false
 	}
 	if new(big.Float).SetInt(n).Cmp(big.NewFloat(now)) <= 0 {
 		return false
 	}
 	want := signText(secret, rel, n.String())
-	return hmac.Equal([]byte(want), []byte(py.Lower(py.Strip(sig))))
+	return hmac.Equal([]byte(want), []byte(strings.ToLower(strings.TrimSpace(sig))))
 }
 
 func (l *Links) Verify(ctx context.Context, rel, exp, sig string, now float64) bool {
@@ -169,7 +184,7 @@ func (l *Links) PublicURL(ctx context.Context, base, rel string, now float64, tt
 		return "", errEmptyLinkKey
 	}
 	exp := int64(now + float64(ttl))
-	return base + FilePrefix + py.URLQuote(rel) + "?exp=" + strconv.FormatInt(exp, 10) + "&sig=" + Sign(secret, rel, exp), nil
+	return base + FilePrefix + urlQuote(rel) + "?exp=" + strconv.FormatInt(exp, 10) + "&sig=" + Sign(secret, rel, exp), nil
 }
 
 func (s Settings) VPNURL(rel string) string {
@@ -184,7 +199,7 @@ func (s Settings) VPNURL(rel string) string {
 	if base == "" {
 		return ""
 	}
-	return base + "/" + py.URLQuote(rest)
+	return base + "/" + urlQuote(rest)
 }
 
 func firstQuery(values []string) string {

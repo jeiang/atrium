@@ -6,7 +6,6 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -17,7 +16,7 @@ func (s *service) dlAddPage(w http.ResponseWriter, r *http.Request, magnet, name
 }
 
 func (s *service) dlAddGet(w http.ResponseWriter, r *http.Request) {
-	s.dlAddPage(w, r, py.Strip(web.QueryValue(r.URL.Query(), "magnet")), "", dlModeMedia, "", http.StatusOK)
+	s.dlAddPage(w, r, strings.TrimSpace(web.QueryValue(r.URL.Query(), "magnet")), "", dlModeMedia, "", http.StatusOK)
 }
 
 func (s *service) dlAddPost(w http.ResponseWriter, r *http.Request) {
@@ -26,7 +25,7 @@ func (s *service) dlAddPost(w http.ResponseWriter, r *http.Request) {
 	torrent, _ := web.FormField(form, "torrent")
 	name, _ := web.FormField(form, "name")
 	mode := web.FormString(form, "mode", dlModeMedia)
-	magnet = py.Strip(magnet)
+	magnet = strings.TrimSpace(magnet)
 	if !slices.Contains(dlAddModes, mode) {
 		mode = dlModeMedia
 	}
@@ -74,11 +73,11 @@ func (s *service) dlAdd(r *http.Request, magnet, name string, data []byte, prese
 	}
 	shown := "the magnet link"
 	if present {
-		file := py.Strip(name)
+		file := strings.TrimSpace(name)
 		if file == "" {
 			file = "upload.torrent"
 		}
-		shown = py.Strip(name)
+		shown = strings.TrimSpace(name)
 		if shown == "" {
 			shown = "the torrent"
 		}

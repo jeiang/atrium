@@ -19,6 +19,7 @@ import (
 	"regexp"
 
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/urlx"
 )
 
 const (
@@ -77,7 +78,7 @@ type TorrentFile struct {
 
 func (t Torrent) HasTag(tag string) bool {
 	for part := range strings.SplitSeq(t.Tags, ",") {
-		if py.Strip(part) == tag {
+		if strings.TrimSpace(part) == tag {
 			return true
 		}
 	}
@@ -85,7 +86,7 @@ func (t Torrent) HasTag(tag string) bool {
 }
 
 func accepted(reply string) bool {
-	reply = py.Strip(reply)
+	reply = strings.TrimSpace(reply)
 	if reply == okReply {
 		return true
 	}
@@ -97,7 +98,7 @@ func accepted(reply string) bool {
 	if !ok {
 		return false
 	}
-	if failures, _ := d.Get("failure_count"); py.Truthy(failures) {
+	if failures, _ := d.Get("failure_count"); truthy(failures) {
 		return false
 	}
 	total := 0.0
@@ -180,7 +181,7 @@ func MagnetHash(magnet string) (string, bool) {
 	if !strings.HasPrefix(magnet, "magnet:?") {
 		return "", false
 	}
-	parts, err := py.URLSplit(magnet)
+	parts, err := urlx.URLSplit(magnet)
 	if err != nil {
 		return "", false
 	}
@@ -214,7 +215,7 @@ func bdecode(data []byte, i, depth int) (value any, end int, ok bool) {
 		if stop < 0 {
 			return nil, 0, false
 		}
-		n, valid := py.ParseInt(string(data[i+1 : i+stop]))
+		n, valid := parseInt(string(data[i+1 : i+stop]))
 		if !valid {
 			return nil, 0, false
 		}
@@ -259,7 +260,7 @@ func bdecode(data []byte, i, depth int) (value any, end int, ok bool) {
 		if colon < 0 {
 			return nil, 0, false
 		}
-		length, valid := py.ParseInt(string(data[i : i+colon]))
+		length, valid := parseInt(string(data[i : i+colon]))
 		if !valid || length < 0 {
 			return nil, 0, false
 		}
@@ -339,7 +340,7 @@ func (q *Qbit) post(ctx context.Context, path string, form []param) error {
 
 func checkAdd(path string, body []byte) error {
 	if path == "torrents/add" && !accepted(string(body)) {
-		text := py.Strip(string(body))
+		text := strings.TrimSpace(string(body))
 		if text == "" {
 			text = "no reply"
 		}

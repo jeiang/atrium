@@ -16,7 +16,6 @@ import (
 	"unicode"
 
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -51,7 +50,7 @@ func slugOf(text string) string {
 			b.WriteByte('_')
 		}
 	}
-	slug := py.Strip(b.String())
+	slug := strings.TrimSpace(b.String())
 	if slug == "" || slug == "." || slug == ".." {
 		return "_"
 	}
@@ -226,7 +225,7 @@ func (a *Artwork) duration(ctx context.Context, full string) (float64, error) {
 	if code != 0 {
 		return 0, nil
 	}
-	seconds, perr := py.ParseFloat(stdout)
+	seconds, perr := strconv.ParseFloat(strings.TrimSpace(stdout), 64)
 	if perr != nil {
 		return 0, nil
 	}

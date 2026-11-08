@@ -8,7 +8,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/media"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -80,10 +79,10 @@ func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toa
 
 func (s *service) channelsIndex(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
-	q := py.Strip(web.QueryValue(query, "q"))
-	imdb := py.Strip(web.QueryValue(query, "imdb"))
+	q := strings.TrimSpace(web.QueryValue(query, "q"))
+	imdb := strings.TrimSpace(web.QueryValue(query, "imdb"))
 	name := web.QueryValue(query, "name")
-	tmdbID := py.Strip(web.QueryValue(query, "tmdb_id"))
+	tmdbID := strings.TrimSpace(web.QueryValue(query, "tmdb_id"))
 	pattern := web.QueryValue(query, "pattern")
 	set := s.settings(r.Context())
 	client := set.TMDB()
@@ -102,7 +101,7 @@ func (s *service) channelsIndex(w http.ResponseWriter, r *http.Request) {
 			}
 			results = &hits
 		}
-		if id, ok := py.ParseInt(tmdbID); py.IsDigits(tmdbID) && ok && imdb == "" && client != nil {
+		if id, ok := parseInt(tmdbID); isDigits(tmdbID) && ok && imdb == "" && client != nil {
 			digits, found, err := client.ImdbOf(ctx, id)
 			if err != nil {
 				return err
@@ -122,7 +121,7 @@ func (s *service) channelsIndex(w http.ResponseWriter, r *http.Request) {
 		}
 		notice = chToast("error", "TMDB failed", failed.Error())
 	}
-	form := ChannelForm{IMDb: imdb, Name: py.Strip(name), TmdbID: tmdbID, Pattern: pattern, Backfill: true}
+	form := ChannelForm{IMDb: imdb, Name: strings.TrimSpace(name), TmdbID: tmdbID, Pattern: pattern, Backfill: true}
 	s.chPage(w, r, notice, http.StatusOK, q, &form, results)
 }
 
@@ -137,8 +136,8 @@ func (s *service) channelAdd(w http.ResponseWriter, r *http.Request) {
 	form := ChannelForm{TmdbID: tmdbID, Name: name, IMDb: imdb, Pattern: pattern, CaseSensitive: caseSensitive, Backfill: backfill}
 	ctx := r.Context()
 	var tmdb *int64
-	if trimmed := py.Strip(tmdbID); py.IsDigits(trimmed) {
-		if id, ok := py.ParseInt(trimmed); ok {
+	if trimmed := strings.TrimSpace(tmdbID); isDigits(trimmed) {
+		if id, ok := parseInt(trimmed); ok {
 			tmdb = &id
 		}
 	}
@@ -224,7 +223,7 @@ func (s *service) chReleases(r *http.Request, digits, pattern string, caseSensit
 	if err != nil {
 		return nil, chExpected(err)
 	}
-	if py.Strip(pattern) == "" {
+	if strings.TrimSpace(pattern) == "" {
 		rows := make([]media.PreviewRow, len(releases))
 		for i, release := range releases {
 			rows[i] = media.PreviewRow{Release: release}
@@ -249,7 +248,7 @@ func chExpected(err error) error {
 
 func (s *service) channelDelete(w http.ResponseWriter, r *http.Request) {
 	raw := web.PathParam(r, "channel_id")
-	id, ok := py.LaxInt64(raw)
+	id, ok := laxInt64(raw)
 	if !ok {
 		web.Unprocessable(w, web.BadInt("path", "channel_id", raw))
 		return
