@@ -75,7 +75,7 @@ func (r *Runner) systemBlocks(ctx context.Context, q db.Querier, thread threads.
 }
 
 func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Thread, kind tool.Kind, model, effort string, set registry.Set,
-	cc prompts.CacheControl, extra string, limits actx.Limits, webSearchMaxUses int) (request, error) {
+	cc prompts.CacheControl, extra string, limits actx.Limits, webSearchMaxUses int, dynamicFiltering bool) (request, error) {
 	system, err := r.systemBlocks(ctx, q, thread, cc, extra)
 	if err != nil {
 		return request{}, err
@@ -84,7 +84,7 @@ func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Threa
 	if err != nil {
 		return request{}, err
 	}
-	toolParams, err := set.Params(webSearchMaxUses, cacheControl)
+	toolParams, err := set.Params(webSearchMaxUses, cacheControl, dynamicFiltering)
 	if err != nil {
 		return request{}, err
 	}

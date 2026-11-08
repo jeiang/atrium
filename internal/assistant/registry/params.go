@@ -5,7 +5,16 @@ import (
 	"encoding/json"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
+	"github.com/jeiang/atrium/internal/settings"
 )
+
+const DynamicFilteringKey = "dynamic_filtering"
+
+func init() {
+	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
+		Key: DynamicFilteringKey, Module: "web_search", Type: settings.Bool, Default: "false",
+	}))
+}
 
 const (
 	WebSearchName = "web_search"
@@ -34,17 +43,21 @@ type serverParam struct {
 	Type           string          `json:"type"`
 	Name           string          `json:"name"`
 	MaxUses        int             `json:"max_uses"`
-	AllowedCallers []string        `json:"allowed_callers"`
+	AllowedCallers []string        `json:"allowed_callers,omitempty"`
 	CacheControl   json.RawMessage `json:"cache_control,omitempty"`
 }
 
-func (s Set) Params(webSearchMaxUses int, cacheControl json.RawMessage) ([]json.RawMessage, error) {
+func (s Set) Params(webSearchMaxUses int, cacheControl json.RawMessage, dynamicFiltering bool) ([]json.RawMessage, error) {
 	items := make([]any, 0, len(s.Dispatch)+len(s.Server))
 	for _, t := range s.Dispatch {
 		items = append(items, toolParam{Name: t.Name, Description: t.Description, InputSchema: t.InputSchema})
 	}
+	var callers []string
+	if !dynamicFiltering {
+		callers = []string{"direct"}
+	}
 	for _, t := range s.Server {
-		items = append(items, serverParam{Type: webSearchType, Name: t.Name, MaxUses: webSearchMaxUses, AllowedCallers: []string{"direct"}})
+		items = append(items, serverParam{Type: webSearchType, Name: t.Name, MaxUses: webSearchMaxUses, AllowedCallers: callers})
 	}
 	if len(items) == 0 {
 		return nil, nil

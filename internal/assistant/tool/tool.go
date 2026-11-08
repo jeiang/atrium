@@ -20,12 +20,22 @@ func (a Args) Get(name string) (any, bool) {
 
 type Handler func(ctx context.Context, tc *Context, args Args) (any, error)
 
+type Flags struct {
+	UntrustedOutput bool
+	PrivateData     bool
+	ExternalEffect  bool
+	Web             bool
+}
+
 type Tool struct {
 	Name        string
 	Description string
 	InputSchema json.RawMessage
 	Handler     Handler
 	Effect      Effect
+	Undo        string
+	Flags       Flags
+	Annotated   bool
 	Contexts    Kinds
 	Server      bool
 	Parallel    bool

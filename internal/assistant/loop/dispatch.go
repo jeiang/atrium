@@ -12,6 +12,7 @@ import (
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/progress"
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -81,6 +82,7 @@ type dispatcher struct {
 	byName map[string]tool.Tool
 	now    func() float64
 	tuning actx.Tuning
+	reg    *registry.Registry
 	guard  func(ctx context.Context) error
 	lost   context.Context
 	abort  context.CancelFunc
@@ -105,6 +107,9 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 	}
 	value, err = x.call(ctx, t, tool.Args(args))
 	if err == nil {
+		if x.reg != nil {
+			x.reg.Taint(x.tc.ThreadID, *t)
+		}
 		return nil, value, nil
 	}
 	if ctx.Err() != nil {
