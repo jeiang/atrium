@@ -43,7 +43,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_grafana_timeout_seconds` | int | `15` | advanced | `ATRIUM_ASSISTANT_AGENT_GRAFANA_TIMEOUT_SECONDS` |
 | `agent_journal_lease_seconds` | int | `1800` | advanced | `ATRIUM_ASSISTANT_AGENT_JOURNAL_LEASE_SECONDS` |
 | `agent_mail_body_chars` | int | `8000` | advanced | `ATRIUM_ASSISTANT_AGENT_MAIL_BODY_CHARS` |
-| `agent_mail_max_contacts` | int | `10` | advanced | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_CONTACTS` |
 | `agent_mail_max_loops_limit` | int | `100` | advanced | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_LOOPS_LIMIT` |
 | `agent_mail_max_results` | int | `20` | advanced | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_RESULTS` |
 | `agent_mail_snippet_chars` | int | `300` | advanced | `ATRIUM_ASSISTANT_AGENT_MAIL_SNIPPET_CHARS` |
@@ -166,6 +165,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
 | `contacts_dir` | string | none | advanced | `ATRIUM_CONTACTS_CONTACTS_DIR` |
+| `contacts_max_results` | int | `10` | advanced | `ATRIUM_CONTACTS_CONTACTS_MAX_RESULTS` |
 
 ## core
 

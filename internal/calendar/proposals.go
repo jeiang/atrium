@@ -73,12 +73,13 @@ func clip(s string, n int) string {
 
 func (p *Proposals) Propose(ctx context.Context, raw py.Dict, source py.Dict, key string) (id int64, created bool, err error) {
 	chosen, _ := raw.Get("calendar")
-	target := ICloud
+	target := Target(ICloud)
 	if s, ok := chosen.(string); ok && s != "" {
-		if s != ICloud && s != Google {
-			return 0, false, ProposalError("calendar must be one of " + TargetsText)
+		parsed, err := ParseTarget(s)
+		if err != nil {
+			return 0, false, ProposalError(err.Error())
 		}
-		target = s
+		target = parsed
 	}
 	tz, err := Zone(p.env())
 	if err != nil {
@@ -98,26 +99,26 @@ func (p *Proposals) Propose(ctx context.Context, raw py.Dict, source py.Dict, ke
 	if source == nil {
 		source = py.Dict{}
 	}
-	payload := py.Dict{{Key: "calendar", Value: target}, {Key: "spec", Value: spec.Dict()}, {Key: "source", Value: source}}
+	payload := py.Dict{{Key: "calendar", Value: string(target)}, {Key: "spec", Value: spec.Dict()}, {Key: "source", Value: source}}
 	preview := py.Dict{
-		{Key: "calendar", Value: target}, {Key: "title", Value: spec.Title}, {Key: "start", Value: spec.Start},
-		{Key: "end", Value: spec.End}, {Key: "all_day", Value: spec.AllDay}, {Key: "location", Value: spec.Location},
+		{Key: "calendar", Value: string(target)}, {Key: "title", Value: spec.Title}, {Key: "start", Value: spec.Start.iso()},
+		{Key: "end", Value: spec.End.iso()}, {Key: "all_day", Value: spec.AllDay}, {Key: "location", Value: spec.Location},
 		{Key: "notes", Value: spec.Notes}, {Key: "source", Value: source},
 	}
-	fp := fingerprint(Kind, target, spec.Title, spec.Start, spec.End)
+	fp := fingerprint(Kind, string(target), spec.Title, spec.Start.iso(), spec.End.iso(), spec.Location, spec.Notes)
 	if key != "" {
 		fp = fingerprint(Kind, key)
 	}
-	when := spec.Start
+	when := spec.Start.iso()
 	if !spec.AllDay {
-		when = strings.ReplaceAll(clip(spec.Start, 16), "T", " ")
+		when = strings.ReplaceAll(clip(spec.Start.iso(), 16), "T", " ")
 	}
 	account := Account
 	title := fmt.Sprintf("Add to calendar: %s (%s)", spec.Title, when)
 	return proposals.Create(ctx, p.DB, Kind, &account, title, payload, preview, fp, p.now())
 }
 
-func payloadOf(prop *proposals.Proposal) (target string, spec Spec, err error) {
+func payloadOf(prop *proposals.Proposal) (target Target, spec Spec, err error) {
 	var d map[string]any
 	if err := json.Unmarshal(prop.Payload, &d); err != nil {
 		return "", Spec{}, err
@@ -126,9 +127,12 @@ func payloadOf(prop *proposals.Proposal) (target string, spec Spec, err error) {
 	if !found {
 		return "", Spec{}, fmt.Errorf("%w: 'calendar'", httpx.ErrMissing)
 	}
-	target, ok := value.(string)
+	text, ok := value.(string)
 	if !ok {
 		return "", Spec{}, fmt.Errorf("%w: calendar must be a string, not %T", httpx.ErrShape, value)
+	}
+	if target, err = ParseTarget(text); err != nil {
+		return "", Spec{}, err
 	}
 	raw, found := d["spec"]
 	if !found {
@@ -160,7 +164,7 @@ func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any
 		return nil, err
 	}
 	action := append(py.Dict{{Key: "type", Value: Kind}}, ref.Dict()...)
-	undo := py.Dict{{Key: "op", Value: UndoOp}, {Key: "calendar", Value: target}, {Key: "uid", Value: spec.UID}}
+	undo := py.Dict{{Key: "op", Value: UndoOp}, {Key: "calendar", Value: string(target)}, {Key: "uid", Value: spec.UID}}
 	if _, err := proposals.RecordAction(ctx, p.DB.Write, prop.ID, "write", nil, action, undo, ledger.OK, nil, p.now()); err != nil {
 		return nil, err
 	}
@@ -175,11 +179,15 @@ func (p *Proposals) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, er
 	if err := json.Unmarshal(plan, &info); err != nil {
 		return nil, err
 	}
+	target, err := ParseTarget(info.Calendar)
+	if err != nil {
+		return nil, err
+	}
 	set, err := LoadSettings(ctx, p.DB.Read)
 	if err != nil {
 		return nil, err
 	}
-	if err := DeleteEvent(ctx, p.env(), set, info.Calendar, info.UID); err != nil {
+	if err := DeleteEvent(ctx, p.env(), set, target, info.UID); err != nil {
 		return nil, err
 	}
 	if err := Untrack(ctx, p.DB.Write, info.UID, p.now()); err != nil {

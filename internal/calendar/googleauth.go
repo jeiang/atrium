@@ -47,21 +47,16 @@ func AuthURL(clientID, redirectURI, state, challenge string) string {
 	return authURI + "?" + formBody(pairs)
 }
 
-func unquotePlus(s string) string {
-	if v, err := url.QueryUnescape(s); err == nil {
-		return v
-	}
-	return s
-}
-
-func queryParams(query string) map[string]string {
+func queryValues(raw string) map[string]string {
 	out := map[string]string{}
-	for _, pair := range strings.Split(query, "&") {
-		name, value, found := strings.Cut(pair, "=")
-		if !found || value == "" {
-			continue
+	values, err := url.ParseQuery(raw)
+	if err != nil {
+		return out
+	}
+	for name, found := range values {
+		if len(found) > 0 && found[0] != "" {
+			out[name] = found[0]
 		}
-		out[unquotePlus(name)] = unquotePlus(value)
 	}
 	return out
 }
@@ -92,7 +87,7 @@ func Authorize(ctx context.Context, o AuthOptions) (string, error) {
 			http.Error(w, fmt.Sprintf("Unsupported method ('%s')", r.Method), http.StatusNotImplemented)
 			return
 		}
-		params := queryParams(r.URL.RawQuery)
+		params := queryValues(r.URL.RawQuery)
 		_, hasCode := params["code"]
 		_, hasError := params["error"]
 		if hasCode || hasError {

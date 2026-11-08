@@ -19,7 +19,7 @@ type Invite struct {
 	Notes    string
 }
 
-func (i Invite) Raw(target string) py.Dict {
+func (i Invite) Raw(target Target) py.Dict {
 	var end any
 	if i.End != nil {
 		end = *i.End
@@ -27,7 +27,7 @@ func (i Invite) Raw(target string) py.Dict {
 	return py.Dict{
 		{Key: "uid", Value: i.UID}, {Key: "title", Value: i.Title}, {Key: "start", Value: i.Start}, {Key: "end", Value: end},
 		{Key: "all_day", Value: i.AllDay}, {Key: "location", Value: i.Location}, {Key: "notes", Value: i.Notes},
-		{Key: "calendar", Value: target},
+		{Key: "calendar", Value: string(target)},
 	}
 }
 

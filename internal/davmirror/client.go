@@ -90,10 +90,6 @@ func (e *StatusError) Error() string {
 	return fmt.Sprintf("dav: %s %s: HTTP %d", e.Method, e.URL, e.Status)
 }
 
-func (e *StatusError) Unauthorized() bool {
-	return e.Status == http.StatusUnauthorized || e.Status == http.StatusForbidden
-}
-
 func do(ctx context.Context, client *http.Client, method string, target *url.URL, depth, body string) ([]response, error) {
 	req, err := http.NewRequestWithContext(ctx, method, target.String(), strings.NewReader(`<?xml version="1.0" encoding="utf-8"?>`+body))
 	if err != nil {
@@ -159,10 +155,14 @@ func Fetch(ctx context.Context, client *http.Client, endpoint string, k Kind) ([
 	homeRef := ""
 	for _, r := range found {
 		p := r.prop()
-		for _, h := range []string{p.CalHome.Href, p.CardHome.Href} {
-			if h != "" {
-				homeRef = h
-			}
+		switch k.homeProp {
+		case Calendars.homeProp:
+			homeRef = p.CalHome.Href
+		case Contacts.homeProp:
+			homeRef = p.CardHome.Href
+		}
+		if homeRef != "" {
+			break
 		}
 	}
 	if homeRef == "" {

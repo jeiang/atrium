@@ -25,11 +25,15 @@ func findSlot(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	if err != nil {
 		return nil, err
 	}
+	filter, err := calendar.ParseFilter(target)
+	if err != nil {
+		return nil, wrap(err)
+	}
 	set, err := calendar.LoadSettings(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
-	found, err := calendar.FindSlots(ctx, tc.DB.Read, tc.Env, set, start, end, time.Duration(minutes)*time.Minute, target)
+	found, err := calendar.FindSlots(ctx, tc.DB.Read, tc.Env, set, start, end, time.Duration(minutes)*time.Minute, filter)
 	if err != nil {
 		return nil, wrap(err)
 	}
@@ -50,7 +54,7 @@ var findSlotTool = tool.Tool{
 	Name: "find_slot",
 	Description: "Find free time of at least duration_minutes between start and end, inside the operator's working hours and days " +
 		"(settings work_hours and work_days), against the iCloud mirror and Google calendar. Timed events block time; " +
-		"all-day events do not. Read-only.",
+		"all-day events do not. Optional calendar filters like calendar_list. Read-only.",
 	InputSchema: schema(`"start":{"type":"string","description":"`+timeNote+`"},"end":{"type":"string","description":"`+timeNote+`"},`+
 		`"duration_minutes":`+durationBound.Schema()+`,"calendar":{"type":"string"}`, `["start","end"]`),
 	Handler:   findSlot,

@@ -13,16 +13,16 @@ import (
 type Row struct {
 	UID      string
 	Calendar string
-	Start    string
-	End      string
+	Start    Value
+	End      Value
 	Title    string
 	Location string
 }
 
-func (r Row) Dict() py.Dict {
+func (r Row) Dict(tz *time.Location) py.Dict {
 	return py.Dict{
-		{Key: "uid", Value: r.UID}, {Key: "calendar", Value: r.Calendar}, {Key: "start", Value: r.Start},
-		{Key: "end", Value: r.End}, {Key: "title", Value: r.Title}, {Key: "location", Value: r.Location},
+		{Key: "uid", Value: r.UID}, {Key: "calendar", Value: r.Calendar}, {Key: "start", Value: fmtValue(r.Start, tz)},
+		{Key: "end", Value: fmtValue(r.End, tz)}, {Key: "title", Value: r.Title}, {Key: "location", Value: r.Location},
 	}
 }
 
@@ -374,7 +374,7 @@ func occurrenceEnd(ev *icsEvent, start, end, occ Value, tz *time.Location) (Valu
 	}
 	if occ.isDate() {
 		if !end.isDate() || !start.isDate() {
-			return Value{}, fmt.Errorf("unsupported operand type(s) for -: 'datetime.datetime' and 'datetime.date'")
+			return Value{}, fmt.Errorf("cannot subtract a date from a datetime")
 		}
 		return dateValue(occ.t.Year(), occ.t.Month(), occ.t.Day()+int(end.t.Sub(start.t).Hours()/24)), nil
 	}
@@ -384,7 +384,7 @@ func occurrenceEnd(ev *icsEvent, start, end, occ Value, tz *time.Location) (Valu
 func longestSpan(master *icsEvent, start, end Value, tz *time.Location) (time.Duration, error) {
 	if !start.isDatetime() {
 		if !end.isDate() {
-			return 0, fmt.Errorf("unsupported operand type(s) for -: 'datetime.datetime' and 'datetime.date'")
+			return 0, fmt.Errorf("cannot subtract a date from a datetime")
 		}
 		return naiveLocal(end, tz).Sub(naiveLocal(start, tz)), nil
 	}
@@ -403,7 +403,7 @@ func overlaps(s, e, ws, we time.Time) bool {
 }
 
 func (ev *icsEvent) row(calendar string, start, end Value, tz *time.Location) Row {
-	return Row{UID: ev.uidKey(), Calendar: calendar, Start: fmtValue(start, tz), End: fmtValue(end, tz), Title: ev.summary, Location: ev.location}
+	return Row{UID: ev.uidKey(), Calendar: calendar, Start: start, End: end, Title: ev.summary, Location: ev.location}
 }
 
 func EventsInICS(data []byte, calendar string, ws, we time.Time, tz *time.Location, notes *[]string, maxOccurrences int) ([]Row, error) {

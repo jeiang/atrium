@@ -110,17 +110,22 @@ func googleEvents(ctx context.Context, env config.Env, set Settings, ws, we time
 	return out, nil
 }
 
-func googleTime(dateTime, date string, tz *time.Location) (string, error) {
+func googleTime(dateTime, date string, tz *time.Location) (Value, error) {
 	if dateTime == "" {
-		return date, nil
+		stamp, ok := parseISO(date)
+		if !ok {
+			return Value{}, valueError("invalid ISO-8601 date")
+		}
+		y, m, d := stamp.t.Date()
+		return dateValue(y, m, d), nil
 	}
 	stamp, ok := parseISO(dateTime)
 	if !ok {
-		return "", valueError("invalid ISO-8601 date/time")
+		return Value{}, valueError("invalid ISO-8601 date/time")
 	}
-	instant := time.Unix(timex.WallToUnix(time.Local, stamp.t.Unix()), 0)
+	instant := time.Unix(timex.WallToUnix(tz, stamp.t.Unix()), 0)
 	if stamp.aware {
 		instant = time.Unix(stamp.t.Unix(), 0)
 	}
-	return instant.In(tz).Format(time.RFC3339), nil
+	return awareValue(instant.In(tz)), nil
 }

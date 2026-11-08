@@ -80,7 +80,7 @@ func requiredText(args tool.Args, name string) (any, error) {
 	return text, nil
 }
 
-func spec(args tool.Args, tz *time.Location, defaultMinutes int) (string, calendar.Spec, error) {
+func spec(args tool.Args, tz *time.Location, defaultMinutes int) (calendar.Target, calendar.Spec, error) {
 	raw := py.Dict{}
 	for _, name := range []string{"end", "location", "notes"} {
 		v, err := optionalText(args, name)
@@ -100,9 +100,10 @@ func spec(args tool.Args, tz *time.Location, defaultMinutes int) (string, calend
 	flag, _ := args.Get("all_day")
 	raw = raw.Set("title", title).Set("start", start).Set("all_day", truthy(flag))
 	chosen, _ := args.Get("calendar")
-	target, _ := chosen.(string)
-	if target != calendar.ICloud && target != calendar.Google {
-		return "", calendar.Spec{}, tool.Error("calendar must be one of " + calendar.TargetsText)
+	text, _ := chosen.(string)
+	target, err := calendar.ParseTarget(text)
+	if err != nil {
+		return "", calendar.Spec{}, tool.Error(err.Error())
 	}
 	normalized, err := calendar.NormalizeSpec(raw, tz, "", defaultMinutes)
 	return target, normalized, wrap(err)
@@ -121,11 +122,15 @@ func list(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	filter, err := calendar.ParseFilter(target)
+	if err != nil {
+		return nil, wrap(err)
+	}
 	set, err := calendar.LoadSettings(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
-	listing, err := calendar.ListEvents(ctx, tc.Env, set, start, end, target)
+	listing, err := calendar.ListEvents(ctx, tc.Env, set, start, end, filter)
 	if err != nil {
 		return nil, wrap(err)
 	}
@@ -155,9 +160,9 @@ func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 		}
 		_, err := writes.Record(ctx, tx, tc.Undoers, writes.New{
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_create",
-			Target: target + ":" + normalized.UID,
-			After:  map[string]any{"calendar": target, "spec": normalized.Dict()},
-			Undo:   deleteUndo{Op: "calendar_delete", Calendar: target, UID: normalized.UID},
+			Target: string(target) + ":" + normalized.UID,
+			After:  map[string]any{"calendar": string(target), "spec": normalized.Dict()},
+			Undo:   deleteUndo{Op: "calendar_delete", Calendar: string(target), UID: normalized.UID},
 		})
 		return err
 	})
@@ -168,9 +173,10 @@ func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	for _, p := range ref.Dict() {
 		out[p.Key] = p.Value
 	}
+	normalizedDict := normalized.Dict()
 	out["title"] = normalized.Title
-	out["start"] = normalized.Start
-	out["end"] = normalized.End
+	out["start"], _ = normalizedDict.Get("start")
+	out["end"], _ = normalizedDict.Get("end")
 	return out, nil
 }
 
@@ -194,7 +200,11 @@ func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if err != nil {
 		return nil, err
 	}
-	if err := calendar.DeleteEvent(ctx, tc.Env, set, row.Calendar, uid); err != nil {
+	rowTarget, err := calendar.ParseTarget(row.Calendar)
+	if err != nil {
+		return nil, wrap(err)
+	}
+	if err := calendar.DeleteEvent(ctx, tc.Env, set, rowTarget, uid); err != nil {
 		return nil, wrap(err)
 	}
 	err = tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
@@ -247,8 +257,9 @@ func propose(ctx context.Context, tc *tool.Context, args tool.Args) (any, error)
 	if !created {
 		return map[string]any{"proposed": false, "reason": "an identical proposal already exists"}, nil
 	}
-	if messageID, ok := source.Get("message_id"); ok {
-		if err := candidates.Mark(ctx, tc.DB, messageID, candidates.Drafted, tc.Now()); err != nil {
+	if stored, ok := source.Get("message_id"); ok {
+		messageID, _ := stored.(int64)
+		if _, err := candidates.Drafted(ctx, tc.DB, messageID, tc.Now()); err != nil {
 			return nil, err
 		}
 	}
@@ -273,7 +284,11 @@ func undoDelete(env config.Env) writes.Undoer {
 		if err := json.Unmarshal(raw, &u); err != nil {
 			return nil, writes.UndoError("calendar undo payload is invalid")
 		}
-		target, uid := u.Calendar, u.UID
+		target, err := calendar.ParseTarget(u.Calendar)
+		if err != nil {
+			return nil, writes.UndoError(err.Error())
+		}
+		uid := u.UID
 		set, err := calendar.LoadSettings(ctx, q)
 		if err != nil {
 			return nil, err
@@ -298,7 +313,10 @@ func undoRecreate(env config.Env) writes.Undoer {
 		if err := json.Unmarshal(raw, &u); err != nil {
 			return nil, writes.UndoError("calendar undo payload is invalid")
 		}
-		target := u.Calendar
+		target, err := calendar.ParseTarget(u.Calendar)
+		if err != nil {
+			return nil, writes.UndoError(err.Error())
+		}
 		restored, err := calendar.SpecOf(u.Spec)
 		if err != nil {
 			return nil, err
@@ -344,8 +362,9 @@ func baseTools() []tool.Tool {
 		{
 			Name: "calendar_list",
 			Description: "List calendar events between start and end (end exclusive), merged from the iCloud calendar mirror and " +
-				"the primary Google calendar, recurring events expanded. Optional calendar filters by calendar name " +
-				"or 'google'. Returns uid, calendar, start, end, title, location.",
+				"the primary Google calendar, recurring events expanded. Optional calendar filters: 'icloud' for every " +
+				"mirrored iCloud calendar, 'google' for Google, or a calendar name; empty lists both. Returns uid, calendar, " +
+				"start, end, title, location.",
 			InputSchema: schema(`"start":{"type":"string","description":"`+timeNote+`"},"end":{"type":"string","description":"`+timeNote+`"},"calendar":{"type":"string"}`, `["start","end"]`),
 			Handler:     list,
 			Effect:      tool.Read,

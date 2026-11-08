@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"strconv"
 
-	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/calendar"
@@ -36,15 +35,21 @@ func syncCommand() *cli.Command {
 			if err != nil {
 				return davmirror.Stats{}, err
 			}
-			dir, err := contacts.Dir(ctx, d.Read)
+			src, err := contacts.Resolve(ctx, d.Read)
 			if err != nil {
 				return davmirror.Stats{}, err
 			}
-			return calendar.SyncContactsMirror(ctx, set, dir)
+			if src.State == contacts.Off {
+				return davmirror.Stats{}, nil
+			}
+			if src.State == contacts.Unset {
+				return davmirror.Stats{}, calendar.Error(contacts.DirKey + " is not set")
+			}
+			return calendar.SyncContactsMirror(ctx, set, src.Dir)
 		})
 }
 
-const schemaMaxContacts = 10
+const schemaMaxContacts = 100
 
 var contactsSchema = json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"},` +
 	`"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaMaxContacts) + `}},` +
@@ -68,23 +73,22 @@ func contactsLookup(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 	if err != nil {
 		return nil, err
 	}
-	r := assistant.Read(ctx, tc.DB.Read)
-	maxContacts := r.Int(assistant.KeyMailMaxContacts)
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
-	limit, err := tool.BoundedInt(args, "limit", 5, int64(maxContacts), 1)
+	maxContacts, err := contacts.MaxResults(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
-	dir, err := contacts.Dir(ctx, tc.DB.Read)
+	limit, err := tool.BoundedInt(args, "limit", 5, maxContacts, 1)
 	if err != nil {
 		return nil, err
 	}
-	if dir == "" {
-		return nil, tool.NotConfigured(contacts.DirEnv + " is not set")
+	src, err := contacts.Resolve(ctx, tc.DB.Read)
+	if err != nil {
+		return nil, err
 	}
-	found := contacts.Search(dir, query, int(limit))
+	if src.State != contacts.Ready {
+		return nil, tool.NotConfigured(contacts.DirKey + " is not set")
+	}
+	found := contacts.Search(src.Dir, query, int(limit))
 	results := make([]any, len(found))
 	for i, c := range found {
 		card := py.Dict{}
