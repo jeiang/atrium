@@ -12,7 +12,8 @@ not claims about the running application.
   TOML, and secret settings as files delivered through systemd
   credentials to every unit and `atrium-run`. The ntfy token still comes
   from an environment file until it becomes a setting. Calendar and
-  contacts sign in with an iCloud mail account's app password.
+  contacts sign in with an iCloud mail account's app password or a Google
+  OAuth client consented from the integrations page.
 - The application brings together mail, calendar, contacts, Notion,
   media, notifications, and read-only Grafana access. The assistant adds
   chat, files, projects, skills, scheduled work, and research subagents.

@@ -27,7 +27,7 @@ func init() {
 	} {
 		integrations.Register(integrations.Integration{
 			Name: endpoint.Integration(e.kind), Label: e.label, Module: module.Mail, URLKey: e.url, SecretKey: e.key,
-			Help: "OpenAI-compatible base URL, for example http://127.0.0.1:8187/v1; the Bearer key is optional.",
+			Help: "OpenAI-compatible base URL ending in /v1; the Bearer key is optional.",
 			Test: probeTest(e.kind),
 		})
 	}

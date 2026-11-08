@@ -23,7 +23,7 @@ import (
 func init() {
 	integrations.Register(integrations.Integration{
 		Name: "notion", Label: "Notion", Module: module.Notion, SecretKey: notion.TokenKey,
-		Help: "Internal integration token or a personal access token. Share the wiki pages with the integration in Notion.",
+		Help: "Internal integration token with the wiki pages shared with it; a personal access token also works.",
 		Test: testToken,
 	})
 }

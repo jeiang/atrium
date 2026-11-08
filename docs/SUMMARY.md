@@ -8,6 +8,10 @@
 - [Environment variables](config/environment.md)
 - [NixOS module options](operator/nixos.md)
 
+# Integrations
+
+- [Integrations and setup](integrations.md)
+
 # Current behavior
 
 - [Operator-visible behavior and boundaries](operator/behavior.md)

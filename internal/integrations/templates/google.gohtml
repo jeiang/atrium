@@ -8,7 +8,7 @@
     <ol class="mt-2 flex list-decimal flex-col gap-1.5 ps-5 text-muted-foreground">
       <li>Open <a class="underline" href="https://console.cloud.google.com/apis/credentials" target="_blank" rel="noreferrer">Google Cloud credentials</a> and create a project (or pick one).</li>
       <li>Configure the <a class="underline" href="https://console.cloud.google.com/apis/credentials/consent" target="_blank" rel="noreferrer">OAuth consent screen</a> as External, then add your own address as a test user.</li>
-      <li>Enable the <a class="underline" href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noreferrer">Google Calendar API</a> and the <a class="underline" href="https://console.cloud.google.com/apis/library/gmail.googleapis.com" target="_blank" rel="noreferrer">Gmail API</a>.</li>
+      <li>Enable the <a class="underline" href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noreferrer">Google Calendar API</a>.</li>
       <li>Create credentials of type <strong>Web application</strong> and add this authorised redirect URI: <code class="break-all font-mono text-xs">{{$d.redirect}}</code></li>
     </ol>
     <p class="mt-2 text-xs text-muted-foreground">If Google rejects that URI, register the same path on a host you control, or use the paste-back box below with any registered URI.</p>

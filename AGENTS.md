@@ -1,8 +1,9 @@
 # atrium
 
 atrium is a single-operator assistant: Go application, embedded web UI,
-SQLite state, and a NixOS service module. The host supplies credentials,
-external services, reverse proxy, persistence, and backups.
+SQLite state, and a NixOS service module. The host supplies external
+services, the reverse proxy, persistence, and backups; credentials are
+settings the operator edits in the UI or pins from the host.
 
 ## Planning context
 

@@ -18,6 +18,7 @@ func init() {
 	ops.Ready(ops.Check{Name: "ntfy", Remote: true, Run: health})
 	integrations.Register(integrations.Integration{
 		Name: Integration, Label: "ntfy", Module: module, URLKey: KeyURL,
+		Help: "Your ntfy server; the token is optional.",
 		Test: func(ctx context.Context, c integrations.Conn) (string, error) {
 			return "", healthOf(ctx, c.HTTP, c.URL)
 		},
