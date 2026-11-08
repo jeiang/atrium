@@ -1,11 +1,11 @@
-{{template "schedule_runs" (dict "runs" .Data.Runs "show_job" (.Data.ShowJob))}}
+{{template "schedule_runs" (dict "runs" .Data.Runs)}}
 
-{{define "schedule_runs"}}{{$show_job := opt . "show_job" true}}
+{{define "schedule_runs"}}
 {{if .runs}}
 <ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card text-sm" role="list" aria-label="Run history">
   {{range .runs}}
   <li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
-    {{if $show_job}}<span class="font-medium">{{.JobName}}</span>{{end}}
+    <span class="font-medium">{{.JobName}}</span>
     {{$title := lbl "job_run_hint" .Status ""}}{{if .Error}}{{$title = (str .Error)}}{{end}}{{template "scheduled_status" (dict "status" .Status "title" $title)}}
     <span class="text-xs text-muted-foreground tabular-nums">{{str .StartedText}}</span>
     {{if .Cost}}<span class="text-xs text-muted-foreground tabular-nums">${{printf "%.3f" .Cost}}</span>{{end}}

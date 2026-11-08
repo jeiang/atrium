@@ -366,6 +366,17 @@
   .topbar h1 {
     @apply min-w-0 truncate text-sm font-medium text-ink;
   }
+  .hub-tabs {
+    @apply flex shrink-0 gap-1 overflow-x-auto border-b px-3 md:px-4;
+    scrollbar-width: none;
+  }
+  .hub-tab {
+    @apply -mb-px inline-flex shrink-0 items-center gap-1.5 border-b-2 border-transparent px-2.5 py-2 text-[13px] font-medium whitespace-nowrap text-ink-3 hover:text-ink;
+
+    &[aria-current="page"] {
+      @apply border-clay text-ink;
+    }
+  }
 
   .chip {
     @apply inline-flex h-6 shrink-0 items-center gap-1 rounded-md border bg-surface px-2 text-xs font-medium text-ink-2;

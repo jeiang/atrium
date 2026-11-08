@@ -27,9 +27,9 @@ func (m Module) Register(mc module.Context) module.Registration {
 			Templates: pages.Templates(),
 			Public:    pages.PublicCheck,
 			Nav: []web.NavItem{
-				{Group: "Media", Label: "Downloads", URL: "/media/downloads", Icon: "download", Page: "media_downloads", Order: 50},
-				{Group: "Media", Label: "Channels", URL: "/media/channels", Icon: "tv", Page: "media_channels", Order: 50},
-				{Group: "Media", Label: "Library", URL: "/media/library", Icon: "film", Page: "media_library", Order: 50},
+				{Section: "apps", Label: "Downloads", URL: "/apps/media/downloads", Icon: "download", Page: "media_downloads", Order: 10},
+				{Section: "apps", Label: "Channels", URL: "/apps/media/channels", Icon: "tv", Page: "media_channels", Order: 20},
+				{Section: "apps", Label: "Library", URL: "/apps/media/library", Icon: "film", Page: "media_library", Order: 30},
 			},
 		}},
 		Commands: []*cli.Command{mediacmd.Command(mc.Env, m.Now)},

@@ -1,0 +1,18 @@
+{{define "title"}}{{.Data.Form.Project.Name}}{{end}}
+{{define "heading"}}{{.Data.Form.Project.Name}}{{end}}
+{{define "content"}}{{$d := .Data}}{{$p := $d.Form.Project}}
+<div class="flex max-w-2xl flex-col gap-8">
+  {{if $p.Archived}}<span class="badge self-start" data-variant="secondary">archived</span>{{end}}
+  <div id="project-form">
+    {{template "project_form" (dict "form" $d.Form "csrf" .CSRF)}}
+  </div>
+  <section id="project-files" class="flex flex-col gap-2" aria-labelledby="project-files-title">
+    {{template "project_files" (dict "project" $p "files" $d.Files "error" nil "csrf" .CSRF)}}
+  </section>
+  <form method="post" action="/projects/{{$p.ID}}/archive" class="border-t pt-4" hx-post="/projects/{{$p.ID}}/archive"{{if not $p.Archived}} hx-confirm="Archive {{$p.Name}}?"{{end}}>
+    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+    <input type="hidden" name="archived" value="{{if $p.Archived}}0{{else}}1{{end}}">
+    <button type="submit" class="btn" data-size="sm" data-variant="{{if $p.Archived}}outline{{else}}destructive{{end}}">{{icon (ternary $p.Archived "archive-restore" "archive")}}{{if $p.Archived}}Restore{{else}}Archive{{end}}</button>
+  </form>
+</div>
+{{end}}

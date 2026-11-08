@@ -38,6 +38,7 @@ type Toast struct {
 
 type NavItem struct {
 	Group      string
+	Section    string
 	Label      string
 	URL        string
 	Icon       string
@@ -74,6 +75,7 @@ type Frame struct {
 	SettingsURL       string
 	BrandURL          string
 	Footer            []NavItem
+	Tabs              []NavItem
 	Path              string
 	Theme             string
 	Rail              bool

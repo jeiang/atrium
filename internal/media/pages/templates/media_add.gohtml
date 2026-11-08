@@ -2,7 +2,7 @@
 {{define "heading"}}Media · Add torrent{{end}}
 {{define "content"}}
 <p class="text-sm text-muted-foreground">Paste a magnet link or choose a .torrent file. Media torrents get their video and subtitle files selected automatically and are filed into the library once complete.</p>
-<form id="add-torrent" method="post" action="/media/add" class="flex flex-col gap-4 rounded-lg border bg-card p-4" data-torrent-form>
+<form id="add-torrent" method="post" action="/apps/media/add" class="flex flex-col gap-4 rounded-lg border bg-card p-4" data-torrent-form>
   <input type="hidden" name="csrf_token" value="{{.CSRF}}">
   <input type="hidden" name="torrent" value="">
   <input type="hidden" name="name" value="{{.Data.TorrentName}}">

@@ -18,6 +18,7 @@ func (Module) Register(module.Context) module.Registration {
 			anyOf(module.Setting(notify.KeyURL), module.Setting(notify.KeyPushSubject)),
 		},
 		Pages: []web.Page{{Module: notify.Module, Templates: notify.Templates(), Nav: []web.NavItem{
+			{Section: "review", Label: "Inbox", URL: "/inbox", Icon: "inbox", Page: "inbox", Order: 50},
 			{Label: "Notifications", URL: "/settings/notifications", Page: "notifications", Settings: true, Primary: true, Order: 60},
 		}}},
 		Tools: func(r *registry.Registry) error {

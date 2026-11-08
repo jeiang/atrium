@@ -22,7 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 )
 
-const FilePrefix = "/media/file/"
+const FilePrefix = "/apps/media/file/"
 
 const linkKeyTTL = 30 * time.Second
 

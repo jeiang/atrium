@@ -7,12 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
@@ -123,14 +120,13 @@ func (s *site) package_(tracking, status string, updated float64, dismissed int)
 		"VALUES ('UPS', ?, 'Shop', ?, 'On its way', 1, 2, ?, ?, ?)", tracking, status, updated, updated, dismissed)
 }
 
-func TestWatchesPageAndPackageDismissal(t *testing.T) {
+func TestPackagesPageListsAndDismissesPackages(t *testing.T) {
 	s := newSite(t)
 	s.package_("1Z999AA10123456784", "in_transit", s.clock-3600, 0)
 	s.package_("DELIVERED1", "delivered", s.clock-3600, 0)
 	page := status(t, s.get("/watches"), http.StatusOK)
-	mustContain(t, page, "1Z999AA10123456784", "Address book not configured", "ATRIUM_CONTACTS_CONTACTS_DIR is not set.",
-		"Packages in transit (1)", "in transit", `href="/messages/2"`, "Birthdays and anniversaries, next 14 days</h2>")
-	mustNotContain(t, page, "DELIVERED1", "Renewals", "/money/")
+	mustContain(t, page, "<h1>Packages</h1>", "1Z999AA10123456784", "Packages in transit (1)", "in transit", `href="/messages/2"`)
+	mustNotContain(t, page, "DELIVERED1", "Renewals", "/money/", "Birthdays", "birthdays-h", "/watches/birthdays/dismiss", "Address book")
 	body := status(t, s.post("/watches/packages/1/dismiss", nil), http.StatusOK)
 	mustContain(t, body, "Dismissed", "No packages in transit")
 	mustNotContain(t, body, "1Z999AA10123456784")
@@ -138,55 +134,22 @@ func TestWatchesPageAndPackageDismissal(t *testing.T) {
 	status(t, s.post("/watches/packages/99/dismiss", nil), http.StatusNotFound)
 }
 
-func TestWatchesPageListsAndDismissesBirthdays(t *testing.T) {
+func TestPackagesPageHasNoBirthdaysEvenWithAnAddressBook(t *testing.T) {
 	dir := t.TempDir()
-	cards := filepath.Join(dir, "cards")
-	if err := os.Mkdir(cards, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	zone, err := config.NewState(settings.New()).Location(config.Map(nil))
-	if err != nil {
-		t.Fatal(err)
-	}
-	today := time.Now().In(zone)
-	card := fmt.Sprintf("BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nBDAY:--%02d%02d\nEND:VCARD\n", int(today.Month()), today.Day())
-	if err := os.WriteFile(filepath.Join(cards, "a.vcf"), []byte(card), 0o644); err != nil {
+	card := "BEGIN:VCARD\nVERSION:3.0\nFN:Ada Lovelace\nBDAY:--0101\nEND:VCARD\n"
+	if err := os.WriteFile(filepath.Join(dir, "a.vcf"), []byte(card), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	s := newSite(t)
-	enableContacts(t, s, cards)
-	s.clock = float64(time.Now().Unix())
-	page := status(t, s.get("/watches"), http.StatusOK)
-	mustContain(t, page, "Ada Lovelace", "(today)", "(1)")
-	mustNotContain(t, page, "Address book not configured")
-	key := fmt.Sprintf("ada lovelace|birthday|%02d-%02d", int(today.Month()), today.Day())
-	date := today.Format("2006-01-02")
-	body := status(t, s.post("/watches/birthdays/dismiss", form("key", key, "date", date)), http.StatusOK)
-	mustContain(t, body, "Hidden until next year.", "Nothing coming up")
-	mustNotContain(t, body, "Ada Lovelace")
-	bad := s.post("/watches/birthdays/dismiss", form("key", key, "date", "nope"))
-	mustContain(t, status(t, bad, http.StatusUnprocessableEntity), "Date must be YYYY-MM-DD.")
-	missing := status(t, s.post("/watches/birthdays/dismiss", nil), http.StatusUnprocessableEntity)
-	if errs := jsonOf(t, missing)["detail"].([]any); len(errs) != 2 {
-		t.Errorf("detail = %v", errs)
-	}
-}
-
-func TestWatchesWithAnEmptyAddressBook(t *testing.T) {
-	cards := t.TempDir()
-	s := newSite(t)
-	enableContacts(t, s, cards)
-	mustContain(t, status(t, s.get("/watches"), http.StatusOK), "Nothing coming up", "(0)")
-}
-
-func enableContacts(t *testing.T, s *site, dir string) {
-	t.Helper()
 	ctx := audit.With(t.Context(), "test", audit.CLI)
 	for key, value := range map[string]string{contacts.DirKey: dir, module.FlagKey(module.Contacts): "true"} {
 		if err := s.settings.Set(ctx, s.db.Write, key, value); err != nil {
 			t.Fatal(err)
 		}
 	}
+	page := status(t, s.get("/watches"), http.StatusOK)
+	mustNotContain(t, page, "Ada Lovelace", "Birthdays", "birthdays-h")
+	status(t, s.post("/watches/birthdays/dismiss", form("key", "ada lovelace|birthday|01-01", "date", "2026-01-01")), http.StatusNotFound)
 }
 
 func TestEmptyFormFieldsAreAbsent(t *testing.T) {

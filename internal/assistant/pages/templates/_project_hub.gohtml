@@ -5,7 +5,6 @@
   <div role="group" class="field">
     <label for="project-hub-id">Wiki hub page (Notion id or URL)</label>
     <input id="project-hub-id" name="wiki_hub_id" type="text" value="{{.hub_id}}" class="font-mono" spellcheck="false" autocomplete="off" placeholder="none">
-    <p>The assistant keeps this page updated with durable project knowledge.</p>
   </div>
   {{if .error}}<p class="text-sm text-destructive" role="alert">{{.error}}</p>{{end}}
   {{if .notice}}<p class="text-sm text-muted-foreground" role="status">{{.notice}}</p>{{end}}

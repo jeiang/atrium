@@ -208,7 +208,7 @@ func (s *site) newProject(instructions string) string {
 	if rec.Code != http.StatusSeeOther {
 		s.t.Fatalf("create project: status %d: %s", rec.Code, rec.Body)
 	}
-	return strings.TrimPrefix(rec.Header().Get("Location"), "/projects/")
+	return strings.TrimSuffix(strings.TrimPrefix(rec.Header().Get("Location"), "/projects/"), "/edit")
 }
 
 func (s *site) projectOf(id string) *projects.Project {

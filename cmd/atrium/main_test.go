@@ -200,15 +200,6 @@ func fetch(t *testing.T, client *http.Client, method, url string, form url.Value
 	return resp.StatusCode, string(text), resp.Header
 }
 
-func TestServeRendersNotificationsPage(t *testing.T) {
-	t.Parallel()
-	base := startServe(t)
-	status, body, _ := fetch(t, http.DefaultClient, "GET", base+"/settings/notifications", nil)
-	if status != http.StatusOK || !strings.Contains(body, "No notifications") {
-		t.Errorf("GET /settings/notifications = %d: %s", status, body)
-	}
-}
-
 func TestServeRendersMailPages(t *testing.T) {
 	t.Parallel()
 	base := startServe(t)
@@ -255,7 +246,7 @@ func TestServeRendersMailPages(t *testing.T) {
 func TestServeRendersReviewPages(t *testing.T) {
 	t.Parallel()
 	base := startServe(t)
-	for _, path := range []string{"/proposals", "/activity", "/drafts", "/loops", "/watches"} {
+	for _, path := range []string{"/review", "/proposals", "/activity", "/drafts", "/loops", "/watches"} {
 		if status, _, _ := fetch(t, http.DefaultClient, "GET", base+path, nil); status != http.StatusOK {
 			t.Errorf("GET %s = %d", path, status)
 		}
@@ -304,15 +295,16 @@ func TestServeRendersAssistantPages(t *testing.T) {
 		status int
 		want   string
 	}{
-		{"/projects", 200, "No projects yet"},
 		{"/projects/new", 200, "New project"},
 		{"/projects/1", 404, "Nothing here"},
+		{"/projects/1/edit", 404, "Nothing here"},
 		{"/scheduled", 200, "Every day at 02:30"},
-		{"/scheduled/new", 200, "New schedule"},
+		{"/library/files", 200, "No files yet"},
+		{"/library/wiki", 200, "No wiki pages yet"},
 		{"/settings/assistant", 200, "Default effort"},
 		{"/settings/usage", 200, "No usage yet"},
 		{"/settings/subagents", 200, `data-agent="mail"`},
-		{"/settings/notifications", 200, "No notifications"},
+		{"/settings/notifications", 200, "Channels"},
 	} {
 		status, body, _ := fetch(t, client, "GET", base+tc.path, nil)
 		if status != tc.status || !strings.Contains(body, tc.want) {
@@ -326,10 +318,13 @@ func TestServeRendersAssistantPages(t *testing.T) {
 		t.Errorf("GET /settings = %d %q", status, header.Get("Location"))
 	}
 	made := url.Values{"name": {"Kitchen"}, "effort": {"high"}, "context_limit": {"200000"}}
-	if status, _, header := fetch(t, client, "POST", base+"/projects", made); status != http.StatusSeeOther || header.Get("Location") != "/projects/1" {
+	if status, _, header := fetch(t, client, "POST", base+"/projects", made); status != http.StatusSeeOther || header.Get("Location") != "/projects/1/edit" {
 		t.Errorf("POST /projects = %d %q", status, header.Get("Location"))
 	}
-	if status, body, _ := fetch(t, client, "GET", base+"/projects/1", nil); status != http.StatusOK || !strings.Contains(body, "Kitchen") {
-		t.Errorf("GET /projects/1 = %d: %.300s", status, body)
+	if status, body, _ := fetch(t, client, "GET", base+"/projects/1/edit", nil); status != http.StatusOK || !strings.Contains(body, "Kitchen") {
+		t.Errorf("GET /projects/1/edit = %d: %.300s", status, body)
+	}
+	if status, _, _ := fetch(t, client, "GET", base+"/scheduled/new", nil); status != http.StatusNotFound && status != http.StatusMethodNotAllowed {
+		t.Errorf("GET /scheduled/new = %d, want 404 or 405", status)
 	}
 }

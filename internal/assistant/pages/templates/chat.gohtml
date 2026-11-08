@@ -35,7 +35,7 @@
       <noscript><button type="submit" class="btn" data-variant="outline">Search</button></noscript>
     </form>
     <div id="threads" class="flex flex-col gap-5">
-      {{template "chat_thread_list" (dict "threads" $d.Threads "q" $d.Q "view" $d.View "project_id" $d.ProjectID)}}
+      {{template "chat_thread_list" (dict "threads" $d.Threads "q" $d.Q "view" $d.View)}}
     </div>
   </section>
 </div>

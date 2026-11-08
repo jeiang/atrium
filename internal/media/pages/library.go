@@ -11,9 +11,9 @@ import (
 )
 
 func (s *service) registerLibrary(r chi.Router) {
-	r.Get("/media/library", s.libraryIndex)
-	r.Get("/media/library/movie/{name}", s.libraryMovie)
-	r.Get("/media/library/tv/{name}", s.libraryShow)
+	r.Get("/apps/media/library", s.libraryIndex)
+	r.Get("/apps/media/library/movie/{name}", s.libraryMovie)
+	r.Get("/apps/media/library/tv/{name}", s.libraryShow)
 }
 
 func (s *service) libRender(w http.ResponseWriter, r *http.Request, name string, data any) {

@@ -6,7 +6,7 @@
 <section class="flex flex-col gap-3" aria-labelledby="channels-h">
   <div class="flex flex-wrap items-center justify-between gap-2">
     <h2 id="channels-h" class="text-sm font-medium">Watching ({{len .Data.Channels}})</h2>
-    <form method="post" action="/media/channels/poll">
+    <form method="post" action="/apps/media/channels/poll">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
       <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "play"}}Check now</button>
     </form>
@@ -26,7 +26,7 @@
         </div>
         <code class="break-all font-mono text-xs">{{.Pattern}}</code>
       </div>
-      <form method="post" action="/media/channels/{{.ID}}/delete">
+      <form method="post" action="/apps/media/channels/{{.ID}}/delete">
         <input type="hidden" name="csrf_token" value="{{$csrf}}">
         <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "trash-2"}}Remove</button>
       </form>
@@ -41,7 +41,7 @@
 <section class="flex flex-col gap-3" aria-labelledby="find-h">
   <h2 id="find-h" class="text-sm font-medium">Find a show</h2>
   {{if .Data.TMDB}}
-  <form method="get" action="/media/channels" class="flex flex-wrap items-end gap-2">
+  <form method="get" action="/apps/media/channels" class="flex flex-wrap items-end gap-2">
     <div role="group" class="field min-w-64 flex-1">
       <label for="q">TMDB search</label>
       <input id="q" name="q" type="search" value="{{$q}}" placeholder="Show name">
@@ -53,7 +53,7 @@
     {{range .Data.Results}}
     <li class="flex flex-wrap items-center gap-3 px-3 py-2">
       <span class="flex-1">{{.Name}}{{if .Year}} <span class="text-muted-foreground">({{.Year}})</span>{{end}}</span>
-      <a class="btn" data-size="sm" href="/media/channels?tmdb_id={{.TmdbID}}&amp;name={{queryval .Name}}&amp;q={{queryval $q}}#new-channel">Use</a>
+      <a class="btn" data-size="sm" href="/apps/media/channels?tmdb_id={{.TmdbID}}&amp;name={{queryval .Name}}&amp;q={{queryval $q}}#new-channel">Use</a>
     </li>
     {{else}}
     <li class="px-3 py-2 text-muted-foreground">No shows found.</li>
@@ -65,7 +65,7 @@
   {{end}}
 </section>
 
-<form id="new-channel" method="post" action="/media/channels" class="flex flex-col gap-3 rounded-lg border p-4" aria-labelledby="new-h">
+<form id="new-channel" method="post" action="/apps/media/channels" class="flex flex-col gap-3 rounded-lg border p-4" aria-labelledby="new-h">
   <h2 id="new-h" class="text-sm font-medium">New channel</h2>
   <input type="hidden" name="csrf_token" value="{{$csrf}}">
   <input type="hidden" name="tmdb_id" value="{{$form.TmdbID}}">
@@ -89,10 +89,10 @@
   <label class="flex items-start gap-2 text-sm"><input class="input mt-0.5" type="checkbox" name="backfill" value="1"{{if $form.Backfill}} checked{{end}}>Download matching releases that are already out</label>
   <div class="flex flex-wrap items-center gap-2">
     <button type="submit" class="btn" data-size="sm">{{icon "plus"}}Watch</button>
-    <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/media/channels/preview" hx-include="#new-channel" hx-target="#preview" hx-indicator="#preview-spinner">{{icon "search"}}Preview against EZTV</button>
+    <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/apps/media/channels/preview" hx-include="#new-channel" hx-target="#preview" hx-indicator="#preview-spinner">{{icon "search"}}Preview against EZTV</button>
     {{template "spinner" (dict "id" "preview-spinner" "label" "Fetching releases")}}
   </div>
-  <div id="preview" hx-post="/media/channels/preview" hx-include="#new-channel" hx-trigger="{{if $form.IMDb}}load, {{end}}input changed delay:500ms from:#pattern, change from:#case, change from:#imdb" hx-indicator="#preview-spinner"></div>
+  <div id="preview" hx-post="/apps/media/channels/preview" hx-include="#new-channel" hx-trigger="{{if $form.IMDb}}load, {{end}}input changed delay:500ms from:#pattern, change from:#case, change from:#imdb" hx-indicator="#preview-spinner"></div>
 </form>
 {{template "tmdb_attribution"}}
 {{end}}

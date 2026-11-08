@@ -1,4 +1,4 @@
-{{define "media_torrents"}}<div id="torrents" class="flex flex-col gap-3"{{if .Active}} hx-get="/media/torrents" hx-trigger="load delay:{{.Poll}}s" hx-swap="outerHTML"{{end}}>
+{{define "media_torrents"}}<div id="torrents" class="flex flex-col gap-3"{{if .Active}} hx-get="/apps/media/torrents" hx-trigger="load delay:{{.Poll}}s" hx-swap="outerHTML"{{end}}>
   {{if .Error}}
   <p class="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive" role="alert">{{.Error}}</p>
   {{end}}
@@ -23,7 +23,7 @@
         {{if .ETA}}<span>ETA {{.ETA}}</span>{{end}}
       </p>
       <div>
-        <button type="button" class="btn" data-size="sm" data-variant="outline" hx-get="/media/torrents/{{.Hash}}/files" hx-target="#torrent-files" hx-swap="innerHTML show:top">{{icon "list-checks"}}Files</button>
+        <button type="button" class="btn" data-size="sm" data-variant="outline" hx-get="/apps/media/torrents/{{.Hash}}/files" hx-target="#torrent-files" hx-swap="innerHTML show:top">{{icon "list-checks"}}Files</button>
       </div>
     </li>
     {{end}}

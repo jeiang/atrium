@@ -3543,17 +3543,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "job_history": {
-          "default": 10,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "job_history_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "learned_limit": {
           "default": 50,
           "type": [
@@ -3595,17 +3584,6 @@
           ]
         },
         "preview_bytes_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "project_thread_limit": {
-          "default": 100,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "project_thread_limit_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

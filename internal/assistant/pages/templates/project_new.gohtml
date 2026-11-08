@@ -1,0 +1,7 @@
+{{define "title"}}New project{{end}}
+{{define "heading"}}New project{{end}}
+{{define "content"}}
+<div id="project-form" class="max-w-2xl">
+  {{template "project_form" (dict "form" .Data "csrf" .CSRF)}}
+</div>
+{{end}}

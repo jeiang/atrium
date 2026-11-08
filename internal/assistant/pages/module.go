@@ -150,6 +150,7 @@ func Module(o Options) web.Module {
 		r.Post("/projects/{project_id}/files", p.projectFilesUpload)
 		r.Get("/projects/{project_id}/files/{file_id}/download", p.projectFileDownload)
 		r.Post("/projects/{project_id}/files/{file_id}/delete", p.projectFileDelete)
+		r.Get("/library/files", p.libraryFiles)
 
 		p.projectRoutes(r)
 		p.scheduledRoutes(r)

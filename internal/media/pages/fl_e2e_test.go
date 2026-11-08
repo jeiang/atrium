@@ -377,8 +377,8 @@ func TestFlRotatedAndGeneratedKeys(t *testing.T) {
 		if _, _, found := flStoredKey(t, w); found {
 			t.Fatal("key stored before first use")
 		}
-		movie := status(t, w.get("/media/library/movie/Dune%20%282021%29"), 200, "movie")
-		public := libHref(t, movie, "https://atrium.test/media/file/")
+		movie := status(t, w.get("/apps/media/library/movie/Dune%20%282021%29"), 200, "movie")
+		public := libHref(t, movie, "https://atrium.test/apps/media/file/")
 		path := strings.TrimPrefix(public, "https://atrium.test")
 		status(t, w.get(path), 200, "link signed with the generated key")
 		value, by, found := flStoredKey(t, w)
@@ -470,11 +470,11 @@ func TestFlGuardAdmitsSignedLinksOnly(t *testing.T) {
 	status(t, flGetHost(proxy, bare, host), 403, "unsigned")
 	status(t, flGetHost(proxy, flSigned(flKey, w.movieRel, 1_000_000_000), host), 403, "expired")
 	status(t, flGetHost(proxy, flSigned("other", w.movieRel, flFar), host), 403, "wrong key")
-	status(t, flGetHost(proxy, "/media/downloads", host), 403, "page without group")
-	status(t, flGetHost(proxy, "/media/downloads", host, group), 200, "page with group")
+	status(t, flGetHost(proxy, "/apps/media/downloads", host), 403, "page without group")
+	status(t, flGetHost(proxy, "/apps/media/downloads", host, group), 200, "page with group")
 	status(t, flGetHost(proxy, good, host, group), 200, "signed link with group")
 	status(t, flGetHost(proxy, bare, host, group), 403, "unsigned link with group is still checked by the route")
-	thumb := "/media/thumb/" + urlQuote(w.episodeRel)
+	thumb := "/apps/media/thumb/" + urlQuote(w.episodeRel)
 	sig := flSign(flKey, w.episodeRel, flFar)
 	status(t, flGetHost(proxy, fmt.Sprintf("%s?exp=%d&sig=%s", thumb, flFar, sig), host), 403, "signature does not unlock other paths")
 	status(t, flGetHost(proxy, flSigned(flKey, w.movieRel, flFar), host, flRange("bytes=10-19")), 206, "range through the guard")
@@ -620,13 +620,13 @@ func TestFlPostersAndThumbnails(t *testing.T) {
 	ff := &flFFmpeg{duration: "1200.5"}
 	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_URL": tmdb.URL + "/3", "ATRIUM_MEDIA_MEDIA_TMDB_IMAGES_URL": tmdb.URL + "/t/p/w342"}, Options{Exec: ff.run})
 
-	flImage(t, w.get("/media/art/movie/"+urlQuote("Dune (2021)")), "movie poster")
-	flImage(t, w.get("/media/art/show/"+urlQuote("Lanterns (2026)")), "show poster")
-	flImage(t, w.get("/media/art/season/"+urlQuote("Lanterns (2026)")+"/1"), "season poster")
+	flImage(t, w.get("/apps/media/art/movie/"+urlQuote("Dune (2021)")), "movie poster")
+	flImage(t, w.get("/apps/media/art/show/"+urlQuote("Lanterns (2026)")), "show poster")
+	flImage(t, w.get("/apps/media/art/season/"+urlQuote("Lanterns (2026)")+"/1"), "season poster")
 	if got := tmdb.imageCount(); got != 3 {
 		t.Fatalf("%d image fetches, want 3", got)
 	}
-	flImage(t, w.get("/media/art/movie/"+urlQuote("Dune (2021)")), "cached poster")
+	flImage(t, w.get("/apps/media/art/movie/"+urlQuote("Dune (2021)")), "cached poster")
 	if got := tmdb.imageCount(); got != 3 {
 		t.Fatalf("cached poster fetched again: %d", got)
 	}
@@ -635,25 +635,25 @@ func TestFlPostersAndThumbnails(t *testing.T) {
 		t.Errorf("poster not cached: %v", err)
 	}
 
-	flPlaceholderCheck(t, w.get("/media/art/movie/"+urlQuote("Unknown (1999)")), "unknown movie")
+	flPlaceholderCheck(t, w.get("/apps/media/art/movie/"+urlQuote("Unknown (1999)")), "unknown movie")
 	if _, err := os.Stat(filepath.Join(w.cfg.MediaCacheDir(), "posters", "movie", "Unknown (1999).none")); err != nil {
 		t.Errorf("miss not remembered: %v", err)
 	}
 	hits := tmdb.hitCount()
-	flPlaceholderCheck(t, w.get("/media/art/movie/"+urlQuote("Unknown (1999)")), "remembered miss")
+	flPlaceholderCheck(t, w.get("/apps/media/art/movie/"+urlQuote("Unknown (1999)")), "remembered miss")
 	if tmdb.hitCount() != hits {
 		t.Errorf("remembered miss looked up again")
 	}
-	flPlaceholderCheck(t, w.get("/media/art/season/"+urlQuote("Lanterns (2026)")+"/2"), "season without poster")
+	flPlaceholderCheck(t, w.get("/apps/media/art/season/"+urlQuote("Lanterns (2026)")+"/2"), "season without poster")
 
-	status(t, w.get("/media/art/bogus/x"), 404, "unknown kind")
-	status(t, w.get("/media/art/season/x"), 404, "season with one segment")
-	status(t, w.get("/media/art/movie/a%2Fb"), 404, "encoded slash in the name")
-	rec := w.get("/media/art/season/Lanterns/one")
+	status(t, w.get("/apps/media/art/bogus/x"), 404, "unknown kind")
+	status(t, w.get("/apps/media/art/season/x"), 404, "season with one segment")
+	status(t, w.get("/apps/media/art/movie/a%2Fb"), 404, "encoded slash in the name")
+	rec := w.get("/apps/media/art/season/Lanterns/one")
 	body := status(t, rec, 422, "non-integer season")
 	contains(t, body, `"int_parsing"`, `"number"`)
 
-	flImage(t, w.get("/media/thumb/"+urlQuote(w.episodeRel)), "thumbnail")
+	flImage(t, w.get("/apps/media/thumb/"+urlQuote(w.episodeRel)), "thumbnail")
 	if len(ff.calls) != 2 {
 		t.Fatalf("%d ffmpeg calls, want 2", len(ff.calls))
 	}
@@ -663,16 +663,16 @@ func TestFlPostersAndThumbnails(t *testing.T) {
 	if ff.calls[1][3] != "ffmpeg" || !flHas(ff.calls[1], "120.05") {
 		t.Errorf("ffmpeg call %v", ff.calls[1])
 	}
-	flImage(t, w.get("/media/thumb/"+urlQuote(w.episodeRel)), "cached thumbnail")
+	flImage(t, w.get("/apps/media/thumb/"+urlQuote(w.episodeRel)), "cached thumbnail")
 	if ff.count() != 2 {
 		t.Errorf("cached thumbnail ran ffmpeg again: %d calls", ff.count())
 	}
 	if _, err := os.Stat(filepath.Join(w.cfg.MediaCacheDir(), "thumbs", w.episodeRel+".jpg")); err != nil {
 		t.Errorf("thumbnail not cached: %v", err)
 	}
-	flPlaceholderCheck(t, w.get("/media/thumb/movies/Dune%20%282021%29/missing.mkv"), "missing thumbnail source")
-	flPlaceholderCheck(t, w.get("/media/thumb/movies/../../atrium.db"), "traversal")
-	flPlaceholderCheck(t, w.get("/media/thumb/"), "empty thumbnail path")
+	flPlaceholderCheck(t, w.get("/apps/media/thumb/movies/Dune%20%282021%29/missing.mkv"), "missing thumbnail source")
+	flPlaceholderCheck(t, w.get("/apps/media/thumb/movies/../../atrium.db"), "traversal")
+	flPlaceholderCheck(t, w.get("/apps/media/thumb/"), "empty thumbnail path")
 	if ff.count() != 2 {
 		t.Errorf("invalid thumbnail paths ran ffmpeg: %d calls", ff.count())
 	}
@@ -690,7 +690,7 @@ func flHas(list []string, want string) bool {
 func TestFlThumbnailFailureIsRemembered(t *testing.T) {
 	ff := &flFFmpeg{duration: "1200.5", fail: true}
 	w := flNew(t, nil, Options{Exec: ff.run})
-	target := "/media/thumb/" + urlQuote(w.episodeRel)
+	target := "/apps/media/thumb/" + urlQuote(w.episodeRel)
 	flPlaceholderCheck(t, w.get(target), "failed ffmpeg")
 	if ff.count() != 2 {
 		t.Fatalf("%d calls, want probe and ffmpeg", ff.count())
@@ -719,7 +719,7 @@ func TestFlThumbnailsRunOneAtATime(t *testing.T) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			recs[i] = w.get("/media/thumb/" + urlQuote(rel))
+			recs[i] = w.get("/apps/media/thumb/" + urlQuote(rel))
 		}()
 	}
 	wg.Wait()
@@ -738,8 +738,8 @@ func TestFlWithoutTMDBOrRoot(t *testing.T) {
 	tmdb := flServeTMDB(t)
 	ff := &flFFmpeg{duration: "10"}
 	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "", "ATRIUM_MEDIA_MEDIA_ROOT": "", "ATRIUM_MEDIA_MEDIA_TMDB_URL": tmdb.URL + "/3", "ATRIUM_MEDIA_MEDIA_TMDB_IMAGES_URL": tmdb.URL + "/t/p/w342"}, Options{Exec: ff.run})
-	flPlaceholderCheck(t, w.get("/media/art/movie/"+urlQuote("Dune (2021)")), "poster without a TMDB key")
-	flPlaceholderCheck(t, w.get("/media/thumb/"+urlQuote("tv/Lanterns (2026)/Season 01/x.mkv")), "thumbnail without a root")
+	flPlaceholderCheck(t, w.get("/apps/media/art/movie/"+urlQuote("Dune (2021)")), "poster without a TMDB key")
+	flPlaceholderCheck(t, w.get("/apps/media/thumb/"+urlQuote("tv/Lanterns (2026)/Season 01/x.mkv")), "thumbnail without a root")
 	if tmdb.hitCount() != 0 || ff.count() != 0 {
 		t.Errorf("unconfigured backends were used: %d TMDB requests, %d runs", tmdb.hitCount(), ff.count())
 	}
@@ -748,7 +748,7 @@ func TestFlWithoutTMDBOrRoot(t *testing.T) {
 func TestFlTMDBFailureGivesPlaceholderWithoutMarker(t *testing.T) {
 	tmdb := flServeTMDB(t)
 	w := flNew(t, map[string]string{"ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "wrong", "ATRIUM_MEDIA_MEDIA_TMDB_URL": tmdb.URL + "/3", "ATRIUM_MEDIA_MEDIA_TMDB_IMAGES_URL": tmdb.URL + "/t/p/w342"}, Options{})
-	flPlaceholderCheck(t, w.get("/media/art/movie/"+urlQuote("Dune (2021)")), "TMDB rejects the key")
+	flPlaceholderCheck(t, w.get("/apps/media/art/movie/"+urlQuote("Dune (2021)")), "TMDB rejects the key")
 	if tmdb.imageCount() != 0 {
 		t.Errorf("image fetched after TMDB error")
 	}

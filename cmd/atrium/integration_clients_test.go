@@ -34,7 +34,7 @@ func TestIntegrationClientsUseTheRecordTransportAndAFailedRequestChecksAtOnce(t 
 	s := &integrationSite{t: t, dir: dir}
 	s.start()
 	waitFor(t, func() bool { return health(t, dir, "qbittorrent") == integrations.Failing })
-	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/media/downloads", nil); code == http.StatusOK && qb.saw("/api/v2/torrents/info") {
+	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/apps/media/downloads", nil); code == http.StatusOK && qb.saw("/api/v2/torrents/info") {
 		t.Fatal("the downloads page reached a server with an untrusted certificate")
 	}
 
@@ -45,7 +45,7 @@ func TestIntegrationClientsUseTheRecordTransportAndAFailedRequestChecksAtOnce(t 
 	if got := runSettings(t, "set", transport.CAKey("qbittorrent"), ca); got.code != 0 {
 		t.Fatalf("set CA: %d %q", got.code, got.stderr)
 	}
-	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/media/downloads", nil); code != http.StatusOK || !qb.saw("/api/v2/torrents/info") {
+	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/apps/media/downloads", nil); code != http.StatusOK || !qb.saw("/api/v2/torrents/info") {
 		t.Fatalf("downloads page with the qBittorrent CA: %d", code)
 	}
 	if code, body := s.post("/qbittorrent/test", nil); code != http.StatusOK || health(t, dir, "qbittorrent") != integrations.OK {
@@ -53,7 +53,7 @@ func TestIntegrationClientsUseTheRecordTransportAndAFailedRequestChecksAtOnce(t 
 	}
 
 	broken.Store(true)
-	_, _, _ = fetch(t, s.client, http.MethodGet, s.base+"/media/downloads", nil)
+	_, _, _ = fetch(t, s.client, http.MethodGet, s.base+"/apps/media/downloads", nil)
 	waitFor(t, func() bool { return health(t, dir, "qbittorrent") == integrations.Failing })
 	if !strings.Contains(s.page(), "data-integration-alerts") {
 		t.Error("no admin banner after a failed qBittorrent request")

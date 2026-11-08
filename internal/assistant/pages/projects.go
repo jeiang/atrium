@@ -13,23 +13,9 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
 )
-
-type ProjectsData struct {
-	Projects []projects.Project `json:"projects"`
-	View     string             `json:"view"`
-}
-
-type ProjectData struct {
-	Project  *projects.Project `json:"project"`
-	Files    []files.Row       `json:"files"`
-	Threads  []threads.Listed  `json:"threads"`
-	View     string            `json:"view"`
-	Composer ComposerView      `json:"composer"`
-}
 
 type ProjectFormValues struct {
 	Name         string  `json:"name"`
@@ -45,6 +31,11 @@ type ProjectFormData struct {
 	Efforts       []string          `json:"efforts"`
 	ContextLimits []int64           `json:"context_limits"`
 	Error         *string           `json:"error"`
+}
+
+type ProjectEditData struct {
+	Form  ProjectFormData `json:"form"`
+	Files []files.Row     `json:"files"`
 }
 
 func projectValues(found projects.Project) ProjectFormValues {
@@ -85,57 +76,68 @@ func submittedValues(f projects.Fields, fallback ProjectFormValues) ProjectFormV
 	return ProjectFormValues{Name: f.Name, Instructions: f.Instructions, Effort: effort, ContextLimit: &limit, WikiHubID: &hub}
 }
 
-func validView(view string) bool { return view == "" || view == archived }
+func editPath(id int64) string { return "/projects/" + strconv.FormatInt(id, 10) + "/edit" }
 
 func (p *pages) projectRoutes(r chi.Router) {
-	r.Get("/projects", p.projectsIndex)
-	r.Get("/projects/new", p.projectNewForm)
+	r.Get("/projects/new", p.projectNew)
 	r.Post("/projects", p.projectCreate)
-	r.Get("/projects/{project_id}", p.projectShow)
-	r.Get("/projects/{project_id}/edit", p.projectEditForm)
-	r.Post("/projects/{project_id}", p.projectUpdate)
+	r.Get("/projects/{project_id}/edit", p.projectEdit)
+	r.Post("/projects/{project_id}/edit", p.projectUpdate)
 	r.Post("/projects/{project_id}/archive", p.projectArchive)
 }
 
-func (p *pages) projectsIndex(w http.ResponseWriter, r *http.Request) {
-	view := web.QueryValue(r.URL.Query(), "view")
-	if !validView(view) {
-		p.fail(w, r, http.StatusUnprocessableEntity, "unknown view")
-		return
-	}
-	found, err := projects.List(r.Context(), p.deps.DB.Read, view == archived)
-	check(err)
-	p.render(w, r, http.StatusOK, "projects", "projects.gohtml", ProjectsData{Projects: found, View: view}, nil)
+func formData(project *projects.Project, values ProjectFormValues, problem *string) ProjectFormData {
+	return ProjectFormData{Project: project, Values: values, Efforts: pricing.Efforts, ContextLimits: assistant.ContextLimits, Error: problem}
 }
 
-func (p *pages) projectForm(w http.ResponseWriter, r *http.Request, status int, project *projects.Project, values ProjectFormValues, problem *string) {
-	data := ProjectFormData{Project: project, Values: values, Efforts: pricing.Efforts, ContextLimits: assistant.ContextLimits, Error: problem}
-	p.renderFragment(w, r, status, "_project_form.gohtml", data, nil)
-}
-
-func (p *pages) projectNewForm(w http.ResponseWriter, r *http.Request) {
+func (p *pages) defaultValues(r *http.Request) ProjectFormValues {
 	chosen, err := threads.Defaults(r.Context(), p.deps.DB.Read)
 	check(err)
 	limit := chosen.ContextLimit
-	p.projectForm(w, r, http.StatusOK, nil, ProjectFormValues{Effort: chosen.Effort, ContextLimit: &limit}, nil)
+	return ProjectFormValues{Effort: chosen.Effort, ContextLimit: &limit}
+}
+
+func (p *pages) projectPage(w http.ResponseWriter, r *http.Request, status int, data ProjectFormData) {
+	if data.Project == nil {
+		p.render(w, r, status, "projects", "project_new.gohtml", data, nil)
+		return
+	}
+	attached, err := files.OfProject(r.Context(), p.deps.DB.Read, data.Project.ID)
+	check(err)
+	if attached == nil {
+		attached = []files.Row{}
+	}
+	p.render(w, r, status, "projects", "project_edit.gohtml", ProjectEditData{Form: data, Files: attached}, nil)
+}
+
+func (p *pages) projectNew(w http.ResponseWriter, r *http.Request) {
+	p.projectPage(w, r, http.StatusOK, formData(nil, p.defaultValues(r), nil))
+}
+
+func (p *pages) projectEdit(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "project_id")
+	if !ok {
+		return
+	}
+	found, ok := p.loadProject(w, r, id)
+	if !ok {
+		return
+	}
+	p.projectPage(w, r, http.StatusOK, formData(found, projectValues(*found), nil))
 }
 
 func (p *pages) projectRefused(w http.ResponseWriter, r *http.Request, project *projects.Project, fields projects.Fields, err error) {
-	if !web.IsPartial(r) {
-		p.fail(w, r, http.StatusUnprocessableEntity, err.Error())
-		return
-	}
-	fallback := ProjectFormValues{}
+	fallback := p.defaultValues(r)
 	if project != nil {
 		fallback = projectValues(*project)
-	} else {
-		chosen, loadErr := threads.Defaults(r.Context(), p.deps.DB.Read)
-		check(loadErr)
-		limit := chosen.ContextLimit
-		fallback = ProjectFormValues{Effort: chosen.Effort, ContextLimit: &limit}
 	}
 	problem := err.Error()
-	p.projectForm(w, r, http.StatusUnprocessableEntity, project, submittedValues(fields, fallback), &problem)
+	data := formData(project, submittedValues(fields, fallback), &problem)
+	if web.IsPartial(r) {
+		p.renderFragment(w, r, http.StatusUnprocessableEntity, "_project_form.gohtml", data, nil)
+		return
+	}
+	p.projectPage(w, r, http.StatusUnprocessableEntity, data)
 }
 
 func (p *pages) projectCreate(w http.ResponseWriter, r *http.Request) {
@@ -147,45 +149,7 @@ func (p *pages) projectCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	check(err)
-	navigate(w, r, "/projects/"+strconv.FormatInt(id, 10))
-}
-
-func (p *pages) projectShow(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "project_id")
-	if !ok {
-		return
-	}
-	view := web.QueryValue(r.URL.Query(), "view")
-	if !validView(view) {
-		p.fail(w, r, http.StatusUnprocessableEntity, "unknown view")
-		return
-	}
-	found, ok := p.loadProject(w, r, id)
-	if !ok {
-		return
-	}
-	limit, err := config.From(r.Context()).Limit(r.Context(), p.deps.DB.Read, config.KeyProjectThreads)
-	check(err)
-	listed, err := threads.ListThreads(r.Context(), p.deps.DB.Read, threads.ListOpts{Limit: limit, Archived: view == archived, ProjectID: id})
-	check(err)
-	attached, err := files.OfProject(r.Context(), p.deps.DB.Read, id)
-	check(err)
-	if attached == nil {
-		attached = []files.Row{}
-	}
-	p.render(w, r, http.StatusOK, "projects", "project.gohtml", ProjectData{Project: found, Files: attached, Threads: listed, View: view, Composer: p.newThreadComposer(r, found.Effort, found.ContextLimit)}, nil)
-}
-
-func (p *pages) projectEditForm(w http.ResponseWriter, r *http.Request) {
-	id, ok := pathID(w, r, "project_id")
-	if !ok {
-		return
-	}
-	found, ok := p.loadProject(w, r, id)
-	if !ok {
-		return
-	}
-	p.projectForm(w, r, http.StatusOK, found, projectValues(*found), nil)
+	navigate(w, r, editPath(id))
 }
 
 func (p *pages) projectUpdate(w http.ResponseWriter, r *http.Request) {
@@ -205,7 +169,7 @@ func (p *pages) projectUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	check(err)
-	navigate(w, r, "/projects/"+strconv.FormatInt(id, 10))
+	navigate(w, r, editPath(id))
 }
 
 func (p *pages) projectArchive(w http.ResponseWriter, r *http.Request) {
@@ -221,9 +185,9 @@ func (p *pages) projectArchive(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, r, http.StatusNotFound, "unknown project")
 		return
 	}
-	to := "/projects/" + strconv.FormatInt(id, 10)
+	to := editPath(id)
 	if flag != 0 {
-		to = "/projects"
+		to = "/chat"
 	}
 	navigate(w, r, to)
 }

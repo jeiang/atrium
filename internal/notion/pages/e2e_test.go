@@ -159,6 +159,7 @@ func TestNotionPageBackLink(t *testing.T) {
 		{"http://testserver/chat?x=1", `href="/chat?x=1"`, "Chat"},
 		{"http://testserver/triage", `href="/triage"`, "Decisions"},
 		{"http://testserver/triage?stage=llm&q=a", `href="/triage?stage=llm&amp;q=a"`, "Decisions"},
+		{"http://testserver/library/wiki?q=plan", `href="/library/wiki?q=plan"`, "Wiki"},
 		{"http://elsewhere.test/triage", `href="/chat"`, "Chat"},
 		{"http://testserver/notion/other", `href="/chat"`, "Chat"},
 		{"", `href="/chat"`, "Chat"},
@@ -169,6 +170,37 @@ func TestNotionPageBackLink(t *testing.T) {
 			t.Errorf("referer %q: want a back link %s labelled %q in %.300s", tc.referer, tc.href, tc.label, body)
 		}
 	}
+}
+
+func TestLibraryWikiListsPagesNewestFirstAndSearches(t *testing.T) {
+	s := newSite(t, nil)
+	empty := status(t, s.get("/library/wiki"), http.StatusOK)
+	mustContain(t, empty, "<html", "No wiki pages yet", `id="wiki-q"`, `hx-get="/library/wiki"`, `hx-target="#wiki-rows"`)
+
+	s.addPage(pageID, "Kitchen plan", "tiles and grout", 0)
+	s.addPage(secretID, "Budget", "money", 1)
+	s.addPage(wikiRootID, "Trashed", "gone", 0)
+	s.exec("UPDATE notion_pages SET edited_ts = 200 WHERE id = ?", secretID)
+	s.exec("UPDATE notion_pages SET in_trash = 1 WHERE id = ?", wikiRootID)
+	s.exec("INSERT INTO notion_fts (rowid, title, path, body) SELECT rid, title, path, markdown FROM notion_pages")
+
+	page := status(t, s.get("/library/wiki"), http.StatusOK)
+	mustContain(t, page, "<html", "Kitchen plan", `href="/notion/`+pageID+`"`, "Budget", `href="/notion/`+secretID+`"`, "private")
+	mustNotContain(t, page, "Trashed", "No wiki pages yet")
+	if strings.Index(page, `href="/notion/`+secretID+`"`) > strings.Index(page, `href="/notion/`+pageID+`"`) {
+		t.Errorf("wiki pages are not newest first")
+	}
+
+	found := status(t, s.get("/library/wiki?q=grout"), http.StatusOK)
+	mustContain(t, found, "<html", "Kitchen plan", `value="grout"`)
+	mustNotContain(t, found, `href="/notion/`+secretID+`"`)
+
+	rows := status(t, s.get("/library/wiki?q=grout", hx, "true"), http.StatusOK)
+	mustContain(t, rows, "Kitchen plan")
+	mustNotContain(t, rows, "<html", `id="wiki-q"`, "Budget")
+
+	none := status(t, s.get("/library/wiki?q=zzzz", hx, "true"), http.StatusOK)
+	mustContain(t, none, "No matching pages")
 }
 
 func TestCreateWikiHubLinksTheNewPage(t *testing.T) {
