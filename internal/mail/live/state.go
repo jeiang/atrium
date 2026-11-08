@@ -96,7 +96,7 @@ func QueryParams(ctx context.Context, q Querier, account string) (Params, error)
 	if err != nil || golive == nil || *golive == "" {
 		return p, err
 	}
-	p.Golive, err = strconv.ParseFloat(py.Strip(*golive), 64)
+	p.Golive, err = strconv.ParseFloat(strings.TrimSpace(*golive), 64)
 	return p, err
 }
 
@@ -153,14 +153,18 @@ func nullJSON(v any) any {
 	if v == nil {
 		return nil
 	}
-	return py.JSONDumps(v)
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	return string(b)
 }
 
 func (l *Live) Begin(ctx context.Context, account string, messageID int64, digest, kind string, src, dest *string,
 	before any, decisionID *int64) (id int64, ok bool, err error) {
 	res, err := l.DB.Write.ExecContext(ctx, "INSERT INTO auto_actions (ts, account, message_id, digest, kind, src, dest, before, decision_id, state) "+
 		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", l.now(), account, messageID, digest, kind, py.Nullable(src), py.Nullable(dest),
-		py.JSONDumps(before), py.Nullable(decisionID), ledger.Held)
+		nullJSON(before), py.Nullable(decisionID), ledger.Held)
 	if db.IsConstraint(err) {
 		return 0, false, nil
 	}
@@ -189,7 +193,7 @@ func (l *Live) Unknown(ctx context.Context, id int64, msg string) error {
 
 func (l *Live) Partial(ctx context.Context, id int64, msg string, after, undo any) error {
 	_, err := l.DB.Write.ExecContext(ctx, "UPDATE auto_actions SET state = ?, error = ?, after = ?, undo = ? WHERE id = ?",
-		ledger.Partial, msg, py.JSONDumps(after), py.JSONDumps(undo), id)
+		ledger.Partial, msg, nullJSON(after), nullJSON(undo), id)
 	return err
 }
 
@@ -381,12 +385,12 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	if state.UndoBlocked() || state == ledger.UndoHeld {
 		return UndoResult{}, UndoError(fmt.Sprintf("action %d has an undo in progress or a partial undo; resolve it in the mailbox before undoing again", id))
 	}
-	parsed, err := py.JSONLoads([]byte(*plan))
-	if err != nil {
+	var parsed any
+	if err := json.Unmarshal([]byte(*plan), &parsed); err != nil {
 		return UndoResult{}, err
 	}
-	fields, _ := parsed.(py.Dict)
-	op, found := fields.Get("op")
+	fields, _ := parsed.(map[string]any)
+	op, found := fields["op"]
 	if !found {
 		return UndoResult{}, fmt.Errorf("%w: 'op'", httpx.ErrMissing)
 	}
@@ -462,11 +466,19 @@ func (l *Live) Paused() bool { return safety.IsPaused(l.Cfg.PausePath()) }
 
 func (l *Live) SetPaused(paused bool) error { return safety.SetPaused(l.Cfg.PausePath(), paused) }
 
-func (l *Live) Status(ctx context.Context) (py.Dict, error) {
-	counts := py.Dict{}
+type Status struct {
+	Mode     string                      `json:"mode"`
+	Paused   bool                        `json:"paused"`
+	GoliveTS *string                     `json:"golive_ts"`
+	Baseline int64                       `json:"baseline"`
+	Actions  map[string]map[string]int64 `json:"actions"`
+}
+
+func (l *Live) Status(ctx context.Context) (Status, error) {
+	counts := map[string]map[string]int64{}
 	rows, err := l.DB.Read.QueryContext(ctx, "SELECT kind, state, COUNT(*) AS n FROM auto_actions GROUP BY 1, 2")
 	if err != nil {
-		return nil, err
+		return Status{}, err
 	}
 	for rows.Next() {
 		var kind string
@@ -474,41 +486,35 @@ func (l *Live) Status(ctx context.Context) (py.Dict, error) {
 		var n int64
 		if err := rows.Scan(&kind, &state, &n); err != nil {
 			_ = rows.Close()
-			return nil, err
+			return Status{}, err
 		}
 		label := string(state)
-		byState := py.Dict{}
-		if existing, found := counts.Get(kind); found {
-			byState = existing.(py.Dict)
+		byState := counts[kind]
+		if byState == nil {
+			byState = map[string]int64{}
+			counts[kind] = byState
 		}
-		total := n
-		if prior, found := byState.Get(label); found {
-			total += prior.(int64)
-		}
-		counts = counts.Set(kind, byState.Set(label, total))
+		byState[label] += n
 	}
 	if err := rows.Close(); err != nil {
-		return nil, err
+		return Status{}, err
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return Status{}, err
 	}
 	golive, err := GetState(ctx, l.DB.Read, GoliveKey)
 	if err != nil {
-		return nil, err
+		return Status{}, err
 	}
 	var baseline int64
 	if err := l.DB.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM live_baseline").Scan(&baseline); err != nil {
-		return nil, err
+		return Status{}, err
 	}
 	mode, err := mail.Mode(ctx, l.DB.Read)
 	if err != nil {
-		return nil, err
+		return Status{}, err
 	}
-	return py.Dict{
-		{Key: "mode", Value: mode}, {Key: "paused", Value: l.Paused()}, {Key: "golive_ts", Value: py.Nullable(golive)},
-		{Key: "baseline", Value: baseline}, {Key: "actions", Value: counts},
-	}, nil
+	return Status{Mode: mode, Paused: l.Paused(), GoliveTS: golive, Baseline: baseline, Actions: counts}, nil
 }
 
 func errSettledMeanwhile(id int64) error {

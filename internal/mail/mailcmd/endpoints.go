@@ -22,11 +22,7 @@ func (o Options) EndpointsCommand() *cli.Command {
 					}
 					failed = failed || !r.OK
 				}
-				out := make([]any, len(results))
-				for i, r := range results {
-					out[i] = r.Dict()
-				}
-				x.JSON(out)
+				x.JSON(results)
 				if failed {
 					return &exitError{code: cli.ExitError, text: "an endpoint probe failed"}
 				}

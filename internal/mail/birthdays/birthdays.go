@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/py"
+	"golang.org/x/text/cases"
 )
 
 const (
@@ -73,7 +74,7 @@ func DismissedKeys(ctx context.Context, q db.Querier) (Dismissals, error) {
 }
 
 func ItemKey(name string, entry contacts.Date) string {
-	return fmt.Sprintf("%s|%s|%02d-%02d", py.Casefold(name), entry.Kind, entry.Month, entry.Day)
+	return fmt.Sprintf("%s|%s|%02d-%02d", cases.Fold().String(name), entry.Kind, entry.Month, entry.Day)
 }
 
 type Item struct {
@@ -121,7 +122,7 @@ func Upcoming(cards []contacts.Card, today time.Time, days int, dismissed Dismis
 		if a.DaysUntil != b.DaysUntil {
 			return a.DaysUntil - b.DaysUntil
 		}
-		if c := strings.Compare(py.Casefold(a.Name), py.Casefold(b.Name)); c != 0 {
+		if c := strings.Compare(cases.Fold().String(a.Name), cases.Fold().String(b.Name)); c != 0 {
 			return c
 		}
 		return strings.Compare(a.Kind, b.Kind)

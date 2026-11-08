@@ -68,10 +68,14 @@ type DecisionRecord struct {
 }
 
 func RecordDecision(ctx context.Context, q Execer, d DecisionRecord) error {
-	_, err := q.ExecContext(ctx,
+	detail, err := json.Marshal(d.Detail)
+	if err != nil {
+		return err
+	}
+	_, err = q.ExecContext(ctx,
 		"INSERT INTO decisions (message_id, account, ts, stage, key, action, dest, confidence, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		d.MessageID, d.Account, d.TS, d.Stage, nullableString(d.Key), d.Action, nullableString(d.Dest), nullableFloat(d.Confidence),
-		py.JSONDumps(d.Detail))
+		string(detail))
 	return err
 }
 
@@ -121,7 +125,7 @@ func plainBody(msg *mime.Message) string {
 	for _, c := range [...]struct {
 		kind    string
 		convert func(string) string
-	}{{"plain", py.Strip}, {"html", features.StripMarkup}} {
+	}{{"plain", strings.TrimSpace}, {"html", features.StripMarkup}} {
 		part := msg.Body(c.kind)
 		if part == nil {
 			continue

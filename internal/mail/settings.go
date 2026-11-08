@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
@@ -206,7 +207,7 @@ func atLeast(lo int64) func(string) error {
 }
 
 func nonBlank(value string) error {
-	if py.Strip(value) == "" {
+	if strings.TrimSpace(value) == "" {
 		return settings.Invalid("must not be blank")
 	}
 	return nil

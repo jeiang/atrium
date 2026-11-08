@@ -18,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/flags"
 	"github.com/jeiang/atrium/internal/py"
+	"golang.org/x/text/cases"
 )
 
 var log = logx.Logger("atrium.openloops")
@@ -50,7 +51,7 @@ var (
 )
 
 func NormSubject(subject string) (string, error) {
-	text := py.Casefold(subject)
+	text := cases.Fold().String(subject)
 	for {
 		stripped := subjectPrefix.ReplaceAllString(text, "")
 		if stripped == text {
@@ -59,7 +60,7 @@ func NormSubject(subject string) (string, error) {
 		text = stripped
 	}
 	text = spaceRuns.ReplaceAllString(text, " ")
-	return py.Strip(text), nil
+	return strings.TrimSpace(text), nil
 }
 
 func IsDraft(labels, flagList string) (bool, error) {
@@ -165,7 +166,7 @@ func threadGroups(rows []Message, selves map[string]bool) ([][]Message, error) {
 		if r.GmThrID != "" {
 			g.union(n, "g:"+r.GmThrID)
 		}
-		links := py.Split(r.InReplyTo + " " + r.Refs)
+		links := strings.Fields(r.InReplyTo + " " + r.Refs)
 		for _, ref := range links {
 			g.union(n, "m:"+ref)
 		}
@@ -259,10 +260,6 @@ func classify(ctx context.Context, q db.Querier, thread []Message, selves map[st
 type Counts struct {
 	OweReply      int `json:"owe_reply"`
 	WaitingOnThem int `json:"waiting_on_them"`
-}
-
-func (c Counts) Dict() py.Dict {
-	return py.Dict{{Key: OweReply, Value: c.OweReply}, {Key: Waiting, Value: c.WaitingOnThem}}
 }
 
 type override struct {

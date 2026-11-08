@@ -2,6 +2,7 @@ package mailcmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -15,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	runpkg "github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var operator = proposals.Resolver{Actor: "operator", Source: "cli"}
@@ -64,7 +64,12 @@ func (x *exec) Now() float64 { return x.opts.now() }
 func (x *exec) Print(text string) { _, _ = io.WriteString(x.Stdout, text) }
 
 func (x *exec) JSON(value any) {
-	x.Print(py.JSONDumps(value, py.JSONOpts{Indent: 2}) + "\n")
+	out, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		x.Print(err.Error() + "\n")
+		return
+	}
+	x.Print(string(out) + "\n")
 }
 
 func (x *exec) Exclusive(fn func() error) error {

@@ -20,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/corrections"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/rules"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var log = logx.Logger("atrium.router")
@@ -33,7 +32,7 @@ type Decision struct {
 	Dest       *string
 	Key        *string
 	Confidence *float64
-	Detail     py.Dict
+	Detail     map[string]any
 }
 
 type LLMContext struct {
@@ -198,7 +197,10 @@ func Vote(neighbors []Neighbor) (folder string, share float64, ok bool) {
 	for i, f := range order {
 		values[i] = scores[f]
 	}
-	total := py.Sum(values)
+	var total float64
+	for _, v := range values {
+		total += v
+	}
 	if len(scores) == 0 || total <= 0 {
 		return "", 0, false
 	}
@@ -275,7 +277,7 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 	}
 	if learned != nil {
 		return &Decision{Stage: "learned", Action: string(rules.ActionFile), Dest: new(learned.Dest), Key: new(learned.Level), Confidence: new(learned.Purity),
-			Detail: py.Dict{{Key: "n", Value: learned.N}}}, nil
+			Detail: map[string]any{"n": learned.N}}, nil
 	}
 	if !m.Embedded {
 		return nil, nil
@@ -305,7 +307,7 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 			return nil, err
 		}
 		if folder != llm.Uncertain {
-			return &Decision{Stage: "llm", Action: string(rules.ActionFile), Dest: new(folder), Key: new("chat"), Detail: py.Dict{{Key: "confident", Value: confident}}}, nil
+			return &Decision{Stage: "llm", Action: string(rules.ActionFile), Dest: new(folder), Key: new("chat"), Detail: map[string]any{"confident": confident}}, nil
 		}
 	}
 	if t.Uncertain != "" {

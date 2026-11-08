@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/mail/mime"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const month = `(?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*\.?`
@@ -118,7 +117,7 @@ func prefix(s string, n int) string {
 }
 
 func subjectTemplate(subject string) string {
-	s := py.Strip(subject)
+	s := strings.TrimSpace(subject)
 	for {
 		n := sub(replyPrefixRE, "", s)
 		if n == s {
@@ -133,7 +132,7 @@ func subjectTemplate(subject string) string {
 	s = sub(numericDateRE, "<date>", s)
 	s = sub(numberWordRE, "<n>", s)
 	s = sub(hashNumberRE, "<n>", s)
-	return py.Strip(sub(spaceRE, " ", s))
+	return strings.TrimSpace(sub(spaceRE, " ", s))
 }
 
 func domainOf(addr string) string {
@@ -147,7 +146,7 @@ func domainOf(addr string) string {
 func StripMarkup(text string) string {
 	text = sub(scriptStyleRE, " ", text)
 	text = sub(tagRE, " ", text)
-	return py.Strip(sub(spaceRE, " ", html.UnescapeString(text)))
+	return strings.TrimSpace(sub(spaceRE, " ", html.UnescapeString(text)))
 }
 
 func filenamePattern(name string) string { return sub(digitsRE, "#", strings.ToLower(name)) }
@@ -222,7 +221,7 @@ func bodyText(msg *mime.Message) string {
 		kind    string
 		convert func(string) string
 	}{
-		{"plain", func(t string) string { return py.Strip(sub(spaceRE, " ", t)) }},
+		{"plain", func(t string) string { return strings.TrimSpace(sub(spaceRE, " ", t)) }},
 		{"html", StripMarkup},
 	}
 	for _, c := range converters {
@@ -298,8 +297,8 @@ func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, 
 		FromDomain:  domainOf(addr),
 		FromName:    fromName,
 		ToAddrs:     sortedSet(to),
-		ListID:      strings.ToLower(py.Strip(msg.Header("List-Id"))),
-		Precedence:  strings.ToLower(py.Strip(msg.Header("Precedence"))),
+		ListID:      strings.ToLower(strings.TrimSpace(msg.Header("List-Id"))),
+		Precedence:  strings.ToLower(strings.TrimSpace(msg.Header("Precedence"))),
 		Subject:     subject,
 		SubjectTmpl: subjectTemplate(subject),
 		DKIMD:       sortedSet(dkim),

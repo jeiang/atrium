@@ -1,6 +1,8 @@
 package mail
 
 import (
+	"golang.org/x/text/cases"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -26,7 +28,7 @@ func IsSystemFlag(flag string) bool {
 }
 
 func IsSystemName(name string) bool {
-	folded := py.Casefold(name)
+	folded := cases.Fold().String(name)
 	for _, n := range systemNames {
 		if folded == n[0] {
 			return true
@@ -47,8 +49,8 @@ func MailboxRole(name string, flags []string, preset string) string {
 			return role
 		}
 	}
-	folded := py.Casefold(name)
-	if folded == py.Casefold(config.Inbox) {
+	folded := cases.Fold().String(name)
+	if folded == cases.Fold().String(config.Inbox) {
 		return "inbox"
 	}
 	if folded == "misc" {
