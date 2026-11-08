@@ -12,9 +12,9 @@ import (
 )
 
 const (
-	WizardPath = "/settings/auth"
+	wizardPath = "/settings/auth"
 	testCookie = "atrium_oidc_test"
-	testPath   = WizardPath + "/test"
+	testPath   = wizardPath + "/test"
 )
 
 var stepToken = regexp.MustCompile(`\{(redirect|access|admin)\}`)
@@ -110,7 +110,7 @@ func (s *Server) steps(v oidc.View) []stepView {
 		"admin":    v.Values[oidc.KeyAdminGroup],
 	}
 	if v.Public != "" {
-		chips["redirect"] = v.Public + CallbackPath
+		chips["redirect"] = v.Public + callbackPath
 	}
 	if chips["access"] == "" {
 		chips["access"] = oidc.DefaultAccessGroup

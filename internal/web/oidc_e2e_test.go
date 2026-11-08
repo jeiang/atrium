@@ -469,7 +469,7 @@ func TestOIDCUnauthenticatedResponses(t *testing.T) {
 	login := b.get("/login")
 	expect(t, login, http.StatusOK, "<form")
 	if !strings.Contains(login.Header.Get("Content-Security-Policy"), "form-action 'self' "+strings.TrimSuffix(r.idp.Issuer(), "/")) {
-		t.Fatalf("login CSP %q", login.Header.Get("Content-Security-Policy"))
+		t.Fatalf("login csp %q", login.Header.Get("Content-Security-Policy"))
 	}
 	expect(t, b.get("/healthz"), http.StatusOK)
 	expect(t, b.get("/login?reason=bogus"), http.StatusOK)

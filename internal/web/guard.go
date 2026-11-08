@@ -20,21 +20,21 @@ const (
 	AuthLocal = "local"
 	AuthOIDC  = "oidc"
 
-	Group      = "atrium_access"
+	group      = "atrium_access"
 	CSRFCookie = "atrium_csrf"
 	CSRFHeader = "X-CSRF-Token"
-	CSRFField  = "csrf_token"
+	csrfField  = "csrf_token"
 
-	StaticPrefix = "/static/"
-	HealthPath   = "/healthz"
+	staticPrefix = "/static/"
+	healthPath   = "/healthz"
 
-	CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; form-action 'self'"
+	csp = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; frame-ancestors 'none'; form-action 'self'"
 
 	formType = "application/x-www-form-urlencoded"
 )
 
 var (
-	AuthModes  = [...]string{AuthProxy, AuthLocal, AuthOIDC}
+	authModes  = [...]string{AuthProxy, AuthLocal, AuthOIDC}
 	localHosts = [...]string{"localhost", "127.0.0.1", "[::1]"}
 )
 
@@ -63,12 +63,12 @@ type Guard struct {
 	bodyCap  func(context.Context) (int, error)
 	sessions *oidc.Service
 	errPage  ErrorPage
-	admin    func(context.Context) string
+	admin    func(context.Context) (string, error)
 	secure   func(*http.Request) bool
 	classify func(*http.Request) access
 }
 
-func NewGuard(auth Policy, allowedHosts []string, public func(*http.Request) bool, classify func(*http.Request) access) *Guard {
+func newGuard(auth Policy, allowedHosts []string, public func(*http.Request) bool, classify func(*http.Request) access) *Guard {
 	hosts := map[string]struct{}{}
 	switch {
 	case len(allowedHosts) > 0:
@@ -134,11 +134,11 @@ func deny(w http.ResponseWriter, status int, text string) {
 }
 
 func healthProbe(r *http.Request) bool {
-	return r.Method == http.MethodGet && r.URL.EscapedPath() == HealthPath
+	return r.Method == http.MethodGet && r.URL.EscapedPath() == healthPath
 }
 
 func setSecurityHeaders(h http.Header) {
-	h.Set("Content-Security-Policy", CSP)
+	h.Set("Content-Security-Policy", csp)
 	h.Set("X-Content-Type-Options", "nosniff")
 	h.Set("Referrer-Policy", "same-origin")
 }
@@ -154,7 +154,7 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			deny(w, http.StatusBadRequest, "Bad Host header")
 			return
 		}
-		static := strings.HasPrefix(r.URL.Path, StaticPrefix)
+		static := strings.HasPrefix(r.URL.Path, staticPrefix)
 		class := accessDefault
 		if g.classify != nil {
 			class = g.classify(r)
@@ -220,7 +220,7 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 					}
 					return
 				}
-				supplied, has = r.PostForm.Get(CSRFField), r.PostForm.Has(CSRFField)
+				supplied, has = r.PostForm.Get(csrfField), r.PostForm.Has(csrfField)
 				if supplied == "" {
 					has = false
 				}
@@ -236,9 +236,9 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-func (g *Guard) adminGroup(ctx context.Context) string {
+func (g *Guard) adminGroup(ctx context.Context) (string, error) {
 	if g.admin == nil {
-		return oidc.DefaultAdminGroup
+		return oidc.DefaultAdminGroup, nil
 	}
 	return g.admin(ctx)
 }
@@ -256,7 +256,7 @@ func (g *Guard) issueCSRF(w http.ResponseWriter, r *http.Request, token string, 
 
 type adminOnlyKey struct{}
 
-func AdminOnly(ctx context.Context) bool {
+func adminOnly(ctx context.Context) bool {
 	v, _ := ctx.Value(adminOnlyKey{}).(bool)
 	return v
 }

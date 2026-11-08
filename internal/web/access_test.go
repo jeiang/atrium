@@ -75,13 +75,13 @@ func TestRouteAccessClasses(t *testing.T) {
 	if got := get("/admin", "").StatusCode; got != http.StatusForbidden {
 		t.Errorf("anonymous admin route: %d", got)
 	}
-	if got := get("/admin", Group).StatusCode; got != http.StatusForbidden {
+	if got := get("/admin", group).StatusCode; got != http.StatusForbidden {
 		t.Errorf("non-admin admin route: %d", got)
 	}
-	if got := get("/admin", Group+",atrium_admin").StatusCode; got != http.StatusNoContent {
+	if got := get("/admin", group+",atrium_admin").StatusCode; got != http.StatusNoContent {
 		t.Errorf("admin route: %d", got)
 	}
-	root := get("/", Group)
+	root := get("/", group)
 	if root.StatusCode != http.StatusSeeOther || root.Header.Get("Location") != "/chat" {
 		t.Errorf("root redirect: %d %q", root.StatusCode, root.Header.Get("Location"))
 	}

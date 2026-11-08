@@ -101,6 +101,55 @@ func identityOf(claims map[string]any, cfg Config) identity {
 	return id
 }
 
+// signed applies the claims of a signed id token. The id token is the
+// authority: a claim it carries replaces the stored value; a claim it omits
+// leaves the stored value alone.
+func (id identity) signed(claims map[string]any, cfg Config) identity {
+	next := identityOf(claims, cfg)
+	if next.Subject != "" {
+		id.Subject = next.Subject
+	}
+	if next.Email != "" {
+		id.Email, id.EmailVerified = next.Email, next.EmailVerified
+	}
+	if next.Name != "" {
+		id.Name = next.Name
+	}
+	if next.Hosted != "" {
+		id.Hosted = next.Hosted
+	}
+	if cfg.GroupsClaim != "" {
+		id.Groups, id.HasGroups = next.Groups, next.HasGroups
+	}
+	return id
+}
+
+// absorb fills only the fields an id token left empty. It is the userinfo
+// half of the merge: an unsigned response never overrides a signed claim.
+func (id identity) absorb(claims map[string]any, cfg Config) identity {
+	next := identityOf(claims, cfg)
+	if id.Subject == "" {
+		id.Subject = next.Subject
+	}
+	if id.Email == "" {
+		id.Email, id.EmailVerified = next.Email, next.EmailVerified
+	}
+	if id.Name == "" {
+		id.Name = next.Name
+	}
+	if id.Hosted == "" {
+		id.Hosted = next.Hosted
+	}
+	if cfg.GroupsClaim != "" && !id.HasGroups {
+		id.Groups, id.HasGroups = next.Groups, next.HasGroups
+	}
+	return id
+}
+
+func needsUserinfo(id identity, cfg Config) bool {
+	return cfg.GroupsClaim != "" && !id.HasGroups
+}
+
 func (c Config) decide(id identity) (access, admin bool) {
 	emailOK := id.EmailVerified && id.Email != ""
 	domain := id.Email[strings.LastIndexByte(id.Email, '@')+1:]

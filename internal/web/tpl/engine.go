@@ -48,9 +48,10 @@ type Frame struct {
 }
 
 type AuthView struct {
-	Admin   bool
-	SignOut bool
-	NoAuth  bool
+	Admin    bool
+	SignOut  bool
+	NoAuth   bool
+	Settings bool
 }
 
 type ErrorView struct {

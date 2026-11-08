@@ -24,7 +24,7 @@ func (p Policy) Proxy() bool    { return p.Mode == ModeProxy || p.Mode == ModePr
 func (p Policy) OIDC() bool     { return p.Mode == ModeOIDC || p.Mode == ModeProxyOIDC }
 func (p Policy) Enforced() bool { return !p.Open }
 
-func ParseAuth(modes []string) (Policy, error) {
+func parseAuth(modes []string) (Policy, error) {
 	if len(modes) == 0 {
 		return Policy{Mode: ModeProxy}, nil
 	}

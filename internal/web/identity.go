@@ -15,9 +15,9 @@ const (
 	SourceLocal = "local"
 	SourceOIDC  = "oidc"
 
-	LoginPath    = "/login"
-	CallbackPath = oidc.CallbackPath
-	LogoutPath   = "/logout"
+	loginPath    = "/login"
+	callbackPath = oidc.CallbackPath
+	logoutPath   = "/logout"
 
 	sessionCookie = "atrium_session"
 	bindingCookie = "atrium_oidc_state"
@@ -51,8 +51,13 @@ func (g *Guard) identify(r *http.Request) (Identity, error) {
 	if g.auth.Local() {
 		return Identity{Source: SourceLocal, Admin: true}, nil
 	}
-	if g.auth.Proxy() && hasGroup(r.Header.Get("Remote-Groups"), Group) {
-		return Identity{Source: SourceProxy, Admin: hasGroup(r.Header.Get("Remote-Groups"), g.adminGroup(r.Context()))}, nil
+	if g.auth.Proxy() && hasGroup(r.Header.Get("Remote-Groups"), group) {
+		adminGroup, err := g.adminGroup(r.Context())
+		if err != nil {
+			log.Error("admin group lookup failed", logx.Err, err.Error())
+			return Identity{}, errUnavailable
+		}
+		return Identity{Source: SourceProxy, Admin: hasGroup(r.Header.Get("Remote-Groups"), adminGroup)}, nil
 	}
 	if g.auth.OIDC() {
 		if token := cookieValue(r, sessionCookie, g.secure(r)); token != "" {
@@ -96,7 +101,7 @@ func (g *Guard) unauthenticated(w http.ResponseWriter, r *http.Request, why erro
 			q.Set("next", next)
 		}
 	}
-	target := LoginPath
+	target := loginPath
 	if len(q) > 0 {
 		target += "?" + q.Encode()
 	}

@@ -1,10 +1,13 @@
 package web
 
 import (
+	"context"
+	"database/sql"
 	"errors"
 	"net/http"
 
 	"github.com/jeiang/atrium/internal/auth/loginlink"
+	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
 )
 
@@ -30,7 +33,12 @@ func (s *Server) registerLinkRoutes() {
 	})
 	s.route(accessPublic, http.MethodPost, loginlink.Path, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
-		err := s.links.Redeem(r.Context(), FormString(FormValues(r), "token", ""))
+		var grant oidc.Grant
+		err := s.links.Redeem(r.Context(), FormString(FormValues(r), "token", ""), func(ctx context.Context, tx *sql.Tx) error {
+			var err error
+			grant, err = s.oidc.IssueLinkSessionTx(ctx, tx)
+			return err
+		})
 		switch {
 		case errors.Is(err, loginlink.ErrUsed):
 			s.linkPage(w, r, http.StatusGone, "This link was already used.")
@@ -46,16 +54,10 @@ func (s *Server) registerLinkRoutes() {
 			s.Error(w, r, http.StatusInternalServerError, "Internal Server Error")
 			return
 		}
-		grant, err := s.oidc.IssueLinkSession(r.Context())
-		if err != nil {
-			log.Error("login link session failed", logx.Err, err.Error())
-			s.Error(w, r, http.StatusInternalServerError, "Internal Server Error")
-			return
-		}
 		setCookie(w, sessionCookie, grant.Token, int(grant.MaxAge.Seconds()), s.secure(r))
 		target := "/chat"
 		if s.oidc.Check(r.Context()) != nil {
-			target = WizardPath
+			target = wizardPath
 		}
 		http.Redirect(w, r, target, http.StatusSeeOther)
 	})

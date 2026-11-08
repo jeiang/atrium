@@ -103,7 +103,9 @@ func (s *Service) Issue(ctx context.Context, ttl time.Duration) (string, error) 
 	return token, nil
 }
 
-func (s *Service) Redeem(ctx context.Context, token string) error {
+type RedeemFunc func(context.Context, *sql.Tx) error
+
+func (s *Service) Redeem(ctx context.Context, token string, after RedeemFunc) error {
 	ctx = audit.With(ctx, "login-link", audit.UI)
 	nonce, given, ok := strings.Cut(token, ".")
 	if !ok || len(nonce) > 128 || len(given) > 128 {
@@ -135,6 +137,11 @@ func (s *Service) Redeem(ctx context.Context, token string) error {
 		case s.unix() >= expires:
 			outcome = ErrExpired
 			return note(ctx, tx, "refused: #%d expired", id)
+		}
+		if after != nil {
+			if err := after(ctx, tx); err != nil {
+				return err
+			}
 		}
 		if _, err := tx.ExecContext(ctx, "UPDATE auth_login_links SET used_at = ? WHERE id = ?", s.unix(), id); err != nil {
 			return err

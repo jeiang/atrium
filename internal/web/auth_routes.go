@@ -43,13 +43,14 @@ func (s *Server) loginPage(w http.ResponseWriter, r *http.Request, reason, next 
 		reason, state = "", loginStates[""]
 	}
 	button := "Sign in"
-	if cfg, err := s.oidc.Config(r.Context()); err != nil {
+	cfg, cfgErr := s.oidc.Config(r.Context())
+	if cfgErr != nil {
 		reason, state = "unconfigured", loginStates["unconfigured"]
 	} else if cfg.Preset.Display != "" {
 		button = "Sign in with " + cfg.Preset.Display
 	}
-	if cfg, err := s.oidc.Config(r.Context()); err == nil {
-		w.Header().Set("Content-Security-Policy", strings.Replace(CSP, "form-action 'self'", "form-action 'self' "+strings.Join(s.oidc.Origins(cfg), " "), 1))
+	if cfgErr == nil {
+		w.Header().Set("Content-Security-Policy", strings.Replace(csp, "form-action 'self'", "form-action 'self' "+strings.Join(s.oidc.Origins(cfg), " "), 1))
 	}
 	view := loginView{Next: oidc.SafeReturn(next), Button: button, Reason: reason, Tone: state.tone, Message: state.message, Start: state.start}
 	if s.render == nil {
@@ -68,7 +69,7 @@ func (s *Server) loginPage(w http.ResponseWriter, r *http.Request, reason, next 
 
 func (s *Server) registerAuthRoutes() {
 	secure := s.secure
-	s.route(accessPublic, http.MethodGet, LoginPath, func(w http.ResponseWriter, r *http.Request) {
+	s.route(accessPublic, http.MethodGet, loginPath, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
 		q := r.URL.Query()
 		if _, ok := IdentityOf(r.Context()); ok {
@@ -77,7 +78,7 @@ func (s *Server) registerAuthRoutes() {
 		}
 		s.loginPage(w, r, q.Get("reason"), q.Get("next"))
 	})
-	s.route(accessPublic, http.MethodPost, LoginPath, func(w http.ResponseWriter, r *http.Request) {
+	s.route(accessPublic, http.MethodPost, loginPath, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
 		form := FormValues(r)
 		next := form.Get("next")
@@ -91,7 +92,7 @@ func (s *Server) registerAuthRoutes() {
 	})
 	s.registerLinkRoutes()
 	s.registerWizardRoutes()
-	s.route(accessPublic, http.MethodGet, CallbackPath, func(w http.ResponseWriter, r *http.Request) {
+	s.route(accessPublic, http.MethodGet, callbackPath, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
 		q := r.URL.Query()
 		if s.oidc.IsTestState(q.Get("state")) {
@@ -112,7 +113,7 @@ func (s *Server) registerAuthRoutes() {
 		setCookie(w, sessionCookie, grant.Token, int(grant.MaxAge.Seconds()), secure(r))
 		http.Redirect(w, r, grant.ReturnTo, http.StatusSeeOther)
 	})
-	s.mux.Post(LogoutPath, func(w http.ResponseWriter, r *http.Request) {
+	s.mux.Post(logoutPath, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
 		if err := s.oidc.End(r.Context(), cookieValue(r, sessionCookie, secure(r))); err != nil {
 			log.Error("sign-out failed", logx.Err, err.Error())
@@ -120,7 +121,7 @@ func (s *Server) registerAuthRoutes() {
 			return
 		}
 		expireCookie(w, sessionCookie, secure(r))
-		http.Redirect(w, r, LoginPath+"?reason=signed_out", http.StatusSeeOther)
+		http.Redirect(w, r, loginPath+"?reason=signed_out", http.StatusSeeOther)
 	})
 }
 
@@ -162,9 +163,9 @@ func (s *Server) signInFailed(w http.ResponseWriter, r *http.Request, err error,
 }
 
 func (s *Server) registerWizardRoutes() {
-	s.route(accessAdmin, http.MethodGet, WizardPath, s.wizardPage)
-	s.route(accessAdmin, http.MethodGet, WizardPath+"/preset", s.wizardPreset)
+	s.route(accessAdmin, http.MethodGet, wizardPath, s.wizardPage)
+	s.route(accessAdmin, http.MethodGet, wizardPath+"/preset", s.wizardPreset)
 	s.route(accessAdmin, http.MethodPost, testPath, s.wizardTest)
 	s.route(accessAdmin, http.MethodGet, testPath+"/status", s.wizardStatus)
-	s.route(accessAdmin, http.MethodPost, WizardPath+"/activate", s.wizardActivate)
+	s.route(accessAdmin, http.MethodPost, wizardPath+"/activate", s.wizardActivate)
 }
