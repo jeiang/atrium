@@ -3,16 +3,14 @@ package attentiontool
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/attention"
-	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/module"
 )
 
 const schema = `{"type":"object","properties":{},"additionalProperties":false}`
-
-var Enabled = module.IsEnabled
 
 func Tools() []tool.Tool {
 	return []tool.Tool{{
@@ -28,7 +26,11 @@ func Tools() []tool.Tool {
 			if tc.Now != nil {
 				now = tc.Now()
 			}
-			result, err := attention.Query(ctx, tc.DB.Read, now, attentionsources.Enabled(ctx, Enabled)...)
+			set := module.SetFrom(ctx)
+			if set == nil || set.Current() == nil {
+				return nil, errors.New("attention: no module set")
+			}
+			result, err := attention.Query(ctx, tc.DB.Read, now, set.Current().Attention()...)
 			if err != nil {
 				return nil, err
 			}
