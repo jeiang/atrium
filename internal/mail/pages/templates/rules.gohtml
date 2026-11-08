@@ -5,13 +5,12 @@
 {{define "mail_rules_learned_tab"}}Learned <span class="badge" data-variant="secondary">{{len .Data.Learned}}</span>{{end}}
 {{define "mail_rules_operator_panel"}}
 <div class="flex flex-col gap-3 pt-3">
-  <p class="text-sm text-muted-foreground">Checked top to bottom before anything learned; the first rule whose conditions all hold decides.</p>
   {{template "mail_rule_list" (dict "rules" .Data.Rules "account" .Data.Account "moved" nil "focus_id" nil)}}
 </div>
 {{end}}
 {{define "mail_rules_learned_panel"}}{{$account := .Data.Account -}}
 <div class="flex flex-col gap-3 pt-3">
-  <p class="text-sm text-muted-foreground">Learned from where you file mail with the same sender or subject template. Read-only: correct a message to teach atrium.{{if .Data.LearnedLimit}} Showing the {{.Data.LearnedLimit}} keys with the most messages per account.{{end}}</p>
+  {{if .Data.LearnedLimit}}<p class="text-xs text-muted-foreground tabular-nums">Top {{.Data.LearnedLimit}} keys per account</p>{{end}}
   {{if .Data.Learned}}
   <div class="table-container rounded-lg border bg-card">
     <table class="table">
@@ -41,7 +40,7 @@
     </table>
   </div>
   {{else}}
-  <p class="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">Nothing learned yet. atrium needs a few filed messages that agree before it trusts a key.</p>
+  <p class="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">Nothing learned yet.</p>
   {{end}}
 </div>
 {{end}}

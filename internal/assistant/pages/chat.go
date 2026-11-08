@@ -21,16 +21,15 @@ import (
 )
 
 type listData struct {
-	Threads   []threads.Listed `json:"threads"`
-	Q         string           `json:"q"`
-	View      string           `json:"view"`
-	ProjectID int64            `json:"project_id"`
+	Threads []threads.Listed `json:"threads"`
+	Q       string           `json:"q"`
+	View    string           `json:"view"`
 
 	Defaults threads.Options `json:"defaults"`
 	Composer ComposerView    `json:"composer"`
 }
 
-func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, projectID int64) {
+func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string) {
 	match := ""
 	if q != "" {
 		var err error
@@ -39,7 +38,7 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, 
 	}
 	limit, err := config.From(r.Context()).Limit(r.Context(), p.deps.DB.Read, config.KeyChatThreadLimit)
 	check(err)
-	found, err := threads.ListThreads(r.Context(), p.deps.DB.Read, threads.ListOpts{Match: match, Limit: limit, Archived: view == archived, ProjectID: projectID})
+	found, err := threads.ListThreads(r.Context(), p.deps.DB.Read, threads.ListOpts{Match: match, Limit: limit, Archived: view == archived})
 	check(err)
 	if found == nil {
 		found = []threads.Listed{}
@@ -47,7 +46,7 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, 
 	defaults, err := threads.Defaults(r.Context(), p.deps.DB.Read)
 	check(err)
 	data := listData{
-		Threads: found, Q: q, View: view, ProjectID: projectID,
+		Threads: found, Q: q, View: view,
 		Defaults: defaults,
 		Composer: composerData(r.Context(), defaults.Model, defaults.Effort, defaults.Thinking, defaults.ContextLimit, defaults.WebSearch, defaults.CostCapUSD, 0),
 	}
@@ -65,7 +64,7 @@ func (p *pages) chatIndex(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, r, http.StatusUnprocessableEntity, "unknown view")
 		return
 	}
-	p.listing(w, r, strings.TrimSpace(web.QueryValue(query, "q")), view, 0)
+	p.listing(w, r, strings.TrimSpace(web.QueryValue(query, "q")), view)
 }
 
 func attachmentBlocks(blocks []files.AttachmentBlock) []json.RawMessage {
@@ -170,7 +169,6 @@ func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string, s
 	threadID, errs := pathInt(r, "thread_id")
 	form := web.FormValues(r)
 	value := formInt(form, "body", column, 1, &errs)
-	projectID := formInt(form, "body", "project_id", 0, &errs)
 	if len(errs) > 0 {
 		web.Unprocessable(w, errs...)
 		return
@@ -186,7 +184,7 @@ func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string, s
 		if view != archived {
 			view = ""
 		}
-		p.listing(w, r, strings.TrimSpace(web.FormString(form, "q", "")), view, projectID)
+		p.listing(w, r, strings.TrimSpace(web.FormString(form, "q", "")), view)
 		return
 	}
 	back := "/chat/" + strconv.FormatInt(threadID, 10)

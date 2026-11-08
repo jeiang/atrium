@@ -34,7 +34,7 @@
 {{end}}
 {{define "mail_triage_flags_panel"}}{{$d := .Data -}}
 <div class="flex flex-col gap-3 pt-3">
-  <p class="text-sm text-muted-foreground">Unread inbox mail and whether it {{if eq .Mode "live"}}is flagged: mail from a contact is flagged automatically, the 9B judgment is only logged{{else}}would be flagged. Nothing is flagged in shadow mode{{end}}.{{if $d.FlagsCapped}} Showing the newest {{len $d.Flags}}.{{end}}</p>
+  {{if $d.FlagsCapped}}<p class="text-xs text-muted-foreground tabular-nums">Newest {{len $d.Flags}}</p>{{end}}
   {{if $d.NoContacts}}<p class="text-sm text-muted-foreground">No contact source is configured, so no sender is flagged as a contact.</p>{{end}}
   {{if $d.Flags}}
   <ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list">
@@ -66,8 +66,7 @@
 </div>
 {{end}}
 {{define "content"}}
-<div class="flex flex-wrap items-center justify-between gap-3">
-  <p class="max-w-prose text-sm text-muted-foreground">{{if eq .Mode "live"}}What atrium decided for read mail in the inbox, whether it was applied, and where the mail is now.{{else}}What atrium would do with read mail still in the inbox, compared with where the mail actually went.{{end}}</p>
+<div class="flex flex-wrap items-center justify-end gap-3">
   {{template "account_switch" (dict "path" "/triage" "current" .Data.Account)}}
 </div>
 

@@ -78,6 +78,7 @@
   {{end}}
   {{if $d.SMTPResult}}<p class="text-xs text-muted-foreground">{{str $d.SMTPResult}}</p>{{end}}
 </li>
+{{if .partial}}{{template "pending_badge" (dict "count" .pending_count "oob" true)}}{{end}}
 {{if and .partial .toast}}{{with .toast}}{{template "_toast.gohtml" (dict "Toast" .)}}{{end}}{{end}}{{end}}
 
-{{template "draft_card" (dict "d" .Data.D "configured" .Data.Configured "csrf" .CSRF "partial" .Data.Partial "toast" .Toast)}}
+{{template "draft_card" (dict "d" .Data.D "configured" .Data.Configured "csrf" .CSRF "partial" .Data.Partial "toast" .Toast "pending_count" .PendingCount)}}

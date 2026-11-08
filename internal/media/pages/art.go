@@ -19,9 +19,9 @@ const (
 )
 
 func (s *service) registerFiles(r chi.Router) {
-	r.Get("/media/art/season/{name}/{number}", s.serveSeasonArt)
-	r.Get("/media/art/{kind}/{name}", s.serveArt)
-	r.Get("/media/thumb/*", s.serveThumb)
+	r.Get("/apps/media/art/season/{name}/{number}", s.serveSeasonArt)
+	r.Get("/apps/media/art/{kind}/{name}", s.serveArt)
+	r.Get("/apps/media/thumb/*", s.serveThumb)
 	r.Get(media.FilePrefix+"*", s.serveFile)
 }
 

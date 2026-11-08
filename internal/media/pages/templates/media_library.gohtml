@@ -4,8 +4,8 @@
 <ul class="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5" role="list" aria-label="{{.label}}">
   {{range .items}}
   <li>
-    <a class="group flex flex-col gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring" href="/media/library/{{if eq .Kind "movie"}}movie{{else}}tv{{end}}/{{urlencode .Dir}}">
-      <img class="aspect-[2/3] w-full rounded-lg border bg-muted object-cover" src="/media/art/{{if eq .Kind "movie"}}movie{{else}}show{{end}}/{{urlencode .Dir}}" alt="" loading="lazy">
+    <a class="group flex flex-col gap-2 rounded-lg outline-none focus-visible:ring-2 focus-visible:ring-ring" href="/apps/media/library/{{if eq .Kind "movie"}}movie{{else}}tv{{end}}/{{urlencode .Dir}}">
+      <img class="aspect-[2/3] w-full rounded-lg border bg-muted object-cover" src="/apps/media/art/{{if eq .Kind "movie"}}movie{{else}}show{{end}}/{{urlencode .Dir}}" alt="" loading="lazy">
       <span class="text-sm font-medium leading-tight group-hover:underline">{{.Title}}</span>
       {{if .Year}}<span class="text-xs text-muted-foreground">{{.Year}}</span>{{end}}
     </a>

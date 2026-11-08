@@ -1,7 +1,7 @@
-{{define "title"}}Watches{{end}}
-{{define "heading"}}Watches{{end}}
+{{define "title"}}Packages{{end}}
+{{define "heading"}}Packages{{end}}
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
-<p class="text-sm text-muted-foreground">Read from your mail and address book by a local model. Dates and statuses can be wrong or stale; open the source mail to check. Nothing here pays, cancels or contacts anyone.</p>
+<p class="text-sm text-muted-foreground">Read from your mail by a local model. Dates and statuses can be wrong or stale; open the source mail to check. Nothing here pays, cancels or contacts anyone.</p>
 
 <section class="flex flex-col gap-3" aria-labelledby="packages-h">
   <h2 id="packages-h" class="text-sm font-medium">Packages in transit ({{len $d.Packages}})</h2>
@@ -33,35 +33,6 @@
   </ul>
   {{else}}
   {{template "empty_state" (dict "icon_name" "package" "title" "No packages in transit" "body" "Status only changes when a later shipping email arrives.")}}
-  {{end}}
-</section>
-
-<section class="flex flex-col gap-3" aria-labelledby="birthdays-h">
-  <h2 id="birthdays-h" class="text-sm font-medium">Birthdays and anniversaries, next {{$d.BirthdayDays}} days{{if $d.BirthdaysConfigured}} ({{len $d.Birthdays}}){{end}}</h2>
-  {{if not $d.BirthdaysConfigured}}
-  {{template "empty_state" (dict "icon_name" "book-user" "title" "Address book not configured" "body" "ATRIUM_CONTACTS_CONTACTS_DIR is not set.")}}
-  {{else if $d.Birthdays}}
-  <ul class="flex flex-col gap-3" role="list" aria-label="Birthdays">
-    {{range $d.Birthdays}}
-    <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
-      <div class="flex min-w-0 flex-col gap-1">
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="text-sm font-medium">{{.Name}}</span>
-          <span class="badge" data-variant="outline">{{.Label}}</span>
-        </div>
-        <p class="text-xs text-muted-foreground tabular-nums">{{.Date}} ({{if eq .DaysUntil 0}}today{{else}}in {{.DaysUntil}} days{{end}}){{if .Turning}} · turning {{str .Turning}}{{end}}</p>
-      </div>
-      <form method="post" action="/watches/birthdays/dismiss">
-        <input type="hidden" name="csrf_token" value="{{$csrf}}">
-        <input type="hidden" name="key" value="{{.Key}}">
-        <input type="hidden" name="date" value="{{.Date}}">
-        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "x"}}Dismiss</button>
-      </form>
-    </li>
-    {{end}}
-  </ul>
-  {{else}}
-  {{template "empty_state" (dict "icon_name" "check" "title" "Nothing coming up" "body" "No contact has a birthday or anniversary in the next 60 days.")}}
   {{end}}
 </section>
 {{end}}

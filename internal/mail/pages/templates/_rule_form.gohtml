@@ -15,11 +15,9 @@
       <div role="group" class="field">
         <label for="rule-id">Name</label>
         {{if $is_new}}
-        <input id="rule-id" name="id" type="text" value="{{or $rule.ID ""}}" placeholder="Generated if empty" autocomplete="off" spellcheck="false" class="font-mono" aria-describedby="rule-id-help">
-        <p id="rule-id-help">Shown in Decisions when this rule decides.</p>
+        <input id="rule-id" name="id" type="text" value="{{or $rule.ID ""}}" placeholder="Generated if empty" autocomplete="off" spellcheck="false" class="font-mono">
         {{else}}
-        <input id="rule-id" name="id" type="text" value="{{$rule.ID}}" readonly class="font-mono" aria-describedby="rule-id-help">
-        <p id="rule-id-help">A rule keeps its name; delete it and create another to rename.</p>
+        <input id="rule-id" name="id" type="text" value="{{$rule.ID}}" readonly class="font-mono" title="A rule keeps its name">
         {{end}}
       </div>
       <div role="group" class="field">
@@ -58,7 +56,6 @@
 
   <fieldset class="fieldset group/conditions">
     <legend>Conditions</legend>
-    <p>A message matches when every condition holds. Values compare without regard to case.</p>
     <div class="hidden gap-2 px-0 text-xs font-medium text-muted-foreground sm:group-has-[#conditions>li]/conditions:grid sm:grid-cols-[--spacing(44)_--spacing(44)_minmax(0,1fr)_--spacing(9)]" aria-hidden="true">
       <span>Field</span><span>Operator</span><span>Value</span><span></span>
     </div>

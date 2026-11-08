@@ -161,59 +161,59 @@ func TestChE2EChannelsSearchPreviewAddRemovePoll(t *testing.T) {
 	ez.release("1234567", chHashB, "lanterns s01e01 720p")
 	s := newSite(t, chVars(t, map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL": qb.URL, "ATRIUM_MEDIA_MEDIA_EZTV_URL": ez.url, "ATRIUM_NOTIFY_NTFY_URL": chNewNtfy(t), "ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "k", "ATRIUM_MEDIA_MEDIA_TMDB_URL": tm.URL}), Options{})
 
-	empty := status(t, s.get("/media/channels"), 200, "channels page")
+	empty := status(t, s.get("/apps/media/channels"), 200, "channels page")
 	contains(t, empty, "No channels", "Not checked yet.", `name="backfill" value="1" checked`, "Watching (0)")
 
-	page := status(t, s.get("/media/channels?q=lant"), 200, "search")
-	contains(t, page, "Lanterns", "tmdb_id=42", `href="/media/channels?tmdb_id=42&amp;name=Lanterns&amp;q=lant#new-channel"`)
-	picked := status(t, s.get("/media/channels?tmdb_id=42&name=Lanterns"), 200, "use")
+	page := status(t, s.get("/apps/media/channels?q=lant"), 200, "search")
+	contains(t, page, "Lanterns", "tmdb_id=42", `href="/apps/media/channels?tmdb_id=42&amp;name=Lanterns&amp;q=lant#new-channel"`)
+	picked := status(t, s.get("/apps/media/channels?tmdb_id=42&name=Lanterns"), 200, "use")
 	contains(t, picked, `value="tt1234567"`, `value="42"`, "load, input changed")
 
 	post := func(path string, form url.Values) string { return s.post(path, form).Body.String() }
-	preview := post("/media/channels/preview", url.Values{"imdb": {"tt1234567"}, "pattern": {"^lanterns s01e01"}})
+	preview := post("/apps/media/channels/preview", url.Values{"imdb": {"tt1234567"}, "pattern": {"^lanterns s01e01"}})
 	contains(t, preview, "2 of 2 current EZTV releases match", `data-match="yes"`, "1.2 GB")
-	strict := post("/media/channels/preview", url.Values{"imdb": {"tt1234567"}, "pattern": {"^lanterns s01e01"}, "case_sensitive": {"1"}})
+	strict := post("/apps/media/channels/preview", url.Values{"imdb": {"tt1234567"}, "pattern": {"^lanterns s01e01"}, "case_sensitive": {"1"}})
 	contains(t, strict, "1 of 2 current EZTV releases match", `data-match="no"`)
-	blank := post("/media/channels/preview", url.Values{"imdb": {"tt1234567"}, "pattern": {"  "}})
+	blank := post("/apps/media/channels/preview", url.Values{"imdb": {"tt1234567"}, "pattern": {"  "}})
 	contains(t, blank, "0 of 2 current EZTV releases match")
-	contains(t, post("/media/channels/preview", url.Values{"imdb": {""}, "pattern": {"x"}}), "Pick a show or enter an IMDb id first.")
-	contains(t, post("/media/channels/preview", url.Values{"imdb": {"tt1234567"}, "pattern": {"("}}), "pattern")
+	contains(t, post("/apps/media/channels/preview", url.Values{"imdb": {""}, "pattern": {"x"}}), "Pick a show or enter an IMDb id first.")
+	contains(t, post("/apps/media/channels/preview", url.Values{"imdb": {"tt1234567"}, "pattern": {"("}}), "pattern")
 	ez.mu.Lock()
 	ez.fail = 500
 	ez.mu.Unlock()
-	contains(t, post("/media/channels/preview", url.Values{"imdb": {"tt1234567"}, "pattern": {"x"}}), "EZTV: 500")
+	contains(t, post("/apps/media/channels/preview", url.Values{"imdb": {"tt1234567"}, "pattern": {"x"}}), "EZTV: 500")
 	ez.mu.Lock()
 	ez.fail = 0
 	ez.mu.Unlock()
 
-	saved := status(t, s.post("/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"tt1234567"}, "tmdb_id": {"42"}, "pattern": {"1080p"}}), 200, "add")
+	saved := status(t, s.post("/apps/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"tt1234567"}, "tmdb_id": {"42"}, "pattern": {"1080p"}}), 200, "add")
 	contains(t, saved, "Watching Lanterns", "The first poll only records what is already out", "first check pending", "Watching (1)", `name="backfill" value="1" checked`)
-	bad := status(t, s.post("/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"nope"}, "pattern": {"1080p"}, "case_sensitive": {"1"}}), 422, "bad imdb")
+	bad := status(t, s.post("/apps/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"nope"}, "pattern": {"1080p"}, "case_sensitive": {"1"}}), 422, "bad imdb")
 	contains(t, bad, "Not saved", `value="nope"`, `name="case_sensitive" value="1" checked`)
 	rows := chChannels(t, s)
 	if len(rows) != 1 || rows[0].TMDBID == nil || *rows[0].TMDBID != 42 {
 		t.Fatalf("channels = %+v", rows)
 	}
 
-	polled := status(t, s.post("/media/channels/poll", nil), 200, "poll")
+	polled := status(t, s.post("/apps/media/channels/poll", nil), 200, "poll")
 	contains(t, polled, "nothing new", "Last check")
 	if !chSeen(t, s, chHashA) || chSeen(t, s, chHashB) {
 		t.Fatal("first poll must record only the matching release")
 	}
 
-	backfilled := status(t, s.post("/media/channels", url.Values{"name": {"Lanterns B"}, "imdb": {"tt1234567"}, "pattern": {"720p"}, "backfill": {"1"}}), 200, "backfill")
+	backfilled := status(t, s.post("/apps/media/channels", url.Values{"name": {"Lanterns B"}, "imdb": {"tt1234567"}, "pattern": {"720p"}, "backfill": {"1"}}), 200, "backfill")
 	contains(t, backfilled, "Watching Lanterns B", "Added: lanterns s01e01 720p.")
 	if len(qb.added) != 1 || qb.added[0].Get("tags") != "media" || !strings.Contains(qb.added[0].Get("urls"), chHashB) {
 		t.Fatalf("qBittorrent adds = %v", qb.added)
 	}
 
-	removed := status(t, s.post(fmt.Sprintf("/media/channels/%d/delete", rows[0].ID), nil), 200, "remove")
+	removed := status(t, s.post(fmt.Sprintf("/apps/media/channels/%d/delete", rows[0].ID), nil), 200, "remove")
 	contains(t, removed, "Removed Lanterns")
 	if len(chChannels(t, s)) != 1 {
 		t.Fatal("remove must delete exactly one channel")
 	}
-	status(t, s.post("/media/channels/999/delete", nil), 404, "remove missing")
-	status(t, s.post("/media/channels/abc/delete", nil), 422, "remove non-integer")
+	status(t, s.post("/apps/media/channels/999/delete", nil), 404, "remove missing")
+	status(t, s.post("/apps/media/channels/abc/delete", nil), 422, "remove non-integer")
 }
 
 func TestChE2ETmdbFailuresAndMissingBackends(t *testing.T) {
@@ -221,26 +221,26 @@ func TestChE2ETmdbFailuresAndMissingBackends(t *testing.T) {
 	ez := chNewEztv(t)
 	s := newSite(t, chVars(t, map[string]string{"ATRIUM_MEDIA_MEDIA_EZTV_URL": ez.url, "ATRIUM_MEDIA_MEDIA_TMDB_TOKEN": "k", "ATRIUM_MEDIA_MEDIA_TMDB_URL": tm.URL}), Options{})
 
-	missing := status(t, s.get("/media/channels?tmdb_id=7"), 200, "no imdb id")
+	missing := status(t, s.get("/apps/media/channels?tmdb_id=7"), 200, "no imdb id")
 	contains(t, missing, "No IMDb id on TMDB", "Enter it by hand.")
-	none := status(t, s.get("/media/channels?q=zzz"), 200, "no results")
+	none := status(t, s.get("/apps/media/channels?q=zzz"), 200, "no results")
 	contains(t, none, "No shows found.")
 	tm.mu.Lock()
 	tm.fail = 500
 	tm.mu.Unlock()
-	failed := status(t, s.get("/media/channels?q=lant"), 200, "tmdb failure")
+	failed := status(t, s.get("/apps/media/channels?q=lant"), 200, "tmdb failure")
 	contains(t, failed, "TMDB failed", "TMDB: 500")
 
-	added := status(t, s.post("/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"tt1234567"}, "pattern": {"1080p"}, "backfill": {"1"}}), 200, "backfill without qBittorrent")
+	added := status(t, s.post("/apps/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"tt1234567"}, "pattern": {"1080p"}, "backfill": {"1"}}), 200, "backfill without qBittorrent")
 	contains(t, added, "Watching Lanterns", "Nothing downloaded: media_qbittorrent_url is not set")
 	if len(chChannels(t, s)) != 1 {
 		t.Fatal("the channel must be kept when nothing could be downloaded")
 	}
-	unpolled := status(t, s.post("/media/channels/poll", nil), 422, "poll without qBittorrent")
+	unpolled := status(t, s.post("/apps/media/channels/poll", nil), 422, "poll without qBittorrent")
 	contains(t, unpolled, "Not polled", "media_qbittorrent_url is not set")
 
 	plain := newSite(t, chVars(t, nil), Options{})
-	page := status(t, plain.get("/media/channels?q=x"), 200, "no TMDB key")
+	page := status(t, plain.get("/apps/media/channels?q=x"), 200, "no TMDB key")
 	contains(t, page, "No TMDB read token is set: enter the IMDb id directly.", `name="imdb"`)
 	lacks(t, page, `id="q"`)
 }

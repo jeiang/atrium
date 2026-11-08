@@ -65,16 +65,17 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 	if who, ok := IdentityOf(r.Context()); ok {
 		auth.Admin, auth.SignOut, auth.NoAuth = who.Admin, who.Source == SourceOIDC, who.NoAuth
 	}
-	nav, settings, settingsURL, brandURL, footer := rd.navFor(page)
+	nav := rd.navFor(page)
 	f := &tpl.Frame{
 		Auth:        auth,
 		CSRF:        CSRFToken(r.Context()),
 		Page:        page,
-		Nav:         nav,
-		Settings:    settings,
-		SettingsURL: settingsURL,
-		BrandURL:    brandURL,
-		Footer:      footer,
+		Nav:         nav.groups,
+		Settings:    nav.settings,
+		SettingsURL: nav.settingsURL,
+		BrandURL:    nav.brandURL,
+		Footer:      nav.footer,
+		Tabs:        nav.tabs,
 		Path:        r.URL.Path,
 		Theme:       themeOf(r),
 		Rail:        cookieValue(r, railCookie, false) == "1",
@@ -105,11 +106,28 @@ func themeOf(r *http.Request) string {
 	}
 }
 
-func (rd *Renderer) navFor(page string) ([]tpl.NavGroup, []tpl.NavItem, string, string, []tpl.NavItem) {
-	var groups []tpl.NavGroup
+type hub struct {
+	section, label, icon string
+	badge                bool
+}
+
+var hubs = []hub{
+	{section: "review", label: "Review", icon: "inbox", badge: true},
+	{section: "library", label: "Library", icon: "library"},
+	{section: "apps", label: "Apps", icon: "layout-grid"},
+}
+
+type navView struct {
+	groups                []tpl.NavGroup
+	settings, footer      []tpl.NavItem
+	tabs                  []tpl.NavItem
+	settingsURL, brandURL string
+}
+
+func (rd *Renderer) navFor(page string) navView {
+	var v navView
 	index := map[string]int{}
-	var settings, footer []tpl.NavItem
-	settingsURL, brandURL := "", ""
+	sections := map[string][]tpl.NavItem{}
 	primarySet := false
 	for _, item := range rd.nav {
 		if item.Module != "" && rd.moduleEnabled != nil && !rd.moduleEnabled(item.Module) {
@@ -119,43 +137,61 @@ func (rd *Renderer) navFor(page string) ([]tpl.NavGroup, []tpl.NavItem, string, 
 			continue
 		}
 		item.Current = item.Page == page
-		if item.Brand {
-			brandURL = item.URL
-			continue
-		}
-		if item.Footer {
-			footer = append(footer, item)
-			continue
-		}
-		if item.Settings {
-			settings = append(settings, item)
-			if settingsURL == "" {
-				settingsURL = item.URL
+		switch {
+		case item.Brand:
+			v.brandURL = item.URL
+		case item.Footer:
+			v.footer = append(v.footer, item)
+		case item.Section != "":
+			sections[item.Section] = append(sections[item.Section], item)
+		case item.Settings:
+			v.settings = append(v.settings, item)
+			if v.settingsURL == "" {
+				v.settingsURL = item.URL
 			}
 			if item.Primary && !primarySet {
-				settingsURL, primarySet = item.PrimaryURL, true
-				if settingsURL == "" {
-					settingsURL = item.URL
+				v.settingsURL, primarySet = item.PrimaryURL, true
+				if v.settingsURL == "" {
+					v.settingsURL = item.URL
 				}
 			}
+		default:
+			at, ok := index[item.Group]
+			if !ok {
+				at = len(v.groups)
+				index[item.Group] = at
+				v.groups = append(v.groups, tpl.NavGroup{Label: item.Group})
+			}
+			v.groups[at].Items = append(v.groups[at].Items, item)
+		}
+	}
+	sort.SliceStable(v.groups, func(i, j int) bool {
+		return groupOrder(v.groups[i]) < groupOrder(v.groups[j])
+	})
+	var entries []tpl.NavItem
+	for _, h := range hubs {
+		tabs := sections[h.section]
+		if len(tabs) == 0 {
 			continue
 		}
-		at, ok := index[item.Group]
-		if !ok {
-			at = len(groups)
-			index[item.Group] = at
-			groups = append(groups, tpl.NavGroup{Label: item.Group})
+		sort.SliceStable(tabs, func(i, j int) bool { return tabs[i].Order < tabs[j].Order })
+		entry := tpl.NavItem{Label: h.label, URL: tabs[0].URL, Icon: h.icon, Page: h.section, Badge: h.badge, Current: page == h.section}
+		for _, t := range tabs {
+			if t.Current {
+				entry.Current = true
+				v.tabs = tabs
+			}
 		}
-		groups[at].Items = append(groups[at].Items, item)
+		entries = append(entries, entry)
 	}
-	sort.SliceStable(groups, func(i, j int) bool {
-		return groupOrder(groups[i]) < groupOrder(groups[j])
+	if len(entries) > 0 {
+		v.groups = append(v.groups, tpl.NavGroup{Items: entries})
+	}
+	sort.SliceStable(v.settings, func(i, j int) bool {
+		return v.settings[i].Order < v.settings[j].Order
 	})
-	sort.SliceStable(settings, func(i, j int) bool {
-		return settings[i].Order < settings[j].Order
-	})
-	sort.SliceStable(footer, func(i, j int) bool { return footer[i].Order < footer[j].Order })
-	return groups, settings, settingsURL, brandURL, footer
+	sort.SliceStable(v.footer, func(i, j int) bool { return v.footer[i].Order < v.footer[j].Order })
+	return v
 }
 
 func groupOrder(g tpl.NavGroup) int {

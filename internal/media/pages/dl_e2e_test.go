@@ -267,24 +267,24 @@ func dlCompletedMedia(t *testing.T, root string, qb *dlQbitFake, hash, name stri
 func TestDlAddPagePrefillAndSubmit(t *testing.T) {
 	s, qb, _ := dlWorld(t, nil)
 	magnet := "magnet:?xt=urn:btih:" + dlHashA + "&dn=Lanterns.S01E08"
-	page := status(t, s.get("/media/add?magnet="+url.QueryEscape(magnet)+"&name=Lanterns.S01E08.torrent"), 200, "add page")
+	page := status(t, s.get("/apps/media/add?magnet="+url.QueryEscape(magnet)+"&name=Lanterns.S01E08.torrent"), 200, "add page")
 	contains(t, page, `value="`+strings.ReplaceAll(magnet, "&", "&amp;")+`"`, `name="torrent"`, `value="media" checked`, `value="Lanterns.S01E08.torrent"`)
 
-	done := status(t, s.post("/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}), 200, "add magnet")
+	done := status(t, s.post("/apps/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}), 200, "add magnet")
 	contains(t, done, "Added the magnet link")
 	if got := qb.added[len(qb.added)-1]; got.kind != "magnet" || got.magnet != magnet || got.hash != dlHashA || !slices.Equal(got.tags, []string{"media"}) {
 		t.Fatalf("magnet add recorded %+v", got)
 	}
 
 	plain := "magnet:?xt=urn:btih:" + dlHashB
-	status(t, s.post("/media/add", url.Values{"magnet": {plain}, "mode": {"plain"}}), 200, "add plain")
+	status(t, s.post("/apps/media/add", url.Values{"magnet": {plain}, "mode": {"plain"}}), 200, "add plain")
 	if got := qb.added[len(qb.added)-1]; len(got.tags) != 0 {
 		t.Fatalf("plain add carries tags %v", got.tags)
 	}
 
 	data, hash := dlTorrentBytes("Dune.2021")
 	b64 := base64.RawURLEncoding.EncodeToString(data)
-	status(t, s.post("/media/add", url.Values{"torrent": {b64}, "name": {"Dune.2021.torrent"}, "mode": {"media"}}), 200, "add file")
+	status(t, s.post("/apps/media/add", url.Values{"torrent": {b64}, "name": {"Dune.2021.torrent"}, "mode": {"media"}}), 200, "add file")
 	if got := qb.added[len(qb.added)-1]; got.kind != "file" || got.name != "Dune.2021.torrent" || got.hash != hash || !slices.Equal(got.tags, []string{"media"}) {
 		t.Fatalf("file add recorded %+v", got)
 	}
@@ -292,27 +292,27 @@ func TestDlAddPagePrefillAndSubmit(t *testing.T) {
 		t.Fatalf("selection not applied after add: %v", qb.tagsOf(hash))
 	}
 
-	empty := status(t, s.post("/media/add", url.Values{"magnet": {""}, "mode": {"media"}}), 422, "empty add")
+	empty := status(t, s.post("/apps/media/add", url.Values{"magnet": {""}, "mode": {"media"}}), 422, "empty add")
 	contains(t, empty, "Paste a magnet link or choose a .torrent file.")
-	notMagnet := status(t, s.post("/media/add", url.Values{"magnet": {"http://x"}, "mode": {"media"}, "name": {"Kept <x>.torrent"}}), 422, "not a magnet")
+	notMagnet := status(t, s.post("/apps/media/add", url.Values{"magnet": {"http://x"}, "mode": {"media"}, "name": {"Kept <x>.torrent"}}), 422, "not a magnet")
 	contains(t, notMagnet, "That is not a magnet link.", `value="http://x"`, "Kept &lt;x&gt;.torrent (from the shim)")
-	status(t, s.post("/media/add", url.Values{"torrent": {"AAAA"}, "mode": {"media"}}), 422, "not a torrent")
+	status(t, s.post("/apps/media/add", url.Values{"torrent": {"AAAA"}, "mode": {"media"}}), 422, "not a torrent")
 
 	qb.setFail(500)
-	down := status(t, s.post("/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}), 502, "qbit down")
+	down := status(t, s.post("/apps/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}), 502, "qbit down")
 	contains(t, down, "qBittorrent: torrents/add: 500")
 }
 
 func TestDlAddPageKeepsTheGlobalMode(t *testing.T) {
 	s, _, _ := dlWorld(t, map[string]string{"ATRIUM_MODE": "live"})
 	for _, body := range []string{
-		status(t, s.get("/media/add"), 200, "add page"),
-		status(t, s.post("/media/add", url.Values{"magnet": {"http://x"}, "mode": {"plain"}}), 422, "add post"),
+		status(t, s.get("/apps/media/add"), 200, "add page"),
+		status(t, s.post("/apps/media/add", url.Values{"magnet": {"http://x"}, "mode": {"plain"}}), 422, "add post"),
 	} {
 		contains(t, body, `action="/live/pause"`)
 		lacks(t, body, "Shadow")
 	}
-	contains(t, status(t, s.post("/media/add", url.Values{"magnet": {"http://x"}, "mode": {"plain"}}), 422, "plain"), `value="plain" checked`)
+	contains(t, status(t, s.post("/apps/media/add", url.Values{"magnet": {"http://x"}, "mode": {"plain"}}), 422, "plain"), `value="plain" checked`)
 }
 
 func TestDlDownloadsPageListsTorrentsQueueAndFiles(t *testing.T) {
@@ -324,60 +324,60 @@ func TestDlDownloadsPageListsTorrentsQueueAndFiles(t *testing.T) {
 		files: []dlFile{{Index: 0, Name: "Dune.2021.mkv", Priority: 1, Size: 2_000_000_000, Progress: 0.4}, {Index: 1, Name: "x.nfo", Priority: 0}},
 	})
 
-	page := status(t, s.get("/media/downloads"), 200, "downloads")
+	page := status(t, s.get("/apps/media/downloads"), 200, "downloads")
 	contains(t, page, "Lanterns.S01E08.1080p.WEB.h264-ETHEL", "Ready to file (1)", "tv/Lanterns/Season 01/Lanterns - S01E08.mkv",
-		"40%", "4.8 MB/s", "ETA 6m", `hx-get="/media/torrents"`, "1.9 GB")
+		"40%", "4.8 MB/s", "ETA 6m", `hx-get="/apps/media/torrents"`, "1.9 GB")
 
-	home := s.get("/media")
+	home := s.get("/apps/media")
 	status(t, home, 303, "media home")
-	if got := home.Header().Get("Location"); got != "/media/downloads" {
+	if got := home.Header().Get("Location"); got != "/apps/media/downloads" {
 		t.Fatalf("location %q", got)
 	}
 
-	partial := status(t, s.get("/media/torrents"), 200, "torrents partial")
+	partial := status(t, s.get("/apps/media/torrents"), 200, "torrents partial")
 	contains(t, partial, "Dune.2021.mkv")
 	lacks(t, partial, "<html")
 
-	files := status(t, s.get("/media/torrents/"+dlHashB+"/files"), 200, "files")
+	files := status(t, s.get("/apps/media/torrents/"+dlHashB+"/files"), 200, "files")
 	contains(t, files, "Dune.2021.mkv", "Skipped", "Wanted", "1.9 GB · 40%")
 
-	toggled := status(t, s.post("/media/torrents/"+dlHashB+"/files", url.Values{"index": {"1"}, "wanted": {"1"}}), 200, "toggle")
+	toggled := status(t, s.post("/apps/media/torrents/"+dlHashB+"/files", url.Values{"index": {"1"}, "wanted": {"1"}}), 200, "toggle")
 	contains(t, toggled, "Selection changed")
 	if got := qb.prioritiesOf(dlHashB); !slices.Equal(got, []int{1, 1}) {
 		t.Fatalf("priorities %v", got)
 	}
-	skipped := status(t, s.post("/media/torrents/"+dlHashB+"/files", url.Values{"index": {"1"}, "wanted": {"0"}}), 200, "toggle off")
+	skipped := status(t, s.post("/apps/media/torrents/"+dlHashB+"/files", url.Values{"index": {"1"}, "wanted": {"0"}}), 200, "toggle off")
 	contains(t, skipped, "Selection changed")
 	if got := qb.prioritiesOf(dlHashB); !slices.Equal(got, []int{1, 0}) {
 		t.Fatalf("priorities %v", got)
 	}
-	missing := s.post("/media/torrents/"+dlHashB+"/files", url.Values{"wanted": {"1"}})
+	missing := s.post("/apps/media/torrents/"+dlHashB+"/files", url.Values{"wanted": {"1"}})
 	body := status(t, missing, 422, "toggle without index")
 	contains(t, body, `"missing"`, `"index"`)
 
-	status(t, s.get("/media/torrents/"+dlHashC+"/files"), 404, "unknown torrent")
+	status(t, s.get("/apps/media/torrents/"+dlHashC+"/files"), 404, "unknown torrent")
 
 	qb.setFail(500)
-	down := status(t, s.get("/media/downloads"), 200, "downloads qbit down")
+	down := status(t, s.get("/apps/media/downloads"), 200, "downloads qbit down")
 	contains(t, down, "qBittorrent: torrents/info: 500")
-	lacks(t, down, `hx-get="/media/torrents"`)
-	fragment := status(t, s.get("/media/torrents/"+dlHashB+"/files"), 502, "files qbit down")
+	lacks(t, down, `hx-get="/apps/media/torrents"`)
+	fragment := status(t, s.get("/apps/media/torrents/"+dlHashB+"/files"), 502, "files qbit down")
 	contains(t, fragment, "qBittorrent: torrents/info: 500")
-	toggleDown := status(t, s.post("/media/torrents/"+dlHashB+"/files", url.Values{"index": {"0"}, "wanted": {"0"}}), 502, "toggle qbit down")
+	toggleDown := status(t, s.post("/apps/media/torrents/"+dlHashB+"/files", url.Values{"index": {"0"}, "wanted": {"0"}}), 502, "toggle qbit down")
 	contains(t, toggleDown, "qBittorrent: torrents/info: 500")
 }
 
 func TestDlDownloadsPageWithoutQbittorrent(t *testing.T) {
 	s, _, _ := dlWorld(t, map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL": ""})
-	page := status(t, s.get("/media/downloads"), 200, "downloads")
+	page := status(t, s.get("/apps/media/downloads"), 200, "downloads")
 	contains(t, page, "media_qbittorrent_url is not set", "Ready to file (0)")
 	lacks(t, page, "Nothing is waiting", "No torrents")
-	status(t, s.get("/media/torrents"), 200, "torrents partial")
-	status(t, s.get("/media/torrents/"+dlHashA+"/files"), 502, "files")
-	status(t, s.post("/media/add", url.Values{"magnet": {"magnet:?xt=urn:btih:" + dlHashA}, "mode": {"media"}}), 502, "add")
-	filed := status(t, s.post("/media/file", url.Values{"id": {dlHashA}, "action": {"file"}}), 422, "file")
+	status(t, s.get("/apps/media/torrents"), 200, "torrents partial")
+	status(t, s.get("/apps/media/torrents/"+dlHashA+"/files"), 502, "files")
+	status(t, s.post("/apps/media/add", url.Values{"magnet": {"magnet:?xt=urn:btih:" + dlHashA}, "mode": {"media"}}), 502, "add")
+	filed := status(t, s.post("/apps/media/file", url.Values{"id": {dlHashA}, "action": {"file"}}), 422, "file")
 	contains(t, filed, "Not filed")
-	ignored := status(t, s.post("/media/ignore", url.Values{"id": {dlHashA}}), 422, "ignore")
+	ignored := status(t, s.post("/apps/media/ignore", url.Values{"id": {dlHashA}}), 422, "ignore")
 	contains(t, ignored, "Not ignored")
 }
 
@@ -388,7 +388,7 @@ func TestDlFilingFromTheWeb(t *testing.T) {
 		return url.Values{"id": {dlHashA}, "action": {action}, "kind": {"tv"}, "title": {"Lanterns"}, "year": {year}, "s0": {"1"}, "e0": {"8"}}
 	}
 
-	preview := status(t, s.post("/media/file", form("preview", "2026")), 200, "preview")
+	preview := status(t, s.post("/apps/media/file", form("preview", "2026")), 200, "preview")
 	contains(t, preview, "tv/Lanterns (2026)/Season 01/Lanterns (2026) - S01E08.mkv")
 	if _, err := os.Stat(filepath.Join(root, "tv", "Lanterns (2026)")); !os.IsNotExist(err) {
 		t.Fatalf("preview touched the filesystem: %v", err)
@@ -397,13 +397,13 @@ func TestDlFilingFromTheWeb(t *testing.T) {
 		t.Fatal("preview tagged the torrent")
 	}
 
-	bad := status(t, s.post("/media/file", form("file", "20x6")), 422, "bad year")
+	bad := status(t, s.post("/apps/media/file", form("file", "20x6")), 422, "bad year")
 	contains(t, bad, "is not a year")
 	if _, err := os.Stat(filepath.Join(root, "tv", "Lanterns (2026)")); !os.IsNotExist(err) {
 		t.Fatalf("a rejected plan touched the filesystem: %v", err)
 	}
 
-	filed := status(t, s.post("/media/file", form("file", "2026")), 200, "file")
+	filed := status(t, s.post("/apps/media/file", form("file", "2026")), 200, "file")
 	contains(t, filed, "Filed Lanterns.S01E08")
 	src, err := os.Stat(filepath.Join(content, "Lanterns.S01E08.1080p.WEB.h264-ETHEL.mkv"))
 	if err != nil {
@@ -423,16 +423,16 @@ func TestDlFilingFromTheWeb(t *testing.T) {
 		t.Fatalf("tags %v", qb.tagsOf(dlHashA))
 	}
 
-	status(t, s.post("/media/file", url.Values{"id": {dlHashA}, "action": {"file"}}), 422, "file twice")
+	status(t, s.post("/apps/media/file", url.Values{"id": {dlHashA}, "action": {"file"}}), 422, "file twice")
 
 	dlCompletedMedia(t, root, qb, dlHashB, "Other.S01E01")
-	ignored := status(t, s.post("/media/ignore", url.Values{"id": {dlHashB}}), 200, "ignore")
+	ignored := status(t, s.post("/apps/media/ignore", url.Values{"id": {dlHashB}}), 200, "ignore")
 	contains(t, ignored, "Ignored")
 	if !slices.Contains(qb.tagsOf(dlHashB), "ignored") {
 		t.Fatalf("tags %v", qb.tagsOf(dlHashB))
 	}
-	status(t, s.post("/media/ignore", url.Values{"id": {"nope"}}), 422, "ignore unknown")
-	missing := s.post("/media/ignore", nil)
+	status(t, s.post("/apps/media/ignore", url.Values{"id": {"nope"}}), 422, "ignore unknown")
+	missing := s.post("/apps/media/ignore", nil)
 	status(t, missing, 422, "ignore without id")
 }
 
@@ -445,12 +445,12 @@ func TestDlImportEntryIsMovedNotIgnored(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "Dune.2021.1080p.mkv"), []byte("x"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	page := status(t, s.get("/media/downloads"), 200, "downloads")
+	page := status(t, s.get("/apps/media/downloads"), 200, "downloads")
 	contains(t, page, "import: moved", "Ready to file (1)")
-	lacks(t, page, `formaction="/media/ignore"`)
-	refused := status(t, s.post("/media/ignore", url.Values{"id": {"import/Dune.2021.1080p"}}), 422, "ignore import")
+	lacks(t, page, `formaction="/apps/media/ignore"`)
+	refused := status(t, s.post("/apps/media/ignore", url.Values{"id": {"import/Dune.2021.1080p"}}), 422, "ignore import")
 	contains(t, refused, "Only torrents can be ignored")
-	status(t, s.post("/media/file", url.Values{"id": {"import/Dune.2021.1080p"}, "action": {"file"}, "kind": {"movie"}, "title": {"Dune"}, "year": {"2021"}}), 200, "file import")
+	status(t, s.post("/apps/media/file", url.Values{"id": {"import/Dune.2021.1080p"}, "action": {"file"}, "kind": {"movie"}, "title": {"Dune"}, "year": {"2021"}}), 200, "file import")
 	if _, err := os.Stat(filepath.Join(root, "movies", "Dune (2021)", "Dune (2021).mkv")); err != nil {
 		t.Fatal(err)
 	}
@@ -474,7 +474,7 @@ func TestDlPollDoesNotWriteToQbit(t *testing.T) {
 		files: []dlFile{{Index: 0, Name: "c.mkv", Priority: 0}, {Index: 1, Name: "c.txt", Priority: 1}},
 	})
 
-	status(t, s.get("/media/downloads"), 200, "downloads")
+	status(t, s.get("/apps/media/downloads"), 200, "downloads")
 	if got := qb.prioritiesOf(dlHashA); !slices.Equal(got, []int{0, 1, 0}) {
 		t.Fatalf("priorities after the page GET %v", got)
 	}
@@ -489,7 +489,7 @@ func TestDlPollDoesNotWriteToQbit(t *testing.T) {
 		hash: "dddddddddddddddddddddddddddddddddddddddd", name: "Show.S01E03", tags: []string{"media"}, state: "downloading",
 		files: []dlFile{{Index: 0, Name: "d.mkv", Priority: 0}, {Index: 1, Name: "d.txt", Priority: 1}},
 	})
-	status(t, s.get("/media/torrents"), 200, "poll")
+	status(t, s.get("/apps/media/torrents"), 200, "poll")
 	if got := qb.prioritiesOf("dddddddddddddddddddddddddddddddddddddddd"); !slices.Equal(got, []int{0, 1}) {
 		t.Fatalf("priorities after the poll %v", got)
 	}

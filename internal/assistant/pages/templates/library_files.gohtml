@@ -1,0 +1,19 @@
+{{define "title"}}Files{{end}}
+{{define "heading"}}Files{{end}}
+{{define "content"}}{{$d := .Data}}
+{{if $d.Files}}
+<ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card text-sm" role="list" aria-label="Files">
+  {{range $d.Files}}
+  <li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5" data-file="{{.ID}}">
+    {{template "file_icon" (dict "media_type" .MediaType)}}
+    <span class="min-w-0 truncate font-medium">{{.Name}}</span>
+    <a class="inline-flex min-w-0 items-center gap-1 truncate text-xs text-muted-foreground underline-offset-4 hover:underline" href="{{.OwnerURL}}">{{icon (ternary .Project "folder" "messages-square") "size-3.5 shrink-0"}}{{.Owner}}</a>
+    <span class="ms-auto text-xs text-muted-foreground tabular-nums">{{filesizeformat .Bytes}} · {{template "when" (dict "epoch" .CreatedAt "style" "datetime")}}</span>
+    <a class="btn" data-size="icon-sm" data-variant="ghost" href="{{.DownloadURL}}" download aria-label="Download {{.Name}}">{{icon "download" "size-3.5"}}</a>
+  </li>
+  {{end}}
+</ul>
+{{else}}
+{{template "empty_state" (dict "icon_name" "paperclip" "title" "No files yet")}}
+{{end}}
+{{end}}

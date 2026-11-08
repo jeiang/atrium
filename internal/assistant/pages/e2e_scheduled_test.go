@@ -3,7 +3,6 @@ package pages
 import (
 	"fmt"
 	"net/http"
-	"net/url"
 	"strings"
 	"testing"
 )
@@ -24,24 +23,14 @@ func (s *site) job(name string) jobRow {
 	return j
 }
 
-func schedule(name, prompt, when string) url.Values {
-	return url.Values{"name": {name}, "prompt": {prompt}, "schedule": {when}}
-}
-
-func wantListHeaders(t *testing.T, r *reply, trigger string) {
-	t.Helper()
-	if r.Header.Get("HX-Retarget") != "#scheduled-list" || r.Header.Get("HX-Reswap") != "outerHTML" || r.Header.Get("HX-Trigger") != trigger {
-		t.Errorf("headers retarget=%q reswap=%q trigger=%q, want trigger %q", r.Header.Get("HX-Retarget"), r.Header.Get("HX-Reswap"), r.Header.Get("HX-Trigger"), trigger)
-	}
-}
-
-func TestScheduledCreateEditToggleCancel(t *testing.T) {
+func TestScheduledListToggleDelete(t *testing.T) {
 	s := newSite(t)
 	page := status(t, s.get("/scheduled"), http.StatusOK)
-	mustContain(t, page, "nightly", "Every day at 02:30", "Fri 29 May 02:30", "weekly-review", "Sun 31 May 18:00", "No runs yet.", "Times are America/Port_of_Spain",
-		`aria-labelledby="schedule-dialog-title"`, `id="new-schedule"`, `id="schedule-dialog"`, `hx-get="/scheduled/new"`, `id="scheduled-list"`, "Never")
+	mustContain(t, page, "nightly", "Every day at 02:30", "Fri 29 May 02:30", "weekly-review", "Sun 31 May 18:00", "No runs yet.", "America/Port_of_Spain", `id="scheduled-list"`, "Never")
+	mustNotContain(t, page, "New schedule", "schedule-dialog", "/scheduled/new", "job-edit-", "Times are", "create one here")
 	nightlyID := fmt.Sprint(s.job("nightly").id)
-	mustContain(t, page, `id="job-toggle-`+nightlyID+`"`, `id="job-edit-`+nightlyID+`"`, `id="schedules-h"`, `data-focus-fallback`)
+	mustContain(t, page, `id="job-toggle-`+nightlyID+`"`, `id="schedules-h"`, `data-focus-fallback`)
+	mustNotContain(t, page, `id="job-delete-`+nightlyID+`"`, fmt.Sprintf(`id="job-delete-%d"`, s.job("weekly-review").id))
 	if n := s.count("SELECT COUNT(*) FROM jobs WHERE kind = 'nightly'"); n != 1 {
 		t.Errorf("nightly jobs %d", n)
 	}
@@ -52,43 +41,27 @@ func TestScheduledCreateEditToggleCancel(t *testing.T) {
 	}
 	partial := status(t, s.get("/scheduled", hx, "true"), http.StatusOK)
 	mustContain(t, partial, `id="scheduled-list"`, "Every day at 02:30")
-	mustNotContain(t, partial, "<html", `id="schedule-dialog"`)
-	form := status(t, s.get("/scheduled/new"), http.StatusOK)
-	mustContain(t, form, `name="schedule"`, "New schedule", `id="schedule-dialog-title"`, "Times are", `placeholder="daily 08:00"`, "Create")
+	mustNotContain(t, partial, "<html")
 
-	created := s.post("/scheduled", schedule("Digest", "Summarize mail.", "weekly mon 08:00"), hx, "true")
-	body := status(t, created, http.StatusOK)
-	mustContain(t, body, "Digest", "Every Monday at 08:00", "Schedule created")
-	mustNotContain(t, body, "<html")
-	wantListHeaders(t, created, "close-dialogs")
+	for _, path := range []string{"/scheduled/new", "/scheduled/1/edit"} {
+		if r := s.get(path); r.StatusCode != http.StatusNotFound && r.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("GET %s: %d, want 404 or 405", path, r.StatusCode)
+		}
+	}
+	for _, path := range []string{"/scheduled", "/scheduled/1"} {
+		if r := s.post(path, nil); r.StatusCode != http.StatusNotFound && r.StatusCode != http.StatusMethodNotAllowed {
+			t.Errorf("POST %s: %d, want 404 or 405", path, r.StatusCode)
+		}
+	}
 
-	bad := s.post("/scheduled", schedule("Bad", "p", "nonsense"), hx, "true")
-	mustContain(t, status(t, bad, http.StatusUnprocessableEntity), "unrecognised schedule", `value="Bad"`, `role="alert" tabindex="-1" autofocus`, `id="schedule-dialog-title"`, "New schedule")
-	if bad.Header.Get("HX-Retarget") != "" || bad.Header.Get("HX-Trigger") != "" {
-		t.Errorf("a refused form carries list headers: %v", bad.Header)
-	}
-	mustContain(t, status(t, s.post("/scheduled", schedule(" ", "p", "daily 08:00"), hx, "true"), http.StatusUnprocessableEntity), "name and prompt are required")
-
-	digest := s.job("Digest")
-	id := fmt.Sprint(digest.id)
-	edit := status(t, s.get("/scheduled/"+id+"/edit"), http.StatusOK)
-	mustContain(t, edit, `value="Digest"`, "Recent runs", "Edit Digest", "No runs yet.", "Delete", `hx-post="/scheduled/`+id+`/cancel"`)
-	mustNotContain(t, edit, "<html", "readonly")
-	saved := s.post("/scheduled/"+id, schedule("Digest", "New prompt", "daily 09:00"), hx, "true")
-	mustContain(t, status(t, saved, http.StatusOK), "Schedule saved", "Every day at 09:00")
-	wantListHeaders(t, saved, "close-dialogs")
-	if got := s.job("Digest"); got.prompt != "New prompt" || got.sched != "daily 09:00" {
-		t.Errorf("saved job %+v", got)
-	}
-	refused := s.post("/scheduled/"+id, schedule("Renamed", "kept in form", "later"), hx, "true")
-	mustContain(t, status(t, refused, http.StatusUnprocessableEntity), "Edit Digest", `value="Renamed"`, "kept in form", `value="later"`, `role="alert"`)
-	if got := s.job("Digest"); got.prompt != "New prompt" {
-		t.Errorf("a refused save changed the job: %+v", got)
-	}
+	s.exec("INSERT INTO jobs (name, prompt, schedule, tz, state, created_by, created_at) VALUES ('Digest', 'Summarize mail.', 'weekly mon 08:00', 'UTC', 'active', 'agent', 1)")
+	id := fmt.Sprint(s.job("Digest").id)
+	listed := status(t, s.get("/scheduled"), http.StatusOK)
+	mustContain(t, listed, "Digest", "Every Monday at 08:00", "Summarize mail.", `id="job-delete-`+id+`"`, `hx-post="/scheduled/`+id+`/cancel"`, `hx-confirm="Delete Digest?"`, `aria-label="Delete Digest"`)
 
 	toggled := s.post("/scheduled/"+id+"/toggle", nil, hx, "true")
-	mustContain(t, status(t, toggled, http.StatusOK), "Schedule updated", "Paused")
-	wantListHeaders(t, toggled, "close-dialogs")
+	mustContain(t, status(t, toggled, http.StatusOK), "Schedule updated", "Paused", `id="scheduled-list"`)
+	mustNotContain(t, toggled.body, "<html")
 	if s.job("Digest").state == "active" {
 		t.Error("toggle did not disable the job")
 	}
@@ -99,48 +72,22 @@ func TestScheduledCreateEditToggleCancel(t *testing.T) {
 	s.exec("INSERT INTO jobs (name, prompt, schedule, tz, state, created_by, created_at) VALUES ('Past', 'p', '2020-01-01T09:00', 'UTC', 'disabled', 'operator', 1)")
 	past := s.post(fmt.Sprintf("/scheduled/%d/toggle", s.job("Past").id), nil, hx, "true")
 	mustContain(t, status(t, past, http.StatusUnprocessableEntity), "Not saved", `id="scheduled-list"`)
-	if past.Header.Get("HX-Retarget") != "#scheduled-list" || past.Header.Get("HX-Reswap") != "outerHTML" || past.Header.Get("HX-Trigger") != "" {
-		t.Errorf("refused toggle headers %v", past.Header)
-	}
 
 	cancelled := s.post("/scheduled/"+id+"/cancel", nil, hx, "true")
-	body = status(t, cancelled, http.StatusOK)
+	body := status(t, cancelled, http.StatusOK)
 	mustContain(t, body, "Schedule deleted")
 	mustNotContain(t, body, "Digest")
-	wantListHeaders(t, cancelled, "close-dialogs")
 	if s.job("Digest").state != "cancelled" {
 		t.Error("cancel did not cancel the job")
 	}
-	status(t, s.get("/scheduled/"+id+"/edit"), http.StatusNotFound)
 	status(t, s.post("/scheduled/"+id+"/toggle", nil), http.StatusNotFound)
 	status(t, s.post("/scheduled/999/cancel", nil), http.StatusNotFound)
-	status(t, s.post("/scheduled/999", schedule("a", "b", "daily 08:00")), http.StatusNotFound)
-	status(t, s.get("/scheduled/999/edit"), http.StatusNotFound)
-	mustContain(t, status(t, s.get("/scheduled/x/edit"), http.StatusUnprocessableEntity), `"int_parsing"`, `"job_id"`)
+	mustContain(t, status(t, s.post("/scheduled/x/toggle", nil), http.StatusUnprocessableEntity), `"int_parsing"`, `"job_id"`)
 	status(t, s.get("/settings/schedules"), http.StatusNotFound)
 
 	builtin := s.job("weekly-review")
 	refusedCancel := s.post(fmt.Sprintf("/scheduled/%d/cancel", builtin.id), nil, hx, "true")
 	mustContain(t, status(t, refusedCancel, http.StatusUnprocessableEntity), "built-in runs cannot be cancelled; disable them instead", "Not saved")
-	if refusedCancel.Header.Get("HX-Trigger") != "" {
-		t.Errorf("refused cancel closes dialogs: %v", refusedCancel.Header)
-	}
-}
-
-func TestScheduledFixedJobsOnlyTakeASchedule(t *testing.T) {
-	s := newSite(t)
-	status(t, s.get("/scheduled"), http.StatusOK)
-	nightly := s.job("nightly")
-	id := fmt.Sprint(nightly.id)
-	form := status(t, s.get("/scheduled/"+id+"/edit"), http.StatusOK)
-	mustContain(t, form, "The nightly prompt is fixed in code.", `rows="5"`, "readonly")
-	mustNotContain(t, form, "Delete", `hx-post="/scheduled/`+id+`/cancel"`)
-	saved := s.post("/scheduled/"+id, schedule("hacked", "hacked", "daily 03:00"), hx, "true")
-	status(t, saved, http.StatusOK)
-	got := s.job("nightly")
-	if got.sched != "daily 03:00" || got.name != "nightly" || got.prompt != nightly.prompt {
-		t.Errorf("fixed job after save: %+v", got)
-	}
 }
 
 func TestScheduledShowsRunsInThePageZone(t *testing.T) {
@@ -169,30 +116,24 @@ func TestScheduledShowsRunsInThePageZone(t *testing.T) {
 		"Nightly", "Built-in", "Created by you", "Created by the assistant", `data-variant="outline">weird</span>`)
 	mustNotContain(t, page, "Budget <exceeded>", `>ok</span>`, `>error</span>`, `>missed_coalesced</span>`, `>skipped_pause</span>`, `>skipped_budget</span>`, `>running</span>`)
 
-	edit := status(t, s.get(fmt.Sprintf("/scheduled/%d/edit", nightly.id)), http.StatusOK)
-	mustContain(t, edit, "Recent runs", "Thu 28 May 16:26", "$0.123")
-	mustNotContain(t, edit, `<span class="font-medium">nightly</span>`)
 	wide := status(t, s.get("/scheduled", hx, "true"), http.StatusOK)
 	mustContain(t, wide, `<span class="font-medium">nightly</span>`)
 }
 
 func TestScheduledWithoutScriptAnswersWholePages(t *testing.T) {
 	s := newSite(t)
-	made := s.post("/scheduled", schedule("Plain", "p", "daily 08:00"))
-	if made.StatusCode != http.StatusSeeOther || made.Header.Get("Location") != "/scheduled" {
-		t.Fatalf("create: %d %v", made.StatusCode, made.Header)
-	}
+	s.exec("INSERT INTO jobs (name, prompt, schedule, tz, state, created_by, created_at) VALUES ('Plain', 'p', 'daily 08:00', 'UTC', 'active', 'operator', 1)")
 	id := fmt.Sprint(s.job("Plain").id)
-	mustContain(t, status(t, s.post("/scheduled/"+id, schedule("Plain", "p", "nonsense")), http.StatusUnprocessableEntity), "Not saved")
 	for _, path := range []string{"/scheduled/" + id + "/toggle", "/scheduled/" + id + "/cancel"} {
 		r := s.post(path, nil)
 		if r.StatusCode != http.StatusSeeOther || r.Header.Get("Location") != "/scheduled" {
 			t.Errorf("%s: %d %v", path, r.StatusCode, r.Header)
 		}
 	}
-	refused := s.post("/scheduled", schedule("Bad", "p", "nonsense"))
+	s.exec("INSERT INTO jobs (name, prompt, schedule, tz, state, created_by, created_at) VALUES ('Past', 'p', '2020-01-01T09:00', 'UTC', 'disabled', 'operator', 1)")
+	refused := s.post(fmt.Sprintf("/scheduled/%d/toggle", s.job("Past").id), nil)
 	body := status(t, refused, http.StatusUnprocessableEntity)
-	mustContain(t, body, "<html", "Not saved", "unrecognised schedule", `id="schedule-dialog"`)
+	mustContain(t, body, "<html", "Not saved", `id="scheduled-list"`)
 	if refused.Header.Get("HX-Retarget") != "" {
 		t.Errorf("a full page carries list headers: %v", refused.Header)
 	}

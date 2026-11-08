@@ -81,26 +81,4 @@
   <button type="submit" class="btn self-start" data-size="sm"{{if not $d.Encrypted}} disabled title="Encrypt the database first"{{end}}>{{icon "link"}}Connect</button>
 </form>
 {{end}}
-
-{{if $d.Notifications}}
-<div class="table-container rounded-lg border bg-card">
-  <table class="table">
-    <caption class="sr-only">Notifications, newest first</caption>
-    <thead><tr><th scope="col">When</th><th scope="col">Notification</th><th scope="col">Channel</th><th scope="col">Thread</th><th scope="col">Push</th></tr></thead>
-    <tbody>
-      {{range $d.Notifications}}
-      <tr>
-        <td class="whitespace-nowrap text-muted-foreground">{{ts .TS}}</td>
-        <td><span class="font-medium">{{.Title}}</span><br><span class="whitespace-pre-line text-muted-foreground">{{.Body}}</span></td>
-        <td class="capitalize">{{or .Channel "assistant"}}</td>
-        <td>{{if .ThreadLink}}<a class="underline underline-offset-4" href="{{str .ThreadLink}}">open</a>{{end}}</td>
-        <td>{{if .Delivered}}<span class="badge" data-variant="secondary">Sent</span>{{else}}<form method="post" action="/settings/notifications/{{.ID}}/resend" class="flex items-center gap-2"><input type="hidden" name="csrf_token" value="{{$csrf}}"><span class="badge" data-variant="outline" title="{{or (str .Error) ""}}">Local only</span><button type="submit" class="btn" data-size="sm" data-variant="ghost">Resend</button></form>{{end}}</td>
-      </tr>
-      {{end}}
-    </tbody>
-  </table>
-</div>
-{{else}}
-{{template "empty_state" (dict "icon_name" "inbox" "title" "No notifications" "body" "Notifications the assistant sends appear here, even when push is not configured.")}}
-{{end}}
 {{end}}

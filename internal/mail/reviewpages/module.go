@@ -97,11 +97,12 @@ func Module(o Options) web.Module {
 		}
 
 		d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
-			var n int
-			err := d.DB.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM proposals WHERE status = 'pending'").Scan(&n)
+			n, err := needsCount(ctx, d.DB.Read)
 			f.PendingCount = n
 			return err
 		})
+
+		r.Get("/review", s.needsPage)
 
 		r.Get("/proposals", s.proposalsPage)
 		r.Get("/proposals/{proposal_id}/card", s.proposalCard)
@@ -133,7 +134,6 @@ func Module(o Options) web.Module {
 
 		r.Get("/watches", s.watchesPage)
 		r.Post("/watches/packages/{package_id}/dismiss", s.packageDismiss)
-		r.Post("/watches/birthdays/dismiss", s.birthdayDismiss)
 	}
 }
 

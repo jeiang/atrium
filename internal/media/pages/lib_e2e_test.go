@@ -60,18 +60,18 @@ func TestLibE2EPagesLinksAndMissing(t *testing.T) {
 	libTree(t, root)
 	s := newSite(t, vars, Options{})
 
-	index := status(t, s.get("/media/library"), 200, "library")
+	index := status(t, s.get("/apps/media/library"), 200, "library")
 	contains(t, index,
 		"Movies (1)", "TV (1)", "Dune", "Lanterns",
-		`href="/media/library/movie/Dune%20%282021%29"`, `src="/media/art/movie/Dune%20%282021%29"`,
-		`href="/media/library/tv/Lanterns%20%282026%29"`, `src="/media/art/show/Lanterns%20%282026%29"`,
+		`href="/apps/media/library/movie/Dune%20%282021%29"`, `src="/apps/media/art/movie/Dune%20%282021%29"`,
+		`href="/apps/media/library/tv/Lanterns%20%282026%29"`, `src="/apps/media/art/show/Lanterns%20%282026%29"`,
 		`<ul class="grid grid-cols-2`, `aria-label="Movies"`, `aria-label="Shows"`)
 
-	movie := status(t, s.get("/media/library/movie/Dune%20%282021%29"), 200, "movie")
+	movie := status(t, s.get("/apps/media/library/movie/Dune%20%282021%29"), 200, "movie")
 	contains(t, movie,
 		"Media · Dune (2021)", "Dune (2021).mkv", "0.0 GB", "Public link", "VPN link", "expire after 12 hours",
-		`href="http://artemis.vpn:8084/Dune%20%282021%29/Dune%20%282021%29.mkv"`, `src="/media/art/movie/Dune%20%282021%29"`)
-	public := libHref(t, movie, "https://atrium.test/media/file/")
+		`href="http://artemis.vpn:8084/Dune%20%282021%29/Dune%20%282021%29.mkv"`, `src="/apps/media/art/movie/Dune%20%282021%29"`)
+	public := libHref(t, movie, "https://atrium.test/apps/media/file/")
 	if !strings.Contains(public, "movies/Dune%20%282021%29/Dune%20%282021%29.mkv?exp=") || !strings.Contains(public, "&sig=") {
 		t.Fatalf("public link = %q", public)
 	}
@@ -80,39 +80,39 @@ func TestLibE2EPagesLinksAndMissing(t *testing.T) {
 		t.Fatalf("signed link fetch: status %d, %d bytes", fetched.Code, fetched.Body.Len())
 	}
 
-	show := status(t, s.get("/media/library/tv/Lanterns%20%282026%29"), 200, "show")
+	show := status(t, s.get("/apps/media/library/tv/Lanterns%20%282026%29"), 200, "show")
 	contains(t, show,
 		"Media · Lanterns (2026)", "2 seasons.", `id="season-1"`, `id="season-2"`, "Season 00", "Season 01",
 		"Episode 8", "Episode 0",
-		`src="/media/art/season/Lanterns%20%282026%29/1"`, `src="/media/art/season/Lanterns%20%282026%29/0"`,
-		`src="/media/thumb/tv/Lanterns%20%282026%29/Season%2001/`,
+		`src="/apps/media/art/season/Lanterns%20%282026%29/1"`, `src="/apps/media/art/season/Lanterns%20%282026%29/0"`,
+		`src="/apps/media/thumb/tv/Lanterns%20%282026%29/Season%2001/`,
 		`href="http://artemis.vpn:8085/Lanterns%20%282026%29/Season%2001/Lanterns%20%282026%29%20-%20S01E08.mkv"`)
 
-	status(t, s.get("/media/library/tv/Nope"), 404, "unknown show")
-	status(t, s.get("/media/library/movie/Nope"), 404, "unknown movie")
-	status(t, s.get("/media/library/movie/%2e%2e"), 404, "dot-dot movie")
-	status(t, s.get("/media/library/tv/%2e%2e"), 404, "dot-dot show")
-	status(t, s.get("/media/library/movie/Dune%20%282021%29%2F..%2F.."), 404, "encoded slash")
+	status(t, s.get("/apps/media/library/tv/Nope"), 404, "unknown show")
+	status(t, s.get("/apps/media/library/movie/Nope"), 404, "unknown movie")
+	status(t, s.get("/apps/media/library/movie/%2e%2e"), 404, "dot-dot movie")
+	status(t, s.get("/apps/media/library/tv/%2e%2e"), 404, "dot-dot show")
+	status(t, s.get("/apps/media/library/movie/Dune%20%282021%29%2F..%2F.."), 404, "encoded slash")
 }
 
 func TestLibE2ELinksFollowSettingsAndEmptyLibrary(t *testing.T) {
 	vars, root := libVars(t, map[string]string{"ATRIUM_CORE_PUBLIC_URL": "", "ATRIUM_MEDIA_MEDIA_MOVIES_URL": ""})
 	libWrite(t, root, "movies/Dune (2021)/Dune (2021).mkv", 10)
 	s := newSite(t, vars, Options{})
-	movie := status(t, s.get("/media/library/movie/Dune%20%282021%29"), 200, "movie without links")
+	movie := status(t, s.get("/apps/media/library/movie/Dune%20%282021%29"), 200, "movie without links")
 	lacks(t, movie, `title="Signed public link`, `title="Direct over the VPN"`)
 
 	emptyVars, _ := libVars(t, nil)
 	empty := newSite(t, emptyVars, Options{})
-	page := status(t, empty.get("/media/library"), 200, "empty library")
+	page := status(t, empty.get("/apps/media/library"), 200, "empty library")
 	contains(t, page, "No movies yet", "Filed movies appear here.", "No shows yet", "Filed episodes appear here by show.", "Movies (0)", "TV (0)")
 
 	bare := newSite(t, map[string]string{}, Options{})
-	unset := status(t, bare.get("/media/library"), 200, "library without a root")
+	unset := status(t, bare.get("/apps/media/library"), 200, "library without a root")
 	contains(t, unset, "Library not configured", "media_root is not set; pin it with ATRIUM_MEDIA_MEDIA_ROOT")
 	lacks(t, unset, "Movies (")
-	status(t, bare.get("/media/library/movie/Dune"), 404, "movie without a root")
-	status(t, bare.get("/media/library/tv/Lanterns"), 404, "show without a root")
+	status(t, bare.get("/apps/media/library/movie/Dune"), 404, "movie without a root")
+	status(t, bare.get("/apps/media/library/tv/Lanterns"), 404, "show without a root")
 }
 
 func TestLibE2ELinkTTLFollowsTheRegistry(t *testing.T) {
@@ -128,11 +128,11 @@ func TestLibE2ELinkTTLFollowsTheRegistry(t *testing.T) {
 	if err := s.settings.Set(ctx, s.db.Write, media.KeyLinkTTL, "7200"); err != nil {
 		t.Fatal(err)
 	}
-	movie := status(t, s.get("/media/library/movie/Dune%20%282021%29"), 200, "movie")
+	movie := status(t, s.get("/apps/media/library/movie/Dune%20%282021%29"), 200, "movie")
 	contains(t, movie, "expire after 2 hours")
-	show := status(t, s.get("/media/library/tv/Lanterns%20%282026%29"), 200, "show")
+	show := status(t, s.get("/apps/media/library/tv/Lanterns%20%282026%29"), 200, "show")
 	contains(t, show, "expire after 2 hours")
-	link, err := url.Parse(libHref(t, movie, "https://atrium.test/media/file/"))
+	link, err := url.Parse(libHref(t, movie, "https://atrium.test/apps/media/file/"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -157,6 +157,6 @@ func TestLibE2ELinkTTLReadsAsAHumanDuration(t *testing.T) {
 		if err := s.settings.Set(ctx, s.db.Write, media.KeyLinkTTL, ttl); err != nil {
 			t.Fatal(err)
 		}
-		contains(t, status(t, s.get("/media/library/movie/Dune%20%282021%29"), 200, "movie "+ttl), want)
+		contains(t, status(t, s.get("/apps/media/library/movie/Dune%20%282021%29"), 200, "movie "+ttl), want)
 	}
 }

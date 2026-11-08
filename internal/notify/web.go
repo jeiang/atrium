@@ -29,13 +29,12 @@ func Templates() fs.FS {
 }
 
 type listing struct {
-	Notifications []Notification `json:"notifications"`
-	Channels      []Channel      `json:"channels"`
-	URL           string         `json:"url"`
-	NtfySh        bool           `json:"ntfy_sh"`
-	Encrypted     bool           `json:"encrypted"`
-	Error         string         `json:"error"`
-	Push          pushListing    `json:"push"`
+	Channels  []Channel   `json:"channels"`
+	URL       string      `json:"url"`
+	NtfySh    bool        `json:"ntfy_sh"`
+	Encrypted bool        `json:"encrypted"`
+	Error     string      `json:"error"`
+	Push      pushListing `json:"push"`
 }
 
 type pushListing struct {
@@ -45,7 +44,14 @@ type pushListing struct {
 	Devices []PushDevice `json:"devices"`
 }
 
-const page = "/settings/notifications"
+type inboxView struct {
+	Notifications []Notification `json:"notifications"`
+}
+
+const (
+	page      = "/settings/notifications"
+	inboxPage = "/inbox"
+)
 
 type handlers struct{ d *web.Deps }
 
@@ -81,11 +87,12 @@ func Module(r chi.Router, d *web.Deps) {
 	d.Admin(http.MethodPost, page+"/channels/{name}/test", h.test)
 	d.Admin(http.MethodPost, page+"/channels/{name}/content", h.content)
 	d.Admin(http.MethodPost, page+"/channels/{name}/reset", h.reset)
-	d.Admin(http.MethodPost, page+"/{id}/resend", h.resend)
 	d.Admin(http.MethodPost, page+"/push/subscriptions", h.subscribe)
 	d.Admin(http.MethodPost, page+"/push/unsubscribe", h.unsubscribe)
 	d.Admin(http.MethodPost, page+"/push/test", h.pushTest)
 	d.Admin(http.MethodPost, page+"/push/{id}/remove", h.removeDevice)
+	d.Admin(http.MethodGet, inboxPage, h.inbox)
+	d.Admin(http.MethodPost, inboxPage+"/{id}/resend", h.resend)
 }
 
 func (h handlers) ctx(r *http.Request) context.Context {
@@ -94,15 +101,11 @@ func (h handlers) ctx(r *http.Request) context.Context {
 
 func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, problem string) {
 	ctx := r.Context()
-	list, err := Recent(ctx, h.d.DB.Read, 100)
-	if err != nil {
-		panic(err)
-	}
 	channels, err := ListChannels(ctx, h.d.DB.Write)
 	if err != nil {
 		panic(err)
 	}
-	data := listing{Notifications: list, Encrypted: h.d.DB.Encrypted(), Error: problem}
+	data := listing{Encrypted: h.d.DB.Encrypted(), Error: problem}
 	base, baseErr := baseURL(ctx, h.d.DB.Read)
 	if baseErr == nil {
 		data.URL, data.NtfySh = base.String(), IsNtfySh(base)
@@ -139,13 +142,36 @@ func (h handlers) index(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, http.StatusOK, nil, "")
 }
 
-func (h handlers) done(w http.ResponseWriter, r *http.Request, err error, title string) {
+func (h handlers) renderInbox(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast) {
+	list, err := Recent(r.Context(), h.d.DB.Read, 100)
+	if err != nil {
+		panic(err)
+	}
+	f, err := h.d.Render.Frame(r, "inbox", inboxView{Notifications: list})
+	if err != nil {
+		panic(err)
+	}
+	f.Toast = toast
+	if err := h.d.Render.Page(w, r, status, "inbox.gohtml", f); err != nil {
+		panic(err)
+	}
+}
+
+func (h handlers) inbox(w http.ResponseWriter, r *http.Request) {
+	h.renderInbox(w, r, http.StatusOK, nil)
+}
+
+func refused(err error) bool {
 	var account AccountError
 	var channel ChannelError
 	var encryption settings.EncryptionRequired
 	var pinned *settings.PinnedError
 	var push PushError
-	if errors.As(err, &account) || errors.As(err, &channel) || errors.As(err, &push) || errors.As(err, &encryption) || errors.As(err, &pinned) {
+	return errors.As(err, &account) || errors.As(err, &channel) || errors.As(err, &push) || errors.As(err, &encryption) || errors.As(err, &pinned)
+}
+
+func (h handlers) done(w http.ResponseWriter, r *http.Request, err error, title string) {
+	if refused(err) {
 		h.render(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()}, err.Error())
 		return
 	}
@@ -197,7 +223,14 @@ func (h handlers) resend(w http.ResponseWriter, r *http.Request) {
 	if err == nil && !sent.Delivered {
 		err = ChannelError("Not delivered: " + sent.Error)
 	}
-	h.done(w, r, err, "Resent")
+	if refused(err) {
+		h.renderInbox(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not resent", Description: err.Error()})
+		return
+	}
+	if err != nil {
+		panic(err)
+	}
+	h.renderInbox(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: "Resent"})
 }
 
 func (h handlers) subscribe(w http.ResponseWriter, r *http.Request) {

@@ -365,12 +365,10 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_WEB_ACTIVITY_SNIPPET_CHARS` | `web.activity_snippet_chars` |
 | `ATRIUM_WEB_BODY_CAP_BYTES` | `web.body_cap_bytes` |
 | `ATRIUM_WEB_CHAT_THREAD_LIMIT` | `web.chat_thread_limit` |
-| `ATRIUM_WEB_JOB_HISTORY` | `web.job_history` |
 | `ATRIUM_WEB_LEARNED_LIMIT` | `web.learned_limit` |
 | `ATRIUM_WEB_LOOP_LIMIT` | `web.loop_limit` |
 | `ATRIUM_WEB_PAGE_SIZE` | `web.page_size` |
 | `ATRIUM_WEB_PREVIEW_BYTES` | `web.preview_bytes` |
-| `ATRIUM_WEB_PROJECT_THREAD_LIMIT` | `web.project_thread_limit` |
 | `ATRIUM_WEB_RUN_HISTORY` | `web.run_history` |
 | `ATRIUM_WEB_SNOOZE_CHOICES` | `web.snooze_choices` |
 | `ATRIUM_WEB_SEARCH_DYNAMIC_FILTERING` | `web_search.dynamic_filtering` |

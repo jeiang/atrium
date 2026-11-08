@@ -15,7 +15,7 @@ const (
 	dlModePlain     = "plain"
 	dlPollSeconds   = 5
 	dlInfiniteETA   = 8640000
-	dlDownloadsPage = "/media/downloads"
+	dlDownloadsPage = "/apps/media/downloads"
 )
 
 var dlAddModes = []string{dlModeMedia, dlModePlain}

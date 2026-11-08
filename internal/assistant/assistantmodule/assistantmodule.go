@@ -84,8 +84,8 @@ func (m Module) Register(mc module.Context) module.Registration {
 			Home:      "/chat",
 			Nav: []web.NavItem{
 				{Group: "Assistant", Label: "Chat", URL: "/chat", Icon: "messages-square", Page: "chat", Brand: true, Order: 10},
-				{Group: "Assistant", Label: "Scheduled", URL: "/scheduled", Icon: "clock", Page: "scheduled", Order: 10},
-				{Group: "Assistant", Label: "Projects", URL: "/projects", Icon: "folder", Page: "projects", Order: 10},
+				{Section: "library", Label: "Files", URL: "/library/files", Icon: "paperclip", Page: "library_files", Order: 20},
+				{Section: "library", Label: "Scheduled", URL: "/scheduled", Icon: "clock", Page: "scheduled", Order: 40},
 				{Label: "Assistant", URL: "/settings/assistant", Page: "assistant", Settings: true, Primary: true, PrimaryURL: "/settings", Order: 10},
 				{Label: "Subagents", URL: "/settings/subagents", Page: "subagents", Settings: true, Order: 30},
 				{Label: "Prompts", URL: "/settings/prompts", Page: "prompts", Settings: true, Order: 40},

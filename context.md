@@ -30,8 +30,11 @@ behavior-parity target.
 - The web interface is server-rendered Go templates with Basecoat, htmx
   and one static script under a strict CSP; a push service worker is the
   only other script. A sidebar holds New chat, the
-  thread list (pinned, by day, by project) and the module pages, and
-  collapses to a rail; chat uses a centred reading column with serif
+  thread list (pinned, by day, by project groups) and the Review, Library,
+  Apps and Settings entries; Review, Library and Apps are tabbed sections.
+  Media is the app at `/apps/media`. Projects have no pages of their own
+  beyond create and edit. The sidebar collapses to a rail; chat uses a
+  centred reading column with serif
   assistant prose. Drafts and proposals the assistant creates are cards in
   the thread that act through the Drafts and Proposals endpoints, so the
   send gate and approval pipeline are unchanged. The light, dark or system

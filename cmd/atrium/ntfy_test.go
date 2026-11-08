@@ -234,11 +234,17 @@ func TestNtfyChannelsMintTokensProbePrivacyAndTrackHealth(t *testing.T) {
 		t.Fatal(err)
 	}
 	f.set(false, false)
-	if code, _ := post(fmt.Sprintf("/%d/resend", failed), nil); code != http.StatusOK {
+	resend := func() int {
+		t.Helper()
+		get()
+		code, _, _ := fetch(t, client, http.MethodPost, base+fmt.Sprintf("/inbox/%d/resend", failed), url.Values{})
+		return code
+	}
+	if code := resend(); code != http.StatusOK {
 		t.Fatalf("resend: %d", code)
 	}
 	waitPublishes(8)
-	post(fmt.Sprintf("/%d/resend", failed), nil)
+	resend()
 	if _, n := f.last(); n != 8 {
 		t.Errorf("%d publishes after a second resend, want the delivered notification sent once", n)
 	}

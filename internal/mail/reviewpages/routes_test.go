@@ -22,20 +22,28 @@ func TestPostsWithoutTheCSRFTokenAreForbidden(t *testing.T) {
 		t.Errorf("status = %s", got)
 	}
 }
-func TestEveryPageMarksItsSidebarEntryCurrent(t *testing.T) {
+func TestEveryReviewPageMarksTheHubAndItsTabCurrent(t *testing.T) {
 	s := newSite(t)
-	for _, c := range []struct{ target, label, heading string }{
-		{"/proposals", "Proposals", "Proposals"}, {"/activity", "Activity", "Activity"}, {"/drafts", "Drafts", "Drafts"},
-		{"/loops", "Loops", "Open loops"}, {"/watches", "Watches", "Watches"},
+	for _, c := range []struct{ target, tab, heading string }{
+		{"/review", "Needs you", "Needs you"}, {"/loops", "Loops", "Open loops"},
+		{"/watches", "Packages", "Packages"}, {"/activity", "Done", "Done"},
 	} {
 		page := status(t, s.get(c.target), http.StatusOK)
-		if n := strings.Count(page, `aria-current="page"`); n != 1 {
+		if n := strings.Count(page, `aria-current="page"`); n != 2 {
 			t.Errorf("%s marks %d entries current", c.target, n)
 		}
-		current := between(page, `aria-current="page"`, "</a>")
-		if !strings.Contains(text(current), c.label) {
-			t.Errorf("%s marks %q current, want %s", c.target, text(current), c.label)
+		hub := between(page, `class="sb-item" title="Review" aria-current="page"`, "</a>")
+		if !strings.Contains(text(hub), "Review") {
+			t.Errorf("%s does not mark the Review hub current", c.target)
 		}
-		mustContain(t, page, `<h1>`+c.heading+`</h1>`)
+		tab := between(page, `class="hub-tab" aria-current="page">`, "</a>")
+		if text(tab) != c.tab {
+			t.Errorf("%s marks tab %q current, want %s", c.target, text(tab), c.tab)
+		}
+		mustContain(t, page, `<h1>`+c.heading+`</h1>`, `href="/review"`, `href="/loops"`, `href="/watches"`, `href="/activity"`)
+	}
+	for _, target := range []string{"/proposals", "/drafts"} {
+		page := status(t, s.get(target), http.StatusOK)
+		mustNotContain(t, page, `aria-current="page"`, `class="hub-tabs"`)
 	}
 }

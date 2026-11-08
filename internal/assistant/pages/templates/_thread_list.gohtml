@@ -1,13 +1,13 @@
-{{$d := .Data}}{{template "chat_thread_list" (dict "threads" $d.Threads "q" $d.Q "view" $d.View "project_id" $d.ProjectID)}}
+{{$d := .Data}}{{template "chat_thread_list" (dict "threads" $d.Threads "q" $d.Q "view" $d.View)}}
 
-{{define "chat_thread_list"}}{{$project_id := .project_id}}
+{{define "chat_thread_list"}}
 {{if .threads}}
 {{$pinned := selattr "pinned" .threads}}{{$rest := rejattr "pinned" .threads}}
 {{if eq .view "archived"}}
-{{template "chat_thread_group" (dict "title" "Archived" "items" .threads "project_id" $project_id)}}
+{{template "chat_thread_group" (dict "title" "Archived" "items" .threads)}}
 {{else}}
-{{if $pinned}}{{template "chat_thread_group" (dict "title" "Pinned" "items" $pinned "project_id" $project_id)}}{{end}}
-{{if $rest}}{{template "chat_thread_group" (dict "title" (ternary $pinned "Threads" "Recent") "items" $rest "project_id" $project_id)}}{{end}}
+{{if $pinned}}{{template "chat_thread_group" (dict "title" "Pinned" "items" $pinned)}}{{end}}
+{{if $rest}}{{template "chat_thread_group" (dict "title" (ternary $pinned "Threads" "Recent") "items" $rest)}}{{end}}
 {{end}}
 {{else if .q}}
 {{template "empty_state" (dict "icon_name" "search" "title" "Nothing matches" "body" (partial "chat_search_empty_body" .q))}}
@@ -20,22 +20,22 @@
 
 {{define "chat_search_empty_body"}}No thread mentions “{{.}}”.{{end}}
 
-{{define "chat_thread_group"}}{{$project_id := .project_id}}
+{{define "chat_thread_group"}}
 <section class="flex flex-col gap-1" aria-label="{{.title}}">
   <h2 class="eyebrow px-2" tabindex="-1" data-focus-fallback>{{.title}}</h2>
   <ul class="flex flex-col" role="list">
-    {{range .items}}{{template "chat_thread_row" (dict "t" . "project_id" $project_id)}}{{end}}
+    {{range .items}}{{template "chat_thread_row" (dict "t" .)}}{{end}}
   </ul>
 </section>
 {{- end}}
 
-{{define "chat_thread_row"}}{{$t := .t}}{{$project_id := .project_id}}
+{{define "chat_thread_row"}}{{$t := .t}}
 <li class="group flex items-center gap-1 rounded-lg pe-1 hover:bg-surface-2">
   <a href="/chat/{{$t.ID}}" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
     <span class="flex min-w-0 items-center gap-2">
       <span class="truncate text-sm text-ink">{{or (str $t.Title) "Untitled thread"}}</span>
       {{template "run_badge" (str $t.RunState)}}
-      {{if and $t.ProjectName (not $project_id)}}<span class="badge truncate" data-variant="outline">{{icon "folder" "size-3"}}{{str $t.ProjectName}}</span>{{end}}
+      {{if $t.ProjectName}}<span class="badge truncate" data-variant="outline">{{icon "folder" "size-3"}}{{str $t.ProjectName}}</span>{{end}}
     </span>
     <span class="ms-auto flex shrink-0 gap-3 text-xs text-ink-3 tabular-nums">
       <span class="max-sm:hidden">${{printf "%.3f" $t.Cost}}</span>
@@ -44,9 +44,9 @@
   </a>
   {{if not $t.Archived}}
   <button id="thread-{{$t.ID}}-pin" type="button" class="btn" data-variant="ghost" data-size="icon-sm" title="{{if $t.Pinned}}Unpin{{else}}Pin{{end}}" aria-label="{{if $t.Pinned}}Unpin{{else}}Pin{{end}} {{or (str $t.Title) "thread"}}"
-          hx-post="/chat/{{$t.ID}}/pin" hx-vals='{"pinned": {{if $t.Pinned}}0{{else}}1{{end}}, "project_id": {{or $project_id 0}}}' hx-include="#thread-search" hx-target="#threads" hx-swap="innerHTML">{{icon (ternary $t.Pinned "pin-off" "pin")}}</button>
+          hx-post="/chat/{{$t.ID}}/pin" hx-vals='{"pinned": {{if $t.Pinned}}0{{else}}1{{end}}}' hx-include="#thread-search" hx-target="#threads" hx-swap="innerHTML">{{icon (ternary $t.Pinned "pin-off" "pin")}}</button>
   {{end}}
   <button id="thread-{{$t.ID}}-archive" type="button" class="btn" data-variant="ghost" data-size="icon-sm" title="{{if $t.Archived}}Unarchive{{else}}Archive{{end}}" aria-label="{{if $t.Archived}}Unarchive{{else}}Archive{{end}} {{or (str $t.Title) "thread"}}"
-          hx-post="/chat/{{$t.ID}}/archive" hx-vals='{"archived": {{if $t.Archived}}0{{else}}1{{end}}, "project_id": {{or $project_id 0}}}' hx-include="#thread-search" hx-target="#threads" hx-swap="innerHTML">{{icon (ternary $t.Archived "archive-restore" "archive")}}</button>
+          hx-post="/chat/{{$t.ID}}/archive" hx-vals='{"archived": {{if $t.Archived}}0{{else}}1{{end}}}' hx-include="#thread-search" hx-target="#threads" hx-swap="innerHTML">{{icon (ternary $t.Archived "archive-restore" "archive")}}</button>
 </li>
 {{- end}}
