@@ -6,7 +6,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/notion"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/urlx"
 )
 
 type crumb struct {
@@ -106,7 +106,7 @@ func newRelated(found []notion.Related) []related {
 var backLabels = map[string]string{"/chat": "Chat", "/triage": "Decisions"}
 
 func backTo(r *http.Request) backLink {
-	parts, err := py.URLSplit(r.Header.Get("Referer"))
+	parts, err := urlx.URLSplit(r.Header.Get("Referer"))
 	if label, ok := backLabels[parts.Path]; ok && err == nil && parts.Netloc == r.Host {
 		url := parts.Path
 		if parts.Query != "" {

@@ -3,9 +3,11 @@ package notion
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,20 +55,20 @@ func PageTitle(page py.Dict) string {
 	for _, p := range asDict(field(page, "properties")) {
 		prop := asDict(p.Value)
 		if text(prop, "type") == "title" {
-			return py.Strip(richText(list(prop, "title")))
+			return strings.TrimSpace(richText(list(prop, "title")))
 		}
 	}
 	return ""
 }
 
-func sourceTitle(source py.Dict) string { return py.Strip(richText(list(source, "title"))) }
+func sourceTitle(source py.Dict) string { return strings.TrimSpace(richText(list(source, "title"))) }
 
 func (s Sensitivity) Of(properties py.Dict) string {
 	if s.Property == "" {
 		return ""
 	}
 	for _, p := range properties {
-		if py.Lower(py.Strip(p.Key)) != s.Property {
+		if strings.ToLower(strings.TrimSpace(p.Key)) != s.Property {
 			continue
 		}
 		prop := asDict(p.Value)
@@ -93,7 +95,7 @@ func (s Sensitivity) Of(properties py.Dict) string {
 
 func (s Sensitivity) IsPrivate(value string) bool {
 	for _, v := range strings.Split(value, ",") {
-		if py.Lower(py.Strip(v)) == s.Private {
+		if strings.ToLower(strings.TrimSpace(v)) == s.Private {
 			return true
 		}
 	}
@@ -136,11 +138,11 @@ func parentRef(parent py.Dict) (kind, id string) {
 }
 
 func editedTS(value string) float64 {
-	dt, ok := py.FromISOFormat(strings.ReplaceAll(value, "Z", "+00:00"))
-	if !ok {
+	t, err := time.Parse(time.RFC3339, value)
+	if err != nil {
 		return 0
 	}
-	return dt.Timestamp(time.Local)
+	return float64(t.UnixNano()) / 1e9
 }
 
 func b2i(b bool) int {
@@ -152,16 +154,20 @@ func b2i(b bool) int {
 
 func upsertSource(ctx context.Context, q db.Querier, source py.Dict) error {
 	parent := asDict(field(source, "database_parent"))
-	if !py.Truthy(parent) {
+	if !truthy(parent) {
 		parent = asDict(field(source, "parent"))
 	}
 	kind, parentID := parentRef(parent)
 	databaseID := notionid.Normalize(text(asDict(field(source, "parent")), "database_id"))
 	props := field(source, "properties")
-	if !py.Truthy(props) {
+	if !truthy(props) {
 		props = py.Dict{}
 	}
-	_, err := q.ExecContext(ctx,
+	encoded, err := json.Marshal(props)
+	if err != nil {
+		return err
+	}
+	_, err = q.ExecContext(ctx,
 		"INSERT INTO notion_sources (id, database_id, parent_type, parent_id, title, url, properties, "+
 			"last_edited_time, in_trash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "+
 			"ON CONFLICT(id) DO UPDATE SET database_id = excluded.database_id, parent_type = excluded.parent_type, "+
@@ -169,7 +175,7 @@ func upsertSource(ctx context.Context, q db.Querier, source py.Dict) error {
 			"properties = excluded.properties, last_edited_time = excluded.last_edited_time, "+
 			"in_trash = excluded.in_trash",
 		notionid.Normalize(text(source, "id")), databaseID, kind, parentID, sourceTitle(source), text(source, "url"),
-		py.JSONDumps(props), text(source, "last_edited_time"), b2i(py.Truthy(field(source, "in_trash"))))
+		string(encoded), text(source, "last_edited_time"), b2i(truthy(field(source, "in_trash"))))
 	return err
 }
 
@@ -191,7 +197,7 @@ func ftsWrite(ctx context.Context, q db.Querier, rid int64, title, path, markdow
 		return err
 	}
 	_, err := q.ExecContext(ctx, "INSERT INTO notion_fts (rowid, title, path, body) VALUES (?, ?, ?, ?)",
-		rid, title, path, py.Clip(markdown, config.FTSBodyChars))
+		rid, title, path, clip(markdown, config.FTSBodyChars))
 	return err
 }
 
@@ -222,7 +228,7 @@ func upsertPage(ctx context.Context, q db.Querier, client *Client, sensitivity S
 	if kind == "data_source_id" {
 		dataSource = notionid.Normalize(text(parent, "data_source_id"))
 	}
-	trashed := int64(b2i(py.Truthy(field(page, "in_trash"))))
+	trashed := int64(b2i(truthy(field(page, "in_trash"))))
 	if found && storedEdited == edited && trashedBefore == trashed {
 		_, err := q.ExecContext(ctx, "UPDATE notion_pages SET synced_at = ? WHERE rid = ?", now, rid)
 		stats.Unchanged++
@@ -240,20 +246,28 @@ func upsertPage(ctx context.Context, q db.Querier, client *Client, sensitivity S
 		}
 	}
 	sens := sensitivity.Of(props)
+	propsJSON, err := json.Marshal(props)
+	if err != nil {
+		return err
+	}
+	linksJSON, err := json.Marshal(linkTargets(props, markdown))
+	if err != nil {
+		return err
+	}
 	values := []py.Pair{
 		{Key: "parent_type", Value: kind},
 		{Key: "parent_id", Value: parentID},
 		{Key: "data_source_id", Value: dataSource},
 		{Key: "title", Value: PageTitle(page)},
 		{Key: "url", Value: text(page, "url")},
-		{Key: "properties", Value: py.JSONDumps(props)},
+		{Key: "properties", Value: string(propsJSON)},
 		{Key: "markdown", Value: markdown},
 		{Key: "last_edited_time", Value: edited},
 		{Key: "edited_ts", Value: editedTS(edited)},
 		{Key: "in_trash", Value: trashed},
 		{Key: "sensitivity", Value: sens},
 		{Key: "private", Value: b2i(sensitivity.IsPrivate(sens))},
-		{Key: "links", Value: py.JSONDumps(linkTargets(props, markdown))},
+		{Key: "links", Value: string(linksJSON)},
 		{Key: "embedded", Value: 0},
 		{Key: "synced_at", Value: now},
 	}
@@ -504,7 +518,7 @@ func Sync(ctx context.Context, d *db.DB, client *Client, embedTexts embed.TextsF
 	}
 	if _, err := d.Write.ExecContext(ctx,
 		"INSERT INTO notion_state (key, value) VALUES ('last_sync_at', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
-		py.FloatRepr(stamp)); err != nil {
+		strconv.FormatFloat(stamp, 'f', -1, 64)); err != nil {
 		return stats, err
 	}
 	embedURL, err := mail.EmbedURL(ctx, d.Read)

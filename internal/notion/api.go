@@ -3,6 +3,7 @@ package notion
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"math"
@@ -158,7 +159,7 @@ func retryable(status int) bool {
 }
 
 func (c *Client) retryDelay(status int, headers http.Header, attempt int) float64 {
-	delay, err := py.ParseFloat(headers.Get("Retry-After"))
+	delay, err := strconv.ParseFloat(strings.TrimSpace(headers.Get("Retry-After")), 64)
 	if err != nil {
 		delay = c.API.RetryAfterBase
 		if status != http.StatusTooManyRequests {
@@ -194,7 +195,31 @@ func pyStr(v any) string {
 	if s, ok := v.(string); ok {
 		return s
 	}
-	return py.ReprValue(v)
+	return fmt.Sprint(v)
+}
+
+func truthy(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return false
+	case bool:
+		return x
+	case string:
+		return x != ""
+	case float64:
+		return x != 0
+	case int:
+		return x != 0
+	case int64:
+		return x != 0
+	case []any:
+		return len(x) > 0
+	case py.Dict:
+		return len(x) > 0
+	case map[string]any:
+		return len(x) > 0
+	}
+	return true
 }
 
 type Query []py.Pair
@@ -217,7 +242,11 @@ func (c *Client) Request(ctx context.Context, method, path string, body any, que
 	}
 	var data []byte
 	if body != nil {
-		data = []byte(py.JSONDumps(body))
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		data = encoded
 	}
 	for attempt := 0; ; attempt++ {
 		if err := c.pace(ctx); err != nil {
@@ -277,7 +306,7 @@ func (c *Client) Each(ctx context.Context, method, path string, body py.Dict, qu
 		}
 		next, _ := reply.Get("next_cursor")
 		cursor, _ = next.(string)
-		if !py.Truthy(field(reply, "has_more")) || cursor == "" {
+		if !truthy(field(reply, "has_more")) || cursor == "" {
 			return nil
 		}
 	}
@@ -402,7 +431,7 @@ func (c *Client) BlocksMarkdown(ctx context.Context, blockID string, depth int) 
 			line = strconv.Itoa(number) + ". " + body
 		case "to_do":
 			mark := " "
-			if py.Truthy(field(data, "checked")) {
+			if truthy(field(data, "checked")) {
 				mark = "x"
 			}
 			line = "- [" + mark + "] " + body
@@ -414,7 +443,7 @@ func (c *Client) BlocksMarkdown(ctx context.Context, blockID string, depth int) 
 		if line != "" {
 			lines = append(lines, strings.Repeat("  ", depth)+line)
 		}
-		if py.Truthy(field(block, "has_children")) && depth < c.API.BlockDepth && kind != "child_page" {
+		if truthy(field(block, "has_children")) && depth < c.API.BlockDepth && kind != "child_page" {
 			nested, err := c.BlocksMarkdown(ctx, text(block, "id"), depth+1)
 			if err != nil {
 				return err

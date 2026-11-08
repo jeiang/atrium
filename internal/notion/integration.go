@@ -49,5 +49,5 @@ func SharedPages(ctx context.Context, token string, hc *http.Client) (shared int
 	if err != nil {
 		return 0, false, err
 	}
-	return len(list(reply, "results")), py.Truthy(field(reply, "has_more")), nil
+	return len(list(reply, "results")), truthy(field(reply, "has_more")), nil
 }

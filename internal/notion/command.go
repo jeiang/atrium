@@ -2,6 +2,7 @@ package notion
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"path/filepath"
 
@@ -108,7 +109,11 @@ func (o Options) syncPass(ctx context.Context, d *db.DB, cfg config.Config, env 
 		{Key: "failed", Value: stats.Failed}, {Key: "embedded", Value: counts.Embedded}, {Key: "seconds", Value: stats.Seconds},
 		{Key: "live", Value: counts.Live}, {Key: "private", Value: counts.Private},
 	}
-	_, _ = fmt.Fprintln(env.Stdout, py.JSONDumps(out))
+	encoded, err := json.Marshal(out)
+	if err != nil {
+		return err
+	}
+	_, _ = fmt.Fprintln(env.Stdout, string(encoded))
 	return nil
 }
 
