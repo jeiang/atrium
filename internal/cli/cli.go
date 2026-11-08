@@ -14,6 +14,7 @@ import (
 	"regexp"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/observability"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -221,13 +222,21 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 			return ExitError
 		}
 	}
-	stdin := a.Stdin
-	if stdin == nil {
-		stdin = os.Stdin
-	}
 	env := a.Env
 	if env == nil {
 		env = config.OS
+	}
+	if a.Settings != nil {
+		stopTracing, err := observability.Start(ctx, env)
+		if err != nil {
+			_, _ = fmt.Fprintf(stderr, "error: %v\n", err)
+			return ExitError
+		}
+		defer stopTracing(context.Background())
+	}
+	stdin := a.Stdin
+	if stdin == nil {
+		stdin = os.Stdin
 	}
 	return s.handler(&Env{Ctx: ctx, Stdin: stdin, Stdout: stdout, Stderr: stderr, Env: env, Settings: a.Settings, p: s.leaf, width: s.width})
 }

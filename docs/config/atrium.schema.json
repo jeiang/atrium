@@ -1592,6 +1592,13 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "otel_traces_endpoint": {
+          "type": "string"
+        },
+        "otel_traces_endpoint_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "pass_run_retention_days": {
           "default": 90,
           "type": [

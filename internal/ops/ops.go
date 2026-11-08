@@ -52,6 +52,7 @@ func checkListen(value string) error {
 }
 
 type Sample struct {
+	Name   string
 	Labels [][2]string
 	Value  float64
 }
@@ -165,7 +166,11 @@ func render(ctx context.Context, d *db.DB) []byte {
 		}
 		fmt.Fprintf(&b, "# HELP %s %s\n# TYPE %s %s\n", m.Name, m.Help, m.Name, m.Type)
 		for _, sm := range samples {
-			b.WriteString(m.Name)
+			name := sm.Name
+			if name == "" {
+				name = m.Name
+			}
+			b.WriteString(name)
 			if len(sm.Labels) > 0 {
 				parts := make([]string, len(sm.Labels))
 				for i, l := range sm.Labels {

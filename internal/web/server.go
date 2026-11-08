@@ -8,18 +8,24 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
 	"unicode/utf8"
 
+	"github.com/felixge/httpsnoop"
 	"github.com/go-chi/chi/v5"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/jeiang/atrium/internal/auth/loginlink"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -140,6 +146,7 @@ func New(o Options) (*Server, error) {
 		return nil, errors.New("oidc auth needs a session service, a renderer and a database")
 	}
 	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, links: o.LoginLinks, settings: o.Settings, state: o.State}
+	s.mux.Use(instrument)
 	if s.links == nil && o.DB != nil {
 		s.links = loginlink.New(o.DB)
 	}
@@ -207,8 +214,30 @@ func New(o Options) (*Server, error) {
 			return config.From(ctx).Limit(ctx, o.DB.Read, config.KeyBodyCap)
 		}
 	}
-	s.handler = guard.Middleware(Gzip(recoverer(s.mux)))
+	s.handler = otelhttp.NewHandler(guard.Middleware(Gzip(recoverer(s.mux))), "http.server",
+		otelhttp.WithFilter(func(r *http.Request) bool {
+			return !strings.HasPrefix(r.URL.Path, staticPrefix) && r.URL.Path != healthPath
+		}),
+	)
 	return s, nil
+}
+
+func instrument(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		metrics := httpsnoop.CaptureMetrics(next, w, r)
+		route := chi.RouteContext(r.Context()).RoutePattern()
+		if route == "" {
+			route = "unmatched"
+		}
+		status := strconv.Itoa(metrics.Code)
+		obs.HTTPRequests.Add(1, route, r.Method, status)
+		obs.HTTPDuration.Observe(metrics.Duration.Seconds(), route, r.Method, status)
+		span := trace.SpanFromContext(r.Context())
+		if span.IsRecording() {
+			span.SetName(r.Method + " " + route)
+			span.SetAttributes(attribute.String(obs.HTTPRoute, route))
+		}
+	})
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {

@@ -15,6 +15,8 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
@@ -22,6 +24,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
 	"github.com/jeiang/atrium/internal/mail/rules"
+	"github.com/jeiang/atrium/internal/obs"
 )
 
 type limits struct {
@@ -88,8 +91,26 @@ type mailbox struct {
 	Checkpoint checkpoint
 }
 
-func (s *Syncer) Account(ctx context.Context, account string, client mail.Client) (Stats, error) {
-	var stats Stats
+func (s *Syncer) Account(ctx context.Context, account string, client mail.Client) (stats Stats, err error) {
+	ctx, span := obs.Start(ctx, "mail.sync", trace.WithAttributes(obs.String(obs.MailAccount, account)))
+	started := time.Now()
+	defer func() {
+		duration := time.Since(started)
+		span.SetAttributes(
+			obs.Int64(obs.MailNewCount, int64(stats.New)),
+			obs.Int64(obs.MailGoneCount, int64(len(stats.GoneIDs))),
+			obs.Int64(obs.MailFlagChangesCount, int64(stats.FlagChanges)),
+			obs.Int64(obs.MailMailboxes, int64(stats.Mailboxes)),
+		)
+		if err != nil {
+			obs.Fail(span, "error")
+		}
+		span.End()
+		obs.MailNew.Add(float64(stats.New), account)
+		obs.MailGone.Add(float64(len(stats.GoneIDs)), account)
+		obs.MailFlagChanges.Add(float64(stats.FlagChanges), account)
+		obs.MailDuration.Observe(duration.Seconds(), account)
+	}()
 	if _, err := s.DB.Write.ExecContext(ctx, "INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", account, config.From(ctx).Preset(account)); err != nil {
 		return stats, err
 	}

@@ -5,12 +5,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/numx"
+	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/timex"
 )
 
@@ -148,6 +150,7 @@ func Record(ctx context.Context, d *db.DB, e Entry, u anthropic.Usage) (float64,
 	if err != nil {
 		return 0, err
 	}
+	reasoning := ReasoningOf(u)
 	_, err = d.Write.ExecContext(ctx,
 		"INSERT INTO usage (ts, request_id, source, provider, thread_id, run_id, kind, job_name, model, effort, iterations, "+
 			"input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, reasoning_tokens, searches, tool_calls, wall_ms, "+
@@ -155,11 +158,27 @@ func Record(ctx context.Context, d *db.DB, e Entry, u anthropic.Usage) (float64,
 			"VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT j.name FROM threads t JOIN jobs j ON j.id = t.job_id WHERE t.id = ?), ?, ?, ?, "+
 			"?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(request_id) DO NOTHING",
 		e.TS, e.RequestID, e.Source, e.Provider, nullable(e.ThreadID), nullable(e.RunID), e.Kind, e.ThreadID, e.Model, e.Effort,
-		string(raw), sum.Input, sum.CacheWrite5m, sum.CacheWrite1h, sum.CacheRead, sum.Output, ReasoningOf(u),
+		string(raw), sum.Input, sum.CacheWrite5m, sum.CacheWrite1h, sum.CacheRead, sum.Output, reasoning,
 		searches, e.ToolCalls, e.WallMS, tier, cost, e.Partial, unpriced, e.ClearEdits, e.ClearedTokens, e.Compaction)
 	if err != nil {
 		return 0, err
 	}
+	kind := e.Kind
+	if kind == "" {
+		kind = "unknown"
+	}
+	model := e.Model
+	if model == "" {
+		model = "unknown"
+	}
+	obs.LLMRequests.Add(1, model, kind, strconv.FormatBool(e.Partial))
+	obs.LLMDuration.Observe(float64(e.WallMS)/1000, model, kind)
+	obs.LLMTokens.Add(float64(sum.Input), model, kind, "input")
+	obs.LLMTokens.Add(float64(sum.CacheWrite5m+sum.CacheWrite1h), model, kind, "cache_write")
+	obs.LLMTokens.Add(float64(sum.CacheRead), model, kind, "cache_read")
+	obs.LLMTokens.Add(float64(sum.Output), model, kind, "output")
+	obs.LLMTokens.Add(float64(reasoning), model, kind, "reasoning")
+	obs.LLMCost.Add(cost, model, kind)
 	return cost, nil
 }
 

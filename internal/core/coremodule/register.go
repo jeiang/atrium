@@ -25,6 +25,7 @@ import (
 	mailpages "github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/module"
+	_ "github.com/jeiang/atrium/internal/obs/opsmetrics"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals/proposalscmd"
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"

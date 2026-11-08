@@ -48,13 +48,14 @@ func (h *textHandler) WithGroup(name string) slog.Handler {
 	return &n
 }
 
-func (h *textHandler) Handle(_ context.Context, r slog.Record) error {
+func (h *textHandler) Handle(ctx context.Context, r slog.Record) error {
 	name := h.component
 	flat := make([]slog.Attr, 0, r.NumAttrs())
 	r.Attrs(func(a slog.Attr) bool {
 		flat = flatten(flat, h.prefix, a)
 		return true
 	})
+	flat = append(flat, traceAttrs(ctx)...)
 	attrs := appendFields(nil, flat, &name)
 	t := r.Time.In(h.loc)
 	message := Scrub(r.Message)

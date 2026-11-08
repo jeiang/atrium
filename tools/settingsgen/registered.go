@@ -19,5 +19,6 @@ import (
 	_ "github.com/jeiang/atrium/internal/notify"
 	_ "github.com/jeiang/atrium/internal/notion"
 	_ "github.com/jeiang/atrium/internal/notion/notionmodule"
+	_ "github.com/jeiang/atrium/internal/observability"
 	_ "github.com/jeiang/atrium/internal/secrets"
 )

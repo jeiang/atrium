@@ -11,9 +11,12 @@ import (
 	"sync"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations/transport"
+	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -175,6 +178,15 @@ func current(ctx context.Context, d *db.DB, q db.Querier, i Integration, env con
 }
 
 func run(ctx context.Context, q db.Querier, i Integration, c Conn) (state, reason string, expires *time.Time, err error) {
+	ctx, span := obs.Start(ctx, "integration.check", trace.WithAttributes(obs.String(obs.IntegrationName, i.Name)))
+	defer func() {
+		if err != nil {
+			obs.Fail(span, "error")
+		} else {
+			span.SetAttributes(obs.String(obs.IntegrationState, state))
+		}
+		span.End()
+	}()
 	if c.HTTP, err = transport.Configured(ctx, q, i.Name, testTimeout); err != nil {
 		var te transport.Error
 		if errors.As(err, &te) {
