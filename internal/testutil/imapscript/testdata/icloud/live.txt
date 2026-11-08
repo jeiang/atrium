@@ -1,0 +1,129 @@
+# Live iCloud session captured 2026-10-24 for issue #408, sanitized.
+# Server lines are the capture; client lines are adapted to the go-imap
+# client's command spelling (the capture used a Python runner). VANISHED was
+# not observed: UID EXPUNGE answered a plain EXPUNGE.
+
+S: * OK [CAPABILITY XAPPLEPUSHSERVICE IMAP4 IMAP4rev1 SASL-IR AUTH=ATOKEN AUTH=PLAIN AUTH=ATOKEN2 AUTH=XOAUTH2] (2642B150-0cc9295d8d28) p00-iscream-00-percent-0000000000-xxxxx
+C: {t} CAPABILITY
+S: * CAPABILITY XAPPLEPUSHSERVICE IMAP4 IMAP4rev1 SASL-IR AUTH=ATOKEN AUTH=PLAIN AUTH=ATOKEN2 AUTH=XOAUTH2
+S: {t} OK Completed
+C: {t} LOGIN "atrium.test@icloud.com" "app password"
+S: {t} OK [CAPABILITY XAPPLEPUSHSERVICE IMAP4 IMAP4rev1 SASL-IR AUTH=ATOKEN AUTH=PLAIN AUTH=ATOKEN2 AUTH=XOAUTH2] user atrium.test@icloud.com logged in
+C: {t} LIST "" ""
+S: * LIST (\Noselect) "/" "/"
+S: {t} OK LIST completed (took 2 ms)
+C: {t} EXAMINE INBOX (CONDSTORE)
+S: * 0 EXISTS
+S: * 0 RECENT
+S: * OK [UIDVALIDITY 1]
+S: * OK [UIDNEXT 7829]
+S: * FLAGS (\Answered \Flagged \Draft \Deleted \Seen \Recent $MailFlagBit0 $MailFlagBit1 $MailFlagBit2 $Forwarded Redirected $NotJunk NotJunk)
+S: * OK [PERMANENTFLAGS (\Answered \Flagged \Draft \Deleted \Seen \Recent $MailFlagBit0 $MailFlagBit1 $MailFlagBit2 $Forwarded Redirected $NotJunk NotJunk $iCloudCleanup \*)]
+S: * OK [HIGHESTMODSEQ 96236]
+S: {t} OK [READ-WRITE] EXAMINE completed (took 39 ms)
+C: {t} UID FETCH 1:* (UID FLAGS) (CHANGEDSINCE 96216)
+S: {t} OK FETCH completed (took 8 ms)
+C: {t} IDLE
+S: + idling
+C: DONE
+S: {t} OK IDLE Terminated (took 3 ms)
+C: {t} LIST "" "atrium-transcript-test*"
+S: {t} OK LIST completed (took 4 ms)
+C: {t} CREATE "atrium-transcript-test"
+S: {t} OK CREATE completed (took 120 ms)
+C: {t} CREATE "atrium-transcript-test-2"
+S: {t} OK CREATE completed (took 77 ms)
+C: {t} APPEND "atrium-transcript-test" (\Seen) {343}
+S: + go ahead
+C/ ^From: Atrium Test <atrium\.test@example\.invalid>\r\nTo: Atrium Test <atrium\.test@example\.invalid>\r\nSubject: atrium transcript test\r\nMessage-ID: <atrium-transcript-test-408@atrium\.invalid>\r\nDate: Sat, 24 Oct 2026 12:00:00 \+0000\r\nMIME-Version: 1\.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nSynthetic message for the atrium IMAP transcript test\.\r\n$
+S: {t} OK [APPENDUID 1750835959 1] completed (took 274 ms)
+C: {t} SELECT "atrium-transcript-test"
+S: * 1 EXISTS
+S: * 0 RECENT
+S: * OK [UNSEEN 1]
+S: * OK [UIDVALIDITY 1750835959]
+S: * OK [UIDNEXT 2]
+S: * FLAGS (\Answered \Flagged \Draft \Deleted \Seen \Recent $MailFlagBit0 $MailFlagBit1 $MailFlagBit2 $Forwarded Redirected $NotJunk NotJunk)
+S: * OK [PERMANENTFLAGS (\Answered \Flagged \Draft \Deleted \Seen \Recent $MailFlagBit0 $MailFlagBit1 $MailFlagBit2 $Forwarded Redirected $NotJunk NotJunk $iCloudCleanup \*)]
+S: * OK [HIGHESTMODSEQ 96244]
+S: {t} OK [READ-WRITE] SELECT completed (took 18 ms)
+C: {t} UID SEARCH ALL
+S: * SEARCH 1
+S: {t} OK SEARCH completed (took 1 ms)
+C: {t} UID COPY 1 "atrium-transcript-test-2"
+S: {t} OK [COPYUID 1750835961 1 1] completed (took 181 ms)
+C: {t} SELECT "atrium-transcript-test-2"
+S: * 1 EXISTS
+S: * 0 RECENT
+S: * OK [UNSEEN 1]
+S: * OK [UIDVALIDITY 1750835961]
+S: * OK [UIDNEXT 2]
+S: * FLAGS (\Answered \Flagged \Draft \Deleted \Seen \Recent $MailFlagBit0 $MailFlagBit1 $MailFlagBit2 $Forwarded Redirected $NotJunk NotJunk)
+S: * OK [PERMANENTFLAGS (\Answered \Flagged \Draft \Deleted \Seen \Recent $MailFlagBit0 $MailFlagBit1 $MailFlagBit2 $Forwarded Redirected $NotJunk NotJunk $iCloudCleanup \*)]
+S: * OK [HIGHESTMODSEQ 96245]
+S: {t} OK [READ-WRITE] SELECT completed (took 92 ms)
+C: {t} UID SEARCH ALL
+S: * SEARCH 1
+S: {t} OK SEARCH completed (took 1 ms)
+C: {t} UID STORE 1 +FLAGS.SILENT (\Deleted)
+S: {t} OK STORE completed (took 170 ms)
+C: {t} UID EXPUNGE 1
+S: * 1 EXPUNGE
+S: {t} OK EXPUNGE completed (took 252 ms)
+C: {t} UID SEARCH ALL
+S: {t} OK SEARCH completed (took 2 ms)
+C: {t} EXAMINE INBOX
+S: * 0 EXISTS
+S: * 0 RECENT
+S: * OK [UIDVALIDITY 1]
+S: * OK [UIDNEXT 7829]
+S: * FLAGS (\Answered \Flagged \Draft \Deleted \Seen \Recent $MailFlagBit0 $MailFlagBit1 $MailFlagBit2 $Forwarded Redirected $NotJunk NotJunk)
+S: * OK [PERMANENTFLAGS (\Answered \Flagged \Draft \Deleted \Seen \Recent $MailFlagBit0 $MailFlagBit1 $MailFlagBit2 $Forwarded Redirected $NotJunk NotJunk $iCloudCleanup \*)]
+S: * OK [HIGHESTMODSEQ 96236]
+S: {t} OK [READ-WRITE] EXAMINE completed (took 23 ms)
+C: {t} DELETE "atrium-transcript-test"
+S: {t} OK DELETE completed (took 124 ms)
+C: {t} DELETE "atrium-transcript-test-2"
+S: {t} OK DELETE completed (took 149 ms)
+C: {t} LIST "" "atrium-transcript-test*"
+S: {t} OK LIST completed (took 47 ms)
+C: {t} LOGOUT
+S: * BYE
+S: {t} OK !!
+
+! accept
+
+S: * OK [CAPABILITY XAPPLEPUSHSERVICE IMAP4 IMAP4rev1 SASL-IR AUTH=ATOKEN AUTH=PLAIN AUTH=ATOKEN2 AUTH=XOAUTH2] (2642B150-0cc9295d8d28) p00-iscream-00-percent-0000000000-xxxxx
+C: {t} CAPABILITY
+S: * CAPABILITY XAPPLEPUSHSERVICE IMAP4 IMAP4rev1 SASL-IR AUTH=ATOKEN AUTH=PLAIN AUTH=ATOKEN2 AUTH=XOAUTH2
+S: {t} OK Completed
+C: {t} LOGIN "atrium.test@icloud.com" "app password"
+S: {t} OK [CAPABILITY XAPPLEPUSHSERVICE IMAP4 IMAP4rev1 SASL-IR AUTH=ATOKEN AUTH=PLAIN AUTH=ATOKEN2 AUTH=XOAUTH2] user atrium.test@icloud.com logged in
+C: {t} LIST "" ""
+S: * LIST (\Noselect) "/" "/"
+S: {t} OK LIST completed (took 2 ms)
+C: {t} EXAMINE "Archive" (CONDSTORE)
+S: * 361 EXISTS
+S: * 0 RECENT
+S: * OK [UNSEEN 361]
+S: * OK [UIDVALIDITY 1741850503]
+S: * OK [UIDNEXT 363]
+S: * FLAGS (\Answered \Flagged \Draft \Deleted \Seen \Recent $MailFlagBit0 $MailFlagBit1 $MailFlagBit2 $Forwarded Redirected $NotJunk NotJunk)
+S: * OK [PERMANENTFLAGS (\Answered \Flagged \Draft \Deleted \Seen \Recent $MailFlagBit0 $MailFlagBit1 $MailFlagBit2 $Forwarded Redirected $NotJunk NotJunk $iCloudCleanup \*)]
+S: * OK [HIGHESTMODSEQ 96014]
+S: {t} OK [READ-WRITE] EXAMINE completed (took 21 ms)
+C: {t} UID FETCH 357:* (UID FLAGS) (CHANGEDSINCE 95714)
+S: * 356 FETCH (UID 357 MODSEQ (95937) FLAGS (\Seen))
+S: * 357 FETCH (UID 358 MODSEQ (95938) FLAGS (\Seen))
+S: * 358 FETCH (UID 359 MODSEQ (95950) FLAGS (\Seen))
+S: * 359 FETCH (UID 360 MODSEQ (96003) FLAGS (\Seen))
+S: * 360 FETCH (UID 361 MODSEQ (96008) FLAGS (\Seen))
+S: * 361 FETCH (UID 362 MODSEQ (96014) FLAGS (\Seen))
+S: {t} OK FETCH completed (took 3 ms)
+C: {t} IDLE
+S: + idling
+C: DONE
+S: {t} OK IDLE Terminated (took 1 ms)
+C: {t} LOGOUT
+S: * BYE
+S: {t} OK !!

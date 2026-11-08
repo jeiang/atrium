@@ -1,0 +1,63 @@
+# Live Gmail read path captured 2026-10-24 for issue #408, sanitized.
+# No write exchange was captured on Gmail: the two DELETE commands only prove
+# the test folders were gone, and Gmail auto-expunges on STORE \Deleted, so
+# the COPY + STORE + UID EXPUNGE exchange exists only for iCloud.
+
+S: * OK Gimap ready for requests from 192.0.2.1 a1b2c3d4e5f6
+C: {t} CAPABILITY
+S: * CAPABILITY IMAP4rev1 UNSELECT IDLE NAMESPACE QUOTA ID XLIST CHILDREN X-GM-EXT-1 XYZZY SASL-IR AUTH=XOAUTH2 AUTH=PLAIN AUTH=PLAIN-CLIENTTOKEN AUTH=OAUTHBEARER
+S: {t} OK Thats all she wrote! a1b2c3d4e5f6
+C: {t} LOGIN "atrium.test@gmail.com" "app password"
+S: * CAPABILITY IMAP4rev1 UNSELECT IDLE NAMESPACE QUOTA ID XLIST CHILDREN X-GM-EXT-1 UIDPLUS COMPRESS=DEFLATE ENABLE MOVE CONDSTORE ESEARCH UTF8=ACCEPT LIST-EXTENDED LIST-STATUS LITERAL- SPECIAL-USE APPENDLIMIT=35651584
+S: {t} OK [CAPABILITY IMAP4rev1 UNSELECT IDLE NAMESPACE QUOTA ID XLIST CHILDREN X-GM-EXT-1 UIDPLUS COMPRESS=DEFLATE ENABLE MOVE CONDSTORE ESEARCH UTF8=ACCEPT LIST-EXTENDED LIST-STATUS LITERAL- SPECIAL-USE APPENDLIMIT=35651584] atrium.test@gmail.com authenticated (Success)
+C: {t} LIST "" ""
+S: * LIST (\Noselect) "/" "/"
+S: {t} OK Success
+C: {t} EXAMINE INBOX
+S: * FLAGS (\Answered \Flagged \Draft \Deleted \Seen $Forwarded $MailFlagBit2 $NotJunk $NotPhishing $Phishing Forwarded NotJunk)
+S: * OK [PERMANENTFLAGS ()] Flags permitted.
+S: * OK [UIDVALIDITY 1] UIDs valid.
+S: * 0 EXISTS
+S: * 0 RECENT
+S: * OK [UIDNEXT 37630] Predicted next UID.
+S: * OK [HIGHESTMODSEQ 39698851]
+S: {t} OK [READ-ONLY] INBOX selected. (Success)
+C: {t} DELETE "atrium-transcript-test"
+S: {t} NO [NONEXISTENT] Unknown folder. (Failure)
+C: {t} DELETE "atrium-transcript-test-2"
+S: {t} NO [NONEXISTENT] Unknown folder. (Failure)
+C: {t} LOGOUT
+S: * BYE LOGOUT Requested
+S: {t} OK 73 good day (Success)
+
+! accept
+
+S: * OK Gimap ready for requests from 192.0.2.1 a1b2c3d4e5f6
+C: {t} CAPABILITY
+S: * CAPABILITY IMAP4rev1 UNSELECT IDLE NAMESPACE QUOTA ID XLIST CHILDREN X-GM-EXT-1 XYZZY SASL-IR AUTH=XOAUTH2 AUTH=PLAIN AUTH=PLAIN-CLIENTTOKEN AUTH=OAUTHBEARER
+S: {t} OK Thats all she wrote! a1b2c3d4e5f6
+C: {t} LOGIN "atrium.test@gmail.com" "app password"
+S: * CAPABILITY IMAP4rev1 UNSELECT IDLE NAMESPACE QUOTA ID XLIST CHILDREN X-GM-EXT-1 UIDPLUS COMPRESS=DEFLATE ENABLE MOVE CONDSTORE ESEARCH UTF8=ACCEPT LIST-EXTENDED LIST-STATUS LITERAL- SPECIAL-USE APPENDLIMIT=35651584
+S: {t} OK [CAPABILITY IMAP4rev1 UNSELECT IDLE NAMESPACE QUOTA ID XLIST CHILDREN X-GM-EXT-1 UIDPLUS COMPRESS=DEFLATE ENABLE MOVE CONDSTORE ESEARCH UTF8=ACCEPT LIST-EXTENDED LIST-STATUS LITERAL- SPECIAL-USE APPENDLIMIT=35651584] atrium.test@gmail.com authenticated (Success)
+C: {t} LIST "" ""
+S: * LIST (\Noselect) "/" "/"
+S: {t} OK Success
+C: {t} EXAMINE "[Gmail]/All Mail" (CONDSTORE)
+S: * FLAGS (\Answered \Flagged \Draft \Deleted \Seen $Forwarded $MailFlagBit2 $NotJunk $NotPhishing $Phishing Forwarded NotJunk)
+S: * OK [PERMANENTFLAGS ()] Flags permitted.
+S: * OK [UIDVALIDITY 11] UIDs valid.
+S: * 3771 EXISTS
+S: * 0 RECENT
+S: * OK [UIDNEXT 52953] Predicted next UID.
+S: * OK [HIGHESTMODSEQ 39698851]
+S: {t} OK [READ-ONLY] [Gmail]/All Mail selected. (Success)
+C: {t} UID FETCH 52947:* (UID FLAGS X-GM-MSGID X-GM-THRID X-GM-LABELS) (CHANGEDSINCE 39698551)
+S: * 3771 FETCH (X-GM-THRID 1000000000000000001 X-GM-MSGID 1000000000000000001 X-GM-LABELS () UID 52952 MODSEQ (39698811) FLAGS (\Seen))
+S: {t} OK Success
+C: {t} IDLE
+S: + idling
+C: DONE
+S: {t} OK IDLE terminated (Success)
+C: {t} LOGOUT
+S: * BYE LOGOUT Requested
+S: {t} OK 73 good day (Success)

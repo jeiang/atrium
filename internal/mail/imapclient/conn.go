@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"crypto/tls"
+	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -54,11 +56,21 @@ func New(host, user, password string) *conn {
 func (c *conn) setBodyCap(n int) { c.bodyCap = n }
 
 func newConn(host, user, password string) *conn {
+	addr, serverName := config.IMAPEndpoint(host)
+	tlsConfig := &tls.Config{ServerName: serverName, MinVersion: tls.VersionTLS12}
+	if path, ok := config.OS("ATRIUM_IMAP_CA"); ok && path != "" {
+		if pem, err := os.ReadFile(path); err == nil {
+			pool := x509.NewCertPool()
+			if pool.AppendCertsFromPEM(pem) {
+				tlsConfig.RootCAs = pool
+			}
+		}
+	}
 	c := &conn{
 		user:          user,
 		password:      password,
-		addr:          net.JoinHostPort(host, port),
-		tlsConfig:     &tls.Config{ServerName: host, MinVersion: tls.VersionTLS12},
+		addr:          addr,
+		tlsConfig:     tlsConfig,
 		dialTimeout:   dialTimeout,
 		readTimeout:   readTimeout,
 		writeTimeout:  writeTimeout,
