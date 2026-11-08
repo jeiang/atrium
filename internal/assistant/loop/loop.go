@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
@@ -20,7 +21,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
-	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/usage"
@@ -234,7 +234,8 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		return nil, err
 	}
 	limits := actx.LimitsFor(min(threads.ContextLimitOf(*thread), model.ContextWindow), tuning)
-	req, err := r.request(ctx, d.Read, *thread, kind, model.ID, found.Effort, set, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), limits, webSearchMaxUses, dynamicFiltering)
+	extra := deref(o.Limits.SystemExtra) + memoryPrompt
+	req, err := r.request(ctx, d.Read, *thread, kind, model.ID, found.Effort, set, prompts.PrefixCacheControl(kind, ttl), extra, webSearchMaxUses, dynamicFiltering)
 	if err != nil {
 		return nil, err
 	}
@@ -372,16 +373,28 @@ func (s *state) injectQueued(ctx context.Context) (bool, error) {
 	return len(taken) > 0, nil
 }
 
-func (s *state) active(ctx context.Context, loc *time.Location) ([]actx.Message, error) {
-	active, err := actx.ActiveMessages(ctx, s.d.Read, s.thread.ID, s.req.sig)
+const memoryPrompt = "\n\nMemory view: the history above is a memory tree, not raw messages. " +
+	"Each line carries a message range and a zoom id; call zoom(id, n) to open a summary's two children, " +
+	"or zoom(id, 1) to read one message's source, when the summary is not enough."
+
+func (s *state) viewMessages(ctx context.Context, loc *time.Location) ([]actx.Message, error) {
+	if err := memory.Rebuild(ctx, s.d.Write, s.thread.ID, s.now()); err != nil {
+		return nil, err
+	}
+	v, err := memory.Build(ctx, s.d.Write, s.thread.ID, s.now())
 	if err != nil {
 		return nil, err
 	}
-	runs, err := journal.RunsOf(ctx, s.d.Read, s.thread.ID)
-	if err != nil {
-		return nil, err
+	if v == nil || len(v.Lines) == 0 {
+		return nil, nil
 	}
-	return stampMessages(active, runs, loc)
+	var b strings.Builder
+	b.WriteString("Memory view of this thread (message ranges and zoom ids):")
+	for _, line := range v.Lines {
+		n := 1 << line.Level
+		fmt.Fprintf(&b, "\n\n[%d..%d] zoom id %d n %d (%s)\n%s", line.From, line.To, line.From, n, line.State, line.Text)
+	}
+	return []actx.Message{{Role: "user", Content: []json.RawMessage{actx.TextBlock(b.String())}}}, nil
 }
 
 func (s *state) size(ctx context.Context, active []actx.Message, a *anchor) (int64, error) {
@@ -482,34 +495,13 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if spent >= s.maxCost {
 		return false, nil, RunLimit(fmt.Sprintf("run cost ceiling reached ($%s of $%s)", strconv.FormatFloat(spent, 'f', 2, 64), strconv.FormatFloat(s.maxCost, 'f', 2, 64)))
 	}
-	active, err := s.active(ctx, loc)
+	active, err := s.viewMessages(ctx, loc)
 	if err != nil {
 		return false, nil, err
 	}
 	size, err := s.size(ctx, active, last)
 	if err != nil {
 		return false, nil, err
-	}
-	if size > s.limits.Preflight {
-		log.Info(fmt.Sprintf("run %d: next request ~%d tokens, compacting on the client", s.run.ID, size), logx.RunID, s.run.ID)
-		summaryIn := min(size, s.limits.Hard-int64(s.limits.Tuning.SummaryMaxTokens))
-		summary, err := budget.UncachedRequestUSD(s.run.Model, summaryIn, int64(s.limits.Tuning.SummaryMaxTokens))
-		if err != nil {
-			return false, nil, err
-		}
-		if err := s.reserveUSD(ctx, summary, fmt.Sprintf("the summary request is about %d tokens, up to $%s uncached", summaryIn, strconv.FormatFloat(summary, 'f', 2, 64))); err != nil {
-			return false, nil, err
-		}
-		if _, err := actx.ClientCompact(ctx, s.d, s.client, s.run.Model, active, s.thread.ID, s.run.ID, string(s.kind), s.limits.Hard, s.now(), s.limits.Tuning); err != nil {
-			return false, nil, err
-		}
-		last = nil
-		if active, err = s.active(ctx, loc); err != nil {
-			return false, nil, err
-		}
-		if size, err = s.size(ctx, active, last); err != nil {
-			return false, nil, err
-		}
 	}
 	if size > s.limits.Hard {
 		return false, nil, RunLimit(fmt.Sprintf("next request would be about %d tokens, over the %d limit", size, s.limits.Hard))
@@ -533,15 +525,12 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		return false, nil, err
 	}
 	blocks := response.Content
-	compacted := response.StopReason == block.Compaction
 	var stop error
-	if !compacted {
-		blocks, stop = judge(response, blocks)
-	}
+	blocks, stop = judge(response, blocks)
 	clearEdits, cleared := actx.ClearsOf(response)
 	entry := usage.Entry{
 		TS: s.now(), ThreadID: s.thread.ID, RunID: s.run.ID, Kind: string(s.kind), Model: s.run.Model, Effort: s.run.Effort,
-		ClearEdits: clearEdits, ClearedTokens: cleared, Compaction: int64(store.Bit(compacted)),
+		ClearEdits: clearEdits, ClearedTokens: cleared,
 	}
 	if _, err := usage.Record(context.WithoutCancel(ctx), s.d, entry, response.Usage); err != nil {
 		return false, nil, err
@@ -555,10 +544,6 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	}
 	if stop != nil {
 		return false, nil, stop
-	}
-	if compacted {
-		_, err := actx.ServerCompacted(ctx, s.d.Write, s.thread.ID, s.run.ID, blocks, active, s.now(), s.limits.Tuning)
-		return false, nil, err
 	}
 	next := &anchor{tokens: actx.HistoryTokens(response.Usage), seq: seq}
 	urls, err := block.SearchURLs(blocks)

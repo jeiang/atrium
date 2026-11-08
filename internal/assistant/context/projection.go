@@ -341,70 +341,16 @@ func inFold(folds []Entry, seq int64) bool {
 	return false
 }
 
-func ActiveMessages(ctx gocontext.Context, q db.Querier, threadID int64, systemSig string) ([]Message, error) {
-	p, err := getProjection(ctx, q, threadID)
+func blockDict(raw json.RawMessage) (py.Dict, error) {
+	v, err := py.JSONLoads(raw)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("context: content block: %w", err)
 	}
-	ledger, err := loadLedger(ctx, q, threadID)
-	if err != nil {
-		return nil, err
+	d, ok := v.(py.Dict)
+	if !ok {
+		return nil, fmt.Errorf("context: content block is %s, not an object", py.TypeName(v))
 	}
-	dropped := map[string]Entry{}
-	for _, e := range ledger.withState(StateDropped) {
-		dropped[e.ID] = e
-	}
-	folds := ledger.withState(StateFolded)
-	foldAt := map[int64]Entry{}
-	for _, f := range folds {
-		foldAt[f.Fold.From] = f
-	}
-	out := make([]Message, 0, len(p.Head))
-	for _, m := range p.Head {
-		out = append(out, Message{Role: m.Role, Content: append([]json.RawMessage{}, m.Content...)})
-	}
-	tail, err := tailOf(ctx, q, threadID, p)
-	if err != nil {
-		return nil, err
-	}
-	for _, m := range tail {
-		seq := m.Seq
-		if f, ok := foldAt[seq]; ok {
-			out = append(out, Message{Role: journal.User, Content: []json.RawMessage{foldBlock(f)}, Seq: &seq, RunID: m.RunID})
-			continue
-		}
-		if inFold(folds, seq) {
-			continue
-		}
-		content := m.Content
-		if m.Role == journal.User {
-			content = make([]json.RawMessage, len(m.Content))
-			for i, raw := range m.Content {
-				content[i] = raw
-				b, err := block.Decode(raw)
-				if err != nil {
-					return nil, err
-				}
-				if b.Kind != block.ToolResult {
-					continue
-				}
-				if r, ok := dropped[b.String("tool_use_id")]; ok {
-					if content[i], err = dropStub(raw, r.ResultID); err != nil {
-						return nil, err
-					}
-				}
-			}
-		} else if (p.StripFromSeq <= seq && seq < p.StripBeforeSeq) || (systemSig != "" && (m.SystemSig == nil || *m.SystemSig != systemSig)) {
-			if content, err = StripThinking(content); err != nil {
-				return nil, err
-			}
-			if len(content) == 0 {
-				continue
-			}
-		}
-		out = append(out, Message{Role: m.Role, Content: content, Seq: &seq, RunID: m.RunID})
-	}
-	return mergeRoles(out), nil
+	return d, nil
 }
 
 func deref(p *int64) int64 {

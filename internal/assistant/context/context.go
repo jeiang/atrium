@@ -32,21 +32,15 @@ const (
 )
 
 const (
-	SummaryEffort         = "low"
-	BetaContextManagement = anthropic.BetaContextManagement
-	BetaCompaction        = anthropic.BetaCompaction
-	ClearToolUses         = "clear_tool_uses_20250919"
-	Compact               = "compact_20260112"
-	Compaction            = block.Compaction
-	Text                  = block.Text
-	ToolUse               = block.ToolUse
-	ToolResult            = block.ToolResult
-	Thinking              = block.Thinking
-	RedactedThinking      = block.RedactedThinking
-	Attachment            = block.Attachment
-	recallTool            = "recall"
-	inputTokens           = "input_tokens"
-	compactionTruncate    = " [truncated for compaction]"
+	ClearToolUses    = "clear_tool_uses_20250919"
+	Compaction       = block.Compaction
+	Text             = block.Text
+	ToolUse          = block.ToolUse
+	ToolResult       = block.ToolResult
+	Thinking         = block.Thinking
+	RedactedThinking = block.RedactedThinking
+	Attachment       = block.Attachment
+	recallTool       = "recall"
 )
 
 const (
@@ -61,17 +55,9 @@ const (
 	KindCommit = "commit"
 )
 
-const SummarySystem = "You write faithful, source-cited summaries of atrium assistant sessions. Output only the summary."
-
-func SummaryRequest(instructions string) string {
-	return "The conversation above must be compacted. " + instructions + "\nWrite the summary now."
-}
-
 type ContextError string
 
 func (e ContextError) Error() string { return string(e) }
-
-func Betas() []string { return []string{BetaContextManagement, BetaCompaction} }
 
 var (
 	compactJSON = py.JSONOpts{Compact: true, NoEnsureASCII: true}
@@ -178,26 +164,6 @@ func LimitsFor(contextLimit int64, t Tuning) Limits {
 
 func typed(kind string, value int64) py.Dict {
 	return py.Dict{{Key: "type", Value: kind}, {Key: "value", Value: value}}
-}
-
-func ContextManagement(l Limits) json.RawMessage {
-	edits := []any{
-		py.Dict{
-			{Key: "type", Value: ClearToolUses},
-			{Key: "trigger", Value: typed(inputTokens, l.Clear)},
-			{Key: "keep", Value: typed("tool_uses", int64(l.Tuning.ClearKeep))},
-			{Key: "clear_at_least", Value: typed(inputTokens, l.ClearAtLeast)},
-			{Key: "clear_tool_inputs", Value: false},
-			{Key: "exclude_tools", Value: []string{recallTool}},
-		},
-		py.Dict{
-			{Key: "type", Value: Compact},
-			{Key: "trigger", Value: typed(inputTokens, l.Compact)},
-			{Key: "pause_after_compaction", Value: true},
-			{Key: "instructions", Value: l.Tuning.Summary},
-		},
-	}
-	return json.RawMessage(py.JSONDumps(py.Dict{{Key: "edits", Value: edits}}, compactJSON))
 }
 
 func ClearsOf(m *anthropic.Message) (int64, int64) {

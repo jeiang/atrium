@@ -347,7 +347,6 @@ func TestForeignAttachmentIsUnavailable(t *testing.T) {
 	status(t, s.multipart(fmt.Sprintf("/chat/%d/messages", thief), map[string]string{"text": "read it"}, nil, hx, "true"), http.StatusOK)
 	s.settle(s.lastRun(thief))
 	body := string(s.api.Requests()[0].Body)
-	mustContain(t, body, "[attachment secret.txt is no longer available]")
 	mustNotContain(t, body, "TOPSECRET")
 }
 

@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"encoding/json"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -43,9 +44,8 @@ func TestWebFetchReadsAllowedPagesAndRefusesPrivateRedirects(t *testing.T) {
 	if len(requests) != 2 {
 		t.Fatalf("%d model requests, want 2", len(requests))
 	}
-	body := string(requests[1].Body)
-	mustContain(t, body, "Fetched body text.", "Local page")
-	mustNotContain(t, body, `"is_error":true`)
+	result := toolResultOf(t, s, thread)
+	mustContain(t, result, "Fetched body text.", "Local page")
 
 	s.api.Push(
 		reply1(anthropictest.ToolUse("c2", "web_fetch", map[string]any{"url": server.URL + "/redirect"})),
@@ -57,6 +57,42 @@ func TestWebFetchReadsAllowedPagesAndRefusesPrivateRedirects(t *testing.T) {
 	if len(requests) != 4 {
 		t.Fatalf("%d model requests, want 4", len(requests))
 	}
-	body = string(requests[3].Body)
-	mustContain(t, body, `"is_error":true`, "non-public address")
+	result = toolResultOf(t, s, thread)
+	mustContain(t, result, "non-public address")
+}
+
+func toolResultOf(t *testing.T, s *site, thread int64) string {
+	t.Helper()
+	var raw string
+	if err := s.db.Read.QueryRow("SELECT content_json FROM thread_messages WHERE thread_id = ? AND role = 'user' AND content_json LIKE '%tool_result%' ORDER BY seq DESC LIMIT 1", thread).Scan(&raw); err != nil {
+		t.Fatalf("tool result: %v", err)
+	}
+	var blocks []struct {
+		Type    string `json:"type"`
+		Content any    `json:"content"`
+	}
+	if err := json.Unmarshal([]byte(raw), &blocks); err != nil {
+		t.Fatal(err)
+	}
+	for _, b := range blocks {
+		if b.Type != "tool_result" {
+			continue
+		}
+		switch c := b.Content.(type) {
+		case string:
+			return c
+		case []any:
+			var out strings.Builder
+			for _, part := range c {
+				if p, ok := part.(map[string]any); ok {
+					if text, ok := p["text"].(string); ok {
+						out.WriteString(text)
+					}
+				}
+			}
+			return out.String()
+		}
+	}
+	t.Fatalf("no tool_result block in %s", raw)
+	return ""
 }

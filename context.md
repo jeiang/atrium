@@ -19,10 +19,15 @@ not claims about the running application.
   A skill is a name, one-line description and Markdown body, exchanged as
   `SKILL.md` folders through the Skills page and `atrium skills`; the
   prompt carries only a budgeted index of them.
-- The system prompt, compaction summary instructions and subagent rules
-  are operator-editable settings over built-in defaults; the untrusted-data
-  preamble is fixed in code and always comes first. Edits apply to every
-  thread's next request until the frozen-prefix work lands.
+- The system prompt and subagent rules are operator-editable settings over
+  built-in defaults; the untrusted-data preamble is fixed in code and always
+  comes first. Edits apply to every thread's next request until the
+  frozen-prefix work lands.
+- Assistant history is a per-thread memory tree. The request carries the
+  current view: older message ranges as summaries, the newest messages
+  verbatim, each line with a zoom id. The `zoom` tool opens a summary's two
+  children or one message's source. Client- and server-side transcript
+  compaction are gone; the old projection and ledger rows stay untouched.
 - Notifications are recorded in an in-app inbox first and pushed best
   effort to ntfy on one of three channels (assistant, media, system), each
   with its own topic and optional per-channel token minted from the
