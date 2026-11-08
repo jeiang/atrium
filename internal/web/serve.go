@@ -225,7 +225,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 	if err != nil {
 		return err
 	}
-	return listenAndShutdown(ctx, listener, srv)
+	return listenAndShutdown(ctx, listener, srv, a.env)
 }
 
 func anyPublic(checks []func(*http.Request) bool) func(*http.Request) bool {
@@ -242,13 +242,13 @@ func anyPublic(checks []func(*http.Request) bool) func(*http.Request) bool {
 	}
 }
 
-func listenAndShutdown(ctx context.Context, listener net.Listener, srv *Server) error {
+func listenAndShutdown(ctx context.Context, listener net.Listener, srv *Server, env config.Env) error {
 	httpServer := &http.Server{Handler: srv, ReadHeaderTimeout: 30 * time.Second}
 	httpServer.RegisterOnShutdown(srv.StopStreams)
 	failed := make(chan error, 1)
 	go func() { failed <- httpServer.Serve(listener) }()
 	log.Info("listening", "addr", listener.Addr().String())
-	notifier := sdnotify.FromEnv()
+	notifier := sdnotify.New(func(name string) string { v, _ := env(name); return v })
 	srv.Release()
 	notifier.Ready()
 	notifier.Status("serving " + listener.Addr().String())

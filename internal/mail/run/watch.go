@@ -256,7 +256,7 @@ func Watch(ctx context.Context, env config.Env, cfg config.Config, requested str
 	if err != nil {
 		return err
 	}
-	notifier := sdnotify.FromEnv()
+	notifier := sdnotify.New(func(name string) string { v, _ := env(name); return v })
 	w := &Watcher{Env: env, Cfg: cfg, Open: open, Notify: notifier}
 	_, release, err := w.connect(ctx)
 	if err != nil {
