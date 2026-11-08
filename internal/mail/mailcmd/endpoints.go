@@ -10,7 +10,7 @@ import (
 func (o Options) EndpointsCommand() *cli.Command {
 	return group("endpoints",
 		o.leaf("probe", func(*cli.Args) body {
-			return func(x *Exec) error {
+			return func(x *exec) error {
 				results, err := mail.ProbeEndpoints(x.Ctx, x.DB, x.Now())
 				if err != nil {
 					return err
