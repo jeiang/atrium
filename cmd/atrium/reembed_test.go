@@ -131,7 +131,7 @@ func embedProgress(t *testing.T, base string) (done, total int, page string) {
 func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, path string) {
 	t.Helper()
 	dir, _ = moduleFixture(t, flagsExcept("", ""))
-	data, err := os.ReadFile(filepath.Join(golden.Dir(), "atrium.db"))
+	data, err := os.ReadFile(filepath.Join(golden.Dir(), "world.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,6 +139,7 @@ func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, pa
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	seedNotionVectors(t, path)
 	t.Setenv(settingEnv(mail.KeyEmbedURL), fake.URL+"/v1")
 	t.Setenv(settingEnv(mail.KeyEmbedModel), model)
 	t.Setenv(settingEnv(mail.KeyEmbedBatch), "40")
@@ -228,7 +229,7 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 	defer func() { _ = d.Close() }()
 	var rows, generations, oldTables int
 	if err := d.Read.QueryRow("SELECT (SELECT COUNT(*) FROM embed_message_1) + (SELECT COUNT(*) FROM embed_notion_1), "+
-		"(SELECT COUNT(*) FROM embed_index), (SELECT COUNT(*) FROM sqlite_master WHERE name IN ('message_vec', 'notion_vec'))").
+		"(SELECT COUNT(*) FROM embed_index), (SELECT COUNT(*) FROM sqlite_master WHERE name IN ('embed_message_0', 'embed_notion_0'))").
 		Scan(&rows, &generations, &oldTables); err != nil {
 		t.Fatal(err)
 	}

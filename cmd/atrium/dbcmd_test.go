@@ -68,7 +68,7 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 			t.Fatal(err)
 		}
 	}
-	if _, err := seed.Write.Exec("INSERT INTO notion_vec (rowid, visibility, embedding) VALUES (1, 'public', ?)", embed.Serialize(vector)); err != nil {
+	if _, err := seed.Write.Exec("INSERT INTO embed_notion_0 (rowid, visibility, embedding) VALUES (1, 'public', ?)", embed.Serialize(vector)); err != nil {
 		t.Fatal(err)
 	}
 	if err := seed.Close(); err != nil {
@@ -76,7 +76,7 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 	}
 
 	check := runProcess(t, "db check", dbEnv(live), keyEnv(rightKeyHex))
-	for _, want := range []string{"integrity_check: ok\n", "fts5 notion_fts: 1\n", "vec0 notion_vec: 1\n", "key id " + dbkey.ID(k)} {
+	for _, want := range []string{"integrity_check: ok\n", "fts5 notion_fts: 1\n", "vec0 embed_notion_0: 1\n", "key id " + dbkey.ID(k)} {
 		if check.code != cli.ExitOK || !strings.Contains(check.stdout, want) {
 			t.Errorf("db check exited %d with stdout %q, stderr %q; want 0 and %q", check.code, check.stdout, check.stderr, want)
 		}
@@ -234,7 +234,7 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 		t.Errorf("old key after rekey exited %d, stderr %q; want %d and %q", old.code, old.stderr, cli.ExitError, db.ErrWrongKey)
 	}
 	reopened := runProcess(t, "db check", dbEnv(live), keyEnv(otherKeyHex))
-	for _, want := range []string{"integrity_check: ok\n", "fts5 notion_fts: 1\n", "vec0 notion_vec: 1\n", "key id " + dbkey.ID(other)} {
+	for _, want := range []string{"integrity_check: ok\n", "fts5 notion_fts: 1\n", "vec0 embed_notion_0: 1\n", "key id " + dbkey.ID(other)} {
 		if reopened.code != cli.ExitOK || !strings.Contains(reopened.stdout, want) {
 			t.Errorf("db check with the new key exited %d with stdout %q, stderr %q; want 0 and %q", reopened.code, reopened.stdout, reopened.stderr, want)
 		}

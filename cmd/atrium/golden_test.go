@@ -205,7 +205,7 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	app.Stdin = strings.NewReader(stdin)
 	copyFile(t, filepath.Join(golden.Dir(), "world.db"), filepath.Join(dir, "atrium.db"))
 	f := &fixture{t: t, dir: dir, env: vars, app: app}
-	f.seedNotionVectors(t)
+	seedNotionVectors(t, filepath.Join(f.dir, "atrium.db"))
 	if code, _, stderr := f.Run(context.Background(), "reindex"); code != cli.ExitOK {
 		t.Fatalf("embed the seeded world: exit %d stderr %q", code, stderr)
 	}
@@ -225,19 +225,19 @@ func (f *fixture) Serve() string {
 	return f.base
 }
 
-func (f *fixture) seedNotionVectors(t *testing.T) {
+func seedNotionVectors(t *testing.T, path string) {
 	t.Helper()
 	var vectors []notionVector
 	if err := json.Unmarshal(golden.ReadFile(t, ".", "notion_vec.json"), &vectors); err != nil {
 		t.Fatal(err)
 	}
-	d, err := db.Connect(filepath.Join(f.dir, "atrium.db"))
+	d, err := db.Connect(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = d.Close() }()
 	for _, v := range vectors {
-		if _, err := d.Write.Exec("INSERT INTO notion_vec (rowid, visibility, embedding) VALUES (?, ?, ?)", v.RowID, v.Visibility, v.Embedding); err != nil {
+		if _, err := d.Write.Exec("INSERT INTO embed_notion_0 (rowid, visibility, embedding) VALUES (?, ?, ?)", v.RowID, v.Visibility, v.Embedding); err != nil {
 			t.Fatal(err)
 		}
 	}

@@ -36,7 +36,3 @@ CREATE TABLE IF NOT EXISTS notion_state (
     value TEXT NOT NULL
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS notion_fts USING fts5(title, path, body);
-CREATE VIRTUAL TABLE IF NOT EXISTS notion_vec USING vec0(
-    visibility TEXT PARTITION KEY,
-    embedding FLOAT[768] DISTANCE_METRIC=cosine
-);

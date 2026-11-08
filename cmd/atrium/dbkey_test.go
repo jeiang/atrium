@@ -104,7 +104,7 @@ func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := seed.Write.Exec("INSERT INTO notion_vec (rowid, visibility, embedding) VALUES (1, 'public', ?)", embed.Serialize(vector)); err != nil {
+	if _, err := seed.Write.Exec("INSERT INTO embed_notion_0 (rowid, visibility, embedding) VALUES (1, 'public', ?)", embed.Serialize(vector)); err != nil {
 		t.Fatal(err)
 	}
 	if err := seed.Close(); err != nil {

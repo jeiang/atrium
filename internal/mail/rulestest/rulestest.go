@@ -81,7 +81,7 @@ func Add(t testing.TB, d *db.DB, uid int, vector []float32, body string, fields 
 	addr, _ := row["from_addr"].(string)
 	Exec(t, d, "INSERT INTO message_fts (rowid, subject, sender, body) VALUES (?, ?, ?, ?)", id, subject, addr, body)
 	if vector != nil {
-		Exec(t, d, "INSERT INTO message_vec (rowid, account, embedding) VALUES (?, ?, ?)", id, row["account"], db.SerializeFloat32(vector))
+		Exec(t, d, "INSERT INTO embed_message_0 (rowid, account, embedding) VALUES (?, ?, ?)", id, row["account"], db.SerializeFloat32(vector))
 		Exec(t, d, "UPDATE messages SET embedded = 1 WHERE id = ?", id)
 	}
 	return id

@@ -18,7 +18,7 @@ import (
 
 func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
 	data := loadGoldenData(t)
-	r := newRig(t, data, nil, "")
+	f := newFixture(t, data, nil, "")
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var body struct {
 			Input    []string `json:"input"`
@@ -50,7 +50,7 @@ func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
 	t.Setenv("ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
 	t.Setenv("ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
 
-	seed, err := db.Connect(filepath.Join(r.dir, "atrium.db"))
+	seed, err := db.Connect(filepath.Join(f.dir, "atrium.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -68,12 +68,12 @@ func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
 
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
-	code, _, stderr := r.run(ctx, "watch", "--account", "icloud")
+	code, _, stderr := f.Run(ctx, "watch", "--account", "icloud")
 	if code != cli.ExitOK || !strings.Contains(stderr, "event scan failed") || !strings.Contains(stderr, "has_event") {
 		t.Fatalf("watch with a non-boolean judge answer: exit %d stderr %q", code, stderr)
 	}
 
-	d, err := db.Connect(filepath.Join(r.dir, "atrium.db"))
+	d, err := db.Connect(filepath.Join(f.dir, "atrium.db"))
 	if err != nil {
 		t.Fatal(err)
 	}

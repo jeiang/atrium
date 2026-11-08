@@ -8,4 +8,12 @@ CREATE TABLE IF NOT EXISTS embed_index (
     total INTEGER NOT NULL DEFAULT 0,
     error TEXT NOT NULL DEFAULT ''
 );
+CREATE VIRTUAL TABLE IF NOT EXISTS embed_message_0 USING vec0(
+    account TEXT PARTITION KEY,
+    embedding FLOAT[768] DISTANCE_METRIC=cosine
+);
+CREATE VIRTUAL TABLE IF NOT EXISTS embed_notion_0 USING vec0(
+    visibility TEXT PARTITION KEY,
+    embedding FLOAT[768] DISTANCE_METRIC=cosine
+);
 INSERT OR IGNORE INTO embed_index (generation, state, dimension) VALUES (0, 'active', 768);
