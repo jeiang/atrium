@@ -162,10 +162,11 @@ func (e *Env) UsageError(format string, a ...any) int {
 }
 
 type App struct {
-	Version string
-	Stdin   io.Reader
-	root    Command
-	setup   func(stderr io.Writer)
+	Version   string
+	Stdin     io.Reader
+	Bootstrap func(ctx context.Context, stderr io.Writer) error
+	root      Command
+	setup     func(stderr io.Writer)
 }
 
 func New(name string, setup func(stderr io.Writer)) *App {
@@ -193,6 +194,12 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	}
 	if a.setup != nil {
 		a.setup(stderr)
+	}
+	if a.Bootstrap != nil {
+		if err := a.Bootstrap(ctx, stderr); err != nil {
+			_, _ = fmt.Fprintf(stderr, "error: %v\n", err)
+			return ExitError
+		}
 	}
 	stdin := a.Stdin
 	if stdin == nil {

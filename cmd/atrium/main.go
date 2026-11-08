@@ -37,6 +37,7 @@ func main() {
 func newApp() *cli.App {
 	app := cli.New("atrium", logx.Setup)
 	app.Version = version
+	app.Bootstrap = bootstrap(config.OS, settings.Default)
 	app.Add(commands(imapclient.Opener, nil)...)
 	return app
 }
@@ -66,6 +67,5 @@ func newSet(clients run.Clients, now func() float64) *module.Set {
 
 func commands(clients run.Clients, now func() float64) []*cli.Command {
 	set := newSet(clients, now)
-	cmds := append(set.Commands(), web.ServeCommand(set.Pages()...))
-	return pinned(cmds)
+	return append(set.Commands(), web.ServeCommand(set.Pages()...))
 }

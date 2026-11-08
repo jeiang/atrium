@@ -10,7 +10,6 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -114,21 +113,6 @@ func copyTree(t *testing.T, from, to string) {
 	}
 }
 
-var pythonOrder = []string{
-	"sync", "watch", "rules", "shadow-report", "reindex", "rebalance", "deletions", "gmail-labels", "live", "proposals",
-	"notion", "agent", "calendar", "loops", "watches", "media", "serve", "db",
-}
-
-func inPythonOrder(have []*cli.Command) []*cli.Command {
-	var out []*cli.Command
-	for _, name := range pythonOrder {
-		if i := slices.IndexFunc(have, func(c *cli.Command) bool { return c.Name == name }); i >= 0 {
-			out = append(out, have[i])
-		}
-	}
-	return out
-}
-
 var volatileRunFields = []string{"started_at", "ended_at", "lease_until", "owner"}
 
 func normalizeRun(s string) string {
@@ -227,7 +211,8 @@ func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin str
 		return func(_ context.Context, account string) (mail.Client, error) { return fakes[account], nil }
 	}
 	app := cli.New("atrium", logx.Setup)
-	app.Add(inPythonOrder(commands(clients, func() float64 { return data.world.Clock }))...)
+	app.Bootstrap = bootstrap(config.OS, settings.Default)
+	app.Add(commands(clients, func() float64 { return data.world.Clock })...)
 	app.Stdin = strings.NewReader(stdin)
 	r := &rig{dir: dir, app: app}
 	code, _, stderr := r.run(context.Background(), "db", "import-v1", filepath.Join(golden.Dir(), "atrium.db"))

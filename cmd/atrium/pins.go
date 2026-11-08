@@ -1,39 +1,21 @@
 package main
 
 import (
-	"fmt"
+	"context"
+	"io"
 
-	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	dbkey "github.com/jeiang/atrium/internal/db/key"
-	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
-var log = logx.Logger("atrium.config")
-
-func pinned(cmds []*cli.Command) []*cli.Command {
-	for _, c := range cmds {
-		if c.Setup != nil {
-			setup := c.Setup
-			c.Setup = func(a *cli.Args) cli.Handler {
-				run := setup(a)
-				return func(e *cli.Env) int {
-					pins, err := config.LoadPins(config.OS, settings.Default)
-					if err != nil {
-						_, _ = fmt.Fprintf(e.Stderr, "error: %v\n", err)
-						return cli.ExitError
-					}
-					settings.Default.SetPins(pins)
-					if err := dbkey.Configure(config.OS, settings.Default); err != nil {
-						_, _ = fmt.Fprintf(e.Stderr, "error: %v\n", err)
-						return cli.ExitError
-					}
-					return run(e)
-				}
-			}
+func bootstrap(env config.Env, reg *settings.Registry) func(context.Context, io.Writer) error {
+	return func(_ context.Context, _ io.Writer) error {
+		pins, err := config.LoadPins(env, reg)
+		if err != nil {
+			return err
 		}
-		pinned(c.Commands)
+		reg.SetPins(pins)
+		return dbkey.Configure(env, reg)
 	}
-	return cmds
 }
