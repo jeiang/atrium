@@ -7,9 +7,11 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
@@ -27,7 +29,7 @@ var candidates = "SELECT m.id, m.subject, m.from_name, m.from_addr, m.date_ts, d
 	"WHERE m.account = :account AND m.in_inbox = 1 AND m.seen = 1 AND m.flagged = 0 AND m.sent = 0 " +
 	"AND m.gone_at IS NULL AND d.action = 'file' AND d.dest IS NOT NULL " +
 	"AND m.id IN (SELECT message_id FROM live_baseline) " +
-	"AND " + live.NoNewCorrection + " AND " + live.NotBlocked + " AND NOT " + mailops.UnresolvedSQL + " ORDER BY m.id"
+	"AND " + live.NoNewCorrection + " AND " + live.NotBlocked + " AND NOT " + ledger.MailUnresolvedSQL + " ORDER BY m.id"
 
 type Error string
 
@@ -57,7 +59,7 @@ func Build(ctx context.Context, q live.Querier, account string) (*Proposal, erro
 	}
 	var groups []*group
 	byDest := map[string]*group{}
-	var ids []any
+	var ids []string
 	for rows.Next() {
 		var m scanutil.Message
 		var dest string
@@ -72,7 +74,7 @@ func Build(ctx context.Context, q live.Querier, account string) (*Proposal, erro
 			groups = append(groups, g)
 		}
 		g.rows = append(g.rows, m)
-		ids = append(ids, m.ID)
+		ids = append(ids, strconv.FormatInt(m.ID, 10))
 	}
 	if err := rows.Close(); err != nil {
 		return nil, err
@@ -90,7 +92,7 @@ func Build(ctx context.Context, q live.Querier, account string) (*Proposal, erro
 	if err != nil {
 		return nil, err
 	}
-	var goliveText any = "None"
+	goliveText := "None"
 	if golive != nil {
 		goliveText = *golive
 	}
@@ -128,7 +130,7 @@ func Build(ctx context.Context, q live.Querier, account string) (*Proposal, erro
 		}
 	}
 	return &Proposal{
-		Fingerprint: fmt.Sprintf("%s:%s:%s", Kind, account, scanutil.Digest(append([]any{goliveText}, ids...)...)),
+		Fingerprint: fmt.Sprintf("%s:%s:%s", Kind, account, scanutil.Digest(append([]string{goliveText}, ids...)...)),
 		Account:     account,
 		Title:       fmt.Sprintf("File %d read inbox messages into %d %s", len(ids), len(groups), unit),
 		Payload:     py.Dict{{Key: "folder", Value: folder}, {Key: "groups", Value: payloadGroups}},
@@ -164,14 +166,6 @@ func Backlog(ctx context.Context, d *db.DB, ts float64) (Result, error) {
 			return out, err
 		}
 		if built == nil {
-			out.Accounts = append(out.Accounts, py.Pair{Key: spec.Name})
-			continue
-		}
-		known, err := proposals.Known(ctx, d.Write, built.Fingerprint)
-		if err != nil {
-			return out, err
-		}
-		if known {
 			out.Accounts = append(out.Accounts, py.Pair{Key: spec.Name})
 			continue
 		}

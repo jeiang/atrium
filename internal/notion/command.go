@@ -14,8 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-const wikiPlanNotPorted = "atrium notion wiki-plan is not ported in v2"
-
 type Options struct {
 	Env       config.Env
 	NewClient func(token string) *Client
@@ -51,12 +49,6 @@ func Command(o Options) *cli.Command {
 					return run(env, o, func(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env) error {
 						return o.search(ctx, d, cfg, env, *query, *private, *limit)
 					})
-				}
-			}},
-			{Name: "wiki-plan", Help: "draft one proposal that turns every database and page into the wiki page tree", Setup: func(*cli.Args) cli.Handler {
-				return func(env *cli.Env) int {
-					_, _ = fmt.Fprintln(env.Stderr, wikiPlanNotPorted)
-					return cli.ExitError
 				}
 			}},
 		},

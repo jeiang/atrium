@@ -231,55 +231,12 @@
   </div>
 </div>
 
-{{else if eq $kind "notion_wiki_plan"}}
-{{$decisions := dict "convert" "Convert" "merge" "Merge" "drop" "Drop" "keep" "Keep"}}
-{{$counts := get $v "counts"}}{{$entries := get $v "items"}}
-<p class="text-sm text-muted-foreground">Turns the Notion workspace into the wiki page tree under Wiki Home. Dropped rows and emptied databases are archived (never deleted); every step is undoable.</p>
-<div class="flex flex-wrap gap-1.5">
-  {{if $counts}}{{range items $counts}}<span class="badge" data-variant="{{if eq .Key "drop"}}destructive{{else}}secondary{{end}}">{{pystr .Value}} {{lower (or (get $decisions .Key) .Key)}}</span>{{end}}{{end}}
-</div>
-<div class="grid gap-4 md:grid-cols-2">
-  <div class="flex min-w-0 flex-col gap-1.5">
-    <h4 class="text-xs font-medium text-muted-foreground">Hubs under Wiki Home</h4>
-    <ul class="flex flex-col gap-1 text-sm" role="list">
-      {{range get $v "hubs"}}<li><span class="font-medium">{{pyattr . "title"}}</span>{{if get . "description"}} <span class="text-muted-foreground">{{pyattr . "description"}}</span>{{end}}</li>{{end}}
-    </ul>
-  </div>
-  <div class="flex min-w-0 flex-col gap-1.5">
-    <h4 class="text-xs font-medium text-muted-foreground">Databases</h4>
-    <ul class="flex flex-col gap-1 text-sm" role="list">
-      {{range get $v "databases"}}
-      <li class="flex min-w-0 flex-col"><span><span class="font-medium">{{pyattr . "title"}}</span> <span class="text-muted-foreground">→ {{if eq (pyattr . "mode") "table"}}one page with a table{{else}}hub with child pages{{end}} under {{pyattr . "hub"}}</span></span><span class="truncate text-xs text-muted-foreground">{{pyattr . "reason"}}</span></li>
-      {{end}}
-    </ul>
-  </div>
-</div>
-<details class="group/list">
-  <summary class="inline-flex gap-1 rounded-sm text-xs font-medium text-muted-foreground hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-    {{icon "chevron-down" "size-3.5 transition-transform group-open/list:rotate-180"}}Every row and page ({{pylen $entries}})
-  </summary>
-  <ul class="mt-2 flex max-h-96 flex-col divide-y overflow-y-auto rounded-md border bg-background" role="list">
-    {{range $entries}}
-    {{$decision := pyattr . "decision"}}
-    <li class="flex min-w-0 flex-col gap-0.5 px-3 py-2">
-      <span class="flex min-w-0 items-center gap-2">
-        <span class="badge shrink-0" data-variant="{{if eq $decision "drop"}}destructive{{else if eq $decision "keep"}}outline{{else}}secondary{{end}}">{{or (get $decisions $decision) $decision}}</span>
-        <a class="truncate text-sm hover:underline" href="/notion/{{pyattr . "id"}}">{{or (get . "title") "Untitled"}}</a>
-        {{if get . "source"}}<span class="shrink-0 text-xs text-muted-foreground">{{pyattr . "source"}}</span>{{end}}
-        {{if get . "hub"}}<span class="shrink-0 text-xs text-muted-foreground">→ {{pyattr . "hub"}}</span>{{end}}
-        {{if get . "merge_into"}}<span class="truncate text-xs text-muted-foreground">→ into {{pyattr . "merge_into"}}</span>{{end}}
-      </span>
-      <span class="text-xs text-muted-foreground">{{pyattr . "reason"}}</span>
-    </li>
-    {{end}}
-  </ul>
-</details>
 {{end}}{{end}}
 
 {{define "proposal_blocked"}}{{if .blocked}}
 <div class="flex w-full flex-col gap-2 rounded-md border p-3 text-sm">
   <p class="text-muted-foreground">A write has an unknown or partial outcome, so atrium refuses to retry it. Check the mailbox, then record what you found. atrium does not touch the mailbox.</p>
-  {{template "resolve_controls" (dict "path" (printf "/proposals/%v/resolve" .id) "target" (printf "#proposal-%v" .id) "undo" .blocked_undo)}}
+  {{template "resolve_controls" (dict "path" (printf "/proposals/%v/resolve" .id) "target" (printf "#proposal-%v" .id) "undo" .blocked_undo "forward" false)}}
 </div>
 {{end}}{{end}}
 
@@ -313,11 +270,6 @@
 <div class="flex flex-wrap items-center gap-2">
   {{template "proposal_blocked" $p}}
   <p class="flex-1 text-xs whitespace-nowrap text-muted-foreground">Tried {{template "when" (dict "epoch" $p.decided_ts "style" "datetime")}}</p>
-  {{if eq $p.kind "notion_wiki_plan"}}
-  <span id="proposal-spinner-{{$p.id}}" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">{{icon "loader-circle" "size-4 animate-spin"}}Applying…</span>
-  <button type="button" class="btn" data-size="sm" hx-post="/proposals/{{$p.id}}/approve" hx-vals='{"all": "1"}' hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML" hx-disabled-elt="this" hx-indicator="#proposal-spinner-{{$p.id}}"
-          title="Skips the steps the earlier attempt finished">{{icon "play"}}Resume</button>
-  {{end}}
   {{if $p.undoable}}
   <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/proposals/{{$p.id}}/undo" hx-target="#proposal-{{$p.id}}" hx-swap="outerHTML" hx-disabled-elt="this">{{icon "undo-2"}}Undo what it did</button>
   {{end}}
@@ -344,7 +296,7 @@
     {{end}}
     <header class="flex flex-col gap-2 p-4 pb-3">
       <div class="flex flex-wrap items-center gap-2">
-        <span class="badge" data-variant="secondary">{{icon (lbl "kind_icon" $p.kind "list-checks")}}{{lbl "kind" $p.kind}}</span>
+        <span class="badge" data-variant="secondary">{{icon (or $p.kind_icon "list-checks")}}{{$p.kind_label}}</span>
         {{if $p.account}}<span class="badge" data-variant="outline">{{$p.account}}</span>{{end}}
         {{template "status_badge" $p.status}}
         <span class="ml-auto text-xs text-muted-foreground">#{{$p.id}} · {{template "when" (dict "epoch" $p.created_ts)}}</span>

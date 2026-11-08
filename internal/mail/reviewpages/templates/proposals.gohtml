@@ -30,6 +30,6 @@
 </form>
 
 <div id="proposal-list" class="flex flex-col gap-3 transition-opacity [&.htmx-request]:opacity-60">
-  {{template "proposal_list" (dict "proposals" $d.proposals "status" $d.status "kind" $d.kind "partial" false "mode" .Mode "toast" .Toast)}}
+  {{template "proposal_list" (dict "proposals" $d.proposals "status" $d.status "kind" $d.kind "kind_label" $d.kind_label "partial" false "mode" .Mode "toast" .Toast)}}
 </div>
 {{end}}

@@ -322,13 +322,6 @@ func Scan(ctx context.Context, d *db.DB, ts float64) (scanutil.Result, error) {
 		if b == nil {
 			continue
 		}
-		known, err := proposals.Known(ctx, d.Write, b.fingerprint)
-		if err != nil {
-			return scanutil.Result{}, err
-		}
-		if known {
-			continue
-		}
 		account := c.Account
 		_, ok, err := proposals.Create(ctx, d, Kind, &account, b.title, b.payload, b.preview, b.fingerprint, ts)
 		if err != nil {

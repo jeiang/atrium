@@ -15,6 +15,7 @@ import (
 	gcal "google.golang.org/api/calendar/v3"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -309,7 +310,7 @@ func (p *Proposals) record(ctx context.Context, prop *proposals.Proposal, kind s
 	calendarName, _ := undo.Get("calendar")
 	uid, _ := undo.Get("uid")
 	action := py.Dict{{Key: "type", Value: kind}, {Key: "calendar", Value: calendarName}, {Key: "uid", Value: uid}}
-	if _, err := proposals.RecordAction(ctx, p.DB.Write, prop.ID, action, undo, true, nil, p.now()); err != nil {
+	if _, err := proposals.RecordAction(ctx, p.DB.Write, prop.ID, "write", nil, action, undo, ledger.OK, nil, p.now()); err != nil {
 		return nil, err
 	}
 	return py.Dict{{Key: "summary", Value: summary}}, nil

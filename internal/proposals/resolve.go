@@ -7,17 +7,22 @@ import (
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/mailops"
+	"github.com/jeiang/atrium/internal/ledger"
 )
 
 const (
-	SettledText      = "settled by operator after checking the mailbox"
-	OutcomeUndone    = "undone"
-	OutcomeNotUndone = "not-undone"
-	OutcomeSettled   = "settled"
+	OutcomeUndone     = "undone"
+	OutcomeNotUndone  = "not-undone"
+	OutcomeApplied    = "applied"
+	OutcomeNotApplied = "not-applied"
+	OutcomeSettled    = "settled"
 
 	ResolveProposalAction = "proposal_action"
 	ResolveAutoUndo       = "auto_undo"
+	ResolveAutoAction     = "auto_action"
+
+	SettledText    = "settled by operator after checking the mailbox"
+	NotAppliedText = "the operator checked: the write did not happen"
 )
 
 type Resolver struct {
@@ -37,12 +42,6 @@ func RecordResolution(ctx context.Context, x Execer, who Resolver, ts float64, k
 }
 
 const ErrSettledMeanwhile = ProposalError("the write was settled by the operator while it ran; the recorded outcome stands")
-
-func Blocked(ctx context.Context, q Querier, id int64) (blocked, undo bool, err error) {
-	err = q.QueryRowContext(ctx, "SELECT COUNT(*) > 0, COALESCE(MAX(json_extract(a.action, '$.op') IS 'undo'), 0) FROM proposal_actions a "+
-		"WHERE a.proposal_id = ? AND a.ok = 0 AND "+mailops.BlockingTextSQL("a.error"), id).Scan(&blocked, &undo)
-	return blocked, undo, err
-}
 
 type Resolved struct {
 	ID      int64
@@ -66,21 +65,22 @@ func (p *Pipeline) Resolve(ctx context.Context, id int64, outcome string, who Re
 		if status == Approved {
 			return ProposalError(fmt.Sprintf("proposal %d is still being applied", id))
 		}
-		rows, err := tx.QueryContext(ctx, "SELECT id, ts, json_extract(action, '$.op'), error FROM proposal_actions "+
-			"WHERE proposal_id = ? AND ok = 0 AND (instr(error, ?) > 0 OR instr(error, ?) > 0) ORDER BY id",
-			id, mailops.UnknownPrefix, mailops.PartialPrefix)
+		rows, err := tx.QueryContext(ctx, "SELECT id, lease, kind, undo_of, state, error FROM proposal_actions "+
+			"WHERE proposal_id = ? AND state IN ('held', 'unknown', 'partial', 'undo_held', 'undo_unknown', 'undo_partial') ORDER BY id", id)
 		if err != nil {
 			return err
 		}
 		type held struct {
-			id    int64
-			ts    float64
-			op    *string
-			error string
+			id     int64
+			lease  float64
+			kind   string
+			undoOf *int64
+			state  ledger.State
+			error  string
 		}
 		blocked, err := db.Collect(rows, func(r *sql.Rows) (held, error) {
 			var h held
-			return h, r.Scan(&h.id, &h.ts, &h.op, &h.error)
+			return h, r.Scan(&h.id, &h.lease, &h.kind, &h.undoOf, &h.state, &h.error)
 		})
 		if err != nil {
 			return err
@@ -90,9 +90,9 @@ func (p *Pipeline) Resolve(ctx context.Context, id int64, outcome string, who Re
 		}
 		now := p.now()
 		for _, h := range blocked {
-			isUndo := h.op != nil && *h.op == UndoOp
+			isUndo := h.kind == "undo"
 			switch {
-			case h.error == InFlightText && now-h.ts < StuckSeconds:
+			case (h.state == ledger.Held || h.state == ledger.UndoHeld) && now-h.lease < StuckSeconds:
 				return ProposalError(fmt.Sprintf("action %d may still be running; wait until atrium is idle and try again", h.id))
 			case isUndo && outcome == "":
 				return ProposalError(fmt.Sprintf("action %d is a blocked undo; check the mailbox and say whether the message is %s or %s", h.id, OutcomeUndone, OutcomeNotUndone))
@@ -100,17 +100,15 @@ func (p *Pipeline) Resolve(ctx context.Context, id int64, outcome string, who Re
 		}
 		for _, h := range blocked {
 			recorded := OutcomeSettled
-			if h.op != nil && *h.op == UndoOp {
+			state := ledger.Settled
+			if h.kind == "undo" {
 				recorded = outcome
 				if outcome == OutcomeUndone {
-					_, err = tx.ExecContext(ctx, "UPDATE proposal_actions SET ok = 1, error = NULL WHERE id = ?", h.id)
-				} else {
-					_, err = tx.ExecContext(ctx, "UPDATE proposal_actions SET error = ? WHERE id = ?", SettledText, h.id)
+					state = ledger.OK
 				}
-			} else {
-				_, err = tx.ExecContext(ctx, "UPDATE proposal_actions SET error = ? WHERE id = ?", SettledText, h.id)
 			}
-			if err != nil {
+			if _, err := tx.ExecContext(ctx, "UPDATE proposal_actions SET state = ?, error = CASE WHEN ? = 'ok' THEN NULL ELSE ? END WHERE id = ?",
+				state, state, SettledText, h.id); err != nil {
 				return err
 			}
 			if err := RecordResolution(ctx, tx, who, now, ResolveProposalAction, h.id, &id, recorded, h.error); err != nil {

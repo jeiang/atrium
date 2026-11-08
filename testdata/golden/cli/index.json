@@ -521,7 +521,7 @@
       "approve",
       "9",
       "--selection",
-      "{\"groups\": [{\"name\": \"Receipts/Shop B Subset\", \"message_ids\": [48, 49, 50, 51, 52]}]}"
+      "{\"groups\": [{\"id\": \"Receipts/Shop B\", \"name\": \"Receipts/Shop B Subset\", \"message_ids\": [48, 49, 50, 51, 52]}]}"
     ],
     "exit_code": 0,
     "name": "proposals-approve-selection",
@@ -576,9 +576,10 @@
       "--selection",
       "[1]"
     ],
-    "exit_code": 0,
+    "exit_code": 1,
     "name": "proposals-approve-list-selection",
-    "stdout": "proposals-approve-list-selection.stdout"
+    "stdout": "proposals-approve-list-selection.stdout",
+    "stderr": "proposals-approve-list-selection.stderr"
   },
   {
     "argv": [
@@ -589,9 +590,10 @@
       "--selection",
       "[1]"
     ],
-    "exit_code": 0,
+    "exit_code": 1,
     "name": "proposals-approve-list-selection-deletion",
-    "stdout": "proposals-approve-list-selection-deletion.stdout"
+    "stdout": "proposals-approve-list-selection-deletion.stdout",
+    "stderr": "proposals-approve-list-selection-deletion.stderr"
   },
   {
     "argv": [

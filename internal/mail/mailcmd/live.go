@@ -38,7 +38,7 @@ func (o Options) LiveCommand() *cli.Command {
 		}),
 		o.leaf("resolve", func(a *cli.Args) body {
 			id := a.IntArg("id", cli.Opt{})
-			outcome := a.String("outcome", "", cli.Opt{Choices: []string{proposals.OutcomeUndone, proposals.OutcomeNotUndone}, Required: true, Help: "what the mailbox shows for the blocked undo"})
+			outcome := a.String("outcome", "", cli.Opt{Choices: []string{proposals.OutcomeUndone, proposals.OutcomeNotUndone, proposals.OutcomeApplied, proposals.OutcomeNotApplied}, Required: true, Help: "what the mailbox shows for the blocked write"})
 			return func(x *Exec) error { return resolveAction(x, int64(*id), *outcome) }
 		}),
 		o.leaf("undo", func(a *cli.Args) body {

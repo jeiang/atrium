@@ -135,17 +135,10 @@ func TestFailedAndAppliedFootersByKind(t *testing.T) {
 	s := newSite(t)
 	failed := s.splitProposal("failed")
 	s.exec("UPDATE proposals SET status = 'failed', decided_ts = 1000, result = ? WHERE id = ?", `{"error": "boom <b>"}`, failed)
-	wiki := s.propose("notion_wiki_plan", "", "Wiki", py.Dict{
-		{Key: "counts", Value: py.Dict{}}, {Key: "hubs", Value: []any{}}, {Key: "databases", Value: []any{}}, {Key: "items", Value: []any{}},
-	}, "wiki")
-	s.exec("UPDATE proposals SET status = 'failed', decided_ts = 1000 WHERE id = ?", wiki)
 	applied := s.propose("reminder", "", "Remind", py.Dict{{Key: "text", Value: "call"}, {Key: "due", Value: "2026-11-01"}, {Key: "remind_at", Value: "09:00"}}, "rem")
 	s.exec("UPDATE proposals SET status = 'applied', applied_ts = 1000, decided_ts = 1000 WHERE id = ?", applied)
 	page := status(t, s.get("/proposals?status=all", hx, "true"), http.StatusOK)
-	mustContain(t, page, "boom &lt;b&gt;", "Tried", "Resume", "Skips the steps the earlier attempt finished", ">Applied<")
-	if strings.Count(page, "Resume") != 1 {
-		t.Errorf("Resume appears %d times, want only the wiki plan", strings.Count(page, "Resume"))
-	}
+	mustContain(t, page, "boom &lt;b&gt;", "Tried", ">Applied<")
 	mustNotContain(t, page, "Undo what it did", "hx-confirm=")
 }
 

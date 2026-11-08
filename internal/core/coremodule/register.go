@@ -17,8 +17,10 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	mailpages "github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
+	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/ops"
+	"github.com/jeiang/atrium/internal/proposals/proposalscmd"
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
 	"github.com/jeiang/atrium/internal/settings/settingspages"
@@ -28,6 +30,8 @@ import (
 type Module struct {
 	Version string
 	Guard   settingscmd.Guard
+	Clients run.Clients
+	Now     func() float64
 }
 
 func (m Module) Register(mc module.Context) module.Registration {
@@ -44,6 +48,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 			{Module: settingspages.Module, Templates: settingspages.Templates()},
 		},
 		Commands: []*cli.Command{
+			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now}),
 			settingscmd.Command(mc.Env, m.Guard),
 			loginlink.Command(),
 			secretscmd.Command(mc.Env),

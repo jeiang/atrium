@@ -10,6 +10,8 @@ import (
 type ProposalView struct {
 	ID          int64    `json:"id"`
 	Kind        string   `json:"kind"`
+	KindLabel   string   `json:"kind_label"`
+	KindIcon    string   `json:"kind_icon"`
 	Status      string   `json:"status"`
 	Account     *string  `json:"account"`
 	Title       string   `json:"title"`
@@ -23,20 +25,11 @@ type ProposalView struct {
 	Result      any      `json:"result"`
 }
 
-const kindWikiPlan = "notion_wiki_plan"
-
-func proposalView(p *proposals.Proposal) ProposalView {
-	preview := plainJSON(p.Preview)
-	if dict, ok := p.Preview.(py.Dict); ok && p.Kind == kindWikiPlan {
-		if counts, found := dict.Get("counts"); found {
-			if plain, ok := preview.(map[string]any); ok {
-				plain["counts"] = counts
-			}
-		}
-	}
+func proposalView(p *proposals.Proposal, kind proposals.Kind) ProposalView {
 	return ProposalView{
-		ID: p.ID, Kind: p.Kind, Status: p.Status, Account: p.Account, Title: p.Title, CreatedTS: p.CreatedTS,
-		DecidedTS: p.DecidedTS, AppliedTS: p.AppliedTS, Undoable: p.Undoable, Preview: preview, Result: plainJSON(p.Result),
+		ID: p.ID, Kind: p.Kind, KindLabel: kind.Label, KindIcon: kind.Icon, Status: p.Status, Account: p.Account, Title: p.Title,
+		CreatedTS: p.CreatedTS, DecidedTS: p.DecidedTS, AppliedTS: p.AppliedTS, Undoable: p.Undoable, Blocked: p.Blocked,
+		BlockedUndo: p.BlockedUndo, Preview: plainJSON(p.Preview), Result: plainJSON(p.Result),
 	}
 }
 
@@ -58,10 +51,11 @@ func plainJSON(v any) any {
 	return v
 }
 
-func proposalViews(list []*proposals.Proposal) []ProposalView {
+func proposalViews(list []*proposals.Proposal, registry *proposals.Registry) []ProposalView {
 	out := make([]ProposalView, len(list))
 	for i, p := range list {
-		out[i] = proposalView(p)
+		kind, _ := registry.Kind(p.Kind)
+		out[i] = proposalView(p, kind)
 	}
 	return out
 }
@@ -70,6 +64,7 @@ type proposalListData struct {
 	Proposals []ProposalView `json:"proposals"`
 	Status    string         `json:"status"`
 	Kind      string         `json:"kind"`
+	KindLabel string         `json:"kind_label"`
 	Counts    py.Dict        `json:"counts"`
 	Partial   bool           `json:"partial"`
 }
@@ -96,6 +91,7 @@ type ActivityEntry struct {
 	Status      string  `json:"status"`
 	Error       *string `json:"error"`
 	Undoable    bool    `json:"undoable"`
+	Blocked     bool    `json:"blocked"`
 	UndoBlocked bool    `json:"undo_blocked"`
 
 	Tool       string   `json:"tool"`
@@ -109,11 +105,12 @@ type ActivityEntry struct {
 	After      string   `json:"after"`
 }
 
-func mailEntry(a live.Action) ActivityEntry {
+func mailEntry(a live.Action, now float64) ActivityEntry {
 	return ActivityEntry{
 		Source: sourceMail, ID: a.ID, Category: categoryMail, TS: a.TS, MessageID: a.MessageID, Subject: a.Subject,
 		Kind: a.Kind, FromName: a.FromName, FromAddr: a.FromAddr, Account: a.Account, Src: a.Src, Dest: a.Dest,
-		Status: a.Status, Error: a.Error, Undoable: a.Undoable && !live.Blocked(a), UndoBlocked: live.Blocked(a),
+		Status: a.Status, Error: a.Error, Undoable: a.Undoable && !live.Blocked(a, now), Blocked: live.Blocked(a, now),
+		UndoBlocked: live.UndoBlocked(a, now),
 	}
 }
 

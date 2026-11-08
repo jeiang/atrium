@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS auto_actions (
     after TEXT,
     undo TEXT,
     decision_id INTEGER,
-    ok INTEGER,
+    state TEXT NOT NULL,
     error TEXT,
     undone_ts REAL,
     undone_error TEXT,
@@ -27,13 +27,13 @@ CREATE TABLE IF NOT EXISTS auto_actions (
 CREATE INDEX IF NOT EXISTS auto_actions_message ON auto_actions (message_id, kind);
 CREATE INDEX IF NOT EXISTS auto_actions_digest ON auto_actions (account, digest, kind);
 CREATE UNIQUE INDEX IF NOT EXISTS auto_actions_once ON auto_actions (message_id, kind, COALESCE(dest, ''))
-    WHERE ok IS NULL OR (ok = 1 AND undone_ts IS NULL);
+    WHERE state IN ('held', 'interrupted', 'applied', 'undo_held', 'undo_failed', 'undo_unknown', 'undo_partial', 'undo_settled');
 CREATE TABLE IF NOT EXISTS write_resolutions (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts REAL NOT NULL,
     actor TEXT NOT NULL,
     source TEXT NOT NULL CHECK (source IN ('cli', 'ui')),
-    kind TEXT NOT NULL CHECK (kind IN ('proposal_action', 'auto_undo')),
+    kind TEXT NOT NULL CHECK (kind IN ('proposal_action', 'auto_undo', 'auto_action')),
     row_id INTEGER NOT NULL,
     proposal_id INTEGER,
     outcome TEXT NOT NULL,

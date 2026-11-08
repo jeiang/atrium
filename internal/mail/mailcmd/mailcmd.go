@@ -24,6 +24,8 @@ import (
 
 type Clients = run.Clients
 
+var operator = proposals.Resolver{Actor: "operator", Source: "cli"}
+
 type Options struct {
 	Env     config.Env
 	Clients Clients
@@ -82,7 +84,7 @@ func (x *Exec) Syncer() *mailsync.Syncer {
 
 func (x *Exec) Registry() *proposals.Registry {
 	registry := proposals.NewRegistry()
-	handlers.Register(registry, handlers.Deps{DB: x.DB, Open: x.Open(), Syncer: x.Syncer(), Now: x.opts.Now})
+	handlers.Register(registry, handlers.Deps{DB: x.DB, Open: x.Open(), Syncer: x.Syncer(), Now: x.opts.Now, Env: config.OS})
 	return registry
 }
 

@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
@@ -105,7 +106,7 @@ func resolveGroups(groups []group, selection any) ([]planned, error) {
 	if err != nil {
 		return nil, err
 	}
-	var picks []any
+	byID := map[string]py.Dict{}
 	if picksV != nil {
 		list, err := py.Iter(picksV)
 		if err != nil {
@@ -114,17 +115,31 @@ func resolveGroups(groups []group, selection any) ([]planned, error) {
 		if len(list) != len(groups) {
 			return nil, proposals.SelectionError("selection does not match the proposal groups")
 		}
-		picks = list
-	}
-	plan := make([]planned, 0, len(groups))
-	for i, g := range groups {
-		pick := py.Dict{}
-		if picks != nil {
-			d, ok := picks[i].(py.Dict)
+		for _, value := range list {
+			d, ok := value.(py.Dict)
 			if !ok {
 				return nil, fmt.Errorf("selection group is not an object")
 			}
-			pick = d
+			id, _ := d.Get("id")
+			name, ok := id.(string)
+			if !ok || name == "" {
+				return nil, proposals.SelectionError("selection group is missing its id")
+			}
+			if _, duplicate := byID[name]; duplicate {
+				return nil, proposals.SelectionError("selection repeats group " + strconv.Quote(name))
+			}
+			byID[name] = d
+		}
+	}
+	plan := make([]planned, 0, len(groups))
+	for _, g := range groups {
+		pick := py.Dict{}
+		if picksV != nil {
+			found, ok := byID[g.Dest]
+			if !ok {
+				return nil, proposals.SelectionError("selection does not name group " + strconv.Quote(g.Dest))
+			}
+			pick = found
 		}
 		value := g.Dest
 		if chosen := get(pick, "name"); py.Truthy(chosen) {
@@ -143,6 +158,9 @@ func resolveGroups(groups []group, selection any) ([]planned, error) {
 			return nil, err
 		}
 		plan = append(plan, planned{name, snaps})
+	}
+	if picksV != nil && len(byID) != len(groups) {
+		return nil, proposals.SelectionError("selection names a group the proposal does not have")
 	}
 	return plan, nil
 }
@@ -165,12 +183,12 @@ func (e *Executors) record(ctx context.Context, pid int64, action, undo py.Dict)
 	if undo != nil {
 		plan = undo
 	}
-	_, err := proposals.RecordAction(ctx, e.DB.Write, pid, action, plan, true, nil, e.now())
+	_, err := proposals.RecordAction(ctx, e.DB.Write, pid, "write", nil, action, plan, ledger.OK, nil, e.now())
 	return err
 }
 
 func (e *Executors) recordFailed(ctx context.Context, pid int64, action py.Dict, text string) error {
-	_, err := proposals.RecordAction(ctx, e.DB.Write, pid, action, nil, false, &text, e.now())
+	_, err := proposals.RecordAction(ctx, e.DB.Write, pid, "write", nil, action, nil, ledger.Failed, &text, e.now())
 	return err
 }
 
@@ -191,27 +209,31 @@ func (e *Executors) hold(ctx context.Context, pid int64, action py.Dict, uids []
 	return &slot{e: e, pid: pid, id: id, uids: uids, stop: proposals.KeepActionAlive(e.DB.Write, e.now, id)}, nil
 }
 
-func (s *slot) settle(ctx context.Context, action, undo py.Dict, ok bool, text *string) error {
+func (s *slot) settle(ctx context.Context, action, undo py.Dict, state ledger.State, text *string) error {
 	var plan any
 	if undo != nil {
 		plan = undo
 	}
 	if s.id == 0 {
-		_, err := proposals.RecordAction(ctx, s.e.DB.Write, s.pid, action, plan, ok, text, s.e.now())
+		_, err := proposals.RecordAction(ctx, s.e.DB.Write, s.pid, "write", nil, action, plan, state, text, s.e.now())
 		return err
 	}
 	id := s.id
 	s.id = 0
 	s.stop()
-	return proposals.SettleAction(ctx, s.e.DB.Write, id, action, plan, ok, text, s.e.now())
+	return proposals.SettleAction(ctx, s.e.DB.Write, id, action, plan, state, text, s.e.now())
 }
 
 func (s *slot) record(ctx context.Context, action, undo py.Dict) error {
-	return s.settle(ctx, action, undo, true, nil)
+	return s.settle(ctx, action, undo, ledger.OK, nil)
 }
 
 func (s *slot) recordFailed(ctx context.Context, action py.Dict, text string) error {
-	return s.settle(ctx, action, nil, false, &text)
+	return s.settle(ctx, action, nil, ledger.Failed, &text)
+}
+
+func (s *slot) partial(ctx context.Context, action, undo py.Dict, text string) error {
+	return s.settle(ctx, action, undo, ledger.Partial, &text)
 }
 
 func (s *slot) release(ctx context.Context) error {
@@ -244,7 +266,7 @@ func (s *slot) cancelled(ctx context.Context, action py.Dict, err error) error {
 		text = partial.Err.Error()
 	}
 	logged := append(slices.Clone(action), py.Pair{Key: "uids", Value: uidList(s.uids)})
-	if rerr := s.recordFailed(ctx, logged, mailops.UnknownPrefix+": "+text); rerr != nil {
+	if rerr := s.settle(ctx, logged, nil, ledger.Unknown, &text); rerr != nil {
 		return rerr
 	}
 	return err
@@ -367,9 +389,10 @@ func (e *Executors) moveGroup(ctx context.Context, client mail.Client, pid int64
 			}
 		}
 		failed := append(slices.Clone(action), py.Pair{Key: "dest_uidvalidity", Value: validityOrNil(partial.Copied)}, py.Pair{Key: "copied", Value: copied})
-		if rerr := s.recordFailed(ctx, failed, partial.Error()); rerr != nil {
+		if rerr := s.partial(ctx, failed, nil, partial.Error()); rerr != nil {
 			return moved, rerr
 		}
+		return moved, err
 	}
 	if err != nil {
 		return moved, s.cancelled(ctx, action, err)
@@ -383,6 +406,13 @@ func uidList(uids []uint32) []any {
 		out[i] = u
 	}
 	return out
+}
+
+func nullableString(v string) any {
+	if v == "" {
+		return nil
+	}
+	return v
 }
 
 func stringList(values []string) []any {
@@ -489,7 +519,7 @@ func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int6
 				}
 			}
 			var undo py.Dict
-			if len(known) > 0 && len(known) == len(entries) {
+			if len(known) > 0 {
 				undo = py.Dict{
 					{Key: "op", Value: live.OpGmailUntrash}, {Key: "account", Value: account}, {Key: "trash_imap", Value: trash},
 					{Key: "dest_uidvalidity", Value: validityOrNil(copied)}, {Key: "uids", Value: known},
@@ -498,6 +528,14 @@ func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int6
 			action := py.Dict{
 				{Key: "op", Value: "trash"}, {Key: "imap_name", Value: g.IMAPName}, {Key: "uidvalidity", Value: g.UIDValidity},
 				{Key: "dest_imap", Value: trash}, {Key: "items", Value: entries},
+			}
+			if len(known) < len(entries) {
+				text := fmt.Sprintf("partial: %d of %d messages have no destination uid in Trash; check the mailbox", len(entries)-len(known), len(entries))
+				if err := s.partial(ctx, action, undo, text); err != nil {
+					return trashed, err
+				}
+				trashed += len(batch)
+				continue
 			}
 			if err := s.record(ctx, action, undo); err != nil {
 				return trashed, err
@@ -709,6 +747,7 @@ func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal
 	var moved int
 	var skipped []mailops.Skip
 	deleted := false
+	keptReason := ""
 	err = mailops.Session(ctx, e.Open, account, func(client mail.Client) error {
 		items, skips, err := mailops.Verify(ctx, e.DB.Read, client, account, snaps)
 		if err != nil {
@@ -723,8 +762,12 @@ func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal
 		}
 		label := mail.UTF7Encode(payload.Label)
 		st, err := client.Status(ctx, label)
-		if err != nil || st.Messages != 0 {
+		if err != nil {
 			return err
+		}
+		if st.Messages != 0 {
+			keptReason = fmt.Sprintf("%d messages still carry the label", st.Messages)
+			return nil
 		}
 		drop := py.Dict{{Key: "op", Value: "delete_label"}, {Key: "imap_name", Value: label}}
 		s, err := e.hold(ctx, p.ID, drop, nil)
@@ -743,9 +786,14 @@ func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal
 	if deleted {
 		state = "deleted"
 	}
+	summary := fmt.Sprintf("%d relabelled, label %s", moved, state)
+	if keptReason != "" {
+		summary += " (" + keptReason + ")"
+	}
+	summary += fmt.Sprintf(", %d skipped as changed", len(skipped))
 	return py.Dict{
-		{Key: "summary", Value: fmt.Sprintf("%d relabelled, label %s, %d skipped as changed", moved, state, len(skipped))},
-		{Key: "relabelled", Value: moved}, {Key: "label_deleted", Value: deleted}, {Key: "skipped", Value: skipList(skipped)},
+		{Key: "summary", Value: summary}, {Key: "relabelled", Value: moved}, {Key: "label_deleted", Value: deleted},
+		{Key: "label_kept_reason", Value: nullableString(keptReason)}, {Key: "skipped", Value: skipList(skipped)},
 	}, nil
 }
 
@@ -805,6 +853,11 @@ func Register(r *proposals.Registry, e *Executors, syncer *mailsync.Syncer) {
 	r.Executors[DeletionRule] = e.ExecuteDeletion
 	r.Executors[GmailLabelMerge] = e.ExecuteLabelMerge
 	r.Executors[InboxBacklog] = e.ExecuteMoves
+	r.AddKind(proposals.Kind{Name: RebalanceSplit, Label: "Split folder", Icon: "split", Picker: true, Groups: true})
+	r.AddKind(proposals.Kind{Name: RebalanceMerge, Label: "Merge folders", Icon: "merge", Picker: true, Group: true})
+	r.AddKind(proposals.Kind{Name: DeletionRule, Label: "Deletion rule", Icon: "trash-2", Picker: true, Messages: true, CountKey: "backlog"})
+	r.AddKind(proposals.Kind{Name: GmailLabelMerge, Label: "Merge labels", Icon: "tag", Picker: true, Messages: true, CountKey: "from_count"})
+	r.AddKind(proposals.Kind{Name: InboxBacklog, Label: "Inbox backlog", Icon: "inbox", Picker: true, Groups: true})
 	live.RegisterUndoers(r, e.Open)
 	r.Undoers[OpDeleteFolder] = e.UndoDeleteFolder
 	r.Undoers[OpRuleDelete] = e.UndoRuleDelete
