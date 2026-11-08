@@ -7,7 +7,6 @@ require (
 	github.com/anthropics/anthropic-sdk-go v1.82.0
 	github.com/emersion/go-ical v0.0.0-20250609112844-439c63cef608
 	github.com/emersion/go-imap/v2 v2.0.0-beta.8
-	github.com/emersion/go-webdav v0.7.0
 	github.com/go-chi/chi/v5 v5.5.0
 	github.com/jeiang/atrium/third_party/sqlite-vec v0.0.0
 	github.com/markusmobius/go-trafilatura v1.12.2
