@@ -2,7 +2,9 @@
 
 `docs/vision.md` describes the goals. This file records current behavior,
 accepted direction, and unresolved choices. Planned capabilities below are
-not claims about the running application.
+not claims about the running application. v2 is a from-scratch Go
+application, not a port of the earlier Python application; there is no
+behavior-parity target.
 
 ## Current application
 
@@ -34,12 +36,33 @@ not claims about the running application.
   operator's ntfy account. Full text goes only to topics that refuse an
   anonymous read. Three consecutive delivery failures raise an admin banner
   and a system-channel message.
+- The attention view is one query across the enabled queues: proposals,
+  drafts, open loops, commitments, event candidates, thread plans, packages
+  and tasks. Items are grouped as overdue, due soon, needs decision, waiting
+  on them and upcoming, each with its actions; a snooze hides an item until
+  its time. Tasks are a core store with open, done and dismissed status, a
+  due date, reminder time, priority and an optional source; the assistant can
+  list, add, update, complete and propose tasks, and the reminder job inserts
+  a task.
+- Phone actions are HMAC-signed links in a notification that approve or
+  dismiss a proposal: `phone_actions_enabled` (default off) and
+  `phone_actions_kinds` choose the proposal kinds, and web-only kinds cannot
+  be enabled. A link is valid for 12 hours, one use, with at most 20 links
+  minted per hour; `POST /actions/{token}` redeems it without a session, and
+  the resolution is recorded with source `phone` and shown as "approved via
+  phone" in `/activity`. Rotating the generated `action_link_key` invalidates
+  outstanding links; the Phone actions settings page shows the outstanding
+  count and rotates the key.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs. Mail accounts are records with a stable
   id and an iCloud or Gmail preset, read from the deploy-time
   `mail_accounts_file` or added, tested and removed on the Mail settings
-  page (stored in the database, password only on an encrypted database).
+  page (stored in the database, password only on an encrypted database). A
+  Gmail account can use an app password or XOAUTH2; XOAUTH2 uses the Google
+  OAuth wizard's Gmail refresh token, refreshes the access token once for
+  concurrent callers, reconnects or retries AUTH once after a rejected token,
+  and reports needs-reauth or expiring health.
 - The assistant uses the Anthropic API. A static catalog in
   `internal/assistant/pricing` holds Haiku 5.5, Sonnet 5.5 and Opus 5.5 with
   their ids, context window, maximum output, effort levels, thinking modes
@@ -65,8 +88,10 @@ not claims about the running application.
   and its tokens are recorded as a separate usage row priced at the model
   that served them. Mail classification and embeddings
   use separately configured OpenAI-compatible endpoints, local or hosted,
-  each with an optional Bearer key, CA bundle and proxy; `atrium endpoints
-  probe` and the Integrations Test record whether each works, and mail is
+  each with an optional Bearer key, CA bundle and proxy; the endpoint package
+  carries the resolved chat and embed model, body-character, batch and
+  dimension settings through the request context. `atrium endpoints probe`
+  and the Integrations Test record whether each works, and mail is
   held in needs-settings while the current endpoint's probe fails. Connected content sent to a hosted model leaves
   the host; privacy does not mean that inference is necessarily local.
   The embedding index records its embedder and dimension; changing the
@@ -77,7 +102,14 @@ not claims about the running application.
 - ntfy, qBittorrent (API key) and TMDB (read token) are connection records on the Integrations settings
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-integration CA bundle and proxy. Certificate verification
-  cannot be turned off.
+  cannot be turned off. The Integrations page also has a Google OAuth wizard:
+  the Cloud console steps, a Web-application client ID and secret, consent
+  per capability (Calendar or Gmail) with PKCE and a paste-back fallback, and
+  a Testing-mode warning about 7-day refresh tokens. The state and verifier
+  live in `oauth_states` for ten minutes; the refresh token is stored as a
+  secret (`google_calendar_refresh_token` or `google_gmail_refresh_token`),
+  pinnable with its `*_file` variable; Test exchanges it, and a 400 or 401
+  marks the integration needs-reauth.
 - SQLite holds application records, configuration stored by the application,
   and assistant history. Uploaded files live beside the database under
   `files/`; the Notion wiki also has external state. The database alone is
@@ -89,8 +121,9 @@ not claims about the running application.
   page cache; every other connection uses a 2 MiB cache, and all use
   in-memory temporary storage and a 64 MiB journal size limit.
 - Deployment configuration and credentials come from the host and its
-  environment files. Settings live in a registry: an `ATRIUM_<MODULE>_<KEY>`
-  variable or configuration-file value pins a setting, otherwise a value
+  environment files. Each application instance builds its own settings
+  registry (`settings.New()`); an `ATRIUM_<MODULE>_<KEY>` variable or
+  configuration-file value pins a setting, otherwise a value
   stored in the database applies, and every command reads the same stored
   values. Every setting that is not a generated secret appears on one
   generated Configuration page per module, editable there unless pinned,
@@ -154,6 +187,10 @@ not claims about the running application.
 - Mail writes use the shared gate. Shadow mode records decisions without
   automatic mailbox writes; live automatic writes also depend on pause,
   go-live eligibility, verification, caps, and action ledgers.
+- Calendar writes record an intent in `agent_writes` before the external
+  call. A write whose outcome is unknown stays blocked; further writes to the
+  same calendar are refused until the operator resolves it with
+  `atrium writes resolve <id>` or the Activity page.
 - The assistant can prepare mail drafts but cannot send them. Sending is
   currently an operator action. Delegated sending is a product goal, not
   permission granted by the existing tools.
@@ -186,12 +223,8 @@ not claims about the running application.
 - The money (spending ledger) module is removed and deferred. Its tables
   and stored rows stay in the database, untouched; mail-statement parsing
   is not the planned source when it returns.
-- A changed embed dimension should trigger a background re-embed that keeps
-  the old index serving until the swap.
 - Cost accounting should explain usage by job and run. Recorded runs should
   support evaluating application and model changes.
-- Follow-ups, proposals, plans, event candidates and drafts should
-  converge into one attention view.
 - The memory model should state what belongs in profile, wiki, skills,
   projects, nightly capture, and thread summaries, and how stale facts
   expire.
@@ -204,7 +237,6 @@ not claims about the running application.
 
 ## Open decisions
 
-- Which phone interface to support and which actions it may authorize.
 
 Detailed feature scope and acceptance criteria belong in the
 [Wayfinder map](https://github.com/jeiang/atrium/issues/15), not in this file.
