@@ -1,10 +1,11 @@
 package mail
 
 import (
+	"strings"
+
 	"golang.org/x/text/cases"
 
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var systemFlags = map[string]string{`\trash`: "trash", `\sent`: "sent", `\drafts`: "drafts", `\junk`: "junk"}
@@ -23,7 +24,7 @@ var systemNames = [...][2]string{
 }
 
 func IsSystemFlag(flag string) bool {
-	_, ok := systemFlags[py.Lower(flag)]
+	_, ok := systemFlags[strings.ToLower(flag)]
 	return ok
 }
 
@@ -45,7 +46,7 @@ func MailboxRole(name string, flags []string, preset string) string {
 		return "system"
 	}
 	for _, flag := range flags {
-		if role, ok := systemFlags[py.Lower(flag)]; ok {
+		if role, ok := systemFlags[strings.ToLower(flag)]; ok {
 			return role
 		}
 	}

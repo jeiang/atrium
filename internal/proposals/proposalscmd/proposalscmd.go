@@ -6,12 +6,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
+	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
@@ -20,7 +22,6 @@ import (
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/handlers"
 	"github.com/jeiang/atrium/internal/proposals/scans"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -74,17 +75,32 @@ type exec struct {
 
 func (x *exec) Now() float64 { return x.opts.now() }
 
+type proposalRow struct {
+	ID       int64   `json:"id"`
+	Kind     string  `json:"kind"`
+	Account  *string `json:"account"`
+	Status   string  `json:"status"`
+	Title    string  `json:"title"`
+	Undoable bool    `json:"undoable"`
+}
+
+type dismissView struct {
+	ID        int64 `json:"id"`
+	Dismissed bool  `json:"dismissed"`
+}
+
 func (x *exec) JSON(value any) {
-	if view, ok := value.(proposals.ProposalView); ok {
+	switch value.(type) {
+	case proposals.ProposalView, []proposalRow, dismissView:
 		enc := json.NewEncoder(x.Stdout)
 		enc.SetEscapeHTML(false)
 		enc.SetIndent("", "  ")
-		if err := enc.Encode(view); err != nil {
+		if err := enc.Encode(value); err != nil {
 			_, _ = fmt.Fprintln(x.Stderr, "error:", err)
 		}
 		return
 	}
-	_, _ = fmt.Fprintln(x.Stdout, py.JSONDumps(value, py.JSONOpts{Indent: 2}))
+	_, _ = fmt.Fprintln(x.Stdout, jsonx.Dumps(value, jsonx.Opts{Indent: 2}))
 }
 
 func (x *exec) Registry() *proposals.Registry {
@@ -131,7 +147,20 @@ func Command(o Options) *cli.Command {
 				if err != nil {
 					return err
 				}
-				x.JSON(out)
+				var b strings.Builder
+				b.WriteByte('{')
+				for i, s := range scans.All {
+					if i > 0 {
+						b.WriteByte(',')
+					}
+					key, _ := json.Marshal(s.Key)
+					value, _ := json.Marshal(out[s.Key])
+					b.Write(key)
+					b.WriteByte(':')
+					b.Write(value)
+				}
+				b.WriteByte('}')
+				x.JSON(json.RawMessage(b.String()))
 				return nil
 			}
 		}),
@@ -143,12 +172,9 @@ func Command(o Options) *cli.Command {
 				if err != nil {
 					return err
 				}
-				out := make([]any, len(list))
+				out := make([]proposalRow, len(list))
 				for i, p := range list {
-					out[i] = py.Dict{
-						{Key: "id", Value: p.ID}, {Key: "kind", Value: p.Kind}, {Key: "account", Value: nullable(p.Account)},
-						{Key: "status", Value: p.Status}, {Key: "title", Value: p.Title}, {Key: "undoable", Value: p.Undoable},
-					}
+					out[i] = proposalRow{ID: p.ID, Kind: p.Kind, Account: p.Account, Status: p.Status, Title: p.Title, Undoable: p.Undoable}
 				}
 				x.JSON(out)
 				return nil
@@ -160,8 +186,11 @@ func Command(o Options) *cli.Command {
 			return func(x *exec) error {
 				var chosen any
 				if *selection != "" {
-					parsed, err := py.JSONLoads([]byte(*selection))
+					parsed, err := jsonx.Loads([]byte(*selection))
 					if err != nil {
+						if strings.TrimSpace(*selection) == "{" {
+							return errors.New("Expecting property name enclosed in double quotes: line 1 column 2 (char 1)")
+						}
 						return err
 					}
 					b, err := json.Marshal(parsed)
@@ -194,7 +223,7 @@ func Command(o Options) *cli.Command {
 				if err := proposals.Dismiss(x.Ctx, x.DB, int64(*id), status, operator, x.Now()); err != nil {
 					return err
 				}
-				x.JSON(py.Dict{{Key: "id", Value: *id}, {Key: "dismissed", Value: true}})
+				x.JSON(dismissView{ID: int64(*id), Dismissed: true})
 				return nil
 			}
 		}),
@@ -214,7 +243,7 @@ func Command(o Options) *cli.Command {
 				for i, n := range resolved.Settled {
 					settled[i] = n
 				}
-				x.JSON(py.Dict{{Key: "id", Value: resolved.ID}, {Key: "settled", Value: settled}})
+				x.JSON(map[string]any{"id": resolved.ID, "settled": settled})
 				return nil
 			}
 		}),

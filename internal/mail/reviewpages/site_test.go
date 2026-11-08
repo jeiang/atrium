@@ -25,7 +25,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/smtp/smtptest"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/handlers"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -212,25 +211,18 @@ func form(pairs ...string) url.Values {
 	return v
 }
 
-func message(id int) py.Dict {
-	return py.Dict{
-		{Key: "id", Value: int64(id)}, {Key: "subject", Value: "Subject " + itoa(id)}, {Key: "from_name", Value: "Shop"},
-		{Key: "from_addr", Value: "s@shop.test"}, {Key: "date_ts", Value: 1.0},
-	}
+func message(id int) map[string]any {
+	return map[string]any{"id": int64(id), "subject": "Subject " + itoa(id), "from_name": "Shop", "from_addr": "s@shop.test", "date_ts": 1.0}
 }
 
 func itoa(n int) string { return strconv.Itoa(n) }
 
-func group(name string, ids ...int) py.Dict {
+func group(name string, ids ...int) map[string]any {
 	messages := make([]any, len(ids))
 	for i, id := range ids {
 		messages[i] = message(id)
 	}
-	return py.Dict{
-		{Key: "name", Value: name}, {Key: "count", Value: int64(len(ids))},
-		{Key: "senders", Value: []any{py.Dict{{Key: "label", Value: "shop.test"}, {Key: "count", Value: int64(len(ids))}}}},
-		{Key: "terms", Value: []any{}}, {Key: "subjects", Value: []any{"Subject"}}, {Key: "messages", Value: messages},
-	}
+	return map[string]any{"name": name, "count": int64(len(ids)), "senders": []any{map[string]any{"label": "shop.test", "count": int64(len(ids))}}, "terms": []any{}, "subjects": []any{"Subject"}, "messages": messages}
 }
 
 func (s *site) propose(kind, account, title string, preview any, fingerprint string) int64 {
@@ -239,7 +231,7 @@ func (s *site) propose(kind, account, title string, preview any, fingerprint str
 	if account != "" {
 		acct = &account
 	}
-	id, ok, err := proposals.Create(settings.With(s.t.Context(), s.settings), s.db, kind, acct, title, py.Dict{}, preview, fingerprint, 1_000.0)
+	id, ok, err := proposals.Create(settings.With(s.t.Context(), s.settings), s.db, kind, acct, title, map[string]any{}, preview, fingerprint, 1_000.0)
 	if err != nil || !ok {
 		s.t.Fatalf("create %s: %v %v", kind, ok, err)
 	}
@@ -256,7 +248,7 @@ func (s *site) proposal(id int64) *proposals.Proposal {
 }
 
 func (s *site) splitProposal(fingerprint string) int64 {
-	preview := py.Dict{{Key: "folder", Value: "INBOX/Shop"}, {Key: "groups", Value: []any{group("Shop/Orders", 1, 2), group("Shop/Ads", 3, 4)}}}
+	preview := map[string]any{"folder": "INBOX/Shop", "groups": []any{group("Shop/Orders", 1, 2), group("Shop/Ads", 3, 4)}}
 	return s.propose("rebalance_split", "icloud", "Split Shop", preview, fingerprint)
 }
 

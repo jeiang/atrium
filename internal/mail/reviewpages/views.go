@@ -4,7 +4,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type ProposalView struct {
@@ -35,10 +34,10 @@ func proposalView(p *proposals.Proposal, kind proposals.Kind) ProposalView {
 
 func plainJSON(v any) any {
 	switch x := v.(type) {
-	case py.Dict:
+	case map[string]any:
 		out := make(map[string]any, len(x))
-		for _, pair := range x {
-			out[pair.Key] = plainJSON(pair.Value)
+		for k, val := range x {
+			out[k] = plainJSON(val)
 		}
 		return out
 	case []any:
@@ -65,7 +64,7 @@ type proposalListData struct {
 	Status    string         `json:"status"`
 	Kind      string         `json:"kind"`
 	KindLabel string         `json:"kind_label"`
-	Counts    py.Dict        `json:"counts"`
+	Counts    map[string]any `json:"counts"`
 	Partial   bool           `json:"partial"`
 }
 

@@ -18,8 +18,9 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/tasks"
+	"github.com/jeiang/atrium/internal/textx"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
@@ -45,7 +46,7 @@ func (r *Reminders) env() config.Env {
 }
 
 func local(ts float64, loc *time.Location) time.Time {
-	sec, _ := py.SplitTimestamp(ts)
+	sec, _ := timex.SplitTimestamp(ts)
 	return time.Unix(sec, 0).In(loc)
 }
 
@@ -54,12 +55,13 @@ func ReminderTime(due, tz string, hour int, now float64) (float64, error) {
 	if err != nil {
 		return 0, err
 	}
-	year, month, day, ok := py.DateFromISOFormat(due)
+	parsed, ok := timex.ParseDay(due)
 	if !ok {
 		return 0, fmt.Errorf("%w: Invalid isoformat string: %s", httpx.ErrPayload, strconv.Quote(due))
 	}
+	year, month, day := parsed.Year(), int(parsed.Month()), parsed.Day()
 	wall := time.Date(year, time.Month(month), day, hour, 0, 0, 0, time.UTC).Unix()
-	return max(float64(py.WallToUnix(loc, wall)), now+300), nil
+	return max(float64(timex.WallToUnix(loc, wall)), now+300), nil
 }
 
 func ReminderPrompt(text string, messageID int64) string {
@@ -125,11 +127,11 @@ func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, e
 			preview[key] = value
 		}
 		preview["subject"] = subject
-		preview["remind_at"] = py.ISOFormat(local(remindAt, loc), "minutes")
+		preview["remind_at"] = timex.ISOFormat(local(remindAt, loc), "minutes")
 		encoded, _ := json.Marshal([]any{KindReminder, c.id})
 		sum := sha256.Sum256(encoded)
 		fingerprint := hex.EncodeToString(sum[:])[:32]
-		title := fmt.Sprintf("Remind me: %s (due %s)", py.Clip(c.text, 80), c.due)
+		title := fmt.Sprintf("Remind me: %s (due %s)", textx.Clip(c.text, 80), c.due)
 		pid, created, err := proposals.Create(ctx, r.DB, KindReminder, nil, title, payload, preview, fingerprint, now)
 		if err != nil {
 			return made, err
@@ -173,7 +175,7 @@ func payloadString(d map[string]any, key string) (string, error) {
 	}
 	s, ok := v.(string)
 	if !ok {
-		return "", fmt.Errorf("%w: %s must be a string, not %s", httpx.ErrShape, key, py.TypeName(v))
+		return "", fmt.Errorf("%w: %s must be a string, not %s", httpx.ErrShape, key, fmt.Sprintf("%T", v))
 	}
 	return s, nil
 }

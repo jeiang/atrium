@@ -6,13 +6,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"slices"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/textx"
 )
 
 type Limits struct {
@@ -43,11 +44,8 @@ type Message struct {
 	DateTS   float64
 }
 
-func (m Message) View() py.Dict {
-	return py.Dict{
-		{Key: "id", Value: m.ID}, {Key: "subject", Value: m.Subject}, {Key: "from_name", Value: m.FromName},
-		{Key: "from_addr", Value: m.FromAddr}, {Key: "date_ts", Value: m.DateTS},
-	}
+func (m Message) View() map[string]any {
+	return map[string]any{"id": m.ID, "subject": m.Subject, "from_name": m.FromName, "from_addr": m.FromAddr, "date_ts": m.DateTS}
 }
 
 func (l Limits) ranked(values []string) ([]string, map[string]int) {
@@ -77,7 +75,7 @@ func (l Limits) TopCounts(values []string) []any {
 	labels, counts := l.ranked(values)
 	out := make([]any, len(labels))
 	for i, label := range labels {
-		out[i] = py.Dict{{Key: "label", Value: label}, {Key: "count", Value: counts[label]}}
+		out[i] = map[string]any{"label": label, "count": counts[label]}
 	}
 	return out
 }
@@ -90,10 +88,10 @@ func (l Limits) SampleSubjectsOf(rows []Message) []string {
 	seen := map[string]bool{}
 	out := []string{}
 	for _, r := range sorted {
-		subject := py.Strip(r.Subject)
+		subject := strings.TrimSpace(r.Subject)
 		if subject != "" && !seen[subject] {
 			seen[subject] = true
-			out = append(out, py.Clip(subject, 120))
+			out = append(out, textx.Clip(subject, 120))
 		}
 		if len(out) >= l.SampleSubjects {
 			break
@@ -104,8 +102,8 @@ func (l Limits) SampleSubjectsOf(rows []Message) []string {
 
 type Draft struct {
 	Title   string
-	Payload py.Dict
-	Preview py.Dict
+	Payload map[string]any
+	Preview map[string]any
 }
 
 func Publish(ctx context.Context, d *db.DB, ts float64, kind string, account *string, fingerprint string, build func() (*Draft, error)) (int64, bool, error) {
@@ -125,8 +123,8 @@ type Result struct {
 	Created    int
 }
 
-func (r Result) Dict() py.Dict {
-	return py.Dict{{Key: "candidates", Value: r.Candidates}, {Key: "created", Value: r.Created}}
+func (r Result) Dict() map[string]any {
+	return map[string]any{"candidates": r.Candidates, "created": r.Created}
 }
 
 func SnapshotList(snaps []mailops.Snapshot) []any {

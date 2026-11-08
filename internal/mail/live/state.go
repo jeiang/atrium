@@ -14,13 +14,14 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/corrections"
 	"github.com/jeiang/atrium/internal/mail/mailops"
+	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
@@ -123,7 +124,7 @@ func (l *Live) TakeBaseline(ctx context.Context) error {
 			"WHERE in_inbox = 1 AND seen = 1 AND flagged = 0 AND sent = 0 AND gone_at IS NULL"); err != nil {
 			return err
 		}
-		return SetState(ctx, tx, GoliveKey, py.FloatRepr(l.now()))
+		return SetState(ctx, tx, GoliveKey, numx.FloatRepr(l.now()))
 	})
 }
 
@@ -163,8 +164,8 @@ func nullJSON(v any) any {
 func (l *Live) Begin(ctx context.Context, account string, messageID int64, digest, kind string, src, dest *string,
 	before any, decisionID *int64) (id int64, ok bool, err error) {
 	res, err := l.DB.Write.ExecContext(ctx, "INSERT INTO auto_actions (ts, account, message_id, digest, kind, src, dest, before, decision_id, state) "+
-		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", l.now(), account, messageID, digest, kind, py.Nullable(src), py.Nullable(dest),
-		nullJSON(before), py.Nullable(decisionID), ledger.Held)
+		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", l.now(), account, messageID, digest, kind, jsonx.Nullable(src), jsonx.Nullable(dest),
+		nullJSON(before), jsonx.Nullable(decisionID), ledger.Held)
 	if db.IsConstraint(err) {
 		return 0, false, nil
 	}
@@ -177,7 +178,7 @@ func (l *Live) Begin(ctx context.Context, account string, messageID int64, diges
 
 func (l *Live) Finish(ctx context.Context, id int64, after, undo any, note *string) error {
 	_, err := l.DB.Write.ExecContext(ctx, "UPDATE auto_actions SET state = ?, error = ?, after = ?, undo = ? WHERE id = ?",
-		ledger.Applied, py.Nullable(note), nullJSON(after), nullJSON(undo), id)
+		ledger.Applied, jsonx.Nullable(note), nullJSON(after), nullJSON(undo), id)
 	return err
 }
 
@@ -258,8 +259,8 @@ func (l *Live) Discard(ctx context.Context, id int64) error {
 func (l *Live) Skip(ctx context.Context, account string, messageID int64, digest, kind string, src, dest *string,
 	reason string, decisionID *int64) error {
 	_, err := l.DB.Write.ExecContext(ctx, "INSERT INTO auto_actions (ts, account, message_id, digest, kind, src, dest, decision_id, state, error) "+
-		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", l.now(), account, messageID, digest, kind, py.Nullable(src), py.Nullable(dest),
-		py.Nullable(decisionID), ledger.Skipped, "skipped: "+reason)
+		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", l.now(), account, messageID, digest, kind, jsonx.Nullable(src), jsonx.Nullable(dest),
+		jsonx.Nullable(decisionID), ledger.Skipped, "skipped: "+reason)
 	return err
 }
 

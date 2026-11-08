@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/scanutil"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var log = logx.Logger("atrium.gmail_labels")
@@ -200,11 +199,8 @@ func scan(ctx context.Context, d *db.DB, account string, ts float64) (scanutil.R
 			}
 			return &scanutil.Draft{
 				Title:   fmt.Sprintf("Merge label %s into %s", c.label, c.into),
-				Payload: py.Dict{{Key: "label", Value: c.label}, {Key: "into", Value: c.into}, {Key: "messages", Value: scanutil.SnapshotList(snaps)}},
-				Preview: py.Dict{
-					{Key: "from", Value: c.label}, {Key: "into", Value: c.into}, {Key: "from_count", Value: len(c.ids)},
-					{Key: "into_count", Value: len(m.members[c.into])}, {Key: "messages", Value: views},
-				},
+				Payload: map[string]any{"label": c.label, "into": c.into, "messages": scanutil.SnapshotList(snaps)},
+				Preview: map[string]any{"from": c.label, "into": c.into, "from_count": len(c.ids), "into_count": len(m.members[c.into]), "messages": views},
 			}, nil
 		})
 		if err != nil {

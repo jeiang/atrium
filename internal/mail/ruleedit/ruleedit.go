@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail/rules"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -43,8 +42,6 @@ func ruleErrorf(msg string) error { return rules.RuleError{Code: "rule", Msg: ms
 
 func withID(raw any, id string) (any, bool) {
 	switch raw := raw.(type) {
-	case py.Dict:
-		return raw.Set("id", id), true
 	case map[string]any:
 		out := make(map[string]any, len(raw)+1)
 		for k, v := range raw {
@@ -58,9 +55,6 @@ func withID(raw any, id string) (any, bool) {
 
 func get(raw any, key string) any {
 	switch raw := raw.(type) {
-	case py.Dict:
-		v, _ := raw.Get(key)
-		return v
 	case map[string]any:
 		return raw[key]
 	}

@@ -14,10 +14,12 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailscan"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/textx"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 const CommitmentSystem = "You read one email for its owner and list explicit commitments and deadlines. A commitment is a clear promise " +
@@ -53,10 +55,11 @@ func DueDate(value any) (string, bool) {
 	if !isStr {
 		return "", false
 	}
-	year, month, day, ok := py.DateFromISOFormat(py.Clip(strings.TrimSpace(text), 10))
+	parsed, ok := timex.ParseDay(textx.Clip(strings.TrimSpace(text), 10))
 	if !ok {
 		return "", false
 	}
+	year, month, day := parsed.Year(), int(parsed.Month()), parsed.Day()
 	return fmt.Sprintf("%04d-%02d-%02d", year, month, day), true
 }
 
@@ -75,10 +78,10 @@ func JudgeCommitments(ctx context.Context, env config.Env, url string, m Message
 	if err != nil {
 		return nil, err
 	}
-	sec, _ := py.SplitTimestamp(m.DateTS)
+	sec, _ := timex.SplitTimestamp(m.DateTS)
 	sentOn := time.Unix(sec, 0).In(zone).Format("2006-01-02")
 	user := fmt.Sprintf("This message was %s on %s.\nFrom: %s <%s>\nTo: %s\nSubject: %s\nBody:\n%s",
-		direction, sentOn, m.FromName, m.FromAddr, strings.Join(to, ", "), m.Subject, py.Clip(body, llm.BodyChars(ctx)))
+		direction, sentOn, m.FromName, m.FromAddr, strings.Join(to, ", "), m.Subject, textx.Clip(body, llm.BodyChars(ctx)))
 	raw, err := llm.ChatJSON(ctx, url, CommitmentSystem, user, CommitmentSchema, 500)
 	if err != nil {
 		return nil, err
@@ -104,7 +107,7 @@ func messageOf(m mailscan.Message) Message {
 }
 
 func commitmentItems(found any, perMail int) ([]any, error) {
-	if !py.Truthy(found) {
+	if !jsonx.Truthy(found) {
 		return nil, nil
 	}
 	switch v := found.(type) {
@@ -115,7 +118,7 @@ func commitmentItems(found any, perMail int) ([]any, error) {
 	case map[string]any:
 		return nil, fmt.Errorf("%w: commitment list must be a list", httpx.ErrShape)
 	}
-	return nil, fmt.Errorf("%w: %s is not a list", httpx.ErrShape, py.TypeName(found))
+	return nil, fmt.Errorf("%w: %s is not a list", httpx.ErrShape, fmt.Sprintf("%T", found))
 }
 
 func ScanCommitments(ctx context.Context, d *db.DB, env config.Env, now float64, judge Judge) (int64, error) {
@@ -179,7 +182,7 @@ func storeCommitment(ctx context.Context, d *db.DB, messageID int64, item any, n
 		return 0, nil
 	}
 	text := ""
-	if v := entry["text"]; py.Truthy(v) {
+	if v := entry["text"]; jsonx.Truthy(v) {
 		s, isStr := v.(string)
 		if !isStr {
 			return 0, fmt.Errorf("%w: commitment text is not a string", httpx.ErrShape)
@@ -196,7 +199,7 @@ func storeCommitment(ctx context.Context, d *db.DB, messageID int64, item any, n
 		due = &s
 	}
 	res, err := d.Write.ExecContext(ctx, "INSERT OR IGNORE INTO commitments (message_id, text, owner, due, created_ts) VALUES (?, ?, ?, ?, ?)",
-		messageID, py.Clip(text, 300), owner, due, now)
+		messageID, textx.Clip(text, 300), owner, due, now)
 	if err != nil {
 		return 0, err
 	}

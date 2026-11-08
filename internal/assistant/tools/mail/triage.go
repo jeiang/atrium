@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/executors"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func RegisterProposalKinds() {
@@ -135,18 +134,14 @@ func proposeTriage(ctx context.Context, tc *tool.Context, payload map[string]any
 			}
 		}
 		items = append(items, item)
-		preview = append(preview, py.Dict{
-			{Key: "id", Value: req.ID}, {Key: "subject", Value: subjects[req.ID]},
-			{Key: "from_addr", Value: senders[req.ID]}, {Key: "date_ts", Value: dates[req.ID]},
-			{Key: "action", Value: req.Action}, {Key: "label", Value: req.Label},
-		})
+		preview = append(preview, map[string]any{"id": req.ID, "subject": subjects[req.ID], "from_addr": senders[req.ID], "date_ts": dates[req.ID], "action": req.Action, "label": req.Label})
 	}
 	dicts := make([]any, len(items))
 	for i, item := range items {
 		dicts[i] = item.Dict()
 	}
-	body := py.Dict{{Key: "items", Value: dicts}}
-	view := py.Dict{{Key: "count", Value: len(items)}, {Key: "messages", Value: preview}}
+	body := map[string]any{"items": dicts}
+	view := map[string]any{"count": len(items), "messages": preview}
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return nil, err
