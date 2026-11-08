@@ -134,6 +134,8 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 		return journal.GetRun(ctx, d.Read, runID)
 	case ctx.Err() != nil:
 		return nil, ctx.Err()
+	case errors.As(err, new(*tool.Park)):
+		final = journal.Parked
 	case errors.As(err, new(budget.BudgetExceeded)), errors.As(err, new(RunLimit)), errors.Is(err, progress.ErrStopped):
 		errText = new(err.Error())
 	default:
@@ -145,6 +147,11 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 			log.Error(fmt.Sprintf("thread %d memory tree rebuild failed", s.thread.ID), logx.RunID, runID, logx.Err, rerr)
 		}
 		if err := journal.FinishRun(ctx, d.Write, runID, journal.Failed, s.now(), errText); err != nil {
+			return nil, err
+		}
+	}
+	if final == journal.Parked {
+		if err := journal.ParkRun(ctx, d.Write, runID, s.now()); err != nil {
 			return nil, err
 		}
 	}

@@ -23,6 +23,7 @@ import (
 const (
 	Running     = "running"
 	Interrupted = "interrupted"
+	Parked      = "parked"
 	Done        = "done"
 	Failed      = "failed"
 )
@@ -255,8 +256,8 @@ func ClaimResume(ctx context.Context, q db.Querier, runID int64, owner string, n
 	if err != nil {
 		return false, err
 	}
-	return db.Changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = ?, lease_until = ? WHERE id = ? AND state = ?",
-		Running, owner, now+lease, runID, Interrupted))
+	return db.Changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = ?, lease_until = ? WHERE id = ? AND state IN (?, ?)",
+		Running, owner, now+lease, runID, Interrupted, Parked))
 }
 
 func InterruptedRuns(ctx context.Context, q db.Querier) ([]Run, error) {
@@ -265,7 +266,7 @@ func InterruptedRuns(ctx context.Context, q db.Querier) ([]Run, error) {
 
 func ActiveRun(ctx context.Context, q db.Querier, threadID int64) (*Run, error) {
 	r, err := scanRun(q.QueryRowContext(ctx,
-		"SELECT "+runColumns+" FROM runs WHERE thread_id = ? AND state IN (?, ?) ORDER BY id DESC LIMIT 1", threadID, Running, Interrupted))
+		"SELECT "+runColumns+" FROM runs WHERE thread_id = ? AND state IN (?, ?, ?) ORDER BY id DESC LIMIT 1", threadID, Running, Interrupted, Parked))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -656,4 +657,11 @@ func ToolCallsForThread(ctx context.Context, q db.Querier, threadID int64) ([]To
 	return calls(q.QueryContext(ctx,
 		"SELECT c.id, c.run_id, c.tool_use_id, c.name, c.args_json, c.args_sha256, c.replay_class, c.state, c.error, c.result_id, c.started_at, c.finished_at "+
 			"FROM tool_calls c JOIN runs r ON r.id = c.run_id WHERE r.thread_id = ? AND r.superseded = 0 ORDER BY c.id", threadID))
+}
+
+// ParkRun releases the lease and marks the run parked until the operator
+// answers the pending question.
+func ParkRun(ctx context.Context, q db.Querier, runID int64, now float64) error {
+	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = NULL, lease_until = NULL, ended_at = ? WHERE id = ?", Parked, now, runID)
+	return err
 }

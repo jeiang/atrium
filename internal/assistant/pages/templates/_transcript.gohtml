@@ -20,8 +20,24 @@
 {{template "chat_run_live" (dict "thread_id" $t.id "run_id" $active.id "after" (ternary $v.items (opt (last $v.items) "seq" 0) 0))}}
 {{else if and $active (eq $active.state "interrupted")}}
 {{template "chat_interrupted" (dict "thread_id" $t.id "run_id" $active.id)}}
+{{else if and $active (eq $active.state "parked")}}
+{{if $v.question}}{{template "chat_parked" (dict "thread_id" $t.id "run_id" $active.id "question" $v.question "csrf" $csrf)}}{{end}}
 {{end}}
 {{range $v.queued}}{{template "chat_item" (dict "item" (dict "kind" "queued" "id" .id "text" .text "files" .files))}}{{end}}
+{{- end}}
+
+{{define "chat_parked"}}
+<li class="ps-10" id="run-{{.run_id}}">
+  <div class="alert" role="alert">
+    {{icon "messages-square"}}
+    <p>{{.question.text}}</p>
+    <form method="post" action="/chat/{{.thread_id}}/answer" hx-post="/chat/{{.thread_id}}/answer" hx-target="#transcript" hx-swap="innerHTML" hx-disabled-elt="find button[type=submit]" class="flex gap-2">
+      <input type="hidden" name="csrf_token" value="{{.csrf}}">
+      <input name="text" class="input" placeholder="Your answer" required autofocus>
+      <button type="submit" class="btn" data-size="sm">Answer</button>
+    </form>
+  </div>
+</li>
 {{- end}}
 
 {{define "chat_interrupted"}}

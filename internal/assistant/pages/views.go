@@ -120,9 +120,13 @@ func threadViewDict(v *service.ThreadView) (map[string]any, error) {
 	if m, err := pricing.Lookup(label); err == nil {
 		label = m.Name
 	}
+	var question map[string]any
+	if v.Question != nil {
+		question = map[string]any{"run_id": v.Question.RunID, "tool_use_id": v.Question.ToolUseID, "text": v.Question.Text}
+	}
 	return map[string]any{
 		"model_label": label, "thread": v.Thread, "items": items, "runs": runs, "active": v.Active, "queued": queued, "cost": v.Cost,
-		"meter": v.Meter, "last_operator_seq": v.LastOperatorSeq, "branched_from": v.BranchedFrom,
+		"meter": v.Meter, "last_operator_seq": v.LastOperatorSeq, "branched_from": v.BranchedFrom, "question": question,
 	}, nil
 }
 

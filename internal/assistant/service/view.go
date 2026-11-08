@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/big"
 	"slices"
@@ -411,6 +412,7 @@ type ThreadView struct {
 	Meter           Meter
 	LastOperatorSeq *int64
 	BranchedFrom    *threads.Thread
+	Question        *Question
 }
 
 func View(ctx context.Context, q db.Querier, threadID int64) (*ThreadView, error) {
@@ -458,6 +460,9 @@ func View(ctx context.Context, q db.Querier, threadID int64) (*ThreadView, error
 	if last != nil {
 		v.LastOperatorSeq = &last.Seq
 	}
+	if v.Question, err = PendingQuestion(ctx, q, threadID); err != nil {
+		return nil, err
+	}
 	if thread.BranchedFromThreadID != nil && *thread.BranchedFromThreadID != 0 {
 		if v.BranchedFrom, err = threads.Get(ctx, q, *thread.BranchedFromThreadID); err != nil {
 			return nil, err
@@ -498,4 +503,65 @@ func RunDict(ctx context.Context, q db.Querier, runID int64) (py.Dict, error) {
 		return nil, err
 	}
 	return append(run[0], py.Pair{Key: "calls", Value: list}, py.Pair{Key: "cost", Value: cost}, py.Pair{Key: "skills", Value: skills}), nil
+}
+
+type Question struct {
+	CallID    int64
+	RunID     int64
+	ToolUseID string
+	Text      string
+}
+
+// PendingQuestion returns the parked run's unanswered ask_operator call.
+func PendingQuestion(ctx context.Context, q db.Querier, threadID int64) (*Question, error) {
+	var out Question
+	var argsJSON string
+	err := q.QueryRowContext(ctx,
+		"SELECT c.id, c.run_id, c.tool_use_id, c.args_json FROM tool_calls c JOIN runs r ON r.id = c.run_id "+
+			"WHERE r.thread_id = ? AND r.state = ? AND c.name = ? AND c.state = ? ORDER BY c.id DESC LIMIT 1",
+		threadID, journal.Parked, "ask_operator", journal.Started).
+		Scan(&out.CallID, &out.RunID, &out.ToolUseID, &argsJSON)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	var args struct {
+		Question string `json:"question"`
+	}
+	if err := json.Unmarshal([]byte(argsJSON), &args); err != nil {
+		return nil, err
+	}
+	out.Text = args.Question
+	return &out, nil
+}
+
+// Answer stores the operator's answer as the parked tool's result and resumes
+// the run through the normal resume path.
+func (s *Service) Answer(ctx context.Context, threadID int64, text string) error {
+	text = strings.TrimSpace(text)
+	if text == "" {
+		return fmt.Errorf("answer is required")
+	}
+	q, err := PendingQuestion(ctx, s.DB.Read, threadID)
+	if err != nil {
+		return err
+	}
+	if q == nil {
+		return fmt.Errorf("no pending question")
+	}
+	result := py.Dict{
+		{Key: "type", Value: block.ToolResult},
+		{Key: "tool_use_id", Value: q.ToolUseID},
+		{Key: "content", Value: text},
+	}
+	raw := json.RawMessage(py.JSONDumps(result, py.JSONOpts{Compact: true, NoEnsureASCII: true}))
+	if _, err := journal.AppendMessage(ctx, s.DB, threadID, &q.RunID, journal.User, []json.RawMessage{raw}, s.now(), nil); err != nil {
+		return err
+	}
+	if err := journal.FinishToolCall(ctx, s.DB.Write, q.CallID, journal.OK, s.now(), nil, nil); err != nil {
+		return err
+	}
+	return s.StartResume(ctx, q.RunID)
 }

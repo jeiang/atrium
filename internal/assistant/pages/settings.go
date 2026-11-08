@@ -40,6 +40,7 @@ type AssistantData struct {
 type UsageData struct {
 	Budget   budget.Status     `json:"budget"`
 	Summary  usage.Summary     `json:"summary"`
+	Memory   usage.Summary     `json:"memory"`
 	ByKind   []usage.KindRow   `json:"by_kind"`
 	ByThread []usage.ThreadRow `json:"by_thread"`
 }
@@ -112,5 +113,7 @@ func (p *pages) usagePage(w http.ResponseWriter, r *http.Request) {
 	check(err)
 	byThread, err := usage.ByThread(ctx, p.deps.DB.Read, now, loc, usage.DefaultThreadLimit)
 	check(err)
-	p.settings(w, r, http.StatusOK, "usage.gohtml", UsageData{Budget: status, Summary: summary, ByKind: byKind, ByThread: byThread}, nil)
+	memory, err := usage.MemorySummary(ctx, p.deps.DB.Read, now, loc)
+	check(err)
+	p.settings(w, r, http.StatusOK, "usage.gohtml", UsageData{Budget: status, Summary: summary, Memory: memory, ByKind: byKind, ByThread: byThread}, nil)
 }

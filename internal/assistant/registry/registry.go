@@ -182,7 +182,7 @@ func (r *Registry) Admit(ctx context.Context, threadID int64, kind tool.Kind, al
 		if Decide(Policy, kind, t.Effect) == Denied {
 			continue
 		}
-		if tainted && (t.Flags.ExternalEffect || t.Effect == tool.Notify) {
+		if tainted && (t.Flags.ExternalEffect || t.Effect == tool.Notify || t.Effect == tool.WriteUndo) {
 			continue
 		}
 		enabled, err := r.enabled(ctx, q, t.Name)

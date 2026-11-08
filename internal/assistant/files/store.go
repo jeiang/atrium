@@ -52,6 +52,9 @@ type Owner struct {
 func ThreadOwner(id int64) Owner  { return Owner{kind: threadOwner, id: id} }
 func ProjectOwner(id int64) Owner { return Owner{kind: projectOwner, id: id} }
 
+// Dir returns the owner's directory name under the files root.
+func (o Owner) Dir() string { return o.dirName() }
+
 func (o Owner) dirName() string {
 	if o.kind == projectOwner {
 		return "p" + strconv.FormatInt(o.id, 10)

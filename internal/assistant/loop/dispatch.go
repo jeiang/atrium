@@ -118,6 +118,10 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 	if x.lost.Err() != nil {
 		return nil, nil, LeaseLost(fmt.Sprintf("run %d was taken over by another process", x.tc.RunID))
 	}
+	var park *tool.Park
+	if errors.As(err, &park) {
+		return nil, nil, park
+	}
 	if text, ok := toolErrorText(err); ok {
 		return fail(text)
 	}

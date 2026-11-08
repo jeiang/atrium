@@ -14,6 +14,10 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
+// KindMemory marks summarizer calls: recorded and visible, never counted
+// against the monthly dollar budget.
+const KindMemory = "memory"
+
 type Entry struct {
 	TS            float64
 	ThreadID      int64
@@ -156,7 +160,7 @@ func MonthStart(now float64, loc *time.Location) float64 {
 
 func MonthToDate(ctx context.Context, q db.Querier, now float64, loc *time.Location) (float64, error) {
 	var cost float64
-	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE ts >= ?", MonthStart(now, loc)).Scan(&cost)
+	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE ts >= ? AND kind <> ?", MonthStart(now, loc), KindMemory).Scan(&cost)
 	return cost, err
 }
 
@@ -192,17 +196,33 @@ type Summary struct {
 const summarySQL = "SELECT COUNT(*) AS calls, COALESCE(SUM(cost_usd), 0) AS cost, COALESCE(SUM(input_tokens), 0) AS input_tokens, " +
 	"COALESCE(SUM(cache_write_5m + cache_write_1h), 0) AS cache_write, COALESCE(SUM(cache_read), 0) AS cache_read, " +
 	"COALESCE(SUM(output_tokens), 0) AS output_tokens, COALESCE(SUM(searches), 0) AS searches, " +
-	"COALESCE(SUM(tier = ?), 0) AS high_tier FROM usage WHERE ts >= ?"
+	"COALESCE(SUM(tier = ?), 0) AS high_tier FROM usage WHERE ts >= ? AND kind <> ?"
 
 func MonthSummary(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Summary, error) {
 	var s Summary
-	err := q.QueryRowContext(ctx, summarySQL, pricing.TierHigh, MonthStart(now, loc)).Scan(
+	err := q.QueryRowContext(ctx, summarySQL, pricing.TierHigh, MonthStart(now, loc), KindMemory).Scan(
 		&s.Calls, &s.Cost, &s.InputTokens, &s.CacheWrite, &s.CacheRead, &s.OutputTokens, &s.Searches, &s.HighTier)
 	if err != nil {
 		return Summary{}, err
 	}
 	if prompt := s.InputTokens + s.CacheWrite + s.CacheRead; prompt != 0 {
 		s.CacheReadShare = float64(s.CacheRead) / float64(prompt)
+	}
+	return s, nil
+}
+
+const memorySummarySQL = "SELECT COUNT(*) AS calls, COALESCE(SUM(cost_usd), 0) AS cost, COALESCE(SUM(input_tokens), 0) AS input_tokens, " +
+	"COALESCE(SUM(cache_write_5m + cache_write_1h), 0) AS cache_write, COALESCE(SUM(cache_read), 0) AS cache_read, " +
+	"COALESCE(SUM(output_tokens), 0) AS output_tokens, COALESCE(SUM(searches), 0) AS searches, " +
+	"COALESCE(SUM(tier = ?), 0) AS high_tier FROM usage WHERE ts >= ? AND kind = ?"
+
+// MemorySummary totals the memory-kind rows that the budget excludes.
+func MemorySummary(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Summary, error) {
+	var s Summary
+	err := q.QueryRowContext(ctx, memorySummarySQL, pricing.TierHigh, MonthStart(now, loc), KindMemory).Scan(
+		&s.Calls, &s.Cost, &s.InputTokens, &s.CacheWrite, &s.CacheRead, &s.OutputTokens, &s.Searches, &s.HighTier)
+	if err != nil {
+		return Summary{}, err
 	}
 	return s, nil
 }

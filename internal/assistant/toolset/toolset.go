@@ -5,7 +5,9 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
 	"github.com/jeiang/atrium/internal/assistant/tool"
+	askoperatortools "github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
+	filetools "github.com/jeiang/atrium/internal/assistant/tools/files"
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	mediatools "github.com/jeiang/atrium/internal/assistant/tools/media"
@@ -31,6 +33,7 @@ func Undoers(env config.Env) *writes.Registry {
 	notiontools.RegisterUndoers(r, env)
 	mailtools.RegisterUndoer(r)
 	scheduletools.RegisterUndoers(r)
+	filetools.RegisterUndoer(r)
 	return r
 }
 
@@ -40,6 +43,8 @@ func Undoers(env config.Env) *writes.Registry {
 func Registry() (*registry.Registry, error) {
 	r := registry.New()
 	for _, group := range [][]tool.Tool{
+		askoperatortools.Tools(),
+		filetools.Tools(),
 		mailtools.Tools(),
 		calendartools.Tools(),
 		mediatools.Tools(),
