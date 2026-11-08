@@ -40,22 +40,19 @@ func chosenSnapshots(messages []mailops.Snapshot, wanted any) ([]mailops.Snapsho
 	if wanted == nil {
 		return slices.Clone(messages), nil
 	}
-	items, err := py.Iter(wanted)
-	if err != nil {
-		return nil, err
+	items, ok := wanted.([]any)
+	if !ok {
+		return nil, proposals.SelectionError("selection is not a list")
 	}
 	ids := map[int64]bool{}
 	outside := false
 	for _, item := range items {
-		id, err := py.Int(item)
-		if err != nil {
-			return nil, err
-		}
-		if id.IsInt64() {
-			ids[id.Int64()] = true
-		} else {
+		id, ok := numberToInt64(item)
+		if !ok {
 			outside = true
+			continue
 		}
+		ids[id] = true
 	}
 	known := map[int64]bool{}
 	for _, m := range messages {
@@ -86,16 +83,15 @@ type planned struct {
 	snaps []mailops.Snapshot
 }
 
-func get(d py.Dict, key string) any {
-	v, _ := d.Get(key)
-	return v
+func get(d map[string]any, key string) any {
+	return d[key]
 }
 
 func selected(selection any, key string) (any, error) {
-	if !py.Truthy(selection) {
+	if !truthy(selection) {
 		return nil, nil
 	}
-	d, ok := selection.(py.Dict)
+	d, ok := selection.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("selection is not an object")
 	}
@@ -107,21 +103,21 @@ func resolveGroups(groups []group, selection any) ([]planned, error) {
 	if err != nil {
 		return nil, err
 	}
-	byID := map[string]py.Dict{}
+	byID := map[string]map[string]any{}
 	if picksV != nil {
-		list, err := py.Iter(picksV)
-		if err != nil {
-			return nil, err
+		list, ok := picksV.([]any)
+		if !ok {
+			return nil, proposals.SelectionError("selection does not match the proposal groups")
 		}
 		if len(list) != len(groups) {
 			return nil, proposals.SelectionError("selection does not match the proposal groups")
 		}
 		for _, value := range list {
-			d, ok := value.(py.Dict)
+			d, ok := value.(map[string]any)
 			if !ok {
 				return nil, fmt.Errorf("selection group is not an object")
 			}
-			id, _ := d.Get("id")
+			id := d["id"]
 			name, ok := id.(string)
 			if !ok || name == "" {
 				return nil, proposals.SelectionError("selection group is missing its id")
@@ -134,7 +130,7 @@ func resolveGroups(groups []group, selection any) ([]planned, error) {
 	}
 	plan := make([]planned, 0, len(groups))
 	for _, g := range groups {
-		pick := py.Dict{}
+		pick := map[string]any{}
 		if picksV != nil {
 			found, ok := byID[g.Dest]
 			if !ok {
@@ -143,7 +139,7 @@ func resolveGroups(groups []group, selection any) ([]planned, error) {
 			pick = found
 		}
 		value := g.Dest
-		if chosen := get(pick, "name"); py.Truthy(chosen) {
+		if chosen := get(pick, "name"); truthy(chosen) {
 			s, ok := chosen.(string)
 			if !ok {
 				return nil, fmt.Errorf("selection name is not text")
@@ -543,20 +539,19 @@ func (e *Executors) trashItems(ctx context.Context, client mail.Client, pid int6
 	return trashed, nil
 }
 
-func decode(raw json.RawMessage) (py.Dict, error) {
-	v, err := py.JSONLoads(raw)
-	if err != nil {
+func decode(raw json.RawMessage) (map[string]any, error) {
+	var d map[string]any
+	if err := json.Unmarshal(raw, &d); err != nil {
 		return nil, err
 	}
-	d, ok := v.(py.Dict)
-	if !ok {
+	if d == nil {
 		return nil, fmt.Errorf("proposal payload is not an object")
 	}
 	return d, nil
 }
 
-func required(d py.Dict, key string) (any, error) {
-	v, ok := d.Get(key)
+func required(d map[string]any, key string) (any, error) {
+	v, ok := d[key]
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", httpx.ErrMissing, strconv.Quote(key))
 	}
@@ -565,8 +560,49 @@ func required(d py.Dict, key string) (any, error) {
 
 func snapshotsOf(v any) ([]mailops.Snapshot, error) {
 	var out []mailops.Snapshot
-	err := json.Unmarshal([]byte(py.JSONDumps(v)), &out)
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, err
+	}
+	err = json.Unmarshal(b, &out)
 	return out, err
+}
+
+func truthy(v any) bool {
+	switch v := v.(type) {
+	case nil:
+		return false
+	case bool:
+		return v
+	case string:
+		return v != ""
+	case int:
+		return v != 0
+	case int64:
+		return v != 0
+	case float64:
+		return v != 0
+	case []any:
+		return len(v) > 0
+	case map[string]any:
+		return len(v) > 0
+	}
+	return true
+}
+
+func numberToInt64(v any) (int64, bool) {
+	switch n := v.(type) {
+	case int:
+		return int64(n), true
+	case int64:
+		return n, true
+	case float64:
+		return int64(n), n == float64(int64(n))
+	case json.Number:
+		i, err := n.Int64()
+		return i, err == nil
+	}
+	return 0, false
 }
 
 func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, selection any) (any, error) {
@@ -666,7 +702,7 @@ func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, 
 	if err != nil {
 		return nil, err
 	}
-	ruleDict, ok := rule.(py.Dict)
+	ruleDict, ok := rule.(map[string]any)
 	if !ok {
 		return nil, fmt.Errorf("proposal rule is not an object")
 	}
