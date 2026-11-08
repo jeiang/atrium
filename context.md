@@ -12,8 +12,9 @@ behavior-parity target.
   with embedded assets, packaged and deployed through a NixOS module. The
   module takes typed deployment options, application settings rendered to
   TOML, and secret settings as files delivered through systemd
-  credentials to every unit and `atrium-run`. The ntfy token still comes
-  from an environment file until it becomes a setting. Calendar and
+  credentials to every unit and `atrium-run`. Ntfy tokens are secrets
+  (`ntfy_token_assistant`, `ntfy_token_media`, `ntfy_token_system`);
+  `NTFY_TOKEN` is only the fallback. Calendar and
   contacts sign in with an iCloud mail account's app password or a Google
   OAuth client consented from the integrations page.
 - The application brings together mail, calendar, contacts, Notion,
@@ -21,7 +22,8 @@ behavior-parity target.
   chat, files, projects, skills, scheduled work, and research subagents.
   A skill is a name, one-line description and Markdown body, exchanged as
   `SKILL.md` folders through the Skills page and `atrium skills`; the
-  prompt carries only a budgeted index of them.
+  prompt carries only a budgeted index of them. The new-thread composer
+  takes the model, effort, context size, thinking, web search and cost cap.
 - The system prompt and subagent rules are operator-editable settings over
   built-in defaults; the untrusted-data preamble is fixed in code and always
   comes first. Edits apply to every thread's next request until the
@@ -47,11 +49,12 @@ behavior-parity target.
   operator's ntfy account. Full text goes only to topics that refuse an
   anonymous read. Three consecutive delivery failures raise an admin banner
   and a system-channel message.
-- The attention view is one query across the enabled queues: proposals,
-  drafts, open loops, commitments, event candidates, thread plans, packages
-  and tasks. Items are grouped as overdue, due soon, needs decision, waiting
-  on them and upcoming, each with its actions; a snooze hides an item until
-  its time. Tasks are a core store with open, done and dismissed status, a
+- The attention query covers the enabled queues: proposals, drafts, open
+  loops, commitments, event candidates, thread plans, packages and tasks.
+  Items are grouped as overdue, due soon, needs decision, waiting on them
+  and upcoming. The cron-only `attention` tool and the daily digest read it;
+  the attention page and its actions, including snooze, come with #471.
+  Tasks are a core store with open, done and dismissed status, a
   due date, reminder time, priority and an optional source; the assistant can
   list, add, update, complete and propose tasks, and the reminder job inserts
   a task.
@@ -236,9 +239,10 @@ behavior-parity target.
 
 ## Planned capabilities
 
-- Model, effort and context controls on the new-thread composer.
 - Independent instances for other operators, without owner-specific source
   changes.
 
-Detailed feature scope and acceptance criteria belong in the
-[Wayfinder map](https://github.com/jeiang/atrium/issues/15), not in this file.
+Detailed feature scope and acceptance criteria belong in the open issues
+that carry them: #455, #457, #471 and #476 for the remaining v2 work, plus
+the owner gates #227, #233, #245, #247 and #615. They do not belong in this
+file.
