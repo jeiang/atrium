@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"math/big"
 	"time"
@@ -142,24 +141,38 @@ func mailSearch(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	if err != nil {
 		return nil, err
 	}
-	filters := map[string]any{}
-	for _, f := range [...]struct{ filter, arg string }{
-		{"account", "account"}, {"folder", "folder"}, {"date_from", "since"}, {"date_to", "until"},
-	} {
+	var filters search.Filters
+	for _, f := range [...]struct {
+		arg string
+		set func(string)
+	}{{"account", func(v string) { filters.Account = search.Text(v) }},
+		{"folder", func(v string) { filters.Folder = search.Text(v) }}} {
 		text, ok, err := tool.TextArg(args, f.arg, false)
 		if err != nil {
 			return nil, err
 		}
 		if ok {
-			filters[f.filter] = text
-		} else {
-			filters[f.filter] = nil
+			f.set(text)
 		}
 	}
-	found, err := search.Search(ctx, tc.DB.KNN, tc.Cfg, query, filters, int(limit), embedder(tc))
-	if errors.Is(err, httpx.ErrPayload) {
-		return nil, tool.Error("bad date filter: " + httpx.Message(err))
+	for _, f := range [...]struct {
+		arg string
+		set func(*float64)
+	}{{"since", func(v *float64) { filters.DateFrom = v }}, {"until", func(v *float64) { filters.DateTo = v }}} {
+		text, ok, err := tool.TextArg(args, f.arg, false)
+		if err != nil {
+			return nil, err
+		}
+		if !ok {
+			continue
+		}
+		day, err := search.Day(text, f.arg == "until")
+		if err != nil {
+			return nil, tool.Error("bad date filter: " + httpx.Message(err))
+		}
+		f.set(day)
 	}
+	found, err := search.Search(ctx, tc.DB.KNN, search.Query{Text: query, Filters: filters, Limit: int(limit)}, embedder(tc))
 	if err != nil {
 		return nil, err
 	}

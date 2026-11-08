@@ -4,13 +4,16 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"slices"
+	"strings"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/rules"
+	"github.com/jeiang/atrium/internal/ordmap"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/scanutil"
 	"github.com/jeiang/atrium/internal/py"
@@ -68,8 +71,16 @@ func (r *row) view() py.Dict {
 	return scanutil.Message{ID: r.ID, Subject: r.Subject, FromName: r.FromName, FromAddr: r.FromAddr, DateTS: r.DateTS}.View()
 }
 
-func received(ctx context.Context, q proposals.Querier) ([]*row, error) {
-	rows, err := q.QueryContext(ctx, "SELECT "+rules.MessageColumns+" FROM messages WHERE sent = 0 ORDER BY id")
+func received(ctx context.Context, q proposals.Querier, accounts []string) ([]*row, error) {
+	if len(accounts) == 0 {
+		return nil, nil
+	}
+	args := make([]any, len(accounts))
+	for i, account := range accounts {
+		args[i] = account
+	}
+	rows, err := q.QueryContext(ctx, "SELECT "+rules.MessageColumns+" FROM messages WHERE sent = 0 AND account IN (?"+
+		strings.Repeat(",?", len(accounts)-1)+") ORDER BY id", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -100,7 +111,7 @@ func deletedIDs(ctx context.Context, q proposals.Querier) (map[int64]bool, error
 	return out, err
 }
 
-type Candidate struct {
+type candidate struct {
 	Reason  string
 	Level   level
 	Account string
@@ -112,57 +123,20 @@ type Candidate struct {
 
 type groupKey struct{ account, key, tmpl string }
 
-type groups struct {
-	order []groupKey
-	rows  map[groupKey][]*row
-}
-
-func (g *groups) add(k groupKey, r *row) {
-	if g.rows == nil {
-		g.rows = map[groupKey][]*row{}
-	}
-	if _, seen := g.rows[k]; !seen {
-		g.order = append(g.order, k)
-	}
-	g.rows[k] = append(g.rows[k], r)
-}
-
-func (g *groups) sorted() []groupKey {
-	keys := slices.Clone(g.order)
-	slices.SortFunc(keys, func(a, b groupKey) int {
-		switch {
-		case a.account != b.account:
-			return compare(a.account, b.account)
-		case a.key != b.key:
-			return compare(a.key, b.key)
-		}
-		return compare(a.tmpl, b.tmpl)
-	})
-	return keys
-}
-
-func compare(a, b string) int {
-	switch {
-	case a < b:
-		return -1
-	case a > b:
-		return 1
-	}
-	return 0
-}
-
-func (p params) candidates(everyone []*row, deleted map[int64]bool) []Candidate {
-	var found []Candidate
+func (p params) candidates(everyone []*row, deleted map[int64]bool) []candidate {
+	var found []candidate
 	claimed := map[int64]bool{}
 	for _, lv := range levels {
-		var g groups
+		var g ordmap.Map[groupKey, []*row]
 		for _, r := range everyone {
 			if !claimed[r.ID] && r.column(lv.column) != "" && r.SubjectTmpl != "" {
-				g.add(groupKey{r.Account, r.column(lv.column), r.SubjectTmpl}, r)
+				k := groupKey{r.Account, r.column(lv.column), r.SubjectTmpl}
+				rows, _ := g.Get(k)
+				g.Set(k, append(rows, r))
 			}
 		}
-		for _, k := range g.sorted() {
-			rows := g.rows[k]
+		for _, k := range g.Sorted(compareKeys) {
+			rows, _ := g.Get(k)
 			gone := 0
 			for _, r := range rows {
 				if deleted[r.ID] {
@@ -173,18 +147,20 @@ func (p params) candidates(everyone []*row, deleted map[int64]bool) []Candidate 
 				for _, r := range rows {
 					claimed[r.ID] = true
 				}
-				found = append(found, Candidate{ReasonDeleted, lv, k.account, k.key, k.tmpl, rows, gone})
+				found = append(found, candidate{ReasonDeleted, lv, k.account, k.key, k.tmpl, rows, gone})
 			}
 		}
 	}
-	var otp groups
+	var otp ordmap.Map[groupKey, []*row]
 	for _, r := range everyone {
 		if r.FromDomain != "" && r.SubjectTmpl != "" {
-			otp.add(groupKey{r.Account, r.FromDomain, r.SubjectTmpl}, r)
+			k := groupKey{r.Account, r.FromDomain, r.SubjectTmpl}
+			rows, _ := otp.Get(k)
+			otp.Set(k, append(rows, r))
 		}
 	}
-	for _, k := range otp.sorted() {
-		rows := otp.rows[k]
+	for _, k := range otp.Sorted(compareKeys) {
+		rows, _ := otp.Get(k)
 		codes, all := 0, true
 		for _, r := range rows {
 			if r.OTP6 || r.VCode {
@@ -193,19 +169,23 @@ func (p params) candidates(everyone []*row, deleted map[int64]bool) []Candidate 
 			all = all && claimed[r.ID]
 		}
 		if len(rows) >= p.minGroup && float64(codes)/float64(len(rows)) >= p.otpMinShare && !all {
-			found = append(found, Candidate{ReasonOTP, levels[1], k.account, k.key, k.tmpl, rows, codes})
+			found = append(found, candidate{ReasonOTP, levels[1], k.account, k.key, k.tmpl, rows, codes})
 		}
 	}
 	return found
 }
 
-func BuildRule(account, levelName, key, tmpl string, olderThanDays int) py.Dict {
-	lv := levels[0]
-	for _, l := range levels {
-		if l.name == levelName {
-			lv = l
-		}
+func compareKeys(a, b groupKey) int {
+	switch {
+	case a.account != b.account:
+		return strings.Compare(a.account, b.account)
+	case a.key != b.key:
+		return strings.Compare(a.key, b.key)
 	}
+	return strings.Compare(a.tmpl, b.tmpl)
+}
+
+func buildRule(account string, lv level, key, tmpl string, olderThanDays int) py.Dict {
 	when := []any{
 		py.Dict{{Key: "field", Value: lv.column}, {Key: "op", Value: lv.op}, {Key: "value", Value: key}},
 		py.Dict{{Key: "field", Value: "subject_tmpl"}, {Key: "op", Value: "eq"}, {Key: "value", Value: tmpl}},
@@ -216,29 +196,19 @@ func BuildRule(account, levelName, key, tmpl string, olderThanDays int) py.Dict 
 		reason = ReasonOTP
 	}
 	return py.Dict{
-		{Key: "id", Value: "del-" + scanutil.Digest(account, reason, levelName, key, tmpl)[:10]},
+		{Key: "id", Value: "del-" + scanutil.Digest(account, reason, lv.name, key, tmpl)[:10]},
 		{Key: "account", Value: account}, {Key: "action", Value: "delete"}, {Key: "when", Value: when},
 	}
 }
 
-type proposal struct {
-	fingerprint      string
-	title            string
-	payload, preview py.Dict
-}
-
-func (p params) build(ctx context.Context, q proposals.Querier, everyone []*row, c Candidate, now float64) (*proposal, error) {
+func (p params) build(ctx context.Context, q proposals.Querier, everyone []*row, existing []rules.Rule, c candidate, now float64) (*scanutil.Draft, error) {
 	otp := c.Reason == ReasonOTP
 	days := 0
 	if otp {
 		days = p.otpOlderThanDays
 	}
-	rule := BuildRule(c.Account, c.Level.name, c.Key, c.Tmpl, days)
+	rule := buildRule(c.Account, c.Level, c.Key, c.Tmpl, days)
 	parsed, err := rules.ValidateRule(rule)
-	if err != nil {
-		return nil, err
-	}
-	existing, err := rules.LoadRules(ctx, q, c.Account)
 	if err != nil {
 		return nil, err
 	}
@@ -277,23 +247,20 @@ func (p params) build(ctx context.Context, q proposals.Querier, everyone []*row,
 	if err != nil {
 		return nil, err
 	}
-	var older any
-	if otp {
-		older = p.otpOlderThanDays
+	when, ok := rule.Get("when")
+	if !ok {
+		return nil, fmt.Errorf("%w: rule has no conditions", httpx.ErrShape)
 	}
-	when, _ := rule.Get("when")
-	return &proposal{
-		fingerprint: fmt.Sprintf("%s:%s:%s:%s:%s", Kind, c.Account, c.Reason, c.Level.name, scanutil.Digest(c.Key, c.Tmpl)),
-		title:       fmt.Sprintf("Delete %d messages and future mail matching %s / %s", len(ids), c.Key, c.Tmpl),
-		payload: py.Dict{
+	return &scanutil.Draft{
+		Title: fmt.Sprintf("Delete %d messages and future mail matching %s / %s", len(ids), c.Key, c.Tmpl),
+		Payload: py.Dict{
 			{Key: "rule", Value: rule}, {Key: "reason", Value: c.Reason}, {Key: "messages", Value: scanutil.SnapshotList(snaps)},
 		},
-		preview: py.Dict{
+		Preview: py.Dict{
 			{Key: "reason", Value: c.Reason},
 			{Key: "rule", Value: py.Dict{{Key: "account", Value: c.Account}, {Key: "when", Value: when}}},
-			{Key: "stats", Value: py.Dict{{Key: "messages", Value: len(c.Rows)}, {Key: "matched", Value: c.Hits}}},
-			{Key: "older_than_days", Value: older}, {Key: "backlog", Value: len(ids)},
-			{Key: "sample", Value: views[:min(len(views), 10)]}, {Key: "subjects", Value: p.limits.SampleSubjectsOf(messages)},
+			{Key: "backlog", Value: len(ids)},
+			{Key: "subjects", Value: p.limits.SampleSubjectsOf(messages)},
 			{Key: "senders", Value: p.limits.TopCounts(senders)}, {Key: "messages", Value: views},
 		},
 	}, nil
@@ -304,7 +271,19 @@ func Scan(ctx context.Context, d *db.DB, ts float64) (scanutil.Result, error) {
 	if err != nil {
 		return scanutil.Result{}, err
 	}
-	everyone, err := received(ctx, d.Read)
+	accounts, err := config.ExistingAccounts(ctx, d.Read)
+	if err != nil {
+		return scanutil.Result{}, err
+	}
+	names := make([]string, len(accounts))
+	loaded := map[string][]rules.Rule{}
+	for i, spec := range accounts {
+		names[i] = spec.Name
+		if loaded[spec.Name], err = rules.LoadRules(ctx, d.Read, spec.Name); err != nil {
+			return scanutil.Result{}, err
+		}
+	}
+	everyone, err := received(ctx, d.Read, names)
 	if err != nil {
 		return scanutil.Result{}, err
 	}
@@ -315,15 +294,11 @@ func Scan(ctx context.Context, d *db.DB, ts float64) (scanutil.Result, error) {
 	found := p.candidates(everyone, deleted)
 	created := 0
 	for _, c := range found {
-		b, err := p.build(ctx, d.Read, everyone, c, ts)
-		if err != nil {
-			return scanutil.Result{}, err
-		}
-		if b == nil {
-			continue
-		}
+		fingerprint := fmt.Sprintf("%s:%s:%s:%s:%s", Kind, c.Account, c.Reason, c.Level.name, scanutil.Digest(c.Key, c.Tmpl))
 		account := c.Account
-		_, ok, err := proposals.Create(ctx, d, Kind, &account, b.title, b.payload, b.preview, b.fingerprint, ts)
+		_, ok, err := scanutil.Publish(ctx, d, ts, Kind, &account, fingerprint, func() (*scanutil.Draft, error) {
+			return p.build(ctx, d.Read, everyone, loaded[c.Account], c, ts)
+		})
 		if err != nil {
 			return scanutil.Result{}, err
 		}

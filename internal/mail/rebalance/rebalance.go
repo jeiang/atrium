@@ -13,6 +13,7 @@ import (
 
 	"regexp"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
@@ -20,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
+	"github.com/jeiang/atrium/internal/ordmap"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/scanutil"
 	"github.com/jeiang/atrium/internal/py"
@@ -153,22 +155,27 @@ func (c Candidate) Fingerprint() string {
 type folderKey struct{ account, folder string }
 
 type folders struct {
-	order []folderKey
-	rows  map[folderKey][]*row
+	rows ordmap.Map[folderKey, []*row]
 }
 
 func (f folders) sorted() []folderKey {
-	keys := slices.Clone(f.order)
-	slices.SortFunc(keys, func(a, b folderKey) int {
+	return f.rows.Sorted(func(a, b folderKey) int {
 		return cmp.Or(cmp.Compare(a.account, b.account), cmp.Compare(a.folder, b.folder))
 	})
-	return keys
 }
 
-func folderRows(ctx context.Context, q proposals.Querier) (folders, error) {
-	f := folders{rows: map[folderKey][]*row{}}
+func folderRows(ctx context.Context, q proposals.Querier, accounts []string) (folders, error) {
+	var f folders
+	if len(accounts) == 0 {
+		return f, nil
+	}
+	args := make([]any, len(accounts))
+	for i, account := range accounts {
+		args[i] = account
+	}
 	rows, err := q.QueryContext(ctx, "SELECT id, account, folder, from_addr, from_domain, from_name, subject, subject_tmpl, date_ts "+
-		"FROM messages WHERE gone_at IS NULL AND sent = 0 AND in_inbox = 0 AND folder IS NOT NULL AND folder != '' ORDER BY id")
+		"FROM messages WHERE gone_at IS NULL AND sent = 0 AND in_inbox = 0 AND folder IS NOT NULL AND folder != '' AND account IN (?"+
+		strings.Repeat(",?", len(accounts)-1)+") ORDER BY id", args...)
 	if err != nil {
 		return f, err
 	}
@@ -182,30 +189,21 @@ func folderRows(ctx context.Context, q proposals.Querier) (folders, error) {
 	}
 	for _, m := range all {
 		key := folderKey{m.Account, m.Folder}
-		if _, seen := f.rows[key]; !seen {
-			f.order = append(f.order, key)
-		}
-		f.rows[key] = append(f.rows[key], m)
+		existing, _ := f.rows.Get(key)
+		f.rows.Set(key, append(existing, m))
 	}
 	return f, nil
 }
 
-type grouped struct {
-	order []string
-	ids   map[string][]int64
-}
-
-func groupBy(rows []*row, key keyer) grouped {
-	g := grouped{ids: map[string][]int64{}}
+func groupBy(rows []*row, key keyer) ordmap.Map[string, []int64] {
+	var g ordmap.Map[string, []int64]
 	for _, r := range rows {
 		k := key(r)
 		if k == "" {
 			continue
 		}
-		if _, seen := g.ids[k]; !seen {
-			g.order = append(g.order, k)
-		}
-		g.ids[k] = append(g.ids[k], r.ID)
+		ids, _ := g.Get(k)
+		g.Set(k, append(ids, r.ID))
 	}
 	return g
 }
@@ -223,9 +221,10 @@ func sortGroups(groups []Group) {
 func (p params) bigGroups(rows []*row, key keyer, total int) []Group {
 	g := groupBy(rows, key)
 	var out []Group
-	for _, k := range g.order {
-		if p.big(len(g.ids[k]), total) {
-			out = append(out, Group{k, g.ids[k]})
+	for _, k := range g.Keys() {
+		ids, _ := g.Get(k)
+		if p.big(len(ids), total) {
+			out = append(out, Group{k, ids})
 		}
 	}
 	sortGroups(out)
@@ -440,12 +439,8 @@ func (p params) embeddingSplit(ctx context.Context, q proposals.Querier, rows []
 		for i, id := range members {
 			domains[i] = byID[id].FromDomain
 		}
-		top := p.limits.TopCounts(domains)
-		names := make([]string, 0, 3)
-		for _, d := range top[:min(len(top), 3)] {
-			label, _ := d.(py.Dict).Get("label")
-			names = append(names, label.(string))
-		}
+		names := p.limits.TopLabelsOf(domains)
+		names = names[:min(len(names), 3)]
 		slices.Sort(names)
 		groups = append(groups, Group{strings.Join(names, "|"), members})
 	}
@@ -459,7 +454,7 @@ func (p params) embeddingSplit(ctx context.Context, q proposals.Querier, rows []
 func (p params) splitCandidates(ctx context.Context, q proposals.Querier, f folders) ([]Candidate, error) {
 	var found []Candidate
 	for _, key := range f.sorted() {
-		rows := f.rows[key]
+		rows, _ := f.rows.Get(key)
 		if len(rows) < p.minFolder {
 			continue
 		}
@@ -479,50 +474,44 @@ func (p params) splitCandidates(ctx context.Context, q proposals.Querier, f fold
 
 type placedKey struct{ account, key string }
 
-type counter struct {
-	order []string
-	n     map[string]int
-}
-
 func (p params) mergeCandidates(f folders) []Candidate {
 	var found []Candidate
 	for _, lv := range mergeLevels {
-		placed := map[placedKey]*counter{}
-		for _, fk := range f.order {
-			for _, r := range f.rows[fk] {
+		var placed ordmap.Map[placedKey, *ordmap.Map[string, int]]
+		for _, fk := range f.rows.Keys() {
+			rows, _ := f.rows.Get(fk)
+			for _, r := range rows {
 				k := lv.key(r)
 				if k == "" {
 					continue
 				}
 				pk := placedKey{fk.account, k}
-				c := placed[pk]
-				if c == nil {
-					c = &counter{n: map[string]int{}}
-					placed[pk] = c
+				c, ok := placed.Get(pk)
+				if !ok {
+					c = &ordmap.Map[string, int]{}
+					placed.Set(pk, c)
 				}
-				if c.n[fk.folder] == 0 {
-					c.order = append(c.order, fk.folder)
-				}
-				c.n[fk.folder]++
+				n, _ := c.Get(fk.folder)
+				c.Set(fk.folder, n+1)
 			}
 		}
 		for _, fk := range f.sorted() {
-			rows := f.rows[fk]
+			rows, _ := f.rows.Get(fk)
 			if len(rows) < p.minFolder {
 				continue
 			}
 			g := groupBy(rows, lv.key)
-			keys := slices.Clone(g.order)
+			keys := g.Keys()
 			slices.Sort(keys)
 			for _, k := range keys {
-				ids := g.ids[k]
-				counts := placed[placedKey{fk.account, k}]
+				ids, _ := g.Get(k)
+				counts, _ := placed.Get(placedKey{fk.account, k})
 				total, into, top := 0, "", -1
-				for _, folder := range counts.order {
+				for _, folder := range counts.Keys() {
 					if folder == fk.folder {
 						continue
 					}
-					n := counts.n[folder]
+					n, _ := counts.Get(folder)
 					total += n
 					if n > top || n == top && folder > into {
 						into, top = folder, n
@@ -560,17 +549,8 @@ func (p params) mergeCandidates(f folders) []Candidate {
 	return unique
 }
 
-func Detect(ctx context.Context, q proposals.Querier) ([]Candidate, error) {
-	p, err := readParams(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-	_, found, err := p.detect(ctx, q)
-	return found, err
-}
-
-func (p params) detect(ctx context.Context, q proposals.Querier) (folders, []Candidate, error) {
-	f, err := folderRows(ctx, q)
+func (p params) detect(ctx context.Context, q proposals.Querier, accounts []string) (folders, []Candidate, error) {
+	f, err := folderRows(ctx, q, accounts)
 	if err != nil {
 		return f, nil, err
 	}
@@ -602,7 +582,7 @@ func (p params) termsOf(rows []*row) []string {
 	return words[:min(len(words), p.topTerms)]
 }
 
-func CleanName(value string, maxChars int) string {
+func cleanName(value string, maxChars int) string {
 	name := junkRE.ReplaceAllString(value, " ")
 	name = spacesRE.ReplaceAllString(name, " ")
 	return py.Strip(py.Clip(py.Strip(name), maxChars))
@@ -627,13 +607,13 @@ func SuggestName(chatURL string) Namer {
 			if fields, ok := answer.(py.Dict); ok {
 				if value, _ := fields.Get("name"); value != nil {
 					if s, isString := value.(string); isString {
-						name = CleanName(s, maxChars)
+						name = cleanName(s, maxChars)
 					}
 				}
 			}
 		}
 		if name == "" && len(domains) > 0 {
-			name = CleanName(domains[0], maxChars)
+			name = cleanName(domains[0], maxChars)
 		}
 		if name == "" {
 			name = "Split"
@@ -642,32 +622,34 @@ func SuggestName(chatURL string) Namer {
 	}
 }
 
-func (p params) groupPreview(rows []*row, name string) py.Dict {
+type groupPreview struct {
+	Domains []string
+	Terms   []string
+	dict    py.Dict
+}
+
+func (g groupPreview) Dict() py.Dict { return g.dict }
+
+func (g groupPreview) WithName(name string) py.Dict { return g.dict.Set("name", name) }
+
+func (p params) preview(rows []*row, name string) groupPreview {
 	domains := make([]string, len(rows))
-	addrs := make([]string, len(rows))
 	messages := make([]scanutil.Message, len(rows))
 	views := make([]any, len(rows))
 	for i, r := range rows {
 		domains[i] = r.FromDomain
-		addrs[i] = r.FromAddr
 		messages[i] = r.Message
 		views[i] = r.View()
 	}
-	return py.Dict{
-		{Key: "name", Value: name}, {Key: "count", Value: len(rows)}, {Key: "senders", Value: p.limits.TopCounts(domains)},
-		{Key: "addresses", Value: p.limits.TopCounts(addrs)}, {Key: "terms", Value: p.termsOf(rows)},
-		{Key: "subjects", Value: p.limits.SampleSubjectsOf(messages)}, {Key: "messages", Value: views},
+	terms := p.termsOf(rows)
+	return groupPreview{
+		Domains: p.limits.TopLabelsOf(domains), Terms: terms,
+		dict: py.Dict{
+			{Key: "name", Value: name}, {Key: "count", Value: len(rows)}, {Key: "senders", Value: p.limits.TopCounts(domains)},
+			{Key: "terms", Value: terms},
+			{Key: "subjects", Value: p.limits.SampleSubjectsOf(messages)}, {Key: "messages", Value: views},
+		},
 	}
-}
-
-type built struct {
-	title            string
-	payload, preview py.Dict
-}
-
-func snapshots(ctx context.Context, q proposals.Querier, ids []int64) ([]any, error) {
-	snaps, err := mailops.Snapshots(ctx, q, ids)
-	return scanutil.SnapshotList(snaps), err
 }
 
 func groupRows(byID map[int64]*row, ids []int64) []*row {
@@ -681,23 +663,23 @@ func groupRows(byID map[int64]*row, ids []int64) []*row {
 	return rows
 }
 
-func (p params) build(ctx context.Context, q proposals.Querier, byID map[int64]*row, cand Candidate, namer Namer) (built, error) {
+func (p params) build(ctx context.Context, q proposals.Querier, byID map[int64]*row, cand Candidate, namer Namer) (*scanutil.Draft, error) {
 	if cand.Kind == Merge {
 		g := cand.Groups[0]
 		rows := groupRows(byID, g.IDs)
-		snaps, err := snapshots(ctx, q, g.IDs)
+		snaps, err := mailops.Snapshots(ctx, q, g.IDs)
 		if err != nil {
-			return built{}, err
+			return nil, err
 		}
-		return built{
-			title: fmt.Sprintf("Move %d messages from %s to %s", len(rows), cand.Folder, cand.Into),
-			payload: py.Dict{{Key: "folder", Value: cand.Folder}, {Key: "groups", Value: []any{
-				py.Dict{{Key: "dest", Value: cand.Into}, {Key: "messages", Value: snaps}},
+		return &scanutil.Draft{
+			Title: fmt.Sprintf("Move %d messages from %s to %s", len(rows), cand.Folder, cand.Into),
+			Payload: py.Dict{{Key: "folder", Value: cand.Folder}, {Key: "groups", Value: []any{
+				py.Dict{{Key: "dest", Value: cand.Into}, {Key: "messages", Value: scanutil.SnapshotList(snaps)}},
 			}}},
-			preview: py.Dict{
+			Preview: py.Dict{
 				{Key: "folder", Value: cand.Folder},
 				{Key: "sources", Value: []any{py.Dict{{Key: "folder", Value: cand.Folder}, {Key: "count", Value: len(rows)}}}},
-				{Key: "into", Value: cand.Into}, {Key: "into_exists", Value: true}, {Key: "group", Value: p.groupPreview(rows, cand.Into)},
+				{Key: "into", Value: cand.Into}, {Key: "group", Value: p.preview(rows, cand.Into).Dict()},
 			},
 		}, nil
 	}
@@ -705,31 +687,24 @@ func (p params) build(ctx context.Context, q proposals.Querier, byID map[int64]*
 	count := 0
 	for _, g := range cand.Groups {
 		rows := groupRows(byID, g.IDs)
-		info := p.groupPreview(rows, "")
-		var domains []string
-		senders, _ := info.Get("senders")
-		for _, d := range senders.([]any) {
-			label, _ := d.(py.Dict).Get("label")
-			domains = append(domains, label.(string))
-		}
-		terms, _ := info.Get("terms")
-		short, err := namer(ctx, cand.Folder, domains, terms.([]string), p.nameMax)
+		info := p.preview(rows, "")
+		short, err := namer(ctx, cand.Folder, info.Domains, info.Terms, p.nameMax)
 		if err != nil {
-			return built{}, err
+			return nil, err
 		}
 		dest := cand.Folder + "/" + short
-		previewGroups = append(previewGroups, info.Set("name", dest))
-		snaps, err := snapshots(ctx, q, g.IDs)
+		previewGroups = append(previewGroups, info.WithName(dest))
+		snaps, err := mailops.Snapshots(ctx, q, g.IDs)
 		if err != nil {
-			return built{}, err
+			return nil, err
 		}
-		payloadGroups = append(payloadGroups, py.Dict{{Key: "dest", Value: dest}, {Key: "messages", Value: snaps}})
+		payloadGroups = append(payloadGroups, py.Dict{{Key: "dest", Value: dest}, {Key: "messages", Value: scanutil.SnapshotList(snaps)}})
 		count += len(rows)
 	}
-	return built{
-		title:   fmt.Sprintf("Split %d messages out of %s into %d new folders", count, cand.Folder, len(previewGroups)),
-		payload: py.Dict{{Key: "folder", Value: cand.Folder}, {Key: "groups", Value: payloadGroups}},
-		preview: py.Dict{{Key: "folder", Value: cand.Folder}, {Key: "groups", Value: previewGroups}},
+	return &scanutil.Draft{
+		Title:   fmt.Sprintf("Split %d messages out of %s into %d new folders", count, cand.Folder, len(previewGroups)),
+		Payload: py.Dict{{Key: "folder", Value: cand.Folder}, {Key: "groups", Value: payloadGroups}},
+		Preview: py.Dict{{Key: "folder", Value: cand.Folder}, {Key: "groups", Value: previewGroups}},
 	}, nil
 }
 
@@ -810,7 +785,15 @@ func Scan(ctx context.Context, d *db.DB, ts float64, namer Namer) (scanutil.Resu
 	if ctx, err = mail.WithModels(ctx, d.Read); err != nil {
 		return scanutil.Result{}, err
 	}
-	f, candidates, err := p.detect(ctx, d.Read)
+	accounts, err := config.ExistingAccounts(ctx, d.Read)
+	if err != nil {
+		return scanutil.Result{}, err
+	}
+	names := make([]string, len(accounts))
+	for i, spec := range accounts {
+		names[i] = spec.Name
+	}
+	f, candidates, err := p.detect(ctx, d.Read, names)
 	if err != nil {
 		return scanutil.Result{}, err
 	}
@@ -819,7 +802,8 @@ func Scan(ctx context.Context, d *db.DB, ts float64, namer Namer) (scanutil.Resu
 		return scanutil.Result{}, err
 	}
 	byID := map[int64]*row{}
-	for _, rows := range f.rows {
+	for _, key := range f.rows.Keys() {
+		rows, _ := f.rows.Get(key)
 		for _, r := range rows {
 			byID[r.ID] = r
 		}
@@ -830,12 +814,10 @@ func Scan(ctx context.Context, d *db.DB, ts float64, namer Namer) (scanutil.Resu
 		if runs[fp] < int64(p.runsRequired) {
 			continue
 		}
-		b, err := p.build(ctx, d.Read, byID, cand, namer)
-		if err != nil {
-			return scanutil.Result{}, err
-		}
 		account := cand.Account
-		_, ok, err := proposals.Create(ctx, d, cand.Kind, &account, b.title, b.payload, b.preview, fp, ts)
+		_, ok, err := scanutil.Publish(ctx, d, ts, cand.Kind, &account, fp, func() (*scanutil.Draft, error) {
+			return p.build(ctx, d.Read, byID, cand, namer)
+		})
 		if err != nil {
 			return scanutil.Result{}, err
 		}

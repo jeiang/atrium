@@ -53,6 +53,11 @@ func WallToUnix(loc *time.Location, wall int64) int64 {
 	return wall - offsetAt(loc, wall-slices.Max(offsets))
 }
 
+func ParseDay(value string) (time.Time, bool) {
+	day, err := time.Parse("2006-01-02", value)
+	return day, err == nil
+}
+
 func SplitTimestamp(ts float64) (sec, us int64) {
 	whole := math.Floor(ts)
 	frac := math.RoundToEven((ts - whole) * microsecondsPerSec)

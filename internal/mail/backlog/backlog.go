@@ -3,8 +3,6 @@ package backlog
 import (
 	"cmp"
 	"context"
-	"database/sql"
-	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -15,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
-	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/scanutil"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -35,20 +32,21 @@ type Error string
 
 func (e Error) Error() string { return string(e) }
 
-type Proposal struct {
-	Fingerprint string
-	Account     string
-	Title       string
-	Payload     py.Dict
-	Preview     py.Dict
-}
-
 type group struct {
 	dest string
 	rows []scanutil.Message
 }
 
-func Build(ctx context.Context, q live.Querier, account string) (*Proposal, error) {
+type detection struct {
+	account    string
+	ids        []string
+	groups     []*group
+	goliveText string
+	folder     string
+	unit       string
+}
+
+func detect(ctx context.Context, q live.Querier, account string) (*detection, error) {
 	params, err := live.QueryParams(ctx, q, account)
 	if err != nil {
 		return nil, err
@@ -96,18 +94,25 @@ func Build(ctx context.Context, q live.Querier, account string) (*Proposal, erro
 	if golive != nil {
 		goliveText = *golive
 	}
-	gmail := config.Preset(account) == config.Gmail
 	folder, unit := config.Inbox, "folders"
-	if gmail {
+	if config.Preset(account) == config.Gmail {
 		folder, unit = mailops.InboxLabel, "labels"
 	}
-	payloadGroups := make([]any, len(groups))
-	previewGroups := make([]any, len(groups))
+	return &detection{account: account, ids: ids, groups: groups, goliveText: goliveText, folder: folder, unit: unit}, nil
+}
+
+func (d *detection) fingerprint() string {
+	return fmt.Sprintf("%s:%s:%s", Kind, d.account, scanutil.Digest(append([]string{d.goliveText}, d.ids...)...))
+}
+
+func (d *detection) draft(ctx context.Context, q live.Querier) (*scanutil.Draft, error) {
+	payloadGroups := make([]any, len(d.groups))
+	previewGroups := make([]any, len(d.groups))
 	lim, err := scanutil.ReadLimits(ctx, q)
 	if err != nil {
 		return nil, err
 	}
-	for i, g := range groups {
+	for i, g := range d.groups {
 		groupIDs := make([]int64, len(g.rows))
 		views := make([]any, len(g.rows))
 		senders := make([]string, len(g.rows))
@@ -118,23 +123,17 @@ func Build(ctx context.Context, q live.Querier, account string) (*Proposal, erro
 		if err != nil {
 			return nil, err
 		}
-		messages := make([]any, len(snaps))
-		for j, s := range snaps {
-			messages[j] = s.Dict()
-		}
-		payloadGroups[i] = py.Dict{{Key: "dest", Value: g.dest}, {Key: "messages", Value: messages}}
+		payloadGroups[i] = py.Dict{{Key: "dest", Value: g.dest}, {Key: "messages", Value: scanutil.SnapshotList(snaps)}}
 		previewGroups[i] = py.Dict{
-			{Key: "name", Value: g.dest}, {Key: "count", Value: len(g.rows)}, {Key: "terms", Value: []any{}},
+			{Key: "name", Value: g.dest}, {Key: "count", Value: len(g.rows)},
 			{Key: "senders", Value: lim.TopCounts(senders)}, {Key: "subjects", Value: lim.SampleSubjectsOf(g.rows)},
 			{Key: "messages", Value: views},
 		}
 	}
-	return &Proposal{
-		Fingerprint: fmt.Sprintf("%s:%s:%s", Kind, account, scanutil.Digest(append([]string{goliveText}, ids...)...)),
-		Account:     account,
-		Title:       fmt.Sprintf("File %d read inbox messages into %d %s", len(ids), len(groups), unit),
-		Payload:     py.Dict{{Key: "folder", Value: folder}, {Key: "groups", Value: payloadGroups}},
-		Preview:     py.Dict{{Key: "folder", Value: folder}, {Key: "groups", Value: previewGroups}},
+	return &scanutil.Draft{
+		Title:   fmt.Sprintf("File %d read inbox messages into %d %s", len(d.ids), len(d.groups), d.unit),
+		Payload: py.Dict{{Key: "folder", Value: d.folder}, {Key: "groups", Value: payloadGroups}},
+		Preview: py.Dict{{Key: "folder", Value: d.folder}, {Key: "groups", Value: previewGroups}},
 	}, nil
 }
 
@@ -152,28 +151,27 @@ func Backlog(ctx context.Context, d *db.DB, ts float64) (Result, error) {
 	if golive == nil {
 		return out, Error("the live service has not run yet: no go-live baseline exists")
 	}
-	for _, spec := range config.Accounts() {
-		var one int
-		err := d.Write.QueryRowContext(ctx, "SELECT 1 FROM accounts WHERE name = ?", spec.Name).Scan(&one)
-		if errors.Is(err, sql.ErrNoRows) {
-			continue
-		}
+	accounts, err := config.ExistingAccounts(ctx, d.Read)
+	if err != nil {
+		return out, err
+	}
+	for _, spec := range accounts {
+		detected, err := detect(ctx, d.Read, spec.Name)
 		if err != nil {
 			return out, err
 		}
-		built, err := Build(ctx, d.Write, spec.Name)
-		if err != nil {
-			return out, err
-		}
-		if built == nil {
+		if detected == nil {
 			out.Accounts = append(out.Accounts, py.Pair{Key: spec.Name})
 			continue
 		}
-		id, ok, err := proposals.Create(ctx, d, Kind, new(spec.Name), built.Title, built.Payload, built.Preview, built.Fingerprint, ts)
+		account := spec.Name
+		id, created, err := scanutil.Publish(ctx, d, ts, Kind, &account, detected.fingerprint(), func() (*scanutil.Draft, error) {
+			return detected.draft(ctx, d.Read)
+		})
 		if err != nil {
 			return out, err
 		}
-		if !ok {
+		if !created {
 			out.Accounts = append(out.Accounts, py.Pair{Key: spec.Name})
 			continue
 		}

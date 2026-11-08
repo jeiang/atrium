@@ -64,6 +64,22 @@ func Account(name string) (AccountSpec, bool) {
 	return AccountSpec{}, false
 }
 
+func ExistingAccounts(ctx context.Context, q db.Querier) ([]AccountSpec, error) {
+	var out []AccountSpec
+	for _, spec := range Accounts() {
+		var one int
+		err := q.QueryRowContext(ctx, "SELECT 1 FROM accounts WHERE name = ?", spec.Name).Scan(&one)
+		if errors.Is(err, sql.ErrNoRows) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, spec)
+	}
+	return out, nil
+}
+
 func Preset(account string) string {
 	a, _ := Account(account)
 	return a.Preset

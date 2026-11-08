@@ -108,9 +108,9 @@
   {{range get $v "sources"}}<span class="badge" data-variant="secondary">{{place (get . "folder")}} <span class="tabular-nums text-muted-foreground">{{pyattr . "count"}}</span></span>{{end}}
   {{icon "arrow-right" "size-3.5 text-muted-foreground"}}
   <span class="font-medium">{{place (get $v "into")}}</span>
-  <span class="text-xs text-muted-foreground">{{if get $v "into_exists"}}existing {{noun $p.account}}{{else}}new {{noun $p.account}}{{end}}</span>
+  <span class="text-xs text-muted-foreground">existing {{noun $p.account}}</span>
 </div>
-{{template "proposal_group_picker" (dict "p" $p "i" 0 "g" (get $v "group") "editable" (not (get $v "into_exists")) "pending" $.pending "picker" $.picker)}}
+{{template "proposal_group_picker" (dict "p" $p "i" 0 "g" (get $v "group") "editable" false "pending" $.pending "picker" $.picker)}}
 
 {{else if eq $kind "deletion_rule"}}
 {{$rule := get $v "rule"}}{{$reason := pyattr $v "reason"}}

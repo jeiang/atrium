@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -48,7 +49,7 @@ func (m Message) View() py.Dict {
 	}
 }
 
-func (l Limits) TopCounts(values []string) []any {
+func (l Limits) ranked(values []string) ([]string, map[string]int) {
 	counts := map[string]int{}
 	var order []string
 	for _, v := range values {
@@ -63,9 +64,19 @@ func (l Limits) TopCounts(values []string) []any {
 	slices.SortFunc(order, func(a, b string) int {
 		return cmp.Or(cmp.Compare(counts[b], counts[a]), cmp.Compare(a, b))
 	})
-	out := []any{}
-	for _, label := range order[:min(len(order), l.TopLabels)] {
-		out = append(out, py.Dict{{Key: "label", Value: label}, {Key: "count", Value: counts[label]}})
+	return order[:min(len(order), l.TopLabels)], counts
+}
+
+func (l Limits) TopLabelsOf(values []string) []string {
+	labels, _ := l.ranked(values)
+	return labels
+}
+
+func (l Limits) TopCounts(values []string) []any {
+	labels, counts := l.ranked(values)
+	out := make([]any, len(labels))
+	for i, label := range labels {
+		out[i] = py.Dict{{Key: "label", Value: label}, {Key: "count", Value: counts[label]}}
 	}
 	return out
 }
@@ -90,6 +101,24 @@ func (l Limits) SampleSubjectsOf(rows []Message) []string {
 	return out
 }
 
+type Draft struct {
+	Title   string
+	Payload py.Dict
+	Preview py.Dict
+}
+
+func Publish(ctx context.Context, d *db.DB, ts float64, kind string, account *string, fingerprint string, build func() (*Draft, error)) (int64, bool, error) {
+	known, err := proposals.Known(ctx, d.Write, fingerprint)
+	if err != nil || known {
+		return 0, false, err
+	}
+	draft, err := build()
+	if err != nil || draft == nil {
+		return 0, false, err
+	}
+	return proposals.Create(ctx, d, kind, account, draft.Title, draft.Payload, draft.Preview, fingerprint, ts)
+}
+
 type Result struct {
 	Candidates int
 	Created    int
@@ -98,8 +127,6 @@ type Result struct {
 func (r Result) Dict() py.Dict {
 	return py.Dict{{Key: "candidates", Value: r.Candidates}, {Key: "created", Value: r.Created}}
 }
-
-func (r Result) MarshalJSON() ([]byte, error) { return []byte(py.JSONDumps(r.Dict())), nil }
 
 func SnapshotList(snaps []mailops.Snapshot) []any {
 	out := make([]any, len(snaps))
