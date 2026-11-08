@@ -131,55 +131,34 @@ func rowInvites(cfg config.Config, r row, now time.Time) ([]calendar.Invite, err
 	if err != nil {
 		return nil, err
 	}
-	msg, err := mime.Parse(data)
-	if err != nil {
-		return nil, err
-	}
+	msg := mime.Parse(data)
 	var out []calendar.Invite
 	seen := map[string]bool{}
-	var walk func(part *mime.Message) error
-	walk = func(part *mime.Message) error {
-		if err := collect(part, now, seen, &out); err != nil {
-			return err
-		}
+	var walk func(part *mime.Message)
+	walk = func(part *mime.Message) {
+		collect(part, now, seen, &out)
 		for _, sub := range part.Parts() {
-			if err := walk(sub); err != nil {
-				return err
-			}
+			walk(sub)
 		}
-		return nil
 	}
-	return out, walk(msg)
+	walk(msg)
+	return out, nil
 }
 
-func collect(part *mime.Message, now time.Time, seen map[string]bool, out *[]calendar.Invite) error {
-	if !calendarTypes[part.ContentType()] {
-		name, _, err := part.Filename()
-		if err != nil {
-			return err
-		}
-		if !strings.HasSuffix(py.Lower(name), ".ics") {
-			return nil
-		}
+func collect(part *mime.Message, now time.Time, seen map[string]bool, out *[]calendar.Invite) {
+	if !calendarTypes[part.ContentType()] && !strings.HasSuffix(py.Lower(part.Filename()), ".ics") {
+		return
 	}
-	data, err := part.Payload()
-	if err != nil {
-		return err
-	}
+	data := part.Payload()
 	if len(data) == 0 {
-		return nil
+		return
 	}
-	method, _, err := part.Param("method", "content-type")
-	if err != nil {
-		method = ""
-	}
-	for _, invite := range calendar.InvitesIn(data, method, now) {
+	for _, invite := range calendar.InvitesIn(data, part.Param("method"), now) {
 		if !seen[invite.UID] {
 			seen[invite.UID] = true
 			*out = append(*out, invite)
 		}
 	}
-	return nil
 }
 
 func proposeInvites(ctx context.Context, p *calendar.Proposals, r row, invites []calendar.Invite) (int, error) {

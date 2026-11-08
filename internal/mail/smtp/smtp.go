@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/mime"
+	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
 )
 
@@ -34,20 +35,16 @@ func SenderAddress(account, user string) string {
 
 var commaRunRE = rx.MustCompile(`[\s,]*,[\s,]*`, 0)
 
-func SplitAddresses(text string) ([]string, error) {
+func SplitAddresses(text string) []string {
 	text, _ = commaRunRE.Sub(", ", text, 0)
-	text = strings.Trim(mime.Strip(text), ",")
-	parsed, err := mime.GetAddresses([]string{text})
-	if err != nil {
-		return nil, err
-	}
+	text = strings.Trim(py.Strip(text), ",")
 	out := []string{}
-	for _, a := range parsed {
+	for _, a := range mime.ParseAddresses(text) {
 		if strings.Contains(a.Address, "@") && !strings.Contains(a.Address, " ") {
 			out = append(out, a.Address)
 		}
 	}
-	return out, nil
+	return out
 }
 
 func Send(ctx context.Context, creds Credentials, account string, msg *Message, factory Factory) (Refusals, error) {
@@ -57,11 +54,7 @@ func Send(ctx context.Context, creds Credentials, account string, msg *Message, 
 	}
 	var recipients []string
 	for _, h := range [...]string{"To", "Cc"} {
-		addrs, err := SplitAddresses(msg.Get(h))
-		if err != nil {
-			return nil, err
-		}
-		recipients = append(recipients, addrs...)
+		recipients = append(recipients, SplitAddresses(msg.Get(h))...)
 	}
 	if len(recipients) == 0 {
 		return nil, SendError("no recipients")

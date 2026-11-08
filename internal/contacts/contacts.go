@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
 )
@@ -146,7 +145,7 @@ func Parse(text string) []Card {
 			cards = append(cards, c.finish())
 			c = nil
 		case c != nil:
-			c.collect(name, value, mime.Lower(group))
+			c.collect(name, value, strings.ToLower(group))
 		}
 	}
 	return cards
@@ -164,7 +163,7 @@ func (c *card) collect(name, value, group string) {
 		}
 		c.n = joinNonEmpty(" ", unescape(given), unescape(family))
 	case "EMAIL":
-		email := mime.Lower(strings.TrimPrefix(unescape(value), "mailto:"))
+		email := strings.ToLower(strings.TrimPrefix(unescape(value), "mailto:"))
 		if strings.Contains(email, "@") && !slices.Contains(c.emails, email) {
 			c.emails = append(c.emails, email)
 		}

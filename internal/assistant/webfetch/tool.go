@@ -8,8 +8,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/textutil"
 )
 
 const schemaTextDefault = 12000
@@ -106,10 +106,7 @@ func handle(ctx context.Context, f *Fetcher, tc *tool.Context, args py.Dict) (an
 	if err != nil {
 		return nil, fetchFailed(err)
 	}
-	markup, err := mime.DecodeReplace(page.Body, page.Charset)
-	if err != nil {
-		return nil, fetchFailed(err)
-	}
+	markup := textutil.Decode(page.Body, page.Charset)
 	title, body := ExtractText(markup, page.URL, lim.PageChars)
 	return py.Dict{
 		{Key: "untrusted", Value: true},
@@ -124,9 +121,8 @@ func fetchFailed(err error) error {
 	var (
 		blocked Blocked
 		fetch   FetchError
-		pe      *py.Exception
 	)
-	if errors.As(err, &blocked) || errors.As(err, &fetch) || errors.As(err, &pe) && pe.Class == "LookupError" {
+	if errors.As(err, &blocked) || errors.As(err, &fetch) {
 		return tool.Error("fetch failed: " + err.Error())
 	}
 	return raised(err)

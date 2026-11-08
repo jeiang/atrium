@@ -235,9 +235,9 @@ func NormalizeAddresses(name string, value any) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	parsed, err := mime.GetAddresses([]string{text})
-	if err != nil {
-		return "", err
+	parsed := mime.ParseAddresses(text)
+	if len(parsed) == 0 {
+		return "", Error(name + " has an invalid address")
 	}
 	for _, p := range parsed {
 		if p.Address == "" || !strings.Contains(p.Address, "@") || strings.Contains(p.Address, " ") {
@@ -331,14 +331,6 @@ func rawFile(cacheDir, rawPath string) string {
 	return path
 }
 
-func header(m *mime.Message, name string) string {
-	v, ok, err := m.Get(name)
-	if !ok || err != nil {
-		return ""
-	}
-	return v
-}
-
 func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error) {
 	var account, fromAddr, fromName string
 	var msgid, toAddrs, rawPath sql.NullString
@@ -358,11 +350,9 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 		if err != nil {
 			return reply{}, err
 		}
-		if raw, err = mime.Parse(data); err != nil {
-			return reply{}, err
-		}
+		raw = mime.Parse(data)
 		for _, name := range [...]string{"From", "To", "Cc", "Reply-To", "Message-ID"} {
-			headers[name] = header(raw, name)
+			headers[name] = raw.Header(name)
 		}
 	}
 	if headers["From"] == "" {
@@ -381,13 +371,7 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 	}
 	references := ""
 	if raw != nil {
-		v, ok, err := raw.Get("References")
-		if err != nil {
-			return reply{}, err
-		}
-		if ok {
-			references = strings.Join(py.Split(v), " ")
-		}
+		references = strings.Join(py.Split(raw.Header("References")), " ")
 	}
 	var chain []string
 	for _, x := range [...]string{references, inReplyTo} {
@@ -405,12 +389,8 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 	}
 	participants := map[string]bool{}
 	for _, p := range people {
-		addrs, err := smtp.SplitAddresses(p)
-		if err != nil {
-			return reply{}, err
-		}
-		for _, a := range addrs {
-			participants[mime.Lower(a)] = true
+		for _, a := range smtp.SplitAddresses(p) {
+			participants[strings.ToLower(a)] = true
 		}
 	}
 	return reply{inReplyTo: inReplyTo, refs: strings.Join(chain, " "), participants: participants, account: account}, nil
@@ -654,21 +634,15 @@ func (s *Store) UnexpectedRecipients(ctx context.Context, d Row) ([]string, erro
 	if err != nil {
 		return nil, err
 	}
-	to, err := smtp.SplitAddresses(d.ToAddrs)
-	if err != nil {
-		return nil, err
-	}
-	cc, err := smtp.SplitAddresses(d.CcAddrs)
-	if err != nil {
-		return nil, err
-	}
+	to := smtp.SplitAddresses(d.ToAddrs)
+	cc := smtp.SplitAddresses(d.CcAddrs)
 	seen := map[string]bool{}
 	for _, a := range append(to, cc...) {
 		if seen[a] {
 			continue
 		}
 		seen[a] = true
-		if !r.participants[mime.Lower(a)] {
+		if !r.participants[strings.ToLower(a)] {
 			out = append(out, a)
 		}
 	}
