@@ -2,7 +2,7 @@
 {{define "heading"}}Settings · Prompts{{end}}
 {{define "body_attrs"}}{{if .Data.strip}} data-strip-params="saved,reset"{{end}}{{end}}
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
-{{template "settings_tabs" (dict "Tab" "prompts" "Auth" .Auth)}}
+{{template "settings_tabs" (dict "Tab" "prompts" "Auth" .Auth "Settings" .Settings)}}
 <div class="flex flex-col gap-4">
   <section class="rounded-lg border bg-card p-4" aria-labelledby="prompt-preamble">
     <h2 id="prompt-preamble" class="flex items-center gap-2 text-sm font-medium">Preamble<span class="badge" data-variant="outline">fixed</span></h2>

@@ -93,7 +93,7 @@ func (s *service) messagePage(w http.ResponseWriter, r *http.Request) {
 		s.fragment(w, r, "_message.gohtml", data, nil)
 		return
 	}
-	s.page(w, r, http.StatusOK, "message.gohtml", data, nil)
+	s.page(w, r, http.StatusOK, messagePage(data), "message.gohtml", data, nil)
 }
 
 func (s *service) correctForm(w http.ResponseWriter, r *http.Request) {
@@ -180,7 +180,8 @@ func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
 	case partial:
 		s.fragment(w, r, "_decision_card.gohtml", messageData{Message: fresh, Correct: form_}, notice)
 	default:
-		s.page(w, r, http.StatusOK, "message.gohtml", messageData{Message: fresh, Back: backTo(r), Correct: form_}, nil)
+		data := messageData{Message: fresh, Back: backTo(r), Correct: form_}
+		s.page(w, r, http.StatusOK, messagePage(data), "message.gohtml", data, nil)
 	}
 }
 
@@ -264,4 +265,11 @@ func (s *service) liveUndo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.fragment(w, r, "_triage_row.gohtml", rowData{Row: row}, notice)
+}
+
+func messagePage(data messageData) string {
+	if data.Back.Label == "Decisions" {
+		return "triage"
+	}
+	return "chat"
 }

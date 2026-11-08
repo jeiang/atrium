@@ -6,8 +6,8 @@ import (
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
-func (s *service) page(w http.ResponseWriter, r *http.Request, status int, name string, data any, notice *tpl.Toast) {
-	f, err := s.deps.Render.Frame(r, "", data)
+func (s *service) page(w http.ResponseWriter, r *http.Request, status int, page, name string, data any, notice *tpl.Toast) {
+	f, err := s.deps.Render.Frame(r, page, data)
 	if err != nil {
 		panic(err)
 	}

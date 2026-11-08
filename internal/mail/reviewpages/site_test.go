@@ -51,6 +51,16 @@ type site struct {
 
 type siteOption func(env map[string]string)
 
+func reviewNav() []web.NavItem {
+	return []web.NavItem{
+		{Group: "Review", Label: "Proposals", URL: "/proposals", Icon: "list-checks", Page: "proposals", Order: 20, Badge: true},
+		{Group: "Review", Label: "Activity", URL: "/activity", Icon: "history", Page: "activity", Order: 20},
+		{Group: "Mail", Label: "Drafts", URL: "/drafts", Icon: "mail", Page: "drafts", Order: 30},
+		{Group: "Life", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 40},
+		{Group: "Life", Label: "Watches", URL: "/watches", Icon: "package", Page: "watches", Order: 40},
+	}
+}
+
 func newSite(t *testing.T, options ...siteOption) *site {
 	t.Helper()
 	d := dbtest.Schema(t)
@@ -87,7 +97,7 @@ func newSite(t *testing.T, options ...siteOption) *site {
 	}
 	handlers.Register(s.registry, handlers.Deps{DB: d, Open: open, Now: tick, Env: env})
 	s.store = &drafts.Store{DB: d, Cfg: cfg, Now: tick}
-	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}})
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}}, reviewNav()...)
 	if err != nil {
 		t.Fatal(err)
 	}

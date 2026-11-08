@@ -1,7 +1,7 @@
 {{define "title"}}Mail · Settings{{end}}
 {{define "heading"}}Settings · Mail{{end}}
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
-{{template "settings_tabs" (dict "Tab" "mail" "Auth" .Auth)}}
+{{template "settings_tabs" (dict "Tab" "mail" "Auth" .Auth "Settings" .Settings)}}
 <div class="flex flex-col gap-3">
   {{range $d.indexes}}
   <div class="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-4 text-sm" data-embed-index="{{.state}}" data-generation="{{.generation}}">

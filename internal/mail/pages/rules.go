@@ -112,7 +112,7 @@ func (s *service) rulesPage(w http.ResponseWriter, r *http.Request) {
 		}
 		notice = toast("success", title, saved)
 	}
-	s.page(w, r, http.StatusOK, "rules.gohtml", data, notice)
+	s.page(w, r, http.StatusOK, "rules", "rules.gohtml", data, notice)
 }
 
 func (s *service) ruleNew(w http.ResponseWriter, r *http.Request) {
@@ -149,7 +149,7 @@ func (s *service) ruleNew(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	data.Rule, data.Folders = rule, s.folderMap(ctx)
-	s.page(w, r, http.StatusOK, "rule_edit.gohtml", data, nil)
+	s.page(w, r, http.StatusOK, "rules", "rule_edit.gohtml", data, nil)
 }
 
 func (s *service) ruleCondition(w http.ResponseWriter, r *http.Request) {
@@ -270,7 +270,7 @@ func (s *service) saveRule(w http.ResponseWriter, r *http.Request, id string, is
 			Rule: shownRule(id, raw), IsNew: isNew, Folders: s.folderMap(ctx), Suggestions: []map[string]any{},
 			Errors: []string{ruleProblem(err)},
 		}
-		s.page(w, r, http.StatusOK, "rule_edit.gohtml", data, nil)
+		s.page(w, r, http.StatusOK, "rules", "rule_edit.gohtml", data, nil)
 		return
 	}
 	check(err)
@@ -302,7 +302,7 @@ func (s *service) ruleEdit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := ruleEditData{Rule: all[found], Folders: s.folderMap(ctx), Suggestions: []map[string]any{}, Errors: []string{}}
-	s.page(w, r, http.StatusOK, "rule_edit.gohtml", data, nil)
+	s.page(w, r, http.StatusOK, "rules", "rule_edit.gohtml", data, nil)
 }
 
 func (s *service) ruleMove(w http.ResponseWriter, r *http.Request) {

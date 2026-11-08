@@ -77,6 +77,29 @@ var labelSets = map[string][]pair{
 		{"dismissed", "Dismissed"},
 		{"suppressed", "Dismissed forever"},
 	},
+	"job_run_hint": {
+		{"skipped_budget", "The monthly budget was reached, so this run did not start."},
+		{"skipped_pause", "Live mode was paused, so this run did not start."},
+		{"skipped_module", "The module that owns this job is disabled, so this run did not start."},
+		{"missed_coalesced", "The run was due while atrium was down; missed runs were merged into one."},
+	},
+	"job_source": {
+		{"nightly", "Nightly"},
+		{"builtin", "Built-in"},
+		{"operator", "Created by you"},
+		{"agent", "Created by the assistant"},
+	},
+	"thread_kind": {
+		{"chat", "Chat"},
+		{"cron", "Scheduled run"},
+		{"nightly", "Nightly run"},
+		{"sub", "Research run"},
+		{"subagent", "Subagent"},
+	},
+	"file_origin": {
+		{"upload", "Uploaded"},
+		{"generated", "Generated"},
+	},
 }
 
 var badgeSets = map[string]map[string]Badge{
@@ -100,6 +123,29 @@ var badgeSets = map[string]map[string]Badge{
 		"running":     {"outline", "Working"},
 		"interrupted": {"destructive", "Interrupted"},
 		"failed":      {"destructive", "Failed"},
+	},
+	"job_run": {
+		"running":          {"outline", "Running"},
+		"ok":               {"secondary", "Completed"},
+		"error":            {"destructive", "Failed"},
+		"skipped_budget":   {"outline", "Skipped (budget)"},
+		"skipped_pause":    {"outline", "Skipped (paused)"},
+		"skipped_module":   {"outline", "Skipped (module off)"},
+		"missed_coalesced": {"secondary", "Ran late"},
+	},
+	"subagent_status": {
+		"queued":      {"outline", "Queued"},
+		"running":     {"outline", "Running"},
+		"done":        {"outline", "Done"},
+		"error":       {"destructive", "Failed"},
+		"interrupted": {"destructive", "Interrupted"},
+	},
+	"draft_status": {
+		"draft":     {"outline", "Draft"},
+		"sending":   {"outline", "Sending"},
+		"sent":      {"secondary", "Sent"},
+		"discarded": {"outline", "Discarded"},
+		"unknown":   {"destructive", "Unknown"},
 	},
 }
 

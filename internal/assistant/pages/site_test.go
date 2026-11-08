@@ -89,6 +89,20 @@ func withRunner(r *loop.Runner) siteOption { return func(s *site) { s.runner = r
 
 func withWebfetch(f *webfetch.Fetcher) siteOption { return func(s *site) { s.fetch = f } }
 
+func assistantNav() []web.NavItem {
+	return []web.NavItem{
+		{Group: "Assistant", Label: "Chat", URL: "/chat", Icon: "messages-square", Page: "chat", Order: 10},
+		{Group: "Assistant", Label: "Scheduled", URL: "/scheduled", Icon: "clock", Page: "scheduled", Order: 10},
+		{Group: "Assistant", Label: "Projects", URL: "/projects", Icon: "folder", Page: "projects", Order: 10},
+		{Label: "Assistant", URL: "/settings/assistant", Page: "assistant", Settings: true, Primary: true, PrimaryURL: "/settings", Order: 10},
+		{Label: "Skills", URL: "/settings/skills", Page: "skills", Settings: true, Order: 20},
+		{Label: "Subagents", URL: "/settings/subagents", Page: "subagents", Settings: true, Order: 30},
+		{Label: "Prompts", URL: "/settings/prompts", Page: "prompts", Settings: true, Order: 40},
+		{Label: "Notifications", URL: "/settings/notifications", Page: "notifications", Settings: true, Order: 60},
+		{Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 80},
+	}
+}
+
 func newSite(t *testing.T, options ...siteOption) *site {
 	t.Helper()
 	return newSiteOn(t, dbtest.Schema(t), options...)
@@ -108,7 +122,7 @@ func newSiteOn(t *testing.T, d *db.DB, options ...siteOption) *site {
 	for _, o := range options {
 		o(s)
 	}
-	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}})
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}}, assistantNav()...)
 	if err != nil {
 		t.Fatal(err)
 	}

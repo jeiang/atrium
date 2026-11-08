@@ -1,7 +1,5 @@
-{{define "settings_tabs"}}{{$tab := .Tab}}{{$on := global "module_enabled"}}
+{{define "settings_tabs"}}{{$tab := .Tab}}
 <nav aria-label="Settings sections" class="-mb-2 flex flex-wrap gap-x-1 border-b text-sm">
-  {{range (list (list "assistant" "Assistant" "/settings/assistant" "assistant") (list "skills" "Skills" "/settings/skills" "assistant") (list "subagents" "Subagents" "/settings/subagents" "assistant") (list "prompts" "Prompts" "/settings/prompts" "assistant") (list "mail" "Mail" "/settings/mail" "mail") (list "notifications" "Notifications" "/settings/notifications" "notifications") (list "integrations" "Integrations" "/settings/integrations" "core") (list "usage" "Usage" "/settings/usage" "assistant") (list "auth" "Sign-in" "/settings/auth" "auth") (list "modules" "Modules" "/settings/modules" "core") (list "config" "Configuration" "/settings/config" "core") (list "audit" "Audit" "/settings/audit" "core"))}}
-  {{if or (and (eq (index . 3) "auth") $.Auth.Settings) (and (ne (index . 3) "auth") (call $on (index . 3)))}}<a href="{{index . 2}}" class="-mb-px whitespace-nowrap border-b-2 px-3 py-2 font-medium {{if eq $tab (index . 0)}}border-primary text-foreground{{else}}border-transparent text-muted-foreground hover:text-foreground{{end}}"{{if eq $tab (index . 0)}} aria-current="page"{{end}}>{{index . 1}}</a>{{end}}
-  {{end}}
+  {{range .Settings}}<a href="{{.URL}}" class="-mb-px whitespace-nowrap border-b-2 px-3 py-2 font-medium {{if eq $tab .Page}}border-primary text-foreground{{else}}border-transparent text-muted-foreground hover:text-foreground{{end}}"{{if eq $tab .Page}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}
 </nav>
 {{end}}

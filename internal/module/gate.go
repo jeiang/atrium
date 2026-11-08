@@ -26,7 +26,7 @@ func (s *Set) Pages() []web.Page {
 	pages := []web.Page{{Globals: map[string]any{"module_enabled": s.enabled}}, s.modulesPage()}
 	for _, r := range s.regs {
 		for _, p := range r.Pages {
-			if p.Module == nil && p.Start == nil {
+			if p.Module == nil && p.Start == nil && len(p.Nav) == 0 {
 				continue
 			}
 			if !r.Core {
@@ -39,6 +39,11 @@ func (s *Set) Pages() []web.Page {
 }
 
 func (s *Set) gatePage(owner string, p web.Page) web.Page {
+	for i := range p.Nav {
+		if p.Nav[i].Module == "" {
+			p.Nav[i].Module = owner
+		}
+	}
 	inner := p.Module
 	p.Module = func(r chi.Router, d *web.Deps) {
 		if s.Current().Enabled(owner) {
