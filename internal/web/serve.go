@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -233,6 +234,12 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 	listener, err := net.Listen("tcp", net.JoinHostPort(a.host, strconv.Itoa(a.port)))
 	if err != nil {
 		return err
+	}
+	if path, _ := a.env("ATRIUM_SERVE_ADDR_FILE"); path != "" {
+		if err := os.WriteFile(path, []byte(listener.Addr().String()), 0o600); err != nil {
+			_ = listener.Close()
+			return err
+		}
 	}
 	return listenAndShutdown(ctx, listener, srv, a.env)
 }

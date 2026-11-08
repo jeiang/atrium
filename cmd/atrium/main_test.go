@@ -3,14 +3,17 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -59,6 +62,16 @@ func startServeStoppable(t *testing.T, dir string) (string, *lockedBuffer, func(
 
 func startServeWith(t *testing.T, dir string, logged bool) (string, *lockedBuffer, func()) {
 	t.Helper()
+	base, logs, stop, err := startServeOnce(t, dir, logged)
+	if err != nil {
+		t.Fatalf("serve did not start: %v", err)
+	}
+	t.Cleanup(stop)
+	return base, logs, stop
+}
+
+func startServeOnce(t *testing.T, dir string, logged bool) (string, *lockedBuffer, func(), error) {
+	t.Helper()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
@@ -70,23 +83,33 @@ func startServeWith(t *testing.T, dir string, logged bool) (string, *lockedBuffe
 	if logged {
 		logx.Setup(logs)
 	}
-	return startServeApp(t, app, logs)
+	return startServeAppOnce(t, app, logs)
 }
 
 func startServeApp(t *testing.T, app *cli.App, logs *lockedBuffer) (string, *lockedBuffer, func()) {
 	t.Helper()
-	l, err := net.Listen("tcp", "127.0.0.1:0")
+	base, logs, stop, err := startServeAppOnce(t, app, logs)
 	if err != nil {
-		t.Fatal(err)
+		t.Fatalf("serve did not start: %v", err)
 	}
-	_, port, _ := net.SplitHostPort(l.Addr().String())
-	_ = l.Close()
+	t.Cleanup(stop)
+	return base, logs, stop
+}
+
+func startServeAppOnce(t *testing.T, app *cli.App, logs *lockedBuffer) (string, *lockedBuffer, func(), error) {
+	t.Helper()
+	addrFile := filepath.Join(t.TempDir(), "serve-addr")
+	setEnv(t, "ATRIUM_SERVE_ADDR_FILE", addrFile)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan int, 1)
+	var exitCode atomic.Int32
+	exitCode.Store(-1)
 	go func() {
 		var stdout bytes.Buffer
-		done <- app.Run(ctx, []string{"serve", "--port", port, "--auth", "local"}, &stdout, logs)
+		code := app.Run(ctx, []string{"serve", "--port", "0", "--auth", "local"}, &stdout, logs)
+		exitCode.Store(int32(code))
+		done <- code
 	}()
 	var once sync.Once
 	stop := func() {
@@ -94,7 +117,7 @@ func startServeApp(t *testing.T, app *cli.App, logs *lockedBuffer) (string, *loc
 			cancel()
 			select {
 			case code := <-done:
-				if code != cli.ExitOK {
+				if code != cli.ExitOK && !t.Failed() {
 					t.Errorf("exit code %d", code)
 				}
 			case <-time.After(15 * time.Second):
@@ -102,17 +125,45 @@ func startServeApp(t *testing.T, app *cli.App, logs *lockedBuffer) (string, *loc
 			}
 		})
 	}
-	t.Cleanup(stop)
-	base := "http://127.0.0.1:" + port
+	base, err := waitForServeAddr(t, addrFile, logs, &exitCode, cancel)
+	if err != nil {
+		cancel()
+		<-done
+		return "", logs, nil, err
+	}
 	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); {
 		if resp, err := http.Get(base + "/healthz"); err == nil {
 			_ = resp.Body.Close()
-			return base, logs, stop
+			return base, logs, stop, nil
+		}
+		if code := exitCode.Load(); code >= 0 {
+			cancel()
+			<-done
+			return "", logs, nil, fmt.Errorf("serve exited with %d: %s", code, logs.String())
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	t.Fatal("serve did not start")
-	return "", nil, nil
+	cancel()
+	<-done
+	return "", logs, nil, fmt.Errorf("serve did not start: %s", logs.String())
+}
+
+func waitForServeAddr(t *testing.T, path string, logs *lockedBuffer, exitCode *atomic.Int32, cancel context.CancelFunc) (string, error) {
+	t.Helper()
+	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); {
+		if raw, err := os.ReadFile(path); err == nil {
+			addr := strings.TrimSpace(string(raw))
+			if _, _, err := net.SplitHostPort(addr); err == nil {
+				return "http://" + addr, nil
+			}
+		}
+		if code := exitCode.Load(); code >= 0 {
+			return "", fmt.Errorf("serve exited with %d: %s", code, logs.String())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	return "", fmt.Errorf("serve did not report its address: %s", logs.String())
 }
 
 func fetch(t *testing.T, client *http.Client, method, url string, form url.Values) (int, string, http.Header) {
