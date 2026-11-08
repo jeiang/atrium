@@ -1,11 +1,14 @@
 package openloops
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"math"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -18,6 +21,8 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/flags"
+	"github.com/jeiang/atrium/internal/mail/message"
+	"github.com/jeiang/atrium/internal/mail/mime"
 	"golang.org/x/text/cases"
 )
 
@@ -91,12 +96,17 @@ type Message struct {
 	Subject    string
 	FromName   string
 	FromAddr   string
+	FromDomain string
 	ToAddrs    string
 	ListID     string
 	Precedence string
 	Category   string
+	ESP        string
+	ReplyTo    string
+	RawPath    string
 	Labels     string
 	Flags      string
+	Owners     []string
 }
 
 func (m *Message) Recipients() ([]string, error) {
@@ -111,25 +121,136 @@ func (m *Message) Recipients() ([]string, error) {
 	return out, nil
 }
 
-func (m *Message) HumanSender() (bool, error) {
-	if m.FromAddr == "" || m.ListID != "" || slices.Contains(automatedPrecedence, m.Precedence) ||
-		slices.Contains(automatedCategories, m.Category) {
-		return false, nil
-	}
-	local, _, _ := strings.Cut(m.FromAddr, "@")
-	automated, err := flags.AutomatedLocal(local)
-	return !automated, err
+type envelope struct {
+	to              []string
+	listUnsubscribe string
+	autoSubmitted   string
+	ok              bool
 }
 
-const messageColumns = "id, account, msgid, gm_thrid, in_reply_to, refs, date_ts, sent, subject, from_name, from_addr, to_addrs, " +
-	"list_id, precedence, category, labels, flags"
+func readEnvelope(cacheDir, rawPath string) envelope {
+	path, ok := message.RawFile(cacheDir, rawPath)
+	if !ok {
+		return envelope{}
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		return envelope{}
+	}
+	defer func() { _ = f.Close() }()
+	msg := mime.Parse(readHeader(f))
+	env := envelope{ok: true, listUnsubscribe: msg.Header("List-Unsubscribe"), autoSubmitted: msg.Header("Auto-Submitted")}
+	for _, a := range msg.Addresses("To") {
+		if a.Address != "" {
+			env.to = append(env.to, strings.ToLower(a.Address))
+		}
+	}
+	return env
+}
+
+func readHeader(r io.Reader) []byte {
+	data, _ := io.ReadAll(io.LimitReader(r, 256<<10))
+	if i := bytes.Index(data, []byte("\r\n\r\n")); i >= 0 {
+		return data[:i]
+	}
+	if i := bytes.Index(data, []byte("\n\n")); i >= 0 {
+		return data[:i]
+	}
+	return data
+}
+
+func (e envelope) bulk() bool {
+	if strings.TrimSpace(e.listUnsubscribe) != "" {
+		return true
+	}
+	switch strings.ToLower(strings.TrimSpace(e.autoSubmitted)) {
+	case "", "no":
+		return false
+	}
+	return true
+}
+
+type gate struct {
+	cacheDir  string
+	selves    map[string]bool
+	envelopes map[string]envelope
+}
+
+func newGate(cacheDir string, selves map[string]bool) *gate {
+	return &gate{cacheDir: cacheDir, selves: selves, envelopes: map[string]envelope{}}
+}
+
+func (g *gate) envelope(m *Message) envelope {
+	if m.RawPath == "" {
+		return envelope{}
+	}
+	if env, ok := g.envelopes[m.RawPath]; ok {
+		return env
+	}
+	env := readEnvelope(g.cacheDir, m.RawPath)
+	g.envelopes[m.RawPath] = env
+	return env
+}
+
+func bulkESP(value string) bool {
+	text := strings.TrimSpace(value)
+	return text != "" && text != "[]"
+}
+
+func (g *gate) automated(m *Message) (bool, error) {
+	if m.FromAddr == "" || m.ListID != "" || slices.Contains(automatedPrecedence, m.Precedence) ||
+		slices.Contains(automatedCategories, m.Category) || bulkESP(m.ESP) ||
+		(m.ReplyTo != "" && !strings.EqualFold(m.ReplyTo, m.FromAddr)) {
+		return true, nil
+	}
+	local, _, _ := strings.Cut(m.FromAddr, "@")
+	if automated, err := flags.AutomatedLocal(local); err != nil || automated {
+		return true, err
+	}
+	if flags.AutomatedDomain(m.FromDomain) {
+		return true, nil
+	}
+	return g.envelope(m).bulk(), nil
+}
+
+func (g *gate) wanted(m *Message) (bool, error) {
+	if m.Sent {
+		return true, nil
+	}
+	automated, err := g.automated(m)
+	if err != nil || automated {
+		return false, err
+	}
+	env := g.envelope(m)
+	if env.ok {
+		for _, addr := range env.to {
+			if g.selves[addr] {
+				return true, nil
+			}
+		}
+		return false, nil
+	}
+	to, err := m.Recipients()
+	if err != nil {
+		return false, err
+	}
+	for _, addr := range to {
+		if g.selves[addr] {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+const messageColumns = "id, account, msgid, gm_thrid, in_reply_to, refs, date_ts, sent, subject, from_name, from_addr, from_domain, to_addrs, " +
+	"list_id, precedence, category, esp, reply_to, raw_path, labels, flags"
 
 func scanMessage(r *sql.Rows) (Message, error) {
 	var m Message
-	var gm, inReplyTo, refs sql.NullString
+	var gm, inReplyTo, refs, rawPath sql.NullString
 	err := r.Scan(&m.ID, &m.Account, &m.MsgID, &gm, &inReplyTo, &refs, &m.DateTS, &m.Sent, &m.Subject, &m.FromName, &m.FromAddr,
-		&m.ToAddrs, &m.ListID, &m.Precedence, &m.Category, &m.Labels, &m.Flags)
-	m.GmThrID, m.InReplyTo, m.Refs = gm.String, inReplyTo.String, refs.String
+		&m.FromDomain, &m.ToAddrs, &m.ListID, &m.Precedence, &m.Category, &m.ESP, &m.ReplyTo, &rawPath, &m.Labels, &m.Flags)
+	m.GmThrID, m.InReplyTo, m.Refs, m.RawPath = gm.String, inReplyTo.String, refs.String, rawPath.String
 	return m, err
 }
 
@@ -216,15 +337,34 @@ func pendingFlag(ctx context.Context, q db.Querier, id int64) (sql.NullInt64, er
 	return asking, err
 }
 
+func selfAddresses(ctx context.Context, q db.Querier) (map[string]bool, error) {
+	rows, err := q.QueryContext(ctx, "SELECT DISTINCT from_addr FROM messages WHERE sent = 1 AND from_addr != ''")
+	if err != nil {
+		return nil, err
+	}
+	found, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
+		var addr string
+		return addr, r.Scan(&addr)
+	})
+	if err != nil {
+		return nil, err
+	}
+	selves := make(map[string]bool, len(found))
+	for _, addr := range found {
+		selves[strings.ToLower(addr)] = true
+	}
+	return selves, nil
+}
+
 type thresholds struct {
 	oweMaxAge, waitingAfter, waitingMaxAge int
 }
 
-func classify(ctx context.Context, q db.Querier, thread []Message, selves map[string]bool, now float64, t thresholds) (state, counterpart string, ok bool, err error) {
+func classify(ctx context.Context, q db.Querier, thread []Message, g *gate, now float64, t thresholds) (state, counterpart string, ok bool, err error) {
 	last := &thread[len(thread)-1]
 	age := now - last.DateTS
 	if !last.Sent {
-		if age > float64(t.oweMaxAge)*Day || selves[last.FromAddr] {
+		if age > float64(t.oweMaxAge)*Day || g.selves[last.FromAddr] {
 			return "", "", false, nil
 		}
 		asking, err := pendingFlag(ctx, q, last.ID)
@@ -234,11 +374,9 @@ func classify(ctx context.Context, q db.Querier, thread []Message, selves map[st
 		if asking.Valid && asking.Int64 == 0 {
 			return "", "", false, nil
 		}
-		if !asking.Valid {
-			human, err := last.HumanSender()
-			if err != nil || !human {
-				return "", "", false, err
-			}
+		wanted, err := g.wanted(last)
+		if err != nil || !wanted {
+			return "", "", false, err
 		}
 		return OweReply, last.FromAddr, true, nil
 	}
@@ -250,7 +388,7 @@ func classify(ctx context.Context, q db.Querier, thread []Message, selves map[st
 		return "", "", false, err
 	}
 	for _, a := range to {
-		if a != "" && !selves[a] {
+		if a != "" && !g.selves[a] {
 			return Waiting, a, true, nil
 		}
 	}
@@ -274,7 +412,7 @@ func SnoozeDefault(ctx context.Context, q db.Querier) (int, error) {
 	return days, r.Err()
 }
 
-func Compute(ctx context.Context, d *db.DB, now float64) (Counts, error) {
+func Compute(ctx context.Context, d *db.DB, cacheDir string, now float64) (Counts, error) {
 	var counts Counts
 	r := endpoint.Read(ctx, d.Read)
 	window := r.Int(mail.KeyLoopsWindowDays)
@@ -306,12 +444,11 @@ func Compute(ctx context.Context, d *db.DB, now float64) (Counts, error) {
 				mail = append(mail, m)
 			}
 		}
-		selves := map[string]bool{}
-		for _, m := range mail {
-			if m.Sent && m.FromAddr != "" {
-				selves[m.FromAddr] = true
-			}
+		selves, err := selfAddresses(ctx, tx)
+		if err != nil {
+			return err
 		}
+		g := newGate(cacheDir, selves)
 		rows, err = tx.QueryContext(ctx, "SELECT thread_key FROM open_loops")
 		if err != nil {
 			return err
@@ -350,7 +487,7 @@ func Compute(ctx context.Context, d *db.DB, now float64) (Counts, error) {
 				}
 				return cmpInt(a.ID, b.ID)
 			})
-			state, counterpart, ok, err := classify(ctx, tx, thread, selves, now, limits)
+			state, counterpart, ok, err := classify(ctx, tx, thread, g, now, limits)
 			if err != nil {
 				return err
 			}

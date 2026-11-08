@@ -102,7 +102,7 @@ func New(env config.Env, d *db.DB, cfg config.Config, open mail.OpenFunc, now fu
 	}
 	p.Extras = []Extra{
 		{"open loops", func(ctx context.Context) (any, error) {
-			return openloops.Refresh(ctx, d, now(), openloops.Options{Env: env, Clock: now})
+			return openloops.Refresh(ctx, d, now(), openloops.Options{Env: env, Clock: now, CacheDir: cfg.CacheDir})
 		}},
 		{"watches", func(ctx context.Context) (any, error) {
 			return watches.Refresh(ctx, d, now(), watches.Options{Env: env, Clock: now})

@@ -11,7 +11,7 @@ func (o Options) RefreshCommands() []*cli.Command {
 		group("loops", o.leaf("refresh", func(*cli.Args) body {
 			return func(x *exec) error {
 				return x.Exclusive(func() error {
-					out, err := openloops.Refresh(x.Ctx, x.DB, x.Now(), openloops.Options{Env: o.env(), Clock: o.Now})
+					out, err := openloops.Refresh(x.Ctx, x.DB, x.Now(), openloops.Options{Env: o.env(), Clock: o.Now, CacheDir: x.Cfg.CacheDir})
 					if err != nil {
 						return err
 					}

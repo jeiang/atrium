@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -22,12 +23,14 @@ import (
 	"github.com/jeiang/atrium/internal/timex"
 )
 
-const CommitmentSystem = "You read one email for its owner and list explicit commitments and deadlines. A commitment is a clear promise " +
-	"to do something (owner 'me' when the mailbox owner promises or must act, owner 'them' when the other party " +
-	"promises or must act). Include a deadline only as an explicit calendar date written YYYY-MM-DD, resolved from " +
-	"a date the message states (for example 'by March 3'); when no explicit date is given set due to null. Never " +
-	"invent dates, skip vague pleasantries ('let's catch up'), newsletters and automated notices. Return an empty " +
-	"list when there is nothing."
+const CommitmentSystem = "You read one email for its owner and list explicit commitments and deadlines that belong to the mailbox " +
+	"owner. A commitment is a clear promise to do something: owner 'me' when the mailbox owner promises or must act, " +
+	"owner 'them' when the other party explicitly promises the owner something. Extract only items addressed to or " +
+	"requested of the mailbox owner; when several people are addressed, ignore items meant for other recipients. " +
+	"Include a deadline only as an explicit calendar date written YYYY-MM-DD, resolved from a date the message states " +
+	"(for example 'by March 3'); when no explicit date is given set due to null. Never invent dates. Skip newsletters, " +
+	"marketing, receipts, shipping notices, notifications and automated mail, and skip vague pleasantries ('let's catch " +
+	"up'). Return an empty list when there is nothing."
 
 var CommitmentSchema = map[string]any{
 	"type": "object",
@@ -80,8 +83,12 @@ func JudgeCommitments(ctx context.Context, env config.Env, url string, m Message
 	}
 	sec, _ := timex.SplitTimestamp(m.DateTS)
 	sentOn := time.Unix(sec, 0).In(zone).Format("2006-01-02")
-	user := fmt.Sprintf("This message was %s on %s.\nFrom: %s <%s>\nTo: %s\nSubject: %s\nBody:\n%s",
-		direction, sentOn, m.FromName, m.FromAddr, strings.Join(to, ", "), m.Subject, textx.Clip(body, llm.BodyChars(ctx)))
+	owners := strings.Join(m.Owners, ", ")
+	if owners == "" {
+		owners = "unknown"
+	}
+	user := fmt.Sprintf("The mailbox owner is: %s\nThis message was %s on %s.\nFrom: %s <%s>\nRecipients: %s\nSubject: %s\nBody:\n%s",
+		owners, direction, sentOn, m.FromName, m.FromAddr, strings.Join(to, ", "), m.Subject, textx.Clip(body, llm.BodyChars(ctx)))
 	raw, err := llm.ChatJSON(ctx, url, CommitmentSystem, user, CommitmentSchema, 500)
 	if err != nil {
 		return nil, err
@@ -102,8 +109,8 @@ func JudgeCommitments(ctx context.Context, env config.Env, url string, m Message
 
 func messageOf(m mailscan.Message) Message {
 	return Message{ID: m.ID, Account: m.Account, DateTS: m.DateTS, Sent: m.Sent, Subject: m.Subject, FromName: m.FromName,
-		FromAddr: m.FromAddr, ToAddrs: m.ToAddrs, ListID: m.ListID, Precedence: m.Precedence, Category: m.Category,
-		Labels: m.Labels, Flags: m.Flags}
+		FromAddr: m.FromAddr, FromDomain: m.FromDomain, ToAddrs: m.ToAddrs, ListID: m.ListID, Precedence: m.Precedence,
+		Category: m.Category, ESP: m.ESP, ReplyTo: m.ReplyTo, RawPath: m.RawPath, Labels: m.Labels, Flags: m.Flags}
 }
 
 func commitmentItems(found any, perMail int) ([]any, error) {
@@ -121,7 +128,7 @@ func commitmentItems(found any, perMail int) ([]any, error) {
 	return nil, fmt.Errorf("%w: %s is not a list", httpx.ErrShape, fmt.Sprintf("%T", found))
 }
 
-func ScanCommitments(ctx context.Context, d *db.DB, env config.Env, now float64, judge Judge) (int64, error) {
+func ScanCommitments(ctx context.Context, d *db.DB, cacheDir string, env config.Env, now float64, judge Judge) (int64, error) {
 	if judge == nil {
 		judge = JudgeCommitments
 	}
@@ -140,6 +147,16 @@ func ScanCommitments(ctx context.Context, d *db.DB, env config.Env, now float64,
 	if err != nil {
 		return 0, err
 	}
+	selves, err := selfAddresses(ctx, d.Read)
+	if err != nil {
+		return 0, err
+	}
+	owners := make([]string, 0, len(selves))
+	for addr := range selves {
+		owners = append(owners, addr)
+	}
+	slices.Sort(owners)
+	g := newGate(cacheDir, selves)
 	result, err := mailscan.Run(ctx, d, now, mailscan.Spec{
 		Kind: "commitments", Hint: "1", WindowDays: window, FetchLimit: limit * 4, Limit: limit,
 		Eligible: func(m mailscan.Message) (bool, error) {
@@ -148,13 +165,12 @@ func ScanCommitments(ctx context.Context, d *db.DB, env config.Env, now float64,
 				return false, err
 			}
 			msg := messageOf(m)
-			if msg.Sent {
-				return true, nil
-			}
-			return msg.HumanSender()
+			return g.wanted(&msg)
 		},
 		Judge: func(ctx context.Context, row mailscan.Message, body string) (int, error) {
-			found, err := judge(ctx, env, chatURL, messageOf(row), body)
+			msg := messageOf(row)
+			msg.Owners = owners
+			found, err := judge(ctx, env, chatURL, msg, body)
 			if err != nil {
 				return 0, err
 			}

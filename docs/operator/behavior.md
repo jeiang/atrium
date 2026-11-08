@@ -71,6 +71,7 @@ Every mailbox write goes through one safety gate.
 ## Attention and tasks
 
 - The attention query covers the enabled queues: proposals, drafts, open loops, commitments, event candidates, thread plans, packages and tasks. Items are grouped as overdue, due soon, needs decision, waiting on them and upcoming. The cron-only `attention` tool and the daily digest read it. The attention page is not part of this build.
+- Open loops come from mail the operator actually needs to answer: the latest message must be addressed directly to the operator in To and must not be bulk or automated (List-Id, List-Unsubscribe, Precedence bulk/list/junk, Auto-Submitted, a bulk Gmail category, an email service provider, a Reply-To that differs from From, or an automated sender address). Commitments follow the same rule and include only items addressed to or requested of the operator; items meant for other recipients of a group message are ignored. Birthdays are read from contacts for the calendar and are not an open-loop source.
 - Tasks are a core store with open, done and dismissed status, a due date, reminder time, priority and an optional source. The assistant tools list, add, update, complete and propose tasks; the reminder job inserts a task when a scheduled reminder is due. The assistant reads the attention view with the `attention` tool, and a daily digest posts the view to the assistant channel.
 
 ## Settings and secrets
