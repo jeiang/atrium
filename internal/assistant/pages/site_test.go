@@ -110,9 +110,7 @@ func newSiteOn(t *testing.T, d *db.DB, options ...siteOption) *site {
 		t.Fatal(err)
 	}
 	reg := allTools(t, s.fetch)
-	if all, err := s.runner.Registry.All(); err == nil && len(all) == 0 {
-		s.runner.Registry = reg
-	}
+	s.runner.Registry = reg
 	module := Module(Options{Runner: s.runner, Registry: reg, Client: s.api.Client(), Now: s.now, Poll: 10 * time.Millisecond, KeepAlive: 200 * time.Millisecond})
 	s.srv, err = web.New(web.Options{Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, Render: render, Modules: []web.Module{module}})
 	if err != nil {
