@@ -64,7 +64,9 @@ func TestTaskAddUndoAndRegistryMatrix(t *testing.T) {
 			t.Fatalf("%s missing from cron/nightly: %v %v", name, cronNames, nightlyNames)
 		}
 	}
-	for _, name := range []string{"task_propose", "task_update", "task_done"} {
+	for _, name := range []string{"task_propose", "task_update", "task_done", "draft_email_create", "draft_email_update", "file_write",
+		"mail_folder_create", "mail_move", "notion_add_alias", "notion_archive_page", "notion_create_page", "notion_move_page",
+		"notion_update_page", "profile_set", "schedule_cancel", "schedule_create", "schedule_update"} {
 		if containsName(cronNames, name) || containsName(nightlyNames, name) {
 			t.Fatalf("%s offered to an unattended run", name)
 		}
