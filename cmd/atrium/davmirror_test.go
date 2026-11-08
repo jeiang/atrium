@@ -40,7 +40,8 @@ func davFixture(t *testing.T) (dir string, srv *caldavtest.Server) {
 	t.Helper()
 	dir, _ = moduleFixture(t, flagsExcept("", ""))
 	srv = caldavtest.New(t, "operator@icloud.invalid", davPassword, "Home")
-	t.Cleanup(calendar.UseEndpoints(calendar.Endpoints{CalDAV: srv.URL + "/", CardDAV: srv.URL + "/"}))
+	activeFixture.env[calendar.CalDAVEnv] = srv.URL + "/"
+	activeFixture.env[calendar.CardDAVEnv] = srv.URL + "/"
 	activeFixture.env[settingEnv(contacts.DirKey)] = filepath.Join(dir, "contacts")
 	activeFixture.env[settingEnv(calendar.CalendarDirKey)] = filepath.Join(dir, "calendars")
 	return dir, srv

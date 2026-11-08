@@ -140,7 +140,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_CALENDAR_WORK_HOURS` | `calendar.work_hours` |
 | `ATRIUM_CONTACTS_CONTACTS_DIR` | `contacts.contacts_dir` |
 | `ATRIUM_CONTACTS_CONTACTS_MAX_RESULTS` | `contacts.contacts_max_results` |
-| `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_CONTACTS` | `contacts.contacts_max_results` |
 | `ATRIUM_CORE_ASSISTANT_ENABLED` | `core.assistant_enabled` |
 | `ATRIUM_CORE_CALENDAR_ENABLED` | `core.calendar_enabled` |
 | `ATRIUM_CORE_CONTACTS_ENABLED` | `core.contacts_enabled` |

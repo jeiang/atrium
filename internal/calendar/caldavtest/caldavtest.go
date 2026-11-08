@@ -13,13 +13,16 @@ import (
 
 type Server struct {
 	*httptest.Server
-	mu        sync.Mutex
-	Calendars []string
-	objects   map[string]string
-	Puts      []string
-	Deleted   []string
-	User      string
-	Password  string
+	mu          sync.Mutex
+	Calendars   []string
+	objects     map[string]string
+	Puts        []string
+	PutAttempts int
+	FailPuts    int
+	PutStatus   int
+	Deleted     []string
+	User        string
+	Password    string
 }
 
 const header = `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav">`
@@ -81,6 +84,16 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	case "PROPFIND":
 		s.propfind(w, r, string(body))
 	case http.MethodPut:
+		s.PutAttempts++
+		if s.FailPuts > 0 {
+			s.FailPuts--
+			status := s.PutStatus
+			if status == 0 {
+				status = http.StatusInternalServerError
+			}
+			w.WriteHeader(status)
+			return
+		}
 		s.objects[r.URL.Path] = string(body)
 		s.Puts = append(s.Puts, string(body))
 		w.WriteHeader(http.StatusCreated)

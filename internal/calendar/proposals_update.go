@@ -15,7 +15,6 @@ import (
 	gcal "google.golang.org/api/calendar/v3"
 
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -50,7 +49,7 @@ func encodeICS(cal *ical.Calendar) (string, error) {
 }
 
 func findICloud(ctx context.Context, env config.Env, set Settings, uid string) (*icloudObject, error) {
-	client, calendars, err := icloudCalendars(ctx, set)
+	client, calendars, err := icloudCalendars(ctx, env, set)
 	if err != nil {
 		return nil, err
 	}
@@ -102,7 +101,7 @@ func eventOf(cal *ical.Calendar) *ical.Component {
 
 var updatedProps = []string{ical.PropSummary, ical.PropDateTimeStart, ical.PropDateTimeEnd, ical.PropLocation, ical.PropDescription, ical.PropDateTimeStamp}
 
-func updateICloud(ctx context.Context, env config.Env, set Settings, spec Spec, tz *time.Location) (py.Dict, error) {
+func planICloudUpdate(ctx context.Context, env config.Env, set Settings, spec Spec, tz *time.Location) (func() (py.Dict, error), error) {
 	obj, err := findICloud(ctx, env, set, spec.UID)
 	if err != nil {
 		return nil, err
@@ -132,13 +131,15 @@ func updateICloud(ctx context.Context, env config.Env, set Settings, spec Spec, 
 		sequence, _ = strconv.Atoi(strings.TrimSpace(p.Value))
 	}
 	ev.Props.Set(&ical.Prop{Name: ical.PropSequence, Params: ical.Params{}, Value: strconv.Itoa(sequence + 1)})
-	if err := obj.put(ctx, copied); err != nil {
-		return nil, err
-	}
-	return py.Dict{{Key: "op", Value: RestoreOp}, {Key: "calendar", Value: string(ICloud)}, {Key: "uid", Value: spec.UID}, {Key: "ics", Value: obj.raw}}, nil
+	return func() (py.Dict, error) {
+		if err := obj.put(ctx, copied); err != nil {
+			return nil, err
+		}
+		return py.Dict{{Key: "op", Value: RestoreOp}, {Key: "calendar", Value: string(ICloud)}, {Key: "uid", Value: spec.UID}, {Key: "ics", Value: obj.raw}}, nil
+	}, nil
 }
 
-func rsvpICloud(ctx context.Context, env config.Env, set Settings, uid, response string) (py.Dict, error) {
+func planICloudRSVP(ctx context.Context, env config.Env, set Settings, uid, response string) (func() (py.Dict, error), error) {
 	obj, err := findICloud(ctx, env, set, uid)
 	if err != nil {
 		return nil, err
@@ -163,10 +164,12 @@ func rsvpICloud(ctx context.Context, env config.Env, set Settings, uid, response
 	if !found {
 		return nil, Error("the operator is not an attendee of this event")
 	}
-	if err := obj.put(ctx, copied); err != nil {
-		return nil, err
-	}
-	return py.Dict{{Key: "op", Value: RestoreOp}, {Key: "calendar", Value: string(ICloud)}, {Key: "uid", Value: uid}, {Key: "ics", Value: obj.raw}}, nil
+	return func() (py.Dict, error) {
+		if err := obj.put(ctx, copied); err != nil {
+			return nil, err
+		}
+		return py.Dict{{Key: "op", Value: RestoreOp}, {Key: "calendar", Value: string(ICloud)}, {Key: "uid", Value: uid}, {Key: "ics", Value: obj.raw}}, nil
+	}, nil
 }
 
 func googleSnapshot(ev *gcal.Event) (string, error) {
@@ -174,7 +177,7 @@ func googleSnapshot(ev *gcal.Event) (string, error) {
 	return string(raw), err
 }
 
-func updateGoogle(ctx context.Context, env config.Env, set Settings, spec Spec, tz *time.Location) (py.Dict, error) {
+func planGoogleUpdate(ctx context.Context, env config.Env, set Settings, spec Spec, tz *time.Location) (func() (py.Dict, error), error) {
 	svc, err := googleService(ctx, env, set)
 	if err != nil {
 		return nil, err
@@ -193,13 +196,15 @@ func updateGoogle(ctx context.Context, env config.Env, set Settings, spec Spec, 
 	}
 	body.Id, body.Attendees = "", nil
 	body.ForceSendFields = []string{"Location", "Description"}
-	if _, err := svc.Events.Patch("primary", spec.UID, body).SendUpdates("none").Context(ctx).Do(); err != nil {
-		return nil, remote(err)
-	}
-	return py.Dict{{Key: "op", Value: RestoreOp}, {Key: "calendar", Value: string(Google)}, {Key: "uid", Value: spec.UID}, {Key: "google", Value: snapshot}}, nil
+	return func() (py.Dict, error) {
+		if _, err := svc.Events.Patch("primary", spec.UID, body).SendUpdates("none").Context(ctx).Do(); err != nil {
+			return nil, remote(err)
+		}
+		return py.Dict{{Key: "op", Value: RestoreOp}, {Key: "calendar", Value: string(Google)}, {Key: "uid", Value: spec.UID}, {Key: "google", Value: snapshot}}, nil
+	}, nil
 }
 
-func rsvpGoogle(ctx context.Context, env config.Env, set Settings, uid, response string) (py.Dict, error) {
+func planGoogleRSVP(ctx context.Context, env config.Env, set Settings, uid, response string) (func() (py.Dict, error), error) {
 	svc, err := googleService(ctx, env, set)
 	if err != nil {
 		return nil, err
@@ -225,10 +230,12 @@ func rsvpGoogle(ctx context.Context, env config.Env, set Settings, uid, response
 	if !found {
 		return nil, Error("the operator is not an attendee of this event")
 	}
-	if _, err := svc.Events.Patch("primary", uid, &gcal.Event{Attendees: attendees}).SendUpdates("none").Context(ctx).Do(); err != nil {
-		return nil, remote(err)
-	}
-	return py.Dict{{Key: "op", Value: RestoreOp}, {Key: "calendar", Value: string(Google)}, {Key: "uid", Value: uid}, {Key: "google", Value: snapshot}}, nil
+	return func() (py.Dict, error) {
+		if _, err := svc.Events.Patch("primary", uid, &gcal.Event{Attendees: attendees}).SendUpdates("none").Context(ctx).Do(); err != nil {
+			return nil, remote(err)
+		}
+		return py.Dict{{Key: "op", Value: RestoreOp}, {Key: "calendar", Value: string(Google)}, {Key: "uid", Value: uid}, {Key: "google", Value: snapshot}}, nil
+	}, nil
 }
 
 func targetOf(raw py.Dict) (Target, error) {
@@ -313,16 +320,6 @@ func (p *Proposals) ProposeRSVP(ctx context.Context, raw py.Dict) (int64, bool, 
 		fingerprint(RSVPKind, target, uid, response), p.now())
 }
 
-func (p *Proposals) record(ctx context.Context, prop *proposals.Proposal, kind string, undo py.Dict, summary string) (py.Dict, error) {
-	calendarName, _ := undo.Get("calendar")
-	uid, _ := undo.Get("uid")
-	action := py.Dict{{Key: "type", Value: kind}, {Key: "calendar", Value: calendarName}, {Key: "uid", Value: uid}}
-	if _, err := proposals.RecordAction(ctx, p.DB.Write, prop.ID, "write", nil, action, undo, ledger.OK, nil, p.now()); err != nil {
-		return nil, err
-	}
-	return py.Dict{{Key: "summary", Value: summary}}, nil
-}
-
 func (p *Proposals) ExecuteUpdate(ctx context.Context, prop *proposals.Proposal, _ any) (py.Dict, error) {
 	target, spec, err := payloadOf(prop)
 	if err != nil {
@@ -337,19 +334,28 @@ func (p *Proposals) ExecuteUpdate(ctx context.Context, prop *proposals.Proposal,
 	if err != nil {
 		return nil, err
 	}
-	var undo py.Dict
+	var plan func() (py.Dict, error)
 	switch target {
 	case ICloud:
-		undo, err = updateICloud(ctx, env, set, spec, tz)
+		plan, err = planICloudUpdate(ctx, env, set, spec, tz)
 	case Google:
-		undo, err = updateGoogle(ctx, env, set, spec, tz)
+		plan, err = planGoogleUpdate(ctx, env, set, spec, tz)
 	default:
 		err = targetError()
 	}
 	if err != nil {
 		return nil, err
 	}
-	return p.record(ctx, prop, UpdateKind, undo, "Changed the event on the "+string(target)+" calendar")
+	action := py.Dict{{Key: "type", Value: UpdateKind}, {Key: "calendar", Value: string(target)}, {Key: "uid", Value: spec.UID}}
+	intent, err := p.begin(ctx, prop, action)
+	if err != nil {
+		return nil, err
+	}
+	undo, err := plan()
+	if err != nil {
+		return nil, p.fail(ctx, intent, action, err)
+	}
+	return p.settleRecord(ctx, intent, UpdateKind, undo, "Changed the event on the "+string(target)+" calendar")
 }
 
 func (p *Proposals) ExecuteRSVP(ctx context.Context, prop *proposals.Proposal, _ any) (py.Dict, error) {
@@ -369,17 +375,26 @@ func (p *Proposals) ExecuteRSVP(ctx context.Context, prop *proposals.Proposal, _
 	if err != nil {
 		return nil, err
 	}
-	var undo py.Dict
+	var plan func() (py.Dict, error)
 	switch target {
 	case ICloud:
-		undo, err = rsvpICloud(ctx, p.env(), set, info.UID, info.Response)
+		plan, err = planICloudRSVP(ctx, p.env(), set, info.UID, info.Response)
 	case Google:
-		undo, err = rsvpGoogle(ctx, p.env(), set, info.UID, info.Response)
+		plan, err = planGoogleRSVP(ctx, p.env(), set, info.UID, info.Response)
 	}
 	if err != nil {
 		return nil, err
 	}
-	return p.record(ctx, prop, RSVPKind, undo, "Replied "+info.Response)
+	action := py.Dict{{Key: "type", Value: RSVPKind}, {Key: "calendar", Value: string(target)}, {Key: "uid", Value: info.UID}, {Key: "response", Value: info.Response}}
+	intent, err := p.begin(ctx, prop, action)
+	if err != nil {
+		return nil, err
+	}
+	undo, err := plan()
+	if err != nil {
+		return nil, p.fail(ctx, intent, action, err)
+	}
+	return p.settleRecord(ctx, intent, RSVPKind, undo, "Replied "+info.Response)
 }
 
 func (p *Proposals) Restore(ctx context.Context, plan json.RawMessage) (py.Dict, error) {

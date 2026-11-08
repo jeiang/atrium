@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
@@ -19,16 +20,16 @@ import (
 
 type Module struct{}
 
-func (Module) Register(module.Context) module.Registration {
+func (Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
 		Name:     module.Contacts,
 		Requires: []module.Requirement{module.Setting(contacts.DirKey)},
-		Commands: []*cli.Command{{Name: "contacts", Commands: []*cli.Command{syncCommand()}}},
+		Commands: []*cli.Command{{Name: "contacts", Commands: []*cli.Command{syncCommand(mc.Env)}}},
 		Tools:    func(r *registry.Registry) error { return r.Add(Tools()...) },
 	}
 }
 
-func syncCommand() *cli.Command {
+func syncCommand(env config.Env) *cli.Command {
 	return davmirror.SyncCommand("mirror the iCloud address books into the contacts directory (read-only)", passrun.CardDAV,
 		func(ctx context.Context, d *db.DB) (davmirror.Stats, error) {
 			set, err := calendar.LoadSettings(ctx, d.Read)
@@ -45,7 +46,7 @@ func syncCommand() *cli.Command {
 			if src.State == contacts.Unset {
 				return davmirror.Stats{}, calendar.Error(contacts.DirKey + " is not set")
 			}
-			return calendar.SyncContactsMirror(ctx, set, src.Dir)
+			return calendar.SyncContactsMirror(ctx, env, set, src.Dir)
 		})
 }
 

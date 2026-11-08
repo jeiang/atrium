@@ -17,7 +17,7 @@ import (
 type Module struct{}
 
 func (Module) Register(mc module.Context) module.Registration {
-	command := calendarcmd.Command(mc.Env, mc.Tools)
+	command := calendarcmd.Command(mc.Env, mc.Tools, calendar.AuthOptions{})
 	return module.Registration{
 		Name:     module.Calendar,
 		Requires: []module.Requirement{{Name: "calendar credentials", Check: credentials}},

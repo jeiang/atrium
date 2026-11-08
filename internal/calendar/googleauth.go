@@ -16,6 +16,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/jeiang/atrium/internal/config"
 	"golang.org/x/oauth2"
 )
 
@@ -26,16 +27,10 @@ const (
 	exchangeWindow = 30 * time.Second
 )
 
-var tokenURLSafe = func(n int) string {
+func tokenURLSafe(n int) string {
 	b := make([]byte, n)
 	_, _ = rand.Read(b)
 	return base64.RawURLEncoding.EncodeToString(b)
-}
-
-func UseTokens(f func(n int) string) func() {
-	saved := tokenURLSafe
-	tokenURLSafe = f
-	return func() { tokenURLSafe = saved }
 }
 
 func AuthURL(clientID, redirectURI, state, challenge string) string {
@@ -67,6 +62,8 @@ type AuthOptions struct {
 	Port         int
 	Out          io.Writer
 	Timeout      int
+	Random       func(int) string
+	Env          config.Env
 }
 
 func Authorize(ctx context.Context, o AuthOptions) (string, error) {
@@ -105,10 +102,14 @@ func Authorize(ctx context.Context, o AuthOptions) (string, error) {
 	})}
 	go func() { _ = srv.Serve(listener) }()
 	redirect := fmt.Sprintf("http://127.0.0.1:%d", listener.Addr().(*net.TCPAddr).Port)
-	verifier := tokenURLSafe(64)
+	random := o.Random
+	if random == nil {
+		random = tokenURLSafe
+	}
+	verifier := random(64)
 	digest := sha256.Sum256([]byte(verifier))
 	challenge := base64.RawURLEncoding.EncodeToString(digest[:])
-	state := tokenURLSafe(16)
+	state := random(16)
 	_, _ = fmt.Fprintf(o.Out, "Open this URL in a browser and approve access:\n\n%s\n\n", AuthURL(o.ClientID, redirect, state, challenge))
 	got, err := waitForRedirect(ctx, result, served, o.Timeout)
 	closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
@@ -128,7 +129,7 @@ func Authorize(ctx context.Context, o AuthOptions) (string, error) {
 	}
 	conf := &oauth2.Config{
 		ClientID: o.ClientID, ClientSecret: o.ClientSecret, RedirectURL: redirect,
-		Endpoint: oauth2.Endpoint{AuthURL: authURI, TokenURL: endpoints.Token, AuthStyle: oauth2.AuthStyleInParams},
+		Endpoint: oauth2.Endpoint{AuthURL: authURI, TokenURL: EndpointsFrom(o.Env).Token, AuthStyle: oauth2.AuthStyleInParams},
 	}
 	exchange := context.WithValue(ctx, oauth2.HTTPClient, &http.Client{Timeout: exchangeWindow})
 	token, err := conf.Exchange(exchange, got["code"], oauth2.VerifierOption(verifier))

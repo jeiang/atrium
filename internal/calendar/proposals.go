@@ -142,6 +142,40 @@ func payloadOf(prop *proposals.Proposal) (target Target, spec Spec, err error) {
 	return target, spec, err
 }
 
+func (p *Proposals) begin(ctx context.Context, prop *proposals.Proposal, action py.Dict) (int64, error) {
+	return proposals.BeginAction(ctx, p.DB.Write, prop.ID, action, p.now())
+}
+
+func (p *Proposals) settle(ctx context.Context, id int64, action, undo py.Dict, state ledger.State, text *string) error {
+	var plan any
+	if undo != nil {
+		plan = undo
+	}
+	return proposals.SettleAction(ctx, p.DB.Write, id, action, plan, state, text, p.now())
+}
+
+func (p *Proposals) fail(ctx context.Context, id int64, action py.Dict, err error) error {
+	text := err.Error()
+	state := ledger.Failed
+	if OutcomeUnknown(err) {
+		state = ledger.Unknown
+	}
+	if settleErr := p.settle(ctx, id, action, nil, state, &text); settleErr != nil {
+		return settleErr
+	}
+	return err
+}
+
+func (p *Proposals) settleRecord(ctx context.Context, id int64, kind string, undo py.Dict, summary string) (py.Dict, error) {
+	calendarName, _ := undo.Get("calendar")
+	uid, _ := undo.Get("uid")
+	action := py.Dict{{Key: "type", Value: kind}, {Key: "calendar", Value: calendarName}, {Key: "uid", Value: uid}}
+	if err := p.settle(ctx, id, action, undo, ledger.OK, nil); err != nil {
+		return nil, err
+	}
+	return py.Dict{{Key: "summary", Value: summary}}, nil
+}
+
 func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any) (py.Dict, error) {
 	target, spec, err := payloadOf(prop)
 	if err != nil {
@@ -156,16 +190,21 @@ func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any
 	if err != nil {
 		return nil, err
 	}
-	ref, err := CreateEvent(ctx, env, set, target, spec, tz)
+	action := py.Dict{{Key: "type", Value: Kind}, {Key: "calendar", Value: string(target)}, {Key: "uid", Value: spec.UID}}
+	intent, err := p.begin(ctx, prop, action)
 	if err != nil {
 		return nil, err
 	}
-	if err := Track(ctx, p.DB.Write, spec, target, &prop.ID, p.now()); err != nil {
-		return nil, err
+	ref, err := CreateEvent(ctx, env, set, target, spec, tz)
+	if err != nil {
+		return nil, p.fail(ctx, intent, action, err)
 	}
-	action := append(py.Dict{{Key: "type", Value: Kind}}, ref.Dict()...)
+	if err := Track(ctx, p.DB.Write, spec, target, &prop.ID, p.now()); err != nil {
+		return nil, p.fail(ctx, intent, action, &Partial{Err: err})
+	}
 	undo := py.Dict{{Key: "op", Value: UndoOp}, {Key: "calendar", Value: string(target)}, {Key: "uid", Value: spec.UID}}
-	if _, err := proposals.RecordAction(ctx, p.DB.Write, prop.ID, "write", nil, action, undo, ledger.OK, nil, p.now()); err != nil {
+	settled := append(py.Dict{{Key: "type", Value: Kind}}, ref.Dict()...)
+	if err := p.settle(ctx, intent, settled, undo, ledger.OK, nil); err != nil {
 		return nil, err
 	}
 	return append(py.Dict{{Key: "summary", Value: fmt.Sprintf("Added to the %s calendar", target)}}, ref.Dict()...), nil
@@ -191,7 +230,7 @@ func (p *Proposals) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, er
 		return nil, err
 	}
 	if err := Untrack(ctx, p.DB.Write, info.UID, p.now()); err != nil {
-		return nil, err
+		return nil, &Partial{Err: err}
 	}
 	return py.Dict{{Key: "deleted", Value: info.UID}}, nil
 }

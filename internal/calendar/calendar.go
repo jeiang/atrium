@@ -68,23 +68,28 @@ type Endpoints struct {
 	CardDAV   string
 }
 
-var endpoints = Endpoints{Token: TokenURI, CalDAV: CalDAVURL, CardDAV: CardDAVURL}
+const (
+	CalDAVEnv      = "ATRIUM_CALENDAR_CALDAV_URL"
+	CardDAVEnv     = "ATRIUM_CALENDAR_CARDDAV_URL"
+	GoogleTokenEnv = "ATRIUM_CALENDAR_GOOGLE_TOKEN_URL"
+	GoogleAPIEnv   = "ATRIUM_CALENDAR_GOOGLE_API_URL"
+)
 
-func UseEndpoints(e Endpoints) func() {
-	saved := endpoints
-	if e.Token != "" {
-		endpoints.Token = e.Token
+func EndpointsFrom(env config.Env) Endpoints {
+	pick := func(key, fallback string) string {
+		if env != nil {
+			if value, ok := env(key); ok && strings.TrimSpace(value) != "" {
+				return strings.TrimSpace(value)
+			}
+		}
+		return fallback
 	}
-	if e.GoogleAPI != "" {
-		endpoints.GoogleAPI = e.GoogleAPI
+	return Endpoints{
+		Token:     pick(GoogleTokenEnv, TokenURI),
+		GoogleAPI: pick(GoogleAPIEnv, ""),
+		CalDAV:    pick(CalDAVEnv, CalDAVURL),
+		CardDAV:   pick(CardDAVEnv, CardDAVURL),
 	}
-	if e.CalDAV != "" {
-		endpoints.CalDAV = e.CalDAV
-	}
-	if e.CardDAV != "" {
-		endpoints.CardDAV = e.CardDAV
-	}
-	return func() { endpoints = saved }
 }
 
 type Ref struct {
@@ -115,6 +120,7 @@ func googleService(ctx context.Context, env config.Env, set Settings) (*gcal.Ser
 	if err != nil {
 		return nil, err
 	}
+	endpoints := EndpointsFrom(env)
 	source := oauth2.ReuseTokenSource(nil, &refresher{ctx: ctx, creds: creds, tokenURL: endpoints.Token})
 	client := &http.Client{
 		Timeout:   remoteTimeout,
@@ -150,7 +156,7 @@ func CreateEvent(ctx context.Context, env config.Env, set Settings, target Targe
 			return Ref{}, remote(err)
 		}
 	case ICloud:
-		cal, err := openICloud(ctx, set)
+		cal, err := openICloud(ctx, env, set)
 		if err != nil {
 			return Ref{}, err
 		}
@@ -180,7 +186,7 @@ func DeleteEvent(ctx context.Context, env config.Env, set Settings, target Targe
 			}
 		}
 	case ICloud:
-		cal, err := openICloud(ctx, set)
+		cal, err := openICloud(ctx, env, set)
 		if err != nil {
 			return err
 		}

@@ -20,8 +20,7 @@ func init() {
 		Key: DirKey, Module: "contacts", Type: settings.String}))
 	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
 		Key: MaxResultsKey, Module: "contacts", Type: settings.Int, Default: "10", Min: 1, Max: 100,
-		Check:    settings.Between(1, 100),
-		EnvAlias: "ATRIUM_ASSISTANT_AGENT_MAIL_MAX_CONTACTS"}))
+		Check: settings.Between(1, 100)}))
 }
 
 type State uint8

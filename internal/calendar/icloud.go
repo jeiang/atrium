@@ -14,6 +14,8 @@ import (
 	"github.com/emersion/go-ical"
 	"github.com/emersion/go-webdav"
 	"github.com/emersion/go-webdav/caldav"
+
+	"github.com/jeiang/atrium/internal/config"
 )
 
 type icloudCalendar struct {
@@ -70,13 +72,13 @@ func homeSetURL(ctx context.Context, client webdav.HTTPClient, principal *url.UR
 	return nil, errors.New("caldav: no calendar-home-set")
 }
 
-func icloudCalendars(ctx context.Context, set Settings) (*caldav.Client, []caldav.Calendar, error) {
+func icloudCalendars(ctx context.Context, env config.Env, set Settings) (*caldav.Client, []caldav.Calendar, error) {
 	login, err := ICloudLogin(set)
 	if err != nil {
 		return nil, nil, err
 	}
 	httpClient := webdav.HTTPClientWithBasicAuth(&http.Client{Timeout: remoteTimeout}, login.AppleID, login.Password)
-	base, err := url.Parse(endpoints.CalDAV)
+	base, err := url.Parse(EndpointsFrom(env).CalDAV)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -104,8 +106,8 @@ func icloudCalendars(ctx context.Context, set Settings) (*caldav.Client, []calda
 	return client, calendars, nil
 }
 
-func openICloud(ctx context.Context, set Settings) (*icloudCalendar, error) {
-	client, calendars, err := icloudCalendars(ctx, set)
+func openICloud(ctx context.Context, env config.Env, set Settings) (*icloudCalendar, error) {
+	client, calendars, err := icloudCalendars(ctx, env, set)
 	if err != nil {
 		return nil, err
 	}
