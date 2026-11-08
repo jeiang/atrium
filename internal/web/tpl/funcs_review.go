@@ -1,6 +1,7 @@
 package tpl
 
 import (
+	"fmt"
 	"html/template"
 	"reflect"
 
@@ -23,7 +24,7 @@ func pyScalar(v any) (string, error) {
 	if s, err := pyStr(v); err == nil {
 		return s, nil
 	}
-	return py.ReprValue(v), nil
+	return fmt.Sprint(v), nil
 }
 
 func pyAttr(m any, key string) (string, error) {

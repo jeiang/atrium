@@ -17,8 +17,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notionid"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
+	"github.com/jeiang/atrium/internal/urlx"
 )
 
 var markdownTags = []string{
@@ -99,7 +99,7 @@ func taskBox(m *rx.Match) string {
 
 func internalHref(m *rx.Match, pages map[string]string) string {
 	url := html.UnescapeString(m.Group(1))
-	parts, err := py.URLSplit(url)
+	parts, err := urlx.URLSplit(url)
 	if err != nil {
 		return m.Text()
 	}

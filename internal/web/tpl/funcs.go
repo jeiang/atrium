@@ -2,18 +2,23 @@ package tpl
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
 	"maps"
+	"math"
+	"net/url"
 	"reflect"
 	"slices"
 	"strconv"
 	"strings"
 	ttemplate "text/template"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 var extraFuncs = template.FuncMap{}
@@ -54,23 +59,23 @@ func (e *Engine) funcs(set func() *template.Template) template.FuncMap {
 		"fail":     func(msg string, args ...any) (string, error) { return "", fmt.Errorf(msg, args...) },
 		"markdown": func(v any) template.HTML { return Markdown(str(v)) },
 		"ts":       ts,
-		"truncate": func(n int, v any) string { return py.Truncate(str(v), n) },
+		"truncate": func(n int, v any) string { return truncate(str(v), n) },
 		"filesizeformat": func(v any) (string, error) {
 			f, err := toFloat(v)
-			return py.FileSizeFormat(f), err
+			return fileSizeFormat(f), err
 		},
 		"urlencode": urlencode,
 		"items":     items,
 		"odict":     odict,
 		"get":       get,
-		"tojson":    py.JSONHTMLSafe,
+		"tojson":    jsonHTMLSafe,
 		"round": func(v any, digits ...int) (float64, error) {
 			f, err := toFloat(v)
 			n := 0
 			if len(digits) > 0 {
 				n = digits[0]
 			}
-			return py.Round(f, n), err
+			return roundTo(f, n), err
 		},
 		"int": func(v any) (int64, error) {
 			f, err := toFloat(v)
@@ -81,11 +86,11 @@ func (e *Engine) funcs(set func() *template.Template) template.FuncMap {
 		},
 		"fdiv":  func(a, b any) (float64, error) { return arith(a, b, func(x, y float64) float64 { return x / y }) },
 		"inc":   func(i int) int { return i + 1 },
-		"lower": func(v any) string { return py.Lower(str(v)) },
+		"lower": func(v any) string { return strings.ToLower(str(v)) },
 		"capitalize": func(v any) string {
 			s := str(v)
 			for i, r := range s {
-				return strings.ToUpper(string(r)) + py.Lower(s[i+len(string(r)):])
+				return strings.ToUpper(string(r)) + strings.ToLower(s[i+len(string(r)):])
 			}
 			return s
 		},
@@ -190,7 +195,7 @@ func ts(v any, style ...string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	sec, us := py.SplitTimestamp(epoch)
+	sec, us := timex.SplitTimestamp(epoch)
 	moment := time.Unix(sec, us*1000).UTC()
 	kind := "datetime"
 	if len(style) > 0 {
@@ -329,9 +334,9 @@ func pyStr(v any) (string, error) {
 		}
 		return "False", nil
 	case float64:
-		return py.FloatRepr(x), nil
+		return strconv.FormatFloat(x, 'g', -1, 64), nil
 	case float32:
-		return py.FloatRepr(float64(x)), nil
+		return strconv.FormatFloat(float64(x), 'g', -1, 64), nil
 	case string:
 		return x, nil
 	case template.HTML:
@@ -374,12 +379,12 @@ func urlencode(v any) (string, error) {
 			if err != nil {
 				return "", err
 			}
-			parts[i] = py.URLQuotePlus(p.Key) + "=" + py.URLQuotePlus(value)
+			parts[i] = url.QueryEscape(p.Key) + "=" + url.QueryEscape(value)
 		}
 		return strings.Join(parts, "&"), nil
 	}
 	s, err := pyStr(v)
-	return py.URLQuote(s), err
+	return urlQuote(s), err
 }
 
 func odict(kv ...any) (py.Dict, error) {
@@ -406,4 +411,76 @@ func get(m any, key string) any {
 		return v
 	}
 	return nil
+}
+
+func truncate(s string, length int) string {
+	const end, leeway = "...", 5
+	if utf8.RuneCountInString(s) <= length+leeway {
+		return s
+	}
+	cut := clip(s, max(length-len(end), 0))
+	if i := strings.LastIndex(cut, " "); i >= 0 {
+		cut = cut[:i]
+	}
+	return cut + end
+}
+
+func clip(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	i := 0
+	for pos := range s {
+		if i == n {
+			return s[:pos]
+		}
+		i++
+	}
+	return s
+}
+
+func fileSizeFormat(value float64) string {
+	if value == 1 {
+		return "1 Byte"
+	}
+	if value < 1000 {
+		return fmt.Sprintf("%d Bytes", int64(value))
+	}
+	prefixes := []string{"kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"}
+	unit := 1000.0
+	for i, prefix := range prefixes {
+		unit *= 1000
+		if value < unit || i == len(prefixes)-1 {
+			return strconv.FormatFloat(1000*value/unit, 'f', 1, 64) + " " + prefix
+		}
+	}
+	return ""
+}
+
+func jsonHTMLSafe(v any) (string, error) {
+	var b strings.Builder
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(true)
+	if err := enc.Encode(v); err != nil {
+		return "", err
+	}
+	return strings.TrimSuffix(b.String(), "\n"), nil
+}
+
+func roundTo(x float64, ndigits int) float64 {
+	if math.IsNaN(x) || math.IsInf(x, 0) {
+		return x
+	}
+	if ndigits == 0 {
+		return math.RoundToEven(x)
+	}
+	out, err := strconv.ParseFloat(strconv.FormatFloat(x, 'f', ndigits, 64), 64)
+	if err != nil {
+		return x
+	}
+	return out
+}
+
+func urlQuote(s string) string {
+	return strings.ReplaceAll(strings.ReplaceAll(url.QueryEscape(s), "+", "%20"), "%2F", "/")
 }
