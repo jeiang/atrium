@@ -2,6 +2,7 @@ package coremodule
 
 import (
 	"context"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/db/dbcmd"
 	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	mailpages "github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/module"
@@ -38,6 +40,7 @@ func (m Module) Register(module.Context) module.Registration {
 			{Module: mailpages.PauseModule},
 			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(config.OS)}), Templates: reviewpages.Templates()},
 			{Module: startOps},
+			{Module: startEmbed},
 			{Module: integrations.Module, Templates: integrations.Templates()},
 			{Module: settingspages.Module, Templates: settingspages.Templates()},
 		},
@@ -61,4 +64,31 @@ func startOps(_ chi.Router, d *web.Deps) {
 		return
 	}
 	d.OnClose(stop)
+}
+
+const embedEvery = time.Minute
+
+func startEmbed(_ chi.Router, d *web.Deps) {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		for ctx.Err() == nil {
+			more, err := mail.ReembedStep(ctx, d.DB)
+			if err != nil && ctx.Err() == nil {
+				log.Warn("embedding index rebuild failed", logx.Err, err.Error())
+			}
+			if more {
+				continue
+			}
+			select {
+			case <-ctx.Done():
+			case <-time.After(embedEvery):
+			}
+		}
+	}()
+	d.OnClose(func() {
+		cancel()
+		<-done
+	})
 }
