@@ -21,6 +21,7 @@ func (s *service) libRender(w http.ResponseWriter, r *http.Request, name string,
 	if err != nil {
 		panic(err)
 	}
+	f.Typed = true
 	if err := s.deps.Render.Page(w, r, http.StatusOK, name, f); err != nil {
 		panic(err)
 	}

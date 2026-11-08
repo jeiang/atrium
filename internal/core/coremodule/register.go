@@ -48,7 +48,9 @@ func (m Module) Register(mc module.Context) module.Registration {
 		Name: module.Core,
 		Core: true,
 		Pages: []web.Page{
-			{Module: about.Module(m.Version), Templates: about.Templates()},
+			{Module: about.Module(m.Version), Templates: about.Templates(), Nav: []web.NavItem{
+				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},
+			}},
 			{Module: mailpages.PauseModule},
 			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(mc.Env), Enabled: enabled}), Templates: reviewpages.Templates(), Nav: []web.NavItem{
 				{Group: "Review", Label: "Proposals", URL: "/proposals", Icon: "list-checks", Page: "proposals", Order: 20, Badge: true},

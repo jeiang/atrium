@@ -71,7 +71,9 @@ func (s *Set) renderModules(w http.ResponseWriter, r *http.Request, d *web.Deps,
 	if err != nil {
 		panic(err)
 	}
-	f, err := d.Render.Frame(r, "settings", map[string]any{"modules": list})
+	f, err := d.Render.Frame(r, "settings", struct {
+		Modules []row `json:"modules"`
+	}{Modules: list})
 	if err != nil {
 		panic(err)
 	}

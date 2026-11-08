@@ -24,7 +24,6 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
-	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 const (
@@ -157,7 +156,7 @@ func (p *pages) chatFile(w http.ResponseWriter, r *http.Request) {
 	}
 	preview, err := filePreview(r.Context(), p.deps.DB.Read, *found)
 	check(err)
-	p.fragment(w, r, http.StatusOK, "_file.gohtml", map[string]any{"file": preview, "file_url": fileURL})
+	p.fragment(w, r, http.StatusOK, "_file.gohtml", FileData{File: preview, FileURL: fileURL})
 }
 
 func (p *pages) chatFileDownload(w http.ResponseWriter, r *http.Request) {
@@ -242,7 +241,7 @@ func (p *pages) projectFiles(w http.ResponseWriter, r *http.Request, projectID i
 	if rows == nil {
 		rows = []files.Row{}
 	}
-	p.fragment(w, r, status, "_project_files.gohtml", map[string]any{"project": project, "files": rows, "error": problem})
+	p.fragment(w, r, status, "_project_files.gohtml", ProjectFiles{Project: project, Files: rows, Error: problem})
 }
 
 func (p *pages) projectFilesList(w http.ResponseWriter, r *http.Request) {
@@ -339,38 +338,38 @@ func (p *pages) projectFileDelete(w http.ResponseWriter, r *http.Request) {
 	p.projectFiles(w, r, projectID, http.StatusOK, nil)
 }
 
-func filePreview(ctx context.Context, q db.Querier, found files.Row) (map[string]any, error) {
+func filePreview(ctx context.Context, q db.Querier, found files.Row) (FilePreview, error) {
 	limit, err := config.From(ctx).Limit(ctx, q, config.KeyPreviewBytes)
 	if err != nil {
-		return nil, err
+		return FilePreview{}, err
 	}
-	out := tpl.View(found).(map[string]any)
 	render, text, rows, truncated, err := previewOf(found, limit)
 	if err != nil {
-		return nil, err
+		return FilePreview{}, err
 	}
-	out["render"], out["text"], out["rows"], out["truncated"] = render, text, rows, truncated
-	return out, nil
+	return FilePreview{ID: found.ID, ThreadID: found.ThreadID, RunID: found.RunID, Name: found.Name, MediaType: found.MediaType,
+		Bytes: found.Bytes, Path: found.Path, Origin: found.Origin, CreatedAt: found.CreatedAt, Text: found.Text, Tokens: found.Tokens,
+		ProjectID: found.ProjectID, Render: render, Body: text, Rows: rows, Truncated: truncated}, nil
 }
 
-func previewOf(found files.Row, previewBytes int) (render any, text string, rows [][]string, truncated bool, err error) {
+func previewOf(found files.Row, previewBytes int) (render string, text string, rows [][]string, truncated bool, err error) {
 	rows = [][]string{}
 	media := found.MediaType
 	if files.IsImageType(media) {
 		return "image", "", rows, false, nil
 	}
 	if media == files.PDFType {
-		return nil, "", rows, false, nil
+		return "", "", rows, false, nil
 	}
 	var body *string
 	if found.Text == nil {
 		info, statErr := os.Stat(found.Path)
 		if statErr != nil || !info.Mode().IsRegular() {
-			return nil, "", rows, false, nil
+			return "", "", rows, false, nil
 		}
 		raw, readErr := os.ReadFile(found.Path)
 		if readErr != nil {
-			return nil, "", nil, false, readErr
+			return "", "", nil, false, readErr
 		}
 		truncated = len(raw) > previewBytes
 		head := raw[:min(len(raw), sniffBytes)]
@@ -385,7 +384,7 @@ func previewOf(found files.Row, previewBytes int) (render any, text string, rows
 		body = found.Text
 	}
 	if body == nil {
-		return nil, "", rows, false, nil
+		return "", "", rows, false, nil
 	}
 	suffix := py.Lower(py.PathSuffix(py.PathName(found.Path)))
 	switch {

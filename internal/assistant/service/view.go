@@ -38,47 +38,47 @@ const (
 )
 
 type Attachment struct {
-	ID        any
-	Name      any
-	MediaType any
-	Kind      any
+	ID        any `json:"id"`
+	Name      any `json:"name"`
+	MediaType any `json:"media_type"`
+	Kind      any `json:"kind"`
 }
 
 type Citation struct {
-	URL   string
-	Title string
-	Cited string
+	URL   string `json:"url"`
+	Title string `json:"title"`
+	Cited string `json:"cited"`
 }
 
 type SearchResult struct {
-	URL   any
-	Title any
+	URL   any `json:"url"`
+	Title any `json:"title"`
 }
 
 type Step struct {
-	Kind          string
-	Text          string
-	ID            any
-	Name          string
-	Args          string
-	State         *string
-	Result        *string
-	IsError       bool
-	ChildThreadID any
-	Results       []SearchResult
-	Error         any
+	Kind          string         `json:"kind"`
+	Text          string         `json:"text"`
+	ID            any            `json:"id"`
+	Name          string         `json:"name"`
+	Args          string         `json:"args"`
+	State         *string        `json:"state"`
+	Result        *string        `json:"result"`
+	IsError       bool           `json:"is_error"`
+	ChildThreadID any            `json:"child_thread_id"`
+	Results       []SearchResult `json:"results"`
+	Error         any            `json:"error"`
 }
 
 type Item struct {
-	Seq       int64
-	RunID     *int64
-	CreatedAt float64
-	Kind      string
-	Text      string
-	Files     []Attachment
-	Steps     []*Step
-	Citations []Citation
-	Draft     py.Dict
+	Seq       int64        `json:"seq"`
+	RunID     *int64       `json:"run_id"`
+	CreatedAt float64      `json:"created_at"`
+	Kind      string       `json:"kind"`
+	Text      string       `json:"text"`
+	Files     []Attachment `json:"files"`
+	Steps     []*Step      `json:"steps"`
+	Citations []Citation   `json:"citations"`
+	Draft     py.Dict      `json:"draft"`
 }
 
 func get(d py.Dict, key string, fallback any) any {

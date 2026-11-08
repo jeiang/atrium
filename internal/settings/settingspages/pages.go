@@ -259,5 +259,7 @@ func (h handlers) audit(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		panic(err)
 	}
-	h.page(w, r, http.StatusOK, nil, "settings_audit.gohtml", map[string]any{"entries": list})
+	h.page(w, r, http.StatusOK, nil, "settings_audit.gohtml", struct {
+		Entries []entry `json:"entries"`
+	}{Entries: list})
 }
