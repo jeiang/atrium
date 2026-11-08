@@ -165,7 +165,7 @@ func TestUndoingAProfileSetRestoresThePreviousValue(t *testing.T) {
 	third := s.profileSet(run, "tz", "AST")
 	s.profileSet(run, "tz", "UTC")
 	refused := s.post(fmt.Sprintf("/activity/write/%v/undo", third["write_id"]), nil)
-	if got := status(t, refused, http.StatusConflict); jsonOf(t, got)["detail"] != "profile 'tz' changed since this write" {
+	if got := status(t, refused, http.StatusConflict); jsonOf(t, got)["detail"] != `profile "tz" changed since this write` {
 		t.Errorf("detail = %s", got)
 	}
 	if s.profile("tz") != "UTC" {
