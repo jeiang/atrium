@@ -12,6 +12,7 @@ import (
 var retiredKeys = [...]struct{ key, replacement string }{
 	{"max_run_cost_usd", "max_run_cost_usd_*"},
 	{"max_steps", "max_steps_*,agent_subagent_max_steps"},
+	{"agent_commit_savings", ""},
 }
 
 type Orphan struct {
