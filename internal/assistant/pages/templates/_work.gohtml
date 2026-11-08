@@ -59,7 +59,7 @@
     </li>
     {{end}}
     {{range $w.Drafts}}
-    <li><a class="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-accent" {{template "preview_attrs" (printf "/drafts/%v" .ID)}}>{{icon "mail" "size-3.5 shrink-0 text-muted-foreground"}}<span class="truncate">{{or .Subject "(no subject)"}}</span>{{$ds := .Status}}{{with badge "draft_status" $ds}}<span class="badge ms-auto shrink-0" data-variant="{{.Variant}}">{{.Label}}</span>{{else}}<span class="badge ms-auto shrink-0" data-variant="outline">{{$ds}}</span>{{end}}</a></li>
+    <li><a class="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-accent" {{template "preview_attrs" (printf "/drafts/%v" (get . "id"))}}>{{icon "mail" "size-3.5 shrink-0 text-muted-foreground"}}<span class="truncate">{{or (get . "subject") "(no subject)"}}</span>{{$ds := get . "status"}}{{with badge "draft_status" $ds}}<span class="badge ms-auto shrink-0" data-variant="{{.Variant}}">{{.Label}}</span>{{else}}<span class="badge ms-auto shrink-0" data-variant="outline">{{$ds}}</span>{{end}}</a></li>
     {{end}}
   </ul>
   {{end}}

@@ -23,7 +23,7 @@
       <div role="group" class="field flex-1">
         <label for="thread-q" class="sr-only">Search threads</label>
         <div class="input-group h-9">
-          {{icon "search" "size-4 text-muted-foreground"}}
+          {{icon "search" "size-4 shrink-0 text-muted-foreground"}}
           <input id="thread-q" name="q" type="search" value="{{$d.Q}}" placeholder="Search threads" autocomplete="off" data-search-input>
           {{template "spinner" (dict "id" "thread-spinner" "label" "Searching")}}
         </div>

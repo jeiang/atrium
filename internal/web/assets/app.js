@@ -122,7 +122,9 @@ document.addEventListener("close-dialogs", () => {
 
 document.addEventListener("htmx:beforeSwap", (event) => {
   const xhr = event.detail.xhr;
-  if (xhr.status === 422 && (xhr.getResponseHeader("content-type") || "").startsWith("text/html")) {
+  const html = (xhr.getResponseHeader("content-type") || "").startsWith("text/html");
+  const card = xhr.status === 409 && event.detail.target?.matches?.("[data-card]");
+  if (html && (xhr.status === 422 || card)) {
     event.detail.shouldSwap = true;
     event.detail.isError = false;
   }
@@ -168,6 +170,23 @@ const failed = (title, description) => (event) => {
 };
 document.addEventListener("htmx:responseError", failed("Something went wrong", "atrium could not finish that request. Try again, or reload the page."));
 document.addEventListener("htmx:sendError", failed("atrium is unreachable", "Check the connection to the server and try again."));
+
+document.addEventListener("keydown", (event) => {
+  if (event.ctrlKey || event.metaKey || event.altKey || event.target.closest("input, textarea, select, [contenteditable]")) return;
+  const card = event.target.closest("[data-card]");
+  if (!card) return;
+  if (event.key === "Escape") {
+    card.querySelectorAll("details[open]").forEach((details) => { details.open = false; });
+    event.target.blur();
+    return;
+  }
+  const action = { a: "[data-card-approve]", d: "[data-card-dismiss]" }[event.key.toLowerCase()];
+  const button = action && card.querySelector(action);
+  if (button && !button.disabled) {
+    event.preventDefault();
+    button.click();
+  }
+});
 
 document.addEventListener("keydown", (event) => {
   if (event.key === "/" && !event.target.closest("input, textarea, select, [contenteditable]")) {

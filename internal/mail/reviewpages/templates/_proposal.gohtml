@@ -252,7 +252,7 @@
 {{if .pending}}
 <div class="flex flex-wrap items-center gap-2">
   {{$deletes := eq $p.Kind "deletion_rule"}}
-  <button type="submit" class="btn" data-size="sm" name="all" value="1"{{if $deletes}} data-confirm="{{if .picker}}Move all matching messages to Trash now and save the rule?{{else}}Save the rule? Nothing moves to Trash now.{{end}}"{{end}}>
+  <button type="submit" class="btn" data-size="sm" name="all" value="1" data-card-approve{{if $deletes}} data-confirm="{{if .picker}}Move all matching messages to Trash now and save the rule?{{else}}Save the rule? Nothing moves to Trash now.{{end}}"{{end}}>
     {{icon (ternary .picker "check-check" "check")}}{{if .picker}}Approve all{{else}}Approve{{end}}
   </button>
   {{if .picker}}
@@ -260,7 +260,7 @@
   {{end}}
   <span id="proposal-spinner-{{$p.ID}}" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">{{icon "loader-circle" "size-4 animate-spin"}}Applying…</span>
   <div class="ml-auto flex gap-1">
-    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.ID}}/dismiss" hx-indicator="unset">Dismiss</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.ID}}/dismiss" hx-indicator="unset" data-card-dismiss>Dismiss</button>
     <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.ID}}/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
             title="Never propose this again">Dismiss forever</button>
   </div>
@@ -296,14 +296,14 @@
 {{else if eq $p.Kind "gmail_label_merge"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "from_count")))}}{{else if eq $p.Kind "mail_triage"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "count")))}}{{end}}
 {{$picker := and $pending (gt (len $picks) 0)}}
 {{$ctx := dict "p" $p "v" $v "pending" $pending "picks" $picks "picker" $picker "mode" .mode}}
-<li id="proposal-{{$p.ID}}" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring {{if or (eq $p.Status "dismissed") (eq $p.Status "suppressed")}}opacity-80{{end}}">
+<li id="proposal-{{$p.ID}}" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring {{if or (eq $p.Status "dismissed") (eq $p.Status "suppressed")}}opacity-80{{end}}" data-card="proposal" data-status="{{$p.Status}}" tabindex="-1">
   <article aria-labelledby="proposal-title-{{$p.ID}}">
     {{if $pending}}
     <form class="flex flex-col" hx-post="/proposals/{{$p.ID}}/approve" hx-target="#proposal-{{$p.ID}}" hx-swap="outerHTML"
           hx-disabled-elt="find button" hx-indicator="#proposal-spinner-{{$p.ID}}"{{if $picker}} data-selection{{end}}>
     {{end}}
     <header class="flex flex-col gap-2 p-4 pb-3">
-      <div class="flex flex-wrap items-center gap-2">
+      <div class="flex flex-wrap items-center gap-2" data-card-body>
         <span class="badge" data-variant="secondary">{{icon (or $p.KindIcon "list-checks")}}{{$p.KindLabel}}</span>
         {{if $p.Account}}<span class="badge" data-variant="outline">{{str $p.Account}}</span>{{end}}
         {{template "status_badge" $p.Status}}
@@ -311,7 +311,14 @@
       </div>
       <h3 id="proposal-title-{{$p.ID}}" class="font-medium text-pretty">{{$p.Title}}</h3>
     </header>
-    <div class="flex flex-col gap-4 px-4 pb-4">{{template "proposal_body" $ctx}}</div>
+    {{with .toast}}{{if eq .Category "error"}}
+    <div class="alert mx-4 mb-4" data-variant="destructive" role="alert">
+      {{icon "circle-alert"}}
+      <h2>{{.Title}}</h2>
+      {{with .Description}}<section><p>{{.}}</p></section>{{end}}
+    </div>
+    {{end}}{{end}}
+    <div class="flex flex-col gap-4 px-4 pb-4" data-card-body>{{template "proposal_body" $ctx}}</div>
     <footer class="border-t px-4 py-3">{{template "proposal_footer" $ctx}}</footer>
     {{if $pending}}</form>{{end}}
   </article>

@@ -1,12 +1,20 @@
 {{define "draft_card"}}{{$d := .d}}{{$csrf := .csrf}}{{$configured := .configured}}
-<li id="draft-{{$d.ID}}" class="flex flex-col gap-3 rounded-lg border bg-card p-4" data-draft-card="{{$d.ID}}">
+<li id="draft-{{$d.ID}}" class="flex flex-col gap-3 rounded-lg border bg-card p-4" data-draft-card="{{$d.ID}}" data-card="draft" data-status="{{$d.Status}}">
   <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
     <span class="badge" data-variant="outline">{{$d.Status}}</span>
     <span>{{$d.Account}}</span>
     {{if $d.InReplyToMessageID}}<a class="underline" href="/messages/{{str $d.InReplyToMessageID}}">reply to message {{str $d.InReplyToMessageID}}</a>{{end}}
-    {{if $d.ThreadID}}<a class="underline" href="/chat/{{str $d.ThreadID}}">{{icon "messages-square" "size-3"}}from thread</a>{{end}}
+    {{if $d.ThreadID}}<a class="underline" href="/chat/{{str $d.ThreadID}}" data-card-thread>{{icon "messages-square" "size-3"}}from thread</a>{{end}}
     <span class="tabular-nums">{{template "when" (dict "epoch" $d.UpdatedAt "style" "datetime")}}</span>
   </div>
+  <p class="card-line hidden min-w-0 items-center gap-2 text-sm">{{icon (ternary (eq $d.Status "sent") "send" "mail") "size-4 shrink-0 text-muted-foreground"}}<span class="truncate"><span class="font-medium">{{or $d.Subject "(no subject)"}}</span> <span class="text-muted-foreground">to {{$d.ToAddrs}}</span></span></p>
+  {{with .toast}}{{if eq .Category "error"}}
+  <div class="alert" data-variant="destructive" role="alert">
+    {{icon "circle-alert"}}
+    <h2>{{.Title}}</h2>
+    {{with .Description}}<section><p>{{.}}</p></section>{{end}}
+  </div>
+  {{end}}{{end}}
   {{if $d.Unexpected}}
   <div class="alert" data-variant="destructive" role="alert">
     {{icon "circle-alert"}}
@@ -30,14 +38,15 @@
     <div><button type="submit" class="btn" data-variant="outline">{{icon "pencil"}}Save changes</button></div>
   </form>
   <div class="flex gap-2">
-    <form method="post" action="/drafts/{{$d.ID}}/send" hx-post="/drafts/{{$d.ID}}/send" hx-target="#draft-{{$d.ID}}" hx-swap="outerHTML" hx-confirm="Send this email now?">
+    <form method="post" action="/drafts/{{$d.ID}}/send" hx-post="/drafts/{{$d.ID}}/send" hx-target="#draft-{{$d.ID}}" hx-swap="outerHTML" hx-confirm="Send this email now?" hx-disabled-elt="find button" hx-indicator="#draft-sending-{{$d.ID}}" class="flex items-center gap-2">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
       <input type="hidden" name="revision" value="{{$d.Revision}}">
-      <button type="submit" class="btn">{{icon "send"}}Send</button>
+      <button type="submit" class="btn" data-card-approve>{{icon "send"}}Send</button>
+      <span id="draft-sending-{{$d.ID}}" class="htmx-indicator hidden items-center gap-1.5 text-xs text-muted-foreground [&.htmx-request]:inline-flex" role="status">{{icon "loader-circle" "size-4 animate-spin"}}Sending…</span>
     </form>
     <form method="post" action="/drafts/{{$d.ID}}/discard" hx-post="/drafts/{{$d.ID}}/discard" hx-target="#draft-{{$d.ID}}" hx-swap="outerHTML">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
-      <button type="submit" class="btn" data-variant="outline">{{icon "trash-2"}}Discard</button>
+      <button type="submit" class="btn" data-variant="outline" data-card-dismiss>{{icon "trash-2"}}Discard</button>
     </form>
   </div>
   {{else}}
@@ -60,12 +69,12 @@
     </form>
   </div>
   {{end}}
-  <dl class="grid gap-1 text-sm">
+  <dl class="grid gap-1 text-sm" data-card-body>
     <div><dt class="inline font-medium">To:</dt> <dd class="inline">{{$d.ToAddrs}}</dd></div>
     {{if $d.CcAddrs}}<div><dt class="inline font-medium">Cc:</dt> <dd class="inline">{{$d.CcAddrs}}</dd></div>{{end}}
     <div><dt class="inline font-medium">Subject:</dt> <dd class="inline">{{$d.Subject}}</dd></div>
   </dl>
-  <pre class="whitespace-pre-wrap rounded-md bg-muted p-3 text-sm">{{$d.Body}}</pre>
+  <pre class="whitespace-pre-wrap rounded-md bg-muted p-3 text-sm" data-card-body>{{$d.Body}}</pre>
   {{end}}
   {{if $d.SMTPResult}}<p class="text-xs text-muted-foreground">{{str $d.SMTPResult}}</p>{{end}}
 </li>
