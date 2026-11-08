@@ -109,13 +109,13 @@ external services, reverse proxy, persistence, and backups.
   CSP, and loopback listener defaults.
 - Media writes touch only torrents tagged media. Preserve library group
   permissions and expiring signed file links; public links still check Host.
-- Never edit or renumber a shipped database migration. New migrations are
-  additive by default. Row rewrites require explicit approval and validation
-  on a database copy. Refuse unknown future schema versions before writes.
-  `initSchema` in `internal/db` is migration 1 and never runs on an
-  existing database: every schema change is a new numbered migration in
-  `internal/db/migrate.go`, with an e2e that migrates a copy of the golden
-  Phase A database.
+- The v2 baseline schema files in `internal/db/schema/` are edited in place
+  until v2 first ships to artemis; afterwards every schema change is a new
+  additive migration in `internal/db/migrate.go` with an e2e. Row rewrites
+  require explicit approval and validation on a database copy. Refuse
+  unknown future schema versions before writes. `atrium db import-v1` is
+  the only path from v1 data: it copies the learned-rule data into a fresh
+  v2 database; everything else is rebuilt.
 - A binary downgrade can require restoring the pre-migration database,
   losing later writes. Do not imply that changing the binary reverses data.
 - Unit names, environment variable names, and `atrium-run` are host-facing
