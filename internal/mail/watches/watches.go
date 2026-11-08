@@ -480,7 +480,7 @@ func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64
 	rows, err := q.QueryContext(ctx,
 		"SELECT id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, source_message_id, "+
 			"last_message_id, updated_ts, first_seen, dismissed, aggregator, tracker_id, last_sync_ts, last_event, last_event_ts, "+
-			"(SELECT description FROM package_events WHERE package_id = packages.id ORDER BY event_ts DESC LIMIT 1) "+
+			"COALESCE((SELECT description FROM package_events WHERE package_id = packages.id ORDER BY event_ts DESC LIMIT 1), '') "+
 			"FROM packages"+where+" ORDER BY updated_ts DESC")
 	if err != nil {
 		return nil, err
