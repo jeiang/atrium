@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/router"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/rx"
 )
 
@@ -29,24 +28,6 @@ var (
 
 type Contacts map[string]struct{}
 
-func VCardEmails(text string) Contacts {
-	found := Contacts{}
-	for _, line := range py.SplitLines(contacts.Unfold(text)) {
-		head, value, ok := strings.Cut(line, ":")
-		if !ok {
-			continue
-		}
-		name, _, _ := strings.Cut(head, ";")
-		if i := strings.LastIndex(name, "."); i >= 0 {
-			name = name[i+1:]
-		}
-		if strings.ToUpper(name) == "EMAIL" && strings.Contains(value, "@") {
-			found[py.Lower(py.Strip(value))] = struct{}{}
-		}
-	}
-	return found
-}
-
 func LoadContacts(dir string) Contacts {
 	emails := Contacts{}
 	if info, err := os.Stat(dir); dir == "" || err != nil || !info.IsDir() {
@@ -57,8 +38,10 @@ func LoadContacts(dir string) Contacts {
 		if err != nil {
 			continue
 		}
-		for e := range VCardEmails(contacts.ReadText(data)) {
-			emails[e] = struct{}{}
+		for _, card := range contacts.Parse(contacts.ReadText(data)) {
+			for _, email := range card.Emails {
+				emails[email] = struct{}{}
+			}
 		}
 	}
 	return emails

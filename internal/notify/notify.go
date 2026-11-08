@@ -301,6 +301,13 @@ func Send(ctx context.Context, q db.Querier, env config.Env, m Message) (Sent, e
 	if now == nil {
 		now = func() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 	}
+	channel := m.Channel
+	if channel == "" {
+		channel = Assistant
+	}
+	if !known(channel) {
+		return Sent{}, ChannelError("unknown channel " + channel)
+	}
 	res, err := q.ExecContext(ctx, "INSERT INTO notifications (ts, title, body, thread_id, run_id, thread_link, channel, click, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		now(), title, body, nullID(m.ThreadID), nullID(m.RunID), linkValue, nullable(m.Channel), nullable(m.Click), nullID(int64(m.Priority)))
 	if err != nil {
@@ -310,7 +317,7 @@ func Send(ctx context.Context, q db.Querier, env config.Env, m Message) (Sent, e
 	if err != nil {
 		return Sent{}, err
 	}
-	delivered, failure, err := deliverAndRecord(ctx, q, env, delivery{channel: m.Channel, title: title, body: message, click: m.Click, priority: m.Priority})
+	delivered, failure, err := deliverAndRecord(ctx, q, env, delivery{channel: channel, title: title, body: message, click: m.Click, priority: m.Priority})
 	if err != nil {
 		return Sent{}, err
 	}

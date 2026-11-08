@@ -79,7 +79,11 @@ func Truthy(v any) bool {
 	case float64:
 		return t != 0
 	case string:
-		return t != ""
+		switch strings.ToLower(strings.TrimSpace(t)) {
+		case "true", "1", "yes":
+			return true
+		}
+		return false
 	case []any:
 		return len(t) > 0
 	case map[string]any:

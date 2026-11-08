@@ -1,7 +1,6 @@
 package pages
 
 import (
-	"database/sql"
 	"errors"
 	"net/http"
 	"time"
@@ -132,13 +131,6 @@ func (p *pages) scheduledData(r *http.Request) ScheduledData {
 	tz := config.TZName(p.deps.Env)
 	zone, err := scheduler.Zone(tz)
 	check(err)
-	now := p.now()
-	check(p.deps.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		if err := scheduler.EnsureNightly(ctx, tx, tz, now); err != nil {
-			return err
-		}
-		return scheduler.EnsureBuiltins(ctx, tx, tz, now)
-	}))
 	jobs, err := scheduler.ListJobs(ctx, p.deps.DB.Read, false)
 	check(err)
 	history, err := config.Limit(ctx, p.deps.DB.Read, config.KeyRunHistory)

@@ -371,11 +371,14 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 			headers["From"] = fromName + " <" + fromAddr + ">"
 		}
 	}
-	id := msgid.String
+	id := stripMsgID(msgid.String)
 	if id == "" {
-		id = headers["Message-ID"]
+		id = stripMsgID(headers["Message-ID"])
 	}
-	id = py.Strip(id)
+	inReplyTo := ""
+	if id != "" {
+		inReplyTo = "<" + id + ">"
+	}
 	references := ""
 	if raw != nil {
 		v, ok, err := raw.Get("References")
@@ -387,7 +390,7 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 		}
 	}
 	var chain []string
-	for _, x := range [...]string{references, id} {
+	for _, x := range [...]string{references, inReplyTo} {
 		if x != "" {
 			chain = append(chain, x)
 		}
@@ -410,7 +413,7 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 			participants[mime.Lower(a)] = true
 		}
 	}
-	return reply{inReplyTo: id, refs: strings.Join(chain, " "), participants: participants, account: account}, nil
+	return reply{inReplyTo: inReplyTo, refs: strings.Join(chain, " "), participants: participants, account: account}, nil
 }
 
 func (s *Store) limits(ctx context.Context) (maxBody, maxSubject int, err error) {

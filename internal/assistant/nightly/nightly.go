@@ -124,7 +124,7 @@ func read(ctx context.Context, q db.Querier, start, end float64) ([]any, error) 
 	}
 	rows, err := q.QueryContext(ctx,
 		"SELECT t.id, t.kind, t.title FROM threads t WHERE t.kind IN ('chat', 'cron') AND EXISTS "+
-			"(SELECT 1 FROM thread_messages m WHERE m.thread_id = t.id AND m.created_at >= ? AND m.created_at < ?) "+
+			"(SELECT 1 FROM thread_messages m WHERE m.thread_id = t.id AND m.created_at >= ? AND m.created_at < ? AND m.superseded = 0) "+
 			"ORDER BY t.id LIMIT ?", start, end, maxThreads)
 	if err != nil {
 		return nil, err
@@ -162,7 +162,7 @@ func read(ctx context.Context, q db.Querier, start, end float64) ([]any, error) 
 
 func lines(ctx context.Context, q db.Querier, threadID int64, start, end float64) ([]string, error) {
 	rows, err := q.QueryContext(ctx,
-		"SELECT role, content_json FROM thread_messages WHERE thread_id = ? AND created_at >= ? AND created_at < ? ORDER BY seq",
+		"SELECT role, content_json FROM thread_messages WHERE thread_id = ? AND created_at >= ? AND created_at < ? AND superseded = 0 ORDER BY seq",
 		threadID, start, end)
 	if err != nil {
 		return nil, err

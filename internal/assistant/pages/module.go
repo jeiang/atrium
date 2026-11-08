@@ -2,6 +2,7 @@ package pages
 
 import (
 	"context"
+	"database/sql"
 	"embed"
 	"errors"
 	"io/fs"
@@ -15,7 +16,9 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/runner"
+	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/service"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -110,6 +113,14 @@ func Module(o Options) web.Module {
 			reg = made
 		}
 		p := &pages{deps: d, svc: svc, now: now, poll: poll, keepalive: keepalive, reg: reg}
+		tz := config.TZName(d.Env)
+		stamp := now()
+		check(d.DB.WithTx(base, func(tx *sql.Tx) error {
+			if err := scheduler.EnsureNightly(base, tx, tz, stamp); err != nil {
+				return err
+			}
+			return scheduler.EnsureBuiltins(base, tx, tz, stamp)
+		}))
 
 		r.Get("/chat", p.chatIndex)
 		r.Post("/chat", p.chatNew)

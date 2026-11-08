@@ -58,6 +58,7 @@ func init() {
 		timing(KeyLeaseSeconds, "1800", 60, 86400),
 		timing(KeyMissedGrace, "120", 0, 86400),
 		minimum,
+		timing(KeyMaxActiveJobs, "20", 1, 1000),
 		modelRun(KeyNightlySchedule, "daily 02:30"),
 		modelRun(KeyWeeklyReview, "weekly sun 18:00"),
 		modelRun(KeyDailyNudges, "daily 08:00"),

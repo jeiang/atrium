@@ -55,7 +55,7 @@ func TestAssistantSettingOrderingAndBuiltinSchedules(t *testing.T) {
 	}
 	accepted("set", "agent_schedule_media_sweep", "*/20 * * * *")
 	_, page, _ = fetch(t, http.DefaultClient, "GET", base+"/scheduled", nil)
-	if !strings.Contains(page, "*/20 * * * *") {
-		t.Errorf("GET /scheduled after the override should list the new media sweep schedule: %.800s", page)
+	if !strings.Contains(page, "*/10 * * * *") || strings.Contains(page, "*/20 * * * *") {
+		t.Errorf("GET /scheduled must not sync builtin schedules; the scheduler worker does: %.800s", page)
 	}
 }

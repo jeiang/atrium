@@ -62,6 +62,9 @@ func PageTitle(page py.Dict) string {
 func sourceTitle(source py.Dict) string { return py.Strip(richText(list(source, "title"))) }
 
 func (s Sensitivity) Of(properties py.Dict) string {
+	if s.Property == "" {
+		return ""
+	}
 	for _, p := range properties {
 		if py.Lower(py.Strip(p.Key)) != s.Property {
 			continue
@@ -83,8 +86,9 @@ func (s Sensitivity) Of(properties py.Dict) string {
 			items, _ := value.([]any)
 			return richText(items)
 		}
+		return s.Private
 	}
-	return ""
+	return s.Private
 }
 
 func (s Sensitivity) IsPrivate(value string) bool {
