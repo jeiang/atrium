@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals/scanutil"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var log = logx.Logger("atrium.backlog")
@@ -126,17 +125,13 @@ func (d *detection) draft(ctx context.Context, q live.Querier) (*scanutil.Draft,
 		if err != nil {
 			return nil, err
 		}
-		payloadGroups[i] = py.Dict{{Key: "dest", Value: g.dest}, {Key: "messages", Value: scanutil.SnapshotList(snaps)}}
-		previewGroups[i] = py.Dict{
-			{Key: "name", Value: g.dest}, {Key: "count", Value: len(g.rows)},
-			{Key: "senders", Value: lim.TopCounts(senders)}, {Key: "subjects", Value: lim.SampleSubjectsOf(g.rows)},
-			{Key: "messages", Value: views},
-		}
+		payloadGroups[i] = map[string]any{"dest": g.dest, "messages": scanutil.SnapshotList(snaps)}
+		previewGroups[i] = map[string]any{"name": g.dest, "count": len(g.rows), "senders": lim.TopCounts(senders), "subjects": lim.SampleSubjectsOf(g.rows), "messages": views}
 	}
 	return &scanutil.Draft{
 		Title:   fmt.Sprintf("File %d read inbox messages into %d %s", len(d.ids), len(d.groups), d.unit),
-		Payload: py.Dict{{Key: "folder", Value: d.folder}, {Key: "groups", Value: payloadGroups}},
-		Preview: py.Dict{{Key: "folder", Value: d.folder}, {Key: "groups", Value: previewGroups}},
+		Payload: map[string]any{"folder": d.folder, "groups": payloadGroups},
+		Preview: map[string]any{"folder": d.folder, "groups": previewGroups},
 	}, nil
 }
 

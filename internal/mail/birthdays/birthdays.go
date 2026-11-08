@@ -15,7 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/timex"
 	"golang.org/x/text/cases"
 )
 
@@ -147,7 +147,7 @@ func UpcomingFor(ctx context.Context, q db.Querier, today time.Time, days int) (
 }
 
 func Dismiss(ctx context.Context, q db.Querier, key, occurrenceDate string, ts float64) error {
-	if _, _, _, ok := py.DateFromISOFormat(occurrenceDate); !ok {
+	if _, ok := timex.ParseISO(occurrenceDate); !ok {
 		return fmt.Errorf("%w: Invalid isoformat string: %s", httpx.ErrPayload, strconv.Quote(occurrenceDate))
 	}
 	_, err := q.ExecContext(ctx,

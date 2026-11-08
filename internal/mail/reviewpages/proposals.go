@@ -10,7 +10,6 @@ import (
 	"slices"
 
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -87,14 +86,13 @@ func picked(form url.Values, index int, messages any) ([]any, error) {
 }
 
 func previewGet(preview any, key string) any {
-	if d, ok := preview.(py.Dict); ok {
-		v, _ := d.Get(key)
-		return v
+	if d, ok := preview.(map[string]any); ok {
+		return d[key]
 	}
 	return nil
 }
 
-func selectionOf(p *proposals.Proposal, kind proposals.Kind, form url.Values) (py.Dict, error) {
+func selectionOf(p *proposals.Proposal, kind proposals.Kind, form url.Values) (map[string]any, error) {
 	switch {
 	case kind.Groups || kind.Group:
 		var groups []any
@@ -105,12 +103,12 @@ func selectionOf(p *proposals.Proposal, kind proposals.Kind, form url.Values) (p
 		}
 		out := make([]any, len(groups))
 		for i, g := range groups {
-			group, _ := g.(py.Dict)
+			group, _ := g.(map[string]any)
 			var name any
 			if v, ok := web.Value(form, fmt.Sprintf("name-%d", i)); ok {
 				name = v
 			}
-			messages, _ := group.Get("messages")
+			messages := group["messages"]
 			ids, err := picked(form, i, messages)
 			if err != nil {
 				return nil, err
@@ -119,10 +117,10 @@ func selectionOf(p *proposals.Proposal, kind proposals.Kind, form url.Values) (p
 			if ids != nil {
 				chosen = ids
 			}
-			id, _ := group.Get("name")
-			out[i] = py.Dict{{Key: "id", Value: id}, {Key: "name", Value: name}, {Key: "message_ids", Value: chosen}}
+			id := group["name"]
+			out[i] = map[string]any{"id": id, "name": name, "message_ids": chosen}
 		}
-		return py.Dict{{Key: "groups", Value: out}}, nil
+		return map[string]any{"groups": out}, nil
 	case kind.Messages:
 		ids, err := picked(form, 0, previewGet(p.Preview, "messages"))
 		if err != nil {
@@ -132,7 +130,7 @@ func selectionOf(p *proposals.Proposal, kind proposals.Kind, form url.Values) (p
 		if ids != nil {
 			chosen = ids
 		}
-		return py.Dict{{Key: "message_ids", Value: chosen}}, nil
+		return map[string]any{"message_ids": chosen}, nil
 	}
 	return nil, nil
 }
@@ -153,7 +151,7 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 	var selection any
 	var done *proposals.Proposal
 	if all, _ := web.Value(form, "all"); all == "" {
-		var picked py.Dict
+		var picked map[string]any
 		kind, _ := s.registry.Kind(found.Kind)
 		if picked, err = selectionOf(found, kind, form); picked != nil {
 			selection = picked
@@ -217,8 +215,8 @@ func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
 	}
 	failed := ""
 	for _, o := range outcome.Outcomes {
-		if okOutcome, _ := o.Get("ok"); okOutcome != true {
-			text, _ := o.Get("error")
+		if okOutcome := o["ok"]; okOutcome != true {
+			text := o["error"]
 			failed, _ = text.(string)
 			break
 		}
@@ -259,10 +257,6 @@ func (s *service) proposalResolve(w http.ResponseWriter, r *http.Request) {
 
 func resultString(v any, key string) string {
 	switch x := v.(type) {
-	case py.Dict:
-		value, _ := x.Get(key)
-		s, _ := value.(string)
-		return s
 	case map[string]any:
 		s, _ := x[key].(string)
 		return s

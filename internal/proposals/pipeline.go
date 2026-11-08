@@ -14,10 +14,10 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/mailops"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
@@ -109,7 +109,7 @@ func loads(text *string) (any, error) {
 	if text == nil {
 		return nil, nil
 	}
-	return py.JSONLoads([]byte(*text))
+	return jsonx.Loads([]byte(*text))
 }
 
 var columns = "p.id, p.kind, p.account, p.status, p.created_ts, p.decided_ts, p.applied_ts, p.undone_ts, p.recovered, " +
@@ -140,14 +140,14 @@ func scanProposal(s scanner, full bool) (*Proposal, error) {
 		p.resultRaw = *result
 	}
 	var err error
-	if p.Preview, err = py.JSONLoads([]byte(preview)); err != nil {
+	if p.Preview, err = jsonx.Loads([]byte(preview)); err != nil {
 		return nil, err
 	}
 	if p.Result, err = loads(result); err != nil {
 		return nil, err
 	}
 	if full {
-		if _, err := py.JSONLoads([]byte(payload)); err != nil {
+		if _, err := jsonx.Loads([]byte(payload)); err != nil {
 			return nil, err
 		}
 		p.Payload = json.RawMessage(payload)
@@ -185,30 +185,35 @@ func Get(ctx context.Context, q Querier, id int64) (*Proposal, error) {
 	return p, err
 }
 
-func CountsByStatus(ctx context.Context, q Querier) (py.Dict, error) {
+func CountsByStatus(ctx context.Context, q Querier) (map[string]any, error) {
 	out, err := counts(ctx, q, "SELECT status, COUNT(*) AS n FROM proposals GROUP BY status")
 	if err != nil {
 		return nil, err
 	}
 	var all int64
-	for _, p := range out {
-		all += p.Value.(int64)
+	for _, v := range out {
+		all += v.(int64)
 	}
-	return append(out, py.Pair{Key: "all", Value: all}), nil
+	out["all"] = all
+	return out, nil
 }
 
-func counts(ctx context.Context, q Querier, query string, args ...any) (py.Dict, error) {
+func counts(ctx context.Context, q Querier, query string, args ...any) (map[string]any, error) {
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
-	pairs, err := db.Collect(rows, func(r *sql.Rows) (py.Pair, error) {
+	defer rows.Close()
+	out := map[string]any{}
+	for rows.Next() {
 		var key string
 		var n int64
-		err := r.Scan(&key, &n)
-		return py.Pair{Key: key, Value: n}, err
-	})
-	return py.Dict(pairs), err
+		if err := rows.Scan(&key, &n); err != nil {
+			return nil, err
+		}
+		out[key] = n
+	}
+	return out, rows.Err()
 }
 
 func Dismiss(ctx context.Context, d *db.DB, id int64, status string, who Resolver, ts float64) error {
@@ -352,7 +357,7 @@ func Actions(ctx context.Context, q Querier, proposalID int64) ([]Action, error)
 			return a, err
 		}
 		var err error
-		if a.Action, err = py.JSONLoads([]byte(action)); err != nil {
+		if a.Action, err = jsonx.Loads([]byte(action)); err != nil {
 			return a, err
 		}
 		a.Undo, err = loads(undo)
@@ -399,11 +404,11 @@ const (
 )
 
 func RecoverStuck(ctx context.Context, d *db.DB, now float64) (int64, error) {
-	held := py.Dict{{Key: "error", Value: "approve interrupted; resolve the mailbox by hand before approving again"}}
+	held := map[string]any{"error": "approve interrupted; resolve the mailbox by hand before approving again"}
 	res, err := d.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, result = ?, recovered = 1 WHERE status = ? AND EXISTS "+
 		"(SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND a.state = 'held' AND a.kind = 'write') "+
 		"AND NOT EXISTS (SELECT 1 FROM proposal_actions b WHERE b.proposal_id = proposals.id AND b.lease >= ?)",
-		Failed, py.JSONDumps(held), Approved, now-StuckSeconds)
+		Failed, jsonx.Dumps(held), Approved, now-StuckSeconds)
 	if err != nil {
 		return 0, err
 	}
@@ -411,13 +416,10 @@ func RecoverStuck(ctx context.Context, d *db.DB, now float64) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	unheld := py.Dict{
-		{Key: "error", Value: "approve interrupted before any write was in flight; the settled batches can be undone and the proposal approved again"},
-		{Key: "interrupted", Value: true},
-	}
+	unheld := map[string]any{"error": "approve interrupted before any write was in flight; the settled batches can be undone and the proposal approved again", "interrupted": true}
 	res, err = d.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, result = ?, recovered = 1 WHERE status = ? AND decided_ts < ? "+
 		"AND NOT EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND (a.state IN ('held', 'unknown', 'partial') OR a.lease >= ?))",
-		Failed, py.JSONDumps(unheld), Approved, now-StuckUnheldSeconds, now-StuckUnheldSeconds)
+		Failed, jsonx.Dumps(unheld), Approved, now-StuckUnheldSeconds, now-StuckUnheldSeconds)
 	if err != nil {
 		return heldN, err
 	}
@@ -571,16 +573,22 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any,
 
 type UndoResult struct {
 	Undone    bool
-	Outcomes  []py.Dict
+	Outcomes  []map[string]any
 	SyncError *string
 }
 
-func (r UndoResult) Dict() py.Dict {
+type undoView struct {
+	Undone    bool    `json:"undone"`
+	Outcomes  []any   `json:"outcomes"`
+	SyncError *string `json:"sync_error"`
+}
+
+func (r UndoResult) Dict() undoView {
 	outcomes := make([]any, len(r.Outcomes))
 	for i, o := range r.Outcomes {
 		outcomes[i] = o
 	}
-	return py.Dict{{Key: "undone", Value: r.Undone}, {Key: "outcomes", Value: outcomes}, {Key: "sync_error", Value: py.Nullable(r.SyncError)}}
+	return undoView{Undone: r.Undone, Outcomes: outcomes, SyncError: r.SyncError}
 }
 
 func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
@@ -608,7 +616,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		return UndoResult{}, err
 	}
 	approved := scope(ctx, id)
-	out := UndoResult{Outcomes: []py.Dict{}}
+	out := UndoResult{Outcomes: []map[string]any{}}
 	settle := context.WithoutCancel(ctx)
 	for _, entry := range pending(logged) {
 		if partialUndo(logged, entry.ID) {
@@ -617,8 +625,8 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}
-		plan, _ := entry.Undo.(py.Dict)
-		op, found := plan.Get("op")
+		plan, _ := entry.Undo.(map[string]any)
+		op, found := plan["op"]
 		if !found {
 			return out, fmt.Errorf("%w: 'op'", httpx.ErrMissing)
 		}
@@ -630,14 +638,14 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		if undoer == nil {
 			return out, ProposalError("no undo handler for " + fmt.Sprint(op))
 		}
-		undoAction := py.Dict{{Key: "op", Value: UndoOp}, {Key: "of", Value: entry.ID}}
+		undoAction := map[string]any{"op": UndoOp, "of": entry.ID}
 		held, err := p.beginUndo(ctx, id, entry.ID, undoAction)
 		if err != nil {
 			return out, err
 		}
 		detail, err := func() (any, error) {
 			defer KeepActionAlive(p.DB.Write, p.now, held)()
-			return undoer(approved, json.RawMessage(py.JSONDumps(entry.Undo)))
+			return undoer(approved, json.RawMessage(jsonx.Dumps(entry.Undo)))
 		}()
 		if err != nil {
 			state := ledger.UndoFailed
@@ -650,7 +658,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 			if rerr := SettleAction(ctx, p.DB.Write, held, undoAction, nil, state, &text, p.now()); rerr != nil {
 				return out, rerr
 			}
-			out.Outcomes = append(out.Outcomes, py.Dict{{Key: "action", Value: entry.ID}, {Key: "ok", Value: false}, {Key: "error", Value: err.Error()}})
+			out.Outcomes = append(out.Outcomes, map[string]any{"action": entry.ID, "ok": false, "error": err.Error()})
 			continue
 		}
 		var details any
@@ -660,7 +668,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		if err := SettleAction(ctx, p.DB.Write, held, map[string]any{"op": UndoOp, "of": entry.ID, "detail": details}, nil, ledger.OK, nil, p.now()); err != nil {
 			return out, err
 		}
-		out.Outcomes = append(out.Outcomes, py.Dict{{Key: "action", Value: entry.ID}, {Key: "ok", Value: true}})
+		out.Outcomes = append(out.Outcomes, map[string]any{"action": entry.ID, "ok": true})
 	}
 	if err := ctx.Err(); err != nil {
 		return out, err
@@ -668,7 +676,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	out.SyncError = p.sync(ctx, prop)
 	out.Undone = true
 	for _, o := range out.Outcomes {
-		if ok, _ := o.Get("ok"); ok == false {
+		if ok, _ := o["ok"]; ok == false {
 			out.Undone = false
 		}
 	}
@@ -685,8 +693,6 @@ func withSyncError(result any, msg string) any {
 	case map[string]any:
 		r["sync_error"] = msg
 		return r
-	case py.Dict:
-		return r.Set("sync_error", msg)
 	}
 	return result
 }

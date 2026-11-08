@@ -17,11 +17,13 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailscan"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/textx"
+	"github.com/jeiang/atrium/internal/timex"
 	"golang.org/x/text/cases"
 )
 
@@ -109,11 +111,11 @@ func clip(text string, limit int) string {
 	if utf8.RuneCountInString(text) <= limit {
 		return text
 	}
-	return py.Clip(text, limit-1) + "…"
+	return textx.Clip(text, limit-1) + "…"
 }
 
 func rowText(row mailscan.Message, body string, bodyChars int) string {
-	return fmt.Sprintf("From: %s <%s>\nSubject: %s\nBody:\n%s", row.FromName, row.FromAddr, row.Subject, py.Clip(body, bodyChars))
+	return fmt.Sprintf("From: %s <%s>\nSubject: %s\nBody:\n%s", row.FromName, row.FromAddr, row.Subject, textx.Clip(body, bodyChars))
 }
 
 type Options struct {
@@ -181,7 +183,7 @@ func findTracking(text string) []tracking {
 
 func findOrderRef(text string) string {
 	for _, loc := range orderRE.FindAllStringSubmatchIndex(text, -1) {
-		ref := py.Upper(text[loc[2]:loc[3]])
+		ref := strings.ToUpper(text[loc[2]:loc[3]])
 		if strings.ContainsAny(ref, "0123456789") {
 			return ref
 		}
@@ -190,7 +192,7 @@ func findOrderRef(text string) string {
 }
 
 func classifyStatus(subject, body string) string {
-	for _, text := range [...]string{subject, py.Clip(body, 1500)} {
+	for _, text := range [...]string{subject, textx.Clip(body, 1500)} {
 		for _, s := range statuses {
 			for _, loc := range s.pattern.FindAllStringIndex(text, -1) {
 				if s.status == delivered && strings.HasSuffix(strings.ToLower(text[:loc[0]]), "be ") {
@@ -239,7 +241,7 @@ func regexPackages(row mailscan.Message, body string, carrierDomains []string) [
 }
 
 func pyStr(v any) string {
-	if !py.Truthy(v) {
+	if !jsonx.Truthy(v) {
 		return ""
 	}
 	if s, ok := v.(string); ok {
@@ -253,7 +255,7 @@ func cleanPackage(answer any, text string) (item, bool, error) {
 	if !isDict {
 		return item{}, false, nil
 	}
-	if v := reply["is_order"]; !py.Truthy(v) {
+	if v := reply["is_order"]; !jsonx.Truthy(v) {
 		return item{}, false, nil
 	}
 	field := func(key string) any { return reply[key] }
@@ -264,7 +266,7 @@ func cleanPackage(answer any, text string) (item, bool, error) {
 			tracking = ""
 		}
 	}
-	orderRef := py.Upper(strings.TrimSpace(pyStr(field("order_ref"))))
+	orderRef := strings.ToUpper(strings.TrimSpace(pyStr(field("order_ref"))))
 	if orderRef != "" && !strings.Contains(cases.Fold().String(text), cases.Fold().String(orderRef)) {
 		orderRef = ""
 	}
@@ -279,7 +281,7 @@ func cleanPackage(answer any, text string) (item, bool, error) {
 		Carrier:        clip(pyStr(field("carrier")), 30),
 		TrackingNumber: tracking,
 		Merchant:       clip(pyStr(field("merchant")), 80),
-		OrderRef:       py.Clip(orderRef, 40),
+		OrderRef:       textx.Clip(orderRef, 40),
 		Status:         status,
 		StatusText:     clip(pyStr(field("status_text")), 120),
 	}, true, nil
@@ -501,7 +503,7 @@ func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64
 		return nil, fmt.Errorf("unknown time zone %q", config.From(ctx).TZName(env))
 	}
 	for i := range out {
-		sec, _ := py.SplitTimestamp(out[i].UpdatedTS)
+		sec, _ := timex.SplitTimestamp(out[i].UpdatedTS)
 		out[i].Updated = time.Unix(sec, 0).In(zone).Format("2006-01-02")
 	}
 	return out, nil

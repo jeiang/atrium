@@ -17,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/ordmap"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/scanutil"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var log = logx.Logger("atrium.deletions")
@@ -68,7 +67,7 @@ func (r *row) column(name string) string {
 	return r.FromDomain
 }
 
-func (r *row) view() py.Dict {
+func (r *row) view() map[string]any {
 	return scanutil.Message{ID: r.ID, Subject: r.Subject, FromName: r.FromName, FromAddr: r.FromAddr, DateTS: r.DateTS}.View()
 }
 
@@ -253,17 +252,9 @@ func (p params) build(ctx context.Context, q proposals.Querier, everyone []*row,
 		return nil, fmt.Errorf("%w: rule has no conditions", httpx.ErrShape)
 	}
 	return &scanutil.Draft{
-		Title: fmt.Sprintf("Delete %d messages and future mail matching %s / %s", len(ids), c.Key, c.Tmpl),
-		Payload: py.Dict{
-			{Key: "rule", Value: rule}, {Key: "reason", Value: c.Reason}, {Key: "messages", Value: scanutil.SnapshotList(snaps)},
-		},
-		Preview: py.Dict{
-			{Key: "reason", Value: c.Reason},
-			{Key: "rule", Value: py.Dict{{Key: "account", Value: c.Account}, {Key: "when", Value: when}}},
-			{Key: "backlog", Value: len(ids)},
-			{Key: "subjects", Value: p.limits.SampleSubjectsOf(messages)},
-			{Key: "senders", Value: p.limits.TopCounts(senders)}, {Key: "messages", Value: views},
-		},
+		Title:   fmt.Sprintf("Delete %d messages and future mail matching %s / %s", len(ids), c.Key, c.Tmpl),
+		Payload: map[string]any{"rule": rule, "reason": c.Reason, "messages": scanutil.SnapshotList(snaps)},
+		Preview: map[string]any{"reason": c.Reason, "rule": map[string]any{"account": c.Account, "when": when}, "backlog": len(ids), "subjects": p.limits.SampleSubjectsOf(messages), "senders": p.limits.TopCounts(senders), "messages": views},
 	}, nil
 }
 

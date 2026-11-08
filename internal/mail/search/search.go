@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/timex"
 )
 
@@ -335,7 +334,7 @@ func bodyHead(ctx context.Context, q Querier, list []int64, snippetChars int) (m
 		return h, err
 	})
 	for _, h := range found {
-		heads[h.id] = strings.Join(py.Split(h.text.String), " ")
+		heads[h.id] = strings.Join(strings.Fields(h.text.String), " ")
 	}
 	return heads, err
 }

@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/search"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/timex"
 )
 
@@ -227,10 +226,10 @@ func mailRead(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	if found == nil {
 		return nil, tool.Error(fmt.Sprintf("no message %d", id))
 	}
-	headers := py.Dict{}
+	headers := map[string]any{}
 	for _, name := range message.Headers {
 		if v := found.Headers[name]; v != "" {
-			headers = append(headers, py.Pair{Key: name, Value: tool.Clip(v, 500)})
+			headers[name] = tool.Clip(v, 500)
 		}
 	}
 	attachments := make([]any, len(found.Attachments))

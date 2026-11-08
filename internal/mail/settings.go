@@ -10,7 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -195,7 +195,7 @@ func init() {
 
 func atLeast(lo int64) func(string) error {
 	return func(value string) error {
-		n, ok := py.ParseInt(value)
+		n, ok := numx.ParseInt(value)
 		if !ok {
 			return settings.Invalid("must be a whole number")
 		}

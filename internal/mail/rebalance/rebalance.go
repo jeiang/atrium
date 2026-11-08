@@ -26,7 +26,7 @@ import (
 	"github.com/jeiang/atrium/internal/ordmap"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/scanutil"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/textx"
 )
 
 var log = logx.Logger("atrium.rebalance")
@@ -599,7 +599,7 @@ func (p params) termsOf(rows []*row) []string {
 func cleanName(value string, maxChars int) string {
 	name := junkRE.ReplaceAllString(value, " ")
 	name = spacesRE.ReplaceAllString(name, " ")
-	return strings.TrimSpace(py.Clip(strings.TrimSpace(name), maxChars))
+	return strings.TrimSpace(textx.Clip(strings.TrimSpace(name), maxChars))
 }
 
 type Namer func(ctx context.Context, folder string, domains, terms []string, maxChars int) (string, error)
@@ -691,14 +691,10 @@ func (p params) build(ctx context.Context, q proposals.Querier, byID map[int64]*
 		}
 		return &scanutil.Draft{
 			Title: fmt.Sprintf("Move %d messages from %s to %s", len(rows), cand.Folder, cand.Into),
-			Payload: py.Dict{{Key: "folder", Value: cand.Folder}, {Key: "groups", Value: []any{
-				py.Dict{{Key: "dest", Value: cand.Into}, {Key: "messages", Value: scanutil.SnapshotList(snaps)}},
-			}}},
-			Preview: py.Dict{
-				{Key: "folder", Value: cand.Folder},
-				{Key: "sources", Value: []any{py.Dict{{Key: "folder", Value: cand.Folder}, {Key: "count", Value: len(rows)}}}},
-				{Key: "into", Value: cand.Into}, {Key: "group", Value: p.preview(rows, cand.Into).Dict()},
-			},
+			Payload: map[string]any{"folder": cand.Folder, "groups": []any{
+				map[string]any{"dest": cand.Into, "messages": scanutil.SnapshotList(snaps)},
+			}},
+			Preview: map[string]any{"folder": cand.Folder, "sources": []any{map[string]any{"folder": cand.Folder, "count": len(rows)}}, "into": cand.Into, "group": p.preview(rows, cand.Into).Dict()},
 		}, nil
 	}
 	var payloadGroups, previewGroups []any
@@ -716,13 +712,13 @@ func (p params) build(ctx context.Context, q proposals.Querier, byID map[int64]*
 		if err != nil {
 			return nil, err
 		}
-		payloadGroups = append(payloadGroups, py.Dict{{Key: "dest", Value: dest}, {Key: "messages", Value: scanutil.SnapshotList(snaps)}})
+		payloadGroups = append(payloadGroups, map[string]any{"dest": dest, "messages": scanutil.SnapshotList(snaps)})
 		count += len(rows)
 	}
 	return &scanutil.Draft{
 		Title:   fmt.Sprintf("Split %d messages out of %s into %d new folders", count, cand.Folder, len(previewGroups)),
-		Payload: py.Dict{{Key: "folder", Value: cand.Folder}, {Key: "groups", Value: payloadGroups}},
-		Preview: py.Dict{{Key: "folder", Value: cand.Folder}, {Key: "groups", Value: previewGroups}},
+		Payload: map[string]any{"folder": cand.Folder, "groups": payloadGroups},
+		Preview: map[string]any{"folder": cand.Folder, "groups": previewGroups},
 	}, nil
 }
 

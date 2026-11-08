@@ -21,8 +21,8 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/rules"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
+	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/proposals/executors"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/safety"
 	"golang.org/x/text/cases"
 )
@@ -1076,7 +1076,7 @@ func (a *Applier) DeletionPass(ctx context.Context, account string, force bool) 
 	if err != nil || !out.Ran {
 		return out, err
 	}
-	return out, live.SetState(context.WithoutCancel(ctx), a.Live.DB.Write, live.DeletionKey+":"+account, py.FloatRepr(a.now()))
+	return out, live.SetState(context.WithoutCancel(ctx), a.Live.DB.Write, live.DeletionKey+":"+account, numx.FloatRepr(a.now()))
 }
 
 func (a *Applier) ApplyAll(ctx context.Context, account string) (applied, deleted Outcome, err error) {

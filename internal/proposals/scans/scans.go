@@ -9,7 +9,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/proposals/scanutil"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type Scan struct {
@@ -30,14 +29,15 @@ var All = []Scan{
 	}},
 }
 
-func ScanAll(ctx context.Context, d *db.DB, ts float64, namer rebalance.Namer) (out py.Dict, err error) {
+func ScanAll(ctx context.Context, d *db.DB, ts float64, namer rebalance.Namer) (out map[string]any, err error) {
+	out = map[string]any{}
 	err = passrun.Track(ctx, d, passrun.Scan, func() error {
 		for _, s := range All {
 			res, err := s.Run(ctx, d, ts, namer)
 			if err != nil {
 				return err
 			}
-			out = append(out, py.Pair{Key: s.Key, Value: res.Dict()})
+			out[s.Key] = res.Dict()
 		}
 		return nil
 	})

@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/py"
 	"golang.org/x/text/cases"
 )
 
@@ -427,8 +426,6 @@ func FirstMatch(m *Message, rules []Rule, now float64) (*Rule, error) {
 
 func object(v any) (get func(string) (any, bool), ok bool) {
 	switch v := v.(type) {
-	case py.Dict:
-		return v.Get, true
 	case map[string]any:
 		return func(k string) (any, bool) { x, found := v[k]; return x, found }, true
 	}

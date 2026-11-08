@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"math"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,7 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/flags"
-	"github.com/jeiang/atrium/internal/py"
 	"golang.org/x/text/cases"
 )
 
@@ -461,7 +461,7 @@ func ListLoops(ctx context.Context, q db.Querier, now float64, state string, lim
 		var l Loop
 		err := r.Scan(&l.ID, &l.ThreadKey, &l.Account, &l.State, &l.LastMessageID, &l.Since, &l.Counterpart, &l.Subject,
 			&l.SnoozedUntil, &l.Dismissed)
-		l.Days = int64(py.FloorDiv(now-l.Since, Day))
+		l.Days = int64(math.Floor((now - l.Since) / Day))
 		return l, err
 	})
 }

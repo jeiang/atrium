@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode"
 
 	"regexp"
 
@@ -20,7 +21,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/ordmap"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/timex"
 )
 
@@ -283,5 +283,5 @@ func Build(ctx context.Context, q Querier, env config.Env, since *string, at tim
 		}
 		lines = append(append(lines, section...), "")
 	}
-	return strings.TrimRightFunc(strings.Join(lines, "\n"), py.IsSpace) + "\n", nil
+	return strings.TrimRightFunc(strings.Join(lines, "\n"), unicode.IsSpace) + "\n", nil
 }

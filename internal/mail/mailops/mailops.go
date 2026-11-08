@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
 	"github.com/jeiang/atrium/internal/mail/mime"
-	"github.com/jeiang/atrium/internal/py"
 	"golang.org/x/text/cases"
 )
 
@@ -115,12 +114,8 @@ type Snapshot struct {
 	IMAPName    string `json:"imap_name"`
 }
 
-func (s Snapshot) Dict() py.Dict {
-	return py.Dict{
-		{Key: "id", Value: s.ID}, {Key: "uid", Value: s.UID}, {Key: "uidvalidity", Value: s.UIDValidity},
-		{Key: "msgid", Value: s.MsgID}, {Key: "digest", Value: s.Digest}, {Key: "mailbox", Value: s.Mailbox},
-		{Key: "imap_name", Value: s.IMAPName},
-	}
+func (s Snapshot) Dict() map[string]any {
+	return map[string]any{"id": s.ID, "uid": s.UID, "uidvalidity": s.UIDValidity, "msgid": s.MsgID, "digest": s.Digest, "mailbox": s.Mailbox, "imap_name": s.IMAPName}
 }
 
 type Verified struct {
@@ -134,8 +129,8 @@ type Skip struct {
 	Reason string
 }
 
-func (s Skip) Dict() py.Dict {
-	return py.Dict{{Key: "id", Value: s.ID}, {Key: "reason", Value: s.Reason}}
+func (s Skip) Dict() map[string]any {
+	return map[string]any{"id": s.ID, "reason": s.Reason}
 }
 
 func Snapshots(ctx context.Context, q db.Querier, ids []int64) ([]Snapshot, error) {
@@ -319,7 +314,7 @@ func TrashMailbox(ctx context.Context, client mail.Client, account string) (stri
 	found := ""
 	for _, info := range boxes {
 		for _, f := range info.Flags {
-			if py.Lower(f) == py.Lower(TrashLabel) {
+			if strings.ToLower(f) == strings.ToLower(TrashLabel) {
 				return info.IMAPName, nil
 			}
 		}

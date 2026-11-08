@@ -7,12 +7,12 @@ import (
 	"errors"
 	"net/mail"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/features"
 	"github.com/jeiang/atrium/internal/mail/mime"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -97,12 +97,18 @@ func RawFile(cacheDir, rawPath string) (string, bool) {
 	if rawPath == "" {
 		return "", false
 	}
-	root := py.Resolve(cacheDir)
+	root, err := filepath.Abs(cacheDir)
+	if err != nil {
+		return "", false
+	}
 	target := rawPath
 	if !strings.HasPrefix(rawPath, "/") {
 		target = root + "/" + rawPath
 	}
-	resolved := py.Resolve(target)
+	resolved, err := filepath.Abs(target)
+	if err != nil {
+		return "", false
+	}
 	if resolved != root && !strings.HasPrefix(resolved, strings.TrimSuffix(root, "/")+"/") {
 		return "", false
 	}
