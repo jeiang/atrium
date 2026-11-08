@@ -83,8 +83,9 @@ func (s Sensitivity) Of(properties py.Dict) string {
 			items, _ := value.([]any)
 			return richText(items)
 		}
+		return s.Private
 	}
-	return ""
+	return s.Private
 }
 
 func (s Sensitivity) IsPrivate(value string) bool {
