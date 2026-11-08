@@ -91,6 +91,7 @@ type ActivityEntry struct {
 	Status      string  `json:"status"`
 	Error       *string `json:"error"`
 	Undoable    bool    `json:"undoable"`
+	Blocked     bool    `json:"blocked"`
 	UndoBlocked bool    `json:"undo_blocked"`
 
 	Tool       string   `json:"tool"`
@@ -108,7 +109,8 @@ func mailEntry(a live.Action, now float64) ActivityEntry {
 	return ActivityEntry{
 		Source: sourceMail, ID: a.ID, Category: categoryMail, TS: a.TS, MessageID: a.MessageID, Subject: a.Subject,
 		Kind: a.Kind, FromName: a.FromName, FromAddr: a.FromAddr, Account: a.Account, Src: a.Src, Dest: a.Dest,
-		Status: a.Status, Error: a.Error, Undoable: a.Undoable && !live.Blocked(a, now), UndoBlocked: live.Blocked(a, now),
+		Status: a.Status, Error: a.Error, Undoable: a.Undoable && !live.Blocked(a, now), Blocked: live.Blocked(a, now),
+		UndoBlocked: live.UndoBlocked(a, now),
 	}
 }
 

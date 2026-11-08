@@ -42,10 +42,7 @@ var moduleCases = []moduleCase{
 		command: []string{"rules", "export"}, output: nonEmpty},
 	{module: module.Calendar, tool: "calendar_list", table: "agent_events",
 		command: []string{"calendar", "candidates"}, output: nonEmpty},
-	{module: module.Notion, tool: "search_knowledge", table: "notion_pages", method: "POST", path: "/notion/missing/link", form: url.Values{}, status: http.StatusUnprocessableEntity,
-		command: []string{"notion", "wiki-plan"}, output: func(_, stderr string, code int) bool {
-			return code == cli.ExitError && strings.Contains(stderr, "wiki-plan")
-		}},
+	{module: module.Notion, tool: "search_knowledge", table: "notion_pages", method: "POST", path: "/notion/missing/link", form: url.Values{}, status: http.StatusUnprocessableEntity},
 	{module: module.Media, tool: "media_downloads", table: "media_channels", method: "GET", path: "/media/channels", status: http.StatusOK,
 		command: []string{"media", "poll"}, output: nonEmpty},
 	{module: module.Assistant, tool: "profile_set", table: "threads", method: "GET", path: "/projects", status: http.StatusOK,

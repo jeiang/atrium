@@ -11,14 +11,18 @@ import (
 )
 
 const (
-	OutcomeUndone    = "undone"
-	OutcomeNotUndone = "not-undone"
-	OutcomeSettled   = "settled"
+	OutcomeUndone     = "undone"
+	OutcomeNotUndone  = "not-undone"
+	OutcomeApplied    = "applied"
+	OutcomeNotApplied = "not-applied"
+	OutcomeSettled    = "settled"
 
 	ResolveProposalAction = "proposal_action"
 	ResolveAutoUndo       = "auto_undo"
+	ResolveAutoAction     = "auto_action"
 
-	SettledText = "settled by operator after checking the mailbox"
+	SettledText    = "settled by operator after checking the mailbox"
+	NotAppliedText = "the operator checked: the write did not happen"
 )
 
 type Resolver struct {

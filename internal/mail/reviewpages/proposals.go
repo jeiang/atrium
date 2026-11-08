@@ -121,7 +121,8 @@ func selectionOf(p *proposals.Proposal, kind proposals.Kind, form url.Values) (p
 			if ids != nil {
 				chosen = ids
 			}
-			out[i] = py.Dict{{Key: "name", Value: name}, {Key: "message_ids", Value: chosen}}
+			id, _ := group.Get("name")
+			out[i] = py.Dict{{Key: "id", Value: id}, {Key: "name", Value: name}, {Key: "message_ids", Value: chosen}}
 		}
 		return py.Dict{{Key: "groups", Value: out}}, nil
 	case kind.Messages:
@@ -237,6 +238,10 @@ func resolvedToast(outcome string) *tpl.Toast {
 		return toast("success", "Undo recorded as done", "You checked that the messages are back."+untouched)
 	case proposals.OutcomeNotUndone:
 		return toast("success", "Undo recorded as not done", "You checked that the messages were not moved back, so the undo can be tried again."+untouched)
+	case proposals.OutcomeApplied:
+		return toast("success", "Write recorded as done", "You checked that the write happened."+untouched)
+	case proposals.OutcomeNotApplied:
+		return toast("success", "Write recorded as not done", "You checked that the write did not happen, so the action can be tried again."+untouched)
 	}
 	return toast("success", "Marked as checked", "The blocked write is recorded as checked by you."+untouched)
 }

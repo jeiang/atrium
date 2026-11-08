@@ -18,7 +18,6 @@ type migration struct {
 
 var migrations = []migration{
 	{1, func(ctx context.Context, tx *sql.Tx) error { return initSchema(ctx, tx) }},
-	{2, ledgerState},
 }
 
 type ModuleMigration struct {

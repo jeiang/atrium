@@ -128,9 +128,35 @@ func seedWorld(t *testing.T, app *cli.App, target, source string) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	const unknownText = "cancelled, write outcome unknown"
+	const partialText = "copied but not expunged: "
+	const heldText = unknownText + ": write in flight"
+	const settledText = "settled by operator after checking the mailbox"
+	const stuckText = "interrupted before completion"
 	var stmts []string
 	for _, table := range tables {
 		if seededTables[table] {
+			continue
+		}
+		switch table {
+		case "auto_actions":
+			stmts = append(stmts, "INSERT OR IGNORE INTO main.auto_actions (id, ts, account, message_id, digest, kind, src, dest, before, after, undo, decision_id, state, error, undone_ts, undone_error, undo_started_at) "+
+				"SELECT id, ts, account, message_id, digest, kind, src, dest, before, after, undo, decision_id, CASE "+
+				"WHEN undone_ts IS NOT NULL THEN 'undone' WHEN undone_error = '"+heldText+"' THEN 'undo_held' "+
+				"WHEN undone_error = '"+settledText+"' THEN 'undo_settled' WHEN instr(undone_error, '"+unknownText+"') > 0 THEN 'undo_unknown' "+
+				"WHEN instr(undone_error, '"+partialText+"') > 0 THEN 'undo_partial' WHEN undone_error IS NOT NULL THEN 'undo_failed' "+
+				"WHEN ok IS NULL AND error = '"+stuckText+"' THEN 'interrupted' WHEN ok IS NULL THEN 'held' WHEN ok = 1 THEN 'applied' "+
+				"WHEN error LIKE 'skipped:%' THEN 'skipped' WHEN instr(error, '"+unknownText+"') > 0 THEN 'unknown' "+
+				"WHEN instr(error, '"+partialText+"') > 0 THEN 'partial' ELSE 'failed' END, "+
+				"error, undone_ts, undone_error, NULL FROM v1.auto_actions;")
+			continue
+		case "proposal_actions":
+			stmts = append(stmts, "INSERT OR IGNORE INTO main.proposal_actions (id, proposal_id, ts, lease, kind, undo_of, action, undo, state, error) "+
+				"SELECT id, proposal_id, ts, ts, CASE WHEN json_extract(action, '$.op') = 'undo' THEN 'undo' ELSE 'write' END, "+
+				"CASE WHEN json_extract(action, '$.op') = 'undo' THEN json_extract(action, '$.of') END, action, undo, CASE "+
+				"WHEN ok = 1 THEN 'ok' WHEN error = '"+heldText+"' THEN 'held' WHEN instr(error, '"+unknownText+"') > 0 THEN 'unknown' "+
+				"WHEN instr(error, '"+partialText+"') > 0 THEN 'partial' WHEN error = '"+settledText+"' THEN 'settled' "+
+				"ELSE 'failed' END, error FROM v1.proposal_actions;")
 			continue
 		}
 		if strings.HasPrefix(table, "message_fts_") || strings.HasPrefix(table, "thread_fts_") || strings.HasPrefix(table, "notion_fts_") {
@@ -165,6 +191,9 @@ func seedWorld(t *testing.T, app *cli.App, target, source string) {
 		stmts = append(stmts, "INSERT OR IGNORE INTO main."+table+" ("+strings.Join(quoted, ", ")+") SELECT "+
 			strings.Join(quoted, ", ")+" FROM v1."+table+";")
 	}
+	stmts = append(stmts,
+		"UPDATE main.proposals SET undone_ts = json_extract(result, '$.undone_ts') WHERE result IS NOT NULL AND undone_ts IS NULL;",
+		"UPDATE main.proposals SET recovered = 1 WHERE json_extract(result, '$.interrupted') AND recovered = 0;")
 	script := "PRAGMA foreign_keys = OFF;\nATTACH DATABASE '" + strings.ReplaceAll(source, "'", "''") + "' AS v1;\n" +
 		strings.Join(stmts, "\n") + "\nDETACH DATABASE v1;\n"
 	saved := app.Stdin

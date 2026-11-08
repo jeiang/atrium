@@ -106,7 +106,7 @@ func resolveGroups(groups []group, selection any) ([]planned, error) {
 	if err != nil {
 		return nil, err
 	}
-	var picks []any
+	byID := map[string]py.Dict{}
 	if picksV != nil {
 		list, err := py.Iter(picksV)
 		if err != nil {
@@ -115,17 +115,31 @@ func resolveGroups(groups []group, selection any) ([]planned, error) {
 		if len(list) != len(groups) {
 			return nil, proposals.SelectionError("selection does not match the proposal groups")
 		}
-		picks = list
-	}
-	plan := make([]planned, 0, len(groups))
-	for i, g := range groups {
-		pick := py.Dict{}
-		if picks != nil {
-			d, ok := picks[i].(py.Dict)
+		for _, value := range list {
+			d, ok := value.(py.Dict)
 			if !ok {
 				return nil, fmt.Errorf("selection group is not an object")
 			}
-			pick = d
+			id, _ := d.Get("id")
+			name, ok := id.(string)
+			if !ok || name == "" {
+				return nil, proposals.SelectionError("selection group is missing its id")
+			}
+			if _, duplicate := byID[name]; duplicate {
+				return nil, proposals.SelectionError("selection repeats group " + strconv.Quote(name))
+			}
+			byID[name] = d
+		}
+	}
+	plan := make([]planned, 0, len(groups))
+	for _, g := range groups {
+		pick := py.Dict{}
+		if picksV != nil {
+			found, ok := byID[g.Dest]
+			if !ok {
+				return nil, proposals.SelectionError("selection does not name group " + strconv.Quote(g.Dest))
+			}
+			pick = found
 		}
 		value := g.Dest
 		if chosen := get(pick, "name"); py.Truthy(chosen) {
@@ -144,6 +158,9 @@ func resolveGroups(groups []group, selection any) ([]planned, error) {
 			return nil, err
 		}
 		plan = append(plan, planned{name, snaps})
+	}
+	if picksV != nil && len(byID) != len(groups) {
+		return nil, proposals.SelectionError("selection names a group the proposal does not have")
 	}
 	return plan, nil
 }
@@ -389,6 +406,13 @@ func uidList(uids []uint32) []any {
 		out[i] = u
 	}
 	return out
+}
+
+func nullableString(v string) any {
+	if v == "" {
+		return nil
+	}
+	return v
 }
 
 func stringList(values []string) []any {
@@ -723,6 +747,7 @@ func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal
 	var moved int
 	var skipped []mailops.Skip
 	deleted := false
+	keptReason := ""
 	err = mailops.Session(ctx, e.Open, account, func(client mail.Client) error {
 		items, skips, err := mailops.Verify(ctx, e.DB.Read, client, account, snaps)
 		if err != nil {
@@ -737,8 +762,12 @@ func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal
 		}
 		label := mail.UTF7Encode(payload.Label)
 		st, err := client.Status(ctx, label)
-		if err != nil || st.Messages != 0 {
+		if err != nil {
 			return err
+		}
+		if st.Messages != 0 {
+			keptReason = fmt.Sprintf("%d messages still carry the label", st.Messages)
+			return nil
 		}
 		drop := py.Dict{{Key: "op", Value: "delete_label"}, {Key: "imap_name", Value: label}}
 		s, err := e.hold(ctx, p.ID, drop, nil)
@@ -757,9 +786,14 @@ func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal
 	if deleted {
 		state = "deleted"
 	}
+	summary := fmt.Sprintf("%d relabelled, label %s", moved, state)
+	if keptReason != "" {
+		summary += " (" + keptReason + ")"
+	}
+	summary += fmt.Sprintf(", %d skipped as changed", len(skipped))
 	return py.Dict{
-		{Key: "summary", Value: fmt.Sprintf("%d relabelled, label %s, %d skipped as changed", moved, state, len(skipped))},
-		{Key: "relabelled", Value: moved}, {Key: "label_deleted", Value: deleted}, {Key: "skipped", Value: skipList(skipped)},
+		{Key: "summary", Value: summary}, {Key: "relabelled", Value: moved}, {Key: "label_deleted", Value: deleted},
+		{Key: "label_kept_reason", Value: nullableString(keptReason)}, {Key: "skipped", Value: skipList(skipped)},
 	}, nil
 }
 

@@ -236,7 +236,7 @@
 {{define "proposal_blocked"}}{{if .blocked}}
 <div class="flex w-full flex-col gap-2 rounded-md border p-3 text-sm">
   <p class="text-muted-foreground">A write has an unknown or partial outcome, so atrium refuses to retry it. Check the mailbox, then record what you found. atrium does not touch the mailbox.</p>
-  {{template "resolve_controls" (dict "path" (printf "/proposals/%v/resolve" .id) "target" (printf "#proposal-%v" .id) "undo" .blocked_undo)}}
+  {{template "resolve_controls" (dict "path" (printf "/proposals/%v/resolve" .id) "target" (printf "#proposal-%v" .id) "undo" .blocked_undo "forward" false)}}
 </div>
 {{end}}{{end}}
 
