@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"net/http"
+	"sync"
 	"sync/atomic"
 
 	"github.com/jeiang/atrium/internal/config"
@@ -14,27 +15,40 @@ import (
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
+type FrameFunc func(context.Context, *tpl.Frame) error
+
 type Renderer struct {
 	oidcOn atomic.Bool
 	engine *tpl.Engine
 	cfg    config.Config
 	db     *db.DB
+	frame  []FrameFunc
+	mu     sync.Mutex
+}
+
+func (rd *Renderer) OnFrame(fn FrameFunc) {
+	rd.mu.Lock()
+	defer rd.mu.Unlock()
+	rd.frame = append(rd.frame, fn)
 }
 
 func NewRenderer(cfg config.Config, d *db.DB, extra tpl.Config) (*Renderer, error) {
-	accounts := make([]string, len(config.Accounts()))
-	for i, spec := range config.Accounts() {
-		accounts[i] = spec.Name
-	}
+	rd := &Renderer{cfg: cfg, db: d}
 	extra.AssetVersion = AssetVersion
 	if extra.Globals == nil {
 		extra.Globals = map[string]any{}
 	}
-	extra.Globals["accounts"] = accounts
+	extra.Globals["accounts"] = func() []string {
+		specs := config.Accounts()
+		accounts := make([]string, len(specs))
+		for i, spec := range specs {
+			accounts[i] = spec.Name
+		}
+		return accounts
+	}
 	if _, ok := extra.Globals["module_enabled"]; !ok {
 		extra.Globals["module_enabled"] = func(string) bool { return true }
 	}
-	rd := &Renderer{cfg: cfg, db: d}
 	enabled, _ := extra.Globals["module_enabled"].(func(string) bool)
 	extra.Globals["module_enabled"] = func(name string) bool {
 		if name == "auth" {
@@ -51,13 +65,17 @@ func NewRenderer(cfg config.Config, d *db.DB, extra tpl.Config) (*Renderer, erro
 }
 
 func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, error) {
-	pending, err := rd.pending(r.Context())
-	if err != nil {
-		return nil, err
+	pending := 0
+	if n, err := rd.pending(r.Context()); err != nil {
+		log.Error("frame pending count failed", "err", err.Error())
+	} else {
+		pending = n
 	}
-	mode, err := rd.mode(r.Context())
-	if err != nil {
-		return nil, err
+	mode := config.Shadow
+	if m, err := rd.mode(r.Context()); err != nil {
+		log.Error("frame mail mode failed", "err", err.Error())
+	} else {
+		mode = m
 	}
 	var auth tpl.AuthView
 	if who, ok := IdentityOf(r.Context()); ok {
@@ -65,14 +83,20 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 	}
 	var failing, alerts []string
 	if auth.Admin {
-		if failing, err = rd.names(r.Context(), "SELECT name FROM ntfy_channels WHERE failures >= 3 ORDER BY name"); err != nil {
-			return nil, err
+		names, err := rd.names(r.Context(), "SELECT name FROM ntfy_channels WHERE failures >= 3 ORDER BY name")
+		if err != nil {
+			log.Error("frame notify state failed", "err", err.Error())
+		} else {
+			failing = names
 		}
-		if alerts, err = rd.names(r.Context(), "SELECT name || ' ' || replace(state, '_', ' ') FROM integration_health WHERE state <> 'ok' ORDER BY name"); err != nil {
-			return nil, err
+		names, err = rd.names(r.Context(), "SELECT name || ' ' || replace(state, '_', ' ') FROM integration_health WHERE state <> 'ok' ORDER BY name")
+		if err != nil {
+			log.Error("frame integration state failed", "err", err.Error())
+		} else {
+			alerts = names
 		}
 	}
-	return &tpl.Frame{
+	f := &tpl.Frame{
 		Auth:              auth,
 		CSRF:              CSRFToken(r.Context()),
 		Mode:              mode,
@@ -82,7 +106,16 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 		IntegrationAlerts: alerts,
 		Page:              page,
 		Data:              data,
-	}, nil
+	}
+	rd.mu.Lock()
+	contributions := append([]FrameFunc(nil), rd.frame...)
+	rd.mu.Unlock()
+	for _, fn := range contributions {
+		if err := fn(r.Context(), f); err != nil {
+			log.Error("frame contribution failed", "err", err.Error())
+		}
+	}
+	return f, nil
 }
 
 func (rd *Renderer) names(ctx context.Context, query string) ([]string, error) {

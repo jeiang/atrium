@@ -33,6 +33,7 @@ type Deps struct {
 	DB       *db.DB
 	Render   *Renderer
 	Error    func(w http.ResponseWriter, r *http.Request, status int, detail string)
+	OnFrame  func(FrameFunc)
 	Stopping <-chan struct{}
 	OnClose  func(func())
 }
@@ -123,6 +124,9 @@ func New(o Options) (*Server, error) {
 	deps := &Deps{
 		Cfg: o.Cfg, Env: o.Env, DB: o.DB, Render: o.Render, Error: s.Error, Stopping: s.stop,
 		OnClose: func(f func()) { s.closers = append(s.closers, f) },
+	}
+	if o.Render != nil {
+		deps.OnFrame = o.Render.OnFrame
 	}
 	s.secure = func(r *http.Request) bool {
 		return hasSecureTransport(r, strings.HasPrefix(config.PublicURL(o.Env), "https://"))

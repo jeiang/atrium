@@ -49,7 +49,7 @@ Shadow mode: nothing is changed automatically. Proposals you approve still run.
 {{define "account_switch"}}{{$path := .path}}{{$current := .current -}}
 <nav class="button-group" aria-label="{{opt . "label" "Account"}}">
   <a class="btn" data-size="sm" data-variant="{{if not $current}}secondary{{else}}outline{{end}}" href="{{safeurl $path}}"{{if not $current}} aria-current="page"{{end}}>All accounts</a>
-  {{range global "accounts"}}
+  {{range call (global "accounts")}}
   <a class="btn" data-size="sm" data-variant="{{if eq $current .}}secondary{{else}}outline{{end}}" href="{{safeurl $path}}?account={{.}}"{{if eq $current .}} aria-current="page"{{end}}>{{.}}</a>
   {{end}}
 </nav>
