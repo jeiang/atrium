@@ -17,7 +17,7 @@ import (
 func runSecrets(t *testing.T, stdin string, args ...string) settingsRun {
 	t.Helper()
 	var out, errs bytes.Buffer
-	app := defaultApp()
+	app := defaultApp(t)
 	app.Stdin = strings.NewReader(stdin)
 	code := app.Run(context.Background(), append([]string{"secrets"}, args...), &out, &errs)
 	return settingsRun{code, out.String(), errs.String()}
@@ -98,6 +98,7 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 }
 
 func TestEmptyPinnedLinkKeyIsRefused(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))

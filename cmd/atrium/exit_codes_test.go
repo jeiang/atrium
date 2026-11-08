@@ -23,7 +23,7 @@ func TestCLIExitProcess(t *testing.T) {
 			os.Exit(cli.ExitError)
 		}
 		ctx, stop := cli.SignalContext(context.Background())
-		code := defaultApp().Run(ctx, args, os.Stdout, os.Stderr)
+		code := defaultApp(t).Run(ctx, args, os.Stdout, os.Stderr)
 		stop()
 		os.Exit(code)
 	}
@@ -39,6 +39,7 @@ func TestCLIExitProcess(t *testing.T) {
 }
 
 func TestCLISignalExitCodes(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name string
 		sig  syscall.Signal
@@ -118,8 +119,10 @@ func cliExitProcessArgs(t *testing.T, args []string) *exec.Cmd {
 	cmd := exec.Command(os.Args[0], "-test.run=^TestCLIExitProcess$")
 	cmd.Env = append(os.Environ(), "ATRIUM_CLI_EXIT_E2E=1", "ATRIUM_CLI_EXIT_ARGS="+string(encoded))
 	inherited := testEnv
-	if activeFixture != nil {
-		inherited = activeFixture.env
+	if f := fixtureFor(t); f != nil {
+		inherited = f.env
+	} else {
+		inherited = varsFor(t).snapshot()
 	}
 	for name, value := range inherited {
 		cmd.Env = append(cmd.Env, name+"="+value)

@@ -20,7 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
@@ -44,14 +44,17 @@ func freePort(t *testing.T) string {
 	return port
 }
 
-func noTools() (*registry.Registry, error) { return registry.New(), nil }
+func noTools() (*registry.Registry, error) { return registry.New(settings.New()), nil }
 
 func pinnedTokens(n int) string { return fmt.Sprintf("golden-token-urlsafe-%d", n) }
 
-func googleAuthApp() *cli.App {
-	app := cli.New("atrium", logx.Setup)
-	app.Bootstrap = bootstrap(testLookup, settings.Default)
-	app.Add(calendarcmd.Command(testLookup, noTools, calendar.AuthOptions{Random: pinnedTokens}))
+func googleAuthApp(t *testing.T) *cli.App {
+	reg := settings.New()
+	app := cli.New("atrium", quietLog)
+	app.Settings = reg
+	app.State = config.NewState(reg)
+	app.Bootstrap = bootstrap(testLookupFor(t), reg)
+	app.Add(calendarcmd.Command(testLookupFor(t), noTools, calendar.AuthOptions{Random: pinnedTokens}))
 	return app
 }
 
@@ -69,7 +72,7 @@ func runGoogleAuth(t *testing.T, redirect, port string, args ...string) authRun 
 	done := make(chan authRun, 1)
 	go func() {
 		var out, errs bytes.Buffer
-		code := googleAuthApp().Run(context.Background(), append([]string{"calendar", "google-auth", "--port", port}, args...), &out, &errs)
+		code := googleAuthApp(t).Run(context.Background(), append([]string{"calendar", "google-auth", "--port", port}, args...), &out, &errs)
 		done <- authRun{code, out.String(), errs.String()}
 	}()
 	if redirect != "" {

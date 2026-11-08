@@ -91,7 +91,7 @@ type mailbox struct {
 
 func (s *Syncer) Account(ctx context.Context, account string, client mail.Client) (Stats, error) {
 	var stats Stats
-	if _, err := s.DB.Write.ExecContext(ctx, "INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", account, config.Preset(account)); err != nil {
+	if _, err := s.DB.Write.ExecContext(ctx, "INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", account, config.From(ctx).Preset(account)); err != nil {
 		return stats, err
 	}
 	lim, err := readLimits(ctx, s.DB.Read)
@@ -188,7 +188,7 @@ func (s *Syncer) upsertMailboxes(ctx context.Context, account string, client mai
 	}
 	var picked []chosen
 	for _, info := range listed {
-		role := mail.MailboxRole(info.Name, info.Flags, config.Preset(account))
+		role := mail.MailboxRole(info.Name, info.Flags, config.From(ctx).Preset(account))
 		if (systemRoles[role] && !indexedSystemRoles[role]) || role == "system" {
 			continue
 		}
@@ -260,7 +260,7 @@ type stored struct {
 }
 
 func (s *Syncer) syncMailbox(ctx context.Context, client mail.Client, account string, mbx mailbox, run float64, lim limits, stats *Stats) error {
-	gmail := config.Preset(account) == config.Gmail
+	gmail := config.From(ctx).Preset(account) == config.Gmail
 	status, err := client.Status(ctx, mbx.IMAPName)
 	if err != nil {
 		return err
@@ -442,7 +442,7 @@ func (s *Syncer) refreshFlags(ctx context.Context, client mail.Client, account s
 	if len(survivors) == 0 {
 		return nil
 	}
-	gmail := config.Preset(account) == config.Gmail
+	gmail := config.From(ctx).Preset(account) == config.Gmail
 	items := mail.FetchRequest{Mode: mail.FetchFlags, Labels: gmail}
 	var updates []mail.Message
 	if client.HasCapability("CONDSTORE") && current.ModSeq != 0 && prev.Valid && prev.ModSeq != 0 {
@@ -480,7 +480,7 @@ func (s *Syncer) refreshFlags(ctx context.Context, client mail.Client, account s
 				return err
 			}
 		}
-		state := MessageState(account, mbx.Role, mbx.Name, item.Flags, labels)
+		state := MessageState(config.From(ctx).Preset(account), mbx.Role, mbx.Name, item.Flags, labels)
 		if state.Flags == row.Flags && state.Labels == row.Labels {
 			continue
 		}
@@ -627,7 +627,10 @@ func (s *Syncer) ingest(ctx context.Context, tx *sql.Tx, account string, mbx mai
 	relative, absolute := RawLocation(s.Cfg, account, mbx.ID, validity, item.UID)
 	raw := make([]byte, 0, len(item.Header)+len(item.Text))
 	raw = append(append(raw, item.Header...), item.Text...)
-	state := MessageState(account, mbx.Role, mbx.Name, item.Flags, item.Labels)
+	if err := storeRaw(absolute, raw); err != nil {
+		return err
+	}
+	state := MessageState(config.From(ctx).Preset(account), mbx.Role, mbx.Name, item.Flags, item.Labels)
 	id, err := rules.InsertMessage(ctx, tx, rules.MessageInsert{
 		Account: account, MailboxID: mbx.ID, UIDValidity: validity, UID: item.UID, MsgID: feats.MsgID, Digest: digest,
 		GmMsgID: item.GmMsgID, GmThrID: item.GmThrID, InternalDate: item.InternalDate, DateTS: feats.DateTS,

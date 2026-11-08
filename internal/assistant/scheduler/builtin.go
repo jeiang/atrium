@@ -92,7 +92,7 @@ func builtinSchedule(ctx context.Context, q db.Querier, name string) (string, bo
 	if !ok {
 		return "", false, fmt.Errorf("unknown builtin %q", name)
 	}
-	found, err := settings.Default.Resolve(ctx, q, spec.Setting)
+	found, err := settings.From(ctx).Resolve(ctx, q, spec.Setting)
 	return found.Value, found.Origin != settings.FromDefault, err
 }
 

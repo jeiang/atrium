@@ -24,7 +24,7 @@ type runView struct {
 
 func agentRun(t *testing.T, args ...string) runView {
 	t.Helper()
-	got := runApp(append([]string{"agent", "run"}, args...)...)
+	got := runApp(t, append([]string{"agent", "run"}, args...)...)
 	var v runView
 	if err := json.Unmarshal([]byte(got.stdout), &v); err != nil {
 		t.Fatalf("agent run: %d %q %q", got.code, got.stdout, got.stderr)
@@ -35,7 +35,8 @@ func agentRun(t *testing.T, args ...string) runView {
 var nextRequest = regexp.MustCompile(`about (\d+) tokens`)
 
 func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
-	dir, api := moduleFixture(t, flagsExcept("", ""))
+	t.Parallel()
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, settingEnv(loop.CacheTTLKey), "5m")
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("first")))
 	first := agentRun(t, "--text", "hello")

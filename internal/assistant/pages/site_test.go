@@ -44,6 +44,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/notify"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -51,17 +52,23 @@ import (
 const zone = "America/Port_of_Spain"
 
 type site struct {
-	t      *testing.T
-	db     *db.DB
-	cfg    config.Config
-	api    *anthropictest.Server
-	srv    *web.Server
-	http   *httptest.Server
-	token  string
-	mu     sync.Mutex
-	clock  float64
-	runner *loop.Runner
-	fetch  *webfetch.Fetcher
+	t        *testing.T
+	db       *db.DB
+	cfg      config.Config
+	settings *settings.Registry
+	state    *config.State
+	api      *anthropictest.Server
+	srv      *web.Server
+	http     *httptest.Server
+	token    string
+	mu       sync.Mutex
+	clock    float64
+	runner   *loop.Runner
+	fetch    *webfetch.Fetcher
+}
+
+func (s *site) ctx() context.Context {
+	return config.With(settings.With(context.Background(), s.settings), s.state)
 }
 
 func allTools(t *testing.T, fetchers ...*webfetch.Fetcher) *registry.Registry {
@@ -70,7 +77,7 @@ func allTools(t *testing.T, fetchers ...*webfetch.Fetcher) *registry.Registry {
 	if len(fetchers) > 0 && fetchers[0] != nil {
 		fetch = []tool.Tool{webfetch.Tool(fetchers[0])}
 	}
-	r := registry.New()
+	r := registry.New(settings.New())
 	for _, tools := range [][]tool.Tool{
 		askoperatortools.Tools(), filetools.Tools(), memorytools.Tools(), mailtools.Tools(), mediatools.Tools(), notify.Tools(), fetch, nightly.Tools(),
 		recalltools.Tools(), plantools.Tools(), profiletools.Tools(), proposetools.Tools(),
@@ -119,11 +126,13 @@ func newSiteOn(t *testing.T, d *db.DB, options ...siteOption) *site {
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &site{t: t, db: d, cfg: cfg, api: anthropictest.New(t), clock: 1_780_000_000, runner: &loop.Runner{Registry: registry.New()}}
+	settingsReg := settings.New()
+	st := config.NewState(settingsReg)
+	s := &site{t: t, db: d, cfg: cfg, settings: settingsReg, state: st, api: anthropictest.New(t), clock: 1_780_000_000, runner: &loop.Runner{Registry: registry.New(settingsReg)}}
 	for _, o := range options {
 		o(s)
 	}
-	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}}, assistantNav()...)
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}, State: st}, assistantNav()...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +140,7 @@ func newSiteOn(t *testing.T, d *db.DB, options ...siteOption) *site {
 	s.runner.Registry = reg
 	s.runner.Undoers = toolset.Undoers(config.OS)
 	module := Module(Options{Runner: s.runner, Registry: reg, Client: s.api.Client(), Now: s.now, Poll: 10 * time.Millisecond, KeepAlive: 200 * time.Millisecond})
-	s.srv, err = web.New(web.Options{Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, Render: render, Modules: []web.Module{module}})
+	s.srv, err = web.New(web.Options{Cfg: cfg, Env: env, DB: d, Settings: settingsReg, State: st, Auth: []string{web.AuthLocal}, Render: render, Modules: []web.Module{module}})
 	if err != nil {
 		t.Fatal(err)
 	}

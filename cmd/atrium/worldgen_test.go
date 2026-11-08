@@ -30,7 +30,7 @@ func TestGenerateWorldFixture(t *testing.T) {
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_CONFIG", "")
 	setEnv(t, "ATRIUM_DB_KEY", "")
-	app := defaultApp()
+	app := defaultApp(t)
 	run := func(argv ...string) {
 		var out, errs strings.Builder
 		if code := app.Run(context.Background(), argv, &out, &errs); code != cli.ExitOK {

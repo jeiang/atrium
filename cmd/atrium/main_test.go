@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/logx"
 )
 
 func startServe(t *testing.T) string {
@@ -43,56 +45,69 @@ func (b *lockedBuffer) String() string {
 
 func startServeIn(t *testing.T, dir string) string {
 	t.Helper()
-	base, _ := startServeLogged(t, dir)
+	base, _, _ := startServeStoppable(t, dir)
 	return base
 }
 
 func startServeLogged(t *testing.T, dir string) (string, *lockedBuffer) {
 	t.Helper()
-	base, logs, _ := startServeStoppable(t, dir)
+	base, logs, _ := startServeWith(t, dir, true)
 	return base, logs
 }
 
 func startServeStoppable(t *testing.T, dir string) (string, *lockedBuffer, func()) {
 	t.Helper()
-	for attempt := 0; ; attempt++ {
-		base, logs, stop, err := startServeOnce(t, dir)
-		if err == nil {
-			t.Cleanup(stop)
-			return base, logs, stop
-		}
-		if attempt >= 4 || !strings.Contains(err.Error(), "address already in use") {
-			t.Fatalf("serve did not start: %v", err)
-		}
-	}
+	return startServeWith(t, dir, false)
 }
 
-func startServeOnce(t *testing.T, dir string) (string, *lockedBuffer, func(), error) {
+func startServeWith(t *testing.T, dir string, logged bool) (string, *lockedBuffer, func()) {
+	t.Helper()
+	base, logs, stop, err := startServeOnce(t, dir, logged)
+	if err != nil {
+		t.Fatalf("serve did not start: %v", err)
+	}
+	t.Cleanup(stop)
+	return base, logs, stop
+}
+
+func startServeOnce(t *testing.T, dir string, logged bool) (string, *lockedBuffer, func(), error) {
 	t.Helper()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
-	l, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		return "", nil, nil, err
+	app := newTestApp(t, nil)
+	if f := fixtureFor(t); f != nil {
+		app = f.app
 	}
-	_, port, _ := net.SplitHostPort(l.Addr().String())
-	_ = l.Close()
+	logs := &lockedBuffer{}
+	if logged {
+		logx.Setup(logs)
+	}
+	return startServeAppOnce(t, app, logs)
+}
+
+func startServeApp(t *testing.T, app *cli.App, logs *lockedBuffer) (string, *lockedBuffer, func()) {
+	t.Helper()
+	base, logs, stop, err := startServeAppOnce(t, app, logs)
+	if err != nil {
+		t.Fatalf("serve did not start: %v", err)
+	}
+	t.Cleanup(stop)
+	return base, logs, stop
+}
+
+func startServeAppOnce(t *testing.T, app *cli.App, logs *lockedBuffer) (string, *lockedBuffer, func(), error) {
+	t.Helper()
+	addrFile := filepath.Join(t.TempDir(), "serve-addr")
+	setEnv(t, "ATRIUM_SERVE_ADDR_FILE", addrFile)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan int, 1)
 	var exitCode atomic.Int32
 	exitCode.Store(-1)
-	logs := &lockedBuffer{}
-	envMu.RLock()
-	app := defaultApp()
-	if activeFixture != nil {
-		app = activeFixture.app
-	}
-	envMu.RUnlock()
 	go func() {
 		var stdout bytes.Buffer
-		code := app.Run(ctx, []string{"serve", "--port", port, "--auth", "local"}, &stdout, logs)
+		code := app.Run(ctx, []string{"serve", "--port", "0", "--auth", "local"}, &stdout, logs)
 		exitCode.Store(int32(code))
 		done <- code
 	}()
@@ -110,7 +125,12 @@ func startServeOnce(t *testing.T, dir string) (string, *lockedBuffer, func(), er
 			}
 		})
 	}
-	base := "http://127.0.0.1:" + port
+	base, err := waitForServeAddr(t, addrFile, logs, &exitCode, cancel)
+	if err != nil {
+		cancel()
+		<-done
+		return "", logs, nil, err
+	}
 	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); {
 		if resp, err := http.Get(base + "/healthz"); err == nil {
 			_ = resp.Body.Close()
@@ -126,6 +146,24 @@ func startServeOnce(t *testing.T, dir string) (string, *lockedBuffer, func(), er
 	cancel()
 	<-done
 	return "", logs, nil, fmt.Errorf("serve did not start: %s", logs.String())
+}
+
+func waitForServeAddr(t *testing.T, path string, logs *lockedBuffer, exitCode *atomic.Int32, cancel context.CancelFunc) (string, error) {
+	t.Helper()
+	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); {
+		if raw, err := os.ReadFile(path); err == nil {
+			addr := strings.TrimSpace(string(raw))
+			if _, _, err := net.SplitHostPort(addr); err == nil {
+				return "http://" + addr, nil
+			}
+		}
+		if code := exitCode.Load(); code >= 0 {
+			return "", fmt.Errorf("serve exited with %d: %s", code, logs.String())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	cancel()
+	return "", fmt.Errorf("serve did not report its address: %s", logs.String())
 }
 
 func fetch(t *testing.T, client *http.Client, method, url string, form url.Values) (int, string, http.Header) {
@@ -156,6 +194,7 @@ func fetch(t *testing.T, client *http.Client, method, url string, form url.Value
 }
 
 func TestServeRendersNotificationsPage(t *testing.T) {
+	t.Parallel()
 	base := startServe(t)
 	status, body, _ := fetch(t, http.DefaultClient, "GET", base+"/settings/notifications", nil)
 	if status != http.StatusOK || !strings.Contains(body, "No notifications") {
@@ -164,6 +203,7 @@ func TestServeRendersNotificationsPage(t *testing.T) {
 }
 
 func TestServeRendersMailPages(t *testing.T) {
+	t.Parallel()
 	base := startServe(t)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -206,6 +246,7 @@ func TestServeRendersMailPages(t *testing.T) {
 }
 
 func TestServeRendersReviewPages(t *testing.T) {
+	t.Parallel()
 	base := startServe(t)
 	for _, path := range []string{"/proposals", "/activity", "/drafts", "/loops", "/watches"} {
 		if status, _, _ := fetch(t, http.DefaultClient, "GET", base+path, nil); status != http.StatusOK {
@@ -215,6 +256,7 @@ func TestServeRendersReviewPages(t *testing.T) {
 }
 
 func TestServeRendersNotionPages(t *testing.T) {
+	t.Parallel()
 	base := startServe(t)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -243,6 +285,7 @@ func TestServeRendersNotionPages(t *testing.T) {
 }
 
 func TestServeRendersAssistantPages(t *testing.T) {
+	t.Parallel()
 	base := startServe(t)
 	jar, err := cookiejar.New(nil)
 	if err != nil {

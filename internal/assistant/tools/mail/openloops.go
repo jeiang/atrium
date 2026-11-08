@@ -83,7 +83,7 @@ func openLoops(ctx context.Context, tc *tool.Context, args tool.Args) (any, erro
 		return nil, err
 	}
 	now := tc.Now()
-	loc, err := zone(tc.Env)
+	loc, err := zone(ctx, tc.Env)
 	if err != nil {
 		return nil, err
 	}

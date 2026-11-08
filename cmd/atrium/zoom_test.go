@@ -11,8 +11,8 @@ import (
 )
 
 func TestZoomOpensSummariesLeavesAndRefusesBadRanges(t *testing.T) {
-	dir, api := moduleFixture(t, flagsExcept("", ""))
-	if ran := runApp("agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
@@ -22,7 +22,7 @@ func TestZoomOpensSummariesLeavesAndRefusesBadRanges(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if ran := runApp("memory", "view", "1"); ran.code != cli.ExitOK {
+	if ran := runApp(t, "memory", "view", "1"); ran.code != cli.ExitOK {
 		t.Fatalf("memory view: %d %s", ran.code, ran.stderr)
 	}
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("z1", "zoom", map[string]any{"id": 1, "n": 8})))
@@ -30,7 +30,7 @@ func TestZoomOpensSummariesLeavesAndRefusesBadRanges(t *testing.T) {
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("z3", "zoom", map[string]any{"id": 2, "n": 3})))
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("z4", "zoom", map[string]any{"id": 999, "n": 1})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-	if ran := runApp("agent", "run", "--thread", "1", "--text", "zoom"); ran.code != cli.ExitOK {
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "zoom"); ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 	}
 	rows, err := d.Read.Query("SELECT content_json FROM thread_messages WHERE thread_id = 1 AND role = 'user' ORDER BY seq")

@@ -21,6 +21,7 @@ import (
 )
 
 func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	setEnv(t, "ATRIUM_DB", path)
@@ -120,31 +121,31 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 
 	id := func(n int64) string { return strconv.FormatInt(n, 10) }
 
-	if got := runApp("proposals", "approve", id(viaCLI)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "resolve it in the mailbox") {
+	if got := runApp(t, "proposals", "approve", id(viaCLI)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "resolve it in the mailbox") {
 		t.Fatalf("approve of a blocked proposal = %d %q, want a refusal", got.code, got.stderr)
 	}
-	if got := runApp("proposals", "resolve", id(recent)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "may still be running") {
+	if got := runApp(t, "proposals", "resolve", id(recent)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "may still be running") {
 		t.Fatalf("resolve of a write still in flight = %d %q, want a refusal", got.code, got.stderr)
 	}
-	if got := runApp("proposals", "resolve", id(undoRecentProposal), "--outcome", "not-undone"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "may still be running") {
+	if got := runApp(t, "proposals", "resolve", id(undoRecentProposal), "--outcome", "not-undone"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "may still be running") {
 		t.Fatalf("resolve of an undo still in flight = %d %q, want a refusal", got.code, got.stderr)
 	}
-	if got := runApp("live", "resolve", id(undoRecent), "--outcome", "undone"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "may still be running") {
+	if got := runApp(t, "live", "resolve", id(undoRecent), "--outcome", "undone"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "may still be running") {
 		t.Fatalf("live resolve of an undo still in flight = %d %q, want a refusal", got.code, got.stderr)
 	}
-	if got := runApp("proposals", "resolve", id(undoHeld)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "blocked undo") {
+	if got := runApp(t, "proposals", "resolve", id(undoHeld)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "blocked undo") {
 		t.Fatalf("resolve of a blocked undo without an outcome = %d %q, want a refusal", got.code, got.stderr)
 	}
-	if got := runApp("proposals", "resolve", "99999"); got.code == cli.ExitOK {
+	if got := runApp(t, "proposals", "resolve", "99999"); got.code == cli.ExitOK {
 		t.Fatalf("resolve of an unknown proposal exited %d", got.code)
 	}
-	if got := runApp("proposals", "resolve", id(viaCLI)); got.code != cli.ExitOK {
+	if got := runApp(t, "proposals", "resolve", id(viaCLI)); got.code != cli.ExitOK {
 		t.Fatalf("proposals resolve = %d %q", got.code, got.stderr)
 	}
-	if got := runApp("proposals", "resolve", id(viaCLI)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "no blocked write") {
+	if got := runApp(t, "proposals", "resolve", id(viaCLI)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "no blocked write") {
 		t.Fatalf("second resolve = %d %q, want a refusal", got.code, got.stderr)
 	}
-	approved := runApp("proposals", "approve", id(viaCLI))
+	approved := runApp(t, "proposals", "approve", id(viaCLI))
 	var after struct {
 		Status string `json:"status"`
 	}
@@ -155,22 +156,22 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		t.Fatalf("approve after resolve still refused as unresolved: %q", approved.stdout)
 	}
 
-	if got := runApp("live", "undo", id(undoCLI)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "resolve it in the mailbox") {
+	if got := runApp(t, "live", "undo", id(undoCLI)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "resolve it in the mailbox") {
 		t.Fatalf("undo of a blocked action = %d %q, want a refusal", got.code, got.stderr)
 	}
-	if got := runApp("live", "resolve", id(undoCLI)); got.code == cli.ExitOK {
+	if got := runApp(t, "live", "resolve", id(undoCLI)); got.code == cli.ExitOK {
 		t.Fatalf("live resolve without an outcome exited %d", got.code)
 	}
-	if got := runApp("live", "resolve", id(undoCLI), "--outcome", "undone"); got.code != cli.ExitOK {
+	if got := runApp(t, "live", "resolve", id(undoCLI), "--outcome", "undone"); got.code != cli.ExitOK {
 		t.Fatalf("live resolve = %d %q", got.code, got.stderr)
 	}
-	if got := runApp("live", "undo", id(undoCLI)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "cannot be undone") {
+	if got := runApp(t, "live", "undo", id(undoCLI)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "cannot be undone") {
 		t.Fatalf("undo of a settled action = %d %q, want it closed", got.code, got.stderr)
 	}
-	if got := runApp("live", "resolve", id(correctDone), "--outcome", "undone"); got.code != cli.ExitOK {
+	if got := runApp(t, "live", "resolve", id(correctDone), "--outcome", "undone"); got.code != cli.ExitOK {
 		t.Fatalf("live resolve of a correction = %d %q", got.code, got.stderr)
 	}
-	if got := runApp("live", "resolve", id(correctKept), "--outcome", "not-undone"); got.code != cli.ExitOK {
+	if got := runApp(t, "live", "resolve", id(correctKept), "--outcome", "not-undone"); got.code != cli.ExitOK {
 		t.Fatalf("live resolve not-undone = %d %q", got.code, got.stderr)
 	}
 	base := startServeIn(t, dir)
@@ -183,7 +184,7 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		strings.Count(body, ">Mark checked<") != 1 || strings.Count(body, ">Messages are back<") != 1 || !strings.Contains(body, `role="group" aria-label="Record what you found in the mailbox"`) {
 		t.Fatalf("GET /proposals?status=failed = %d, want Mark checked on the blocked write and Messages are back only on the blocked undo: %.400s", status, body)
 	}
-	if got := runApp("proposals", "resolve", id(undoHeld), "--outcome", "not-undone"); got.code != cli.ExitOK {
+	if got := runApp(t, "proposals", "resolve", id(undoHeld), "--outcome", "not-undone"); got.code != cli.ExitOK {
 		t.Fatalf("proposals resolve of a blocked undo = %d %q", got.code, got.stderr)
 	}
 	if status, body, _ := fetch(t, client, "GET", base+"/activity", nil); status != http.StatusOK || !strings.Contains(body, "/activity/mail/"+id(undoWeb)+"/resolve") {

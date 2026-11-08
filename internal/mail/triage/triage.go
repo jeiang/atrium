@@ -231,7 +231,7 @@ func Summarize(ctx context.Context, q report.Querier, env config.Env, account st
 	if err := r.Err(); err != nil {
 		return Summary{}, err
 	}
-	start, err := report.ParseSince(env, since, at)
+	start, err := report.ParseSince(ctx, env, since, at)
 	if err != nil {
 		return Summary{}, err
 	}
@@ -261,7 +261,7 @@ func Summarize(ctx context.Context, q report.Querier, env config.Env, account st
 
 func Summaries(ctx context.Context, q report.Querier, env config.Env, since *string, at time.Time) ([]Summary, error) {
 	out := []Summary{}
-	for _, spec := range config.Accounts() {
+	for _, spec := range config.From(ctx).Accounts() {
 		ok, err := report.AccountExists(ctx, q, spec.Name)
 		if err != nil {
 			return nil, err

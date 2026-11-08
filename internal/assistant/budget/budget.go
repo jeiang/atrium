@@ -26,7 +26,7 @@ type BudgetExceeded string
 func (e BudgetExceeded) Error() string { return string(e) }
 
 func MonthlyBudget(ctx context.Context, q db.Querier) (float64, error) {
-	found, err := settings.Default.Resolve(ctx, q, BudgetKey)
+	found, err := settings.From(ctx).Resolve(ctx, q, BudgetKey)
 	if err != nil {
 		return 0, err
 	}
@@ -34,7 +34,7 @@ func MonthlyBudget(ctx context.Context, q db.Querier) (float64, error) {
 }
 
 func chatShare(ctx context.Context, q db.Querier) (float64, error) {
-	found, err := settings.Default.Resolve(ctx, q, ChatKey)
+	found, err := settings.From(ctx).Resolve(ctx, q, ChatKey)
 	if err != nil {
 		return 0, err
 	}
@@ -42,7 +42,7 @@ func chatShare(ctx context.Context, q db.Querier) (float64, error) {
 }
 
 func unattendedShare(ctx context.Context, q db.Querier) (float64, error) {
-	found, err := settings.Default.Resolve(ctx, q, UnattendedKey)
+	found, err := settings.From(ctx).Resolve(ctx, q, UnattendedKey)
 	if err != nil {
 		return 0, err
 	}
@@ -107,7 +107,7 @@ func RunCap(ctx context.Context, q db.Querier, model string) (float64, error) {
 	if _, err := pricing.Lookup(model); err != nil {
 		return 0, err
 	}
-	found, err := settings.Default.Resolve(ctx, q, RunCapKey(model))
+	found, err := settings.From(ctx).Resolve(ctx, q, RunCapKey(model))
 	if err != nil {
 		return 0, err
 	}
@@ -138,7 +138,7 @@ func SpendCap() BudgetExceeded { return BudgetExceeded(SpendCapText) }
 const ThreadCapKey = "thread_cost_cap_usd"
 
 func ThreadCap(ctx context.Context, q db.Querier, threadID int64) (spent, limit float64, err error) {
-	found, err := settings.Default.Resolve(ctx, q, ThreadCapKey)
+	found, err := settings.From(ctx).Resolve(ctx, q, ThreadCapKey)
 	if err != nil {
 		return 0, 0, err
 	}

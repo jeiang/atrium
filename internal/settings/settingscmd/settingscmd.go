@@ -25,7 +25,7 @@ func (r *Refused) Error() string { return r.Err.Error() }
 func (r *Refused) Unwrap() error { return r.Err }
 
 func Command(env config.Env, guard Guard) *cli.Command {
-	s := &service{env: env, reg: settings.Default, guard: guard}
+	s := &service{env: env, guard: guard}
 	return &cli.Command{
 		Name: "settings",
 		Commands: []*cli.Command{
@@ -39,7 +39,6 @@ func Command(env config.Env, guard Guard) *cli.Command {
 
 type service struct {
 	env   config.Env
-	reg   *settings.Registry
 	guard Guard
 }
 
@@ -51,7 +50,7 @@ func (s *service) list(*cli.Args) cli.Handler {
 				return 0, err
 			}
 			rows := make([]any, 0)
-			for _, def := range s.reg.Defs() {
+			for _, def := range settings.From(e.Ctx).Defs() {
 				row, err := s.row(e.Ctx, store, snap, def.Key)
 				if err != nil {
 					return 0, err
@@ -83,7 +82,7 @@ func (s *service) set(a *cli.Args) cli.Handler {
 						return &Refused{Err: err}
 					}
 				}
-				return s.reg.Set(ctx, tx, *key, *value)
+				return settings.From(ctx).Set(ctx, tx, *key, *value)
 			})
 		})
 	}
@@ -94,13 +93,13 @@ func (s *service) unset(a *cli.Args) cli.Handler {
 	return func(e *cli.Env) int {
 		return s.keyed(e, *key, func(d *db.DB, _ *settings.Store) error {
 			ctx := audit.With(e.Ctx, actor, audit.CLI)
-			return d.WithTx(ctx, func(tx *sql.Tx) error { return s.reg.Unset(ctx, tx, *key) })
+			return d.WithTx(ctx, func(tx *sql.Tx) error { return settings.From(ctx).Unset(ctx, tx, *key) })
 		})
 	}
 }
 
 func (s *service) keyed(e *cli.Env, key string, act func(*db.DB, *settings.Store) error) int {
-	def, ok := s.reg.Lookup(key)
+	def, ok := settings.From(e.Ctx).Lookup(key)
 	if !ok {
 		return e.UsageError("%v", settings.UnknownKey(key))
 	}
@@ -153,7 +152,7 @@ func (s *service) with(e *cli.Env, run func(*db.DB, *settings.Store) (int, error
 }
 
 func (s *service) row(ctx context.Context, store *settings.Store, snap *settings.Snapshot, key string) (py.Dict, error) {
-	def, _ := s.reg.Lookup(key)
+	def, _ := settings.From(ctx).Lookup(key)
 	if def.IsSecret() {
 		return py.Dict{{Key: "key", Value: key}, {Key: "value", Value: nil}, {Key: "source", Value: nil}, {Key: "class", Value: def.Class()}}, nil
 	}

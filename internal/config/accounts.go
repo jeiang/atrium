@@ -66,12 +66,14 @@ func init() {
 		Key: KeyMailAccountsFile, Module: "mail", Type: settings.String}))
 }
 
-func Accounts() []AccountSpec {
-	return loadState().accounts
+func (s *State) Accounts() []AccountSpec {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.accounts
 }
 
-func Account(name string) (AccountSpec, bool) {
-	for _, a := range Accounts() {
+func (s *State) Account(name string) (AccountSpec, bool) {
+	for _, a := range s.Accounts() {
 		if a.Name == name {
 			return a, true
 		}
@@ -81,7 +83,7 @@ func Account(name string) (AccountSpec, bool) {
 
 func ExistingAccounts(ctx context.Context, q db.Querier) ([]AccountSpec, error) {
 	var out []AccountSpec
-	for _, spec := range Accounts() {
+	for _, spec := range From(ctx).Accounts() {
 		var one int
 		err := q.QueryRowContext(ctx, "SELECT 1 FROM accounts WHERE name = ?", spec.Name).Scan(&one)
 		if errors.Is(err, sql.ErrNoRows) {
@@ -95,49 +97,57 @@ func ExistingAccounts(ctx context.Context, q db.Querier) ([]AccountSpec, error) 
 	return out, nil
 }
 
-func Preset(account string) string {
-	a, _ := Account(account)
+func (s *State) Preset(account string) string {
+	a, _ := s.Account(account)
 	return a.Preset
 }
 
-func Password(id string) (string, bool) {
-	value, ok := loadState().passwords[id]
+func (s *State) Password(id string) (string, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	value, ok := s.passwords[id]
 	return value, ok && value != ""
 }
 
-func UseAccounts(list []AccountSpec, passwords map[string]string) (restore func()) {
-	previous := loadState()
-	next := *previous
-	next.accounts, next.passwords = list, passwords
-	current.Store(&next)
-	return func() { current.Store(previous) }
+func (s *State) UseAccounts(list []AccountSpec, passwords map[string]string) (restore func()) {
+	s.mu.Lock()
+	previousAccounts, previousPasswords := s.accounts, s.passwords
+	s.accounts, s.passwords = list, passwords
+	s.mu.Unlock()
+	return func() {
+		s.mu.Lock()
+		s.accounts, s.passwords = previousAccounts, previousPasswords
+		s.mu.Unlock()
+	}
 }
 
 func PasswordKey(id string) string { return "mail_password_" + id }
 
-func RegisterPassword(id string) error {
-	if _, ok := settings.Default.Lookup(PasswordKey(id)); ok {
+func (s *State) RegisterPassword(id string) error {
+	if _, ok := s.settings.Lookup(PasswordKey(id)); ok {
 		return nil
 	}
-	return settings.Default.Register(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{
+	return s.settings.Register(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{
 		Key: PasswordKey(id), Module: "mail", Type: settings.String, Page: "/settings/mail"}))
 }
 
 func NormalizePassword(value string) string { return strings.Join(py.Split(value), "") }
 
-func LoadStoredAccounts(ctx context.Context, q db.Querier) error {
-	s := loadState()
-	accounts, passwords, err := loadAccountsFromDB(ctx, q, s.passwords)
+func (s *State) LoadStoredAccounts(ctx context.Context, q db.Querier) error {
+	s.mu.RLock()
+	previous := s.passwords
+	s.mu.RUnlock()
+	accounts, passwords, err := s.loadAccountsFromDB(ctx, q, previous)
 	if err != nil {
 		return err
 	}
-	next := *s
-	next.accounts, next.passwords = accounts, passwords
-	current.Store(&next)
+	s.mu.Lock()
+	s.accounts, s.passwords = accounts, passwords
+	s.mu.Unlock()
 	return nil
 }
 
-func loadAccountsFromDB(ctx context.Context, q db.Querier, filePasswords map[string]string) ([]AccountSpec, map[string]string, error) {
+func (s *State) loadAccountsFromDB(ctx context.Context, q db.Querier, filePasswords map[string]string) ([]AccountSpec, map[string]string, error) {
 	rows, err := q.QueryContext(ctx, "SELECT id, label, preset, login, enabled, pinned FROM mail_accounts ORDER BY created_at, id")
 	if err != nil {
 		return nil, nil, err
@@ -159,10 +169,10 @@ func loadAccountsFromDB(ctx context.Context, q db.Querier, filePasswords map[str
 	for _, x := range stored {
 		password := filePasswords[x.id]
 		if !x.pinned {
-			if err := RegisterPassword(x.id); err != nil {
+			if err := s.RegisterPassword(x.id); err != nil {
 				return nil, nil, err
 			}
-			password, err = secrets.NewIn(nil, q, nil).Value(ctx, PasswordKey(x.id))
+			password, err = secrets.NewIn(s.settings, nil, q, nil).Value(ctx, PasswordKey(x.id))
 			if err != nil {
 				return nil, nil, err
 			}
@@ -238,8 +248,8 @@ type accountEntry struct {
 	Enabled      *bool  `toml:"enabled"`
 }
 
-func loadAccounts(env Env) ([]AccountSpec, map[string]string, error) {
-	path, ok := pinned(env, KeyMailAccountsFile)
+func loadAccounts(env Env, reg *settings.Registry) ([]AccountSpec, map[string]string, error) {
+	path, ok := pinned(reg, env, KeyMailAccountsFile)
 	if !ok {
 		return nil, nil, nil
 	}

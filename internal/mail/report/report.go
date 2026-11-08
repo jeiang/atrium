@@ -42,7 +42,7 @@ func sinceError(value string) error {
 	return fmt.Errorf("invalid date %q, want YYYY-MM-DD", value)
 }
 
-func ParseSince(env config.Env, value *string, at time.Time) (float64, error) {
+func ParseSince(ctx context.Context, env config.Env, value *string, at time.Time) (float64, error) {
 	now := float64(at.UnixNano()) / 1e9
 	if value == nil {
 		return 0, nil
@@ -67,7 +67,7 @@ func ParseSince(env config.Env, value *string, at time.Time) (float64, error) {
 	if !ok {
 		return 0, sinceError(*value)
 	}
-	loc, err := config.Location(env)
+	loc, err := config.From(ctx).Location(env)
 	if err != nil {
 		return 0, err
 	}
@@ -267,7 +267,7 @@ func Build(ctx context.Context, q Querier, env config.Env, since *string, at tim
 	if err := r.Err(); err != nil {
 		return "", err
 	}
-	start, err := ParseSince(env, since, at)
+	start, err := ParseSince(ctx, env, since, at)
 	if err != nil {
 		return "", err
 	}

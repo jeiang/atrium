@@ -20,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 var log = logx.Logger("atrium.web")
@@ -41,9 +42,12 @@ type routeRule struct {
 }
 
 type Deps struct {
+	Ctx      context.Context
 	Cfg      config.Config
 	Env      config.Env
 	DB       *db.DB
+	Settings *settings.Registry
+	State    *config.State
 	Render   *Renderer
 	Error    func(w http.ResponseWriter, r *http.Request, status int, detail string)
 	OnFrame  func(FrameFunc)
@@ -70,9 +74,12 @@ func (d *Deps) route(method, pattern string, class access, h http.HandlerFunc) {
 type Module func(r chi.Router, d *Deps)
 
 type Options struct {
+	Ctx          context.Context
 	Cfg          config.Config
 	Env          config.Env
 	DB           *db.DB
+	Settings     *settings.Registry
+	State        *config.State
 	Auth         []string
 	AllowedHosts []string
 	Public       func(*http.Request) bool
@@ -86,6 +93,8 @@ type Options struct {
 }
 
 type Server struct {
+	settings *settings.Registry
+	state    *config.State
 	auth     Policy
 	oidc     *oidc.Service
 	links    *loginlink.Service
@@ -118,10 +127,19 @@ func New(o Options) (*Server, error) {
 	if o.Env == nil {
 		o.Env = config.OS
 	}
+	if o.Ctx == nil {
+		o.Ctx = context.Background()
+	}
+	if o.Settings != nil {
+		o.Ctx = settings.With(o.Ctx, o.Settings)
+	}
+	if o.State != nil {
+		o.Ctx = config.With(o.Ctx, o.State)
+	}
 	if auth.OIDC() && (o.OIDC == nil || o.Render == nil || (o.LoginLinks == nil && o.DB == nil)) {
 		return nil, errors.New("oidc auth needs a session service, a renderer and a database")
 	}
-	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, links: o.LoginLinks}
+	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, links: o.LoginLinks, settings: o.Settings, state: o.State}
 	if s.links == nil && o.DB != nil {
 		s.links = loginlink.New(o.DB)
 	}
@@ -153,7 +171,7 @@ func New(o Options) (*Server, error) {
 	})
 	s.stop = make(chan struct{})
 	deps := &Deps{
-		Cfg: o.Cfg, Env: o.Env, DB: o.DB, Render: o.Render, Error: s.Error, Stopping: s.stop,
+		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Render: o.Render, Error: s.Error, Stopping: s.stop,
 		OnFrame: func(FrameFunc) {},
 		OnClose: func(f func()) { s.closers = append(s.closers, f) },
 		router:  s.mux, routes: &s.routes,
@@ -162,7 +180,7 @@ func New(o Options) (*Server, error) {
 		deps.OnFrame = o.Render.OnFrame
 	}
 	s.secure = func(r *http.Request) bool {
-		return hasSecureTransport(r, strings.HasPrefix(config.PublicURL(o.Env), "https://"))
+		return hasSecureTransport(r, strings.HasPrefix(o.State.PublicURL(o.Env), "https://"))
 	}
 	if auth.OIDC() {
 		o.Render.oidcOn.Store(true)
@@ -185,13 +203,24 @@ func New(o Options) (*Server, error) {
 	guard.errPage = s.errPage
 	if o.DB != nil {
 		guard.admin = func(ctx context.Context) (string, error) { return oidc.AdminGroup(ctx, o.DB.Read) }
-		guard.bodyCap = func(ctx context.Context) (int, error) { return config.Limit(ctx, o.DB.Read, config.KeyBodyCap) }
+		guard.bodyCap = func(ctx context.Context) (int, error) {
+			return config.From(ctx).Limit(ctx, o.DB.Read, config.KeyBodyCap)
+		}
 	}
 	s.handler = guard.Middleware(Gzip(recoverer(s.mux)))
 	return s, nil
 }
 
-func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.ServeHTTP(w, r) }
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	if s.settings != nil {
+		ctx = settings.With(ctx, s.settings)
+	}
+	if s.state != nil {
+		ctx = config.With(ctx, s.state)
+	}
+	s.handler.ServeHTTP(w, r.WithContext(ctx))
+}
 
 func (s *Server) route(class access, method, pattern string, h http.HandlerFunc) {
 	s.mux.Method(method, pattern, h)

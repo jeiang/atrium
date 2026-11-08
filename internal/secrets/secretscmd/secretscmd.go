@@ -70,7 +70,7 @@ func (s *service) delete(a *cli.Args) cli.Handler {
 func (s *service) status(*cli.Args) cli.Handler {
 	return func(e *cli.Env) int {
 		return s.with(e, func(st *settings.Store) int {
-			for _, def := range settings.Default.Defs() {
+			for _, def := range settings.From(e.Ctx).Defs() {
 				if def.IsSecret() {
 					if code := report(e, st, def.Key); code != cli.ExitOK {
 						return code

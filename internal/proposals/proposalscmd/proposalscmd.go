@@ -217,12 +217,12 @@ func Command(o Options) *cli.Command {
 }
 
 func mailEnabled(ctx context.Context, q db.Querier) bool {
-	flag, err := settings.Default.Resolve(ctx, q, module.FlagKey(module.Mail))
+	flag, err := settings.From(ctx).Resolve(ctx, q, module.FlagKey(module.Mail))
 	if err != nil || flag.Value != "true" {
 		return false
 	}
 	for _, key := range []string{endpoint.KeyChatURL, endpoint.KeyEmbedURL} {
-		found, err := settings.Default.Resolve(ctx, q, key)
+		found, err := settings.From(ctx).Resolve(ctx, q, key)
 		if err != nil || found.Value == "" {
 			return false
 		}

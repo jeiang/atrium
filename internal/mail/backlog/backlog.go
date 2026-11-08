@@ -94,8 +94,9 @@ func detect(ctx context.Context, q live.Querier, account string) (*detection, er
 	if golive != nil {
 		goliveText = *golive
 	}
+	gmail := config.From(ctx).Preset(account) == config.Gmail
 	folder, unit := config.Inbox, "folders"
-	if config.Preset(account) == config.Gmail {
+	if gmail {
 		folder, unit = mailops.InboxLabel, "labels"
 	}
 	return &detection{account: account, ids: ids, groups: groups, goliveText: goliveText, folder: folder, unit: unit}, nil

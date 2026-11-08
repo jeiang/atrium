@@ -335,7 +335,7 @@ func TestUploadsLimitsAndFileServing(t *testing.T) {
 func TestForeignAttachmentIsUnavailable(t *testing.T) {
 	s := newSite(t)
 	owner := s.startThread("")
-	blocks, err := files.IngestUploads(context.Background(), s.db, s.cfg.FilesDir(),
+	blocks, err := files.IngestUploads(s.ctx(), s.db, s.cfg.FilesDir(),
 		[]files.UploadedFile{{Name: "secret.txt", Data: []byte("TOPSECRET"), Type: "text/plain"}}, 1, files.ThreadOwner(owner), nil)
 	if err != nil {
 		t.Fatal(err)
@@ -576,7 +576,7 @@ func TestNewChatComposerShowsTheHaikuCliffAndResetsOnModelChange(t *testing.T) {
 
 func TestThreadSettingsShowLockedFieldsAndCost(t *testing.T) {
 	s := newSite(t)
-	ctx := context.Background()
+	ctx := s.ctx()
 	id, err := threads.Create(ctx, s.db.Write, s.clock, threads.Spec{Kind: threads.Chat, Model: pricing.SonnetID, Effort: pricing.High, Thinking: "between_tools"})
 	if err != nil {
 		t.Fatal(err)

@@ -76,8 +76,8 @@ func interrupted(ctx context.Context, err error) bool {
 func (w *Worker) Tick(ctx context.Context) error {
 	d, env := w.Service.DB, w.Service.Env
 	stamp := w.now()
-	tz := config.TZName(env)
-	loc, err := config.Location(env)
+	tz := config.From(ctx).TZName(env)
+	loc, err := config.From(ctx).Location(env)
 	if err != nil {
 		return err
 	}
@@ -128,10 +128,10 @@ func (w *Worker) notifySkipped(ctx context.Context, skip scheduler.Skipped, now 
 	if previous == scheduler.StatusSkippedBudget {
 		return nil
 	}
-	if !notify.Enabled() {
+	if !notify.Enabled(ctx) {
 		return err
 	}
-	loc, err := config.Location(w.Service.Env)
+	loc, err := config.From(ctx).Location(w.Service.Env)
 	if err != nil {
 		return err
 	}

@@ -19,7 +19,7 @@ func TestMonthlyBudgetPausesUnattendedRunsAt80AndChatAt100(t *testing.T) {
 		anthropictest.Reply("end_turn", anthropictest.Text("first")),
 		anthropictest.Reply("end_turn", anthropictest.Text("chat at 80")),
 	)
-	anthropictest.PinKey(t)
+	anthropictest.PinKey(t, testRegistry)
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	env := config.Map(map[string]string{

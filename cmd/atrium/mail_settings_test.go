@@ -14,7 +14,7 @@ import (
 func liveMode(t *testing.T) (string, int, string) {
 	t.Helper()
 	var out, errs bytes.Buffer
-	code := defaultApp().Run(context.Background(), []string{"live", "status"}, &out, &errs)
+	code := defaultApp(t).Run(context.Background(), []string{"live", "status"}, &out, &errs)
 	if code != cli.ExitOK {
 		return "", code, errs.String()
 	}
@@ -28,6 +28,7 @@ func liveMode(t *testing.T) (string, int, string) {
 }
 
 func TestMailModeAndWriteCapFollowTheRegistryLive(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))

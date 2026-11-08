@@ -79,7 +79,7 @@ func Module(r chi.Router, d *web.Deps) {
 }
 
 func watch(d *web.Deps) {
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(d.Ctx)
 	defer cancel()
 	go func() {
 		<-d.Stopping

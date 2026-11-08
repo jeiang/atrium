@@ -57,7 +57,7 @@ func Record(ctx context.Context, d *db.DB, job string, started float64, failure 
 		outcome, message = Failed, logx.Scrub(failure.Error())
 	}
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
-		days, err := settings.Default.Resolve(ctx, tx, RetentionKey)
+		days, err := settings.From(ctx).Resolve(ctx, tx, RetentionKey)
 		if err != nil {
 			return err
 		}

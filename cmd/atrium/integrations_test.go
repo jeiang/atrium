@@ -62,13 +62,10 @@ func (h *healthServer) notices() []string {
 func unsetEnv(t *testing.T, names ...string) {
 	t.Helper()
 	for _, name := range names {
-		envMu.Lock()
-		if activeFixture != nil {
-			delete(activeFixture.env, name)
+		if f := fixtureFor(t); f != nil {
+			f.unset(name)
 		}
-		envMu.Unlock()
 		setEnv(t, name, "")
-		_ = os.Unsetenv(name)
 	}
 }
 
@@ -123,6 +120,7 @@ func storedURL(t *testing.T, dir string) string {
 }
 
 func TestIntegrationTestSavesOnlyWorkingConfigAndHealthNotifiesOncePerChange(t *testing.T) {
+	t.Parallel()
 	good := &healthServer{status: http.StatusOK}
 	goodSrv := httptest.NewServer(http.HandlerFunc(good.handler))
 	t.Cleanup(goodSrv.Close)
@@ -130,7 +128,7 @@ func TestIntegrationTestSavesOnlyWorkingConfigAndHealthNotifiesOncePerChange(t *
 	badSrv := httptest.NewServer(http.HandlerFunc(bad.handler))
 	t.Cleanup(badSrv.Close)
 
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, settingEnv(notify.KeyURL), "")
 	setEnv(t, settingEnv(media.KeyQbitURL), "")
 	s := &integrationSite{t: t, dir: dir}
@@ -230,6 +228,7 @@ func waitFor(t *testing.T, ok func() bool) {
 }
 
 func TestIntegrationTransportTrustsOnlyTheConfiguredCAAndUsesTheProxy(t *testing.T) {
+	t.Parallel()
 	tlsHealth := &healthServer{status: http.StatusOK}
 	tlsSrv := httptest.NewTLSServer(http.HandlerFunc(tlsHealth.handler))
 	t.Cleanup(tlsSrv.Close)
@@ -259,7 +258,7 @@ func TestIntegrationTransportTrustsOnlyTheConfiguredCAAndUsesTheProxy(t *testing
 	}))
 	t.Cleanup(proxy.Close)
 
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, settingEnv(notify.KeyURL), "")
 	s := &integrationSite{t: t, dir: dir}
 	s.start()

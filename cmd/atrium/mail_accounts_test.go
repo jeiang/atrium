@@ -12,9 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/settings"
 
-	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/testutil/llmstub"
@@ -43,6 +41,7 @@ func accountsFile(t *testing.T, dir string, accounts ...mailAccount) string {
 }
 
 func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
@@ -76,9 +75,8 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 		}
 	}
 	run := func(args ...string) appRun {
-		app := cli.New("atrium", logx.Setup)
-		app.Bootstrap = bootstrap(testLookup, settings.Default)
-		app.Add(commands(testLookup, settings.Default, nil, clients, nil)...)
+		reg := settings.New()
+		app := newAppWith(testLookupFor(t), reg, config.NewState(reg), nil, clients, nil, quietLog)
 		var out, errs bytes.Buffer
 		code := app.Run(context.Background(), args, &out, &errs)
 		return appRun{code, out.String(), errs.String()}

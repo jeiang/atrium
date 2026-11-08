@@ -195,13 +195,13 @@ type Settings struct {
 }
 
 func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
-	out := Settings{PublicURL: config.PublicURL(env)}
+	out := Settings{PublicURL: config.From(ctx).PublicURL(env)}
 	var failure error
 	resolve := func(key string) settings.Resolved {
 		if failure != nil {
 			return settings.Resolved{}
 		}
-		found, err := settings.Default.Resolve(ctx, q, key)
+		found, err := settings.From(ctx).Resolve(ctx, q, key)
 		failure = err
 		return found
 	}
@@ -267,7 +267,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 	if failure != nil {
 		return Settings{}, failure
 	}
-	store := secrets.NewIn(nil, q, nil)
+	store := secrets.NewIn(settings.From(ctx), nil, q, nil)
 	if out.QbitKey, failure = store.Value(ctx, KeyQbitAPIKey); failure != nil {
 		return Settings{}, failure
 	}

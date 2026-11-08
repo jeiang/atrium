@@ -82,7 +82,7 @@ func PostJSON(ctx context.Context, rawURL string, payload any) (json.RawMessage,
 	if err != nil {
 		return nil, err
 	}
-	reply, err := do(ctx, rawURL, config.HTTPTimeout(config.OS), func(ctx context.Context) (*http.Request, error) {
+	reply, err := do(ctx, rawURL, config.From(ctx).HTTPTimeout(config.OS), func(ctx context.Context) (*http.Request, error) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, rawURL, bytes.NewReader(body))
 		if err == nil {
 			req.Header.Set("Content-Type", "application/json")

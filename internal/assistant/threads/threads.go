@@ -53,7 +53,7 @@ func EffortOf(ctx context.Context, q db.Querier, kind Kind) (string, bool, error
 	if !ok {
 		return "", false, nil
 	}
-	found, err := settings.Default.Resolve(ctx, q, key)
+	found, err := settings.From(ctx).Resolve(ctx, q, key)
 	if err != nil {
 		return "", true, err
 	}
@@ -194,21 +194,21 @@ func Defaults(ctx context.Context, q db.Querier) (Options, error) {
 	if m, err := CleanModel(out.Model); err == nil {
 		out.Thinking = m.DefaultThinking()
 	}
-	found, err := settings.Default.Resolve(ctx, q, assistant.KeyDefaultEffort)
+	found, err := settings.From(ctx).Resolve(ctx, q, assistant.KeyDefaultEffort)
 	if err != nil {
 		return Options{}, err
 	}
 	if slices.Contains(pricing.Efforts, found.Value) {
 		out.Effort = found.Value
 	}
-	found, err = settings.Default.Resolve(ctx, q, assistant.KeyDefaultModel)
+	found, err = settings.From(ctx).Resolve(ctx, q, assistant.KeyDefaultModel)
 	if err != nil {
 		return out, err
 	}
 	if _, err := CleanModel(found.Value); err == nil {
 		out.Model = found.Value
 	}
-	found, err = settings.Default.Resolve(ctx, q, assistant.KeyDefaultContextLimit)
+	found, err = settings.From(ctx).Resolve(ctx, q, assistant.KeyDefaultContextLimit)
 	if err != nil {
 		return out, err
 	}
@@ -247,7 +247,7 @@ func SetDefaults(ctx context.Context, d *db.DB, model, effort string, contextLim
 }
 
 func setPinSafe(ctx context.Context, q db.Querier, key, value string) error {
-	err := settings.Default.Set(ctx, q, key, value)
+	err := settings.From(ctx).Set(ctx, q, key, value)
 	var pinned *settings.PinnedError
 	if errors.As(err, &pinned) {
 		return OptionError(pinned.Error())

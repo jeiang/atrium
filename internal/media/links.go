@@ -29,6 +29,7 @@ const linkKeyTTL = 30 * time.Second
 var errEmptyLinkKey = errors.New("media: the link key is empty")
 
 type Links struct {
+	reg        *settings.Registry
 	d          *db.DB
 	legacyPath string
 	mu         sync.Mutex
@@ -36,8 +37,8 @@ type Links struct {
 	loaded     time.Time
 }
 
-func NewLinks(d *db.DB, legacyPath string) *Links {
-	return &Links{d: d, legacyPath: legacyPath}
+func NewLinks(reg *settings.Registry, d *db.DB, legacyPath string) *Links {
+	return &Links{reg: reg, d: d, legacyPath: legacyPath}
 }
 
 func trimKey(b []byte) []byte { return bytes.Trim(b, " \t\n\r\v\f") }
@@ -70,7 +71,7 @@ func (l *Links) secretKey(ctx context.Context) (key []byte, fresh bool, err erro
 }
 
 func (l *Links) reread(ctx context.Context) []byte {
-	value, err := secrets.New(l.d, l.d).Reading().Value(ctx, KeyLinkKey)
+	value, err := secrets.New(l.reg, l.d, l.d).Reading().Value(ctx, KeyLinkKey)
 	if err != nil || value == "" {
 		return nil
 	}
@@ -78,7 +79,7 @@ func (l *Links) reread(ctx context.Context) []byte {
 }
 
 func (l *Links) load(ctx context.Context) ([]byte, error) {
-	store := secrets.New(l.d, l.d)
+	store := secrets.New(l.reg, l.d, l.d)
 	value, err := store.Reading().Value(ctx, KeyLinkKey)
 	if err != nil {
 		return nil, err

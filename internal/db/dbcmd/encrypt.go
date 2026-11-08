@@ -18,7 +18,7 @@ const knnSample = 10
 func (s *service) encrypt(a *cli.Args) cli.Handler {
 	a.RejectExtras("db encrypt takes no arguments; the key comes from the " + db.KeySetting + " setting")
 	return func(e *cli.Env) int {
-		key, err := s.currentKey()
+		key, err := s.currentKey(e)
 		if err != nil {
 			return cli.Fail(e, err)
 		}

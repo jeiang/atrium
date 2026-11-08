@@ -11,14 +11,14 @@ import (
 )
 
 func TestMemoryWorkSummarizesTheTree(t *testing.T) {
-	dir, api := moduleFixture(t, flagsExcept("", ""))
-	if ran := runApp("agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	long := strings.Repeat("evidence ", 120)
 	for i := range 4 {
 		api.Push(anthropictest.Reply("end_turn", anthropictest.Text(long)))
-		if ran := runApp("agent", "run", "--thread", "1", "--text", fmt.Sprintf("message %d", i)); ran.code != cli.ExitOK {
+		if ran := runApp(t, "agent", "run", "--thread", "1", "--text", fmt.Sprintf("message %d", i)); ran.code != cli.ExitOK {
 			t.Fatalf("chat run %d: %d %s", i, ran.code, ran.stderr)
 		}
 	}
@@ -34,7 +34,7 @@ func TestMemoryWorkSummarizesTheTree(t *testing.T) {
 		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("summary")))
 	}
 	for range 10 {
-		ran := runApp("memory", "work", "1")
+		ran := runApp(t, "memory", "work", "1")
 		if ran.code != cli.ExitOK {
 			t.Fatalf("memory work: %d %s", ran.code, ran.stderr)
 		}
@@ -77,13 +77,13 @@ func TestMemoryWorkSummarizesTheTree(t *testing.T) {
 }
 
 func TestMemoryWorkRetriesLongAnswersAndFallsBack(t *testing.T) {
-	dir, api := moduleFixture(t, flagsExcept("", ""))
-	if ran := runApp("agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	long := strings.Repeat("evidence ", 120)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text(long)))
-	if ran := runApp("agent", "run", "--thread", "1", "--text", "long"); ran.code != cli.ExitOK {
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "long"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
 	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text(strings.Repeat("too long ", 200))))
@@ -93,7 +93,7 @@ func TestMemoryWorkRetriesLongAnswersAndFallsBack(t *testing.T) {
 		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("summary")))
 	}
 	for range 3 {
-		if ran := runApp("memory", "work", "1"); ran.code != cli.ExitOK {
+		if ran := runApp(t, "memory", "work", "1"); ran.code != cli.ExitOK {
 			t.Fatalf("memory work: %d %s", ran.code, ran.stderr)
 		}
 	}

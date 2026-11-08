@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
@@ -61,7 +62,7 @@ func New(d *db.DB, opts ...Option) *Service {
 func (s *Service) unix() float64 { return float64(s.now().UnixNano()) / 1e9 }
 
 func (s *Service) mac(ctx context.Context, nonce string) ([]byte, error) {
-	key, err := secrets.New(s.d, s.d).Generate(ctx, secrets.ActionLinkKey)
+	key, err := secrets.New(settings.From(ctx), s.d, s.d).Generate(ctx, secrets.ActionLinkKey)
 	if err != nil {
 		return nil, err
 	}

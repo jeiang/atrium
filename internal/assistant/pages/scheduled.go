@@ -124,12 +124,12 @@ func (p *pages) scheduledRoutes(r chi.Router) {
 
 func (p *pages) scheduledData(r *http.Request) ScheduledData {
 	ctx := detached(r)
-	tz := config.TZName(p.deps.Env)
+	tz := config.From(ctx).TZName(p.deps.Env)
 	zone, err := scheduler.Zone(tz)
 	check(err)
 	jobs, err := scheduler.ListJobs(ctx, p.deps.DB.Read, false)
 	check(err)
-	history, err := config.Limit(ctx, p.deps.DB.Read, config.KeyRunHistory)
+	history, err := config.From(ctx).Limit(ctx, p.deps.DB.Read, config.KeyRunHistory)
 	check(err)
 	runs, err := scheduler.ListRuns(ctx, p.deps.DB.Read, 0, history)
 	check(err)
@@ -164,10 +164,10 @@ func listHeaders(closeDialogs bool) func(http.Header) {
 
 func (p *pages) scheduleForm(w http.ResponseWriter, r *http.Request, status int, job *scheduler.Job, problem string, submitted *ScheduleFormValues) {
 	ctx := r.Context()
-	tz := config.TZName(p.deps.Env)
+	tz := config.From(ctx).TZName(p.deps.Env)
 	var runs []scheduler.ListedRun
 	if job != nil {
-		history, err := config.Limit(ctx, p.deps.DB.Read, config.KeyJobHistory)
+		history, err := config.From(ctx).Limit(ctx, p.deps.DB.Read, config.KeyJobHistory)
 		check(err)
 		found, err := scheduler.ListRuns(ctx, p.deps.DB.Read, job.ID, history)
 		check(err)
@@ -248,7 +248,7 @@ func submittedSchedule(r *http.Request) ScheduleFormValues {
 func (p *pages) scheduleCreate(w http.ResponseWriter, r *http.Request) {
 	values := submittedSchedule(r)
 	_, err := scheduler.CreateJob(detached(r), p.deps.DB.Write, scheduler.NewJob{
-		Name: values.Name, Prompt: values.Prompt, Schedule: values.Schedule, TZ: config.TZName(p.deps.Env), Now: p.now(),
+		Name: values.Name, Prompt: values.Prompt, Schedule: values.Schedule, TZ: config.From(r.Context()).TZName(p.deps.Env), Now: p.now(),
 		CreatedBy: scheduler.Operator, PromptBy: scheduler.Operator,
 	})
 	p.attempted(w, r, err, "Schedule created", nil, &values, true)

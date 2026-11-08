@@ -17,6 +17,7 @@ import (
 )
 
 func TestOperatorResolvesAForwardInterruptedAction(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	setEnv(t, "ATRIUM_DB", path)
@@ -55,13 +56,13 @@ func TestOperatorResolvesAForwardInterruptedAction(t *testing.T) {
 		!strings.Contains(body, ">It happened<") || !strings.Contains(body, ">It did not happen<") {
 		t.Fatalf("GET /activity = %d, want the forward resolve controls: %.400s", status, body)
 	}
-	if got := runApp("live", "resolve", id(interrupted), "--outcome", "undone"); got.code == 0 || !strings.Contains(got.stderr, "applied") {
+	if got := runApp(t, "live", "resolve", id(interrupted), "--outcome", "undone"); got.code == 0 || !strings.Contains(got.stderr, "applied") {
 		t.Fatalf("resolve with an undo outcome = %d %q, want a refusal", got.code, got.stderr)
 	}
 	if status, _, _ := fetch(t, client, "POST", base+"/activity/mail/"+id(interrupted)+"/resolve", url.Values{"outcome": {"applied"}}); status != http.StatusSeeOther {
 		t.Fatalf("resolve applied = %d", status)
 	}
-	if got := runApp("live", "resolve", id(unknown), "--outcome", "not-applied"); got.code != 0 {
+	if got := runApp(t, "live", "resolve", id(unknown), "--outcome", "not-applied"); got.code != 0 {
 		t.Fatalf("resolve not-applied = %d %q", got.code, got.stderr)
 	}
 	d, err := db.Connect(path)

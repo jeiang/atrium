@@ -32,7 +32,7 @@ func Refresh(ctx context.Context, d *db.DB, now float64, o Options) (py.Dict, er
 			return counts.Dict(), err
 		}},
 		{"commitments", func() (any, error) { return ScanCommitments(ctx, d, env, now, o.Judge) }},
-		{"reminders", func() (any, error) { return reminders.Propose(ctx, now, config.TZName(env)) }},
+		{"reminders", func() (any, error) { return reminders.Propose(ctx, now, config.From(ctx).TZName(env)) }},
 	}
 	out := make(py.Dict, 0, len(steps))
 	var errs []error

@@ -23,14 +23,16 @@ const host = "testserver"
 var hx = [2]string{"HX-Request", "true"}
 
 type site struct {
-	t      *testing.T
-	db     *db.DB
-	cfg    config.Config
-	env    config.Env
-	dir    string
-	srv    *web.Server
-	cookie string
-	token  string
+	t        *testing.T
+	db       *db.DB
+	cfg      config.Config
+	env      config.Env
+	dir      string
+	settings *settings.Registry
+	state    *config.State
+	srv      *web.Server
+	cookie   string
+	token    string
 }
 
 func newSite(t *testing.T, vars map[string]string, o Options) *site {
@@ -45,12 +47,14 @@ func newSite(t *testing.T, vars map[string]string, o Options) *site {
 	for k, v := range all {
 		pinned[k] = v
 	}
-	pins, err := config.LoadPins(config.Map(pinned), settings.Default)
+	reg := settings.New()
+	st := config.NewState(reg)
+	pins, err := config.LoadPins(config.Map(pinned), reg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	settings.Default.SetPins(pins)
-	t.Cleanup(func() { settings.Default.SetPins(nil) })
+	reg.SetPins(pins)
+	t.Cleanup(func() { reg.SetPins(nil) })
 	env := config.Map(all)
 	cfg, err := config.Load(env)
 	if err != nil {
@@ -64,18 +68,18 @@ func newSite(t *testing.T, vars map[string]string, o Options) *site {
 	if err := db.Migrate(context.Background(), d, path); err != nil {
 		t.Fatal(err)
 	}
-	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}})
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}, State: st})
 	if err != nil {
 		t.Fatal(err)
 	}
 	srv, err := web.New(web.Options{
-		Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, AllowedHosts: []string{host}, Public: PublicCheck(cfg, env, d),
+		Cfg: cfg, Env: env, DB: d, Settings: reg, State: st, Auth: []string{web.AuthLocal}, AllowedHosts: []string{host}, Public: PublicCheck(cfg, env, d, reg),
 		Render: render, Modules: []web.Module{Module(o), mailpages.PauseModule},
 	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	s := &site{t: t, db: d, cfg: cfg, env: env, dir: dir, srv: srv}
+	s := &site{t: t, db: d, cfg: cfg, env: env, dir: dir, settings: reg, state: st, srv: srv}
 	s.handshake()
 	return s
 }

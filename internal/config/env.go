@@ -49,7 +49,7 @@ func Zone(name string) (*time.Location, error) {
 	return nil, fmt.Errorf("unknown timezone %s", strconv.Quote(name))
 }
 
-func Location(env Env) (*time.Location, error) { return Zone(TZName(env)) }
+func (s *State) Location(env Env) (*time.Location, error) { return Zone(s.TZName(env)) }
 
 type CalDAVLogin struct {
 	AppleID  string

@@ -12,6 +12,7 @@ import (
 )
 
 func TestCoreSettingsRejectBadValuesAndDriveTheWebLayer(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))

@@ -28,7 +28,7 @@ func toolResult(t *testing.T, name string, input map[string]any) string {
 		api.seen = append(api.seen, r)
 	}
 	setEnv(t, anthropic.BaseURLEnv, api.URL)
-	if ran := runApp("agent", "run", "--text", "please", "--kind", "chat"); ran.code != cli.ExitOK {
+	if ran := runApp(t, "agent", "run", "--text", "please", "--kind", "chat"); ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 	}
 	requests := api.Requests()
@@ -44,7 +44,8 @@ func event(uid, start, end string) string {
 }
 
 func TestFindSlotHonoursOverlapsAllDayEventsWorkingHoursAndDST(t *testing.T) {
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
+	t.Parallel()
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_CORE_TZ", "America/New_York")
 	setEnv(t, settingEnv(calendar.WorkDaysKey), "sun,mon")
 	mirror := filepath.Join(dir, "calendars")
@@ -131,6 +132,7 @@ func proposalID(t *testing.T, result string) string {
 }
 
 func TestRSVPAndUpdateProposalsWriteOnlyOnApprovalAndUndo(t *testing.T) {
+	t.Parallel()
 	_, srv := davFixture(t)
 	path := caldavtest.CalendarPath(0) + "lunch.ics"
 	srv.SetObject(path, invite)
@@ -139,7 +141,7 @@ func TestRSVPAndUpdateProposalsWriteOnlyOnApprovalAndUndo(t *testing.T) {
 	if len(srv.Puts) != 0 {
 		t.Fatalf("proposing wrote to the calendar: %v", srv.Puts)
 	}
-	if got := runApp("proposals", "approve", rsvp); got.code != cli.ExitOK {
+	if got := runApp(t, "proposals", "approve", rsvp); got.code != cli.ExitOK {
 		t.Fatalf("approve rsvp: %d %s", got.code, got.stderr)
 	}
 	body := srv.Objects()[path]
@@ -149,14 +151,14 @@ func TestRSVPAndUpdateProposalsWriteOnlyOnApprovalAndUndo(t *testing.T) {
 	if strings.Count(body, "ATTENDEE") != 2 {
 		t.Errorf("the rsvp changed the attendee list: %q", body)
 	}
-	if got := runApp("proposals", "approve", rsvp); got.code == cli.ExitOK || len(srv.Puts) != 1 {
+	if got := runApp(t, "proposals", "approve", rsvp); got.code == cli.ExitOK || len(srv.Puts) != 1 {
 		t.Errorf("a second approval wrote again: exit %d, %d puts", got.code, len(srv.Puts))
 	}
 
 	update := proposalID(t, toolResult(t, "calendar_update", map[string]any{
 		"calendar": "icloud", "uid": "lunch", "title": "Long lunch", "start": "2026-11-10T12:00:00", "end": "2026-11-10T14:00:00",
 	}))
-	if got := runApp("proposals", "approve", update); got.code != cli.ExitOK {
+	if got := runApp(t, "proposals", "approve", update); got.code != cli.ExitOK {
 		t.Fatalf("approve update: %d %s", got.code, got.stderr)
 	}
 	body = srv.Objects()[path]
@@ -173,7 +175,7 @@ func TestRSVPAndUpdateProposalsWriteOnlyOnApprovalAndUndo(t *testing.T) {
 			t.Errorf("the update did not clear %s: %q", cleared, body)
 		}
 	}
-	if got := runApp("proposals", "undo", update); got.code != cli.ExitOK {
+	if got := runApp(t, "proposals", "undo", update); got.code != cli.ExitOK {
 		t.Fatalf("undo update: %d %s", got.code, got.stderr)
 	}
 	if body = srv.Objects()[path]; !strings.Contains(body, "SUMMARY:Lunch") || strings.Contains(body, "Long lunch") ||
@@ -183,7 +185,7 @@ func TestRSVPAndUpdateProposalsWriteOnlyOnApprovalAndUndo(t *testing.T) {
 }
 
 func TestCalendarListFiltersByTargetAndCollection(t *testing.T) {
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	mirror := filepath.Join(dir, "calendars")
 	setEnv(t, settingEnv(calendar.CalendarDirKey), mirror)
 	if err := os.MkdirAll(filepath.Join(mirror, "home"), 0o750); err != nil {
@@ -216,13 +218,13 @@ func TestCalendarUnknownWriteStaysBlocked(t *testing.T) {
 	}))
 	srv.FailPuts = 1
 	srv.PutStatus = http.StatusInternalServerError
-	if got := runApp("proposals", "approve", update); got.code == cli.ExitOK {
+	if got := runApp(t, "proposals", "approve", update); got.code == cli.ExitOK {
 		t.Fatalf("approve with a failing remote write exited 0: %q", got.stdout)
 	}
 	if srv.PutAttempts != 1 {
 		t.Fatalf("%d PUT attempts, want 1", srv.PutAttempts)
 	}
-	if got := runApp("proposals", "approve", update); got.code == cli.ExitOK || !strings.Contains(got.stderr, "resolve it in the mailbox") {
+	if got := runApp(t, "proposals", "approve", update); got.code == cli.ExitOK || !strings.Contains(got.stderr, "resolve it in the mailbox") {
 		t.Fatalf("second approve = %d %q, want an unresolved-write refusal", got.code, got.stderr)
 	}
 	if srv.PutAttempts != 1 {
@@ -259,7 +261,7 @@ func TestDirectCalendarUnknownWriteBlocksUntilResolved(t *testing.T) {
 	if srv.PutAttempts != 1 {
 		t.Fatalf("the refused create reached the remote: %d attempts", srv.PutAttempts)
 	}
-	if got := runApp("writes", "resolve", strconv.FormatInt(id, 10)); got.code != cli.ExitOK || !strings.Contains(got.stdout, `"resolved": true`) {
+	if got := runApp(t, "writes", "resolve", strconv.FormatInt(id, 10)); got.code != cli.ExitOK || !strings.Contains(got.stdout, `"resolved": true`) {
 		t.Fatalf("writes resolve: %d %q %q", got.code, got.stdout, got.stderr)
 	}
 	third := unescape(toolResult(t, "calendar_create", input))

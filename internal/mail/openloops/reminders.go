@@ -69,7 +69,7 @@ func ReminderPrompt(text string, messageID int64) string {
 
 func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, error) {
 	if tz == "" {
-		tz = config.TZName(r.env())
+		tz = config.From(ctx).TZName(r.env())
 	}
 	loc, err := scheduler.Zone(tz)
 	if err != nil {

@@ -59,6 +59,7 @@ func (f *fakeOpenAI) seen(path string) []string {
 }
 
 func TestEndpointProbeGatesTheMailModuleAndSendsTheKeyOnlyToItsEndpoint(t *testing.T) {
+	t.Parallel()
 	const chatKey = "sk-chat-endpoint-0123456789"
 	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)
 	moduleFixture(t, flagsExcept(module.Mail, ""))
@@ -66,7 +67,7 @@ func TestEndpointProbeGatesTheMailModuleAndSendsTheKeyOnlyToItsEndpoint(t *testi
 	setEnv(t, settingEnv(endpoint.KeyEmbedURL), embed.URL+"/v1")
 	setEnv(t, settingEnv(endpoint.KeyChatKey), chatKey)
 
-	ok := runApp("endpoints", "probe")
+	ok := runApp(t, "endpoints", "probe")
 	if ok.code != cli.ExitOK || strings.Contains(ok.stdout+ok.stderr, chatKey) || strings.Contains(ok.stderr, "hosted") {
 		t.Fatalf("probe: %d stdout %q stderr %q", ok.code, ok.stdout, ok.stderr)
 	}
@@ -92,7 +93,7 @@ func TestEndpointProbeGatesTheMailModuleAndSendsTheKeyOnlyToItsEndpoint(t *testi
 	embed.mu.Lock()
 	embed.dim = 0
 	embed.mu.Unlock()
-	if failed := runApp("endpoints", "probe"); failed.code != cli.ExitError || !strings.Contains(failed.stdout, "no embedding") {
+	if failed := runApp(t, "endpoints", "probe"); failed.code != cli.ExitError || !strings.Contains(failed.stdout, "no embedding") {
 		t.Fatalf("probe with an embedder that returns no vector: %d %q", failed.code, failed.stdout)
 	}
 	if off := runSettings(t, "set", module.FlagKey(module.Mail), "false"); off.code != cli.ExitOK {
@@ -103,7 +104,7 @@ func TestEndpointProbeGatesTheMailModuleAndSendsTheKeyOnlyToItsEndpoint(t *testi
 		t.Fatalf("enabling mail with a failing probe: %d %q", refused.code, refused.stderr)
 	}
 	before := chat.chats
-	if export := runApp("rules", "export"); export.code != cli.ExitOK || export.stdout != "" || chat.chats != before {
+	if export := runApp(t, "rules", "export"); export.code != cli.ExitOK || export.stdout != "" || chat.chats != before {
 		t.Errorf("rules export while mail needs settings: %d %q", export.code, export.stdout)
 	}
 
@@ -114,17 +115,18 @@ func TestEndpointProbeGatesTheMailModuleAndSendsTheKeyOnlyToItsEndpoint(t *testi
 }
 
 func TestEndpointFormTestUsesTheEndpointCAAndAPassingTestReleasesTheMailHold(t *testing.T) {
+	t.Parallel()
 	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)
 	tlsEmbed := httptest.NewTLSServer(embed.Config.Handler)
 	t.Cleanup(tlsEmbed.Close)
-	dir, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
 	unsetEnv(t, settingEnv(endpoint.KeyChatURL), settingEnv(endpoint.KeyEmbedURL))
 	for key, value := range map[string]string{endpoint.KeyChatURL: chat.URL + "/v1", endpoint.KeyEmbedURL: tlsEmbed.URL + "/v1"} {
 		if got := runSettings(t, "set", key, value); got.code != cli.ExitOK {
 			t.Fatalf("set %s: %d %q", key, got.code, got.stderr)
 		}
 	}
-	if untrusted := runApp("endpoints", "probe"); untrusted.code != cli.ExitError || !strings.Contains(untrusted.stdout, "certificate") {
+	if untrusted := runApp(t, "endpoints", "probe"); untrusted.code != cli.ExitError || !strings.Contains(untrusted.stdout, "certificate") {
 		t.Fatalf("probe without the embed CA: %d %q", untrusted.code, untrusted.stdout)
 	}
 	ca := filepath.Join(dir, "embed-ca.pem")
@@ -137,7 +139,7 @@ func TestEndpointFormTestUsesTheEndpointCAAndAPassingTestReleasesTheMailHold(t *
 	embed.mu.Lock()
 	embed.dim = 0
 	embed.mu.Unlock()
-	if failed := runApp("endpoints", "probe"); failed.code != cli.ExitError || !strings.Contains(failed.stdout, "no embedding") {
+	if failed := runApp(t, "endpoints", "probe"); failed.code != cli.ExitError || !strings.Contains(failed.stdout, "no embedding") {
 		t.Fatalf("probe with the CA and an embedder that returns no vector: %d %q", failed.code, failed.stdout)
 	}
 	if refused := runSettings(t, "set", module.FlagKey(module.Mail), "true"); refused.code != cli.ExitError || !strings.Contains(refused.stderr, "embed endpoint probe failed") {

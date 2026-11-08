@@ -18,7 +18,7 @@ func main() {
 		fmt.Fprintln(os.Stderr, "usage: settingsgen OUTPUT_DIR")
 		os.Exit(2)
 	}
-	if err := generate(os.Args[1], settings.Default.Defs()); err != nil {
+	if err := generate(os.Args[1], settings.New().Defs()); err != nil {
 		fmt.Fprintln(os.Stderr, "settingsgen:", err)
 		os.Exit(1)
 	}

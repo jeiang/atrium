@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/mail/rulestest"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -27,17 +28,19 @@ var hx = [2]string{"HX-Request", "true"}
 type ids struct{ invoice, other int64 }
 
 type site struct {
-	t      *testing.T
-	db     *db.DB
-	cfg    config.Config
-	env    config.Env
-	srv    *web.Server
-	ids    ids
-	cookie string
-	token  string
+	t        *testing.T
+	db       *db.DB
+	cfg      config.Config
+	env      config.Env
+	settings *settings.Registry
+	state    *config.State
+	srv      *web.Server
+	ids      ids
+	cookie   string
+	token    string
 }
 
-func newEnv(t *testing.T, mode string) (config.Config, config.Env, *db.DB) {
+func newEnv(t *testing.T, mode string) (config.Config, config.Env, *db.DB, *settings.Registry, *config.State) {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
@@ -54,23 +57,25 @@ func newEnv(t *testing.T, mode string) (config.Config, config.Env, *db.DB) {
 	if err := db.Migrate(context.Background(), d, path); err != nil {
 		t.Fatal(err)
 	}
-	mailtest.PinMode(t, mode)
-	mailtest.UseAccounts(t, map[string]string{config.ICloud: "me", config.Gmail: "me@gmail.test"})
+	reg := settings.New()
+	st := config.NewState(reg)
+	mailtest.PinMode(t, reg, mode)
+	mailtest.UseAccounts(t, st, map[string]string{config.ICloud: "me", config.Gmail: "me@gmail.test"})
 	for i, account := range []string{"icloud", "gmail"} {
 		rulestest.Exec(t, d, "INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", account, account)
 		rulestest.Exec(t, d, "INSERT INTO mailboxes (id, account, name, imap_name, role) VALUES (?, ?, 'box', 'box', 'filed')", i+1, account)
 	}
-	return cfg, env, d
+	return cfg, env, d, reg, st
 }
 
-func newServer(t *testing.T, cfg config.Config, env config.Env, d *db.DB, o Options) *web.Server {
+func newServer(t *testing.T, cfg config.Config, env config.Env, d *db.DB, reg *settings.Registry, st *config.State, o Options) *web.Server {
 	t.Helper()
-	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}, Globals: Globals()})
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}, Globals: Globals(), State: st})
 	if err != nil {
 		t.Fatal(err)
 	}
 	srv, err := web.New(web.Options{
-		Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, AllowedHosts: []string{host}, Render: render, Modules: []web.Module{Module(o), PauseModule},
+		Cfg: cfg, Env: env, DB: d, Settings: reg, State: st, Auth: []string{web.AuthLocal}, AllowedHosts: []string{host}, Render: render, Modules: []web.Module{Module(o), PauseModule},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -80,7 +85,7 @@ func newServer(t *testing.T, cfg config.Config, env config.Env, d *db.DB, o Opti
 
 func seeded(t *testing.T, mode string, o Options) *site {
 	t.Helper()
-	cfg, env, d := newEnv(t, mode)
+	cfg, env, d, reg, st := newEnv(t, mode)
 	for i := range 3 {
 		rulestest.Add(t, d, i+1, nil, "statement body", rulestest.Fields{
 			"from_addr": "pay@bank.test", "from_domain": "bank.test", "folder": "Bills", "location": "Bills", "in_inbox": 0,
@@ -100,7 +105,7 @@ func seeded(t *testing.T, mode string, o Options) *site {
 			"VALUES (?, 'icloud', 1.0, 'operator', 'r-1', 'file', 'Bills', 1.0, '{}')", id)
 	}
 	rulestest.Exec(t, d, "INSERT INTO flag_decisions (message_id, account, ts, contacts_match, llm_flag) VALUES (?, 'icloud', 1.0, 1, 1)", invoice)
-	s := &site{t: t, db: d, cfg: cfg, env: env, srv: newServer(t, cfg, env, d, o), ids: ids{invoice, other}}
+	s := &site{t: t, db: d, cfg: cfg, env: env, settings: reg, state: st, srv: newServer(t, cfg, env, d, reg, st, o), ids: ids{invoice, other}}
 	s.handshake()
 	return s
 }

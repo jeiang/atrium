@@ -50,7 +50,7 @@ func restoreSetup(a *cli.Args) cli.Handler {
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		configured, err := dbkey.Load(e.Env, settings.Default)
+		configured, err := dbkey.Load(e.Env, settings.From(e.Ctx))
 		if err != nil {
 			return cli.Fail(e, err)
 		}
@@ -221,6 +221,9 @@ func migrateStaged(ctx context.Context, staged string, key db.Key, rep *report) 
 		return err
 	}
 	err = db.Migrate(ctx, m, staged)
+	if err == nil {
+		err = settings.NewStore(settings.From(ctx), m, m).Load(ctx)
+	}
 	if err = errors.Join(wrapMigrate(err), m.Close()); err != nil {
 		return err
 	}

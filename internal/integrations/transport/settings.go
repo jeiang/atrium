@@ -20,10 +20,11 @@ func Failed() <-chan string { return failed }
 func Configured(ctx context.Context, q db.Querier, name string, timeout time.Duration) (*http.Client, error) {
 	o := Options{Timeout: timeout}
 	for key, into := range map[string]*string{CAKey(name): &o.CAFile, ProxyKey(name): &o.Proxy} {
-		if _, known := settings.Default.Lookup(key); !known {
+		reg := settings.From(ctx)
+		if _, known := reg.Lookup(key); !known {
 			continue
 		}
-		found, err := settings.Default.Resolve(ctx, q, key)
+		found, err := reg.Resolve(ctx, q, key)
 		if err != nil {
 			return nil, err
 		}

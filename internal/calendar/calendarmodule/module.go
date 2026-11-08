@@ -46,7 +46,7 @@ func credentials(ctx context.Context, p module.Probe) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	_, icloudErr := calendar.ICloudLogin(calendar.Settings{AppleID: icloud.Value, Account: strings.TrimSpace(account.Value)})
+	_, icloudErr := calendar.ICloudLogin(ctx, calendar.Settings{AppleID: icloud.Value, Account: strings.TrimSpace(account.Value)})
 	if icloudErr == nil {
 		return "", nil
 	}

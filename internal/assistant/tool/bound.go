@@ -20,7 +20,7 @@ type Bound struct {
 }
 
 func NewBound(key, defaultKey string) Bound {
-	min, max, ok := settings.Default.Range(key)
+	min, max, ok := settings.RangeOf(key)
 	if !ok {
 		panic("tool: setting " + key + " has no range")
 	}

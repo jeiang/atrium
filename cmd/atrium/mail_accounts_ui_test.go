@@ -15,11 +15,9 @@ import (
 
 	"github.com/jeiang/atrium/internal/settings"
 
-	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations"
-	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
@@ -27,7 +25,7 @@ import (
 )
 
 func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T) {
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
+	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
@@ -125,9 +123,8 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 			return mail.Gated(fakes[opts.Account], opts.Q), nil
 		}
 	}
-	app := cli.New("atrium", logx.Setup)
-	app.Bootstrap = bootstrap(testLookup, settings.Default)
-	app.Add(commands(testLookup, settings.Default, nil, clients, nil)...)
+	reg := settings.New()
+	app := newAppWith(f.lookup, reg, config.NewState(reg), nil, clients, nil, quietLog)
 	var out, errs bytes.Buffer
 	if code := app.Run(context.Background(), []string{"sync", "--account", "work"}, &out, &errs); code != 0 {
 		t.Fatalf("sync of the added account: %d %s", code, errs.String())

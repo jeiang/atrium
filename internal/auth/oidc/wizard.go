@@ -79,8 +79,8 @@ type View struct {
 	Public       string
 }
 
-func (s *Service) pinned(key string) (bool, error) {
-	_, ok, err := settings.Default.Pinned(key)
+func (s *Service) pinned(ctx context.Context, key string) (bool, error) {
+	_, ok, err := settings.From(ctx).Pinned(key)
 	return ok, err
 }
 
@@ -94,7 +94,7 @@ func (s *Service) View(ctx context.Context, presetName string) (View, error) {
 	}
 	v := View{Values: vals, Pinned: map[string]bool{}}
 	for _, key := range valueKeys {
-		pinned, err := s.pinned(key)
+		pinned, err := s.pinned(ctx, key)
 		if err != nil {
 			return View{}, err
 		}
@@ -144,14 +144,14 @@ func (s *Service) View(ctx context.Context, presetName string) (View, error) {
 	if err != nil {
 		return View{}, err
 	}
-	secretPinned, err := s.pinned(secrets.OIDCClientSecret)
+	secretPinned, err := s.pinned(ctx, secrets.OIDCClientSecret)
 	if err != nil {
 		return View{}, err
 	}
 	v.SecretSet, v.SecretPinned = secret != "" || secretPinned, secretPinned
-	_, activeErr := assemble(vals, strings.TrimSpace(secret), s.env, s.d.Encrypted(), nil)
+	_, activeErr := assemble(ctx, vals, strings.TrimSpace(secret), s.env, s.d.Encrypted(), nil)
 	v.Active = activeErr == nil
-	v.Public = config.PublicURL(s.env)
+	v.Public = config.From(ctx).PublicURL(s.env)
 	return v, nil
 }
 
@@ -193,7 +193,7 @@ func fieldKeys() []string {
 var wizardKeys = fieldKeys()
 
 func init() {
-	settings.Default.Claim("/settings/auth", append([]string{KeyPreset, secrets.OIDCClientSecret}, wizardKeys...)...)
+	settings.Claim("/settings/auth", append([]string{KeyPreset, secrets.OIDCClientSecret}, wizardKeys...)...)
 }
 
 func (f Form) shown(preset Preset) map[string]string {
@@ -234,7 +234,7 @@ func (s *Service) draftFrom(ctx context.Context, q db.Querier, f Form) (Draft, e
 		return Draft{}, errors.New(strings.Join(problems, "; "))
 	}
 	preset, ok := presetNamed(f.Preset)
-	presetPinned, err := s.pinned(KeyPreset)
+	presetPinned, err := s.pinned(ctx, KeyPreset)
 	if err != nil {
 		return Draft{}, err
 	}
@@ -271,7 +271,7 @@ func (s *Service) draftFrom(ctx context.Context, q db.Querier, f Form) (Draft, e
 	}
 	for _, key := range append([]string{KeyPreset}, wizardKeys...) {
 		value := next[key]
-		pinned, err := s.pinned(key)
+		pinned, err := s.pinned(ctx, key)
 		if err != nil {
 			return Draft{}, err
 		}
@@ -279,7 +279,7 @@ func (s *Service) draftFrom(ctx context.Context, q db.Querier, f Form) (Draft, e
 			continue
 		}
 		if value != "" || key == KeyAccessGroup || key == KeyAdminGroup {
-			if err := settings.Default.Validate(key, value); err != nil {
+			if err := settings.From(ctx).Validate(key, value); err != nil {
 				return Draft{}, &FieldError{key, err}
 			}
 		}
@@ -293,7 +293,7 @@ func (s *Service) draftFrom(ctx context.Context, q db.Querier, f Form) (Draft, e
 		return Draft{}, err
 	}
 	d.secret = strings.TrimSpace(stored)
-	secretPinned, err := s.pinned(secrets.OIDCClientSecret)
+	secretPinned, err := s.pinned(ctx, secrets.OIDCClientSecret)
 	if err != nil {
 		return Draft{}, err
 	}
@@ -303,7 +303,7 @@ func (s *Service) draftFrom(ctx context.Context, q db.Querier, f Form) (Draft, e
 		}
 		d.secret, d.secretGiven = given, true
 	}
-	d.cfg, err = assemble(d.vals, d.secret, s.env, s.d.Encrypted(), nil)
+	d.cfg, err = assemble(ctx, d.vals, d.secret, s.env, s.d.Encrypted(), nil)
 	if err != nil {
 		return Draft{}, err
 	}
@@ -366,7 +366,7 @@ type storedDraft struct {
 }
 
 func (s *Service) sealDraft(ctx context.Context, d *Draft) (string, error) {
-	key, err := secrets.New(s.d, s.d).Generate(ctx, secrets.ActionLinkKey)
+	key, err := secrets.New(settings.From(ctx), s.d, s.d).Generate(ctx, secrets.ActionLinkKey)
 	if err != nil {
 		return "", err
 	}
@@ -384,7 +384,7 @@ func (s *Service) sealDraft(ctx context.Context, d *Draft) (string, error) {
 }
 
 func (s *Service) openDraft(ctx context.Context, raw string) (Form, error) {
-	key, err := secrets.New(s.d, s.d).Generate(ctx, secrets.ActionLinkKey)
+	key, err := secrets.New(settings.From(ctx), s.d, s.d).Generate(ctx, secrets.ActionLinkKey)
 	if err != nil {
 		return Form{}, err
 	}
@@ -648,16 +648,16 @@ func (s *Service) Activate(ctx context.Context, fingerprint string) error {
 		for _, key := range keys {
 			var err error
 			if d.changed[key] == "" && key != KeyAccessGroup && key != KeyAdminGroup {
-				err = settings.Default.Unset(ctx, tx, key)
+				err = settings.From(ctx).Unset(ctx, tx, key)
 			} else {
-				err = settings.Default.Set(ctx, tx, key, d.changed[key])
+				err = settings.From(ctx).Set(ctx, tx, key, d.changed[key])
 			}
 			if err != nil {
 				return err
 			}
 		}
 		if d.secretGiven {
-			return secrets.NewIn(s.d, tx, s.d).Set(ctx, secrets.OIDCClientSecret, d.secret, "ui")
+			return secrets.NewIn(settings.From(ctx), s.d, tx, s.d).Set(ctx, secrets.OIDCClientSecret, d.secret, "ui")
 		}
 		return nil
 	})

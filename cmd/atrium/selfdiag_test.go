@@ -60,6 +60,7 @@ func fakeGrafana(t *testing.T) (*httptest.Server, func() []dsQuery) {
 }
 
 func TestSelfDiagnoseQueriesMetricsAndLogsInTheConfiguredDialect(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		dialect, want string
 	}{
@@ -84,7 +85,7 @@ func TestSelfDiagnoseQueriesMetricsAndLogsInTheConfiguredDialect(t *testing.T) {
 			}
 			setEnv(t, anthropic.BaseURLEnv, api.URL)
 
-			ran := runApp("agent", "run", "--text", "how are you doing?", "--kind", "chat")
+			ran := runApp(t, "agent", "run", "--text", "how are you doing?", "--kind", "chat")
 			if ran.code != cli.ExitOK {
 				t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 			}

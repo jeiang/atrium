@@ -11,12 +11,16 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 func runServePages(t *testing.T, ctx context.Context, env config.Env, pages []Page, args ...string) (int, string, string) {
 	t.Helper()
 	app := cli.New("atrium", nil)
 	app.Env = env
+	reg := settings.New()
+	app.Settings = reg
+	app.State = config.NewState(reg)
 	app.Add(ServeCommand(testBoot(env), pages...))
 	var stdout, stderr bytes.Buffer
 	code := app.Run(ctx, append([]string{"serve"}, args...), &stdout, &stderr)

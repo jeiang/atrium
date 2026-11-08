@@ -251,7 +251,7 @@ func NewLLMContext(ctx context.Context, q Querier, account, url string, folderMi
 }
 
 func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleList []rules.Rule, lc *LLMContext, t Tuning) (*Decision, error) {
-	_, ok := config.Account(m.Account)
+	_, ok := config.From(ctx).Account(m.Account)
 	if !ok {
 		return nil, fmt.Errorf("%w: %s", httpx.ErrMissing, strconv.Quote(m.Account))
 	}

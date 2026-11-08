@@ -20,7 +20,7 @@ func liveSite(t *testing.T, w *livetest.World, open mail.OpenFunc) *site {
 	if open == nil {
 		open = w.Open
 	}
-	s := &site{t: t, db: w.DB, cfg: w.Cfg, env: env, srv: newServer(t, w.Cfg, env, w.DB, Options{Open: open, Now: func() float64 { return w.Clock }})}
+	s := &site{t: t, db: w.DB, cfg: w.Cfg, env: env, settings: w.Settings, state: w.State, srv: newServer(t, w.Cfg, env, w.DB, w.Settings, w.State, Options{Open: open, Now: func() float64 { return w.Clock }})}
 	s.handshake()
 	return s
 }
@@ -38,7 +38,7 @@ func liveWorld(t *testing.T) *livetest.World {
 
 func TestTriageShowsStatusUndoAndHeaderControls(t *testing.T) {
 	w := liveWorld(t)
-	if _, err := applier.New(w.Live, w.Open, w.Syncer).ApplyAccount(context.Background(), "icloud"); err != nil {
+	if _, err := applier.New(w.Live, w.Open, w.Syncer).ApplyAccount(w.Context(), "icloud"); err != nil {
 		t.Fatal(err)
 	}
 	var action = -1
@@ -112,12 +112,12 @@ func TestPageFrameFollowsTheMailModePin(t *testing.T) {
 	contains(t, live, "Live", "/live/pause")
 	lacks(t, live, "Shadow")
 
-	mailtest.PinMode(t, "shadow")
+	mailtest.PinMode(t, s.settings, "shadow")
 	shadow := status(t, s.get("/triage?account=icloud"), 200, "shadow")
 	contains(t, shadow, "Shadow")
 	lacks(t, shadow, "/live/pause", "/live/resume")
 
-	mailtest.PinMode(t, "live")
+	mailtest.PinMode(t, s.settings, "live")
 	again := status(t, s.get("/triage?account=icloud"), 200, "live again")
 	contains(t, again, "/live/pause")
 }

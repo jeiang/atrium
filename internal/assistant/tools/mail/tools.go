@@ -1,6 +1,7 @@
 package mailtools
 
 import (
+	"context"
 	"encoding/json"
 	"math/big"
 	"time"
@@ -35,8 +36,8 @@ func intArg(value any, message string) (int64, error) {
 	return 0, tool.Error(message)
 }
 
-func zone(env config.Env) (*time.Location, error) {
-	loc, err := scheduler.Zone(config.TZName(env))
+func zone(ctx context.Context, env config.Env) (*time.Location, error) {
+	loc, err := scheduler.Zone(config.From(ctx).TZName(env))
 	if err != nil {
 		return nil, tool.Error("invalid time zone")
 	}

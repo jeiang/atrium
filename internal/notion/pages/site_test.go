@@ -64,23 +64,25 @@ func newSite(t *testing.T, extra map[string]string) *site {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pins, err := config.LoadPins(env, settings.Default)
+	reg := settings.New()
+	st := config.NewState(reg)
+	pins, err := config.LoadPins(env, reg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	settings.Default.SetPins(pins)
-	t.Cleanup(func() { settings.Default.SetPins(nil) })
+	reg.SetPins(pins)
+	t.Cleanup(func() { reg.SetPins(nil) })
 	s := &site{t: t, db: d, cfg: cfg, clock: 1_780_000_000}
-	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates(), assistantpages.Templates()}})
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates(), assistantpages.Templates()}, State: st})
 	if err != nil {
 		t.Fatal(err)
 	}
 	chat := func(_ context.Context, _, system, user string, _ any, _ int) (json.RawMessage, error) {
 		return s.chat(system, user)
 	}
-	assistant := assistantpages.Module(assistantpages.Options{Runner: &loop.Runner{Registry: registry.New(), Undoers: toolset.Undoers(config.OS)}, Registry: registry.New(), Now: s.now})
+	assistant := assistantpages.Module(assistantpages.Options{Runner: &loop.Runner{Registry: registry.New(reg), Undoers: toolset.Undoers(config.OS)}, Registry: registry.New(reg), Now: s.now})
 	s.srv, err = web.New(web.Options{
-		Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, AllowedHosts: []string{"testserver"}, Render: render,
+		Cfg: cfg, Env: env, DB: d, Settings: reg, State: st, Auth: []string{web.AuthLocal}, AllowedHosts: []string{"testserver"}, Render: render,
 		Modules: []web.Module{Module(Options{Chat: chat, Now: s.now}), assistant},
 	})
 	if err != nil {

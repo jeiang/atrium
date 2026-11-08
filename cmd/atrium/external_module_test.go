@@ -71,11 +71,12 @@ func extPings(t *testing.T, dir string) int {
 }
 
 func TestExternalModuleMigratesAndRunsOnlyWhenEnabled(t *testing.T) {
+	t.Parallel()
 	mods := extModules()
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	activeFixture.env[flagEnv(extName)] = ""
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, flagEnv(extName), "")
 
-	off := runAppWith(mods, extName)
+	off := runAppWith(t, mods, extName)
 	if off.code != cli.ExitOK || off.stdout != "" {
 		t.Fatalf("disabled module: exit %d stdout %q stderr %q", off.code, off.stdout, off.stderr)
 	}
@@ -86,10 +87,10 @@ func TestExternalModuleMigratesAndRunsOnlyWhenEnabled(t *testing.T) {
 		t.Fatalf("disabled module wrote %d rows", n)
 	}
 
-	if set := runAppWith(mods, "settings", "set", extName+"_enabled", "true"); set.code != cli.ExitOK {
+	if set := runAppWith(t, mods, "settings", "set", extName+"_enabled", "true"); set.code != cli.ExitOK {
 		t.Fatalf("enable: exit %d stderr %q", set.code, set.stderr)
 	}
-	on := runAppWith(mods, extName)
+	on := runAppWith(t, mods, extName)
 	if on.code != cli.ExitOK || on.stdout != "pong\n" {
 		t.Fatalf("enabled module: exit %d stdout %q stderr %q", on.code, on.stdout, on.stderr)
 	}
@@ -99,10 +100,11 @@ func TestExternalModuleMigratesAndRunsOnlyWhenEnabled(t *testing.T) {
 }
 
 func TestNewerExternalModuleSchemaIsRefusedBeforeWrites(t *testing.T) {
+	t.Parallel()
 	mods := extModules()
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	activeFixture.env[flagEnv(extName)] = "true"
-	if first := runAppWith(mods, extName); first.code != cli.ExitOK {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, flagEnv(extName), "true")
+	if first := runAppWith(t, mods, extName); first.code != cli.ExitOK {
 		t.Fatalf("first run: exit %d stderr %q", first.code, first.stderr)
 	}
 	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
@@ -114,7 +116,7 @@ func TestNewerExternalModuleSchemaIsRefusedBeforeWrites(t *testing.T) {
 	}
 	_ = d.Close()
 
-	refused := runAppWith(mods, extName)
+	refused := runAppWith(t, mods, extName)
 	if refused.code == cli.ExitOK || !strings.Contains(refused.stderr, "newer "+extName+" module") {
 		t.Fatalf("newer module schema: exit %d stderr %q", refused.code, refused.stderr)
 	}

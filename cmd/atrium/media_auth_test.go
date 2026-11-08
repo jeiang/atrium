@@ -53,6 +53,7 @@ func (f *fakeQbit) saw(path string) bool {
 }
 
 func TestMediaCredentialsTestThroughIntegrationsAndAuthenticateEveryRequest(t *testing.T) {
+	t.Parallel()
 	qb := &fakeQbit{version: "v5.2.0"}
 	qbSrv := httptest.NewServer(http.HandlerFunc(qb.handler))
 	t.Cleanup(qbSrv.Close)
@@ -69,11 +70,12 @@ func TestMediaCredentialsTestThroughIntegrationsAndAuthenticateEveryRequest(t *t
 		_, _ = w.Write([]byte(`{}`))
 	}))
 	t.Cleanup(tmdb.Close)
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, settingEnv(media.KeyTMDBURL), tmdb.URL+"/3")
+
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, settingEnv(media.KeyQbitURL), qbSrv.URL)
 	setEnv(t, settingEnv(media.KeyQbitAPIKey), "qbt_good")
 	setEnv(t, settingEnv(media.KeyTMDBToken), "tmdb_good")
-	setEnv(t, settingEnv(media.KeyTMDBURL), tmdb.URL+"/3")
 	s := &integrationSite{t: t, dir: dir}
 	s.start()
 

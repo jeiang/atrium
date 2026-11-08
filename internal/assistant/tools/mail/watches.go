@@ -72,7 +72,7 @@ func upcomingBirthdays(ctx context.Context, tc *tool.Context, args tool.Args) (a
 	if err != nil {
 		return nil, err
 	}
-	loc, err := zone(tc.Env)
+	loc, err := zone(ctx, tc.Env)
 	if err != nil {
 		return nil, err
 	}

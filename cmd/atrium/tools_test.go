@@ -13,8 +13,9 @@ import (
 )
 
 func TestDisabledToolIsNotOffered(t *testing.T) {
-	dir, api := moduleFixture(t, flagsExcept("", ""))
-	if ran := runApp("agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+	t.Parallel()
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
@@ -22,7 +23,7 @@ func TestDisabledToolIsNotOffered(t *testing.T) {
 		t.Fatal(err)
 	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
-	ran := runApp("agent", "run", "--text", "hi")
+	ran := runApp(t, "agent", "run", "--text", "hi")
 	if ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 	}
@@ -46,8 +47,8 @@ func lastTools(t *testing.T, api *modelLog, ran appRun) []any {
 }
 
 func TestNightlyRunOmitsWriteUndoTools(t *testing.T) {
-	_, api := moduleFixture(t, flagsExcept("", ""))
-	ran := runApp("agent", "run", "--text", "hi", "--kind", "nightly")
+	_, api, _ := moduleFixture(t, flagsExcept("", ""))
+	ran := runApp(t, "agent", "run", "--text", "hi", "--kind", "nightly")
 	names := offeredTools(t, api, ran)
 	for _, name := range []string{"profile_set", "ask_operator"} {
 		if slices.Contains(names, name) {
@@ -60,8 +61,8 @@ func TestNightlyRunOmitsWriteUndoTools(t *testing.T) {
 }
 
 func TestWebSearchAllowedCallers(t *testing.T) {
-	dir, api := moduleFixture(t, flagsExcept("", ""))
-	ran := runApp("agent", "run", "--text", "warm")
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	ran := runApp(t, "agent", "run", "--text", "warm")
 	for _, raw := range lastTools(t, api, ran) {
 		entry, _ := raw.(map[string]any)
 		if entry["name"] != "web_search" {
@@ -77,7 +78,7 @@ func TestWebSearchAllowedCallers(t *testing.T) {
 		t.Fatal(err)
 	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
-	ran = runApp("agent", "run", "--text", "hi")
+	ran = runApp(t, "agent", "run", "--text", "hi")
 	for _, raw := range lastTools(t, api, ran) {
 		entry, _ := raw.(map[string]any)
 		if entry["name"] == "web_search" && entry["allowed_callers"] != nil {
@@ -87,8 +88,8 @@ func TestWebSearchAllowedCallers(t *testing.T) {
 }
 
 func TestFileToolsReadSearchAndTraversal(t *testing.T) {
-	dir, api := moduleFixture(t, flagsExcept("", ""))
-	if ran := runApp("agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "file_write", map[string]any{"name": "note.txt", "content": "hello world"})))
@@ -96,7 +97,7 @@ func TestFileToolsReadSearchAndTraversal(t *testing.T) {
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f3", "file_read", map[string]any{"name": "../secret"})))
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f4", "file_search", map[string]any{"query": "hello"})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-	ran := runApp("agent", "run", "--thread", "1", "--text", "write a note")
+	ran := runApp(t, "agent", "run", "--thread", "1", "--text", "write a note")
 	if ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 	}
@@ -126,8 +127,8 @@ func TestFileToolsReadSearchAndTraversal(t *testing.T) {
 }
 
 func TestMemorySpendDoesNotPauseChat(t *testing.T) {
-	dir, api := moduleFixture(t, flagsExcept("", ""))
-	if ran := runApp("agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
@@ -143,21 +144,21 @@ func TestMemorySpendDoesNotPauseChat(t *testing.T) {
 		t.Fatal(err)
 	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
-	if ran := runApp("agent", "run", "--thread", "1", "--text", "hi"); !strings.Contains(ran.stdout+ran.stderr, "monthly budget") {
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "hi"); !strings.Contains(ran.stdout+ran.stderr, "monthly budget") {
 		t.Fatalf("chat did not pause at the threshold: code=%d stdout=%s stderr=%s", ran.code, ran.stdout, ran.stderr)
 	}
 	if _, err := d.Write.Exec(insert, now, "memory", 100.0); err != nil {
 		t.Fatal(err)
 	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
-	if ran := runApp("agent", "run", "--thread", "1", "--text", "hi"); !strings.Contains(ran.stdout+ran.stderr, "monthly budget") {
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "hi"); !strings.Contains(ran.stdout+ran.stderr, "monthly budget") {
 		t.Fatalf("a memory row changed the pause decision: code=%d stdout=%s stderr=%s", ran.code, ran.stdout, ran.stderr)
 	}
 	if _, err := d.Write.Exec("UPDATE usage SET cost_usd = 0.5 WHERE kind = 'chat'"); err != nil {
 		t.Fatal(err)
 	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
-	if ran := runApp("agent", "run", "--thread", "1", "--text", "hi"); ran.code != cli.ExitOK {
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "hi"); ran.code != cli.ExitOK {
 		t.Fatalf("chat stayed paused with a large memory row: %d %s", ran.code, ran.stderr)
 	}
 }

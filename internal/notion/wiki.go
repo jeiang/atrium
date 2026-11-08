@@ -37,8 +37,8 @@ type WikiError string
 
 func (e WikiError) Error() string { return string(e) }
 
-func LocalDate(ts float64, env config.Env) (string, error) {
-	loc, err := config.Location(env)
+func LocalDate(ctx context.Context, ts float64, env config.Env) (string, error) {
+	loc, err := config.From(ctx).Location(env)
 	if err != nil {
 		return "", err
 	}

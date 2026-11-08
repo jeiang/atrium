@@ -10,8 +10,9 @@ import (
 )
 
 func TestAMailProposalRefusesToRunWhenTheMailModuleIsOff(t *testing.T) {
+	t.Parallel()
 	f := newFixture(t, loadGoldenData(t), nil, "")
-	f.env["ATRIUM_CORE_MAIL_ENABLED"] = "false"
+	setEnv(t, "ATRIUM_CORE_MAIL_ENABLED", "false")
 	code, stdout, stderr := f.Run(context.Background(), "proposals", "approve", "6")
 	if code == 0 {
 		t.Fatalf("approve with mail off: exit %d stdout %q", code, stdout)

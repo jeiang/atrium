@@ -3,12 +3,9 @@ package pages
 import (
 	"net/http"
 	"testing"
-
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 func TestUsageExcludesMemoryFromMonthlySpend(t *testing.T) {
-	settings.Default.SetPins(nil)
 	s := newSite(t)
 	s.exec("INSERT INTO settings (key, value) VALUES ('monthly_budget_usd', '2')")
 	s.exec("INSERT INTO threads (id, kind, effort, created_at, updated_at) VALUES (1, 'chat', 'low', 0, 0)")

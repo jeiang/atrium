@@ -90,15 +90,15 @@ func (s *Server) Env() config.Env {
 	return config.Map(map[string]string{"ANTHROPIC_API_KEY": APIKey, anthropic.BaseURLEnv: s.URL})
 }
 
-func PinKey(t testing.TB) {
+func PinKey(t testing.TB, reg *settings.Registry) {
 	t.Helper()
-	previous := settings.Default.PinSource()
-	pins, err := config.LoadPins(config.Map(map[string]string{"ANTHROPIC_API_KEY": APIKey}), settings.Default)
+	previous := reg.PinSource()
+	pins, err := config.LoadPins(config.Map(map[string]string{"ANTHROPIC_API_KEY": APIKey}), reg)
 	if err != nil {
 		t.Fatal(err)
 	}
-	settings.Default.SetPins(pins)
-	t.Cleanup(func() { settings.Default.SetPins(previous) })
+	reg.SetPins(pins)
+	t.Cleanup(func() { reg.SetPins(previous) })
 }
 
 func (s *Server) Client() *anthropic.Client {

@@ -88,7 +88,7 @@ func Backfill(ctx context.Context, d *db.DB, threadID *int64, client *anthropic.
 		}
 	}
 	if threadID == nil {
-		if err := settings.Default.Set(ctx, d.Write, BackfillDoneKey, fmt.Sprintf("%d", time.Now().Unix())); err != nil {
+		if err := settings.From(ctx).Set(ctx, d.Write, BackfillDoneKey, fmt.Sprintf("%d", time.Now().Unix())); err != nil {
 			return done, err
 		}
 	}
@@ -112,7 +112,7 @@ func backfillThreads(ctx context.Context, q db.Querier, threadID *int64) ([]int6
 
 // BackfillDone reports the recorded completion timestamp, if any.
 func BackfillDone(ctx context.Context, q db.Querier) (string, error) {
-	found, err := settings.Default.Resolve(ctx, q, BackfillDoneKey)
+	found, err := settings.From(ctx).Resolve(ctx, q, BackfillDoneKey)
 	if err != nil {
 		return "", err
 	}

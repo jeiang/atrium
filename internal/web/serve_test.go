@@ -18,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 func testBoot(env config.Env) Boot {
@@ -50,6 +51,9 @@ func runServe(t *testing.T, ctx context.Context, env config.Env, args ...string)
 	t.Helper()
 	app := cli.New("atrium", nil)
 	app.Env = env
+	reg := settings.New()
+	app.Settings = reg
+	app.State = config.NewState(reg)
 	app.Add(ServeCommand(testBoot(env)))
 	var stdout, stderr bytes.Buffer
 	code := app.Run(ctx, append([]string{"serve"}, args...), &stdout, &stderr)

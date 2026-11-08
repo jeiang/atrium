@@ -144,7 +144,7 @@ func TestWatchesPageListsAndDismissesBirthdays(t *testing.T) {
 	if err := os.Mkdir(cards, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	zone, err := config.Location(config.Map(nil))
+	zone, err := config.NewState(settings.New()).Location(config.Map(nil))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -183,7 +183,7 @@ func enableContacts(t *testing.T, s *site, dir string) {
 	t.Helper()
 	ctx := audit.With(t.Context(), "test", audit.CLI)
 	for key, value := range map[string]string{contacts.DirKey: dir, module.FlagKey(module.Contacts): "true"} {
-		if err := settings.Default.Set(ctx, s.db.Write, key, value); err != nil {
+		if err := s.settings.Set(ctx, s.db.Write, key, value); err != nil {
 			t.Fatal(err)
 		}
 	}

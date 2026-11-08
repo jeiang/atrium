@@ -66,7 +66,7 @@ func JudgeCommitments(ctx context.Context, env config.Env, url string, m Message
 	if m.Sent {
 		direction = "sent by the mailbox owner"
 	}
-	zone, err := config.Zone(config.TZName(env))
+	zone, err := config.Zone(config.From(ctx).TZName(env))
 	if err != nil {
 		return nil, fmt.Errorf("%w: %s", httpx.ErrMissing, err)
 	}

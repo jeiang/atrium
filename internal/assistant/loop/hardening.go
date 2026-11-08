@@ -49,7 +49,7 @@ func doomLoopThreshold(ctx context.Context, q db.Querier) (int, error) {
 }
 
 func intSetting(ctx context.Context, q db.Querier, key string) (int, error) {
-	found, err := settings.Default.Resolve(ctx, q, key)
+	found, err := settings.From(ctx).Resolve(ctx, q, key)
 	if err != nil {
 		return 0, err
 	}

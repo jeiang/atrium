@@ -46,17 +46,17 @@ func init() {
 	)
 }
 
-func Enabled() bool {
-	return modules.IsEnabled(modules.Notifications)
+func Enabled(ctx context.Context) bool {
+	return modules.IsEnabled(ctx, modules.Notifications)
 }
 
 func text(ctx context.Context, q db.Querier, key string) (string, error) {
-	found, err := settings.Default.Resolve(ctx, q, key)
+	found, err := settings.From(ctx).Resolve(ctx, q, key)
 	return strings.TrimSpace(found.Value), err
 }
 
 func whole(ctx context.Context, q db.Querier, key string) (int, error) {
-	found, err := settings.Default.Resolve(ctx, q, key)
+	found, err := settings.From(ctx).Resolve(ctx, q, key)
 	if err != nil {
 		return 0, err
 	}

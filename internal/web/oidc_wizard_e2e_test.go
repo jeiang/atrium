@@ -11,7 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/auth/oidc/oidctest"
 	"github.com/jeiang/atrium/internal/secrets"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 var tags = regexp.MustCompile(`<[^>]*>`)
@@ -301,8 +300,8 @@ func TestWizardTestSignInIsPersistedAndSealed(t *testing.T) {
 
 func TestWizardPinnedFieldsAreReadOnlyAndWin(t *testing.T) {
 	r, admin := wizardRig(t)
-	settings.Default.SetPins(secretPin{secrets.OIDCClientSecret: "s3cret", oidc.KeyClientID: r.idp.ClientID(), oidc.KeyAccessGroup: "atrium_access"})
-	t.Cleanup(func() { settings.Default.SetPins(nil) })
+	r.settings.SetPins(secretPin{secrets.OIDCClientSecret: "s3cret", oidc.KeyClientID: r.idp.ClientID(), oidc.KeyAccessGroup: "atrium_access"})
+	t.Cleanup(func() { r.settings.SetPins(nil) })
 	page := admin.get("/settings/auth")
 	expect(t, page, http.StatusOK)
 	for _, id := range []string{"oidc-client-id", "oidc-access-group", "oidc-client-secret"} {
@@ -324,8 +323,8 @@ func TestWizardPinnedFieldsAreReadOnlyAndWin(t *testing.T) {
 
 func TestWizardGoogleFlowUsesEmailAllowlists(t *testing.T) {
 	r := newRig(t, rigOpts{preset: "google", settings: map[string]string{"oidc_access_emails": "friend@example.com", "oidc_admin_emails": "boss@example.com"}})
-	settings.Default.SetPins(secretPin{secrets.OIDCClientSecret: "s3cret", oidc.KeyIssuer: r.idp.Issuer()})
-	t.Cleanup(func() { settings.Default.SetPins(nil) })
+	r.settings.SetPins(secretPin{secrets.OIDCClientSecret: "s3cret", oidc.KeyIssuer: r.idp.Issuer()})
+	t.Cleanup(func() { r.settings.SetPins(nil) })
 	r.idp.AddUser(oidctest.User{Name: "admin", Email: "boss@example.com", EmailVerified: true})
 	r.idp.AddUser(oidctest.User{Name: "friend", Email: "friend@example.com", EmailVerified: true})
 	admin := r.browser()

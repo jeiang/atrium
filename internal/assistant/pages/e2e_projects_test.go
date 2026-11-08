@@ -1,7 +1,6 @@
 package pages
 
 import (
-	"context"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -50,7 +49,7 @@ func (s *site) newThread(title string, project int64) int64 {
 	if project != 0 {
 		n.ProjectID = &project
 	}
-	id, err := threads.Create(context.Background(), s.db.Write, s.now(), n)
+	id, err := threads.Create(s.ctx(), s.db.Write, s.now(), n)
 	if err != nil {
 		s.t.Fatal(err)
 	}

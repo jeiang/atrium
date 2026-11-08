@@ -41,7 +41,7 @@ func (s *service) importV1(a *cli.Args) cli.Handler {
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		key, err := s.currentKey()
+		key, err := s.currentKey(e)
 		if err != nil {
 			return cli.Fail(e, err)
 		}

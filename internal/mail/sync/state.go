@@ -27,11 +27,11 @@ func bit(b bool) int {
 	return 0
 }
 
-func MessageState(account, role, mailboxName string, flags, labels []string) State {
+func MessageState(preset, role, mailboxName string, flags, labels []string) State {
 	var st State
 	st.Seen = bit(slices.Contains(flags, `\Seen`))
 	st.Flagged = bit(slices.Contains(flags, `\Flagged`))
-	if config.Preset(account) == config.Gmail {
+	if preset == config.Gmail {
 		if labels == nil {
 			labels = []string{}
 		}

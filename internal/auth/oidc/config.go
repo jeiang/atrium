@@ -58,7 +58,7 @@ type values map[string]string
 func resolved(ctx context.Context, q db.Querier) (values, []string, error) {
 	out := values{}
 	for _, key := range valueKeys {
-		found, err := settings.Default.Resolve(ctx, q, key)
+		found, err := settings.From(ctx).Resolve(ctx, q, key)
 		if err != nil {
 			return nil, nil, err
 		}
@@ -80,10 +80,10 @@ func load(ctx context.Context, q db.Querier, env config.Env, encrypted bool) (Co
 		}
 		problems = append(problems, err.Error())
 	}
-	return assemble(vals, strings.TrimSpace(secret), env, encrypted, problems)
+	return assemble(ctx, vals, strings.TrimSpace(secret), env, encrypted, problems)
 }
 
-func assemble(get values, secret string, env config.Env, encrypted bool, problems []string) (Config, error) {
+func assemble(ctx context.Context, get values, secret string, env config.Env, encrypted bool, problems []string) (Config, error) {
 	days := func(key string, unit time.Duration, low, high int64) time.Duration {
 		n, err := strconv.ParseInt(strings.TrimSpace(get[key]), 10, 64)
 		switch {
@@ -124,7 +124,7 @@ func assemble(get values, secret string, env config.Env, encrypted bool, problem
 		c.GroupsClaim = preset.GroupsClaim
 	}
 	c.ClientSecret = secret
-	public := config.PublicURL(env)
+	public := config.From(ctx).PublicURL(env)
 	switch {
 	case c.Issuer == "":
 		problems = append(problems, KeyIssuer+" is not set")
@@ -155,7 +155,7 @@ func assemble(get values, secret string, env config.Env, encrypted bool, problem
 }
 
 func AdminGroup(ctx context.Context, q db.Querier) (string, error) {
-	found, err := settings.Default.Resolve(ctx, q, KeyAdminGroup)
+	found, err := settings.From(ctx).Resolve(ctx, q, KeyAdminGroup)
 	if err != nil {
 		return "", err
 	}

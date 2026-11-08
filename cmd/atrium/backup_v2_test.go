@@ -23,6 +23,7 @@ func shellEnv(t *testing.T) (string, []string) {
 }
 
 func TestDatabaseShellKeepsCaseEndTriggers(t *testing.T) {
+	t.Parallel()
 	path, env := shellEnv(t)
 	if got := runProcess(t, "settings set tz UTC", env...); got.code != cli.ExitOK {
 		t.Fatalf("create database: exit %d stderr %q", got.code, got.stderr)
@@ -45,6 +46,7 @@ func TestDatabaseShellKeepsCaseEndTriggers(t *testing.T) {
 }
 
 func TestBackupRefusesDestinationUnderFiles(t *testing.T) {
+	t.Parallel()
 	path, env := shellEnv(t)
 	if got := runProcess(t, "settings set tz UTC", env...); got.code != cli.ExitOK {
 		t.Fatalf("create database: exit %d stderr %q", got.code, got.stderr)
@@ -64,6 +66,7 @@ func TestBackupRefusesDestinationUnderFiles(t *testing.T) {
 }
 
 func TestRestoreRefusesV1Archive(t *testing.T) {
+	t.Parallel()
 	_, env := shellEnv(t)
 	archive := filepath.Join(t.TempDir(), "v1.backup")
 	f, err := os.Create(archive)
@@ -91,6 +94,7 @@ func TestRestoreRefusesV1Archive(t *testing.T) {
 }
 
 func TestRestoreKeepsNestedFilesDirectoryModes(t *testing.T) {
+	t.Parallel()
 	path, env := shellEnv(t)
 	if got := runProcess(t, "settings set tz UTC", env...); got.code != cli.ExitOK {
 		t.Fatalf("create database: exit %d stderr %q", got.code, got.stderr)

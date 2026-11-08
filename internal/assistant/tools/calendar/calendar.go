@@ -149,7 +149,7 @@ func list(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 }
 
 func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	tz, err := calendar.Zone(tc.Env)
+	tz, err := calendar.Zone(ctx, tc.Env)
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +370,7 @@ func undoRecreate(env config.Env) writes.Undoer {
 			return nil, err
 		}
 		restored.UID = calendar.NewUID()
-		tz, err := calendar.Zone(env)
+		tz, err := calendar.Zone(ctx, env)
 		if err != nil {
 			return nil, err
 		}

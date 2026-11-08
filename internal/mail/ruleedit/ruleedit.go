@@ -67,7 +67,7 @@ func get(raw any, key string) any {
 	return nil
 }
 
-func checked(raw any, id string) (rules.Rule, error) {
+func checked(ctx context.Context, raw any, id string) (rules.Rule, error) {
 	doc, ok := withID(raw, id)
 	if !ok {
 		return rules.Rule{}, fmt.Errorf("%w: 'raw' object is not a mapping", httpx.ErrShape)
@@ -77,7 +77,7 @@ func checked(raw any, id string) (rules.Rule, error) {
 		return rules.Rule{}, err
 	}
 	if rule.Account != nil {
-		if _, known := config.Account(*rule.Account); !known {
+		if _, known := config.From(ctx).Account(*rule.Account); !known {
 			return rules.Rule{}, ruleErrorf("unknown account " + strconv.Quote(*rule.Account))
 		}
 	}
@@ -134,7 +134,7 @@ func CreateRule(ctx context.Context, d *db.DB, raw any) (rules.Rule, error) {
 		}
 		id = s
 	}
-	rule, err := checked(raw, id)
+	rule, err := checked(ctx, raw, id)
 	if err != nil {
 		return rules.Rule{}, err
 	}
@@ -165,7 +165,7 @@ func randomHex() string {
 }
 
 func UpdateRule(ctx context.Context, d *db.DB, id string, raw any) (rules.Rule, error) {
-	rule, err := checked(raw, id)
+	rule, err := checked(ctx, raw, id)
 	if err != nil {
 		return rules.Rule{}, err
 	}
@@ -255,7 +255,7 @@ func PreviewRule(ctx context.Context, q rules.Querier, raw any, limit int, now f
 		}
 		id = s
 	}
-	rule, err := checked(raw, id)
+	rule, err := checked(ctx, raw, id)
 	if err != nil {
 		return Preview{}, err
 	}

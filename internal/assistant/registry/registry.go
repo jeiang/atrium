@@ -23,16 +23,17 @@ func (e InvalidError) Error() string { return string(e) }
 type Binder func(ctx context.Context, q db.Querier, t tool.Tool) (bound tool.Tool, ok bool, err error)
 
 type Registry struct {
-	tools   []tool.Tool
-	binders map[string]Binder
-	mu      sync.Mutex
-	tainted map[int64]bool
+	tools    []tool.Tool
+	binders  map[string]Binder
+	mu       sync.Mutex
+	tainted  map[int64]bool
+	settings *settings.Registry
 }
 
 type Source func() (*Registry, error)
 
-func New() *Registry {
-	return &Registry{tools: []tool.Tool{webSearchTool()}, binders: map[string]Binder{}, tainted: map[int64]bool{}}
+func New(reg *settings.Registry) *Registry {
+	return &Registry{tools: []tool.Tool{webSearchTool()}, binders: map[string]Binder{}, tainted: map[int64]bool{}, settings: reg}
 }
 
 func (r *Registry) Add(tools ...tool.Tool) error {
@@ -46,10 +47,10 @@ func (r *Registry) Add(tools ...tool.Tool) error {
 	}
 	for _, t := range tools {
 		key := settingKey(t.Name)
-		if _, ok := settings.Default.Lookup(key); ok {
+		if _, ok := r.settings.Lookup(key); ok {
 			continue
 		}
-		if err := settings.Default.Register(settings.Value(settings.Advanced, settings.Def{
+		if err := r.settings.Register(settings.Value(settings.Advanced, settings.Def{
 			Key: key, Module: "tools", Type: settings.Bool, Default: "true",
 		})); err != nil {
 			return err
@@ -224,10 +225,10 @@ func (r *Registry) SubagentPool() ([]tool.Tool, error) {
 
 func (r *Registry) enabled(ctx context.Context, q db.Querier, name string) (bool, error) {
 	key := settingKey(name)
-	if _, ok := settings.Default.Lookup(key); !ok || q == nil {
+	if _, ok := r.settings.Lookup(key); !ok || q == nil {
 		return true, nil
 	}
-	found, err := settings.Default.Resolve(ctx, q, key)
+	found, err := r.settings.Resolve(ctx, q, key)
 	if err != nil {
 		return false, err
 	}

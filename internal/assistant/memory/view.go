@@ -44,7 +44,7 @@ type storedView struct {
 
 func ViewSettings(ctx context.Context, q db.Querier) (low, high, tail int, err error) {
 	resolve := func(key string) (int64, error) {
-		found, err := settings.Default.Resolve(ctx, q, key)
+		found, err := settings.From(ctx).Resolve(ctx, q, key)
 		if err != nil {
 			return 0, err
 		}

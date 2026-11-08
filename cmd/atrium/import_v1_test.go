@@ -32,6 +32,7 @@ func freshImportRig(t *testing.T) (*fixture, string) {
 }
 
 func TestImportV1CopiesLearnedRuleData(t *testing.T) {
+	t.Parallel()
 	r, source := freshImportRig(t)
 	code, stdout, stderr := r.Run(context.Background(), "db", "import-v1", source)
 	if code != 0 {
@@ -69,6 +70,7 @@ func TestImportV1CopiesLearnedRuleData(t *testing.T) {
 }
 
 func TestImportV1RefusesNonRE2RulePattern(t *testing.T) {
+	t.Parallel()
 	r, source := freshImportRig(t)
 	broken := filepath.Join(t.TempDir(), "v1.db")
 	data, err := os.ReadFile(source)
@@ -116,6 +118,7 @@ func TestImportV1RefusesNonRE2RulePattern(t *testing.T) {
 }
 
 func TestImportV1RefusesUnknownRuleField(t *testing.T) {
+	t.Parallel()
 	r, source := freshImportRig(t)
 	broken := filepath.Join(t.TempDir(), "v1.db")
 	data, err := os.ReadFile(source)

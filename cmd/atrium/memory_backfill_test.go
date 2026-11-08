@@ -10,8 +10,8 @@ import (
 )
 
 func TestMemoryBackfillIsIdempotentAndRefusesAfterDone(t *testing.T) {
-	dir, api := moduleFixture(t, flagsExcept("", ""))
-	if ran := runApp("agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
@@ -24,7 +24,7 @@ func TestMemoryBackfillIsIdempotentAndRefusesAfterDone(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	estimate := runApp("memory", "backfill", "--estimate")
+	estimate := runApp(t, "memory", "backfill", "--estimate")
 	if estimate.code != cli.ExitOK {
 		t.Fatalf("estimate: %d %s", estimate.code, estimate.stderr)
 	}
@@ -41,7 +41,7 @@ func TestMemoryBackfillIsIdempotentAndRefusesAfterDone(t *testing.T) {
 	for range 100 {
 		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("summary")))
 	}
-	if ran := runApp("memory", "backfill"); ran.code != cli.ExitOK {
+	if ran := runApp(t, "memory", "backfill"); ran.code != cli.ExitOK {
 		t.Fatalf("backfill: %d %s", ran.code, ran.stderr)
 	}
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM usage WHERE kind = 'memory'").Scan(&usageRows); err != nil {
@@ -57,7 +57,7 @@ func TestMemoryBackfillIsIdempotentAndRefusesAfterDone(t *testing.T) {
 	if done == "" {
 		t.Error("backfill_done is empty")
 	}
-	again := runApp("memory", "backfill")
+	again := runApp(t, "memory", "backfill")
 	if again.code == cli.ExitOK || !strings.Contains(again.stderr, "already completed") {
 		t.Errorf("second backfill: %d %s", again.code, again.stderr)
 	}
@@ -65,7 +65,7 @@ func TestMemoryBackfillIsIdempotentAndRefusesAfterDone(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM memory_nodes WHERE thread_id = 2").Scan(&before); err != nil {
 		t.Fatal(err)
 	}
-	if ran := runApp("memory", "backfill", "--thread", "2"); ran.code != cli.ExitOK {
+	if ran := runApp(t, "memory", "backfill", "--thread", "2"); ran.code != cli.ExitOK {
 		t.Fatalf("thread backfill: %d %s", ran.code, ran.stderr)
 	}
 	var after int

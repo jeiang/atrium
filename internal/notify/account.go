@@ -120,7 +120,7 @@ func Connect(ctx context.Context, d *db.DB, user, password, by string) error {
 		}
 		tokens[name] = token
 	}
-	store := secrets.New(d, d)
+	store := secrets.New(settings.From(ctx), d, d)
 	for _, name := range Channels {
 		old, err := store.Value(ctx, TokenKey(name))
 		if err != nil {
@@ -140,7 +140,7 @@ func ResetChannel(ctx context.Context, d *db.DB, name string) error {
 	if !known(name) {
 		return ChannelError("unknown channel " + name)
 	}
-	store := secrets.New(d, d)
+	store := secrets.New(settings.From(ctx), d, d)
 	token, err := store.Value(ctx, TokenKey(name))
 	if err != nil {
 		return err

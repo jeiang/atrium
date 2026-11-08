@@ -123,7 +123,7 @@ func loadCore(ctx context.Context, q db.Querier) (core, error) {
 			return nil
 		}},
 	} {
-		found, err := settings.Default.Resolve(ctx, q, field.key)
+		found, err := settings.From(ctx).Resolve(ctx, q, field.key)
 		if err != nil {
 			return core{}, err
 		}
@@ -134,11 +134,11 @@ func loadCore(ctx context.Context, q db.Querier) (core, error) {
 	return c, nil
 }
 
-func pinned(env Env, key string) (string, bool) {
-	if value, _, ok := settings.Default.Pin(key); ok {
+func pinned(reg *settings.Registry, env Env, key string) (string, bool) {
+	if value, _, ok := reg.Pin(key); ok {
 		return value, true
 	}
-	if def, ok := settings.Default.Lookup(key); ok {
+	if def, ok := reg.Lookup(key); ok {
 		if value := stripped(env, EnvName(def)); value != "" {
 			return value, true
 		}
@@ -146,11 +146,13 @@ func pinned(env Env, key string) (string, bool) {
 	return "", false
 }
 
-func coreValue(env Env, key string) (string, bool) {
-	if value, ok := pinned(env, key); ok {
+func (s *State) coreValue(env Env, key string) (string, bool) {
+	if value, ok := pinned(s.settings, env, key); ok {
 		return value, true
 	}
-	c := loadState().core
+	s.mu.RLock()
+	c := s.core
+	s.mu.RUnlock()
 	switch key {
 	case KeyTZ:
 		return c.tz, c.tz != ""
@@ -164,20 +166,20 @@ func coreValue(env Env, key string) (string, bool) {
 	return "", false
 }
 
-func TZName(env Env) string {
-	if value, ok := coreValue(env, KeyTZ); ok {
+func (s *State) TZName(env Env) string {
+	if value, ok := s.coreValue(env, KeyTZ); ok {
 		return value
 	}
 	return Timezone
 }
 
-func PublicURL(env Env) string {
-	value, _ := coreValue(env, KeyPublicURL)
+func (s *State) PublicURL(env Env) string {
+	value, _ := s.coreValue(env, KeyPublicURL)
 	return strings.TrimRight(value, "/")
 }
 
-func HTTPTimeout(env Env) time.Duration {
-	if value, ok := coreValue(env, KeyHTTPTimeout); ok {
+func (s *State) HTTPTimeout(env Env) time.Duration {
+	if value, ok := s.coreValue(env, KeyHTTPTimeout); ok {
 		if n, ok := py.ParseInt(value); ok {
 			return time.Duration(n) * time.Second
 		}
@@ -185,8 +187,8 @@ func HTTPTimeout(env Env) time.Duration {
 	return defaultHTTPTimeout * time.Second
 }
 
-func Limit(ctx context.Context, q db.Querier, key string) (int, error) {
-	found, err := settings.Default.Resolve(ctx, q, key)
+func (s *State) Limit(ctx context.Context, q db.Querier, key string) (int, error) {
+	found, err := s.settings.Resolve(ctx, q, key)
 	if err != nil {
 		return 0, err
 	}
@@ -194,8 +196,8 @@ func Limit(ctx context.Context, q db.Querier, key string) (int, error) {
 	return int(n), err
 }
 
-func SnoozeChoices(ctx context.Context, q db.Querier) ([]int, error) {
-	found, err := settings.Default.Resolve(ctx, q, KeySnoozeChoices)
+func (s *State) SnoozeChoices(ctx context.Context, q db.Querier) ([]int, error) {
+	found, err := s.settings.Resolve(ctx, q, KeySnoozeChoices)
 	if err != nil {
 		return nil, err
 	}

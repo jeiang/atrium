@@ -154,7 +154,9 @@ func cleanArgs(wiki notion.Wiki, args tool.Args) (aliases, sources []string, err
 	return aliases, sources, err
 }
 
-func today(tc *tool.Context) (string, error) { return notion.LocalDate(tc.Now(), tc.Env) }
+func today(ctx context.Context, tc *tool.Context) (string, error) {
+	return notion.LocalDate(ctx, tc.Now(), tc.Env)
+}
 
 func editedText(v any) string {
 	s, _ := v.(string)
@@ -202,7 +204,7 @@ func (w write) finish(ctx context.Context, tc *tool.Context, client *notion.Clie
 	if err != nil {
 		return 0, err
 	}
-	date, err := today(tc)
+	date, err := today(ctx, tc)
 	if err != nil {
 		return 0, err
 	}
@@ -294,7 +296,7 @@ func createPage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 				". Update that page, or pass allow_duplicate=true if this is genuinely a different entity.")
 		}
 	}
-	date, err := today(tc)
+	date, err := today(ctx, tc)
 	if err != nil {
 		return nil, err
 	}
@@ -417,7 +419,7 @@ func updatePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	if err != nil {
 		return nil, err
 	}
-	date, err := today(tc)
+	date, err := today(ctx, tc)
 	if err != nil {
 		return nil, err
 	}

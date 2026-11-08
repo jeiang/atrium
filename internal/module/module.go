@@ -35,6 +35,8 @@ type Context struct {
 	Current  func() *Snapshot
 	Evaluate func(context.Context, db.Querier) (*Snapshot, error)
 	Env      config.Env
+	Settings *settings.Registry
+	State    *config.State
 }
 
 func (c Context) Enabled(name string) bool {

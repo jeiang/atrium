@@ -62,7 +62,7 @@ func (s *service) ruleViews(ctx context.Context, account string) []ruleView {
 
 func (s *service) folderMap(ctx context.Context) map[string][]triage.Folder {
 	out := map[string][]triage.Folder{}
-	for _, spec := range config.Accounts() {
+	for _, spec := range config.From(ctx).Accounts() {
 		folders, err := triage.Folders(ctx, s.deps.DB.Read, spec.Name)
 		check(err)
 		out[spec.Name] = folders
@@ -74,7 +74,7 @@ func (s *service) learnedFor(ctx context.Context, account string) ([]learnedView
 	names := []string{account}
 	if account == "" {
 		names = names[:0]
-		for _, spec := range config.Accounts() {
+		for _, spec := range config.From(ctx).Accounts() {
 			names = append(names, spec.Name)
 		}
 	}

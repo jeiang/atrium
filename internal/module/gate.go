@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/sdnotify"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -51,8 +52,8 @@ func (s *Set) gatePage(owner string, p web.Page) web.Page {
 		}
 	}
 	if public := p.Public; public != nil {
-		p.Public = func(cfg config.Config, env config.Env, d *db.DB) func(*http.Request) bool {
-			check := public(cfg, env, d)
+		p.Public = func(cfg config.Config, env config.Env, d *db.DB, reg *settings.Registry) func(*http.Request) bool {
+			check := public(cfg, env, d, reg)
 			return func(r *http.Request) bool {
 				snap := s.Current()
 				return snap != nil && snap.Enabled(owner) && check(r)

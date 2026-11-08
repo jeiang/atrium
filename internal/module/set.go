@@ -21,10 +21,19 @@ type Set struct {
 	cur  atomic.Pointer[Snapshot]
 }
 
-var active atomic.Pointer[Set]
+type setKey struct{}
 
-func IsEnabled(name string) bool {
-	s := active.Load()
+func WithSet(ctx context.Context, s *Set) context.Context {
+	return context.WithValue(ctx, setKey{}, s)
+}
+
+func SetFrom(ctx context.Context) *Set {
+	s, _ := ctx.Value(setKey{}).(*Set)
+	return s
+}
+
+func IsEnabled(ctx context.Context, name string) bool {
+	s := SetFrom(ctx)
 	if s == nil {
 		return false
 	}
@@ -32,11 +41,11 @@ func IsEnabled(name string) bool {
 	return snap != nil && snap.Enabled(name)
 }
 
-func NewSet(reg *settings.Registry, env config.Env, mods ...Module) (*Set, error) {
+func NewSet(reg *settings.Registry, st *config.State, env config.Env, mods ...Module) (*Set, error) {
 	s := &Set{reg: reg, env: env}
 	var regs []Registration
 	for _, m := range mods {
-		regs = append(regs, m.Register(Context{Current: s.Current, Evaluate: s.Evaluate, Env: env}))
+		regs = append(regs, m.Register(Context{Current: s.Current, Evaluate: s.Evaluate, Env: env, Settings: reg, State: st}))
 	}
 	s.regs = regs
 	if err := s.validate(); err != nil {
@@ -47,7 +56,6 @@ func NewSet(reg *settings.Registry, env config.Env, mods ...Module) (*Set, error
 		return nil, err
 	}
 	s.regs = ordered
-	active.Store(s)
 	return s, nil
 }
 
@@ -234,7 +242,7 @@ func (n *Snapshot) Registry() (*registry.Registry, error) {
 }
 
 func (n *Snapshot) buildRegistry() (*registry.Registry, error) {
-	out := registry.New()
+	out := registry.New(n.set.reg)
 	for _, r := range n.set.regs {
 		if r.Tools == nil || !n.Enabled(r.Name) {
 			continue

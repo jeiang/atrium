@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"io"
 	"os"
 
 	"github.com/jeiang/atrium/internal/assistant/assistantmodule"
@@ -29,21 +30,30 @@ var version = "dev"
 
 func main() {
 	ctx, stop := cli.SignalContext(context.Background())
-	code := newApp(config.OS, settings.Default, sdk.Modules()).Run(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	reg := settings.New()
+	code := newApp(config.OS, reg, config.NewState(reg), sdk.Modules()).Run(ctx, os.Args[1:], os.Stdout, os.Stderr)
 	stop()
 	os.Exit(code)
 }
 
-func newApp(env config.Env, reg *settings.Registry, mods []module.Module) *cli.App {
-	app := cli.New("atrium", logx.Setup)
+func newApp(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module) *cli.App {
+	return newAppWith(env, reg, st, mods, imapclient.Opener, nil, logx.Setup)
+}
+
+func newAppWith(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64, setup func(io.Writer)) *cli.App {
+	set := newSet(env, reg, st, mods, clients, now)
+	app := cli.New("atrium", setup)
 	app.Version = version
 	app.Env = env
+	app.Settings = reg
+	app.State = st
+	app.SetupContext = func(ctx context.Context) context.Context { return module.WithSet(ctx, set) }
 	app.Bootstrap = bootstrap(env, reg)
-	app.Add(commands(env, reg, mods, imapclient.Opener, nil)...)
+	app.Add(append(set.Commands(), web.ServeCommand(set, set.Pages()...))...)
 	return app
 }
 
-func newSet(env config.Env, reg *settings.Registry, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64) *module.Set {
+func newSet(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64) *module.Set {
 	var set *module.Set
 	guard := func(ctx context.Context, q db.Querier, key, value string) error {
 		return set.Guard(ctx, q, key, value)
@@ -59,14 +69,9 @@ func newSet(env config.Env, reg *settings.Registry, mods []module.Module, client
 		notifymodule.Module{},
 		grafanamodule.Module{},
 	}, mods...)
-	set, err := module.NewSet(reg, env, all...)
+	set, err := module.NewSet(reg, st, env, all...)
 	if err != nil {
 		panic(err)
 	}
 	return set
-}
-
-func commands(env config.Env, reg *settings.Registry, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64) []*cli.Command {
-	set := newSet(env, reg, mods, clients, now)
-	return append(set.Commands(), web.ServeCommand(set, set.Pages()...))
 }

@@ -47,7 +47,7 @@ func DraftEventProposals(ctx context.Context, svc *service.Service, limit int, n
 	lines := make([]string, len(items))
 	for i, item := range items {
 		ids[i] = item.MessageID
-		lines[i] = strconv.FormatInt(item.MessageID, 10) + " (calendar=" + string(defaultCalendar(item.Account)) + ")"
+		lines[i] = strconv.FormatInt(item.MessageID, 10) + " (calendar=" + string(defaultCalendar(ctx, item.Account)) + ")"
 	}
 	title := "Event candidates"
 	threadID, err := threads.Create(ctx, svc.DB.Write, now(), threads.Spec{Kind: threads.Cron, Title: &title})

@@ -5,11 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -134,11 +136,14 @@ func loadGoldenData(t *testing.T) goldenData {
 }
 
 type fixture struct {
-	t    *testing.T
-	dir  string
-	env  map[string]string
-	app  *cli.App
-	base string
+	t        *testing.T
+	dir      string
+	mu       sync.Mutex
+	env      map[string]string
+	app      *cli.App
+	settings *settings.Registry
+	state    *config.State
+	base     string
 }
 
 func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin string) *fixture {
@@ -147,12 +152,11 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	copyTree(t, filepath.Join(golden.Dir(), "state", "cache"), filepath.Join(dir, "cache"))
 	copyTree(t, filepath.Join(golden.Dir(), "state", "contacts"), filepath.Join(dir, "contacts"))
 	srv := llmstub.Server(t, nil)
-	caldavSrv := caldav.New(t, data.environment["ICLOUD_APPLE_ID"], data.environment["ICLOUD_APP_PASSWORD"])
+	caldavURL := caldav.New(t, data.environment["ICLOUD_APPLE_ID"], data.environment["ICLOUD_APP_PASSWORD"]).URL + "/"
 	vars := map[string]string{}
 	for k, v := range data.environment {
 		vars[k] = v
 	}
-	vars[calendar.CalDAVEnv] = caldavSrv.URL + "/"
 	vars["ATRIUM_CALENDAR_ICLOUD_APPLE_ID"] = vars["ICLOUD_APPLE_ID"]
 	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
@@ -161,6 +165,7 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	vars["ATRIUM_CHAT_URL"] = srv.URL + "/v1"
 	vars["ATRIUM_EMBED_URL"] = srv.URL + "/v1"
 	vars["ATRIUM_NOTION_BASE_URL"] = "http://127.0.0.1:9"
+	vars[calendar.CalDAVEnv] = caldavURL
 	for k, v := range extraEnv {
 		vars[k] = v
 	}
@@ -189,30 +194,20 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 		delete(vars, name)
 	}
 	env := config.Map(vars)
-	t.Cleanup(func() { settings.Default.SetPins(nil) })
 	fakes := data.world.fakes()
 	clients := func(config.Config) mail.OpenFunc {
 		return func(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
 			return mail.Gated(fakes[opts.Account], opts.Q), nil
 		}
 	}
-	app := cli.New("atrium", logx.Setup)
-	app.Env = env
-	app.Bootstrap = bootstrap(env, settings.Default)
-	app.Add(commands(env, settings.Default, nil, clients, func() float64 { return data.world.Clock })...)
+	reg := settings.New()
+	st := config.NewState(reg)
+	app := newAppWith(env, reg, st, nil, clients, func() float64 { return data.world.Clock }, quietLog)
 	app.Stdin = strings.NewReader(stdin)
 	copyFile(t, filepath.Join(golden.Dir(), "world.db"), filepath.Join(dir, "atrium.db"))
-	f := &fixture{t: t, dir: dir, env: vars, app: app}
-	envMu.Lock()
-	activeFixture = f
-	envMu.Unlock()
-	t.Cleanup(func() {
-		envMu.Lock()
-		defer envMu.Unlock()
-		if activeFixture == f {
-			activeFixture = nil
-		}
-	})
+	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: reg, state: st}
+	fixturesByTest.Store(t, f)
+	fixturesByTest.Store(testKey(t), f)
 	seedNotionVectors(t, filepath.Join(f.dir, "atrium.db"))
 	if code, _, stderr := f.Run(context.Background(), "reindex"); code != cli.ExitOK {
 		t.Fatalf("embed the seeded world: exit %d stderr %q", code, stderr)
@@ -221,23 +216,41 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 }
 
 func (f *fixture) lookup(name string) (string, bool) {
-	envMu.RLock()
+	f.mu.Lock()
 	v, ok := f.env[name]
-	envMu.RUnlock()
+	f.mu.Unlock()
 	if ok {
 		return v, true
 	}
-	return testLookup(name)
+	return testLookupFor(f.t)(name)
+}
+
+func (f *fixture) set(name, value string) (string, bool) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	old, had := f.env[name]
+	f.env[name] = value
+	return old, had
+}
+
+func (f *fixture) unset(name string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	delete(f.env, name)
+}
+
+func (f *fixture) snapshotEnv() map[string]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return maps.Clone(f.env)
 }
 
 func (f *fixture) loadPins() {
-	envMu.RLock()
-	pins, err := config.LoadPins(config.Map(f.env), settings.Default)
-	envMu.RUnlock()
+	pins, err := config.LoadPins(config.Map(f.snapshotEnv()), f.settings)
 	if err != nil {
 		f.t.Fatal(err)
 	}
-	settings.Default.SetPins(pins)
+	f.settings.SetPins(pins)
 }
 
 func (f *fixture) Run(ctx context.Context, argv ...string) (code int, stdout, stderr string) {
@@ -247,10 +260,20 @@ func (f *fixture) Run(ctx context.Context, argv ...string) (code int, stdout, st
 	return code, out.String(), errs.String()
 }
 
+func (f *fixture) runLogged(ctx context.Context, argv ...string) (code int, stdout, stderr string) {
+	f.loadPins()
+	f.app.SetLogSetup(logx.Setup)
+	defer f.app.SetLogSetup(quietLog)
+	var out, errs lockedBuffer
+	code = f.app.Run(ctx, argv, &out, &errs)
+	return code, out.String(), errs.String()
+}
+
 func (f *fixture) Serve() string {
 	if f.base == "" {
 		f.loadPins()
-		f.base = startServeIn(f.t, f.dir)
+		base, _, _ := startServeApp(f.t, f.app, &lockedBuffer{})
+		f.base = base
 	}
 	return f.base
 }
@@ -274,6 +297,7 @@ func seedNotionVectors(t *testing.T, path string) {
 }
 
 func TestCLIGoldens(t *testing.T) {
+	t.Parallel()
 	var index []cliGolden
 	if err := json.Unmarshal(golden.ReadFile(t, "cli", "index.json"), &index); err != nil {
 		t.Fatal(err)
@@ -281,6 +305,7 @@ func TestCLIGoldens(t *testing.T) {
 	data := loadGoldenData(t)
 	for _, g := range index {
 		t.Run(g.Name, func(t *testing.T) {
+			t.Parallel()
 			f := newFixture(t, data, goldenEnv(t, g), g.Stdin)
 			tmp := filepath.Join(f.dir, "tmp")
 			if err := os.MkdirAll(tmp, 0o777); err != nil {
@@ -320,6 +345,7 @@ func TestCLIGoldens(t *testing.T) {
 }
 
 func TestWritingCommandsTakeTheDatabaseLock(t *testing.T) {
+	t.Parallel()
 	data := loadGoldenData(t)
 	for _, argv := range [][]string{{"live", "rebaseline"}, {"live", "deletions"}, {"loops", "refresh"}, {"watches", "refresh"}} {
 		t.Run(strings.Join(argv, " "), func(t *testing.T) {

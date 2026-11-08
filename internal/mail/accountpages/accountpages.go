@@ -83,8 +83,8 @@ func (h handlers) ctx(r *http.Request) context.Context {
 
 func (h handlers) accounts(ctx context.Context) ([]account, error) {
 	var out []account
-	for _, a := range config.Accounts() {
-		password, _ := config.Password(a.Name)
+	for _, a := range config.From(ctx).Accounts() {
+		password, _ := config.From(ctx).Password(a.Name)
 		v := account{ID: a.Name, Label: a.Label, Preset: a.Preset, Login: a.Login, Enabled: a.Enabled, Pinned: a.Pinned, PasswordSet: password != "", State: integrations.Untested}
 		err := h.d.DB.Read.QueryRowContext(ctx, "SELECT state, reason FROM integration_health WHERE name = ?", healthName(a.Name)).Scan(&v.State, &v.Reason)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -138,8 +138,8 @@ func (h handlers) fail(w http.ResponseWriter, r *http.Request, failed string, fo
 	}
 }
 
-func (h handlers) stored(id string) (config.AccountSpec, error) {
-	a, ok := config.Account(id)
+func (h handlers) stored(ctx context.Context, id string) (config.AccountSpec, error) {
+	a, ok := config.From(ctx).Account(id)
 	switch {
 	case !ok:
 		return a, errNotFound
@@ -173,7 +173,7 @@ func (h handlers) add(w http.ResponseWriter, r *http.Request) {
 	case !h.d.DB.Encrypted():
 		err = settings.EncryptionRequired(config.PasswordKey(a.Name))
 	default:
-		if _, exists := config.Account(a.Name); exists {
+		if _, exists := config.From(ctx).Account(a.Name); exists {
 			err = refusal(a.Name + " is already an account id")
 		}
 	}
@@ -192,7 +192,7 @@ func (h handlers) add(w http.ResponseWriter, r *http.Request) {
 
 func (h handlers) update(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	current, err := h.stored(id)
+	current, err := h.stored(h.ctx(r), id)
 	if errors.Is(err, errNotFound) {
 		http.NotFound(w, r)
 		return
@@ -203,7 +203,7 @@ func (h handlers) update(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		password := web.FormString(form, "password", "")
 		login := strings.TrimSpace(web.FormString(form, "login", current.Login))
-		next, _ := config.Password(id)
+		next, _ := config.From(ctx).Password(id)
 		if password != "" {
 			next = config.NormalizePassword(password)
 		}
@@ -227,7 +227,7 @@ func (h handlers) update(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handlers) save(ctx context.Context, a config.AccountSpec, password string, setPassword, tested bool) error {
-	if err := config.RegisterPassword(a.Name); err != nil {
+	if err := config.From(ctx).RegisterPassword(a.Name); err != nil {
 		return err
 	}
 	err := h.d.DB.WithTx(ctx, func(tx *sql.Tx) error {
@@ -237,14 +237,14 @@ func (h handlers) save(ctx context.Context, a config.AccountSpec, password strin
 			return err
 		}
 		if setPassword {
-			return secrets.NewIn(h.d.DB, tx, h.d.DB).Set(ctx, config.PasswordKey(a.Name), password, "ui")
+			return secrets.NewIn(settings.From(ctx), h.d.DB, tx, h.d.DB).Set(ctx, config.PasswordKey(a.Name), password, "ui")
 		}
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	if err := config.LoadStoredAccounts(ctx, h.d.DB.Read); err != nil {
+	if err := config.From(ctx).LoadStoredAccounts(ctx, h.d.DB.Read); err != nil {
 		return err
 	}
 	if tested {
@@ -255,14 +255,14 @@ func (h handlers) save(ctx context.Context, a config.AccountSpec, password strin
 
 func (h handlers) test(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	a, ok := config.Account(id)
+	a, ok := config.From(h.ctx(r)).Account(id)
 	if !ok {
 		http.NotFound(w, r)
 		return
 	}
 	ctx := h.ctx(r)
 	state, reason := integrations.OK, ""
-	password, _ := config.Password(id)
+	password, _ := config.From(ctx).Password(id)
 	if err := imapclient.Login(ctx, a, password); err != nil {
 		state, reason = integrations.Failing, err.Error()
 	}
@@ -278,7 +278,7 @@ func (h handlers) test(w http.ResponseWriter, r *http.Request) {
 
 func (h handlers) remove(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	_, err := h.stored(id)
+	_, err := h.stored(h.ctx(r), id)
 	if errors.Is(err, errNotFound) {
 		http.NotFound(w, r)
 		return
@@ -289,7 +289,7 @@ func (h handlers) remove(w http.ResponseWriter, r *http.Request) {
 			if _, err := tx.ExecContext(ctx, "DELETE FROM mail_accounts WHERE id = ?", id); err != nil {
 				return err
 			}
-			if err := secrets.NewIn(h.d.DB, tx, h.d.DB).Delete(ctx, config.PasswordKey(id)); err != nil {
+			if err := secrets.NewIn(settings.From(ctx), h.d.DB, tx, h.d.DB).Delete(ctx, config.PasswordKey(id)); err != nil {
 				return err
 			}
 			_, err := tx.ExecContext(ctx, "DELETE FROM integration_health WHERE name = ?", healthName(id))
@@ -297,7 +297,7 @@ func (h handlers) remove(w http.ResponseWriter, r *http.Request) {
 		})
 	}
 	if err == nil {
-		err = config.LoadStoredAccounts(ctx, h.d.DB.Read)
+		err = config.From(ctx).LoadStoredAccounts(ctx, h.d.DB.Read)
 	}
 	if err != nil {
 		h.fail(w, r, id, nil, err)

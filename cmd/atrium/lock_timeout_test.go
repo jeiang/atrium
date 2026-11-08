@@ -12,7 +12,9 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const lockHolderEnv = "ATRIUM_LOCK_TIMEOUT_TEST_HOLDER"
@@ -29,10 +31,14 @@ func TestMain(m *testing.M) {
 		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
 		os.Exit(0)
 	}
+	extModules()
+	reg := settings.New()
+	newApp(config.OS, reg, config.NewState(reg), nil)
 	os.Exit(m.Run())
 }
 
 func TestRefreshReportsExclusiveLockTimeout(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	d, err := db.Connect(path)
@@ -72,7 +78,7 @@ func TestRefreshReportsExclusiveLockTimeout(t *testing.T) {
 	}
 
 	var out, stderr bytes.Buffer
-	code := defaultApp().Run(context.Background(), []string{"loops", "refresh"}, &out, &stderr)
+	code := defaultApp(t).Run(context.Background(), []string{"loops", "refresh"}, &out, &stderr)
 	if code == cli.ExitOK || !strings.Contains(stderr.String(), "timed out after") || !strings.Contains(stderr.String(), path+".lock") {
 		t.Fatalf("loops refresh = (%d, stdout %q, stderr %q), want non-zero and a clear lock timeout", code, out.String(), stderr.String())
 	}

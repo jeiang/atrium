@@ -72,7 +72,7 @@ func TestCredentialIntegrationsTestWithSpecificReasonsAndSaveOnlyWorkingSecrets(
 	gone := httptest.NewServer(http.NotFoundHandler())
 	gone.Close()
 
-	dir, api := moduleFixture(t, flagsExcept("", ""))
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_NOTION_BASE_URL", notionSrv.URL)
 	api.RejectKey = "sk-ant-bad"
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
@@ -139,7 +139,7 @@ func TestCredentialIntegrationsTestWithSpecificReasonsAndSaveOnlyWorkingSecrets(
 		t.Error("the working Anthropic key was not stored write-only")
 	}
 
-	if got := runApp("settings", "get", notion.TokenKey); got.code != cli.ExitError || strings.Contains(got.stdout, "ntn_legacy") || !strings.Contains(got.stderr, "is a secret") {
+	if got := runApp(t, "settings", "get", notion.TokenKey); got.code != cli.ExitError || strings.Contains(got.stdout, "ntn_legacy") || !strings.Contains(got.stderr, "is a secret") {
 		t.Errorf("settings get of a secret: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 }

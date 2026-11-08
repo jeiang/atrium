@@ -108,8 +108,8 @@ func pending(ctx context.Context, d *db.DB, account string) ([]row, error) {
 	})
 }
 
-func defaultCalendar(account string) calendar.Target {
-	if config.Preset(account) == config.Gmail {
+func defaultCalendar(ctx context.Context, account string) calendar.Target {
+	if config.From(ctx).Preset(account) == config.Gmail {
 		return calendar.Google
 	}
 	return calendar.ICloud
@@ -158,7 +158,7 @@ func proposeInvites(ctx context.Context, p *calendar.Proposals, r row, invites [
 	made := 0
 	for _, invite := range invites {
 		source := py.Dict{{Key: "message_id", Value: r.id}, {Key: "subject", Value: r.subject}, {Key: "from", Value: r.fromAddr}, {Key: "invitation", Value: true}}
-		_, created, err := p.Propose(ctx, invite.Raw(defaultCalendar(r.account)), source, "ics:"+invite.UID)
+		_, created, err := p.Propose(ctx, invite.Raw(defaultCalendar(ctx, r.account)), source, "ics:"+invite.UID)
 		var refused calendar.ProposalError
 		if errors.As(err, &refused) {
 			log.Warn(fmt.Sprintf("message %d: invitation %s skipped: %s", r.id, invite.UID, refused))

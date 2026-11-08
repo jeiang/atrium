@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net"
 	"net/http"
+	"os"
 	"strconv"
 	"time"
 
@@ -20,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/sdnotify"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
@@ -68,7 +70,7 @@ type Page struct {
 	Module    Module
 	Templates fs.FS
 	Globals   map[string]any
-	Public    func(config.Config, config.Env, *db.DB) func(*http.Request) bool
+	Public    func(config.Config, config.Env, *db.DB, *settings.Registry) func(*http.Request) bool
 	Home      string
 	Start     func(context.Context, *Deps) error
 	Nav       []tpl.NavItem
@@ -116,13 +118,15 @@ func ServeCommand(boot Boot, pages ...Page) *cli.Command {
 }
 
 type serveArgs struct {
-	host  string
-	port  int
-	auth  []string
-	hosts []string
-	pages []Page
-	env   config.Env
-	boot  Boot
+	host     string
+	port     int
+	auth     []string
+	hosts    []string
+	pages    []Page
+	env      config.Env
+	settings *settings.Registry
+	state    *config.State
+	boot     Boot
 
 	forceDisableAuth bool
 }
@@ -138,6 +142,7 @@ func publicHosts(given []string, env config.Env) []string {
 }
 
 func serve(env *cli.Env, a serveArgs) int {
+	a.settings, a.state = settings.From(env.Ctx), config.From(env.Ctx)
 	hosts := publicHosts(a.hosts, a.env)
 	a, policy, ok := resolveAuth(env.Stderr, a, hosts)
 	if !ok {
@@ -156,7 +161,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 		return err
 	}
 	defer func() { _ = d.Close() }()
-	if _, err := config.Location(a.env); err != nil {
+	if _, err := a.state.Location(a.env); err != nil {
 		return fmt.Errorf("the tz setting is not a time zone: %w", err)
 	}
 	if _, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx); err != nil {
@@ -186,7 +191,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 			modules = append(modules, p.Module)
 		}
 		if p.Public != nil {
-			public = append(public, p.Public(cfg, a.env, d))
+			public = append(public, p.Public(cfg, a.env, d, a.settings))
 		}
 		if p.Templates != nil {
 			templates = append(templates, p.Templates)
@@ -204,11 +209,11 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 			log.Warn("oidc sign-in is not set up; nobody can sign in until it is", logx.Err, err.Error())
 		}
 	}
-	render, err := NewRenderer(tpl.Config{Modules: templates, Globals: globals}, nav...)
+	render, err := NewRenderer(tpl.Config{Modules: templates, Globals: globals, State: a.state}, nav...)
 	if err != nil {
 		return err
 	}
-	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, Policy: &policy, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, Home: home, OnReady: func(deps *Deps) error {
+	srv, err := New(Options{Ctx: ctx, Cfg: cfg, Env: a.env, DB: d, Settings: a.settings, State: a.state, Auth: a.auth, Policy: &policy, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, Home: home, OnReady: func(deps *Deps) error {
 		if err := a.boot.Start(ctx, deps); err != nil {
 			return err
 		}
@@ -229,6 +234,12 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 	listener, err := net.Listen("tcp", net.JoinHostPort(a.host, strconv.Itoa(a.port)))
 	if err != nil {
 		return err
+	}
+	if path, _ := a.env("ATRIUM_SERVE_ADDR_FILE"); path != "" {
+		if err := os.WriteFile(path, []byte(listener.Addr().String()), 0o600); err != nil {
+			_ = listener.Close()
+			return err
+		}
 	}
 	return listenAndShutdown(ctx, listener, srv, a.env)
 }

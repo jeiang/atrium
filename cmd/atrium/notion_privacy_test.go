@@ -10,6 +10,7 @@ import (
 )
 
 func TestNotionSyncTreatsAFormulaPrivacyValueAsPrivate(t *testing.T) {
+	t.Parallel()
 	const pageID = "11111111-1111-1111-1111-111111111111"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

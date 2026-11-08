@@ -2,25 +2,50 @@ package config
 
 import (
 	"context"
-	"sync/atomic"
+	"sync"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
-type state struct {
+type State struct {
+	mu        sync.RWMutex
 	core      core
 	accounts  []AccountSpec
 	passwords map[string]string
+	settings  *settings.Registry
 }
 
-var current atomic.Pointer[state]
+func NewState(reg *settings.Registry) *State {
+	return &State{settings: reg}
+}
 
-func loadState() *state {
-	if s := current.Load(); s != nil {
-		return s
+type stateKey struct{}
+
+type envKey struct{}
+
+func WithEnv(ctx context.Context, env Env) context.Context {
+	return context.WithValue(ctx, envKey{}, env)
+}
+
+func EnvFrom(ctx context.Context) Env {
+	env, _ := ctx.Value(envKey{}).(Env)
+	if env == nil {
+		panic("config: no environment in context")
 	}
-	return &state{}
+	return env
+}
+
+func With(ctx context.Context, s *State) context.Context {
+	return context.WithValue(ctx, stateKey{}, s)
+}
+
+func From(ctx context.Context) *State {
+	s, _ := ctx.Value(stateKey{}).(*State)
+	if s == nil {
+		panic("config: no state in context")
+	}
+	return s
 }
 
 func OpenStore(ctx context.Context, env Env) (*db.DB, *settings.Store, error) {
@@ -36,35 +61,45 @@ func OpenStore(ctx context.Context, env Env) (*db.DB, *settings.Store, error) {
 		_ = d.Close()
 		return nil, nil, err
 	}
-	return d, settings.NewStore(settings.Default, d, d), nil
+	return d, settings.NewStore(settings.From(ctx), d, d), nil
 }
 
 func Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
-	if settings.Default.PinSource() == nil {
-		pins, err := LoadPins(env, settings.Default)
+	return From(ctx).Boot(ctx, env, d, cfg)
+}
+
+func (s *State) Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
+	reg := s.settings
+	if reg.PinSource() == nil {
+		pins, err := LoadPins(env, reg)
 		if err != nil {
 			return err
 		}
-		settings.Default.SetPins(pins)
+		reg.SetPins(pins)
 	}
 	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
+		return err
+	}
+	if err := settings.NewStore(reg, d, d).Load(ctx); err != nil {
 		return err
 	}
 	c, err := loadCore(ctx, d.Read)
 	if err != nil {
 		return err
 	}
-	files, filePasswords, err := loadAccounts(env)
+	files, filePasswords, err := loadAccounts(env, reg)
 	if err != nil {
 		return err
 	}
 	if err := reconcileAccounts(ctx, d, files); err != nil {
 		return err
 	}
-	accounts, passwords, err := loadAccountsFromDB(ctx, d.Read, filePasswords)
+	accounts, passwords, err := s.loadAccountsFromDB(ctx, d.Read, filePasswords)
 	if err != nil {
 		return err
 	}
-	current.Store(&state{core: c, accounts: accounts, passwords: passwords})
+	s.mu.Lock()
+	s.core, s.accounts, s.passwords = c, accounts, passwords
+	s.mu.Unlock()
 	return nil
 }

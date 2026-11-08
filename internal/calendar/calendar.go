@@ -101,7 +101,9 @@ func (r Ref) Dict() py.Dict {
 	return py.Dict{{Key: "calendar", Value: r.Calendar}, {Key: "uid", Value: r.UID}}
 }
 
-func Zone(env config.Env) (*time.Location, error) { return config.Location(env) }
+func Zone(ctx context.Context, env config.Env) (*time.Location, error) {
+	return config.From(ctx).Location(env)
+}
 
 func targetError() error { return Error("calendar must be one of " + TargetsText) }
 
@@ -253,7 +255,7 @@ func (l Listing) Dict() py.Dict {
 }
 
 func ListEvents(ctx context.Context, env config.Env, set Settings, start, end any, filter Filter) (*Listing, error) {
-	tz, err := Zone(env)
+	tz, err := Zone(ctx, env)
 	if err != nil {
 		return nil, err
 	}

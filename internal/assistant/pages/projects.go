@@ -164,7 +164,7 @@ func (p *pages) projectShow(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	limit, err := config.Limit(r.Context(), p.deps.DB.Read, config.KeyProjectThreads)
+	limit, err := config.From(r.Context()).Limit(r.Context(), p.deps.DB.Read, config.KeyProjectThreads)
 	check(err)
 	listed, err := threads.ListThreads(r.Context(), p.deps.DB.Read, threads.ListOpts{Limit: limit, Archived: view == archived, ProjectID: id})
 	check(err)

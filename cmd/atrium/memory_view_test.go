@@ -10,8 +10,8 @@ import (
 )
 
 func TestMemoryViewReducesWithSummaries(t *testing.T) {
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	if ran := runApp("agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
@@ -25,7 +25,7 @@ func TestMemoryViewReducesWithSummaries(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	first := runApp("memory", "view", "1")
+	first := runApp(t, "memory", "view", "1")
 	if first.code != cli.ExitOK {
 		t.Fatalf("first view: %d %s", first.code, first.stderr)
 	}
@@ -35,7 +35,7 @@ func TestMemoryViewReducesWithSummaries(t *testing.T) {
 	if _, err := d.Write.Exec("UPDATE memory_nodes SET state = 'summary', text = 's', bytes = 1 WHERE thread_id = 1 AND level > 0"); err != nil {
 		t.Fatal(err)
 	}
-	second := runApp("memory", "view", "1")
+	second := runApp(t, "memory", "view", "1")
 	if second.code != cli.ExitOK {
 		t.Fatalf("second view: %d %s", second.code, second.stderr)
 	}
@@ -57,7 +57,7 @@ func TestMemoryViewReducesWithSummaries(t *testing.T) {
 	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('view_high', '3000')"); err != nil {
 		t.Fatal(err)
 	}
-	third := runApp("memory", "view", "1")
+	third := runApp(t, "memory", "view", "1")
 	if third.code != cli.ExitOK {
 		t.Fatalf("third view: %d %s", third.code, third.stderr)
 	}
@@ -67,7 +67,7 @@ func TestMemoryViewReducesWithSummaries(t *testing.T) {
 	if _, err := d.Write.Exec("INSERT INTO thread_messages (thread_id, seq, role, content_json, created_at) VALUES (1, 700, 'user', ?, 0)", text); err != nil {
 		t.Fatal(err)
 	}
-	fourth := runApp("memory", "view", "1")
+	fourth := runApp(t, "memory", "view", "1")
 	if fourth.code != cli.ExitOK {
 		t.Fatalf("fourth view: %d %s", fourth.code, fourth.stderr)
 	}
