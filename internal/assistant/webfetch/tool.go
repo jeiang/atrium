@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/textutil"
+	"github.com/jeiang/atrium/internal/textx"
 )
 
 const schemaTextDefault = 12000
@@ -109,7 +110,7 @@ func handle(ctx context.Context, f *Fetcher, tc *tool.Context, args tool.Args) (
 		{Key: "untrusted", Value: true},
 		{Key: "url", Value: page.URL},
 		{Key: "title", Value: title},
-		{Key: "text", Value: py.Clip(body, int(maxChars))},
+		{Key: "text", Value: textx.Clip(body, int(maxChars))},
 		{Key: "truncated", Value: int64(utf8.RuneCountInString(body)) > maxChars},
 	}, nil
 }

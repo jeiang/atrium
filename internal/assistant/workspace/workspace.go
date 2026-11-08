@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/textx"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
@@ -60,10 +61,10 @@ func CleanPlan(ctx context.Context, q db.Querier, items any) ([]PlanItem, error)
 			done, _ = step.Get("done")
 		}
 		text, isText := rawText.(string)
-		if !isText || py.Strip(text) == "" {
+		if !isText || strings.TrimSpace(text) == "" {
 			return nil, PlanError("each step needs a non-empty text")
 		}
-		out = append(out, PlanItem{Text: py.Clip(py.Strip(text), maxChars), Done: py.Truthy(done)})
+		out = append(out, PlanItem{Text: textx.Clip(strings.TrimSpace(text), maxChars), Done: py.Truthy(done)})
 	}
 	return out, nil
 }

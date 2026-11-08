@@ -17,7 +17,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -233,7 +232,7 @@ func Import(ctx context.Context, d *db.DB, items []Item, now float64) (Imported,
 	}
 	seen := map[string]string{}
 	for _, item := range items {
-		name := py.Strip(item.Name)
+		name := strings.TrimSpace(item.Name)
 		if first, dup := seen[name]; dup {
 			return out, Error(fmt.Sprintf("%s: %q is also defined in %s", item.Source, name, first))
 		}
@@ -242,12 +241,12 @@ func Import(ctx context.Context, d *db.DB, items []Item, now float64) (Imported,
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
 		out = Imported{}
 		for _, item := range items {
-			name := py.Strip(item.Name)
+			name := strings.TrimSpace(item.Name)
 			existing, err := Get(ctx, tx, name)
 			if err != nil {
 				return err
 			}
-			if existing != nil && existing.Description == strings.Join(py.Split(item.Description), " ") && existing.Body == py.Strip(item.Body) {
+			if existing != nil && existing.Description == strings.Join(strings.Fields(item.Description), " ") && existing.Body == strings.TrimSpace(item.Body) {
 				out.Unchanged = append(out.Unchanged, name)
 				continue
 			}

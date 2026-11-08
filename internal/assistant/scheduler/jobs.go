@@ -9,7 +9,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -128,7 +127,7 @@ type NewJob struct {
 }
 
 func CreateJob(ctx context.Context, q db.Querier, n NewJob) (int64, error) {
-	name, prompt := py.Strip(n.Name), py.Strip(n.Prompt)
+	name, prompt := strings.TrimSpace(n.Name), strings.TrimSpace(n.Prompt)
 	if name == "" || prompt == "" {
 		return 0, Error("name and prompt are required")
 	}
@@ -151,7 +150,7 @@ func CreateJob(ctx context.Context, q db.Querier, n NewJob) (int64, error) {
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO jobs (name, prompt, schedule, tz, kind, state, next_due, created_by, created_in_thread, created_at, prompt_by) "+
 			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		name, prompt, py.Strip(n.Schedule), n.TZ, n.Kind, StateActive, due, n.CreatedBy, n.ThreadID, n.Now, nullable(n.PromptBy))
+		name, prompt, strings.TrimSpace(n.Schedule), n.TZ, n.Kind, StateActive, due, n.CreatedBy, n.ThreadID, n.Now, nullable(n.PromptBy))
 	if err != nil {
 		return 0, err
 	}
@@ -182,14 +181,14 @@ func UpdateJob(ctx context.Context, q db.Querier, id int64, now float64, u JobUp
 		args = append(args, v)
 	}
 	if u.Name != nil {
-		name := py.Strip(*u.Name)
+		name := strings.TrimSpace(*u.Name)
 		if name == "" {
 			return nil, Error("name is empty")
 		}
 		set("name", name)
 	}
 	if u.Prompt != nil {
-		prompt := py.Strip(*u.Prompt)
+		prompt := strings.TrimSpace(*u.Prompt)
 		if prompt == "" {
 			return nil, Error("prompt is empty")
 		}
@@ -220,7 +219,7 @@ func UpdateJob(ctx context.Context, q db.Querier, id int64, now float64, u JobUp
 		}
 	}
 	if u.Schedule != nil {
-		set("schedule", py.Strip(*u.Schedule))
+		set("schedule", strings.TrimSpace(*u.Schedule))
 	}
 	if u.Enabled != nil {
 		set("state", state)

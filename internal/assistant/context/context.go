@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/textx"
 )
 
 func Supersede(ctx gocontext.Context, q db.Querier, threadID, fromSeq int64) error {
@@ -135,7 +136,7 @@ func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool strin
 		"result_id": resultID,
 		"tool":      tool,
 		"tokens":    tokens,
-		"preview":   py.Clip(body, t.PreviewChars),
+		"preview":   textx.Clip(body, t.PreviewChars),
 		"note":      StubNote,
 	}
 	return py.JSONDumps(stub, valueJSON), &resultID, nil

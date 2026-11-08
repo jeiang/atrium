@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/textx"
 )
 
 const (
@@ -97,7 +98,7 @@ func clock(text string) (int, int, error) {
 }
 
 func cronValue(token string, index int) (int, error) {
-	if v, ok := cronNames[index][py.Lower(token)]; ok {
+	if v, ok := cronNames[index][strings.ToLower(token)]; ok {
 		return v, nil
 	}
 	v, ok := number(token)
@@ -179,7 +180,7 @@ func newSpec(kind, tz string, loc *time.Location, minutes, hours, dom, months, d
 }
 
 func Parse(text, tz string) (Spec, error) {
-	text = py.Strip(text)
+	text = strings.TrimSpace(text)
 	if text == "" {
 		return Spec{}, Error("schedule is empty")
 	}
@@ -187,8 +188,8 @@ func Parse(text, tz string) (Spec, error) {
 	if err != nil {
 		return Spec{}, err
 	}
-	words := py.Split(text)
-	switch py.Lower(words[0]) {
+	words := strings.Fields(text)
+	switch strings.ToLower(words[0]) {
 	case KindDaily:
 		if len(words) != 2 {
 			return Spec{}, Error("daily schedules look like 'daily 07:30'")
@@ -202,7 +203,7 @@ func Parse(text, tz string) (Spec, error) {
 		var day int
 		var ok bool
 		if len(words) == 3 {
-			day, ok = days[py.Lower(py.Clip(words[1], 3))]
+			day, ok = days[strings.ToLower(textx.Clip(words[1], 3))]
 		}
 		if !ok {
 			return Spec{}, Error("weekly schedules look like 'weekly mon 07:30'")

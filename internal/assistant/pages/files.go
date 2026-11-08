@@ -105,7 +105,7 @@ func (p *pages) readUploads(w http.ResponseWriter, r *http.Request) (url.Values,
 	case errors.Is(err, errBadBody):
 		p.fail(w, r, http.StatusBadRequest, badBodyDetail)
 		return nil, nil, false
-	case err != nil && py.Strip(web.FormString(form, "text", "")) == "":
+	case err != nil && strings.TrimSpace(web.FormString(form, "text", "")) == "":
 		p.failure(w, r, "Nothing sent", "Type a message to go with the files.")
 		return nil, nil, false
 	case err != nil:
@@ -190,7 +190,7 @@ func (p *pages) chatFileRaw(w http.ResponseWriter, r *http.Request) {
 }
 
 func contentType(media string) string {
-	if strings.HasPrefix(media, "text/") && !strings.Contains(py.Lower(media), "charset=") {
+	if strings.HasPrefix(media, "text/") && !strings.Contains(strings.ToLower(media), "charset=") {
 		return media + "; charset=utf-8"
 	}
 	return media
@@ -386,7 +386,7 @@ func previewOf(found files.Row, previewBytes int) (render string, text string, r
 	if body == nil {
 		return "", "", rows, false, nil
 	}
-	suffix := py.Lower(py.PathSuffix(py.PathName(found.Path)))
+	suffix := strings.ToLower(py.PathSuffix(py.PathName(found.Path)))
 	switch {
 	case slices.Contains(markdownTypes, media) || suffix == ".md" || suffix == ".markdown":
 		return "markdown", *body, rows, truncated, nil

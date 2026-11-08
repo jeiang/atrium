@@ -305,7 +305,7 @@ func messageText(content []json.RawMessage) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("journal: %w", err)
 	}
-	return py.Strip(strings.Join(texts, "\n")), nil
+	return strings.TrimSpace(strings.Join(texts, "\n")), nil
 }
 
 func ReindexThread(ctx context.Context, q db.Querier, threadID int64) error {

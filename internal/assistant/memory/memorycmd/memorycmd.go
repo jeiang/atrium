@@ -2,6 +2,7 @@ package memorycmd
 
 import (
 	"fmt"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant"
@@ -9,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
@@ -91,7 +91,7 @@ func workCommand(cfgEnv config.Env) *cli.Command {
 				if err != nil {
 					return cli.Fail(env, err)
 				}
-				client, err := anthropic.New(py.Strip(key), cfgEnv)
+				client, err := anthropic.New(strings.TrimSpace(key), cfgEnv)
 				if err != nil {
 					return cli.Fail(env, err)
 				}
@@ -185,7 +185,7 @@ func backfillCommand(cfgEnv config.Env) *cli.Command {
 				if err != nil {
 					return cli.Fail(env, err)
 				}
-				client, err := anthropic.New(py.Strip(key), cfgEnv)
+				client, err := anthropic.New(strings.TrimSpace(key), cfgEnv)
 				if err != nil {
 					return cli.Fail(env, err)
 				}

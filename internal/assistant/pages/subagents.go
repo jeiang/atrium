@@ -5,10 +5,10 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/subagents"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -96,7 +96,7 @@ func (p *pages) subagentSave(w http.ResponseWriter, r *http.Request) {
 	}
 	ctx := detached(r)
 	err := p.deps.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		existing, err := subagents.Get(ctx, tx, py.Strip(draft.Name))
+		existing, err := subagents.Get(ctx, tx, strings.TrimSpace(draft.Name))
 		if err != nil {
 			return err
 		}
@@ -110,7 +110,7 @@ func (p *pages) subagentSave(w http.ResponseWriter, r *http.Request) {
 	if errors.As(err, &refused) {
 		editing := ""
 		if web.FormString(form, "from", "") == "edit" {
-			existing, getErr := subagents.Get(ctx, p.deps.DB.Read, py.Strip(draft.Name))
+			existing, getErr := subagents.Get(ctx, p.deps.DB.Read, strings.TrimSpace(draft.Name))
 			check(getErr)
 			if existing != nil {
 				editing = existing.Name
@@ -120,7 +120,7 @@ func (p *pages) subagentSave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	check(err)
-	settingsRedirect(w, "/settings/subagents?saved="+url.QueryEscape(py.Strip(draft.Name)))
+	settingsRedirect(w, "/settings/subagents?saved="+url.QueryEscape(strings.TrimSpace(draft.Name)))
 }
 
 func (p *pages) subagentToggle(w http.ResponseWriter, r *http.Request) {

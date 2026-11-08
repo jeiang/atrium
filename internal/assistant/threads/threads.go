@@ -23,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/textx"
 )
 
 type Kind string
@@ -256,15 +257,15 @@ func setPinSafe(ctx context.Context, q db.Querier, key, value string) error {
 }
 
 func TitleFrom(text string) string {
-	for _, line := range py.SplitLines(text) {
-		line = py.Strip(line)
+	for _, line := range textx.SplitLines(text) {
+		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
 		if utf8.RuneCountInString(line) <= TitleChars {
 			return line
 		}
-		return py.Clip(line, TitleChars-1) + "…"
+		return textx.Clip(line, TitleChars-1) + "…"
 	}
 	return ""
 }

@@ -4,8 +4,6 @@ import (
 	"strings"
 
 	"golang.org/x/net/html"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var (
@@ -21,7 +19,7 @@ func setOf(names ...string) map[string]bool {
 	return m
 }
 
-func collapse(s string) string { return strings.Join(py.Split(s), " ") }
+func collapse(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 func PlainText(markup string) (title, text string) {
 	var (

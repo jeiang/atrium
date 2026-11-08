@@ -109,7 +109,7 @@ func citationsOf(block py.Dict) []Citation {
 			if title == "" {
 				title = "attachment"
 			}
-			found = append(found, Citation{Title: title, Cited: py.Strip(cited)})
+			found = append(found, Citation{Title: title, Cited: strings.TrimSpace(cited)})
 		}
 	}
 	return found
@@ -225,7 +225,7 @@ func Items(messages []journal.Message, calls []journal.ToolCall, drafts map[int6
 				activity = nil
 				items = addAnswer(items, base, b.Value)
 			case b.Kind == block.Text:
-				if body := b.Text(); py.Strip(body) != "" {
+				if body := b.Text(); strings.TrimSpace(body) != "" {
 					step(base, &Step{Kind: StepNote, Text: body})
 				}
 			case b.Kind == block.Thinking || b.Kind == block.RedactedThinking:

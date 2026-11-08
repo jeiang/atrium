@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/textx"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/store"
@@ -46,7 +47,7 @@ func ShortArgs(args json.RawMessage) (string, error) {
 	if utf8.RuneCountInString(text) <= ArgsChars {
 		return text, nil
 	}
-	return py.Clip(text, ArgsChars-1) + "…", nil
+	return textx.Clip(text, ArgsChars-1) + "…", nil
 }
 
 func PreviewOf(content any) string {
@@ -57,7 +58,7 @@ func PreviewOf(content any) string {
 	if utf8.RuneCountInString(text) <= PreviewChars {
 		return text
 	}
-	return py.Clip(text, PreviewChars-1) + "…"
+	return textx.Clip(text, PreviewChars-1) + "…"
 }
 
 func Emit(ctx context.Context, q db.Querier, runID int64, kind string, data any, now float64) error {

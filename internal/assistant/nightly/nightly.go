@@ -158,7 +158,7 @@ func lines(ctx context.Context, q db.Querier, threadID int64, start, end float64
 			return nil, err
 		}
 		for _, text := range texts {
-			if py.Strip(text) != "" {
+			if strings.TrimSpace(text) != "" {
 				out = append(out, m.Role+": "+text)
 			}
 		}

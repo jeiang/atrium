@@ -113,7 +113,7 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	text := py.Strip(web.FormString(form, "text", ""))
+	text := strings.TrimSpace(web.FormString(form, "text", ""))
 	if text == "" {
 		p.failure(w, r, "Nothing sent", emptyMessage)
 		return
