@@ -54,7 +54,7 @@ These options are removed; setting one now fails evaluation as an unknown option
 - `grafanaUrl` → `settings.grafana.grafana_url`
 - `vdirsyncer` options and the `stateDir/vdirsyncer/` directory → `stateDir/mirrors/`; the old directory is not read and the mirrors re-sync.
 
-atrium also logs a warning at startup for each environment variable it no longer reads (for example `ATRIUM_MODE`) and names the variable to use instead.
+The earlier unprefixed environment variables (`ATRIUM_MODE`, `ATRIUM_TZ`, `NTFY_URL` and the others listed in [Settings and secrets](behavior.md#settings-and-secrets)) are not read and do not pin anything.
 
 ## Web listeners
 
@@ -83,6 +83,15 @@ atrium also logs a warning at startup for each environment variable it no longer
 | `backup.onCalendar` | string | `"daily"` | systemd `OnCalendar` expression of the timer; the timer is persistent. |
 
 The module never removes old archives. Pruning and copying archives off the host belong to the host's own backup tooling. An archive made under a database key restores only with that key; the key must be kept outside the host's state (for example in the host's secrets store plus an offline copy), because after loss of the key a keyed archive cannot be opened. After `atrium db rekey`, archives made before the rekey still need the old key. The `restore-drill` flake check runs `atrium backup` and `atrium restore --verify` on the golden database, plaintext and keyed, and expects a corrupted archive, a wrong key and a missing key to be refused.
+
+## Monitoring
+
+| Option | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `monitoring.ruleFile` | path | `nix/monitoring/atrium.rules.yml` | Prometheus alert rules for atrium's ops metrics, for `services.prometheus.ruleFiles` or vmalert. Read-only. |
+| `monitoring.dashboardFile` | path | `nix/monitoring/atrium-dashboard.json` | Grafana dashboard for atrium's ops metrics, for Grafana dashboard provisioning. Read-only. |
+
+The metrics on the ops listener are listed in [Operations](behavior.md#operations).
 
 ## Units and atrium-run
 
