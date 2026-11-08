@@ -68,7 +68,7 @@ func (s *Service) Branch(ctx context.Context, threadID, seq int64) (int64, error
 		return 0, err
 	}
 	for _, m := range messages {
-		content, err := files.CloneContent(ctx, s.DB.Write, files.Scope{ThreadID: threadID, ProjectID: source.ProjectID}, m.Content, child, s.now())
+		content, err := files.CloneContent(ctx, s.DB.Write, files.ScopeOf(threadID, source.ProjectID), m.Content, child, s.now())
 		if err != nil {
 			return 0, err
 		}

@@ -95,7 +95,7 @@ func (p *pages) parseUploads(w http.ResponseWriter, r *http.Request) (url.Values
 
 func uploadReadError(err error, messageCap int) error {
 	if errors.As(err, new(*http.MaxBytesError)) {
-		return files.FileError(fmt.Sprintf("files in one message must total under %d MB", messageCap>>20))
+		return files.MessageCapError(messageCap)
 	}
 	return errBadBody
 }
@@ -123,13 +123,6 @@ func archivedProject(project *projects.Project, verb string) (string, bool) {
 	return fmt.Sprintf("“%s” is archived. Restore it to %s.", project.Name, verb), true
 }
 
-func (p *pages) remote(ctx context.Context) files.RemoteDeleter {
-	if client, err := p.svc.ResolveClient(ctx); err == nil {
-		return client
-	}
-	return nil
-}
-
 func (p *pages) threadFile(w http.ResponseWriter, r *http.Request) (*files.Row, string, bool) {
 	threadID, errs := pathInt(r, "thread_id")
 	fileID, more := pathInt(r, "file_id")
@@ -145,7 +138,12 @@ func (p *pages) threadFile(w http.ResponseWriter, r *http.Request) (*files.Row, 
 	}
 	found, err := files.Get(r.Context(), p.deps.DB.Read, fileID)
 	check(err)
-	if found == nil || found.ThreadID == nil || *found.ThreadID != threadID {
+	if found == nil {
+		p.fail(w, r, http.StatusNotFound, "unknown file")
+		return nil, "", false
+	}
+	owner, owned := files.OwnerOf(found)
+	if !owned || owner != files.ThreadOwner(threadID) {
 		p.fail(w, r, http.StatusNotFound, "unknown file")
 		return nil, "", false
 	}
@@ -276,7 +274,7 @@ func (p *pages) projectFilesUpload(w http.ResponseWriter, r *http.Request) {
 	}
 	if err == nil {
 		limit := project.ContextLimit
-		_, err = files.IngestUploads(detached(r), p.deps.DB.Write, p.deps.Cfg.FilesDir(), uploads, p.now(), files.Owner{ProjectID: projectID}, &limit)
+		_, err = files.IngestUploads(detached(r), p.deps.DB, p.deps.Cfg.FilesDir(), uploads, p.now(), files.ProjectOwner(projectID), &limit)
 	}
 	var refused files.FileError
 	if errors.As(err, &refused) {
@@ -304,7 +302,12 @@ func (p *pages) projectFile(w http.ResponseWriter, r *http.Request) (int64, *fil
 	}
 	found, err := files.Get(r.Context(), p.deps.DB.Read, fileID)
 	check(err)
-	if found == nil || found.ProjectID == nil || *found.ProjectID != projectID {
+	if found == nil {
+		p.fail(w, r, http.StatusNotFound, "unknown file")
+		return 0, nil, false
+	}
+	owner, owned := files.OwnerOf(found)
+	if !owned || owner != files.ProjectOwner(projectID) {
 		p.fail(w, r, http.StatusNotFound, "unknown file")
 		return 0, nil, false
 	}
@@ -331,7 +334,7 @@ func (p *pages) projectFileDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	_, err := files.DeleteOne(ctx, p.deps.DB.Write, p.remote(ctx), found.ID)
+	_, err := files.DeleteOne(ctx, p.deps.DB.Write, found.ID)
 	check(err)
 	p.projectFiles(w, r, projectID, http.StatusOK, nil)
 }

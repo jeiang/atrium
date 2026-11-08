@@ -58,13 +58,18 @@ type site struct {
 	mu     sync.Mutex
 	clock  float64
 	runner *loop.Runner
+	fetch  *webfetch.Fetcher
 }
 
-func allTools(t *testing.T) *registry.Registry {
+func allTools(t *testing.T, fetchers ...*webfetch.Fetcher) *registry.Registry {
 	t.Helper()
+	fetch := webfetch.Tools()
+	if len(fetchers) > 0 && fetchers[0] != nil {
+		fetch = []tool.Tool{webfetch.Tool(fetchers[0])}
+	}
 	r := registry.New()
 	for _, tools := range [][]tool.Tool{
-		mailtools.Tools(), mediatools.Tools(), notify.Tools(), webfetch.Tools(), nightly.Tools(),
+		mailtools.Tools(), mediatools.Tools(), notify.Tools(), fetch, nightly.Tools(),
 		contexttools.Tools(), recalltools.Tools(), plantools.Tools(), profiletools.Tools(), proposetools.Tools(),
 		scheduletools.Tools(), skillstools.Tools(), notiontools.Tools(),
 		grafanatools.Tools(), calendartools.Tools(), contactsmodule.Tools(),
@@ -79,6 +84,8 @@ func allTools(t *testing.T) *registry.Registry {
 type siteOption func(*site)
 
 func withRunner(r *loop.Runner) siteOption { return func(s *site) { s.runner = r } }
+
+func withWebfetch(f *webfetch.Fetcher) siteOption { return func(s *site) { s.fetch = f } }
 
 func newSite(t *testing.T, options ...siteOption) *site {
 	t.Helper()
@@ -103,7 +110,11 @@ func newSiteOn(t *testing.T, d *db.DB, options ...siteOption) *site {
 	if err != nil {
 		t.Fatal(err)
 	}
-	module := Module(Options{Runner: s.runner, Registry: allTools(t), Client: s.api.Client(), Now: s.now, Poll: 10 * time.Millisecond, KeepAlive: 200 * time.Millisecond})
+	reg := allTools(t, s.fetch)
+	if all, err := s.runner.Registry.All(); err == nil && len(all) == 0 {
+		s.runner.Registry = reg
+	}
+	module := Module(Options{Runner: s.runner, Registry: reg, Client: s.api.Client(), Now: s.now, Poll: 10 * time.Millisecond, KeepAlive: 200 * time.Millisecond})
 	s.srv, err = web.New(web.Options{Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, Render: render, Modules: []web.Module{module}})
 	if err != nil {
 		t.Fatal(err)

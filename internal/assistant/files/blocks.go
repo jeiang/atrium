@@ -89,15 +89,19 @@ func unavailable(d py.Dict) (json.RawMessage, error) {
 }
 
 type Scope struct {
-	ThreadID  int64
-	ProjectID *int64
+	thread  int64
+	project *int64
+}
+
+func ScopeOf(threadID int64, projectID *int64) Scope {
+	return Scope{thread: threadID, project: projectID}
 }
 
 func (s Scope) owns(r *Row) bool {
-	if r.ThreadID != nil && *r.ThreadID == s.ThreadID {
+	if r.ThreadID != nil && *r.ThreadID == s.thread {
 		return true
 	}
-	return s.ProjectID != nil && r.ProjectID != nil && *r.ProjectID == *s.ProjectID
+	return s.project != nil && r.ProjectID != nil && *r.ProjectID == *s.project
 }
 
 func apiBlocks(ctx context.Context, q db.Querier, scope Scope, d py.Dict) ([]json.RawMessage, error) {
@@ -121,7 +125,7 @@ func apiBlocks(ctx context.Context, q db.Querier, scope Scope, d py.Dict) ([]jso
 	if found.Text != nil {
 		block = documentBlock{
 			Type: "document", Source: textSource{Type: "text", MediaType: "text/plain", Data: *found.Text},
-			Title: found.Name, Context: DocumentContext, Citations: citations{Enabled: true}, CacheControl: cache,
+			Title: found.Name, Context: documentContext, Citations: citations{Enabled: true}, CacheControl: cache,
 		}
 	} else {
 		raw, err := os.ReadFile(found.Path)
@@ -134,7 +138,7 @@ func apiBlocks(ctx context.Context, q db.Querier, scope Scope, d py.Dict) ([]jso
 		}
 		source := textSource{Type: "base64", MediaType: found.MediaType, Data: base64.StdEncoding.EncodeToString(raw)}
 		if found.MediaType == PDFType {
-			block = documentBlock{Type: "document", Source: source, Title: found.Name, Context: DocumentContext, Citations: citations{Enabled: true}, CacheControl: cache}
+			block = documentBlock{Type: "document", Source: source, Title: found.Name, Context: documentContext, Citations: citations{Enabled: true}, CacheControl: cache}
 		} else {
 			block = imageBlock{Type: "image", Source: source, CacheControl: cache}
 		}
@@ -218,13 +222,13 @@ func ProjectBlocks(ctx context.Context, q db.Querier, projectID int64) ([]json.R
 	}
 	out := make([]json.RawMessage, 0, len(rows)+1)
 	for _, r := range rows {
-		b, err := marshal(newAttachment(r.ID, r.Name, r.MediaType, KindOf(r.MediaType), r.Tokens))
+		b, err := marshal(newAttachment(r.ID, r.Name, r.MediaType, kindOf(r.MediaType), r.Tokens))
 		if err != nil {
 			return nil, err
 		}
 		out = append(out, b)
 	}
-	b, err := marshal(textBlock{Type: "text", Text: ProjectNotice})
+	b, err := marshal(textBlock{Type: "text", Text: projectNotice})
 	if err != nil {
 		return nil, err
 	}
