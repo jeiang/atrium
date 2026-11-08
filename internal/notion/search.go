@@ -140,11 +140,7 @@ type nearRow struct {
 	distance float64
 }
 
-func knn(ctx context.Context, q Querier, blob []byte, k int, includePrivate bool) ([]nearRow, error) {
-	idx, err := embed.Active(ctx, q)
-	if err != nil {
-		return nil, err
-	}
+func knn(ctx context.Context, q Querier, idx embed.Index, blob []byte, k int, includePrivate bool) ([]nearRow, error) {
 	var total int
 	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+idx.NotionTable()).Scan(&total); err != nil {
 		return nil, err
@@ -196,8 +192,8 @@ func lexical(ctx context.Context, q Querier, match string, includePrivate bool, 
 	})
 }
 
-func semantic(ctx context.Context, q Querier, vector []float64, includePrivate bool, limit int) ([]int64, error) {
-	rows, err := knn(ctx, q, embed.Serialize(vector), limit, includePrivate)
+func semantic(ctx context.Context, q Querier, idx embed.Index, vector []float64, includePrivate bool, limit int) ([]int64, error) {
+	rows, err := knn(ctx, q, idx, embed.Serialize(vector), limit, includePrivate)
 	if err != nil {
 		return nil, err
 	}
@@ -398,11 +394,15 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 	}
 	var sem []int64
 	available := true
-	embedURL, err := embed.EmbedURL(ctx, q)
+	idx, err := embed.Active(ctx, q)
 	if err != nil {
 		return Result{}, err
 	}
-	modelCtx, err := embed.WithModels(ctx, q)
+	embedURL, err := embed.EmbedURLFor(ctx, q, idx)
+	if err != nil {
+		return Result{}, err
+	}
+	modelCtx, err := embed.WithIndex(ctx, q, idx)
 	if err != nil {
 		return Result{}, err
 	}
@@ -411,7 +411,7 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 		if len(vectors) == 0 {
 			err = fmt.Errorf("%w: list index out of range", httpx.ErrRange)
 		} else {
-			sem, err = semantic(ctx, q, vectors[0], includePrivate, limits.Branch)
+			sem, err = semantic(ctx, q, idx, vectors[0], includePrivate, limits.Branch)
 		}
 	}
 	if err != nil {
@@ -546,7 +546,7 @@ func RelatedPages(ctx context.Context, q Querier, pageID string, limit int) ([]R
 	if err != nil {
 		return nil, err
 	}
-	near, err := knn(ctx, q, blob, limit+len(taken)+1, allowPrivate)
+	near, err := knn(ctx, q, idx, blob, limit+len(taken)+1, allowPrivate)
 	if err != nil {
 		return nil, err
 	}

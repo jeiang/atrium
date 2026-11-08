@@ -315,6 +315,10 @@ func EmbedURL(ctx context.Context, q endpoint.Querier) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	return EmbedURLFor(ctx, q, active)
+}
+
+func EmbedURLFor(ctx context.Context, q endpoint.Querier, active Index) (string, error) {
 	return endpoint.EmbedURL(ctx, q, active.URL)
 }
 
@@ -323,5 +327,9 @@ func WithModels(ctx context.Context, q endpoint.Querier) (context.Context, error
 	if err != nil {
 		return ctx, err
 	}
+	return WithIndex(ctx, q, active)
+}
+
+func WithIndex(ctx context.Context, q endpoint.Querier, active Index) (context.Context, error) {
 	return endpoint.WithModels(ctx, q, endpoint.Active{URL: active.URL, Model: active.Model, Dim: active.Dimension})
 }
