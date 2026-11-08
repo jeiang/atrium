@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -73,6 +72,15 @@ func plan[T any](fn func(context.Context, T) (any, error)) proposals.Undoer {
 		}
 		return fn(ctx, p)
 	}
+}
+
+type moveBackResult struct {
+	Restored int `json:"restored"`
+	Missing  int `json:"missing"`
+}
+
+type messagesResult struct {
+	Messages int `json:"messages"`
 }
 
 func gmailAccount(recorded string) string {
@@ -153,7 +161,7 @@ func undoMoveBack(ctx context.Context, open mail.OpenFunc, q db.Querier, p MoveB
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "restored", Value: restored}, {Key: "missing", Value: missing}}, nil
+	return moveBackResult{Restored: restored, Missing: missing}, nil
 }
 
 func undoGmailLabels(ctx context.Context, open mail.OpenFunc, q db.Querier, p GmailLabels) (any, error) {
@@ -174,7 +182,7 @@ func undoGmailLabels(ctx context.Context, open mail.OpenFunc, q db.Querier, p Gm
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "messages", Value: len(p.UIDs)}}, nil
+	return messagesResult{Messages: len(p.UIDs)}, nil
 }
 
 func undoGmailUntrash(ctx context.Context, open mail.OpenFunc, q db.Querier, p GmailUntrash) (any, error) {
@@ -197,7 +205,7 @@ func undoGmailUntrash(ctx context.Context, open mail.OpenFunc, q db.Querier, p G
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "messages", Value: len(p.UIDs)}}, nil
+	return messagesResult{Messages: len(p.UIDs)}, nil
 }
 
 func undoUnflag(ctx context.Context, open mail.OpenFunc, q db.Querier, p Unflag) (any, error) {
@@ -218,7 +226,7 @@ func undoUnflag(ctx context.Context, open mail.OpenFunc, q db.Querier, p Unflag)
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "messages", Value: len(p.UIDs)}}, nil
+	return messagesResult{Messages: len(p.UIDs)}, nil
 }
 
 func derefOr0(v *uint32) uint32 {
