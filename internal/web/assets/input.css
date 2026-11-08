@@ -414,6 +414,57 @@
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
   }
 
+  .welcome {
+    @apply flex flex-col items-center gap-4 pt-6 text-center md:pt-12;
+  }
+  .welcome-mark {
+    @apply grid size-12 place-items-center rounded-2xl bg-ink font-mono text-2xl font-semibold text-background;
+  }
+
+  .palette {
+    @apply m-0 h-full max-h-none w-full max-w-none bg-transparent p-0 open:flex open:items-start open:justify-center;
+
+    &::backdrop {
+      @apply bg-black/30;
+    }
+  }
+  .palette-box {
+    @apply mx-3 mt-[12vh] flex max-h-[70vh] w-full max-w-xl flex-col overflow-hidden rounded-xl border bg-surface text-ink shadow-xl;
+  }
+  .palette-search {
+    @apply flex h-12 shrink-0 items-center gap-2 border-b px-3;
+
+    & svg {
+      @apply size-4 shrink-0 text-ink-3;
+    }
+    & input {
+      @apply h-full w-full bg-transparent text-sm outline-none placeholder:text-ink-3;
+    }
+  }
+  .palette-list {
+    @apply flex flex-col overflow-y-auto p-1.5;
+    scrollbar-width: thin;
+  }
+  .palette-head {
+    @apply px-2 pt-2 pb-1 text-[11px] font-medium tracking-[0.06em] text-ink-3 uppercase;
+  }
+  .palette-option {
+    @apply flex h-9 min-w-0 cursor-pointer items-center gap-2 rounded-lg px-2 text-sm text-ink-2 hover:bg-surface-2;
+
+    & > svg {
+      @apply size-4 shrink-0 text-ink-3;
+    }
+    &[aria-selected="true"] {
+      @apply bg-surface-2 text-ink;
+    }
+  }
+  .palette-hint {
+    @apply ms-auto shrink-0 text-xs text-ink-3;
+  }
+  .palette-empty {
+    @apply px-4 py-6 text-center text-sm text-ink-3;
+  }
+
   .workspace {
     @apply relative flex min-h-[calc(100dvh-3rem)] flex-1 flex-col md:grid md:grid-cols-[minmax(0,1fr)_auto_var(--panel-w)];
   }

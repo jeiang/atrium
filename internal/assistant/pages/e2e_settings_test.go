@@ -79,8 +79,8 @@ func TestAssistantSettings(t *testing.T) {
 func TestUsagePage(t *testing.T) {
 	s := newSite(t)
 	empty := status(t, s.get("/settings/usage"), http.StatusOK)
-	mustContain(t, empty, "No usage yet", "$0.00", "$150.00", "0% of $150 used; unattended runs pause at 80%, chat at 100%", "Spent this month", "0 API calls")
-	mustNotContain(t, empty, "Prompt tokens (all calls)")
+	mustContain(t, empty, "No usage yet", "$0.00", "$150.00", `title="Unattended runs pause at 80%, chat at 100%">0% of $150 used</span>`, "Spent this month", "0 API calls")
+	mustNotContain(t, empty, "Prompt tokens (all calls)", "Costs appear here")
 
 	thread := s.newThread("", 0)
 	s.exec("INSERT INTO runs (thread_id, kind, model, effort, state, started_at) VALUES (?, 'chat', 'm', 'medium', 'done', ?)", thread, s.clock)

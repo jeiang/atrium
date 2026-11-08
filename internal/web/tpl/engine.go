@@ -76,6 +76,7 @@ type Frame struct {
 	BrandURL          string
 	Footer            []NavItem
 	Tabs              []NavItem
+	Pages             []NavItem
 	Path              string
 	Theme             string
 	Rail              bool

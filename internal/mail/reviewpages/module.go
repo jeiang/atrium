@@ -103,6 +103,7 @@ func Module(o Options) web.Module {
 		})
 
 		r.Get("/review", s.needsPage)
+		r.Get("/review/strip", s.needsStrip)
 
 		r.Get("/proposals/{proposal_id}", s.proposalLink)
 		r.Get("/proposals/{proposal_id}/card", s.proposalCard)

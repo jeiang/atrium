@@ -40,7 +40,7 @@
 <section class="flex flex-col gap-3" aria-labelledby="channels-h">
   <div class="flex flex-wrap items-center justify-between gap-2">
     <h2 id="channels-h" class="text-sm font-medium">Channels</h2>
-    {{if $d.URL}}<form method="post" action="/settings/notifications/probe"><input type="hidden" name="csrf_token" value="{{$csrf}}"><button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "lock"}}Check privacy</button></form>{{end}}
+    {{if $d.URL}}<form method="post" action="/settings/notifications/probe"><input type="hidden" name="csrf_token" value="{{$csrf}}"><button type="submit" class="btn" data-size="sm" data-variant="outline" title="Check whether each topic can be read without its token">{{icon "lock"}}Check privacy</button></form>{{end}}
   </div>
   <div class="grid gap-3 md:grid-cols-3">
     {{range $d.Channels}}
@@ -56,7 +56,7 @@
       <form method="post" action="/settings/notifications/channels/{{.Name}}/content" class="flex items-end gap-2">
         <input type="hidden" name="csrf_token" value="{{$csrf}}">
         <label class="sr-only" for="content-{{.Name}}">Content</label>
-        <select id="content-{{.Name}}" name="content" class="text-xs">
+        <select id="content-{{.Name}}" name="content" class="text-xs" title="Message text sent to this channel: auto shows full text only on private topics">
           {{$c := .Content}}{{range (list "auto" "full" "title")}}<option value="{{.}}"{{if eq . $c}} selected{{end}}>{{.}}</option>{{end}}
         </select>
         <button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button>

@@ -8,7 +8,7 @@
     <div role="group" class="field flex-1">
       <label for="wiki-q" class="sr-only">Search the wiki</label>
       <div class="input-group h-9">
-        {{icon "search" "size-4 shrink-0 text-muted-foreground"}}
+        {{icon "search" "ms-3 size-4 shrink-0 p-0 text-muted-foreground"}}
         <input id="wiki-q" name="q" type="search" value="{{$d.Q}}" placeholder="Search the wiki" autocomplete="off">
         {{template "spinner" (dict "id" "wiki-spinner" "label" "Searching")}}
       </div>

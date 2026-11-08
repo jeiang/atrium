@@ -764,3 +764,174 @@ document.addEventListener("DOMContentLoaded", async () => {
   section.querySelector('[data-action="push-enable"]').hidden = known || globalThis.Notification?.permission === "denied";
   section.querySelector('[data-action="push-disable"]').hidden = !known;
 });
+
+actions["fill-composer"] = (button) => {
+  const field = document.getElementById(button.dataset.target);
+  if (!field) return;
+  field.value = button.dataset.text;
+  field.focus();
+  field.setSelectionRange(field.value.length, field.value.length);
+};
+
+const palette = () => document.getElementById("palette");
+const paletteInput = () => document.getElementById("palette-input");
+let paletteRequest = null;
+let paletteTimer = 0;
+
+const fuzzyScore = (query, text) => {
+  if (!query) return 1;
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
+  const at = t.indexOf(q);
+  if (at >= 0) return 1000 - at;
+  let score = 0;
+  let from = 0;
+  let previous = -2;
+  for (const ch of q) {
+    if (ch === " ") continue;
+    const i = t.indexOf(ch, from);
+    if (i < 0) return 0;
+    score += i === previous + 1 ? 5 : 1;
+    previous = i;
+    from = i + 1;
+  }
+  return score;
+};
+
+const paletteOptions = () => [...palette().querySelectorAll('[role="option"]')].filter((option) => !option.closest("[hidden]"));
+
+const paletteSelect = (option) => {
+  const input = paletteInput();
+  palette().querySelectorAll('[role="option"][aria-selected="true"]').forEach((other) => other.setAttribute("aria-selected", "false"));
+  if (!option) {
+    input.removeAttribute("aria-activedescendant");
+    return;
+  }
+  option.setAttribute("aria-selected", "true");
+  input.setAttribute("aria-activedescendant", option.id);
+  option.scrollIntoView({ block: "nearest" });
+};
+
+const paletteFilter = () => {
+  const dialog = palette();
+  const query = paletteInput().value.trim();
+  dialog.querySelectorAll('[role="group"]').forEach((group) => {
+    const threads = group.dataset.paletteGroup === "threads";
+    const ranked = [...group.querySelectorAll('[role="option"]')].map((option, index) => {
+      option.dataset.order ??= String(index);
+      const text = [...option.querySelectorAll("span")].map((span) => span.textContent).join(" ");
+      return { option, score: threads ? 1 : fuzzyScore(query, text) };
+    });
+    ranked.forEach(({ option, score }) => { option.hidden = score === 0; });
+    if (!threads) {
+      ranked.filter(({ score }) => score > 0)
+        .sort((a, b) => b.score - a.score || Number(a.option.dataset.order) - Number(b.option.dataset.order))
+        .forEach(({ option }) => group.appendChild(option));
+    }
+    group.hidden = ranked.every(({ score }) => score === 0);
+  });
+  const options = paletteOptions();
+  dialog.querySelector("[data-palette-empty]").hidden = options.length > 0;
+  paletteSelect(options[0]);
+};
+
+const paletteThreads = () => {
+  const url = palette().dataset.paletteThreads;
+  if (!url) return;
+  clearTimeout(paletteTimer);
+  paletteTimer = setTimeout(async () => {
+    paletteRequest?.abort();
+    paletteRequest = new AbortController();
+    try {
+      const response = await fetch(`${url}?q=${encodeURIComponent(paletteInput().value.trim())}`, { signal: paletteRequest.signal, credentials: "same-origin" });
+      if (!response.ok) return;
+      const template = document.createElement("template");
+      template.innerHTML = await response.text();
+      palette().querySelector("[data-palette-thread-options]").replaceChildren(template.content);
+      paletteFilter();
+    } catch {
+      return;
+    }
+  }, 120);
+};
+
+const openPalette = () => {
+  const dialog = palette();
+  if (!dialog || dialog.open) return;
+  const opener = document.activeElement;
+  paletteInput().value = "";
+  dialog.showModal();
+  if (opener && opener.id) dialogOpeners.set(dialog, opener.id);
+  paletteFilter();
+  paletteThreads();
+  paletteInput().focus();
+};
+
+const paletteRun = (option) => {
+  const dialog = palette();
+  const href = option.dataset.paletteHref;
+  const theme = option.dataset.paletteTheme;
+  if (href) {
+    dialog.close();
+    location.assign(href);
+    return;
+  }
+  if (theme) {
+    const button = document.querySelector(`.sb-theme [data-theme-value="${theme}"]`);
+    if (button) actions["set-theme"](button);
+  }
+  if (option.hasAttribute("data-palette-sidebar")) {
+    if (window.matchMedia("(min-width: 768px)").matches) {
+      const button = document.querySelector('[data-action="toggle-rail"]');
+      if (button) actions["toggle-rail"](button);
+    } else {
+      dialogOpeners.delete(dialog);
+      dialog.close();
+      sidebarOpen(!document.getElementById("sidebar")?.hasAttribute("data-open"));
+      return;
+    }
+  }
+  dialog.close();
+};
+
+actions["open-palette"] = openPalette;
+
+document.addEventListener("keydown", (event) => {
+  if ((event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "k") {
+    const dialog = palette();
+    if (!dialog) return;
+    event.preventDefault();
+    if (dialog.open) dialog.close();
+    else openPalette();
+    return;
+  }
+  if (event.target.id !== "palette-input") return;
+  const options = paletteOptions();
+  const current = options.findIndex((option) => option.getAttribute("aria-selected") === "true");
+  const step = { ArrowDown: 1, ArrowUp: -1 }[event.key];
+  if (step) {
+    event.preventDefault();
+    if (options.length) paletteSelect(options[(current + step + options.length) % options.length]);
+  } else if (event.key === "Home" || event.key === "End") {
+    event.preventDefault();
+    paletteSelect(event.key === "Home" ? options[0] : options[options.length - 1]);
+  } else if (event.key === "Enter") {
+    event.preventDefault();
+    if (current >= 0) paletteRun(options[current]);
+  }
+});
+
+document.addEventListener("input", (event) => {
+  if (event.target.id !== "palette-input") return;
+  paletteFilter();
+  paletteThreads();
+});
+
+document.addEventListener("click", (event) => {
+  const option = event.target.closest && event.target.closest('#palette [role="option"]');
+  if (option) {
+    paletteRun(option);
+    return;
+  }
+  if (event.target.id === "palette") palette().close();
+});

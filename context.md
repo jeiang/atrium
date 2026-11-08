@@ -29,9 +29,15 @@ behavior-parity target.
   dropped.
 - The web interface is server-rendered Go templates with Basecoat, htmx
   and one static script under a strict CSP; a push service worker is the
-  only other script. A sidebar holds New chat, the
+  only other script. A sidebar holds New chat, Today, the
   thread list (pinned, by day, by project groups) and the Review, Library,
   Apps and Settings entries; Review, Library and Apps are tabbed sections.
+  `/chat` is home: a welcome screen with starter prompts until the first
+  thread exists, then the composer, a Needs you strip of up to three
+  review items and the recent threads. Today is one chat thread per
+  calendar day in the configured time zone, found by role and title. A
+  ⌘K / Ctrl+K command palette searches threads, pages and actions. There
+  is no tutorial text; guidance is `title` tooltips on controls.
   Media is the app at `/apps/media`. Projects have no pages of their own
   beyond create and edit. The sidebar collapses to a rail; chat uses a
   centred reading column with serif
@@ -328,10 +334,8 @@ behavior-parity target.
 - **Chat is home.** Five navigation entries: chat and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings.
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
-- **No tutorial text.** A welcome screen appears on first start; guidance uses tooltips.
 - **Settings has six tabs:** Assistant, Mail accounts, Integrations, Notifications, Sign-in, and Usage. Advanced settings move to Nix, the CLI, or the agent.
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
-- **A daily "Today" thread.**
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now (implemented alongside ntfy), APNs with a future iOS app; ntfy is removed after Web Push is checked on a device.
 - **Telemetry:** OpenTelemetry traces to VictoriaTraces, Prometheus metrics, and a `trace_id` in logs.
