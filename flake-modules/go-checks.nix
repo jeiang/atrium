@@ -73,6 +73,16 @@
         ${cmd}
       done
     '';
+    testTags = tags: ''
+      set -o pipefail
+      log=$TMPDIR/go-test.log
+      if ! go test -race -timeout 30m -tags ${tags} ./... 2>&1 | tee "$log"; then
+        echo "=== go-test failure summary ==="
+        grep -E -- '^(--- FAIL|FAIL[[:space:]]|panic:)|DATA RACE|^[[:space:]]+[A-Za-z0-9_]+_test\.go:[0-9]+:' "$log" | sort -u
+        awk 'race && /^==================$/ { exit } race && (/^[A-Z]/ || /jeiang\/atrium/) { sub(/ \+0x[0-9a-f]+$/, ""); print } /WARNING: DATA RACE/ { race = 1 }' "$log" | head -n 22
+        exit 1
+      fi
+    '';
   in {
     checks = {
       go-vet = goCheck "vet" [] (eachDriver ''go vet -tags "$tags" ./...'');
@@ -96,23 +106,9 @@
         diff -r docs/config $TMPDIR/config
       '';
 
-      go-test = goCheck "test" [] ''
-        log=$TMPDIR/go-test.log
-        : >"$log"
-        status=0
-        for tags in libsqlite3,sqlite_fts5 modernc; do
-          echo "tags: $tags"
-          if ! go test -race -timeout 30m -tags "$tags" ./... 2>&1 | tee -a "$log"; then
-            status=1
-          fi
-        done
-        if [ "$status" -ne 0 ]; then
-          echo "=== go-test failure summary ==="
-          grep -E -- '^(--- FAIL|FAIL[[:space:]]|panic:)|DATA RACE|^[[:space:]]+[A-Za-z0-9_]+_test\.go:[0-9]+:' "$log" | sort -u
-          awk 'race && /^==================$/ { exit } race && (/^[A-Z]/ || /jeiang\/atrium/) { sub(/ \+0x[0-9a-f]+$/, ""); print } /WARNING: DATA RACE/ { race = 1 }' "$log" | head -n 22
-          exit 1
-        fi
-      '';
+      go-test = goCheck "test" [] (testTags "libsqlite3,sqlite_fts5");
+
+      go-test-modernc = goCheck "test-modernc" [] (testTags "modernc");
 
       go-licenses = goCheck "licenses" [pkgs.go-licenses] ''
         ${eachDriver ''GOFLAGS="$GOFLAGS -tags=$tags" go-licenses check ./... --disallowed_types=forbidden,unknown''}
