@@ -349,10 +349,11 @@ func (s *Service) lastOperator(ctx context.Context, threadID int64, refusal stri
 	if _, err := Load(ctx, s.DB.Read, s.Env, threadID, s.now()); err != nil {
 		return nil, err
 	}
-	last, err := journal.LastOperatorMessage(ctx, s.DB.Read, threadID)
+	history, err := journal.LoadHistory(ctx, s.DB.Read, threadID)
 	if err != nil {
 		return nil, err
 	}
+	last := history.LastOperator()
 	if last == nil {
 		return nil, NothingToRedo(refusal)
 	}

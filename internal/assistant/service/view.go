@@ -215,7 +215,11 @@ func executionResult(block py.Dict) (any, bool) {
 	return py.JSONDumps(rest, py.JSONOpts{NoEnsureASCII: true}), false
 }
 
-func Items(messages []journal.Message, calls map[journal.CallKey]journal.ToolCall, drafts map[int64]py.Dict) ([]*Item, error) {
+func Items(messages []journal.Message, calls []journal.ToolCall, drafts map[int64]py.Dict) ([]*Item, error) {
+	byKey := make(map[journal.CallKey]journal.ToolCall, len(calls))
+	for _, c := range calls {
+		byKey[journal.CallKey{RunID: c.RunID, ToolUseID: c.ToolUseID}] = c
+	}
 	items := []*Item{}
 	uses := map[any]*Step{}
 	var attached []Attachment
@@ -275,7 +279,7 @@ func Items(messages []journal.Message, calls map[journal.CallKey]journal.ToolCal
 				name, _ := get(block, "name", "").(string)
 				found := &Step{Kind: StepTool, ID: id, Name: name, Args: args}
 				if s, ok := id.(string); ok && m.RunID != nil {
-					if call, ok := calls[journal.CallKey{RunID: *m.RunID, ToolUseID: s}]; ok {
+					if call, ok := byKey[journal.CallKey{RunID: *m.RunID, ToolUseID: s}]; ok {
 						found.State = new(call.State)
 					}
 				}
@@ -469,11 +473,7 @@ func View(ctx context.Context, q db.Querier, threadID int64) (*ThreadView, error
 		return nil, err
 	}
 	v := &ThreadView{Thread: *thread}
-	messages, err := journal.MessagesOf(ctx, q, threadID, false)
-	if err != nil {
-		return nil, err
-	}
-	calls, err := journal.ToolCallsForThread(ctx, q, threadID)
+	history, err := journal.LoadHistory(ctx, q, threadID)
 	if err != nil {
 		return nil, err
 	}
@@ -487,7 +487,7 @@ func View(ctx context.Context, q db.Querier, threadID int64) (*ThreadView, error
 			drafts[id] = d
 		}
 	}
-	if v.Items, err = Items(messages, calls, drafts); err != nil {
+	if v.Items, err = Items(history.Messages, history.Calls, drafts); err != nil {
 		return nil, err
 	}
 	if v.Runs, err = journal.RunsOf(ctx, q, threadID); err != nil {
@@ -505,11 +505,7 @@ func View(ctx context.Context, q db.Querier, threadID int64) (*ThreadView, error
 	if v.Meter, err = MeterOf(ctx, q, *thread); err != nil {
 		return nil, err
 	}
-	last, err := journal.LastOperatorMessage(ctx, q, threadID)
-	if err != nil {
-		return nil, err
-	}
-	if last != nil {
+	if last := history.LastOperator(); last != nil {
 		v.LastOperatorSeq = &last.Seq
 	}
 	if thread.BranchedFromThreadID != nil && *thread.BranchedFromThreadID != 0 {

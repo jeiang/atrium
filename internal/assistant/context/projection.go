@@ -280,12 +280,12 @@ func mergeRoles(messages []Message) []Message {
 }
 
 func tailOf(ctx gocontext.Context, q db.Querier, threadID int64, p Projection) ([]journal.Message, error) {
-	all, err := journal.MessagesOf(ctx, q, threadID, false)
+	history, err := journal.LoadHistory(ctx, q, threadID)
 	if err != nil {
 		return nil, err
 	}
-	out := all[:0:0]
-	for _, m := range all {
+	out := history.Messages[:0:0]
+	for _, m := range history.Messages {
 		if m.Seq >= p.BaseSeq {
 			out = append(out, m)
 		}

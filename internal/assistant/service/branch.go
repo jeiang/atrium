@@ -46,10 +46,11 @@ func (s *Service) Branch(ctx context.Context, threadID, seq int64) (int64, error
 	if source == nil {
 		return 0, UnknownThread(threadID)
 	}
-	all, err := journal.MessagesOf(ctx, s.DB.Read, threadID, false)
+	history, err := journal.LoadHistory(ctx, s.DB.Read, threadID)
 	if err != nil {
 		return 0, err
 	}
+	all := history.Messages
 	if !slices.ContainsFunc(all, func(m journal.Message) bool { return m.Seq == seq }) {
 		return 0, NothingToRedo(fmt.Sprintf("no message %d to branch from", seq))
 	}

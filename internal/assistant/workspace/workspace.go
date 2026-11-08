@@ -1,11 +1,14 @@
 package workspace
 
 import (
+	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
@@ -197,14 +200,10 @@ type resultBlock struct {
 	Content   json.RawMessage `json:"content"`
 }
 
-func resultBodies(ctx context.Context, q db.Querier, threadIDs []int64) (map[string]string, error) {
+func resultBodies(histories []journal.History) map[string]string {
 	bodies := map[string]string{}
-	for _, id := range threadIDs {
-		msgs, err := journal.MessagesOf(ctx, q, id, false)
-		if err != nil {
-			return nil, err
-		}
-		for _, m := range msgs {
+	for _, h := range histories {
+		for _, m := range h.Messages {
 			if m.Role != journal.User {
 				continue
 			}
@@ -217,21 +216,7 @@ func resultBodies(ctx context.Context, q db.Querier, threadIDs []int64) (map[str
 			}
 		}
 	}
-	marks, args := inList(threadIDs)
-	rows, err := q.QueryContext(ctx,
-		"SELECT c.tool_use_id, t.body FROM tool_calls c JOIN runs r ON r.id = c.run_id JOIN tool_results t ON t.result_id = c.result_id "+
-			"WHERE r.thread_id IN ("+marks+")", args...)
-	if err != nil {
-		return nil, err
-	}
-	stored, err := db.Collect(rows, func(r *sql.Rows) ([2]string, error) {
-		var kv [2]string
-		return kv, r.Scan(&kv[0], &kv[1])
-	})
-	for _, kv := range stored {
-		bodies[kv[0]] = kv[1]
-	}
-	return bodies, err
+	return bodies
 }
 
 func inList(ids []int64) (string, []any) {
@@ -242,46 +227,32 @@ func inList(ids []int64) (string, []any) {
 	return strings.TrimSuffix(strings.Repeat("?,", len(ids)), ","), args
 }
 
-type threadCall struct {
-	journal.ToolCall
-	ThreadID int64
-	Via      *string
-}
-
-func callsOfThreads(ctx context.Context, q db.Querier, threadIDs []int64) ([]threadCall, error) {
+func storedBodies(ctx context.Context, q db.Querier, threadIDs []int64) (map[string]string, error) {
 	marks, args := inList(threadIDs)
 	rows, err := q.QueryContext(ctx,
-		"SELECT c.id, c.run_id, c.tool_use_id, c.name, c.args_json, c.args_sha256, c.replay_class, c.state, c.error, c.result_id, "+
-			"c.started_at, c.finished_at, r.thread_id, t.role AS via "+
-			"FROM tool_calls c JOIN runs r ON r.id = c.run_id JOIN threads t ON t.id = r.thread_id "+
-			"WHERE r.thread_id IN ("+marks+") ORDER BY c.id", args...)
+		"SELECT c.tool_use_id, t.body FROM tool_calls c JOIN runs r ON r.id = c.run_id JOIN tool_results t ON t.result_id = c.result_id "+
+			"WHERE r.thread_id IN ("+marks+") AND r.superseded = 0", args...)
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (threadCall, error) {
-		var c threadCall
-		err := r.Scan(&c.ID, &c.RunID, &c.ToolUseID, &c.Name, &c.ArgsJSON, &c.ArgsSHA256, &c.ReplayClass, &c.State, &c.Error,
-			&c.ResultID, &c.StartedAt, &c.FinishedAt, &c.ThreadID, &c.Via)
-		return c, err
+	stored, err := db.Collect(rows, func(r *sql.Rows) ([2]string, error) {
+		var kv [2]string
+		return kv, r.Scan(&kv[0], &kv[1])
 	})
+	if err != nil {
+		return nil, err
+	}
+	bodies := make(map[string]string, len(stored))
+	for _, kv := range stored {
+		bodies[kv[0]] = kv[1]
+	}
+	return bodies, nil
 }
 
-func searchSources(ctx context.Context, q db.Querier, threadID int64, children []threads.Thread) ([]Source, error) {
-	type owner struct {
-		id   int64
-		role *string
-	}
-	owners := []owner{{threadID, nil}}
-	for _, c := range children {
-		owners = append(owners, owner{c.ID, c.Role})
-	}
+func searchSources(histories []journal.History, roles map[int64]*string) []Source {
 	var found []Source
-	for _, t := range owners {
-		msgs, err := journal.MessagesOf(ctx, q, t.id, false)
-		if err != nil {
-			return nil, err
-		}
-		for _, m := range msgs {
+	for _, h := range histories {
+		for _, m := range h.Messages {
 			for _, raw := range m.Content {
 				var b resultBlock
 				var results []json.RawMessage
@@ -294,12 +265,12 @@ func searchSources(ctx context.Context, q db.Querier, threadID int64, children [
 						continue
 					}
 					url := str(hit, "url")
-					found = append(found, Source{Kind: KindWeb, Key: url, Title: first(str(hit, "title"), url), URL: url, Via: t.role})
+					found = append(found, Source{Kind: KindWeb, Key: url, Title: first(str(hit, "title"), url), URL: url, Via: roles[h.ThreadID]})
 				}
 			}
 		}
 	}
-	return found, nil
+	return found
 }
 
 func isInt(v any) (int64, bool) {
@@ -349,19 +320,37 @@ func SourcesOf(ctx context.Context, q db.Querier, threadID int64) ([]Source, err
 	return SourcesWith(ctx, q, threadID, children)
 }
 
+type ownedCall struct {
+	journal.ToolCall
+	ThreadID int64
+}
+
 func SourcesWith(ctx context.Context, q db.Querier, threadID int64, children []threads.Thread) ([]Source, error) {
 	ids := []int64{threadID}
+	roles := map[int64]*string{threadID: nil}
 	for _, c := range children {
 		ids = append(ids, c.ID)
+		roles[c.ID] = c.Role
 	}
-	bodies, err := resultBodies(ctx, q, ids)
+	histories := make([]journal.History, 0, len(ids))
+	var calls []ownedCall
+	for _, id := range ids {
+		h, err := journal.LoadHistory(ctx, q, id)
+		if err != nil {
+			return nil, err
+		}
+		histories = append(histories, h)
+		for _, c := range h.Calls {
+			calls = append(calls, ownedCall{c, id})
+		}
+	}
+	slices.SortFunc(calls, func(a, b ownedCall) int { return cmp.Compare(a.ID, b.ID) })
+	bodies := resultBodies(histories)
+	stored, err := storedBodies(ctx, q, ids)
 	if err != nil {
 		return nil, err
 	}
-	calls, err := callsOfThreads(ctx, q, ids)
-	if err != nil {
-		return nil, err
-	}
+	maps.Copy(bodies, stored)
 	var found []Source
 	for _, c := range calls {
 		if c.State != journal.OK {
@@ -375,15 +364,11 @@ func SourcesWith(ctx context.Context, q db.Querier, threadID int64, children []t
 			continue
 		}
 		if c.ThreadID != threadID {
-			s.Via = c.Via
+			s.Via = roles[c.ThreadID]
 		}
 		found = append(found, *s)
 	}
-	hits, err := searchSources(ctx, q, threadID, children)
-	if err != nil {
-		return nil, err
-	}
-	found = append(found, hits...)
+	found = append(found, searchSources(histories, roles)...)
 	out := []Source{}
 	seen := map[string]bool{}
 	for _, s := range found {

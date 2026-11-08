@@ -281,14 +281,13 @@ func RunsOf(ctx context.Context, q db.Querier, threadID int64) ([]Run, error) {
 }
 
 type Message struct {
-	ID         int64             `json:"id"`
-	RunID      *int64            `json:"run_id"`
-	Seq        int64             `json:"seq"`
-	Role       string            `json:"role"`
-	Content    []json.RawMessage `json:"content"`
-	CreatedAt  float64           `json:"created_at"`
-	SystemSig  *string           `json:"system_sig"`
-	Superseded bool              `json:"superseded"`
+	ID        int64             `json:"id"`
+	RunID     *int64            `json:"run_id"`
+	Seq       int64             `json:"seq"`
+	Role      string            `json:"role"`
+	Content   []json.RawMessage `json:"content"`
+	CreatedAt float64           `json:"created_at"`
+	SystemSig *string           `json:"system_sig"`
 }
 
 func Dumps(content []json.RawMessage) (string, error) {
@@ -411,27 +410,50 @@ func decodeContent(id int64, raw string) ([]json.RawMessage, error) {
 	return content, nil
 }
 
-func MessagesOf(ctx context.Context, q db.Querier, threadID int64, includeSuperseded bool) ([]Message, error) {
-	query := "SELECT id, run_id, seq, role, content_json, created_at, system_sig, superseded FROM thread_messages WHERE thread_id = ?"
-	if !includeSuperseded {
-		query += " AND superseded = 0"
-	}
-	rows, err := q.QueryContext(ctx, query+" ORDER BY seq", threadID)
+func MessagesOf(ctx context.Context, q db.Querier, threadID int64) ([]Message, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT id, run_id, seq, role, content_json, created_at, system_sig FROM thread_messages WHERE thread_id = ? AND superseded = 0 ORDER BY seq",
+		threadID)
 	if err != nil {
 		return nil, err
 	}
 	return db.Collect(rows, func(r *sql.Rows) (Message, error) {
 		var m Message
 		var raw string
-		var superseded store.Flag
-		if err := r.Scan(&m.ID, &m.RunID, &m.Seq, &m.Role, &raw, &m.CreatedAt, &m.SystemSig, &superseded); err != nil {
+		if err := r.Scan(&m.ID, &m.RunID, &m.Seq, &m.Role, &raw, &m.CreatedAt, &m.SystemSig); err != nil {
 			return Message{}, err
 		}
-		m.Superseded = bool(superseded)
 		var err error
 		m.Content, err = decodeContent(m.ID, raw)
 		return m, err
 	})
+}
+
+type History struct {
+	ThreadID int64
+	Messages []Message
+	Calls    []ToolCall
+}
+
+func LoadHistory(ctx context.Context, q db.Querier, threadID int64) (History, error) {
+	messages, err := MessagesOf(ctx, q, threadID)
+	if err != nil {
+		return History{}, err
+	}
+	calls, err := ToolCallsForThread(ctx, q, threadID)
+	if err != nil {
+		return History{}, err
+	}
+	return History{ThreadID: threadID, Messages: messages, Calls: calls}, nil
+}
+
+func (h History) LastOperator() *Message {
+	for i := len(h.Messages) - 1; i >= 0; i-- {
+		if h.Messages[i].Role == User && HasText(h.Messages[i].Content) {
+			return &h.Messages[i]
+		}
+	}
+	return nil
 }
 
 func LastMessage(ctx context.Context, q db.Querier, threadID int64) (*Message, error) {
@@ -460,19 +482,6 @@ func HasText(content []json.RawMessage) bool {
 		}
 	}
 	return false
-}
-
-func LastOperatorMessage(ctx context.Context, q db.Querier, threadID int64) (*Message, error) {
-	all, err := MessagesOf(ctx, q, threadID, false)
-	if err != nil {
-		return nil, err
-	}
-	for i := len(all) - 1; i >= 0; i-- {
-		if all[i].Role == User && HasText(all[i].Content) {
-			return &all[i], nil
-		}
-	}
-	return nil, nil
 }
 
 func Supersede(ctx context.Context, d *db.DB, threadID, fromSeq int64, keepMessage bool) error {
@@ -643,17 +652,8 @@ type CallKey struct {
 	ToolUseID string
 }
 
-func ToolCallsForThread(ctx context.Context, q db.Querier, threadID int64) (map[CallKey]ToolCall, error) {
-	rows, err := q.QueryContext(ctx,
+func ToolCallsForThread(ctx context.Context, q db.Querier, threadID int64) ([]ToolCall, error) {
+	return calls(q.QueryContext(ctx,
 		"SELECT c.id, c.run_id, c.tool_use_id, c.name, c.args_json, c.args_sha256, c.replay_class, c.state, c.error, c.result_id, c.started_at, c.finished_at "+
-			"FROM tool_calls c JOIN runs r ON r.id = c.run_id WHERE r.thread_id = ? ORDER BY c.id", threadID)
-	list, err := calls(rows, err)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[CallKey]ToolCall, len(list))
-	for _, c := range list {
-		out[CallKey{c.RunID, c.ToolUseID}] = c
-	}
-	return out, nil
+			"FROM tool_calls c JOIN runs r ON r.id = c.run_id WHERE r.thread_id = ? AND r.superseded = 0 ORDER BY c.id", threadID))
 }

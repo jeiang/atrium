@@ -218,10 +218,11 @@ func CreateChild(ctx context.Context, q db.Querier, parentThread, parentRun int6
 }
 
 func DigestOf(ctx context.Context, q db.Querier, threadID int64) (string, error) {
-	messages, err := journal.MessagesOf(ctx, q, threadID, false)
+	history, err := journal.LoadHistory(ctx, q, threadID)
 	if err != nil {
 		return "", err
 	}
+	messages := history.Messages
 	for i := len(messages) - 1; i >= 0; i-- {
 		if messages[i].Role != journal.Assistant {
 			continue
