@@ -17,6 +17,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	mailaccounts "github.com/jeiang/atrium/internal/mail/accounts"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
@@ -25,12 +26,13 @@ import (
 const KeyMailAccountsFile = "mail_accounts_file"
 
 type AccountSpec struct {
-	Name    string
-	Label   string
-	Preset  string
-	Login   string
-	Enabled bool
-	Pinned  bool
+	Name       string
+	Label      string
+	Preset     string
+	Login      string
+	Enabled    bool
+	Pinned     bool
+	AuthMethod mailaccounts.Method
 }
 
 func (a AccountSpec) Host() string { return presets[a.Preset].host }
@@ -148,17 +150,18 @@ func (s *State) LoadStoredAccounts(ctx context.Context, q db.Querier) error {
 }
 
 func (s *State) loadAccountsFromDB(ctx context.Context, q db.Querier, filePasswords map[string]string) ([]AccountSpec, map[string]string, error) {
-	rows, err := q.QueryContext(ctx, "SELECT id, label, preset, login, enabled, pinned FROM mail_accounts ORDER BY created_at, id")
+	rows, err := q.QueryContext(ctx, "SELECT id, label, preset, login, enabled, pinned, auth_method FROM mail_accounts ORDER BY created_at, id")
 	if err != nil {
 		return nil, nil, err
 	}
 	type row struct {
 		id, label, preset, login string
 		enabled, pinned          bool
+		method                   string
 	}
 	stored, err := db.Collect(rows, func(r *sql.Rows) (row, error) {
 		var x row
-		err := r.Scan(&x.id, &x.label, &x.preset, &x.login, &x.enabled, &x.pinned)
+		err := r.Scan(&x.id, &x.label, &x.preset, &x.login, &x.enabled, &x.pinned, &x.method)
 		return x, err
 	})
 	if err != nil {
@@ -184,6 +187,9 @@ func (s *State) loadAccountsFromDB(ctx context.Context, q db.Querier, filePasswo
 		if err != nil {
 			return nil, nil, fmt.Errorf("config: stored mail account %q: %w", x.id, err)
 		}
+		if a.AuthMethod, err = mailaccounts.Parse(x.method); err != nil {
+			return nil, nil, fmt.Errorf("config: stored mail account %q: %w", x.id, err)
+		}
 		a.Pinned = x.pinned
 		accounts = append(accounts, a)
 	}
@@ -196,9 +202,9 @@ func reconcileAccounts(ctx context.Context, d *db.DB, files []AccountSpec) error
 		for _, a := range files {
 			keep[a.Name] = true
 			if _, err := tx.ExecContext(ctx,
-				"INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, created_at) VALUES (?, ?, ?, ?, ?, 1, ?) "+
-					"ON CONFLICT(id) DO UPDATE SET label = excluded.label, preset = excluded.preset, login = excluded.login, enabled = excluded.enabled, pinned = 1",
-				a.Name, a.Label, a.Preset, a.Login, a.Enabled, stamp()); err != nil {
+				"INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, auth_method, created_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?) "+
+					"ON CONFLICT(id) DO UPDATE SET label = excluded.label, preset = excluded.preset, login = excluded.login, enabled = excluded.enabled, auth_method = excluded.auth_method, pinned = 1",
+				a.Name, a.Label, a.Preset, a.Login, a.Enabled, a.AuthMethod, stamp()); err != nil {
 				return err
 			}
 		}
@@ -236,7 +242,7 @@ func NewAccount(name, label, presetName, login string, enabled bool) (AccountSpe
 	if label == "" {
 		label = name
 	}
-	return AccountSpec{Name: name, Label: label, Preset: presetName, Login: py.Strip(login), Enabled: enabled}, nil
+	return AccountSpec{Name: name, Label: label, Preset: presetName, Login: py.Strip(login), Enabled: enabled, AuthMethod: mailaccounts.Password}, nil
 }
 
 type accountEntry struct {

@@ -104,6 +104,20 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	if count("SELECT COUNT(*) FROM secrets WHERE name = ?", config.PasswordKey("work")) != 1 || health(t, dir, "mail_work") != integrations.OK {
 		t.Error("the added account has no stored password or no ok health")
 	}
+	if !strings.Contains(page(), `id="new-auth" name="auth_method"`) {
+		t.Error("the add form does not offer an auth method")
+	}
+	update := url.Values{"label": {"Work"}, "login": {"me@work.test"}, "enabled": {"1"}, "auth_method": {"xoauth2"}}
+	if code, body := post("/accounts/work", update); code != http.StatusOK || !strings.Contains(body, `<option value="xoauth2" selected>`) {
+		t.Fatalf("switching to xoauth2: %d", code)
+	}
+	if n := count("SELECT COUNT(*) FROM mail_accounts WHERE id = 'work' AND auth_method = 'xoauth2'"); n != 1 {
+		t.Fatal("the xoauth2 auth method was not stored")
+	}
+	update.Set("auth_method", "password")
+	if code, _ := post("/accounts/work", update); code != http.StatusOK {
+		t.Fatalf("switching back to password: %d", code)
+	}
 	if code, _ := post("/accounts", add); code != http.StatusUnprocessableEntity {
 		t.Errorf("a duplicate id: %d", code)
 	}

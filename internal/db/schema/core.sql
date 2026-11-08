@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS mail_accounts (
     login TEXT NOT NULL,
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
     pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
+    auth_method TEXT NOT NULL DEFAULT 'password' CHECK (auth_method IN ('password', 'xoauth2')),
     created_at REAL NOT NULL
 );
 CREATE TABLE IF NOT EXISTS mailboxes (
