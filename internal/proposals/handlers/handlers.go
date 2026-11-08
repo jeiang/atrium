@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/executors"
 )
@@ -26,7 +25,6 @@ type Deps struct {
 func Register(r *proposals.Registry, deps Deps) {
 	executors.Register(r, &executors.Executors{DB: deps.DB, Open: deps.Open, Now: deps.Now}, deps.Syncer, module.Mail)
 	calendar.Register(r, &calendar.Proposals{DB: deps.DB, Now: deps.Now, Env: deps.Env}, module.Calendar)
-	(&notion.Applier{DB: deps.DB, Env: deps.Env, Now: deps.Now}).Register(r, module.Notion)
 	openloops.Register(r, &openloops.Reminders{DB: deps.DB, Now: deps.Now}, module.Mail)
 	(&approval.Executor{DB: deps.DB, Env: deps.Env, Now: deps.Now, Undoers: toolset.Undoers(deps.Env), Tools: toolset.Approvals()}).Register(r)
 }

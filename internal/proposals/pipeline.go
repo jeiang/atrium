@@ -34,25 +34,26 @@ type Execer interface {
 }
 
 type Proposal struct {
-	ID          int64
-	Kind        string
-	Account     *string
-	Status      string
-	CreatedTS   float64
-	DecidedTS   *float64
-	AppliedTS   *float64
-	UndoneTS    *float64
-	Recovered   bool
-	Title       string
-	Payload     json.RawMessage
-	Preview     any
-	Result      any
-	previewRaw  string
-	resultRaw   string
-	Fingerprint string
-	Undoable    bool
-	Blocked     bool
-	BlockedUndo bool
+	ID           int64
+	Kind         string
+	Account      *string
+	Status       string
+	CreatedTS    float64
+	DecidedTS    *float64
+	AppliedTS    *float64
+	UndoneTS     *float64
+	Recovered    bool
+	Title        string
+	Payload      json.RawMessage
+	Preview      any
+	Result       any
+	previewRaw   string
+	resultRaw    string
+	Fingerprint  string
+	Undoable     bool
+	Blocked      bool
+	BlockedUndo  bool
+	BlockedError string
 }
 
 func (p *Proposal) AccountName() string {
@@ -114,7 +115,7 @@ func loads(text *string) (any, error) {
 
 var columns = "p.id, p.kind, p.account, p.status, p.created_ts, p.decided_ts, p.applied_ts, p.undone_ts, p.recovered, " +
 	"p.title, p.payload, p.preview, p.result, p.fingerprint, " +
-	"EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = p.id AND " + ledger.BlockedSQL("a") + ") AS blocked, " +
+	"(SELECT COALESCE(a.error, '') FROM proposal_actions a WHERE a.proposal_id = p.id AND " + ledger.BlockedSQL("a") + " ORDER BY a.id DESC LIMIT 1) AS blocked_error, " +
 	"EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = p.id AND a.state IN ('undo_unknown', 'undo_partial')) AS blocked_undo, " +
 	"(p.status IN ('applied', 'failed') AND p.undone_ts IS NULL AND (p.status = 'applied' OR p.recovered = 1) AND EXISTS " +
 	"(SELECT 1 FROM proposal_actions a WHERE a.proposal_id = p.id AND a.state = 'ok' AND a.undo IS NOT NULL AND NOT EXISTS " +
@@ -126,13 +127,20 @@ func scanProposal(s scanner, full bool) (*Proposal, error) {
 	var p Proposal
 	var payload, preview string
 	var result *string
-	var recovered, blocked, blockedUndo, undoable int64
+	var blockedError *string
+	var recovered, blockedUndo, undoable int64
 	if err := s.Scan(&p.ID, &p.Kind, &p.Account, &p.Status, &p.CreatedTS, &p.DecidedTS, &p.AppliedTS, &p.UndoneTS, &recovered,
-		&p.Title, &payload, &preview, &result, &p.Fingerprint, &blocked, &blockedUndo, &undoable); err != nil {
+		&p.Title, &payload, &preview, &result, &p.Fingerprint, &blockedError, &blockedUndo, &undoable); err != nil {
 		return nil, err
 	}
 	p.Recovered = recovered != 0
-	p.Blocked = blocked != 0
+	p.Blocked = blockedError != nil
+	if p.Blocked {
+		p.BlockedError = *blockedError
+		if p.BlockedError == "" {
+			p.BlockedError = UnknownOutcomeText
+		}
+	}
 	p.BlockedUndo = blockedUndo != 0
 	p.Undoable = undoable != 0
 	p.previewRaw = preview
@@ -187,7 +195,7 @@ func Get(ctx context.Context, q Querier, id int64) (*Proposal, error) {
 
 func ListBlocked(ctx context.Context, q Querier) ([]*Proposal, error) {
 	rows, err := q.QueryContext(ctx, "SELECT * FROM (SELECT "+columns+" FROM proposals p WHERE p.status <> 'pending') "+
-		"WHERE blocked ORDER BY created_ts DESC, id DESC")
+		"WHERE blocked_error IS NOT NULL ORDER BY created_ts DESC, id DESC")
 	if err != nil {
 		return nil, err
 	}

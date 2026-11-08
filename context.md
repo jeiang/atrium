@@ -286,6 +286,10 @@ behavior-parity target.
 - The registry restricts tools by run kind. Scheduled runs read, propose,
   and notify; nightly runs may also update Notion and the profile with undo.
   Research subagents have restricted tools and bounded runs.
+- Notion edits are free: the Notion page Edit and Link buttons write
+  directly through the same path as `notion_update_page`, with Undo on
+  Done; approvals are only for external or costly actions. Old
+  `notion_link` and `notion_edit` proposals stay readable and dismissable.
 - A successful call to a `private_data` or `web` tool taints its thread
   (`threads.tainted_at`). From the next model request of the same run on,
   and in every later run of that thread in any process, the thread is not

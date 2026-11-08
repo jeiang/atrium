@@ -192,10 +192,6 @@ func fieldKeys() []string {
 
 var wizardKeys = fieldKeys()
 
-func init() {
-	settings.Claim("/settings/auth", append([]string{KeyPreset, secrets.OIDCClientSecret}, wizardKeys...)...)
-}
-
 func (f Form) shown(preset Preset) map[string]string {
 	out := map[string]string{KeyClientID: f.ClientID, KeyScopes: f.Scopes}
 	if preset.Issuer == "" {

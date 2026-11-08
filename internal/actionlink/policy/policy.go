@@ -25,8 +25,8 @@ var WebOnly = map[string]bool{
 
 func init() {
 	settings.MustRegister(
-		settings.Value(settings.UI, settings.Def{Key: EnabledKey, Module: "action_links", Type: settings.Bool, Default: "false", Page: "/settings/phone-actions"}),
-		settings.Value(settings.UI, settings.Def{Key: KindsKey, Module: "action_links", Type: settings.String, Default: strings.Join(DefaultKinds, ","), Page: "/settings/phone-actions"}),
+		settings.Value(settings.UI, settings.Def{Key: EnabledKey, Module: "action_links", Type: settings.Bool, Default: "false"}),
+		settings.Value(settings.UI, settings.Def{Key: KindsKey, Module: "action_links", Type: settings.String, Default: strings.Join(DefaultKinds, ",")}),
 	)
 }
 

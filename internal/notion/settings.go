@@ -177,16 +177,16 @@ func LoadSearch(ctx context.Context, q db.Querier) (SearchLimits, error) {
 	return out, r.err
 }
 
-type ProposalLimits struct {
+type DraftLimits struct {
 	LinkPageChars int
 	EditPageChars int
 	LinkMaxTokens int
 	EditMaxTokens int
 }
 
-func LoadProposals(ctx context.Context, q db.Querier) (ProposalLimits, error) {
+func LoadDrafts(ctx context.Context, q db.Querier) (DraftLimits, error) {
 	r := resolver{ctx: ctx, q: q}
-	out := ProposalLimits{
+	out := DraftLimits{
 		LinkPageChars: r.int(LinkPageCharsKey),
 		EditPageChars: r.int(EditPageCharsKey),
 		LinkMaxTokens: r.int(LinkMaxTokensKey),

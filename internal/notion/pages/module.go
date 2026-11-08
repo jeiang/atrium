@@ -30,9 +30,9 @@ type Options struct {
 }
 
 type service struct {
-	deps     *web.Deps
-	now      func() float64
-	proposer *notion.Proposer
+	deps    *web.Deps
+	now     func() float64
+	drafter *notion.Drafter
 }
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
@@ -43,7 +43,7 @@ func Module(o Options) web.Module {
 		if now == nil {
 			now = wallClock
 		}
-		s := &service{deps: d, now: now, proposer: &notion.Proposer{DB: d.DB, Chat: o.Chat, Now: o.Now}}
+		s := &service{deps: d, now: now, drafter: &notion.Drafter{DB: d.DB, Chat: o.Chat}}
 
 		r.Get("/library/wiki", s.wiki)
 		r.Get("/notion/{page_id}", s.view)

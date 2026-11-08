@@ -437,14 +437,14 @@ func SplitFooter(markdown string) (body, reviewed string, sources []string, err 
 	if loc == nil {
 		return trimmed, "", []string{}, nil
 	}
-	sources, err = parseSources(last[loc[4]:loc[5]])
+	sources, err = parseSources(group(last, loc, 2))
 	if err != nil {
 		return "", "", nil, err
 	}
 	if sources == nil {
 		sources = []string{}
 	}
-	return rstrip(strings.Join(lines[:len(lines)-1], "\n")), last[loc[2]:loc[3]], sources, nil
+	return rstrip(strings.Join(lines[:len(lines)-1], "\n")), group(last, loc, 1), sources, nil
 }
 
 func (w Wiki) footerLine(date string, sources []string) (string, error) {

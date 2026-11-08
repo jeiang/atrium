@@ -109,8 +109,7 @@ func FlagDef(name string) settings.Def {
 		Key:     FlagKey(name),
 		Module:  Core,
 		Type:    settings.Bool,
-		Default: "false",
-		Page:    "/settings/modules"})
+		Default: "false"})
 }
 
 type State string

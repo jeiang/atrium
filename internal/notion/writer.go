@@ -38,7 +38,9 @@ func (w *Writer) Create(ctx context.Context, parent, title, markdown string) (Re
 	})
 }
 
-func (w *Writer) Rewrite(ctx context.Context, pageID string, replace, appendText *string, section, date string, sources []string) (
+type Edit func(body string) (string, error)
+
+func (w *Writer) Rewrite(ctx context.Context, pageID string, edit Edit, date string, sources []string) (
 	page RemotePage, previous, updated string, merged []string, edited string, err error) {
 	if page, err = w.Live(ctx, pageID); err != nil {
 		return
@@ -56,7 +58,7 @@ func (w *Writer) Rewrite(ctx context.Context, pageID string, replace, appendText
 	if err != nil {
 		return
 	}
-	next, err := editMarkdown(body, replace, appendText, section)
+	next, err := edit(body)
 	if err != nil {
 		return
 	}
@@ -141,7 +143,7 @@ func replaceContent(text string) map[string]any {
 	return map[string]any{"type": "replace_content", "replace_content": map[string]any{"new_str": text}}
 }
 
-func editMarkdown(previous string, replace, appendText *string, section string) (string, error) {
+func EditMarkdown(previous string, replace, appendText *string, section string) (string, error) {
 	if section != "" {
 		if replace != nil {
 			updated, ok, err := ReplaceSection(previous, section, *replace)

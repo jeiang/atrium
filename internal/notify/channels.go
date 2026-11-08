@@ -53,7 +53,7 @@ func TokenKey(channel string) string { return "ntfy_token_" + channel }
 func init() {
 	for _, name := range Channels {
 		settings.MustRegister(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{
-			Key: TokenKey(name), Module: module, Type: settings.String, Page: "/settings/notifications"}))
+			Key: TokenKey(name), Module: module, Type: settings.String}))
 	}
 }
 
