@@ -160,7 +160,7 @@ func (s *Service) keysFor(ctx context.Context, p *provider, t rawToken) ([]named
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	stale := p.keys == nil || s.now().Sub(p.keysFetched) > jwksTTL
-	missing := !t.hasKey(p.keys) && s.now().Sub(p.keysFetched) > s.KeyRefetchGap
+	missing := !t.hasKey(p.keys) && s.now().Sub(p.keysFetched) > s.keyRefetchGap
 	if !stale && !missing {
 		return p.keys, nil
 	}

@@ -27,6 +27,30 @@ type row struct {
 	refreshToken    string
 }
 
+type sessionInsert struct {
+	tokenHash     string
+	subject       string
+	email         string
+	name          string
+	admin         bool
+	now           float64
+	idle          float64
+	absolute      float64
+	rechecked     float64
+	accessToken   string
+	accessExpires any
+	refreshToken  string
+	verified      bool
+	hosted        string
+	origin        string
+}
+
+func insertSession(ctx context.Context, tx *sql.Tx, s sessionInsert) error {
+	_, err := tx.ExecContext(ctx, "INSERT INTO auth_sessions (token_hash, subject, email, name, admin, created_at, last_seen_at, idle_expires_at, absolute_expires_at, rechecked_at, access_token, access_expires_at, refresh_token, email_verified, hosted_domain, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		s.tokenHash, s.subject, s.email, s.name, boolInt(s.admin), s.now, s.now, s.idle, s.absolute, s.rechecked, s.accessToken, s.accessExpires, s.refreshToken, boolInt(s.verified), s.hosted, s.origin)
+	return err
+}
+
 const sessionColumns = "id, subject, email, name, admin, idle_expires_at, absolute_expires_at, last_seen_at, rechecked_at, access_token, access_expires_at, refresh_token, email_verified, hosted_domain, origin"
 
 func (s *Service) loadRow(ctx context.Context, hash string) (row, error) {
@@ -176,7 +200,21 @@ func (s *Service) recheck(ctx context.Context, hash string, seen row, t timing) 
 	}
 	cfg, err := load(ctx, s.d.Read, s.env, s.d.Encrypted())
 	if err != nil {
-		log.Warn("session ended: oidc configuration is unusable", "sub", r.Subject)
+		var config *ConfigError
+		if errors.As(err, &config) {
+			log.Warn("session ended: oidc configuration is unusable", "sub", r.Subject)
+			return r, s.drop(ctx, r.id)
+		}
+		// A transient read failure leaves the last authorized identity in
+		// place only for the same bounded grace a provider outage gets; after
+		// that the session is dropped without a fresh authorization decision.
+		log.Warn("re-check could not read the oidc configuration; keeping the session for now", "sub", r.Subject, "err", err.Error())
+		s.mu.Lock()
+		s.retry[r.id] = s.now().Add(retryGap)
+		s.mu.Unlock()
+		if now < r.rechecked+t.recheck.Seconds()+recheckGrace.Seconds() {
+			return r, nil
+		}
 		return r, s.drop(ctx, r.id)
 	}
 	s.mu.Lock()

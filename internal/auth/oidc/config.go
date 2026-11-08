@@ -2,6 +2,7 @@ package oidc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -54,23 +55,29 @@ var valueKeys = append([]string{KeyPreset}, append(wizardKeys, KeyIdleDays, KeyM
 
 type values map[string]string
 
-func resolved(ctx context.Context, q db.Querier) (values, []string) {
-	var problems []string
+func resolved(ctx context.Context, q db.Querier) (values, []string, error) {
 	out := values{}
 	for _, key := range valueKeys {
 		found, err := settings.Default.Resolve(ctx, q, key)
 		if err != nil {
-			problems = append(problems, err.Error())
+			return nil, nil, err
 		}
 		out[key] = strings.TrimSpace(found.Value)
 	}
-	return out, problems
+	return out, nil, nil
 }
 
 func load(ctx context.Context, q db.Querier, env config.Env, encrypted bool) (Config, error) {
-	vals, problems := resolved(ctx, q)
+	vals, problems, err := resolved(ctx, q)
+	if err != nil {
+		return Config{}, err
+	}
 	secret, err := secrets.Credential(ctx, q, secrets.OIDCClientSecret)
 	if err != nil {
+		var empty settings.EmptyValue
+		if !errors.As(err, &empty) {
+			return Config{}, err
+		}
 		problems = append(problems, err.Error())
 	}
 	return assemble(vals, strings.TrimSpace(secret), env, encrypted, problems)

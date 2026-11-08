@@ -106,8 +106,7 @@ func newRig(t *testing.T, o rigOpts) *rig {
 		settings.Default.SetPins(secretPin{secrets.OIDCClientSecret: o.idp.ClientSecret})
 		t.Cleanup(func() { settings.Default.SetPins(nil) })
 	}
-	svc := oidc.New(d, env)
-	svc.KeyRefetchGap = 0
+	svc := oidc.New(d, env, oidc.WithKeyRefetchGap(0))
 	render, err := web.NewRenderer(tpl.Config{})
 	if err != nil {
 		t.Fatal(err)
