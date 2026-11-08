@@ -65,6 +65,7 @@ type Provider struct {
 	Expired     bool
 	RefreshCall int
 	Redirect    string
+	jwksCalls   int
 	keyN        int
 }
 
@@ -410,8 +411,63 @@ func (p *Provider) reply(w http.ResponseWriter, name, nonce, scope string, first
 	writeJSON(w, out)
 }
 
-func (p *Provider) sign(claims map[string]any) string {
+func (p *Provider) JWKSCalls() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.jwksCalls
+}
+
+type AccessOptions struct {
+	Audience  []string
+	ClientID  string
+	Typ       string
+	Issuer    string
+	ExpiresIn time.Duration
+	Foreign   bool
+	Mutate    func(claims map[string]any)
+}
+
+func (p *Provider) AccessToken(name, client string, o AccessOptions) string {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	u := p.users[name]
+	now := time.Now()
+	if o.ExpiresIn == 0 {
+		o.ExpiresIn = 15 * time.Minute
+	}
+	if o.Audience == nil {
+		o.Audience = []string{client, p.Issuer()}
+	}
+	if o.ClientID == "" {
+		o.ClientID = client
+	}
+	if o.Typ == "" {
+		o.Typ = "at+jwt"
+	}
+	if o.Issuer == "" {
+		o.Issuer = p.Issuer()
+	}
+	claims := map[string]any{
+		"iss": o.Issuer, "sub": u.Sub, "aud": o.Audience, "client_id": o.ClientID, "jti": randomString(),
+		"scope": "openid profile email groups", "iat": now.Unix(), "exp": now.Add(o.ExpiresIn).Unix(),
+	}
+	if o.Mutate != nil {
+		o.Mutate(claims)
+	}
 	s := p.keys[len(p.keys)-1]
+	if o.Foreign {
+		s = signer{kid: "foreign", rsa: rsaKey(p.keyN + 1)}
+	}
+	token := p.signWith(claims, o.Typ, s)
+	p.access[token] = name
+	return token
+}
+
+func (p *Provider) sign(claims map[string]any) string {
+	return p.signWith(claims, "JWT", p.keys[len(p.keys)-1])
+}
+
+func (p *Provider) signWith(claims map[string]any, typ string, s signer) string {
 	alg := p.opts.Alg
 	switch p.Forge {
 	case "none":
@@ -419,7 +475,7 @@ func (p *Provider) sign(claims map[string]any) string {
 	case "hs256":
 		alg = "HS256"
 	}
-	head, _ := json.Marshal(map[string]string{"alg": alg, "kid": s.kid, "typ": "JWT"})
+	head, _ := json.Marshal(map[string]string{"alg": alg, "kid": s.kid, "typ": typ})
 	body, _ := json.Marshal(claims)
 	signed := b64(head) + "." + b64(body)
 	switch p.Forge {
@@ -469,6 +525,7 @@ func ecPoint(s signer) []byte {
 func (p *Provider) jwks(w http.ResponseWriter) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	p.jwksCalls++
 	var keys []map[string]any
 	for _, s := range p.keys {
 		if s.ec != nil {

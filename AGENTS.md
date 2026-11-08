@@ -111,6 +111,8 @@ settings the operator edits in the UI or pins from the host.
   shared allowlist and SSRF protections on every redirect.
 - Preserve proxy authentication, Host validation, CSRF, same-origin checks,
   CSP, and loopback listener defaults.
+- `/api/v1` is bearer-only: never read session cookies or proxy headers
+  there. Within v1, responses change only additively.
 - Media writes touch only torrents tagged media. Preserve library group
   permissions and expiring signed file links; public links still check Host.
 - The v2 baseline schema files in `internal/db/schema/` are frozen: v2

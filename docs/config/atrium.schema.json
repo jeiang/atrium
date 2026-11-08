@@ -1242,6 +1242,13 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "oidc_api_client_id": {
+          "type": "string"
+        },
+        "oidc_api_client_id_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "oidc_client_id": {
           "type": "string"
         },

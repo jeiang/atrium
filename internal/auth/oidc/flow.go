@@ -56,6 +56,7 @@ type Service struct {
 	providers map[string]*provider
 	locks     map[int64]*sync.Mutex
 	retry     map[int64]time.Time
+	bearer    map[string]bearerEntry
 }
 
 type Option func(*Service)
@@ -65,7 +66,7 @@ func WithKeyRefetchGap(gap time.Duration) Option {
 }
 
 func New(d *db.DB, env config.Env, opts ...Option) *Service {
-	s := &Service{d: d, env: env, now: time.Now, keyRefetchGap: jwksMinGap, providers: map[string]*provider{}, locks: map[int64]*sync.Mutex{}, retry: map[int64]time.Time{}}
+	s := &Service{d: d, env: env, now: time.Now, keyRefetchGap: jwksMinGap, providers: map[string]*provider{}, locks: map[int64]*sync.Mutex{}, retry: map[int64]time.Time{}, bearer: map[string]bearerEntry{}}
 	for _, opt := range opts {
 		opt(s)
 	}

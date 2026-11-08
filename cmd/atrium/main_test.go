@@ -98,6 +98,11 @@ func startServeApp(t *testing.T, app *cli.App, logs *lockedBuffer) (string, *loc
 
 func startServeAppOnce(t *testing.T, app *cli.App, logs *lockedBuffer) (string, *lockedBuffer, func(), error) {
 	t.Helper()
+	return startServeAppArgs(t, app, logs, "--auth", "local")
+}
+
+func startServeAppArgs(t *testing.T, app *cli.App, logs *lockedBuffer, auth ...string) (string, *lockedBuffer, func(), error) {
+	t.Helper()
 	addrFile := filepath.Join(t.TempDir(), "serve-addr")
 	setEnv(t, "ATRIUM_SERVE_ADDR_FILE", addrFile)
 
@@ -107,7 +112,7 @@ func startServeAppOnce(t *testing.T, app *cli.App, logs *lockedBuffer) (string, 
 	exitCode.Store(-1)
 	go func() {
 		var stdout bytes.Buffer
-		code := app.Run(ctx, []string{"serve", "--port", "0", "--auth", "local"}, &stdout, logs)
+		code := app.Run(ctx, append([]string{"serve", "--port", "0"}, auth...), &stdout, logs)
 		exitCode.Store(int32(code))
 		done <- code
 	}()

@@ -13,6 +13,7 @@ const (
 	KeyPreset         = "oidc_preset"
 	KeyIssuer         = "oidc_issuer"
 	KeyClientID       = "oidc_client_id"
+	KeyAPIClientID    = "oidc_api_client_id"
 	KeyScopes         = "oidc_scopes"
 	KeyGroupsClaim    = "oidc_groups_claim"
 	KeyAccessGroup    = "oidc_access_group"
@@ -39,6 +40,7 @@ func init() {
 			Choices: PresetNames()}),
 		text(KeyIssuer, checkIssuer),
 		text(KeyClientID, nil),
+		text(KeyAPIClientID, nil),
 		text(KeyScopes, nil),
 		text(KeyGroupsClaim, nil),
 		settings.Value(settings.UI, settings.Def{Key: KeyAccessGroup, Module: module, Type: settings.String, Default: DefaultAccessGroup, Check: settings.NonEmpty}),

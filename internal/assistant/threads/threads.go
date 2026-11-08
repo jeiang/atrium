@@ -737,6 +737,17 @@ type ListOpts struct {
 	Limit     int
 	Archived  bool
 	ProjectID int64
+	After     *ListKey
+}
+
+type ListKey struct {
+	Pinned    bool
+	UpdatedAt float64
+	ID        int64
+}
+
+func (l Listed) Key() ListKey {
+	return ListKey{Pinned: bool(l.Pinned), UpdatedAt: l.UpdatedAt, ID: l.ID}
 }
 
 const listSQL = "SELECT t.id, t.kind, t.title, t.pinned, t.archived, t.created_at, t.updated_at, t.project_id, " +
@@ -755,6 +766,11 @@ func ListThreads(ctx context.Context, q db.Querier, o ListOpts) ([]Listed, error
 	if o.Match != "" {
 		query += " AND t.id IN (SELECT thread_id FROM thread_fts WHERE thread_fts MATCH ?)"
 		args = append(args, o.Match)
+	}
+	if k := o.After; k != nil {
+		pinned := store.Bit(k.Pinned)
+		query += " AND (t.pinned < ? OR (t.pinned = ? AND (t.updated_at < ? OR (t.updated_at = ? AND t.id < ?))))"
+		args = append(args, pinned, pinned, k.UpdatedAt, k.UpdatedAt, k.ID)
 	}
 	query += " ORDER BY t.pinned DESC, t.updated_at DESC, t.id DESC LIMIT ?"
 	args = append(args, o.Limit)

@@ -142,6 +142,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `oidc_admin_domains` | string | none | ui | `ATRIUM_AUTH_OIDC_ADMIN_DOMAINS` |
 | `oidc_admin_emails` | string | none | ui | `ATRIUM_AUTH_OIDC_ADMIN_EMAILS` |
 | `oidc_admin_group` | string | `atrium_admin` | ui | `ATRIUM_AUTH_OIDC_ADMIN_GROUP` |
+| `oidc_api_client_id` | string | none | ui | `ATRIUM_AUTH_OIDC_API_CLIENT_ID` |
 | `oidc_client_id` | string | none | ui | `ATRIUM_AUTH_OIDC_CLIENT_ID` |
 | `oidc_client_secret` | string | none | secret | `ATRIUM_AUTH_OIDC_CLIENT_SECRET` |
 | `oidc_groups_claim` | string | none | ui | `ATRIUM_AUTH_OIDC_GROUPS_CLAIM` |

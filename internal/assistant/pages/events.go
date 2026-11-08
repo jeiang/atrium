@@ -61,6 +61,10 @@ func (p *pages) chatEvents(w http.ResponseWriter, r *http.Request) {
 	if _, ok := p.loadRun(w, r, threadID, runID); !ok {
 		return
 	}
+	p.serveStream(w, r, runID, after)
+}
+
+func (p *pages) serveStream(w http.ResponseWriter, r *http.Request, runID, after int64) {
 	h := w.Header()
 	h.Set("Content-Type", "text/event-stream; charset=utf-8")
 	h.Set("Cache-Control", "no-cache")
