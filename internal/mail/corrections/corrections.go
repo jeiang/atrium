@@ -12,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/message"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -50,7 +49,7 @@ func Get(ctx context.Context, q Querier, messageID int64) (*Correction, error) {
 }
 
 func Record(ctx context.Context, d *db.DB, messageID int64, folder, source string, ts float64) (Correction, error) {
-	folder = py.Strip(folder)
+	folder = strings.TrimSpace(folder)
 	if folder == "" || utf8.RuneCountInString(folder) > MaxFolderChars || strings.Contains(folder, "|") || folder == config.Inbox {
 		return Correction{}, errorf("invalid destination %s", strconv.Quote(folder))
 	}

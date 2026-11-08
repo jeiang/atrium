@@ -3,6 +3,7 @@ package rules
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -16,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/py"
+	"golang.org/x/text/cases"
 )
 
 const (
@@ -101,17 +103,26 @@ type Rule struct {
 	Conditions []Condition
 }
 
-func (c Condition) Dict() py.Dict {
-	d := py.Dict{{Key: "field", Value: c.field}, {Key: "op", Value: c.op}}
+type conditionJSON struct {
+	Field string `json:"field"`
+	Op    string `json:"op"`
+	Value any    `json:"value,omitempty"`
+}
+
+func (c Condition) dict() conditionJSON {
+	d := conditionJSON{Field: c.field, Op: c.op}
 	if c.hasValue {
-		d = append(d, py.Pair{Key: "value", Value: c.value})
+		d.Value = c.value
 	}
 	return d
 }
 
-func (c Condition) JSON() string { return py.JSONDumps(c.Dict()) }
+func (c Condition) JSON() string {
+	b, _ := json.Marshal(c.dict())
+	return string(b)
+}
 
-func (c Condition) MarshalJSON() ([]byte, error) { return []byte(c.JSON()), nil }
+func (c Condition) MarshalJSON() ([]byte, error) { return json.Marshal(c.dict()) }
 
 func ConditionsJSON(conds []Condition) string {
 	parts := make([]string, len(conds))
@@ -215,7 +226,8 @@ func (m *Message) list(field string) string {
 
 func FieldValues(m *Message, field string) ([]string, error) {
 	if column, ok := ListFields[field]; ok {
-		raw, err := py.JSONLoads([]byte(m.list(field)))
+		var raw any
+		err := json.Unmarshal([]byte(m.list(field)), &raw)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", column, err)
 		}
@@ -311,9 +323,9 @@ func (c Condition) Matches(m *Message, now float64) (bool, error) {
 		if !ok {
 			return false, fmt.Errorf("op eq: value %s: not a string", fmt.Sprint(c.value))
 		}
-		target = py.Casefold(target)
+		target = cases.Fold().String(target)
 		for _, v := range values {
-			if py.Casefold(v) == target {
+			if cases.Fold().String(v) == target {
 				return true, nil
 			}
 		}
@@ -325,10 +337,10 @@ func (c Condition) Matches(m *Message, now float64) (bool, error) {
 		}
 		targets := map[string]bool{}
 		for _, t := range list {
-			targets[py.Casefold(t)] = true
+			targets[cases.Fold().String(t)] = true
 		}
 		for _, v := range values {
-			if targets[py.Casefold(v)] {
+			if targets[cases.Fold().String(v)] {
 				return true, nil
 			}
 		}
@@ -340,13 +352,13 @@ func (c Condition) Matches(m *Message, now float64) (bool, error) {
 		}
 		targets := make([]string, len(list))
 		for i, t := range list {
-			targets[i] = py.Casefold(t)
+			targets[i] = cases.Fold().String(t)
 		}
 		for _, v := range values {
 			if v == "" {
 				continue
 			}
-			folded := py.Casefold(v)
+			folded := cases.Fold().String(v)
 			for _, t := range targets {
 				if domainSuffix(folded, t) {
 					return true, nil
@@ -435,7 +447,7 @@ func valueList(v any) ([]string, bool) {
 	out := make([]string, len(items))
 	for i, item := range items {
 		s, ok := item.(string)
-		if !ok || py.Strip(s) == "" {
+		if !ok || strings.TrimSpace(s) == "" {
 			return nil, false
 		}
 		out[i] = s
@@ -485,7 +497,7 @@ func ValidateCondition(raw any) (Condition, error) {
 	if (op == "eq" || op == "re") && !isStr {
 		return Condition{}, ruleErrorf("op %s needs a string value", op)
 	}
-	if isStr && py.Strip(text) == "" {
+	if isStr && strings.TrimSpace(text) == "" {
 		return Condition{}, ruleErrorf("op %s needs a value", op)
 	}
 	list, isList := valueList(value)
@@ -512,9 +524,9 @@ func ValidateCondition(raw any) (Condition, error) {
 }
 
 func NewCondition(field, op string, value any) (Condition, error) {
-	raw := py.Dict{{Key: "field", Value: field}, {Key: "op", Value: op}}
+	raw := map[string]any{"field": field, "op": op}
 	if value != nil {
-		raw = append(raw, py.Pair{Key: "value", Value: value})
+		raw["value"] = value
 	}
 	return ValidateCondition(raw)
 }
@@ -822,8 +834,8 @@ func ValidateStored(row StoredRule) error {
 }
 
 func parseStored(text string) ([]Condition, error) {
-	raw, err := py.JSONLoads([]byte(text))
-	if err != nil {
+	var raw any
+	if err := json.Unmarshal([]byte(text), &raw); err != nil {
 		return nil, err
 	}
 	items, ok := raw.([]any)
@@ -849,28 +861,39 @@ func LoadAllRules(ctx context.Context, q Querier) ([]Rule, error) {
 	return loadRules(ctx, q, func(sql.NullString) bool { return true })
 }
 
-func ExportRules(ctx context.Context, q Querier) (py.Dict, error) {
+type exportedRule struct {
+	ID      string          `json:"id"`
+	Account string          `json:"account,omitempty"`
+	Action  string          `json:"action"`
+	Dest    string          `json:"dest,omitempty"`
+	When    []conditionJSON `json:"when"`
+}
+
+type exportedRules struct {
+	Rules []exportedRule `json:"rules"`
+}
+
+func ExportRules(ctx context.Context, q Querier) (exportedRules, error) {
 	loaded, err := LoadAllRules(ctx, q)
 	if err != nil {
-		return nil, err
+		return exportedRules{}, err
 	}
-	out := make([]any, len(loaded))
+	out := make([]exportedRule, len(loaded))
 	for i, r := range loaded {
-		d := py.Dict{{Key: "id", Value: r.ID}}
-		if r.Account != nil && *r.Account != "" {
-			d = append(d, py.Pair{Key: "account", Value: *r.Account})
+		e := exportedRule{ID: r.ID, Action: string(r.Action)}
+		if r.Account != nil {
+			e.Account = *r.Account
 		}
-		d = append(d, py.Pair{Key: "action", Value: string(r.Action)})
-		if r.Dest != nil && *r.Dest != "" {
-			d = append(d, py.Pair{Key: "dest", Value: *r.Dest})
+		if r.Dest != nil {
+			e.Dest = *r.Dest
 		}
-		when := make([]any, len(r.Conditions))
+		e.When = make([]conditionJSON, len(r.Conditions))
 		for j, c := range r.Conditions {
-			when[j] = c.Dict()
+			e.When[j] = c.dict()
 		}
-		out[i] = append(d, py.Pair{Key: "when", Value: when})
+		out[i] = e
 	}
-	return py.Dict{{Key: "rules", Value: out}}, nil
+	return exportedRules{Rules: out}, nil
 }
 
 type Picked struct {

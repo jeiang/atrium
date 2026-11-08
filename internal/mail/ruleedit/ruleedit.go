@@ -127,8 +127,8 @@ func ListRules(ctx context.Context, q rules.Querier, account *string) ([]RuleDic
 
 func CreateRule(ctx context.Context, d *db.DB, raw any) (rules.Rule, error) {
 	id := "r-" + randomHex()
-	if py.Truthy(get(raw, "id")) {
-		s, ok := get(raw, "id").(string)
+	if v := get(raw, "id"); v != nil && v != "" {
+		s, ok := v.(string)
 		if !ok {
 			return rules.Rule{}, ruleErrorf("rule needs a string id")
 		}
@@ -248,8 +248,8 @@ type Preview struct {
 
 func PreviewRule(ctx context.Context, q rules.Querier, raw any, limit int, now float64) (Preview, error) {
 	id := PreviewID
-	if py.Truthy(get(raw, "id")) {
-		s, ok := get(raw, "id").(string)
+	if v := get(raw, "id"); v != nil && v != "" {
+		s, ok := v.(string)
 		if !ok {
 			return Preview{}, ruleErrorf("rule needs a string id")
 		}
