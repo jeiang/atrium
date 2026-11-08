@@ -27,7 +27,7 @@ var Statuses = [...]string{Pending, Approved, Dismissed, Applied, Failed, Suppre
 
 const UndoOp = "undo"
 
-type Executor func(ctx context.Context, p *Proposal, selection any) (py.Dict, error)
+type Executor func(ctx context.Context, p *Proposal, selection any) (any, error)
 
 type Execer interface {
 	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
@@ -47,6 +47,8 @@ type Proposal struct {
 	Payload     json.RawMessage
 	Preview     any
 	Result      any
+	previewRaw  string
+	resultRaw   string
 	Fingerprint string
 	Undoable    bool
 	Blocked     bool
@@ -60,19 +62,47 @@ func (p *Proposal) AccountName() string {
 	return *p.Account
 }
 
-func (p *Proposal) Dict() py.Dict {
-	out := py.Dict{
-		{Key: "id", Value: p.ID}, {Key: "kind", Value: p.Kind}, {Key: "account", Value: py.Nullable(p.Account)},
-		{Key: "status", Value: p.Status}, {Key: "created_ts", Value: p.CreatedTS},
-		{Key: "decided_ts", Value: py.Nullable(p.DecidedTS)}, {Key: "applied_ts", Value: py.Nullable(p.AppliedTS)},
-		{Key: "title", Value: p.Title}, {Key: "preview", Value: p.Preview}, {Key: "result", Value: p.Result},
-		{Key: "fingerprint", Value: p.Fingerprint},
+type jsonFloat float64
+
+func (f jsonFloat) MarshalJSON() ([]byte, error) {
+	s := strconv.FormatFloat(float64(f), 'f', -1, 64)
+	if !strings.ContainsAny(s, ".eE") {
+		s += ".0"
 	}
-	if p.Payload != nil {
-		payload, _ := py.JSONLoads(p.Payload)
-		out = append(out, py.Pair{Key: "payload", Value: payload})
+	return []byte(s), nil
+}
+
+func jsonFloatPtr(v *float64) *jsonFloat {
+	if v == nil {
+		return nil
 	}
-	return append(out, py.Pair{Key: "undoable", Value: p.Undoable})
+	f := jsonFloat(*v)
+	return &f
+}
+
+type ProposalView struct {
+	ID          int64           `json:"id"`
+	Kind        string          `json:"kind"`
+	Account     *string         `json:"account"`
+	Status      string          `json:"status"`
+	CreatedTS   jsonFloat       `json:"created_ts"`
+	DecidedTS   *jsonFloat      `json:"decided_ts"`
+	AppliedTS   *jsonFloat      `json:"applied_ts"`
+	Title       string          `json:"title"`
+	Preview     json.RawMessage `json:"preview"`
+	Result      json.RawMessage `json:"result"`
+	Fingerprint string          `json:"fingerprint"`
+	Payload     json.RawMessage `json:"payload,omitempty"`
+	Undoable    bool            `json:"undoable"`
+}
+
+func (p *Proposal) Dict() ProposalView {
+	return ProposalView{
+		ID: p.ID, Kind: p.Kind, Account: p.Account, Status: p.Status,
+		CreatedTS: jsonFloat(p.CreatedTS), DecidedTS: jsonFloatPtr(p.DecidedTS), AppliedTS: jsonFloatPtr(p.AppliedTS),
+		Title: p.Title, Preview: json.RawMessage(p.previewRaw), Result: json.RawMessage(p.resultRaw),
+		Fingerprint: p.Fingerprint, Payload: p.Payload, Undoable: p.Undoable,
+	}
 }
 
 func loads(text *string) (any, error) {
@@ -105,6 +135,10 @@ func scanProposal(s scanner, full bool) (*Proposal, error) {
 	p.Blocked = blocked != 0
 	p.BlockedUndo = blockedUndo != 0
 	p.Undoable = undoable != 0
+	p.previewRaw = preview
+	if result != nil {
+		p.resultRaw = *result
+	}
 	var err error
 	if p.Preview, err = py.JSONLoads([]byte(preview)); err != nil {
 		return nil, err
@@ -206,14 +240,34 @@ func Dismiss(ctx context.Context, d *db.DB, id int64, status string, who Resolve
 	})
 }
 
+func marshalJSON(v any) (string, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
+
 func RecordAction(ctx context.Context, x Execer, proposalID int64, kind string, undoOf *int64, action, undo any, state ledger.State, errText *string, ts float64) (int64, error) {
 	var plan any
 	if undo != nil {
-		plan = py.JSONDumps(undo)
+		text, err := marshalJSON(undo)
+		if err != nil {
+			return 0, err
+		}
+		plan = text
+	}
+	body, err := marshalJSON(action)
+	if err != nil {
+		return 0, err
+	}
+	var of any
+	if undoOf != nil {
+		of = *undoOf
 	}
 	res, err := x.ExecContext(context.WithoutCancel(ctx), "INSERT INTO proposal_actions "+
 		"(proposal_id, ts, lease, kind, undo_of, action, undo, state, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		proposalID, ts, ts, kind, py.Nullable(undoOf), py.JSONDumps(action), plan, state, errText)
+		proposalID, ts, ts, kind, of, body, plan, state, errText)
 	if err != nil {
 		return 0, err
 	}
@@ -227,10 +281,18 @@ func BeginAction(ctx context.Context, x Execer, proposalID int64, action any, ts
 func SettleAction(ctx context.Context, x Execer, id int64, action, undo any, state ledger.State, errText *string, ts float64) error {
 	var plan any
 	if undo != nil {
-		plan = py.JSONDumps(undo)
+		text, err := marshalJSON(undo)
+		if err != nil {
+			return err
+		}
+		plan = text
+	}
+	body, err := marshalJSON(action)
+	if err != nil {
+		return err
 	}
 	res, err := x.ExecContext(context.WithoutCancel(ctx), "UPDATE proposal_actions SET ts = ?, lease = ?, action = ?, undo = ?, state = ?, error = ? "+
-		"WHERE id = ? AND state = 'held'", ts, ts, py.JSONDumps(action), plan, state, errText, id)
+		"WHERE id = ? AND state = 'held'", ts, ts, body, plan, state, errText, id)
 	if err != nil {
 		return err
 	}
@@ -474,9 +536,12 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any,
 		return nil, err
 	case err != nil:
 		log.Error(fmt.Sprintf("proposal %d failed", id), logx.Err, err.Error())
-		failure := py.Dict{{Key: "error", Value: err.Error()}}
+		failure, merr := json.Marshal(map[string]any{"error": err.Error()})
+		if merr != nil {
+			return nil, merr
+		}
 		res, uerr := p.DB.Write.ExecContext(settle, "UPDATE proposals SET status = 'failed', result = ? WHERE id = ? AND status = 'approved'",
-			py.JSONDumps(failure), id)
+			string(failure), id)
 		if uerr != nil {
 			return nil, uerr
 		}
@@ -487,10 +552,14 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any,
 		return Get(settle, p.DB.Write, id)
 	}
 	if syncErr := p.sync(ctx, prop); syncErr != nil {
-		result = result.Set("sync_error", *syncErr)
+		result = withSyncError(result, *syncErr)
+	}
+	body, merr := json.Marshal(result)
+	if merr != nil {
+		return nil, merr
 	}
 	res, err := p.DB.Write.ExecContext(settle, "UPDATE proposals SET status = 'applied', applied_ts = ?, result = ? WHERE id = ? AND status = 'approved'",
-		p.now(), py.JSONDumps(result), id)
+		p.now(), string(body), id)
 	if err != nil {
 		return nil, err
 	}
@@ -566,7 +635,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		if err != nil {
 			return out, err
 		}
-		detail, err := func() (py.Dict, error) {
+		detail, err := func() (any, error) {
 			defer KeepActionAlive(p.DB.Write, p.now, held)()
 			return undoer(approved, json.RawMessage(py.JSONDumps(entry.Undo)))
 		}()
@@ -588,7 +657,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		if detail != nil {
 			details = detail
 		}
-		if err := SettleAction(ctx, p.DB.Write, held, py.Dict{{Key: "op", Value: UndoOp}, {Key: "of", Value: entry.ID}, {Key: "detail", Value: details}}, nil, ledger.OK, nil, p.now()); err != nil {
+		if err := SettleAction(ctx, p.DB.Write, held, map[string]any{"op": UndoOp, "of": entry.ID, "detail": details}, nil, ledger.OK, nil, p.now()); err != nil {
 			return out, err
 		}
 		out.Outcomes = append(out.Outcomes, py.Dict{{Key: "action", Value: entry.ID}, {Key: "ok", Value: true}})
@@ -609,4 +678,15 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		}
 	}
 	return out, nil
+}
+
+func withSyncError(result any, msg string) any {
+	switch r := result.(type) {
+	case map[string]any:
+		r["sync_error"] = msg
+		return r
+	case py.Dict:
+		return r.Set("sync_error", msg)
+	}
+	return result
 }

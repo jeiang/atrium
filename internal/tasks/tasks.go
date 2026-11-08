@@ -137,7 +137,7 @@ type Executor struct {
 	Now func() float64
 }
 
-func (e *Executor) Execute(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
+func (e *Executor) Execute(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
 	var s Spec
 	if err := json.Unmarshal([]byte(p.Payload), &s); err != nil {
 		return nil, err
@@ -154,7 +154,7 @@ func (e *Executor) Execute(ctx context.Context, p *proposals.Proposal, _ any) (p
 	return py.Dict{{Key: "summary", Value: "Task added: " + s.Title}, {Key: "task_id", Value: id}}, nil
 }
 
-func (e *Executor) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, error) {
+func (e *Executor) Undo(ctx context.Context, plan json.RawMessage) (any, error) {
 	var info struct {
 		ID int64 `json:"id"`
 	}

@@ -45,7 +45,7 @@ func TestASecondUndoIsRefusedWhileTheFirstRunsAndAPartialUndoBlocksAnother(t *te
 	started := make(chan struct{})
 	release := make(chan struct{})
 	registry := proposals.NewRegistry()
-	registry.Undoers["partial"] = func(context.Context, json.RawMessage) (py.Dict, error) {
+	registry.Undoers["partial"] = func(context.Context, json.RawMessage) (any, error) {
 		close(started)
 		<-release
 		return nil, &mailops.PartialMove{Err: errors.New("expunge failed")}

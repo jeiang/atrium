@@ -179,7 +179,7 @@ func payloadString(d py.Dict, key string) (string, error) {
 	return s, nil
 }
 
-func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
+func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
 	decoded, err := py.JSONLoads(p.Payload)
 	if err != nil {
 		return nil, err
@@ -214,7 +214,7 @@ func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (
 	}, nil
 }
 
-func (r *Reminders) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, error) {
+func (r *Reminders) Undo(ctx context.Context, plan json.RawMessage) (any, error) {
 	var info struct {
 		ID int64 `json:"id"`
 	}

@@ -183,7 +183,7 @@ func (p *Proposals) fail(ctx context.Context, id int64, action py.Dict, err erro
 	return err
 }
 
-func (p *Proposals) settleRecord(ctx context.Context, id int64, kind string, undo py.Dict, summary string) (py.Dict, error) {
+func (p *Proposals) settleRecord(ctx context.Context, id int64, kind string, undo py.Dict, summary string) (any, error) {
 	calendarName, _ := undo.Get("calendar")
 	uid, _ := undo.Get("uid")
 	action := py.Dict{{Key: "type", Value: kind}, {Key: "calendar", Value: calendarName}, {Key: "uid", Value: uid}}
@@ -193,7 +193,7 @@ func (p *Proposals) settleRecord(ctx context.Context, id int64, kind string, und
 	return py.Dict{{Key: "summary", Value: summary}}, nil
 }
 
-func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any) (py.Dict, error) {
+func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any) (any, error) {
 	target, spec, err := payloadOf(prop)
 	if err != nil {
 		return nil, err
@@ -230,7 +230,7 @@ func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any
 	return append(py.Dict{{Key: "summary", Value: fmt.Sprintf("Added to the %s calendar", target)}}, ref.Dict()...), nil
 }
 
-func (p *Proposals) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, error) {
+func (p *Proposals) Undo(ctx context.Context, plan json.RawMessage) (any, error) {
 	var info struct {
 		Calendar string `json:"calendar"`
 		UID      string `json:"uid"`

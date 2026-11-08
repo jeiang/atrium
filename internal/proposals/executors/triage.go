@@ -75,7 +75,7 @@ func triageSelection(selection any) (map[int64]bool, error) {
 	return out, nil
 }
 
-func (e *Executors) ExecuteTriage(ctx context.Context, p *proposals.Proposal, selection any) (py.Dict, error) {
+func (e *Executors) ExecuteTriage(ctx context.Context, p *proposals.Proposal, selection any) (any, error) {
 	var payload triagePayload
 	if err := json.Unmarshal(p.Payload, &payload); err != nil {
 		return nil, err
@@ -268,7 +268,7 @@ func archiveIMAP(ctx context.Context, client mail.Client, account string) (strin
 	return dest, nil
 }
 
-func (e *Executors) UndoCancelSnooze(ctx context.Context, raw json.RawMessage) (py.Dict, error) {
+func (e *Executors) UndoCancelSnooze(ctx context.Context, raw json.RawMessage) (any, error) {
 	var plan struct {
 		SnoozeID int64 `json:"snooze_id"`
 	}

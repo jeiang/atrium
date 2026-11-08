@@ -132,7 +132,7 @@ S: {t} OK
 	if err := d.Read.QueryRow("SELECT action FROM proposal_actions WHERE proposal_id = ? AND kind = 'write' AND state = 'ok'", id).Scan(&action); err != nil {
 		t.Fatalf("no recorded move: %v", err)
 	}
-	if !strings.Contains(action, `"op": "move"`) || !strings.Contains(action, `"dest_imap": "Archive"`) {
+	if !strings.Contains(action, `"op":"move"`) || !strings.Contains(action, `"dest_imap":"Archive"`) {
 		t.Fatalf("recorded action = %s", action)
 	}
 }

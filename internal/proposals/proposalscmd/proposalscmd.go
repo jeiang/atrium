@@ -2,6 +2,7 @@ package proposalscmd
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -74,6 +75,15 @@ type exec struct {
 func (x *exec) Now() float64 { return x.opts.now() }
 
 func (x *exec) JSON(value any) {
+	if view, ok := value.(proposals.ProposalView); ok {
+		enc := json.NewEncoder(x.Stdout)
+		enc.SetEscapeHTML(false)
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(view); err != nil {
+			_, _ = fmt.Fprintln(x.Stderr, "error:", err)
+		}
+		return
+	}
 	_, _ = fmt.Fprintln(x.Stdout, py.JSONDumps(value, py.JSONOpts{Indent: 2}))
 }
 
