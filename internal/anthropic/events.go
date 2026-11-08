@@ -7,59 +7,47 @@ import (
 	sdk "github.com/anthropics/anthropic-sdk-go"
 )
 
-const (
-	EventThinking  = "thinking"
-	EventText      = "text"
-	EventToolStart = "tool_start"
-	EventToolDone  = "tool_done"
-)
+type Event interface{ event() }
 
-const (
-	blockServerToolUse   = "server_tool_use"
-	blockWebSearchResult = "web_search_tool_result"
-)
+type ThinkingEvent struct{ Text string }
 
-type Event struct {
-	Kind    string
-	Text    string
+type TextEvent struct{ Text string }
+
+type ToolStartEvent struct {
+	ID    string
+	Name  string
+	Input json.RawMessage
+}
+
+type ToolDoneEvent struct {
 	ID      string
-	Name    string
-	Input   json.RawMessage
 	OK      bool
 	Preview string
 }
 
-type stoppedBlock struct {
-	Type      string          `json:"type"`
-	ID        string          `json:"id"`
-	Name      string          `json:"name"`
-	Input     json.RawMessage `json:"input"`
-	ToolUseID string          `json:"tool_use_id"`
-	Content   json.RawMessage `json:"content"`
-}
+func (ThinkingEvent) event()  {}
+func (TextEvent) event()      {}
+func (ToolStartEvent) event() {}
+func (ToolDoneEvent) event()  {}
 
-func eventOf(acc *sdk.BetaMessage, ev sdk.BetaRawMessageStreamEventUnion) (Event, error) {
+func eventOf(acc *sdk.BetaMessage, ev sdk.BetaRawMessageStreamEventUnion) Event {
 	switch ev.Type {
 	case "content_block_delta":
 		switch ev.Delta.Type {
 		case "thinking_delta":
-			return Event{Kind: EventThinking, Text: ev.Delta.Thinking}, nil
+			return ThinkingEvent{Text: ev.Delta.Thinking}
 		case "text_delta":
-			return Event{Kind: EventText, Text: ev.Delta.Text}, nil
+			return TextEvent{Text: ev.Delta.Text}
 		}
 	case "content_block_stop":
-		var b stoppedBlock
-		if err := json.Unmarshal([]byte(acc.Content[ev.Index].RawJSON()), &b); err != nil {
-			return Event{}, fmt.Errorf("anthropic: decoding content block %d: %w", ev.Index, err)
-		}
-		switch b.Type {
-		case blockServerToolUse:
-			return Event{Kind: EventToolStart, ID: b.ID, Name: b.Name, Input: b.Input}, nil
-		case blockWebSearchResult:
-			var results []json.RawMessage
-			ok := json.Unmarshal(b.Content, &results) == nil && results != nil
-			return Event{Kind: EventToolDone, ID: b.ToolUseID, OK: ok, Preview: fmt.Sprintf("%d results", len(results))}, nil
+		block := acc.Content[ev.Index]
+		switch block.Type {
+		case "server_tool_use":
+			return ToolStartEvent{ID: block.ID, Name: block.Name, Input: block.Input}
+		case "web_search_tool_result":
+			results := block.Content.OfBetaWebSearchResultBlockArray
+			return ToolDoneEvent{ID: block.ToolUseID, OK: block.Content.ErrorCode == "", Preview: fmt.Sprintf("%d results", len(results))}
 		}
 	}
-	return Event{}, nil
+	return nil
 }

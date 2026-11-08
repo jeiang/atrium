@@ -81,12 +81,12 @@ const NameSystem = "You name a mail folder. You get the existing parent folder, 
 	"of a group of messages that will move into a new folder. Answer a short, plain folder name of one to three " +
 	"words that describes what the messages are, without the sender's name unless that is what they are about."
 
-func nameSchema(maxChars int) llm.Object {
-	return llm.Object{
-		{Key: "type", Value: "object"},
-		{Key: "properties", Value: llm.Object{{Key: "name", Value: llm.Object{{Key: "type", Value: "string"}, {Key: "maxLength", Value: maxChars}}}}},
-		{Key: "required", Value: []string{"name"}},
-		{Key: "additionalProperties", Value: false},
+func nameSchema(maxChars int) map[string]any {
+	return map[string]any{
+		"type":                 "object",
+		"properties":           map[string]any{"name": map[string]any{"type": "string", "maxLength": maxChars}},
+		"required":             []string{"name"},
+		"additionalProperties": false,
 	}
 }
 

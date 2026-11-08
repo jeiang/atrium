@@ -92,12 +92,13 @@ func (s *Server) Env() config.Env {
 
 func PinKey(t testing.TB) {
 	t.Helper()
+	previous := settings.Default.PinSource()
 	pins, err := config.LoadPins(config.Map(map[string]string{"ANTHROPIC_API_KEY": APIKey}), settings.Default)
 	if err != nil {
 		t.Fatal(err)
 	}
 	settings.Default.SetPins(pins)
-	t.Cleanup(func() { settings.Default.SetPins(nil) })
+	t.Cleanup(func() { settings.Default.SetPins(previous) })
 }
 
 func (s *Server) Client() *anthropic.Client {

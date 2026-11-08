@@ -16,6 +16,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/llm"
@@ -83,6 +84,14 @@ func Endpoints(ctx context.Context, q Querier) ([]Endpoint, error) {
 	return out, nil
 }
 
+func endpointOf(endpoints []Endpoint, kind string) (Endpoint, bool) {
+	i := slices.IndexFunc(endpoints, func(e Endpoint) bool { return e.Kind == kind })
+	if i < 0 {
+		return Endpoint{}, false
+	}
+	return endpoints[i], true
+}
+
 func Integration(kind string) string { return "mail_" + kind }
 
 func withEndpoints(ctx context.Context, q Querier, endpoints []Endpoint) (context.Context, error) {
@@ -135,7 +144,7 @@ var probeSchema = map[string]any{
 }
 
 func probeChat(ctx context.Context, e Endpoint) (string, int) {
-	raw, err := llm.ChatJSON(llm.WithOptions(ctx, llm.Options{Model: e.Model, MaxTokens: 32}), e.URL, "Reply with JSON only.", `Return {"ok": true}.`, probeSchema, 32)
+	raw, err := llm.ChatJSON(endpoint.With(ctx, endpoint.Settings{ChatModel: e.Model, MaxTokens: 32}), e.URL, "Reply with JSON only.", `Return {"ok": true}.`, probeSchema, 0)
 	if err != nil {
 		return httpx.Message(err), 0
 	}
@@ -216,8 +225,10 @@ func ProbeCandidate(ctx context.Context, d *db.DB, kind, url, key string, client
 	if err != nil {
 		return ProbeResult{}, err
 	}
-	i := slices.IndexFunc(endpoints, func(e Endpoint) bool { return e.Kind == kind })
-	e := endpoints[i]
+	e, ok := endpointOf(endpoints, kind)
+	if !ok {
+		return ProbeResult{}, errors.New("unknown endpoint kind " + kind)
+	}
 	e.URL, e.key = url, key
 	res := probe(httpx.WithEndpoint(ctx, url, key, client), e)
 	if res.OK {

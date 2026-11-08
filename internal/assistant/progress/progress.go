@@ -163,18 +163,18 @@ func (w *Writer) CheckStop(ctx context.Context, force bool) error {
 
 func (w *Writer) Observe(ctx context.Context, ev anthropic.Event) error {
 	var err error
-	switch ev.Kind {
-	case anthropic.EventThinking:
-		err = w.Delta(ctx, Thinking, ev.Text)
-	case anthropic.EventText:
-		err = w.Delta(ctx, Text, ev.Text)
-	case anthropic.EventToolStart:
+	switch e := ev.(type) {
+	case anthropic.ThinkingEvent:
+		err = w.Delta(ctx, Thinking, e.Text)
+	case anthropic.TextEvent:
+		err = w.Delta(ctx, Text, e.Text)
+	case anthropic.ToolStartEvent:
 		var args string
-		if args, err = ShortArgs(ev.Input); err == nil {
-			err = w.Event(ctx, ToolStart, py.Dict{{Key: "id", Value: ev.ID}, {Key: "name", Value: ev.Name}, {Key: "args", Value: args}})
+		if args, err = ShortArgs(e.Input); err == nil {
+			err = w.Event(ctx, ToolStart, py.Dict{{Key: "id", Value: e.ID}, {Key: "name", Value: e.Name}, {Key: "args", Value: args}})
 		}
-	case anthropic.EventToolDone:
-		err = w.Event(ctx, ToolDone, py.Dict{{Key: "id", Value: ev.ID}, {Key: "ok", Value: ev.OK}, {Key: "preview", Value: ev.Preview}})
+	case anthropic.ToolDoneEvent:
+		err = w.Event(ctx, ToolDone, py.Dict{{Key: "id", Value: e.ID}, {Key: "ok", Value: e.OK}, {Key: "preview", Value: e.Preview}})
 	}
 	if err != nil {
 		return err

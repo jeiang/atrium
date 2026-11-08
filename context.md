@@ -66,7 +66,9 @@ not claims about the running application.
   the host; privacy does not mean that inference is necessarily local.
   The embedding index records its embedder and dimension; changing the
   embedder re-embeds in the background under `atrium serve` and swaps the
-  index when complete.
+  index when complete. The rebuild loop runs for every install, so a
+  Notion-only install keeps its index fresh, and Notion document embeddings
+  use the same `mail_embed_body_chars` limit as mail.
 - ntfy, qBittorrent (API key) and TMDB (read token) are connection records on the Integrations settings
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-integration CA bundle and proxy. Certificate verification

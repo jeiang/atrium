@@ -11,7 +11,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/llm"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -383,8 +383,15 @@ func UncertainDest(ctx context.Context, q Querier, account string) (string, erro
 
 func WithModels(ctx context.Context, q Querier) (context.Context, error) {
 	r := Read(ctx, q)
-	chat := llm.Options{Model: r.Text(KeyChatModel), MaxTokens: r.Int(KeyChatMaxTokens), BodyChars: r.Int(KeyLLMBodyChars), TopSenders: r.Int(KeyLLMTopSenders)}
-	vec := embed.Options{Model: r.Text(KeyEmbedModel), BodyChars: r.Int(KeyEmbedBodyChars), Batch: r.Int(KeyEmbedBatch)}
+	s := endpoint.Settings{
+		ChatModel:      r.Text(KeyChatModel),
+		EmbedModel:     r.Text(KeyEmbedModel),
+		LLMBodyChars:   r.Int(KeyLLMBodyChars),
+		EmbedBodyChars: r.Int(KeyEmbedBodyChars),
+		Batch:          r.Int(KeyEmbedBatch),
+		MaxTokens:      r.Int(KeyChatMaxTokens),
+		TopSenders:     r.Int(KeyLLMTopSenders),
+	}
 	if r.Err() != nil {
 		return ctx, r.Err()
 	}
@@ -392,13 +399,13 @@ func WithModels(ctx context.Context, q Querier) (context.Context, error) {
 	if err != nil {
 		return ctx, err
 	}
-	vec.Dim = active.Dimension
+	s.Dim = active.Dimension
 	if active.URL != "" {
-		vec.Model = active.Model
+		s.EmbedModel = active.Model
 	}
 	endpoints, err := Endpoints(ctx, q)
 	if err != nil {
 		return ctx, err
 	}
-	return withEndpoints(embed.WithOptions(llm.WithOptions(ctx, chat), vec), q, endpoints)
+	return withEndpoints(endpoint.With(ctx, s), q, endpoints)
 }
