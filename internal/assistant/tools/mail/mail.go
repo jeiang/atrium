@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/search"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 const (
@@ -62,12 +63,22 @@ func mailTools() []tool.Tool {
 	}
 }
 
+func clip(s string, n int) string {
+	for i := range s {
+		if n == 0 {
+			return s[:i]
+		}
+		n--
+	}
+	return s
+}
+
 func iso(ts float64) string {
 	if ts == 0 {
 		return ""
 	}
-	sec, _ := py.SplitTimestamp(ts)
-	return py.ISOFormat(time.Unix(sec, 0).UTC(), "seconds")
+	sec, _ := timex.SplitTimestamp(ts)
+	return time.Unix(sec, 0).UTC().Format("2006-01-02T15:04:05-07:00")
 }
 
 func embedder(tc *tool.Context) embed.TextsFunc {
@@ -84,7 +95,11 @@ func recipients(ctx context.Context, q db.Querier, ids []int64) (map[int64]any, 
 	for i, id := range ids {
 		list[i] = id
 	}
-	rows, err := q.QueryContext(ctx, "SELECT id, to_addrs FROM messages WHERE id IN (SELECT value FROM json_each(?))", py.JSONDumps(list))
+	encoded, err := json.Marshal(list)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := q.QueryContext(ctx, "SELECT id, to_addrs FROM messages WHERE id IN (SELECT value FROM json_each(?))", encoded)
 	if err != nil {
 		return nil, err
 	}
@@ -105,9 +120,9 @@ func recipients(ctx context.Context, q db.Querier, ids []int64) (map[int64]any, 
 		if text == "" {
 			text = "[]"
 		}
-		v, err := py.JSONLoads([]byte(text))
-		if err != nil {
-			return nil, &tool.Raised{Class: "JSONDecodeError"}
+		var v any
+		if err := json.Unmarshal([]byte(text), &v); err != nil {
+			return nil, tool.Error("invalid recipients JSON")
 		}
 		out[r.id] = v
 	}
@@ -231,7 +246,7 @@ func mailRead(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 		{Key: "folder", Value: found.Folder},
 		{Key: "date", Value: iso(found.DateTS)},
 		{Key: "headers", Value: headers},
-		{Key: "body", Value: py.Clip(found.Body, int(maxChars))},
+		{Key: "body", Value: clip(found.Body, int(maxChars))},
 		{Key: "truncated", Value: int64(utf8.RuneCountInString(found.Body)) > maxChars},
 		{Key: "attachments", Value: attachments},
 	}, nil

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"strings"
 
@@ -165,7 +166,7 @@ func torrentDict(t media.Torrent) py.Dict {
 		{Key: "hash", Value: t.Hash},
 		{Key: "name", Value: t.Name},
 		{Key: "state", Value: state},
-		{Key: "progress_percent", Value: int64(py.Round(t.Progress*100, 0))},
+		{Key: "progress_percent", Value: int64(math.RoundToEven(t.Progress * 100))},
 		{Key: "size_bytes", Value: optionalInt(t.Size)},
 		{Key: "download_bytes_per_second", Value: optionalInt(t.DLSpeed)},
 		{Key: "eta_seconds", Value: optionalInt(t.ETA)},

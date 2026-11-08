@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -141,7 +142,7 @@ func undo(ctx context.Context, q db.Querier, info map[string]any) (any, error) {
 		return nil, err
 	}
 	if optional(found) != info["applied"] {
-		return nil, writes.UndoError(fmt.Sprintf("profile %s changed since this write", py.Repr(key)))
+		return nil, writes.UndoError(fmt.Sprintf("profile %s changed since this write", strconv.Quote(key)))
 	}
 	previous, restored := info["previous"].(string)
 	if !restored {

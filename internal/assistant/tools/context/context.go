@@ -15,6 +15,28 @@ import (
 
 var contexts = tool.Kinds{tool.Chat, tool.Cron, tool.Nightly}
 
+func truthy(v any) bool {
+	switch v := v.(type) {
+	case nil:
+		return false
+	case string:
+		return v != ""
+	case bool:
+		return v
+	case int64:
+		return v != 0
+	case float64:
+		return v != 0
+	case []any:
+		return len(v) > 0
+	case map[string]any:
+		return len(v) > 0
+	case py.Dict:
+		return len(v) > 0
+	}
+	return true
+}
+
 func guarded(v any, err error) (any, error) {
 	var ce actx.ContextError
 	if errors.As(err, &ce) {
@@ -69,7 +91,7 @@ func fold(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	}
 	raw, _ := args.Get("source_ids")
 	sources := []any{}
-	if py.Truthy(raw) {
+	if truthy(raw) {
 		list, ok := raw.([]any)
 		if !ok || len(list) > maxSources {
 			return nil, tool.Error(fmt.Sprintf("source_ids must be a list of at most %d ids", maxSources))

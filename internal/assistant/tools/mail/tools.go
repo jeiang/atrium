@@ -8,7 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 func Tools() []tool.Tool {
@@ -38,12 +38,17 @@ func zone(env config.Env) (*time.Location, error) {
 }
 
 func localTime(ts float64, loc *time.Location) time.Time {
-	sec, us := py.SplitTimestamp(ts)
+	sec, us := timex.SplitTimestamp(ts)
 	return time.Unix(sec, us*1000).In(loc)
 }
 
+type classed interface {
+	error
+	PyClass() string
+}
+
 func raised(err error) error {
-	var c py.Classed
+	var c classed
 	if errors.As(err, &c) {
 		return &tool.Raised{Class: c.PyClass()}
 	}

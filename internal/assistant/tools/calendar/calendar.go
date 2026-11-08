@@ -40,10 +40,29 @@ func wrap(err error) error {
 	if errors.As(err, &raised) {
 		return err
 	}
-	if class := py.ExceptionClass(err); class != "RuntimeError" {
-		return &tool.Raised{Class: class}
-	}
 	return err
+}
+
+func truthy(v any) bool {
+	switch v := v.(type) {
+	case nil:
+		return false
+	case string:
+		return v != ""
+	case bool:
+		return v
+	case int64:
+		return v != 0
+	case float64:
+		return v != 0
+	case []any:
+		return len(v) > 0
+	case map[string]any:
+		return len(v) > 0
+	case py.Dict:
+		return len(v) > 0
+	}
+	return true
 }
 
 func optionalText(args py.Dict, name string) (any, error) {
@@ -80,7 +99,7 @@ func spec(args py.Dict, tz *time.Location, defaultMinutes int) (string, calendar
 		return "", calendar.Spec{}, err
 	}
 	flag, _ := args.Get("all_day")
-	raw = raw.Set("title", title).Set("start", start).Set("all_day", py.Truthy(flag))
+	raw = raw.Set("title", title).Set("start", start).Set("all_day", truthy(flag))
 	chosen, _ := args.Get("calendar")
 	target, _ := chosen.(string)
 	if target != calendar.ICloud && target != calendar.Google {
@@ -162,8 +181,8 @@ func remove(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if row == nil {
 		return nil, tool.Error("only events created through atrium can be deleted, and this uid is not one of them")
 	}
-	stored, err := py.JSONLoads([]byte(row.Spec))
-	if err != nil {
+	var stored any
+	if err := json.Unmarshal([]byte(row.Spec), &stored); err != nil {
 		return nil, err
 	}
 	set, err := calendar.LoadSettings(ctx, tc.DB.Read)
@@ -202,7 +221,7 @@ func propose(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	}
 	flag, _ := args.Get("all_day")
 	target, _ := args.Get("calendar")
-	raw = raw.Set("all_day", py.Truthy(flag)).Set("calendar", target)
+	raw = raw.Set("all_day", truthy(flag)).Set("calendar", target)
 	source := py.Dict{}
 	messageID, hasID := args.Get("source_message_id")
 	switch id := messageID.(type) {
@@ -223,7 +242,7 @@ func propose(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if !created {
 		return py.Dict{{Key: "proposed", Value: false}, {Key: "reason", Value: "an identical proposal already exists"}}, nil
 	}
-	if hasID && py.Truthy(messageID) {
+	if hasID && truthy(messageID) {
 		if err := candidates.Mark(ctx, tc.DB, messageID, candidates.Drafted, tc.Now()); err != nil {
 			return nil, err
 		}

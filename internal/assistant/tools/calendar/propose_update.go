@@ -34,7 +34,7 @@ func proposeUpdate(ctx context.Context, tc *tool.Context, args py.Dict) (any, er
 	}
 	flag, _ := args.Get("all_day")
 	target, _ := args.Get("calendar")
-	raw = raw.Set("all_day", py.Truthy(flag)).Set("calendar", target)
+	raw = raw.Set("all_day", truthy(flag)).Set("calendar", target)
 	return proposed((&calendar.Proposals{DB: tc.DB, Now: tc.Now, Env: tc.Env}).ProposeUpdate(ctx, raw))
 }
 
