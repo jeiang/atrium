@@ -32,7 +32,7 @@
   <div class="flex gap-2">
     <form method="post" action="/drafts/{{$d.id}}/send" hx-post="/drafts/{{$d.id}}/send" hx-target="#draft-{{$d.id}}" hx-swap="outerHTML" hx-confirm="Send this email now?">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
-      <input type="hidden" name="updated_at" value="{{pystr $d.updated_at}}">
+      <input type="hidden" name="revision" value="{{$d.revision}}">
       <button type="submit" class="btn">{{icon "send"}}Send</button>
     </form>
     <form method="post" action="/drafts/{{$d.id}}/discard" hx-post="/drafts/{{$d.id}}/discard" hx-target="#draft-{{$d.id}}" hx-swap="outerHTML">
