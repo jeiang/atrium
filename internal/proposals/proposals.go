@@ -8,7 +8,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -20,7 +19,7 @@ const (
 	Suppressed = "suppressed"
 )
 
-type Undoer func(ctx context.Context, plan json.RawMessage) (py.Dict, error)
+type Undoer func(ctx context.Context, plan json.RawMessage) (any, error)
 
 type SyncHook func(ctx context.Context, account string) error
 
@@ -89,7 +88,14 @@ var OnCreate func(ctx context.Context, d *db.DB, p *Proposal)
 
 func Create(ctx context.Context, d *db.DB, kind string, account *string, title string, payload, preview any,
 	fingerprint string, ts float64) (id int64, created bool, err error) {
-	body, view := py.JSONDumps(payload), py.JSONDumps(preview)
+	body, err := marshalJSON(payload)
+	if err != nil {
+		return 0, false, err
+	}
+	view, err := marshalJSON(preview)
+	if err != nil {
+		return 0, false, err
+	}
 	err = d.WithTx(ctx, func(tx *sql.Tx) error {
 		res, err := tx.ExecContext(ctx, "INSERT INTO proposals (kind, account, status, title, payload, preview, created_ts, fingerprint) "+
 			"VALUES (?, ?, 'pending', ?, ?, ?, ?, ?) ON CONFLICT(fingerprint) DO NOTHING",

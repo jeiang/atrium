@@ -363,7 +363,7 @@ func Count(ctx context.Context, q Querier, account, kind string) (int64, error) 
 type UndoResult struct {
 	ID        int64   `json:"id"`
 	Undone    bool    `json:"undone"`
-	Detail    py.Dict `json:"detail"`
+	Detail    any     `json:"detail"`
 	SyncError *string `json:"sync_error"`
 }
 
@@ -415,7 +415,7 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 	} else if n == 0 {
 		return UndoResult{}, UndoError(fmt.Sprintf("action %d has an undo in progress or a partial undo; resolve it in the mailbox before undoing again", id))
 	}
-	detail, err := func() (py.Dict, error) {
+	detail, err := func() (any, error) {
 		defer proposals.KeepAlive(l.DB.Write, l.now, "UPDATE auto_actions SET undo_started_at = ? WHERE id = ? AND state = 'undo_held'", id)()
 		return undoer(safety.ApprovedWrites(ctx, fmt.Sprintf("undo-%d", id)), json.RawMessage(*plan))
 	}()

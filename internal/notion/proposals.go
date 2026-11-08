@@ -435,14 +435,14 @@ func restoreUndo(pageID, previous, edited string) map[string]any {
 	return map[string]any{"op": UndoRestoreOp, "page_id": pageID, "previous_markdown": previous, "applied_edited_time": edited}
 }
 
-func (a *Applier) failed(ctx context.Context, p *proposals.Proposal, action any, err error) (py.Dict, error) {
+func (a *Applier) failed(ctx context.Context, p *proposals.Proposal, action any, err error) (any, error) {
 	if rerr := a.record(ctx, p, action, nil, false, err); rerr != nil {
 		return nil, rerr
 	}
 	return nil, err
 }
 
-func (a *Applier) ExecuteLink(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
+func (a *Applier) ExecuteLink(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
 	client, err := a.client(ctx)
 	if err != nil {
 		return nil, err
@@ -498,7 +498,7 @@ func (a *Applier) applyLink(ctx context.Context, client *Client, payload map[str
 	return previous, after, err
 }
 
-func (a *Applier) ExecuteEdit(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
+func (a *Applier) ExecuteEdit(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
 	client, err := a.client(ctx)
 	if err != nil {
 		return nil, err
@@ -553,7 +553,7 @@ func validPayloadUpdates(raw any) []update {
 	return out
 }
 
-func (a *Applier) UndoRestore(ctx context.Context, plan json.RawMessage) (py.Dict, error) {
+func (a *Applier) UndoRestore(ctx context.Context, plan json.RawMessage) (any, error) {
 	var info struct {
 		PageID            string `json:"page_id"`
 		PreviousMarkdown  string `json:"previous_markdown"`
@@ -579,7 +579,7 @@ func (a *Applier) UndoRestore(ctx context.Context, plan json.RawMessage) (py.Dic
 	return py.Dict{{Key: "restored", Value: pageID}}, nil
 }
 
-func (a *Applier) ExecuteCapture(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
+func (a *Applier) ExecuteCapture(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
 	var payload struct {
 		Note string `json:"note"`
 	}

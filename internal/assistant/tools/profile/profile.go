@@ -211,7 +211,7 @@ func (e *UpdateExecutor) now() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }
 
-func (e *UpdateExecutor) Execute(ctx context.Context, p *proposals.Proposal, _ any) (py.Dict, error) {
+func (e *UpdateExecutor) Execute(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
 	var payload struct {
 		Key      string `json:"key"`
 		Value    string `json:"value"`
@@ -234,7 +234,7 @@ func (e *UpdateExecutor) Execute(ctx context.Context, p *proposals.Proposal, _ a
 	return py.Dict{{Key: "summary", Value: "Profile updated: " + payload.Key}}, nil
 }
 
-func (e *UpdateExecutor) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, error) {
+func (e *UpdateExecutor) Undo(ctx context.Context, plan json.RawMessage) (any, error) {
 	var info struct {
 		Key      string `json:"key"`
 		Previous string `json:"previous"`

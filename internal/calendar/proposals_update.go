@@ -319,7 +319,7 @@ func (p *Proposals) ProposeRSVP(ctx context.Context, raw py.Dict) (int64, bool, 
 		fingerprint(RSVPKind, target, uid, response), p.now())
 }
 
-func (p *Proposals) ExecuteUpdate(ctx context.Context, prop *proposals.Proposal, _ any) (py.Dict, error) {
+func (p *Proposals) ExecuteUpdate(ctx context.Context, prop *proposals.Proposal, _ any) (any, error) {
 	target, spec, err := payloadOf(prop)
 	if err != nil {
 		return nil, err
@@ -360,7 +360,7 @@ func (p *Proposals) ExecuteUpdate(ctx context.Context, prop *proposals.Proposal,
 	return p.settleRecord(ctx, intent, UpdateKind, undo, "Changed the event on the "+string(target)+" calendar")
 }
 
-func (p *Proposals) ExecuteRSVP(ctx context.Context, prop *proposals.Proposal, _ any) (py.Dict, error) {
+func (p *Proposals) ExecuteRSVP(ctx context.Context, prop *proposals.Proposal, _ any) (any, error) {
 	var info struct {
 		Calendar string `json:"calendar"`
 		UID      string `json:"uid"`
@@ -402,7 +402,7 @@ func (p *Proposals) ExecuteRSVP(ctx context.Context, prop *proposals.Proposal, _
 	return p.settleRecord(ctx, intent, RSVPKind, undo, "Replied "+info.Response)
 }
 
-func (p *Proposals) Restore(ctx context.Context, plan json.RawMessage) (py.Dict, error) {
+func (p *Proposals) Restore(ctx context.Context, plan json.RawMessage) (any, error) {
 	var info struct {
 		Calendar string `json:"calendar"`
 		UID      string `json:"uid"`

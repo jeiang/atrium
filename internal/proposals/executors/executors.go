@@ -572,7 +572,7 @@ func snapshotsOf(v any) ([]mailops.Snapshot, error) {
 	return out, err
 }
 
-func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, selection any) (py.Dict, error) {
+func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, selection any) (any, error) {
 	var payload struct {
 		Folder string  `json:"folder"`
 		Groups []group `json:"groups"`
@@ -644,7 +644,7 @@ func (e *Executors) ExecuteMoves(ctx context.Context, p *proposals.Proposal, sel
 	}, nil
 }
 
-func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, selection any) (py.Dict, error) {
+func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, selection any) (any, error) {
 	payload, err := decode(p.Payload)
 	if err != nil {
 		return nil, err
@@ -726,7 +726,7 @@ func (e *Executors) ExecuteDeletion(ctx context.Context, p *proposals.Proposal, 
 	}, nil
 }
 
-func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal, selection any) (py.Dict, error) {
+func (e *Executors) ExecuteLabelMerge(ctx context.Context, p *proposals.Proposal, selection any) (any, error) {
 	var payload struct {
 		Label    string             `json:"label"`
 		Into     string             `json:"into"`
@@ -806,7 +806,7 @@ type RuleDelete struct {
 	ID string `json:"id"`
 }
 
-func (e *Executors) UndoDeleteFolder(ctx context.Context, raw json.RawMessage) (py.Dict, error) {
+func (e *Executors) UndoDeleteFolder(ctx context.Context, raw json.RawMessage) (any, error) {
 	var plan DeleteFolder
 	if err := json.Unmarshal(raw, &plan); err != nil {
 		return nil, err
@@ -823,7 +823,7 @@ func (e *Executors) UndoDeleteFolder(ctx context.Context, raw json.RawMessage) (
 	return py.Dict{{Key: "deleted", Value: deleted}}, nil
 }
 
-func (e *Executors) UndoRuleDelete(ctx context.Context, raw json.RawMessage) (py.Dict, error) {
+func (e *Executors) UndoRuleDelete(ctx context.Context, raw json.RawMessage) (any, error) {
 	var plan RuleDelete
 	if err := json.Unmarshal(raw, &plan); err != nil {
 		return nil, err
