@@ -58,7 +58,7 @@ type Unflag struct {
 }
 
 func RegisterUndoers(r *proposals.Registry, open mail.OpenFunc, q db.Querier) {
-	r.Undoers[OpMoveBack] = plan(func(ctx context.Context, p MoveBack) (any, error) { return undoMoveBack(ctx, open, q, p) })
+	r.Undoers[OpMoveBack] = plan(func(ctx context.Context, p MoveBack) (any, error) { return UndoMoveBack(ctx, open, q, p) })
 	r.Undoers[OpGmailLabels] = plan(func(ctx context.Context, p GmailLabels) (any, error) { return undoGmailLabels(ctx, open, q, p) })
 	r.Undoers[OpGmailUntrash] = plan(func(ctx context.Context, p GmailUntrash) (any, error) { return undoGmailUntrash(ctx, open, q, p) })
 	r.Undoers[OpUnflag] = plan(func(ctx context.Context, p Unflag) (any, error) { return undoUnflag(ctx, open, q, p) })
@@ -95,7 +95,7 @@ func validity(ctx context.Context, client mail.Client, imapName string) (uint32,
 	return st.UIDValidity, err
 }
 
-func undoMoveBack(ctx context.Context, open mail.OpenFunc, q db.Querier, p MoveBack) (any, error) {
+func UndoMoveBack(ctx context.Context, open mail.OpenFunc, q db.Querier, p MoveBack) (any, error) {
 	var restored, missing int
 	err := mailops.Session(ctx, open, q, p.Account, func(client mail.Client) error {
 		current, err := validity(ctx, client, p.DestIMAP)

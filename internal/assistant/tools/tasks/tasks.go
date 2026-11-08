@@ -95,11 +95,9 @@ func specOf(args tool.Args) (tasks.Spec, error) {
 	} else {
 		s.Priority = priority
 	}
-	if raw, ok := args.Get("remind_at"); ok && raw != nil {
-		f, isFloat := raw.(float64)
-		if !isFloat {
-			return s, tool.Error("remind_at must be a number")
-		}
+	if f, ok, err := tool.FloatArg(args, "remind_at", false); err != nil {
+		return s, err
+	} else if ok {
 		s.RemindAt = &f
 	}
 	return s, nil

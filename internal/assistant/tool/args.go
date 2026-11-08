@@ -94,6 +94,32 @@ func IntArg(args Args, name string, required bool) (int64, bool, error) {
 	return 0, false, Error(name + " must be an integer")
 }
 
+func FloatArg(args Args, name string, required bool) (float64, bool, error) {
+	value, ok := args.Get(name)
+	if !ok || value == nil {
+		if required {
+			return 0, false, Error(name + " is required")
+		}
+		return 0, false, nil
+	}
+	switch v := value.(type) {
+	case float64:
+		return v, true, nil
+	case int64:
+		return float64(v), true, nil
+	case json.Number:
+		f, err := v.Float64()
+		if err != nil {
+			return 0, false, Error(name + " must be a number")
+		}
+		return f, true, nil
+	case *big.Int:
+		f, _ := new(big.Float).SetInt(v).Float64()
+		return f, true, nil
+	}
+	return 0, false, Error(name + " must be a number")
+}
+
 func TextArg(args Args, name string, required bool) (text string, ok bool, err error) {
 	value, _ := args.Get(name)
 	if value == nil || value == "" {
