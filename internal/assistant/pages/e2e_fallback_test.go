@@ -25,7 +25,10 @@ func TestChatPageShowsAServerFallback(t *testing.T) {
 	}
 	body := status(t, s.get(fmt.Sprintf("/chat/%d", thread)), http.StatusOK)
 	mustContain(t, body, pricing.HaikuID+" declined; "+pricing.OpusID+" took over (refusal category: cyber).", "served by the fallback")
-	if n := s.count("SELECT COUNT(*) FROM usage WHERE model = ?", pricing.OpusID); n != 1 {
-		t.Errorf("%d fallback usage rows", n)
+	if n := s.count("SELECT COUNT(*) FROM usage"); n != 1 {
+		t.Errorf("%d usage rows, want one per request", n)
+	}
+	if n := s.count("SELECT COUNT(*) FROM usage WHERE model = ? AND iterations LIKE ?", pricing.HaikuID, "%"+pricing.OpusID+"%"); n != 1 {
+		t.Errorf("%d rows carry the fallback iteration", n)
 	}
 }

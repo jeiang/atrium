@@ -28,8 +28,13 @@ type Usage struct {
 	CacheCreation            *CacheCreation `json:"cache_creation"`
 	CacheReadInputTokens     int64          `json:"cache_read_input_tokens"`
 	OutputTokens             int64          `json:"output_tokens"`
+	OutputTokensDetails      *OutputTokens  `json:"output_tokens_details"`
 	ServerToolUse            *ServerToolUse `json:"server_tool_use"`
 	Iterations               []Iteration    `json:"iterations"`
+}
+
+type OutputTokens struct {
+	ThinkingTokens int64 `json:"thinking_tokens"`
 }
 
 type CacheCreation struct {

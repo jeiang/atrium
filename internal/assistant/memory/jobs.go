@@ -311,7 +311,7 @@ func recordUsage(ctx context.Context, d *db.DB, threadID int64, o WorkOptions, r
 		return err
 	}
 	_, err = usage.Record(ctx, d, usage.Entry{
-		TS: o.Now, ThreadID: threadID, RunID: runID, Kind: usage.KindMemory, Model: o.Model, Effort: o.Effort,
+		TS: o.Now, RequestID: resp.ID, ThreadID: threadID, RunID: runID, Kind: usage.KindMemory, Model: o.Model, Effort: o.Effort,
 	}, resp.Usage)
 	return err
 }

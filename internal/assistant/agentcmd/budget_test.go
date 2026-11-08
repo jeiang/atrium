@@ -41,8 +41,8 @@ func TestMonthlyBudgetPausesUnattendedRunsAt80AndChatAt100(t *testing.T) {
 	defer func() { _ = d.Close() }()
 	spend := func(usd float64) {
 		t.Helper()
-		if _, err := d.Write.Exec("INSERT INTO usage (ts, thread_id, run_id, kind, model, effort, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) "+
-			"VALUES (?, 1, 1, 'chat', 'claude-haiku-5-5', 'medium', 0, 0, 0, 0, 0, 0, '<=100K', ?)", float64(time.Now().UnixMicro())/1e6, usd); err != nil {
+		if _, err := d.Write.Exec("INSERT INTO usage (ts, request_id, source, provider, thread_id, run_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) "+
+			"VALUES (?, lower(hex(randomblob(16))), 'loop', 'anthropic', 1, 1, 'chat', 'claude-haiku-5-5', 'medium', '[]', 0, 0, 0, 0, 0, 0, '<=100K', ?)", float64(time.Now().UnixMicro())/1e6, usd); err != nil {
 			t.Fatal(err)
 		}
 	}

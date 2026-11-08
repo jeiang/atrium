@@ -150,6 +150,13 @@ func seedWorld(t *testing.T, app *cli.App, target, source string) {
 				"WHEN instr(error, '"+partialText+"') > 0 THEN 'partial' ELSE 'failed' END, "+
 				"error, undone_ts, undone_error, NULL FROM v1.auto_actions;")
 			continue
+		case "usage":
+			stmts = append(stmts, "INSERT OR IGNORE INTO main.usage (id, ts, request_id, source, provider, thread_id, run_id, kind, model, effort, iterations, "+
+				"input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, reasoning_tokens, searches, tool_calls, wall_ms, tier, cost_usd, "+
+				"partial, unpriced, clear_edits, cleared_tokens, compaction) "+
+				"SELECT id, ts, 'v1-' || id, 'loop', 'anthropic', thread_id, run_id, kind, model, effort, '[]', input_tokens, cache_write_5m, "+
+				"cache_write_1h, cache_read, output_tokens, 0, searches, 0, 0, tier, cost_usd, 0, 0, clear_edits, cleared_tokens, compaction FROM v1.usage;")
+			continue
 		case "proposal_actions":
 			stmts = append(stmts, "INSERT OR IGNORE INTO main.proposal_actions (id, proposal_id, ts, lease, kind, undo_of, action, undo, state, error) "+
 				"SELECT id, proposal_id, ts, ts, CASE WHEN json_extract(action, '$.op') = 'undo' THEN 'undo' ELSE 'write' END, "+
