@@ -8,7 +8,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/mail/openloops"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var loopKinds = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}
@@ -90,20 +89,9 @@ func openLoops(ctx context.Context, tc *tool.Context, args tool.Args) (any, erro
 	}
 	loops := make([]any, len(items))
 	for i, l := range items {
-		loops[i] = py.Dict{
-			{Key: "state", Value: l.State},
-			{Key: "message_id", Value: l.LastMessageID},
-			{Key: "counterpart", Value: l.Counterpart},
-			{Key: "subject", Value: tool.Clip(l.Subject, 200)},
-			{Key: "days_open", Value: l.Days},
-			{Key: "since", Value: localTime(l.Since, loc).Format("2006-01-02T15:04")},
-			{Key: "account", Value: l.Account},
-		}
+		loops[i] = map[string]any{"state": l.State, "message_id": l.LastMessageID, "counterpart": l.Counterpart, "subject": tool.Clip(l.Subject, 200), "days_open": l.Days, "since": localTime(l.Since, loc).Format("2006-01-02T15:04"), "account": l.Account}
 	}
-	return py.Dict{
-		{Key: "loops", Value: loops},
-		{Key: "note", Value: "owe_reply: the last message in the thread is theirs and awaits the operator; waiting_on_them: the operator wrote last."},
-	}, nil
+	return map[string]any{"loops": loops, "note": "owe_reply: the last message in the thread is theirs and awaits the operator; waiting_on_them: the operator wrote last."}, nil
 }
 
 func commitments(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -125,17 +113,9 @@ func commitments(ctx context.Context, tc *tool.Context, args tool.Args) (any, er
 		if c.Subject != nil {
 			subject = *c.Subject
 		}
-		out[i] = py.Dict{
-			{Key: "text", Value: c.Text},
-			{Key: "owner", Value: c.Owner},
-			{Key: "due", Value: nilString(c.Due)},
-			{Key: "status", Value: c.Status},
-			{Key: "message_id", Value: c.MessageID},
-			{Key: "subject", Value: tool.Clip(subject, 200)},
-			{Key: "reminder_proposal_id", Value: nilInt(c.ProposalID)},
-		}
+		out[i] = map[string]any{"text": c.Text, "owner": c.Owner, "due": nilString(c.Due), "status": c.Status, "message_id": c.MessageID, "subject": tool.Clip(subject, 200), "reminder_proposal_id": nilInt(c.ProposalID)}
 	}
-	return py.Dict{{Key: "commitments", Value: out}}, nil
+	return map[string]any{"commitments": out}, nil
 }
 
 func nilString(p *string) any {

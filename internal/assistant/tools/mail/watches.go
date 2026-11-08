@@ -6,9 +6,9 @@ import (
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
+	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/mail/birthdays"
 	"github.com/jeiang/atrium/internal/mail/watches"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var packagesSchema = json.RawMessage(`{"type":"object","properties":{"active_only":{"type":"boolean"}},"additionalProperties":false}`)
@@ -54,21 +54,9 @@ func packages(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	}
 	out := make([]any, len(items))
 	for i, p := range items {
-		out[i] = py.Dict{
-			{Key: "carrier", Value: p.Carrier},
-			{Key: "tracking_number", Value: p.TrackingNumber},
-			{Key: "merchant", Value: p.Merchant},
-			{Key: "order_ref", Value: p.OrderRef},
-			{Key: "status", Value: p.Status},
-			{Key: "status_text", Value: tool.Clip(p.StatusText, 200)},
-			{Key: "updated", Value: p.Updated},
-			{Key: "source_message_id", Value: p.SourceMessageID},
-		}
+		out[i] = map[string]any{"carrier": p.Carrier, "tracking_number": p.TrackingNumber, "merchant": p.Merchant, "order_ref": p.OrderRef, "status": p.Status, "status_text": tool.Clip(p.StatusText, 200), "updated": p.Updated, "source_message_id": p.SourceMessageID}
 	}
-	return py.Dict{
-		{Key: "packages", Value: out},
-		{Key: "note", Value: "Status comes only from emails the operator received; there is no carrier lookup, so it can lag."},
-	}, nil
+	return map[string]any{"packages": out, "note": "Status comes only from emails the operator received; there is no carrier lookup, so it can lag."}, nil
 }
 
 func upcomingBirthdays(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -87,21 +75,15 @@ func upcomingBirthdays(ctx context.Context, tc *tool.Context, args tool.Args) (a
 		return nil, err
 	}
 	if !ok {
-		return nil, tool.NotConfigured("ATRIUM_CONTACTS_CONTACTS_DIR is not set")
+		return nil, tool.NotConfigured(contacts.DirEnv + " is not set")
 	}
 	out := make([]any, len(found))
 	for i, item := range found {
-		d := py.Dict{
-			{Key: "name", Value: item.Name},
-			{Key: "kind", Value: item.Kind},
-			{Key: "label", Value: item.Label},
-			{Key: "date", Value: item.Date},
-			{Key: "days_until", Value: int64(item.DaysUntil)},
-		}
+		d := map[string]any{"name": item.Name, "kind": item.Kind, "label": item.Label, "date": item.Date, "days_until": int64(item.DaysUntil)}
 		if item.Turning != nil {
-			d = append(d, py.Pair{Key: "turning", Value: int64(*item.Turning)})
+			d["turning"] = int64(*item.Turning)
 		}
 		out[i] = d
 	}
-	return py.Dict{{Key: "upcoming", Value: out}}, nil
+	return map[string]any{"upcoming": out}, nil
 }

@@ -181,18 +181,9 @@ func mailSearch(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 		if !ok {
 			recips = []any{}
 		}
-		results[i] = py.Dict{
-			{Key: "message_id", Value: h.ID},
-			{Key: "account", Value: h.Account},
-			{Key: "folder", Value: h.Folder},
-			{Key: "date", Value: iso(h.DateTS)},
-			{Key: "from", Value: from},
-			{Key: "to", Value: recips},
-			{Key: "subject", Value: h.Subject},
-			{Key: "snippet", Value: tool.Clip(h.Snippet, snippetChars)},
-		}
+		results[i] = map[string]any{"message_id": h.ID, "account": h.Account, "folder": h.Folder, "date": iso(h.DateTS), "from": from, "to": recips, "subject": h.Subject, "snippet": tool.Clip(h.Snippet, snippetChars)}
 	}
-	return py.Dict{{Key: "semantic", Value: found.Semantic}, {Key: "results", Value: results}}, nil
+	return map[string]any{"semantic": found.Semantic, "results": results}, nil
 }
 
 func mailRead(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -232,15 +223,5 @@ func mailRead(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 			attachments[i] = a.ContentType
 		}
 	}
-	return py.Dict{
-		{Key: "untrusted", Value: true},
-		{Key: "message_id", Value: found.ID},
-		{Key: "account", Value: found.Account},
-		{Key: "folder", Value: found.Folder},
-		{Key: "date", Value: iso(found.DateTS)},
-		{Key: "headers", Value: headers},
-		{Key: "body", Value: clip(found.Body, int(maxChars))},
-		{Key: "truncated", Value: int64(utf8.RuneCountInString(found.Body)) > maxChars},
-		{Key: "attachments", Value: attachments},
-	}, nil
+	return map[string]any{"untrusted": true, "message_id": found.ID, "account": found.Account, "folder": found.Folder, "date": iso(found.DateTS), "headers": headers, "body": clip(found.Body, int(maxChars)), "truncated": int64(utf8.RuneCountInString(found.Body)) > maxChars, "attachments": attachments}, nil
 }

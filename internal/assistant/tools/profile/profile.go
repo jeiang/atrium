@@ -8,7 +8,6 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
@@ -84,8 +83,13 @@ func get(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 		}
 		entries = append(entries, py.Dict{{Key: "key", Value: e.Key}, {Key: "value", Value: e.Value}})
 	}
-	return py.Dict{{Key: "entries", Value: entries}}, nil
+	return map[string]any{"entries": entries}, nil
 }
+
+var (
+	keyBound   = tool.NewBound(assistant.KeyProfileKeyChars, "")
+	valueBound = tool.NewBound(assistant.KeyProfileValueChars, "")
+)
 
 func set(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	key, keyOK, err := tool.TextArg(args, "key", true)
@@ -99,14 +103,11 @@ func set(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if !keyOK || !valueOK {
 		return nil, tool.Error("key and value are required")
 	}
-	r := assistant.Read(ctx, tc.DB.Read)
-	keyChars := r.Int(assistant.KeyProfileKeyChars)
-	valueChars := r.Int(assistant.KeyProfileValueChars)
-	if err := r.Err(); err != nil {
+	if err := keyBound.ClampText(ctx, tc.DB.Read, key, "key"); err != nil {
 		return nil, err
 	}
-	if utf8.RuneCountInString(key) > keyChars || utf8.RuneCountInString(value) > valueChars {
-		return nil, tool.Error(fmt.Sprintf("key is limited to %d characters and value to %d", keyChars, valueChars))
+	if err := valueBound.ClampText(ctx, tc.DB.Read, value, "value"); err != nil {
+		return nil, err
 	}
 	var previous *string
 	var writeID int64
@@ -125,35 +126,44 @@ func set(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "profile_set", Target: "profile:" + key,
 			Before: map[string]any{"value": optional(previous)},
 			After:  map[string]any{"value": value},
-			Undo:   map[string]any{"op": UndoOp, "key": key, "previous": optional(previous), "applied": value},
+			Undo:   profileUndo{Op: UndoOp, Key: key, Previous: previous, Applied: value},
 		})
 		return err
 	})
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "key", Value: key}, {Key: "value", Value: value}, {Key: "previous", Value: optional(previous)}, {Key: "write_id", Value: writeID}}, nil
+	return map[string]any{"key": key, "value": value, "previous": optional(previous), "write_id": writeID}, nil
 }
 
-func undo(ctx context.Context, q db.Querier, info map[string]any) (any, error) {
-	key, _ := info["key"].(string)
-	found, err := current(ctx, q, key)
+type profileUndo struct {
+	Op       string  `json:"op"`
+	Key      string  `json:"key"`
+	Previous *string `json:"previous"`
+	Applied  string  `json:"applied"`
+}
+
+func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, error) {
+	var u profileUndo
+	if err := json.Unmarshal(payload, &u); err != nil {
+		return nil, writes.UndoError("profile undo payload is invalid")
+	}
+	found, err := current(ctx, q, u.Key)
 	if err != nil {
 		return nil, err
 	}
-	if optional(found) != info["applied"] {
-		return nil, writes.UndoError(fmt.Sprintf("profile %s changed since this write", strconv.Quote(key)))
+	if optional(found) != u.Applied {
+		return nil, writes.UndoError(fmt.Sprintf("profile %s changed since this write", strconv.Quote(u.Key)))
 	}
-	previous, restored := info["previous"].(string)
-	if !restored {
-		_, err = q.ExecContext(ctx, "DELETE FROM agent_profile WHERE key = ?", key)
+	if u.Previous == nil {
+		_, err = q.ExecContext(ctx, "DELETE FROM agent_profile WHERE key = ?", u.Key)
 	} else {
-		_, err = q.ExecContext(ctx, "UPDATE agent_profile SET value = ? WHERE key = ?", previous, key)
+		_, err = q.ExecContext(ctx, "UPDATE agent_profile SET value = ? WHERE key = ?", *u.Previous, u.Key)
 	}
 	if err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "key", Value: key}, {Key: "restored", Value: info["previous"]}}, nil
+	return map[string]any{"key": u.Key, "restored": optional(u.Previous)}, nil
 }
 
 func RegisterUndoer(r *writes.Registry) { r.Register(UndoOp, undo) }
@@ -171,7 +181,7 @@ func Tools() []tool.Tool {
 		{
 			Name:        "profile_set",
 			Description: "Record or overwrite one stable operator preference or fact in the profile (key/value). Logged and undoable by the operator. Keep values short and factual; never store secrets.",
-			InputSchema: json.RawMessage(`{"type": "object", "properties": {"key": {"type": "string", "maxLength": 64}, "value": {"type": "string", "maxLength": 500}}, "required": ["key", "value"], "additionalProperties": false}`),
+			InputSchema: json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {"key": %s, "value": %s}, "required": ["key", "value"], "additionalProperties": false}`, keyBound.TextSchema(), valueBound.TextSchema())),
 			Handler:     set,
 			Effect:      tool.Write,
 			Contexts:    tool.Kinds{tool.Chat, tool.Nightly},

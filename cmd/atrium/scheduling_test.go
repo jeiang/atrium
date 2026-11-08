@@ -61,10 +61,10 @@ func TestFindSlotHonoursOverlapsAllDayEventsWorkingHoursAndDST(t *testing.T) {
 		}
 	}
 	input := map[string]any{"start": "2026-11-01T00:00:00", "end": "2026-11-03T00:00:00", "duration_minutes": 60}
-	want := `[{"start": "2026-11-01T09:00:00-05:00", "end": "2026-11-01T10:00:00-05:00"}, ` +
-		`{"start": "2026-11-01T12:00:00-05:00", "end": "2026-11-01T17:00:00-05:00"}, ` +
-		`{"start": "2026-11-02T09:00:00-05:00", "end": "2026-11-02T13:00:00-05:00"}, ` +
-		`{"start": "2026-11-02T13:30:00-05:00", "end": "2026-11-02T17:00:00-05:00"}]`
+	want := `[{"end": "2026-11-01T10:00:00-05:00", "start": "2026-11-01T09:00:00-05:00"}, ` +
+		`{"end": "2026-11-01T17:00:00-05:00", "start": "2026-11-01T12:00:00-05:00"}, ` +
+		`{"end": "2026-11-02T13:00:00-05:00", "start": "2026-11-02T09:00:00-05:00"}, ` +
+		`{"end": "2026-11-02T17:00:00-05:00", "start": "2026-11-02T13:30:00-05:00"}]`
 	if got := unescape(toolResult(t, "find_slot", input)); !strings.Contains(got, want) {
 		t.Errorf("find_slot result lacks the expected windows:\n%s", got)
 	}

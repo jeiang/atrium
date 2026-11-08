@@ -68,7 +68,12 @@ func testAccess(ctx context.Context, c integrations.Conn) (string, error) {
 		return "", fmt.Errorf("grafana answered %d", status)
 	}
 	var user struct{ Login string }
-	_ = json.Unmarshal([]byte(body), &user)
+	if err := json.Unmarshal([]byte(body), &user); err != nil {
+		return "", fmt.Errorf("grafana returned an unreadable user profile: %w", err)
+	}
+	if user.Login == "" {
+		return "", fmt.Errorf("grafana returned a user profile without a login")
+	}
 	status, _, err = viewerGet(ctx, c, "/api/search?limit=1")
 	if err != nil {
 		return "", err

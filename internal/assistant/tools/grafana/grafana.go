@@ -25,6 +25,8 @@ import (
 	"github.com/jeiang/atrium/internal/timex"
 )
 
+var queryLimitBound = tool.NewCeiling(100, 1, 200)
+
 type limits struct {
 	timeout    time.Duration
 	series     int
@@ -64,8 +66,6 @@ func errorClass(err error) string {
 	switch {
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
 		return "protocol error"
-	case strings.Contains(err.Error(), "TLS handshake timeout"):
-		return "connect timeout"
 	case errors.As(err, &op) && op.Op == "dial":
 		if op.Timeout() {
 			return "connect timeout"
@@ -73,6 +73,10 @@ func errorClass(err error) string {
 		return "connect failed"
 	case errors.As(err, &cert), errors.As(err, &host), errors.As(err, &invalid), errors.As(err, &dns):
 		return "connect failed"
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() && !errors.As(err, &op) {
+		return "connect timeout"
 	}
 	var timeouter interface{ Timeout() bool }
 	if errors.As(err, &timeouter) && timeouter.Timeout() {
@@ -273,7 +277,7 @@ func sample(count, limit int) ([]int, error) {
 		return out, nil
 	}
 	if limit == 1 {
-		return nil, tool.Error("cannot sample a single row")
+		return []int{0}, nil
 	}
 	for i := range limit {
 		out = append(out, int(math.RoundToEven(float64(i*(count-1))/float64(limit-1))))
@@ -282,7 +286,7 @@ func sample(count, limit int) ([]int, error) {
 	return slices.Compact(out), nil
 }
 
-func compactFrame(frameValue any, rowCap, cellChars int) (py.Dict, error) {
+func compactFrame(frameValue any, rowCap, cellChars int) (map[string]any, error) {
 	frame, err := attr(frameValue)
 	if err != nil {
 		return nil, err
@@ -359,12 +363,12 @@ func compactFrame(frameValue any, rowCap, cellChars int) (py.Dict, error) {
 		}
 		names = append(names, orDefault(fields[i], "name", ""))
 	}
-	out := py.Dict{{Key: "fields", Value: names}, {Key: "rows", Value: rows}, {Key: "total_rows", Value: int64(total)}}
+	out := map[string]any{"fields": names, "rows": rows, "total_rows": int64(total)}
 	if name := get(schema, "name"); truthy(name) {
-		out = append(out, py.Pair{Key: "name", Value: name})
+		out["name"] = name
 	}
 	if len(labels) > 0 {
-		out = append(out, py.Pair{Key: "labels", Value: labels})
+		out["labels"] = labels
 	}
 	return out, nil
 }
@@ -405,7 +409,7 @@ func compactResults(payloadValue any, rowCap int, lim limits) (any, error) {
 		}
 		series = append(series, c)
 	}
-	return py.Dict{{Key: "series", Value: series}, {Key: "total_series", Value: int64(len(frames))}}, nil
+	return map[string]any{"series": series, "total_series": int64(len(frames))}, nil
 }
 
 func datasources(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
@@ -427,9 +431,9 @@ func datasources(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, py.Dict{{Key: "uid", Value: get(d, "uid")}, {Key: "name", Value: get(d, "name")}, {Key: "type", Value: get(d, "type")}})
+		out = append(out, map[string]any{"uid": get(d, "uid"), "name": get(d, "name"), "type": get(d, "type")})
 	}
-	return py.Dict{{Key: "datasources", Value: out}}, nil
+	return map[string]any{"datasources": out}, nil
 }
 
 func query(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -455,7 +459,7 @@ func query(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 100, 200, 1)
+	limit, err := queryLimitBound.Clamp(ctx, tc.DB.Read, args, "limit")
 	if err != nil {
 		return nil, err
 	}
@@ -547,14 +551,14 @@ func alerts(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 		if !ok {
 			return nil, tool.Error("grafana returned an unexpected value")
 		}
-		out = append(out, py.Dict{
-			{Key: "labels", Value: orDefault(a, "labels", py.Dict{})},
-			{Key: "summary", Value: tool.Clip(text, lim.cellChars)},
-			{Key: "active_at", Value: get(a, "activeAt")},
-			{Key: "value", Value: get(a, "value")},
+		out = append(out, map[string]any{
+			"labels":    orDefault(a, "labels", py.Dict{}),
+			"summary":   tool.Clip(text, lim.cellChars),
+			"active_at": get(a, "activeAt"),
+			"value":     get(a, "value"),
 		})
 	}
-	return py.Dict{{Key: "total_firing", Value: int64(len(firing))}, {Key: "alerts", Value: out}}, nil
+	return map[string]any{"total_firing": int64(len(firing)), "alerts": out}, nil
 }
 
 func searchDashboards(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -581,15 +585,15 @@ func searchDashboards(ctx context.Context, tc *tool.Context, args tool.Args) (an
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, py.Dict{
-			{Key: "title", Value: get(d, "title")},
-			{Key: "uid", Value: get(d, "uid")},
-			{Key: "url", Value: get(d, "url")},
-			{Key: "folder", Value: get(d, "folderTitle")},
-			{Key: "tags", Value: orDefault(d, "tags", []any{})},
+		out = append(out, map[string]any{
+			"title":  get(d, "title"),
+			"uid":    get(d, "uid"),
+			"url":    get(d, "url"),
+			"folder": get(d, "folderTitle"),
+			"tags":   orDefault(d, "tags", []any{}),
 		})
 	}
-	return py.Dict{{Key: "dashboards", Value: out}}, nil
+	return map[string]any{"dashboards": out}, nil
 }
 
 const emptySchema = `{"type": "object", "properties": {}, "required": [], "additionalProperties": false}`
@@ -610,7 +614,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"datasource_uid": {"type": "string"}, "expr": {"type": "string"}, ` +
 				`"kind": {"type": "string", "enum": ["prometheus", "logs"]}, "start": {"type": "string", "description": "e.g. now-1h or epoch ms"}, ` +
 				`"end": {"type": "string"}, "step": {"type": "string", "description": "Prometheus step, e.g. 60s"}, ` +
-				`"limit": {"type": "integer", "minimum": 1, "maximum": 200}}, "required": ["datasource_uid", "expr"], "additionalProperties": false}`),
+				`"limit": ` + queryLimitBound.Schema() + `}, "required": ["datasource_uid", "expr"], "additionalProperties": false}`),
 			Handler:  query,
 			Effect:   tool.Read,
 			Contexts: contexts,

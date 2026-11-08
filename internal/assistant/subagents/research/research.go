@@ -241,12 +241,7 @@ func (r *Research) handle(ctx context.Context, tc *tool.Context, args tool.Args)
 		}
 		return nil, tool.Error(fmt.Sprintf("%s research stopped: %s (child thread %d)%s", role, reason, child, partial))
 	}
-	return py.Dict{
-		{Key: "untrusted", Value: true},
-		{Key: "role", Value: role},
-		{Key: "child_thread_id", Value: child},
-		{Key: "digest", Value: digest},
-	}, nil
+	return map[string]any{"untrusted": true, "role": role, "child_thread_id": child, "digest": digest}, nil
 }
 
 func (r *Research) runChild(ctx context.Context, tc *tool.Context, child int64, text, role string, agent subagents.Agent) error {

@@ -26,8 +26,9 @@ const (
 )
 
 var (
-	readKinds  = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}
-	writeKinds = tool.Kinds{tool.Chat}
+	readKinds   = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}
+	writeKinds  = tool.Kinds{tool.Chat}
+	searchBound = tool.NewCeiling(20, 1, searchLimitCeiling)
 )
 
 func Tools() []tool.Tool {
@@ -43,7 +44,7 @@ func Tools() []tool.Tool {
 		{
 			Name:        "media_library_search",
 			Description: "Search the media library (movies and TV episodes) by words in the title or file name; returns paths and VPN URLs. The limit is capped by media_search_limit.",
-			InputSchema: json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": {"type": "integer", "minimum": 1, "maximum": %d}}, "required": ["query"], "additionalProperties": false}`, searchLimitCeiling)),
+			InputSchema: json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": %s}, "required": ["query"], "additionalProperties": false}`, searchBound.Schema())),
 			Handler:     mediaLibrarySearch,
 			Effect:      tool.Read,
 			Contexts:    readKinds,
@@ -90,11 +91,7 @@ func RegisterUndoer(r *writes.Registry, env config.Env) {
 }
 
 func qbitFailed(err error) error {
-	var failure media.QbitError
-	if errors.As(err, &failure) {
-		return tool.Error(string(failure))
-	}
-	return err
+	return tool.Domain[media.QbitError, tool.Error](err)
 }
 
 func qbitOf(settings media.Settings) (*media.Qbit, error) {
@@ -148,12 +145,8 @@ func optionalInt(p *int64) any {
 	return *p
 }
 
-func channelDict(c media.Channel) py.Dict {
-	return py.Dict{
-		{Key: "id", Value: c.ID}, {Key: "name", Value: c.Name}, {Key: "imdb", Value: c.IMDB}, {Key: "tmdb_id", Value: optionalInt(c.TMDBID)},
-		{Key: "pattern", Value: c.Pattern}, {Key: "case_sensitive", Value: c.CaseSensitive}, {Key: "primed", Value: c.Primed},
-		{Key: "created", Value: c.Created},
-	}
+func channelDict(c media.Channel) map[string]any {
+	return map[string]any{"id": c.ID, "name": c.Name, "imdb": c.IMDB, "tmdb_id": optionalInt(c.TMDBID), "pattern": c.Pattern, "case_sensitive": c.CaseSensitive, "primed": c.Primed, "created": c.Created}
 }
 
 func kindOf(isMedia bool) string {
@@ -163,22 +156,12 @@ func kindOf(isMedia bool) string {
 	return "plain"
 }
 
-func torrentDict(t media.Torrent) py.Dict {
+func torrentDict(t media.Torrent) map[string]any {
 	state := t.State
 	if label, ok := media.StateLabels[t.State]; ok {
 		state = label
 	}
-	return py.Dict{
-		{Key: "hash", Value: t.Hash},
-		{Key: "name", Value: t.Name},
-		{Key: "state", Value: state},
-		{Key: "progress_percent", Value: int64(math.RoundToEven(t.Progress * 100))},
-		{Key: "size_bytes", Value: optionalInt(t.Size)},
-		{Key: "download_bytes_per_second", Value: optionalInt(t.DLSpeed)},
-		{Key: "eta_seconds", Value: optionalInt(t.ETA)},
-		{Key: "kind", Value: kindOf(t.HasTag(media.TagMedia))},
-		{Key: "filed", Value: t.HasTag(media.TagFiled)},
-	}
+	return map[string]any{"hash": t.Hash, "name": t.Name, "state": state, "progress_percent": int64(math.RoundToEven(t.Progress * 100)), "size_bytes": optionalInt(t.Size), "download_bytes_per_second": optionalInt(t.DLSpeed), "eta_seconds": optionalInt(t.ETA), "kind": kindOf(t.HasTag(media.TagMedia)), "filed": t.HasTag(media.TagFiled)}
 }
 
 func mediaDownloads(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
@@ -211,13 +194,9 @@ func mediaDownloads(ctx context.Context, tc *tool.Context, _ tool.Args) (any, er
 	}
 	queue := []any{}
 	for _, it := range waiting {
-		queue = append(queue, py.Dict{{Key: "id", Value: it.ID}, {Key: "name", Value: it.Name}, {Key: "torrent", Value: it.Torrent}})
+		queue = append(queue, map[string]any{"id": it.ID, "name": it.Name, "torrent": it.Torrent})
 	}
-	return py.Dict{
-		{Key: "torrents", Value: shown},
-		{Key: "waiting_to_file", Value: queue},
-		{Key: "note", Value: "Only torrents of kind media are filed into the library, from the Media downloads page."},
-	}, nil
+	return map[string]any{"torrents": shown, "waiting_to_file": queue, "note": "Only torrents of kind media are filed into the library, from the Media downloads page."}, nil
 }
 
 func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -233,7 +212,7 @@ func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (
 	if err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 20, int64(settings.SearchLimit), 1)
+	limit, err := tool.BoundedInt(args, "limit", searchBound.Default, min(int64(settings.SearchLimit), searchBound.Max), searchBound.Min)
 	if err != nil {
 		return nil, err
 	}
@@ -248,10 +227,7 @@ func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (
 			{Key: "files", Value: files}, {Key: "vpn_urls", Value: urls},
 		})
 	}
-	return py.Dict{
-		{Key: "results", Value: results},
-		{Key: "note", Value: "Paths are relative to the media root; VPN URLs work on the mesh. Public links are made on the Library page."},
-	}, nil
+	return map[string]any{"results": results, "note": "Paths are relative to the media root; VPN URLs work on the mesh. Public links are made on the Library page."}, nil
 }
 
 func mediaChannels(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
@@ -271,7 +247,7 @@ func mediaChannels(ctx context.Context, tc *tool.Context, _ tool.Args) (any, err
 	for i, e := range status.Errors {
 		errs[i] = e
 	}
-	return py.Dict{{Key: "channels", Value: listed}, {Key: "last_check", Value: status.LastCheck}, {Key: "errors", Value: errs}}, nil
+	return map[string]any{"channels": listed, "last_check": status.LastCheck, "errors": errs}, nil
 }
 
 func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -302,7 +278,14 @@ func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 	if asMedia {
 		tags = media.TagMedia
 	}
+	id, err := writes.Begin(ctx, tc.DB.Write, writes.New{
+		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "media_add_magnet", Target: hash,
+	})
+	if err != nil {
+		return nil, err
+	}
 	if err := qb.AddMagnet(ctx, magnet, tags); err != nil {
+		_ = writes.Discard(ctx, tc.DB.Write, id)
 		return nil, qbitFailed(err)
 	}
 	if asMedia {
@@ -310,15 +293,14 @@ func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 			return nil, qbitFailed(err)
 		}
 	}
-	id, err := writes.Record(ctx, tc.DB.Write, tc.Undoers, writes.New{
-		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "media_add_magnet", Target: hash,
-		After: py.Dict{{Key: "magnet", Value: magnet}, {Key: "media", Value: asMedia}},
-		Undo:  py.Dict{{Key: "op", Value: UndoTorrent}, {Key: "hash", Value: hash}},
-	})
-	if err != nil {
+	if err := writes.Settle(ctx, tc.DB.Write, tc.Undoers, id, writes.New{
+		Target: hash,
+		After:  map[string]any{"magnet": magnet, "media": asMedia},
+		Undo:   torrentUndo{Op: UndoTorrent, Hash: hash},
+	}); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "hash", Value: hash}, {Key: "kind", Value: kindOf(asMedia)}, {Key: "write_id", Value: id}}, nil
+	return map[string]any{"hash": hash, "kind": kindOf(asMedia), "write_id": id}, nil
 }
 
 func showFromTMDB(ctx context.Context, client *media.TMDB, tmdbID int64) (string, string, error) {
@@ -359,11 +341,7 @@ func showFromIMDB(ctx context.Context, client *media.TMDB, imdb, name string) (s
 }
 
 func tmdbFailed(err error) error {
-	var failure media.TmdbError
-	if errors.As(err, &failure) {
-		return tool.Error(string(failure))
-	}
-	return err
+	return tool.Domain[media.TmdbError, tool.Error](err)
 }
 
 func mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -423,7 +401,7 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any
 		writeID, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "media_channel_add", Target: fmt.Sprintf("channel:%d", row.ID),
 			After: channelDict(*row),
-			Undo:  py.Dict{{Key: "op", Value: UndoChannelDelete}, {Key: "id", Value: row.ID}},
+			Undo:  channelDeleteUndo{Op: UndoChannelDelete, ID: row.ID},
 		})
 		return err
 	})
@@ -434,8 +412,9 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any
 		}
 		return nil, err
 	}
-	out := append(channelDict(*row), py.Pair{Key: "write_id", Value: writeID},
-		py.Pair{Key: "note", Value: "The first poll only records current releases; later matches are added."})
+	out := channelDict(*row)
+	out["write_id"] = writeID
+	out["note"] = "The first poll only records current releases; later matches are added."
 	return out, nil
 }
 
@@ -456,7 +435,7 @@ func mediaChannelRemove(ctx context.Context, tc *tool.Context, args tool.Args) (
 		writeID, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "media_channel_remove", Target: fmt.Sprintf("channel:%d", id),
 			Before: dict,
-			Undo:   py.Dict{{Key: "op", Value: UndoChannelRestore}, {Key: "row", Value: dict}},
+			Undo:   channelRestoreUndo{Op: UndoChannelRestore, Row: channelUndoOf(row)},
 		})
 		return err
 	})
@@ -467,5 +446,5 @@ func mediaChannelRemove(ctx context.Context, tc *tool.Context, args tool.Args) (
 		}
 		return nil, err
 	}
-	return py.Dict{{Key: "removed", Value: id}, {Key: "name", Value: row.Name}, {Key: "write_id", Value: writeID}}, nil
+	return map[string]any{"removed": id, "name": row.Name, "write_id": writeID}, nil
 }

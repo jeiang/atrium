@@ -12,7 +12,6 @@ import (
 	notiontools "github.com/jeiang/atrium/internal/assistant/tools/notion"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/notion"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -77,9 +76,8 @@ func (s *service) wikiHub(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	check(err)
-	page, _ := made.(py.Dict)
-	value, _ := page.Get("page_id")
-	pageID, _ := value.(string)
+	page, _ := made.(map[string]any)
+	pageID, _ := page["page_id"].(string)
 	_, err = projects.SetHub(ctx, s.deps.DB.Write, id, pageID, s.now())
 	check(err)
 	project, err = projects.Get(ctx, s.deps.DB.Read, id)

@@ -9,7 +9,10 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 )
 
-const DirKey = "contacts_dir"
+const (
+	DirKey = "contacts_dir"
+	DirEnv = "ATRIUM_CONTACTS_" + DirKey
+)
 
 func init() {
 	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{

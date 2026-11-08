@@ -8,7 +8,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/skills"
 	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const Name = "load_skill"
@@ -51,12 +50,7 @@ func load(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if len(unknown) > 0 {
 		body += "\n\nReferenced skills that do not exist: " + strings.Join(unknown, ", ")
 	}
-	return py.Dict{
-		{Key: "name", Value: found.Name},
-		{Key: "description", Value: found.Description},
-		{Key: "body", Value: body},
-		{Key: "references", Value: references},
-	}, nil
+	return map[string]any{"name": found.Name, "description": found.Description, "body": body, "references": references}, nil
 }
 
 func Tools() []tool.Tool {

@@ -8,7 +8,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notion"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var NewClient = notion.NewClient
@@ -27,16 +26,23 @@ func makeClient(ctx context.Context, q db.Querier) (*notion.Client, error) {
 }
 
 func notionError(err error) error {
-	var failure *notion.Error
-	if errors.As(err, &failure) {
-		return tool.Error("notion: " + err.Error())
-	}
-	return err
+	return tool.Domain[*notion.Error, tool.Error](err)
 }
 
-func str(d py.Dict, key string) string {
-	s, _ := dictGet(d, key).(string)
+func str(d any, key string) string {
+	s, _ := value(d, key).(string)
 	return s
+}
+
+func value(d any, key string) any {
+	switch v := d.(type) {
+	case map[string]any:
+		return v[key]
+	case getter:
+		x, _ := v.Get(key)
+		return x
+	}
+	return nil
 }
 
 type getter interface{ Get(string) (any, bool) }

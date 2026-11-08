@@ -2,7 +2,6 @@ package calendartools
 
 import (
 	"context"
-	"errors"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/calendar"
@@ -10,17 +9,16 @@ import (
 )
 
 func proposed(id int64, created bool, err error) (any, error) {
-	var refused calendar.ProposalError
-	if errors.As(err, &refused) {
-		return nil, tool.Error(refused.Error())
-	}
 	if err != nil {
+		if converted := tool.Domain[calendar.ProposalError, tool.Error](err); converted != err {
+			return nil, converted
+		}
 		return nil, wrap(err)
 	}
 	if !created {
-		return py.Dict{{Key: "proposed", Value: false}, {Key: "reason", Value: "an identical proposal already exists"}}, nil
+		return map[string]any{"proposed": false, "reason": "an identical proposal already exists"}, nil
 	}
-	return py.Dict{{Key: "proposed", Value: true}, {Key: "proposal_id", Value: id}}, nil
+	return map[string]any{"proposed": true, "proposal_id": id}, nil
 }
 
 func proposeUpdate(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
