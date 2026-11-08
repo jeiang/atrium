@@ -26,6 +26,20 @@ var log = logx.Logger("atrium.web")
 
 type ErrorPage func(w http.ResponseWriter, r *http.Request, status int, problem string)
 
+type access uint8
+
+const (
+	accessDefault access = iota
+	accessPublic
+	accessAdmin
+)
+
+type routeRule struct {
+	method  string
+	pattern string
+	access  access
+}
+
 type Deps struct {
 	Cfg      config.Config
 	Env      config.Env
@@ -35,6 +49,22 @@ type Deps struct {
 	OnFrame  func(FrameFunc)
 	Stopping <-chan struct{}
 	OnClose  func(func())
+
+	router chi.Router
+	routes *[]routeRule
+}
+
+func (d *Deps) Public(method, pattern string, h http.HandlerFunc) {
+	d.route(method, pattern, accessPublic, h)
+}
+
+func (d *Deps) Admin(method, pattern string, h http.HandlerFunc) {
+	d.route(method, pattern, accessAdmin, h)
+}
+
+func (d *Deps) route(method, pattern string, class access, h http.HandlerFunc) {
+	d.router.Method(method, pattern, h)
+	*d.routes = append(*d.routes, routeRule{method: method, pattern: pattern, access: class})
 }
 
 type Module func(r chi.Router, d *Deps)
@@ -66,6 +96,7 @@ type Server struct {
 	stopOnce sync.Once
 	starting atomic.Bool
 	closers  []func()
+	routes   []routeRule
 }
 
 func New(o Options) (*Server, error) {
@@ -118,6 +149,7 @@ func New(o Options) (*Server, error) {
 	deps := &Deps{
 		Cfg: o.Cfg, Env: o.Env, DB: o.DB, Render: o.Render, Error: s.Error, Stopping: s.stop,
 		OnClose: func(f func()) { s.closers = append(s.closers, f) },
+		router:  s.mux, routes: &s.routes,
 	}
 	if o.Render != nil {
 		deps.OnFrame = o.Render.OnFrame
@@ -132,7 +164,7 @@ func New(o Options) (*Server, error) {
 	for _, register := range o.Modules {
 		register(s.mux, deps)
 	}
-	guard := NewGuard(auth, o.AllowedHosts, o.Public)
+	guard := NewGuard(auth, o.AllowedHosts, o.Public, s.access)
 	guard.secure = s.secure
 	guard.sessions = o.OIDC
 	guard.errPage = s.errPage
@@ -145,6 +177,25 @@ func New(o Options) (*Server, error) {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) { s.handler.ServeHTTP(w, r) }
+
+func (s *Server) route(class access, method, pattern string, h http.HandlerFunc) {
+	s.mux.Method(method, pattern, h)
+	s.routes = append(s.routes, routeRule{method: method, pattern: pattern, access: class})
+}
+
+func (s *Server) access(r *http.Request) access {
+	ctx := chi.NewRouteContext()
+	if !s.mux.Match(ctx, r.Method, r.URL.Path) {
+		return accessDefault
+	}
+	pattern := ctx.RoutePattern()
+	for _, rule := range s.routes {
+		if rule.method == r.Method && rule.pattern == pattern {
+			return rule.access
+		}
+	}
+	return accessDefault
+}
 
 func (s *Server) stopped() bool {
 	select {

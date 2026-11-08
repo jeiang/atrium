@@ -65,9 +65,10 @@ type Guard struct {
 	errPage  ErrorPage
 	admin    func(context.Context) string
 	secure   func(*http.Request) bool
+	classify func(*http.Request) access
 }
 
-func NewGuard(auth Policy, allowedHosts []string, public func(*http.Request) bool) *Guard {
+func NewGuard(auth Policy, allowedHosts []string, public func(*http.Request) bool, classify func(*http.Request) access) *Guard {
 	hosts := map[string]struct{}{}
 	switch {
 	case len(allowedHosts) > 0:
@@ -82,7 +83,7 @@ func NewGuard(auth Policy, allowedHosts []string, public func(*http.Request) boo
 	if public == nil {
 		public = func(*http.Request) bool { return false }
 	}
-	return &Guard{auth: auth, hosts: hosts, public: public}
+	return &Guard{auth: auth, hosts: hosts, public: public, classify: classify}
 }
 
 func hostname(value string) string {
@@ -154,12 +155,16 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			return
 		}
 		static := strings.HasPrefix(r.URL.Path, StaticPrefix)
+		class := accessDefault
+		if g.classify != nil {
+			class = g.classify(r)
+		}
 		who, err := g.identify(r)
 		switch {
 		case errors.Is(err, errUnavailable):
 			deny(w, http.StatusServiceUnavailable, "Service Unavailable")
 			return
-		case err != nil && !static && !g.public(r) && (!g.auth.OIDC() || !signInPath(r)):
+		case err != nil && !static && !g.public(r) && class != accessPublic:
 			g.unauthenticated(w, r, err)
 			return
 		}
@@ -174,7 +179,7 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 		if err == nil {
 			who.NoAuth = who.Source == SourceLocal && g.auth.Open
 			r = r.WithContext(context.WithValue(r.Context(), identityKey{}, who))
-			if !who.Admin && adminRoute(r) {
+			if !who.Admin && (class == accessAdmin || adminRoute(r)) {
 				setSecurityHeaders(w.Header())
 				g.issueCSRF(w, r, token, fresh)
 				r = r.WithContext(context.WithValue(context.WithValue(r.Context(), csrfKey{}, token), adminOnlyKey{}, true))

@@ -25,10 +25,10 @@ func (s *Server) linkPage(w http.ResponseWriter, r *http.Request, status int, me
 }
 
 func (s *Server) registerLinkRoutes() {
-	s.mux.Get(loginlink.Path, func(w http.ResponseWriter, r *http.Request) {
+	s.route(accessPublic, http.MethodGet, loginlink.Path, func(w http.ResponseWriter, r *http.Request) {
 		s.linkPage(w, r, http.StatusOK, "")
 	})
-	s.mux.Post(loginlink.Path, func(w http.ResponseWriter, r *http.Request) {
+	s.route(accessPublic, http.MethodPost, loginlink.Path, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
 		err := s.links.Redeem(r.Context(), FormString(FormValues(r), "token", ""))
 		switch {

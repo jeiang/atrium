@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/auth/loginlink"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
 )
@@ -47,18 +46,6 @@ type identityKey struct{}
 func IdentityOf(ctx context.Context) (Identity, bool) {
 	who, ok := ctx.Value(identityKey{}).(Identity)
 	return who, ok
-}
-
-func signInPath(r *http.Request) bool {
-	switch r.URL.Path {
-	case LoginPath:
-		return r.Method == http.MethodGet || r.Method == http.MethodPost
-	case CallbackPath:
-		return r.Method == http.MethodGet
-	case loginlink.Path:
-		return r.Method == http.MethodGet || r.Method == http.MethodPost
-	}
-	return false
 }
 
 func (g *Guard) identify(r *http.Request) (Identity, error) {
