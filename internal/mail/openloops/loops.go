@@ -243,11 +243,7 @@ func (g *gate) wanted(m *Message) (bool, error) {
 	if env.ok {
 		return g.addressed(env.to) || !g.addressed(env.cc), nil
 	}
-	to, err := m.Recipients()
-	if err != nil {
-		return false, err
-	}
-	return g.addressed(to), nil
+	return true, nil
 }
 
 const messageColumns = "id, account, msgid, gm_thrid, in_reply_to, refs, date_ts, sent, subject, from_name, from_addr, from_domain, to_addrs, " +

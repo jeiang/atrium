@@ -27,17 +27,20 @@ type seededLoopMail struct {
 	toAddrs    string
 	esp        string
 	raw        string
+	noRaw      bool
 }
 
 func seedLoopMail(t *testing.T, d *db.DB, cacheDir string, m seededLoopMail) {
 	t.Helper()
 	rel := fmt.Sprintf("raw/test/%d.eml", m.uid)
-	path := filepath.Join(cacheDir, filepath.FromSlash(rel))
-	if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(m.raw), 0o666); err != nil {
-		t.Fatal(err)
+	if !m.noRaw {
+		path := filepath.Join(cacheDir, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(path), 0o777); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, []byte(m.raw), 0o666); err != nil {
+			t.Fatal(err)
+		}
 	}
 	now := float64(time.Now().Unix())
 	if _, err := d.Write.Exec(
@@ -109,6 +112,10 @@ func TestLoopsRefreshSkipsBulkAndOtherRecipients(t *testing.T) {
 		toAddrs: `["other@example.test"]`, esp: "[]",
 		raw: "From: Friend <friend@example.test>\r\nTo: Other <other@example.test>\r\nSubject: Mail merge\r\n\r\nAre you free next week?\r\n",
 	})
+	seedLoopMail(t, d, cacheDir, seededLoopMail{
+		uid: 8, ageDays: 1, subject: "Bcc uncached", from: "friend@example.test", fromDomain: "example.test",
+		toAddrs: `["other@example.test"]`, esp: "[]", noRaw: true,
+	})
 	if ran := runApp(t, "loops", "refresh"); ran.code != cli.ExitOK {
 		t.Fatalf("loops refresh: %d %s", ran.code, ran.stderr)
 	}
@@ -125,20 +132,20 @@ func TestLoopsRefreshSkipsBulkAndOtherRecipients(t *testing.T) {
 		}
 		subjects = append(subjects, subject)
 	}
-	if len(subjects) != 3 || subjects[0] != "Bcc intro" || subjects[1] != "Dinner?" || subjects[2] != "Mail merge" {
-		t.Fatalf("open loops = %v, want the direct question, the BCC and the mail merge", subjects)
+	if len(subjects) != 4 || subjects[0] != "Bcc intro" || subjects[1] != "Bcc uncached" || subjects[2] != "Dinner?" || subjects[3] != "Mail merge" {
+		t.Fatalf("open loops = %v, want the direct question, the BCC, the uncached BCC and the mail merge", subjects)
 	}
 	var scans int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM mail_scans WHERE kind = 'commitments'").Scan(&scans); err != nil {
 		t.Fatal(err)
 	}
-	if scans != 3 {
-		t.Fatalf("commitment scans = %d, want the three addressed messages", scans)
+	if scans != 4 {
+		t.Fatalf("commitment scans = %d, want the four wanted messages", scans)
 	}
 	mu.Lock()
 	defer mu.Unlock()
-	if len(bodies) != 3 {
-		t.Fatalf("commitment prompts = %d, want 3", len(bodies))
+	if len(bodies) != 4 {
+		t.Fatalf("commitment prompts = %d, want 4", len(bodies))
 	}
 	for _, body := range bodies {
 		for _, want := range []string{"owner@example.test", "ignore items meant for other recipients"} {
