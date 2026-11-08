@@ -36,7 +36,7 @@ func (r Result) Dict() py.Dict {
 	return py.Dict{{Key: "candidates", Value: r.Candidates}, {Key: "run_id", Value: run}, {Key: "proposed", Value: r.Proposed}}
 }
 
-func (r Result) MarshalJSON() ([]byte, error) { return []byte(py.JSONDumps(r.Dict())), nil }
+func (r Result) MarshalJSON() ([]byte, error) { return json.Marshal(r.Dict()) }
 
 func DraftEventProposals(ctx context.Context, svc *service.Service, limit int, now func() float64) (Result, error) {
 	if now == nil {

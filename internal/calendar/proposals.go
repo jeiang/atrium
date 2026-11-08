@@ -49,16 +49,34 @@ func (p *Proposals) env() config.Env {
 }
 
 func fingerprint(parts ...any) string {
-	sum := sha256.Sum256([]byte(py.JSONDumps(parts)))
+	quoted := make([]string, len(parts))
+	for i, part := range parts {
+		encoded, _ := json.Marshal(part)
+		quoted[i] = string(encoded)
+	}
+	sum := sha256.Sum256([]byte("[" + strings.Join(quoted, ", ") + "]"))
 	return hex.EncodeToString(sum[:])[:32]
+}
+
+func clip(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	i := 0
+	for pos := range s {
+		if i == n {
+			return s[:pos]
+		}
+		i++
+	}
+	return s
 }
 
 func (p *Proposals) Propose(ctx context.Context, raw py.Dict, source py.Dict, key string) (id int64, created bool, err error) {
 	chosen, _ := raw.Get("calendar")
 	target := ICloud
-	if py.Truthy(chosen) {
-		s, ok := chosen.(string)
-		if !ok || s != ICloud && s != Google {
+	if s, ok := chosen.(string); ok && s != "" {
+		if s != ICloud && s != Google {
 			return 0, false, ProposalError("calendar must be one of " + TargetsText)
 		}
 		target = s
@@ -93,7 +111,7 @@ func (p *Proposals) Propose(ctx context.Context, raw py.Dict, source py.Dict, ke
 	}
 	when := spec.Start
 	if !spec.AllDay {
-		when = strings.ReplaceAll(py.Clip(spec.Start, 16), "T", " ")
+		when = strings.ReplaceAll(clip(spec.Start, 16), "T", " ")
 	}
 	account := Account
 	title := fmt.Sprintf("Add to calendar: %s (%s)", spec.Title, when)
@@ -101,23 +119,19 @@ func (p *Proposals) Propose(ctx context.Context, raw py.Dict, source py.Dict, ke
 }
 
 func payloadOf(prop *proposals.Proposal) (target string, spec Spec, err error) {
-	decoded, err := py.JSONLoads(prop.Payload)
-	if err != nil {
+	var d map[string]any
+	if err := json.Unmarshal(prop.Payload, &d); err != nil {
 		return "", Spec{}, err
 	}
-	d, ok := decoded.(py.Dict)
-	if !ok {
-		return "", Spec{}, fmt.Errorf("%w: calendar payload is not an object", httpx.ErrType)
-	}
-	value, found := d.Get("calendar")
+	value, found := d["calendar"]
 	if !found {
 		return "", Spec{}, fmt.Errorf("%w: 'calendar'", httpx.ErrKey)
 	}
-	target, ok = value.(string)
+	target, ok := value.(string)
 	if !ok {
-		return "", Spec{}, fmt.Errorf("%w: calendar must be a string, not %s", httpx.ErrType, py.TypeName(value))
+		return "", Spec{}, fmt.Errorf("%w: calendar must be a string, not %T", httpx.ErrType, value)
 	}
-	raw, found := d.Get("spec")
+	raw, found := d["spec"]
 	if !found {
 		return "", Spec{}, fmt.Errorf("%w: 'spec'", httpx.ErrKey)
 	}

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 type kind uint8
@@ -42,7 +42,7 @@ func wall(t time.Time) time.Time {
 }
 
 func resolve(loc *time.Location, w time.Time) time.Time {
-	return time.Unix(py.WallToUnix(loc, w.Unix()), int64(w.Nanosecond())).In(loc)
+	return time.Unix(timex.WallToUnix(loc, w.Unix()), int64(w.Nanosecond())).In(loc)
 }
 
 func (v Value) midnight() time.Time {
@@ -105,43 +105,79 @@ func (v Value) iso() string {
 
 func fmtValue(v Value, tz *time.Location) string {
 	if v.isDatetime() {
-		return py.ISOFormat(asDT(v, tz).In(tz), "seconds")
+		return asDT(v, tz).In(tz).Format(time.RFC3339)
 	}
 	return v.iso()
 }
 
+type isoStamp struct {
+	t     time.Time
+	aware bool
+}
+
+func parseISO(s string) (isoStamp, bool) {
+	for _, layout := range []string{
+		"2006-01-02T15:04:05Z07:00",
+		"2006-01-02 15:04:05Z07:00",
+		"2006-01-02T15:04Z07:00",
+		"2006-01-02 15:04Z07:00",
+		"2006-01-02T15:04:05Z0700",
+		"2006-01-02 15:04:05Z0700",
+		"2006-01-02T15:04Z0700",
+		"2006-01-02 15:04Z0700",
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return isoStamp{t: t, aware: true}, true
+		}
+	}
+	for _, layout := range []string{
+		"2006-01-02T15:04:05",
+		"2006-01-02 15:04:05",
+		"2006-01-02T15:04",
+		"2006-01-02 15:04",
+		"2006-01-02",
+	} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return isoStamp{t: t}, true
+		}
+	}
+	return isoStamp{}, false
+}
+
 func ParseWhen(raw any, tz *time.Location, allDay bool) (Value, error) {
 	text, ok := raw.(string)
-	if !ok || py.Strip(text) == "" {
+	trimmed := strings.TrimSpace(text)
+	if !ok || trimmed == "" {
 		return Value{}, Error("start and end must be ISO-8601 strings")
 	}
-	trimmed := py.Strip(text)
-	bad := func(msg string) error { return Error(fmt.Sprintf("bad date/time %s: %s", py.Repr(text), msg)) }
+	bad := func(msg string) error { return Error(fmt.Sprintf("bad date/time %q: %s", text, msg)) }
 	separated := strings.ContainsAny(trimmed, "T ")
 	if allDay {
 		if separated {
-			dt, ok := py.FromISOFormat(trimmed)
+			stamp, ok := parseISO(trimmed)
 			if !ok {
-				return Value{}, bad(py.ISOFormatError(trimmed))
+				return Value{}, bad("invalid ISO-8601 date/time")
 			}
-			return dateValue(dt.Year, time.Month(dt.Month), dt.Day), nil
+			y, m, d := stamp.t.Date()
+			return dateValue(y, m, d), nil
 		}
-		y, m, d, ok := py.DateFromISOFormat(trimmed)
-		if !ok {
-			return Value{}, bad(py.DateISOFormatError(trimmed))
+		date, err := time.Parse("2006-01-02", trimmed)
+		if err != nil {
+			return Value{}, bad("invalid ISO-8601 date")
 		}
-		return dateValue(y, time.Month(m), d), nil
+		y, m, d := date.Date()
+		return dateValue(y, m, d), nil
 	}
-	dt, ok := py.FromISOFormat(trimmed)
+	stamp, ok := parseISO(trimmed)
 	if !ok {
-		return Value{}, bad(py.ISOFormatError(trimmed))
+		return Value{}, bad("invalid ISO-8601 date/time")
 	}
 	if !separated {
-		return awareValue(resolve(tz, time.Date(dt.Year, time.Month(dt.Month), dt.Day, 0, 0, 0, 0, time.UTC))), nil
+		y, m, d := stamp.t.Date()
+		return awareValue(resolve(tz, time.Date(y, m, d, 0, 0, 0, 0, time.UTC))), nil
 	}
-	w := time.Date(dt.Year, time.Month(dt.Month), dt.Day, dt.Hour, dt.Minute, dt.Second, dt.Microsecond*1000, time.UTC)
-	if dt.Aware {
-		return awareValue(time.Unix(w.Unix()-int64(dt.OffsetSeconds), int64(w.Nanosecond())).In(time.FixedZone("", dt.OffsetSeconds))), nil
+	if stamp.aware {
+		return awareValue(stamp.t), nil
 	}
-	return awareValue(resolve(tz, w)), nil
+	return awareValue(resolve(tz, stamp.t)), nil
 }

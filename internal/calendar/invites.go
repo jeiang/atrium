@@ -1,9 +1,11 @@
 package calendar
 
 import (
+	"strings"
 	"time"
 
 	"github.com/emersion/go-ical"
+
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -43,7 +45,7 @@ func InvitesIn(data []byte, methodParam string, now time.Time) []Invite {
 	if method == "" {
 		method = methodParam
 	}
-	if skippedMethods[py.Upper(method)] {
+	if skippedMethods[strings.ToUpper(method)] {
 		return nil
 	}
 	events, err := parseEvents(cal)
@@ -54,7 +56,7 @@ func InvitesIn(data []byte, methodParam string, now time.Time) []Invite {
 	var out []Invite
 	seen := map[string]bool{}
 	for _, ev := range events {
-		if ev.dtstart == nil || py.Upper(ev.status) == "CANCELLED" {
+		if ev.dtstart == nil || strings.ToUpper(ev.status) == "CANCELLED" {
 			continue
 		}
 		start := *ev.dtstart
@@ -70,13 +72,13 @@ func InvitesIn(data []byte, methodParam string, now time.Time) []Invite {
 			continue
 		}
 		seen[uid] = true
-		title := py.Strip(ev.summary)
+		title := strings.TrimSpace(ev.summary)
 		if title == "" {
 			title = "Event"
 		}
 		invite := Invite{
 			UID: uid, Title: title, Start: start.iso(), AllDay: start.isDate(),
-			Location: py.Strip(ev.location), Notes: py.Clip(py.Strip(ev.description), 1000),
+			Location: strings.TrimSpace(ev.location), Notes: clip(strings.TrimSpace(ev.description), 1000),
 		}
 		if ev.dtend != nil {
 			invite.End = new(ev.dtend.iso())

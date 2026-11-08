@@ -2,6 +2,7 @@ package calendarcmd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
@@ -14,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func Callables() map[string]worker.Callable {
@@ -61,7 +61,11 @@ func candidatesCommand(env config.Env, tools registry.Source, now func() float64
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				_, _ = fmt.Fprintln(e.Stdout, py.JSONDumps(out.Dict(), py.JSONOpts{Indent: 2}))
+				encoded, err := json.MarshalIndent(out.Dict(), "", "  ")
+				if err != nil {
+					return cli.Fail(e, err)
+				}
+				_, _ = fmt.Fprintln(e.Stdout, string(encoded))
 				return cli.ExitOK
 			}
 		},

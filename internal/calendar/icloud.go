@@ -14,7 +14,6 @@ import (
 	"github.com/emersion/go-ical"
 	"github.com/emersion/go-webdav"
 	"github.com/emersion/go-webdav/caldav"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type icloudCalendar struct {
@@ -112,12 +111,12 @@ func openICloud(ctx context.Context, set Settings) (*icloudCalendar, error) {
 	}
 	named := set.ICloudCalendar
 	for _, cal := range calendars {
-		if named != "" && py.Lower(cal.Name) == named {
+		if named != "" && strings.ToLower(cal.Name) == named {
 			return &icloudCalendar{client, cal.Path}, nil
 		}
 	}
 	if named != "" {
-		return nil, Error(fmt.Sprintf("iCloud calendar %s not found", py.Repr(named)))
+		return nil, Error(fmt.Sprintf("iCloud calendar %q not found", named))
 	}
 	for _, cal := range calendars {
 		if len(cal.SupportedComponentSet) == 0 || slices.Contains(cal.SupportedComponentSet, "VEVENT") {

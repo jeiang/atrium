@@ -1,11 +1,14 @@
 package calendar
 
 import (
+	"context"
 	"errors"
 	"fmt"
+	"net"
+	"os"
 	"strings"
+	"syscall"
 
-	"github.com/jeiang/atrium/internal/py"
 	"golang.org/x/oauth2"
 	"google.golang.org/api/googleapi"
 )
@@ -44,12 +47,23 @@ func remote(err error) error {
 		if reason == "" {
 			reason = "Unknown"
 		}
-		return &Remote{Class: "HttpError", Text: fmt.Sprintf("<HttpError %d returned %s>", api.Code, py.Repr(reason))}
+		return &Remote{Class: "HttpError", Text: fmt.Sprintf("<HttpError %d returned %q>", api.Code, reason)}
 	case errors.As(err, &refused):
-		return &Remote{Class: "RefreshError", Text: fmt.Sprintf("(%s, %s)", py.Repr(refreshReason(refused)), strings.TrimSpace(string(refused.Body)))}
+		return &Remote{Class: "RefreshError", Text: fmt.Sprintf("(%q, %s)", refreshReason(refused), strings.TrimSpace(string(refused.Body)))}
 	}
-	if osErr, ok := py.OSErrorOf(err); ok {
-		return &Remote{Class: osErr.Kind, Text: osErr.Error()}
+	var dns *net.DNSError
+	var timeout interface{ Timeout() bool }
+	var errno syscall.Errno
+	switch {
+	case errors.As(err, &dns) && dns.IsNotFound:
+		return &Remote{Class: "gaierror", Text: "Name or service not known"}
+	case errors.As(err, &dns) && !dns.IsTimeout:
+		return &Remote{Class: "gaierror", Text: "Temporary failure in name resolution"}
+	case errors.Is(err, context.DeadlineExceeded) || errors.Is(err, os.ErrDeadlineExceeded),
+		errors.As(err, &timeout) && timeout.Timeout():
+		return &Remote{Class: "TimeoutError", Text: "timed out"}
+	case errors.As(err, &errno):
+		return &Remote{Class: "OSError", Text: errno.Error()}
 	}
 	return &Remote{Class: "Exception", Text: err.Error()}
 }
