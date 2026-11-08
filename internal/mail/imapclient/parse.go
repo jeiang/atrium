@@ -74,7 +74,7 @@ func expandUIDSet(text string) ([]uint32, error) {
 func pyInt32(s string) (uint32, error) {
 	v, err := strconv.ParseUint(s, 10, 32)
 	if err != nil {
-		return 0, fmt.Errorf("invalid literal for int() with base 10: %s", py.Repr(s))
+		return 0, fmt.Errorf("invalid literal for int() with base 10: %s", strconv.Quote(s))
 	}
 	return uint32(v), nil
 }
@@ -82,7 +82,7 @@ func pyInt32(s string) (uint32, error) {
 func pyInt64(s string) (uint64, error) {
 	v, err := strconv.ParseUint(s, 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("invalid literal for int() with base 10: %s", py.Repr(s))
+		return 0, fmt.Errorf("invalid literal for int() with base 10: %s", strconv.Quote(s))
 	}
 	return v, nil
 }

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -54,7 +55,7 @@ func Get(ctx context.Context, q Querier, messageID int64) (*Correction, error) {
 func Record(ctx context.Context, d *db.DB, messageID int64, folder, source string, ts float64) (Correction, error) {
 	folder = py.Strip(folder)
 	if folder == "" || utf8.RuneCountInString(folder) > MaxFolderChars || strings.Contains(folder, "|") || folder == config.Inbox {
-		return Correction{}, errorf("invalid destination %s", py.Repr(folder))
+		return Correction{}, errorf("invalid destination %s", strconv.Quote(folder))
 	}
 	var out Correction
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {

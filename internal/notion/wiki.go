@@ -38,10 +38,6 @@ type WikiError string
 
 func (e WikiError) Error() string { return string(e) }
 
-func (WikiError) PyClass() string { return "WikiError" }
-
-func (WikiError) PyModule() string { return "atrium.notion_wiki" }
-
 func LocalDate(ts float64, env config.Env) (string, error) {
 	loc, err := config.Location(env)
 	if err != nil {

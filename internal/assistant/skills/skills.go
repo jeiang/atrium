@@ -26,8 +26,6 @@ type Error string
 
 func (e Error) Error() string { return string(e) }
 
-func (Error) PyClass() string { return "SkillError" }
-
 type Skill struct {
 	Name        string  `json:"name"`
 	Description string  `json:"description"`

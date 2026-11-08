@@ -21,7 +21,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/watches"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var log = logx.Logger("atrium.run")
@@ -180,7 +179,7 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 			log.Error(extra.Name+" refresh failed", logx.Err, err.Error())
 			continue
 		}
-		log.Info(extra.Name + ": " + py.ReprValue(result))
+		log.Info(extra.Name + ": " + fmt.Sprint(result))
 	}
 	return ctx.Err()
 }

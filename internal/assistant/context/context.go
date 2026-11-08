@@ -72,8 +72,6 @@ type ContextError string
 
 func (e ContextError) Error() string { return string(e) }
 
-func (ContextError) PyClass() string { return "ContextError" }
-
 func Betas() []string { return []string{BetaContextManagement, BetaCompaction} }
 
 var (
@@ -246,5 +244,5 @@ func str(v any) string {
 	if s, ok := v.(string); ok {
 		return s
 	}
-	return py.ReprValue(v)
+	return fmt.Sprint(v)
 }

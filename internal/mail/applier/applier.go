@@ -368,7 +368,7 @@ func (a *Applier) moveGroup(ctx context.Context, client mail.Client, account str
 		return nil
 	}
 	for _, uid := range failing {
-		if err := a.Live.Fail(ctx, by[uid].aid, py.ExceptionText(err)); err != nil {
+		if err := a.Live.Fail(ctx, by[uid].aid, err.Error()); err != nil {
 			return err
 		}
 	}
@@ -411,7 +411,7 @@ func (a *Applier) labelGroup(ctx context.Context, client mail.Client, account st
 	size := batchSize(ctx)
 	for _, chunk := range mailops.Chunks(uids, size) {
 		if err := mailops.StoreLabels(ctx, client, g.imapName, g.validity, chunk, size, g.added, g.removed); err != nil {
-			text := py.ExceptionText(err)
+			text := err.Error()
 			if errors.Is(err, mailops.ErrValidityChanged) {
 				for _, uid := range chunk {
 					if err := a.Live.Fail(ctx, by[uid].aid, text); err != nil {
@@ -541,7 +541,7 @@ func (a *Applier) gmailTrashGroup(ctx context.Context, client mail.Client, accou
 			c, err = mailops.CopyUIDs(ctx, client, g.dest, chunk)
 		}
 		if err != nil {
-			text := py.ExceptionText(err)
+			text := err.Error()
 			_, refused := errors.AsType[safety.WriteRefused](err)
 			refused = refused || errors.Is(err, mailops.ErrValidityChanged)
 			_, unknown := errors.AsType[*mail.WriteInterrupted](err)
@@ -611,7 +611,7 @@ func (a *Applier) flagGroup(ctx context.Context, client mail.Client, account str
 	for _, chunk := range mailops.Chunks(uids, size) {
 		if err := mailops.StoreFlag(ctx, client, g.imapName, g.validity, chunk, size, mailops.Flagged, true); err != nil {
 			for _, uid := range chunk {
-				if err := a.Live.Fail(ctx, by[uid].aid, py.ExceptionText(err)); err != nil {
+				if err := a.Live.Fail(ctx, by[uid].aid, err.Error()); err != nil {
 					return err
 				}
 			}
@@ -790,7 +790,7 @@ func (a *Applier) execute(ctx context.Context, client mail.Client, account strin
 		}
 		log.Error(account+": group failed unexpectedly", logx.Err, runErr.Error())
 		_, refused := errors.AsType[safety.WriteRefused](runErr)
-		text := py.ExceptionText(runErr)
+		text := runErr.Error()
 		for _, e := range g.entries {
 			var err error
 			if refused {
@@ -1023,7 +1023,7 @@ func (a *Applier) runPass(ctx context.Context, account string, build builder, la
 			byKind = py.Dict{}
 		}
 		log.Info(fmt.Sprintf("%s: %s applied=%s skipped=%d failed=%d deferred=%d",
-			account, label, py.ReprValue(byKind), out.Skipped, out.Failed, budget.Deferred))
+			account, label, fmt.Sprint(byKind), out.Skipped, out.Failed, budget.Deferred))
 	}
 	return out, nil
 }

@@ -71,22 +71,20 @@ func errorClass(err error) string {
 	var dns *net.DNSError
 	switch {
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
-		return "RemoteProtocolError"
-	case strings.Contains(err.Error(), "TLS handshake timeout"):
-		return "ConnectTimeout"
+		return "protocol error"
 	case errors.As(err, &op) && op.Op == "dial":
 		if op.Timeout() {
-			return "ConnectTimeout"
+			return "connect timeout"
 		}
-		return "ConnectError"
+		return "connect failed"
 	case errors.As(err, &cert), errors.As(err, &host), errors.As(err, &invalid), errors.As(err, &dns):
-		return "ConnectError"
+		return "connect failed"
 	}
 	var timeouter interface{ Timeout() bool }
 	if errors.As(err, &timeouter) && timeouter.Timeout() {
-		return "ReadTimeout"
+		return "read timeout"
 	}
-	return "ReadError"
+	return "read failed"
 }
 
 type param struct{ key, value string }

@@ -374,7 +374,7 @@ func shortArgs(input any) (string, error) {
 		input = py.Dict{}
 	}
 	if _, ok := input.(py.Dict); !ok {
-		return py.ReprValue(input), nil
+		return fmt.Sprint(input), nil
 	}
 	return progress.ShortArgs(json.RawMessage(py.JSONDumps(input)))
 }

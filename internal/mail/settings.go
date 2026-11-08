@@ -234,7 +234,7 @@ func modeCheck(value string) error {
 			return nil
 		}
 	}
-	return settings.Invalid(fmt.Sprintf("must be one of (%s, %s), got %s", py.Repr(config.Shadow), py.Repr(config.Live), py.Repr(value)))
+	return settings.Invalid(fmt.Sprintf("must be one of (%s, %s), got %s", strconv.Quote(config.Shadow), strconv.Quote(config.Live), strconv.Quote(value)))
 }
 
 func clusterKsCheck(value string) error {
@@ -249,7 +249,7 @@ func domainsCheck(value string) error {
 	for _, d := range SplitList(value) {
 		for _, c := range d {
 			if c != '.' && c != '-' && (c < 'a' || c > 'z') && (c < '0' || c > '9') {
-				return settings.Invalid("domains are lowercase letters, digits, dots and hyphens, got " + py.Repr(d))
+				return settings.Invalid("domains are lowercase letters, digits, dots and hyphens, got " + strconv.Quote(d))
 			}
 		}
 	}
@@ -275,7 +275,7 @@ func splitInts(value string) ([]int, error) {
 	for i, part := range parts {
 		n, ok := py.ParseInt(part)
 		if !ok || n < 1 || n > math.MaxInt32 {
-			return nil, settings.Invalid("must be comma-separated whole numbers of at least 1, got " + py.Repr(part))
+			return nil, settings.Invalid("must be comma-separated whole numbers of at least 1, got " + strconv.Quote(part))
 		}
 		out[i] = int(n)
 	}

@@ -36,26 +36,23 @@ func pathText(p string) string {
 }
 
 type osFailure struct {
-	class string
-	text  string
+	text string
 }
 
 func (e *osFailure) Error() string { return e.text }
 
-func (e *osFailure) PyClass() string { return e.class }
-
 func osClass(err error) string {
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		return "FileNotFoundError"
+		return "file not found"
 	case errors.Is(err, fs.ErrPermission):
-		return "PermissionError"
+		return "permission denied"
 	case errors.Is(err, syscall.EISDIR):
-		return "IsADirectoryError"
+		return "is a directory"
 	case errors.Is(err, syscall.ENOTDIR):
-		return "NotADirectoryError"
+		return "not a directory"
 	}
-	return "OSError"
+	return "I/O error"
 }
 
 func collectionName(root, file string) (string, error) {
@@ -64,7 +61,7 @@ func collectionName(root, file string) (string, error) {
 		data, err := os.ReadFile(label)
 		if err == nil {
 			if !utf8.Valid(data) {
-				return "", &osFailure{"UnicodeDecodeError", "'utf-8' codec can't decode bytes"}
+				return "", &osFailure{"invalid UTF-8"}
 			}
 			if text := strings.TrimSpace(string(data)); text != "" {
 				return text, nil
@@ -111,13 +108,13 @@ func MirrorEvents(directory string, ws, we time.Time, tz *time.Location, target 
 		}
 		data, err := os.ReadFile(file)
 		if err != nil {
-			notes = append(notes, fmt.Sprintf("%s: unreadable (%s)", filepath.Base(file), osClass(err)))
+			notes = append(notes, fmt.Sprintf("%s: unreadable: %s", filepath.Base(file), osClass(err)))
 			continue
 		}
 		rows, err := EventsInICS(data, name, ws, we, tz, &notes, maxOccurrences)
 		var bad valueError
 		if errors.As(err, &bad) {
-			notes = append(notes, fmt.Sprintf("%s: unreadable (ValueError)", filepath.Base(file)))
+			notes = append(notes, fmt.Sprintf("%s: unreadable: invalid calendar data", filepath.Base(file)))
 			continue
 		}
 		if err != nil {

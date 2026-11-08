@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type runner func(ctx context.Context, cfg config.Config, requested string, open mailops.Opener) error
@@ -49,10 +49,10 @@ func execute(env *cli.Env, requested string, run runner, clients Clients) int {
 	if errors.As(err, &unknown) {
 		var names []string
 		for _, a := range config.Accounts() {
-			names = append(names, py.Repr(a.Name))
+			names = append(names, strconv.Quote(a.Name))
 		}
 		slices.Sort(names)
-		return env.UsageError("argument --account: invalid choice: %s (choose from %s)", py.Repr(requested), strings.Join(names, ", "))
+		return env.UsageError("argument --account: invalid choice %q (choose from %s)", requested, strings.Join(names, ", "))
 	}
 	if err != nil {
 		return cli.Fail(env, err)

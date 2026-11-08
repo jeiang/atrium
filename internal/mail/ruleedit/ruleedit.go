@@ -70,7 +70,7 @@ func get(raw any, key string) any {
 func checked(raw any, id string) (rules.Rule, error) {
 	doc, ok := withID(raw, id)
 	if !ok {
-		return rules.Rule{}, fmt.Errorf("%w: 'raw' object is not a mapping", httpx.ErrType)
+		return rules.Rule{}, fmt.Errorf("%w: 'raw' object is not a mapping", httpx.ErrShape)
 	}
 	rule, err := rules.ValidateRule(doc)
 	if err != nil {
@@ -78,7 +78,7 @@ func checked(raw any, id string) (rules.Rule, error) {
 	}
 	if rule.Account != nil {
 		if _, known := config.Account(*rule.Account); !known {
-			return rules.Rule{}, ruleErrorf("unknown account " + py.Repr(*rule.Account))
+			return rules.Rule{}, ruleErrorf("unknown account " + strconv.Quote(*rule.Account))
 		}
 	}
 	return rule, nil
@@ -142,7 +142,7 @@ func CreateRule(ctx context.Context, d *db.DB, raw any) (rules.Rule, error) {
 		var one int
 		switch err := tx.QueryRowContext(ctx, "SELECT 1 FROM rules WHERE id = ?", rule.ID).Scan(&one); {
 		case err == nil:
-			return ruleErrorf("rule " + py.Repr(rule.ID) + " already exists")
+			return ruleErrorf("rule " + strconv.Quote(rule.ID) + " already exists")
 		case !errors.Is(err, sql.ErrNoRows):
 			return err
 		}
@@ -175,7 +175,7 @@ func UpdateRule(ctx context.Context, d *db.DB, id string, raw any) (rules.Rule, 
 		return rules.Rule{}, err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return rules.Rule{}, ruleErrorf("unknown rule " + py.Repr(id))
+		return rules.Rule{}, ruleErrorf("unknown rule " + strconv.Quote(id))
 	}
 	return rule, nil
 }

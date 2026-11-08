@@ -12,8 +12,6 @@ import (
 	"unicode/utf8"
 
 	"regexp"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -184,7 +182,7 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	root.version = a.Version
 	extras, err := s.parse(root, args)
 	if err == nil && len(extras) > 0 {
-		msg := "unrecognized arguments: " + strings.Join(extras, " ")
+		msg := "unknown arguments: " + strings.Join(extras, " ")
 		if s.leaf != nil && s.leaf.extras != "" {
 			msg = s.leaf.extras
 		}
@@ -204,7 +202,7 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 }
 
 func formatWidth() int {
-	if n, ok := py.ParseInt(os.Getenv("COLUMNS")); ok && n > 0 && n <= 1<<20 {
+	if n, err := strconv.ParseInt(strings.TrimSpace(os.Getenv("COLUMNS")), 10, 64); err == nil && n > 0 && n <= 1<<20 {
 		return int(n) - 2
 	}
 	return 80 - 2
@@ -459,7 +457,7 @@ func (s *session) parse(p *parser, args []string) ([]string, error) {
 				break
 			}
 			if t.opt[1] == '-' || t.explicit == "" || t.sep != "" || t.explicit[0] == '-' {
-				return 0, s.argError(p, t.a, "ignored explicit argument %s", py.Repr(t.explicit))
+				return 0, s.argError(p, t.a, "does not take a value")
 			}
 			todo = append(todo, taken{t.a, nil})
 			_, size := utf8.DecodeRuneInString(t.explicit)
@@ -542,7 +540,7 @@ func (s *session) parse(p *parser, args []string) ([]string, error) {
 		}
 	}
 	if len(required) > 0 {
-		return nil, s.fail(p, "the following arguments are required: "+strings.Join(required, ", "))
+		return nil, s.fail(p, "missing required arguments: "+strings.Join(required, ", "))
 	}
 	return append(extras, subExtras...), nil
 }
@@ -551,9 +549,9 @@ func (s *session) store(p *parser, a *action, str string, keep bool) error {
 	value := str
 	var n int
 	if a.isInt {
-		v, ok := py.ParseInt(str)
-		if !ok || int64(int(v)) != v {
-			return s.argError(p, a, "invalid int value: %s", py.Repr(str))
+		v, err := strconv.ParseInt(strings.TrimSpace(str), 10, 64)
+		if err != nil || int64(int(v)) != v {
+			return s.argError(p, a, "invalid integer %q", str)
 		}
 		n, value = int(v), strconv.Itoa(int(v))
 	}
@@ -578,9 +576,9 @@ func (s *session) checkChoice(p *parser, a *action, value string) error {
 	}
 	quoted := make([]string, len(a.Choices))
 	for i, c := range a.Choices {
-		quoted[i] = py.Repr(c)
+		quoted[i] = strconv.Quote(c)
 	}
-	return s.argError(p, a, "invalid choice: %s (choose from %s)", py.Repr(value), strings.Join(quoted, ", "))
+	return s.argError(p, a, "invalid choice %q (choose from %s)", value, strings.Join(quoted, ", "))
 }
 
 func matchPartial(actions []*action, pattern string) []int {
@@ -618,7 +616,7 @@ func (a *action) metavar() string {
 	case a.Choices != nil:
 		return "{" + strings.Join(a.Choices, ",") + "}"
 	case len(a.opts) > 0:
-		return py.Upper(a.dest)
+		return strings.ToUpper(a.dest)
 	}
 	return a.dest
 }
@@ -779,7 +777,7 @@ func formatItem(b *strings.Builder, item helpItem, helpPos, width int) {
 		indentFirst = helpPos
 	}
 	if item.help != "" {
-		if py.Strip(item.help) != "" {
+		if strings.TrimSpace(item.help) != "" {
 			lines := splitLines(item.help, helpWidth)
 			b.WriteString(strings.Repeat(" ", indentFirst) + lines[0] + "\n")
 			for _, line := range lines[1:] {
@@ -850,14 +848,14 @@ func splitHelp(text string) []string {
 
 func splitLines(text string, width int) []string {
 	text = asciiSpace.ReplaceAllString(text, " ")
-	split := splitHelp(py.Strip(text))
+	split := splitHelp(strings.TrimSpace(text))
 	var chunks [][]rune
 	for i := len(split) - 1; i >= 0; i-- {
 		if split[i] != "" {
 			chunks = append(chunks, []rune(split[i]))
 		}
 	}
-	blank := func(c []rune) bool { return py.Strip(string(c)) == "" }
+	blank := func(c []rune) bool { return strings.TrimSpace(string(c)) == "" }
 	var lines []string
 	for len(chunks) > 0 {
 		var line [][]rune

@@ -532,7 +532,7 @@ func Sync(ctx context.Context, d *db.DB, client *Client, embedTexts embed.TextsF
 	embedded, err := embed.NotionPending(modelCtx, d, embedURL, embedTexts)
 	if err != nil {
 		var unavailable *httpx.ServiceUnavailable
-		if !errors.As(err, &unavailable) && !errors.Is(err, httpx.ErrValue) && !errors.Is(err, httpx.ErrKey) {
+		if !errors.As(err, &unavailable) && !errors.Is(err, httpx.ErrPayload) && !errors.Is(err, httpx.ErrMissing) {
 			return stats, err
 		}
 		log.Warn("embedding unavailable: " + httpx.Message(err))

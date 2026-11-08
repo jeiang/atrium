@@ -87,7 +87,7 @@ func threadsToday(ctx context.Context, tc *tool.Context, args py.Dict) (any, err
 	}
 	loc, err := config.Location(tc.Env)
 	if err != nil {
-		return nil, &tool.Raised{Class: "ScheduleError"}
+		return nil, tool.Error("invalid time zone")
 	}
 	start, end, err := Window(dateArg, loc, tc.Now())
 	if err != nil {

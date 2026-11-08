@@ -42,10 +42,8 @@ type SinceError string
 
 func (e SinceError) Error() string { return string(e) }
 
-func (SinceError) PyClass() string { return "ValueError" }
-
 func sinceError(value string) error {
-	return SinceError(fmt.Sprintf("time data %s does not match format '%%Y-%%m-%%d'", py.Repr(value)))
+	return SinceError(fmt.Sprintf("time data %q does not match format YYYY-MM-DD", value))
 }
 
 func ParseSince(env config.Env, value *string, at time.Time) (float64, error) {

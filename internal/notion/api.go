@@ -32,24 +32,14 @@ type Error struct {
 	Status  int
 	Code    string
 	Message string
-	class   string
 }
 
 func (e *Error) Error() string {
 	return fmt.Sprintf("notion %d %s: %s", e.Status, e.Code, e.Message)
 }
 
-func (e *Error) PyClass() string {
-	if e.class != "" {
-		return e.class
-	}
-	return "NotionError"
-}
-
-func (e *Error) PyModule() string { return "atrium.notion_api" }
-
 func unavailable(message string) *Error {
-	return &Error{Status: 0, Code: "unavailable", Message: message, class: "NotionUnavailable"}
+	return &Error{Status: 0, Code: "unavailable", Message: message}
 }
 
 type Client struct {

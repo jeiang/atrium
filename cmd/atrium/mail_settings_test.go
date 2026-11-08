@@ -64,7 +64,7 @@ func TestMailModeAndWriteCapFollowTheRegistryLive(t *testing.T) {
 	}
 
 	t.Setenv("ATRIUM_MAIL_MAIL_MODE", "bogus")
-	if _, code, stderr := liveMode(t); code != cli.ExitError || !strings.Contains(stderr, "must be one of ('shadow', 'live'), got 'bogus'") {
+	if _, code, stderr := liveMode(t); code != cli.ExitError || !strings.Contains(stderr, `must be one of ("shadow", "live"), got "bogus"`) {
 		t.Errorf("invalid pin: exit %d stderr %q", code, stderr)
 	}
 }

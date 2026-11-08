@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -15,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/report"
 	"github.com/jeiang/atrium/internal/mail/router"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var Agreements = [...]string{"agree", "disagree", "pending", "gone"}
@@ -127,8 +127,6 @@ type FilterError string
 
 func (e FilterError) Error() string { return string(e) }
 
-func (FilterError) PyClass() string { return "ValueError" }
-
 type Page struct {
 	Total int   `json:"total"`
 	Rows  []Row `json:"rows"`
@@ -136,10 +134,10 @@ type Page struct {
 
 func Triage(ctx context.Context, q report.Querier, f Filter) (Page, error) {
 	if f.Stage != "" && !slices.Contains(router.Stages[:], f.Stage) {
-		return Page{}, FilterError("unknown stage " + py.Repr(f.Stage))
+		return Page{}, FilterError("unknown stage " + strconv.Quote(f.Stage))
 	}
 	if f.Agreement != "" && !slices.Contains(Agreements[:], f.Agreement) {
-		return Page{}, FilterError("unknown agreement " + py.Repr(f.Agreement))
+		return Page{}, FilterError("unknown agreement " + strconv.Quote(f.Agreement))
 	}
 	if f.Limit == 0 {
 		f.Limit = 50

@@ -4,16 +4,15 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"strconv"
 	"strings"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func Key(v any, k string) (any, error) {
 	if m, ok := v.(map[string]any); ok {
 		found, ok := m[k]
 		if !ok {
-			return nil, fmt.Errorf("%w: %s", ErrKey, py.Repr(k))
+			return nil, fmt.Errorf("%w: %s", ErrMissing, strconv.Quote(k))
 		}
 		return found, nil
 	}
@@ -24,15 +23,15 @@ func Index(v any, i int) (any, error) {
 	switch t := v.(type) {
 	case []any:
 		if i < 0 || i >= len(t) {
-			return nil, fmt.Errorf("%w: list index out of range", ErrIndex)
+			return nil, fmt.Errorf("%w: index %d out of range", ErrRange, i)
 		}
 		return t[i], nil
 	case map[string]any:
-		return nil, fmt.Errorf("%w: %d", ErrKey, i)
+		return nil, fmt.Errorf("%w: %d", ErrMissing, i)
 	case string:
 		r := []rune(t)
 		if i < 0 || i >= len(r) {
-			return nil, fmt.Errorf("%w: string index out of range", ErrIndex)
+			return nil, fmt.Errorf("%w: index %d out of range", ErrRange, i)
 		}
 		return string(r[i]), nil
 	}
@@ -42,11 +41,11 @@ func Index(v any, i int) (any, error) {
 func subscriptError(v any, index string) error {
 	switch v.(type) {
 	case []any:
-		return fmt.Errorf("%w: list indices must be integers or slices, not %s", ErrType, index)
+		return fmt.Errorf("%w: cannot index a list with %s", ErrShape, index)
 	case string:
-		return fmt.Errorf("%w: string indices must be integers, not '%s'", ErrType, index)
+		return fmt.Errorf("%w: cannot index a string with %s", ErrShape, index)
 	}
-	return fmt.Errorf("%w: '%s' object is not subscriptable", ErrType, TypeName(v))
+	return fmt.Errorf("%w: %s is not indexable", ErrShape, TypeName(v))
 }
 
 func TypeName(v any) string {
@@ -102,12 +101,12 @@ func Float(v any) (float64, error) {
 		}
 		return 0, nil
 	}
-	return 0, fmt.Errorf("%w: unsupported operand type(s) for *: '%s' and '%s'", ErrType, TypeName(v), TypeName(v))
+	return 0, fmt.Errorf("%w: %s is not a number", ErrShape, TypeName(v))
 }
 
 func Message(err error) string {
 	text := err.Error()
-	for _, class := range []error{ErrValue, ErrKey, ErrIndex, ErrType} {
+	for _, class := range []error{ErrPayload, ErrMissing, ErrRange, ErrShape} {
 		if errors.Is(err, class) {
 			return strings.TrimPrefix(text, class.Error()+": ")
 		}

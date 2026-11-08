@@ -37,22 +37,18 @@ var log = logx.Logger("atrium.agent.service")
 type RunActive string
 
 func (e RunActive) Error() string { return string(e) }
-func (RunActive) PyClass() string { return "RunActive" }
 
 type UnknownThread int64
 
 func (e UnknownThread) Error() string { return strconv.FormatInt(int64(e), 10) }
-func (UnknownThread) PyClass() string { return "UnknownThread" }
 
 type NothingToRedo string
 
 func (e NothingToRedo) Error() string { return string(e) }
-func (NothingToRedo) PyClass() string { return "NothingToRedo" }
 
 type NotInterrupted int64
 
 func (e NotInterrupted) Error() string { return fmt.Sprintf("run %d is not interrupted", int64(e)) }
-func (NotInterrupted) PyClass() string { return "ValueError" }
 
 type Service struct {
 	DB     *db.DB

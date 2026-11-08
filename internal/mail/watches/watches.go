@@ -137,7 +137,7 @@ func ChatJSON(ctx context.Context, url, system, user string, schema any, maxToke
 	}
 	answer, err := py.JSONLoads(raw)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", httpx.ErrValue, err)
+		return nil, fmt.Errorf("%w: %w", httpx.ErrPayload, err)
 	}
 	return answer, nil
 }
@@ -298,7 +298,7 @@ func pyStr(v any) string {
 	if s, ok := v.(string); ok {
 		return s
 	}
-	return py.ReprValue(v)
+	return fmt.Sprint(v)
 }
 
 func CleanPackage(answer any, text string) (item Item, ok bool, err error) {
@@ -483,7 +483,7 @@ scan:
 			case errors.As(err, &unavailable):
 				log.Warn(fmt.Sprintf("chat unavailable, deferring package scan: %s", unavailable))
 				break scan
-			case errors.Is(err, httpx.ErrValue) || errors.Is(err, httpx.ErrKey) || errors.Is(err, httpx.ErrType):
+			case errors.Is(err, httpx.ErrPayload) || errors.Is(err, httpx.ErrMissing) || errors.Is(err, httpx.ErrShape):
 				log.Warn(fmt.Sprintf("message %d: unreadable package answer: %s", row.ID, httpx.Message(err)))
 				if err := markScanned(ctx, d, o, Packages, row.ID, false); err != nil {
 					return result, err
@@ -577,7 +577,7 @@ func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64
 	}
 	zone, err := config.Zone(config.TZName(env))
 	if err != nil {
-		return nil, &py.Exception{Class: "ZoneInfoNotFoundError", Msg: py.Repr("No time zone found with key " + config.TZName(env))}
+		return nil, fmt.Errorf("unknown time zone %q", config.TZName(env))
 	}
 	for i := range out {
 		sec, _ := py.SplitTimestamp(out[i].UpdatedTS)

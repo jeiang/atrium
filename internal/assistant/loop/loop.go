@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
@@ -128,7 +129,7 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 		errText = new(err.Error())
 	default:
 		log.Error(fmt.Sprintf("run %d failed", runID), logx.RunID, runID, logx.Err, err)
-		errText = new(py.ExceptionText(err))
+		errText = new(err.Error())
 	}
 	if errText != nil {
 		if err := journal.FinishRun(ctx, d.Write, runID, journal.Failed, s.now(), errText); err != nil {
@@ -483,7 +484,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		return false, nil, err
 	}
 	if spent >= s.maxCost {
-		return false, nil, RunLimit(fmt.Sprintf("run cost ceiling reached ($%s of $%s)", py.FormatFixed(spent, 2), py.FormatFixed(s.maxCost, 2)))
+		return false, nil, RunLimit(fmt.Sprintf("run cost ceiling reached ($%s of $%s)", strconv.FormatFloat(spent, 'f', 2, 64), strconv.FormatFloat(s.maxCost, 'f', 2, 64)))
 	}
 	active, err := s.active(ctx, loc)
 	if err != nil {
@@ -500,7 +501,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		if err != nil {
 			return false, nil, err
 		}
-		if err := s.reserveUSD(ctx, summary, fmt.Sprintf("the summary request is about %d tokens, up to $%s uncached", summaryIn, py.FormatFixed(summary, 2))); err != nil {
+		if err := s.reserveUSD(ctx, summary, fmt.Sprintf("the summary request is about %d tokens, up to $%s uncached", summaryIn, strconv.FormatFloat(summary, 'f', 2, 64))); err != nil {
 			return false, nil, err
 		}
 		if _, err := actx.ClientCompact(ctx, s.d, s.client, s.run.Model, active, s.thread.ID, s.run.ID, string(s.kind), s.limits.Hard, s.now(), s.limits.Tuning); err != nil {
@@ -590,7 +591,7 @@ func (s *state) reserve(ctx context.Context, size int64) error {
 	if err != nil {
 		return err
 	}
-	return s.reserveUSD(ctx, cold, fmt.Sprintf("the next request is about %d tokens, up to $%s to write to the cache cold", size, py.FormatFixed(cold, 2)))
+	return s.reserveUSD(ctx, cold, fmt.Sprintf("the next request is about %d tokens, up to $%s to write to the cache cold", size, strconv.FormatFloat(cold, 'f', 2, 64)))
 }
 
 func (s *state) reserveUSD(ctx context.Context, next float64, what string) error {
@@ -600,7 +601,7 @@ func (s *state) reserveUSD(ctx context.Context, next float64, what string) error
 	}
 	if spent+next > s.maxCost {
 		return RunLimit(fmt.Sprintf("run cost cap: %s, with $%s of $%s already spent; raise %s to continue",
-			what, py.FormatFixed(spent, 2), py.FormatFixed(s.maxCost, 2), budget.RunCapKey(s.run.Model)))
+			what, strconv.FormatFloat(spent, 'f', 2, 64), strconv.FormatFloat(s.maxCost, 'f', 2, 64), budget.RunCapKey(s.run.Model)))
 	}
 	threadSpent, limit, err := budget.ThreadCap(ctx, s.d.Read, s.thread.ID)
 	if err != nil {
@@ -608,7 +609,7 @@ func (s *state) reserveUSD(ctx context.Context, next float64, what string) error
 	}
 	if threadSpent+next > limit {
 		return RunLimit(fmt.Sprintf("thread cost cap: %s, with $%s of $%s already spent in this thread; raise %s to continue",
-			what, py.FormatFixed(threadSpent, 2), py.FormatFixed(limit, 2), budget.ThreadCapKey))
+			what, strconv.FormatFloat(threadSpent, 'f', 2, 64), strconv.FormatFloat(limit, 'f', 2, 64), budget.ThreadCapKey))
 	}
 	return nil
 }

@@ -90,7 +90,7 @@ func Texts(ctx context.Context, url string, texts []string) ([][]float64, error)
 	}
 	var reply any
 	if err := json.Unmarshal(raw, &reply); err != nil {
-		return nil, fmt.Errorf("%w: %w", httpx.ErrValue, err)
+		return nil, fmt.Errorf("%w: %w", httpx.ErrPayload, err)
 	}
 	data, err := httpx.Key(reply, "data")
 	if err != nil {
@@ -98,7 +98,7 @@ func Texts(ctx context.Context, url string, texts []string) ([][]float64, error)
 	}
 	items, ok := data.([]any)
 	if !ok {
-		return nil, fmt.Errorf("%w: embeddings data is %s, not list", httpx.ErrType, httpx.TypeName(data))
+		return nil, fmt.Errorf("%w: embeddings data is %s, not list", httpx.ErrShape, httpx.TypeName(data))
 	}
 	type entry struct {
 		index float64
@@ -108,13 +108,13 @@ func Texts(ctx context.Context, url string, texts []string) ([][]float64, error)
 	for i, item := range items {
 		d, ok := item.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("%w: '%s' object has no attribute 'get'", httpx.ErrType, httpx.TypeName(item))
+			return nil, fmt.Errorf("%w: '%s' object has no attribute 'get'", httpx.ErrShape, httpx.TypeName(item))
 		}
 		entries[i].item = item
 		if idx, ok := d["index"]; ok {
 			n, ok := idx.(float64)
 			if !ok {
-				return nil, fmt.Errorf("%w: embeddings index is %s", httpx.ErrType, httpx.TypeName(idx))
+				return nil, fmt.Errorf("%w: embeddings index is %s", httpx.ErrShape, httpx.TypeName(idx))
 			}
 			entries[i].index = n
 		}
@@ -127,7 +127,7 @@ func Texts(ctx context.Context, url string, texts []string) ([][]float64, error)
 		}
 	}
 	dim := options(ctx).Dim
-	shape := fmt.Errorf("%w: embedding response shape mismatch: expected %dx%d", httpx.ErrValue, len(texts), dim)
+	shape := fmt.Errorf("%w: embedding response shape mismatch: expected %dx%d", httpx.ErrPayload, len(texts), dim)
 	if len(vectors) != len(texts) {
 		return nil, shape
 	}
@@ -144,7 +144,7 @@ func Texts(ctx context.Context, url string, texts []string) ([][]float64, error)
 	for i, v := range vectors {
 		list, ok := v.([]any)
 		if !ok {
-			return nil, fmt.Errorf("%w: embedding is %s, not list", httpx.ErrType, httpx.TypeName(v))
+			return nil, fmt.Errorf("%w: embedding is %s, not list", httpx.ErrShape, httpx.TypeName(v))
 		}
 		vec := make([]float64, len(list))
 		for j, x := range list {
@@ -166,7 +166,7 @@ func pyLen(v any) (int, error) {
 	case string:
 		return len([]rune(t)), nil
 	}
-	return 0, fmt.Errorf("%w: object of type '%s' has no len()", httpx.ErrType, httpx.TypeName(v))
+	return 0, fmt.Errorf("%w: object of type '%s' has no len()", httpx.ErrShape, httpx.TypeName(v))
 }
 
 func Normalize(vector []float64) []float64 {
@@ -206,7 +206,7 @@ func MessageDocument(ctx context.Context, q querier, id int64) (string, error) {
 		"SELECT m.subject, m.from_name, m.from_addr, f.body FROM messages m "+
 			"JOIN message_fts f ON f.rowid = m.id WHERE m.id = ?", id).Scan(&subject, &name, &addr, &body)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", fmt.Errorf("%w: message %d has no index row: 'NoneType' object is not subscriptable", httpx.ErrType, id)
+		return "", fmt.Errorf("%w: message %d has no index row: 'NoneType' object is not subscriptable", httpx.ErrShape, id)
 	}
 	if err != nil {
 		return "", err
@@ -361,7 +361,7 @@ func notionBatch(ctx context.Context, d *db.DB, url string, texts TextsFunc, idx
 		return 0, err
 	}
 	if len(vectors) != len(batch) {
-		return 0, fmt.Errorf("%w: zip() argument 2 is shorter or longer than argument 1", httpx.ErrValue)
+		return 0, fmt.Errorf("%w: zip() argument 2 is shorter or longer than argument 1", httpx.ErrPayload)
 	}
 	table := idx.NotionTable()
 	err = d.WithTx(ctx, func(tx *sql.Tx) error {

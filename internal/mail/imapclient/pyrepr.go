@@ -1,19 +1,18 @@
 package imapclient
 
 import (
+	"strconv"
 	"strings"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func (d datum) repr() string {
 	switch {
 	case d.none:
-		return "None"
+		return "none"
 	case d.tuple:
-		return "(" + py.ReprBytes(d.text) + ", " + py.ReprBytes(d.lit) + ")"
+		return "(" + strconv.Quote(string(d.text)) + ", " + strconv.Quote(string(d.lit)) + ")"
 	}
-	return py.ReprBytes(d.text)
+	return strconv.Quote(string(d.text))
 }
 
 func listRepr(data []datum) string {
@@ -40,7 +39,7 @@ func (d datum) str() string {
 }
 
 func split(s string) []string {
-	if out := py.Split(s); out != nil {
+	if out := strings.Fields(s); out != nil {
 		return out
 	}
 	return []string{}

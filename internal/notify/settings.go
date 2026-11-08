@@ -2,11 +2,11 @@ package notify
 
 import (
 	"context"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
 	modules "github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -58,7 +58,7 @@ func Enabled(ctx context.Context, q db.Querier) (bool, error) {
 
 func text(ctx context.Context, q db.Querier, key string) (string, error) {
 	found, err := settings.Default.Resolve(ctx, q, key, 0)
-	return py.Strip(found.Value), err
+	return strings.TrimSpace(found.Value), err
 }
 
 func whole(ctx context.Context, q db.Querier, key string) (int, error) {

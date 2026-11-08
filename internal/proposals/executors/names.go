@@ -1,6 +1,7 @@
 package executors
 
 import (
+	"strconv"
 	"strings"
 	"unicode/utf8"
 
@@ -15,7 +16,7 @@ func ValidName(value string) (string, error) {
 	name := py.Strip(value)
 	if name == "" || utf8.RuneCountInString(name) > MaxNameChars || strings.Contains(name, "|") ||
 		py.Casefold(name) == py.Casefold(config.Inbox) || strings.ContainsFunc(name, func(r rune) bool { return r < 32 }) {
-		return "", proposals.SelectionError("invalid folder name " + py.Repr(value))
+		return "", proposals.SelectionError("invalid folder name " + strconv.Quote(value))
 	}
 	return name, nil
 }

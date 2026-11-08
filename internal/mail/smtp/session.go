@@ -19,8 +19,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type Session interface {
@@ -142,8 +140,8 @@ func (s *session) putcmd(cmd, args string) error {
 		return &Failure{Kind: "ValueError", Msg: "command and arguments contain prohibited newline characters: " + line}
 	}
 	if !s.utf8Cmds {
-		if err := py.ASCIIEncodeError(line); err != nil {
-			return err
+		if !isASCII([]byte(line)) {
+			return &Failure{Kind: "ValueError", Msg: "command and arguments must be ASCII"}
 		}
 	}
 	return s.send([]byte(line + "\r\n"))
@@ -186,7 +184,7 @@ func (s *session) getreply() (int, string, error) {
 		}
 		if len(line) > maxLine {
 			s.close()
-			return 0, "", &ResponseError{Kind: "SMTPResponseException", Code: 500, Msg: "Line too long.", text: true}
+			return 0, "", &ResponseError{Kind: "SMTPResponseException", Code: 500, Msg: "Line too long."}
 		}
 		var rest []byte
 		if len(line) > 4 {
@@ -412,7 +410,7 @@ func (s *session) auth(mech, user, password string) error {
 		answer, _ := s.authResponse(mech, user, password, challenge, false)
 		code, resp, err = s.docmd(base64.StdEncoding.EncodeToString([]byte(answer)), "")
 		if err == nil && s.challenges > maxChallenge {
-			return &Failure{Kind: "SMTPException", Msg: fmt.Sprintf("Server AUTH mechanism infinite loop. Last response: (%d, %s)", code, py.ReprBytes([]byte(resp)))}
+			return &Failure{Kind: "SMTPException", Msg: fmt.Sprintf("Server AUTH mechanism infinite loop. Last response: %d %s", code, resp)}
 		}
 	}
 	if err != nil {
@@ -528,7 +526,7 @@ func (s *session) SendMessage(msg *Message, from string, to []string) (Refusals,
 	if err := s.ehloOrHelo(); err != nil {
 		return nil, err
 	}
-	international := py.ASCIIEncodeError(from+strings.Join(to, "")) != nil
+	international := !isASCII([]byte(from + strings.Join(to, "")))
 	var mailOptions []string
 	if international {
 		if !s.hasExtn("smtputf8") {

@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -42,17 +43,9 @@ type ProposalError string
 
 func (e ProposalError) Error() string { return string(e) }
 
-func (ProposalError) PyClass() string { return "ProposalError" }
-
-func (ProposalError) PyModule() string { return "atrium.notion_proposals" }
-
 type StaleError string
 
 func (e StaleError) Error() string { return string(e) }
-
-func (StaleError) PyClass() string { return "StaleError" }
-
-func (StaleError) PyModule() string { return "atrium.notion_proposals" }
 
 type ChatFunc func(ctx context.Context, url, system, user string, schema any, maxTokens int) (json.RawMessage, error)
 
@@ -106,7 +99,7 @@ func (p *Proposer) chat(ctx context.Context, system, user, schema string, maxTok
 	}
 	d, ok := v.(py.Dict)
 	if !ok {
-		return nil, fmt.Errorf("model reply is %T, not an object", v)
+		return nil, errors.New("proposal payload is not an object")
 	}
 	return d, nil
 }

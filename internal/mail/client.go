@@ -103,10 +103,6 @@ func (e *WriteInterrupted) Error() string { return e.Err.Error() }
 
 func (e *WriteInterrupted) Unwrap() error { return e.Err }
 
-func (*WriteInterrupted) PyClass() string { return "abort" }
-
-func (*WriteInterrupted) PyModule() string { return "imaplib.IMAP4" }
-
 type CopyUID struct {
 	UIDValidity uint32
 	Mapping     map[uint32]uint32

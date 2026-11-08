@@ -70,10 +70,6 @@ type Error string
 
 func (e Error) Error() string { return string(e) }
 
-func (Error) PyClass() string { return "MailOpError" }
-
-func (Error) PyModule() string { return "atrium.mailops" }
-
 var ErrValidityChanged = Error("UIDVALIDITY changed")
 
 type PartialMove struct {
@@ -111,10 +107,6 @@ func (e *PartialMove) Error() string {
 	}
 	return PartialPrefix + e.Err.Error()
 }
-
-func (*PartialMove) PyClass() string { return "PartialMove" }
-
-func (*PartialMove) PyModule() string { return "atrium.mailops" }
 
 func (e *PartialMove) Unwrap() error { return e.Err }
 

@@ -18,7 +18,7 @@ func load(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	shown := "None"
+	shown := "unknown"
 	var found *skills.Skill
 	if ok {
 		shown = strconv.Quote(name)

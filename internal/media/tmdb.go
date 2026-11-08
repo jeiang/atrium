@@ -48,7 +48,7 @@ func (t *TMDB) get(ctx context.Context, path string, params ...param) (any, erro
 	}
 	req, err := http.NewRequest(http.MethodGet, target, nil)
 	if err != nil {
-		return nil, TmdbError("TMDB unreachable: InvalidURL")
+		return nil, TmdbError("TMDB unreachable: invalid URL")
 	}
 	req.Header.Set("Authorization", "Bearer "+t.token)
 	res, err := send(ctx, t.http, req)
@@ -197,7 +197,7 @@ func (t *TMDB) Season(ctx context.Context, tmdbID, number int64) (py.Dict, error
 func (t *TMDB) Image(ctx context.Context, posterPath string) ([]byte, error) {
 	req, err := http.NewRequest(http.MethodGet, TMDBImages+posterPath, nil)
 	if err != nil {
-		return nil, TmdbError("TMDB images unreachable: InvalidURL")
+		return nil, TmdbError("TMDB images unreachable: invalid URL")
 	}
 	res, err := send(ctx, t.http, req)
 	if err != nil {

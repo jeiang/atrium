@@ -308,7 +308,7 @@ func (q *Qbit) do(ctx context.Context, method, path string, params []param, body
 	}
 	req, err := http.NewRequest(method, target, body)
 	if err != nil {
-		return nil, QbitError("qBittorrent unreachable: InvalidURL")
+		return nil, QbitError("qBittorrent unreachable: invalid URL")
 	}
 	if contentType != "" {
 		req.Header.Set("Content-Type", contentType)

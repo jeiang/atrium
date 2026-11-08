@@ -33,10 +33,6 @@ type Error string
 
 func (e Error) Error() string { return string(e) }
 
-func (Error) PyClass() string { return "BacklogError" }
-
-func (Error) PyModule() string { return "atrium.backlog" }
-
 type Proposal struct {
 	Fingerprint string
 	Account     string
@@ -190,7 +186,7 @@ func Backlog(ctx context.Context, d *db.DB, ts float64) (Result, error) {
 		out.Accounts = append(out.Accounts, py.Pair{Key: spec.Name, Value: id})
 		out.Created = append(out.Created, id)
 	}
-	log.Info("inbox backlog proposals: " + py.ReprValue(out.Accounts))
+	log.Info("inbox backlog proposals: " + fmt.Sprint(out.Accounts))
 	return out, nil
 }
 

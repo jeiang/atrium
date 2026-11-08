@@ -137,14 +137,13 @@ func (o Options) run(env *cli.Env, run body) error {
 }
 
 func openError(path string, err error) error {
-	quoted := py.Repr(path)
 	switch {
 	case errors.Is(err, fs.ErrNotExist):
-		return &py.Exception{Class: "FileNotFoundError", Msg: "[Errno 2] No such file or directory: " + quoted}
+		return fmt.Errorf("%s: no such file or directory", path)
 	case errors.Is(err, fs.ErrPermission):
-		return &py.Exception{Class: "PermissionError", Msg: "[Errno 13] Permission denied: " + quoted}
+		return fmt.Errorf("%s: permission denied", path)
 	case errors.Is(err, syscall.EISDIR):
-		return &py.Exception{Class: "IsADirectoryError", Msg: "[Errno 21] Is a directory: " + quoted}
+		return fmt.Errorf("%s: is a directory", path)
 	}
 	return err
 }

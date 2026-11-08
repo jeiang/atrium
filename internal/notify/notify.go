@@ -1,9 +1,11 @@
 package notify
 
 import (
+	"bytes"
 	"context"
 	"crypto/x509"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -21,7 +23,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations/transport"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 )
 
@@ -63,7 +64,7 @@ type Sent struct {
 }
 
 func Plain(text string, limit int) string {
-	text = py.Strip(text)
+	text = strings.TrimSpace(text)
 	cleaned := control.ReplaceAllString(text, "")
 	return tool.Clip(cleaned, limit)
 }
@@ -75,7 +76,7 @@ func LinkFor(raw *string, threadID int64) (string, error) {
 		}
 		return "", nil
 	}
-	link := py.Strip(*raw)
+	link := strings.TrimSpace(*raw)
 	if isDigits(link) {
 		link = "/chat/" + link
 	}
@@ -127,23 +128,30 @@ func deliver(ctx context.Context, q db.Querier, env config.Env, m delivery) (boo
 	if !c.FullText() {
 		title, body = privateTitle, privateBody
 	}
-	payload := py.Dict{{Key: "topic", Value: c.Topic}, {Key: "title", Value: title}, {Key: "message", Value: body}}
-	if m.click != "" {
-		payload = append(payload, py.Pair{Key: "click", Value: m.click})
-	}
+	payload := struct {
+		Topic    string `json:"topic"`
+		Title    string `json:"title"`
+		Message  string `json:"message"`
+		Click    string `json:"click,omitempty"`
+		Priority int    `json:"priority,omitempty"`
+	}{Topic: c.Topic, Title: title, Message: body, Click: m.click}
 	if m.priority >= 1 && m.priority <= 5 {
-		payload = append(payload, py.Pair{Key: "priority", Value: int64(m.priority)})
+		payload.Priority = m.priority
 	}
 	target, err := url.Parse(base)
 	if err != nil {
-		return false, "", &tool.Raised{Class: "InvalidURL"}
+		return false, "", tool.Error("ntfy URL is invalid")
 	}
 	if target.Scheme != "http" && target.Scheme != "https" {
-		return false, "ntfy unreachable: UnsupportedProtocol", nil
+		return false, "ntfy unreachable: unsupported protocol", nil
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base, strings.NewReader(py.JSONDumps(payload, py.JSONOpts{NoEnsureASCII: true, Compact: true})))
+	payloadJSON, err := json.Marshal(payload)
 	if err != nil {
-		return false, "", &tool.Raised{Class: "InvalidURL"}
+		return false, "", err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, base, bytes.NewReader(payloadJSON))
+	if err != nil {
+		return false, "", tool.Error("ntfy URL is invalid")
 	}
 	req.Header.Set("Content-Type", "application/json")
 	if token != "" {
@@ -254,22 +262,22 @@ func errorClass(err error) string {
 	var dns *net.DNSError
 	switch {
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
-		return "RemoteProtocolError"
+		return "protocol error"
 	case strings.Contains(err.Error(), "TLS handshake timeout"):
-		return "ConnectTimeout"
+		return "connect timeout"
 	case errors.As(err, &op) && op.Op == "dial":
 		if op.Timeout() {
-			return "ConnectTimeout"
+			return "connect timeout"
 		}
-		return "ConnectError"
+		return "connect failed"
 	case errors.As(err, &cert), errors.As(err, &host), errors.As(err, &invalid), errors.As(err, &dns):
-		return "ConnectError"
+		return "connect failed"
 	}
 	var timeouter interface{ Timeout() bool }
 	if errors.As(err, &timeouter) && timeouter.Timeout() {
-		return "ReadTimeout"
+		return "read timeout"
 	}
-	return "ReadError"
+	return "read failed"
 }
 
 func Send(ctx context.Context, q db.Querier, env config.Env, m Message) (Sent, error) {

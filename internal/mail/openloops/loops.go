@@ -83,7 +83,7 @@ func IsDraft(labels, flagList string) (bool, error) {
 				return true, nil
 			}
 		default:
-			return false, fmt.Errorf("%w: argument of type '%s' is not iterable", httpx.ErrType, py.TypeName(decoded))
+			return false, fmt.Errorf("%w: %s is not a list or string", httpx.ErrShape, py.TypeName(decoded))
 		}
 	}
 	return false, nil
@@ -120,12 +120,12 @@ func (m *Message) Recipients() ([]string, error) {
 	}
 	items, ok := decoded.([]any)
 	if !ok {
-		return nil, fmt.Errorf("%w: to_addrs is not a list", httpx.ErrType)
+		return nil, fmt.Errorf("%w: to_addrs is not a list", httpx.ErrShape)
 	}
 	out := make([]string, len(items))
 	for i, item := range items {
 		if out[i], ok = item.(string); !ok {
-			return nil, fmt.Errorf("%w: sequence item %d: expected str instance, %s found", httpx.ErrType, i, py.TypeName(item))
+			return nil, fmt.Errorf("%w: to_addrs item %d is %s, not a string", httpx.ErrShape, i, py.TypeName(item))
 		}
 	}
 	return out, nil
@@ -501,7 +501,7 @@ func Dismiss(ctx context.Context, q db.Querier, id int64) (bool, error) {
 
 func DismissAll(ctx context.Context, q db.Querier, state string) (int64, error) {
 	if !slices.Contains(States[:], state) {
-		return 0, fmt.Errorf("%w: unknown state %s", httpx.ErrValue, py.Repr(state))
+		return 0, fmt.Errorf("%w: unknown state %s", httpx.ErrPayload, strconv.Quote(state))
 	}
 	res, err := q.ExecContext(ctx, "UPDATE open_loops SET dismissed = 1 WHERE state = ? AND dismissed = 0", state)
 	if err != nil {

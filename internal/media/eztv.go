@@ -117,7 +117,7 @@ func (t Tuning) FetchReleases(ctx context.Context, imdb string) ([]Release, erro
 	target := t.EZTVURL + "?" + encodeParams([]param{{"imdb_id", imdb}, {"limit", strconv.Itoa(t.EZTVLimit)}})
 	req, err := http.NewRequest(http.MethodGet, target, nil)
 	if err != nil {
-		return nil, EztvError("EZTV unreachable: InvalidURL")
+		return nil, EztvError("EZTV unreachable: invalid URL")
 	}
 	res, err := send(ctx, clientFor(t.EZTVTimeout), req)
 	if err != nil {

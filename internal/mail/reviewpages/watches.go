@@ -73,7 +73,7 @@ func (s *service) birthdayDismiss(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	err := birthdays.Dismiss(r.Context(), s.deps.DB.Write, key, date, s.now())
-	if errors.Is(err, httpx.ErrValue) {
+	if errors.Is(err, httpx.ErrPayload) {
 		s.fail(w, r, http.StatusUnprocessableEntity, "date must be YYYY-MM-DD")
 		return
 	}

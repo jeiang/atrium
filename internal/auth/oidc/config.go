@@ -94,7 +94,7 @@ func assemble(get values, secret string, env config.Env, encrypted bool, problem
 	name := get[KeyPreset]
 	preset, ok := presetNamed(name)
 	if !ok {
-		problems = append(problems, fmt.Sprintf("unknown preset %q", name))
+		problems = append(problems, "unknown preset "+strconv.Quote(name))
 	}
 	c := Config{
 		Preset:        preset,

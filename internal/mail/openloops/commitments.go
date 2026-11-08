@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -66,7 +67,7 @@ func JudgeCommitments(ctx context.Context, env config.Env, url string, m Message
 	}
 	zone, err := config.Zone(config.TZName(env))
 	if err != nil {
-		return nil, fmt.Errorf("%w: %s", httpx.ErrKey, err)
+		return nil, fmt.Errorf("%w: %s", httpx.ErrMissing, err)
 	}
 	to, err := m.Recipients()
 	if err != nil {
@@ -82,12 +83,12 @@ func JudgeCommitments(ctx context.Context, env config.Env, url string, m Message
 	}
 	answer, err := py.JSONLoads(raw)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %w", httpx.ErrValue, err)
+		return nil, fmt.Errorf("%w: %w", httpx.ErrPayload, err)
 	}
 	if reply, ok := answer.(py.Dict); ok {
 		found, ok := reply.Get("commitments")
 		if !ok {
-			return nil, fmt.Errorf("%w: 'commitments'", httpx.ErrKey)
+			return nil, fmt.Errorf("%w: 'commitments'", httpx.ErrMissing)
 		}
 		return found, nil
 	}
@@ -142,9 +143,9 @@ func commitmentItems(found any, perMail int) ([]any, error) {
 	case string:
 		return nil, nil
 	case py.Dict, map[string]any:
-		return nil, fmt.Errorf("%w: unhashable type: 'slice'", httpx.ErrType)
+		return nil, fmt.Errorf("%w: commitment list must be a list", httpx.ErrShape)
 	}
-	return nil, fmt.Errorf("%w: '%s' object is not subscriptable", httpx.ErrType, py.TypeName(found))
+	return nil, fmt.Errorf("%w: %s is not a list", httpx.ErrShape, py.TypeName(found))
 }
 
 func ScanCommitments(ctx context.Context, d *db.DB, env config.Env, now float64, judge Judge) (int64, error) {
@@ -183,7 +184,7 @@ rows:
 		case errors.As(err, &unavailable):
 			log.Warn(fmt.Sprintf("chat unavailable, deferring commitment scan: %s", unavailable))
 			break rows
-		case errors.Is(err, httpx.ErrValue) || errors.Is(err, httpx.ErrKey) || errors.Is(err, httpx.ErrType):
+		case errors.Is(err, httpx.ErrPayload) || errors.Is(err, httpx.ErrMissing) || errors.Is(err, httpx.ErrShape):
 			log.Warn(fmt.Sprintf("message %d: unusable commitment answer: %s", row.ID, httpx.Message(err)))
 			found = nil
 		case err != nil:
@@ -216,7 +217,7 @@ func storeCommitment(ctx context.Context, d *db.DB, messageID int64, item any, n
 	if v, _ := entry.Get("text"); py.Truthy(v) {
 		s, isStr := v.(string)
 		if !isStr {
-			return 0, py.AttributeError(v, "strip")
+			return 0, fmt.Errorf("%w: commitment text is not a string", httpx.ErrShape)
 		}
 		text = py.Strip(s)
 	}
@@ -275,7 +276,7 @@ func SetCommitmentStatus(ctx context.Context, q db.Querier, id int64, status str
 		known = known || s == status
 	}
 	if !known {
-		return false, fmt.Errorf("%w: unknown status %s", httpx.ErrValue, py.Repr(status))
+		return false, fmt.Errorf("%w: unknown status %s", httpx.ErrPayload, strconv.Quote(status))
 	}
 	return affectedOne(q.ExecContext(ctx, "UPDATE commitments SET status = ? WHERE id = ?", status, id))
 }

@@ -39,18 +39,18 @@ func SpecOf(v any) (Spec, error) {
 				d = append(d, py.Pair{Key: k, Value: val})
 			}
 		} else {
-			return Spec{}, fmt.Errorf("%w: spec is %T, not an object", httpx.ErrType, v)
+			return Spec{}, fmt.Errorf("%w: spec is %T, not an object", httpx.ErrShape, v)
 		}
 	}
 	var s Spec
 	text := func(key string) (string, error) {
 		val, found := d.Get(key)
 		if !found {
-			return "", fmt.Errorf("%w: %q", httpx.ErrKey, key)
+			return "", fmt.Errorf("%w: %q", httpx.ErrMissing, key)
 		}
 		str, isString := val.(string)
 		if !isString {
-			return "", fmt.Errorf("%w: spec %s is %T, not a string", httpx.ErrType, key, val)
+			return "", fmt.Errorf("%w: spec %s is %T, not a string", httpx.ErrShape, key, val)
 		}
 		return str, nil
 	}
@@ -65,7 +65,7 @@ func SpecOf(v any) (Spec, error) {
 	}
 	allDay, found := d.Get("all_day")
 	if !found {
-		return Spec{}, fmt.Errorf("%w: 'all_day'", httpx.ErrKey)
+		return Spec{}, fmt.Errorf("%w: 'all_day'", httpx.ErrMissing)
 	}
 	s.AllDay, _ = allDay.(bool)
 	return s, nil
@@ -86,7 +86,7 @@ func textField(raw py.Dict, key string) (string, error) {
 	}
 	s, ok := v.(string)
 	if !ok {
-		return "", fmt.Errorf("%w: %s is %T, not a string", httpx.ErrType, key, v)
+		return "", fmt.Errorf("%w: %s is %T, not a string", httpx.ErrShape, key, v)
 	}
 	return strings.TrimSpace(s), nil
 }

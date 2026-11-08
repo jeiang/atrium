@@ -159,7 +159,7 @@ func mailSearch(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 		}
 	}
 	found, err := search.Search(ctx, tc.DB.KNN, tc.Cfg, query, filters, int(limit), embedder(tc))
-	if errors.Is(err, httpx.ErrValue) {
+	if errors.Is(err, httpx.ErrPayload) {
 		return nil, tool.Error("bad date filter: " + httpx.Message(err))
 	}
 	if err != nil {
@@ -217,7 +217,7 @@ func mailRead(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 		return nil, err
 	}
 	if _, huge := raw.(*big.Int); huge {
-		return nil, &tool.Raised{Class: "OverflowError"}
+		return nil, tool.Error("value is too large")
 	}
 	found, err := message.Get(ctx, tc.DB.Read, tc.Cfg.CacheDir, id)
 	if err != nil {

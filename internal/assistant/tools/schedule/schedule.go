@@ -37,7 +37,7 @@ func describe(ctx context.Context, q db.Querier, job *scheduler.Job) (py.Dict, e
 	if job.NextDue != nil {
 		loc, err := scheduler.Zone(job.TZ)
 		if err != nil {
-			return nil, &tool.Raised{Class: "ScheduleError"}
+			return nil, tool.Error("invalid time zone")
 		}
 		sec, us := timex.SplitTimestamp(*job.NextDue)
 		due = time.Unix(sec, us*1000).In(loc).Format("2006-01-02T15:04-07:00")
@@ -76,7 +76,7 @@ func agentJob(ctx context.Context, q db.Querier, args py.Dict) (*scheduler.Job, 
 	case int64:
 		id = v
 	case *big.Int:
-		return nil, &tool.Raised{Class: "OverflowError"}
+		return nil, tool.Error("value is too large")
 	default:
 		return nil, tool.Error("id must be an integer")
 	}

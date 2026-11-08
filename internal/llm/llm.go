@@ -228,7 +228,7 @@ func ChatJSON(ctx context.Context, url, system, user string, schema any, maxToke
 	}
 	var reply any
 	if err := json.Unmarshal(raw, &reply); err != nil {
-		return nil, fmt.Errorf("%w: %w", httpx.ErrValue, err)
+		return nil, fmt.Errorf("%w: %w", httpx.ErrPayload, err)
 	}
 	choices, err := httpx.Key(reply, "choices")
 	if err != nil {
@@ -248,10 +248,10 @@ func ChatJSON(ctx context.Context, url, system, user string, schema any, maxToke
 	}
 	text, ok := content.(string)
 	if !ok {
-		return nil, fmt.Errorf("%w: the JSON object must be str, not %s", httpx.ErrType, httpx.TypeName(content))
+		return nil, fmt.Errorf("%w: the JSON object must be str, not %s", httpx.ErrShape, httpx.TypeName(content))
 	}
 	if !json.Valid([]byte(text)) {
-		return nil, fmt.Errorf("%w: chat reply content is not JSON: %q", httpx.ErrValue, text)
+		return nil, fmt.Errorf("%w: chat reply content is not JSON: %q", httpx.ErrPayload, text)
 	}
 	return json.RawMessage(text), nil
 }
@@ -259,7 +259,7 @@ func ChatJSON(ctx context.Context, url, system, user string, schema any, maxToke
 func answer(raw json.RawMessage) (any, error) {
 	var v any
 	if err := json.Unmarshal(raw, &v); err != nil {
-		return nil, fmt.Errorf("%w: %w", httpx.ErrValue, err)
+		return nil, fmt.Errorf("%w: %w", httpx.ErrPayload, err)
 	}
 	return v, nil
 }
@@ -284,7 +284,7 @@ func JudgeFolder(ctx context.Context, url string, folders []string, catalog stri
 	}
 	folder, ok := f.(string)
 	if !ok {
-		return "", false, fmt.Errorf("%w: folder is %s, not str", httpx.ErrType, httpx.TypeName(f))
+		return "", false, fmt.Errorf("%w: folder is %s, not str", httpx.ErrShape, httpx.TypeName(f))
 	}
 	confident, err := field(a, "confident")
 	return folder, confident, err

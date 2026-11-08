@@ -120,7 +120,7 @@ func serve(env *cli.Env, a serveArgs) int {
 		return cli.ExitError
 	}
 	if _, err := config.Location(a.env); err != nil {
-		_, _ = fmt.Fprintf(env.Stderr, "error: the tz setting is not a time zone: %s. Use an IANA name such as America/Port_of_Spain.\n", py.Repr(config.TZName(a.env)))
+		_, _ = fmt.Fprintf(env.Stderr, "error: the tz setting is not a time zone: %s. Use an IANA name such as America/Port_of_Spain.\n", strconv.Quote(config.TZName(a.env)))
 		return cli.ExitError
 	}
 	if err := run(env.Ctx, cfg, a, hosts); err != nil {

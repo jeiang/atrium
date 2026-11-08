@@ -63,31 +63,31 @@ func errorClass(err error) string {
 	var dns *net.DNSError
 	switch {
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
-		return "RemoteProtocolError"
+		return "protocol error"
 	case strings.Contains(err.Error(), "TLS handshake timeout"):
-		return "ConnectTimeout"
+		return "connect timeout"
 	case errors.As(err, &op) && op.Op == "dial":
 		if op.Timeout() {
-			return "ConnectTimeout"
+			return "connect timeout"
 		}
-		return "ConnectError"
+		return "connect failed"
 	case errors.As(err, &cert), errors.As(err, &host), errors.As(err, &invalid), errors.As(err, &dns):
-		return "ConnectError"
+		return "connect failed"
 	}
 	var timeouter interface{ Timeout() bool }
 	if errors.As(err, &timeouter) && timeouter.Timeout() {
-		return "ReadTimeout"
+		return "read timeout"
 	}
-	return "ReadError"
+	return "read failed"
 }
 
 func urlClass(target string) string {
 	scheme, _, found := strings.Cut(target, ":")
 	if !found || !strings.EqualFold(scheme, "http") && !strings.EqualFold(scheme, "https") {
-		return "UnsupportedProtocol"
+		return "unsupported protocol"
 	}
 	if u, err := url.Parse(target); err != nil || u.Host == "" {
-		return "ConnectError"
+		return "connect failed"
 	}
 	return ""
 }
@@ -121,7 +121,7 @@ func request(ctx context.Context, tc *tool.Context, lim limits, method, path, ra
 	}
 	req, err := http.NewRequestWithContext(ctx, method, target, reader)
 	if err != nil {
-		return nil, tool.Error("grafana unreachable: ConnectError")
+		return nil, tool.Error("grafana unreachable: connect failed")
 	}
 	req.Header.Set("Authorization", "Bearer "+access.Token)
 	req.Header.Set("Accept", "application/json")
@@ -165,7 +165,7 @@ func request(ctx context.Context, tc *tool.Context, lim limits, method, path, ra
 func attr(v any) (py.Dict, error) {
 	d, ok := v.(py.Dict)
 	if !ok {
-		return nil, &tool.Raised{Class: "AttributeError"}
+		return nil, tool.Error("grafana returned an unexpected object")
 	}
 	return d, nil
 }
@@ -173,7 +173,7 @@ func attr(v any) (py.Dict, error) {
 func items(v any) ([]any, error) {
 	l, ok := v.([]any)
 	if !ok {
-		return nil, &tool.Raised{Class: "TypeError"}
+		return nil, tool.Error("grafana returned an unexpected value")
 	}
 	return l, nil
 }
@@ -273,7 +273,7 @@ func sample(count, limit int) ([]int, error) {
 		return out, nil
 	}
 	if limit == 1 {
-		return nil, &tool.Raised{Class: "ZeroDivisionError"}
+		return nil, tool.Error("cannot sample a single row")
 	}
 	for i := range limit {
 		out = append(out, int(math.RoundToEven(float64(i*(count-1))/float64(limit-1))))
@@ -335,7 +335,7 @@ func compactFrame(frameValue any, rowCap, cellChars int) (py.Dict, error) {
 				return nil, err
 			}
 			if r >= len(column) {
-				return nil, &tool.Raised{Class: "IndexError"}
+				return nil, tool.Error("grafana returned a short column")
 			}
 			if get(fields[i], "type") == "time" {
 				row = append(row, timeCell(column[r], cellChars))
@@ -545,7 +545,7 @@ func alerts(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
 		}
 		text, ok := summary.(string)
 		if !ok {
-			return nil, &tool.Raised{Class: "TypeError"}
+			return nil, tool.Error("grafana returned an unexpected value")
 		}
 		out = append(out, py.Dict{
 			{Key: "labels", Value: orDefault(a, "labels", py.Dict{})},

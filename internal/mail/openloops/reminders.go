@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -53,7 +54,7 @@ func ReminderTime(due, tz string, hour int, now float64) (float64, error) {
 	}
 	year, month, day, ok := py.DateFromISOFormat(due)
 	if !ok {
-		return 0, fmt.Errorf("%w: Invalid isoformat string: %s", httpx.ErrValue, py.Repr(due))
+		return 0, fmt.Errorf("%w: Invalid isoformat string: %s", httpx.ErrPayload, strconv.Quote(due))
 	}
 	wall := time.Date(year, time.Month(month), day, hour, 0, 0, 0, time.UTC).Unix()
 	return max(float64(py.WallToUnix(loc, wall)), now+300), nil
@@ -140,7 +141,7 @@ func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, e
 func payloadField(d py.Dict, key string) (any, error) {
 	v, ok := d.Get(key)
 	if !ok {
-		return nil, fmt.Errorf("%w: %s", httpx.ErrKey, py.Repr(key))
+		return nil, fmt.Errorf("%w: %s", httpx.ErrMissing, strconv.Quote(key))
 	}
 	return v, nil
 }
@@ -152,7 +153,7 @@ func payloadString(d py.Dict, key string) (string, error) {
 	}
 	s, ok := v.(string)
 	if !ok {
-		return "", fmt.Errorf("%w: %s must be a string, not %s", httpx.ErrType, key, py.TypeName(v))
+		return "", fmt.Errorf("%w: %s must be a string, not %s", httpx.ErrShape, key, py.TypeName(v))
 	}
 	return s, nil
 }
@@ -164,7 +165,7 @@ func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (
 	}
 	payload, ok := decoded.(py.Dict)
 	if !ok {
-		return nil, fmt.Errorf("%w: reminder payload is not an object", httpx.ErrType)
+		return nil, fmt.Errorf("%w: reminder payload is not an object", httpx.ErrShape)
 	}
 	text, err := payloadString(payload, "text")
 	if err != nil {

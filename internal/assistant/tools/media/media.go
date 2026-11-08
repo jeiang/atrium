@@ -118,7 +118,7 @@ func intArg(value any, message string) (int64, error) {
 	case int64:
 		return v, nil
 	case *big.Int:
-		return 0, &tool.Raised{Class: "OverflowError"}
+		return 0, tool.Error("value is too large")
 	}
 	return 0, tool.Error(message)
 }

@@ -618,8 +618,8 @@ func SuggestName(chatURL string) Namer {
 		raw, err := llm.ChatJSON(ctx, chatURL, NameSystem, prompt, nameSchema(maxChars), 0)
 		var down *httpx.ServiceUnavailable
 		switch {
-		case errors.As(err, &down) || errors.Is(err, httpx.ErrValue) || errors.Is(err, httpx.ErrKey) ||
-			errors.Is(err, httpx.ErrIndex) || errors.Is(err, httpx.ErrType):
+		case errors.As(err, &down) || errors.Is(err, httpx.ErrPayload) || errors.Is(err, httpx.ErrMissing) ||
+			errors.Is(err, httpx.ErrRange) || errors.Is(err, httpx.ErrShape):
 		case err != nil:
 			return "", err
 		default:
