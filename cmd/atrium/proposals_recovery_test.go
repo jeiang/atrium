@@ -113,8 +113,8 @@ func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoabl
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if code, _, _ := fetch(t, client, "GET", base+"/proposals", nil); code != http.StatusOK {
-		t.Fatalf("GET /proposals = %d", code)
+	if code, _, _ := fetch(t, client, "GET", base+"/review", nil); code != http.StatusOK {
+		t.Fatalf("GET /review = %d", code)
 	}
 	route := func(id int64, verb string) string {
 		return base + "/proposals/" + strconv.FormatInt(id, 10) + "/" + verb

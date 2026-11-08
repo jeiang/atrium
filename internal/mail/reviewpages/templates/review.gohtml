@@ -1,12 +1,20 @@
 {{define "title"}}Needs you{{end}}
 {{define "heading"}}Needs you{{end}}
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}{{$mode := .Mode}}
-{{if or $d.Proposals $d.Drafts}}
+{{if or $d.Proposals $d.Blocked $d.Drafts}}
 {{if $d.Proposals}}
 <section class="flex flex-col gap-3" aria-labelledby="needs-proposals-h">
   <h2 id="needs-proposals-h" class="text-sm font-medium">Proposals <span class="tabular-nums text-muted-foreground">{{len $d.Proposals}}</span></h2>
   <ul class="flex flex-col gap-3" role="list" aria-label="Proposals">
     {{range $d.Proposals}}{{template "proposal_card" (dict "p" . "mode" $mode "toast" nil "pending_oob" false "pending_count" 0)}}{{end}}
+  </ul>
+</section>
+{{end}}
+{{if $d.Blocked}}
+<section class="flex flex-col gap-3" aria-labelledby="needs-blocked-h">
+  <h2 id="needs-blocked-h" class="text-sm font-medium">Blocked <span class="tabular-nums text-muted-foreground">{{len $d.Blocked}}</span></h2>
+  <ul class="flex flex-col gap-3" role="list" aria-label="Blocked">
+    {{range $d.Blocked}}{{template "proposal_card" (dict "p" . "mode" $mode "toast" nil "pending_oob" false "pending_count" 0)}}{{end}}
   </ul>
 </section>
 {{end}}

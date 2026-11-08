@@ -217,7 +217,7 @@
 </li>
 {{else if eq $item.Kind "proposal"}}
 <li id="proposal-{{$item.ProposalID}}" class="msg-indent" data-seq="{{$item.Seq}}" hx-get="/proposals/{{$item.ProposalID}}/card" hx-trigger="load" hx-swap="outerHTML">
-  <a class="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 text-sm hover:border-line-strong" href="/proposals#proposal-{{$item.ProposalID}}">
+  <a class="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 text-sm hover:border-line-strong" href="/review#proposal-{{$item.ProposalID}}">
     {{icon "list-checks" "size-4 shrink-0 text-muted-foreground"}}<span class="truncate font-medium">Proposal #{{$item.ProposalID}}</span>
   </a>
 </li>

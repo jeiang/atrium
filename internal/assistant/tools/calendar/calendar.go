@@ -8,12 +8,14 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/approval"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/module"
 )
 
 const timeNote = "ISO-8601 (2026-10-16T09:00 or 2026-10-16); times without an offset are in the operator's timezone."
@@ -88,35 +90,6 @@ func requiredText(args tool.Args, name string) (any, error) {
 	return text, nil
 }
 
-func spec(args tool.Args, tz *time.Location, defaultMinutes int) (calendar.Target, calendar.Spec, error) {
-	raw := map[string]any{}
-	for _, name := range []string{"end", "location", "notes"} {
-		v, err := optionalText(args, name)
-		if err != nil {
-			return "", calendar.Spec{}, err
-		}
-		raw[name] = v
-	}
-	title, err := requiredText(args, "title")
-	if err != nil {
-		return "", calendar.Spec{}, err
-	}
-	start, err := requiredText(args, "start")
-	if err != nil {
-		return "", calendar.Spec{}, err
-	}
-	flag, _ := args.Get("all_day")
-	raw["title"], raw["start"], raw["all_day"] = title, start, truthy(flag)
-	chosen, _ := args.Get("calendar")
-	text, _ := chosen.(string)
-	target, err := calendar.ParseTarget(text)
-	if err != nil {
-		return "", calendar.Spec{}, tool.Error(err.Error())
-	}
-	normalized, err := calendar.NormalizeSpec(raw, tz, "", defaultMinutes)
-	return target, normalized, wrap(err)
-}
-
 func list(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	start, err := requiredText(args, "start")
 	if err != nil {
@@ -143,67 +116,6 @@ func list(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 		return nil, wrap(err)
 	}
 	return listing.Dict(), nil
-}
-
-func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	tz, err := calendar.Zone(ctx, tc.Env)
-	if err != nil {
-		return nil, err
-	}
-	set, err := calendar.LoadSettings(ctx, tc.DB.Read)
-	if err != nil {
-		return nil, err
-	}
-	target, normalized, err := spec(args, tz, set.DefaultMinutes)
-	if err != nil {
-		return nil, err
-	}
-	if err := guard(ctx, tc.DB.Read, target); err != nil {
-		return nil, err
-	}
-	intent, err := writes.Begin(ctx, tc.DB.Write, writes.New{
-		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_create",
-		Target: string(target) + ":" + normalized.UID,
-	})
-	if err != nil {
-		return nil, err
-	}
-	ref, err := calendar.CreateEvent(ctx, tc.Env, set, target, normalized, tz)
-	if err != nil {
-		if calendar.OutcomeUnknown(err) {
-			text := err.Error()
-			if settleErr := writes.SettleUnknown(ctx, tc.DB.Write, intent, writes.New{
-				Target: string(target) + ":" + normalized.UID,
-			}, text); settleErr != nil {
-				return nil, settleErr
-			}
-			return nil, wrap(err)
-		}
-		_ = writes.Discard(ctx, tc.DB.Write, intent)
-		return nil, wrap(err)
-	}
-	err = tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		if err := calendar.Track(ctx, tx, normalized, target, nil, tc.Now()); err != nil {
-			return err
-		}
-		return writes.Settle(ctx, tx, tc.Undoers, intent, writes.New{
-			Target: string(target) + ":" + normalized.UID,
-			After:  map[string]any{"calendar": string(target), "spec": normalized.Dict()},
-			Undo:   deleteUndo{Op: "calendar_delete", Calendar: string(target), UID: normalized.UID},
-		})
-	})
-	if err != nil {
-		return nil, err
-	}
-	out := map[string]any{}
-	for k, v := range ref.Dict() {
-		out[k] = v
-	}
-	normalizedDict := normalized.Dict()
-	out["title"] = normalized.Title
-	out["start"] = normalizedDict["start"]
-	out["end"] = normalizedDict["end"]
-	return out, nil
 }
 
 func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -419,31 +331,30 @@ func baseTools() []tool.Tool {
 		},
 		{
 			Name: "calendar_create",
-			Description: "Create an event on the operator's own iCloud or Google calendar. Only for events the operator attends " +
-				"and time blocks. There is no attendees parameter: invitations are never sent. Call only when the " +
-				"operator asked for this event in chat.",
+			Description: "Ask the operator to approve an event on their own iCloud or Google calendar; nothing is created until " +
+				"they approve the card. Only for events the operator attends and time blocks. There is no attendees " +
+				"parameter: invitations are never sent. Call only when the operator asked for this event in chat.",
 			InputSchema: schema(eventProperties, `["calendar","title","start"]`),
-			Handler:     create,
-			Effect:      tool.WriteUndo, Undo: "calendar_delete",
-			Annotated: true,
-			Flags:     tool.Flags{ExternalEffect: true},
-			Contexts:  tool.Kinds{tool.Chat},
+			Handler:     propose,
+			Effect:      tool.Propose,
+			Annotated:   true,
+			Flags:       tool.Flags{ExternalEffect: true},
+			Contexts:    tool.Kinds{tool.Chat},
 		},
-		{
+		approval.Gate(tool.Tool{
 			Name:        "calendar_delete",
-			Description: "Delete an event that atrium created earlier (by its uid from calendar_create). Other events cannot be deleted.",
+			Description: "Ask the operator to approve deleting an event that atrium created earlier (by its uid); nothing is deleted until they approve the card. Other events cannot be deleted.",
 			InputSchema: schema(`"uid":{"type":"string"}`, `["uid"]`),
-			Handler:     remove,
-			Effect:      tool.WriteUndo, Undo: "calendar_recreate",
+			Effect:      tool.Propose, Undo: "calendar_recreate",
 			Annotated: true,
 			Flags:     tool.Flags{ExternalEffect: true},
 			Contexts:  tool.Kinds{tool.Chat},
-		},
+			Approval:  &tool.Approval{Apply: remove, Label: "Delete calendar event", Icon: "trash-2", Module: module.Calendar, Detail: "uid"},
+		}),
 		{
 			Name: "event_propose",
-			Description: "Propose a calendar event for the operator to approve on the Proposals page (nothing is created until " +
-				"they approve). Use for events found in mail. No attendees. Pass source_message_id when the event comes " +
-				"from a mail.",
+			Description: "Ask the operator to approve a calendar event; nothing is created until they approve the card. Use for " +
+				"events found in mail. No attendees. Pass source_message_id when the event comes from a mail.",
 			InputSchema: schema(eventProperties+`,"source_message_id":{"type":"integer"}`, `["calendar","title","start"]`),
 			Handler:     propose,
 			Effect:      tool.Propose,

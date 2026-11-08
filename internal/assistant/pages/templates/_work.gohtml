@@ -1,6 +1,19 @@
 {{template "chat_work" .Data.Work}}
 
 {{define "chat_work"}}{{$w := .}}
+{{if $w.Needs}}
+<section class="flex flex-col gap-2" aria-labelledby="work-needs">
+  <h2 id="work-needs" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "bell" "size-3.5"}}Needs you</h2>
+  <ul class="flex flex-col gap-2" data-needs>
+    {{range $w.Needs}}
+    <li id="needs-{{.ID}}" class="rounded-md border px-3 py-2 text-sm" hx-get="/proposals/{{.ID}}/card?view=row" hx-trigger="load" hx-swap="outerHTML">
+      <a class="flex min-w-0 items-center gap-2 underline-offset-4 hover:underline" href="#proposal-{{.ID}}">{{icon "list-checks" "size-3.5 shrink-0 text-muted-foreground"}}<span class="truncate">{{.Title}}</span></a>
+    </li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+
 <section class="flex flex-col gap-2" aria-labelledby="work-plan">
   <h2 id="work-plan" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "list-checks" "size-3.5"}}Plan</h2>
   {{if $w.Plan}}

@@ -44,6 +44,9 @@ func flags(f tool.Flags) string {
 	if f.ExternalEffect {
 		out = append(out, "external_effect")
 	}
+	if f.Cost {
+		out = append(out, "cost")
+	}
 	if f.Web {
 		out = append(out, "web")
 	}
@@ -57,7 +60,7 @@ func undo(op string) string {
 	if op == "" {
 		return "—"
 	}
-	return "`" + op + "`"
+	return "`" + strings.Join(strings.Split(op, ", "), "`, `") + "`"
 }
 
 func cell(text string) string {

@@ -133,6 +133,24 @@ func latestThreadContent(t *testing.T, d *db.DB) string {
 	return all.String()
 }
 
+func requestTracking(t *testing.T, api *modelLog, d *db.DB, useID string, packageID int, text string) string {
+	t.Helper()
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse(useID, "track_package", map[string]any{"package_id": packageID})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
+	if ran := runApp(t, "agent", "run", "--text", text, "--kind", "chat"); ran.code != cli.ExitOK {
+		t.Fatalf("track run: %d %s", ran.code, ran.stderr)
+	}
+	content := latestThreadContent(t, d)
+	if !strings.Contains(content, `\"proposed\": true`) {
+		t.Fatalf("track_package did not ask for approval: %s", content)
+	}
+	var id string
+	if err := d.Read.QueryRow("SELECT CAST(id AS TEXT) FROM proposals WHERE kind = 'track_package' AND status = 'pending' ORDER BY id DESC LIMIT 1").Scan(&id); err != nil {
+		t.Fatalf("no pending track_package proposal: %v", err)
+	}
+	return id
+}
+
 func TestShip24IntegrationTestRecordsOkAndRefusesA401(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := &fakeShip24{milestone: "in_transit"}
@@ -183,15 +201,20 @@ func TestTrackPackageRegistersAndRespectsTheQuota(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("t1", "track_package", map[string]any{"package_id": 1})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-	if ran := runApp(t, "agent", "run", "--text", "track one", "--kind", "chat"); ran.code != cli.ExitOK {
-		t.Fatalf("track run: %d %s", ran.code, ran.stderr)
+	first := requestTracking(t, api, d, "t1", 1, "track one")
+	if creates, _ := fake.counts(); creates != 0 {
+		t.Fatalf("asking to track created %d trackers before approval", creates)
 	}
-	content := latestThreadContent(t, d)
+	if ran := runApp(t, "proposals", "approve", first); ran.code != cli.ExitOK {
+		t.Fatalf("approve tracking: %d %s", ran.code, ran.stderr)
+	}
+	var result string
+	if err := d.Read.QueryRow("SELECT result FROM proposals WHERE id = ?", first).Scan(&result); err != nil {
+		t.Fatal(err)
+	}
 	for _, want := range []string{"trk_1", "in_transit", "Package is moving"} {
-		if !strings.Contains(content, want) {
-			t.Fatalf("track result misses %q: %s", want, content)
+		if !strings.Contains(result, want) {
+			t.Fatalf("track result misses %q: %s", want, result)
 		}
 	}
 	var tracker, aggregator string
@@ -202,14 +225,9 @@ func TestTrackPackageRegistersAndRespectsTheQuota(t *testing.T) {
 	if tracker != "trk_1" || aggregator != "ship24" || registered <= 0 {
 		t.Fatalf("package after tracking: tracker %q aggregator %q registered %v", tracker, aggregator, registered)
 	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("t2", "track_package", map[string]any{"package_id": 2})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-	if ran := runApp(t, "agent", "run", "--text", "track two", "--kind", "chat"); ran.code != cli.ExitOK {
-		t.Fatalf("second track run: %d %s", ran.code, ran.stderr)
-	}
-	content = latestThreadContent(t, d)
-	if !strings.Contains(content, "quota") {
-		t.Fatalf("the exhausted quota was not refused: %s", content)
+	second := requestTracking(t, api, d, "t2", 2, "track two")
+	if ran := runApp(t, "proposals", "approve", second); ran.code == cli.ExitOK || !strings.Contains(ran.stdout+ran.stderr, "quota") {
+		t.Fatalf("the exhausted quota was not refused: %d %s %s", ran.code, ran.stdout, ran.stderr)
 	}
 	if creates, _ := fake.counts(); creates != 1 {
 		t.Fatalf("Ship24 created %d trackers, want 1", creates)
@@ -345,14 +363,13 @@ func TestTrackPackageUnknownOutcomeStaysBlocked(t *testing.T) {
 		"source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)"); err != nil {
 		t.Fatal(err)
 	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("u1", "track_package", map[string]any{"package_id": 1})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-	if ran := runApp(t, "agent", "run", "--text", "track unknown", "--kind", "chat"); ran.code != cli.ExitOK {
-		t.Fatalf("track run: %d %s", ran.code, ran.stderr)
+	first := requestTracking(t, api, d, "u1", 1, "track unknown")
+	if ran := runApp(t, "proposals", "approve", first); ran.code == cli.ExitOK || !strings.Contains(ran.stdout+ran.stderr, "outcome is unknown") {
+		t.Fatalf("the unknown outcome was not reported: %d %s %s", ran.code, ran.stdout, ran.stderr)
 	}
-	content := latestThreadContent(t, d)
-	if !strings.Contains(content, "outcome is unknown") {
-		t.Fatalf("the unknown outcome was not reported: %s", content)
+	var action string
+	if err := d.Read.QueryRow("SELECT state FROM proposal_actions WHERE proposal_id = ? ORDER BY id DESC LIMIT 1", first).Scan(&action); err != nil || action != "unknown" {
+		t.Fatalf("proposal action = %q, %v; want unknown", action, err)
 	}
 	var state string
 	var undo sql.NullString
@@ -362,14 +379,9 @@ func TestTrackPackageUnknownOutcomeStaysBlocked(t *testing.T) {
 	if state != "unknown" || undo.Valid {
 		t.Fatalf("write after a 500 = state %q undo %v; want unknown with no undo", state, undo)
 	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("u2", "track_package", map[string]any{"package_id": 1})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-	if ran := runApp(t, "agent", "run", "--text", "retry unknown", "--kind", "chat"); ran.code != cli.ExitOK {
-		t.Fatalf("retry run: %d %s", ran.code, ran.stderr)
-	}
-	content = latestThreadContent(t, d)
-	if !strings.Contains(content, "unknown outcome") {
-		t.Fatalf("the retry was not refused: %s", content)
+	retry := requestTracking(t, api, d, "u2", 1, "retry unknown")
+	if ran := runApp(t, "proposals", "approve", retry); ran.code == cli.ExitOK || !strings.Contains(ran.stdout+ran.stderr, "unknown outcome") {
+		t.Fatalf("the retry was not refused: %d %s %s", ran.code, ran.stdout, ran.stderr)
 	}
 	if creates, _ := fake.counts(); creates != 1 {
 		t.Fatalf("the retry reached Ship24 (%d creates); want 1", creates)
@@ -400,10 +412,8 @@ func TestTrackPackageQuotaSurvivesUndo(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("q1", "track_package", map[string]any{"package_id": 1})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-	if ran := runApp(t, "agent", "run", "--text", "track one", "--kind", "chat"); ran.code != cli.ExitOK {
-		t.Fatalf("track run: %d %s", ran.code, ran.stderr)
+	if ran := runApp(t, "proposals", "approve", requestTracking(t, api, d, "q1", 1, "track one")); ran.code != cli.ExitOK {
+		t.Fatalf("approve tracking: %d %s", ran.code, ran.stderr)
 	}
 	var writeID int64
 	if err := d.Read.QueryRow("SELECT id FROM agent_writes WHERE tool = 'track_package' ORDER BY id DESC LIMIT 1").Scan(&writeID); err != nil {
@@ -428,14 +438,8 @@ func TestTrackPackageQuotaSurvivesUndo(t *testing.T) {
 	if fake.unsubscribeCount() != 1 {
 		t.Fatalf("Ship24 unsubscribes = %d, want 1", fake.unsubscribeCount())
 	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("q2", "track_package", map[string]any{"package_id": 2})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-	if ran := runApp(t, "agent", "run", "--text", "track two", "--kind", "chat"); ran.code != cli.ExitOK {
-		t.Fatalf("second track run: %d %s", ran.code, ran.stderr)
-	}
-	content := latestThreadContent(t, d)
-	if !strings.Contains(content, "quota") {
-		t.Fatalf("the undone registration freed a quota slot: %s", content)
+	if ran := runApp(t, "proposals", "approve", requestTracking(t, api, d, "q2", 2, "track two")); ran.code == cli.ExitOK || !strings.Contains(ran.stdout+ran.stderr, "quota") {
+		t.Fatalf("the undone registration freed a quota slot: %d %s %s", ran.code, ran.stdout, ran.stderr)
 	}
 	if creates, _ := fake.counts(); creates != 1 {
 		t.Fatalf("Ship24 created %d trackers, want 1", creates)
@@ -488,10 +492,8 @@ func TestUndoPackageUntrackRefusesWithoutAKey(t *testing.T) {
 		"source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)"); err != nil {
 		t.Fatal(err)
 	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("x1", "track_package", map[string]any{"package_id": 1})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-	if ran := runApp(t, "agent", "run", "--text", "track", "--kind", "chat"); ran.code != cli.ExitOK {
-		t.Fatalf("track run: %d %s", ran.code, ran.stderr)
+	if ran := runApp(t, "proposals", "approve", requestTracking(t, api, d, "x1", 1, "track")); ran.code != cli.ExitOK {
+		t.Fatalf("approve tracking: %d %s", ran.code, ran.stderr)
 	}
 	var writeID int64
 	if err := d.Read.QueryRow("SELECT id FROM agent_writes WHERE tool = 'track_package' ORDER BY id DESC LIMIT 1").Scan(&writeID); err != nil {

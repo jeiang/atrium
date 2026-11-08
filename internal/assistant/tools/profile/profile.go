@@ -8,21 +8,14 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
-	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/proposals"
 )
 
-const (
-	UndoOp            = "profile_restore"
-	KindProfileUpdate = "profile_update"
-	UndoProfileUpdate = "profile_update_undo"
-)
+const UndoOp = "profile_restore"
 
 type Entry struct {
 	Key       string
@@ -115,9 +108,13 @@ func set(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if err := valueBound.ClampText(ctx, tc.DB.Read, value, "value"); err != nil {
 		return nil, err
 	}
+	return Write(ctx, tc, "profile_set", key, value)
+}
+
+func Write(ctx context.Context, tc *tool.Context, name, key, value string) (map[string]any, error) {
 	var previous *string
 	var writeID int64
-	err = tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
+	err := tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
 		var err error
 		if previous, err = current(ctx, tx, key); err != nil {
 			return err
@@ -129,7 +126,7 @@ func set(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 			return err
 		}
 		writeID, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
-			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "profile_set", Target: "profile:" + key,
+			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: name, Target: "profile:" + key,
 			Before: map[string]any{"value": optional(previous)},
 			After:  map[string]any{"value": value},
 			Undo:   profileUndo{Op: UndoOp, Key: key, Previous: previous, Applied: value},
@@ -193,66 +190,7 @@ func Tools() []tool.Tool {
 			Handler:     set,
 			Effect:      tool.WriteUndo, Undo: "profile_restore",
 			Annotated: true,
-			Contexts:  tool.Kinds{tool.Chat, tool.Nightly},
+			Contexts:  tool.Kinds{tool.Chat},
 		},
 	}
-}
-
-type UpdateExecutor struct {
-	DB  *db.DB
-	Now func() float64
-}
-
-func (e *UpdateExecutor) now() float64 {
-	if e.Now != nil {
-		return e.Now()
-	}
-	return float64(time.Now().UnixNano()) / 1e9
-}
-
-func (e *UpdateExecutor) Execute(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
-	var payload struct {
-		Key      string `json:"key"`
-		Value    string `json:"value"`
-		Previous string `json:"previous"`
-	}
-	if err := json.Unmarshal([]byte(p.Payload), &payload); err != nil {
-		return nil, err
-	}
-	if _, err := e.DB.Write.ExecContext(ctx,
-		"INSERT INTO agent_profile (key, value, updated_at) VALUES (?, ?, ?) "+
-			"ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
-		payload.Key, payload.Value, e.now()); err != nil {
-		return nil, err
-	}
-	action := map[string]any{"type": KindProfileUpdate, "key": payload.Key}
-	undo := map[string]any{"op": UndoProfileUpdate, "key": payload.Key, "previous": payload.Previous}
-	if _, err := proposals.RecordAction(ctx, e.DB.Write, p.ID, "write", nil, action, undo, ledger.OK, nil, e.now()); err != nil {
-		return nil, err
-	}
-	return map[string]any{"summary": "Profile updated: " + payload.Key}, nil
-}
-
-func (e *UpdateExecutor) Undo(ctx context.Context, plan json.RawMessage) (any, error) {
-	var info struct {
-		Key      string `json:"key"`
-		Previous string `json:"previous"`
-	}
-	if err := json.Unmarshal(plan, &info); err != nil {
-		return nil, err
-	}
-	if info.Previous == "" {
-		if _, err := e.DB.Write.ExecContext(ctx, "DELETE FROM agent_profile WHERE key = ?", info.Key); err != nil {
-			return nil, err
-		}
-	} else if _, err := e.DB.Write.ExecContext(ctx, "UPDATE agent_profile SET value = ?, updated_at = ? WHERE key = ?", info.Previous, e.now(), info.Key); err != nil {
-		return nil, err
-	}
-	return map[string]any{"restored": info.Key}, nil
-}
-
-func RegisterProposal(reg *proposals.Registry, e *UpdateExecutor, owner string) {
-	reg.Executors[KindProfileUpdate] = e.Execute
-	reg.Undoers[UndoProfileUpdate] = e.Undo
-	reg.AddKind(proposals.Kind{Name: KindProfileUpdate, Module: owner, Label: "Profile update", Icon: "user-round"})
 }

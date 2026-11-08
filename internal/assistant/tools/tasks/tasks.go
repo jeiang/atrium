@@ -2,16 +2,13 @@ package taskstools
 
 import (
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/tasks"
 )
 
@@ -41,7 +38,7 @@ func Tools() []tool.Tool {
 			Handler:     add,
 			Effect:      tool.WriteUndo, Undo: UndoDelete,
 			Annotated: true,
-			Contexts:  tool.Kinds{tool.Chat},
+			Contexts:  tool.Kinds{tool.Chat, tool.Cron, tool.Nightly},
 		},
 		{
 			Name:        "task_update",
@@ -60,15 +57,6 @@ func Tools() []tool.Tool {
 			Effect:      tool.WriteUndo, Undo: UndoRestore,
 			Annotated: true,
 			Contexts:  tool.Kinds{tool.Chat},
-		},
-		{
-			Name:        "task_propose",
-			Description: "Propose a task for the operator to approve; nothing is created until they approve it.",
-			InputSchema: json.RawMessage(addSchema),
-			Handler:     propose,
-			Effect:      tool.Propose,
-			Annotated:   true,
-			Contexts:    tool.Kinds{tool.Cron, tool.Nightly},
 		},
 	}
 }
@@ -219,23 +207,6 @@ func done(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 		return nil, err
 	}
 	return map[string]any{"task_id": id, "status": tasks.StatusDone, "write_id": writeID}, nil
-}
-
-func propose(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	spec, err := specOf(args)
-	if err != nil {
-		return nil, err
-	}
-	if spec.Title == "" {
-		return nil, tool.Error("title is required")
-	}
-	raw, _ := json.Marshal(spec)
-	sum := sha256.Sum256(raw)
-	id, created, err := proposals.Create(ctx, tc.DB, tasks.KindTask, nil, spec.Title, spec, spec, hex.EncodeToString(sum[:]), tc.Now())
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"proposal_id": id, "created": created}, nil
 }
 
 type undoDelete struct {

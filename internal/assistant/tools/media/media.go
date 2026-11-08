@@ -11,10 +11,12 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/approval"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/module"
 )
 
 const (
@@ -59,36 +61,36 @@ func Tools() []tool.Tool {
 			Annotated:   true,
 			Contexts:    readKinds,
 		},
-		{
+		approval.Gate(tool.Tool{
 			Name:        "media_add_magnet",
-			Description: "Add a magnet link to qBittorrent. media=true (default) tags it for filing into the library with automatic video/subtitle selection; false adds a plain torrent. Undo deletes the torrent and its data unless it was already filed.",
+			Description: "Ask the operator to approve adding a magnet link to qBittorrent; nothing is added until they approve the card. media=true (default) tags it for filing into the library with automatic video/subtitle selection; false adds a plain torrent. Undo deletes the torrent and its data unless it was already filed.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"magnet": {"type": "string"}, "media": {"type": "boolean"}}, "required": ["magnet"], "additionalProperties": false}`),
-			Handler:     mediaAddMagnet,
-			Effect:      tool.WriteUndo, Undo: "media_torrent_delete",
+			Effect:      tool.Propose, Undo: UndoTorrent,
 			Annotated: true,
 			Flags:     tool.Flags{ExternalEffect: true},
 			Contexts:  writeKinds,
-		},
-		{
+			Approval:  &tool.Approval{Apply: mediaAddMagnet, Label: "Add torrent", Icon: "download", Module: module.Media},
+		}),
+		approval.Gate(tool.Tool{
 			Name:        "media_channel_add",
-			Description: "Watch a show on EZTV: give imdb_id (tt1234567) or tmdb_id (needs TMDB) plus a regex over release titles; case_sensitive defaults to false. New matches are downloaded automatically after the first poll. Undo removes the channel.",
+			Description: "Ask the operator to approve watching a show on EZTV; nothing changes until they approve the card. Give imdb_id (tt1234567) or tmdb_id (needs TMDB) plus a regex over release titles; case_sensitive defaults to false. New matches are downloaded automatically after the first poll. Undo removes the channel.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"imdb_id": {"type": "string"}, "tmdb_id": {"type": "integer"}, "regex": {"type": "string"}, "case_sensitive": {"type": "boolean"}, "name": {"type": "string", "description": "Display name; defaults to the TMDB title or the IMDb id."}}, "required": ["regex"], "additionalProperties": false}`),
-			Handler:     mediaChannelAdd,
-			Effect:      tool.WriteUndo, Undo: "media_channel_delete",
+			Effect:      tool.Propose, Undo: UndoChannelDelete,
 			Annotated: true,
 			Flags:     tool.Flags{ExternalEffect: true},
 			Contexts:  writeKinds,
-		},
-		{
+			Approval:  &tool.Approval{Apply: mediaChannelAdd, Label: "Watch show", Icon: "tv", Module: module.Media, Detail: "name"},
+		}),
+		approval.Gate(tool.Tool{
 			Name:        "media_channel_remove",
-			Description: "Remove an EZTV channel by id (see media_channels). Undo restores it.",
+			Description: "Ask the operator to approve removing an EZTV channel by id (see media_channels); nothing changes until they approve the card. Undo restores it.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"], "additionalProperties": false}`),
-			Handler:     mediaChannelRemove,
-			Effect:      tool.WriteUndo, Undo: "media_channel_restore",
+			Effect:      tool.Propose, Undo: UndoChannelRestore,
 			Annotated: true,
 			Flags:     tool.Flags{ExternalEffect: true},
 			Contexts:  writeKinds,
-		},
+			Approval:  &tool.Approval{Apply: mediaChannelRemove, Label: "Stop watching show", Icon: "tv", Module: module.Media},
+		}),
 	}
 }
 

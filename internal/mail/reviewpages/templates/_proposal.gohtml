@@ -239,6 +239,13 @@
   </div>
 </div>
 
+{{else if $p.Approval}}
+{{if $p.Args}}
+<dl class="grid gap-x-4 gap-y-1 text-sm sm:grid-cols-[auto_minmax(0,1fr)]" data-args>
+  {{range $p.Args}}<dt class="text-muted-foreground">{{.Label}}</dt><dd class="min-w-0 break-words">{{.Value}}</dd>{{end}}
+</dl>
+{{end}}
+
 {{end}}{{end}}
 
 {{define "proposal_blocked"}}{{if .Blocked}}
@@ -260,9 +267,11 @@
   {{end}}
   <span id="proposal-spinner-{{$p.ID}}" class="htmx-indicator inline-flex items-center gap-1.5 text-xs text-muted-foreground" role="status">{{icon "loader-circle" "size-4 animate-spin"}}Applying…</span>
   <div class="ml-auto flex gap-1">
-    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.ID}}/dismiss" hx-indicator="unset" data-card-dismiss>Dismiss</button>
+    <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.ID}}/dismiss" hx-indicator="unset" data-card-dismiss>{{if $p.Approval}}Deny{{else}}Dismiss{{end}}</button>
+    {{if not $p.Approval}}
     <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/proposals/{{$p.ID}}/dismiss" hx-vals='{"forever": "1"}' hx-indicator="unset"
             title="Never propose this again">Dismiss forever</button>
+    {{end}}
   </div>
 </div>
 {{else if eq $p.Status "applied"}}
@@ -296,7 +305,7 @@
 {{else if eq $p.Kind "gmail_label_merge"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "from_count")))}}{{else if eq $p.Kind "mail_triage"}}{{$picks = selattr "messages" (list (dict "messages" (get $v "messages") "count" (get $v "count")))}}{{end}}
 {{$picker := and $pending (gt (len $picks) 0)}}
 {{$ctx := dict "p" $p "v" $v "pending" $pending "picks" $picks "picker" $picker "mode" .mode}}
-<li id="proposal-{{$p.ID}}" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring {{if or (eq $p.Status "dismissed") (eq $p.Status "suppressed")}}opacity-80{{end}}" data-card="proposal" data-status="{{$p.Status}}" tabindex="-1">
+<li id="proposal-{{$p.ID}}" class="scroll-mt-20 rounded-lg border bg-card target:ring-2 target:ring-ring {{if or (eq $p.Status "dismissed") (eq $p.Status "suppressed")}}opacity-80{{end}}" data-card="proposal" data-status="{{$p.Status}}" tabindex="-1"{{if $pending}} hx-get="/proposals/{{$p.ID}}/card?poll=1" hx-trigger="every 20s" hx-swap="outerHTML"{{end}}>
   <article aria-labelledby="proposal-title-{{$p.ID}}">
     {{if $pending}}
     <form class="flex flex-col" hx-post="/proposals/{{$p.ID}}/approve" hx-target="#proposal-{{$p.ID}}" hx-swap="outerHTML"

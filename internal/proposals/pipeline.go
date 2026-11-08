@@ -185,35 +185,36 @@ func Get(ctx context.Context, q Querier, id int64) (*Proposal, error) {
 	return p, err
 }
 
-func CountsByStatus(ctx context.Context, q Querier) (map[string]any, error) {
-	out, err := counts(ctx, q, "SELECT status, COUNT(*) AS n FROM proposals GROUP BY status")
+func ListBlocked(ctx context.Context, q Querier) ([]*Proposal, error) {
+	rows, err := q.QueryContext(ctx, "SELECT * FROM (SELECT "+columns+" FROM proposals p WHERE p.status <> 'pending') "+
+		"WHERE blocked ORDER BY created_ts DESC, id DESC")
 	if err != nil {
 		return nil, err
 	}
-	var all int64
-	for _, v := range out {
-		all += v.(int64)
-	}
-	out["all"] = all
-	return out, nil
+	return db.Collect(rows, func(r *sql.Rows) (*Proposal, error) { return scanProposal(r, false) })
 }
 
-func counts(ctx context.Context, q Querier, query string, args ...any) (map[string]any, error) {
-	rows, err := q.QueryContext(ctx, query, args...)
+const threadRefs = "SELECT m.thread_id AS thread_id, m.id AS message_id, CASE WHEN b.type = 'object' THEN " +
+	"CASE WHEN json_extract(b.value, '$.type') = 'tool_result' AND NOT COALESCE(json_extract(b.value, '$.is_error'), 0) " +
+	"AND json_valid(json_extract(b.value, '$.content')) THEN json_extract(json_extract(b.value, '$.content'), '$.proposal_id') END " +
+	"END AS proposal_id FROM thread_messages m, json_each(m.content_json) b WHERE m.content_json LIKE '%proposal_id%'"
+
+func ThreadOf(ctx context.Context, q Querier, id int64) (int64, bool, error) {
+	var thread int64
+	err := q.QueryRowContext(ctx, "SELECT thread_id FROM ("+threadRefs+") WHERE proposal_id = ? ORDER BY message_id LIMIT 1", id).Scan(&thread)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, false, nil
+	}
+	return thread, err == nil, err
+}
+
+func PendingInThread(ctx context.Context, q Querier, threadID int64) ([]*Proposal, error) {
+	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM proposals p WHERE p.status = 'pending' AND p.id IN "+
+		"(SELECT proposal_id FROM ("+threadRefs+" AND m.thread_id = ?)) ORDER BY p.created_ts, p.id", threadID)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
-	out := map[string]any{}
-	for rows.Next() {
-		var key string
-		var n int64
-		if err := rows.Scan(&key, &n); err != nil {
-			return nil, err
-		}
-		out[key] = n
-	}
-	return out, rows.Err()
+	return db.Collect(rows, func(r *sql.Rows) (*Proposal, error) { return scanProposal(r, false) })
 }
 
 func Dismiss(ctx context.Context, d *db.DB, id int64, status string, who Resolver, ts float64) error {

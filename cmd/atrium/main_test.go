@@ -246,10 +246,13 @@ func TestServeRendersMailPages(t *testing.T) {
 func TestServeRendersReviewPages(t *testing.T) {
 	t.Parallel()
 	base := startServe(t)
-	for _, path := range []string{"/review", "/proposals", "/activity", "/drafts", "/loops", "/watches"} {
+	for _, path := range []string{"/review", "/activity", "/drafts", "/loops", "/watches"} {
 		if status, _, _ := fetch(t, http.DefaultClient, "GET", base+path, nil); status != http.StatusOK {
 			t.Errorf("GET %s = %d", path, status)
 		}
+	}
+	if status, _, _ := fetch(t, http.DefaultClient, "GET", base+"/proposals", nil); status != http.StatusNotFound {
+		t.Errorf("GET /proposals = %d, want 404", status)
 	}
 }
 

@@ -13,7 +13,7 @@
   <h3>{{lbl "kind" .Created.Kind}} proposed</h3>
   <section>
     <p>{{.Created.Title}}</p>
-    <p><a class="font-medium text-foreground underline underline-offset-4" href="/proposals?kind={{.Created.Kind}}#proposal-{{.Created.ID}}">Review proposal #{{.Created.ID}}</a>. Nothing changes in Notion until you approve it.</p>
+    <p><a class="font-medium text-foreground underline underline-offset-4" href="/proposals/{{.Created.ID}}">Review proposal #{{.Created.ID}}</a>. Nothing changes in Notion until you approve it.</p>
   </section>
 </div>
 {{end}}

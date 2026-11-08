@@ -3,59 +3,45 @@ package reviewpages
 import (
 	"errors"
 	"fmt"
-	"strconv"
-
 	"net/http"
 	"net/url"
-	"slices"
+	"strconv"
 
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
-const allStatuses = "all"
-
-var proposalStatuses = []string{
-	proposals.Pending, proposals.Applied, proposals.Failed, proposals.Dismissed, proposals.Suppressed, allStatuses,
-}
-
-func (s *service) kindLabel(name string) string {
-	kind, _ := s.registry.Kind(name)
-	return kind.Label
-}
-
-func (s *service) proposalsPage(w http.ResponseWriter, r *http.Request) {
-	status := web.QueryValue(r.URL.Query(), "status")
-	if status == "" {
-		status = proposals.Pending
-	}
-	kind := web.QueryValue(r.URL.Query(), "kind")
-	if !slices.Contains(proposalStatuses, status) {
-		s.fail(w, r, http.StatusUnprocessableEntity, "unknown status")
+func (s *service) proposalLink(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "proposal_id")
+	if !ok {
 		return
-	}
-	if kind != "" && !s.registry.Known(kind) {
-		s.fail(w, r, http.StatusUnprocessableEntity, "unknown kind")
-		return
-	}
-	filter := status
-	if status == allStatuses {
-		filter = ""
 	}
 	ctx := r.Context()
-	list, err := proposals.List(ctx, s.deps.DB.Read, filter, kind)
+	found, err := proposals.Get(ctx, s.deps.DB.Read, id)
 	check(err)
-	counts, err := proposals.CountsByStatus(ctx, s.deps.DB.Read)
-	check(err)
-	views := proposalViews(list, s.registry)
-	data := proposalListData{Proposals: views, Status: status, Kind: kind, KindLabel: s.kindLabel(kind), Counts: counts}
-	if web.IsPartial(r) {
-		data.Partial = true
-		s.fragment(w, r, http.StatusOK, "_proposal_list.gohtml", data, nil)
+	if found == nil {
+		s.fail(w, r, http.StatusNotFound, "unknown proposal")
 		return
 	}
-	s.page(w, r, http.StatusOK, "proposals", "proposals.gohtml", data, nil)
+	thread, known, err := proposals.ThreadOf(ctx, s.deps.DB.Read, id)
+	check(err)
+	target := fmt.Sprintf("/review#proposal-%d", id)
+	if known {
+		target = fmt.Sprintf("/chat/%d#proposal-%d", thread, id)
+	}
+	http.Redirect(w, r, target, http.StatusSeeOther)
+}
+
+func rowView(r *http.Request) bool {
+	if web.QueryValue(r.URL.Query(), "view") == "row" {
+		return true
+	}
+	if r.Method != http.MethodPost {
+		return false
+	}
+	view, _ := web.Value(web.FormValues(r), "view")
+	return view == "row"
 }
 
 func (s *service) card(w http.ResponseWriter, r *http.Request, id int64, notice *tpl.Toast) {
@@ -65,9 +51,17 @@ func (s *service) card(w http.ResponseWriter, r *http.Request, id int64, notice 
 		s.fail(w, r, http.StatusNotFound, "unknown proposal")
 		return
 	}
+	if r.Method == http.MethodGet && web.QueryValue(r.URL.Query(), "poll") != "" && found.Status == proposals.Pending {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 	kind, _ := s.registry.Kind(found.Kind)
-	view := []ProposalView{proposalView(found, kind)}
-	s.fragment(w, r, http.StatusOK, "_proposal.gohtml", proposalCardData{Proposal: view[0], PendingOOB: true}, notice)
+	view := proposalView(found, kind)
+	if rowView(r) {
+		s.fragment(w, r, http.StatusOK, "_proposal_row.gohtml", proposalCardData{Proposal: view, PendingOOB: true}, notice)
+		return
+	}
+	s.fragment(w, r, http.StatusOK, "_proposal.gohtml", proposalCardData{Proposal: view, PendingOOB: true}, notice)
 }
 
 func picked(form url.Values, index int, messages any) ([]any, error) {

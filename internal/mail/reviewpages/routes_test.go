@@ -8,7 +8,7 @@ import (
 
 func TestWrongMethodsAreRefused(t *testing.T) {
 	s := newSite(t)
-	status(t, s.do(http.MethodPost, "/proposals", nil), http.StatusMethodNotAllowed)
+	status(t, s.do(http.MethodPost, "/proposals/1", nil), http.StatusMethodNotAllowed)
 	status(t, s.do(http.MethodGet, "/proposals/1/approve", nil), http.StatusMethodNotAllowed)
 	status(t, s.do(http.MethodDelete, "/drafts/1", nil, "X-CSRF-Token", s.token), http.StatusMethodNotAllowed)
 }
@@ -42,8 +42,6 @@ func TestEveryReviewPageMarksTheHubAndItsTabCurrent(t *testing.T) {
 		}
 		mustContain(t, page, `<h1>`+c.heading+`</h1>`, `href="/review"`, `href="/loops"`, `href="/watches"`, `href="/activity"`)
 	}
-	for _, target := range []string{"/proposals", "/drafts"} {
-		page := status(t, s.get(target), http.StatusOK)
-		mustNotContain(t, page, `aria-current="page"`, `class="hub-tabs"`)
-	}
+	page := status(t, s.get("/drafts"), http.StatusOK)
+	mustNotContain(t, page, `aria-current="page"`, `class="hub-tabs"`)
 }

@@ -6,27 +6,29 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jeiang/atrium/internal/assistant/approval"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/tracking"
+	"github.com/jeiang/atrium/internal/module"
 )
 
 var trackPackageSchema = json.RawMessage(`{"type":"object","properties":{"package_id":{"type":"integer"},"tracking_number":{"type":"string"},"carrier":{"type":"string"},"destination_country":{"type":"string"},"destination_postcode":{"type":"string"}},"additionalProperties":false}`)
 
 func trackingTools() []tool.Tool {
-	return []tool.Tool{{
+	return []tool.Tool{approval.Gate(tool.Tool{
 		Name: "track_package",
-		Description: "Register a package's tracking number with Ship24 and return its current status and recent events. " +
+		Description: "Ask the operator to approve registering a package's tracking number with Ship24 (a paid lookup); nothing is sent until they approve the card. " +
 			"Use the id from the packages tool, or give a tracking_number. Undoable.",
 		InputSchema: trackPackageSchema,
-		Handler:     trackPackage,
-		Effect:      tool.WriteUndo, Undo: tracking.UndoUntrack,
+		Effect:      tool.Propose, Undo: tracking.UndoUntrack,
 		Annotated: true,
-		Flags:     tool.Flags{ExternalEffect: true},
+		Flags:     tool.Flags{ExternalEffect: true, Cost: true},
 		Contexts:  tool.Kinds{tool.Chat},
-	}}
+		Approval:  &tool.Approval{Apply: trackPackage, Label: "Track package", Icon: "package", Module: module.Mail, Detail: "tracking_number"},
+	})}
 }
 
 func trackPackage(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {

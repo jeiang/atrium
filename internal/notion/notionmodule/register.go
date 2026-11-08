@@ -73,7 +73,6 @@ func (m Module) Register(module.Context) module.Registration {
 		}}},
 		Commands: []*cli.Command{notion.Command(notion.Options{Env: env})},
 		Tools: func(r *registry.Registry) error {
-			notiontools.RegisterProposalKinds()
 			if err := r.Add(notiontools.Tools()...); err != nil {
 				return err
 			}

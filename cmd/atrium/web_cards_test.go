@@ -148,41 +148,57 @@ func TestDraftSentFromTheThreadGoesThroughTheSendGate(t *testing.T) {
 	}
 }
 
-func TestProposalApprovedFromTheThreadResolves(t *testing.T) {
-	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
-		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+func TestCalendarCreateAsksInTheThreadAndWritesOnlyOnApproval(t *testing.T) {
+	dir, srv := davFixture(t)
+	id := proposalID(t, toolResult(t, "calendar_create", map[string]any{
+		"calendar": "icloud", "title": "Dentist", "start": "2026-11-10T12:00:00", "end": "2026-11-10T13:00:00",
+	}))
+	if len(srv.Puts) != 0 || len(srv.Deleted) != 0 {
+		t.Fatalf("asking wrote to the calendar: puts %v deletes %v", srv.Puts, srv.Deleted)
 	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("p1", "task_propose", map[string]any{"title": "Renew the passport"})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("I proposed a task.")))
-	if ran := runApp(t, "agent", "run", "--kind", "cron", "--text", "review"); ran.code != cli.ExitOK {
-		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
+	thread := strconv.FormatInt(latestThread(t, dir), 10)
+	base := startServeIn(t, dir)
+	card := base + "/proposals/" + id + "/card"
+	client := cardClient(t, base, thread, "/proposals/"+id+"/card")
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+
+	if code, _, header := fetch(t, client, http.MethodGet, base+"/proposals/"+id, nil); code != http.StatusSeeOther || header.Get("Location") != "/chat/"+thread+"#proposal-"+id {
+		t.Fatalf("GET /proposals/%s = %d %q, want a redirect to the thread card", id, code, header.Get("Location"))
 	}
-	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
-	if err != nil {
-		t.Fatal(err)
+	if code, _, _ := fetch(t, client, http.MethodGet, base+"/proposals", nil); code != http.StatusNotFound {
+		t.Fatalf("GET /proposals = %d, want 404", code)
 	}
-	var proposalID string
-	if err := d.Read.QueryRow("SELECT CAST(id AS TEXT) FROM proposals WHERE title = 'Renew the passport'").Scan(&proposalID); err != nil {
-		t.Fatal(err)
+	if code, page, _ := fetch(t, client, http.MethodGet, base+"/chat/"+thread, nil); code != http.StatusOK || !strings.Contains(page, `id="needs-`+id+`"`) ||
+		!strings.Contains(page, `hx-get="/proposals/`+id+`/card?view=row"`) {
+		t.Fatalf("the Work panel does not list the pending approval: %d", code)
+	}
+	code, body := hxFetch(t, client, http.MethodGet, card, nil)
+	if code != http.StatusOK || !strings.Contains(body, `data-card="proposal" data-status="pending"`) || !strings.Contains(body, "data-card-approve") ||
+		!strings.Contains(body, "Dentist") || !strings.Contains(body, `hx-trigger="every 20s"`) {
+		t.Fatalf("pending card: %d\n%s", code, body)
+	}
+	if code, body = hxFetch(t, client, http.MethodGet, card+"?poll=1", nil); code != http.StatusNoContent {
+		t.Fatalf("poll of a pending card = %d, want 204\n%s", code, body)
+	}
+	if code, body = hxFetch(t, client, http.MethodGet, card+"?view=row", nil); code != http.StatusOK || !strings.Contains(body, `id="needs-`+id+`"`) ||
+		!strings.Contains(body, `href="#proposal-`+id+`"`) || !strings.Contains(body, "data-card-approve") {
+		t.Fatalf("Needs you row: %d\n%s", code, body)
 	}
 
-	base := startServeIn(t, dir)
-	client := cardClient(t, base, strconv.FormatInt(latestThread(t, dir), 10), "/proposals/"+proposalID+"/card")
-	code, card := hxFetch(t, client, http.MethodGet, base+"/proposals/"+proposalID+"/card", nil)
-	if code != http.StatusOK || !strings.Contains(card, `data-card="proposal" data-status="pending"`) || !strings.Contains(card, "data-card-approve") {
-		t.Fatalf("proposal card: %d\n%s", code, card)
+	code, body = hxFetch(t, client, http.MethodPost, base+"/proposals/"+id+"/approve", url.Values{"all": {"1"}, "view": {"row"}})
+	if code != http.StatusOK || !strings.Contains(body, `id="needs-`+id+`"`) || !strings.Contains(body, `data-status="applied"`) || strings.Contains(body, "data-card-approve") {
+		t.Fatalf("approve from the Work panel: %d\n%s", code, body)
 	}
-	code, card = hxFetch(t, client, http.MethodPost, base+"/proposals/"+proposalID+"/approve", url.Values{"all": {"1"}})
-	if code != http.StatusOK || !strings.Contains(card, `data-status="applied"`) {
-		t.Fatalf("approve: %d\n%s", code, card)
+	if len(srv.Puts) != 1 || len(srv.Deleted) != 0 {
+		t.Fatalf("approval wrote %d events and deleted %d, want one PUT", len(srv.Puts), len(srv.Deleted))
 	}
-	var status string
-	if err := d.Read.QueryRow("SELECT status FROM proposals WHERE id = ?", proposalID).Scan(&status); err != nil || status != "applied" {
-		t.Fatalf("proposal status = %q, %v", status, err)
+	if code, body = hxFetch(t, client, http.MethodGet, card+"?poll=1", nil); code != http.StatusOK || !strings.Contains(body, `data-status="applied"`) || strings.Contains(body, "every 20s") {
+		t.Fatalf("poll of the applied card: %d\n%s", code, body)
 	}
-	var tasks int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM tasks WHERE title = 'Renew the passport'").Scan(&tasks); err != nil || tasks != 1 {
-		t.Fatalf("tasks = %d, %v", tasks, err)
+	if code, page, _ := fetch(t, client, http.MethodGet, base+"/chat/"+thread, nil); code != http.StatusOK || strings.Contains(page, `id="needs-`+id+`"`) {
+		t.Fatalf("the Work panel still lists the applied approval: %d", code)
+	}
+	if code, body = hxFetch(t, client, http.MethodPost, base+"/proposals/"+id+"/approve", url.Values{"all": {"1"}}); len(srv.Puts) != 1 {
+		t.Fatalf("a second approval wrote again: %d %d puts\n%s", code, len(srv.Puts), body)
 	}
 }

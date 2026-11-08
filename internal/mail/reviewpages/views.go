@@ -1,9 +1,16 @@
 package reviewpages
 
 import (
+	"fmt"
+	"slices"
+	"strings"
+	"unicode/utf8"
+
+	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/textx"
 )
 
 type ProposalView struct {
@@ -22,14 +29,63 @@ type ProposalView struct {
 	BlockedUndo bool     `json:"blocked_undo"`
 	Preview     any      `json:"preview"`
 	Result      any      `json:"result"`
+	Approval    bool     `json:"approval"`
+	Args        []Arg    `json:"args"`
+}
+
+type Arg struct {
+	Label string `json:"label"`
+	Value string `json:"value"`
 }
 
 func proposalView(p *proposals.Proposal, kind proposals.Kind) ProposalView {
-	return ProposalView{
+	v := ProposalView{
 		ID: p.ID, Kind: p.Kind, KindLabel: kind.Label, KindIcon: kind.Icon, Status: p.Status, Account: p.Account, Title: p.Title,
 		CreatedTS: p.CreatedTS, DecidedTS: p.DecidedTS, AppliedTS: p.AppliedTS, Undoable: p.Undoable, Blocked: p.Blocked,
-		BlockedUndo: p.BlockedUndo, Preview: plainJSON(p.Preview), Result: plainJSON(p.Result),
+		BlockedUndo: p.BlockedUndo, Preview: plainJSON(p.Preview), Result: plainJSON(p.Result), Approval: kind.Approval,
 	}
+	if kind.Approval {
+		v.Args = approvalArgs(p.Preview)
+	}
+	return v
+}
+
+func approvalArgs(preview any) []Arg {
+	d, _ := preview.(map[string]any)
+	args, _ := d["args"].(map[string]any)
+	keys := make([]string, 0, len(args))
+	for k := range args {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	out := make([]Arg, 0, len(keys))
+	for _, k := range keys {
+		label := strings.ReplaceAll(k, "_", " ")
+		r, size := utf8.DecodeRuneInString(label)
+		out = append(out, Arg{Label: strings.ToUpper(string(r)) + label[size:], Value: argText(args[k])})
+	}
+	return out
+}
+
+func argText(v any) string {
+	var text string
+	switch x := v.(type) {
+	case string:
+		text = x
+	case bool:
+		text = "No"
+		if x {
+			text = "Yes"
+		}
+	case int64:
+		text = fmt.Sprint(x)
+	default:
+		text = jsonx.Dumps(x)
+	}
+	if utf8.RuneCountInString(text) > 200 {
+		return textx.Clip(text, 199) + "…"
+	}
+	return text
 }
 
 func plainJSON(v any) any {
@@ -57,15 +113,6 @@ func proposalViews(list []*proposals.Proposal, registry *proposals.Registry) []P
 		out[i] = proposalView(p, kind)
 	}
 	return out
-}
-
-type proposalListData struct {
-	Proposals []ProposalView `json:"proposals"`
-	Status    string         `json:"status"`
-	Kind      string         `json:"kind"`
-	KindLabel string         `json:"kind_label"`
-	Counts    map[string]any `json:"counts"`
-	Partial   bool           `json:"partial"`
 }
 
 type proposalCardData struct {
