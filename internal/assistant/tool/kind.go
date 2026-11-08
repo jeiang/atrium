@@ -34,12 +34,11 @@ type Effect string
 
 const (
 	Read      Effect = "read"
-	Write     Effect = "write"
 	WriteUndo Effect = "write_undo"
 	Propose   Effect = "propose"
 	Notify    Effect = "notify"
 )
 
-var Effects = []Effect{Read, Write, WriteUndo, Propose, Notify}
+var Effects = []Effect{Read, WriteUndo, Propose, Notify}
 
 func (e Effect) Valid() bool { return slices.Contains(Effects, e) }

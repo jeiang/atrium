@@ -211,6 +211,11 @@ behavior-parity target.
 - The registry restricts tools by run kind. Scheduled runs read, propose,
   and notify; nightly runs may also update Notion and the profile with undo.
   Research subagents have restricted tools and bounded runs.
+- A successful call to a `private_data` or `web` tool taints its thread
+  (`threads.tainted_at`). From the next model request of the same run on,
+  and in every later run of that thread in any process, the thread is not
+  offered `external_effect`, `notify` or `write_undo` tools. Branches
+  inherit the taint. `untrusted_output` alone does not taint.
 - The public web service accepts an authenticating reverse proxy
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Local requests are
   administrators; a proxy request or OIDC session is an administrator only

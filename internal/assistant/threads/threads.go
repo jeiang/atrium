@@ -294,6 +294,7 @@ type Spec struct {
 	ParentRunID          *int64
 	BranchedFromThreadID *int64
 	BranchedFromSeq      *int64
+	TaintedAt            *float64
 }
 
 func resolve(ctx context.Context, q db.Querier, kind Kind, projectID *int64, explicit Options) (Options, error) {
@@ -384,10 +385,10 @@ func Create(ctx context.Context, q db.Querier, now float64, s Spec) (int64, erro
 		web = *s.WebSearch
 	}
 	res, err := q.ExecContext(ctx,
-		"INSERT INTO threads (kind, title, job_id, parent_thread_id, model, effort, context_limit, project_id, allowed_urls, role, parent_run_id, branched_from_thread_id, branched_from_seq, created_at, updated_at, thinking, web_search, cost_cap_usd, environment, repo, base_branch, agent, beta_set, speed) "+
-			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO threads (kind, title, job_id, parent_thread_id, model, effort, context_limit, project_id, allowed_urls, role, parent_run_id, branched_from_thread_id, branched_from_seq, created_at, updated_at, thinking, web_search, cost_cap_usd, environment, repo, base_branch, agent, beta_set, speed, tainted_at) "+
+			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		s.Kind, s.Title, s.JobID, s.ParentID, o.Model, o.Effort, o.ContextLimit, s.ProjectID, jsonx.Dumps(urls), s.Role, s.ParentRunID,
-		s.BranchedFromThreadID, s.BranchedFromSeq, now, now, o.Thinking, b2i(web), o.CostCapUSD, s.Environment, s.Repo, s.BaseBranch, s.Agent, s.BetaSet, s.Speed)
+		s.BranchedFromThreadID, s.BranchedFromSeq, now, now, o.Thinking, b2i(web), o.CostCapUSD, s.Environment, s.Repo, s.BaseBranch, s.Agent, s.BetaSet, s.Speed, s.TaintedAt)
 	if err != nil {
 		return 0, err
 	}
@@ -406,6 +407,20 @@ func b2i(b bool) int {
 		return 1
 	}
 	return 0
+}
+
+func Taint(ctx context.Context, q db.Querier, threadID int64, now float64) error {
+	_, err := q.ExecContext(ctx, "UPDATE threads SET tainted_at = ? WHERE id = ? AND tainted_at IS NULL", now, threadID)
+	return err
+}
+
+func TaintedAt(ctx context.Context, q db.Querier, threadID int64) (*float64, error) {
+	var at *float64
+	err := q.QueryRowContext(ctx, "SELECT tainted_at FROM threads WHERE id = ?", threadID).Scan(&at)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	return at, err
 }
 
 func EffortFixed(thinking string) bool { return thinking == "between_tools" || thinking == "disabled" }

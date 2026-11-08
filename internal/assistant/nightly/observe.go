@@ -22,7 +22,7 @@ func observeTool() tool.Tool {
 		Description: "Record one durable observation from the day (subject, value). The first sighting proposes a 'sometimes uses' wiki note; a repeat across two weeks proposes a replacement; a contradiction with the profile proposes a profile update. Never write the wiki or profile directly.",
 		InputSchema: json.RawMessage(observeSchema),
 		Handler:     observe,
-		Effect:      tool.Write,
+		Effect:      tool.Propose,
 		Annotated:   true,
 		Contexts:    tool.Kinds{tool.Nightly},
 	}

@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
-	"sync"
 
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
@@ -25,15 +25,13 @@ type Binder func(ctx context.Context, q db.Querier, t tool.Tool) (bound tool.Too
 type Registry struct {
 	tools    []tool.Tool
 	binders  map[string]Binder
-	mu       sync.Mutex
-	tainted  map[int64]bool
 	settings *settings.Registry
 }
 
 type Source func() (*Registry, error)
 
 func New(reg *settings.Registry) *Registry {
-	return &Registry{tools: []tool.Tool{webSearchTool()}, binders: map[string]Binder{}, tainted: map[int64]bool{}, settings: reg}
+	return &Registry{tools: []tool.Tool{webSearchTool()}, binders: map[string]Binder{}, settings: reg}
 }
 
 func (r *Registry) Add(tools ...tool.Tool) error {
@@ -62,20 +60,7 @@ func (r *Registry) Add(tools ...tool.Tool) error {
 
 func settingKey(name string) string { return "tool_" + name + "_enabled" }
 
-func (r *Registry) Taint(threadID int64, t tool.Tool) {
-	if !t.Flags.PrivateData && !t.Flags.Web {
-		return
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	r.tainted[threadID] = true
-}
-
-func (r *Registry) Tainted(threadID int64) bool {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	return r.tainted[threadID]
-}
+func Taints(t tool.Tool) bool { return t.Flags.PrivateData || t.Flags.Web }
 
 type Decision int
 
@@ -161,7 +146,11 @@ func (r *Registry) Admit(ctx context.Context, threadID int64, kind tool.Kind, al
 	if err != nil {
 		return Set{}, err
 	}
-	tainted := r.Tainted(threadID)
+	taintedAt, err := threads.TaintedAt(ctx, q, threadID)
+	if err != nil {
+		return Set{}, err
+	}
+	tainted := taintedAt != nil
 	var set Set
 	for _, t := range found {
 		if !allow.Has(t.Name) {
