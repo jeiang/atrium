@@ -9,6 +9,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/secrets"
 )
 
 const (
@@ -278,9 +279,9 @@ func formFor(r *http.Request) oidc.Form {
 	form := FormValues(r)
 	get := func(name string) string { return FormString(form, name, "") }
 	return oidc.Form{
-		Preset: get("preset"), Issuer: get("issuer"), ClientID: get("client_id"), ClientSecret: get("client_secret"),
-		Scopes: get("scopes"), GroupsClaim: get("groups_claim"), AccessGroup: get("access_group"), AdminGroup: get("admin_group"),
-		AccessEmails: get("access_emails"), AdminEmails: get("admin_emails"), AccessDomains: get("access_domains"), AdminDomains: get("admin_domains"),
+		Preset: get("preset"), Issuer: get(oidc.KeyIssuer), ClientID: get(oidc.KeyClientID), ClientSecret: get(secrets.OIDCClientSecret),
+		Scopes: get(oidc.KeyScopes), GroupsClaim: get(oidc.KeyGroupsClaim), AccessGroup: get(oidc.KeyAccessGroup), AdminGroup: get(oidc.KeyAdminGroup),
+		AccessEmails: get(oidc.KeyAccessEmails), AdminEmails: get(oidc.KeyAdminEmails), AccessDomains: get(oidc.KeyAccessDomains), AdminDomains: get(oidc.KeyAdminDomains),
 	}
 }
 
