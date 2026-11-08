@@ -113,6 +113,7 @@ func Module(o Options) web.Module {
 		r.Post("/activity/mail/{action_id}/undo", s.undoMail)
 		r.Post("/activity/mail/{action_id}/resolve", s.resolveMail)
 		r.Post("/activity/write/{write_id}/undo", s.undoWrite)
+		r.Post("/activity/write/{write_id}/resolve", s.resolveWrite)
 
 		r.Get("/drafts", s.draftsPage)
 		r.Get("/drafts/{draft_id}", s.draftPage)

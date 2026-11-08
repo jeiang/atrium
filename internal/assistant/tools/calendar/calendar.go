@@ -24,6 +24,17 @@ var eventProperties = `"calendar":{"type":"string","enum":["icloud","google"]},"
 	`"end":{"type":"string","description":"Exclusive end, same format. Default: one hour (all-day: one day) after start."},` +
 	`"all_day":{"type":"boolean","description":"start/end are dates"},"location":{"type":"string"},"notes":{"type":"string"}`
 
+func guard(ctx context.Context, q db.Querier, target calendar.Target) error {
+	id, err := writes.UnknownTarget(ctx, q, string(target)+":")
+	if err != nil {
+		return err
+	}
+	if id != 0 {
+		return tool.Error(fmt.Sprintf("calendar write %d has an unknown outcome; resolve it with `atrium writes resolve %d` or on the Activity page before writing to the %s calendar again", id, id, target))
+	}
+	return nil
+}
+
 func wrap(err error) error {
 	var missing calendar.NotConfigured
 	var failed calendar.Error
@@ -150,6 +161,9 @@ func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if err != nil {
 		return nil, err
 	}
+	if err := guard(ctx, tc.DB.Read, target); err != nil {
+		return nil, err
+	}
 	intent, err := writes.Begin(ctx, tc.DB.Write, writes.New{
 		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_create",
 		Target: string(target) + ":" + normalized.UID,
@@ -160,6 +174,12 @@ func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	ref, err := calendar.CreateEvent(ctx, tc.Env, set, target, normalized, tz)
 	if err != nil {
 		if calendar.OutcomeUnknown(err) {
+			text := err.Error()
+			if settleErr := writes.SettleUnknown(ctx, tc.DB.Write, intent, writes.New{
+				Target: string(target) + ":" + normalized.UID,
+			}, text); settleErr != nil {
+				return nil, settleErr
+			}
 			return nil, wrap(err)
 		}
 		_ = writes.Discard(ctx, tc.DB.Write, intent)
@@ -213,6 +233,9 @@ func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if err != nil {
 		return nil, wrap(err)
 	}
+	if err := guard(ctx, tc.DB.Read, rowTarget); err != nil {
+		return nil, err
+	}
 	intent, err := writes.Begin(ctx, tc.DB.Write, writes.New{
 		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_delete",
 		Target: row.Calendar + ":" + uid,
@@ -222,6 +245,13 @@ func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	}
 	if err := calendar.DeleteEvent(ctx, tc.Env, set, rowTarget, uid); err != nil {
 		if calendar.OutcomeUnknown(err) {
+			text := err.Error()
+			if settleErr := writes.SettleUnknown(ctx, tc.DB.Write, intent, writes.New{
+				Target: row.Calendar + ":" + uid,
+				Before: map[string]any{"calendar": row.Calendar, "spec": stored},
+			}, text); settleErr != nil {
+				return nil, settleErr
+			}
 			return nil, wrap(err)
 		}
 		_ = writes.Discard(ctx, tc.DB.Write, intent)

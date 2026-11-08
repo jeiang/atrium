@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/about"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
+	"github.com/jeiang/atrium/internal/assistant/writes/writescmd"
 	"github.com/jeiang/atrium/internal/auth/loginlink"
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
@@ -56,6 +57,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 			{Module: settingspages.Module, Templates: settingspages.Templates()},
 		},
 		Commands: []*cli.Command{
+			writescmd.Command(mc.Env),
 			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled}),
 			settingscmd.Command(mc.Env, m.Guard),
 			loginlink.Command(),

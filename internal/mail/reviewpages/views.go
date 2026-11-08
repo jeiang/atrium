@@ -91,6 +91,7 @@ type ActivityEntry struct {
 	Status      string  `json:"status"`
 	Error       *string `json:"error"`
 	Undoable    bool    `json:"undoable"`
+	State       string  `json:"state"`
 	Blocked     bool    `json:"blocked"`
 	UndoBlocked bool    `json:"undo_blocked"`
 

@@ -37,6 +37,7 @@
       <p class="text-xs text-muted-foreground">
         {{if $e.thread_id}}by <a class="underline underline-offset-4" href="/chat/{{$e.thread_id}}">{{or $e.thread_kind "thread"}} thread</a>{{else}}by atrium{{end}}
       </p>
+      {{if $e.error}}<p class="max-w-full truncate text-xs text-muted-foreground" title="{{$e.error}}">{{$e.error}}</p>{{end}}
     </div>
     {{end}}
     <div class="flex sm:ms-auto">
@@ -47,6 +48,15 @@
         <p class="max-w-xs text-xs text-muted-foreground">{{if $e.undo_blocked}}The undo has an unknown or partial outcome.{{else}}The write has an unknown or interrupted outcome.{{end}} Check the mailbox, then record what you found. atrium does not touch the mailbox.</p>
         {{template "resolve_controls" (dict "path" (printf "/activity/mail/%v/resolve" $e.id) "target" (printf "#activity-%v-%v" $e.source $e.id) "undo" $e.undo_blocked "forward" (and $e.blocked (not $e.undo_blocked)))}}
       </div>
+      {{else if and (eq $e.source "write") (eq $e.state "unknown")}}
+      <div class="flex flex-col gap-1">
+        <p class="max-w-xs text-xs text-muted-foreground">The write has an unknown outcome. Check the calendar, then resolve it. atrium does not touch the calendar.</p>
+        <button type="button" class="btn" data-size="sm" data-variant="outline"
+                hx-post="/activity/write/{{$e.id}}/resolve" hx-target="#activity-{{$e.source}}-{{$e.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
+                hx-confirm="Mark this write resolved?">Resolve</button>
+      </div>
+      {{else if and (eq $e.source "write") (eq $e.state "resolved")}}
+      <span class="badge" data-variant="outline">Resolved</span>
       {{else if $e.undoable}}
       <button type="button" class="btn" data-size="sm" data-variant="outline" title="Undo"
               hx-post="/activity/{{$e.source}}/{{$e.id}}/undo" hx-target="#activity-{{$e.source}}-{{$e.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
