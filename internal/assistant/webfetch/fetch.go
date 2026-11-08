@@ -18,6 +18,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/netguard"
 )
 
 var textTypes = []string{"text/html", "application/xhtml+xml", "text/plain"}
@@ -58,7 +59,7 @@ func (f *Fetcher) allowed(ip netip.Addr) bool {
 	if f.Allowed != nil {
 		return f.Allowed(ip)
 	}
-	return defaultAllowed(ip)
+	return netguard.Public(ip)
 }
 
 func (f *Fetcher) FetchPage(ctx context.Context, rawURL string, lim Limits) (Page, error) {

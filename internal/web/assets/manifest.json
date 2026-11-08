@@ -1,0 +1,9 @@
+{
+  "name": "atrium",
+  "short_name": "atrium",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#fbfaf7",
+  "theme_color": "#1e1a16"
+}

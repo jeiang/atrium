@@ -272,10 +272,32 @@ func Resend(ctx context.Context, q db.Querier, env config.Env, id int64) (Sent, 
 	if err != nil {
 		return Sent{}, err
 	}
+	m.body = body
+	ok, failure, err = withPush(ctx, q, m, deref(link), ok, failure)
+	if err != nil {
+		return Sent{}, err
+	}
 	if _, err := q.ExecContext(ctx, "UPDATE notifications SET delivered = ?, error = ? WHERE id = ?", ok, nullable(failure), id); err != nil {
 		return Sent{}, err
 	}
 	return Sent{ID: id, Delivered: ok, Error: failure}, nil
+}
+
+func withPush(ctx context.Context, q db.Querier, m delivery, link string, delivered bool, failure string) (bool, string, error) {
+	tried, pushed, pushFailure, err := deliverPush(ctx, q, m, link)
+	if err != nil || !tried {
+		return delivered, failure, err
+	}
+	if failure == notConfigured {
+		failure = ""
+	}
+	if delivered || pushed {
+		return true, "", nil
+	}
+	if failure != "" && pushFailure != "" {
+		return false, failure + "; " + pushFailure, nil
+	}
+	return false, failure + pushFailure, nil
 }
 
 func deref(s *string) string {
@@ -365,15 +387,17 @@ func Send(ctx context.Context, q db.Querier, env config.Env, m Message) (Sent, e
 	if err != nil {
 		return Sent{}, err
 	}
-	delivered, failure, err := deliverAndRecord(ctx, q, env, delivery{channel: channel, title: title, body: message, click: m.Click, priority: m.Priority, actions: m.Actions})
+	d := delivery{channel: channel, title: title, body: message, click: m.Click, priority: m.Priority, actions: m.Actions}
+	delivered, failure, err := deliverAndRecord(ctx, q, env, d)
 	if err != nil {
 		return Sent{}, err
 	}
-	var failureValue any
-	if failure != "" {
-		failureValue = failure
+	d.body = body
+	delivered, failure, err = withPush(ctx, q, d, link, delivered, failure)
+	if err != nil {
+		return Sent{}, err
 	}
-	if _, err := q.ExecContext(ctx, "UPDATE notifications SET delivered = ?, error = ? WHERE id = ?", delivered, failureValue, id); err != nil {
+	if _, err := q.ExecContext(ctx, "UPDATE notifications SET delivered = ?, error = ? WHERE id = ?", delivered, nullable(failure), id); err != nil {
 		return Sent{}, err
 	}
 	return Sent{ID: id, Delivered: delivered, Error: failure}, nil

@@ -391,6 +391,9 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `ntfy_token_system` | string | none | secret | `ATRIUM_NOTIFY_NTFY_TOKEN_SYSTEM` |
 | `ntfy_topic` | string | none | ui | `ATRIUM_NOTIFY_NTFY_TOPIC` |
 | `ntfy_url` | string | none | ui | `ATRIUM_NOTIFY_NTFY_URL` |
+| `webpush_ca_file` | string | none | advanced | `ATRIUM_NOTIFY_WEBPUSH_CA_FILE` |
+| `webpush_subject` | string | none | ui | `ATRIUM_NOTIFY_WEBPUSH_SUBJECT` |
+| `webpush_vapid_private_key` | string | none | secret | `ATRIUM_NOTIFY_WEBPUSH_VAPID_PRIVATE_KEY` |
 
 ## notion
 

@@ -333,6 +333,9 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_NOTIFY_NTFY_TOKEN_SYSTEM` | `notify.ntfy_token_system` |
 | `ATRIUM_NOTIFY_NTFY_TOPIC` | `notify.ntfy_topic` |
 | `ATRIUM_NOTIFY_NTFY_URL` | `notify.ntfy_url` |
+| `ATRIUM_NOTIFY_WEBPUSH_CA_FILE` | `notify.webpush_ca_file` |
+| `ATRIUM_NOTIFY_WEBPUSH_SUBJECT` | `notify.webpush_subject` |
+| `ATRIUM_NOTIFY_WEBPUSH_VAPID_PRIVATE_KEY` | `notify.webpush_vapid_private_key` |
 | `ATRIUM_NOTION_NOTION_BLOCK_DEPTH` | `notion.notion_block_depth` |
 | `ATRIUM_NOTION_NOTION_BRANCH_LIMIT` | `notion.notion_branch_limit` |
 | `ATRIUM_NOTION_NOTION_CA_FILE` | `notion.notion_ca_file` |

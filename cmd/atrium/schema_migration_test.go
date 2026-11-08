@@ -188,3 +188,85 @@ func TestSchemaVersionTwoDatabaseMigratesToTheFreshSchema(t *testing.T) {
 		}
 	}
 }
+
+func baselineV3(t *testing.T, path string) {
+	t.Helper()
+	baselineV2(t, path)
+	d := mustConnect(t, path)
+	defer func() { _ = d.Close() }()
+	for _, stmt := range []string{
+		"ALTER TABLE packages ADD COLUMN aggregator TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE packages ADD COLUMN tracker_id TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE packages ADD COLUMN tracker_registered_ts REAL NOT NULL DEFAULT 0",
+		"ALTER TABLE packages ADD COLUMN last_sync_ts REAL NOT NULL DEFAULT 0",
+		"ALTER TABLE packages ADD COLUMN last_event_hash TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE packages ADD COLUMN last_event TEXT NOT NULL DEFAULT ''",
+		"ALTER TABLE packages ADD COLUMN last_event_ts REAL NOT NULL DEFAULT 0",
+		"ALTER TABLE packages ADD COLUMN notified_status TEXT NOT NULL DEFAULT ''",
+		`CREATE TABLE IF NOT EXISTS package_events (
+				id INTEGER PRIMARY KEY,
+				package_id INTEGER NOT NULL,
+				tracker_id TEXT NOT NULL DEFAULT '',
+				event_key TEXT NOT NULL,
+				event_ts REAL NOT NULL DEFAULT 0,
+				status TEXT NOT NULL DEFAULT '',
+				status_code TEXT NOT NULL DEFAULT '',
+				status_milestone TEXT NOT NULL DEFAULT '',
+				description TEXT NOT NULL DEFAULT '',
+				location TEXT NOT NULL DEFAULT '',
+				created_ts REAL NOT NULL,
+				UNIQUE (package_id, event_key)
+			)`,
+		"CREATE INDEX IF NOT EXISTS package_events_package ON package_events (package_id, event_ts)",
+		"INSERT INTO schema_migrations (version, applied_at) VALUES (3, 3.0)",
+	} {
+		if _, err := d.Write.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestSchemaVersionThreeDatabaseMigratesToTheFreshSchema(t *testing.T) {
+	old := t.TempDir()
+	path := filepath.Join(old, "atrium.db")
+	baselineV3(t, path)
+
+	if code, _, stderr := runIn(t, old, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list on a version 3 database: exit %d %s", code, stderr)
+	}
+	d := mustConnect(t, path)
+	var subscriptions int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM push_subscriptions").Scan(&subscriptions); err != nil || subscriptions != 0 {
+		t.Fatalf("push_subscriptions after migration: %d, %v", subscriptions, err)
+	}
+	var tracker string
+	if err := d.Read.QueryRow("SELECT tracker_id FROM packages WHERE id = 1").Scan(&tracker); err != nil || tracker != "" {
+		t.Errorf("package after migration: %q, %v", tracker, err)
+	}
+	var version int
+	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version < 4 {
+		t.Errorf("schema version = %d, %v; want %d", version, err, db.LatestSchemaVersion())
+	}
+	_ = d.Close()
+	if code, stdout, stderr := runIn(t, old, "db", "check"); code != cli.ExitOK || !strings.Contains(stdout, "integrity_check: ok") {
+		t.Fatalf("db check: exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+
+	fresh := t.TempDir()
+	if code, _, stderr := runIn(t, fresh, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list on a fresh database: exit %d %s", code, stderr)
+	}
+	migrated, created := schemaDump(t, path), schemaDump(t, filepath.Join(fresh, "atrium.db"))
+	if !slices.Equal(migrated, created) {
+		for _, line := range migrated {
+			if !slices.Contains(created, line) {
+				t.Errorf("only in the migrated schema: %s", line)
+			}
+		}
+		for _, line := range created {
+			if !slices.Contains(migrated, line) {
+				t.Errorf("only in the fresh schema: %s", line)
+			}
+		}
+	}
+}

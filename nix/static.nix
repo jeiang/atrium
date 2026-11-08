@@ -46,6 +46,8 @@ in
       fileset = lib.fileset.unions [
         ../internal/web/assets/app.js
         ../internal/web/assets/input.css
+        ../internal/web/assets/manifest.json
+        ../internal/web/assets/sw.js
         ../internal/web/tpl/labels.go
         ../internal/web/tpl/icons.go
         (lib.fileset.fileFilter (file: file.hasExt "gohtml") ../internal)
@@ -67,6 +69,8 @@ in
       runHook preInstall
       install -Dm444 app.css $out/app.css
       install -Dm444 app.js $out/app.js
+      install -Dm444 sw.js $out/sw.js
+      install -Dm444 manifest.json $out/manifest.json
       install -Dm444 node_modules/basecoat-css/dist/js/all.min.js $out/basecoat/all.min.js
       tar -xzOf ${htmx} package/dist/htmx.min.js > $out/htmx.min.js
       ${lib.concatMapStrings installFont fonts}

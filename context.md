@@ -28,7 +28,8 @@ behavior-parity target.
   `skills` table and `runs.skills_json` remain from it, unused and not
   dropped.
 - The web interface is server-rendered Go templates with Basecoat, htmx
-  and one static script under a strict CSP. A sidebar holds New chat, the
+  and one static script under a strict CSP; a push service worker is the
+  only other script. A sidebar holds New chat, the
   thread list (pinned, by day, by project) and the module pages, and
   collapses to a rail; chat uses a centred reading column with serif
   assistant prose. Drafts and proposals the assistant creates are cards in
@@ -56,11 +57,19 @@ behavior-parity target.
   `nightly_stale_months` (default 6); the nightly run re-checks them and the
   weekly review lists them.
 - Notifications are recorded in an in-app inbox first and pushed best
-  effort to ntfy on one of three channels (assistant, media, system), each
-  with its own topic and optional per-channel token minted from the
-  operator's ntfy account. Full text goes only to topics that refuse an
-  anonymous read. Three consecutive delivery failures raise an admin banner
-  and a system-channel message.
+  effort to ntfy and Web Push on one of three channels (assistant, media,
+  system). Each ntfy channel has its own topic and optional per-channel
+  token minted from the operator's ntfy account. Full text goes only to
+  topics that refuse an anonymous read, and Web Push follows the same
+  per-channel rule. Three consecutive ntfy delivery failures raise an admin
+  banner and a system-channel message.
+- Web Push devices subscribe from the Notifications settings page. The VAPID
+  key is a generated secret (`webpush_vapid_private_key`, pinnable) and the
+  subject comes from `webpush_subject`. A push carries the title, a body of
+  at most 240 characters, a URL path and, for phone actions, the action
+  links; it is encrypted per RFC 8291 and sent only over HTTPS to public
+  addresses. A 404 or 410 deletes the subscription; other failures are
+  counted per device. ntfy stays until Web Push is checked on a real device.
 - The attention query covers the enabled queues: proposals, drafts, open
   loops, commitments, event candidates, thread plans, packages and tasks.
   Packages come from shipping emails; a package the operator registers with
@@ -187,7 +196,9 @@ behavior-parity target.
   input, and checks integrity with FTS5 and vec0 counts. The v2 schema is
   the baseline in `internal/db/schema/` (migration 1, frozen since v2
   shipped to artemis on 2026-11-08) plus additive migrations in
-  `internal/db/migrate.go`; migration 2 adds `threads.tainted_at`.
+  `internal/db/migrate.go`; migration 2 adds `threads.tainted_at`,
+  migration 3 the package tracker columns and `package_events`, and
+  migration 4 `push_subscriptions`.
   `atrium db import-v1` is the only path from a v1
   database: it copies the learned rules, corrections, routing decisions and
   the unsent message history their derivation reads into a fresh v2
@@ -304,7 +315,7 @@ behavior-parity target.
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
 - **A daily "Today" thread.**
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
-- **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app; ntfy is removed.
+- **Notifications:** the in-app inbox is canonical; Web Push now (implemented alongside ntfy), APNs with a future iOS app; ntfy is removed after Web Push is checked on a device.
 - **Telemetry:** OpenTelemetry traces to VictoriaTraces, Prometheus metrics, and a `trace_id` in logs.
 - **Integrations:** weather (Open-Meteo, later WeatherKit) and package tracking (Ship24 free tier for flagged packages).
 - **An iOS app** through a JSON API built during the redesign.
