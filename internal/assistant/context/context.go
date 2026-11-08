@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
@@ -101,18 +102,6 @@ func serialize(value any) string {
 	return py.JSONDumps(value, valueJSON)
 }
 
-func store(ctx gocontext.Context, q db.Querier, runID, callID int64, tool, body string, now float64) (int64, int64, error) {
-	tokens := EstimateTokens(body)
-	res, err := q.ExecContext(ctx,
-		"INSERT INTO tool_results (run_id, tool_call_id, tool, tokens, bytes, sha256, body, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		runID, callID, tool, tokens, 0, "", body, now)
-	if err != nil {
-		return 0, 0, err
-	}
-	id, err := res.LastInsertId()
-	return id, tokens, err
-}
-
 type Tuning struct {
 	ClearShare        float64
 	ClearAtLeastShare float64
@@ -123,7 +112,6 @@ type Tuning struct {
 	SummaryMaxTokens  int
 	StubTokens        int
 	PreviewChars      int
-	DashboardItems    int
 	ManifestResults   int
 	Summary           string
 }
@@ -140,7 +128,6 @@ func ReadTuning(ctx gocontext.Context, q db.Querier) (Tuning, error) {
 		SummaryMaxTokens:  r.Int(assistant.KeySummaryMaxTokens),
 		StubTokens:        r.Int(assistant.KeyStubTokens),
 		PreviewChars:      r.Int(assistant.KeyPreviewChars),
-		DashboardItems:    r.Int(assistant.KeyDashboardItems),
 		ManifestResults:   r.Int(assistant.KeyManifestResults),
 	}
 	if r.Err() != nil {
@@ -156,7 +143,8 @@ func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool strin
 	if EstimateTokens(body) <= int64(t.StubTokens) {
 		return body, nil, nil
 	}
-	resultID, tokens, err := store(ctx, q, runID, callID, tool, body, now)
+	tokens := EstimateTokens(body)
+	resultID, err := journal.StoreResult(ctx, q, runID, callID, tool, body, tokens, now)
 	if err != nil {
 		return "", nil, err
 	}

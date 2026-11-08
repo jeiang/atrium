@@ -36,7 +36,6 @@ const (
 	KeySummaryMaxTokens  = "agent_summary_max_tokens"
 	KeyStubTokens        = "agent_stub_tokens"
 	KeyPreviewChars      = "agent_preview_chars"
-	KeyDashboardItems    = "agent_dashboard_items"
 	KeyManifestResults   = "agent_manifest_results"
 
 	KeyJournalLeaseSeconds = "agent_journal_lease_seconds"
@@ -179,7 +178,6 @@ func init() {
 		adv(KeySummaryMaxTokens, settings.Int, "8192", settings.Between(512, 32000)),
 		adv(KeyStubTokens, settings.Int, "2000", settings.Between(100, 50000)),
 		adv(KeyPreviewChars, settings.Int, "600", settings.Between(50, 10000)),
-		count(KeyDashboardItems, 60, 1, 500),
 		count(KeyManifestResults, 30, 1, 500),
 
 		adv(KeyJournalLeaseSeconds, settings.Int, "1800", settings.Between(1800, 86400)),
