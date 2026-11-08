@@ -63,7 +63,7 @@ func Module(r chi.Router, d *web.Deps) {
 		if err != nil {
 			return err
 		}
-		defer rows.Close()
+		defer func() { _ = rows.Close() }()
 		for rows.Next() {
 			var name string
 			if err := rows.Scan(&name); err != nil {
