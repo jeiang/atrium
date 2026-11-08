@@ -52,8 +52,7 @@ behavior-parity target.
 - The attention query covers the enabled queues: proposals, drafts, open
   loops, commitments, event candidates, thread plans, packages and tasks.
   Items are grouped as overdue, due soon, needs decision, waiting on them
-  and upcoming. The cron-only `attention` tool and the daily digest read it;
-  the attention page and its actions, including snooze, come with #471.
+  and upcoming. The cron-only `attention` tool and the daily digest read it.
   Tasks are a core store with open, done and dismissed status, a
   due date, reminder time, priority and an optional source; the assistant can
   list, add, update, complete and propose tasks, and the reminder job inserts
@@ -251,9 +250,29 @@ behavior-parity target.
 
 ## Planned capabilities
 
+### Life-management redesign
+
+- **Chat is home.** Five navigation entries: chat and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings.
+- **The agent acts directly** on internal, undoable actions and offers undo: tasks, wiki and Notion edits, mail folders and moves. Actions that leave the systems, are irreversible, or spend money need inline approval in chat.
+- **The Proposals page is removed.** Drafts are written, edited and sent in chat.
+- **Skills are removed.**
+- **No tutorial text.** A welcome screen appears on first start; guidance uses tooltips.
+- **Settings has six tabs:** Assistant, Mail accounts, Integrations, Notifications, Sign-in, and Usage. Advanced settings move to Nix, the CLI, or the agent.
+- **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
+- **A daily "Today" thread.**
+- **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
+- **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app; ntfy is removed.
+- **Telemetry:** OpenTelemetry traces to VictoriaTraces, Prometheus metrics, and a `trace_id` in logs.
+- **Integrations:** weather (Open-Meteo, later WeatherKit) and package tracking (Ship24 free tier for flagged packages).
+- **An iOS app** through a JSON API built during the redesign.
+- **Birthdays** have no page; the agent keeps access.
+- **Open loops** cover only mail addressed to the owner that needs a reply.
+
+### Other
+
 - Independent instances for other operators, without owner-specific source
   changes.
 
 Detailed feature scope and acceptance criteria belong in the open issues
-that carry them: #457, #471 and #476 for the remaining v2 work, plus the
-owner gates #233 and #615. They do not belong in this file.
+that carry them: #457 and #476 for the remaining v2 work, plus
+the owner gates #233 and #615. They do not belong in this file.
