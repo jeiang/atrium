@@ -14,7 +14,6 @@ CREATE TABLE IF NOT EXISTS thread_files (
     path TEXT NOT NULL,
     origin TEXT NOT NULL,
     created_at REAL NOT NULL,
-    anthropic_file_id TEXT,
     text TEXT,
     tokens INTEGER NOT NULL DEFAULT 0,
     project_id INTEGER
