@@ -61,19 +61,21 @@ func Globals() map[string]any {
 }
 
 type Options struct {
-	Open mail.OpenFunc
-	Now  func() float64
+	Open     mail.OpenFunc
+	Now      func() float64
+	PageSize int
 }
 
 type service struct {
-	deps    *web.Deps
-	now     func() float64
-	live    *live.Live
-	applier *applier.Applier
-	drafts  *drafts.Store
+	deps     *web.Deps
+	now      func() float64
+	live     *live.Live
+	applier  *applier.Applier
+	drafts   *drafts.Store
+	pageSize int
 }
 
-var pageSize = 50
+const defaultPageSize = 50
 
 const learnedLimit = 50
 
@@ -89,11 +91,15 @@ func Module(o Options) web.Module {
 		if now == nil {
 			now = wallClock
 		}
+		pageSize := o.PageSize
+		if pageSize <= 0 {
+			pageSize = defaultPageSize
+		}
 		syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: now}
 		registry := proposals.NewRegistry()
 		handlers.Register(registry, handlers.Deps{DB: d.DB, Open: open, Syncer: syncer, Now: now, Env: d.Env})
 		l := &live.Live{DB: d.DB, Cfg: d.Cfg, Registry: registry, Now: now}
-		s := &service{deps: d, now: now, live: l, applier: applier.New(l, open, syncer), drafts: &drafts.Store{DB: d.DB, Cfg: d.Cfg}}
+		s := &service{deps: d, now: now, live: l, applier: applier.New(l, open, syncer), drafts: &drafts.Store{DB: d.DB, Cfg: d.Cfg}, pageSize: pageSize}
 
 		r.Get("/messages/{message_id}", s.messagePage)
 		r.Get("/messages/{message_id}/correct", s.correctForm)
