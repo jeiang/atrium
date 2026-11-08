@@ -1,8 +1,12 @@
 # Vision
 
-atrium should be my agentic personal assistant: something that understands
-my circumstances, helps with day-to-day tasks, and can do useful work on
-my behalf.
+atrium manages my life: tasks, time, communication, commitments, and
+knowledge about me. It is my agentic personal assistant, something that
+understands my circumstances, helps with day-to-day tasks, and can do
+useful work on my behalf.
+
+Other capabilities, such as media, are sub-apps and tools the assistant
+can use. They support that work; they are not the main focus.
 
 ## Bring my information and actions together
 
