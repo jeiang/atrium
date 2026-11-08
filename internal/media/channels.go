@@ -250,47 +250,18 @@ func ChannelStatus(ctx context.Context, q db.Querier) (Status, error) {
 	out := Status{Errors: []string{}}
 	var body string
 	err := q.QueryRowContext(ctx, "SELECT value FROM media_state WHERE key = ?", stateKey).Scan(&body)
-	if err == nil {
-		var state channelState
-		if err := json.Unmarshal([]byte(body), &state); err != nil {
-			return Status{}, err
-		}
-		out.LastCheck = &state.LastCheck
-		out.Errors = append(out.Errors, state.Errors...)
+	if errors.Is(err, sql.ErrNoRows) {
 		return out, nil
 	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return Status{}, err
-	}
-	rows, err := q.QueryContext(ctx, "SELECT key, value FROM media_state WHERE key IN ('last_check', 'last_errors')")
 	if err != nil {
 		return Status{}, err
 	}
-	state, err := db.Collect(rows, func(r *sql.Rows) ([2]string, error) {
-		var kv [2]string
-		return kv, r.Scan(&kv[0], &kv[1])
-	})
-	if err != nil {
+	var state channelState
+	if err := json.Unmarshal([]byte(body), &state); err != nil {
 		return Status{}, err
 	}
-	for _, kv := range state {
-		var v any
-		if err := json.Unmarshal([]byte(kv[1]), &v); err != nil {
-			return Status{}, err
-		}
-		switch kv[0] {
-		case "last_check":
-			if f, ok := v.(float64); ok {
-				out.LastCheck = &f
-			}
-		case "last_errors":
-			items, _ := v.([]any)
-			for _, item := range items {
-				text, _ := item.(string)
-				out.Errors = append(out.Errors, text)
-			}
-		}
-	}
+	out.LastCheck = &state.LastCheck
+	out.Errors = append(out.Errors, state.Errors...)
 	return out, nil
 }
 
