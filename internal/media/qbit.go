@@ -436,6 +436,10 @@ func (q *Qbit) AddFile(ctx context.Context, data []byte, name, tags string) erro
 	return checkAdd(body)
 }
 
+func (q *Qbit) RemoveTags(ctx context.Context, hash, tags string) error {
+	return q.post(ctx, "torrents/removeTags", []param{{"hashes", hash}, {"tags", tags}})
+}
+
 func (q *Qbit) AddTags(ctx context.Context, hash, tags string) error {
 	return q.post(ctx, "torrents/addTags", []param{{"hashes", hash}, {"tags", tags}})
 }

@@ -335,6 +335,9 @@ func (t Tuning) Apply(ctx context.Context, qb *Qbit, item Item, ops []Op, root s
 		}
 	}
 	if item.Torrent {
+		if err := qb.RemoveTags(ctx, item.ID, TagIgnored); err != nil {
+			return err
+		}
 		return qb.AddTags(ctx, item.ID, TagFiled)
 	}
 	if len(t.VideosUnder(item.Root)) == 0 {
@@ -362,6 +365,9 @@ func (t Tuning) Edited(item Item, root string, form map[string]string) View {
 func Ignore(ctx context.Context, qb *Qbit, item Item) error {
 	if !item.Torrent {
 		return PlanError("Only torrents can be ignored; delete the import entry instead.")
+	}
+	if err := qb.RemoveTags(ctx, item.ID, TagFiled); err != nil {
+		return err
 	}
 	return qb.AddTags(ctx, item.ID, TagIgnored)
 }

@@ -195,7 +195,7 @@ func (s *service) channelPreview(w http.ResponseWriter, r *http.Request) {
 				view.Matched++
 			}
 		}
-		view.Releases = &releases
+		view.Releases = releases
 	}
 	f, err := s.deps.Render.Frame(r, "", view)
 	if err != nil {

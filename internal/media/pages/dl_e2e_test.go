@@ -191,6 +191,14 @@ func (f *dlQbitFake) handle(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
+	case "torrents/removeTags":
+		for _, h := range strings.Split(form.Get("hashes"), "|") {
+			if t, ok := f.items[h]; ok {
+				for _, tag := range dlSplitTags(form.Get("tags")) {
+					t.tags = slices.DeleteFunc(t.tags, func(existing string) bool { return existing == tag })
+				}
+			}
+		}
 	case "torrents/filePrio":
 		t := f.items[form.Get("hash")]
 		priority, _ := strconv.Atoi(form.Get("priority"))
