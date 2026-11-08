@@ -41,7 +41,7 @@
           ATRIUM_DEV_SHELL = "1";
           CGO_ENABLED = "1";
           GOFLAGS = "-tags=libsqlite3,sqlite_fts5";
-          CGO_CFLAGS = "-I${sqlcipherLib}/include";
+          CGO_CFLAGS = "${pkgs.lib.optionalString pkgs.stdenv.hostPlatform.isAarch64 "-flax-vector-conversions "}-I${sqlcipherLib}/include";
           CGO_LDFLAGS = "-L${sqlcipherLib}/lib";
           ATRIUM_STATIC_ASSETS = "${self'.packages.atrium-static}";
           ATRIUM_BASECOAT = "${self'.packages.atrium-static.basecoat}";

@@ -8,7 +8,7 @@
     sqlcipherLib = pkgs.callPackage ../nix/sqlcipher.nix {};
     cgoEnv = {
       CGO_ENABLED = "1";
-      CGO_CFLAGS = "-I${sqlcipherLib}/include";
+      CGO_CFLAGS = "${lib.optionalString pkgs.stdenv.hostPlatform.isAarch64 "-flax-vector-conversions "}-I${sqlcipherLib}/include";
       CGO_LDFLAGS = "-L${sqlcipherLib}/lib";
     };
     goSrc = import ../nix/go-src.nix {inherit lib;};
