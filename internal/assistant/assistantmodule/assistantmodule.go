@@ -41,7 +41,7 @@ import (
 func init() {
 	integrations.Register(integrations.Integration{
 		Name: "anthropic", Label: "Anthropic", Module: module.Assistant, SecretKey: secrets.AnthropicAPIKey,
-		Help: "Console API key from a workspace with a monthly spend limit, so a leaked key cannot spend beyond it.",
+		Help: "Console API key from a workspace with a monthly spend limit; use one workspace per instance.",
 		Test: testAnthropic,
 	})
 }

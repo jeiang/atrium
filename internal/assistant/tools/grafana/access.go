@@ -27,7 +27,7 @@ func init() {
 	)
 	integrations.Register(integrations.Integration{
 		Name: "grafana", Label: "Grafana", Module: "grafana", URLKey: KeyURL, SecretKey: KeyToken,
-		Help: "Service account token with the Viewer role.",
+		Help: "Service account token with the Viewer role; Viewer can query datasources.",
 		Test: testAccess,
 	})
 }

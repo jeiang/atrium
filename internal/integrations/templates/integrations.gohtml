@@ -3,6 +3,10 @@
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
 {{template "settings_tabs" (dict "Tab" "integrations" "Auth" .Auth "Settings" .Settings)}}
 <div class="flex flex-col gap-3">
+  <a class="flex flex-col gap-1 rounded-lg border bg-card p-4 text-sm" href="/settings/integrations/google" data-integration="google">
+    <span class="font-medium">Google Calendar and Gmail</span>
+    <span class="text-xs text-muted-foreground">Bring your own OAuth client; one consent per capability.</span>
+  </a>
   {{range $d.Records}}
   <form method="post" action="/settings/integrations/{{.Name}}/test" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" data-integration="{{.Name}}" data-state="{{.State}}" autocomplete="off">
     <input type="hidden" name="csrf_token" value="{{$csrf}}">
