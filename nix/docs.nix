@@ -13,6 +13,7 @@ stdenvNoCC.mkDerivation {
       ../docs/operator
       ../docs/config
       ../docs/tools.md
+      ../docs/integrations.md
     ];
   };
   nativeBuildInputs = [mdbook];
