@@ -54,9 +54,6 @@ func pageRef(id, title, url, path string, private bool) PageRef {
 type Page struct {
 	RID            int64   `json:"rid"`
 	ID             string  `json:"id"`
-	ParentType     string  `json:"parent_type"`
-	ParentID       string  `json:"parent_id"`
-	DataSourceID   string  `json:"data_source_id"`
 	Title          string  `json:"title"`
 	Path           string  `json:"path"`
 	URL            string  `json:"url"`
@@ -65,21 +62,19 @@ type Page struct {
 	LastEditedTime string  `json:"last_edited_time"`
 	EditedTS       float64 `json:"edited_ts"`
 	InTrash        int64   `json:"in_trash"`
-	Sensitivity    string  `json:"sensitivity"`
 	Private        int64   `json:"private"`
 	Links          string  `json:"links"`
-	Embedded       int64   `json:"embedded"`
 	SyncedAt       float64 `json:"synced_at"`
 }
 
 func GetPage(ctx context.Context, q Querier, pageID string) (*Page, error) {
 	var p Page
 	err := q.QueryRowContext(ctx,
-		"SELECT rid, id, parent_type, parent_id, data_source_id, title, path, url, properties, markdown, last_edited_time, "+
-			"edited_ts, in_trash, sensitivity, private, links, embedded, synced_at FROM notion_pages WHERE id = ?",
+		"SELECT rid, id, title, path, url, properties, markdown, last_edited_time, "+
+			"edited_ts, in_trash, private, links, synced_at FROM notion_pages WHERE id = ?",
 		notionid.Normalize(pageID)).
-		Scan(&p.RID, &p.ID, &p.ParentType, &p.ParentID, &p.DataSourceID, &p.Title, &p.Path, &p.URL, &p.Properties,
-			&p.Markdown, &p.LastEditedTime, &p.EditedTS, &p.InTrash, &p.Sensitivity, &p.Private, &p.Links, &p.Embedded, &p.SyncedAt)
+		Scan(&p.RID, &p.ID, &p.Title, &p.Path, &p.URL, &p.Properties,
+			&p.Markdown, &p.LastEditedTime, &p.EditedTS, &p.InTrash, &p.Private, &p.Links, &p.SyncedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -316,22 +311,12 @@ func heads(ctx context.Context, q Querier, limits SearchLimits, rids []int64) (m
 
 type Hit struct {
 	PageRef
-	Account        string        `json:"account"`
-	Subject        string        `json:"subject"`
-	Folder         string        `json:"folder"`
-	LastEditedTime string        `json:"last_edited_time"`
-	EditedTS       float64       `json:"edited_ts"`
-	DateTS         float64       `json:"date_ts"`
-	FromAddr       string        `json:"from_addr"`
-	FromName       string        `json:"from_name"`
-	Seen           bool          `json:"seen"`
-	Flagged        bool          `json:"flagged"`
-	HasAttachment  bool          `json:"has_attachment"`
-	Score          *float64      `json:"score"`
-	LexicalRank    *int          `json:"lexical_rank"`
-	SemanticRank   *int          `json:"semantic_rank"`
-	Snippet        string        `json:"snippet"`
-	SnippetParts   []search.Part `json:"snippet_parts"`
+	Folder       string        `json:"folder"`
+	Score        *float64      `json:"score"`
+	LexicalRank  *int          `json:"lexical_rank"`
+	SemanticRank *int          `json:"semantic_rank"`
+	Snippet      string        `json:"snippet"`
+	SnippetParts []search.Part `json:"snippet_parts"`
 }
 
 func newHit(info hitInfo, score *float64, lexRank, semRank *int, head string, marked *string) Hit {
@@ -347,9 +332,8 @@ func newHit(info hitInfo, score *float64, lexRank, semRank *int, head string, ma
 		snippet.WriteString(p.Text)
 	}
 	return Hit{
-		PageRef: pageRef(info.id, info.title, info.url, info.path, info.private), Account: Account, Subject: info.title,
-		Folder: info.path, LastEditedTime: info.lastEditedTime, EditedTS: info.editedTS, DateTS: info.editedTS,
-		Seen: true, Score: score, LexicalRank: lexRank, SemanticRank: semRank, Snippet: snippet.String(), SnippetParts: parts,
+		PageRef: pageRef(info.id, info.title, info.url, info.path, info.private),
+		Folder:  info.path, Score: score, LexicalRank: lexRank, SemanticRank: semRank, Snippet: snippet.String(), SnippetParts: parts,
 	}
 }
 

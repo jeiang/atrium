@@ -25,11 +25,7 @@ CREATE TABLE IF NOT EXISTS notion_sources (
     database_id TEXT NOT NULL DEFAULT '',
     parent_type TEXT NOT NULL DEFAULT '',
     parent_id TEXT NOT NULL DEFAULT '',
-    title TEXT NOT NULL DEFAULT '',
-    url TEXT NOT NULL DEFAULT '',
-    properties TEXT NOT NULL DEFAULT '{}',
-    last_edited_time TEXT NOT NULL DEFAULT '',
-    in_trash INTEGER NOT NULL DEFAULT 0
+    title TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS notion_state (
     key TEXT PRIMARY KEY,

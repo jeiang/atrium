@@ -120,23 +120,11 @@ func upsertSource(ctx context.Context, q db.Querier, source SearchResult) error 
 	}
 	kind, parentID := parent.Ref()
 	databaseID := notionid.Normalize(source.Parent.DatabaseID)
-	props := source.Properties
-	if props == nil {
-		props = map[string]Property{}
-	}
-	encoded, err := json.Marshal(props)
-	if err != nil {
-		return err
-	}
-	_, err = q.ExecContext(ctx,
-		"INSERT INTO notion_sources (id, database_id, parent_type, parent_id, title, url, properties, "+
-			"last_edited_time, in_trash) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) "+
+	_, err := q.ExecContext(ctx,
+		"INSERT INTO notion_sources (id, database_id, parent_type, parent_id, title) VALUES (?, ?, ?, ?, ?) "+
 			"ON CONFLICT(id) DO UPDATE SET database_id = excluded.database_id, parent_type = excluded.parent_type, "+
-			"parent_id = excluded.parent_id, title = excluded.title, url = excluded.url, "+
-			"properties = excluded.properties, last_edited_time = excluded.last_edited_time, "+
-			"in_trash = excluded.in_trash",
-		notionid.Normalize(source.ID), databaseID, kind, parentID, source.TitleText(), source.URL,
-		string(encoded), source.LastEditedTime, b2i(source.InTrash))
+			"parent_id = excluded.parent_id, title = excluded.title",
+		notionid.Normalize(source.ID), databaseID, kind, parentID, source.TitleText())
 	return err
 }
 
@@ -418,14 +406,35 @@ func Sync(ctx context.Context, d *db.DB, client *Client, embedTexts embed.TextsF
 	started := time.Now()
 	stamp := now()
 	var stats Stats
+	seenSources := map[string]bool{}
 	err = client.Search(ctx, "data_source", func(source SearchResult) error {
 		if source.Object != "data_source" {
 			return nil
 		}
+		seenSources[notionid.Normalize(source.ID)] = true
 		return upsertSource(ctx, d.Write, source)
 	})
 	if err != nil {
 		return stats, err
+	}
+	sourceRows, err := d.Write.QueryContext(ctx, "SELECT id FROM notion_sources")
+	if err != nil {
+		return stats, err
+	}
+	sources, err := db.Collect(sourceRows, func(r *sql.Rows) (string, error) {
+		var id string
+		return id, r.Scan(&id)
+	})
+	if err != nil {
+		return stats, err
+	}
+	for _, id := range sources {
+		if seenSources[id] {
+			continue
+		}
+		if _, err := d.Write.ExecContext(ctx, "DELETE FROM notion_sources WHERE id = ?", id); err != nil {
+			return stats, err
+		}
 	}
 	seen := map[string]bool{}
 	err = client.Search(ctx, "page", func(page SearchResult) error {
