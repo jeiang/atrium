@@ -270,12 +270,17 @@ func resolve(ctx context.Context, q db.Querier, kind string, projectID *int64, e
 	}
 	projectEffort, projectLimit := false, false
 	if projectID != nil && *projectID != 0 {
-		err := q.QueryRowContext(ctx, "SELECT effort, context_limit FROM projects WHERE id = ?", *projectID).Scan(&chosen.Effort, &chosen.ContextLimit)
+		var archived int
+		err := q.QueryRowContext(ctx, "SELECT effort, context_limit, archived FROM projects WHERE id = ?", *projectID).
+			Scan(&chosen.Effort, &chosen.ContextLimit, &archived)
 		if errors.Is(err, sql.ErrNoRows) {
 			return Options{}, fmt.Errorf("threads: no project %d", *projectID)
 		}
 		if err != nil {
 			return Options{}, err
+		}
+		if archived != 0 {
+			return Options{}, OptionError("project is archived")
 		}
 		projectEffort, projectLimit = true, true
 	}

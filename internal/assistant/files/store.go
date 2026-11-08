@@ -285,9 +285,6 @@ func DeleteOwned(ctx context.Context, q db.Querier, dir string, remote RemoteDel
 		deleteRemote(ctx, remote, r.AnthropicFileID)
 	}
 	_ = os.RemoveAll(filepath.Join(dir, owner.dirName()))
-	if _, err := q.ExecContext(ctx, "DELETE FROM thread_files WHERE "+column+" = ?", id); err != nil {
-		return 0, err
-	}
 	return len(found), nil
 }
 
