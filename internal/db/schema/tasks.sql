@@ -10,7 +10,8 @@ CREATE TABLE IF NOT EXISTS tasks (
     source_id TEXT NOT NULL DEFAULT '',
     created_ts REAL NOT NULL,
     updated_ts REAL NOT NULL,
-    done_ts REAL
+    done_ts REAL,
+    reminded_ts REAL
 );
 CREATE INDEX IF NOT EXISTS tasks_status ON tasks (status, remind_at);
 CREATE INDEX IF NOT EXISTS tasks_remind ON tasks (remind_at);
