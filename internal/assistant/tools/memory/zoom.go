@@ -26,11 +26,11 @@ const schema = `{"type":"object","properties":{"id":{"type":"integer","descripti
 	`"required":["id"],"additionalProperties":false}`
 
 func Tools() []tool.Tool {
-	return []tool.Tool{{
+	return append([]tool.Tool{{
 		Name: Name, Description: Description, InputSchema: json.RawMessage(schema), Handler: zoom,
 		Effect: tool.Read, Flags: tool.Flags{PrivateData: true}, Annotated: true,
 		Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
-	}}
+	}}, searchTools()...)
 }
 
 func zoom(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {

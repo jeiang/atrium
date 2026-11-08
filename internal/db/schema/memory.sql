@@ -38,3 +38,15 @@ CREATE TABLE IF NOT EXISTS memory_views (
     lines_json TEXT NOT NULL,
     created_at REAL NOT NULL
 );
+
+CREATE VIRTUAL TABLE IF NOT EXISTS memory_fts USING fts5(thread_id UNINDEXED, level UNINDEXED, idx UNINDEXED, text);
+CREATE TRIGGER IF NOT EXISTS memory_fts_insert AFTER INSERT ON memory_nodes BEGIN
+    INSERT INTO memory_fts (thread_id, level, idx, text) VALUES (new.thread_id, new.level, new.idx, new.text);
+END;
+CREATE TRIGGER IF NOT EXISTS memory_fts_update AFTER UPDATE ON memory_nodes BEGIN
+    DELETE FROM memory_fts WHERE thread_id = old.thread_id AND level = old.level AND idx = old.idx;
+    INSERT INTO memory_fts (thread_id, level, idx, text) VALUES (new.thread_id, new.level, new.idx, new.text);
+END;
+CREATE TRIGGER IF NOT EXISTS memory_fts_delete AFTER DELETE ON memory_nodes BEGIN
+    DELETE FROM memory_fts WHERE thread_id = old.thread_id AND level = old.level AND idx = old.idx;
+END;
