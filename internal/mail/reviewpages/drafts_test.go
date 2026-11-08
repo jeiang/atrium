@@ -99,6 +99,9 @@ func TestSendICloudUsesSMTPAndFilesTheSentCopy(t *testing.T) {
 	if len(s.imap.Appended) != 1 || s.imap.Appended[0].Mailbox != "Sent Messages" || !s.imap.Closed {
 		t.Errorf("appended %+v closed %v", s.imap.Appended, s.imap.Closed)
 	}
+	if got := s.imap.Boxes["Sent Messages"].Box.UIDs(); len(got) != 1 {
+		t.Errorf("the sent copy is not in the mailbox: %v", got)
+	}
 	if row := s.row(id); row.Status != drafts.Sent || row.SentAt == nil {
 		t.Errorf("row %+v", row)
 	}

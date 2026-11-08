@@ -1,6 +1,7 @@
 package mailtest
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"slices"
@@ -418,11 +419,24 @@ func (c fakeConn) UIDExpunge(_ context.Context, uids mail.UIDSet) error {
 }
 
 func (c fakeConn) Append(_ context.Context, imapName string, raw []byte, flags ...string) error {
+	m, ok := c.f.Boxes[imapName]
+	if !ok {
+		return fmt.Errorf("fake IMAP: no mailbox %q", imapName)
+	}
 	if err := c.record(FakeWrite{Verb: "APPEND", Mailbox: imapName, Args: slices.Clone(flags)}); err != nil {
 		return err
 	}
+	header, text := splitRaw(raw)
+	m.Box.Add(header, text, flags, nil)
 	c.f.Appended = append(c.f.Appended, FakeAppend{Mailbox: imapName, Raw: slices.Clone(raw), Flags: slices.Clone(flags)})
 	return nil
+}
+
+func splitRaw(raw []byte) (header, text []byte) {
+	if i := bytes.Index(raw, []byte("\r\n\r\n")); i >= 0 {
+		return raw[:i+4], raw[i+4:]
+	}
+	return raw, nil
 }
 
 func (c fakeConn) CreateMailbox(_ context.Context, imapName string) error {
