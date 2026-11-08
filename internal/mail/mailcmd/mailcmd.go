@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	runpkg "github.com/jeiang/atrium/internal/mail/run"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 )
 
@@ -124,6 +125,11 @@ func (o Options) run(env *cli.Env, run body) error {
 		return err
 	}
 	defer release()
+	if set := module.SetFrom(env.Ctx); set != nil {
+		if err := set.Refresh(env.Ctx, pass.DB.Read); err != nil {
+			return err
+		}
+	}
 	return run(&exec{Pass: pass, Ctx: env.Ctx, Stdin: env.Stdin, Stdout: env.Stdout, Stderr: env.Stderr, opts: o})
 }
 

@@ -51,6 +51,9 @@ behavior-parity target.
   and a system-channel message.
 - The attention query covers the enabled queues: proposals, drafts, open
   loops, commitments, event candidates, thread plans, packages and tasks.
+  Packages come from shipping emails; a package the operator registers with
+  `track_package` is polled through Ship24, stores its events, and notifies
+  once when it is delivered or hits an exception.
   Items are grouped as overdue, due soon, needs decision, waiting on them
   and upcoming. The cron-only `attention` tool and the daily digest read it.
   Tasks are a core store with open, done and dismissed status, a
@@ -121,7 +124,7 @@ behavior-parity target.
   index when complete. The rebuild loop runs for every install, so a
   Notion-only install keeps its index fresh, and Notion document embeddings
   use the same `mail_embed_body_chars` limit as mail.
-- ntfy, qBittorrent (API key) and TMDB (read token) are connection records on the Integrations settings
+- ntfy, qBittorrent (API key), TMDB (read token) and Ship24 (API key) are connection records on the Integrations settings
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-integration CA bundle and proxy. Certificate verification
   cannot be turned off. Open-Meteo is a keyless connection record for the

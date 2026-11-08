@@ -75,6 +75,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_schedule_memory_work` | string | `*/2 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEMORY_WORK` |
 | `agent_schedule_min_interval_seconds` | int | `3600` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MIN_INTERVAL_SECONDS` |
 | `agent_schedule_nightly` | string | `daily 02:30` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_NIGHTLY` |
+| `agent_schedule_package_tracking` | string | `0 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_PACKAGE_TRACKING` |
 | `agent_schedule_task_reminders` | string | `*/5 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_TASK_REMINDERS` |
 | `agent_schedule_weekly_review` | string | `weekly sun 18:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_WEEKLY_REVIEW` |
 | `agent_scheduler_lease_seconds` | int | `1800` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_LEASE_SECONDS` |
@@ -273,6 +274,14 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `mail_search_rrf_k` | int | `60` | advanced | `ATRIUM_MAIL_MAIL_SEARCH_RRF_K` |
 | `mail_search_snippet_chars` | int | `220` | advanced | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_CHARS` |
 | `mail_search_snippet_tokens` | int | `24` | advanced | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_TOKENS` |
+| `mail_ship24_api_key` | string | none | secret | `ATRIUM_MAIL_MAIL_SHIP24_API_KEY` |
+| `mail_ship24_destination_country` | string | none | advanced | `ATRIUM_MAIL_MAIL_SHIP24_DESTINATION_COUNTRY` |
+| `mail_ship24_destination_postcode` | string | none | advanced | `ATRIUM_MAIL_MAIL_SHIP24_DESTINATION_POSTCODE` |
+| `mail_ship24_monthly_quota` | int | `10` | advanced | `ATRIUM_MAIL_MAIL_SHIP24_MONTHLY_QUOTA` |
+| `mail_ship24_poll_days` | int | `30` | advanced | `ATRIUM_MAIL_MAIL_SHIP24_POLL_DAYS` |
+| `mail_ship24_poll_limit` | int | `40` | advanced | `ATRIUM_MAIL_MAIL_SHIP24_POLL_LIMIT` |
+| `mail_ship24_timeout_seconds` | int | `15` | advanced | `ATRIUM_MAIL_MAIL_SHIP24_TIMEOUT_SECONDS` |
+| `mail_ship24_url` | string | `https://api.ship24.com/public/v1` | advanced | `ATRIUM_MAIL_MAIL_SHIP24_URL` |
 | `mailops_batch` | int | `100` | advanced | `ATRIUM_MAIL_MAILOPS_BATCH` |
 | `openloops_commitment_scan_limit` | int | `20` | advanced | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_SCAN_LIMIT` |
 | `openloops_commitment_window_days` | int | `14` | advanced | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_WINDOW_DAYS` |
@@ -304,6 +313,8 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `rule_min_n` | int | `3` | advanced | `ATRIUM_MAIL_RULE_MIN_N` |
 | `rule_min_purity` | float | `0.9` | advanced | `ATRIUM_MAIL_RULE_MIN_PURITY` |
 | `sent_backfill_days` | int | `90` | advanced | `ATRIUM_MAIL_SENT_BACKFILL_DAYS` |
+| `ship24_ca_file` | string | none | advanced | `ATRIUM_MAIL_SHIP24_CA_FILE` |
+| `ship24_proxy` | string | none | advanced | `ATRIUM_MAIL_SHIP24_PROXY` |
 | `triage_top_dests` | int | `15` | advanced | `ATRIUM_MAIL_TRIAGE_TOP_DESTS` |
 | `uncertain_dest` | string | `Misc` | ui | `ATRIUM_MAIL_UNCERTAIN_DEST` |
 | `watches_body_chars` | int | `3000` | advanced | `ATRIUM_MAIL_WATCHES_BODY_CHARS` |

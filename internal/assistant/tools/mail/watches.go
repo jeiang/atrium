@@ -58,9 +58,16 @@ func packages(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	}
 	out := make([]any, len(items))
 	for i, p := range items {
-		out[i] = map[string]any{"carrier": p.Carrier, "tracking_number": p.TrackingNumber, "merchant": p.Merchant, "order_ref": p.OrderRef, "status": p.Status, "status_text": tool.Clip(p.StatusText, 200), "updated": p.Updated, "source_message_id": p.SourceMessageID}
+		item := map[string]any{"id": p.ID, "carrier": p.Carrier, "tracking_number": p.TrackingNumber, "merchant": p.Merchant, "order_ref": p.OrderRef, "status": p.Status, "status_text": tool.Clip(p.StatusText, 200), "updated": p.Updated, "source_message_id": p.SourceMessageID}
+		if p.TrackerID != "" {
+			item["tracker_id"] = p.TrackerID
+			item["aggregator"] = p.Aggregator
+			item["last_sync"] = p.LastSync
+			item["last_event"] = tool.Clip(p.LastEvent, 200)
+		}
+		out[i] = item
 	}
-	return map[string]any{"packages": out, "note": "Status comes only from emails the operator received; there is no carrier lookup, so it can lag."}, nil
+	return map[string]any{"packages": out, "note": "Status comes from emails the operator received and, for tracked packages, from Ship24. Use track_package to register a package for live updates."}, nil
 }
 
 func upcomingBirthdays(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {

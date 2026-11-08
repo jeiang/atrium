@@ -16,7 +16,7 @@ func (packages) Name() string { return "packages" }
 
 func (packages) Items(ctx context.Context, q db.Querier, _ float64) ([]attention.Item, error) {
 	rows, err := q.QueryContext(ctx,
-		"SELECT id, merchant, status_text, tracking_number, first_seen FROM packages "+
+		"SELECT id, merchant, COALESCE(NULLIF(last_event, ''), status_text), tracking_number, first_seen FROM packages "+
 			"WHERE dismissed = 0 AND status NOT IN ('delivered', 'returned') ORDER BY first_seen")
 	if err != nil {
 		return nil, err

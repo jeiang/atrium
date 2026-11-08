@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/media/mediacmd"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/sdnotify"
@@ -42,6 +43,13 @@ func callables() map[string]worker.Callable {
 		Modules: []string{module.Assistant},
 		Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
 			_, err := remind.Due(ctx, e.Service.DB, e.Service.Env, e.Now())
+			return worker.Result{}, err
+		},
+	}
+	out[scheduler.PackageTrackingName] = worker.Callable{
+		Modules: []string{module.Mail},
+		Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
+			_, err := tracking.Poll(ctx, e.Service.DB, e.Service.Env, e.Now())
 			return worker.Result{}, err
 		},
 	}

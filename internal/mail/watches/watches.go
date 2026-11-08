@@ -455,6 +455,12 @@ type Package struct {
 	FirstSeen       float64 `json:"first_seen"`
 	Dismissed       int64   `json:"dismissed"`
 	Updated         string  `json:"updated"`
+	Aggregator      string  `json:"aggregator"`
+	TrackerID       string  `json:"tracker_id"`
+	LastSyncTS      float64 `json:"last_sync_ts"`
+	LastSync        string  `json:"last_sync"`
+	LastEvent       string  `json:"last_event"`
+	LastEventTS     float64 `json:"last_event_ts"`
 }
 
 func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64, activeOnly, includeDismissed bool) ([]Package, error) {
@@ -472,14 +478,16 @@ func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64
 	}
 	rows, err := q.QueryContext(ctx,
 		"SELECT id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, source_message_id, "+
-			"last_message_id, updated_ts, first_seen, dismissed FROM packages"+where+" ORDER BY updated_ts DESC")
+			"last_message_id, updated_ts, first_seen, dismissed, aggregator, tracker_id, last_sync_ts, last_event, last_event_ts "+
+			"FROM packages"+where+" ORDER BY updated_ts DESC")
 	if err != nil {
 		return nil, err
 	}
 	all, err := db.Collect(rows, func(r *sql.Rows) (Package, error) {
 		var p Package
 		err := r.Scan(&p.ID, &p.Carrier, &p.TrackingNumber, &p.Merchant, &p.MerchantKey, &p.OrderRef, &p.Status, &p.StatusText,
-			&p.SourceMessageID, &p.LastMessageID, &p.UpdatedTS, &p.FirstSeen, &p.Dismissed)
+			&p.SourceMessageID, &p.LastMessageID, &p.UpdatedTS, &p.FirstSeen, &p.Dismissed, &p.Aggregator, &p.TrackerID,
+			&p.LastSyncTS, &p.LastEvent, &p.LastEventTS)
 		return p, err
 	})
 	if err != nil {
@@ -505,6 +513,10 @@ func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64
 	for i := range out {
 		sec, _ := timex.SplitTimestamp(out[i].UpdatedTS)
 		out[i].Updated = time.Unix(sec, 0).In(zone).Format("2006-01-02")
+		if out[i].LastSyncTS > 0 {
+			sec, _ := timex.SplitTimestamp(out[i].LastSyncTS)
+			out[i].LastSync = time.Unix(sec, 0).In(zone).Format("2006-01-02 15:04")
+		}
 	}
 	return out, nil
 }

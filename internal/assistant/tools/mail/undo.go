@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/mail/tracking"
 )
 
 type draftDeleteUndo struct {
@@ -32,6 +33,7 @@ func RegisterUndoer(r *writes.Registry) {
 	r.Register("draft_restore", undoDraftRestore)
 	r.Register(UndoFolderDelete, undoFolderDelete)
 	r.Register(UndoMoveBack, undoMailMoveBack)
+	r.Register(tracking.UndoUntrack, undoPackageUntrack)
 }
 
 func undoDraftDelete(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
