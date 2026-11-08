@@ -33,12 +33,13 @@ func (k Kind) Valid() bool { return AllKinds.Has(k) }
 type Effect string
 
 const (
-	Read    Effect = "read"
-	Write   Effect = "write"
-	Propose Effect = "propose"
-	Notify  Effect = "notify"
+	Read      Effect = "read"
+	Write     Effect = "write"
+	WriteUndo Effect = "write_undo"
+	Propose   Effect = "propose"
+	Notify    Effect = "notify"
 )
 
-var Effects = []Effect{Read, Write, Propose, Notify}
+var Effects = []Effect{Read, Write, WriteUndo, Propose, Notify}
 
 func (e Effect) Valid() bool { return slices.Contains(Effects, e) }

@@ -5,6 +5,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -30,4 +31,12 @@ func readWebSearchMaxUses(ctx context.Context, q db.Querier) (int, error) {
 	r := assistant.Read(ctx, q)
 	n := r.Int(assistant.KeyWebSearchMaxUses)
 	return n, r.Err()
+}
+
+func readWebSearchDynamicFiltering(ctx context.Context, q db.Querier) (bool, error) {
+	found, err := settings.Default.Resolve(ctx, q, registry.DynamicFilteringKey)
+	if err != nil {
+		return false, err
+	}
+	return found.Value == "true", nil
 }

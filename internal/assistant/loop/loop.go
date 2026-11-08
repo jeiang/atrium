@@ -180,7 +180,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if o.Limits.AllowedTools != nil {
 		allow = registry.Only(o.Limits.AllowedTools)
 	}
-	set, err := r.Registry.Admit(ctx, kind, allow, d.Read)
+	set, err := r.Registry.Admit(ctx, found.ThreadID, kind, allow, d.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -210,6 +210,10 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if err != nil {
 		return nil, err
 	}
+	dynamicFiltering, err := readWebSearchDynamicFiltering(ctx, d.Read)
+	if err != nil {
+		return nil, err
+	}
 	model, err := pricing.Lookup(found.Model)
 	if err != nil {
 		return nil, err
@@ -219,7 +223,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		return nil, err
 	}
 	limits := actx.LimitsFor(min(threads.ContextLimitOf(*thread), model.ContextWindow), tuning)
-	req, err := r.request(ctx, d.Read, *thread, kind, model.ID, found.Effort, set, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), limits, webSearchMaxUses)
+	req, err := r.request(ctx, d.Read, *thread, kind, model.ID, found.Effort, set, prompts.PrefixCacheControl(kind, ttl), deref(o.Limits.SystemExtra), limits, webSearchMaxUses, dynamicFiltering)
 	if err != nil {
 		return nil, err
 	}
@@ -243,7 +247,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, limits: limits, req: req,
 		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, maxCost: maxCost, ttl: ttl,
-		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, tuning: tuning},
+		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, tuning: tuning, reg: r.Registry},
 	}
 	s.x.guard = s.renew
 	s.x.lost, s.x.abort = context.WithCancel(context.Background())
