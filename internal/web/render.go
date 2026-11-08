@@ -27,6 +27,9 @@ type Renderer struct {
 }
 
 func (rd *Renderer) OnFrame(fn FrameFunc) {
+	if fn == nil {
+		return
+	}
 	rd.mu.Lock()
 	defer rd.mu.Unlock()
 	rd.frame = append(rd.frame, fn)
