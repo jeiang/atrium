@@ -15,17 +15,21 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/module"
 )
 
 func Callables() map[string]worker.Callable {
 	return map[string]worker.Callable{
-		scheduler.CalendarCandidatesName: func(ctx context.Context, e worker.Env) (worker.Result, error) {
-			_, limit, err := calendar.CandidateLimits(ctx, e.Service.DB.Read)
-			if err != nil {
-				return worker.Result{}, err
-			}
-			out, err := candidates.DraftEventProposals(ctx, e.Service, limit, e.Now)
-			return worker.Result{RunID: out.RunID}, err
+		scheduler.CalendarCandidatesName: {
+			Modules: []string{module.Calendar, module.Mail},
+			Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
+				_, limit, err := calendar.CandidateLimits(ctx, e.Service.DB.Read)
+				if err != nil {
+					return worker.Result{}, err
+				}
+				out, err := candidates.DraftEventProposals(ctx, e.Service, limit, e.Now)
+				return worker.Result{RunID: out.RunID}, err
+			},
 		},
 	}
 }

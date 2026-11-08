@@ -116,10 +116,7 @@ func Module(o Options) web.Module {
 		tz := config.TZName(d.Env)
 		stamp := now()
 		check(d.DB.WithTx(base, func(tx *sql.Tx) error {
-			if err := scheduler.EnsureNightly(base, tx, tz, stamp); err != nil {
-				return err
-			}
-			return scheduler.EnsureBuiltins(base, tx, tz, stamp)
+			return scheduler.Ensure(base, tx, tz, stamp)
 		}))
 
 		r.Get("/chat", p.chatIndex)

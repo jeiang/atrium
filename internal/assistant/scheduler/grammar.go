@@ -7,7 +7,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-	"unicode"
 
 	"regexp"
 
@@ -18,20 +17,19 @@ import (
 )
 
 const (
-	checkedOccurrences  = 64
-	searchDays          = 366 * 5
-	KindDaily           = "daily"
-	KindWeekly          = "weekly"
-	KindCron            = "cron"
-	KindOnce            = "once"
-	errUnrecognised     = "unrecognised schedule; use an ISO datetime, 'daily HH:MM', 'weekly DOW HH:MM' or a 5-field cron expression"
-	errNeverFires       = "that schedule never fires in the future"
-	secondsPerDay       = 86400
-	microsecondsPerSec  = 1_000_000
-	dowBound            = 4
-	cronFieldCount      = 5
-	monthField          = 3
-	maxParsedCronNumber = 1 << 30
+	checkedOccurrences = 64
+	searchDays         = 366 * 5
+	KindDaily          = "daily"
+	KindWeekly         = "weekly"
+	KindCron           = "cron"
+	KindOnce           = "once"
+	errUnrecognised    = "unrecognised schedule; use an ISO datetime, 'daily HH:MM', 'weekly DOW HH:MM' or a 5-field cron expression"
+	errNeverFires      = "that schedule never fires in the future"
+	secondsPerDay      = 86400
+	microsecondsPerSec = 1_000_000
+	dowBound           = 4
+	cronFieldCount     = 5
+	monthField         = 3
 )
 
 type Error string
@@ -65,38 +63,17 @@ type Spec struct {
 
 func (s Spec) Recurring() bool { return s.Kind != KindOnce }
 
-func isDecimal(s string) bool {
-	if s == "" {
-		return false
+func number(text string) (int, bool) {
+	if text == "" {
+		return 0, false
 	}
-	for _, r := range s {
-		if !unicode.Is(unicode.Nd, r) {
-			return false
+	for i := 0; i < len(text); i++ {
+		if text[i] < '0' || text[i] > '9' {
+			return 0, false
 		}
 	}
-	return true
-}
-
-func decimalValue(r rune) int {
-	for _, rg := range unicode.Nd.R16 {
-		if r >= rune(rg.Lo) && r <= rune(rg.Hi) {
-			return int(r-rune(rg.Lo)) % 10
-		}
-	}
-	for _, rg := range unicode.Nd.R32 {
-		if r >= rune(rg.Lo) && r <= rune(rg.Hi) {
-			return int(r-rune(rg.Lo)) % 10
-		}
-	}
-	return 0
-}
-
-func pyInt(s string) int {
-	n := 0
-	for _, r := range s {
-		n = min(n*10+decimalValue(r), maxParsedCronNumber)
-	}
-	return n
+	n, err := strconv.Atoi(text)
+	return n, err == nil
 }
 
 func Zone(name string) (*time.Location, error) {
@@ -110,8 +87,9 @@ func Zone(name string) (*time.Location, error) {
 func clock(text string) (int, int, error) {
 	loc := timePattern.FindStringSubmatchIndex(text)
 	if loc != nil {
-		h, mi := pyInt(text[loc[2]:loc[3]]), pyInt(text[loc[4]:loc[5]])
-		if h <= 23 && mi <= 59 {
+		h, hOK := number(text[loc[2]:loc[3]])
+		mi, miOK := number(text[loc[4]:loc[5]])
+		if hOK && miOK && h <= 23 && mi <= 59 {
 			return h, mi, nil
 		}
 	}
@@ -122,10 +100,11 @@ func cronValue(token string, index int) (int, error) {
 	if v, ok := cronNames[index][py.Lower(token)]; ok {
 		return v, nil
 	}
-	if !isDecimal(token) {
+	v, ok := number(token)
+	if !ok {
 		return 0, Error("bad cron value " + strconv.Quote(token))
 	}
-	return pyInt(token), nil
+	return v, nil
 }
 
 func cronField(text string, index int) ([]int, error) {
@@ -133,12 +112,13 @@ func cronField(text string, index int) ([]int, error) {
 	var found [64]bool
 	for part := range strings.SplitSeq(text, ",") {
 		body, stepText, _ := strings.Cut(part, "/")
-		if stepText != "" && !isDecimal(stepText) {
-			return nil, Error("bad cron step " + strconv.Quote(part))
-		}
 		step := 1
 		if stepText != "" {
-			step = pyInt(stepText)
+			var ok bool
+			step, ok = number(stepText)
+			if !ok {
+				return nil, Error("bad cron step " + strconv.Quote(part))
+			}
 		}
 		if step < 1 {
 			return nil, Error("bad cron step " + strconv.Quote(part))
@@ -378,9 +358,16 @@ func Validate(ctx context.Context, q db.Querier, text, tz string, now float64, e
 func describeInterval(seconds int) string {
 	switch {
 	case seconds%3600 == 0:
-		return fmt.Sprintf("%d hour", seconds/3600)
+		return plural(seconds/3600, "hour")
 	case seconds%60 == 0:
-		return fmt.Sprintf("%d minutes", seconds/60)
+		return plural(seconds/60, "minute")
 	}
-	return fmt.Sprintf("%d seconds", seconds)
+	return plural(seconds, "second")
+}
+
+func plural(n int, unit string) string {
+	if n == 1 {
+		return "1 " + unit
+	}
+	return fmt.Sprintf("%d %ss", n, unit)
 }

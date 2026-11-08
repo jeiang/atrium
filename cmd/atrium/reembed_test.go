@@ -131,7 +131,7 @@ func embedProgress(t *testing.T, base string) (done, total int, page string) {
 func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, path string) {
 	t.Helper()
 	dir, _ = moduleFixture(t, flagsExcept("", ""))
-	data, err := os.ReadFile(filepath.Join(golden.Dir(), "atrium.db"))
+	data, err := os.ReadFile(filepath.Join(golden.Dir(), "world.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,6 +139,7 @@ func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, pa
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	(&fixture{t: t, dir: dir}).seedNotionVectors(t)
 	t.Setenv(settingEnv(mail.KeyEmbedURL), fake.URL+"/v1")
 	t.Setenv(settingEnv(mail.KeyEmbedModel), model)
 	t.Setenv(settingEnv(mail.KeyEmbedBatch), "40")

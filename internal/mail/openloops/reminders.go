@@ -203,12 +203,11 @@ func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (
 	}
 	moment := py.ISOFormat(local(remindAt, loc), "seconds")
 	jobID, err := scheduler.CreateJob(ctx, r.DB.Write, scheduler.NewJob{
-		Name:       "Reminder: " + py.Clip(text, 50),
-		Prompt:     ReminderPrompt(text, mid.Int64()),
-		Schedule:   moment,
-		TZ:         tz,
-		Now:        current,
-		SkipLimits: true,
+		Name:     "Reminder: " + py.Clip(text, 50),
+		Prompt:   ReminderPrompt(text, mid.Int64()),
+		Schedule: moment,
+		TZ:       tz,
+		Now:      current,
 	})
 	if err != nil {
 		return nil, err
