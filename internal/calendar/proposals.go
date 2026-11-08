@@ -3,8 +3,10 @@ package calendar
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -142,6 +144,21 @@ func payloadOf(prop *proposals.Proposal) (target Target, spec Spec, err error) {
 	return target, spec, err
 }
 
+func (p *Proposals) guard(ctx context.Context, target Target) error {
+	var id int64
+	prefix := string(target) + ":"
+	err := p.DB.Read.QueryRowContext(ctx,
+		"SELECT id FROM agent_writes WHERE state = 'unknown' AND substr(target, 1, length(?)) = ? ORDER BY id LIMIT 1",
+		prefix, prefix).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return Error(fmt.Sprintf("calendar write %d has an unknown outcome; resolve it with `atrium writes resolve %d` before writing to the %s calendar again", id, id, target))
+}
+
 func (p *Proposals) begin(ctx context.Context, prop *proposals.Proposal, action py.Dict) (int64, error) {
 	return proposals.BeginAction(ctx, p.DB.Write, prop.ID, action, p.now())
 }
@@ -190,6 +207,9 @@ func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any
 	if err != nil {
 		return nil, err
 	}
+	if err := p.guard(ctx, target); err != nil {
+		return nil, err
+	}
 	action := py.Dict{{Key: "type", Value: Kind}, {Key: "calendar", Value: string(target)}, {Key: "uid", Value: spec.UID}}
 	intent, err := p.begin(ctx, prop, action)
 	if err != nil {
@@ -224,6 +244,9 @@ func (p *Proposals) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, er
 	}
 	set, err := LoadSettings(ctx, p.DB.Read)
 	if err != nil {
+		return nil, err
+	}
+	if err := p.guard(ctx, target); err != nil {
 		return nil, err
 	}
 	if err := DeleteEvent(ctx, p.env(), set, target, info.UID); err != nil {
