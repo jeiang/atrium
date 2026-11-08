@@ -101,7 +101,7 @@ jobs:
           SYSTEM: ${{ matrix.target.system }}
           CHECK: ${{ matrix.target.check }}
         run: |
-          nix build --keep-going --show-trace --no-link --print-out-paths \
+          nix build --keep-going --show-trace --no-link --print-out-paths -L \
             ".#checks.${SYSTEM}.${CHECK}" >"$RUNNER_TEMP/garret-outputs"
 
       - name: Push to garret what the watcher has not
