@@ -308,16 +308,12 @@ type textBlock struct {
 	Text *string `json:"text"`
 }
 
-func AppendMessage(ctx context.Context, d *db.DB, threadID int64, runID *int64, role string, content []json.RawMessage, now float64, systemSig *string) (int64, error) {
-	body, err := Dumps(content)
-	if err != nil {
-		return 0, err
-	}
+func messageText(content []json.RawMessage) (string, error) {
 	var texts []string
 	for _, raw := range content {
 		var b textBlock
 		if err := json.Unmarshal(raw, &b); err != nil {
-			return 0, fmt.Errorf("journal: content block is not an object: %w", err)
+			return "", fmt.Errorf("journal: content block is not an object: %w", err)
 		}
 		if b.Type == "text" {
 			t := ""
@@ -327,7 +323,65 @@ func AppendMessage(ctx context.Context, d *db.DB, threadID int64, runID *int64, 
 			texts = append(texts, t)
 		}
 	}
-	text := py.Strip(strings.Join(texts, "\n"))
+	return py.Strip(strings.Join(texts, "\n")), nil
+}
+
+func ReindexThread(ctx context.Context, q db.Querier, threadID int64) error {
+	if _, err := q.ExecContext(ctx, "DELETE FROM thread_fts WHERE thread_id = ?", threadID); err != nil {
+		return err
+	}
+	var title *string
+	err := q.QueryRowContext(ctx, "SELECT title FROM threads WHERE id = ?", threadID).Scan(&title)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if title != nil && *title != "" {
+		if _, err := q.ExecContext(ctx, "INSERT INTO thread_fts (thread_id, text) VALUES (?, ?)", threadID, *title); err != nil {
+			return err
+		}
+	}
+	rows, err := q.QueryContext(ctx, "SELECT content_json FROM thread_messages WHERE thread_id = ? AND superseded = 0 ORDER BY seq", threadID)
+	if err != nil {
+		return err
+	}
+	bodies, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
+		var raw string
+		return raw, r.Scan(&raw)
+	})
+	if err != nil {
+		return err
+	}
+	for _, raw := range bodies {
+		var content []json.RawMessage
+		if err := json.Unmarshal([]byte(raw), &content); err != nil {
+			return fmt.Errorf("journal: thread %d content_json: %w", threadID, err)
+		}
+		text, err := messageText(content)
+		if err != nil {
+			return err
+		}
+		if text == "" {
+			continue
+		}
+		if _, err := q.ExecContext(ctx, "INSERT INTO thread_fts (thread_id, text) VALUES (?, ?)", threadID, text); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func AppendMessage(ctx context.Context, d *db.DB, threadID int64, runID *int64, role string, content []json.RawMessage, now float64, systemSig *string) (int64, error) {
+	body, err := Dumps(content)
+	if err != nil {
+		return 0, err
+	}
+	text, err := messageText(content)
+	if err != nil {
+		return 0, err
+	}
 	var seq int64
 	err = d.WithTx(ctx, func(tx *sql.Tx) error {
 		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(seq), 0) + 1 FROM thread_messages WHERE thread_id = ?", threadID).Scan(&seq); err != nil {

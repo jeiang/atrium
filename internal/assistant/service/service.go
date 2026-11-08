@@ -146,19 +146,6 @@ func emptyLimits(l journal.Limits) bool {
 	return l.MaxSteps == nil && l.MaxCostUSD == nil && l.SystemExtra == nil && l.AllowedTools == nil && l.ToolChoice == nil
 }
 
-func CreateThread(ctx context.Context, q db.Querier, now float64, n threads.NewThread) (int64, error) {
-	id, err := threads.Create(ctx, q, now, n)
-	if err != nil {
-		return 0, err
-	}
-	if n.Title != nil && *n.Title != "" {
-		if _, err := q.ExecContext(ctx, "INSERT INTO thread_fts (thread_id, text) VALUES (?, ?)", id, *n.Title); err != nil {
-			return 0, err
-		}
-	}
-	return id, nil
-}
-
 func Load(ctx context.Context, q db.Querier, env config.Env, threadID int64, now float64) (*threads.Thread, error) {
 	thread, err := threads.Get(ctx, q, threadID)
 	if err != nil {

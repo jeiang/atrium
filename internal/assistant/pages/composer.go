@@ -3,14 +3,15 @@ package pages
 import (
 	"net/http"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/web"
 )
 
 func contextLimitsOf(m pricing.Model) []int64 {
-	out := make([]int64, 0, len(threads.ContextLimits))
-	for _, n := range threads.ContextLimits {
+	out := make([]int64, 0, len(assistant.ContextLimits))
+	for _, n := range assistant.ContextLimits {
 		if n <= m.ContextWindow {
 			out = append(out, n)
 		}
@@ -20,12 +21,12 @@ func contextLimitsOf(m pricing.Model) []int64 {
 
 func composerData(modelID, effort string, limit, live int64) map[string]any {
 	models := pricing.Models()
-	efforts, limits, known := threads.Efforts[:], threads.ContextLimits[:], false
+	efforts, limits, known := pricing.Efforts, assistant.ContextLimits, false
 	if m, err := pricing.Lookup(modelID); err == nil {
 		known, efforts, limits = true, m.Efforts, contextLimitsOf(m)
 		effort = threads.SnapEffort(m, effort)
 		if limit == 0 {
-			limit = threads.DefaultContextLimit
+			limit = assistant.DefaultContextLimit
 		}
 		limit = threads.SnapContextLimit(m, limit)
 	}

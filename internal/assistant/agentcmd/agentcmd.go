@@ -65,7 +65,7 @@ func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64
 	svc := service.New(ctx, d, cfg, cfgEnv, r)
 	if threadID == nil {
 		now := float64(time.Now().UnixMicro()) / 1e6
-		id, err := service.CreateThread(ctx, d.Write, now, threads.NewThread{Kind: kind})
+		id, err := threads.Create(ctx, d.Write, now, threads.Spec{Kind: kind})
 		if err != nil {
 			return err
 		}

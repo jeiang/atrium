@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -12,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/search"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
@@ -121,7 +123,7 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 		}
 		project = &projectID
 	}
-	threadID, err := service.CreateThread(ctx, p.deps.DB.Write, p.now(), threads.NewThread{
+	threadID, err := threads.Create(ctx, p.deps.DB.Write, p.now(), threads.Spec{
 		Kind: threads.Chat, ProjectID: project,
 		Model: web.FormString(form, "model", ""), Effort: web.FormString(form, "effort", ""), ContextLimit: optional(form, "context_limit"),
 	})
@@ -152,7 +154,7 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 	redirect(w, r, to)
 }
 
-func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string) {
+func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string, set func(context.Context, db.Querier, int64, bool) (bool, error)) {
 	threadID, errs := pathInt(r, "thread_id")
 	form := web.FormValues(r)
 	value := formInt(form, "body", column, 1, &errs)
@@ -161,7 +163,7 @@ func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	ok, err := threads.SetFlag(detached(r), p.deps.DB.Write, threadID, column, value != 0)
+	ok, err := set(detached(r), p.deps.DB.Write, threadID, value != 0)
 	check(err)
 	if !ok {
 		p.fail(w, r, http.StatusNotFound, "unknown thread")

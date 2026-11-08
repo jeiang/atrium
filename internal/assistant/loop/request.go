@@ -10,6 +10,7 @@ import (
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
@@ -20,7 +21,7 @@ import (
 )
 
 func MaxTokensFor(effort string) int64 {
-	if effort == threads.XHigh || effort == threads.Max {
+	if effort == pricing.XHigh || effort == pricing.Max {
 		return MaxTokensDeep
 	}
 	return MaxTokens

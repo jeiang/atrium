@@ -70,7 +70,7 @@ func (p *pages) settings(w http.ResponseWriter, r *http.Request, status int, nam
 func (p *pages) assistantPage(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, saved bool, formError string) {
 	defaults, err := threads.Defaults(r.Context(), p.deps.DB.Read)
 	check(err)
-	p.settings(w, r, status, "settings_assistant.gohtml", AssistantData{Models: pricing.Models(), Defaults: defaults, Efforts: threads.Efforts[:], ContextLimits: threads.ContextLimits[:], Saved: saved, Error: formError}, toast)
+	p.settings(w, r, status, "settings_assistant.gohtml", AssistantData{Models: pricing.Models(), Defaults: defaults, Efforts: pricing.Efforts, ContextLimits: assistant.ContextLimits, Saved: saved, Error: formError}, toast)
 }
 
 func (p *pages) assistantSettings(w http.ResponseWriter, r *http.Request) {
@@ -84,7 +84,7 @@ func (p *pages) assistantSettings(w http.ResponseWriter, r *http.Request) {
 
 func (p *pages) assistantSave(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	err := threads.SetDefaults(audit.With(detached(r), "operator", audit.UI), p.deps.DB.Write, web.FormString(form, "model", ""), web.FormString(form, "effort", ""), web.FormString(form, "context_limit", ""))
+	err := threads.SetDefaults(audit.With(detached(r), "operator", audit.UI), p.deps.DB, web.FormString(form, "model", ""), web.FormString(form, "effort", ""), web.FormString(form, "context_limit", ""))
 	var refused threads.OptionError
 	if errors.As(err, &refused) {
 		p.assistantPage(w, r, http.StatusUnprocessableEntity, notice("error", "Not saved", err.Error()), false, err.Error())

@@ -266,6 +266,14 @@ type Querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
+func Changed(res sql.Result, err error) (bool, error) {
+	if err != nil {
+		return false, err
+	}
+	n, err := res.RowsAffected()
+	return n > 0, err
+}
+
 func Collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error) {
 	defer func() { _ = rows.Close() }()
 	out := []T{}

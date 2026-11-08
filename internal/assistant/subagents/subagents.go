@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/store"
@@ -163,8 +164,8 @@ func Save(ctx context.Context, q db.Querier, reg *registry.Registry, d Definitio
 	if n := utf8.RuneCountInString(prompt); n == 0 || n > maxPrompt {
 		return nil, Error(fmt.Sprintf("prompt is required, at most %d characters", maxPrompt))
 	}
-	if !slices.Contains(threads.Efforts[:], d.Effort) {
-		return nil, Error("effort must be one of " + strings.Join(threads.Efforts[:], ", "))
+	if !slices.Contains(pricing.Efforts, d.Effort) {
+		return nil, Error("effort must be one of " + strings.Join(pricing.Efforts, ", "))
 	}
 	tools, err := CleanTools(reg, d.Tools)
 	if err != nil {
@@ -210,17 +211,10 @@ func SystemAddendum(ctx context.Context, q db.Querier, a Agent) (string, error) 
 }
 
 func CreateChild(ctx context.Context, q db.Querier, parentThread, parentRun int64, a Agent, title string, now float64) (int64, error) {
-	child, err := threads.Create(ctx, q, now, threads.NewThread{Kind: threads.Subagent, Title: &title, ParentID: &parentThread})
-	if err != nil {
-		return 0, err
-	}
-	if _, err := q.ExecContext(ctx, "UPDATE threads SET role = ?, parent_run_id = ?, effort = ? WHERE id = ?", a.Name, parentRun, a.Effort, child); err != nil {
-		return 0, err
-	}
-	if _, err := q.ExecContext(ctx, "INSERT INTO thread_fts (thread_id, text) VALUES (?, ?)", child, title); err != nil {
-		return 0, err
-	}
-	return child, nil
+	return threads.Create(ctx, q, now, threads.Spec{
+		Kind: threads.Subagent, Title: &title, ParentID: &parentThread,
+		Effort: a.Effort, Role: &a.Name, ParentRunID: &parentRun,
+	})
 }
 
 func DigestOf(ctx context.Context, q db.Querier, threadID int64) (string, error) {

@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func BranchMessages(messages []journal.Message, seq int64) []journal.Message {
@@ -55,17 +54,16 @@ func (s *Service) Branch(ctx context.Context, threadID, seq int64) (int64, error
 		return 0, NothingToRedo(fmt.Sprintf("no message %d to branch from", seq))
 	}
 	messages := BranchMessages(all, seq)
-	child, err := CreateThread(ctx, s.DB.Write, s.now(), threads.NewThread{Kind: threads.Chat, Title: source.Title})
+	var limit any
+	if source.ContextLimit != nil {
+		limit = *source.ContextLimit
+	}
+	child, err := threads.Create(ctx, s.DB.Write, s.now(), threads.Spec{
+		Kind: threads.Chat, Title: source.Title, ProjectID: source.ProjectID,
+		Model: source.Model, Effort: source.Effort, ContextLimit: limit,
+		AllowedURLs: source.AllowedURLs, BranchedFromThreadID: &threadID, BranchedFromSeq: &seq,
+	})
 	if err != nil {
-		return 0, err
-	}
-	urls := source.AllowedURLs
-	if urls == nil {
-		urls = []string{}
-	}
-	if _, err := s.DB.Write.ExecContext(ctx,
-		"UPDATE threads SET model = ?, effort = ?, context_limit = ?, allowed_urls = ?, project_id = ?, branched_from_thread_id = ?, branched_from_seq = ? WHERE id = ?",
-		source.Model, source.Effort, source.ContextLimit, py.JSONDumps(urls), source.ProjectID, threadID, seq, child); err != nil {
 		return 0, err
 	}
 	for _, m := range messages {

@@ -51,7 +51,7 @@ func DraftEventProposals(ctx context.Context, svc *service.Service, limit int, n
 		ids[i] = item.MessageID
 	}
 	title := "Event candidates"
-	threadID, err := service.CreateThread(ctx, svc.DB.Write, now(), threads.NewThread{Kind: threads.Cron, Title: &title})
+	threadID, err := threads.Create(ctx, svc.DB.Write, now(), threads.Spec{Kind: threads.Cron, Title: &title})
 	if err != nil {
 		return Result{}, err
 	}

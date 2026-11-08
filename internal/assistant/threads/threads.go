@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/db"
@@ -30,16 +31,6 @@ const (
 	Subagent = "subagent"
 )
 
-const (
-	Low    = "low"
-	Medium = "medium"
-	High   = "high"
-	XHigh  = "xhigh"
-	Max    = "max"
-)
-
-var Efforts = [...]string{Low, Medium, High, XHigh, Max}
-
 var effortKeys = map[string]string{
 	Cron:     assistant.KeyEffortCron,
 	Nightly:  assistant.KeyEffortNightly,
@@ -48,9 +39,6 @@ var effortKeys = map[string]string{
 }
 
 func EffortOf(ctx context.Context, q db.Querier, kind string) (string, bool, error) {
-	if kind == Chat {
-		return Medium, true, nil
-	}
 	key, ok := effortKeys[kind]
 	if !ok {
 		return "", false, nil
@@ -63,12 +51,8 @@ func EffortOf(ctx context.Context, q db.Querier, kind string) (string, bool, err
 	return effort, true, err
 }
 
-var ContextLimits = [...]int64{90_000, 200_000, 500_000, 1_000_000}
-
 const (
-	DefaultContextLimit = 90_000
-	TitleChars          = 80
-	DefaultListLimit    = 50
+	TitleChars = 80
 )
 
 var urlRe = rx.MustCompile(`https?://[^\s<>\"'()\[\]]+`, 0)
@@ -78,8 +62,8 @@ type OptionError string
 func (e OptionError) Error() string { return string(e) }
 
 func CleanEffort(value string) (string, error) {
-	if !slices.Contains(Efforts[:], value) {
-		return "", OptionError("effort must be one of " + strings.Join(Efforts[:], ", "))
+	if !slices.Contains(pricing.Efforts, value) {
+		return "", OptionError("effort must be one of " + strings.Join(pricing.Efforts, ", "))
 	}
 	return value, nil
 }
@@ -107,8 +91,8 @@ func SnapEffort(model pricing.Model, effort string) string {
 	if model.SupportsEffort(effort) || len(model.Efforts) == 0 {
 		return effort
 	}
-	if model.SupportsEffort(Medium) {
-		return Medium
+	if model.SupportsEffort(pricing.Medium) {
+		return pricing.Medium
 	}
 	return model.Efforts[0]
 }
@@ -118,13 +102,13 @@ func SnapContextLimit(model pricing.Model, limit int64) int64 {
 		return limit
 	}
 	best := int64(0)
-	for _, n := range ContextLimits {
+	for _, n := range assistant.ContextLimits {
 		if n <= model.ContextWindow && n > best {
 			best = n
 		}
 	}
-	if DefaultContextLimit <= model.ContextWindow {
-		return DefaultContextLimit
+	if best == 0 {
+		return assistant.DefaultContextLimit
 	}
 	return best
 }
@@ -156,11 +140,11 @@ func CleanContextLimit(value any) (int64, error) {
 	case string:
 		limit, ok = py.ParseInt(v)
 	}
-	if ok && slices.Contains(ContextLimits[:], limit) {
+	if ok && slices.Contains(assistant.ContextLimits, limit) {
 		return limit, nil
 	}
-	sizes := make([]string, len(ContextLimits))
-	for i, n := range ContextLimits {
+	sizes := make([]string, len(assistant.ContextLimits))
+	for i, n := range assistant.ContextLimits {
 		sizes[i] = fmt.Sprintf("%dK", n/1000)
 	}
 	return 0, OptionError("context limit must be one of " + strings.Join(sizes, ", "))
@@ -172,64 +156,72 @@ type Options struct {
 	ContextLimit int64  `json:"context_limit"`
 }
 
+func (o Options) Validate() (Options, error) {
+	m, err := CleanModel(o.Model)
+	if err != nil {
+		return Options{}, err
+	}
+	if o.Effort, err = CleanModelEffort(m, o.Effort); err != nil {
+		return Options{}, err
+	}
+	if o.ContextLimit, err = CleanModelContextLimit(m, o.ContextLimit); err != nil {
+		return Options{}, err
+	}
+	return o, nil
+}
+
 func Defaults(ctx context.Context, q db.Querier) (Options, error) {
+	out := Options{Model: pricing.DefaultModel, Effort: pricing.Medium, ContextLimit: assistant.DefaultContextLimit}
 	found, err := settings.Default.Resolve(ctx, q, assistant.KeyDefaultEffort, 0)
 	if err != nil {
 		return Options{}, err
 	}
-	effort := found.Value
-	if !slices.Contains(Efforts[:], effort) {
-		effort = Medium
+	if slices.Contains(pricing.Efforts, found.Value) {
+		out.Effort = found.Value
 	}
-	out := Options{Model: pricing.DefaultModel, Effort: effort, ContextLimit: DefaultContextLimit}
 	found, err = settings.Default.Resolve(ctx, q, assistant.KeyDefaultModel, 0)
 	if err != nil {
 		return out, err
 	}
-	if _, err := CleanModel(found.Value); err != nil {
-		return out, fmt.Errorf("threads: setting %s: %w", assistant.KeyDefaultModel, err)
+	if _, err := CleanModel(found.Value); err == nil {
+		out.Model = found.Value
 	}
-	out.Model = found.Value
 	found, err = settings.Default.Resolve(ctx, q, assistant.KeyDefaultContextLimit, 0)
 	if err != nil {
 		return out, err
 	}
-	limit := found.Value
-	if limit == "" || strings.Trim(limit, "0123456789") != "" {
-		return out, nil
-	}
-	if n, ok := py.ParseInt(limit); ok && slices.Contains(ContextLimits[:], n) {
+	if n, ok := py.ParseInt(found.Value); ok && slices.Contains(assistant.ContextLimits, n) {
 		out.ContextLimit = n
 	}
 	return out, nil
 }
 
-func SetDefaults(ctx context.Context, q db.Querier, model, effort string, contextLimit any) error {
-	chosen := pricing.DefaultModel
-	if model != "" {
-		chosen = model
-	} else if current, err := Defaults(ctx, q); err == nil {
+func SetDefaults(ctx context.Context, d *db.DB, model, effort string, contextLimit any) error {
+	chosen := model
+	if chosen == "" {
+		current, err := Defaults(ctx, d.Read)
+		if err != nil {
+			return err
+		}
 		chosen = current.Model
 	}
-	m, err := CleanModel(chosen)
+	limit, err := CleanContextLimit(contextLimit)
 	if err != nil {
 		return err
 	}
-	e, err := CleanModelEffort(m, effort)
+	o, err := (Options{Model: chosen, Effort: effort, ContextLimit: limit}).Validate()
 	if err != nil {
 		return err
 	}
-	limit, err := CleanModelContextLimit(m, contextLimit)
-	if err != nil {
-		return err
-	}
-	if err := setPinSafe(ctx, q, assistant.KeyDefaultModel, m.ID); err != nil {
-		return err
-	}
-	if err := setPinSafe(ctx, q, assistant.KeyDefaultEffort, e); err != nil {
-		return err
-	}
-	return setPinSafe(ctx, q, assistant.KeyDefaultContextLimit, strconv.FormatInt(limit, 10))
+	return d.WithTx(ctx, func(tx *sql.Tx) error {
+		if err := setPinSafe(ctx, tx, assistant.KeyDefaultModel, o.Model); err != nil {
+			return err
+		}
+		if err := setPinSafe(ctx, tx, assistant.KeyDefaultEffort, o.Effort); err != nil {
+			return err
+		}
+		return setPinSafe(ctx, tx, assistant.KeyDefaultContextLimit, strconv.FormatInt(o.ContextLimit, 10))
+	})
 }
 
 func setPinSafe(ctx context.Context, q db.Querier, key, value string) error {
@@ -255,74 +247,104 @@ func TitleFrom(text string) string {
 	return ""
 }
 
-type NewThread struct {
-	Kind         string
-	Title        *string
-	ParentID     *int64
-	JobID        *int64
-	ProjectID    *int64
-	Model        string
-	Effort       string
-	ContextLimit any
+type Spec struct {
+	Kind                 string
+	Title                *string
+	ParentID             *int64
+	JobID                *int64
+	ProjectID            *int64
+	Model                string
+	Effort               string
+	ContextLimit         any
+	AllowedURLs          []string
+	Role                 *string
+	ParentRunID          *int64
+	BranchedFromThreadID *int64
+	BranchedFromSeq      *int64
 }
 
-func Create(ctx context.Context, q db.Querier, now float64, n NewThread) (int64, error) {
+func resolve(ctx context.Context, q db.Querier, kind string, projectID *int64, explicit Options) (Options, error) {
 	chosen, err := Defaults(ctx, q)
 	if err != nil {
-		return 0, err
+		return Options{}, err
 	}
-	if n.ProjectID != nil && *n.ProjectID != 0 {
-		err := q.QueryRowContext(ctx, "SELECT effort, context_limit FROM projects WHERE id = ?", *n.ProjectID).Scan(&chosen.Effort, &chosen.ContextLimit)
+	projectEffort, projectLimit := false, false
+	if projectID != nil && *projectID != 0 {
+		err := q.QueryRowContext(ctx, "SELECT effort, context_limit FROM projects WHERE id = ?", *projectID).Scan(&chosen.Effort, &chosen.ContextLimit)
 		if errors.Is(err, sql.ErrNoRows) {
-			return 0, fmt.Errorf("threads: no project %d", *n.ProjectID)
+			return Options{}, fmt.Errorf("threads: no project %d", *projectID)
 		}
+		if err != nil {
+			return Options{}, err
+		}
+		projectEffort, projectLimit = true, true
+	}
+	if kind != Chat {
+		effort, ok, err := EffortOf(ctx, q, kind)
+		if err != nil {
+			return Options{}, err
+		}
+		if !ok {
+			return Options{}, fmt.Errorf("threads: no effort for kind %s", py.Repr(kind))
+		}
+		chosen.Effort, chosen.Model = effort, pricing.DefaultModel
+		projectEffort = false
+	}
+	if explicit.Model != "" {
+		chosen.Model = explicit.Model
+	}
+	if explicit.Effort != "" {
+		chosen.Effort, projectEffort = explicit.Effort, false
+	}
+	if explicit.ContextLimit != 0 {
+		chosen.ContextLimit, projectLimit = explicit.ContextLimit, false
+	}
+	m, err := CleanModel(chosen.Model)
+	if err != nil {
+		return Options{}, err
+	}
+	if projectEffort {
+		chosen.Effort = SnapEffort(m, chosen.Effort)
+	}
+	if projectLimit {
+		chosen.ContextLimit = SnapContextLimit(m, chosen.ContextLimit)
+	}
+	return chosen.Validate()
+}
+
+func Create(ctx context.Context, q db.Querier, now float64, s Spec) (int64, error) {
+	explicit := Options{Model: s.Model, Effort: s.Effort}
+	if s.ContextLimit != nil {
+		limit, err := CleanContextLimit(s.ContextLimit)
 		if err != nil {
 			return 0, err
 		}
+		explicit.ContextLimit = limit
 	}
-	model := pricing.DefaultModel
-	if n.Kind == Chat {
-		model = chosen.Model
-	}
-	if n.Model != "" {
-		model = n.Model
-	}
-	m, err := CleanModel(model)
+	o, err := resolve(ctx, q, s.Kind, s.ProjectID, explicit)
 	if err != nil {
 		return 0, err
 	}
-	effort := chosen.Effort
-	if n.Kind != Chat {
-		var ok bool
-		if effort, ok, err = EffortOf(ctx, q, n.Kind); err != nil {
-			return 0, err
-		}
-		if !ok {
-			return 0, fmt.Errorf("threads: no effort for kind %s", py.Repr(n.Kind))
-		}
-	}
-	if n.Effort != "" {
-		effort = n.Effort
-	}
-	if effort, err = CleanModelEffort(m, effort); err != nil {
-		return 0, err
-	}
-	limit := chosen.ContextLimit
-	if n.ContextLimit != nil {
-		if limit, err = CleanContextLimit(n.ContextLimit); err != nil {
-			return 0, err
-		}
-	}
-	if limit, err = CleanModelContextLimit(m, limit); err != nil {
-		return 0, err
+	urls := s.AllowedURLs
+	if urls == nil {
+		urls = []string{}
 	}
 	res, err := q.ExecContext(ctx,
-		"INSERT INTO threads (kind, title, job_id, parent_thread_id, model, effort, context_limit, project_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		n.Kind, n.Title, n.JobID, n.ParentID, m.ID, effort, limit, n.ProjectID, now, now)
+		"INSERT INTO threads (kind, title, job_id, parent_thread_id, model, effort, context_limit, project_id, allowed_urls, role, parent_run_id, branched_from_thread_id, branched_from_seq, created_at, updated_at) "+
+			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		s.Kind, s.Title, s.JobID, s.ParentID, o.Model, o.Effort, o.ContextLimit, s.ProjectID, py.JSONDumps(urls), s.Role, s.ParentRunID,
+		s.BranchedFromThreadID, s.BranchedFromSeq, now, now)
 	if err != nil {
 		return 0, err
 	}
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if err := journal.ReindexThread(ctx, q, id); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 func SetOptions(ctx context.Context, q db.Querier, threadID int64, model, effort string, contextLimit any) (bool, error) {
@@ -335,29 +357,15 @@ func SetOptions(ctx context.Context, q db.Querier, threadID int64, model, effort
 			return false, err
 		}
 	}
-	m, err := CleanModel(model)
-	if err != nil {
-		return false, err
-	}
-	e, err := CleanEffort(effort)
-	if err != nil {
-		return false, err
-	}
-	e = SnapEffort(m, e)
 	limit, err := CleanContextLimit(contextLimit)
 	if err != nil {
 		return false, err
 	}
-	limit = SnapContextLimit(m, limit)
-	return changed(q.ExecContext(ctx, "UPDATE threads SET model = ?, effort = ?, context_limit = ? WHERE id = ? AND kind = ?", m.ID, e, limit, threadID, Chat))
-}
-
-func changed(res sql.Result, err error) (bool, error) {
+	o, err := (Options{Model: model, Effort: effort, ContextLimit: limit}).Validate()
 	if err != nil {
 		return false, err
 	}
-	n, err := res.RowsAffected()
-	return n > 0, err
+	return db.Changed(q.ExecContext(ctx, "UPDATE threads SET model = ?, effort = ?, context_limit = ? WHERE id = ? AND kind = ?", o.Model, o.Effort, o.ContextLimit, threadID, Chat))
 }
 
 type Thread struct {
@@ -413,18 +421,17 @@ func Get(ctx context.Context, q db.Querier, threadID int64) (*Thread, error) {
 
 func ContextLimitOf(t Thread) int64 {
 	if t.ContextLimit == nil || *t.ContextLimit == 0 {
-		return DefaultContextLimit
+		return assistant.DefaultContextLimit
 	}
 	return *t.ContextLimit
 }
 
 func SetTitle(ctx context.Context, q db.Querier, threadID int64, title string) error {
-	changed, err := changed(q.ExecContext(ctx, "UPDATE threads SET title = ? WHERE id = ? AND title IS NULL", title, threadID))
+	changed, err := db.Changed(q.ExecContext(ctx, "UPDATE threads SET title = ? WHERE id = ? AND title IS NULL", title, threadID))
 	if err != nil || !changed {
 		return err
 	}
-	_, err = q.ExecContext(ctx, "INSERT INTO thread_fts (thread_id, text) VALUES (?, ?)", threadID, title)
-	return err
+	return journal.ReindexThread(ctx, q, threadID)
 }
 
 func RootKind(ctx context.Context, q db.Querier, threadID int64) (string, error) {
@@ -558,14 +565,14 @@ func ListThreads(ctx context.Context, q db.Querier, o ListOpts) ([]Listed, error
 	})
 }
 
-func SetFlag(ctx context.Context, q db.Querier, threadID int64, column string, value bool) (bool, error) {
-	switch column {
-	case "pinned", "archived":
-	default:
-		return false, fmt.Errorf("threads: %s", py.Repr(column))
-	}
-	return changed(q.ExecContext(ctx,
-		"UPDATE threads SET "+column+" = ? WHERE id = ? AND kind = ? AND deleted_at IS NULL", store.Bit(value), threadID, Chat))
+func SetPinned(ctx context.Context, q db.Querier, threadID int64, value bool) (bool, error) {
+	return db.Changed(q.ExecContext(ctx,
+		"UPDATE threads SET pinned = ? WHERE id = ? AND kind = ? AND deleted_at IS NULL", store.Bit(value), threadID, Chat))
+}
+
+func SetArchived(ctx context.Context, q db.Querier, threadID int64, value bool) (bool, error) {
+	return db.Changed(q.ExecContext(ctx,
+		"UPDATE threads SET archived = ? WHERE id = ? AND kind = ? AND deleted_at IS NULL", store.Bit(value), threadID, Chat))
 }
 
 func Purge(ctx context.Context, q db.Querier, threadID int64, now float64) error {
@@ -580,6 +587,7 @@ func Purge(ctx context.Context, q db.Querier, threadID int64, now float64) error
 		"DELETE FROM thread_plans WHERE thread_id = ?",
 		"DELETE FROM thread_messages WHERE thread_id = ?",
 		"DELETE FROM thread_fts WHERE thread_id = ?",
+		"DELETE FROM thread_files WHERE thread_id = ?",
 	} {
 		if _, err := q.ExecContext(ctx, stmt, threadID); err != nil {
 			return err

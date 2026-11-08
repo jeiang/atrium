@@ -18,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/runner"
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/service"
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
@@ -125,8 +126,8 @@ func Module(o Options) web.Module {
 		r.Get("/chat", p.chatIndex)
 		r.Post("/chat", p.chatNew)
 		r.Get("/chat/composer-options", p.composerOptions)
-		r.Post("/chat/{thread_id}/pin", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "pinned") })
-		r.Post("/chat/{thread_id}/archive", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "archived") })
+		r.Post("/chat/{thread_id}/pin", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "pinned", threads.SetPinned) })
+		r.Post("/chat/{thread_id}/archive", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "archived", threads.SetArchived) })
 		r.Get("/chat/{thread_id}", p.chatThread)
 		r.Post("/chat/{thread_id}/project", p.chatProject)
 		r.Post("/chat/{thread_id}/options", p.chatOptions)
