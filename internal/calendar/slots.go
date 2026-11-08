@@ -145,18 +145,10 @@ func FindSlots(ctx context.Context, q db.Querier, env config.Env, set Settings, 
 	}
 	var busy []Window
 	for _, row := range listing.Events {
-		s, err := ParseWhen(row.Start, tz, false)
-		if err != nil {
-			return Slots{}, err
-		}
-		if !strings.Contains(row.Start, "T") {
+		if row.Start.isDate() {
 			continue
 		}
-		e, err := ParseWhen(row.End, tz, false)
-		if err != nil {
-			return Slots{}, err
-		}
-		busy = append(busy, Window{asDT(s, tz), asDT(e, tz)})
+		busy = append(busy, Window{asDT(row.Start, tz).In(tz), asDT(row.End, tz).In(tz)})
 	}
 	notes := listing.Notes
 	if listing.Truncated {

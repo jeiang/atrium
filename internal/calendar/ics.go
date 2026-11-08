@@ -13,16 +13,16 @@ import (
 type Row struct {
 	UID      string
 	Calendar string
-	Start    string
-	End      string
+	Start    Value
+	End      Value
 	Title    string
 	Location string
 }
 
-func (r Row) Dict() py.Dict {
+func (r Row) Dict(tz *time.Location) py.Dict {
 	return py.Dict{
-		{Key: "uid", Value: r.UID}, {Key: "calendar", Value: r.Calendar}, {Key: "start", Value: r.Start},
-		{Key: "end", Value: r.End}, {Key: "title", Value: r.Title}, {Key: "location", Value: r.Location},
+		{Key: "uid", Value: r.UID}, {Key: "calendar", Value: r.Calendar}, {Key: "start", Value: fmtValue(r.Start, tz)},
+		{Key: "end", Value: fmtValue(r.End, tz)}, {Key: "title", Value: r.Title}, {Key: "location", Value: r.Location},
 	}
 }
 
@@ -403,7 +403,7 @@ func overlaps(s, e, ws, we time.Time) bool {
 }
 
 func (ev *icsEvent) row(calendar string, start, end Value, tz *time.Location) Row {
-	return Row{UID: ev.uidKey(), Calendar: calendar, Start: fmtValue(start, tz), End: fmtValue(end, tz), Title: ev.summary, Location: ev.location}
+	return Row{UID: ev.uidKey(), Calendar: calendar, Start: start, End: end, Title: ev.summary, Location: ev.location}
 }
 
 func EventsInICS(data []byte, calendar string, ws, we time.Time, tz *time.Location, notes *[]string, maxOccurrences int) ([]Row, error) {

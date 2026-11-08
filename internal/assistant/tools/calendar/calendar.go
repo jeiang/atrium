@@ -173,9 +173,10 @@ func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	for _, p := range ref.Dict() {
 		out[p.Key] = p.Value
 	}
+	normalizedDict := normalized.Dict()
 	out["title"] = normalized.Title
-	out["start"] = normalized.Start
-	out["end"] = normalized.End
+	out["start"], _ = normalizedDict.Get("start")
+	out["end"], _ = normalizedDict.Get("end")
 	return out, nil
 }
 

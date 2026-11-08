@@ -101,17 +101,17 @@ func (p *Proposals) Propose(ctx context.Context, raw py.Dict, source py.Dict, ke
 	}
 	payload := py.Dict{{Key: "calendar", Value: string(target)}, {Key: "spec", Value: spec.Dict()}, {Key: "source", Value: source}}
 	preview := py.Dict{
-		{Key: "calendar", Value: string(target)}, {Key: "title", Value: spec.Title}, {Key: "start", Value: spec.Start},
-		{Key: "end", Value: spec.End}, {Key: "all_day", Value: spec.AllDay}, {Key: "location", Value: spec.Location},
+		{Key: "calendar", Value: string(target)}, {Key: "title", Value: spec.Title}, {Key: "start", Value: spec.Start.iso()},
+		{Key: "end", Value: spec.End.iso()}, {Key: "all_day", Value: spec.AllDay}, {Key: "location", Value: spec.Location},
 		{Key: "notes", Value: spec.Notes}, {Key: "source", Value: source},
 	}
-	fp := fingerprint(Kind, string(target), spec.Title, spec.Start, spec.End, spec.Location, spec.Notes)
+	fp := fingerprint(Kind, string(target), spec.Title, spec.Start.iso(), spec.End.iso(), spec.Location, spec.Notes)
 	if key != "" {
 		fp = fingerprint(Kind, key)
 	}
-	when := spec.Start
+	when := spec.Start.iso()
 	if !spec.AllDay {
-		when = strings.ReplaceAll(clip(spec.Start, 16), "T", " ")
+		when = strings.ReplaceAll(clip(spec.Start.iso(), 16), "T", " ")
 	}
 	account := Account
 	title := fmt.Sprintf("Add to calendar: %s (%s)", spec.Title, when)

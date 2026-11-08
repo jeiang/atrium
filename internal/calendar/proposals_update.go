@@ -279,7 +279,7 @@ func (p *Proposals) ProposeUpdate(ctx context.Context, raw py.Dict) (int64, bool
 	}
 	payload := py.Dict{{Key: "calendar", Value: string(target)}, {Key: "spec", Value: spec.Dict()}}
 	preview := py.Dict{{Key: "calendar", Value: string(target)}, {Key: "uid", Value: uid}, {Key: "title", Value: spec.Title},
-		{Key: "start", Value: spec.Start}, {Key: "end", Value: spec.End}, {Key: "location", Value: spec.Location}}
+		{Key: "start", Value: spec.Start.iso()}, {Key: "end", Value: spec.End.iso()}, {Key: "location", Value: spec.Location}}
 	account := Account
 	return proposals.Create(ctx, p.DB, UpdateKind, &account, "Change calendar event: "+spec.Title, payload, preview,
 		fingerprint(UpdateKind, target, spec.Dict()), p.now())

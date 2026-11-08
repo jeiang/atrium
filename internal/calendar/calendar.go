@@ -201,7 +201,7 @@ func Track(ctx context.Context, q db.Querier, spec Spec, target Target, proposal
 	_, err = q.ExecContext(ctx,
 		"INSERT OR REPLACE INTO agent_events (uid, calendar, title, start, end, spec, created_ts, deleted_ts, proposal_id) "+
 			"VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)",
-		spec.UID, string(target), spec.Title, spec.Start, spec.End, string(encoded), now, proposalID)
+		spec.UID, string(target), spec.Title, spec.Start.iso(), spec.End.iso(), string(encoded), now, proposalID)
 	return err
 }
 
@@ -231,12 +231,13 @@ type Listing struct {
 	Events    []Row
 	Truncated bool
 	Notes     []string
+	tz        *time.Location
 }
 
 func (l Listing) Dict() py.Dict {
 	events := make([]any, len(l.Events))
 	for i, row := range l.Events {
-		events[i] = row.Dict()
+		events[i] = row.Dict(l.tz)
 	}
 	notes := make([]any, len(l.Notes))
 	for i, note := range l.Notes {
@@ -307,24 +308,18 @@ func ListEvents(ctx context.Context, env config.Env, set Settings, start, end an
 		}
 		return nil, NotConfigured(text)
 	}
-	if err := sortEvents(events, tz); err != nil {
-		return nil, err
-	}
+	sortEvents(events, tz)
 	truncated := len(events) > set.MaxEvents
 	if truncated {
 		events = events[:set.MaxEvents]
 	}
-	return &Listing{Events: events, Truncated: truncated, Notes: notes}, nil
+	return &Listing{Events: events, Truncated: truncated, Notes: notes, tz: tz}, nil
 }
 
-func sortEvents(events []Row, tz *time.Location) error {
+func sortEvents(events []Row, tz *time.Location) {
 	keys := make([]time.Time, len(events))
 	for i, ev := range events {
-		v, err := ParseWhen(ev.Start, tz, !strings.Contains(ev.Start, "T"))
-		if err != nil {
-			return err
-		}
-		keys[i] = asDT(v, tz)
+		keys[i] = asDT(ev.Start, tz)
 	}
 	order := make([]int, len(events))
 	for i := range order {
@@ -342,5 +337,4 @@ func sortEvents(events []Row, tz *time.Location) error {
 		sorted[i] = events[at]
 	}
 	copy(events, sorted)
-	return nil
 }
