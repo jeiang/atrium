@@ -71,7 +71,7 @@ func importV1(ctx context.Context, cfg config.Config, source string, key db.Key)
 	if err := requireV2(ctx, d.Read); err != nil {
 		return err
 	}
-	if err := config.Migrate(ctx, d, cfg); err != nil {
+	if err := config.Boot(ctx, config.OS, d, cfg); err != nil {
 		return err
 	}
 	if err := refusePopulated(ctx, d.Read); err != nil {
