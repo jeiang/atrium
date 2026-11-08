@@ -2,11 +2,11 @@ package calendar
 
 import (
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -98,7 +98,7 @@ func LoadSettings(ctx context.Context, q db.Querier) (Settings, error) {
 			return Settings{}, err
 		}
 	}
-	out.ICloudCalendar = strings.ToLower(py.Strip(out.ICloudCalendar))
+	out.ICloudCalendar = strings.ToLower(strings.TrimSpace(out.ICloudCalendar))
 	return out, nil
 }
 
@@ -136,7 +136,7 @@ func ICloudLogin(set Settings) (config.CalDAVLogin, error) {
 	}
 	switch {
 	case len(found) == 0 && set.Account != "":
-		return config.CalDAVLogin{}, NotConfigured(AccountKey + " " + py.Repr(set.Account) + " is not an enabled iCloud mail account")
+		return config.CalDAVLogin{}, NotConfigured(AccountKey + " " + strconv.Quote(set.Account) + " is not an enabled iCloud mail account")
 	case len(found) == 0:
 		return config.CalDAVLogin{}, NotConfigured("no enabled iCloud mail account")
 	case len(found) > 1:

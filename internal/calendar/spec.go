@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/emersion/go-ical"
@@ -38,18 +39,18 @@ func SpecOf(v any) (Spec, error) {
 				d = append(d, py.Pair{Key: k, Value: val})
 			}
 		} else {
-			return Spec{}, fmt.Errorf("%w: spec is %s, not an object", httpx.ErrType, py.TypeName(v))
+			return Spec{}, fmt.Errorf("%w: spec is %T, not an object", httpx.ErrType, v)
 		}
 	}
 	var s Spec
 	text := func(key string) (string, error) {
 		val, found := d.Get(key)
 		if !found {
-			return "", fmt.Errorf("%w: %s", httpx.ErrKey, py.Repr(key))
+			return "", fmt.Errorf("%w: %q", httpx.ErrKey, key)
 		}
 		str, isString := val.(string)
 		if !isString {
-			return "", fmt.Errorf("%w: spec %s is %s, not a string", httpx.ErrType, key, py.TypeName(val))
+			return "", fmt.Errorf("%w: spec %s is %T, not a string", httpx.ErrType, key, val)
 		}
 		return str, nil
 	}
@@ -66,7 +67,7 @@ func SpecOf(v any) (Spec, error) {
 	if !found {
 		return Spec{}, fmt.Errorf("%w: 'all_day'", httpx.ErrKey)
 	}
-	s.AllDay = py.Truthy(allDay)
+	s.AllDay, _ = allDay.(bool)
 	return s, nil
 }
 
@@ -80,14 +81,14 @@ func NewUID() string {
 
 func textField(raw py.Dict, key string) (string, error) {
 	v, _ := raw.Get(key)
-	if !py.Truthy(v) {
+	if v == nil || v == "" {
 		return "", nil
 	}
 	s, ok := v.(string)
 	if !ok {
-		return "", py.AttributeError(v, "strip")
+		return "", fmt.Errorf("%w: %s is %T, not a string", httpx.ErrType, key, v)
 	}
-	return py.Strip(s), nil
+	return strings.TrimSpace(s), nil
 }
 
 func NormalizeSpec(raw py.Dict, tz *time.Location, uid string, defaultMinutes int) (Spec, error) {
@@ -99,7 +100,7 @@ func NormalizeSpec(raw py.Dict, tz *time.Location, uid string, defaultMinutes in
 		return Spec{}, Error("title is required")
 	}
 	flag, _ := raw.Get("all_day")
-	allDay := py.Truthy(flag)
+	allDay, _ := flag.(bool)
 	startRaw, _ := raw.Get("start")
 	start, err := ParseWhen(startRaw, tz, allDay)
 	if err != nil {
@@ -107,9 +108,10 @@ func NormalizeSpec(raw py.Dict, tz *time.Location, uid string, defaultMinutes in
 	}
 	var end Value
 	endRaw, _ := raw.Get("end")
+	given, _ := endRaw.(string)
 	switch {
-	case py.Truthy(endRaw):
-		if end, err = ParseWhen(endRaw, tz, allDay); err != nil {
+	case given != "":
+		if end, err = ParseWhen(given, tz, allDay); err != nil {
 			return Spec{}, err
 		}
 	case allDay:

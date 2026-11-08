@@ -3,6 +3,7 @@ package calendar
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"sort"
@@ -165,10 +166,14 @@ func DeleteEvent(ctx context.Context, env config.Env, set Settings, target, uid 
 }
 
 func Track(ctx context.Context, q db.Querier, spec Spec, target string, proposalID *int64, now float64) error {
-	_, err := q.ExecContext(ctx,
+	encoded, err := json.Marshal(spec.Dict())
+	if err != nil {
+		return err
+	}
+	_, err = q.ExecContext(ctx,
 		"INSERT OR REPLACE INTO agent_events (uid, calendar, title, start, end, spec, created_ts, deleted_ts, proposal_id) "+
 			"VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?)",
-		spec.UID, target, spec.Title, spec.Start, spec.End, py.JSONDumps(spec.Dict()), now, proposalID)
+		spec.UID, target, spec.Title, spec.Start, spec.End, string(encoded), now, proposalID)
 	return err
 }
 
@@ -229,7 +234,7 @@ func ListEvents(ctx context.Context, env config.Env, set Settings, start, end an
 	if !we.After(ws) {
 		return nil, Error("end must be after start")
 	}
-	wanted := strings.ToLower(py.Strip(target))
+	wanted := strings.ToLower(strings.TrimSpace(target))
 	events, notes := []Row{}, []string{}
 	reached := 0
 	if wanted != Google {
@@ -261,7 +266,7 @@ func ListEvents(ctx context.Context, env config.Env, set Settings, start, end an
 		case errors.As(err, &missing):
 			notes = append(notes, "google: "+missing.Error())
 		case err != nil:
-			notes = append(notes, "google: "+py.ExceptionText(err))
+			notes = append(notes, "google: "+err.Error())
 		default:
 			events = append(events, found...)
 			reached++

@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/timex"
 	"golang.org/x/oauth2"
 )
 
@@ -114,14 +114,13 @@ func googleTime(dateTime, date string, tz *time.Location) (string, error) {
 	if dateTime == "" {
 		return date, nil
 	}
-	dt, ok := py.FromISOFormat(dateTime)
+	stamp, ok := parseISO(dateTime)
 	if !ok {
-		return "", valueError(py.ISOFormatError(dateTime))
+		return "", valueError("invalid ISO-8601 date/time")
 	}
-	w := time.Date(dt.Year, time.Month(dt.Month), dt.Day, dt.Hour, dt.Minute, dt.Second, dt.Microsecond*1000, time.UTC)
-	instant := time.Unix(py.WallToUnix(time.Local, w.Unix()), 0)
-	if dt.Aware {
-		instant = time.Unix(w.Unix()-int64(dt.OffsetSeconds), 0)
+	instant := time.Unix(timex.WallToUnix(time.Local, stamp.t.Unix()), 0)
+	if stamp.aware {
+		instant = time.Unix(stamp.t.Unix(), 0)
 	}
-	return py.ISOFormat(instant.In(tz), "seconds"), nil
+	return instant.In(tz).Format(time.RFC3339), nil
 }

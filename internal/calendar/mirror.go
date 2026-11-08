@@ -11,8 +11,6 @@ import (
 	"syscall"
 	"time"
 	"unicode/utf8"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func pathParts(p string) []string {
@@ -68,7 +66,7 @@ func collectionName(root, file string) (string, error) {
 			if !utf8.Valid(data) {
 				return "", &osFailure{"UnicodeDecodeError", "'utf-8' codec can't decode bytes"}
 			}
-			if text := py.Strip(string(data)); text != "" {
+			if text := strings.TrimSpace(string(data)); text != "" {
 				return text, nil
 			}
 		}
@@ -100,7 +98,7 @@ func MirrorEvents(directory string, ws, we time.Time, tz *time.Location, target 
 	slices.SortFunc(files, func(a, b string) int {
 		return slices.Compare(pathParts(filepath.ToSlash(a)), pathParts(filepath.ToSlash(b)))
 	})
-	wanted := py.Lower(target)
+	wanted := strings.ToLower(target)
 	out, notes := []Row{}, []string{}
 	for _, file := range files {
 		name, err := collectionName(root, file)
@@ -108,7 +106,7 @@ func MirrorEvents(directory string, ws, we time.Time, tz *time.Location, target 
 			return nil, nil, err
 		}
 		rel, _ := filepath.Rel(root, file)
-		if wanted != "" && wanted != py.Lower(name) && wanted != py.Lower(pathParts(filepath.ToSlash(rel))[0]) {
+		if wanted != "" && wanted != strings.ToLower(name) && wanted != strings.ToLower(pathParts(filepath.ToSlash(rel))[0]) {
 			continue
 		}
 		data, err := os.ReadFile(file)

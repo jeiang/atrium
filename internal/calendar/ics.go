@@ -2,6 +2,7 @@ package calendar
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -213,8 +214,8 @@ func parseDuration(s string) (time.Duration, bool) {
 		if i == 0 || i >= len(s) || s[i] != unit {
 			return false
 		}
-		n, ok := py.ParseInt(s[:i])
-		if !ok {
+		n, err := strconv.ParseInt(s[:i], 10, 64)
+		if err != nil {
 			return false
 		}
 		total += time.Duration(n) * scale
@@ -375,7 +376,7 @@ func occurrenceEnd(ev *icsEvent, start, end, occ Value, tz *time.Location) (Valu
 	}
 	if occ.isDate() {
 		if !end.isDate() || !start.isDate() {
-			return Value{}, py.TypeError("unsupported operand type(s) for -: 'datetime.datetime' and 'datetime.date'")
+			return Value{}, fmt.Errorf("unsupported operand type(s) for -: 'datetime.datetime' and 'datetime.date'")
 		}
 		return dateValue(occ.t.Year(), occ.t.Month(), occ.t.Day()+int(end.t.Sub(start.t).Hours()/24)), nil
 	}
@@ -385,7 +386,7 @@ func occurrenceEnd(ev *icsEvent, start, end, occ Value, tz *time.Location) (Valu
 func longestSpan(master *icsEvent, start, end Value, tz *time.Location) (time.Duration, error) {
 	if !start.isDatetime() {
 		if !end.isDate() {
-			return 0, py.TypeError("unsupported operand type(s) for -: 'datetime.datetime' and 'datetime.date'")
+			return 0, fmt.Errorf("unsupported operand type(s) for -: 'datetime.datetime' and 'datetime.date'")
 		}
 		return naiveLocal(end, tz).Sub(naiveLocal(start, tz)), nil
 	}
@@ -423,7 +424,7 @@ func EventsInICS(data []byte, calendar string, ws, we time.Time, tz *time.Locati
 				overrideOrder = append(overrideOrder, uid)
 			}
 			overrides[uid] = append(overrides[uid], ev)
-		case py.Upper(ev.status) != "CANCELLED":
+		case strings.ToUpper(ev.status) != "CANCELLED":
 			if _, seen := masters[uid]; !seen {
 				masterOrder = append(masterOrder, uid)
 			}
@@ -464,7 +465,7 @@ func EventsInICS(data []byte, calendar string, ws, we time.Time, tz *time.Locati
 	}
 	for _, uid := range overrideOrder {
 		for _, comp := range overrides[uid] {
-			if comp.dtstart == nil || py.Upper(comp.status) == "CANCELLED" {
+			if comp.dtstart == nil || strings.ToUpper(comp.status) == "CANCELLED" {
 				continue
 			}
 			start := *comp.dtstart

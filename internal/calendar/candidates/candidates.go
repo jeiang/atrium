@@ -146,7 +146,7 @@ func rowInvites(cfg config.Config, r row, now time.Time) ([]calendar.Invite, err
 }
 
 func collect(part *mime.Message, now time.Time, seen map[string]bool, out *[]calendar.Invite) {
-	if !calendarTypes[part.ContentType()] && !strings.HasSuffix(py.Lower(part.Filename()), ".ics") {
+	if !calendarTypes[part.ContentType()] && !strings.HasSuffix(strings.ToLower(part.Filename()), ".ics") {
 		return
 	}
 	data := part.Payload()

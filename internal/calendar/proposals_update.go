@@ -75,7 +75,7 @@ func findICloud(ctx context.Context, env config.Env, set Settings, uid string) (
 			}
 		}
 	}
-	return nil, Error(fmt.Sprintf("no iCloud event with uid %s", py.Repr(uid)))
+	return nil, Error(fmt.Sprintf("no iCloud event with uid %q", uid))
 }
 
 func (o *icloudObject) put(ctx context.Context, cal *ical.Calendar) error {
