@@ -46,7 +46,7 @@ jobs:
         run: tools/imap-upstream/imap-upstream.sh --check ${REF:+"$REF"}
 
       - name: Advisories against the pinned base
-        run: nix shell --inputs-from . nixpkgs#go_1_26 nixpkgs#govulncheck nixpkgs#jq -c tools/imap-upstream/advisories.sh
+        run: nix shell --inputs-from . .#go nixpkgs#govulncheck nixpkgs#jq -c tools/imap-upstream/advisories.sh
 
       - name: Open an issue
         if: failure() && github.event_name != 'pull_request'

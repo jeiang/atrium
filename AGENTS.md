@@ -32,7 +32,8 @@ external services, reverse proxy, persistence, and backups.
   for the targeted CLI/HTTP test, `just changed` for the Go packages touched.
 - Before hand-off: `just check-quick` (statix, treefmt, gofmt, module
   assertions), `just check-eval` after Nix changes, `just check` for everything;
-  Linux-only checks use `just linux <check>`. Recipes re-enter the dev shell.
+  Linux-only checks use `just linux <check>`. Recipes re-enter the dev shell
+  with `nix develop -c` (no `--impure`).
 - Keep the required CI check passing. For an authorized merge, use
   `gh pr merge --auto --merge`.
 - Deployment consumes this repository from a separate host configuration.

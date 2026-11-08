@@ -17,9 +17,10 @@ in
     src = lib.fileset.toSource {
       root = ../.;
       fileset = lib.fileset.unions [
-        (../internal/web/assets)
-        (../internal/web/tpl/labels.go)
-        (../internal/web/tpl/icons.go)
+        ../internal/web/assets/app.js
+        ../internal/web/assets/input.css
+        ../internal/web/tpl/labels.go
+        ../internal/web/tpl/icons.go
         (lib.fileset.fileFilter (file: file.hasExt "gohtml") ../internal)
       ];
     };
@@ -32,6 +33,7 @@ in
       mkdir -p node_modules/basecoat-css
       tar -xzf ${basecoat} --strip-components=1 -C node_modules/basecoat-css
       tailwindcss --input input.css --output app.css --minify
+      grep -q '\.flex{display:flex}' app.css
       runHook postBuild
     '';
     installPhase = ''
