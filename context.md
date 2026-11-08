@@ -30,6 +30,16 @@ behavior-parity target.
   verbatim, each line with a zoom id. The `zoom` tool opens a summary's two
   children or one message's source. Client- and server-side transcript
   compaction are gone; the old projection and ledger rows stay untouched.
+- Memory is profile, then nightly observations, then wiki. A nightly run
+  records durable observations: a first sighting proposes a "sometimes
+  uses" note, a different value first seen at least 14 days earlier proposes
+  a replacement, and a contradiction with the profile proposes a profile
+  update instead, so the profile stays authoritative. Approving an
+  observation creates a `notion_capture` proposal that prepends the note to
+  the Wiki Log (undo restores the previous page markdown); a profile update
+  is undoable. `stale_wiki` lists pages whose last review is older than
+  `nightly_stale_months` (default 6); the nightly run re-checks them and the
+  weekly review lists them.
 - Notifications are recorded in an in-app inbox first and pushed best
   effort to ntfy on one of three channels (assistant, media, system), each
   with its own topic and optional per-channel token minted from the
@@ -217,26 +227,17 @@ behavior-parity target.
 
 ## Accepted direction
 
-- Memory precedence is profile, then nightly observations, then wiki. The
-  profile is authoritative; observations update knowledge according to
-  confidence rather than indiscriminately replacing established facts.
 - The money (spending ledger) module is removed and deferred. Its tables
   and stored rows stay in the database, untouched; mail-statement parsing
   is not the planned source when it returns.
 - Cost accounting should explain usage by job and run. Recorded runs should
   support evaluating application and model changes.
-- The memory model should state what belongs in profile, wiki, skills,
-  projects, nightly capture, and thread summaries, and how stale facts
-  expire.
 
 ## Planned capabilities
 
 - Model, effort and context controls on the new-thread composer.
 - Independent instances for other operators, without owner-specific source
   changes.
-
-## Open decisions
-
 
 Detailed feature scope and acceptance criteria belong in the
 [Wayfinder map](https://github.com/jeiang/atrium/issues/15), not in this file.
