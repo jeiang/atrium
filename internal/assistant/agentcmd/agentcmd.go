@@ -79,15 +79,9 @@ func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64
 	if err != nil {
 		return err
 	}
-	view, err := service.ViewRun(ctx, d.Read, runID)
+	out, err := service.RunDict(ctx, d.Read, runID)
 	if err != nil {
 		return err
-	}
-	var out any
-	if view != nil {
-		if out, err = view.Dict(ctx, d.Read); err != nil {
-			return err
-		}
 	}
 	_, err = fmt.Fprintln(env.Stdout, py.JSONDumps(out, py.JSONOpts{Indent: 2}))
 	return err

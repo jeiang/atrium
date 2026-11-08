@@ -266,7 +266,7 @@ var statusOfRun = map[string]string{
 	journal.Running: Running, journal.Done: Done, journal.Failed: ErrorStatus, journal.Interrupted: Interrupted,
 }
 
-func RunCard(ctx context.Context, q db.Querier, t threads.Thread, run *journal.Run, now float64) (Card, error) {
+func runCard(ctx context.Context, q db.Querier, t threads.Thread, run *journal.Run, now float64) (Card, error) {
 	elapsed := max(now-t.CreatedAt, 0)
 	card := Card{
 		ThreadID: t.ID, Kind: t.Kind, Role: t.Role, Title: t.Title, Effort: t.Effort, ParentRunID: t.ParentRunID,
@@ -315,5 +315,5 @@ func ChildCard(ctx context.Context, q db.Querier, t threads.Thread, now float64)
 	if len(runs) > 0 {
 		run = &runs[len(runs)-1]
 	}
-	return RunCard(ctx, q, t, run, now)
+	return runCard(ctx, q, t, run, now)
 }

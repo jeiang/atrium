@@ -9,7 +9,6 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/journal"
@@ -343,22 +342,13 @@ type Meter struct {
 }
 
 func MeterOf(ctx context.Context, q db.Querier, thread threads.Thread) (Meter, error) {
-	r := assistant.Read(ctx, q)
-	shares := actx.Tuning{
-		ClearShare:        r.Float(assistant.KeyClearShare),
-		ClearAtLeastShare: r.Float(assistant.KeyClearAtLeastShare),
-		CompactShare:      r.Float(assistant.KeyCompactShare),
-		PreflightShare:    r.Float(assistant.KeyPreflightShare),
-	}
-	if err := r.Err(); err != nil {
+	tuning, err := actx.ReadTuning(ctx, q)
+	if err != nil {
 		return Meter{}, err
 	}
-	limits := actx.LimitsFor(threads.ContextLimitOf(thread), shares)
-	var tokens int64
-	err := q.QueryRowContext(ctx,
-		"SELECT input_tokens + cache_write_5m + cache_write_1h + cache_read AS prompt FROM usage WHERE thread_id = ? ORDER BY id DESC LIMIT 1",
-		thread.ID).Scan(&tokens)
-	if err != nil && err != sql.ErrNoRows {
+	limits := actx.LimitsFor(threads.ContextLimitOf(thread), tuning)
+	tokens, err := usage.PromptTokens(ctx, q, thread.ID)
+	if err != nil {
 		return Meter{}, err
 	}
 	share := 1.0
@@ -476,40 +466,22 @@ func View(ctx context.Context, q db.Querier, threadID int64) (*ThreadView, error
 	return v, nil
 }
 
-type RunView struct {
-	journal.Run
-	Calls  []journal.ToolCall `json:"calls"`
-	Cost   float64            `json:"cost"`
-	Skills []string           `json:"skills"`
-}
-
-func ViewRun(ctx context.Context, q db.Querier, runID int64) (*RunView, error) {
+func RunDict(ctx context.Context, q db.Querier, runID int64) (py.Dict, error) {
 	found, err := journal.GetRun(ctx, q, runID)
-	if err != nil || found == nil {
+	if err != nil {
 		return nil, err
 	}
-	v := &RunView{Run: *found}
-	if v.Calls, err = journal.ToolCallsOf(ctx, q, runID); err != nil {
-		return nil, err
+	if found == nil {
+		return nil, fmt.Errorf("service: no run %d", runID)
 	}
-	if v.Cost, err = usage.RunCost(ctx, q, runID); err != nil {
-		return nil, err
-	}
-	if v.Skills, err = journal.SkillsOf(*found); err != nil {
-		return nil, err
-	}
-	return v, nil
-}
-
-func (v *RunView) Dict(ctx context.Context, q db.Querier) (py.Dict, error) {
-	run, err := rowDicts(ctx, q, "SELECT * FROM runs WHERE id = ?", v.ID)
+	run, err := rowDicts(ctx, q, "SELECT * FROM runs WHERE id = ?", runID)
 	if err != nil {
 		return nil, err
 	}
 	if len(run) == 0 {
-		return nil, fmt.Errorf("service: run %d vanished", v.ID)
+		return nil, fmt.Errorf("service: run %d vanished", runID)
 	}
-	calls, err := rowDicts(ctx, q, "SELECT * FROM tool_calls WHERE run_id = ? ORDER BY id", v.ID)
+	calls, err := rowDicts(ctx, q, "SELECT * FROM tool_calls WHERE run_id = ? ORDER BY id", runID)
 	if err != nil {
 		return nil, err
 	}
@@ -518,8 +490,12 @@ func (v *RunView) Dict(ctx context.Context, q db.Querier) (py.Dict, error) {
 		list[i] = c
 	}
 	var cost any
-	if err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE run_id = ?", v.ID).Scan(&cost); err != nil {
+	if err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE run_id = ?", runID).Scan(&cost); err != nil {
 		return nil, err
 	}
-	return append(run[0], py.Pair{Key: "calls", Value: list}, py.Pair{Key: "cost", Value: cost}, py.Pair{Key: "skills", Value: v.Skills}), nil
+	skills, err := journal.SkillsOf(*found)
+	if err != nil {
+		return nil, err
+	}
+	return append(run[0], py.Pair{Key: "calls", Value: list}, py.Pair{Key: "cost", Value: cost}, py.Pair{Key: "skills", Value: skills}), nil
 }

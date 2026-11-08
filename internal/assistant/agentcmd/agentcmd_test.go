@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic"
@@ -35,12 +34,12 @@ func TestRunPrintsTheRunView(t *testing.T) {
 	if code := app(env).Run(t.Context(), []string{"agent", "run", "--text", "hello", "--kind", "cron"}, &stdout, &stderr); code != cli.ExitOK {
 		t.Fatalf("exit %d: %s", code, stderr.String())
 	}
-	if !strings.HasPrefix(stdout.String(), "{\n  \"id\": 1,\n  \"thread_id\": 1,") {
-		t.Errorf("output %q", stdout.String())
-	}
 	var view map[string]any
 	if err := json.Unmarshal(stdout.Bytes(), &view); err != nil {
 		t.Fatal(err)
+	}
+	if view["id"].(float64) != 1 || view["thread_id"].(float64) != 1 {
+		t.Errorf("ids %v", view)
 	}
 	if view["state"] != "done" || view["kind"] != "cron" || view["calls"] == nil || view["cost"].(float64) <= 0 || view["skills"] == nil {
 		t.Errorf("view %v", view)

@@ -104,12 +104,6 @@ func (s *Service) CheckCatalog(ctx context.Context) {
 	}
 }
 
-func (s *Service) Wait() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	s.wg.Wait()
-}
-
 func (s *Service) Close() {
 	s.mu.Lock()
 	s.closed = true
@@ -233,26 +227,7 @@ func (s *Service) PrepareRerun(ctx context.Context, threadID int64, now float64)
 	return runID, err
 }
 
-func merged(stored, override journal.Limits) journal.Limits {
-	if override.MaxSteps != nil {
-		stored.MaxSteps = override.MaxSteps
-	}
-	if override.MaxCostUSD != nil {
-		stored.MaxCostUSD = override.MaxCostUSD
-	}
-	if override.SystemExtra != nil {
-		stored.SystemExtra = override.SystemExtra
-	}
-	if override.AllowedTools != nil {
-		stored.AllowedTools = override.AllowedTools
-	}
-	if override.ToolChoice != nil {
-		stored.ToolChoice = override.ToolChoice
-	}
-	return stored
-}
-
-func (s *Service) Execute(ctx context.Context, runID int64, override journal.Limits) (*journal.Run, error) {
+func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error) {
 	client, err := s.ResolveClient(ctx)
 	var nc config.NotConfigured
 	if errors.As(err, &nc) {
@@ -268,7 +243,7 @@ func (s *Service) Execute(ctx context.Context, runID int64, override journal.Lim
 	if err != nil {
 		return nil, err
 	}
-	return s.Runner.Run(ctx, s.DB, s.Cfg, s.Env, client, runID, loop.Options{Now: s.now, Embed: s.embed, Limits: merged(stored, override)})
+	return s.Runner.Run(ctx, s.DB, s.Cfg, s.Env, client, runID, loop.Options{Now: s.now, Embed: s.embed, Limits: stored})
 }
 
 func (s *Service) embed(ctx context.Context, texts []string) ([][]float64, error) {
@@ -288,7 +263,7 @@ func (s *Service) RunOnce(ctx context.Context, threadID int64, text string, o St
 	if err != nil {
 		return 0, err
 	}
-	if _, err := s.Execute(ctx, runID, o.Limits); err != nil {
+	if _, err := s.Execute(ctx, runID); err != nil {
 		return 0, err
 	}
 	return runID, nil
@@ -306,7 +281,7 @@ func (s *Service) inBackground(runID int64) error {
 				log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, fmt.Sprintf("panic: %v\n%s", p, debug.Stack()))
 			}
 		}()
-		if _, err := s.Execute(s.base, runID, journal.Limits{}); errors.Is(err, context.Canceled) {
+		if _, err := s.Execute(s.base, runID); errors.Is(err, context.Canceled) {
 			log.Info(fmt.Sprintf("background run %d cancelled", runID), logx.RunID, runID)
 		} else if err != nil {
 			log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, err)
@@ -479,13 +454,6 @@ func (s *Service) claim(ctx context.Context, runID int64) error {
 	return nil
 }
 
-func (s *Service) ResumeRun(ctx context.Context, runID int64) (*journal.Run, error) {
-	if err := s.claim(ctx, runID); err != nil {
-		return nil, err
-	}
-	return s.Execute(ctx, runID, journal.Limits{})
-}
-
 func (s *Service) StartResume(ctx context.Context, runID int64) error {
 	if err := s.claim(context.WithoutCancel(ctx), runID); err != nil {
 		return err
@@ -493,49 +461,38 @@ func (s *Service) StartResume(ctx context.Context, runID int64) error {
 	return s.inBackground(runID)
 }
 
-type Resumed struct {
-	RunID  int64  `json:"run_id"`
-	Action string `json:"action"`
-}
-
-const (
-	AwaitingOperator = "awaiting operator"
-	ActionResumed    = "resumed"
-)
-
-func (s *Service) ResumeInterrupted(ctx context.Context, background bool) ([]Resumed, error) {
+func (s *Service) ResumeInterrupted(ctx context.Context, background bool) (int, error) {
 	if _, err := journal.MarkInterrupted(ctx, s.DB.Write, s.now()); err != nil {
-		return nil, err
+		return 0, err
 	}
 	found, err := journal.InterruptedRuns(ctx, s.DB.Read)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	outcome := []Resumed{}
+	resumed := 0
 	for _, run := range found {
 		waiting, err := NeedsOperator(ctx, s.DB.Read, run)
 		if err != nil {
-			return nil, err
+			return 0, err
 		}
 		if waiting {
-			outcome = append(outcome, Resumed{run.ID, AwaitingOperator})
 			continue
 		}
 		ok, err := journal.ClaimResume(ctx, s.DB.Write, run.ID, journal.NewOwner(), s.now())
 		if err != nil {
-			return nil, err
+			return 0, err
 		}
 		if !ok {
 			continue
 		}
 		if background {
 			if err := s.inBackground(run.ID); err != nil {
-				return nil, err
+				return 0, err
 			}
-		} else if _, err := s.Execute(ctx, run.ID, journal.Limits{}); err != nil {
-			return nil, err
+		} else if _, err := s.Execute(ctx, run.ID); err != nil {
+			return 0, err
 		}
-		outcome = append(outcome, Resumed{run.ID, ActionResumed})
+		resumed++
 	}
-	return outcome, nil
+	return resumed, nil
 }
