@@ -48,7 +48,7 @@ type Service struct {
 	hc  *http.Client
 	now func() time.Time
 
-	KeyRefetchGap time.Duration
+	keyRefetchGap time.Duration
 
 	mu        sync.Mutex
 	sealed    *sealer
@@ -56,12 +56,19 @@ type Service struct {
 	providers map[string]*provider
 	locks     map[int64]*sync.Mutex
 	retry     map[int64]time.Time
-	test      *testRun
-	testSeq   int
 }
 
-func New(d *db.DB, env config.Env) *Service {
-	s := &Service{d: d, env: env, now: time.Now, KeyRefetchGap: jwksMinGap, providers: map[string]*provider{}, locks: map[int64]*sync.Mutex{}, retry: map[int64]time.Time{}}
+type Option func(*Service)
+
+func WithKeyRefetchGap(gap time.Duration) Option {
+	return func(s *Service) { s.keyRefetchGap = gap }
+}
+
+func New(d *db.DB, env config.Env, opts ...Option) *Service {
+	s := &Service{d: d, env: env, now: time.Now, keyRefetchGap: jwksMinGap, providers: map[string]*provider{}, locks: map[int64]*sync.Mutex{}, retry: map[int64]time.Time{}}
+	for _, opt := range opts {
+		opt(s)
+	}
 	s.hc = s.client()
 	return s
 }
@@ -199,7 +206,7 @@ type pendingLogin struct {
 func (s *Service) consumeLogin(ctx context.Context, state, binding string, cfg Config) (pendingLogin, error) {
 	var p pendingLogin
 	err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
-		row := tx.QueryRowContext(ctx, "SELECT binding_hash, nonce, verifier, return_to, created_at FROM auth_logins WHERE state_hash = ?", digest(state))
+		row := tx.QueryRowContext(ctx, "SELECT binding_hash, nonce, verifier, return_to, created_at FROM auth_logins WHERE state_hash = ? AND purpose = 'login'", digest(state))
 		if err := row.Scan(&p.binding, &p.nonce, &p.verifier, &p.returnTo, &p.created); err != nil {
 			return err
 		}
@@ -266,9 +273,12 @@ func (s *Service) Complete(ctx context.Context, state, code, binding string) (Gr
 		s.forget(expired...)
 		absolute := now + cfg.Max.Seconds()
 		idle := min(now+cfg.Idle.Seconds(), absolute)
-		_, err = tx.ExecContext(ctx, "INSERT INTO auth_sessions (token_hash, subject, email, name, admin, created_at, last_seen_at, idle_expires_at, absolute_expires_at, rechecked_at, access_token, access_expires_at, refresh_token, email_verified, hosted_domain) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			digest(token), id.Subject, id.Email, id.Name, boolInt(admin), now, now, idle, absolute, now, sl.seal(reply.AccessToken), accessExpires, sl.seal(reply.RefreshToken), boolInt(id.EmailVerified), id.Hosted)
-		return err
+		return insertSession(ctx, tx, sessionInsert{
+			tokenHash: digest(token), subject: id.Subject, email: id.Email, name: id.Name, admin: admin,
+			now: now, idle: idle, absolute: absolute, rechecked: now,
+			accessToken: sl.seal(reply.AccessToken), accessExpires: accessExpires,
+			refreshToken: sl.seal(reply.RefreshToken), verified: id.EmailVerified, hosted: id.Hosted, origin: originOIDC,
+		})
 	})
 	if err != nil {
 		return Grant{}, err

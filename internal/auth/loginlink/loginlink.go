@@ -37,12 +37,28 @@ var (
 
 type Service struct {
 	d   *db.DB
-	Now func() time.Time
+	now func() time.Time
 }
 
-func New(d *db.DB) *Service { return &Service{d: d, Now: time.Now} }
+type Option func(*Service)
 
-func (s *Service) unix() float64 { return float64(s.Now().UnixNano()) / 1e9 }
+func WithNow(now func() time.Time) Option {
+	return func(s *Service) {
+		if now != nil {
+			s.now = now
+		}
+	}
+}
+
+func New(d *db.DB, opts ...Option) *Service {
+	s := &Service{d: d, now: time.Now}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+func (s *Service) unix() float64 { return float64(s.now().UnixNano()) / 1e9 }
 
 func (s *Service) mac(ctx context.Context, nonce string) ([]byte, error) {
 	key, err := secrets.New(s.d, s.d).Generate(ctx, secrets.ActionLinkKey)

@@ -24,7 +24,15 @@ CREATE TABLE IF NOT EXISTS auth_logins (
     nonce TEXT NOT NULL,
     verifier TEXT NOT NULL,
     return_to TEXT NOT NULL,
-    created_at REAL NOT NULL
+    created_at REAL NOT NULL,
+    purpose TEXT NOT NULL DEFAULT 'login' CHECK (purpose IN ('login', 'test')),
+    status TEXT NOT NULL DEFAULT '',
+    reason TEXT NOT NULL DEFAULT '',
+    http INTEGER NOT NULL DEFAULT 0,
+    groups TEXT NOT NULL DEFAULT '',
+    fingerprint TEXT NOT NULL DEFAULT '',
+    draft TEXT NOT NULL DEFAULT '',
+    passed_at REAL
 );
 CREATE TABLE IF NOT EXISTS auth_login_links (
     id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -286,6 +286,19 @@ func TestWizardRefusesAReplayedOrForeignCallback(t *testing.T) {
 	expect(t, admin.get(callback), http.StatusBadRequest)
 }
 
+func TestWizardTestSignInIsPersistedAndSealed(t *testing.T) {
+	r, admin := wizardRig(t)
+	result := providerTab(t, admin, r.idp, "admin", startTest(t, admin, r.form(nil)))
+	expect(t, result, http.StatusOK, "Test passed")
+	var status, draft string
+	if err := r.db.Read.QueryRow("SELECT status, draft FROM auth_logins WHERE purpose = 'test' ORDER BY rowid DESC LIMIT 1").Scan(&status, &draft); err != nil {
+		t.Fatal(err)
+	}
+	if status != "passed" || !strings.HasPrefix(draft, "v1:") {
+		t.Fatalf("test sign-in row status %q draft prefix %q", status, draft[:min(len(draft), 3)])
+	}
+}
+
 func TestWizardPinnedFieldsAreReadOnlyAndWin(t *testing.T) {
 	r, admin := wizardRig(t)
 	settings.Default.SetPins(secretPin{secrets.OIDCClientSecret: "s3cret", oidc.KeyClientID: r.idp.ClientID(), oidc.KeyAccessGroup: "atrium_access"})

@@ -146,8 +146,7 @@ func newLinkSite(t *testing.T) *linkSite {
 	}
 	now := time.Now()
 	site.clock = &now
-	links := loginlink.New(d)
-	links.Now = func() time.Time { return *site.clock }
+	links := loginlink.New(d, loginlink.WithNow(func() time.Time { return *site.clock }))
 	app, err := web.New(web.Options{
 		Cfg: cfg, Env: testLookup, DB: d, Auth: []string{web.AuthOIDC}, AllowedHosts: []string{"127.0.0.1"},
 		Render: render, OIDC: oidc.New(d, testLookup), LoginLinks: links,
