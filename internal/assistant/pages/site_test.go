@@ -24,7 +24,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
-	contexttools "github.com/jeiang/atrium/internal/assistant/tools/context"
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	mediatools "github.com/jeiang/atrium/internal/assistant/tools/media"
@@ -70,7 +69,7 @@ func allTools(t *testing.T, fetchers ...*webfetch.Fetcher) *registry.Registry {
 	r := registry.New()
 	for _, tools := range [][]tool.Tool{
 		mailtools.Tools(), mediatools.Tools(), notify.Tools(), fetch, nightly.Tools(),
-		contexttools.Tools(), recalltools.Tools(), plantools.Tools(), profiletools.Tools(), proposetools.Tools(),
+		recalltools.Tools(), plantools.Tools(), profiletools.Tools(), proposetools.Tools(),
 		scheduletools.Tools(), skillstools.Tools(), notiontools.Tools(),
 		grafanatools.Tools(), calendartools.Tools(), contactsmodule.Tools(),
 	} {

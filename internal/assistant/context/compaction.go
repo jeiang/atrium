@@ -75,7 +75,6 @@ func Manifest(ctx gocontext.Context, q db.Querier, threadID int64, t Tuning) (st
 	if len(stored) > 0 {
 		lines = append(lines, "Stored results (recall(result_id, offset, limit)): "+strings.Join(stored, ", "))
 	}
-	lines = append(lines, "context_status() shows the live dashboard; context_pin/context_drop/context_fold manage it.")
 	return strings.Join(lines, "\n"), nil
 }
 
