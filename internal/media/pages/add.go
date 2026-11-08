@@ -16,7 +16,8 @@ func (s *service) dlAddPage(w http.ResponseWriter, r *http.Request, magnet, name
 }
 
 func (s *service) dlAddGet(w http.ResponseWriter, r *http.Request) {
-	s.dlAddPage(w, r, strings.TrimSpace(web.QueryValue(r.URL.Query(), "magnet")), "", dlModeMedia, "", http.StatusOK)
+	query := r.URL.Query()
+	s.dlAddPage(w, r, strings.TrimSpace(web.QueryValue(query, "magnet")), strings.TrimSpace(web.QueryValue(query, "name")), dlModeMedia, "", http.StatusOK)
 }
 
 func (s *service) dlAddPost(w http.ResponseWriter, r *http.Request) {
