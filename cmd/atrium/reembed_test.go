@@ -139,6 +139,7 @@ func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, pa
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	(&fixture{t: t, dir: dir}).seedNotionVectors(t)
 	t.Setenv(settingEnv(mail.KeyEmbedURL), fake.URL+"/v1")
 	t.Setenv(settingEnv(mail.KeyEmbedModel), model)
 	t.Setenv(settingEnv(mail.KeyEmbedBatch), "40")
