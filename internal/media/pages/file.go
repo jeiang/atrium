@@ -1,7 +1,6 @@
 package pages
 
 import (
-	"mime"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,12 +10,22 @@ import (
 	"github.com/jeiang/atrium/internal/web"
 )
 
+var fileVideoTypes = map[string]string{
+	".mkv": "video/x-matroska",
+	".mp4": "video/mp4",
+	".m4v": "video/x-m4v",
+	".avi": "video/x-msvideo",
+	".mov": "video/quicktime",
+	".ts":  "video/mp2t",
+	".wmv": "video/x-ms-wmv",
+}
+
 func fileVideoType(path string, video map[string]bool) string {
 	ext := strings.ToLower(filepath.Ext(path))
 	if !video[ext] {
 		return "application/octet-stream"
 	}
-	if kind := mime.TypeByExtension(ext); kind != "" {
+	if kind, ok := fileVideoTypes[ext]; ok {
 		return kind
 	}
 	return "application/octet-stream"
