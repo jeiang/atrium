@@ -1,1 +1,1 @@
-error: time data "bogus" does not match format YYYY-MM-DD
+error: invalid date "bogus", want YYYY-MM-DD

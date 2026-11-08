@@ -37,12 +37,8 @@ var outcomeSQL = "SELECT d.stage, d.action, d.dest, m.from_domain, " +
 
 type Querier = db.Querier
 
-type SinceError string
-
-func (e SinceError) Error() string { return string(e) }
-
 func sinceError(value string) error {
-	return SinceError(fmt.Sprintf("time data %q does not match format YYYY-MM-DD", value))
+	return fmt.Errorf("invalid date %q, want YYYY-MM-DD", value)
 }
 
 func ParseSince(env config.Env, value *string, at time.Time) (float64, error) {

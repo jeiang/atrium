@@ -142,7 +142,7 @@ func Day(value string, endOfDay bool) (*float64, error) {
 	}
 	day, ok := timex.ParseDay(value)
 	if !ok {
-		return nil, fmt.Errorf("%w: time data %q does not match format YYYY-MM-DD", httpx.ErrPayload, value)
+		return nil, fmt.Errorf("%w: invalid date %q, want YYYY-MM-DD", httpx.ErrPayload, value)
 	}
 	ts := float64(day.Unix())
 	if endOfDay {
