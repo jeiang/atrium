@@ -23,6 +23,8 @@ import (
 	scheduletools "github.com/jeiang/atrium/internal/assistant/tools/schedule"
 	skillstools "github.com/jeiang/atrium/internal/assistant/tools/skills"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
+	"github.com/jeiang/atrium/internal/attention"
+	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/integrations"
@@ -70,11 +72,12 @@ func (m Module) Register(mc module.Context) module.Registration {
 	chat := m.Chat
 	chat.Tools = mc.Tools
 	return module.Registration{
-		Name:     module.Assistant,
-		Requires: []module.Requirement{{Name: secrets.AnthropicAPIKey, Check: anthropicKey}},
-		Pages:    []web.Page{{Module: chatpages.Module(chat), Templates: chatpages.Templates(), Home: "/chat"}},
-		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled), skillscmd.Command(mc.Env), memorycmd.Command(mc.Env)},
-		Tools:    addTools,
+		Name:      module.Assistant,
+		Attention: []attention.Source{attentionsources.Plans()},
+		Requires:  []module.Requirement{{Name: secrets.AnthropicAPIKey, Check: anthropicKey}},
+		Pages:     []web.Page{{Module: chatpages.Module(chat), Templates: chatpages.Templates(), Home: "/chat"}},
+		Commands:  []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled), skillscmd.Command(mc.Env), memorycmd.Command(mc.Env)},
+		Tools:     addTools,
 	}
 }
 

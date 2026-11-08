@@ -7,6 +7,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
+	"github.com/jeiang/atrium/internal/attention"
+	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/endpoint"
@@ -72,7 +74,8 @@ func (m Module) Register(mc module.Context) module.Registration {
 	cmds = append(cmds, mailCmds.ScanCommands()...)
 	cmds = append(cmds, mailCmds.RefreshCommands()...)
 	return module.Registration{
-		Name: module.Mail,
+		Name:      module.Mail,
+		Attention: []attention.Source{attentionsources.Drafts(), attentionsources.Loops(), attentionsources.Commitments(), attentionsources.Packages()},
 		Requires: []module.Requirement{
 			module.Setting(endpoint.KeyChatURL),
 			module.Setting(endpoint.KeyEmbedURL),
