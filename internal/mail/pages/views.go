@@ -96,12 +96,18 @@ type triageData struct {
 	Q           string            `json:"q"`
 }
 
+type conditionView struct {
+	Field string `json:"field"`
+	Op    string `json:"op"`
+	Value any    `json:"value,omitempty"`
+}
+
 type ruleView struct {
-	ID      string           `json:"id"`
-	Account *string          `json:"account"`
-	Action  string           `json:"action"`
-	Dest    *string          `json:"dest"`
-	When    []map[string]any `json:"when"`
+	ID      string          `json:"id"`
+	Account *string         `json:"account"`
+	Action  string          `json:"action"`
+	Dest    *string         `json:"dest"`
+	When    []conditionView `json:"when"`
 }
 
 type learnedView struct {
@@ -142,34 +148,34 @@ type ruleEditData struct {
 	Rule          ruleView                   `json:"rule"`
 	IsNew         bool                       `json:"is_new"`
 	Folders       map[string][]triage.Folder `json:"folders"`
-	Suggestions   []map[string]any           `json:"suggestions"`
+	Suggestions   []conditionView            `json:"suggestions"`
 	SourceMessage *sourceMessage             `json:"source_message"`
 	Errors        []string                   `json:"errors"`
 }
 
 type conditionData struct {
-	C     map[string]any `json:"c"`
-	Focus string         `json:"focus"`
+	C     conditionView `json:"c"`
+	Focus string        `json:"focus"`
 }
 
-func conditionView(c rules.Condition) map[string]any {
-	out := map[string]any{"field": c.Field(), "op": c.Op()}
+func conditionViewOf(c rules.Condition) conditionView {
+	out := conditionView{Field: c.Field(), Op: c.Op()}
 	value, ok := c.Value()
 	if !ok {
 		return out
 	}
 	if n, ok := value.(*big.Int); ok {
-		out["value"] = n.String()
+		out.Value = n.String()
 	} else {
-		out["value"] = value
+		out.Value = value
 	}
 	return out
 }
 
-func conditionViews(cs []rules.Condition) []map[string]any {
-	out := make([]map[string]any, len(cs))
+func conditionViews(cs []rules.Condition) []conditionView {
+	out := make([]conditionView, len(cs))
 	for i, c := range cs {
-		out[i] = conditionView(c)
+		out[i] = conditionViewOf(c)
 	}
 	return out
 }

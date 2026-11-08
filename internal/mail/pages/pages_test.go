@@ -104,12 +104,11 @@ func TestTriageFullPartialAndPaging(t *testing.T) {
 	s := seeded(t, "shadow", Options{})
 	full := status(t, s.get("/triage"), 200, "full")
 	contains(t, full, "<html", "Weekly news", `id="triage-tabs"`)
-	pageSize = 1
-	t.Cleanup(func() { pageSize = 50 })
-	first := status(t, s.get("/triage", hx), 200, "first")
+	small := seeded(t, "shadow", Options{PageSize: 1})
+	first := status(t, small.get("/triage", hx), 200, "first")
 	contains(t, first, "Show older decisions", `id="decision-list"`)
 	lacks(t, first, "<html", "autofocus")
-	more := status(t, s.get("/triage?offset=1", hx), 200, "more")
+	more := status(t, small.get("/triage?offset=1", hx), 200, "more")
 	contains(t, more, "<li", "autofocus")
 	lacks(t, more, "decision-list", "Show older decisions")
 	status(t, s.get("/triage?stage=operator&agreement=pending&account=icloud", hx), 200, "filtered")
@@ -162,7 +161,7 @@ func TestRulesLifecycle(t *testing.T) {
 	form := url.Values{
 		"id": {"shop"}, "account": {"icloud"}, "action": {"file"}, "dest": {"Bills"},
 		"field": {"from_domain", "dkim_d", "subject"}, "op": {"suffix", "in", "present"},
-		"value": {"shop.test, mail.shop.test", "a.test,b.test", ""},
+		"value": {"shop.test\nmail.shop.test", "a.test\nb.test", ""},
 	}
 	created := s.post("/rules", form)
 	status(t, created, 303, "create")

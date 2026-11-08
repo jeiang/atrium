@@ -64,7 +64,7 @@
     </div>
     <ol id="conditions" class="flex flex-col gap-2" role="list" aria-label="Conditions">
       {{range $rule.when}}
-      {{template "mail_condition_row" (dict "c" (dict "field" .field "op" .op "value" (join ", " (get . "value"))))}}
+      {{template "mail_condition_row" (dict "c" (dict "field" .field "op" .op "value" (join "\n" (get . "value"))))}}
       {{end}}
     </ol>
     <div class="flex flex-wrap items-center gap-2">
@@ -75,7 +75,7 @@
       <p class="text-xs font-medium text-muted-foreground">From the message: add a condition</p>
       <ul class="flex flex-wrap gap-2" role="list">
         {{range $suggestions}}
-        {{$value := join ", " (get . "value")}}
+        {{$value := join "\n" (get . "value")}}
         <li class="max-w-full min-w-0">
           <button type="button" class="btn h-auto max-w-full flex-wrap justify-start gap-x-1.5 py-1 text-left font-normal whitespace-normal" data-size="sm" data-variant="outline"
                   hx-get="/rules/condition?{{urlencode (odict "field" .field "op" .op "value" $value)}}" hx-target="#conditions" hx-swap="beforeend"

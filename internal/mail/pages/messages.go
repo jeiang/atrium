@@ -231,8 +231,10 @@ func (s *service) togglePause(w http.ResponseWriter, r *http.Request, paused boo
 		log.Warn("pause notice failed", logx.Err, err.Error())
 	}
 	target := "/triage"
-	if path, query, same := referer(r); same && strings.HasPrefix(path, "/") && !strings.HasPrefix(path, "//") {
-		target = withQuery(path, query)
+	if path, query, same := referer(r); same {
+		if safe := urlx.SafeReturn(withQuery(path, query)); safe != "/" {
+			target = safe
+		}
 	}
 	http.Redirect(w, r, target, http.StatusSeeOther)
 }

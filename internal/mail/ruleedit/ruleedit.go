@@ -39,7 +39,7 @@ var featureFields = []featureField{
 
 var listFeatures = []featureField{{"dkim_d", "in"}, {"esp", "in"}}
 
-func ruleErrorf(msg string) error { return rules.RuleError(msg) }
+func ruleErrorf(msg string) error { return rules.RuleError{Code: "rule", Msg: msg} }
 
 func withID(raw any, id string) (any, bool) {
 	switch raw := raw.(type) {

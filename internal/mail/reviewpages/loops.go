@@ -3,6 +3,7 @@ package reviewpages
 import (
 	"math/big"
 	"net/http"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -13,6 +14,15 @@ import (
 
 var snoozeChoices = []int{1, 3, 7, 14}
 
+func snoozeChoicesFor(def int) []int {
+	choices := append([]int{}, snoozeChoices...)
+	if !slices.Contains(choices, def) {
+		choices = append(choices, def)
+		slices.Sort(choices)
+	}
+	return choices
+}
+
 const loopLimit = 100
 
 type loopsPage struct {
@@ -20,6 +30,7 @@ type loopsPage struct {
 	Waiting       []openloops.Loop       `json:"waiting"`
 	Commitments   []openloops.Commitment `json:"commitments"`
 	SnoozeChoices []int                  `json:"snooze_choices"`
+	SnoozeDefault int                    `json:"snooze_default"`
 }
 
 func (s *service) showLoops(w http.ResponseWriter, r *http.Request, notice *tpl.Toast) {
@@ -31,7 +42,10 @@ func (s *service) showLoops(w http.ResponseWriter, r *http.Request, notice *tpl.
 	check(err)
 	commitments, err := openloops.ListCommitments(ctx, s.deps.DB.Read, openloops.Open, loopLimit)
 	check(err)
-	s.page(w, r, http.StatusOK, "loops", "openloops.gohtml", loopsPage{Owe: owe, Waiting: waiting, Commitments: commitments, SnoozeChoices: snoozeChoices}, notice)
+	snoozeDefault, err := openloops.SnoozeDefault(ctx, s.deps.DB.Read)
+	check(err)
+	choices := snoozeChoicesFor(snoozeDefault)
+	s.page(w, r, http.StatusOK, "loops", "openloops.gohtml", loopsPage{Owe: owe, Waiting: waiting, Commitments: commitments, SnoozeChoices: choices, SnoozeDefault: snoozeDefault}, notice)
 }
 
 func (s *service) notFound(w http.ResponseWriter, r *http.Request, found bool, what string) bool {
