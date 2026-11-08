@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const FilePrefix = "/media/file/"
@@ -87,7 +88,7 @@ func (l *Links) load(ctx context.Context) ([]byte, error) {
 	}
 	var legacy []byte
 	adopted := false
-	err = store.InTx(ctx, func(w *secrets.Store) error {
+	err = store.InTx(ctx, func(w *settings.Store) error {
 		if value, err = w.Value(ctx, KeyLinkKey); err != nil || value != "" {
 			return err
 		}
@@ -101,7 +102,7 @@ func (l *Links) load(ctx context.Context) ([]byte, error) {
 				return err
 			}
 		}
-		value, err = w.GeneratedKey(ctx, KeyLinkKey)
+		value, err = w.Generate(ctx, KeyLinkKey)
 		return err
 	})
 	if err != nil {

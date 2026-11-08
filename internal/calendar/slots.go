@@ -23,12 +23,11 @@ var workWeekdays = map[string]time.Weekday{
 }
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
 	settings.MustRegister(
-		settings.Def{Key: WorkHoursKey, Module: "calendar", Type: settings.String, Default: "09:00-17:00",
-			Check: func(v string) error { _, _, err := parseHours(v); return err }, Class: settings.UI, Scopes: instance},
-		settings.Def{Key: WorkDaysKey, Module: "calendar", Type: settings.String, Default: "mon,tue,wed,thu,fri",
-			Check: func(v string) error { _, err := parseDays(v); return err }, Class: settings.UI, Scopes: instance},
+		settings.Value(settings.UI, settings.Def{Key: WorkHoursKey, Module: "calendar", Type: settings.String, Default: "09:00-17:00",
+			Check: func(v string) error { _, _, err := parseHours(v); return err }}),
+		settings.Value(settings.UI, settings.Def{Key: WorkDaysKey, Module: "calendar", Type: settings.String, Default: "mon,tue,wed,thu,fri",
+			Check: func(v string) error { _, err := parseDays(v); return err }}),
 	)
 }
 
@@ -116,7 +115,7 @@ func FindSlots(ctx context.Context, q db.Querier, env config.Env, set Settings, 
 	if err != nil {
 		return Slots{}, err
 	}
-	hours, err := settings.Default.Resolve(ctx, q, WorkHoursKey, 0)
+	hours, err := settings.Default.Resolve(ctx, q, WorkHoursKey)
 	if err != nil {
 		return Slots{}, err
 	}
@@ -124,7 +123,7 @@ func FindSlots(ctx context.Context, q db.Querier, env config.Env, set Settings, 
 	if err != nil {
 		return Slots{}, err
 	}
-	daysSetting, err := settings.Default.Resolve(ctx, q, WorkDaysKey, 0)
+	daysSetting, err := settings.Default.Resolve(ctx, q, WorkDaysKey)
 	if err != nil {
 		return Slots{}, err
 	}

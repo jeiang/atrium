@@ -59,10 +59,9 @@ func Register(i Integration) {
 	if slices.ContainsFunc(registry, func(r Integration) bool { return r.Name == i.Name }) {
 		return
 	}
-	instance := []settings.Scope{settings.Instance}
 	settings.MustRegister(
-		settings.Def{Key: transport.CAKey(i.Name), Module: i.Module, Type: settings.String, Class: settings.Advanced, Scopes: instance},
-		settings.Def{Key: transport.ProxyKey(i.Name), Module: i.Module, Type: settings.String, Class: settings.Advanced, Scopes: instance, Check: proxyCheck},
+		settings.Value(settings.Advanced, settings.Def{Key: transport.CAKey(i.Name), Module: i.Module, Type: settings.String}),
+		settings.Value(settings.Advanced, settings.Def{Key: transport.ProxyKey(i.Name), Module: i.Module, Type: settings.String, Check: proxyCheck}),
 	)
 	settings.Default.Claim(path, i.URLKey, i.SecretKey)
 	registry = append(registry, i)
@@ -102,7 +101,7 @@ func text(ctx context.Context, q db.Querier, key string) (string, error) {
 	if key == "" {
 		return "", nil
 	}
-	found, err := settings.Default.Resolve(ctx, q, key, 0)
+	found, err := settings.Default.Resolve(ctx, q, key)
 	return strings.TrimSpace(found.Value), err
 }
 
@@ -131,19 +130,19 @@ func Records(ctx context.Context, q db.Querier) ([]Record, error) {
 	for _, i := range All() {
 		r := Record{Name: i.Name, Label: i.Label, Module: i.Module, Help: i.Help, URLKey: i.URLKey, SecretKey: i.SecretKey, State: Untested}
 		if i.URLKey != "" {
-			found, err := settings.Default.Resolve(ctx, q, i.URLKey, 0)
+			found, err := settings.Default.Resolve(ctx, q, i.URLKey)
 			if err != nil {
 				return nil, err
 			}
 			def, _ := settings.Default.Lookup(i.URLKey)
-			r.URL, r.URLPinned = found.Value, found.Pinned() || (def.Class != settings.UI && def.Class != settings.Advanced)
+			r.URL, r.URLPinned = found.Value, found.Pinned() || !def.Editable()
 		}
 		if i.SecretKey != "" {
-			status, err := store.IsSet(ctx, i.SecretKey)
+			status, err := store.Status(ctx, i.SecretKey)
 			if err != nil {
 				return nil, err
 			}
-			r.SecretSet, r.SecretPinned = status != secrets.Unset, status == secrets.Pinned
+			r.SecretSet, r.SecretPinned = status != settings.Unset, status == settings.Pinned
 		}
 		var expires *float64
 		err := q.QueryRowContext(ctx, "SELECT state, reason, checked_at, expires_at FROM integration_health WHERE name = ?", i.Name).
@@ -331,7 +330,7 @@ func TestAndSave(ctx context.Context, d *db.DB, env config.Env, name string, can
 	}
 	err = d.WithTx(ctx, func(tx *sql.Tx) error {
 		if urlChanged {
-			if err := settings.Default.Set(ctx, tx, i.URLKey, c.URL, 0); err != nil {
+			if err := settings.Default.Set(ctx, tx, i.URLKey, c.URL); err != nil {
 				return err
 			}
 		}
@@ -353,15 +352,15 @@ func Disconnect(ctx context.Context, d *db.DB, name string) error {
 	}
 	return d.WithTx(ctx, func(tx *sql.Tx) error {
 		if i.URLKey != "" {
-			if err := settings.Default.Unset(ctx, tx, i.URLKey, 0); err != nil {
+			if err := settings.Default.Unset(ctx, tx, i.URLKey); err != nil {
 				return err
 			}
 		}
 		if i.SecretKey != "" {
 			store := secrets.NewIn(d, tx, d)
-			if status, err := store.IsSet(ctx, i.SecretKey); err != nil {
+			if status, err := store.Status(ctx, i.SecretKey); err != nil {
 				return err
-			} else if status == secrets.Pinned {
+			} else if status == settings.Pinned {
 				return &settings.PinnedError{Key: i.SecretKey, Source: "deployment"}
 			}
 			if err := store.Delete(ctx, i.SecretKey); err != nil {

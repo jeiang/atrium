@@ -45,7 +45,7 @@ func New(d *db.DB) *Service { return &Service{d: d, Now: time.Now} }
 func (s *Service) unix() float64 { return float64(s.Now().UnixNano()) / 1e9 }
 
 func (s *Service) mac(ctx context.Context, nonce string) ([]byte, error) {
-	key, err := secrets.New(s.d, s.d).GeneratedKey(ctx, secrets.ActionLinkKey)
+	key, err := secrets.New(s.d, s.d).Generate(ctx, secrets.ActionLinkKey)
 	if err != nil {
 		return nil, err
 	}

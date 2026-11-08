@@ -30,7 +30,7 @@ func Command() *cli.Command {
 					return cli.Fail(e, err)
 				}
 				defer func() { _ = d.Close() }()
-				if err := config.Migrate(e.Ctx, d, cfg); err != nil {
+				if err := config.Boot(e.Ctx, config.OS, d, cfg); err != nil {
 					return cli.Fail(e, err)
 				}
 				base := config.PublicURL(config.OS)

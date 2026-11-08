@@ -55,7 +55,7 @@ func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64
 		return err
 	}
 	defer func() { _ = d.Close() }()
-	if err := config.Migrate(ctx, d, cfg); err != nil {
+	if err := config.Boot(ctx, cfgEnv, d, cfg); err != nil {
 		return err
 	}
 	r, err := runner.New(tools)

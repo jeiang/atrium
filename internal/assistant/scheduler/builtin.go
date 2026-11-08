@@ -57,7 +57,7 @@ var BuiltinJobs = []Builtin{
 }
 
 func builtinSchedule(ctx context.Context, q db.Querier, name string) (string, bool, error) {
-	found, err := settings.Default.Resolve(ctx, q, scheduleKeys[name], 0)
+	found, err := settings.Default.Resolve(ctx, q, scheduleKeys[name])
 	return found.Value, found.Origin != settings.FromDefault, err
 }
 

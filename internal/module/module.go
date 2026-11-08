@@ -79,7 +79,7 @@ type Requirement struct {
 
 func Setting(key string) Requirement {
 	return Requirement{Name: key, Key: key, Check: func(ctx context.Context, p Probe) (string, error) {
-		got, err := p.Settings.Resolve(ctx, p.Q, key, 0)
+		got, err := p.Settings.Resolve(ctx, p.Q, key)
 		if err != nil {
 			return "", err
 		}
@@ -98,16 +98,12 @@ func Setting(key string) Requirement {
 func FlagKey(name string) string { return name + "_enabled" }
 
 func FlagDef(name string) settings.Def {
-	return settings.Def{
+	return settings.Value(settings.UI, settings.Def{
 		Key:     FlagKey(name),
 		Module:  Core,
 		Type:    settings.Bool,
 		Default: "false",
-		Class:   settings.UI,
-		Restart: true,
-		Page:    "/settings/modules",
-		Scopes:  []settings.Scope{settings.Instance},
-	}
+		Page:    "/settings/modules"})
 }
 
 type State string

@@ -65,7 +65,7 @@ func resolved(ctx context.Context, q db.Querier) (values, []string) {
 	var problems []string
 	out := values{}
 	for _, key := range valueKeys {
-		found, err := settings.Default.Resolve(ctx, q, key, 0)
+		found, err := settings.Default.Resolve(ctx, q, key)
 		if err != nil {
 			problems = append(problems, err.Error())
 		}
@@ -154,7 +154,7 @@ func assemble(get values, secret string, env config.Env, encrypted bool, problem
 }
 
 func AdminGroup(ctx context.Context, q db.Querier) string {
-	found, err := settings.Default.Resolve(ctx, q, KeyAdminGroup, 0)
+	found, err := settings.Default.Resolve(ctx, q, KeyAdminGroup)
 	if err != nil || strings.TrimSpace(found.Value) == "" {
 		return DefaultAdminGroup
 	}

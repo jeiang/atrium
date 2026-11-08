@@ -11,25 +11,20 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-type Scope string
+type Kind string
 
 const (
-	Instance Scope = "instance"
-	Thread   Scope = "thread"
+	DeployKind Kind = "deploy"
+	ValueKind  Kind = "value"
+	SecretKind Kind = "secret"
 )
 
-type Class string
+type Surface string
 
 const (
-	Bootstrap Class = "bootstrap"
-	Secret    Class = "secret"
-	UI        Class = "ui"
-	Advanced  Class = "advanced"
-	Fixed     Class = "fixed"
-	Cap       Class = "cap"
+	Advanced Surface = "advanced"
+	UI       Surface = "ui"
 )
-
-func (c Class) writable() bool { return c == UI || c == Advanced || c == Cap }
 
 type Type string
 
@@ -42,26 +37,69 @@ const (
 )
 
 type Def struct {
-	Key                 string
-	Module              string
-	Type                Type
-	Default             string
-	Choices             []string
-	Check               func(value string) error
-	Peers               func(value string, peer func(key string) (string, error)) error
-	Class               Class
-	Secret              bool
-	RequiresEncryptedDB bool
-	Generated           bool
-	PinOnly             bool
-	Restart             bool
-	Scopes              []Scope
-	ThreadColumn        string
-	EnvAlias            string
-	Page                string
+	Key       string
+	Module    string
+	Type      Type
+	Default   string
+	Choices   []string
+	Check     func(value string) error
+	Peers     func(value string, peer func(key string) (string, error)) error
+	EnvAlias  string
+	Page      string
+	Kind      Kind
+	Surface   Surface
+	Encrypted bool
+	Generated bool
+	PinOnly   bool
+	Readable  bool
 }
 
-func (d Def) has(s Scope) bool { return slices.Contains(d.Scopes, s) }
+type SecretOpts struct {
+	Encrypted bool
+	Generated bool
+	PinOnly   bool
+	Readable  bool
+}
+
+func Deploy(d Def) Def {
+	d.Kind = DeployKind
+	return d
+}
+
+func Value(surface Surface, d Def) Def {
+	d.Kind = ValueKind
+	d.Surface = surface
+	return d
+}
+
+func Secret(opts SecretOpts, d Def) Def {
+	d.Kind = SecretKind
+	d.Encrypted, d.Generated, d.PinOnly, d.Readable = opts.Encrypted, opts.Generated, opts.PinOnly, opts.Readable
+	return d
+}
+
+func (d Def) Editable() bool { return d.Kind == ValueKind }
+
+func (d Def) IsSecret() bool { return d.Kind == SecretKind }
+
+func (d Def) WriteOnly() bool { return d.Kind == SecretKind && !d.Readable }
+
+func (d Def) NeedsEncryptedDB() bool { return d.Kind == SecretKind && d.Encrypted }
+
+func (d Def) IsGenerated() bool { return d.Kind == SecretKind && d.Generated }
+
+func (d Def) PinnedOnly() bool { return d.Kind == SecretKind && d.PinOnly }
+
+func (d Def) Class() string {
+	switch d.Kind {
+	case DeployKind:
+		return "bootstrap"
+	case SecretKind:
+		return "secret"
+	default:
+		return string(d.Surface)
+	}
+}
 
 type PinSource interface {
 	Pin(key string) (value, source string, ok bool)
@@ -117,12 +155,27 @@ func (r *Registry) SetPins(p PinSource) {
 		return
 	}
 	for _, d := range r.defs {
-		if d.Secret && d.pinnable() {
+		if d.IsSecret() {
 			if value, _, ok := p.Pin(d.Key); ok {
 				logx.AddSecret(value)
 			}
 		}
 	}
+}
+
+func (r *Registry) PinSource() PinSource {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.pins
+}
+
+func (r *Registry) Pin(key string) (value, source string, ok bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.pins == nil {
+		return "", "", false
+	}
+	return r.pins.Pin(key)
 }
 
 func (r *Registry) Defs() []Def {
@@ -152,11 +205,8 @@ func (r *Registry) claimed(d Def) Def {
 
 func (d Def) clone() Def {
 	d.Choices = slices.Clone(d.Choices)
-	d.Scopes = slices.Clone(d.Scopes)
 	return d
 }
-
-func (d Def) pinnable() bool { return d.Class != Fixed }
 
 func (r *Registry) lookup(key string) (Def, PinSource, error) {
 	r.mu.RLock()
@@ -177,27 +227,16 @@ func (d Def) valid() error {
 		return InvalidDef(fmt.Sprintf("settings: key %q and module %q must be lowercase snake_case", d.Key, d.Module))
 	case !slices.Contains([]Type{String, Int, Float, Bool, Enum}, d.Type):
 		return bad("unknown type %q", d.Type)
-	case !slices.Contains([]Class{Bootstrap, Secret, UI, Advanced, Fixed, Cap}, d.Class):
-		return bad("unknown class %q", d.Class)
-	case (d.Class == Secret) != d.Secret:
-		return bad("the secret flag and the secret class go together")
-	case (d.RequiresEncryptedDB || d.Generated || d.PinOnly) && d.Class != Secret:
-		return bad("encrypted-database, generated and pin-only flags belong to secret keys")
-	case d.Class.writable() == (len(d.Scopes) == 0):
-		return bad("class %s %s scopes", d.Class, map[bool]string{true: "needs", false: "takes no"}[d.Class.writable()])
+	case !slices.Contains([]Kind{DeployKind, ValueKind, SecretKind}, d.Kind):
+		return bad("unknown kind %q", d.Kind)
+	case d.Kind == ValueKind && !slices.Contains([]Surface{UI, Advanced}, d.Surface):
+		return bad("a value needs the ui or advanced surface")
+	case d.Kind != ValueKind && d.Surface != "":
+		return bad("only a value has a surface")
+	case d.Kind != SecretKind && (d.Encrypted || d.Generated || d.PinOnly || d.Readable):
+		return bad("encrypted, generated, pin-only and readable belong to secret keys")
 	case (d.Type == Enum) != (len(d.Choices) > 0):
 		return bad("choices belong to enum keys and enum keys need them")
-	case d.Class == Cap && d.Type != Int && d.Type != Float:
-		return bad("a cap key is a number")
-	case d.has(Thread) != (d.ThreadColumn != ""):
-		return bad("a thread column goes with the thread scope")
-	case d.ThreadColumn != "" && !identifier(d.ThreadColumn):
-		return bad("thread column %q is not an identifier", d.ThreadColumn)
-	}
-	for _, s := range d.Scopes {
-		if s != Instance && s != Thread {
-			return bad("unknown scope %q", s)
-		}
 	}
 	if d.Default != "" {
 		if err := d.validate(d.Default); err != nil {
@@ -213,15 +252,6 @@ func snakeCase(s string) bool {
 	}
 	for _, c := range s {
 		if c != '_' && (c < 'a' || c > 'z') && (c < '0' || c > '9') {
-			return false
-		}
-	}
-	return true
-}
-
-func identifier(s string) bool {
-	for _, c := range s {
-		if c != '_' && (c < 'a' || c > 'z') {
 			return false
 		}
 	}
@@ -280,20 +310,9 @@ type UnknownKey string
 
 func (e UnknownKey) Error() string { return "settings: unknown key " + strconv.Quote(string(e)) }
 
-type UnknownThread int64
+type NotEditable struct{ Key string }
 
-func (e UnknownThread) Error() string {
-	return "settings: no thread " + strconv.FormatInt(int64(e), 10)
-}
-
-type ScopeError struct {
-	Key   string
-	Scope Scope
-}
-
-func (e *ScopeError) Error() string {
-	return fmt.Sprintf("settings: %s cannot be set at the %s level", e.Key, e.Scope)
-}
+func (e *NotEditable) Error() string { return "settings: " + e.Key + " is not editable" }
 
 type PinnedError struct {
 	Key    string

@@ -43,10 +43,8 @@ type (
 	Kind        = tool.Kind
 	Kinds       = tool.Kinds
 
-	Setting      = settings.Def
-	SettingType  = settings.Type
-	SettingClass = settings.Class
-	SettingScope = settings.Scope
+	Setting     = settings.Def
+	SettingType = settings.Type
 
 	DB        = db.DB
 	Querier   = db.Querier
@@ -77,10 +75,6 @@ const (
 
 	UI       = settings.UI
 	Advanced = settings.Advanced
-	Secret   = settings.Secret
-
-	Instance = settings.Instance
-	Thread   = settings.Thread
 )
 
 var Settings = settings.Default
@@ -109,7 +103,7 @@ func OpenDB(env *Env) (*DB, Config, error) {
 	if err != nil {
 		return nil, cfg, err
 	}
-	if err := config.Migrate(env.Ctx, d, cfg); err != nil {
+	if err := config.Boot(env.Ctx, config.OS, d, cfg); err != nil {
 		_ = d.Close()
 		return nil, cfg, err
 	}

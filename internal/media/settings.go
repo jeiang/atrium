@@ -56,18 +56,17 @@ const (
 )
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
 	adv := func(key string, kind settings.Type, def string, check func(string) error) settings.Def {
-		return settings.Def{Key: key, Module: module, Type: kind, Default: def, Check: check, Class: settings.Advanced, Scopes: instance}
+		return settings.Value(settings.Advanced, settings.Def{Key: key, Module: module, Type: kind, Default: def, Check: check})
 	}
 	between := func(key string, def string, lo, hi int64) settings.Def {
 		return adv(key, settings.Int, def, wholeBetween(lo, hi))
 	}
 	settings.MustRegister(
-		settings.Def{Key: KeyRoot, Module: module, Type: settings.String, Class: settings.Bootstrap},
-		settings.Def{Key: KeyQbitURL, Module: module, Type: settings.String, Check: httpURL, Class: settings.Bootstrap},
-		settings.Def{Key: KeyMoviesURL, Module: module, Type: settings.String, Check: httpURL, Class: settings.UI, Scopes: instance},
-		settings.Def{Key: KeyTVURL, Module: module, Type: settings.String, Check: httpURL, Class: settings.UI, Scopes: instance},
+		settings.Deploy(settings.Def{Key: KeyRoot, Module: module, Type: settings.String}),
+		settings.Deploy(settings.Def{Key: KeyQbitURL, Module: module, Type: settings.String, Check: httpURL}),
+		settings.Value(settings.UI, settings.Def{Key: KeyMoviesURL, Module: module, Type: settings.String, Check: httpURL}),
+		settings.Value(settings.UI, settings.Def{Key: KeyTVURL, Module: module, Type: settings.String, Check: httpURL}),
 		between(KeyLinkTTL, "43200", 60, 30*86400),
 		adv(KeyEZTVURL, settings.String, defaultEZTVURL, requiredHTTPURL),
 		between(KeyEZTVLimit, "100", 1, 100),
@@ -90,9 +89,9 @@ func init() {
 		adv(KeyVideoExts, settings.String, defaultVideoExts, extensionsCheck),
 		adv(KeySubtitleExts, settings.String, defaultSubtitleExt, extensionsCheck),
 		between(KeyTorrentUploadCap, "1048576", 1024, 32<<20),
-		settings.Def{Key: KeyLinkKey, Module: module, Type: settings.String, Class: settings.Secret, Secret: true, Generated: true, Check: settings.NonEmpty},
-		settings.Def{Key: KeyQbitAPIKey, Module: module, Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
-		settings.Def{Key: KeyTMDBToken, Module: module, Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
+		settings.Secret(settings.SecretOpts{Generated: true}, settings.Def{Key: KeyLinkKey, Module: module, Type: settings.String, Check: settings.NonEmpty}),
+		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyQbitAPIKey, Module: module, Type: settings.String}),
+		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyTMDBToken, Module: module, Type: settings.String}),
 	)
 }
 
@@ -195,7 +194,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		if failure != nil {
 			return settings.Resolved{}
 		}
-		found, err := settings.Default.Resolve(ctx, q, key, 0)
+		found, err := settings.Default.Resolve(ctx, q, key)
 		failure = err
 		return found
 	}

@@ -35,12 +35,11 @@ var selfMetrics = []struct{ ref, expr string }{
 }
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
 	settings.MustRegister(
-		settings.Def{Key: KeyMetricsUID, Module: "grafana", Type: settings.String, Class: settings.UI, Scopes: instance},
-		settings.Def{Key: KeyLogsUID, Module: "grafana", Type: settings.String, Class: settings.UI, Scopes: instance},
-		settings.Def{Key: KeyLogsType, Module: "grafana", Type: settings.Enum, Choices: []string{Loki, VictoriaLogs}, Default: Loki, Class: settings.UI, Scopes: instance},
-		settings.Def{Key: KeyLogsQuery, Module: "grafana", Type: settings.String, Class: settings.Advanced, Scopes: instance},
+		settings.Value(settings.UI, settings.Def{Key: KeyMetricsUID, Module: "grafana", Type: settings.String}),
+		settings.Value(settings.UI, settings.Def{Key: KeyLogsUID, Module: "grafana", Type: settings.String}),
+		settings.Value(settings.UI, settings.Def{Key: KeyLogsType, Module: "grafana", Type: settings.Enum, Choices: []string{Loki, VictoriaLogs}, Default: Loki}),
+		settings.Value(settings.Advanced, settings.Def{Key: KeyLogsQuery, Module: "grafana", Type: settings.String}),
 	)
 }
 

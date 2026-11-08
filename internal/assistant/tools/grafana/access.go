@@ -22,8 +22,8 @@ const (
 
 func init() {
 	settings.MustRegister(
-		settings.Def{Key: KeyURL, Module: "grafana", Type: settings.String, Class: settings.UI, Scopes: []settings.Scope{settings.Instance}},
-		settings.Def{Key: KeyToken, Module: "grafana", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true},
+		settings.Value(settings.UI, settings.Def{Key: KeyURL, Module: "grafana", Type: settings.String}),
+		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyToken, Module: "grafana", Type: settings.String}),
 	)
 	integrations.Register(integrations.Integration{
 		Name: "grafana", Label: "Grafana", Module: "grafana", URLKey: KeyURL, SecretKey: KeyToken,
@@ -38,7 +38,7 @@ type Access struct {
 }
 
 func Load(ctx context.Context, q db.Querier) (Access, error) {
-	found, err := settings.Default.Resolve(ctx, q, KeyURL, 0)
+	found, err := settings.Default.Resolve(ctx, q, KeyURL)
 	if err != nil {
 		return Access{}, err
 	}

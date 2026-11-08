@@ -138,7 +138,7 @@ func (s *Set) Evaluate(ctx context.Context, q db.Querier) (*Snapshot, error) {
 				return nil, err
 			}
 			st.Unmet = unmet
-			on, err := s.reg.Resolve(ctx, q, FlagKey(r.Name), 0)
+			on, err := s.reg.Resolve(ctx, q, FlagKey(r.Name))
 			if err != nil {
 				return nil, err
 			}

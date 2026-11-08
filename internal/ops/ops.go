@@ -35,8 +35,8 @@ var log = logx.Logger("atrium.ops")
 
 func init() {
 	settings.MustRegister(
-		settings.Def{Key: ListenKey, Module: "core", Type: settings.String, Default: DefaultListen, Check: checkListen, Class: settings.Bootstrap},
-		settings.Def{Key: PprofKey, Module: "core", Type: settings.Bool, Default: "false", Class: settings.Bootstrap},
+		settings.Deploy(settings.Def{Key: ListenKey, Module: "core", Type: settings.String, Default: DefaultListen, Check: checkListen}),
+		settings.Deploy(settings.Def{Key: PprofKey, Module: "core", Type: settings.Bool, Default: "false"}),
 	)
 }
 
@@ -245,14 +245,14 @@ func init() {
 }
 
 func Start(ctx context.Context, d *db.DB) (stop func(), err error) {
-	addr, err := settings.Default.Resolve(ctx, d.Read, ListenKey, 0)
+	addr, err := settings.Default.Resolve(ctx, d.Read, ListenKey)
 	if err != nil {
 		return nil, err
 	}
 	if addr.Value == Off {
 		return func() {}, nil
 	}
-	withPprof, err := settings.Default.Resolve(ctx, d.Read, PprofKey, 0)
+	withPprof, err := settings.Default.Resolve(ctx, d.Read, PprofKey)
 	if err != nil {
 		return nil, err
 	}

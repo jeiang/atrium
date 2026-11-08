@@ -126,7 +126,7 @@ func (h handlers) index(w http.ResponseWriter, r *http.Request) {
 func (h handlers) refuse(w http.ResponseWriter, r *http.Request, failed string, form map[string]string, err error) bool {
 	var why refusal
 	var invalid settings.Invalid
-	var encryption secrets.EncryptionRequired
+	var encryption settings.EncryptionRequired
 	if !errors.As(err, &why) && !errors.As(err, &invalid) && !errors.As(err, &encryption) {
 		return false
 	}
@@ -176,7 +176,7 @@ func (h handlers) add(w http.ResponseWriter, r *http.Request) {
 	case a.Login == "" || a.Password == "":
 		err = refusal("login and password are required")
 	case !h.d.DB.Encrypted():
-		err = secrets.EncryptionRequired(config.PasswordKey(a.Name))
+		err = settings.EncryptionRequired(config.PasswordKey(a.Name))
 	default:
 		if _, exists := config.Account(a.Name); exists {
 			err = refusal(a.Name + " is already an account id")

@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"time"
 
 	_ "time/tzdata"
@@ -41,8 +40,6 @@ func get(env Env, name string) string {
 
 func stripped(env Env, name string) string { return py.Strip(get(env, name)) }
 
-func cleanURL(env Env, name string) string { return strings.TrimRight(stripped(env, name), "/") }
-
 func Zone(name string) (*time.Location, error) {
 	if name != "" && name != "Local" {
 		if loc, err := time.LoadLocation(name); err == nil {
@@ -53,21 +50,6 @@ func Zone(name string) (*time.Location, error) {
 }
 
 func Location(env Env) (*time.Location, error) { return Zone(TZName(env)) }
-
-func Require(env Env, names ...string) error {
-	var missing []string
-	for _, n := range names {
-		if get(env, n) == "" {
-			missing = append(missing, n)
-		}
-	}
-	if len(missing) > 0 {
-		return NotConfigured(strings.Join(missing, ", ") + " not set")
-	}
-	return nil
-}
-
-func PublicHost(env Env) string { return stripped(env, "ATRIUM_PUBLIC_HOST") }
 
 type CalDAVLogin struct {
 	AppleID  string
@@ -85,14 +67,5 @@ type GoogleCredentials struct {
 }
 
 func GoogleOAuthSecret(env Env) string { return get(env, "GOOGLE_OAUTH_CLIENT_SECRET") }
-
-func requireStripped(env Env, name string) (string, error) {
-	if v := stripped(env, name); v != "" {
-		return v, nil
-	}
-	return "", NotConfigured(name + " is not set")
-}
-
-func NotionWikiRoot(env Env) (string, error) { return requireStripped(env, "ATRIUM_NOTION_WIKI_ROOT") }
 
 func NtfyToken(env Env) string { return stripped(env, "NTFY_TOKEN") }

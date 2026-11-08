@@ -119,15 +119,14 @@ func contextLimitChoices() []string {
 }
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
-	def := func(key string, kind settings.Type, class settings.Class, value string, check func(string) error) settings.Def {
-		return settings.Def{Key: key, Module: module, Type: kind, Default: value, Check: check, Class: class, Scopes: instance}
+	def := func(key string, kind settings.Type, surface settings.Surface, value string, check func(string) error) settings.Def {
+		return settings.Value(surface, settings.Def{Key: key, Module: module, Type: kind, Default: value, Check: check})
 	}
 	adv := func(key string, kind settings.Type, value string, check func(string) error) settings.Def {
 		return def(key, kind, settings.Advanced, value, check)
 	}
 	capped := func(key string, kind settings.Type, value string, check func(string) error) settings.Def {
-		return def(key, kind, settings.Cap, value, check)
+		return def(key, kind, settings.Advanced, value, check)
 	}
 	count := func(key string, value, lo, hi int64) settings.Def {
 		return capped(key, settings.Int, strconv.FormatInt(value, 10), settings.Between(float64(lo), float64(hi)))
@@ -307,7 +306,7 @@ func (r *Reader) resolve(key string) settings.Resolved {
 	if r.err != nil {
 		return settings.Resolved{}
 	}
-	found, err := settings.Default.Resolve(r.ctx, r.q, key, 0)
+	found, err := settings.Default.Resolve(r.ctx, r.q, key)
 	r.err = err
 	return found
 }

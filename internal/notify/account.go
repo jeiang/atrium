@@ -11,6 +11,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 type AccountError string
@@ -105,7 +106,7 @@ func Connect(ctx context.Context, d *db.DB, user, password, by string) error {
 		return AccountError("username and password are required")
 	}
 	if !d.Encrypted() {
-		return secrets.EncryptionRequired(TokenKey(Assistant))
+		return settings.EncryptionRequired(TokenKey(Assistant))
 	}
 	base, err := baseURL(ctx, d.Read)
 	if err != nil {

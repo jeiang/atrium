@@ -99,7 +99,7 @@ func newRig(t *testing.T, o rigOpts) *rig {
 			values[k] = v
 		}
 		for k, v := range values {
-			if err := settings.Default.Set(ctx, d.Write, k, v, 0); err != nil {
+			if err := settings.Default.Set(ctx, d.Write, k, v); err != nil {
 				t.Fatalf("set %s: %v", k, err)
 			}
 		}

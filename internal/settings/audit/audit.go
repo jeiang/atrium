@@ -32,9 +32,13 @@ func With(ctx context.Context, actor string, source Source) context.Context {
 	return context.WithValue(ctx, originKey{}, origin{actor: actor, source: source})
 }
 
+func HasActor(ctx context.Context) bool {
+	o, ok := ctx.Value(originKey{}).(origin)
+	return ok && o.actor != "" && o.source != ""
+}
+
 type Entry struct {
 	Key    string
-	Thread int64
 	Old    *string
 	New    *string
 	Secret bool
@@ -50,13 +54,9 @@ func Record(ctx context.Context, q db.Querier, e Entry) error {
 		changed := Changed
 		old, next = nil, &changed
 	}
-	var thread any
-	if e.Thread != 0 {
-		thread = e.Thread
-	}
 	_, err := q.ExecContext(ctx,
-		"INSERT INTO settings_audit (ts, key, thread_id, old_value, new_value, secret, actor, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		float64(time.Now().UnixNano())/1e9, e.Key, thread, old, next, e.Secret, o.actor, string(o.source))
+		"INSERT INTO settings_audit (ts, key, thread_id, old_value, new_value, secret, actor, source) VALUES (?, ?, NULL, ?, ?, ?, ?, ?)",
+		float64(time.Now().UnixNano())/1e9, e.Key, old, next, e.Secret, o.actor, string(o.source))
 	return err
 }
 

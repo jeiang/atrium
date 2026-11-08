@@ -224,7 +224,7 @@ func Sync(ctx context.Context, cfg config.Config, requested string, open mailops
 		return nil, err
 	}
 	defer func() { _ = d.Close() }()
-	if err := config.Migrate(ctx, d, cfg); err != nil {
+	if err := config.Boot(ctx, config.OS, d, cfg); err != nil {
 		return nil, err
 	}
 	accounts, err := SelectAccounts(cfg, requested)

@@ -136,7 +136,7 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string) er
 		return err
 	}
 	defer func() { _ = d.Close() }()
-	if err := config.Migrate(ctx, d, cfg); err != nil {
+	if err := config.Boot(ctx, a.env, d, cfg); err != nil {
 		return err
 	}
 	if _, err := config.Location(a.env); err != nil {

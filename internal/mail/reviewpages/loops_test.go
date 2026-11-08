@@ -183,7 +183,7 @@ func enableContacts(t *testing.T, s *site, dir string) {
 	t.Helper()
 	ctx := audit.With(t.Context(), "test", audit.CLI)
 	for key, value := range map[string]string{contacts.DirKey: dir, module.FlagKey(module.Contacts): "true"} {
-		if err := settings.Default.Set(ctx, s.db.Write, key, value, 0); err != nil {
+		if err := settings.Default.Set(ctx, s.db.Write, key, value); err != nil {
 			t.Fatal(err)
 		}
 	}

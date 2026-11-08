@@ -23,7 +23,7 @@ func Configured(ctx context.Context, q db.Querier, name string, timeout time.Dur
 		if _, known := settings.Default.Lookup(key); !known {
 			continue
 		}
-		found, err := settings.Default.Resolve(ctx, q, key, 0)
+		found, err := settings.Default.Resolve(ctx, q, key)
 		if err != nil {
 			return nil, err
 		}

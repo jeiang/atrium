@@ -12,7 +12,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
@@ -131,9 +130,9 @@ func (h handlers) refuse(w http.ResponseWriter, r *http.Request, name string, er
 	var failed *TestFailed
 	var invalid settings.Invalid
 	var pinned *settings.PinnedError
-	var scope *settings.ScopeError
-	var encryption secrets.EncryptionRequired
-	var empty secrets.EmptyValue
+	var scope *settings.NotEditable
+	var encryption settings.EncryptionRequired
+	var empty settings.EmptyValue
 	var unknown Unknown
 	switch {
 	case errors.As(err, &unknown):

@@ -23,7 +23,7 @@ func UseBaseURL(u string) func() {
 }
 
 func init() {
-	settings.MustRegister(settings.Def{Key: TokenKey, Module: "notion", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true})
+	settings.MustRegister(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: TokenKey, Module: "notion", Type: settings.String}))
 }
 
 func Token(ctx context.Context, q db.Querier) (string, error) {

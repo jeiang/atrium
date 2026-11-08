@@ -27,33 +27,27 @@ const (
 )
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
 	settings.MustRegister(
-		settings.Def{Key: AppleIDKey, Module: "calendar", Type: settings.String, Class: settings.UI, Scopes: instance},
-		settings.Def{Key: AccountKey, Module: "calendar", Type: settings.String, Class: settings.UI, Scopes: instance},
-		settings.Def{Key: ICloudCalendarKey, Module: "calendar", Type: settings.String, Class: settings.UI, Scopes: instance},
-		settings.Def{Key: GoogleClientIDKey, Module: "calendar", Type: settings.String, Class: settings.UI, Scopes: instance},
-		settings.Def{
+		settings.Value(settings.UI, settings.Def{Key: AppleIDKey, Module: "calendar", Type: settings.String}),
+		settings.Value(settings.UI, settings.Def{Key: AccountKey, Module: "calendar", Type: settings.String}),
+		settings.Value(settings.UI, settings.Def{Key: ICloudCalendarKey, Module: "calendar", Type: settings.String}),
+		settings.Value(settings.UI, settings.Def{Key: GoogleClientIDKey, Module: "calendar", Type: settings.String}),
+		settings.Value(settings.UI, settings.Def{
 			Key: DefaultMinutesKey, Module: "calendar", Type: settings.Int, Default: defaultEventMinutes,
-			Check: settings.Between(5, 1440), Class: settings.UI, Scopes: instance,
-		},
-		settings.Def{Key: CalendarDirKey, Module: "calendar", Type: settings.String, Class: settings.Advanced, Scopes: instance},
-		settings.Def{
+			Check: settings.Between(5, 1440)}),
+		settings.Value(settings.Advanced, settings.Def{Key: CalendarDirKey, Module: "calendar", Type: settings.String}),
+		settings.Value(settings.Advanced, settings.Def{
 			Key: MaxEventsKey, Module: "calendar", Type: settings.Int, Default: defaultMaxEvents,
-			Check: settings.Between(1, 10000), Class: settings.Advanced, Scopes: instance,
-		},
-		settings.Def{
+			Check: settings.Between(1, 10000)}),
+		settings.Value(settings.Advanced, settings.Def{
 			Key: MaxOccurrencesKey, Module: "calendar", Type: settings.Int, Default: defaultMaxOccur,
-			Check: settings.Between(1, 100000), Class: settings.Advanced, Scopes: instance,
-		},
-		settings.Def{
+			Check: settings.Between(1, 100000)}),
+		settings.Value(settings.Advanced, settings.Def{
 			Key: CandidateScanKey, Module: "calendar", Type: settings.Int, Default: "50",
-			Check: settings.Between(1, 1000), Class: settings.Advanced, Scopes: instance,
-		},
-		settings.Def{
+			Check: settings.Between(1, 1000)}),
+		settings.Value(settings.Advanced, settings.Def{
 			Key: CandidateDraftKey, Module: "calendar", Type: settings.Int, Default: "10",
-			Check: settings.Between(1, 100), Class: settings.Advanced, Scopes: instance,
-		},
+			Check: settings.Between(1, 100)}),
 	)
 }
 
@@ -71,12 +65,12 @@ type Settings struct {
 func LoadSettings(ctx context.Context, q db.Querier) (Settings, error) {
 	var out Settings
 	text := func(key string, into *string) error {
-		found, err := settings.Default.Resolve(ctx, q, key, 0)
+		found, err := settings.Default.Resolve(ctx, q, key)
 		*into = found.Value
 		return err
 	}
 	whole := func(key string, into *int) error {
-		found, err := settings.Default.Resolve(ctx, q, key, 0)
+		found, err := settings.Default.Resolve(ctx, q, key)
 		if err != nil {
 			return err
 		}
@@ -107,7 +101,7 @@ func CandidateLimits(ctx context.Context, q db.Querier) (scan, draft int, err er
 		key  string
 		into *int
 	}{{CandidateScanKey, &scan}, {CandidateDraftKey, &draft}} {
-		found, err := settings.Default.Resolve(ctx, q, step.key, 0)
+		found, err := settings.Default.Resolve(ctx, q, step.key)
 		if err != nil {
 			return 0, 0, err
 		}
