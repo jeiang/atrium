@@ -3,7 +3,6 @@ package writes
 import (
 	"context"
 	"database/sql"
-	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -51,30 +50,21 @@ type New struct {
 	Undo     any
 }
 
-func dump(value any, scrub bool) (*string, error) {
+func dump(value any, scrub bool) *string {
 	if value == nil {
-		return nil, nil
+		return nil
 	}
 	text := py.JSONDumps(value, py.JSONOpts{SortKeys: true})
 	if scrub {
 		text = logx.Scrub(text)
 	}
-	return &text, nil
+	return &text
 }
 
 func Record(ctx context.Context, q db.Querier, w New) (int64, error) {
-	before, err := dump(w.Before, true)
-	if err != nil {
-		return 0, err
-	}
-	after, err := dump(w.After, true)
-	if err != nil {
-		return 0, err
-	}
-	undo, err := dump(w.Undo, false)
-	if err != nil {
-		return 0, err
-	}
+	before := dump(w.Before, true)
+	after := dump(w.After, true)
+	undo := dump(w.Undo, false)
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO agent_writes (ts, thread_id, run_id, tool, target, before_json, after_json, undo_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 		w.TS, w.ThreadID, w.RunID, w.Tool, w.Target, before, after, undo)
@@ -84,21 +74,21 @@ func Record(ctx context.Context, q db.Querier, w New) (int64, error) {
 	return res.LastInsertId()
 }
 
-type Row struct {
-	ID         int64    `json:"id"`
-	TS         float64  `json:"ts"`
-	ThreadID   *int64   `json:"thread_id"`
-	RunID      *int64   `json:"run_id"`
-	Tool       string   `json:"tool"`
-	Target     string   `json:"target"`
-	BeforeJSON *string  `json:"before_json"`
-	AfterJSON  *string  `json:"after_json"`
-	UndoJSON   *string  `json:"undo_json"`
-	UndoneAt   *float64 `json:"undone_at"`
+type row struct {
+	ID         int64
+	TS         float64
+	ThreadID   *int64
+	RunID      *int64
+	Tool       string
+	Target     string
+	BeforeJSON *string
+	AfterJSON  *string
+	UndoJSON   *string
+	UndoneAt   *float64
 }
 
-func Get(ctx context.Context, q db.Querier, writeID int64) (*Row, error) {
-	var r Row
+func get(ctx context.Context, q db.Querier, writeID int64) (*row, error) {
+	var r row
 	err := q.QueryRowContext(ctx,
 		"SELECT id, ts, thread_id, run_id, tool, target, before_json, after_json, undo_json, undone_at FROM agent_writes WHERE id = ?", writeID).
 		Scan(&r.ID, &r.TS, &r.ThreadID, &r.RunID, &r.Tool, &r.Target, &r.BeforeJSON, &r.AfterJSON, &r.UndoJSON, &r.UndoneAt)
@@ -109,59 +99,6 @@ func Get(ctx context.Context, q db.Querier, writeID int64) (*Row, error) {
 		return nil, err
 	}
 	return &r, nil
-}
-
-type lazyTx struct {
-	d  *db.DB
-	tx *sql.Tx
-}
-
-func (l *lazyTx) begin(ctx context.Context) (*sql.Tx, error) {
-	if l.tx == nil {
-		tx, err := l.d.Write.BeginTx(ctx, nil)
-		if err != nil {
-			return nil, err
-		}
-		l.tx = tx
-	}
-	return l.tx, nil
-}
-
-func (l *lazyTx) ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error) {
-	tx, err := l.begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return tx.ExecContext(ctx, query, args...)
-}
-
-func (l *lazyTx) QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
-	tx, err := l.begin(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return tx.QueryContext(ctx, query, args...)
-}
-
-func (l *lazyTx) QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row {
-	tx, err := l.begin(ctx)
-	if err != nil {
-		failed := sql.OpenDB(failedConn{err})
-		defer func() { _ = failed.Close() }()
-		return failed.QueryRowContext(ctx, "SELECT 1")
-	}
-	return tx.QueryRowContext(ctx, query, args...)
-}
-
-type failedConn struct{ err error }
-
-func (f failedConn) Connect(context.Context) (driver.Conn, error) { return nil, f.err }
-func (f failedConn) Driver() driver.Driver                        { return nil }
-
-func (l *lazyTx) rollback() {
-	if l.tx != nil {
-		_ = l.tx.Rollback()
-	}
 }
 
 type idLocks struct {
@@ -200,7 +137,7 @@ func (l *idLocks) lock(id int64) func() {
 var undoing idLocks
 
 func (r *Registry) resolve(ctx context.Context, q db.Querier, writeID int64) (Undoer, map[string]any, error) {
-	row, err := Get(ctx, q, writeID)
+	row, err := get(ctx, q, writeID)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -251,31 +188,19 @@ func (r *Registry) Undo(ctx context.Context, d *db.DB, writeID int64, now func()
 	if err != nil {
 		return nil, err
 	}
-	l := &lazyTx{d: d}
-	defer l.rollback()
-	result, err := fn(ctx, l, desc)
+	tx, err := d.Write.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, err
 	}
-	if err := mark(ctx, l, writeID, now); err != nil {
-		return nil, err
-	}
-	if err := l.tx.Commit(); err != nil {
-		return nil, err
-	}
-	return result, nil
-}
-
-func (r *Registry) UndoIn(ctx context.Context, q db.Querier, writeID int64, now func() float64) (any, error) {
-	fn, desc, err := r.resolve(ctx, q, writeID)
+	defer func() { _ = tx.Rollback() }()
+	result, err := fn(ctx, tx, desc)
 	if err != nil {
 		return nil, err
 	}
-	result, err := fn(ctx, q, desc)
-	if err != nil {
+	if err := mark(ctx, tx, writeID, now); err != nil {
 		return nil, err
 	}
-	if err := mark(ctx, q, writeID, now); err != nil {
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return result, nil
