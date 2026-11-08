@@ -5,64 +5,84 @@
       <span class="badge" data-variant="secondary">{{$e.category}}</span>
       <span class="tabular-nums">{{template "when" (dict "epoch" $e.ts "style" "datetime")}}</span>
     </div>
-    {{if eq $e.source "mail"}}
+    {{with $e.mail}}
     <div class="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
-      <a class="truncate rounded-sm text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {{template "open_attrs" $e.message_id}}>{{or $e.subject "(no subject)"}}</a>
+      <a class="truncate rounded-sm text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" {{template "open_attrs" .message_id}}>{{or .subject "(no subject)"}}</a>
       <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-        <span class="badge" data-variant="outline">{{$e.kind}}</span>
-        <span class="truncate">{{or $e.from_name $e.from_addr}} · {{$e.account}}</span>
-        {{if ne $e.kind "flag"}}
-        <span class="max-w-full truncate">{{place $e.src}}</span>
+        <span class="badge" data-variant="outline">{{.kind}}</span>
+        <span class="truncate">{{or .from_name .from_addr}} · {{.account}}</span>
+        {{if ne .kind "flag"}}
+        <span class="max-w-full truncate">{{place .src}}</span>
         {{icon "arrow-right" "size-3.5 shrink-0"}}
-        <span class="max-w-full truncate font-medium text-foreground">{{place $e.dest}}</span>
+        <span class="max-w-full truncate font-medium text-foreground">{{place .dest}}</span>
         {{end}}
-        {{template "action_badge" $e}}
-        {{if $e.error}}<span class="truncate" title="{{$e.error}}">{{$e.error}}</span>{{end}}
+        {{template "action_badge" .}}
+        {{if .error}}<span class="truncate" title="{{.error}}">{{.error}}</span>{{end}}
       </div>
     </div>
-    {{else if eq $e.source "settings"}}
+    {{end}}
+    {{with $e.settings}}
     <div class="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
       <div class="flex min-w-0 flex-wrap items-center gap-2">
-        <span class="badge" data-variant="outline">{{$e.tool}}</span>
-        {{if $e.thread_id}}<span class="text-xs text-muted-foreground">thread {{$e.thread_id}}</span>{{end}}
+        <span class="badge" data-variant="outline">{{.tool}}</span>
+        {{if .thread_id}}<span class="text-xs text-muted-foreground">thread {{.thread_id}}</span>{{end}}
       </div>
-      <p class="text-xs text-muted-foreground">by {{$e.actor}} via {{$e.origin}}</p>
+      <p class="text-xs text-muted-foreground">by {{.actor}} via {{.origin}}</p>
     </div>
-    {{else}}
+    {{end}}
+    {{with $e.write}}
     <div class="flex min-w-0 flex-1 basis-64 flex-col gap-0.5">
       <div class="flex min-w-0 flex-wrap items-center gap-2">
-        <span class="badge" data-variant="outline">{{$e.tool}}</span>
-        <span class="truncate font-mono text-xs">{{$e.target}}</span>
+        <span class="badge" data-variant="outline">{{.tool}}</span>
+        <span class="truncate font-mono text-xs">{{.target}}</span>
       </div>
       <p class="text-xs text-muted-foreground">
-        {{if $e.thread_id}}by <a class="underline underline-offset-4" href="/chat/{{$e.thread_id}}">{{or $e.thread_kind "thread"}} thread</a>{{else}}by atrium{{end}}
+        {{if .thread_id}}by <a class="underline underline-offset-4" href="/chat/{{.thread_id}}">{{or .thread_kind "thread"}} thread</a>{{else}}by atrium{{end}}
       </p>
     </div>
     {{end}}
     <div class="flex sm:ms-auto">
-      {{if and (eq $e.source "write") $e.undone_at}}
-      <span class="badge" data-variant="outline">Undone {{template "when" (dict "epoch" $e.undone_at "style" "datetime")}}</span>
-      {{else if $e.blocked}}
-      <div class="flex flex-col gap-1">
-        <p class="max-w-xs text-xs text-muted-foreground">{{if $e.undo_blocked}}The undo has an unknown or partial outcome.{{else}}The write has an unknown or interrupted outcome.{{end}} Check the mailbox, then record what you found. atrium does not touch the mailbox.</p>
-        {{template "resolve_controls" (dict "path" (printf "/activity/mail/%v/resolve" $e.id) "target" (printf "#activity-%v-%v" $e.source $e.id) "undo" $e.undo_blocked "forward" (and $e.blocked (not $e.undo_blocked)))}}
-      </div>
-      {{else if $e.undoable}}
+      {{with $e.write}}
+      {{if .undone_at}}
+      <span class="badge" data-variant="outline">Undone {{template "when" (dict "epoch" .undone_at "style" "datetime")}}</span>
+      {{else if .undoable}}
       <button type="button" class="btn" data-size="sm" data-variant="outline" title="Undo"
-              hx-post="/activity/{{$e.source}}/{{$e.id}}/undo" hx-target="#activity-{{$e.source}}-{{$e.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
-              hx-confirm="{{if eq $e.source "mail"}}Undo this and put the message back?{{else}}Undo this change?{{end}}">{{icon "undo-2"}}Undo</button>
+              hx-post="/activity/write/{{$e.id}}/undo" hx-target="#activity-{{$e.source}}-{{$e.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
+              hx-confirm="Undo this change?">{{icon "undo-2"}}Undo</button>
+      {{end}}
+      {{end}}
+      {{with $e.mail}}
+      {{if .blocked}}
+      <div class="flex flex-col gap-1">
+        <p class="max-w-xs text-xs text-muted-foreground">{{if .undo_blocked}}The undo has an unknown or partial outcome.{{else}}The write has an unknown or interrupted outcome.{{end}} Check the mailbox, then record what you found. atrium does not touch the mailbox.</p>
+        {{template "resolve_controls" (dict "path" (printf "/activity/mail/%v/resolve" $e.id) "target" (printf "#activity-%v-%v" $e.source $e.id) "undo" .undo_blocked "forward" (and .blocked (not .undo_blocked)))}}
+      </div>
+      {{else if .undoable}}
+      <button type="button" class="btn" data-size="sm" data-variant="outline" title="Undo"
+              hx-post="/activity/mail/{{$e.id}}/undo" hx-target="#activity-{{$e.source}}-{{$e.id}}" hx-swap="outerHTML" hx-disabled-elt="this"
+              hx-confirm="Undo this and put the message back?">{{icon "undo-2"}}Undo</button>
+      {{end}}
       {{end}}
     </div>
   </div>
-  {{if and (or (eq $e.source "write") (eq $e.source "settings")) (or $e.before $e.after)}}
+  {{with $e.write}}{{if or .before .after}}
   <details class="text-xs">
     <summary class="cursor-pointer text-muted-foreground">Before and after</summary>
     <div class="mt-2 grid gap-2 md:grid-cols-2">
-      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="Before">{{or $e.before "(nothing)"}}</pre>
-      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="After">{{or $e.after "(nothing)"}}</pre>
+      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="Before">{{or .before "(nothing)"}}</pre>
+      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="After">{{or .after "(nothing)"}}</pre>
     </div>
   </details>
-  {{end}}
+  {{end}}{{end}}
+  {{with $e.settings}}{{if or .before .after}}
+  <details class="text-xs">
+    <summary class="cursor-pointer text-muted-foreground">Before and after</summary>
+    <div class="mt-2 grid gap-2 md:grid-cols-2">
+      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="Before">{{or .before "(nothing)"}}</pre>
+      <pre class="overflow-auto whitespace-pre-wrap rounded-md bg-muted p-2" aria-label="After">{{or .after "(nothing)"}}</pre>
+    </div>
+  </details>
+  {{end}}{{end}}
 </li>{{end}}
 
 {{template "activity_row" (dict "e" .Data.e "toast" .Toast)}}

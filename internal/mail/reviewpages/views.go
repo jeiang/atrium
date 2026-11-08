@@ -75,11 +75,16 @@ type proposalCardData struct {
 }
 
 type ActivityEntry struct {
-	Source   string  `json:"source"`
-	ID       int64   `json:"id"`
-	Category string  `json:"category"`
-	TS       float64 `json:"ts"`
+	Source   string            `json:"source"`
+	ID       int64             `json:"id"`
+	Category string            `json:"category"`
+	TS       float64           `json:"ts"`
+	Mail     *MailActivity     `json:"mail,omitempty"`
+	Write    *WriteActivity    `json:"write,omitempty"`
+	Settings *SettingsActivity `json:"settings,omitempty"`
+}
 
+type MailActivity struct {
 	MessageID   int64   `json:"message_id"`
 	Subject     *string `json:"subject"`
 	Kind        string  `json:"kind"`
@@ -93,24 +98,36 @@ type ActivityEntry struct {
 	Undoable    bool    `json:"undoable"`
 	Blocked     bool    `json:"blocked"`
 	UndoBlocked bool    `json:"undo_blocked"`
+}
 
+type WriteActivity struct {
 	Tool       string   `json:"tool"`
 	Target     string   `json:"target"`
 	ThreadID   *int64   `json:"thread_id"`
 	ThreadKind *string  `json:"thread_kind"`
 	UndoneAt   *float64 `json:"undone_at"`
-	Actor      string   `json:"actor"`
-	Origin     string   `json:"origin"`
 	Before     string   `json:"before"`
 	After      string   `json:"after"`
+	Undoable   bool     `json:"undoable"`
+}
+
+type SettingsActivity struct {
+	Tool     string `json:"tool"`
+	ThreadID *int64 `json:"thread_id"`
+	Actor    string `json:"actor"`
+	Origin   string `json:"origin"`
+	Before   string `json:"before"`
+	After    string `json:"after"`
 }
 
 func mailEntry(a live.Action, now float64) ActivityEntry {
 	return ActivityEntry{
-		Source: sourceMail, ID: a.ID, Category: categoryMail, TS: a.TS, MessageID: a.MessageID, Subject: a.Subject,
-		Kind: a.Kind, FromName: a.FromName, FromAddr: a.FromAddr, Account: a.Account, Src: a.Src, Dest: a.Dest,
-		Status: a.Status, Error: a.Error, Undoable: a.Undoable && !live.Blocked(a, now), Blocked: live.Blocked(a, now),
-		UndoBlocked: live.UndoBlocked(a, now),
+		Source: sourceMail, ID: a.ID, Category: categoryMail, TS: a.TS,
+		Mail: &MailActivity{
+			MessageID: a.MessageID, Subject: a.Subject, Kind: a.Kind, FromName: a.FromName, FromAddr: a.FromAddr,
+			Account: a.Account, Src: a.Src, Dest: a.Dest, Status: a.Status, Error: a.Error,
+			Undoable: a.Undoable && !live.Blocked(a, now), Blocked: live.Blocked(a, now), UndoBlocked: live.UndoBlocked(a, now),
+		},
 	}
 }
 

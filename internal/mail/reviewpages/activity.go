@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
@@ -38,9 +39,42 @@ func mustJSONIndent(v any) string {
 	return string(b)
 }
 
-const categorySQL = "CASE WHEN w.tool LIKE 'notion%' THEN 'wiki' WHEN w.tool LIKE 'media%' THEN 'media' ELSE 'assistant' END"
+var writeCategoryPrefixes = []struct{ Prefix, Category string }{
+	{"notion", categoryWiki},
+	{"media", categoryMedia},
+}
 
-const writeColumns = "id, ts, thread_id, tool, target, before_json, after_json, undo_json, undone_at, thread_kind, category"
+func writeCategory(tool string) string {
+	for _, prefix := range writeCategoryPrefixes {
+		if strings.HasPrefix(tool, prefix.Prefix) {
+			return prefix.Category
+		}
+	}
+	return categoryAssistant
+}
+
+func writeCategoryWhere(category string) (string, []any) {
+	if category == "" {
+		return "", nil
+	}
+	var clauses []string
+	var args []any
+	for _, prefix := range writeCategoryPrefixes {
+		if prefix.Category == category {
+			clauses = append(clauses, "tool LIKE ?")
+			args = append(args, prefix.Prefix+"%")
+		}
+	}
+	if category == categoryAssistant {
+		for _, prefix := range writeCategoryPrefixes {
+			clauses = append(clauses, "tool NOT LIKE ?")
+			args = append(args, prefix.Prefix+"%")
+		}
+	}
+	return strings.Join(clauses, " AND "), args
+}
+
+const writeColumns = "id, ts, thread_id, tool, target, before_json, after_json, undo_json, undone_at, thread_kind"
 
 func snippet(raw *string) (string, error) {
 	if raw == nil || *raw == "" {
@@ -59,26 +93,35 @@ func snippet(raw *string) (string, error) {
 
 func scanWrite(sc interface{ Scan(...any) error }) (ActivityEntry, error) {
 	var e ActivityEntry
+	var threadID *int64
+	var tool, target string
 	var before, after, undo *string
-	if err := sc.Scan(&e.ID, &e.TS, &e.ThreadID, &e.Tool, &e.Target, &before, &after, &undo, &e.UndoneAt, &e.ThreadKind, &e.Category); err != nil {
+	var undoneAt *float64
+	var threadKind *string
+	if err := sc.Scan(&e.ID, &e.TS, &threadID, &tool, &target, &before, &after, &undo, &undoneAt, &threadKind); err != nil {
 		return e, err
 	}
-	var err error
-	if e.Before, err = snippet(before); err != nil {
+	beforeText, err := snippet(before)
+	if err != nil {
 		return e, err
 	}
-	if e.After, err = snippet(after); err != nil {
+	afterText, err := snippet(after)
+	if err != nil {
 		return e, err
 	}
 	e.Source = sourceWrite
-	e.Undoable = undo != nil && *undo != "" && e.UndoneAt == nil
+	e.Category = writeCategory(tool)
+	e.Write = &WriteActivity{
+		Tool: tool, Target: target, ThreadID: threadID, ThreadKind: threadKind, UndoneAt: undoneAt,
+		Before: beforeText, After: afterText, Undoable: undo != nil && *undo != "" && undoneAt == nil,
+	}
 	return e, nil
 }
 
 func getWrite(ctx context.Context, q db.Querier, id int64) (*ActivityEntry, error) {
 	e, err := scanWrite(q.QueryRowContext(ctx,
-		"SELECT w.id, w.ts, w.thread_id, w.tool, w.target, w.before_json, w.after_json, w.undo_json, w.undone_at, t.kind, "+categorySQL+
-			" FROM agent_writes w LEFT JOIN threads t ON t.id = w.thread_id WHERE w.id = ?", id))
+		"SELECT w.id, w.ts, w.thread_id, w.tool, w.target, w.before_json, w.after_json, w.undo_json, w.undone_at, t.kind "+
+			"FROM agent_writes w LEFT JOIN threads t ON t.id = w.thread_id WHERE w.id = ?", id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -96,11 +139,12 @@ func settingsEntries(ctx context.Context, q db.Querier, limit int) ([]ActivityEn
 	}
 	return db.Collect(rows, func(r *sql.Rows) (ActivityEntry, error) {
 		e := ActivityEntry{Source: sourceSettings, Category: categorySettings}
+		var key, actor, origin string
 		var old, next *string
-		if err := r.Scan(&e.ID, &e.TS, &e.Tool, &old, &next, &e.Actor, &e.Origin); err != nil {
+		if err := r.Scan(&e.ID, &e.TS, &key, &old, &next, &actor, &origin); err != nil {
 			return e, err
 		}
-		e.Before, e.After = deref(old), deref(next)
+		e.Settings = &SettingsActivity{Tool: key, Actor: actor, Origin: origin, Before: deref(old), After: deref(next)}
 		return e, nil
 	})
 }
@@ -132,10 +176,15 @@ func timeline(ctx context.Context, q db.Querier, category string, limit, offset 
 		entries = append(entries, changes...)
 	}
 	if category != categoryMail && category != categorySettings {
-		rows, err := q.QueryContext(ctx,
-			"SELECT "+writeColumns+" FROM (SELECT w.*, t.kind AS thread_kind, "+categorySQL+" AS category FROM agent_writes w "+
-				"LEFT JOIN threads t ON t.id = w.thread_id) WHERE (? = '' OR category = ?) ORDER BY ts DESC, id DESC LIMIT ?",
-			category, category, want)
+		where, args := writeCategoryWhere(category)
+		query := "SELECT " + writeColumns + " FROM (SELECT w.*, t.kind AS thread_kind FROM agent_writes w " +
+			"LEFT JOIN threads t ON t.id = w.thread_id)"
+		if where != "" {
+			query += " WHERE " + where
+		}
+		query += " ORDER BY ts DESC, id DESC LIMIT ?"
+		args = append(args, want)
+		rows, err := q.QueryContext(ctx, query, args...)
 		if err != nil {
 			return nil, 0, err
 		}
@@ -215,7 +264,7 @@ func (s *service) undoMail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	known, err := live.Get(ctx, s.deps.DB.Write, id)
+	known, err := live.Get(ctx, s.deps.DB.Read, id)
 	check(err)
 	if known == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown action")
@@ -236,7 +285,7 @@ func (s *service) undoMail(w http.ResponseWriter, r *http.Request) {
 	default:
 		notice = toast("success", "Undone")
 	}
-	found, err := live.Get(ctx, s.deps.DB.Write, id)
+	found, err := live.Get(ctx, s.deps.DB.Read, id)
 	check(err)
 	s.undone(w, r, mailEntry(*found, s.now()), notice)
 }
@@ -263,7 +312,7 @@ func (s *service) resolveMail(w http.ResponseWriter, r *http.Request) {
 	default:
 		notice = resolvedToast(outcome)
 	}
-	found, err := live.Get(ctx, s.deps.DB.Write, id)
+	found, err := live.Get(ctx, s.deps.DB.Read, id)
 	check(err)
 	if found == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown action")
@@ -272,13 +321,20 @@ func (s *service) resolveMail(w http.ResponseWriter, r *http.Request) {
 	s.undone(w, r, mailEntry(*found, s.now()), notice)
 }
 
+func writeUndoDetail(err error) string {
+	if strings.Contains(err.Error(), "unknown undo kind") {
+		return "Not undone: atrium has no way to undo this change."
+	}
+	return err.Error()
+}
+
 func (s *service) undoWrite(w http.ResponseWriter, r *http.Request) {
 	id, ok := pathID(w, r, "write_id")
 	if !ok {
 		return
 	}
 	ctx := detached(r)
-	known, err := getWrite(ctx, s.deps.DB.Write, id)
+	known, err := getWrite(ctx, s.deps.DB.Read, id)
 	check(err)
 	if known == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown write")
@@ -289,17 +345,18 @@ func (s *service) undoWrite(w http.ResponseWriter, r *http.Request) {
 	var refused writes.UndoError
 	switch {
 	case errors.As(err, &refused):
+		detail := writeUndoDetail(err)
 		if !web.IsPartial(r) {
-			s.fail(w, r, http.StatusConflict, err.Error())
+			s.fail(w, r, http.StatusConflict, detail)
 			return
 		}
-		notice = toast("error", "Not undone", err.Error())
+		notice = toast("error", "Not undone", detail)
 	case err != nil:
 		panic(err)
 	default:
 		notice = toast("success", "Undone", fmt.Sprintf("Change %d was reverted.", id))
 	}
-	found, err := getWrite(ctx, s.deps.DB.Write, id)
+	found, err := getWrite(ctx, s.deps.DB.Read, id)
 	check(err)
 	s.undone(w, r, *found, notice)
 }

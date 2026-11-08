@@ -108,8 +108,9 @@ func TestUndoingAWriteWithoutARegisteredUndoerIsRefused(t *testing.T) {
 	s := newSite(t)
 	id := s.write(100, "profile_set", "profile:tone", nil, nil, nil, `{"op":"ghost"}`)
 	body := status(t, s.post(fmt.Sprintf("/activity/write/%d/undo", id), nil), http.StatusConflict)
-	if jsonOf(t, body)["detail"] != "unknown undo kind \"ghost\"" {
-		t.Errorf("body = %s", body)
+	detail := fmt.Sprint(jsonOf(t, body)["detail"])
+	if !strings.Contains(detail, "Not undone") || strings.Contains(detail, "ghost") {
+		t.Errorf("detail = %q", detail)
 	}
 }
 

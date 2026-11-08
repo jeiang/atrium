@@ -62,7 +62,7 @@ func (s *service) proposalsPage(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) card(w http.ResponseWriter, r *http.Request, id int64, notice *tpl.Toast) {
-	found, err := proposals.Get(r.Context(), s.deps.DB.Write, id)
+	found, err := proposals.Get(r.Context(), s.deps.DB.Read, id)
 	check(err)
 	if found == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown proposal")
@@ -145,7 +145,7 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	found, err := proposals.Get(ctx, s.deps.DB.Write, id)
+	found, err := proposals.Get(ctx, s.deps.DB.Read, id)
 	check(err)
 	if found == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown proposal")
