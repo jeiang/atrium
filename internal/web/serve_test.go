@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -19,11 +20,29 @@ import (
 	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
 )
 
+func testBoot() Boot {
+	return BootFunc{OpenFunc: func(ctx context.Context) (*db.DB, config.Config, error) {
+		cfg, err := config.Load(config.OS)
+		if err != nil {
+			return nil, config.Config{}, err
+		}
+		d, err := db.Connect(cfg.DBPath)
+		if err != nil {
+			return nil, config.Config{}, err
+		}
+		if err := config.Boot(ctx, config.OS, d, cfg); err != nil {
+			_ = d.Close()
+			return nil, config.Config{}, err
+		}
+		return d, cfg, nil
+	}}
+}
+
 func runServe(t *testing.T, ctx context.Context, args ...string) (int, string, string) {
 	t.Helper()
 	t.Setenv("COLUMNS", "")
 	app := cli.New("atrium", nil)
-	app.Add(ServeCommand())
+	app.Add(ServeCommand(testBoot()))
 	var stdout, stderr bytes.Buffer
 	code := app.Run(ctx, append([]string{"serve"}, args...), &stdout, &stderr)
 	return code, stdout.String(), stderr.String()

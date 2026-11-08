@@ -111,7 +111,7 @@ func (s *Set) validate() error {
 			commands[c.Name] = true
 		}
 		for _, p := range r.Pages {
-			if p.Module == nil {
+			if p.Module == nil && p.Start == nil && len(p.Globals) == 0 && p.Templates == nil {
 				return &InvalidPage{Module: r.Name}
 			}
 		}

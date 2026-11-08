@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"context"
 	"embed"
 	"io/fs"
 	"net/http"
@@ -20,7 +21,9 @@ import (
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/handlers"
+	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/web"
+	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 //go:embed templates/*.gohtml
@@ -36,6 +39,15 @@ func Templates() fs.FS {
 
 func PauseModule(r chi.Router, d *web.Deps) {
 	s := &service{deps: d, live: &live.Live{DB: d.DB, Cfg: d.Cfg}}
+	d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
+		mode, err := mail.Mode(ctx, d.DB.Read)
+		if err != nil {
+			return err
+		}
+		f.Mode = mode
+		f.Paused = safety.IsPaused(d.Cfg.PausePath())
+		return nil
+	})
 	r.Post("/live/pause", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, true) })
 	d.Admin(http.MethodPost, "/live/resume", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, false) })
 }

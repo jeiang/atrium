@@ -94,6 +94,13 @@ func Module(o Options) web.Module {
 			drafts:   &drafts.Store{DB: d.DB, Cfg: d.Cfg, Open: drafts.Opener(open), SMTP: o.SMTP, Now: now},
 		}
 
+		d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
+			var n int
+			err := d.DB.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM proposals WHERE status = 'pending'").Scan(&n)
+			f.PendingCount = n
+			return err
+		})
+
 		r.Get("/proposals", s.proposalsPage)
 		r.Post("/proposals/{proposal_id}/approve", s.proposalApprove)
 		r.Post("/proposals/{proposal_id}/dismiss", s.proposalDismiss)

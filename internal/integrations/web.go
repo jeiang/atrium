@@ -55,6 +55,24 @@ func Module(r chi.Router, d *web.Deps) {
 	}()
 	d.OnClose(func() { <-done })
 	h := handlers{d}
+	d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
+		if !f.Auth.Admin {
+			return nil
+		}
+		rows, err := d.DB.Read.QueryContext(ctx, "SELECT name || ' ' || replace(state, '_', ' ') FROM integration_health WHERE state <> 'ok' ORDER BY name")
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				return err
+			}
+			f.IntegrationAlerts = append(f.IntegrationAlerts, name)
+		}
+		return rows.Err()
+	})
 	d.Admin(http.MethodGet, path, h.index)
 	d.Admin(http.MethodPost, path+"/{name}/test", h.test)
 	d.Admin(http.MethodPost, path+"/{name}/disconnect", h.disconnect)

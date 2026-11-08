@@ -115,7 +115,7 @@ func flRange(spec string) [2]string { return [2]string{"Range", spec} }
 
 func flProxy(t *testing.T, s *site) *site {
 	t.Helper()
-	render, err := web.NewRenderer(s.cfg, s.db, tpl.Config{Modules: []fs.FS{Templates()}})
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}})
 	if err != nil {
 		t.Fatal(err)
 	}

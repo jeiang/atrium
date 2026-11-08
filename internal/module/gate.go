@@ -23,21 +23,10 @@ func (s *Set) enabled(name string) bool {
 }
 
 func (s *Set) Pages() []web.Page {
-	pages := []web.Page{{Globals: map[string]any{"module_enabled": s.enabled}, Module: func(_ chi.Router, d *web.Deps) {
-		err := s.Seed(context.Background(), d.DB)
-		var snap *Snapshot
-		if err == nil {
-			snap, err = s.Evaluate(context.Background(), d.DB.Read)
-		}
-		if err != nil {
-			log.Error("module evaluation failed, serving core only", logx.Err, err.Error())
-			snap = s.coreOnly()
-		}
-		s.cur.Store(snap)
-	}}, s.modulesPage()}
+	pages := []web.Page{{Globals: map[string]any{"module_enabled": s.enabled}}, s.modulesPage()}
 	for _, r := range s.regs {
 		for _, p := range r.Pages {
-			if p.Module == nil {
+			if p.Module == nil && p.Start == nil {
 				continue
 			}
 			if !r.Core {
@@ -126,20 +115,45 @@ func skip(path string, st Status, msg string) {
 	log.Info(msg, logx.Module, st.Name, logx.State, string(st.State), logx.Reason, st.Reason(), logx.Command, strings.TrimSpace(path))
 }
 
-func (s *Set) open(ctx context.Context) (*db.DB, error) {
+// Open loads the configuration, opens the database and boots it. It is the
+// serve command's only path to the application database.
+func (s *Set) Open(ctx context.Context) (*db.DB, config.Config, error) {
 	cfg, err := config.Load(s.env)
 	if err != nil {
-		return nil, err
+		return nil, config.Config{}, err
 	}
 	d, err := db.Connect(cfg.DBPath)
 	if err != nil {
-		return nil, err
+		return nil, config.Config{}, err
 	}
 	if err := config.Boot(ctx, s.env, d, cfg); err != nil {
 		_ = d.Close()
-		return nil, err
+		return nil, config.Config{}, err
 	}
-	return d, nil
+	return d, cfg, nil
+}
+
+func (s *Set) open(ctx context.Context) (*db.DB, error) {
+	d, _, err := s.Open(ctx)
+	return d, err
+}
+
+// Start seeds the module flags and evaluates the one startup snapshot. A
+// failure to evaluate leaves the process serving core only, matching the
+// behaviour the module gate has always had.
+func (s *Set) Start(ctx context.Context, d *web.Deps) error {
+	if err := s.Seed(ctx, d.DB); err != nil {
+		log.Error("module evaluation failed, serving core only", logx.Err, err.Error())
+		s.cur.Store(s.coreOnly())
+		return nil
+	}
+	snap, err := s.Evaluate(ctx, d.DB.Read)
+	if err != nil {
+		log.Error("module evaluation failed, serving core only", logx.Err, err.Error())
+		snap = s.coreOnly()
+	}
+	s.cur.Store(snap)
+	return nil
 }
 
 func (s *Set) load(ctx context.Context) (*Snapshot, error) {

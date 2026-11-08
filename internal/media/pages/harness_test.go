@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	mailpages "github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -63,13 +64,13 @@ func newSite(t *testing.T, vars map[string]string, o Options) *site {
 	if err := db.Migrate(context.Background(), d, path); err != nil {
 		t.Fatal(err)
 	}
-	render, err := web.NewRenderer(cfg, d, tpl.Config{Modules: []fs.FS{Templates()}})
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	srv, err := web.New(web.Options{
 		Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, AllowedHosts: []string{host}, Public: PublicCheck(cfg, env, d),
-		Render: render, Modules: []web.Module{Module(o)},
+		Render: render, Modules: []web.Module{Module(o), mailpages.PauseModule},
 	})
 	if err != nil {
 		t.Fatal(err)

@@ -73,7 +73,7 @@ func newSite(t *testing.T, extra map[string]string) *site {
 	settings.Default.SetPins(pins)
 	t.Cleanup(func() { settings.Default.SetPins(nil) })
 	s := &site{t: t, db: d, cfg: cfg, clock: 1_780_000_000}
-	render, err := web.NewRenderer(cfg, d, tpl.Config{Modules: []fs.FS{Templates(), assistantpages.Templates()}})
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates(), assistantpages.Templates()}})
 	if err != nil {
 		t.Fatal(err)
 	}

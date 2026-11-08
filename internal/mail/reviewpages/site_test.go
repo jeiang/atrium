@@ -21,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
+	mailpages "github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/smtp/smtptest"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
@@ -84,13 +85,13 @@ func newSite(t *testing.T, options ...siteOption) *site {
 		return s.clock
 	}
 	s.store = &drafts.Store{DB: d, Cfg: cfg, Now: tick}
-	render, err := web.NewRenderer(cfg, d, tpl.Config{Modules: []fs.FS{Templates()}})
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}})
 	if err != nil {
 		t.Fatal(err)
 	}
 	srv, err := web.New(web.Options{
 		Cfg: cfg, Env: env, DB: d, Auth: []string{web.AuthLocal}, AllowedHosts: []string{"testserver"}, Render: render,
-		Modules: []web.Module{Module(Options{Open: open, Now: tick, Writes: s.writes, Registry: s.registry, SMTP: s.smtp.Factory})},
+		Modules: []web.Module{Module(Options{Open: open, Now: tick, Writes: s.writes, Registry: s.registry, SMTP: s.smtp.Factory}), mailpages.PauseModule},
 	})
 	if err != nil {
 		t.Fatal(err)

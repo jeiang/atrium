@@ -108,7 +108,7 @@ func newRig(t *testing.T, o rigOpts) *rig {
 	}
 	svc := oidc.New(d, env)
 	svc.KeyRefetchGap = 0
-	render, err := web.NewRenderer(cfg, d, tpl.Config{})
+	render, err := web.NewRenderer(tpl.Config{})
 	if err != nil {
 		t.Fatal(err)
 	}

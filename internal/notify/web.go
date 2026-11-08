@@ -49,6 +49,24 @@ func Module(r chi.Router, d *web.Deps) {
 	}()
 	d.OnClose(func() { <-done })
 	h := handlers{d}
+	d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
+		if !f.Auth.Admin {
+			return nil
+		}
+		rows, err := d.DB.Read.QueryContext(ctx, "SELECT name FROM ntfy_channels WHERE failures >= 3 ORDER BY name")
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var name string
+			if err := rows.Scan(&name); err != nil {
+				return err
+			}
+			f.NotifyFailing = append(f.NotifyFailing, name)
+		}
+		return rows.Err()
+	})
 	d.Admin(http.MethodGet, page, h.index)
 	d.Admin(http.MethodPost, page+"/account", h.connect)
 	d.Admin(http.MethodPost, page+"/probe", h.probe)

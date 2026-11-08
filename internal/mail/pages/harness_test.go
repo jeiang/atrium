@@ -65,7 +65,7 @@ func newEnv(t *testing.T, mode string) (config.Config, config.Env, *db.DB) {
 
 func newServer(t *testing.T, cfg config.Config, env config.Env, d *db.DB, o Options) *web.Server {
 	t.Helper()
-	render, err := web.NewRenderer(cfg, d, tpl.Config{Modules: []fs.FS{Templates()}, Globals: Globals()})
+	render, err := web.NewRenderer(tpl.Config{Modules: []fs.FS{Templates()}, Globals: Globals()})
 	if err != nil {
 		t.Fatal(err)
 	}

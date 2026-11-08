@@ -15,7 +15,7 @@ import (
 func runServePages(t *testing.T, ctx context.Context, pages []Page, args ...string) (int, string, string) {
 	t.Helper()
 	app := cli.New("atrium", nil)
-	app.Add(ServeCommand(pages...))
+	app.Add(ServeCommand(testBoot(), pages...))
 	var stdout, stderr bytes.Buffer
 	code := app.Run(ctx, append([]string{"serve"}, args...), &stdout, &stderr)
 	return code, stdout.String(), stderr.String()

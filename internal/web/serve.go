@@ -68,9 +68,35 @@ type Page struct {
 	Globals   map[string]any
 	Public    func(config.Config, config.Env, *db.DB) func(*http.Request) bool
 	Home      string
+	Start     func(context.Context, *Deps) error
 }
 
-func ServeCommand(pages ...Page) *cli.Command {
+// Boot opens the application database and starts the modules that own it.
+// The serve command calls Open once, then Start after the modules are
+// registered and before the listener opens.
+type Boot interface {
+	Open(context.Context) (*db.DB, config.Config, error)
+	Start(context.Context, *Deps) error
+}
+
+// BootFunc adapts functions to Boot.
+type BootFunc struct {
+	OpenFunc  func(context.Context) (*db.DB, config.Config, error)
+	StartFunc func(context.Context, *Deps) error
+}
+
+func (b BootFunc) Open(ctx context.Context) (*db.DB, config.Config, error) {
+	return b.OpenFunc(ctx)
+}
+
+func (b BootFunc) Start(ctx context.Context, d *Deps) error {
+	if b.StartFunc == nil {
+		return nil
+	}
+	return b.StartFunc(ctx, d)
+}
+
+func ServeCommand(boot Boot, pages ...Page) *cli.Command {
 	return &cli.Command{
 		Name: "serve",
 		Setup: func(args *cli.Args) cli.Handler {
@@ -80,7 +106,7 @@ func ServeCommand(pages ...Page) *cli.Command {
 			hosts := args.Repeated("allowed-host", cli.Opt{Help: "accepted Host header; repeatable (proxy mode requires one, or ATRIUM_PUBLIC_HOST)"})
 			force := args.Bool("force-disable-auth", cli.Opt{Help: "start without authentication when none is configured"})
 			return func(env *cli.Env) int {
-				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, forceDisableAuth: *force, pages: pages, env: env.Env})
+				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, forceDisableAuth: *force, pages: pages, env: env.Env, boot: boot})
 			}
 		},
 	}
@@ -93,6 +119,7 @@ type serveArgs struct {
 	hosts []string
 	pages []Page
 	env   config.Env
+	boot  Boot
 
 	forceDisableAuth bool
 }
@@ -113,31 +140,19 @@ func serve(env *cli.Env, a serveArgs) int {
 	if !ok {
 		return cli.ExitError
 	}
-	cfg, err := config.Load(a.env)
-	if err != nil {
-		_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)
-		return cli.ExitError
-	}
-	if _, err := config.Location(a.env); err != nil {
-		_, _ = fmt.Fprintf(env.Stderr, "error: the tz setting is not a time zone: %s. Use an IANA name such as America/Port_of_Spain.\n", strconv.Quote(config.TZName(a.env)))
-		return cli.ExitError
-	}
-	if err := run(env.Ctx, cfg, a, hosts, policy); err != nil {
+	if err := run(env.Ctx, a, hosts, policy); err != nil {
 		log.Error("serve failed", logx.Err, err.Error())
 		return cli.ExitError
 	}
 	return cli.ExitOK
 }
 
-func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string, policy Policy) error {
-	d, err := db.Connect(cfg.DBPath)
+func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error {
+	d, cfg, err := a.boot.Open(ctx)
 	if err != nil {
 		return err
 	}
 	defer func() { _ = d.Close() }()
-	if err := config.Boot(ctx, a.env, d, cfg); err != nil {
-		return err
-	}
 	if _, err := config.Location(a.env); err != nil {
 		return fmt.Errorf("the tz setting is not a time zone: %w", err)
 	}
@@ -163,7 +178,9 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string, po
 	var public []func(*http.Request) bool
 	home := ""
 	for _, p := range a.pages {
-		modules = append(modules, p.Module)
+		if p.Module != nil {
+			modules = append(modules, p.Module)
+		}
 		if p.Public != nil {
 			public = append(public, p.Public(cfg, a.env, d))
 		}
@@ -182,11 +199,23 @@ func run(ctx context.Context, cfg config.Config, a serveArgs, hosts []string, po
 			log.Warn("oidc sign-in is not set up; nobody can sign in until it is", logx.Err, err.Error())
 		}
 	}
-	render, err := NewRenderer(cfg, d, tpl.Config{Modules: templates, Globals: globals})
+	render, err := NewRenderer(tpl.Config{Modules: templates, Globals: globals})
 	if err != nil {
 		return err
 	}
-	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, Policy: &policy, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, Home: home})
+	srv, err := New(Options{Cfg: cfg, Env: a.env, DB: d, Auth: a.auth, Policy: &policy, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, Home: home, OnReady: func(deps *Deps) error {
+		if err := a.boot.Start(ctx, deps); err != nil {
+			return err
+		}
+		for _, p := range a.pages {
+			if p.Start != nil {
+				if err := p.Start(ctx, deps); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}})
 	if err != nil {
 		return err
 	}

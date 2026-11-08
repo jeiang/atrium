@@ -82,6 +82,7 @@ type Options struct {
 	OIDC         *oidc.Service
 	LoginLinks   *loginlink.Service
 	Policy       *Policy
+	OnReady      func(*Deps) error
 }
 
 type Server struct {
@@ -153,6 +154,7 @@ func New(o Options) (*Server, error) {
 	s.stop = make(chan struct{})
 	deps := &Deps{
 		Cfg: o.Cfg, Env: o.Env, DB: o.DB, Render: o.Render, Error: s.Error, Stopping: s.stop,
+		OnFrame: func(FrameFunc) {},
 		OnClose: func(f func()) { s.closers = append(s.closers, f) },
 		router:  s.mux, routes: &s.routes,
 	}
@@ -165,6 +167,14 @@ func New(o Options) (*Server, error) {
 	if auth.OIDC() {
 		o.Render.oidcOn.Store(true)
 		s.registerAuthRoutes()
+	}
+	if o.OnReady != nil {
+		if err := o.OnReady(deps); err != nil {
+			for _, close := range s.closers {
+				close()
+			}
+			return nil, err
+		}
 	}
 	for _, register := range o.Modules {
 		register(s.mux, deps)
