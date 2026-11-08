@@ -250,7 +250,7 @@ func TestDraftStatusFiltersAndStates(t *testing.T) {
 	status(t, s.get("/drafts?status=bogus"), http.StatusUnprocessableEntity)
 	status(t, s.get("/drafts?status=sending"), http.StatusOK)
 	mustContain(t, status(t, s.get("/drafts"), http.StatusOK), "No draft drafts")
-	mustContain(t, status(t, s.get("/drafts?status="), http.StatusOK), "No  drafts", "Ask the assistant in chat to draft a reply.")
+	mustContain(t, status(t, s.get("/drafts?status="), http.StatusOK), "No  drafts")
 	for _, state := range []string{"discarded", "sending"} {
 		id := s.draft(config.Gmail, "a@x.test", nil, "Hi "+state, "body "+state, nil)
 		s.exec("UPDATE drafts SET status = ? WHERE id = ?", state, id)

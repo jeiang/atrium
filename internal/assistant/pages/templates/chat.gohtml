@@ -3,6 +3,17 @@
 {{define "content_class"}}chat-content{{end}}
 {{define "content"}}{{$d := .Data}}
 <div class="reading gap-8 pt-10 pb-16 md:pt-16">
+  {{if $d.Welcome}}
+  <section class="welcome" aria-labelledby="welcome-h" data-welcome>
+    <span class="welcome-mark" aria-hidden="true">a</span>
+    <h2 id="welcome-h" class="text-xl font-semibold tracking-tight text-ink">What can I take off your plate?</h2>
+    <ul class="flex flex-wrap justify-center gap-2" role="list" aria-label="Suggestions">
+      {{range list "What needs my attention today?" "Summarise my unread mail" "Plan my week"}}
+      <li><button type="button" class="btn" data-variant="outline" data-size="sm" data-action="fill-composer" data-target="new-text" data-text="{{.}}">{{.}}</button></li>
+      {{end}}
+    </ul>
+  </section>
+  {{end}}
   <form method="post" action="/chat" enctype="multipart/form-data" hx-post="/chat" hx-encoding="multipart/form-data" hx-swap="none" hx-disabled-elt="find button[type=submit]"
         class="composer" data-reset data-attach>
     <input type="hidden" name="csrf_token" value="{{.CSRF}}">
@@ -15,6 +26,8 @@
       <button type="submit" class="btn ms-auto" data-size="sm">{{icon "send"}}Start</button>
     </div>
   </form>
+  <div hx-get="/review/strip" hx-trigger="load" hx-swap="outerHTML" data-needs-strip></div>
+  {{if not $d.Welcome}}
   <section class="flex flex-col gap-3" aria-label="Threads">
     <form id="thread-search" action="/chat" method="get" role="search" class="flex flex-col gap-2 sm:flex-row sm:items-center"
           hx-get="/chat" hx-target="#threads" hx-replace-url="true" hx-sync="this:replace" hx-indicator="#thread-spinner"
@@ -23,7 +36,7 @@
       <div role="group" class="field flex-1">
         <label for="thread-q" class="sr-only">Search threads</label>
         <div class="input-group h-9">
-          {{icon "search" "size-4 shrink-0 text-muted-foreground"}}
+          {{icon "search" "ms-3 size-4 shrink-0 p-0 text-muted-foreground"}}
           <input id="thread-q" name="q" type="search" value="{{$d.Q}}" placeholder="Search threads" autocomplete="off" data-search-input>
           {{template "spinner" (dict "id" "thread-spinner" "label" "Searching")}}
         </div>
@@ -38,5 +51,6 @@
       {{template "chat_thread_list" (dict "threads" $d.Threads "q" $d.Q "view" $d.View)}}
     </div>
   </section>
+  {{end}}
 </div>
 {{end}}

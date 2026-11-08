@@ -1,0 +1,2 @@
+{{range .Data}}<div id="palette-thread-{{.ID}}" role="option" aria-selected="false" class="palette-option" data-palette-href="/chat/{{.ID}}">{{icon "messages-square"}}<span class="truncate">{{or (str .Title) "Untitled thread"}}</span></div>
+{{end}}

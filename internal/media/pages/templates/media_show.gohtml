@@ -4,7 +4,7 @@
 <p class="text-xs"><a class="underline underline-offset-4" href="/apps/media/library">{{icon "arrow-left" "inline size-3.5"}} Library</a></p>
 <div class="flex items-start gap-4">
   <img class="aspect-[2/3] w-32 shrink-0 rounded-lg border bg-muted object-cover" src="/apps/media/art/show/{{urlencode $dir}}" alt="">
-  <p class="text-sm text-muted-foreground">{{len .Data.Show.Seasons}} season{{if ne (len .Data.Show.Seasons) 1}}s{{end}}. Public links are signed and expire after {{$ttl}}; VPN links need the mesh.</p>
+  <p class="text-sm text-muted-foreground">{{len .Data.Show.Seasons}} season{{if ne (len .Data.Show.Seasons) 1}}s{{end}}</p>
 </div>
 {{range $i, $s := .Data.Show.Seasons}}{{$n := inc $i}}
 <section class="flex flex-col gap-3" aria-labelledby="season-{{$n}}">

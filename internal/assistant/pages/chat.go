@@ -24,6 +24,7 @@ type listData struct {
 	Threads []threads.Listed `json:"threads"`
 	Q       string           `json:"q"`
 	View    string           `json:"view"`
+	Welcome bool             `json:"welcome"`
 
 	Defaults threads.Options `json:"defaults"`
 	Composer ComposerView    `json:"composer"`
@@ -53,6 +54,12 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string) 
 	if web.IsPartial(r) {
 		p.fragment(w, r, http.StatusOK, "_thread_list.gohtml", data)
 		return
+	}
+	data.Welcome = len(found) == 0 && q == "" && view == ""
+	if data.Welcome {
+		exists, err := threads.HasChat(r.Context(), p.deps.DB.Read)
+		check(err)
+		data.Welcome = !exists
 	}
 	p.page(w, r, "chat.gohtml", data)
 }

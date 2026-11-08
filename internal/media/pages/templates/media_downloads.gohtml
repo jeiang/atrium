@@ -1,8 +1,7 @@
 {{define "title"}}Downloads{{end}}
 {{define "heading"}}Media · Downloads{{end}}
 {{define "content"}}{{$csrf := .CSRF}}
-<div class="flex flex-wrap items-center justify-between gap-3">
-  <p class="text-sm text-muted-foreground"><strong>media</strong> torrents are filed into the library from here once complete; <strong>plain</strong> ones stay in downloads/.</p>
+<div class="flex flex-wrap items-center justify-end gap-3">
   <a class="btn" data-size="sm" href="/apps/media/add">{{icon "plus"}}Add torrent</a>
 </div>
 
@@ -63,7 +62,7 @@
     </div>
   </form>
   {{else}}
-  {{if not .Data.QueueError}}{{template "empty_state" (dict "icon_name" "folder-input" "title" "Nothing is waiting" "body" "Completed media torrents and folders dropped into import/ appear here.")}}{{end}}
+  {{if not .Data.QueueError}}{{template "empty_state" (dict "icon_name" "folder-input" "title" "Nothing is waiting")}}{{end}}
   {{end}}
 </section>
 {{end}}

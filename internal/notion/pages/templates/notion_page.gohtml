@@ -9,14 +9,13 @@
     <section class="flex flex-col gap-3" aria-labelledby="edit-title">
       <header class="flex flex-col gap-1">
         <h2 id="edit-title" class="text-sm font-medium">Draft an edit</h2>
-        <p class="text-xs text-muted-foreground">The model drafts the change as a proposal. Notion stays untouched until you approve it.</p>
       </header>
       <form class="flex flex-col items-start gap-2" hx-post="/notion/{{urlencode $p.ID}}/edit" hx-target="#edit-result" hx-disabled-elt="find button[type=submit]">
         <div role="group" class="field w-full">
           <label for="edit-instruction" class="sr-only">What should change?</label>
           <textarea id="edit-instruction" name="instruction" rows="4" required placeholder="What should change? For example: add a short summary at the top."></textarea>
         </div>
-        <button type="submit" class="btn" data-size="sm">{{icon "pencil"}}Draft edit</button>
+        <button type="submit" class="btn" data-size="sm" title="Drafted as a proposal; Notion is unchanged until you approve it">{{icon "pencil"}}Draft edit</button>
       </form>
       <div id="edit-result" data-loading="action-loading" aria-live="polite" class="empty:hidden"></div>
     </section>
@@ -24,7 +23,6 @@
     <section class="flex flex-col gap-3 border-t pt-6" aria-labelledby="related-title">
       <header class="flex flex-col gap-1">
         <h2 id="related-title" class="text-sm font-medium">Related pages</h2>
-        <p class="text-xs text-muted-foreground">Closest in meaning. Propose a link and the model picks a relation or a mention.</p>
       </header>
       <div id="link-result" data-loading="action-loading" aria-live="polite" class="empty:hidden"></div>
       {{if $d.Related}}
@@ -44,7 +42,7 @@
           {{else}}
           <button type="button" class="btn shrink-0" data-size="sm" data-variant="outline"
                   hx-post="/notion/{{urlencode $p.ID}}/link" hx-vals='{{tojson (dict "target" .ID)}}' hx-target="#link-result" hx-disabled-elt="#related-list button"
-                  aria-label="Propose a link to {{or .Title "Untitled"}}">{{icon "link"}}Propose link</button>
+                  aria-label="Propose a link to {{or .Title "Untitled"}}" title="The model picks a relation or a mention">{{icon "link"}}Propose link</button>
           {{end}}
         </li>
         {{end}}

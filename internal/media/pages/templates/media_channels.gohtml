@@ -1,8 +1,6 @@
 {{define "title"}}Channels{{end}}
 {{define "heading"}}Media · Channels{{end}}
 {{define "content"}}{{$csrf := .CSRF}}{{$q := .Data.Q}}{{$form := .Data.Form}}{{$status := .Data.Status}}
-<p class="text-sm text-muted-foreground">A channel is a show plus a regex over its EZTV release titles, checked every 30 minutes. New matches are downloaded as media torrents and announced on ntfy. Adding a channel also downloads the matching releases that are already out; untick the download box below to only record them.</p>
-
 <section class="flex flex-col gap-3" aria-labelledby="channels-h">
   <div class="flex flex-wrap items-center justify-between gap-2">
     <h2 id="channels-h" class="text-sm font-medium">Watching ({{len .Data.Channels}})</h2>
@@ -34,7 +32,7 @@
     {{end}}
   </ul>
   {{else}}
-  {{template "empty_state" (dict "icon_name" "tv" "title" "No channels" "body" "Find a show below and add a title regex.")}}
+  {{template "empty_state" (dict "icon_name" "tv" "title" "No channels")}}
   {{end}}
 </section>
 
@@ -82,7 +80,7 @@
   <div class="grid gap-3 sm:grid-cols-[1fr_auto]">
     <div role="group" class="field">
       <label for="pattern">Title regex</label>
-      <input id="pattern" name="pattern" type="text" value="{{$form.Pattern}}" class="font-mono" placeholder="^Lanterns S\d+E\d+ 1080p" spellcheck="false" autocomplete="off" required>
+      <input id="pattern" name="pattern" type="text" value="{{$form.Pattern}}" class="font-mono" placeholder="^Lanterns S\d+E\d+ 1080p" spellcheck="false" autocomplete="off" required title="Matched against EZTV release titles every 30 minutes; matches download as media torrents">
     </div>
     <label class="flex h-8 items-center gap-2 self-end text-sm"><input id="case" class="input" type="checkbox" name="case_sensitive" value="1"{{if $form.CaseSensitive}} checked{{end}}>Case-sensitive</label>
   </div>

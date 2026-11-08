@@ -17,6 +17,7 @@
       <h1>{{block "heading" .}}{{end}}</h1>
       {{block "header_meta" .}}{{end}}
       <div class="ms-auto flex shrink-0 items-center gap-2">
+        <button id="palette-open" type="button" class="btn" data-variant="ghost" data-size="icon-sm" aria-label="Open command palette" aria-haspopup="dialog" aria-controls="palette" title="Search and commands (⌘K)" data-action="open-palette">{{icon "search"}}</button>
         {{block "header_actions" .}}{{end}}
         {{template "mode_badge" (dict "mode" .Mode "paused" .Paused)}}
         {{if and (eq .Mode "live") (or .Auth.Admin (not .Paused))}}
@@ -44,6 +45,8 @@
     </article>
   </dialog>
 
+  {{template "palette" .}}
+
   <template id="reader-loading">
     <div class="flex flex-col gap-3" role="status" aria-label="Loading message">
       <div class="skeleton h-6 w-3/4 rounded-md bg-muted"></div>
@@ -67,6 +70,7 @@
   <nav class="sb-body" aria-label="Primary">
     {{with .Threads}}
     <a href="/chat" class="btn sb-new" title="New chat">{{icon "plus"}}<span>New chat</span></a>
+    <a href="/today" class="sb-item" title="Today" data-today>{{icon "sun"}}<span class="sb-label">Today</span></a>
     <div class="sb-threads">
       {{if .Pinned}}{{template "sb_threads" (dict "label" "Pinned" "threads" .Pinned "path" $path)}}{{end}}
       {{range .Dated}}{{template "sb_threads" (dict "label" .Label "threads" .Threads "path" $path)}}{{end}}
@@ -101,6 +105,44 @@
     </div>
   </div>
 </aside>
+{{- end}}
+{{define "palette"}}
+<dialog id="palette" class="palette" aria-labelledby="palette-title"{{if .Threads}} data-palette-threads="/chat/palette"{{end}}>
+  <div class="palette-box">
+    <h2 id="palette-title" class="sr-only">Command palette</h2>
+    <div class="palette-search">
+      {{icon "search"}}
+      <input id="palette-input" type="text" role="combobox" aria-expanded="true" aria-controls="palette-list" aria-autocomplete="list" aria-label="Search threads, pages and actions" placeholder="Search threads, pages, actions" autocomplete="off" spellcheck="false">
+    </div>
+    <div id="palette-list" role="listbox" aria-label="Results" class="palette-list">
+      {{if .Threads}}
+      <div role="group" aria-labelledby="palette-h-threads" data-palette-group="threads">
+        <div id="palette-h-threads" role="presentation" class="palette-head">Threads</div>
+        <div data-palette-thread-options></div>
+      </div>
+      {{end}}
+      <div role="group" aria-labelledby="palette-h-actions">
+        <div id="palette-h-actions" role="presentation" class="palette-head">Actions</div>
+        {{if .Threads}}
+        <div id="palette-action-new" role="option" aria-selected="false" class="palette-option" data-palette-href="/chat">{{icon "plus"}}<span class="truncate">New chat</span></div>
+        <div id="palette-action-today" role="option" aria-selected="false" class="palette-option" data-palette-href="/today">{{icon "sun"}}<span class="truncate">Today</span></div>
+        {{end}}
+        <div id="palette-action-light" role="option" aria-selected="false" class="palette-option" data-palette-theme="light">{{icon "sun"}}<span class="truncate">Light theme</span></div>
+        <div id="palette-action-dark" role="option" aria-selected="false" class="palette-option" data-palette-theme="dark">{{icon "moon"}}<span class="truncate">Dark theme</span></div>
+        <div id="palette-action-system" role="option" aria-selected="false" class="palette-option" data-palette-theme="system">{{icon "monitor"}}<span class="truncate">System theme</span></div>
+        <div id="palette-action-sidebar" role="option" aria-selected="false" class="palette-option" data-palette-sidebar>{{icon "panel-left"}}<span class="truncate">Toggle sidebar</span></div>
+      </div>
+      <div role="group" aria-labelledby="palette-h-pages">
+        <div id="palette-h-pages" role="presentation" class="palette-head">Pages</div>
+        {{range $i, $p := .Pages}}<div id="palette-page-{{$i}}" role="option" aria-selected="false" class="palette-option" data-palette-href="{{$p.URL}}">{{icon (or $p.Icon "arrow-right")}}<span class="truncate">{{$p.Label}}</span>{{with $p.Group}}<span class="palette-hint">{{.}}</span>{{end}}</div>
+        {{end}}
+        {{if .Auth.Admin}}{{range $i, $p := .Settings}}<div id="palette-settings-{{$i}}" role="option" aria-selected="false" class="palette-option" data-palette-href="{{$p.URL}}">{{icon "settings"}}<span class="truncate">{{$p.Label}}</span><span class="palette-hint">Settings</span></div>
+        {{end}}{{end}}
+      </div>
+    </div>
+    <p class="palette-empty" hidden data-palette-empty>No matches</p>
+  </div>
+</dialog>
 {{- end}}
 {{define "sb_threads"}}{{$path := .path}}
 <section class="sb-section" aria-label="{{.label}}">

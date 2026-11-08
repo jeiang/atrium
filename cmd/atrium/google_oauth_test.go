@@ -89,7 +89,8 @@ func TestGoogleOAuthWizardStoresPerCapabilityRefreshTokensAndReportsHealth(t *te
 	s := &integrationSite{t: t, dir: dir, base: base, client: &http.Client{Jar: jar}, stop: stop}
 
 	if code, body, _ := fetch(t, s.client, http.MethodGet, s.base+"/settings/integrations/google", nil); code != http.StatusOK ||
-		!strings.Contains(body, "Create the Google client") {
+		!strings.Contains(body, "Create the Google client") || strings.Contains(body, "One consent per capability") || strings.Contains(body, "Google shows the consent screen") ||
+		!strings.Contains(body, `title="Refresh tokens expire after 7 days while the consent screen is in Testing"`) {
 		t.Fatalf("google page: %d %s", code, logs.String())
 	}
 	noRedirect := &http.Client{Jar: s.client.Jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}

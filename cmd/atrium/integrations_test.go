@@ -143,6 +143,9 @@ func TestIntegrationTestSavesOnlyWorkingConfigAndHealthNotifiesOncePerChange(t *
 		if !strings.Contains(page, `id="url-qbittorrent" class="break-all font-mono text-xs" data-pinned`) {
 			t.Error("the deployment-only qBittorrent URL is editable")
 		}
+		if strings.Contains(page, "data-help") || strings.Contains(page, "Bring your own OAuth client") || !strings.Contains(page, `type="url" value="" title="Your ntfy server; the token is optional.">`) {
+			t.Error("integration help is not a tooltip on the control")
+		}
 		if code, body := s.post("/ntfy/test", url.Values{"url": {badSrv.URL}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "test failed (failing)") {
 			t.Fatalf("failing test: %d", code)
 		}

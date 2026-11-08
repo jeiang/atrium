@@ -76,6 +76,7 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 		BrandURL:    nav.brandURL,
 		Footer:      nav.footer,
 		Tabs:        nav.tabs,
+		Pages:       nav.pages,
 		Path:        r.URL.Path,
 		Theme:       themeOf(r),
 		Rail:        cookieValue(r, railCookie, false) == "1",
@@ -120,7 +121,7 @@ var hubs = []hub{
 type navView struct {
 	groups                []tpl.NavGroup
 	settings, footer      []tpl.NavItem
-	tabs                  []tpl.NavItem
+	tabs, pages           []tpl.NavItem
 	settingsURL, brandURL string
 }
 
@@ -168,6 +169,9 @@ func (rd *Renderer) navFor(page string) navView {
 	sort.SliceStable(v.groups, func(i, j int) bool {
 		return groupOrder(v.groups[i]) < groupOrder(v.groups[j])
 	})
+	for _, g := range v.groups {
+		v.pages = append(v.pages, g.Items...)
+	}
 	var entries []tpl.NavItem
 	for _, h := range hubs {
 		tabs := sections[h.section]
@@ -181,6 +185,8 @@ func (rd *Renderer) navFor(page string) navView {
 				entry.Current = true
 				v.tabs = tabs
 			}
+			t.Group = h.label
+			v.pages = append(v.pages, t)
 		}
 		entries = append(entries, entry)
 	}
@@ -191,6 +197,7 @@ func (rd *Renderer) navFor(page string) navView {
 		return v.settings[i].Order < v.settings[j].Order
 	})
 	sort.SliceStable(v.footer, func(i, j int) bool { return v.footer[i].Order < v.footer[j].Order })
+	v.pages = append(v.pages, v.footer...)
 	return v
 }
 

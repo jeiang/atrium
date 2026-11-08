@@ -15,7 +15,7 @@
   </div>
   <p class="text-sm text-muted-foreground">{{template "reason" (dict "d" $d "mode" $mode)}}</p>
   {{else}}
-  <p class="text-sm text-muted-foreground">No decision yet. atrium decides once a message has been read and is still in the inbox.</p>
+  <p class="text-sm text-muted-foreground" title="Decided once a message has been read and is still in the inbox">No decision yet.</p>
   {{end}}
   {{if and $m.CorrectedTo (or (not $d) (ne $d.stage "correction"))}}
   <p class="text-sm">You corrected this to <span class="font-medium">{{str $m.CorrectedTo}}</span>.</p>

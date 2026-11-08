@@ -13,7 +13,7 @@
   <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
     <span class="text-xs text-muted-foreground">Budget remaining</span>
     <span class="text-2xl font-semibold tabular-nums">${{printf "%.2f" $b.RemainingUSD}}</span>
-    <span class="text-xs text-muted-foreground">{{printf "%.0f%%" (mul $b.Share 100)}} of ${{printf "%.0f" $b.BudgetUSD}} used; unattended runs pause at 80%, chat at 100%</span>
+    <span class="text-xs text-muted-foreground" title="Unattended runs pause at 80%, chat at 100%">{{printf "%.0f%%" (mul $b.Share 100)}} of ${{printf "%.0f" $b.BudgetUSD}} used</span>
   </div>
   <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
     <span class="text-xs text-muted-foreground">Cache read share</span>
@@ -40,7 +40,7 @@
     </tbody>
   </table>
   {{else}}
-  {{template "empty_state" (dict "icon_name" "chart-column" "title" "No usage yet" "body" "Costs appear here after the first model call this month.")}}
+  {{template "empty_state" (dict "icon_name" "chart-column" "title" "No usage yet")}}
   {{end}}
 </section>
 

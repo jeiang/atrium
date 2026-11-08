@@ -11,7 +11,6 @@
       <li>Enable the <a class="underline" href="https://console.cloud.google.com/apis/library/calendar-json.googleapis.com" target="_blank" rel="noreferrer">Google Calendar API</a> and the <a class="underline" href="https://console.cloud.google.com/apis/library/gmail.googleapis.com" target="_blank" rel="noreferrer">Gmail API</a>.</li>
       <li>Create credentials of type <strong>Web application</strong> and add this authorised redirect URI: <code class="break-all font-mono text-xs">{{$d.Redirect}}</code></li>
     </ol>
-    <p class="mt-2 text-xs text-muted-foreground">If Google rejects that URI, register the same path on a host you control, or use the paste-back box below with any registered URI.</p>
   </section>
 
   <form method="post" action="/settings/integrations/google" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" autocomplete="off">
@@ -33,7 +32,6 @@
   <form method="post" action="/settings/integrations/google/start" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm">
     <input type="hidden" name="csrf_token" value="{{$csrf}}">
     <h2 class="font-medium">3. Consent</h2>
-    <p class="text-muted-foreground">One consent per capability. The refresh token is stored as a secret and can be pinned with its <code>*_file</code> variable.</p>
     <div role="group" class="field">
       <label for="google-capability">Capability</label>
       <select id="google-capability" name="capability">
@@ -41,7 +39,6 @@
       </select>
     </div>
     <div><button type="submit" class="btn" data-size="sm">{{icon "external-link"}}Connect Google</button></div>
-    <p class="text-xs text-muted-foreground">Google shows the consent screen in the browser. If the redirect cannot reach atrium, copy the full URL from the address bar and paste it below.</p>
   </form>
 
   <form method="post" action="/settings/integrations/google/paste" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm">
@@ -49,7 +46,7 @@
     <h2 class="font-medium">Paste-back fallback</h2>
     <div role="group" class="field">
       <label for="google-paste">Redirect URL</label>
-      <textarea id="google-paste" name="paste" rows="2" spellcheck="false" placeholder="https://…/callback?state=…&amp;code=…">{{$d.Paste}}</textarea>
+      <textarea id="google-paste" name="paste" rows="2" spellcheck="false" placeholder="https://…/callback?state=…&amp;code=…" title="When the redirect cannot reach atrium, paste the full URL from the address bar">{{$d.Paste}}</textarea>
     </div>
     <div><button type="submit" class="btn" data-size="sm">{{icon "check"}}Finish consent</button></div>
   </form>
@@ -61,10 +58,9 @@
       {{with $d.Reason}}<span class="text-xs text-muted-foreground">{{.}}</span>{{end}}
     </div>
     {{template "module_hold" $d.Hold}}
-    <p class="text-xs text-muted-foreground">If the OAuth consent screen is in <strong>Testing</strong>, Google expires refresh tokens after 7 days. Publish the app to Production for long-lived tokens.</p>
     <form method="post" action="/settings/integrations/google/test">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
-      <button type="submit" class="btn" data-size="sm">{{icon "refresh-cw"}}Test refresh token</button>
+      <button type="submit" class="btn" data-size="sm" title="Refresh tokens expire after 7 days while the consent screen is in Testing">{{icon "refresh-cw"}}Test refresh token</button>
     </form>
   </section>
 

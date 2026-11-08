@@ -69,7 +69,7 @@ func TestLibE2EPagesLinksAndMissing(t *testing.T) {
 
 	movie := status(t, s.get("/apps/media/library/movie/Dune%20%282021%29"), 200, "movie")
 	contains(t, movie,
-		"Media · Dune (2021)", "Dune (2021).mkv", "0.0 GB", "Public link", "VPN link", "expire after 12 hours",
+		"Media · Dune (2021)", "Dune (2021).mkv", "0.0 GB", "Public link", "VPN link", `title="Signed public link, valid 12 hours"`,
 		`href="http://artemis.vpn:8084/Dune%20%282021%29/Dune%20%282021%29.mkv"`, `src="/apps/media/art/movie/Dune%20%282021%29"`)
 	public := libHref(t, movie, "https://atrium.test/apps/media/file/")
 	if !strings.Contains(public, "movies/Dune%20%282021%29/Dune%20%282021%29.mkv?exp=") || !strings.Contains(public, "&sig=") {
@@ -82,7 +82,7 @@ func TestLibE2EPagesLinksAndMissing(t *testing.T) {
 
 	show := status(t, s.get("/apps/media/library/tv/Lanterns%20%282026%29"), 200, "show")
 	contains(t, show,
-		"Media · Lanterns (2026)", "2 seasons.", `id="season-1"`, `id="season-2"`, "Season 00", "Season 01",
+		"Media · Lanterns (2026)", ">2 seasons</p>", `id="season-1"`, `id="season-2"`, "Season 00", "Season 01",
 		"Episode 8", "Episode 0",
 		`src="/apps/media/art/season/Lanterns%20%282026%29/1"`, `src="/apps/media/art/season/Lanterns%20%282026%29/0"`,
 		`src="/apps/media/thumb/tv/Lanterns%20%282026%29/Season%2001/`,
@@ -105,7 +105,7 @@ func TestLibE2ELinksFollowSettingsAndEmptyLibrary(t *testing.T) {
 	emptyVars, _ := libVars(t, nil)
 	empty := newSite(t, emptyVars, Options{})
 	page := status(t, empty.get("/apps/media/library"), 200, "empty library")
-	contains(t, page, "No movies yet", "Filed movies appear here.", "No shows yet", "Filed episodes appear here by show.", "Movies (0)", "TV (0)")
+	contains(t, page, "No movies yet", "No shows yet", "Movies (0)", "TV (0)")
 
 	bare := newSite(t, map[string]string{}, Options{})
 	unset := status(t, bare.get("/apps/media/library"), 200, "library without a root")
@@ -129,9 +129,9 @@ func TestLibE2ELinkTTLFollowsTheRegistry(t *testing.T) {
 		t.Fatal(err)
 	}
 	movie := status(t, s.get("/apps/media/library/movie/Dune%20%282021%29"), 200, "movie")
-	contains(t, movie, "expire after 2 hours")
+	contains(t, movie, `title="Signed public link, valid 2 hours"`)
 	show := status(t, s.get("/apps/media/library/tv/Lanterns%20%282026%29"), 200, "show")
-	contains(t, show, "expire after 2 hours")
+	contains(t, show, `title="Signed public link, valid 2 hours"`)
 	link, err := url.Parse(libHref(t, movie, "https://atrium.test/apps/media/file/"))
 	if err != nil {
 		t.Fatal(err)
@@ -151,8 +151,8 @@ func TestLibE2ELinkTTLReadsAsAHumanDuration(t *testing.T) {
 	s := newSite(t, vars, Options{})
 	ctx := audit.With(context.Background(), "test", audit.CLI)
 	for ttl, want := range map[string]string{
-		"1800": "expire after 30 minutes", "3540": "expire after 59 minutes", "5400": "expire after 90 minutes",
-		"60": "expire after 1 minute;", "3600": "expire after 1 hour;", "172800": "expire after 2 days",
+		"1800": `valid 30 minutes"`, "3540": `valid 59 minutes"`, "5400": `valid 90 minutes"`,
+		"60": `valid 1 minute"`, "3600": `valid 1 hour"`, "172800": `valid 2 days"`,
 	} {
 		if err := s.settings.Set(ctx, s.db.Write, media.KeyLinkTTL, ttl); err != nil {
 			t.Fatal(err)
