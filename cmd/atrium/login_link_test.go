@@ -350,8 +350,8 @@ func TestLoginLinkFirstRunSetupThenOIDCSignIn(t *testing.T) {
 	linkExpect(t, anon.get("/login"), http.StatusOK, "Sign-in is not set up.")
 
 	form := url.Values{
-		"preset": {"pocket_id"}, "issuer": {site.idp.Issuer()}, "client_id": {site.idp.ClientID()},
-		"access_group": {"atrium_access"}, "admin_group": {"atrium_admin"}, "groups_claim": {"groups"}, "scopes": {"openid profile email groups"},
+		"preset": {"pocket_id"}, "oidc_issuer": {site.idp.Issuer()}, "oidc_client_id": {site.idp.ClientID()},
+		"oidc_access_group": {"atrium_access"}, "oidc_admin_group": {"atrium_admin"}, "oidc_groups_claim": {"groups"}, "oidc_scopes": {"openid profile email groups"},
 	}
 	providerTab := func(user string) linkReply {
 		site.idp.Approve(user)

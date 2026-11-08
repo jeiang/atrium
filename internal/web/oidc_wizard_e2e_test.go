@@ -13,7 +13,36 @@ import (
 	"github.com/jeiang/atrium/internal/secrets"
 )
 
-var tags = regexp.MustCompile(`<[^>]*>`)
+var (
+	tags      = regexp.MustCompile(`<[^>]*>`)
+	testForm  = regexp.MustCompile(`(?s)<form[^>]*data-test-signin[^>]*>(.*?)</form>`)
+	formInput = regexp.MustCompile(`<input[^>]*>`)
+	inputAttr = regexp.MustCompile(`\s([a-z-]+)(?:="([^"]*)")?`)
+)
+
+func submitted(t *testing.T, page string, fill map[string]string) url.Values {
+	t.Helper()
+	form := testForm.FindStringSubmatch(page)
+	if form == nil {
+		t.Fatalf("no test sign-in form in %.300s", page)
+	}
+	out := url.Values{}
+	for _, input := range formInput.FindAllString(form[1], -1) {
+		attrs := map[string]string{}
+		for _, m := range inputAttr.FindAllStringSubmatch(input, -1) {
+			attrs[m[1]] = html.UnescapeString(m[2])
+		}
+		if _, off := attrs["disabled"]; off || attrs["name"] == "" {
+			continue
+		}
+		value, ok := fill[attrs["id"]]
+		if !ok {
+			value = attrs["value"]
+		}
+		out.Set(attrs["name"], value)
+	}
+	return out
+}
 
 func plain(body string) string {
 	return strings.Join(strings.Fields(html.UnescapeString(tags.ReplaceAllString(body, " "))), " ")
@@ -36,9 +65,9 @@ func wizardRig(t *testing.T) (*rig, *browser) {
 
 func (r *rig) form(extra map[string]string) url.Values {
 	v := url.Values{
-		"preset": {"generic"}, "issuer": {r.idp.Issuer()}, "client_id": {r.idp.ClientID()},
-		"access_group": {"atrium_access"}, "admin_group": {"atrium_admin"},
-		"groups_claim": {"groups"}, "scopes": {"openid profile email groups"},
+		"preset": {"generic"}, oidc.KeyIssuer: {r.idp.Issuer()}, oidc.KeyClientID: {r.idp.ClientID()},
+		oidc.KeyAccessGroup: {"atrium_access"}, oidc.KeyAdminGroup: {"atrium_admin"},
+		oidc.KeyGroupsClaim: {"groups"}, oidc.KeyScopes: {"openid profile email groups"},
 	}
 	for k, val := range extra {
 		v.Set(k, val)
@@ -157,7 +186,7 @@ func TestWizardNeedsAnAdmin(t *testing.T) {
 func TestWizardTestSignInThenActivate(t *testing.T) {
 	r, admin := wizardRig(t)
 	before := sessionToken(admin)
-	form := r.form(map[string]string{"access_group": "team_access", "admin_group": "team_admin"})
+	form := r.form(map[string]string{oidc.KeyAccessGroup: "team_access", oidc.KeyAdminGroup: "team_admin"})
 
 	idle := admin.get("/settings/auth/test/status")
 	expect(t, idle, http.StatusOK, `data-state="idle"`)
@@ -243,26 +272,44 @@ func TestWizardFailedTestsLeaveTheActiveConfigAlone(t *testing.T) {
 	}
 
 	expectFailure("member lacks admin", startTest(t, admin, r.form(nil)), "member", r.idp, http.StatusForbidden, "This account is not in `atrium_admin`.")
-	expectFailure("no access", startTest(t, admin, r.form(map[string]string{"access_group": "team_access", "admin_group": "team_admin"})), "member", r.idp, http.StatusForbidden, "This account is not in `team_access`.")
-	expectFailure("no groups claim", startTest(t, admin, r.form(map[string]string{"groups_claim": "roles"})), "admin", r.idp, http.StatusForbidden, "No `roles` claim in the response.")
+	expectFailure("no access", startTest(t, admin, r.form(map[string]string{oidc.KeyAccessGroup: "team_access", oidc.KeyAdminGroup: "team_admin"})), "member", r.idp, http.StatusForbidden, "This account is not in `team_access`.")
+	expectFailure("no groups claim", startTest(t, admin, r.form(map[string]string{oidc.KeyGroupsClaim: "roles"})), "admin", r.idp, http.StatusForbidden, "No `roles` claim in the response.")
 	expectFailure("provider denies", startTest(t, admin, r.form(nil)), "", r.idp, http.StatusBadRequest, "The provider rejected the sign-in.")
 
 	down := oidctest.New(t, oidctest.Options{})
 	down.Down = true
-	expectFailure("issuer down", startTest(t, admin, r.form(map[string]string{"issuer": down.Issuer()})), "", nil, http.StatusBadGateway, "The issuer did not respond.")
+	expectFailure("issuer down", startTest(t, admin, r.form(map[string]string{oidc.KeyIssuer: down.Issuer()})), "", nil, http.StatusBadGateway, "The issuer did not respond.")
 
 	nopkce := oidctest.New(t, oidctest.Options{NoS256: true})
-	expectFailure("no s256", startTest(t, admin, r.form(map[string]string{"issuer": nopkce.Issuer()})), "", nil, http.StatusBadRequest, "The provider does not support PKCE S256.")
+	expectFailure("no s256", startTest(t, admin, r.form(map[string]string{oidc.KeyIssuer: nopkce.Issuer()})), "", nil, http.StatusBadRequest, "The provider does not support PKCE S256.")
 
 	other := oidctest.New(t, oidctest.Options{ClientSecret: "another-secret"})
 	other.AddUser(oidctest.User{Name: "admin", Groups: []string{"atrium_access", "atrium_admin"}})
-	expectFailure("wrong secret", startTest(t, admin, r.form(map[string]string{"issuer": other.Issuer()})), "admin", other, http.StatusBadRequest, "The provider rejected the client.")
+	expectFailure("wrong secret", startTest(t, admin, r.form(map[string]string{oidc.KeyIssuer: other.Issuer()})), "admin", other, http.StatusBadRequest, "The provider rejected the client.")
 
-	expectFailure("missing field", startTest(t, admin, r.form(map[string]string{"client_id": ""})), "", nil, http.StatusUnprocessableEntity, "Fields missing.")
-	expectFailure("bad issuer", startTest(t, admin, r.form(map[string]string{"issuer": "ftp://nowhere"})), "", nil, http.StatusUnprocessableEntity, "Fields missing.")
+	expectFailure("missing field", startTest(t, admin, r.form(map[string]string{oidc.KeyClientID: ""})), "", nil, http.StatusUnprocessableEntity, "Fields missing.")
+	expectFailure("bad issuer", startTest(t, admin, r.form(map[string]string{oidc.KeyIssuer: "ftp://nowhere"})), "", nil, http.StatusUnprocessableEntity, "Fields missing.")
 
 	r.browser().mustSignIn(r, "admin")
 	expect(t, admin.get("/ping"), http.StatusOK, "admin=yes")
+}
+
+func TestWizardTestSignInSubmitsTheRenderedForm(t *testing.T) {
+	r, admin := wizardRig(t)
+	page := admin.get("/settings/auth/preset?preset=" + oidc.PresetPocketID)
+	expect(t, page, http.StatusOK)
+	form := submitted(t, page.Body, map[string]string{"oidc-issuer": r.idp.Issuer(), "oidc-client-id": r.idp.ClientID()})
+	result := providerTab(t, admin, r.idp, "admin", startTest(t, admin, form))
+	expect(t, result, http.StatusOK, "Test passed", "atrium_access", "atrium_admin")
+	status := admin.get("/settings/auth/test/status")
+	fingerprint := regexp.MustCompile(`name="fingerprint" value="([0-9a-f]+)"`).FindStringSubmatch(status.Body)
+	if fingerprint == nil {
+		t.Fatalf("no fingerprint in %s", status.Body)
+	}
+	expect(t, admin.post("/settings/auth/activate", url.Values{"fingerprint": {fingerprint[1]}}), http.StatusOK, "Active")
+	if activeSetting(t, r, oidc.KeyPreset) != oidc.PresetPocketID || activeSetting(t, r, oidc.KeyIssuer) != r.idp.Issuer() {
+		t.Fatal("the submitted pocket id settings were not saved")
+	}
 }
 
 func TestWizardRefusesAReplayedOrForeignCallback(t *testing.T) {
@@ -317,7 +364,7 @@ func TestWizardPinnedFieldsAreReadOnlyAndWin(t *testing.T) {
 	if strings.Contains(adminField, " disabled") {
 		t.Fatal("an unpinned field is read-only")
 	}
-	result := providerTab(t, admin, r.idp, "admin", startTest(t, admin, r.form(map[string]string{"client_id": "forged", "access_group": "forged"})))
+	result := providerTab(t, admin, r.idp, "admin", startTest(t, admin, r.form(map[string]string{oidc.KeyClientID: "forged", oidc.KeyAccessGroup: "forged"})))
 	expect(t, result, http.StatusOK, "Test passed", "atrium_access")
 }
 
@@ -330,8 +377,8 @@ func TestWizardGoogleFlowUsesEmailAllowlists(t *testing.T) {
 	admin := r.browser()
 	admin.mustSignIn(r, "admin")
 	form := url.Values{
-		"preset": {"google"}, "client_id": {r.idp.ClientID()}, "scopes": {"openid email profile"},
-		"access_emails": {"friend@example.com, boss@example.com"}, "admin_emails": {"boss@example.com"},
+		"preset": {"google"}, oidc.KeyClientID: {r.idp.ClientID()}, oidc.KeyScopes: {"openid email profile"},
+		oidc.KeyAccessEmails: {"friend@example.com, boss@example.com"}, oidc.KeyAdminEmails: {"boss@example.com"},
 	}
 	denied := providerTab(t, admin, r.idp, "friend", startTest(t, admin, form))
 	expect(t, denied, http.StatusForbidden, "This account is not an administrator.")
