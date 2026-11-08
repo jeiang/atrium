@@ -6,6 +6,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/assistant/files"
@@ -48,7 +49,7 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, 
 	data := listData{
 		Threads: found, Q: q, View: view, ProjectID: projectID,
 		Defaults: defaults,
-		Composer: composerData(defaults.Model, defaults.Effort, defaults.ContextLimit, 0),
+		Composer: composerData(defaults.Model, defaults.Effort, defaults.Thinking, defaults.ContextLimit, defaults.WebSearch, defaults.CostCapUSD, 0),
 	}
 	if web.IsPartial(r) {
 		p.fragment(w, r, http.StatusOK, "_thread_list.gohtml", data)
@@ -123,9 +124,20 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 		}
 		project = &projectID
 	}
+	webSearch := true
+	if values, ok := form["web_search"]; ok {
+		webSearch = slices.Contains(values, "1")
+	}
+	var costCap *float64
+	if raw := web.FormString(form, "cost_cap", ""); raw != "" {
+		if value, err := strconv.ParseFloat(raw, 64); err == nil {
+			costCap = &value
+		}
+	}
 	threadID, err := threads.Create(ctx, p.deps.DB.Write, p.now(), threads.Spec{
 		Kind: threads.Chat, ProjectID: project,
 		Model: web.FormString(form, "model", ""), Effort: web.FormString(form, "effort", ""), ContextLimit: optional(form, "context_limit"),
+		Thinking: web.FormString(form, "thinking", ""), WebSearch: &webSearch, CostCapUSD: costCap,
 	})
 	var refused threads.OptionError
 	if errors.As(err, &refused) {
@@ -246,7 +258,7 @@ func (p *pages) chatOptions(w http.ResponseWriter, r *http.Request) {
 	}
 	thread := threadOf(view)
 	p.fragment(w, r, http.StatusOK, "_options_saved.gohtml", map[string]any{
-		"view": view, "composer": composerData(thread.Model, thread.Effort, threads.ContextLimitOf(thread), threadID),
+		"view": view, "composer": composerData(thread.Model, thread.Effort, thread.Thinking, threads.ContextLimitOf(thread), bool(thread.WebSearch), thread.CostCapUSD, threadID),
 	})
 }
 

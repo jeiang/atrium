@@ -558,3 +558,15 @@ func TestNewThreadPageOffersModelEffortAndContext(t *testing.T) {
 		t.Errorf("thread %s %s %d, want claude-sonnet-5-5 high 200000", model, effort, limit)
 	}
 }
+
+func TestNewChatComposerShowsTheHaikuCliffAndResetsOnModelChange(t *testing.T) {
+	s := newSite(t)
+	body := status(t, s.get("/chat/composer-options?model=claude-haiku-5-5&context_limit=200000"), http.StatusOK)
+	mustContain(t, body, "long-context rate")
+	body = status(t, s.get("/chat/composer-options?model=claude-haiku-5-5&context_limit=90000"), http.StatusOK)
+	mustNotContain(t, body, "long-context rate")
+	body = status(t, s.get("/chat/composer-options?model=claude-sonnet-5-5&reset=1&effort=max&context_limit=200000"), http.StatusOK)
+	mustContain(t, body, `value="medium" selected`, `value="90000" selected`)
+	body = status(t, s.get("/chat/composer-options?model=claude-sonnet-5-5&thinking=between_tools&effort=high&context_limit=90000"), http.StatusOK)
+	mustContain(t, body, `value="xhigh" disabled`, `value="high" selected`)
+}
