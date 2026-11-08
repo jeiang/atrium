@@ -129,7 +129,9 @@ func init() {
 		return def(key, kind, settings.Advanced, value, check)
 	}
 	count := func(key string, value, lo, hi int64) settings.Def {
-		return capped(key, settings.Int, strconv.FormatInt(value, 10), settings.Between(float64(lo), float64(hi)))
+		d := capped(key, settings.Int, strconv.FormatInt(value, 10), settings.Between(float64(lo), float64(hi)))
+		d.Min, d.Max = lo, hi
+		return d
 	}
 	share := func(key, value string, peers func(string, func(string) (string, error)) error) settings.Def {
 		d := adv(key, settings.Float, value, settings.Within(0, 1))

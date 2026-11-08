@@ -41,6 +41,8 @@ type Def struct {
 	Module    string
 	Type      Type
 	Default   string
+	Min       int64
+	Max       int64
 	Choices   []string
 	Check     func(value string) error
 	Peers     func(value string, peer func(key string) (string, error)) error
@@ -194,6 +196,14 @@ func (r *Registry) Lookup(key string) (Def, bool) {
 	defer r.mu.RUnlock()
 	d, ok := r.defs[key]
 	return r.claimed(d).clone(), ok
+}
+
+func (r *Registry) Range(key string) (int64, int64, bool) {
+	d, ok := r.Lookup(key)
+	if !ok || d.Max <= 0 {
+		return 0, 0, false
+	}
+	return d.Min, d.Max, true
 }
 
 func (r *Registry) claimed(d Def) Def {

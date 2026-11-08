@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"strconv"
 	"time"
 	"unicode/utf8"
 
@@ -22,9 +21,9 @@ import (
 	"github.com/jeiang/atrium/internal/timex"
 )
 
-const (
-	schemaMaxResults = 20
-	schemaBodyChars  = 8000
+var (
+	mailLimitBound = tool.NewBound(assistant.KeyMailMaxResults, "")
+	mailBodyBound  = tool.NewBound(assistant.KeyMailBodyChars, "")
 )
 
 var mailKinds = tool.AllKinds
@@ -33,11 +32,11 @@ var mailSearchSchema = json.RawMessage(`{"type":"object","properties":{"query":{
 	`"account":{"type":"string","description":"Mail account id"},"folder":{"type":"string"},` +
 	`"since":{"type":"string","description":"YYYY-MM-DD, inclusive"},` +
 	`"until":{"type":"string","description":"YYYY-MM-DD, inclusive"},` +
-	`"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaMaxResults) + `}},` +
+	`"limit":` + mailLimitBound.Schema() + `},` +
 	`"required":["query"],"additionalProperties":false}`)
 
 var mailReadSchema = json.RawMessage(`{"type":"object","properties":{"message_id":{"type":"integer"},` +
-	`"max_chars":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaBodyChars) + `}},` +
+	`"max_chars":` + mailBodyBound.Schema() + `},` +
 	`"required":["message_id"],"additionalProperties":false}`)
 
 func mailTools() []tool.Tool {
@@ -135,12 +134,11 @@ func mailSearch(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 		return nil, err
 	}
 	r := assistant.Read(ctx, tc.DB.Read)
-	maxResults := r.Int(assistant.KeyMailMaxResults)
 	snippetChars := r.Int(assistant.KeyMailSnippetChars)
 	if err := r.Err(); err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", 10, int64(maxResults), 1)
+	limit, err := mailLimitBound.Clamp(ctx, tc.DB.Read, args, "limit")
 	if err != nil {
 		return nil, err
 	}
@@ -207,12 +205,7 @@ func mailRead(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	default:
 		return nil, tool.Error("message_id must be an integer")
 	}
-	r := assistant.Read(ctx, tc.DB.Read)
-	bodyChars := r.Int(assistant.KeyMailBodyChars)
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
-	maxChars, err := tool.BoundedInt(args, "max_chars", int64(bodyChars), int64(bodyChars), 1)
+	maxChars, err := mailBodyBound.Clamp(ctx, tc.DB.Read, args, "max_chars")
 	if err != nil {
 		return nil, err
 	}

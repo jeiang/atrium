@@ -3,7 +3,6 @@ package mailtools
 import (
 	"context"
 	"encoding/json"
-	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant"
@@ -11,8 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/py"
 )
-
-const schemaMaxLoops = 100
 
 var loopKinds = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}
 
@@ -24,12 +21,14 @@ func enum(values ...string) string {
 	return string(b)
 }
 
+var loopsLimitBound = tool.NewBound(assistant.KeyMailMaxLoopsLimit, "")
+
 var openLoopsSchema = json.RawMessage(`{"type":"object","properties":{"state":{"type":"string","enum":` +
-	enum(openloops.States[:]...) + `},"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaMaxLoops) + `}},` +
+	enum(openloops.States[:]...) + `},"limit":` + loopsLimitBound.Schema() + `},` +
 	`"additionalProperties":false}`)
 
 var commitmentsSchema = json.RawMessage(`{"type":"object","properties":{"status":{"type":"string","enum":` +
-	enum(openloops.CommitmentStatuses[:]...) + `},"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaMaxLoops) + `}},` +
+	enum(openloops.CommitmentStatuses[:]...) + `},"limit":` + loopsLimitBound.Schema() + `},` +
 	`"additionalProperties":false}`)
 
 func openLoopTools() []tool.Tool {
@@ -76,12 +75,7 @@ func openLoops(ctx context.Context, tc *tool.Context, args tool.Args) (any, erro
 	if err != nil {
 		return nil, err
 	}
-	r := assistant.Read(ctx, tc.DB.Read)
-	maxLimit := r.Int(assistant.KeyMailMaxLoopsLimit)
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
-	limit, err := tool.BoundedInt(args, "limit", 20, int64(maxLimit), 1)
+	limit, err := loopsLimitBound.Clamp(ctx, tc.DB.Read, args, "limit")
 	if err != nil {
 		return nil, err
 	}
@@ -117,12 +111,7 @@ func commitments(ctx context.Context, tc *tool.Context, args tool.Args) (any, er
 	if err != nil {
 		return nil, err
 	}
-	r := assistant.Read(ctx, tc.DB.Read)
-	maxLimit := r.Int(assistant.KeyMailMaxLoopsLimit)
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
-	limit, err := tool.BoundedInt(args, "limit", 20, int64(maxLimit), 1)
+	limit, err := loopsLimitBound.Clamp(ctx, tc.DB.Read, args, "limit")
 	if err != nil {
 		return nil, err
 	}

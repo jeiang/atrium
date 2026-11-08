@@ -32,6 +32,8 @@ func slice(s string, offset, limit int64) string {
 	return s[start:end]
 }
 
+var recallLimitBound = tool.NewBound(assistant.KeyRecallMaxPageChars, assistant.KeyRecallPageChars)
+
 func recall(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	resultID, _, err := tool.IntArg(args, "result_id", true)
 	if err != nil {
@@ -41,13 +43,7 @@ func recall(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if err != nil {
 		return nil, err
 	}
-	r := assistant.Read(ctx, tc.DB.Read)
-	pageChars := r.Int(assistant.KeyRecallPageChars)
-	maxPageChars := r.Int(assistant.KeyRecallMaxPageChars)
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
-	limit, err := tool.BoundedInt(args, "limit", int64(pageChars), int64(maxPageChars), 1)
+	limit, err := recallLimitBound.Clamp(ctx, tc.DB.Read, args, "limit")
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +77,7 @@ func Tools() []tool.Tool {
 	return []tool.Tool{{
 		Name:        "recall",
 		Description: "Page through a stored tool result that was replaced by a stub. Returns `limit` characters from `offset` and `next_offset` when more remain.",
-		InputSchema: json.RawMessage(`{"type": "object", "properties": {"result_id": {"type": "integer"}, "offset": {"type": "integer", "minimum": 0}, "limit": {"type": "integer", "minimum": 1, "maximum": 16000}}, "required": ["result_id"], "additionalProperties": false}`),
+		InputSchema: json.RawMessage(`{"type": "object", "properties": {"result_id": {"type": "integer"}, "offset": {"type": "integer", "minimum": 0}, "limit": ` + recallLimitBound.Schema() + `}, "required": ["result_id"], "additionalProperties": false}`),
 		Handler:     recall,
 		Effect:      tool.Read,
 		Contexts:    tool.AllKinds,
