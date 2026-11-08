@@ -2,6 +2,7 @@ package worker
 
 import (
 	"context"
+	"time"
 
 	"github.com/jeiang/atrium/internal/logx"
 )
@@ -21,12 +22,12 @@ func (w *Worker) checkpoint(ctx context.Context) {
 	if ctx.Err() != nil || !w.dirty.Load() || !w.idle(ctx) {
 		return
 	}
-	var busy, logFrames, moved int
-	if err := w.Service.DB.Write.QueryRowContext(ctx, "PRAGMA wal_checkpoint(TRUNCATE)").Scan(&busy, &logFrames, &moved); err != nil {
+	c, err := w.Service.DB.Checkpoint(ctx, time.Second)
+	if err != nil {
 		log.Error("wal checkpoint failed", logx.Err, err)
 		return
 	}
-	if busy != 0 {
+	if c.Busy {
 		log.Debug("wal checkpoint busy; retrying at the next idle point")
 		return
 	}

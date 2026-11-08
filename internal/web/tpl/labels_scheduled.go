@@ -7,11 +7,13 @@ func init() {
 		"error":            {"destructive", "Failed"},
 		"skipped_budget":   {"outline", "Skipped (budget)"},
 		"skipped_pause":    {"outline", "Skipped (paused)"},
+		"skipped_module":   {"outline", "Skipped (module off)"},
 		"missed_coalesced": {"secondary", "Ran late"},
 	}
 	labelSets["job_run_hint"] = []pair{
 		{"skipped_budget", "The monthly budget was reached, so this run did not start."},
 		{"skipped_pause", "Live mode was paused, so this run did not start."},
+		{"skipped_module", "The module that owns this job is disabled, so this run did not start."},
 		{"missed_coalesced", "The run was due while atrium was down; missed runs were merged into one."},
 	}
 	labelSets["job_source"] = []pair{

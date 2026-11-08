@@ -2,6 +2,7 @@ package scheduler
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"slices"
@@ -94,15 +95,14 @@ func builtinSchedule(ctx context.Context, q db.Querier, name string) (string, bo
 }
 
 func syncSchedule(ctx context.Context, q db.Querier, job Job, now float64) error {
-	spec, ok := BuiltinFor(job.Name)
-	if !ok {
+	if _, ok := BuiltinFor(job.Name); !ok {
 		return nil
 	}
 	schedule, explicit, err := builtinSchedule(ctx, q, job.Name)
 	if err != nil || !explicit || schedule == job.Schedule {
 		return err
 	}
-	_, err = UpdateJob(ctx, q, job.ID, now, JobUpdate{Schedule: &schedule, SkipLimits: spec.Run != PromptRun})
+	_, err = UpdateJob(ctx, q, job.ID, now, JobUpdate{Schedule: &schedule, Actor: Operator})
 	var refused Error
 	if errors.As(err, &refused) {
 		log.Warn(fmt.Sprintf("schedule setting for %s not applied: %s", job.Name, refused), logx.Job, job.ID)
@@ -120,7 +120,7 @@ func EnsureBuiltins(ctx context.Context, q db.Querier, tz string, now float64) e
 	if err != nil {
 		return err
 	}
-	existing, err := db.Collect(rows, func(r *sqlRows) (have, error) {
+	existing, err := db.Collect(rows, func(r *sql.Rows) (have, error) {
 		var h have
 		return h, r.Scan(&h.id, &h.name)
 	})
@@ -164,7 +164,7 @@ func ensureOne(ctx context.Context, q db.Querier, tz string, now float64, name s
 		}
 		return syncSchedule(ctx, q, *job, now)
 	}
-	if !isNoRows(err) {
+	if !errors.Is(err, sql.ErrNoRows) {
 		return err
 	}
 	return createBuiltin(ctx, q, tz, now, spec)
@@ -177,7 +177,7 @@ func createBuiltin(ctx context.Context, q db.Querier, tz string, now float64, sp
 	}
 	_, err = CreateJob(ctx, q, NewJob{
 		Name: spec.Name, Prompt: spec.Prompt, Schedule: schedule, TZ: tz, Now: now,
-		CreatedBy: Operator, Kind: spec.Kind, SkipLimits: true,
+		CreatedBy: Operator, Kind: spec.Kind,
 	})
 	return err
 }
@@ -192,7 +192,7 @@ func retireBuiltins(ctx context.Context, q db.Querier, existing []have) error {
 		if _, known := BuiltinFor(h.name); known {
 			continue
 		}
-		if _, err := q.ExecContext(ctx, "UPDATE jobs SET cancelled = 1, enabled = 0, next_due = NULL WHERE id = ? AND cancelled = 0", h.id); err != nil {
+		if _, err := q.ExecContext(ctx, "UPDATE jobs SET state = ?, next_due = NULL WHERE id = ? AND state != ?", StateCancelled, h.id, StateCancelled); err != nil {
 			return err
 		}
 	}

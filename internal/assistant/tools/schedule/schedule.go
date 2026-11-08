@@ -46,7 +46,7 @@ func describe(ctx context.Context, q db.Querier, job *scheduler.Job) (py.Dict, e
 		{Key: "name", Value: job.Name},
 		{Key: "prompt", Value: job.Prompt},
 		{Key: "schedule", Value: job.Schedule},
-		{Key: "enabled", Value: job.Enabled},
+		{Key: "enabled", Value: job.State.Active()},
 		{Key: "next_due", Value: due},
 		{Key: "created_by", Value: job.CreatedBy},
 	}
@@ -77,10 +77,10 @@ func agentJob(ctx context.Context, q db.Querier, args tool.Args) (*scheduler.Job
 	if err != nil {
 		return nil, err
 	}
-	if job == nil || job.Cancelled {
+	if job == nil {
 		return nil, tool.Error(fmt.Sprintf("no active schedule %d", id))
 	}
-	if job.Kind == scheduler.JobNightly || job.Kind == scheduler.JobBuiltin {
+	if job.Fixed() {
 		return nil, tool.Error("built-in runs are managed by the operator")
 	}
 	return job, nil
@@ -128,7 +128,7 @@ func update(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 		if err != nil {
 			return err
 		}
-		u := scheduler.JobUpdate{PromptBy: scheduler.Agent}
+		u := scheduler.JobUpdate{PromptBy: scheduler.Agent, Actor: scheduler.Agent}
 		if raw, _ := args.Get("enabled"); raw != nil {
 			b, ok := raw.(bool)
 			if !ok {
@@ -177,7 +177,7 @@ func list(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 	}
 	out := []any{}
 	for i := range jobs {
-		if jobs[i].Kind == scheduler.JobNightly || jobs[i].Kind == scheduler.JobBuiltin {
+		if jobs[i].Fixed() {
 			continue
 		}
 		d, err := describe(ctx, nil, &jobs[i].Job)

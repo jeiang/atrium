@@ -11,14 +11,14 @@ import (
 type jobRow struct {
 	id                  int64
 	name, prompt, sched string
-	enabled, cancelled  bool
+	state               string
 }
 
 func (s *site) job(name string) jobRow {
 	s.t.Helper()
 	var j jobRow
-	if err := s.db.Read.QueryRow("SELECT id, name, prompt, schedule, enabled, cancelled FROM jobs WHERE name = ?", name).
-		Scan(&j.id, &j.name, &j.prompt, &j.sched, &j.enabled, &j.cancelled); err != nil {
+	if err := s.db.Read.QueryRow("SELECT id, name, prompt, schedule, state FROM jobs WHERE name = ?", name).
+		Scan(&j.id, &j.name, &j.prompt, &j.sched, &j.state); err != nil {
 		s.t.Fatalf("job %q: %v", name, err)
 	}
 	return j
@@ -89,14 +89,14 @@ func TestScheduledCreateEditToggleCancel(t *testing.T) {
 	toggled := s.post("/scheduled/"+id+"/toggle", nil, hx, "true")
 	mustContain(t, status(t, toggled, http.StatusOK), "Schedule updated", "Paused")
 	wantListHeaders(t, toggled, "close-dialogs")
-	if s.job("Digest").enabled {
+	if s.job("Digest").state == "active" {
 		t.Error("toggle did not disable the job")
 	}
 	s.post("/scheduled/"+id+"/toggle", nil, hx, "true")
-	if !s.job("Digest").enabled {
+	if s.job("Digest").state != "active" {
 		t.Error("second toggle did not enable the job")
 	}
-	s.exec("INSERT INTO jobs (name, prompt, schedule, tz, enabled, created_by, created_at) VALUES ('Past', 'p', '2020-01-01T09:00', 'UTC', 0, 'operator', 1)")
+	s.exec("INSERT INTO jobs (name, prompt, schedule, tz, state, created_by, created_at) VALUES ('Past', 'p', '2020-01-01T09:00', 'UTC', 'disabled', 'operator', 1)")
 	past := s.post(fmt.Sprintf("/scheduled/%d/toggle", s.job("Past").id), nil, hx, "true")
 	mustContain(t, status(t, past, http.StatusUnprocessableEntity), "Not saved", `id="scheduled-list"`)
 	if past.Header.Get("HX-Retarget") != "#scheduled-list" || past.Header.Get("HX-Reswap") != "outerHTML" || past.Header.Get("HX-Trigger") != "" {
@@ -108,7 +108,7 @@ func TestScheduledCreateEditToggleCancel(t *testing.T) {
 	mustContain(t, body, "Schedule deleted")
 	mustNotContain(t, body, "Digest")
 	wantListHeaders(t, cancelled, "close-dialogs")
-	if !s.job("Digest").cancelled {
+	if s.job("Digest").state != "cancelled" {
 		t.Error("cancel did not cancel the job")
 	}
 	status(t, s.get("/scheduled/"+id+"/edit"), http.StatusNotFound)
@@ -159,7 +159,7 @@ func TestScheduledShowsRunsInThePageZone(t *testing.T) {
 	}
 	s.exec("UPDATE jobs SET last_run_id = ? WHERE id = ?", last, nightly.id)
 	s.exec("INSERT INTO jobs (name, prompt, schedule, tz, next_due, created_by, created_at) VALUES ('Once', 'p', '2030-01-01T10:00', 'UTC', 1893492000, 'agent', 1)")
-	s.exec("INSERT INTO jobs (name, prompt, schedule, tz, next_due, kind, created_by, created_at) VALUES ('Operator', 'p', '2030-01-01T10:00', 'UTC', 1893492000, 'scheduled', 'operator', 1)")
+	s.exec("INSERT INTO jobs (name, prompt, schedule, tz, next_due, kind, created_by, created_at) VALUES ('Operator', 'p', '2030-01-01T10:00', 'UTC', 1893492000, 'cron', 'operator', 1)")
 
 	page := status(t, s.get("/scheduled"), http.StatusOK)
 	mustContain(t, page, "Thu 28 May 16:26", "Thu 28 May 17:26", "$0.123", fmt.Sprintf(`href="/chat/%d"`, thread), "Budget &lt;exceeded&gt;",

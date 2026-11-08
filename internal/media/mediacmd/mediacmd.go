@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -77,9 +78,12 @@ func anys(items []string) []any {
 }
 
 func callable(run job) worker.Callable {
-	return func(ctx context.Context, e worker.Env) (worker.Result, error) {
-		_, err := run(ctx, e.DB, e.Env, e.Now)
-		return worker.Result{}, err
+	return worker.Callable{
+		Modules: []string{module.Media},
+		Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
+			_, err := run(ctx, e.Service.DB, e.Service.Env, e.Now)
+			return worker.Result{}, err
+		},
 	}
 }
 
@@ -102,9 +106,12 @@ func Callables() map[string]worker.Callable {
 	return map[string]worker.Callable{
 		scheduler.MediaChannelsName: callable(channels),
 		scheduler.MediaSweepName:    callable(sweep),
-		scheduler.MediaThumbnailsName: func(ctx context.Context, e worker.Env) (worker.Result, error) {
-			_, err := thumbnails(e.Cfg)(ctx, e.DB, e.Env, e.Now)
-			return worker.Result{}, err
+		scheduler.MediaThumbnailsName: {
+			Modules: []string{module.Media},
+			Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
+				_, err := thumbnails(e.Service.Cfg)(ctx, e.Service.DB, e.Service.Env, e.Now)
+				return worker.Result{}, err
+			},
 		},
 	}
 }
