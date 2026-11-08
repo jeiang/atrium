@@ -19,6 +19,7 @@ import (
 	recalltools "github.com/jeiang/atrium/internal/assistant/tools/recall"
 	scheduletools "github.com/jeiang/atrium/internal/assistant/tools/schedule"
 	skillstools "github.com/jeiang/atrium/internal/assistant/tools/skills"
+	taskstools "github.com/jeiang/atrium/internal/assistant/tools/tasks"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
@@ -36,6 +37,7 @@ func Undoers(env config.Env) *writes.Registry {
 	mailtools.RegisterUndoer(r)
 	scheduletools.RegisterUndoers(r)
 	filetools.RegisterUndoer(r)
+	taskstools.RegisterUndoer(r)
 	return r
 }
 
@@ -57,6 +59,7 @@ func Registry() (*registry.Registry, error) {
 		plantools.Tools(),
 		recalltools.Tools(),
 		skillstools.Tools(),
+		taskstools.Tools(),
 		proposetools.Tools(),
 		grafanatools.Tools(),
 		notify.Tools(),

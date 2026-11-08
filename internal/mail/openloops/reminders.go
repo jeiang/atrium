@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"math/big"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
@@ -21,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/tasks"
 )
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
@@ -196,57 +196,35 @@ func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (
 	if err != nil {
 		return nil, err
 	}
-	tz, err := payloadString(payload, "tz")
-	if err != nil {
-		return nil, err
-	}
-	messageID, err := payloadField(payload, "message_id")
-	if err != nil {
-		return nil, err
-	}
-	mid, err := py.Int(messageID)
-	if err != nil {
-		return nil, err
-	}
 	current := r.now()
-
-	loc, err := scheduler.Zone(tz)
-	if err != nil {
-		return nil, err
-	}
-	moment := py.ISOFormat(local(remindAt, loc), "seconds")
-	jobID, err := scheduler.CreateJob(ctx, r.DB.Write, scheduler.NewJob{
-		Name:     "Reminder: " + py.Clip(text, 50),
-		Prompt:   ReminderPrompt(text, mid.Int64()),
-		Schedule: moment,
-		TZ:       tz,
-		Now:      current,
+	id, err := tasks.Add(ctx, r.DB.Write, current, tasks.Spec{
+		Title: text, RemindAt: &remindAt, SourceKind: "proposal", SourceID: strconv.FormatInt(p.ID, 10),
 	})
 	if err != nil {
 		return nil, err
 	}
-	action := py.Dict{{Key: "type", Value: KindReminder}, {Key: "job_id", Value: jobID}}
-	undo := py.Dict{{Key: "op", Value: UndoReminder}, {Key: "job_id", Value: jobID}}
+	action := py.Dict{{Key: "type", Value: KindReminder}, {Key: "task_id", Value: id}}
+	undo := py.Dict{{Key: "op", Value: UndoReminder}, {Key: "id", Value: id}}
 	if _, err := proposals.RecordAction(ctx, r.DB.Write, p.ID, "write", nil, action, undo, ledger.OK, nil, r.now()); err != nil {
 		return nil, err
 	}
 	return py.Dict{
-		{Key: "summary", Value: "Reminder scheduled for " + strings.ReplaceAll(py.Clip(moment, 16), "T", " ")},
-		{Key: "job_id", Value: jobID},
+		{Key: "summary", Value: "Reminder set for " + time.Unix(int64(remindAt), 0).UTC().Format("2006-01-02 15:04")},
+		{Key: "task_id", Value: id},
 	}, nil
 }
 
 func (r *Reminders) Undo(ctx context.Context, plan json.RawMessage) (py.Dict, error) {
 	var info struct {
-		JobID int64 `json:"job_id"`
+		ID int64 `json:"id"`
 	}
 	if err := json.Unmarshal(plan, &info); err != nil {
 		return nil, err
 	}
-	if err := scheduler.CancelJob(ctx, r.DB.Write, info.JobID); err != nil {
+	if _, err := tasks.Delete(ctx, r.DB.Write, info.ID); err != nil {
 		return nil, err
 	}
-	return py.Dict{{Key: "cancelled", Value: info.JobID}}, nil
+	return py.Dict{{Key: "deleted", Value: info.ID}}, nil
 }
 
 func Register(reg *proposals.Registry, r *Reminders, owner string) {
