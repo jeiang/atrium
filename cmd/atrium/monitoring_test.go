@@ -12,7 +12,7 @@ import (
 var metricName = regexp.MustCompile(`\batrium_[a-z0-9_]+\b`)
 
 func TestMonitoringPackReferencesOnlyServedMetrics(t *testing.T) {
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	opsBase := opsAddr(t)
 	startServeIn(t, dir)
 	_, scrape, _ := fetch(t, http.DefaultClient, "GET", opsBase+"/metrics", nil)

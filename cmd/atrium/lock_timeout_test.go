@@ -29,6 +29,7 @@ func TestMain(m *testing.M) {
 		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
 		os.Exit(0)
 	}
+	extModules()
 	os.Exit(m.Run())
 }
 
@@ -72,7 +73,7 @@ func TestRefreshReportsExclusiveLockTimeout(t *testing.T) {
 	}
 
 	var out, stderr bytes.Buffer
-	code := defaultApp().Run(context.Background(), []string{"loops", "refresh"}, &out, &stderr)
+	code := defaultApp(t).Run(context.Background(), []string{"loops", "refresh"}, &out, &stderr)
 	if code == cli.ExitOK || !strings.Contains(stderr.String(), "timed out after") || !strings.Contains(stderr.String(), path+".lock") {
 		t.Fatalf("loops refresh = (%d, stdout %q, stderr %q), want non-zero and a clear lock timeout", code, out.String(), stderr.String())
 	}

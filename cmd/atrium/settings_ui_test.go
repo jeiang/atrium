@@ -31,7 +31,7 @@ func (s *settingsSite) post(path string, form url.Values) (int, string) {
 }
 
 func TestSettingsPagesCoverTheRegistryAndSaveThroughTheAudit(t *testing.T) {
-	dir, _ := moduleFixture(t, flagsExcept(module.Contacts, ""))
+	dir, _, f := moduleFixture(t, flagsExcept(module.Contacts, ""))
 	unsetEnv(t, flagEnv(module.Contacts), settingEnv(contacts.DirKey))
 	jar, _ := cookiejar.New(nil)
 	s := &settingsSite{t: t, base: startServeIn(t, dir), client: &http.Client{Jar: jar}}
@@ -39,7 +39,7 @@ func TestSettingsPagesCoverTheRegistryAndSaveThroughTheAudit(t *testing.T) {
 
 	pages := map[string]string{}
 	seen := map[string]int{}
-	for _, d := range activeFixture.settings.Defs() {
+	for _, d := range f.settings.Defs() {
 		if _, ok := pages[d.Module]; ok {
 			continue
 		}
@@ -50,11 +50,11 @@ func TestSettingsPagesCoverTheRegistryAndSaveThroughTheAudit(t *testing.T) {
 		}
 	}
 	for _, body := range pages {
-		for _, d := range activeFixture.settings.Defs() {
+		for _, d := range f.settings.Defs() {
 			seen[d.Key] += strings.Count(body, `data-setting="`+d.Key+`"`)
 		}
 	}
-	for _, d := range activeFixture.settings.Defs() {
+	for _, d := range f.settings.Defs() {
 		want := 1
 		if d.Generated {
 			want = 0
@@ -102,7 +102,7 @@ func TestSettingsPagesCoverTheRegistryAndSaveThroughTheAudit(t *testing.T) {
 	if v, _ := storedSetting(t, db, flag); v == "true" {
 		t.Fatal("contacts enabled without its directory")
 	}
-	dirDef, _ := activeFixture.settings.Lookup(contacts.DirKey)
+	dirDef, _ := f.settings.Lookup(contacts.DirKey)
 	if code, _ := s.post("/settings/config/"+dirDef.Module, url.Values{"v." + contacts.DirKey: {filepath.Join(dir, "contacts")}}); code != http.StatusOK {
 		t.Fatalf("save directory: %d", code)
 	}

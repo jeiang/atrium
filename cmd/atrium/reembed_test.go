@@ -130,7 +130,7 @@ func embedProgress(t *testing.T, base string) (done, total int, page string) {
 
 func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, path string) {
 	t.Helper()
-	dir, _ = moduleFixture(t, flagsExcept("", ""))
+	dir, _, _ = moduleFixture(t, flagsExcept("", ""))
 	data, err := os.ReadFile(filepath.Join(golden.Dir(), "world.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -165,7 +165,7 @@ func TestAFirstServeWithANewDimensionRebuildsTheIndexInsteadOfAdoptingIt(t *test
 	if err := d.Read.QueryRow("SELECT generation FROM embed_index WHERE state = 'active' AND dimension = 1024").Scan(&generation); err != nil || generation != 1 {
 		t.Fatalf("active index after the first serve: generation %d (%v)", generation, err)
 	}
-	if got := runApp("notion", "search", "project notes"); got.code != cli.ExitOK || got.stdout == "" || fake.lastModel() != bigModel {
+	if got := runApp(t, "notion", "search", "project notes"); got.code != cli.ExitOK || got.stdout == "" || fake.lastModel() != bigModel {
 		t.Fatalf("search on the rebuilt index: %d %q %q (query model %q)", got.code, got.stdout, got.stderr, fake.lastModel())
 	}
 }
@@ -175,7 +175,7 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 	dir, path := goldenEmbedFixture(t, fake, "embeddinggemma")
 	search := func() string {
 		t.Helper()
-		got := runApp("notion", "search", "project notes")
+		got := runApp(t, "notion", "search", "project notes")
 		if got.code != cli.ExitOK {
 			t.Fatalf("notion search: %d %q", got.code, got.stderr)
 		}

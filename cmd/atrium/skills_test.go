@@ -35,7 +35,7 @@ func readTree(t *testing.T, root string) map[string]string {
 
 func TestSkillsExportImportRoundTripAndIndexBudget(t *testing.T) {
 	flags := flagsExcept("assistant", "true")
-	dir, api := moduleFixture(t, flags)
+	dir, api, f := moduleFixture(t, flags)
 
 	source := filepath.Join(dir, "source", "trip-plan")
 	if err := os.MkdirAll(source, 0o755); err != nil {
@@ -45,12 +45,12 @@ func TestSkillsExportImportRoundTripAndIndexBudget(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(source, "SKILL.md"), []byte(card), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if ran := runApp("skills", "import", source); ran.code != cli.ExitOK || ran.stdout != "created trip-plan\n" {
+	if ran := runApp(t, "skills", "import", source); ran.code != cli.ExitOK || ran.stdout != "created trip-plan\n" {
 		t.Fatalf("import: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
 	}
 
 	first := filepath.Join(dir, "export-1")
-	if ran := runApp("skills", "export", first); ran.code != cli.ExitOK {
+	if ran := runApp(t, "skills", "export", first); ran.code != cli.ExitOK {
 		t.Fatalf("export: exit %d stderr %q", ran.code, ran.stderr)
 	}
 	tree := readTree(t, first)
@@ -59,12 +59,12 @@ func TestSkillsExportImportRoundTripAndIndexBudget(t *testing.T) {
 		t.Fatalf("exported tree %v", tree)
 	}
 
-	activeFixture.env["ATRIUM_DB"] = filepath.Join(dir, "second.db")
-	if ran := runApp("skills", "import", first); ran.code != cli.ExitOK || !strings.Contains(ran.stdout, "created trip-plan\n") || !strings.Contains(ran.stdout, "unchanged wiki-capture\n") {
+	f.env["ATRIUM_DB"] = filepath.Join(dir, "second.db")
+	if ran := runApp(t, "skills", "import", first); ran.code != cli.ExitOK || !strings.Contains(ran.stdout, "created trip-plan\n") || !strings.Contains(ran.stdout, "unchanged wiki-capture\n") {
 		t.Fatalf("round-trip import: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
 	}
 	second := filepath.Join(dir, "export-2")
-	if ran := runApp("skills", "export", second); ran.code != cli.ExitOK {
+	if ran := runApp(t, "skills", "export", second); ran.code != cli.ExitOK {
 		t.Fatalf("second export: exit %d stderr %q", ran.code, ran.stderr)
 	}
 	again := readTree(t, second)
@@ -77,7 +77,7 @@ func TestSkillsExportImportRoundTripAndIndexBudget(t *testing.T) {
 		}
 	}
 
-	if ran := runApp("skills", "export", "--name", "ghost", filepath.Join(dir, "none")); ran.code != cli.ExitError || !strings.Contains(ran.stderr, "no skill named ghost") {
+	if ran := runApp(t, "skills", "export", "--name", "ghost", filepath.Join(dir, "none")); ran.code != cli.ExitError || !strings.Contains(ran.stderr, "no skill named ghost") {
 		t.Errorf("unknown export: exit %d stderr %q", ran.code, ran.stderr)
 	}
 	bad := filepath.Join(dir, "bad", "Upper")
@@ -87,7 +87,7 @@ func TestSkillsExportImportRoundTripAndIndexBudget(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bad, "SKILL.md"), []byte("---\ndescription: d\n---\nbody\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if ran := runApp("skills", "import", filepath.Join(dir, "bad")); ran.code != cli.ExitError || !strings.Contains(ran.stderr, "Upper/SKILL.md: name must be lowercase") {
+	if ran := runApp(t, "skills", "import", filepath.Join(dir, "bad")); ran.code != cli.ExitError || !strings.Contains(ran.stderr, "Upper/SKILL.md: name must be lowercase") {
 		t.Errorf("invalid import: exit %d stderr %q", ran.code, ran.stderr)
 	}
 
@@ -95,7 +95,7 @@ func TestSkillsExportImportRoundTripAndIndexBudget(t *testing.T) {
 	prompt := func() string {
 		t.Helper()
 		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
-		ran := runApp("agent", "run", "--text", "hello", "--kind", "chat")
+		ran := runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")
 		requests := api.Requests()
 		if ran.code != cli.ExitOK || len(requests) == 0 {
 			t.Fatalf("agent run: exit %d stderr %q", ran.code, ran.stderr)
@@ -106,7 +106,7 @@ func TestSkillsExportImportRoundTripAndIndexBudget(t *testing.T) {
 	if !strings.Contains(full, "- trip-plan: Plan trips") || strings.Contains(full, "more skills are not listed") {
 		t.Fatalf("index under budget should list every skill")
 	}
-	if ran := runApp("settings", "set", "agent_skill_index_chars", "300"); ran.code != cli.ExitOK {
+	if ran := runApp(t, "settings", "set", "agent_skill_index_chars", "300"); ran.code != cli.ExitOK {
 		t.Fatalf("set budget: %q", ran.stderr)
 	}
 	cut := prompt()

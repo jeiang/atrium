@@ -59,18 +59,21 @@ type appRun struct {
 	stdout, stderr string
 }
 
-var activeFixture *fixture
+func runApp(t *testing.T, args ...string) appRun { return runAppWith(t, nil, args...) }
 
-func runApp(args ...string) appRun { return runAppWith(nil, args...) }
-
-func runAppWith(mods []module.Module, args ...string) appRun {
-	env := config.Env(testLookup)
-	if activeFixture != nil {
-		env = activeFixture.lookup
-	}
+func runAppWith(t *testing.T, mods []module.Module, args ...string) appRun {
 	var out bytes.Buffer
 	var errs lockedBuffer
-	code := newTestApp(env, mods).Run(context.Background(), args, &out, &errs)
+	app := newTestApp(t, mods)
+	if f := fixtureFor(t); f != nil {
+		if len(mods) == 0 {
+			app = f.app
+		} else {
+			reg := settings.New()
+			app = newApp(f.lookup, reg, config.NewState(reg), mods)
+		}
+	}
+	code := app.Run(context.Background(), args, &out, &errs)
 	return appRun{code, out.String(), errs.String()}
 }
 
@@ -86,7 +89,7 @@ func (m *modelLog) Requests() []anthropictest.Request {
 	return slices.Clone(m.seen)
 }
 
-func moduleFixture(t *testing.T, flags map[string]string) (dir string, api *modelLog) {
+func moduleFixture(t *testing.T, flags map[string]string) (dir string, api *modelLog, f *fixture) {
 	t.Helper()
 	dir = t.TempDir()
 	api = &modelLog{Server: anthropictest.New(t, anthropictest.Reply("end_turn", anthropictest.Text("hi")))}
@@ -112,15 +115,11 @@ func moduleFixture(t *testing.T, flags map[string]string) (dir string, api *mode
 	}
 	reg := settings.New()
 	st := config.NewState(reg)
-	f := &fixture{t: t, dir: dir, env: env, settings: reg, state: st}
+	f = &fixture{t: t, dir: dir, env: env, settings: reg, state: st}
 	f.app = newApp(f.lookup, reg, st, nil)
-	activeFixture = f
-	t.Cleanup(func() {
-		if activeFixture == f {
-			activeFixture = nil
-		}
-	})
-	return dir, api
+	fixturesByTest.Store(t, f)
+	fixturesByTest.Store(testKey(t), f)
+	return dir, api, f
 }
 
 func flagsExcept(name string, value string) map[string]string {
@@ -181,19 +180,19 @@ func probe(t *testing.T, base string, c moduleCase) int {
 func TestModuleTogglesThroughTheApplication(t *testing.T) {
 	for _, c := range moduleCases {
 		t.Run(c.module+"/disabled", func(t *testing.T) {
-			dir, api := moduleFixture(t, flagsExcept(c.module, "false"))
+			dir, api, _ := moduleFixture(t, flagsExcept(c.module, "false"))
 			if c.path != "" {
 				if status := probe(t, startServeIn(t, dir), c); status != http.StatusNotFound {
 					t.Errorf("%s %s = %d, want 404 while %s is off", c.method, c.path, status, c.module)
 				}
 			}
 			if c.command != nil {
-				if got := runApp(c.command...); got.code != cli.ExitOK || got.stdout != "" {
+				if got := runApp(t, c.command...); got.code != cli.ExitOK || got.stdout != "" {
 					t.Errorf("%v while off: exit %d stdout %q stderr %q, want a silent exit 0", c.command, got.code, got.stdout, got.stderr)
 				}
 			}
 			if c.module != module.Assistant {
-				if names := offeredTools(t, api, runApp("agent", "run", "--text", "hello", "--kind", "chat")); slices.Contains(names, c.tool) {
+				if names := offeredTools(t, api, runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")); slices.Contains(names, c.tool) {
 					t.Errorf("tool %s is offered while %s is off", c.tool, c.module)
 				}
 			} else if n := len(api.Requests()); n != 0 {
@@ -204,7 +203,7 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 			}
 		})
 		t.Run(c.module+"/enabled", func(t *testing.T) {
-			dir, api := moduleFixture(t, flagsExcept(c.module, "true"))
+			dir, api, _ := moduleFixture(t, flagsExcept(c.module, "true"))
 			if c.path != "" {
 				if status := probe(t, startServeIn(t, dir), c); status != c.status {
 					t.Errorf("%s %s = %d, want %d", c.method, c.path, status, c.status)
@@ -212,13 +211,13 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 			}
 			ran := appRun{}
 			if c.output != nil {
-				ran = runApp(c.command...)
+				ran = runApp(t, c.command...)
 				if !c.output(ran.stdout, ran.stderr, ran.code) {
 					t.Errorf("%v: exit %d stdout %q stderr %q", c.command, ran.code, ran.stdout, ran.stderr)
 				}
 			}
 			if c.module != module.Assistant {
-				ran = runApp("agent", "run", "--text", "hello", "--kind", "chat")
+				ran = runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")
 			}
 			if names := offeredTools(t, api, ran); !slices.Contains(names, c.tool) {
 				t.Errorf("tool %s is missing while %s is on: %v", c.tool, c.module, names)
@@ -289,7 +288,7 @@ func TestSettingsListWorksFromTheRootCommand(t *testing.T) {
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	clearModuleEnv(t)
-	got := runApp("settings", "list")
+	got := runApp(t, "settings", "list")
 	var rows []settingRow
 	if err := json.Unmarshal([]byte(got.stdout), &rows); err != nil || got.code != cli.ExitOK {
 		t.Fatalf("settings list: exit %d stderr %q: %v", got.code, got.stderr, err)
@@ -419,15 +418,15 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 }
 
 func TestMailPauseStaysAvailableWhileMailIsOff(t *testing.T) {
-	dir, _ := moduleFixture(t, flagsExcept(module.Mail, "false"))
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, "false"))
 	paused := func() bool {
-		got := runApp("live", "status")
+		got := runApp(t, "live", "status")
 		return got.code == cli.ExitOK && strings.Contains(got.stdout, `"paused": true`)
 	}
-	if got := runApp("live", "pause"); got.code != cli.ExitOK || !paused() {
+	if got := runApp(t, "live", "pause"); got.code != cli.ExitOK || !paused() {
 		t.Fatalf("live pause while mail is off: exit %d stderr %q, paused %v", got.code, got.stderr, paused())
 	}
-	if got := runApp("live", "resume"); got.code != cli.ExitOK || paused() {
+	if got := runApp(t, "live", "resume"); got.code != cli.ExitOK || paused() {
 		t.Fatalf("live resume while mail is off: exit %d stderr %q", got.code, got.stderr)
 	}
 	base := startServeIn(t, dir)

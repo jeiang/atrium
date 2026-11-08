@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 type settingRow struct {
@@ -30,7 +31,7 @@ func runSettings(t *testing.T, args ...string) settingsRun {
 	t.Helper()
 	var out bytes.Buffer
 	var errs lockedBuffer
-	code := defaultApp().Run(context.Background(), append([]string{"settings"}, args...), &out, &errs)
+	code := defaultApp(t).Run(context.Background(), append([]string{"settings"}, args...), &out, &errs)
 	return settingsRun{code, out.String(), errs.String()}
 }
 
@@ -79,7 +80,7 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 		listed = append(listed, row.Key)
 	}
 	var registered []string
-	for _, def := range testRegistry.Defs() {
+	for _, def := range settings.New().Defs() {
 		registered = append(registered, def.Key)
 	}
 	if !slices.Equal(listed, registered) || !slices.Contains(listed, "monthly_budget_usd") || !slices.Contains(listed, "cache_ttl_chat") {
@@ -111,7 +112,7 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 		{"monthly_budget_usd", "0"},
 		{"cache_ttl_chat", "10m"},
 	} {
-		wantMessage := testRegistry.Validate(tc.key, tc.value)
+		wantMessage := settings.New().Validate(tc.key, tc.value)
 		if wantMessage == nil {
 			t.Fatalf("registry accepts %s=%s", tc.key, tc.value)
 		}

@@ -12,9 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/settings"
 
-	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/testutil/llmstub"
@@ -77,11 +75,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 	}
 	run := func(args ...string) appRun {
 		reg := settings.New()
-		app := cli.New("atrium", logx.Setup)
-		app.Settings = reg
-		app.State = config.NewState(reg)
-		app.Bootstrap = bootstrap(testLookup, reg)
-		app.Add(commands(testLookup, reg, app.State, nil, clients, nil)...)
+		app := newAppWith(testLookupFor(t), reg, config.NewState(reg), nil, clients, nil)
 		var out, errs bytes.Buffer
 		code := app.Run(context.Background(), args, &out, &errs)
 		return appRun{code, out.String(), errs.String()}

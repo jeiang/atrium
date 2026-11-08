@@ -2,6 +2,8 @@ package main
 
 import (
 	"fmt"
+	"io"
+	"maps"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,7 +16,8 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
-	"github.com/jeiang/atrium/internal/endpoint"
+	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
@@ -64,44 +67,100 @@ var testEnv = func() map[string]string {
 	return env
 }()
 
-var envMu sync.RWMutex
-
-func testLookup(name string) (string, bool) {
-	envMu.RLock()
-	defer envMu.RUnlock()
-	if activeFixture != nil {
-		if v, ok := activeFixture.env[name]; ok {
-			return v, true
-		}
-	}
-	if v, ok := testEnv[name]; ok {
-		return v, true
-	}
-	return config.OS(name)
+type testVars struct {
+	mu sync.Mutex
+	m  map[string]string
 }
 
-var testRegistry = settings.New()
-var testState = config.NewState(testRegistry)
-var testApp = newApp(testLookup, testRegistry, testState, nil)
+var testVarsByTest sync.Map
+var fixturesByTest sync.Map
+
+func testKey(t *testing.T) string {
+	name := t.Name()
+	if i := strings.IndexByte(name, '/'); i >= 0 {
+		return name[:i]
+	}
+	return name
+}
+
+func fixtureFor(t *testing.T) *fixture {
+	if v, ok := fixturesByTest.Load(t); ok {
+		return v.(*fixture)
+	}
+	if v, ok := fixturesByTest.Load(testKey(t)); ok {
+		return v.(*fixture)
+	}
+	return nil
+}
+
+func fixtureEnv(t *testing.T) map[string]string {
+	if f := fixtureFor(t); f != nil {
+		return f.env
+	}
+	return nil
+}
+
+func varsFor(t *testing.T) *testVars {
+	if v, ok := testVarsByTest.Load(t); ok {
+		return v.(*testVars)
+	}
+	if v, ok := testVarsByTest.Load(testKey(t)); ok {
+		return v.(*testVars)
+	}
+	v := &testVars{m: maps.Clone(testEnv)}
+	actual, _ := testVarsByTest.LoadOrStore(testKey(t), v)
+	return actual.(*testVars)
+}
+
+func (v *testVars) snapshot() map[string]string {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return maps.Clone(v.m)
+}
+
+func (v *testVars) lookup(name string) (string, bool) {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	value, ok := v.m[name]
+	return value, ok
+}
+
+func testLookupFor(t *testing.T) config.Env {
+	v := varsFor(t)
+	return func(name string) (string, bool) {
+		if value, ok := v.lookup(name); ok {
+			return value, true
+		}
+		return config.OS(name)
+	}
+}
 
 func setEnv(t *testing.T, name, value string) {
 	t.Helper()
-	envMu.Lock()
-	target := testEnv
-	if activeFixture != nil {
-		target = activeFixture.env
+	if f := fixtureFor(t); f != nil {
+		old, had := f.set(name, value)
+		t.Cleanup(func() {
+			if had {
+				f.set(name, old)
+				return
+			}
+			f.unset(name)
+		})
+		return
 	}
-	old, had := target[name]
-	target[name] = value
-	envMu.Unlock()
+	v := varsFor(t)
+	v.mu.Lock()
+	old, had := v.m[name]
+	v.m[name] = value
+	v.mu.Unlock()
 	t.Cleanup(func() {
-		envMu.Lock()
-		defer envMu.Unlock()
+		v.mu.Lock()
+		defer v.mu.Unlock()
 		if had {
-			target[name] = old
+			v.m[name] = old
 			return
 		}
-		delete(target, name)
+		delete(v.m, name)
 	})
 }
 
@@ -114,8 +173,8 @@ func moduleEnv(dir string) map[string]string {
 
 func requirementEnv(mediaRoot string) map[string]string {
 	return map[string]string{
-		settingEnv(endpoint.KeyChatURL):        "http://chat.invalid/v1",
-		settingEnv(endpoint.KeyEmbedURL):       "http://embed.invalid/v1",
+		settingEnv(mail.KeyChatURL):            "http://chat.invalid/v1",
+		settingEnv(mail.KeyEmbedURL):           "http://embed.invalid/v1",
 		settingEnv(media.KeyRoot):              mediaRoot,
 		settingEnv(media.KeyQbitURL):           "http://qbittorrent.invalid",
 		settingEnv(notify.KeyURL):              "http://ntfy.invalid",
@@ -150,14 +209,16 @@ func init() {
 	testEnv["ATRIUM_NOTION_BASE_URL"] = "http://127.0.0.1:9"
 }
 
-func newTestApp(env config.Env, mods []module.Module) *cli.App {
+func quietLog(io.Writer) {}
+
+func newTestApp(t *testing.T, mods []module.Module) *cli.App {
 	reg := settings.New()
-	return newApp(env, reg, config.NewState(reg), mods)
+	return newAppWith(testLookupFor(t), reg, config.NewState(reg), mods, imapclient.Opener, nil, quietLog)
 }
 
-func defaultApp() *cli.App {
-	if activeFixture != nil {
-		return activeFixture.app
+func defaultApp(t *testing.T) *cli.App {
+	if f := fixtureFor(t); f != nil {
+		return f.app
 	}
-	return testApp
+	return newTestApp(t, nil)
 }

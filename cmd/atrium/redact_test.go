@@ -15,7 +15,7 @@ import (
 
 func TestStoredSecretsAreRedactedFromLogsAndAgentWrites(t *testing.T) {
 	const secret = "sk-redact-profile-é-0123456789"
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setCmd := cliExitProcess(t, "secrets set "+secrets.ActionLinkKey)
 	setCmd.Stdin = strings.NewReader(secret + "\n")
 	var setErr bytes.Buffer
@@ -29,7 +29,7 @@ func TestStoredSecretsAreRedactedFromLogsAndAgentWrites(t *testing.T) {
 		anthropictest.Reply("end_turn", anthropictest.Text("saved")),
 	)
 	setEnv(t, anthropic.BaseURLEnv, api.URL)
-	ran := runApp("agent", "run", "--text", "remember my token", "--kind", "chat")
+	ran := runApp(t, "agent", "run", "--text", "remember my token", "--kind", "chat")
 	if ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 	}

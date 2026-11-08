@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -12,11 +11,11 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/logx"
 )
 
 func startServe(t *testing.T) string {
@@ -43,58 +42,51 @@ func (b *lockedBuffer) String() string {
 
 func startServeIn(t *testing.T, dir string) string {
 	t.Helper()
-	base, _ := startServeLogged(t, dir)
+	base, _, _ := startServeStoppable(t, dir)
 	return base
 }
 
 func startServeLogged(t *testing.T, dir string) (string, *lockedBuffer) {
 	t.Helper()
-	base, logs, _ := startServeStoppable(t, dir)
+	base, logs, _ := startServeWith(t, dir, true)
 	return base, logs
 }
 
 func startServeStoppable(t *testing.T, dir string) (string, *lockedBuffer, func()) {
 	t.Helper()
-	for attempt := 0; ; attempt++ {
-		base, logs, stop, err := startServeOnce(t, dir)
-		if err == nil {
-			t.Cleanup(stop)
-			return base, logs, stop
-		}
-		if attempt >= 4 || !strings.Contains(err.Error(), "address already in use") {
-			t.Fatalf("serve did not start: %v", err)
-		}
-	}
+	return startServeWith(t, dir, false)
 }
 
-func startServeOnce(t *testing.T, dir string) (string, *lockedBuffer, func(), error) {
+func startServeWith(t *testing.T, dir string, logged bool) (string, *lockedBuffer, func()) {
 	t.Helper()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	app := newTestApp(t, nil)
+	if f := fixtureFor(t); f != nil {
+		app = f.app
+	}
+	logs := &lockedBuffer{}
+	if logged {
+		logx.Setup(logs)
+	}
+	return startServeApp(t, app, logs)
+}
+
+func startServeApp(t *testing.T, app *cli.App, logs *lockedBuffer) (string, *lockedBuffer, func()) {
+	t.Helper()
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		return "", nil, nil, err
+		t.Fatal(err)
 	}
 	_, port, _ := net.SplitHostPort(l.Addr().String())
 	_ = l.Close()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan int, 1)
-	var exitCode atomic.Int32
-	exitCode.Store(-1)
-	logs := &lockedBuffer{}
-	envMu.RLock()
-	app := defaultApp()
-	if activeFixture != nil {
-		app = activeFixture.app
-	}
-	envMu.RUnlock()
 	go func() {
 		var stdout bytes.Buffer
-		code := app.Run(ctx, []string{"serve", "--port", port, "--auth", "local"}, &stdout, logs)
-		exitCode.Store(int32(code))
-		done <- code
+		done <- app.Run(ctx, []string{"serve", "--port", port, "--auth", "local"}, &stdout, logs)
 	}()
 	var once sync.Once
 	stop := func() {
@@ -102,7 +94,7 @@ func startServeOnce(t *testing.T, dir string) (string, *lockedBuffer, func(), er
 			cancel()
 			select {
 			case code := <-done:
-				if code != cli.ExitOK && !t.Failed() {
+				if code != cli.ExitOK {
 					t.Errorf("exit code %d", code)
 				}
 			case <-time.After(15 * time.Second):
@@ -110,22 +102,17 @@ func startServeOnce(t *testing.T, dir string) (string, *lockedBuffer, func(), er
 			}
 		})
 	}
+	t.Cleanup(stop)
 	base := "http://127.0.0.1:" + port
 	for deadline := time.Now().Add(60 * time.Second); time.Now().Before(deadline); {
 		if resp, err := http.Get(base + "/healthz"); err == nil {
 			_ = resp.Body.Close()
-			return base, logs, stop, nil
-		}
-		if code := exitCode.Load(); code >= 0 {
-			cancel()
-			<-done
-			return "", logs, nil, fmt.Errorf("serve exited with %d: %s", code, logs.String())
+			return base, logs, stop
 		}
 		time.Sleep(50 * time.Millisecond)
 	}
-	cancel()
-	<-done
-	return "", logs, nil, fmt.Errorf("serve did not start: %s", logs.String())
+	t.Fatal("serve did not start")
+	return "", nil, nil
 }
 
 func fetch(t *testing.T, client *http.Client, method, url string, form url.Values) (int, string, http.Header) {
@@ -156,6 +143,7 @@ func fetch(t *testing.T, client *http.Client, method, url string, form url.Value
 }
 
 func TestServeRendersNotificationsPage(t *testing.T) {
+	t.Parallel()
 	base := startServe(t)
 	status, body, _ := fetch(t, http.DefaultClient, "GET", base+"/settings/notifications", nil)
 	if status != http.StatusOK || !strings.Contains(body, "No notifications") {
@@ -164,6 +152,7 @@ func TestServeRendersNotificationsPage(t *testing.T) {
 }
 
 func TestServeRendersMailPages(t *testing.T) {
+	t.Parallel()
 	base := startServe(t)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -206,6 +195,7 @@ func TestServeRendersMailPages(t *testing.T) {
 }
 
 func TestServeRendersReviewPages(t *testing.T) {
+	t.Parallel()
 	base := startServe(t)
 	for _, path := range []string{"/proposals", "/activity", "/drafts", "/loops", "/watches"} {
 		if status, _, _ := fetch(t, http.DefaultClient, "GET", base+path, nil); status != http.StatusOK {
@@ -215,6 +205,7 @@ func TestServeRendersReviewPages(t *testing.T) {
 }
 
 func TestServeRendersNotionPages(t *testing.T) {
+	t.Parallel()
 	base := startServe(t)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -243,6 +234,7 @@ func TestServeRendersNotionPages(t *testing.T) {
 }
 
 func TestServeRendersAssistantPages(t *testing.T) {
+	t.Parallel()
 	base := startServe(t)
 	jar, err := cookiejar.New(nil)
 	if err != nil {

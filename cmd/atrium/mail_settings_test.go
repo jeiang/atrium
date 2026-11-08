@@ -14,7 +14,7 @@ import (
 func liveMode(t *testing.T) (string, int, string) {
 	t.Helper()
 	var out, errs bytes.Buffer
-	code := defaultApp().Run(context.Background(), []string{"live", "status"}, &out, &errs)
+	code := defaultApp(t).Run(context.Background(), []string{"live", "status"}, &out, &errs)
 	if code != cli.ExitOK {
 		return "", code, errs.String()
 	}

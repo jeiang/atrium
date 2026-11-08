@@ -13,8 +13,8 @@ import (
 )
 
 func TestDisabledToolIsNotOffered(t *testing.T) {
-	dir, api := moduleFixture(t, flagsExcept("", ""))
-	if ran := runApp("agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
@@ -22,7 +22,7 @@ func TestDisabledToolIsNotOffered(t *testing.T) {
 		t.Fatal(err)
 	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
-	ran := runApp("agent", "run", "--text", "hi")
+	ran := runApp(t, "agent", "run", "--text", "hi")
 	if ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 	}

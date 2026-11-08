@@ -52,7 +52,7 @@ func readiness(t *testing.T, base string) (int, string) {
 }
 
 func TestOpsListenerServesMetricsAndReadinessApartFromThePublicListener(t *testing.T) {
-	dir, _ := moduleFixture(t, flagsExcept(module.Notifications, "false"))
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Notifications, "false"))
 	opsBase := opsAddr(t)
 
 	path := filepath.Join(dir, "atrium.db")
@@ -114,7 +114,7 @@ func TestOpsReadinessIsDegradedWhenNtfyIsDownAndPprofFollowsItsSetting(t *testin
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
 	t.Cleanup(ntfy.Close)
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, settingEnv(notify.KeyURL), ntfy.URL)
 	setEnv(t, settingEnv(ops.PprofKey), "true")
 	opsBase := opsAddr(t)

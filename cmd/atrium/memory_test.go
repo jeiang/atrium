@@ -12,10 +12,10 @@ import (
 )
 
 func TestMemoryTreeFollowsChatRuns(t *testing.T) {
-	dir, api := moduleFixture(t, flagsExcept("", ""))
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	reply := anthropictest.Reply("end_turn", anthropictest.Text("hi"))
 	api.Push(reply, reply)
-	ran := runApp("agent", "run", "--text", "one")
+	ran := runApp(t, "agent", "run", "--text", "one")
 	if ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 	}
@@ -25,12 +25,12 @@ func TestMemoryTreeFollowsChatRuns(t *testing.T) {
 	}
 	thread := int64(out["thread_id"].(float64))
 	for _, text := range []string{"two", "three"} {
-		ran = runApp("agent", "run", "--thread", fmt.Sprint(thread), "--text", text)
+		ran = runApp(t, "agent", "run", "--thread", fmt.Sprint(thread), "--text", text)
 		if ran.code != cli.ExitOK {
 			t.Fatalf("agent run %s: %d %s", text, ran.code, ran.stderr)
 		}
 	}
-	tree := runApp("memory", "tree", fmt.Sprint(thread))
+	tree := runApp(t, "memory", "tree", fmt.Sprint(thread))
 	if tree.code != cli.ExitOK {
 		t.Fatalf("memory tree: %d %s", tree.code, tree.stderr)
 	}

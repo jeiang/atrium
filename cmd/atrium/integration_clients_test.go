@@ -27,7 +27,7 @@ func TestIntegrationClientsUseTheRecordTransportAndAFailedRequestChecksAtOnce(t 
 	}))
 	t.Cleanup(srv.Close)
 
-	dir, _ := moduleFixture(t, flagsExcept("", ""))
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, settingEnv(media.KeyQbitURL), srv.URL)
 	setEnv(t, settingEnv(media.KeyQbitAPIKey), "qbt_good")
 	s := &integrationSite{t: t, dir: dir}
