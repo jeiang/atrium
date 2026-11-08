@@ -194,6 +194,20 @@ behavior-parity target.
   feature; an empty database starts core only. `atrium settings set
   <name>_enabled true` is refused with the unmet reasons. The assistant tool
   registry is built from the enabled modules' tools.
+- Observability: `atrium serve` exposes Prometheus metrics and readiness on
+  the loopback ops listener (`ops_listen`, `off` disables), and every command
+  can export OTLP/HTTP traces when `otel_traces_endpoint` is pinned (empty
+  disables; `OTEL_SDK_DISABLED=true` overrides). Spans cover HTTP requests,
+  agent runs and steps, Anthropic requests, tool calls, mail sync, embedding
+  calls, integration checks, notification delivery and database transactions;
+  attributes are an allowlist of opaque ids, counts, durations and bounded
+  names, never prompts, completions, mail content, addresses, tool arguments
+  or results, or secrets. Log records carry `TRACE_ID` and `SPAN_ID` when a
+  span is active; logs still reach VictoriaLogs through journald, with no
+  OTLP log pipeline. The metrics include LLM tokens and cost by model and run
+  kind, run steps and duration, tool calls and duration, mail sync counts,
+  queue depths, integration health, notification delivery, action links and
+  endpoint probes. The host owns the scrape job and the traces endpoint.
 - The host owns external services, reverse proxy authentication,
   persistence, and backups. Updating this repository does not update the
   host's pinned application input.

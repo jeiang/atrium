@@ -8,11 +8,16 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
+	"strconv"
+	"time"
+
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/textutil"
 )
 
@@ -63,6 +68,25 @@ type embeddingsReply struct {
 
 func Texts(ctx context.Context, url string, texts []string) ([][]float64, error) {
 	s := endpoint.From(ctx)
+	ctx, span := obs.Start(ctx, "embed.request", trace.WithAttributes(
+		obs.String(obs.EmbedModel, s.EmbedModel),
+		obs.Int(obs.EmbedBatchSize, len(texts)),
+		obs.Int(obs.EmbedDimensions, s.Dim),
+	))
+	started := time.Now()
+	vectors, err := textsAt(ctx, url, texts, s)
+	duration := time.Since(started)
+	span.SetAttributes(obs.Bool(obs.EmbedOK, err == nil))
+	if err != nil {
+		obs.Fail(span, "error")
+	}
+	span.End()
+	obs.EmbedRequests.Add(1, s.EmbedModel, strconv.FormatBool(err == nil))
+	obs.EmbedDuration.Observe(duration.Seconds(), s.EmbedModel)
+	return vectors, err
+}
+
+func textsAt(ctx context.Context, url string, texts []string, s endpoint.Settings) ([][]float64, error) {
 	raw, err := httpx.PostJSON(ctx, url+"/embeddings", embeddingsRequest{s.EmbedModel, texts})
 	if err != nil {
 		return nil, err

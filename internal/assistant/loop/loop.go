@@ -9,6 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
@@ -29,6 +31,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/obs"
 )
 
 const (
@@ -73,21 +76,22 @@ type Options struct {
 }
 
 type state struct {
-	r       *Runner
-	d       *db.DB
-	client  *anthropic.Client
-	now     func() float64
-	run     journal.Run
-	thread  threads.Thread
-	kind    tool.Kind
-	limits  actx.Limits
-	req     request
-	writer  *progress.Writer
-	x       *dispatcher
-	env     config.Env
-	steps   int
-	maxCost float64
-	ttl     string
+	r         *Runner
+	d         *db.DB
+	client    *anthropic.Client
+	now       func() float64
+	run       journal.Run
+	thread    threads.Thread
+	kind      tool.Kind
+	limits    actx.Limits
+	req       request
+	writer    *progress.Writer
+	x         *dispatcher
+	env       config.Env
+	steps     int
+	stepIndex int
+	maxCost   float64
+	ttl       string
 
 	callsKey string
 	repeats  int
@@ -143,8 +147,12 @@ func deref[T any](p *T) T {
 }
 
 func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, client *anthropic.Client, runID int64, o Options) (*journal.Run, error) {
+	started := time.Now()
+	ctx, span := obs.Start(ctx, "agent.run", trace.WithAttributes(obs.Int64(obs.RunID, runID)))
+	defer span.End()
 	s, err := r.prepare(ctx, d, cfg, env, client, runID, o)
 	if err != nil {
+		obs.Fail(span, "prepare")
 		now := assistant.Now()
 		if o.Now != nil {
 			now = o.Now()
@@ -152,6 +160,12 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 		_ = journal.FinishRun(ctx, d.Write, runID, journal.Failed, now, new(err.Error()))
 		return nil, err
 	}
+	span.SetAttributes(
+		obs.Int64(obs.ThreadID, s.thread.ID),
+		obs.String(obs.RunKind, string(s.kind)),
+		obs.String(obs.GenAIRequestModel, s.run.Model),
+		obs.String(obs.RunEffort, s.run.Effort),
+	)
 	final := journal.Failed
 	var errText *string
 	stopBeat := s.heartbeat(ctx)
@@ -166,7 +180,9 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 		final = journal.Done
 	case errors.As(err, new(LeaseLost)):
 		log.Warn(err.Error()+"; leaving it to the new owner", logx.RunID, runID)
-		return journal.GetRun(ctx, d.Read, runID)
+		finished, ferr := journal.GetRun(ctx, d.Read, runID)
+		s.observeRun(started, span, finished)
+		return finished, ferr
 	case ctx.Err() != nil:
 		return nil, ctx.Err()
 	case errors.As(err, new(*tool.Park)):
@@ -193,7 +209,20 @@ func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env confi
 	if err := s.writer.Event(ctx, progress.RunDone, map[string]any{"state": final, "error": optional(errText)}); err != nil {
 		return nil, err
 	}
-	return journal.GetRun(ctx, d.Read, runID)
+	finished, err := journal.GetRun(ctx, d.Read, runID)
+	s.observeRun(started, span, finished)
+	return finished, err
+}
+
+func (s *state) observeRun(started time.Time, span trace.Span, run *journal.Run) {
+	if run == nil {
+		return
+	}
+	kind := string(s.kind)
+	span.SetAttributes(obs.String(obs.RunState, run.State), obs.Int64(obs.RunStepCount, run.Steps))
+	obs.Runs.Add(1, kind, run.State)
+	obs.RunSteps.Observe(float64(run.Steps), kind)
+	obs.RunDuration.Observe(time.Since(started).Seconds(), kind)
 }
 
 func optional(p *string) any {
@@ -444,15 +473,14 @@ func (s *state) stream(ctx context.Context, messages []json.RawMessage) (*anthro
 	return response, wall, s.writer.Flush(context.WithoutCancel(ctx))
 }
 
-func (s *state) recordUsage(ctx context.Context, response *anthropic.Message, toolCalls, wall int64, partial bool) error {
+func (s *state) recordUsage(ctx context.Context, response *anthropic.Message, toolCalls, wall int64, partial bool) (float64, error) {
 	clearEdits, cleared := actx.ClearsOf(response)
 	entry := usage.Entry{
 		TS: s.now(), RequestID: response.ID, ThreadID: s.thread.ID, RunID: s.run.ID, Kind: string(s.kind), Model: s.run.Model,
 		Effort: s.run.Effort, ToolCalls: toolCalls, WallMS: wall, Partial: partial,
 		ClearEdits: clearEdits, ClearedTokens: cleared, Compaction: int64(store.Bit(response.StopReason == block.Compaction)),
 	}
-	_, err := usage.Record(context.WithoutCancel(ctx), s.d, entry, response.Usage)
-	return err
+	return usage.Record(context.WithoutCancel(ctx), s.d, entry, response.Usage)
 }
 
 func (s *state) settlePending(ctx context.Context) error {
@@ -508,7 +536,18 @@ func (s *state) unattended(ctx context.Context) (bool, error) {
 	return root == threads.Cron || root == threads.Nightly, err
 }
 
-func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, last *anchor) (bool, *anchor, error) {
+func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, last *anchor) (done bool, next *anchor, err error) {
+	s.stepIndex++
+	ctx, span := obs.Start(ctx, "agent.step", trace.WithAttributes(
+		obs.Int(obs.StepIndex, s.stepIndex),
+		obs.String(obs.RunKind, string(s.kind)),
+	))
+	defer func() {
+		if err != nil {
+			obs.Fail(span, spanError(err))
+		}
+		span.End()
+	}()
 	if err := s.readmit(ctx); err != nil {
 		return false, nil, err
 	}
@@ -544,6 +583,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if err != nil {
 		return false, nil, err
 	}
+	span.SetAttributes(obs.Float(obs.RunCostUSD, spent), obs.Int64(obs.ContextSize, size))
 	if size > s.limits.Hard {
 		return false, nil, RunLimit(fmt.Sprintf("next request would be about %d tokens, over the %d limit", size, s.limits.Hard))
 	}
@@ -558,16 +598,28 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if err != nil {
 		return false, nil, err
 	}
-	response, wall, err := s.stream(ctx, messages)
+	reqCtx, reqSpan := obs.Start(ctx, "gen_ai.request", trace.WithAttributes(
+		obs.String(obs.GenAIRequestModel, s.run.Model),
+		obs.String(obs.RunKind, string(s.kind)),
+	))
+	response, wall, err := s.stream(reqCtx, messages)
 	if err != nil {
 		if response != nil && response.ID != "" {
-			if rerr := s.recordUsage(ctx, response, 0, wall, true); rerr != nil {
+			cost, rerr := s.recordUsage(ctx, response, 0, wall, true)
+			genAIAttrs(reqSpan, response, wall, cost, true)
+			if rerr != nil {
+				obs.Fail(reqSpan, "usage")
+				reqSpan.End()
 				return false, nil, rerr
 			}
 		}
+		obs.Fail(reqSpan, spanError(err))
+		reqSpan.End()
 		return false, nil, err
 	}
 	if err := journal.BumpSteps(context.WithoutCancel(ctx), s.d.Write, s.run.ID); err != nil {
+		obs.Fail(reqSpan, "journal")
+		reqSpan.End()
 		return false, nil, err
 	}
 	blocks := response.Content
@@ -575,9 +627,17 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	blocks, stop = judge(response, blocks)
 	uses, err := toolUses(blocks)
 	if err != nil {
+		obs.Fail(reqSpan, "decode")
+		reqSpan.End()
 		return false, nil, err
 	}
-	if err := s.recordUsage(ctx, response, int64(len(uses)), wall, false); err != nil {
+	cost, err := s.recordUsage(ctx, response, int64(len(uses)), wall, false)
+	genAIAttrs(reqSpan, response, wall, cost, false)
+	if err != nil {
+		obs.Fail(reqSpan, "usage")
+	}
+	reqSpan.End()
+	if err != nil {
 		return false, nil, err
 	}
 	if err := s.renew(ctx); err != nil {
@@ -590,7 +650,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if stop != nil {
 		return false, nil, stop
 	}
-	next := &anchor{tokens: actx.HistoryTokens(response.Usage), seq: seq}
+	next = &anchor{tokens: actx.HistoryTokens(response.Usage), seq: seq}
 	urls, err := block.SearchURLs(blocks)
 	if err != nil {
 		return false, nil, err
@@ -608,7 +668,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if err := memory.Rebuild(ctx, s.d.Write, s.thread.ID, s.now()); err != nil {
 		return false, next, err
 	}
-	done, err := journal.FinishUnlessQueued(ctx, s.d, s.run.ID, s.thread.ID, journal.Done, s.now())
+	done, err = journal.FinishUnlessQueued(ctx, s.d, s.run.ID, s.thread.ID, journal.Done, s.now())
 	return done, next, err
 }
 
@@ -652,4 +712,51 @@ func (s *state) answer(ctx context.Context, uses []ToolUse) error {
 		return err
 	}
 	return s.repeat(uses, results)
+}
+
+func spanError(err error) string {
+	if err == nil {
+		return ""
+	}
+	switch {
+	case errors.Is(err, context.Canceled):
+		return "canceled"
+	case errors.Is(err, context.DeadlineExceeded):
+		return "deadline_exceeded"
+	case errors.As(err, new(LeaseLost)):
+		return "lease_lost"
+	case errors.As(err, new(RunLimit)):
+		return "run_limit"
+	case errors.As(err, new(budget.BudgetExceeded)):
+		return "budget"
+	case errors.As(err, new(*tool.Park)):
+		return "parked"
+	case errors.As(err, new(*anthropic.APIError)):
+		return "api"
+	case errors.Is(err, progress.ErrStopped):
+		return "stopped"
+	default:
+		return "error"
+	}
+}
+
+func genAIAttrs(span trace.Span, response *anthropic.Message, wall int64, cost float64, partial bool) {
+	if response == nil {
+		return
+	}
+	u := response.Usage
+	span.SetAttributes(
+		obs.Int64(obs.GenAIInputTokens, u.InputTokens),
+		obs.Int64(obs.GenAIOutputTokens, u.OutputTokens),
+		obs.Int64(obs.GenAICacheRead, u.CacheReadInputTokens),
+		obs.Int64(obs.GenAICacheCreation, u.CacheCreationInputTokens),
+		obs.String(obs.GenAIStopReason, response.StopReason),
+		obs.Int64(obs.LLMWallMS, wall),
+		obs.Float(obs.LLMCostUSD, cost),
+		obs.Bool(obs.LLMPartial, partial),
+	)
+	total := u.InputTokens + u.CacheReadInputTokens + u.CacheCreationInputTokens
+	if total > 0 {
+		span.SetAttributes(obs.Float(obs.LLMCacheHitRatio, float64(u.CacheReadInputTokens)/float64(total)))
+	}
 }

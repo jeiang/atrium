@@ -6,8 +6,12 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
+	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
+
+	"go.opentelemetry.io/otel/trace"
 
 	"github.com/jeiang/atrium/internal/assistant/block"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
@@ -21,6 +25,7 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/obs"
 )
 
 type ToolUse = block.Use
@@ -171,11 +176,35 @@ func (x *dispatcher) finish(ctx context.Context, callID int64, use ToolUse, errT
 }
 
 func (x *dispatcher) perform(ctx context.Context, t *tool.Tool, callID int64, use ToolUse) (json.RawMessage, error) {
-	errText, value, err := x.invoke(ctx, t, use)
-	if err != nil {
-		return nil, err
+	effect := "unknown"
+	if t != nil {
+		effect = string(t.Effect)
 	}
-	return x.finish(ctx, callID, use, errText, value)
+	ctx, span := obs.Start(ctx, "tool.call", trace.WithAttributes(
+		obs.String(obs.ToolName, use.Name),
+		obs.String(obs.ToolEffect, effect),
+	))
+	started := time.Now()
+	errText, value, err := x.invoke(ctx, t, use)
+	var out json.RawMessage
+	if err == nil {
+		out, err = x.finish(ctx, callID, use, errText, value)
+	}
+	duration := time.Since(started)
+	ok := err == nil && errText == nil
+	span.SetAttributes(obs.Bool(obs.ToolOK, ok), obs.Int64(obs.ToolDurationMS, duration.Milliseconds()))
+	if !ok {
+		class := spanError(err)
+		if class == "" {
+			class = "tool_error"
+		}
+		obs.Fail(span, class)
+		span.SetAttributes(obs.String(obs.ErrorType, class))
+	}
+	obs.ToolCalls.Add(1, use.Name, strconv.FormatBool(ok))
+	obs.ToolDuration.Observe(duration.Seconds(), use.Name, strconv.FormatBool(ok))
+	span.End()
+	return out, err
 }
 
 func (x *dispatcher) toolStart(ctx context.Context, use ToolUse, args json.RawMessage) error {

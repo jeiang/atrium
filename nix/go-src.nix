@@ -26,7 +26,7 @@
     {{end}}'';
 in {
   inherit src noticesTemplate;
-  vendorHash = "sha256-slVR5afJIGmPY8QUb4535h6Ap0/AyjpLKpx000nBiGE=";
+  vendorHash = "sha256-vlb6prOb3pfLnMhC7/djEaoGVPFfTa97JGF4uGvFw3k=";
   licenseCheck = ''GOOS=linux GOARCH=amd64 go-licenses check ./... --disallowed_types=forbidden,unknown'';
   licenseReport = file: ''
     GOOS=linux GOARCH=amd64 go-licenses report ./... --ignore github.com/jeiang/atrium/cmd --ignore github.com/jeiang/atrium/internal --ignore github.com/jeiang/atrium/sdk --template ${noticesTemplate} >${file}

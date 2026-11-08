@@ -26,7 +26,11 @@ func TestMonitoringPackReferencesOnlyServedMetrics(t *testing.T) {
 		names := metricName.FindAllString(string(raw), -1)
 		slices.Sort(names)
 		for _, name := range slices.Compact(names) {
-			if !strings.Contains(scrape, "# TYPE "+name+" ") {
+			base := name
+			for _, suffix := range []string{"_bucket", "_sum", "_count"} {
+				base = strings.TrimSuffix(base, suffix)
+			}
+			if !strings.Contains(scrape, "# TYPE "+base+" ") {
 				t.Errorf("%s references %s, which the ops listener does not serve", path, name)
 			}
 		}

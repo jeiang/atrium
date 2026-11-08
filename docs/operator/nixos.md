@@ -90,8 +90,9 @@ The module never removes old archives. Pruning and copying archives off the host
 | --- | --- | --- | --- |
 | `monitoring.ruleFile` | path | `nix/monitoring/atrium.rules.yml` | Prometheus alert rules for atrium's ops metrics, for `services.prometheus.ruleFiles` or vmalert. Read-only. |
 | `monitoring.dashboardFile` | path | `nix/monitoring/atrium-dashboard.json` | Grafana dashboard for atrium's ops metrics, for Grafana dashboard provisioning. Read-only. |
+| `observability.tracesEndpoint` | null or string | `null` | Full OTLP/HTTP traces URL, such as `http://zantark:10428/insert/opentelemetry/v1/traces`; it is pinned as `core.otel_traces_endpoint`. `null` disables tracing. The standard `OTEL_SDK_DISABLED=true` turns export off without a settings change. |
 
-The metrics on the ops listener are listed in [Operations](behavior.md#operations).
+The metrics on the ops listener are listed in [Operations](behavior.md#operations). The ops listener stays loopback by default; a host that scrapes it over a mesh sets `settings.core.ops_listen` to the mesh address.
 
 ## Units and atrium-run
 

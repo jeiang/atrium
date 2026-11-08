@@ -10,12 +10,16 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/obs"
 )
 
 const (
@@ -122,6 +126,20 @@ func setWAL(w *sql.DB) error {
 }
 
 func (d *DB) WithTx(ctx context.Context, fn func(*sql.Tx) error) error {
+	ctx, span := obs.Start(ctx, "db.tx", trace.WithAttributes(obs.String(obs.DBOperation, "transaction")))
+	started := time.Now()
+	err := d.withTx(ctx, fn)
+	duration := time.Since(started)
+	if err != nil {
+		obs.Fail(span, "error")
+	}
+	span.End()
+	obs.DBTransactions.Add(1, strconv.FormatBool(err == nil))
+	obs.DBDuration.Observe(duration.Seconds())
+	return err
+}
+
+func (d *DB) withTx(ctx context.Context, fn func(*sql.Tx) error) error {
 	tx, err := d.Write.BeginTx(ctx, nil)
 	if err != nil {
 		return err

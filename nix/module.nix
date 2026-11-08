@@ -460,6 +460,14 @@ in {
       };
     };
 
+    observability = {
+      tracesEndpoint = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Full OTLP/HTTP traces URL, such as http://zantark:10428/insert/opentelemetry/v1/traces. Null disables tracing.";
+      };
+    };
+
     monitoring = {
       ruleFile = mkOption {
         type = types.path;
@@ -502,11 +510,16 @@ in {
   };
 
   config = mkIf cfg.enable {
-    services.atrium.settings = {
-      core.tz = lib.mkIf (config.time.timeZone != null) (lib.mkDefault config.time.timeZone);
-      calendar.calendar_dir = lib.mkDefault "${mirrorDir}/calendars";
-      contacts.contacts_dir = lib.mkDefault "${mirrorDir}/contacts";
-    };
+    services.atrium.settings = lib.mkMerge [
+      {
+        core.tz = lib.mkIf (config.time.timeZone != null) (lib.mkDefault config.time.timeZone);
+        calendar.calendar_dir = lib.mkDefault "${mirrorDir}/calendars";
+        contacts.contacts_dir = lib.mkDefault "${mirrorDir}/contacts";
+      }
+      (lib.optionalAttrs (cfg.observability.tracesEndpoint != null) {
+        core.otel_traces_endpoint = cfg.observability.tracesEndpoint;
+      })
+    ];
 
     assertions = [
       {

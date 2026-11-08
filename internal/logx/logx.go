@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	slogjournal "github.com/systemd/slog-journal"
+	"go.opentelemetry.io/otel/trace"
 )
 
 const (
@@ -27,6 +28,8 @@ const (
 	SettingKey   = "SETTING"
 	SettingValue = "VALUE"
 	Integration  = "INTEGRATION"
+	TraceID      = "TRACE_ID"
+	SpanID       = "SPAN_ID"
 )
 
 const Redacted = "[redacted]"
@@ -134,6 +137,14 @@ func flattenAll(prefix string, attrs []slog.Attr) []slog.Attr {
 	return out
 }
 
+func traceAttrs(ctx context.Context) []slog.Attr {
+	sc := trace.SpanContextFromContext(ctx)
+	if !sc.IsValid() {
+		return nil
+	}
+	return []slog.Attr{slog.String(TraceID, sc.TraceID().String()), slog.String(SpanID, sc.SpanID().String())}
+}
+
 type flatHandler struct {
 	inner  slog.Handler
 	prefix string
@@ -150,7 +161,7 @@ func (h *flatHandler) Handle(ctx context.Context, r slog.Record) error {
 		attrs = flatten(attrs, h.prefix, a)
 		return true
 	})
-	out.AddAttrs(attrs...)
+	out.AddAttrs(append(attrs, traceAttrs(ctx)...)...)
 	return h.inner.Handle(ctx, out)
 }
 

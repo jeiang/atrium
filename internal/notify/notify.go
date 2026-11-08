@@ -12,17 +12,21 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 	"time"
 	"unicode"
 
 	"regexp"
 
+	"go.opentelemetry.io/otel/trace"
+
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations/transport"
+	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -105,7 +109,7 @@ type delivery struct {
 	actions                     []Action
 }
 
-func deliver(ctx context.Context, q db.Querier, env config.Env, m delivery) (bool, string, error) {
+func deliver(ctx context.Context, q db.Querier, env config.Env, m delivery) (delivered bool, failure string, err error) {
 	base, err := text(ctx, q, KeyURL)
 	if err != nil {
 		return false, "", err
@@ -119,6 +123,23 @@ func deliver(ctx context.Context, q db.Querier, env config.Env, m delivery) (boo
 	if base == "" {
 		return false, notConfigured, nil
 	}
+	ctx, span := obs.Start(ctx, "notify.deliver", trace.WithAttributes(
+		obs.String(obs.NotifyChannel, m.channel),
+		obs.String(obs.NotifyBackend, "ntfy"),
+	))
+	attempted := false
+	defer func() {
+		span.SetAttributes(obs.Bool(obs.NotifyDelivered, delivered))
+		if err != nil {
+			obs.Fail(span, "error")
+		} else if failure != "" && failure != notConfigured {
+			span.SetAttributes(obs.String(obs.ErrorType, "delivery_failed"))
+		}
+		span.End()
+		if attempted {
+			obs.NotifyDelivery.Add(1, m.channel, "ntfy", strconv.FormatBool(delivered))
+		}
+	}()
 	c, err := GetChannel(ctx, q, m.channel)
 	if err != nil {
 		return false, "", err
@@ -186,6 +207,7 @@ func deliver(ctx context.Context, q db.Querier, env config.Env, m delivery) (boo
 		return false, "", err
 	}
 	defer client.CloseIdleConnections()
+	attempted = true
 	resp, err := client.Do(req)
 	if err == nil {
 		_, err = io.Copy(io.Discard, resp.Body)
