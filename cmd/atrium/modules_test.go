@@ -51,7 +51,7 @@ var moduleCases = []moduleCase{
 		}},
 	{module: module.Notifications, tool: "notify", table: "notifications", method: "GET", path: "/settings/notifications", status: http.StatusOK},
 	{module: module.Grafana, tool: "grafana_datasources"},
-	{module: module.Contacts, tool: "contacts_lookup"},
+	{module: module.Contacts, tool: "contacts_lookup", command: []string{"contacts", "sync"}},
 }
 
 type appRun struct {
@@ -252,6 +252,7 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 		{module.Media, "media_root is not set"},
 		{module.Assistant, "anthropic_api_key is not set"},
 		{module.Notifications, "ntfy_url is not set"},
+		{module.Contacts, "contacts_dir is not set"},
 		{module.Grafana, "grafana_url and grafana_viewer_token"},
 		{module.Grafana, "needs assistant"},
 	} {

@@ -32,7 +32,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_GRAFANA_TIMEOUT_SECONDS` | `assistant.agent_grafana_timeout_seconds` |
 | `ATRIUM_ASSISTANT_AGENT_JOURNAL_LEASE_SECONDS` | `assistant.agent_journal_lease_seconds` |
 | `ATRIUM_ASSISTANT_AGENT_MAIL_BODY_CHARS` | `assistant.agent_mail_body_chars` |
-| `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_CONTACTS` | `assistant.agent_mail_max_contacts` |
 | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_LOOPS_LIMIT` | `assistant.agent_mail_max_loops_limit` |
 | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_RESULTS` | `assistant.agent_mail_max_results` |
 | `ATRIUM_ASSISTANT_AGENT_MAIL_SNIPPET_CHARS` | `assistant.agent_mail_snippet_chars` |
@@ -140,6 +139,8 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_CALENDAR_WORK_DAYS` | `calendar.work_days` |
 | `ATRIUM_CALENDAR_WORK_HOURS` | `calendar.work_hours` |
 | `ATRIUM_CONTACTS_CONTACTS_DIR` | `contacts.contacts_dir` |
+| `ATRIUM_CONTACTS_CONTACTS_MAX_RESULTS` | `contacts.contacts_max_results` |
+| `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_CONTACTS` | `contacts.contacts_max_results` |
 | `ATRIUM_CORE_ASSISTANT_ENABLED` | `core.assistant_enabled` |
 | `ATRIUM_CORE_CALENDAR_ENABLED` | `core.calendar_enabled` |
 | `ATRIUM_CORE_CONTACTS_ENABLED` | `core.contacts_enabled` |

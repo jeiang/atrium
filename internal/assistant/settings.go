@@ -86,7 +86,6 @@ const (
 	KeyMailMaxResults    = "agent_mail_max_results"
 	KeyMailSnippetChars  = "agent_mail_snippet_chars"
 	KeyMailBodyChars     = "agent_mail_body_chars"
-	KeyMailMaxContacts   = "agent_mail_max_contacts"
 	KeyMailMaxLoopsLimit = "agent_mail_max_loops_limit"
 
 	KeyNotionMaxResults  = "agent_notion_max_results"
@@ -229,7 +228,6 @@ func init() {
 		count(KeyMailMaxResults, 20, 1, 200),
 		count(KeyMailSnippetChars, 300, 20, 5000),
 		count(KeyMailBodyChars, 8000, 100, 100000),
-		count(KeyMailMaxContacts, 10, 1, 100),
 		count(KeyMailMaxLoopsLimit, 100, 1, 1000),
 
 		count(KeyNotionMaxResults, 10, 1, 100),

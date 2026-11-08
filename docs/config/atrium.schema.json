@@ -287,17 +287,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "agent_mail_max_contacts": {
-          "default": 10,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_mail_max_contacts_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "agent_mail_max_loops_limit": {
           "default": 100,
           "type": [
@@ -1387,6 +1376,17 @@
           "type": "string"
         },
         "contacts_dir_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "contacts_max_results": {
+          "default": 10,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "contacts_max_results_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }

@@ -112,7 +112,7 @@ func unescape(body string) string {
 }
 
 const invite = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nPRODID:-//test//EN\r\nBEGIN:VEVENT\r\nUID:lunch\r\nDTSTAMP:20261001T000000Z\r\n" +
-	"DTSTART:20261110T170000Z\r\nDTEND:20261110T180000Z\r\nSUMMARY:Lunch\r\nLOCATION:Cafe\r\nRRULE:FREQ=WEEKLY;COUNT=4\r\n" +
+	"DTSTART:20261110T170000Z\r\nDTEND:20261110T180000Z\r\nSUMMARY:Lunch\r\nLOCATION:Cafe\r\nDESCRIPTION:Lunch with Pat\r\nRRULE:FREQ=WEEKLY;COUNT=4\r\n" +
 	"X-APPLE-TRAVEL-ADVISORY-BEHAVIOR:AUTOMATIC\r\nORGANIZER:mailto:pat@example.com\r\n" +
 	"ATTENDEE;PARTSTAT=ACCEPTED:mailto:pat@example.com\r\nATTENDEE;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:operator@icloud.invalid\r\n" +
 	"BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15M\r\nDESCRIPTION:Lunch\r\nEND:VALARM\r\n" +
@@ -161,15 +161,21 @@ func TestRSVPAndUpdateProposalsWriteOnlyOnApprovalAndUndo(t *testing.T) {
 	if !strings.Contains(body, "SUMMARY:Long lunch") || strings.Count(body, "ATTENDEE") != 2 || !strings.Contains(body, "ORGANIZER") {
 		t.Fatalf("after the approved update the event is %q", body)
 	}
-	for _, kept := range []string{"RRULE:FREQ=WEEKLY;COUNT=4", "BEGIN:VALARM", "X-APPLE-TRAVEL-ADVISORY-BEHAVIOR", "LOCATION:Cafe", "SEQUENCE:1"} {
+	for _, kept := range []string{"RRULE:FREQ=WEEKLY;COUNT=4", "BEGIN:VALARM", "X-APPLE-TRAVEL-ADVISORY-BEHAVIOR", "SEQUENCE:1"} {
 		if !strings.Contains(body, kept) {
 			t.Errorf("the update lost %s: %q", kept, body)
+		}
+	}
+	for _, cleared := range []string{"LOCATION:Cafe", "DESCRIPTION:Lunch with Pat"} {
+		if strings.Contains(body, cleared) {
+			t.Errorf("the update did not clear %s: %q", cleared, body)
 		}
 	}
 	if got := runApp("proposals", "undo", update); got.code != cli.ExitOK {
 		t.Fatalf("undo update: %d %s", got.code, got.stderr)
 	}
-	if body = srv.Objects()[path]; !strings.Contains(body, "SUMMARY:Lunch") || strings.Contains(body, "Long lunch") {
+	if body = srv.Objects()[path]; !strings.Contains(body, "SUMMARY:Lunch") || strings.Contains(body, "Long lunch") ||
+		!strings.Contains(body, "LOCATION:Cafe") || !strings.Contains(body, "DESCRIPTION:Lunch with Pat") {
 		t.Errorf("undo did not restore the event: %q", body)
 	}
 }

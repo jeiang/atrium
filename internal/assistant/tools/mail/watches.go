@@ -83,7 +83,7 @@ func upcomingBirthdays(ctx context.Context, tc *tool.Context, args tool.Args) (a
 		return nil, err
 	}
 	if !ok {
-		return nil, tool.NotConfigured(contacts.DirEnv + " is not set")
+		return nil, tool.NotConfigured(contacts.DirKey + " is not set")
 	}
 	out := make([]any, len(found))
 	for i, item := range found {

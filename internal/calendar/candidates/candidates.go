@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"math/big"
 	"os"
 	"strings"
 	"time"
@@ -25,59 +24,53 @@ import (
 
 var log = logx.Logger("atrium.event_candidates")
 
+type Status string
+
 const (
-	StatusQueued = "queued"
-	Drafted      = "drafted"
-	Reviewed     = "reviewed"
-	Proposed     = "proposed"
-	None         = "none"
+	StatusQueued   Status = "queued"
+	StatusDrafted  Status = "drafted"
+	StatusReviewed Status = "reviewed"
+	StatusProposed Status = "proposed"
+	StatusNone     Status = "none"
 )
 
 var calendarTypes = map[string]bool{"text/calendar": true, "application/ics": true}
 
 type Judge func(ctx context.Context, url string, m llm.Message, body string) (bool, error)
 
-func set(ctx context.Context, d *db.DB, messageID any, status, reason string, now float64) error {
+func set(ctx context.Context, d *db.DB, messageID int64, status Status, reason string, now float64) error {
 	_, err := d.Write.ExecContext(ctx, "INSERT OR REPLACE INTO event_candidates (message_id, reason, status, ts) VALUES (?, ?, ?, ?)",
-		messageID, reason, status, now)
+		messageID, reason, string(status), now)
 	return err
 }
 
-func Mark(ctx context.Context, d *db.DB, messageID any, status string, now float64) error {
-	id := messageID
-	switch v := id.(type) {
-	case bool:
-		id = int64(0)
-		if v {
-			id = int64(1)
-		}
-	case *big.Int:
-		id = v.String()
-	}
-	res, err := d.Write.ExecContext(ctx, "UPDATE event_candidates SET status = ?, ts = ? WHERE message_id = ?", status, now, id)
+func Drafted(ctx context.Context, d *db.DB, messageID int64, now float64) (bool, error) {
+	res, err := d.Write.ExecContext(ctx,
+		"UPDATE event_candidates SET status = ?, ts = ? WHERE message_id = ? AND status = ?",
+		string(StatusDrafted), now, messageID, string(StatusQueued))
 	if err != nil {
-		return err
+		return false, err
 	}
-	if changed, err := res.RowsAffected(); err != nil || changed > 0 {
-		return err
-	}
-	return set(ctx, d, id, status, "", now)
+	changed, err := res.RowsAffected()
+	return changed > 0, err
 }
 
 type Item struct {
 	MessageID int64  `json:"message_id"`
+	Account   string `json:"account"`
 	Reason    string `json:"reason"`
 }
 
 func Queued(ctx context.Context, q db.Querier, limit int) ([]Item, error) {
 	rows, err := q.QueryContext(ctx,
-		"SELECT message_id, reason FROM event_candidates WHERE status = ? ORDER BY ts, message_id LIMIT ?", StatusQueued, limit)
+		"SELECT e.message_id, m.account, e.reason FROM event_candidates e JOIN messages m ON m.id = e.message_id "+
+			"WHERE e.status = ? ORDER BY e.ts, e.message_id LIMIT ?", string(StatusQueued), limit)
 	if err != nil {
 		return nil, err
 	}
 	items, err := db.Collect(rows, func(r *sql.Rows) (Item, error) {
 		var item Item
-		return item, r.Scan(&item.MessageID, &item.Reason)
+		return item, r.Scan(&item.MessageID, &item.Account, &item.Reason)
 	})
 	if items == nil {
 		items = []Item{}
@@ -115,7 +108,7 @@ func pending(ctx context.Context, d *db.DB, account string) ([]row, error) {
 	})
 }
 
-func defaultCalendar(account string) string {
+func defaultCalendar(account string) calendar.Target {
 	if config.Preset(account) == config.Gmail {
 		return calendar.Google
 	}
@@ -216,7 +209,7 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 			if err != nil {
 				return proposed, flagged, err
 			}
-			if err := set(ctx, d, r.id, Proposed, "calendar invitation", now()); err != nil {
+			if err := set(ctx, d, r.id, StatusProposed, "calendar invitation", now()); err != nil {
 				return proposed, flagged, err
 			}
 			continue
@@ -238,7 +231,7 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 		if err != nil {
 			return proposed, flagged, err
 		}
-		status, reason := None, ""
+		status, reason := StatusNone, ""
 		if hasEvent {
 			status, reason = StatusQueued, "local model flagged an event"
 			flagged++

@@ -122,6 +122,8 @@ func updateICloud(ctx context.Context, env config.Env, set Settings, spec Spec, 
 	for _, name := range updatedProps {
 		if props, ok := want.Props[name]; ok {
 			ev.Props[name] = props
+		} else if name == ical.PropLocation || name == ical.PropDescription {
+			delete(ev.Props, name)
 		}
 	}
 	delete(ev.Props, ical.PropDuration)
@@ -190,6 +192,7 @@ func updateGoogle(ctx context.Context, env config.Env, set Settings, spec Spec, 
 		return nil, err
 	}
 	body.Id, body.Attendees = "", nil
+	body.ForceSendFields = []string{"Location", "Description"}
 	if _, err := svc.Events.Patch("primary", spec.UID, body).SendUpdates("none").Context(ctx).Do(); err != nil {
 		return nil, remote(err)
 	}

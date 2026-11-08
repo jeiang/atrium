@@ -257,8 +257,9 @@ func propose(ctx context.Context, tc *tool.Context, args tool.Args) (any, error)
 	if !created {
 		return map[string]any{"proposed": false, "reason": "an identical proposal already exists"}, nil
 	}
-	if messageID, ok := source.Get("message_id"); ok {
-		if err := candidates.Mark(ctx, tc.DB, messageID, candidates.Drafted, tc.Now()); err != nil {
+	if stored, ok := source.Get("message_id"); ok {
+		messageID, _ := stored.(int64)
+		if _, err := candidates.Drafted(ctx, tc.DB, messageID, tc.Now()); err != nil {
 			return nil, err
 		}
 	}
