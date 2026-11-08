@@ -135,11 +135,11 @@ func (s *Service) View(ctx context.Context, presetName string) (View, error) {
 	if vals[KeyGroupsClaim] == "" {
 		vals[KeyGroupsClaim] = preset.GroupsClaim
 	}
-	status, err := secrets.New(s.d, s.d).IsSet(ctx, secrets.OIDCClientSecret)
+	status, err := secrets.New(s.d, s.d).Status(ctx, secrets.OIDCClientSecret)
 	if err != nil {
 		return View{}, err
 	}
-	v.SecretSet, v.SecretPinned = status != secrets.Unset, status == secrets.Pinned
+	v.SecretSet, v.SecretPinned = status != settings.Unset, status == settings.Pinned
 	v.Active = s.Check(ctx) == nil
 	v.Public = config.PublicURL(s.env)
 	return v, nil
@@ -479,9 +479,9 @@ func (s *Service) Activate(ctx context.Context, fingerprint string) error {
 		for _, key := range keys {
 			var err error
 			if d.changed[key] == "" && key != KeyAccessGroup && key != KeyAdminGroup {
-				err = settings.Default.Unset(ctx, tx, key, 0)
+				err = settings.Default.Unset(ctx, tx, key)
 			} else {
-				err = settings.Default.Set(ctx, tx, key, d.changed[key], 0)
+				err = settings.Default.Set(ctx, tx, key, d.changed[key])
 			}
 			if err != nil {
 				return err

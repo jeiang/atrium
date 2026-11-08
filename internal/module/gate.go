@@ -135,7 +135,7 @@ func (s *Set) load(ctx context.Context) (*Snapshot, error) {
 		return nil, err
 	}
 	defer func() { _ = d.Close() }()
-	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
+	if err := config.Boot(ctx, s.env, d, cfg); err != nil {
 		return nil, err
 	}
 	if err := s.Seed(ctx, d); err != nil {

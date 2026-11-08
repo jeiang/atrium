@@ -11,7 +11,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
@@ -102,7 +101,7 @@ func (h handlers) index(w http.ResponseWriter, r *http.Request) {
 func (h handlers) done(w http.ResponseWriter, r *http.Request, err error, title string) {
 	var account AccountError
 	var channel ChannelError
-	var encryption secrets.EncryptionRequired
+	var encryption settings.EncryptionRequired
 	var pinned *settings.PinnedError
 	if errors.As(err, &account) || errors.As(err, &channel) || errors.As(err, &encryption) || errors.As(err, &pinned) {
 		h.render(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()}, err.Error())

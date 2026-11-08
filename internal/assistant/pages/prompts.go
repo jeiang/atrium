@@ -66,9 +66,9 @@ func (p *pages) promptChange(w http.ResponseWriter, r *http.Request, e prompts.E
 	ctx := audit.With(detached(r), "operator", audit.UI)
 	var err error
 	if reset || text == e.Default {
-		err = settings.Default.Unset(ctx, p.deps.DB.Write, e.Key, 0)
+		err = settings.Default.Unset(ctx, p.deps.DB.Write, e.Key)
 	} else {
-		err = settings.Default.Set(ctx, p.deps.DB.Write, e.Key, text, 0)
+		err = settings.Default.Set(ctx, p.deps.DB.Write, e.Key, text)
 	}
 	var invalid settings.Invalid
 	var pinned *settings.PinnedError

@@ -106,12 +106,11 @@ const (
 const modeDefault = config.Shadow
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
 	adv := func(key string, kind settings.Type, def string, check func(string) error) settings.Def {
-		return settings.Def{Key: key, Module: module, Type: kind, Default: def, Check: check, Class: settings.Advanced, Scopes: instance}
+		return settings.Value(settings.Advanced, settings.Def{Key: key, Module: module, Type: kind, Default: def, Check: check})
 	}
 	ui := func(key string, kind settings.Type, def string, check func(string) error) settings.Def {
-		return settings.Def{Key: key, Module: module, Type: kind, Default: def, Check: check, Class: settings.UI, Scopes: instance}
+		return settings.Value(settings.UI, settings.Def{Key: key, Module: module, Type: kind, Default: def, Check: check})
 	}
 	count := func(key string, def int) settings.Def {
 		return adv(key, settings.Int, strconv.Itoa(def), atLeast(1))
@@ -120,16 +119,15 @@ func init() {
 		return adv(key, settings.Float, def, settings.Within(0, 1))
 	}
 	settings.MustRegister(
-		settings.Def{Key: KeyMode, Module: module, Type: settings.String, Default: modeDefault, Check: modeCheck, Class: settings.Bootstrap},
+		settings.Deploy(settings.Def{Key: KeyMode, Module: module, Type: settings.String, Default: modeDefault, Check: modeCheck}),
 		ui(KeyChatURL, settings.String, "", nil),
 		ui(KeyEmbedURL, settings.String, "", nil),
 		ui(KeyChatModel, settings.String, "qwen", nonBlank),
 		adv(KeyChatMaxTokens, settings.Int, "80", atLeast(1)),
 		adv(KeyEmbedModel, settings.String, "embeddinggemma", nonBlank),
-		settings.Def{
+		settings.Value(settings.Advanced, settings.Def{
 			Key: KeyWriteCap, Module: module, Type: settings.Int, Default: "100",
-			Check: settings.Between(1, 1000), Class: settings.Cap, Scopes: instance,
-		},
+			Check: settings.Between(1, 1000)}),
 		adv(KeyWriteAttempts, settings.Int, "3", settings.Between(1, 10)),
 		adv(KeyDeletionInterval, settings.Int, "86400", atLeast(3600)),
 		ui(KeyUncertainDest, settings.String, "Misc", nonBlank),
@@ -307,7 +305,7 @@ func (r *Reader) resolve(key string) settings.Resolved {
 	if r.err != nil {
 		return settings.Resolved{}
 	}
-	found, err := settings.Default.Resolve(r.ctx, r.q, key, 0)
+	found, err := settings.Default.Resolve(r.ctx, r.q, key)
 	r.err = err
 	return found
 }
@@ -347,7 +345,7 @@ func (r *Reader) Ints(key string) []int {
 func (r *Reader) List(key string) []string { return SplitList(r.resolve(key).Value) }
 
 func Mode(ctx context.Context, q Querier) (string, error) {
-	found, err := settings.Default.Resolve(ctx, readOnly{q}, KeyMode, 0)
+	found, err := settings.Default.Resolve(ctx, readOnly{q}, KeyMode)
 	if err != nil {
 		return "", err
 	}
@@ -370,16 +368,16 @@ func EmbedURL(ctx context.Context, q Querier) (string, error) {
 }
 
 func urlOf(ctx context.Context, q Querier, key string) (string, error) {
-	found, err := settings.Default.Resolve(ctx, readOnly{q}, key, 0)
+	found, err := settings.Default.Resolve(ctx, readOnly{q}, key)
 	return strings.TrimRight(found.Value, "/"), err
 }
 
 func UncertainDest(ctx context.Context, q Querier, account string) (string, error) {
 	spec, ok := config.Account(account)
-	if !ok || spec.UncertainDest == "" {
+	if !ok || spec.UncertainDest() == "" {
 		return "", nil
 	}
-	found, err := settings.Default.Resolve(ctx, readOnly{q}, KeyUncertainDest, 0)
+	found, err := settings.Default.Resolve(ctx, readOnly{q}, KeyUncertainDest)
 	return found.Value, err
 }
 

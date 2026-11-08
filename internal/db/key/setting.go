@@ -8,13 +8,11 @@ import (
 const settingKey = "key"
 
 func init() {
-	settings.MustRegister(settings.Def{
-		Key: settingKey, Module: "db", Type: settings.String, Class: settings.Secret, Secret: true, PinOnly: true,
-		Check: func(value string) error {
+	settings.MustRegister(settings.Secret(settings.SecretOpts{PinOnly: true}, settings.Def{
+		Key: settingKey, Module: "db", Type: settings.String, Check: func(value string) error {
 			if _, err := db.ParseKey(value); err != nil {
 				return settings.Invalid("must be 64 hex digits")
 			}
 			return nil
-		},
-	})
+		}}))
 }

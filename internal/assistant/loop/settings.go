@@ -14,17 +14,15 @@ const (
 )
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
 	settings.MustRegister(
-		settings.Def{
+		settings.Value(settings.UI, settings.Def{
 			Key: CacheTTLKey, Module: "assistant", Type: settings.Enum, Default: prompts.TTL5m,
-			Choices: []string{prompts.TTL5m, prompts.TTL1h}, Class: settings.UI, Scopes: instance,
-		},
+			Choices: []string{prompts.TTL5m, prompts.TTL1h}}),
 	)
 }
 
 func cacheTTL(ctx context.Context, q db.Querier) (string, error) {
-	found, err := settings.Default.Resolve(ctx, q, CacheTTLKey, 0)
+	found, err := settings.Default.Resolve(ctx, q, CacheTTLKey)
 	return found.Value, err
 }
 

@@ -37,10 +37,9 @@ var MaxAge = map[string]time.Duration{
 var log = logx.Logger("atrium.passrun")
 
 func init() {
-	settings.MustRegister(settings.Def{
+	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
 		Key: RetentionKey, Module: "core", Type: settings.Int, Default: "90",
-		Check: settings.Between(1, 3650), Class: settings.Advanced, Scopes: []settings.Scope{settings.Instance},
-	})
+		Check: settings.Between(1, 3650)}))
 }
 
 func now() float64 { return float64(time.Now().UnixNano()) / 1e9 }
@@ -58,7 +57,7 @@ func Record(ctx context.Context, d *db.DB, job string, started float64, failure 
 		outcome, message = Failed, logx.Scrub(failure.Error())
 	}
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
-		days, err := settings.Default.Resolve(ctx, tx, RetentionKey, 0)
+		days, err := settings.Default.Resolve(ctx, tx, RetentionKey)
 		if err != nil {
 			return err
 		}

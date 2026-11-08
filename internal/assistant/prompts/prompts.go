@@ -66,10 +66,8 @@ var Editables = []Editable{
 
 func init() {
 	for _, e := range Editables {
-		settings.MustRegister(settings.Def{
-			Key: e.Key, Module: "assistant", Type: settings.String, Class: settings.UI,
-			Scopes: []settings.Scope{settings.Instance}, Check: check,
-		})
+		settings.MustRegister(settings.Value(settings.UI, settings.Def{
+			Key: e.Key, Module: "assistant", Type: settings.String, Check: check}))
 	}
 }
 
@@ -84,7 +82,7 @@ func check(value string) error {
 }
 
 func Effective(ctx context.Context, q db.Querier, key string) (text string, custom, pinned bool, err error) {
-	found, err := settings.Default.Resolve(ctx, q, key, 0)
+	found, err := settings.Default.Resolve(ctx, q, key)
 	if err != nil {
 		return "", false, false, err
 	}

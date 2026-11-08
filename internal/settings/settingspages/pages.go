@@ -64,7 +64,6 @@ type page struct {
 type entry struct {
 	TS     float64 `json:"ts"`
 	Key    string  `json:"key"`
-	Thread *int64  `json:"thread"`
 	Old    *string `json:"old"`
 	New    *string `json:"new"`
 	Actor  string  `json:"actor"`
@@ -106,28 +105,28 @@ func fields(ctx context.Context, q db.Querier, module string) ([]field, error) {
 		if d.Module != module || !shown(d) {
 			continue
 		}
-		f := field{Key: d.Key, Type: string(d.Type), Choices: d.Choices, Default: d.Default, Secret: d.Secret, Restart: d.Restart, Page: d.Page}
+		f := field{Key: d.Key, Type: string(d.Type), Choices: d.Choices, Default: d.Default, Secret: d.IsSecret(), Page: d.Page}
 		if source, pinned, err := settings.Default.Pinned(d.Key); err != nil {
 			return nil, err
 		} else if pinned {
 			f.Pinned = source
 		}
-		if d.Secret {
-			status, err := store.IsSet(ctx, d.Key)
+		if d.IsSecret() {
+			status, err := store.Status(ctx, d.Key)
 			if err != nil {
 				return nil, err
 			}
-			f.SecretSet = status == secrets.Set
+			f.SecretSet = status == settings.Set
 			f.Editable = f.Pinned == "" && !d.PinOnly && d.Page == ""
 			out = append(out, f)
 			continue
 		}
-		found, err := settings.Default.Resolve(ctx, q, d.Key, 0)
+		found, err := settings.Default.Resolve(ctx, q, d.Key)
 		if err != nil {
 			return nil, err
 		}
 		f.Value, f.Stored = found.Value, found.Origin == settings.FromInstance
-		f.Editable = f.Pinned == "" && slices.Contains(d.Scopes, settings.Instance) && d.Page == ""
+		f.Editable = f.Pinned == "" && d.Editable() && d.Page == ""
 		out = append(out, f)
 	}
 	return out, nil
@@ -227,7 +226,7 @@ func apply(ctx context.Context, d *db.DB, tx *sql.Tx, f field, form url.Values) 
 	}
 	if reset {
 		if f.Stored {
-			return settings.Default.Unset(ctx, tx, f.Key, 0)
+			return settings.Default.Unset(ctx, tx, f.Key)
 		}
 		return nil
 	}
@@ -235,27 +234,27 @@ func apply(ctx context.Context, d *db.DB, tx *sql.Tx, f field, form url.Values) 
 	if !ok || web.LastValue(value, "") == f.Value {
 		return nil
 	}
-	return settings.Default.Set(ctx, tx, f.Key, web.LastValue(value, ""), 0)
+	return settings.Default.Set(ctx, tx, f.Key, web.LastValue(value, ""))
 }
 
 func refused(err error) bool {
 	var invalid settings.Invalid
 	var pinned *settings.PinnedError
-	var scope *settings.ScopeError
-	var encryption secrets.EncryptionRequired
-	var empty secrets.EmptyValue
+	var scope *settings.NotEditable
+	var encryption settings.EncryptionRequired
+	var empty settings.EmptyValue
 	return errors.As(err, &invalid) || errors.As(err, &pinned) || errors.As(err, &scope) || errors.As(err, &encryption) || errors.As(err, &empty)
 }
 
 func (h handlers) audit(w http.ResponseWriter, r *http.Request) {
 	rows, err := h.d.DB.Read.QueryContext(r.Context(),
-		"SELECT ts, key, thread_id, old_value, new_value, actor, source FROM settings_audit ORDER BY id DESC LIMIT ?", auditRows)
+		"SELECT ts, key, old_value, new_value, actor, source FROM settings_audit ORDER BY id DESC LIMIT ?", auditRows)
 	if err != nil {
 		panic(err)
 	}
 	list, err := db.Collect(rows, func(rs *sql.Rows) (entry, error) {
 		var e entry
-		return e, rs.Scan(&e.TS, &e.Key, &e.Thread, &e.Old, &e.New, &e.Actor, &e.Source)
+		return e, rs.Scan(&e.TS, &e.Key, &e.Old, &e.New, &e.Actor, &e.Source)
 	})
 	if err != nil {
 		panic(err)

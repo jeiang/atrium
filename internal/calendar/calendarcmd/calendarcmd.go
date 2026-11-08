@@ -44,7 +44,7 @@ func googleAuth(env config.Env) *cli.Command {
 					return cli.Fail(e, err)
 				}
 				defer func() { _ = d.Close() }()
-				if err := config.Migrate(e.Ctx, d, cfg); err != nil {
+				if err := config.Boot(e.Ctx, env, d, cfg); err != nil {
 					return cli.Fail(e, err)
 				}
 				set, err := calendar.LoadSettings(e.Ctx, d.Read)

@@ -11,7 +11,7 @@
       {{range $d.entries}}
       <tr data-audit="{{.key}}">
         <td class="whitespace-nowrap p-2 text-xs text-muted-foreground">{{ts .ts}}</td>
-        <td class="p-2 font-mono text-xs">{{.key}}{{with .thread}} · thread {{.}}{{end}}</td>
+        <td class="p-2 font-mono text-xs">{{.key}}</td>
         <td class="break-all p-2 font-mono text-xs">{{with .old}}{{.}}{{end}}</td>
         <td class="break-all p-2 font-mono text-xs">{{with .new}}{{.}}{{end}}</td>
         <td class="whitespace-nowrap p-2 text-xs">{{.actor}} · {{.source}}</td>

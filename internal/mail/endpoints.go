@@ -33,7 +33,7 @@ const (
 
 func init() {
 	for _, key := range []string{KeyChatKey, KeyEmbedKey} {
-		settings.MustRegister(settings.Def{Key: key, Module: module, Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true})
+		settings.MustRegister(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: key, Module: module, Type: settings.String}))
 	}
 }
 

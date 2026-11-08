@@ -95,7 +95,7 @@ func (s *Set) toggle(w http.ResponseWriter, r *http.Request, d *web.Deps) {
 		if err := s.Guard(ctx, tx, FlagKey(name), value); err != nil {
 			return err
 		}
-		return s.reg.Set(ctx, tx, FlagKey(name), value, 0)
+		return s.reg.Set(ctx, tx, FlagKey(name), value)
 	})
 	var needs *NeedsSettingsError
 	var pinned *settings.PinnedError

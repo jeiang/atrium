@@ -151,7 +151,7 @@ func (w *Watcher) connect(ctx context.Context) (*Pass, func(), error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if !w.migrated {
-		if err := config.Migrate(ctx, d, w.Cfg); err != nil {
+		if err := config.Boot(ctx, config.OS, d, w.Cfg); err != nil {
 			_ = d.Close()
 			return nil, nil, err
 		}

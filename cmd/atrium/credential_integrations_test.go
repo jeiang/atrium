@@ -12,6 +12,8 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/cli"
+
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations"
@@ -137,7 +139,7 @@ func TestCredentialIntegrationsTestWithSpecificReasonsAndSaveOnlyWorkingSecrets(
 		t.Error("the working Anthropic key was not stored write-only")
 	}
 
-	if got := runApp("settings", "get", notion.TokenKey); strings.Contains(got.stdout, "ntn_legacy") || !strings.Contains(got.stderr, "ATRIUM_NOTION_NOTION_TOKEN") {
-		t.Errorf("NOTION_TOKEN is still read or not pointed at its replacement: %q %q", got.stdout, got.stderr)
+	if got := runApp("settings", "get", notion.TokenKey); got.code != cli.ExitError || strings.Contains(got.stdout, "ntn_legacy") || !strings.Contains(got.stderr, "is a secret") {
+		t.Errorf("settings get of a secret: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 }

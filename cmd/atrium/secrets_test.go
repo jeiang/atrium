@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 func runSecrets(t *testing.T, stdin string, args ...string) settingsRun {
@@ -68,7 +69,7 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 	}
 
 	refused := runSecrets(t, value, "set", secrets.AnthropicAdminKey)
-	want := "error: " + secrets.EncryptionRequired(secrets.AnthropicAdminKey).Error() + "\n"
+	want := "error: " + settings.EncryptionRequired(secrets.AnthropicAdminKey).Error() + "\n"
 	if refused.code != cli.ExitError || refused.stdout != "" || refused.stderr != want || !strings.Contains(want, "encrypt the database first") {
 		t.Fatalf("flagged set on plaintext: exit %d stdout %q stderr %q, want %q", refused.code, refused.stdout, refused.stderr, want)
 	}

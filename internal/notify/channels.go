@@ -52,9 +52,8 @@ func TokenKey(channel string) string { return "ntfy_token_" + channel }
 
 func init() {
 	for _, name := range Channels {
-		settings.MustRegister(settings.Def{
-			Key: TokenKey(name), Module: module, Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true, Page: "/settings/notifications",
-		})
+		settings.MustRegister(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{
+			Key: TokenKey(name), Module: module, Type: settings.String, Page: "/settings/notifications"}))
 	}
 }
 
@@ -129,13 +128,11 @@ func ListChannels(ctx context.Context, q db.Querier) ([]Channel, error) {
 		if err != nil {
 			return nil, err
 		}
-		var one int
-		switch err := q.QueryRowContext(ctx, "SELECT 1 FROM secrets WHERE name = ?", TokenKey(name)).Scan(&one); {
-		case err == nil:
-			c.Token = true
-		case !errors.Is(err, sql.ErrNoRows):
+		status, err := settings.NewStoreIn(settings.Default, nil, q, nil).Status(ctx, TokenKey(name))
+		if err != nil {
 			return nil, err
 		}
+		c.Token = status != settings.Unset
 		out = append(out, c)
 	}
 	return out, nil

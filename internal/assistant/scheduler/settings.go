@@ -34,17 +34,15 @@ var scheduleKeys = map[string]string{
 }
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
-	adv := func(key string, kind settings.Type, class settings.Class, value string, check func(string) error) settings.Def {
-		return settings.Def{Key: key, Module: "assistant", Type: kind, Default: value, Check: check, Class: class, Scopes: instance}
+	adv := func(key string, kind settings.Type, value string, check func(string) error) settings.Def {
+		return settings.Value(settings.Advanced, settings.Def{Key: key, Module: "assistant", Type: kind, Default: value, Check: check})
 	}
 	timing := func(key, value string, lo, hi float64) settings.Def {
-		return adv(key, settings.Int, settings.Advanced, value, settings.Between(lo, hi))
+		return adv(key, settings.Int, value, settings.Between(lo, hi))
 	}
 	tick := timing(KeyTickSeconds, "30", 5, 3600)
-	tick.Restart = true
 	recurring := func(key, value string) settings.Def {
-		return adv(key, settings.String, settings.Advanced, value, recurringSchedule)
+		return adv(key, settings.String, value, recurringSchedule)
 	}
 	modelRun := func(key, value string) settings.Def {
 		d := recurring(key, value)

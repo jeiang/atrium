@@ -27,7 +27,7 @@ func open(env *cli.Env, cfgEnv config.Env) (*db.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := config.Migrate(env.Ctx, d, cfg); err != nil {
+	if err := config.Boot(env.Ctx, cfgEnv, d, cfg); err != nil {
 		_ = d.Close()
 		return nil, err
 	}

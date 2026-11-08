@@ -588,7 +588,7 @@ func TestOIDCAllowlistSessionsAreRechecked(t *testing.T) {
 func setting(t *testing.T, r *rig, key, value string) {
 	t.Helper()
 	ctx := audit.With(context.Background(), "test", audit.CLI)
-	if err := settings.Default.Set(ctx, r.db.Write, key, value, 0); err != nil {
+	if err := settings.Default.Set(ctx, r.db.Write, key, value); err != nil {
 		t.Fatal(err)
 	}
 }

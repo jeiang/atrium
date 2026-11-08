@@ -9,8 +9,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
@@ -37,7 +35,7 @@ func (s *service) set(a *cli.Args) cli.Handler {
 	name := a.Arg("name", cli.Opt{})
 	a.RejectExtras("the value must come from standard input, not the command line")
 	return func(e *cli.Env) int {
-		known := s.with(e, func(st *secrets.Store) int {
+		known := s.with(e, func(st *settings.Store) int {
 			if err := st.Known(*name); err != nil {
 				return failure(e, err)
 			}
@@ -54,8 +52,8 @@ func (s *service) set(a *cli.Args) cli.Handler {
 		if len(raw) > maxValue {
 			return e.UsageError("the secret on standard input is larger than %d bytes", maxValue)
 		}
-		return s.with(e, func(st *secrets.Store) int {
-			return write(e, st, *name, func(ctx context.Context, w *secrets.Store) error { return w.Set(ctx, *name, value, "cli") })
+		return s.with(e, func(st *settings.Store) int {
+			return write(e, st, *name, func(ctx context.Context, w *settings.Store) error { return w.Set(ctx, *name, value, "cli") })
 		})
 	}
 }
@@ -63,17 +61,17 @@ func (s *service) set(a *cli.Args) cli.Handler {
 func (s *service) delete(a *cli.Args) cli.Handler {
 	name := a.Arg("name", cli.Opt{})
 	return func(e *cli.Env) int {
-		return s.with(e, func(st *secrets.Store) int {
-			return write(e, st, *name, func(ctx context.Context, w *secrets.Store) error { return w.Delete(ctx, *name) })
+		return s.with(e, func(st *settings.Store) int {
+			return write(e, st, *name, func(ctx context.Context, w *settings.Store) error { return w.Delete(ctx, *name) })
 		})
 	}
 }
 
 func (s *service) status(*cli.Args) cli.Handler {
 	return func(e *cli.Env) int {
-		return s.with(e, func(st *secrets.Store) int {
+		return s.with(e, func(st *settings.Store) int {
 			for _, def := range settings.Default.Defs() {
-				if def.Secret {
+				if def.IsSecret() {
 					if code := report(e, st, def.Key); code != cli.ExitOK {
 						return code
 					}
@@ -84,17 +82,17 @@ func (s *service) status(*cli.Args) cli.Handler {
 	}
 }
 
-func write(e *cli.Env, st *secrets.Store, name string, act func(context.Context, *secrets.Store) error) int {
+func write(e *cli.Env, st *settings.Store, name string, act func(context.Context, *settings.Store) error) int {
 	ctx := audit.With(e.Ctx, actor, audit.CLI)
-	err := st.InTx(ctx, func(w *secrets.Store) error { return act(ctx, w) })
+	err := st.InTx(ctx, func(w *settings.Store) error { return act(ctx, w) })
 	if err != nil {
 		return failure(e, err)
 	}
 	return report(e, st, name)
 }
 
-func report(e *cli.Env, st *secrets.Store, name string) int {
-	status, err := st.IsSet(e.Ctx, name)
+func report(e *cli.Env, st *settings.Store, name string) int {
+	status, err := st.Status(e.Ctx, name)
 	if err != nil {
 		return failure(e, err)
 	}
@@ -104,10 +102,10 @@ func report(e *cli.Env, st *secrets.Store, name string) int {
 
 func failure(e *cli.Env, err error) int {
 	var pinned *settings.PinnedError
-	var encrypted secrets.EncryptionRequired
-	var notSecret secrets.NotSecret
-	var empty secrets.EmptyValue
-	var pinOnly secrets.PinOnly
+	var encrypted settings.EncryptionRequired
+	var notSecret settings.NotSecret
+	var empty settings.EmptyValue
+	var pinOnly settings.PinOnly
 	var unknown settings.UnknownKey
 	switch {
 	case errors.As(err, &unknown), errors.As(err, &notSecret):
@@ -119,18 +117,11 @@ func failure(e *cli.Env, err error) int {
 	return cli.Fail(e, err)
 }
 
-func (s *service) with(e *cli.Env, run func(*secrets.Store) int) int {
-	cfg, err := config.Load(s.env)
-	if err != nil {
-		return cli.Fail(e, err)
-	}
-	d, err := db.Connect(cfg.DBPath)
+func (s *service) with(e *cli.Env, run func(*settings.Store) int) int {
+	d, store, err := config.OpenStore(e.Ctx, s.env)
 	if err != nil {
 		return cli.Fail(e, err)
 	}
 	defer func() { _ = d.Close() }()
-	if err := config.Migrate(e.Ctx, d, cfg); err != nil {
-		return cli.Fail(e, err)
-	}
-	return run(secrets.New(d, d))
+	return run(store)
 }

@@ -73,7 +73,7 @@ func run(env *cli.Env, o Options, fn func(context.Context, *db.DB, config.Config
 		return cli.Fail(env, err)
 	}
 	defer func() { _ = d.Close() }()
-	if err := config.Migrate(env.Ctx, d, cfg); err != nil {
+	if err := config.Boot(env.Ctx, o.env(), d, cfg); err != nil {
 		return cli.Fail(env, err)
 	}
 	if err := fn(env.Ctx, d, cfg, env); err != nil {

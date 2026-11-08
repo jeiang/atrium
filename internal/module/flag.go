@@ -25,7 +25,7 @@ func init() {
 }
 
 func FlagOn(ctx context.Context, q db.Querier, name string) (bool, error) {
-	got, err := settings.Default.Resolve(ctx, q, FlagKey(name), 0)
+	got, err := settings.Default.Resolve(ctx, q, FlagKey(name))
 	return got.Value == "true", err
 }
 
@@ -149,7 +149,7 @@ func (s *Set) adopt(ctx context.Context, q db.Querier, only map[string]bool) err
 			log.Info("module flag is pinned, not migrated", logx.Module, r.Name)
 			continue
 		}
-		if err := s.reg.Set(ctx, q, FlagKey(r.Name), value, 0); err != nil {
+		if err := s.reg.Set(ctx, q, FlagKey(r.Name), value); err != nil {
 			return err
 		}
 		if state == Enabled {

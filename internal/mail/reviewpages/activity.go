@@ -90,14 +90,14 @@ func getWrite(ctx context.Context, q db.Querier, id int64) (*ActivityEntry, erro
 
 func settingsEntries(ctx context.Context, q db.Querier, limit int) ([]ActivityEntry, error) {
 	rows, err := q.QueryContext(ctx,
-		"SELECT id, ts, key, thread_id, old_value, new_value, actor, source FROM settings_audit ORDER BY ts DESC, id DESC LIMIT ?", limit)
+		"SELECT id, ts, key, old_value, new_value, actor, source FROM settings_audit ORDER BY ts DESC, id DESC LIMIT ?", limit)
 	if err != nil {
 		return nil, err
 	}
 	return db.Collect(rows, func(r *sql.Rows) (ActivityEntry, error) {
 		e := ActivityEntry{Source: sourceSettings, Category: categorySettings}
 		var old, next *string
-		if err := r.Scan(&e.ID, &e.TS, &e.Tool, &e.ThreadID, &old, &next, &e.Actor, &e.Origin); err != nil {
+		if err := r.Scan(&e.ID, &e.TS, &e.Tool, &old, &next, &e.Actor, &e.Origin); err != nil {
 			return e, err
 		}
 		e.Before, e.After = deref(old), deref(next)

@@ -22,16 +22,13 @@ var maxStepsKeys = map[tool.Kind]string{
 }
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
-	defs := []settings.Def{{
+	defs := []settings.Def{settings.Value(settings.Advanced, settings.Def{
 		Key: DoomLoopThresholdKey, Module: "assistant", Type: settings.Int, Default: "3",
-		Check: settings.Between(2, 20), Class: settings.Advanced, Scopes: instance,
-	}}
+		Check: settings.Between(2, 20)})}
 	for _, kind := range []tool.Kind{tool.Chat, tool.Cron, tool.Nightly} {
-		defs = append(defs, settings.Def{
+		defs = append(defs, settings.Value(settings.Advanced, settings.Def{
 			Key: maxStepsKeys[kind], Module: "assistant", Type: settings.Int, Default: "24",
-			Check: settings.Between(1, 200), Class: settings.Advanced, Scopes: instance,
-		})
+			Check: settings.Between(1, 200)}))
 	}
 	settings.MustRegister(defs...)
 }
@@ -52,7 +49,7 @@ func doomLoopThreshold(ctx context.Context, q db.Querier) (int, error) {
 }
 
 func intSetting(ctx context.Context, q db.Querier, key string) (int, error) {
-	found, err := settings.Default.Resolve(ctx, q, key, 0)
+	found, err := settings.Default.Resolve(ctx, q, key)
 	if err != nil {
 		return 0, err
 	}

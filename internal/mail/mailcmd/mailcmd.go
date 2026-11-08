@@ -130,7 +130,7 @@ func (o Options) run(env *cli.Env, run body) error {
 		return err
 	}
 	defer func() { _ = d.Close() }()
-	if err := config.Migrate(env.Ctx, d, cfg); err != nil {
+	if err := config.Boot(env.Ctx, config.OS, d, cfg); err != nil {
 		return err
 	}
 	return run(&Exec{Ctx: env.Ctx, Cfg: cfg, DB: d, Stdin: env.Stdin, Stdout: env.Stdout, Stderr: env.Stderr, opts: o})

@@ -46,9 +46,6 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 		}
 	}
 	for _, d := range defs {
-		if d.Class == settings.Fixed {
-			continue
-		}
 		found, ok, err := pinFromEnv(env, reg, d)
 		if err != nil {
 			return nil, err
@@ -57,7 +54,6 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 			pins.m[d.Key] = found
 		}
 	}
-	livePins.Store(pins)
 	return pins, nil
 }
 
@@ -69,25 +65,22 @@ func pinFromEnv(env Env, reg *settings.Registry, d settings.Def) (pin, bool, err
 	var found []pin
 	var used []string
 	for _, name := range names {
-		value := get(env, name)
-		if d.Secret {
-			value = py.Strip(value)
-			fileName := name + strings.ToUpper(fileSuffix)
-			if path, set := env(fileName); set {
-				if value != "" {
-					return pin{}, false, fmt.Errorf("config: %s and %s are both set; set only one", name, fileName)
-				}
-				secret, err := os.ReadFile(path)
-				if err != nil {
-					return pin{}, false, fmt.Errorf("config: %s: %w", fileName, err)
-				}
-				value, name = py.Strip(string(secret)), fileName
-				if err := reg.Validate(d.Key, value); err != nil {
-					return pin{}, false, fmt.Errorf("config: %s: %w", name, err)
-				}
-				found, used = append(found, pin{value, "env " + name}), append(used, name)
-				continue
+		value := py.Strip(get(env, name))
+		fileName := name + strings.ToUpper(fileSuffix)
+		if path, set := env(fileName); set {
+			if value != "" {
+				return pin{}, false, fmt.Errorf("config: %s and %s are both set; set only one", name, fileName)
 			}
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return pin{}, false, fmt.Errorf("config: %s: %w", fileName, err)
+			}
+			value, name = py.Strip(string(raw)), fileName
+			if err := reg.Validate(d.Key, value); err != nil {
+				return pin{}, false, fmt.Errorf("config: %s: %w", name, err)
+			}
+			found, used = append(found, pin{value, "env " + name}), append(used, name)
+			continue
 		}
 		if value == "" {
 			continue
@@ -154,10 +147,7 @@ func keyOf(keys map[string]settings.Def, name string) (d settings.Def, isFile, o
 }
 
 func (p *Pins) add(env Env, reg *settings.Registry, d settings.Def, path, dotted string, isFile bool, raw any) error {
-	if d.Class == settings.Fixed {
-		return fmt.Errorf("config: %s: %q is fixed and cannot be set", path, dotted)
-	}
-	if d.Secret && !isFile {
+	if d.IsSecret() && !isFile {
 		return fmt.Errorf("config: %s: %q is a secret; set %s%s, %s or %s%s", path, dotted, TOMLName(d), fileSuffix, EnvName(d), EnvName(d), strings.ToUpper(fileSuffix))
 	}
 	if _, dup := p.m[d.Key]; dup {

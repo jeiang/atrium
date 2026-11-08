@@ -131,7 +131,7 @@ func handler(run job, clock func() float64) func(*cli.Args) cli.Handler {
 				return cli.Fail(env, err)
 			}
 			defer func() { _ = d.Close() }()
-			if err := config.Migrate(env.Ctx, d, cfg); err != nil {
+			if err := config.Boot(env.Ctx, config.OS, d, cfg); err != nil {
 				return cli.Fail(env, err)
 			}
 			out, err := run(env.Ctx, d, config.OS, clock)

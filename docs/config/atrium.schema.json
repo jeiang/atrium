@@ -62,17 +62,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "agent_commit_savings": {
-          "default": 20000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_commit_savings_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "agent_compact_share": {
           "default": 0.875,
           "type": [
@@ -114,17 +103,6 @@
           ]
         },
         "agent_context_summary_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_dashboard_items": {
-          "default": 60,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_dashboard_items_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -586,6 +564,17 @@
           "type": "string"
         },
         "agent_schedule_daily_nudges_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_schedule_max_active_jobs": {
+          "default": 20,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_schedule_max_active_jobs_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

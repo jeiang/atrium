@@ -12,17 +12,15 @@ import (
 const DirKey = "contacts_dir"
 
 func init() {
-	settings.MustRegister(settings.Def{
-		Key: DirKey, Module: "contacts", Type: settings.String, Class: settings.Advanced,
-		Scopes: []settings.Scope{settings.Instance},
-	})
+	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
+		Key: DirKey, Module: "contacts", Type: settings.String}))
 }
 
 func Dir(ctx context.Context, q db.Querier) (string, error) {
 	if on, err := module.FlagOn(ctx, q, module.Contacts); err != nil || !on {
 		return "", err
 	}
-	found, err := settings.Default.Resolve(ctx, q, DirKey, 0)
+	found, err := settings.Default.Resolve(ctx, q, DirKey)
 	if err != nil || found.Value == "" {
 		return "", err
 	}

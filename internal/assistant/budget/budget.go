@@ -26,7 +26,7 @@ type BudgetExceeded string
 func (e BudgetExceeded) Error() string { return string(e) }
 
 func MonthlyBudget(ctx context.Context, q db.Querier) (float64, error) {
-	found, err := settings.Default.Resolve(ctx, q, BudgetKey, 0)
+	found, err := settings.Default.Resolve(ctx, q, BudgetKey)
 	if err != nil {
 		return 0, err
 	}
@@ -34,7 +34,7 @@ func MonthlyBudget(ctx context.Context, q db.Querier) (float64, error) {
 }
 
 func chatShare(ctx context.Context, q db.Querier) (float64, error) {
-	found, err := settings.Default.Resolve(ctx, q, ChatKey, 0)
+	found, err := settings.Default.Resolve(ctx, q, ChatKey)
 	if err != nil {
 		return 0, err
 	}
@@ -42,7 +42,7 @@ func chatShare(ctx context.Context, q db.Querier) (float64, error) {
 }
 
 func unattendedShare(ctx context.Context, q db.Querier) (float64, error) {
-	found, err := settings.Default.Resolve(ctx, q, UnattendedKey, 0)
+	found, err := settings.Default.Resolve(ctx, q, UnattendedKey)
 	if err != nil {
 		return 0, err
 	}
@@ -107,7 +107,7 @@ func RunCap(ctx context.Context, q db.Querier, model string) (float64, error) {
 	if _, err := pricing.Lookup(model); err != nil {
 		return 0, err
 	}
-	found, err := settings.Default.Resolve(ctx, q, RunCapKey(model), 0)
+	found, err := settings.Default.Resolve(ctx, q, RunCapKey(model))
 	if err != nil {
 		return 0, err
 	}
@@ -138,7 +138,7 @@ func SpendCap() BudgetExceeded { return BudgetExceeded(SpendCapText) }
 const ThreadCapKey = "thread_cost_cap_usd"
 
 func ThreadCap(ctx context.Context, q db.Querier, threadID int64) (spent, limit float64, err error) {
-	found, err := settings.Default.Resolve(ctx, q, ThreadCapKey, 0)
+	found, err := settings.Default.Resolve(ctx, q, ThreadCapKey)
 	if err != nil {
 		return 0, 0, err
 	}
@@ -152,10 +152,9 @@ func ThreadCap(ctx context.Context, q db.Querier, threadID int64) (spent, limit 
 func registerRunCaps() []settings.Def {
 	var defs []settings.Def
 	for _, m := range pricing.Models() {
-		defs = append(defs, settings.Def{
+		defs = append(defs, settings.Value(settings.Advanced, settings.Def{
 			Key: RunCapKey(m.ID), Module: "assistant", Type: settings.Float, Default: strconv.FormatFloat(m.RunCapUSD, 'f', -1, 64),
-			Check: settings.Above(0), Class: settings.Cap, Scopes: []settings.Scope{settings.Instance},
-		})
+			Check: settings.Above(0)}))
 	}
 	return defs
 }
@@ -163,18 +162,14 @@ func registerRunCaps() []settings.Def {
 func init() {
 	settings.MustRegister(registerRunCaps()...)
 	settings.MustRegister(
-		settings.Def{
+		settings.Value(settings.UI, settings.Def{
 			Key: BudgetKey, Module: "assistant", Type: settings.Float, Default: "150",
-			Check: settings.Above(0), Class: settings.UI, Scopes: []settings.Scope{settings.Instance},
-		},
-		settings.Def{
+			Check: settings.Above(0)}),
+		settings.Value(settings.Advanced, settings.Def{
 			Key: UnattendedKey, Module: "assistant", Type: settings.Float, Default: "0.8",
-			Check: settings.Within(0, 1), Peers: assistant.Ordered(false, nil, []string{ChatKey}),
-			Class: settings.Advanced, Scopes: []settings.Scope{settings.Instance},
-		},
-		settings.Def{
+			Check: settings.Within(0, 1), Peers: assistant.Ordered(false, nil, []string{ChatKey})}),
+		settings.Value(settings.Advanced, settings.Def{
 			Key: ThreadCapKey, Module: "assistant", Type: settings.Float, Default: "10",
-			Check: settings.Above(0), Class: settings.Cap, Scopes: []settings.Scope{settings.Instance},
-		},
+			Check: settings.Above(0)}),
 	)
 }

@@ -36,24 +36,20 @@ const (
 )
 
 func init() {
-	instance := []settings.Scope{settings.Instance}
 	text := func(key, def string) settings.Def {
-		return settings.Def{
+		return settings.Value(settings.UI, settings.Def{
 			Key: key, Module: "notion", Type: settings.String, Default: def,
-			Check: nonBlank, Class: settings.UI, Scopes: instance,
-		}
+			Check: nonBlank})
 	}
 	number := func(key string, typ settings.Type, def string, check func(string) error) settings.Def {
-		return settings.Def{
+		return settings.Value(settings.Advanced, settings.Def{
 			Key: key, Module: "notion", Type: typ, Default: def,
-			Check: check, Class: settings.Advanced, Scopes: instance,
-		}
+			Check: check})
 	}
 	settings.MustRegister(
-		settings.Def{
+		settings.Value(settings.UI, settings.Def{
 			Key: WikiRootKey, Module: "notion", Type: settings.String,
-			Check: pageID, Class: settings.UI, Scopes: instance,
-		},
+			Check: pageID}),
 		text(SensitivityPropertyKey, "sensitivity"),
 		text(PrivateValueKey, "private"),
 		text(WikiLogTitleKey, "Wiki Log"),
@@ -109,7 +105,7 @@ func (r *resolver) value(key string) string {
 	if r.err != nil {
 		return ""
 	}
-	found, err := settings.Default.Resolve(r.ctx, r.q, key, 0)
+	found, err := settings.Default.Resolve(r.ctx, r.q, key)
 	r.err = err
 	return found.Value
 }
@@ -118,7 +114,7 @@ func (r *resolver) int(key string) int {
 	if r.err != nil {
 		return 0
 	}
-	found, err := settings.Default.Resolve(r.ctx, r.q, key, 0)
+	found, err := settings.Default.Resolve(r.ctx, r.q, key)
 	if err != nil {
 		r.err = err
 		return 0
@@ -132,7 +128,7 @@ func (r *resolver) float(key string) float64 {
 	if r.err != nil {
 		return 0
 	}
-	found, err := settings.Default.Resolve(r.ctx, r.q, key, 0)
+	found, err := settings.Default.Resolve(r.ctx, r.q, key)
 	if err != nil {
 		r.err = err
 		return 0

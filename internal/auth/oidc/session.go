@@ -50,7 +50,7 @@ func (s *Service) timing(ctx context.Context) (timing, error) {
 		unit time.Duration
 		into *time.Duration
 	}{{KeyIdleDays, 24 * time.Hour, &t.idle}, {KeyRecheckMinutes, time.Minute, &t.recheck}} {
-		found, err := settings.Default.Resolve(ctx, s.d.Read, field.key, 0)
+		found, err := settings.Default.Resolve(ctx, s.d.Read, field.key)
 		if err != nil {
 			return t, err
 		}

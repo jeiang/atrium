@@ -11,7 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 )
 
-func TestCanonicalPinsPinAndDroppedNamesWarnAndAreIgnored(t *testing.T) {
+func TestCanonicalPinsPin(t *testing.T) {
 	dir := t.TempDir()
 	t.Setenv("ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
@@ -25,17 +25,6 @@ func TestCanonicalPinsPinAndDroppedNamesWarnAndAreIgnored(t *testing.T) {
 	}
 	if strings.Contains(pinned.stderr, "ATRIUM_MODE") {
 		t.Errorf("canonical pin warned: %q", pinned.stderr)
-	}
-
-	t.Setenv("ATRIUM_MAIL_MAIL_MODE", "")
-	t.Setenv("ATRIUM_MODE", "live")
-	old := runSettings(t, "get", "mail_mode")
-	got = old.row(t)
-	if old.code != cli.ExitOK || got.Value == nil || *got.Value != "shadow" || got.Source == nil || *got.Source != "default" {
-		t.Fatalf("dropped name: exit %d row %+v, want the default and no pin", old.code, got)
-	}
-	if !strings.Contains(old.stderr, "ATRIUM_MODE") || !strings.Contains(old.stderr, "ATRIUM_MAIL_MAIL_MODE") || strings.Count(old.stderr, "ATRIUM_MODE") != 1 {
-		t.Errorf("warning = %q, want one line naming ATRIUM_MODE and ATRIUM_MAIL_MAIL_MODE", old.stderr)
 	}
 }
 

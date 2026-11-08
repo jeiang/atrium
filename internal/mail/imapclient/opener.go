@@ -15,7 +15,7 @@ func Opener(cfg config.Config) mail.OpenFunc {
 		if !ok || !known {
 			return nil, errors.New("missing credentials for " + account)
 		}
-		client := New(spec.Host, user, password)
+		client := New(spec.Host(), user, password)
 		if err := client.Connect(ctx); err != nil {
 			client.Close()
 			return nil, err

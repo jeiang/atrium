@@ -10,7 +10,6 @@ import (
 	"regexp"
 	"slices"
 	"strings"
-	"sync/atomic"
 
 	"github.com/BurntSushi/toml"
 
@@ -24,17 +23,20 @@ import (
 const KeyMailAccountsFile = "mail_accounts_file"
 
 type AccountSpec struct {
-	Name          string
-	Label         string
-	Preset        string
-	Login         string
-	Password      string
-	Enabled       bool
-	Host          string
-	SMTPHost      string
-	UncertainDest string
-	Stored        bool
+	Name     string
+	Label    string
+	Preset   string
+	Login    string
+	Password string
+	Enabled  bool
+	Stored   bool
 }
+
+func (a AccountSpec) Host() string { return presets[a.Preset].host }
+
+func (a AccountSpec) SMTPHost() string { return presets[a.Preset].smtpHost }
+
+func (a AccountSpec) UncertainDest() string { return presets[a.Preset].uncertainDest }
 
 type preset struct{ host, smtpHost, uncertainDest string }
 
@@ -43,23 +45,15 @@ var presets = map[string]preset{
 	Gmail:  {"imap.gmail.com", "smtp.gmail.com", ""},
 }
 
-var (
-	fileAccounts atomic.Pointer[[]AccountSpec]
-	liveAccounts atomic.Pointer[[]AccountSpec]
-	accountID    = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
-)
+var accountID = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
 
 func init() {
-	settings.MustRegister(settings.Def{
-		Key: KeyMailAccountsFile, Module: "mail", Type: settings.String, Class: settings.Bootstrap, Restart: true,
-	})
+	settings.MustRegister(settings.Deploy(settings.Def{
+		Key: KeyMailAccountsFile, Module: "mail", Type: settings.String}))
 }
 
 func Accounts() []AccountSpec {
-	if list := liveAccounts.Load(); list != nil {
-		return *list
-	}
-	return nil
+	return loadState().accounts
 }
 
 func Account(name string) (AccountSpec, bool) {
@@ -77,11 +71,11 @@ func Preset(account string) string {
 }
 
 func UseAccounts(list []AccountSpec) (restore func()) {
-	previousFile, previous := fileAccounts.Swap(&list), liveAccounts.Swap(&list)
-	return func() {
-		fileAccounts.Store(previousFile)
-		liveAccounts.Store(previous)
-	}
+	previous := loadState()
+	next := *previous
+	next.fileAccounts, next.accounts = list, list
+	current.Store(&next)
+	return func() { current.Store(previous) }
 }
 
 func PasswordKey(id string) string { return "mail_password_" + id }
@@ -90,19 +84,27 @@ func RegisterPassword(id string) error {
 	if _, ok := settings.Default.Lookup(PasswordKey(id)); ok {
 		return nil
 	}
-	return settings.Default.Register(settings.Def{
-		Key: PasswordKey(id), Module: "mail", Type: settings.String, Class: settings.Secret, Secret: true, RequiresEncryptedDB: true, Page: "/settings/mail",
-	})
+	return settings.Default.Register(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{
+		Key: PasswordKey(id), Module: "mail", Type: settings.String, Page: "/settings/mail"}))
 }
 
 func LoadStoredAccounts(ctx context.Context, q db.Querier) error {
-	var list []AccountSpec
-	if file := fileAccounts.Load(); file != nil {
-		list = slices.Clone(*file)
-	}
-	rows, err := q.QueryContext(ctx, "SELECT id, label, preset, login, enabled FROM mail_accounts ORDER BY created_at, id")
+	s := loadState()
+	list, err := mergeStoredAccounts(ctx, q, s.fileAccounts)
 	if err != nil {
 		return err
+	}
+	next := *s
+	next.accounts = list
+	current.Store(&next)
+	return nil
+}
+
+func mergeStoredAccounts(ctx context.Context, q db.Querier, base []AccountSpec) ([]AccountSpec, error) {
+	list := slices.Clone(base)
+	rows, err := q.QueryContext(ctx, "SELECT id, label, preset, login, enabled FROM mail_accounts ORDER BY created_at, id")
+	if err != nil {
+		return nil, err
 	}
 	type row struct {
 		id, label, preset, login string
@@ -114,32 +116,31 @@ func LoadStoredAccounts(ctx context.Context, q db.Querier) error {
 		return x, err
 	})
 	if err != nil {
-		return err
+		return nil, err
 	}
 	for _, x := range stored {
 		if slices.ContainsFunc(list, func(a AccountSpec) bool { return a.Name == x.id }) {
 			continue
 		}
 		if err := RegisterPassword(x.id); err != nil {
-			return err
+			return nil, err
 		}
 		password, err := secrets.NewIn(nil, q, nil).Value(ctx, PasswordKey(x.id))
 		if err != nil {
-			return err
+			return nil, err
 		}
 		a, err := NewAccount(x.id, x.label, x.preset, x.login, password, x.enabled)
 		if err != nil {
-			return fmt.Errorf("config: stored mail account %q: %w", x.id, err)
+			return nil, fmt.Errorf("config: stored mail account %q: %w", x.id, err)
 		}
 		a.Stored = true
 		list = append(list, a)
 	}
-	liveAccounts.Store(&list)
-	return nil
+	return list, nil
 }
 
 func NewAccount(name, label, presetName, login, password string, enabled bool) (AccountSpec, error) {
-	p, ok := presets[presetName]
+	_, ok := presets[presetName]
 	if !ok {
 		return AccountSpec{}, fmt.Errorf("preset must be %s or %s", ICloud, Gmail)
 	}
@@ -152,7 +153,6 @@ func NewAccount(name, label, presetName, login, password string, enabled bool) (
 	return AccountSpec{
 		Name: name, Label: label, Preset: presetName, Login: py.Strip(login),
 		Password: strings.Join(py.Split(password), ""), Enabled: enabled,
-		Host: p.host, SMTPHost: p.smtpHost, UncertainDest: p.uncertainDest,
 	}, nil
 }
 

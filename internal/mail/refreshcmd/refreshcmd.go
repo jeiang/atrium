@@ -29,7 +29,7 @@ func Execute(env *cli.Env, cfgEnv config.Env, run Run) int {
 	if err != nil {
 		return cli.Fail(env, err)
 	}
-	out, err := locked(env.Ctx, cfg, run)
+	out, err := locked(env.Ctx, cfgEnv, cfg, run)
 	if err != nil {
 		return cli.Fail(env, err)
 	}
@@ -37,13 +37,13 @@ func Execute(env *cli.Env, cfgEnv config.Env, run Run) int {
 	return cli.ExitOK
 }
 
-func locked(ctx context.Context, cfg config.Config, run Run) (py.Dict, error) {
+func locked(ctx context.Context, env config.Env, cfg config.Config, run Run) (py.Dict, error) {
 	d, err := db.Connect(cfg.DBPath)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = d.Close() }()
-	if err := config.Migrate(ctx, d, cfg); err != nil {
+	if err := config.Boot(ctx, env, d, cfg); err != nil {
 		return nil, err
 	}
 	lock, err := db.Exclusive(ctx, cfg.DBPath, db.ShortLockWait)

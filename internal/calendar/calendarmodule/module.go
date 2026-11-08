@@ -32,7 +32,7 @@ func (Module) Register(mc module.Context) module.Registration {
 }
 
 func credentials(ctx context.Context, p module.Probe) (string, error) {
-	icloud, err := p.Settings.Resolve(ctx, p.Q, calendar.AppleIDKey, 0)
+	icloud, err := p.Settings.Resolve(ctx, p.Q, calendar.AppleIDKey)
 	if err != nil {
 		return "", err
 	}
@@ -43,7 +43,7 @@ func credentials(ctx context.Context, p module.Probe) (string, error) {
 		}
 		icloud.Value = ""
 	}
-	account, err := p.Settings.Resolve(ctx, p.Q, calendar.AccountKey, 0)
+	account, err := p.Settings.Resolve(ctx, p.Q, calendar.AccountKey)
 	if err != nil {
 		return "", err
 	}
@@ -52,7 +52,7 @@ func credentials(ctx context.Context, p module.Probe) (string, error) {
 		return "", nil
 	}
 
-	google, err := p.Settings.Resolve(ctx, p.Q, calendar.GoogleClientIDKey, 0)
+	google, err := p.Settings.Resolve(ctx, p.Q, calendar.GoogleClientIDKey)
 	if err != nil {
 		return "", err
 	}
