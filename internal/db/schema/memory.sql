@@ -29,3 +29,12 @@ CREATE TABLE IF NOT EXISTS memory_jobs (
     UNIQUE (thread_id, level, idx)
 );
 CREATE INDEX IF NOT EXISTS memory_jobs_queue ON memory_jobs (state, next_at);
+
+CREATE TABLE IF NOT EXISTS memory_views (
+    thread_id INTEGER PRIMARY KEY REFERENCES threads(id),
+    summary_count INTEGER NOT NULL,
+    message_count INTEGER NOT NULL,
+    over_target INTEGER NOT NULL,
+    lines_json TEXT NOT NULL,
+    created_at REAL NOT NULL
+);

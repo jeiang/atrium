@@ -14,7 +14,7 @@ import (
 )
 
 func Command(cfgEnv config.Env) *cli.Command {
-	return &cli.Command{Name: "memory", Commands: []*cli.Command{treeCommand(cfgEnv), workCommand(cfgEnv)}}
+	return &cli.Command{Name: "memory", Commands: []*cli.Command{treeCommand(cfgEnv), workCommand(cfgEnv), viewCommand(cfgEnv)}}
 }
 
 func open(env *cli.Env, cfgEnv config.Env) (*db.DB, error) {
@@ -109,6 +109,40 @@ func workCommand(cfgEnv config.Env) *cli.Command {
 					return cli.Fail(env, err)
 				}
 				_, _ = fmt.Fprintf(env.Stdout, "thread %d: %d nodes summarized\n", *thread, n)
+				return cli.ExitOK
+			}
+		},
+	}
+}
+
+func viewCommand(cfgEnv config.Env) *cli.Command {
+	return &cli.Command{
+		Name: "view",
+		Help: "Print the thread's stable memory view",
+		Setup: func(args *cli.Args) cli.Handler {
+			thread := args.IntArg("thread", cli.Opt{Help: "thread id"})
+			return func(env *cli.Env) int {
+				d, err := open(env, cfgEnv)
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				defer func() { _ = d.Close() }()
+				now := assistant.Now()
+				if err := memory.Rebuild(env.Ctx, d.Write, int64(*thread), now); err != nil {
+					return cli.Fail(env, err)
+				}
+				v, err := memory.Build(env.Ctx, d.Write, int64(*thread), now)
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				if v == nil {
+					return cli.Fail(env, fmt.Errorf("unknown thread %d", *thread))
+				}
+				_, _ = fmt.Fprintf(env.Stdout, "thread %d: %d lines, %d bytes, target %d, high %d, over=%t\n",
+					*thread, len(v.Lines), v.Bytes, v.Target, v.High, v.Over)
+				for i, line := range v.Lines {
+					_, _ = fmt.Fprintf(env.Stdout, "line %d: %s\n", i, line.Describe())
+				}
 				return cli.ExitOK
 			}
 		},

@@ -27,3 +27,24 @@ func init() {
 		Min: 1, Max: 16, Check: settings.Between(1, 16),
 	}))
 }
+
+const (
+	ViewLowKey      = "view_low"
+	ViewHighKey     = "view_high"
+	TailMessagesKey = "tail_messages"
+)
+
+func init() {
+	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
+		Key: ViewLowKey, Module: "memory", Type: settings.Int, Default: "64000",
+		Min: 1024, Max: 1000000, Check: settings.Between(1024, 1000000),
+	}))
+	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
+		Key: ViewHighKey, Module: "memory", Type: settings.Int, Default: "128000",
+		Min: 2048, Max: 2000000, Check: settings.Between(2048, 2000000),
+	}))
+	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
+		Key: TailMessagesKey, Module: "memory", Type: settings.Int, Default: "6",
+		Min: 0, Max: 100, Check: settings.Between(0, 100),
+	}))
+}
