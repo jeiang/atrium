@@ -11,6 +11,14 @@ const (
 	Sub     Kind = "sub"
 )
 
+func ParseKind(value string) (Kind, bool) {
+	switch Kind(value) {
+	case Chat, Cron, Nightly, Sub:
+		return Kind(value), true
+	}
+	return "", false
+}
+
 type Kinds []Kind
 
 var (

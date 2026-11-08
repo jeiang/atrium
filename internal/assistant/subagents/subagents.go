@@ -14,6 +14,7 @@ import (
 	"regexp"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
@@ -225,18 +226,9 @@ func DigestOf(ctx context.Context, q db.Querier, threadID int64) (string, error)
 		if messages[i].Role != journal.Assistant {
 			continue
 		}
-		var texts []string
-		for _, raw := range messages[i].Content {
-			var b struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
-			}
-			if err := json.Unmarshal(raw, &b); err != nil {
-				return "", fmt.Errorf("subagents: thread %d message %d block: %w", threadID, messages[i].ID, err)
-			}
-			if b.Type == "text" {
-				texts = append(texts, b.Text)
-			}
+		texts, err := block.Texts(messages[i].Content)
+		if err != nil {
+			return "", fmt.Errorf("subagents: thread %d message %d: %w", threadID, messages[i].ID, err)
 		}
 		if text := py.Strip(strings.Join(texts, "\n")); text != "" {
 			r := assistant.Read(ctx, q)
@@ -274,10 +266,10 @@ var statusOfRun = map[string]string{
 	journal.Running: Running, journal.Done: Done, journal.Failed: ErrorStatus, journal.Interrupted: Interrupted,
 }
 
-func RunCard(ctx context.Context, q db.Querier, t threads.Thread, run *journal.Run, now float64) (Card, error) {
+func runCard(ctx context.Context, q db.Querier, t threads.Thread, run *journal.Run, now float64) (Card, error) {
 	elapsed := max(now-t.CreatedAt, 0)
 	card := Card{
-		ThreadID: t.ID, Kind: t.Kind, Role: t.Role, Title: t.Title, Effort: t.Effort, ParentRunID: t.ParentRunID,
+		ThreadID: t.ID, Kind: string(t.Kind), Role: t.Role, Title: t.Title, Effort: t.Effort, ParentRunID: t.ParentRunID,
 		Status: Queued, Elapsed: &elapsed,
 	}
 	if run == nil {
@@ -323,5 +315,5 @@ func ChildCard(ctx context.Context, q db.Querier, t threads.Thread, now float64)
 	if len(runs) > 0 {
 		run = &runs[len(runs)-1]
 	}
-	return RunCard(ctx, q, t, run, now)
+	return runCard(ctx, q, t, run, now)
 }

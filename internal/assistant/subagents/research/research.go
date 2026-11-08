@@ -11,7 +11,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant"
@@ -95,6 +94,7 @@ func (r *Research) Tool() tool.Tool {
 		Handler:     r.handle,
 		Effect:      tool.Read,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
+		Parallel:    true,
 	}
 }
 
@@ -191,8 +191,17 @@ func (r *Research) handle(ctx context.Context, tc *tool.Context, args py.Dict) (
 	}
 	now := tc.Now
 	if now == nil {
-		now = func() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
+		now = assistant.Now
 	}
+	limits := assistant.Read(ctx, tc.DB.Read)
+	maxConcurrent := limits.Int(assistant.KeySubagentMaxConcurrent)
+	if err := limits.Err(); err != nil {
+		return nil, err
+	}
+	if err := slots.acquire(ctx, maxConcurrent); err != nil {
+		return nil, err
+	}
+	defer slots.release()
 	var child int64
 	title := role + ": " + threads.TitleFrom(task)
 	if err := tc.DB.WithTx(ctx, func(tx *sql.Tx) (err error) {
@@ -242,14 +251,10 @@ func (r *Research) handle(ctx context.Context, tc *tool.Context, args py.Dict) (
 
 func (r *Research) runChild(ctx context.Context, tc *tool.Context, child int64, text, role string, agent subagents.Agent) error {
 	set := assistant.Read(ctx, tc.DB.Read)
-	maxConcurrent, maxSteps, maxCost := set.Int(assistant.KeySubagentMaxConcurrent), set.Int(assistant.KeySubagentMaxSteps), set.Float(assistant.KeySubagentMaxCostUSD)
+	maxSteps, maxCost := set.Int(assistant.KeySubagentMaxSteps), set.Float(assistant.KeySubagentMaxCostUSD)
 	if err := set.Err(); err != nil {
 		return err
 	}
-	if err := slots.acquire(ctx, maxConcurrent); err != nil {
-		return err
-	}
-	defer slots.release()
 	svc := service.New(ctx, tc.DB, tc.Cfg, tc.Env, r.runner)
 	svc.Client = tc.Client
 	svc.Now = tc.Now
@@ -260,7 +265,7 @@ func (r *Research) runChild(ctx context.Context, tc *tool.Context, child int64, 
 	}
 	steps, cost := int64(maxSteps), maxCost
 	_, err = svc.RunOnce(ctx, child, text, service.Start{
-		Kind:        threads.Sub,
+		Kind:        threads.Subagent,
 		ParentRunID: &parent,
 		Limits:      journal.Limits{MaxSteps: &steps, MaxCostUSD: &cost, SystemExtra: &extra, AllowedTools: agent.Tools},
 	})
@@ -269,51 +274,4 @@ func (r *Research) runChild(ctx context.Context, tc *tool.Context, child int64, 
 		return tool.Error(fmt.Sprintf("%s research not started: %s", role, exceeded))
 	}
 	return err
-}
-
-func (r *Research) Batch(ctx context.Context, tc *tool.Context, uses []loop.ToolUse) (map[string]loop.Outcome, error) {
-	out := make(map[string]loop.Outcome, len(uses))
-	var mu sync.Mutex
-	var wg sync.WaitGroup
-	for _, use := range uses {
-		wg.Go(func() {
-			o := r.one(ctx, tc, use)
-			mu.Lock()
-			out[use.ID] = o
-			mu.Unlock()
-		})
-	}
-	wg.Wait()
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (r *Research) one(ctx context.Context, tc *tool.Context, use loop.ToolUse) (o loop.Outcome) {
-	defer func() {
-		if p := recover(); p != nil {
-			log.Error("research panicked", logx.RunID, tc.RunID, logx.Err, fmt.Sprint(p))
-			o = loop.Outcome{Error: "research failed: internal error"}
-		}
-	}()
-	_, input, err := use.Args()
-	if err != nil {
-		return loop.Outcome{Error: "research failed: " + loop.ClassName(err)}
-	}
-	args, ok := input.(py.Dict)
-	if !ok {
-		return loop.Outcome{Error: "research failed: tool input must be an object"}
-	}
-	value, err := r.handle(ctx, tc, args)
-	if err == nil {
-		return loop.Outcome{OK: true, Value: value}
-	}
-	if text, ok := tool.Message(err); ok {
-		return loop.Outcome{Error: text}
-	}
-	if ctx.Err() == nil {
-		log.Error("research failed", logx.RunID, tc.RunID, logx.Err, err)
-	}
-	return loop.Outcome{Error: "research failed: " + loop.ClassName(err)}
 }

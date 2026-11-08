@@ -3,6 +3,7 @@ package usage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"slices"
 	"time"
 
@@ -157,6 +158,17 @@ func MonthToDate(ctx context.Context, q db.Querier, now float64, loc *time.Locat
 	var cost float64
 	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE ts >= ?", MonthStart(now, loc)).Scan(&cost)
 	return cost, err
+}
+
+func PromptTokens(ctx context.Context, q db.Querier, threadID int64) (int64, error) {
+	var tokens int64
+	err := q.QueryRowContext(ctx,
+		"SELECT input_tokens + cache_write_5m + cache_write_1h + cache_read FROM usage WHERE thread_id = ? ORDER BY id DESC LIMIT 1",
+		threadID).Scan(&tokens)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return tokens, err
 }
 
 func RunCost(ctx context.Context, q db.Querier, runID int64) (float64, error) {

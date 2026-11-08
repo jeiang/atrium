@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/usage"
@@ -36,13 +37,13 @@ const (
 	BetaCompaction        = anthropic.BetaCompaction
 	ClearToolUses         = "clear_tool_uses_20250919"
 	Compact               = "compact_20260112"
-	Compaction            = "compaction"
-	Text                  = "text"
-	ToolUse               = "tool_use"
-	ToolResult            = "tool_result"
-	Thinking              = "thinking"
-	RedactedThinking      = "redacted_thinking"
-	Attachment            = "attachment"
+	Compaction            = block.Compaction
+	Text                  = block.Text
+	ToolUse               = block.ToolUse
+	ToolResult            = block.ToolResult
+	Thinking              = block.Thinking
+	RedactedThinking      = block.RedactedThinking
+	Attachment            = block.Attachment
 	recallTool            = "recall"
 	inputTokens           = "input_tokens"
 	compactionTruncate    = " [truncated for compaction]"
@@ -57,8 +58,6 @@ const (
 	StagedFold = "staged_fold"
 	Dropped    = "dropped"
 	Folded     = "folded"
-	KindServer = "server"
-	KindClient = "client"
 	KindCommit = "commit"
 )
 

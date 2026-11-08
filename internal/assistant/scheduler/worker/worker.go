@@ -318,7 +318,7 @@ func (w *Worker) Cycle(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if len(resumed) > 0 {
+	if resumed > 0 {
 		w.dirty.Store(true)
 	}
 	if _, _, err := w.Tick(ctx); err != nil {

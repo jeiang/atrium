@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
@@ -298,25 +299,10 @@ func dumps(content []json.RawMessage) (string, error) {
 	return strings.TrimSuffix(buf.String(), "\n"), nil
 }
 
-type textBlock struct {
-	Type string  `json:"type"`
-	Text *string `json:"text"`
-}
-
 func messageText(content []json.RawMessage) (string, error) {
-	var texts []string
-	for _, raw := range content {
-		var b textBlock
-		if err := json.Unmarshal(raw, &b); err != nil {
-			return "", fmt.Errorf("journal: content block is not an object: %w", err)
-		}
-		if b.Type == "text" {
-			t := ""
-			if b.Text != nil {
-				t = *b.Text
-			}
-			texts = append(texts, t)
-		}
+	texts, err := block.Texts(content)
+	if err != nil {
+		return "", fmt.Errorf("journal: %w", err)
 	}
 	return py.Strip(strings.Join(texts, "\n")), nil
 }
@@ -393,8 +379,8 @@ func AppendMessageTx(ctx context.Context, q db.Querier, threadID int64, runID *i
 
 func StoreResult(ctx context.Context, q db.Querier, runID, callID int64, tool, body string, tokens int64, now float64) (int64, error) {
 	res, err := q.ExecContext(ctx,
-		"INSERT INTO tool_results (run_id, tool_call_id, tool, tokens, bytes, sha256, body, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		runID, callID, tool, tokens, 0, "", body, now)
+		"INSERT INTO tool_results (run_id, tool_call_id, tool, tokens, body, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+		runID, callID, tool, tokens, body, now)
 	if err != nil {
 		return 0, err
 	}
@@ -456,13 +442,20 @@ func LoadHistory(ctx context.Context, q db.Querier, threadID int64) (History, er
 	return History{ThreadID: threadID, Messages: messages, Calls: calls}, nil
 }
 
-func (h History) LastOperator() *Message {
+func (h History) LastOperator() (*Message, error) {
 	for i := len(h.Messages) - 1; i >= 0; i-- {
-		if h.Messages[i].Role == User && HasText(h.Messages[i].Content) {
-			return &h.Messages[i]
+		if h.Messages[i].Role != User {
+			continue
+		}
+		has, err := HasText(h.Messages[i].Content)
+		if err != nil {
+			return nil, err
+		}
+		if has {
+			return &h.Messages[i], nil
 		}
 	}
-	return nil
+	return nil, nil
 }
 
 func LastMessage(ctx context.Context, q db.Querier, threadID int64) (*Message, error) {
@@ -483,14 +476,8 @@ func LastMessage(ctx context.Context, q db.Querier, threadID int64) (*Message, e
 	return &m, nil
 }
 
-func HasText(content []json.RawMessage) bool {
-	for _, raw := range content {
-		var b textBlock
-		if json.Unmarshal(raw, &b) == nil && b.Type == "text" {
-			return true
-		}
-	}
-	return false
+func HasText(content []json.RawMessage) (bool, error) {
+	return block.HasText(content)
 }
 
 func Supersede(ctx context.Context, q db.Querier, threadID, fromSeq int64, keepMessage bool) error {

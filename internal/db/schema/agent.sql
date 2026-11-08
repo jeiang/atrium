@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS runs (
 );
 CREATE INDEX IF NOT EXISTS runs_thread ON runs (thread_id, id);
 CREATE INDEX IF NOT EXISTS runs_parent ON runs (parent_run_id);
+CREATE UNIQUE INDEX IF NOT EXISTS runs_active ON runs (thread_id) WHERE state IN ('running', 'interrupted');
 CREATE TABLE IF NOT EXISTS tool_calls (
     id INTEGER PRIMARY KEY,
     run_id INTEGER NOT NULL REFERENCES runs(id),
@@ -78,8 +79,6 @@ CREATE TABLE IF NOT EXISTS tool_results (
     tool_call_id INTEGER NOT NULL REFERENCES tool_calls(id),
     tool TEXT NOT NULL,
     tokens INTEGER NOT NULL,
-    bytes INTEGER NOT NULL,
-    sha256 TEXT NOT NULL,
     body TEXT NOT NULL,
     created_at REAL NOT NULL
 );

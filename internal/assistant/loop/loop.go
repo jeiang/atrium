@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/files"
@@ -48,11 +50,10 @@ type LeaseLost string
 func (e LeaseLost) Error() string { return string(e) }
 
 type Runner struct {
-	Registry      *registry.Registry
-	Profile       func(ctx context.Context, q db.Querier) (string, error)
-	SkillsIndex   func(ctx context.Context, q db.Querier) (string, error)
-	ExpandSkills  func(ctx context.Context, q db.Querier, text string) (expanded string, used []string, err error)
-	ResearchBatch Batch
+	Registry     *registry.Registry
+	Profile      func(ctx context.Context, q db.Querier) (string, error)
+	SkillsIndex  func(ctx context.Context, q db.Querier) (string, error)
+	ExpandSkills func(ctx context.Context, q db.Querier, text string) (expanded string, used []string, err error)
 }
 
 func (r *Runner) Expand(ctx context.Context, q db.Querier, kind tool.Kind, text string) (string, []string, error) {
@@ -106,6 +107,11 @@ func deref[T any](p *T) T {
 func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, client *anthropic.Client, runID int64, o Options) (*journal.Run, error) {
 	s, err := r.prepare(ctx, d, cfg, env, client, runID, o)
 	if err != nil {
+		now := assistant.Now()
+		if o.Now != nil {
+			now = o.Now()
+		}
+		_ = journal.FinishRun(ctx, d.Write, runID, journal.Failed, now, new(py.ExceptionText(err)))
 		return nil, err
 	}
 	final := journal.Failed
@@ -164,7 +170,10 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if thread == nil {
 		return nil, fmt.Errorf("loop: run %d: no thread %d", runID, found.ThreadID)
 	}
-	kind := tool.Kind(found.Kind)
+	kind, ok := tool.ParseKind(found.Kind)
+	if !ok {
+		return nil, fmt.Errorf("loop: run %d has unknown kind %q", runID, found.Kind)
+	}
 	allow := registry.All()
 	if o.Limits.AllowedTools != nil {
 		allow = registry.Only(o.Limits.AllowedTools)
@@ -222,7 +231,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	}
 	now := o.Now
 	if now == nil {
-		now = func() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
+		now = assistant.Now
 	}
 	writer := progress.NewWriter(d.Write, runID, now)
 	tc := &tool.Context{
@@ -232,7 +241,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, limits: limits, req: req,
 		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, maxCost: maxCost, ttl: ttl,
-		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, batch: r.ResearchBatch, tuning: tuning},
+		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, tuning: tuning},
 	}
 	s.x.guard = s.renew
 	s.x.lost, s.x.abort = context.WithCancel(context.Background())
@@ -274,7 +283,8 @@ func (s *state) heartbeat(ctx context.Context) func() {
 			case <-beatCtx.Done():
 				return
 			case <-t.C:
-				if err := s.renew(beatCtx); errors.As(err, new(LeaseLost)) {
+				if err := s.renew(beatCtx); err != nil {
+					log.Warn("could not renew the run lease; aborting its tools", logx.RunID, s.run.ID, logx.Err, err)
 					s.x.abort()
 					return
 				}
@@ -287,7 +297,7 @@ func (s *state) heartbeat(ctx context.Context) func() {
 func (s *state) runStart(ctx context.Context) error {
 	return s.writer.Event(ctx, progress.RunStart, py.Dict{
 		{Key: "thread_id", Value: s.thread.ID},
-		{Key: "thread_kind", Value: s.thread.Kind},
+		{Key: "thread_kind", Value: string(s.thread.Kind)},
 		{Key: "role", Value: optional(s.thread.Role)},
 		{Key: "title", Value: optional(s.thread.Title)},
 		{Key: "effort", Value: s.run.Effort},
@@ -301,37 +311,6 @@ func PendingUses(ctx context.Context, q db.Querier, threadID int64) (*journal.Me
 	}
 	uses, err := toolUses(last.Content)
 	return last, uses, err
-}
-
-func searchURLs(blocks []json.RawMessage) []string {
-	var urls []string
-	for _, raw := range blocks {
-		if blockType(raw) != webSearchResult {
-			continue
-		}
-		var b struct {
-			Content json.RawMessage `json:"content"`
-		}
-		if json.Unmarshal(raw, &b) != nil {
-			continue
-		}
-		var items []json.RawMessage
-		if json.Unmarshal(b.Content, &items) != nil {
-			continue
-		}
-		for _, item := range items {
-			var r struct {
-				URL any `json:"url"`
-			}
-			if json.Unmarshal(item, &r) != nil {
-				continue
-			}
-			if u, ok := r.URL.(string); ok && u != "" {
-				urls = append(urls, u)
-			}
-		}
-	}
-	return urls
 }
 
 func (s *state) allowURLs(ctx context.Context, urls []string) error {
@@ -385,7 +364,7 @@ func (s *state) active(ctx context.Context, loc *time.Location) ([]actx.Message,
 	if err != nil {
 		return nil, err
 	}
-	return stampMessages(active, runs, loc), nil
+	return stampMessages(active, runs, loc)
 }
 
 func (s *state) size(ctx context.Context, active []actx.Message, a *anchor) (int64, error) {
@@ -536,11 +515,8 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if err := journal.BumpSteps(context.WithoutCancel(ctx), s.d.Write, s.run.ID); err != nil {
 		return false, nil, err
 	}
-	blocks, err := journalBlocks(response.Content)
-	if err != nil {
-		return false, nil, err
-	}
-	compacted := response.StopReason == actx.Compaction
+	blocks := response.Content
+	compacted := response.StopReason == block.Compaction
 	var stop error
 	if !compacted {
 		blocks, stop = judge(response, blocks)
@@ -568,7 +544,11 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		return false, nil, err
 	}
 	next := &anchor{tokens: actx.HistoryTokens(response.Usage), seq: seq}
-	if err := s.allowURLs(ctx, searchURLs(blocks)); err != nil {
+	urls, err := block.SearchURLs(blocks)
+	if err != nil {
+		return false, nil, err
+	}
+	if err := s.allowURLs(ctx, urls); err != nil {
 		return false, nil, err
 	}
 	uses, err := toolUses(blocks)

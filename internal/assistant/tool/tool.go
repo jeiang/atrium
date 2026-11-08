@@ -21,6 +21,7 @@ type Tool struct {
 	Effect      Effect
 	Contexts    Kinds
 	Server      bool
+	Parallel    bool
 }
 
 type Context struct {
