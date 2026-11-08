@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -366,7 +367,7 @@ func (s *Service) EditLast(ctx context.Context, threadID int64, text string, att
 	if err != nil {
 		return 0, err
 	}
-	if err := journal.Supersede(ctx, s.DB, threadID, last.Seq, false); err != nil {
+	if err := s.supersede(ctx, threadID, last.Seq, false); err != nil {
 		return 0, err
 	}
 	return s.StartRun(ctx, threadID, text, Start{Kind: threads.Chat, Operator: true, Files: attachments})
@@ -378,7 +379,7 @@ func (s *Service) Regenerate(ctx context.Context, threadID int64) (int64, error)
 	if err != nil {
 		return 0, err
 	}
-	if err := journal.Supersede(ctx, s.DB, threadID, last.Seq, true); err != nil {
+	if err := s.supersede(ctx, threadID, last.Seq, true); err != nil {
 		return 0, err
 	}
 	runID, err := s.PrepareRerun(ctx, threadID, s.now())
@@ -386,6 +387,15 @@ func (s *Service) Regenerate(ctx context.Context, threadID int64) (int64, error)
 		return 0, err
 	}
 	return runID, s.inBackground(runID)
+}
+
+func (s *Service) supersede(ctx context.Context, threadID, fromSeq int64, keepMessage bool) error {
+	return s.DB.WithTx(ctx, func(tx *sql.Tx) error {
+		if err := journal.Supersede(ctx, tx, threadID, fromSeq, keepMessage); err != nil {
+			return err
+		}
+		return actx.Supersede(ctx, tx, threadID, fromSeq)
+	})
 }
 
 func (s *Service) StopRun(ctx context.Context, threadID, runID int64) (bool, error) {

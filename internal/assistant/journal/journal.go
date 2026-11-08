@@ -377,10 +377,6 @@ func AppendMessage(ctx context.Context, d *db.DB, threadID int64, runID *int64, 
 	if err != nil {
 		return 0, err
 	}
-	text, err := messageText(content)
-	if err != nil {
-		return 0, err
-	}
 	var seq int64
 	err = d.WithTx(ctx, func(tx *sql.Tx) error {
 		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(seq), 0) + 1 FROM thread_messages WHERE thread_id = ?", threadID).Scan(&seq); err != nil {
@@ -391,10 +387,8 @@ func AppendMessage(ctx context.Context, d *db.DB, threadID int64, runID *int64, 
 			threadID, runID, seq, role, body, now, systemSig); err != nil {
 			return err
 		}
-		if text != "" {
-			if _, err := tx.ExecContext(ctx, "INSERT INTO thread_fts (thread_id, text) VALUES (?, ?)", threadID, text); err != nil {
-				return err
-			}
+		if err := ReindexThread(ctx, tx, threadID); err != nil {
+			return err
 		}
 		_, err := tx.ExecContext(ctx, "UPDATE threads SET updated_at = ? WHERE id = ?", now, threadID)
 		return err
@@ -484,33 +478,25 @@ func HasText(content []json.RawMessage) bool {
 	return false
 }
 
-func Supersede(ctx context.Context, d *db.DB, threadID, fromSeq int64, keepMessage bool) error {
-	return d.WithTx(ctx, func(tx *sql.Tx) error {
-		first := fromSeq
-		if keepMessage {
-			first++
-		}
-		if _, err := tx.ExecContext(ctx, "UPDATE thread_messages SET superseded = 1 WHERE thread_id = ? AND seq >= ?", threadID, first); err != nil {
-			return err
-		}
-		var runID *int64
-		err := tx.QueryRowContext(ctx, "SELECT run_id FROM thread_messages WHERE thread_id = ? AND seq = ?", threadID, fromSeq).Scan(&runID)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		if runID != nil {
-			if _, err := tx.ExecContext(ctx, "UPDATE runs SET superseded = 1 WHERE thread_id = ? AND id >= ?", threadID, *runID); err != nil {
-				return err
-			}
-			if _, err := tx.ExecContext(ctx,
-				"DELETE FROM context_ledger WHERE state IN ('staged_drop', 'staged_fold') AND run_id IN (SELECT id FROM runs WHERE thread_id = ? AND superseded = 1)",
-				threadID); err != nil {
-				return err
-			}
-		}
-		_, err = tx.ExecContext(ctx, "DELETE FROM context_projections WHERE thread_id = ? AND base_seq > ?", threadID, fromSeq)
+func Supersede(ctx context.Context, q db.Querier, threadID, fromSeq int64, keepMessage bool) error {
+	first := fromSeq
+	if keepMessage {
+		first++
+	}
+	if _, err := q.ExecContext(ctx, "UPDATE thread_messages SET superseded = 1 WHERE thread_id = ? AND seq >= ?", threadID, first); err != nil {
 		return err
-	})
+	}
+	var runID *int64
+	err := q.QueryRowContext(ctx, "SELECT run_id FROM thread_messages WHERE thread_id = ? AND seq = ?", threadID, fromSeq).Scan(&runID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if runID != nil {
+		if _, err := q.ExecContext(ctx, "UPDATE runs SET superseded = 1 WHERE thread_id = ? AND id >= ?", threadID, *runID); err != nil {
+			return err
+		}
+	}
+	return ReindexThread(ctx, q, threadID)
 }
 
 type QueuedMessage struct {
