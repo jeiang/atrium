@@ -118,17 +118,9 @@ func Update(ctx context.Context, q db.Querier, projectID int64, now float64, f F
 	if err != nil {
 		return false, err
 	}
-	return changed(q.ExecContext(ctx,
+	return db.Changed(q.ExecContext(ctx,
 		"UPDATE projects SET name = ?, instructions = ?, effort = ?, context_limit = ?, wiki_hub_id = ?, updated_at = ? WHERE id = ?",
 		v.Name, v.Instructions, v.Effort, v.ContextLimit, v.WikiHubID, now, projectID))
-}
-
-func changed(res sql.Result, err error) (bool, error) {
-	if err != nil {
-		return false, err
-	}
-	n, err := res.RowsAffected()
-	return n > 0, err
 }
 
 func Get(ctx context.Context, q db.Querier, projectID int64) (*Project, error) {
@@ -152,11 +144,11 @@ func List(ctx context.Context, q db.Querier, archived bool) ([]Project, error) {
 }
 
 func SetArchived(ctx context.Context, q db.Querier, projectID int64, value bool) (bool, error) {
-	return changed(q.ExecContext(ctx, "UPDATE projects SET archived = ? WHERE id = ?", store.Bit(value), projectID))
+	return db.Changed(q.ExecContext(ctx, "UPDATE projects SET archived = ? WHERE id = ?", store.Bit(value), projectID))
 }
 
 func SetHub(ctx context.Context, q db.Querier, projectID int64, pageID string, now float64) (bool, error) {
-	return changed(q.ExecContext(ctx, "UPDATE projects SET wiki_hub_id = ?, updated_at = ? WHERE id = ?", pageID, now, projectID))
+	return db.Changed(q.ExecContext(ctx, "UPDATE projects SET wiki_hub_id = ?, updated_at = ? WHERE id = ?", pageID, now, projectID))
 }
 
 func MoveThread(ctx context.Context, q db.Querier, threadID int64, projectID *int64) (bool, error) {
@@ -170,7 +162,7 @@ func MoveThread(ctx context.Context, q db.Querier, threadID int64, projectID *in
 			return false, err
 		}
 	}
-	return changed(q.ExecContext(ctx, "UPDATE threads SET project_id = ? WHERE id = ? AND kind = 'chat'", projectID, threadID))
+	return db.Changed(q.ExecContext(ctx, "UPDATE threads SET project_id = ? WHERE id = ? AND kind = 'chat'", projectID, threadID))
 }
 
 func HubMarkdown(p Project) string {

@@ -75,11 +75,10 @@ func SetPlan(ctx context.Context, q db.Querier, threadID int64, runID *int64, it
 	if err != nil {
 		return nil, err
 	}
-	pairs := make([]any, len(clean))
-	for i, it := range clean {
-		pairs[i] = py.Dict{{Key: "text", Value: it.Text}, {Key: "done", Value: it.Done}}
+	text, err := json.Marshal(clean)
+	if err != nil {
+		return nil, err
 	}
-	text := py.JSONDumps(pairs, py.JSONOpts{NoEnsureASCII: true})
 	_, err = q.ExecContext(ctx,
 		"INSERT INTO thread_plans (thread_id, run_id, items_json, updated_at) VALUES (?, ?, ?, ?) "+
 			"ON CONFLICT(thread_id) DO UPDATE SET run_id = excluded.run_id, items_json = excluded.items_json, updated_at = excluded.updated_at",
@@ -107,50 +106,6 @@ func PlanOf(ctx context.Context, q db.Querier, threadID int64) (*Plan, error) {
 		return nil, fmt.Errorf("workspace: thread %d plan: %w", threadID, err)
 	}
 	return &p, nil
-}
-
-type File struct {
-	ID              int64   `json:"id"`
-	ThreadID        int64   `json:"thread_id"`
-	RunID           *int64  `json:"run_id"`
-	Name            string  `json:"name"`
-	MediaType       string  `json:"media_type"`
-	Bytes           int64   `json:"bytes"`
-	Path            string  `json:"path"`
-	Origin          string  `json:"origin"`
-	CreatedAt       float64 `json:"created_at"`
-	AnthropicFileID *string `json:"anthropic_file_id"`
-	Text            *string `json:"text"`
-	Tokens          int64   `json:"tokens"`
-	ProjectID       *int64  `json:"project_id"`
-}
-
-const fileColumns = "id, thread_id, run_id, name, media_type, bytes, path, origin, created_at, anthropic_file_id, text, tokens, project_id"
-
-func scanFile(r interface{ Scan(...any) error }) (File, error) {
-	var f File
-	err := r.Scan(&f.ID, &f.ThreadID, &f.RunID, &f.Name, &f.MediaType, &f.Bytes, &f.Path, &f.Origin, &f.CreatedAt,
-		&f.AnthropicFileID, &f.Text, &f.Tokens, &f.ProjectID)
-	return f, err
-}
-
-func FilesOf(ctx context.Context, q db.Querier, threadID int64) ([]File, error) {
-	rows, err := q.QueryContext(ctx, "SELECT "+fileColumns+" FROM thread_files WHERE thread_id = ? ORDER BY id", threadID)
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (File, error) { return scanFile(r) })
-}
-
-func GetFile(ctx context.Context, q db.Querier, threadID, fileID int64) (*File, error) {
-	f, err := scanFile(q.QueryRowContext(ctx, "SELECT "+fileColumns+" FROM thread_files WHERE id = ? AND thread_id = ?", fileID, threadID))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, err
-	}
-	return &f, nil
 }
 
 func ChildThreads(ctx context.Context, q db.Querier, threadID int64) ([]threads.Thread, error) {
@@ -310,14 +265,6 @@ func sourceOf(c journal.ToolCall, result map[string]any) (*Source, error) {
 		}
 	}
 	return nil, nil
-}
-
-func SourcesOf(ctx context.Context, q db.Querier, threadID int64) ([]Source, error) {
-	children, err := ChildThreads(ctx, q, threadID)
-	if err != nil {
-		return nil, err
-	}
-	return SourcesWith(ctx, q, threadID, children)
 }
 
 type ownedCall struct {

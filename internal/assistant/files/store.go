@@ -76,6 +76,14 @@ func Get(ctx context.Context, q db.Querier, fileID int64) (*Row, error) {
 	return &f, nil
 }
 
+func OfThread(ctx context.Context, q db.Querier, threadID int64) ([]Row, error) {
+	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM thread_files WHERE thread_id = ? ORDER BY id", threadID)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Row, error) { return scan(r) })
+}
+
 func OfProject(ctx context.Context, q db.Querier, projectID int64) ([]Row, error) {
 	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM thread_files WHERE project_id = ? ORDER BY id", projectID)
 	if err != nil {

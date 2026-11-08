@@ -1,6 +1,7 @@
 package journal
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -57,8 +58,6 @@ func NewOwner() string {
 	return fmt.Sprintf("%s:%d:%s", host, os.Getpid(), hex.EncodeToString(suffix))
 }
 
-var jsonCompact = py.JSONOpts{Compact: true, NoEnsureASCII: true}
-
 type Run struct {
 	ID            int64      `json:"id"`
 	ThreadID      int64      `json:"thread_id"`
@@ -94,14 +93,6 @@ func runs(rows *sql.Rows, err error) ([]Run, error) {
 		return nil, err
 	}
 	return db.Collect(rows, func(r *sql.Rows) (Run, error) { return scanRun(r) })
-}
-
-func changed(res sql.Result, err error) (bool, error) {
-	if err != nil {
-		return false, err
-	}
-	n, err := res.RowsAffected()
-	return n > 0, err
 }
 
 var ErrRunActive = errors.New("journal: thread already has an active run")
@@ -140,28 +131,28 @@ type Limits struct {
 	ToolChoice   *string
 }
 
-func (l Limits) object() py.Dict {
-	var o py.Dict
-	if l.MaxSteps != nil {
-		o = append(o, py.Pair{Key: "max_steps", Value: *l.MaxSteps})
-	}
-	if l.MaxCostUSD != nil {
-		o = append(o, py.Pair{Key: "max_cost_usd", Value: *l.MaxCostUSD})
-	}
-	if l.SystemExtra != nil {
-		o = append(o, py.Pair{Key: "system_extra", Value: *l.SystemExtra})
-	}
+type limitsJSON struct {
+	MaxSteps     *int64    `json:"max_steps,omitempty"`
+	MaxCostUSD   *float64  `json:"max_cost_usd,omitempty"`
+	SystemExtra  *string   `json:"system_extra,omitempty"`
+	AllowedTools *[]string `json:"allowed_tools,omitempty"`
+	ToolChoice   *string   `json:"tool_choice,omitempty"`
+}
+
+func (l Limits) wire() limitsJSON {
+	w := limitsJSON{MaxSteps: l.MaxSteps, MaxCostUSD: l.MaxCostUSD, SystemExtra: l.SystemExtra, ToolChoice: l.ToolChoice}
 	if l.AllowedTools != nil {
-		o = append(o, py.Pair{Key: "allowed_tools", Value: l.AllowedTools})
+		w.AllowedTools = &l.AllowedTools
 	}
-	if l.ToolChoice != nil {
-		o = append(o, py.Pair{Key: "tool_choice", Value: *l.ToolChoice})
-	}
-	return o
+	return w
 }
 
 func SetLimits(ctx context.Context, q db.Querier, runID int64, l Limits) error {
-	_, err := q.ExecContext(ctx, "UPDATE runs SET limits_json = ? WHERE id = ?", py.JSONDumps(l.object()), runID)
+	body, err := json.Marshal(l.wire())
+	if err != nil {
+		return err
+	}
+	_, err = q.ExecContext(ctx, "UPDATE runs SET limits_json = ? WHERE id = ?", string(body), runID)
 	return err
 }
 
@@ -174,17 +165,15 @@ func LimitsOf(ctx context.Context, q db.Querier, runID int64) (Limits, error) {
 	if err != nil {
 		return Limits{}, err
 	}
-	var stored struct {
-		MaxSteps     *int64   `json:"max_steps"`
-		MaxCostUSD   *float64 `json:"max_cost_usd"`
-		SystemExtra  *string  `json:"system_extra"`
-		AllowedTools []string `json:"allowed_tools"`
-		ToolChoice   *string  `json:"tool_choice"`
-	}
+	var stored limitsJSON
 	if err := json.Unmarshal([]byte(*raw), &stored); err != nil {
 		return Limits{}, fmt.Errorf("journal: run %d limits_json: %w", runID, err)
 	}
-	return Limits{stored.MaxSteps, stored.MaxCostUSD, stored.SystemExtra, stored.AllowedTools, stored.ToolChoice}, nil
+	out := Limits{MaxSteps: stored.MaxSteps, MaxCostUSD: stored.MaxCostUSD, SystemExtra: stored.SystemExtra, ToolChoice: stored.ToolChoice}
+	if stored.AllowedTools != nil {
+		out.AllowedTools = *stored.AllowedTools
+	}
+	return out, nil
 }
 
 func SetSkills(ctx context.Context, q db.Querier, runID int64, names []string) error {
@@ -219,13 +208,8 @@ func FinishRun(ctx context.Context, q db.Querier, runID int64, state string, now
 	return err
 }
 
-func SetRunState(ctx context.Context, q db.Querier, runID int64, state string) error {
-	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ? WHERE id = ?", state, runID)
-	return err
-}
-
 func RequestStop(ctx context.Context, q db.Querier, runID int64) (bool, error) {
-	return changed(q.ExecContext(ctx, "UPDATE runs SET stop_requested = 1 WHERE id = ? AND state = ?", runID, Running))
+	return db.Changed(q.ExecContext(ctx, "UPDATE runs SET stop_requested = 1 WHERE id = ? AND state = ?", runID, Running))
 }
 
 func FinishUnlessQueued(ctx context.Context, d *db.DB, runID, threadID int64, state string, now float64) (bool, error) {
@@ -251,7 +235,7 @@ func RenewLease(ctx context.Context, q db.Querier, runID int64, owner string, no
 	if err != nil {
 		return false, err
 	}
-	return changed(q.ExecContext(ctx, "UPDATE runs SET lease_until = ? WHERE id = ? AND owner = ? AND state = ?",
+	return db.Changed(q.ExecContext(ctx, "UPDATE runs SET lease_until = ? WHERE id = ? AND owner = ? AND state = ?",
 		now+lease, runID, owner, Running))
 }
 
@@ -270,7 +254,7 @@ func ClaimResume(ctx context.Context, q db.Querier, runID int64, owner string, n
 	if err != nil {
 		return false, err
 	}
-	return changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = ?, lease_until = ? WHERE id = ? AND state = ?",
+	return db.Changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = ?, lease_until = ? WHERE id = ? AND state = ?",
 		Running, owner, now+lease, runID, Interrupted))
 }
 
@@ -304,16 +288,14 @@ type Message struct {
 	SystemSig *string           `json:"system_sig"`
 }
 
-func Dumps(content []json.RawMessage) (string, error) {
-	items := make([]any, len(content))
-	for i, b := range content {
-		v, err := py.JSONLoads(b)
-		if err != nil {
-			return "", fmt.Errorf("journal: content block: %w", err)
-		}
-		items[i] = v
+func dumps(content []json.RawMessage) (string, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(content); err != nil {
+		return "", fmt.Errorf("journal: content blocks: %w", err)
 	}
-	return py.JSONDumps(items, jsonCompact), nil
+	return strings.TrimSuffix(buf.String(), "\n"), nil
 }
 
 type textBlock struct {
@@ -387,7 +369,7 @@ func ReindexThread(ctx context.Context, q db.Querier, threadID int64) error {
 }
 
 func AppendMessageTx(ctx context.Context, q db.Querier, threadID int64, runID *int64, role string, content []json.RawMessage, now float64, systemSig *string) (int64, error) {
-	body, err := Dumps(content)
+	body, err := dumps(content)
 	if err != nil {
 		return 0, err
 	}
@@ -534,7 +516,7 @@ type QueuedMessage struct {
 }
 
 func QueueMessage(ctx context.Context, d *db.DB, threadID int64, text string, now float64, files []json.RawMessage) (id int64, queued bool, err error) {
-	body, err := Dumps(append([]json.RawMessage{}, files...))
+	body, err := dumps(append([]json.RawMessage{}, files...))
 	if err != nil {
 		return 0, false, err
 	}
@@ -625,10 +607,11 @@ func scanCall(row interface{ Scan(...any) error }) (ToolCall, error) {
 }
 
 func StartToolCall(ctx context.Context, q db.Querier, runID int64, toolUseID, name string, args json.RawMessage, replayClass string, now float64) (int64, error) {
-	body, err := py.JSONRedump(args, jsonCompact)
-	if err != nil {
-		return 0, err
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, args); err != nil {
+		return 0, fmt.Errorf("journal: tool args: %w", err)
 	}
+	body := buf.String()
 	sum := sha256.Sum256([]byte(body))
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO tool_calls (run_id, tool_use_id, name, args_json, args_sha256, replay_class, state, started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
