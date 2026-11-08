@@ -316,7 +316,9 @@ func (s *Server) wizardTest(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) testWaitPage(w http.ResponseWriter, r *http.Request, target string) {
-	f, err := s.render.Frame(r, "login", map[string]any{"url": target})
+	f, err := s.render.Frame(r, "login", struct {
+		URL string `json:"url"`
+	}{URL: target})
 	if err == nil {
 		err = s.render.Page(w, r, http.StatusOK, "auth_test_wait.gohtml", f)
 	}

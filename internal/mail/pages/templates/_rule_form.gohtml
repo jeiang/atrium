@@ -48,7 +48,7 @@
           <option value=""{{if not $rule.Dest}} selected{{end}}>Choose a folder or label</option>
           {{range $name := global "accounts"}}
           <optgroup label="{{$name}}">
-            {{range (get $folders $name)}}<option value="{{.folder}}"{{if eq $rule.Dest .folder}} selected{{end}}>{{.folder}}</option>{{end}}
+            {{range (get $folders $name)}}<option value="{{.Folder}}"{{if eq (str $rule.Dest) .Folder}} selected{{end}}>{{.Folder}}</option>{{end}}
           </optgroup>
           {{end}}
         </select>

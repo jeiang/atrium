@@ -12,7 +12,6 @@ func (s *service) page(w http.ResponseWriter, r *http.Request, status int, page,
 		panic(err)
 	}
 	f.Toast = notice
-	f.Typed = true
 	if err := s.deps.Render.Page(w, r, status, name, f); err != nil {
 		panic(err)
 	}
@@ -24,7 +23,6 @@ func (s *service) fragment(w http.ResponseWriter, r *http.Request, name string, 
 		panic(err)
 	}
 	f.Toast = notice
-	f.Typed = true
 	if err := s.deps.Render.Fragment(w, r, http.StatusOK, name, f); err != nil {
 		panic(err)
 	}

@@ -109,7 +109,6 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toa
 		panic(err)
 	}
 	f.Toast = toast
-	f.Typed = true
 	if err := h.d.Render.Page(w, r, status, "mail_accounts.gohtml", f); err != nil {
 		panic(err)
 	}

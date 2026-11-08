@@ -47,7 +47,7 @@
           <span class="text-sm font-medium">{{.Name}}</span>
           <span class="badge" data-variant="outline">{{.Label}}</span>
         </div>
-        <p class="text-xs text-muted-foreground tabular-nums">{{.Date}} ({{if eq .DaysUntil 0}}today{{else}}in {{.DaysUntil}} days{{end}}){{if .Turning}} · turning {{.Turning}}{{end}}</p>
+        <p class="text-xs text-muted-foreground tabular-nums">{{.Date}} ({{if eq .DaysUntil 0}}today{{else}}in {{.DaysUntil}} days{{end}}){{if .Turning}} · turning {{str .Turning}}{{end}}</p>
       </div>
       <form method="post" action="/watches/birthdays/dismiss">
         <input type="hidden" name="csrf_token" value="{{$csrf}}">

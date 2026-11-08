@@ -12,12 +12,12 @@
     <span class="max-w-full truncate font-medium">{{proposal $r.Action $r.Dest}}</span>
     {{if $r.Applied}}{{template "action_badge" $r.Applied}}{{else if ne $r.Stage "correction"}}<span class="text-xs">{{template "agreement" $r.Agreement}}</span>{{end}}
     {{if and $r.CorrectedTo (ne $r.Stage "correction")}}
-    <span class="badge" data-variant="secondary">Corrected to {{$r.CorrectedTo}}</span>
+    <span class="badge" data-variant="secondary">Corrected to {{str $r.CorrectedTo}}</span>
     {{end}}
   </div>
   <div class="flex min-w-0 flex-wrap items-center gap-2">
     {{template "stage_badge" $r.Stage}}
-    {{if and (not (isnil $r.Key)) $r.Key (ne $r.Stage "knn") (ne $r.Stage "llm") (ne $r.Stage "correction")}}<code class="truncate font-mono text-xs text-muted-foreground">{{$r.Key}}</code>{{end}}
+    {{if and (not (isnil $r.Key)) $r.Key (ne $r.Stage "knn") (ne $r.Stage "llm") (ne $r.Stage "correction")}}<code class="truncate font-mono text-xs text-muted-foreground">{{str $r.Key}}</code>{{end}}
     {{if and (not (isnil $r.Confidence)) (ne $r.Stage "correction")}}<span class="text-xs text-muted-foreground tabular-nums"><span class="sr-only">confidence </span>{{pct $r.Confidence}}</span>{{end}}
   </div>
   <div class="flex gap-1 group-has-[form]/row:invisible max-lg:group-has-[form]/row:hidden lg:w-18 lg:justify-end">

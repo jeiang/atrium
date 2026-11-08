@@ -17,7 +17,7 @@
       </ul>
       <p class="flex flex-wrap items-center gap-1.5 text-sm">
         {{icon "arrow-right" "size-3.5 text-muted-foreground"}}
-        {{if eq $rule.Action "delete"}}<span class="font-medium text-destructive">Delete</span>{{else}}<span class="text-muted-foreground">File into</span> <span class="font-medium">{{$rule.Dest}}</span>{{end}}
+        {{if eq $rule.Action "delete"}}<span class="font-medium text-destructive">Delete</span>{{else}}<span class="text-muted-foreground">File into</span> <span class="font-medium">{{str $rule.Dest}}</span>{{end}}
       </p>
     </div>
     <div class="col-start-2 flex flex-wrap gap-1 sm:col-start-3">

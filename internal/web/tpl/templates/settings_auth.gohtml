@@ -7,8 +7,8 @@
   <hr role="separator">
   <div role="group" class="field">
     <label for="oidc-preset">Provider</label>
-    <select id="oidc-preset" name="preset" hx-get="/settings/auth/preset" hx-target="#oidc-setup" hx-swap="innerHTML" hx-include="this"{{if $d.preset_pinned}} disabled{{end}}>
-      {{range $d.presets}}<option value="{{.name}}"{{if .selected}} selected{{end}}>{{.label}}</option>{{end}}
+    <select id="oidc-preset" name="preset" hx-get="/settings/auth/preset" hx-target="#oidc-setup" hx-swap="innerHTML" hx-include="this"{{if $d.PresetPinned}} disabled{{end}}>
+      {{range $d.Presets}}<option value="{{.Name}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}
     </select>
   </div>
   <div id="oidc-setup" class="flex flex-col gap-6">{{template "_oidc_setup.gohtml" .}}</div>

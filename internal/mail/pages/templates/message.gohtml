@@ -3,7 +3,7 @@
 {{define "content"}}
 <div class="flex flex-wrap items-center gap-2">
   <a href="{{safeurl .Data.Back.URL}}" class="btn" data-size="sm" data-variant="ghost">{{icon "arrow-left"}}{{.Data.Back.Label}}</a>
-  {{if .Data.FromDraft}}<a href="/chat/{{.Data.FromDraft.ThreadID}}" class="btn" data-size="sm" data-variant="outline">{{icon "messages-square"}}From thread</a>{{end}}
+  {{if .Data.FromDraft}}<a href="/chat/{{str .Data.FromDraft.ThreadID}}" class="btn" data-size="sm" data-variant="outline">{{icon "messages-square"}}From thread</a>{{end}}
 </div>
 <div class="w-full max-w-3xl">
   {{template "mail_message" (dict "m" .Data.Message "mode" .Mode "toast" .Toast "correct" (.Data.Correct))}}

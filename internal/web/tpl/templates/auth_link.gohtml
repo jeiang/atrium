@@ -2,8 +2,8 @@
 {{define "title"}}Admin sign-in{{end}}
 {{define "content"}}
 <h1 class="text-lg font-semibold tracking-tight">Admin sign-in</h1>
-{{if .Data.message}}
-<div class="alert" data-variant="destructive" role="alert">{{icon "circle-alert"}}<p>{{.Data.message}} Run <code>atrium login-link</code> again.</p></div>
+{{if .Data.Message}}
+<div class="alert" data-variant="destructive" role="alert">{{icon "circle-alert"}}<p>{{.Data.Message}} Run <code>atrium login-link</code> again.</p></div>
 {{else}}
 <form method="post" action="/login/link" class="flex flex-col gap-3" data-link-form>
   <input type="hidden" name="csrf_token" value="{{.CSRF}}">

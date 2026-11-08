@@ -1,41 +1,41 @@
 {{define "title"}}Usage · Settings{{end}}
 {{define "heading"}}Settings · Usage{{end}}
-{{define "content"}}{{$d := .Data}}{{$s := $d.summary}}{{$b := $d.budget}}
+{{define "content"}}{{$d := .Data}}{{$s := $d.Summary}}{{$b := $d.Budget}}
 {{template "settings_tabs" (dict "Tab" "usage" "Auth" .Auth "Settings" .Settings)}}
 <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="This month">
   <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
     <span class="text-xs text-muted-foreground">Spent this month</span>
-    <span class="text-2xl font-semibold tabular-nums">${{printf "%.2f" $b.spent_usd}}</span>
-    <span class="text-xs text-muted-foreground">{{$s.calls}} API calls</span>
-    <span class="text-xs text-muted-foreground">{{$d.memory.calls}} memory summaries · ${{printf "%.2f" $d.memory.cost}} excluded from the budget</span>
-    {{if $d.subscription.calls}}<span class="text-xs text-muted-foreground">{{$d.subscription.calls}} subscription requests · ${{printf "%.2f" $d.subscription.cost}} uncapped</span>{{end}}
+    <span class="text-2xl font-semibold tabular-nums">${{printf "%.2f" $b.SpentUSD}}</span>
+    <span class="text-xs text-muted-foreground">{{$s.Calls}} API calls</span>
+    <span class="text-xs text-muted-foreground">{{$d.Memory.Calls}} memory summaries · ${{printf "%.2f" $d.Memory.Cost}} excluded from the budget</span>
+    {{if $d.Subscription.Calls}}<span class="text-xs text-muted-foreground">{{$d.Subscription.Calls}} subscription requests · ${{printf "%.2f" $d.Subscription.Cost}} uncapped</span>{{end}}
   </div>
   <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
     <span class="text-xs text-muted-foreground">Budget remaining</span>
-    <span class="text-2xl font-semibold tabular-nums">${{printf "%.2f" $b.remaining_usd}}</span>
-    <span class="text-xs text-muted-foreground">{{printf "%.0f%%" (mul $b.share 100)}} of ${{printf "%.0f" $b.budget_usd}} used; unattended runs pause at 80%, chat at 100%</span>
+    <span class="text-2xl font-semibold tabular-nums">${{printf "%.2f" $b.RemainingUSD}}</span>
+    <span class="text-xs text-muted-foreground">{{printf "%.0f%%" (mul $b.Share 100)}} of ${{printf "%.0f" $b.BudgetUSD}} used; unattended runs pause at 80%, chat at 100%</span>
   </div>
   <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
     <span class="text-xs text-muted-foreground">Cache read share</span>
-    <span class="text-2xl font-semibold tabular-nums">{{printf "%.0f%%" (mul $s.cache_read_share 100)}}</span>
-    <span class="text-xs text-muted-foreground">{{$s.cache_read}} read · {{$s.cache_write}} written · {{$s.input_tokens}} uncached</span>
+    <span class="text-2xl font-semibold tabular-nums">{{printf "%.0f%%" (mul $s.CacheReadShare 100)}}</span>
+    <span class="text-xs text-muted-foreground">{{$s.CacheRead}} read · {{$s.CacheWrite}} written · {{$s.InputTokens}} uncached</span>
   </div>
   <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
     <span class="text-xs text-muted-foreground">Requests over 100K tokens</span>
-    <span class="text-2xl font-semibold tabular-nums">{{$s.high_tier}}</span>
-    <span class="text-xs text-muted-foreground">{{$s.output_tokens}} output tokens · {{$s.reasoning_tokens}} reasoning · {{$s.searches}} web searches</span>
-    <span class="text-xs text-muted-foreground">{{$s.tool_calls}} tool calls · {{printf "%.1f" (fdiv $s.wall_ms 1000.0)}}s in requests{{if $s.partial}} · {{$s.partial}} partial{{end}}{{if $s.unpriced}} · {{$s.unpriced}} unpriced{{end}}</span>
+    <span class="text-2xl font-semibold tabular-nums">{{$s.HighTier}}</span>
+    <span class="text-xs text-muted-foreground">{{$s.OutputTokens}} output tokens · {{$s.ReasoningTokens}} reasoning · {{$s.Searches}} web searches</span>
+    <span class="text-xs text-muted-foreground">{{$s.ToolCalls}} tool calls · {{printf "%.1f" (fdiv $s.WallMS 1000.0)}}s in requests{{if $s.Partial}} · {{$s.Partial}} partial{{end}}{{if $s.Unpriced}} · {{$s.Unpriced}} unpriced{{end}}</span>
   </div>
 </section>
 
 <section class="flex flex-col gap-2" aria-labelledby="by-kind">
   <h2 id="by-kind" class="text-sm font-medium">By kind</h2>
-  {{if $d.by_kind}}
+  {{if $d.ByKind}}
   <table class="w-full text-sm">
     <thead><tr class="text-left text-xs text-muted-foreground"><th class="py-1">Kind</th><th class="py-1 text-right">Calls</th><th class="py-1 text-right">Tools</th><th class="py-1 text-right">Time</th><th class="py-1 text-right">Searches</th><th class="py-1 text-right">Cost</th></tr></thead>
     <tbody>
-      {{range $d.by_kind}}
-      <tr class="border-t"><td class="py-1">{{.kind}}</td><td class="py-1 text-right tabular-nums">{{.calls}}</td><td class="py-1 text-right tabular-nums">{{.tool_calls}}</td><td class="py-1 text-right tabular-nums">{{printf "%.1f" (fdiv .wall_ms 1000.0)}}s</td><td class="py-1 text-right tabular-nums">{{.searches}}</td><td class="py-1 text-right tabular-nums">${{printf "%.3f" .cost}}</td></tr>
+      {{range $d.ByKind}}
+      <tr class="border-t"><td class="py-1">{{.Kind}}</td><td class="py-1 text-right tabular-nums">{{.Calls}}</td><td class="py-1 text-right tabular-nums">{{.ToolCalls}}</td><td class="py-1 text-right tabular-nums">{{printf "%.1f" (fdiv .WallMS 1000.0)}}s</td><td class="py-1 text-right tabular-nums">{{.Searches}}</td><td class="py-1 text-right tabular-nums">${{printf "%.3f" .Cost}}</td></tr>
       {{end}}
     </tbody>
   </table>
@@ -46,20 +46,20 @@
 
 <section class="flex flex-col gap-2" aria-labelledby="by-thread">
   <h2 id="by-thread" class="text-sm font-medium">By thread</h2>
-  {{if $d.by_thread}}
+  {{if $d.ByThread}}
   <table class="w-full text-sm">
     <thead><tr class="text-left text-xs text-muted-foreground"><th class="py-1">Thread</th><th class="py-1">Kind</th><th class="py-1 text-right">Calls</th><th class="py-1 text-right" title="Summed over every call in the thread">Prompt tokens (all calls)</th><th class="py-1 text-right" title="Largest single request; over 100K bills at 5x">Largest request</th><th class="py-1 text-right">Output</th><th class="py-1 text-right">Reasoning</th><th class="py-1 text-right">Cost</th></tr></thead>
     <tbody>
-      {{range $d.by_thread}}
+      {{range $d.ByThread}}
       <tr class="border-t">
-        <td class="py-1"><a class="underline underline-offset-4" href="/chat/{{.thread_id}}">{{or .title "Untitled thread"}}</a></td>
-        <td class="py-1">{{.kind}}</td>
-        <td class="py-1 text-right tabular-nums">{{.calls}}</td>
-        <td class="py-1 text-right tabular-nums">{{.prompt_tokens}}</td>
-        <td class="py-1 text-right tabular-nums">{{.max_prompt_tokens}}</td>
-        <td class="py-1 text-right tabular-nums">{{.output_tokens}}</td>
-        <td class="py-1 text-right tabular-nums">{{.reasoning_tokens}}</td>
-        <td class="py-1 text-right tabular-nums">${{printf "%.3f" .cost}}</td>
+        <td class="py-1"><a class="underline underline-offset-4" href="/chat/{{.ThreadID}}">{{or (str .Title) "Untitled thread"}}</a></td>
+        <td class="py-1">{{.Kind}}</td>
+        <td class="py-1 text-right tabular-nums">{{.Calls}}</td>
+        <td class="py-1 text-right tabular-nums">{{.PromptTokens}}</td>
+        <td class="py-1 text-right tabular-nums">{{.MaxPromptTokens}}</td>
+        <td class="py-1 text-right tabular-nums">{{.OutputTokens}}</td>
+        <td class="py-1 text-right tabular-nums">{{.ReasoningTokens}}</td>
+        <td class="py-1 text-right tabular-nums">${{printf "%.3f" .Cost}}</td>
       </tr>
       {{end}}
     </tbody>

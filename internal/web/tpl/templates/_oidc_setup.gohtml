@@ -1,24 +1,24 @@
-{{$s := .Data.setup}}
+{{$s := .Data.Setup}}
 <ol class="flex list-decimal flex-col gap-2 ps-5 text-sm">
-  {{range $s.steps}}<li>{{range .parts}}{{if .chip}}<span class="inline-flex items-center gap-1"><code id="{{.id}}" class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">{{.chip}}</code><button type="button" class="btn" data-variant="ghost" data-size="icon-sm" data-action="copy-value" data-target="{{.id}}" aria-label="Copy">{{icon "copy" "size-3.5"}}</button></span>{{else if .missing}}<span class="text-destructive">Public URL is not set</span>{{else}}{{.text}}{{end}}{{end}}</li>{{end}}
+  {{range $s.Steps}}<li>{{range .Parts}}{{if .Chip}}<span class="inline-flex items-center gap-1"><code id="{{.ID}}" class="rounded-sm bg-muted px-1 py-0.5 font-mono text-xs break-all">{{.Chip}}</code><button type="button" class="btn" data-variant="ghost" data-size="icon-sm" data-action="copy-value" data-target="{{.ID}}" aria-label="Copy">{{icon "copy" "size-3.5"}}</button></span>{{else if .Missing}}<span class="text-destructive">Public URL is not set</span>{{else}}{{.Text}}{{end}}{{end}}</li>{{end}}
 </ol>
 <form method="post" action="/settings/auth/test" target="oidc-test" class="flex flex-col gap-4" data-test-signin>
   <input type="hidden" name="csrf_token" value="{{.CSRF}}">
-  <input type="hidden" name="preset" value="{{$s.preset}}">
-  {{range $s.fields}}{{if eq .group "primary"}}
-  <div role="group" class="field"><label for="{{.id}}">{{.label}}{{if .pinned}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="{{.id}}" name="{{.key}}" type="{{.type}}" value="{{.value}}" autocomplete="off"{{if .placeholder}} placeholder="{{.placeholder}}"{{end}}{{if .required}} required{{end}}{{if .disabled}} disabled{{end}}></div>
+  <input type="hidden" name="preset" value="{{$s.Preset}}">
+  {{range $s.Fields}}{{if eq .Group "primary"}}
+  <div role="group" class="field"><label for="{{.ID}}">{{.Label}}{{if .Pinned}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="{{.ID}}" name="{{.Key}}" type="{{.Type}}" value="{{.Value}}" autocomplete="off"{{if .Placeholder}} placeholder="{{.Placeholder}}"{{end}}{{if .Required}} required{{end}}{{if .Disabled}} disabled{{end}}></div>
   {{end}}{{end}}
-  {{range $s.fields}}{{if eq .group "groups"}}
-  <div role="group" class="field"><label for="{{.id}}">{{.label}}{{if .pinned}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="{{.id}}" name="{{.key}}" type="{{.type}}" value="{{.value}}" autocomplete="off"{{if .placeholder}} placeholder="{{.placeholder}}"{{end}}{{if .required}} required{{end}}{{if .disabled}} disabled{{end}}></div>
+  {{range $s.Fields}}{{if eq .Group "groups"}}
+  <div role="group" class="field"><label for="{{.ID}}">{{.Label}}{{if .Pinned}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="{{.ID}}" name="{{.Key}}" type="{{.Type}}" value="{{.Value}}" autocomplete="off"{{if .Placeholder}} placeholder="{{.Placeholder}}"{{end}}{{if .Required}} required{{end}}{{if .Disabled}} disabled{{end}}></div>
   {{end}}{{end}}
-  {{range $s.fields}}{{if eq .group "lists"}}
-  <div role="group" class="field"><label for="{{.id}}">{{.label}}{{if .pinned}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="{{.id}}" name="{{.key}}" type="{{.type}}" value="{{.value}}" autocomplete="off"{{if .placeholder}} placeholder="{{.placeholder}}"{{end}}{{if .required}} required{{end}}{{if .disabled}} disabled{{end}}></div>
+  {{range $s.Fields}}{{if eq .Group "lists"}}
+  <div role="group" class="field"><label for="{{.ID}}">{{.Label}}{{if .Pinned}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="{{.ID}}" name="{{.Key}}" type="{{.Type}}" value="{{.Value}}" autocomplete="off"{{if .Placeholder}} placeholder="{{.Placeholder}}"{{end}}{{if .Required}} required{{end}}{{if .Disabled}} disabled{{end}}></div>
   {{end}}{{end}}
-  <details{{if $s.open}} open{{end}}>
+  <details{{if $s.Open}} open{{end}}>
     <summary class="cursor-pointer text-sm font-medium">Advanced</summary>
     <div class="mt-3 flex flex-col gap-4">
-      {{range $s.fields}}{{if eq .group "advanced"}}
-      <div role="group" class="field"><label for="{{.id}}">{{.label}}{{if .pinned}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="{{.id}}" name="{{.key}}" type="{{.type}}" value="{{.value}}" autocomplete="off"{{if .placeholder}} placeholder="{{.placeholder}}"{{end}}{{if .required}} required{{end}}{{if .disabled}} disabled{{end}}></div>
+      {{range $s.Fields}}{{if eq .Group "advanced"}}
+      <div role="group" class="field"><label for="{{.ID}}">{{.Label}}{{if .Pinned}} <span class="badge" data-variant="outline">Pinned</span>{{end}}</label><input id="{{.ID}}" name="{{.Key}}" type="{{.Type}}" value="{{.Value}}" autocomplete="off"{{if .Placeholder}} placeholder="{{.Placeholder}}"{{end}}{{if .Required}} required{{end}}{{if .Disabled}} disabled{{end}}></div>
       {{end}}{{end}}
     </div>
   </details>

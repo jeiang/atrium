@@ -154,7 +154,6 @@ func (s *service) page(w http.ResponseWriter, r *http.Request, status int, page,
 	f, err := s.deps.Render.Frame(r, page, data)
 	check(err)
 	f.Toast = notice
-	f.Typed = true
 	check(s.deps.Render.Page(w, r, status, name, f))
 }
 
@@ -162,7 +161,6 @@ func (s *service) fragment(w http.ResponseWriter, r *http.Request, status int, n
 	f, err := s.deps.Render.Frame(r, "", data)
 	check(err)
 	f.Toast = notice
-	f.Typed = true
 	check(s.deps.Render.Fragment(w, r, status, name, f))
 }
 

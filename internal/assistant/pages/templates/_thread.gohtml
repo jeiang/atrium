@@ -4,51 +4,51 @@
 <details class="rounded-lg border bg-card p-3 text-xs">
   <summary class="cursor-pointer font-medium">Settings and cost</summary>
   <dl class="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 sm:grid-cols-3">
-    <div><dt class="text-muted-foreground">Model</dt><dd>{{$t.model}}</dd></div>
-    <div><dt class="text-muted-foreground">Thinking {{icon "lock" "size-3"}}</dt><dd>{{$t.thinking}}</dd></div>
-    <div><dt class="text-muted-foreground">Web search {{icon "lock" "size-3"}}</dt><dd>{{if $t.web_search}}On{{else}}Off{{end}}</dd></div>
-    <div><dt class="text-muted-foreground">Cost cap {{icon "lock" "size-3"}}</dt><dd>{{if $t.cost_cap_usd}}${{printf "%.2f" $t.cost_cap_usd}}{{else}}Instance default{{end}}</dd></div>
-    <div><dt class="text-muted-foreground">Project {{icon "lock" "size-3"}}</dt><dd>{{if $t.project_id}}#{{$t.project_id}}{{else}}None{{end}}</dd></div>
+    <div><dt class="text-muted-foreground">Model</dt><dd>{{$t.Model}}</dd></div>
+    <div><dt class="text-muted-foreground">Thinking {{icon "lock" "size-3"}}</dt><dd>{{$t.Thinking}}</dd></div>
+    <div><dt class="text-muted-foreground">Web search {{icon "lock" "size-3"}}</dt><dd>{{if $t.WebSearch}}On{{else}}Off{{end}}</dd></div>
+    <div><dt class="text-muted-foreground">Cost cap {{icon "lock" "size-3"}}</dt><dd>{{if $t.CostCapUSD}}${{printf "%.2f" (float $t.CostCapUSD)}}{{else}}Instance default{{end}}</dd></div>
+    <div><dt class="text-muted-foreground">Project {{icon "lock" "size-3"}}</dt><dd>{{if $t.ProjectID}}#{{str $t.ProjectID}}{{else}}None{{end}}</dd></div>
     <div><dt class="text-muted-foreground">Cost</dt><dd data-cost>${{printf "%.3f" $c}}</dd></div>
   </dl>
 </details>
 {{- end}}
 
-{{define "chat_thread"}}{{$d := .d}}{{$csrf := .csrf}}{{$v := $d.view}}{{$t := $v.thread}}{{$active := $v.active}}{{$busy := and $active (eq $active.state "running")}}
+{{define "chat_thread"}}{{$d := .d}}{{$csrf := .csrf}}{{$v := $d.View}}{{$t := $v.Thread}}{{$active := $v.Active}}{{$busy := and $active (eq $active.State "running")}}
 <header class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
   <a href="/chat" class="btn" data-size="sm" data-variant="ghost">{{icon "arrow-left"}}Threads</a>
-  <span class="badge" data-variant="outline">{{lbl "thread_kind" $t.kind}}</span>
-  <span class="tabular-nums">started {{template "when" (dict "epoch" $t.created_at "style" "datetime")}}</span>
+  <span class="badge" data-variant="outline">{{lbl "thread_kind" $t.Kind}}</span>
+  <span class="tabular-nums">started {{template "when" (dict "epoch" $t.CreatedAt "style" "datetime")}}</span>
   {{template "chat_meter" (dict "view" $v)}}
-  {{if $t.project_id}}<a href="/projects/{{$t.project_id}}" class="btn" data-size="sm" data-variant="ghost">{{icon "folder"}}{{if $d.project}}{{$d.project.name}}{{else}}Project{{end}}</a>{{end}}
-  {{if $t.parent_thread_id}}<a href="/chat/{{$t.parent_thread_id}}" class="btn" data-size="sm" data-variant="ghost">{{icon "arrow-left"}}Parent thread</a>{{end}}
-  {{with $v.branched_from}}<a href="/chat/{{.id}}" class="btn" data-size="sm" data-variant="ghost" title="Branched from message {{$t.branched_from_seq}}">{{icon "git-branch"}}Branched from “{{truncate 40 (or .title "Untitled thread")}}”</a>{{end}}
+  {{if $t.ProjectID}}<a href="/projects/{{str $t.ProjectID}}" class="btn" data-size="sm" data-variant="ghost">{{icon "folder"}}{{if $d.Project}}{{$d.Project.Name}}{{else}}Project{{end}}</a>{{end}}
+  {{if $t.ParentThreadID}}<a href="/chat/{{str $t.ParentThreadID}}" class="btn" data-size="sm" data-variant="ghost">{{icon "arrow-left"}}Parent thread</a>{{end}}
+  {{with $v.BranchedFrom}}<a href="/chat/{{.ID}}" class="btn" data-size="sm" data-variant="ghost" title="Branched from message {{str $t.BranchedFromSeq}}">{{icon "git-branch"}}Branched from “{{truncate 40 (or .Title "Untitled thread")}}”</a>{{end}}
   <span class="ms-auto flex flex-wrap items-center gap-1">
-    {{if eq $t.kind "chat"}}
-    {{if or $d.projects $t.project_id}}
-    <form method="post" action="/chat/{{$t.id}}/project" class="flex items-center gap-1">
+    {{if eq $t.Kind "chat"}}
+    {{if or $d.Projects $t.ProjectID}}
+    <form method="post" action="/chat/{{$t.ID}}/project" class="flex items-center gap-1">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
       <label for="move-project" class="sr-only">Project</label>
       <select id="move-project" name="project_id" class="select h-8 max-w-40 py-0 text-xs">
         <option value="0">No project</option>
-        {{range $d.projects}}<option value="{{.id}}"{{if eq .id $t.project_id}} selected{{end}}>{{.name}}</option>{{end}}
+        {{range $d.Projects}}<option value="{{.ID}}"{{if eq (str .ID) (str $t.ProjectID)}} selected{{end}}>{{.Name}}</option>{{end}}
       </select>
       <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{icon "folder-input"}}Move</button>
     </form>
     {{end}}
-    {{if not $t.archived}}
-    <form method="post" action="/chat/{{$t.id}}/pin">
+    {{if not $t.Archived}}
+    <form method="post" action="/chat/{{$t.ID}}/pin">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
-      <input type="hidden" name="pinned" value="{{if $t.pinned}}0{{else}}1{{end}}">
-      <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{icon (ternary $t.pinned "pin-off" "pin")}}{{if $t.pinned}}Unpin{{else}}Pin{{end}}</button>
+      <input type="hidden" name="pinned" value="{{if $t.Pinned}}0{{else}}1{{end}}">
+      <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{icon (ternary $t.Pinned "pin-off" "pin")}}{{if $t.Pinned}}Unpin{{else}}Pin{{end}}</button>
     </form>
     {{end}}
-    <form method="post" action="/chat/{{$t.id}}/archive">
+    <form method="post" action="/chat/{{$t.ID}}/archive">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
-      <input type="hidden" name="archived" value="{{if $t.archived}}0{{else}}1{{end}}">
-      <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{icon (ternary $t.archived "archive-restore" "archive")}}{{if $t.archived}}Unarchive{{else}}Archive{{end}}</button>
+      <input type="hidden" name="archived" value="{{if $t.Archived}}0{{else}}1{{end}}">
+      <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{icon (ternary $t.Archived "archive-restore" "archive")}}{{if $t.Archived}}Unarchive{{else}}Archive{{end}}</button>
     </form>
-    <form method="post" action="/chat/{{$t.id}}/delete" data-confirm-submit="Delete this thread, its subagent transcripts and its files? This cannot be undone.">
+    <form method="post" action="/chat/{{$t.ID}}/delete" data-confirm-submit="Delete this thread, its subagent transcripts and its files? This cannot be undone.">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
       <button type="submit" class="btn" data-size="sm" data-variant="ghost">{{icon "trash-2"}}Delete</button>
     </form>
@@ -56,14 +56,14 @@
     <button type="button" class="btn md:hidden" data-size="sm" data-variant="outline" id="panel-toggle" data-action="toggle-panel" aria-controls="panel" aria-expanded="false">{{icon "panel-right"}}Panel</button>
   </span>
 </header>
-{{template "thread_settings" (dict "t" $t "cost" $v.cost "csrf" $csrf)}}
-<ol id="transcript" class="flex flex-col gap-4" aria-label="Conversation" data-thread="{{$t.id}}">
+{{template "thread_settings" (dict "t" $t "cost" $v.Cost "csrf" $csrf)}}
+<ol id="transcript" class="flex flex-col gap-4" aria-label="Conversation" data-thread="{{$t.ID}}">
   {{template "chat_transcript" (dict "view" $v "csrf" $csrf)}}
 </ol>
 <p id="transcript-announcer" class="sr-only" role="status"></p>
-{{if ne $t.kind "subagent"}}
-<form id="composer" class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" method="post" action="/chat/{{$t.id}}/messages" enctype="multipart/form-data"
-      hx-post="/chat/{{$t.id}}/messages" hx-encoding="multipart/form-data" hx-target="#transcript" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]" hx-indicator="#composer-spinner" data-reset data-attach>
+{{if ne $t.Kind "subagent"}}
+<form id="composer" class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" method="post" action="/chat/{{$t.ID}}/messages" enctype="multipart/form-data"
+      hx-post="/chat/{{$t.ID}}/messages" hx-encoding="multipart/form-data" hx-target="#transcript" hx-swap="beforeend" hx-disabled-elt="find button[type=submit]" hx-indicator="#composer-spinner" data-reset data-attach>
   <input type="hidden" name="csrf_token" value="{{$csrf}}">
   <input type="hidden" name="edit" value="">
   <p id="composer-editing" class="flex items-center gap-2 text-xs text-muted-foreground" hidden>{{icon "pencil" "size-3.5"}}Editing your last message: sending replaces it and the reply.<button type="button" class="btn" data-size="sm" data-variant="ghost" data-action="cancel-edit">Cancel</button></p>
@@ -72,12 +72,12 @@
   {{template "attach_field"}}
   <div class="flex flex-wrap items-center gap-2 text-xs">
     {{template "attach_button"}}
-    {{if eq $t.kind "chat"}}
-    {{template "composer_options" (dict "c" $d.composer)}}
+    {{if eq $t.Kind "chat"}}
+    {{template "composer_options" (dict "c" $d.Composer)}}
     {{end}}
     {{template "spinner" (dict "id" "composer-spinner" "label" "Sending")}}
     <span class="ms-auto flex items-center gap-1">
-      <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/chat/{{$t.id}}/stop" hx-swap="none" data-stop{{if not $busy}} hidden{{end}}>{{icon "square" "size-3.5"}}Stop</button>
+      <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/chat/{{$t.ID}}/stop" hx-swap="none" data-stop{{if not $busy}} hidden{{end}}>{{icon "square" "size-3.5"}}Stop</button>
       <button type="submit" class="btn" data-size="sm">{{icon "send"}}<span data-send{{if $busy}} hidden{{end}}>Send</span><span data-queue{{if not $busy}} hidden{{end}}>Queue</span></button>
     </span>
   </div>

@@ -18,7 +18,7 @@
   <p class="text-sm text-muted-foreground">No decision yet. atrium decides once a message has been read and is still in the inbox.</p>
   {{end}}
   {{if and $m.CorrectedTo (or (not $d) (ne $d.stage "correction"))}}
-  <p class="text-sm">You corrected this to <span class="font-medium">{{$m.CorrectedTo}}</span>.</p>
+  <p class="text-sm">You corrected this to <span class="font-medium">{{str $m.CorrectedTo}}</span>.</p>
   {{end}}
   {{if $toast}}
   <p class="flex items-start gap-2 rounded-md bg-success/10 px-3 py-2 text-sm text-success" role="status">

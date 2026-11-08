@@ -3,8 +3,8 @@
   <div class="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
     <span class="badge" data-variant="outline">{{$d.Status}}</span>
     <span>{{$d.Account}}</span>
-    {{if $d.InReplyToMessageID}}<a class="underline" href="/messages/{{$d.InReplyToMessageID}}">reply to message {{$d.InReplyToMessageID}}</a>{{end}}
-    {{if $d.ThreadID}}<a class="underline" href="/chat/{{$d.ThreadID}}">{{icon "messages-square" "size-3"}}from thread</a>{{end}}
+    {{if $d.InReplyToMessageID}}<a class="underline" href="/messages/{{str $d.InReplyToMessageID}}">reply to message {{str $d.InReplyToMessageID}}</a>{{end}}
+    {{if $d.ThreadID}}<a class="underline" href="/chat/{{str $d.ThreadID}}">{{icon "messages-square" "size-3"}}from thread</a>{{end}}
     <span class="tabular-nums">{{template "when" (dict "epoch" $d.UpdatedAt "style" "datetime")}}</span>
   </div>
   {{if $d.Unexpected}}
@@ -67,7 +67,7 @@
   </dl>
   <pre class="whitespace-pre-wrap rounded-md bg-muted p-3 text-sm">{{$d.Body}}</pre>
   {{end}}
-  {{if $d.SMTPResult}}<p class="text-xs text-muted-foreground">{{$d.SMTPResult}}</p>{{end}}
+  {{if $d.SMTPResult}}<p class="text-xs text-muted-foreground">{{str $d.SMTPResult}}</p>{{end}}
 </li>
 {{if and .partial .toast}}{{with .toast}}{{template "_toast.gohtml" (dict "Toast" .)}}{{end}}{{end}}{{end}}
 

@@ -86,6 +86,7 @@ func (e *Engine) funcs(set func() *template.Template) template.FuncMap {
 			return arith(a, b, func(x, y float64) float64 { return float64(x * y) })
 		},
 		"fdiv":  func(a, b any) (float64, error) { return arith(a, b, func(x, y float64) float64 { return x / y }) },
+		"float": func(v any) (float64, error) { return toFloat(v) },
 		"inc":   func(i int) int { return i + 1 },
 		"lower": func(v any) string { return strings.ToLower(str(v)) },
 		"capitalize": func(v any) string {
@@ -182,6 +183,11 @@ func opt(m any, key string, def any) any {
 			return v
 		}
 	}
+	if d, ok := m.(py.Dict); ok {
+		if v, ok := d.Get(key); ok {
+			return v
+		}
+	}
 	rv := reflect.ValueOf(m)
 	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
 		if rv.IsNil() {
@@ -194,6 +200,9 @@ func opt(m any, key string, def any) any {
 		t := rv.Type()
 		for i := range t.NumField() {
 			f := t.Field(i)
+			if f.PkgPath != "" {
+				continue
+			}
 			tag, _, _ := strings.Cut(f.Tag.Get("json"), ",")
 			if tag == key || strings.EqualFold(f.Name, key) || strings.ReplaceAll(strings.ToLower(f.Name), "_", "") == want {
 				return rv.Field(i).Interface()
@@ -327,7 +336,15 @@ func elems(l any) []map[string]any {
 	var out []map[string]any
 	if rv := reflect.ValueOf(l); l != nil && rv.Kind() == reflect.Slice {
 		for i := range rv.Len() {
-			switch m := rv.Index(i).Interface().(type) {
+			elem := rv.Index(i).Interface()
+			erv := reflect.ValueOf(elem)
+			for erv.IsValid() && (erv.Kind() == reflect.Pointer || erv.Kind() == reflect.Interface) {
+				if erv.IsNil() {
+					break
+				}
+				erv = erv.Elem()
+			}
+			switch m := elem.(type) {
 			case map[string]any:
 				out = append(out, m)
 			case py.Dict:
@@ -336,6 +353,23 @@ func elems(l any) []map[string]any {
 					row[pair.Key] = pair.Value
 				}
 				out = append(out, row)
+			default:
+				if erv.IsValid() && erv.Kind() == reflect.Struct {
+					row := make(map[string]any, erv.NumField())
+					t := erv.Type()
+					for j := range t.NumField() {
+						f := t.Field(j)
+						if f.PkgPath != "" {
+							continue
+						}
+						key, _, _ := strings.Cut(f.Tag.Get("json"), ",")
+						if key == "" {
+							key = f.Name
+						}
+						row[key] = erv.Field(j).Interface()
+					}
+					out = append(out, row)
+				}
 			}
 		}
 	}
@@ -349,9 +383,14 @@ func truthy(v any) bool {
 
 func filter(l any, key string, want bool) []any {
 	var out []any
-	for _, m := range elems(l) {
-		if truthy(m[key]) == want {
-			out = append(out, m)
+	rv := reflect.ValueOf(l)
+	if l == nil || rv.Kind() != reflect.Slice {
+		return out
+	}
+	for i := range rv.Len() {
+		elem := rv.Index(i).Interface()
+		if truthy(opt(elem, key, nil)) == want {
+			out = append(out, elem)
 		}
 	}
 	return out

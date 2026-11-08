@@ -1,4 +1,4 @@
-{{$d := .Data}}{{template "chat_thread_list" (dict "threads" $d.threads "q" $d.q "view" $d.view "project_id" $d.project_id)}}
+{{$d := .Data}}{{template "chat_thread_list" (dict "threads" $d.Threads "q" $d.Q "view" $d.View "project_id" $d.ProjectID)}}
 
 {{define "chat_thread_list"}}{{$project_id := .project_id}}
 {{if .threads}}
@@ -31,22 +31,22 @@
 
 {{define "chat_thread_row"}}{{$t := .t}}{{$project_id := .project_id}}
 <li class="flex items-center gap-1 pe-2 hover:bg-accent">
-  <a href="/chat/{{$t.id}}" class="flex min-w-0 flex-1 flex-col gap-1 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+  <a href="/chat/{{$t.ID}}" class="flex min-w-0 flex-1 flex-col gap-1 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
     <span class="flex items-center gap-2">
-      <span class="truncate text-sm font-medium">{{or $t.title "Untitled thread"}}</span>
-      {{template "run_badge" $t.run_state}}
-      {{if and $t.project_name (not $project_id)}}<span class="badge truncate" data-variant="outline">{{icon "folder" "size-3"}}{{$t.project_name}}</span>{{end}}
+      <span class="truncate text-sm font-medium">{{or (str $t.Title) "Untitled thread"}}</span>
+      {{template "run_badge" (str $t.RunState)}}
+      {{if and $t.ProjectName (not $project_id)}}<span class="badge truncate" data-variant="outline">{{icon "folder" "size-3"}}{{str $t.ProjectName}}</span>{{end}}
     </span>
     <span class="flex gap-3 text-xs text-muted-foreground tabular-nums">
-      <span>{{template "when" (dict "epoch" $t.updated_at "style" "datetime")}}</span>
-      <span>${{printf "%.3f" $t.cost}}</span>
+      <span>{{template "when" (dict "epoch" $t.UpdatedAt "style" "datetime")}}</span>
+      <span>${{printf "%.3f" $t.Cost}}</span>
     </span>
   </a>
-  {{if not $t.archived}}
-  <button id="thread-{{$t.id}}-pin" type="button" class="btn" data-variant="ghost" data-size="icon-sm" title="{{if $t.pinned}}Unpin{{else}}Pin{{end}}" aria-label="{{if $t.pinned}}Unpin{{else}}Pin{{end}} {{or $t.title "thread"}}"
-          hx-post="/chat/{{$t.id}}/pin" hx-vals='{"pinned": {{if $t.pinned}}0{{else}}1{{end}}, "project_id": {{or $project_id 0}}}' hx-include="#thread-search" hx-target="#threads" hx-swap="innerHTML">{{icon (ternary $t.pinned "pin-off" "pin")}}</button>
+  {{if not $t.Archived}}
+  <button id="thread-{{$t.ID}}-pin" type="button" class="btn" data-variant="ghost" data-size="icon-sm" title="{{if $t.Pinned}}Unpin{{else}}Pin{{end}}" aria-label="{{if $t.Pinned}}Unpin{{else}}Pin{{end}} {{or (str $t.Title) "thread"}}"
+          hx-post="/chat/{{$t.ID}}/pin" hx-vals='{"pinned": {{if $t.Pinned}}0{{else}}1{{end}}, "project_id": {{or $project_id 0}}}' hx-include="#thread-search" hx-target="#threads" hx-swap="innerHTML">{{icon (ternary $t.Pinned "pin-off" "pin")}}</button>
   {{end}}
-  <button id="thread-{{$t.id}}-archive" type="button" class="btn" data-variant="ghost" data-size="icon-sm" title="{{if $t.archived}}Unarchive{{else}}Archive{{end}}" aria-label="{{if $t.archived}}Unarchive{{else}}Archive{{end}} {{or $t.title "thread"}}"
-          hx-post="/chat/{{$t.id}}/archive" hx-vals='{"archived": {{if $t.archived}}0{{else}}1{{end}}, "project_id": {{or $project_id 0}}}' hx-include="#thread-search" hx-target="#threads" hx-swap="innerHTML">{{icon (ternary $t.archived "archive-restore" "archive")}}</button>
+  <button id="thread-{{$t.ID}}-archive" type="button" class="btn" data-variant="ghost" data-size="icon-sm" title="{{if $t.Archived}}Unarchive{{else}}Archive{{end}}" aria-label="{{if $t.Archived}}Unarchive{{else}}Archive{{end}} {{or (str $t.Title) "thread"}}"
+          hx-post="/chat/{{$t.ID}}/archive" hx-vals='{"archived": {{if $t.Archived}}0{{else}}1{{end}}, "project_id": {{or $project_id 0}}}' hx-include="#thread-search" hx-target="#threads" hx-swap="innerHTML">{{icon (ternary $t.Archived "archive-restore" "archive")}}</button>
 </li>
 {{- end}}
