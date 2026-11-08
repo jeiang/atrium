@@ -19,6 +19,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/accounts"
 )
 
 const (
@@ -33,6 +34,9 @@ var errNotConnected = errors.New("IMAP client is not connected")
 
 type conn struct {
 	user, password string
+	method         accounts.Method
+	token          func(context.Context) (string, error)
+	invalidate     func()
 	addr           string
 	tlsConfig      *tls.Config
 	dial           func(context.Context) (net.Conn, error)
@@ -57,6 +61,17 @@ type inflight struct {
 
 func New(host, user, password string) *conn {
 	return newConn(host, user, password)
+}
+
+// NewXOAUTH2 authenticates with a bearer token instead of a password. The
+// token function refreshes as needed; invalidate drops a cached token so an
+// auth failure can retry once with a fresh one.
+func NewXOAUTH2(host, user string, token func(context.Context) (string, error), invalidate func()) *conn {
+	c := newConn(host, user, "")
+	c.method = accounts.XOAUTH2
+	c.token = token
+	c.invalidate = invalidate
+	return c
 }
 
 func (c *conn) setBodyCap(n int) { c.bodyCap = n }
@@ -159,6 +174,22 @@ func (c *conn) Connect(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.shutdown()
+	if err := c.connect(ctx); err != nil {
+		if c.method != accounts.XOAUTH2 {
+			c.shutdown()
+			return err
+		}
+		c.invalidate()
+		c.shutdown()
+		if rerr := c.connect(ctx); rerr != nil {
+			c.shutdown()
+			return rerr
+		}
+	}
+	return nil
+}
+
+func (c *conn) connect(ctx context.Context) error {
 	nc, err := c.dial(ctx)
 	if err != nil {
 		return err
@@ -173,11 +204,7 @@ func (c *conn) Connect(ctx context.Context) error {
 			Fetch:   func(*imapclient.FetchMessageData) { c.changed() },
 		},
 	})
-	if err := c.await(ctx, c.login); err != nil {
-		c.shutdown()
-		return err
-	}
-	return nil
+	return c.await(ctx, func() error { return c.login(ctx) })
 }
 
 func (c *conn) changed() {
@@ -190,7 +217,7 @@ func (c *conn) changed() {
 	}
 }
 
-func (c *conn) login() error {
+func (c *conn) login(ctx context.Context) error {
 	if err := c.cl.WaitGreeting(); err != nil {
 		return imapErr(err)
 	}
@@ -201,13 +228,21 @@ func (c *conn) login() error {
 	if !caps.Has(imap.CapIMAP4rev1) && !caps.Has(imap.Cap("IMAP4")) {
 		return pyError("server not IMAP4 compliant")
 	}
-	for _, arg := range []string{c.user, c.password} {
+	args := []string{c.user}
+	if c.method != accounts.XOAUTH2 {
+		args = append(args, c.password)
+	}
+	for _, arg := range args {
 		if err := checkArg(arg); err != nil {
 			return err
 		}
 	}
 	if c.cl.State() == imap.ConnStateNotAuthenticated {
-		if err := c.cl.Login(c.user, c.password).Wait(); err != nil {
+		if c.method == accounts.XOAUTH2 {
+			if err := c.authenticate(ctx); err != nil {
+				return err
+			}
+		} else if err := c.cl.Login(c.user, c.password).Wait(); err != nil {
 			return imapErr(err)
 		}
 	}
@@ -216,6 +251,14 @@ func (c *conn) login() error {
 		return pyError("no CAPABILITY response from server")
 	}
 	return nil
+}
+
+func (c *conn) authenticate(ctx context.Context) error {
+	token, err := c.token(ctx)
+	if err != nil {
+		return err
+	}
+	return imapErr(c.cl.Authenticate(&xoauth2{user: c.user, token: token}))
 }
 
 func (c *conn) shutdown() {

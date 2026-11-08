@@ -98,6 +98,13 @@ func (s *Source) Token(ctx context.Context) (string, error) {
 	return token, nil
 }
 
+// Invalidate drops the cached access token so the next call refreshes.
+func (s *Source) Invalidate() {
+	s.mu.Lock()
+	s.token = ""
+	s.mu.Unlock()
+}
+
 func (s *Source) report(ctx context.Context, state, reason string) {
 	if s.Health != nil {
 		s.Health(ctx, state, reason)
