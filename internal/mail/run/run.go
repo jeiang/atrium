@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/accounts"
 	"github.com/jeiang/atrium/internal/mail/applier"
 	"github.com/jeiang/atrium/internal/mail/flags"
 	"github.com/jeiang/atrium/internal/mail/live"
@@ -37,17 +38,18 @@ func (e UnknownAccount) Error() string { return "unknown mail account " + string
 
 func SelectAccounts(ctx context.Context, requested string) ([]string, error) {
 	if requested != "" {
-		if _, known := config.From(ctx).Account(requested); !known {
+		spec, known := config.From(ctx).Account(requested)
+		if !known {
 			return nil, UnknownAccount(requested)
 		}
-		if _, _, ok := config.Credential(ctx, requested); !ok {
+		if _, _, ok := config.Credential(ctx, requested); !ok && spec.AuthMethod != accounts.XOAUTH2 {
 			return nil, MissingCredentials(requested)
 		}
 		return []string{requested}, nil
 	}
 	var out []string
 	for _, spec := range config.From(ctx).Accounts() {
-		if _, _, ok := config.Credential(ctx, spec.Name); ok {
+		if _, _, ok := config.Credential(ctx, spec.Name); ok || spec.AuthMethod == accounts.XOAUTH2 {
 			out = append(out, spec.Name)
 		}
 	}
