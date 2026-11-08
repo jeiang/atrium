@@ -17,7 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/router"
+	"github.com/jeiang/atrium/internal/mail/message"
 )
 
 var (
@@ -129,7 +129,7 @@ func FlagAccount(ctx context.Context, d *db.DB, account string, judge Judge, now
 		var verdict llm.Flags
 		judged := false
 		if available {
-			body, err := router.MessageBody(ctx, d.Read, row.ID)
+			body, err := message.Body(ctx, d.Read, row.ID)
 			if err != nil {
 				return done, err
 			}

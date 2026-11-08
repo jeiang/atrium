@@ -92,7 +92,7 @@ func store(r rules.Rule) []any {
 	if r.Dest != nil {
 		dest = *r.Dest
 	}
-	return []any{account, r.Action, dest, rules.ConditionsJSON(r.Conditions)}
+	return []any{account, string(r.Action), dest, rules.ConditionsJSON(r.Conditions)}
 }
 
 type RuleDict struct {
@@ -104,7 +104,7 @@ type RuleDict struct {
 }
 
 func ruleDict(r rules.Rule) RuleDict {
-	return RuleDict{r.ID, r.Account, r.Action, r.Dest, slices.Clone(r.Conditions)}
+	return RuleDict{r.ID, r.Account, string(r.Action), r.Dest, slices.Clone(r.Conditions)}
 }
 
 func ListRules(ctx context.Context, q rules.Querier, account *string) ([]RuleDict, error) {
@@ -265,19 +265,37 @@ func PreviewRule(ctx context.Context, q rules.Querier, raw any, limit int, now f
 		query += " AND account = ?"
 		args = append(args, *rule.Account)
 	}
+	for _, c := range rule.Conditions {
+		if c.Field() != rules.AgeField {
+			continue
+		}
+		value, _ := c.Value()
+		var days float64
+		switch v := value.(type) {
+		case int64:
+			days = float64(v)
+		case float64:
+			days = v
+		}
+		if days > 0 {
+			query += " AND date_ts != 0 AND (? - date_ts) / 86400.0 >= ?"
+			args = append(args, now, days)
+		}
+	}
 	query += " ORDER BY date_ts DESC, id DESC"
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return Preview{}, err
 	}
-	all, err := db.Collect(rows, func(r *sql.Rows) (rules.Message, error) { return rules.ScanMessage(r) })
-	if err != nil {
-		return Preview{}, err
-	}
-	out := Preview{Total: len(all), Sample: []PreviewSample{}}
-	for i := range all {
-		m := &all[i]
-		ok, err := rule.Matches(m, now)
+	defer func() { _ = rows.Close() }()
+	out := Preview{Sample: []PreviewSample{}}
+	for rows.Next() {
+		m, err := rules.ScanMessage(rows)
+		if err != nil {
+			return Preview{}, err
+		}
+		out.Total++
+		ok, err := rule.Matches(&m, now)
 		if err != nil {
 			return Preview{}, err
 		}
@@ -296,7 +314,7 @@ func PreviewRule(ctx context.Context, q rules.Querier, raw any, limit int, now f
 			out.Sample = append(out.Sample, PreviewSample{m.ID, m.Account, m.Subject, m.FromAddr, m.FromName, folder, m.DateTS})
 		}
 	}
-	return out, nil
+	return out, rows.Err()
 }
 
 type Features struct {
@@ -318,7 +336,11 @@ func MessageFeatures(ctx context.Context, q rules.Querier, messageID int64) (Fea
 	found := []rules.Condition{}
 	for _, f := range featureFields {
 		if v := scalarOf(&m, f.field); v != "" {
-			found = append(found, rules.Condition{Field: f.field, Op: f.op, Value: v, HasValue: true})
+			cond, err := rules.NewCondition(f.field, f.op, v)
+			if err != nil {
+				return Features{}, err
+			}
+			found = append(found, cond)
 		}
 	}
 	for _, f := range listFeatures {
@@ -327,7 +349,11 @@ func MessageFeatures(ctx context.Context, q rules.Querier, messageID int64) (Fea
 			return Features{}, err
 		}
 		if len(values) > 0 {
-			found = append(found, rules.Condition{Field: f.field, Op: f.op, Value: values, HasValue: true})
+			cond, err := rules.NewCondition(f.field, f.op, values)
+			if err != nil {
+				return Features{}, err
+			}
+			found = append(found, cond)
 		}
 	}
 	var dest sql.NullString
@@ -341,7 +367,7 @@ func MessageFeatures(ctx context.Context, q rules.Querier, messageID int64) (Fea
 		out.Dest = &dest.String
 	}
 	for _, c := range found {
-		if c.Field == "from_addr" {
+		if c.Field() == "from_addr" {
 			out.Default = append(out.Default, c)
 			break
 		}
@@ -362,65 +388,19 @@ type LearnedRule struct {
 	N      int     `json:"n"`
 }
 
-const DefaultLearnedLimit = 50
-
 func LearnedRulesSummary(ctx context.Context, q rules.Querier, account string, limit int) ([]LearnedRule, error) {
 	thresholds, err := rules.ReadThresholds(ctx, q)
 	if err != nil {
 		return nil, err
 	}
+	groups, err := rules.LearnedGroups(ctx, q, account)
+	if err != nil {
+		return nil, err
+	}
 	found := []LearnedRule{}
-	for _, level := range rules.LearnedLevels {
-		nonblank := make([]string, len(level.Columns))
-		for i, c := range level.Columns {
-			nonblank[i] = c + " != ''"
-		}
-		selectCols := strings.Join(level.Columns, ", ")
-		rows, err := q.QueryContext(ctx,
-			"SELECT "+selectCols+", folder, COUNT(*) AS n FROM filed_messages WHERE account = ? AND "+
-				strings.Join(nonblank, " AND ")+" GROUP BY "+selectCols+", folder", account)
-		if err != nil {
-			return nil, err
-		}
-		type group struct {
-			key    string
-			counts map[string]int
-		}
-		var order [][2]string
-		groups := map[[2]string]*group{}
-		err = func() error {
-			defer func() { _ = rows.Close() }()
-			for rows.Next() {
-				parts := make([]string, len(level.Columns))
-				var folder string
-				var n int
-				dest := make([]any, 0, len(parts)+2)
-				for i := range parts {
-					dest = append(dest, &parts[i])
-				}
-				if err := rows.Scan(append(dest, &folder, &n)...); err != nil {
-					return err
-				}
-				var tuple [2]string
-				copy(tuple[:], parts)
-				g := groups[tuple]
-				if g == nil {
-					g = &group{strings.Join(parts, " | "), map[string]int{}}
-					groups[tuple] = g
-					order = append(order, tuple)
-				}
-				g.counts[folder] = n
-			}
-			return rows.Err()
-		}()
-		if err != nil {
-			return nil, err
-		}
-		for _, k := range order {
-			g := groups[k]
-			if p, ok := rules.PickPure(g.counts, thresholds); ok {
-				found = append(found, LearnedRule{level.Name, g.key, p.Folder, p.Purity, p.Total})
-			}
+	for _, g := range groups {
+		if p, ok := rules.PickPure(g.Counts, thresholds); ok {
+			found = append(found, LearnedRule{g.Level, g.Key, p.Folder, p.Purity, p.Total})
 		}
 	}
 	slices.SortStableFunc(found, func(a, b LearnedRule) int {

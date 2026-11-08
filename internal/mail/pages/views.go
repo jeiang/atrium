@@ -153,14 +153,15 @@ type conditionData struct {
 }
 
 func conditionView(c rules.Condition) map[string]any {
-	out := map[string]any{"field": c.Field, "op": c.Op}
-	if !c.HasValue {
+	out := map[string]any{"field": c.Field(), "op": c.Op()}
+	value, ok := c.Value()
+	if !ok {
 		return out
 	}
-	if n, ok := c.Value.(*big.Int); ok {
+	if n, ok := value.(*big.Int); ok {
 		out["value"] = n.String()
 	} else {
-		out["value"] = c.Value
+		out["value"] = value
 	}
 	return out
 }

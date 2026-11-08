@@ -55,7 +55,6 @@ var levels = []level{{"addr", "from_addr", "eq"}, {"domain", "from_domain", "suf
 
 type row struct {
 	rules.Message
-	Seen, Flagged, OTP6, VCode, Gone bool
 }
 
 func (r *row) column(name string) string {
@@ -69,23 +68,15 @@ func (r *row) view() py.Dict {
 	return scanutil.Message{ID: r.ID, Subject: r.Subject, FromName: r.FromName, FromAddr: r.FromAddr, DateTS: r.DateTS}.View()
 }
 
-type withExtra struct {
-	s     rules.Scanner
-	extra []any
-}
-
-func (w withExtra) Scan(dest ...any) error { return w.s.Scan(append(dest, w.extra...)...) }
-
 func received(ctx context.Context, q proposals.Querier) ([]*row, error) {
-	rows, err := q.QueryContext(ctx, "SELECT "+rules.MessageColumns+", seen, flagged, k_otp6, k_vcode, gone_at IS NOT NULL "+
-		"FROM messages WHERE sent = 0 ORDER BY id")
+	rows, err := q.QueryContext(ctx, "SELECT "+rules.MessageColumns+" FROM messages WHERE sent = 0 ORDER BY id")
 	if err != nil {
 		return nil, err
 	}
 	return db.Collect(rows, func(r *sql.Rows) (*row, error) {
 		var m row
 		var err error
-		m.Message, err = rules.ScanMessage(withExtra{r, []any{&m.Seen, &m.Flagged, &m.OTP6, &m.VCode, &m.Gone}})
+		m.Message, err = rules.ScanMessage(r)
 		return &m, err
 	})
 }

@@ -114,3 +114,50 @@ func TestImportV1RefusesNonRE2RulePattern(t *testing.T) {
 		}
 	}
 }
+
+func TestImportV1RefusesUnknownRuleField(t *testing.T) {
+	r, source := freshImportRig(t)
+	broken := filepath.Join(t.TempDir(), "v1.db")
+	data, err := os.ReadFile(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(broken, data, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	d, err := db.Connect(broken)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec(`UPDATE rules SET conditions = ? WHERE id = 'promo-spam'`,
+		`[{"field":"bogus","op":"eq","value":"x"}]`); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	code, stdout, stderr := r.run(context.Background(), "db", "import-v1", broken)
+	if code == 0 {
+		t.Fatalf("import-v1 accepted an unknown field: %s", stdout)
+	}
+	for _, want := range []string{"promo-spam", "bogus", "unknown field"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("refusal report lacks %q:\n%s", want, stderr)
+		}
+	}
+	d, err = db.Connect(filepath.Join(r.dir, "atrium.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	for _, table := range []string{"rules", "messages", "corrections", "decisions"} {
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Errorf("%s holds %d rows after a refused import", table, n)
+		}
+	}
+}

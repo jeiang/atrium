@@ -6,13 +6,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/mail/rules"
 )
 
 var importedTables = []string{"accounts", "mailboxes", "messages", "corrections", "decisions", "rules"}
@@ -184,7 +184,7 @@ type ruleProblem struct {
 }
 
 func validateRules(ctx context.Context, q db.Querier) error {
-	rows, err := q.QueryContext(ctx, "SELECT id, conditions FROM rules ORDER BY position")
+	rows, err := q.QueryContext(ctx, "SELECT id, account, action, dest, conditions FROM rules ORDER BY position")
 	if err != nil {
 		return err
 	}
@@ -192,27 +192,21 @@ func validateRules(ctx context.Context, q db.Querier) error {
 	err = func() error {
 		defer func() { _ = rows.Close() }()
 		for rows.Next() {
-			var id, text string
-			if err := rows.Scan(&id, &text); err != nil {
+			var id, action, text string
+			var account, dest sql.NullString
+			if err := rows.Scan(&id, &account, &action, &dest, &text); err != nil {
 				return err
 			}
-			var conditions []storedCondition
-			if err := json.Unmarshal([]byte(text), &conditions); err != nil {
-				problems = append(problems, ruleProblem{ID: id, Err: "conditions are not a JSON list: " + err.Error()})
-				continue
+			row := rules.StoredRule{ID: id, Action: action, Conditions: text}
+			if account.Valid {
+				row.Account = &account.String
 			}
-			for _, c := range conditions {
-				if c.Op != "re" {
-					continue
-				}
-				var pattern string
-				if err := json.Unmarshal(c.Value, &pattern); err != nil {
-					problems = append(problems, ruleProblem{ID: id, Field: c.Field, Err: "pattern is not a string"})
-					continue
-				}
-				if _, err := regexp.Compile(pattern); err != nil {
-					problems = append(problems, ruleProblem{ID: id, Field: c.Field, Pattern: pattern, Err: err.Error()})
-				}
+			if dest.Valid {
+				row.Dest = &dest.String
+			}
+			if err := rules.ValidateStored(row); err != nil {
+				field, pattern := offendingCondition(text)
+				problems = append(problems, ruleProblem{ID: id, Field: field, Pattern: pattern, Err: err.Error()})
 			}
 		}
 		return rows.Err()
@@ -227,8 +221,26 @@ func validateRules(ctx context.Context, q db.Querier) error {
 	for i, p := range problems {
 		lines[i] = fmt.Sprintf("rule %s: field %s: pattern %s: %s", p.ID, p.Field, p.Pattern, p.Err)
 	}
-	return fmt.Errorf("db import-v1: %d stored rule pattern(s) do not compile under RE2; nothing was imported:\n  %s",
+	return fmt.Errorf("db import-v1: %d stored rule(s) are invalid; nothing was imported:\n  %s",
 		len(problems), strings.Join(lines, "\n  "))
+}
+
+func offendingCondition(text string) (field, pattern string) {
+	var conditions []storedCondition
+	if err := json.Unmarshal([]byte(text), &conditions); err != nil {
+		return "", ""
+	}
+	for _, c := range conditions {
+		if c.Op == "re" {
+			var p string
+			_ = json.Unmarshal(c.Value, &p)
+			return c.Field, p
+		}
+	}
+	if len(conditions) > 0 {
+		return conditions[0].Field, ""
+	}
+	return "", ""
 }
 
 func copyAccounts(ctx context.Context, src *sql.DB, tx *sql.Tx) error {

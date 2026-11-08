@@ -19,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/mime"
-	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -224,7 +223,7 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 		if !available {
 			continue
 		}
-		body, err := router.MessageBody(ctx, d.Read, r.id)
+		body, err := message.Body(ctx, d.Read, r.id)
 		if err != nil {
 			return proposed, flagged, err
 		}

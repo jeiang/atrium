@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log/slog"
 	"strings"
 	"time"
 
@@ -17,9 +16,12 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/corrections"
+	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/py"
 )
+
+var log = logx.Logger("atrium.router")
 
 var Stages = [...]string{"correction", "operator", "learned", "knn", "llm", "fallback"}
 
@@ -39,8 +41,6 @@ type LLMContext struct {
 	Available bool
 	Down      bool
 }
-
-type Judge func(ctx context.Context, url string, folders []string, catalog string, neighbors []llm.Neighbor, m llm.Message, body string) (string, bool, error)
 
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
@@ -75,17 +75,8 @@ func ReadTuning(ctx context.Context, q Querier, account string) (Tuning, error) 
 }
 
 type Router struct {
-	DB    *db.DB
-	Judge Judge
-	Now   func() float64
-	Log   *slog.Logger
-}
-
-func (r *Router) judge() Judge {
-	if r.Judge != nil {
-		return r.Judge
-	}
-	return llm.JudgeFolder
+	DB  *db.DB
+	Now func() float64
 }
 
 func (r *Router) now() float64 {
@@ -93,13 +84,6 @@ func (r *Router) now() float64 {
 		return r.Now()
 	}
 	return float64(time.Now().UnixNano()) / 1e9
-}
-
-func (r *Router) log() *slog.Logger {
-	if r.Log != nil {
-		return r.Log
-	}
-	return logx.Logger("atrium.router")
 }
 
 func Eligible(ctx context.Context, q Querier, account string) ([]rules.Message, error) {
@@ -250,31 +234,21 @@ func NewLLMContext(ctx context.Context, q Querier, account, url string, folderMi
 		args = append(args, f)
 	}
 	rows, err = q.QueryContext(ctx,
-		"SELECT folder, from_domain FROM filed_messages WHERE account = ? AND folder IN ("+
-			strings.TrimSuffix(strings.Repeat("?,", len(folders)), ",")+")", args...)
+		"SELECT folder, from_domain, COUNT(*) FROM filed_messages WHERE account = ? AND folder IN ("+
+			strings.TrimSuffix(strings.Repeat("?,", len(folders)), ",")+") AND from_domain != '' "+
+			"GROUP BY folder, from_domain", args...)
 	if err != nil {
 		return LLMContext{}, err
 	}
 	senders, err := db.Collect(rows, func(r *sql.Rows) (llm.FolderSender, error) {
 		var s llm.FolderSender
-		err := r.Scan(&s.Folder, &s.FromDomain)
+		err := r.Scan(&s.Folder, &s.FromDomain, &s.N)
 		return s, err
 	})
 	if err != nil {
 		return LLMContext{}, err
 	}
 	return LLMContext{URL: url, Folders: folders, Catalog: llm.FolderCatalog(ctx, senders), Available: true}, nil
-}
-
-func MessageBody(ctx context.Context, q interface {
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}, id int64) (string, error) {
-	var body sql.NullString
-	err := q.QueryRowContext(ctx, "SELECT body FROM message_fts WHERE rowid = ?", id).Scan(&body)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	return body.String, err
 }
 
 func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleList []rules.Rule, lc *LLMContext, t Tuning) (*Decision, error) {
@@ -287,21 +261,21 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 		return nil, err
 	}
 	if corrected != nil {
-		return &Decision{Stage: "correction", Action: "file", Dest: new(corrected.Folder), Key: new(corrected.Source), Confidence: new(1.0)}, nil
+		return &Decision{Stage: "correction", Action: string(rules.ActionFile), Dest: new(corrected.Folder), Key: new(corrected.Source), Confidence: new(1.0)}, nil
 	}
 	rule, err := rules.FirstMatch(m, ruleList, r.now())
 	if err != nil {
 		return nil, err
 	}
 	if rule != nil {
-		return &Decision{Stage: "operator", Action: rule.Action, Dest: rule.Dest, Key: new(rule.ID)}, nil
+		return &Decision{Stage: "operator", Action: string(rule.Action), Dest: rule.Dest, Key: new(rule.ID)}, nil
 	}
 	learned, err := rules.LearnedMatch(ctx, q, m, t.Learned)
 	if err != nil {
 		return nil, err
 	}
 	if learned != nil {
-		return &Decision{Stage: "learned", Action: "file", Dest: new(learned.Dest), Key: new(learned.Level), Confidence: new(learned.Purity),
+		return &Decision{Stage: "learned", Action: string(rules.ActionFile), Dest: new(learned.Dest), Key: new(learned.Level), Confidence: new(learned.Purity),
 			Detail: py.Dict{{Key: "n", Value: learned.N}}}, nil
 	}
 	if !m.Embedded {
@@ -312,13 +286,13 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 		return nil, err
 	}
 	if folder, share, ok := Vote(neighbors[:min(t.KNNK, len(neighbors))]); ok && share >= t.KNNMinShare {
-		return &Decision{Stage: "knn", Action: "file", Dest: new(folder), Key: new("vote"), Confidence: new(share)}, nil
+		return &Decision{Stage: "knn", Action: string(rules.ActionFile), Dest: new(folder), Key: new("vote"), Confidence: new(share)}, nil
 	}
 	if len(neighbors) > 0 && lc.Available {
 		if lc.Down {
 			return nil, nil
 		}
-		body, err := MessageBody(ctx, q, m.ID)
+		body, err := message.Body(ctx, q, m.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -326,27 +300,26 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 		for i := range near {
 			near[i] = llm.Neighbor{Folder: neighbors[i].Folder, FromDomain: neighbors[i].FromDomain, Subject: neighbors[i].Subject}
 		}
-		folder, confident, err := r.judge()(ctx, lc.URL, lc.Folders, lc.Catalog, near,
+		folder, confident, err := llm.JudgeFolder(ctx, lc.URL, lc.Folders, lc.Catalog, near,
 			llm.Message{Subject: m.Subject, FromName: m.FromName, FromAddr: m.FromAddr}, body)
 		if err != nil {
 			return nil, err
 		}
 		if folder != llm.Uncertain {
-			return &Decision{Stage: "llm", Action: "file", Dest: new(folder), Key: new("chat"), Detail: py.Dict{{Key: "confident", Value: confident}}}, nil
+			return &Decision{Stage: "llm", Action: string(rules.ActionFile), Dest: new(folder), Key: new("chat"), Detail: py.Dict{{Key: "confident", Value: confident}}}, nil
 		}
 	}
 	if t.Uncertain != "" {
-		return &Decision{Stage: "fallback", Action: "file", Dest: new(t.Uncertain)}, nil
+		return &Decision{Stage: "fallback", Action: string(rules.ActionFile), Dest: new(t.Uncertain)}, nil
 	}
-	return &Decision{Stage: "fallback", Action: "none"}, nil
+	return &Decision{Stage: "fallback", Action: string(rules.ActionNone)}, nil
 }
 
 func (r *Router) Record(ctx context.Context, m *rules.Message, d *Decision) error {
-	_, err := r.DB.Write.ExecContext(ctx,
-		"INSERT INTO decisions (message_id, account, ts, stage, key, action, dest, confidence, detail) "+
-			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		m.ID, m.Account, r.now(), d.Stage, deref(d.Key), d.Action, deref(d.Dest), derefFloat(d.Confidence), py.JSONDumps(d.Detail))
-	return err
+	return message.RecordDecision(ctx, r.DB.Write, message.DecisionRecord{
+		MessageID: m.ID, Account: m.Account, TS: r.now(), Stage: d.Stage, Key: d.Key, Action: d.Action, Dest: d.Dest,
+		Confidence: d.Confidence, Detail: d.Detail,
+	})
 }
 
 func deref(s *string) any {
@@ -394,7 +367,7 @@ func (r *Router) RouteAccount(ctx context.Context, account string) (int, error) 
 		d, err := r.Decide(ctx, r.DB.KNN, m, ruleList, &lc, tune)
 		var unavailable *httpx.ServiceUnavailable
 		if errors.As(err, &unavailable) {
-			r.log().Warn(fmt.Sprintf("chat unavailable, deferring %s: %s", account, unavailable))
+			log.Warn(fmt.Sprintf("chat unavailable, deferring %s: %s", account, unavailable))
 			lc.Down = true
 			continue
 		}

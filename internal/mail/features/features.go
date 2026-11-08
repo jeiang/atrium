@@ -117,7 +117,7 @@ func prefix(s string, n int) string {
 	return s
 }
 
-func SubjectTemplate(subject string) string {
+func subjectTemplate(subject string) string {
 	s := py.Strip(subject)
 	for {
 		n := sub(replyPrefixRE, "", s)
@@ -136,7 +136,7 @@ func SubjectTemplate(subject string) string {
 	return py.Strip(sub(spaceRE, " ", s))
 }
 
-func DomainOf(addr string) string {
+func domainOf(addr string) string {
 	i := strings.LastIndex(addr, "@")
 	if i < 0 {
 		return ""
@@ -150,7 +150,7 @@ func StripMarkup(text string) string {
 	return py.Strip(sub(spaceRE, " ", html.UnescapeString(text)))
 }
 
-func FilenamePattern(name string) string { return sub(digitsRE, "#", strings.ToLower(name)) }
+func filenamePattern(name string) string { return sub(digitsRE, "#", strings.ToLower(name)) }
 
 func NormalizeMsgID(value string) string { return sub(msgidStripRE, "", value) }
 
@@ -276,7 +276,7 @@ func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, 
 	for _, a := range attachments {
 		types[a.Type] = true
 		if a.Name != "" {
-			names[FilenamePattern(a.Name)] = true
+			names[filenamePattern(a.Name)] = true
 		}
 	}
 	attNames := sortedSet(names)
@@ -290,18 +290,18 @@ func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, 
 	msgid := NormalizeMsgID(msg.Header("Message-ID"))
 	f := Features{
 		MsgID:       msgid,
-		MsgIDDomain: DomainOf(msgid),
+		MsgIDDomain: domainOf(msgid),
 		InReplyTo:   strings.Join(MsgIDList(msg.Header("In-Reply-To")), " "),
 		Refs:        strings.Join(MsgIDList(msg.Header("References")), " "),
 		DateTS:      dateTS,
 		FromAddr:    addr,
-		FromDomain:  DomainOf(addr),
+		FromDomain:  domainOf(addr),
 		FromName:    fromName,
 		ToAddrs:     sortedSet(to),
 		ListID:      strings.ToLower(py.Strip(msg.Header("List-Id"))),
 		Precedence:  strings.ToLower(py.Strip(msg.Header("Precedence"))),
 		Subject:     subject,
-		SubjectTmpl: SubjectTemplate(subject),
+		SubjectTmpl: subjectTemplate(subject),
 		DKIMD:       sortedSet(dkim),
 		ESP:         espOf(msg),
 		AttTypes:    sortedSet(types),
@@ -315,7 +315,7 @@ func Extract(header, text []byte, attachments []Attachment, fallbackTS float64, 
 		f.ReplyTo = replyTo[0]
 	}
 	if len(rpath) > 0 {
-		f.RPathDomain = DomainOf(rpath[0])
+		f.RPathDomain = domainOf(rpath[0])
 	}
 	return f
 }

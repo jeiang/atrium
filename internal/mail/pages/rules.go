@@ -118,7 +118,7 @@ func (s *service) rulesPage(w http.ResponseWriter, r *http.Request) {
 func (s *service) ruleNew(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	account := web.QueryValue(q, "account")
-	rule := ruleView{Action: rules.ActionFile, When: []map[string]any{}}
+	rule := ruleView{Action: string(rules.ActionFile), When: []map[string]any{}}
 	if account != "" {
 		rule.Account = &account
 	}
@@ -177,7 +177,7 @@ type ruleForm struct {
 
 func readRuleForm(form url.Values) ruleForm {
 	return ruleForm{
-		account: web.FormString(form, "account", ""), action: web.FormString(form, "action", rules.ActionFile), dest: web.FormString(form, "dest", ""),
+		account: web.FormString(form, "account", ""), action: web.FormString(form, "action", string(rules.ActionFile)), dest: web.FormString(form, "dest", ""),
 		fields: form["field"], ops: form["op"], values: form["value"],
 	}
 }
@@ -219,7 +219,7 @@ func (f ruleForm) raw() map[string]any {
 	if f.account != "" {
 		account = f.account
 	}
-	if f.action != rules.ActionDelete && f.dest != "" {
+	if rules.Action(f.action) != rules.ActionDelete && f.dest != "" {
 		dest = f.dest
 	}
 	return map[string]any{"account": account, "action": f.action, "dest": dest, "when": conditionList(f.fields, f.ops, f.values)}
