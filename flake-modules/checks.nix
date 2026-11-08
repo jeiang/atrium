@@ -60,6 +60,7 @@
       {chatUrl = "x";}
       {embedUrl = "x";}
       {publicUrl = "x";}
+      {grafanaUrl = "x";}
       {timeZone = "UTC";}
       {icloudAppleId = "x";}
       {extraEnvironment = {};}
