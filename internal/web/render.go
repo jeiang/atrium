@@ -75,6 +75,9 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 		SettingsURL: settingsURL,
 		BrandURL:    brandURL,
 		Footer:      footer,
+		Path:        r.URL.Path,
+		Theme:       themeOf(r),
+		Rail:        cookieValue(r, railCookie, false) == "1",
 		Data:        data,
 	}
 	rd.mu.Lock()
@@ -86,6 +89,20 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 		}
 	}
 	return f, nil
+}
+
+const (
+	themeCookie = "atrium_theme"
+	railCookie  = "atrium_rail"
+)
+
+func themeOf(r *http.Request) string {
+	switch v := cookieValue(r, themeCookie, false); v {
+	case "light", "dark":
+		return v
+	default:
+		return "system"
+	}
 }
 
 func (rd *Renderer) navFor(page string) ([]tpl.NavGroup, []tpl.NavItem, string, string, []tpl.NavItem) {

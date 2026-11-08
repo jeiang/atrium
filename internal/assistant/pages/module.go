@@ -113,6 +113,7 @@ func Module(o Options) web.Module {
 			reg = made
 		}
 		p := &pages{deps: d, svc: svc, now: now, poll: poll, keepalive: keepalive, reg: reg}
+		d.OnFrame(p.sidebar)
 		tz := config.From(base).TZName(d.Env)
 		stamp := now()
 		if err := d.DB.WithTx(base, func(tx *sql.Tx) error {

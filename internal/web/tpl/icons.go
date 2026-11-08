@@ -80,6 +80,12 @@ var icons = map[string]template.HTML{
 	"archive-restore": `<rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h2"/><path d="M20 8v11a2 2 0 0 1-2 2h-2"/><path d="m9 15 3-3 3 3"/><path d="M12 12v9"/>`,
 	"clock":           `<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>`,
 	"history":         `<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/>`,
+	"sun":             `<circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m6.34 17.66-1.41 1.41"/><path d="m19.07 4.93-1.41 1.41"/>`,
+	"moon":            `<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>`,
+	"monitor":         `<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>`,
+	"chevron-right":   `<path d="m9 18 6-6-6-6"/>`,
+	"menu":            `<path d="M4 12h16"/><path d="M4 6h16"/><path d="M4 18h16"/>`,
+	"square-pen":      `<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/>`,
 }
 
 func icon(name string, class ...any) (template.HTML, error) {
@@ -92,6 +98,6 @@ func icon(name string, class ...any) (template.HTML, error) {
 		extra = str(class[0])
 	}
 	return template.HTML(`<svg class="lucide lucide-` + html.EscapeString(name) + ` ` + html.EscapeString(extra) +
-		`" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">` +
+		`" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">` +
 		string(paths) + `</svg>`), nil
 }

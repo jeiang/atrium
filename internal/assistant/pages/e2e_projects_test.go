@@ -167,7 +167,7 @@ func TestProjectPageListsItsThreadsPinnedFirst(t *testing.T) {
 	s.newThread("Newer", project)
 	s.newThread("Elsewhere", 0)
 	status(t, s.post(fmt.Sprintf("/chat/%d/pin", older), url.Values{"pinned": {"1"}}), http.StatusSeeOther)
-	page := status(t, s.get(fmt.Sprintf("/projects/%d", project)), http.StatusOK)
+	page := mainOf(status(t, s.get(fmt.Sprintf("/projects/%d", project)), http.StatusOK))
 	mustContain(t, page, fmt.Sprintf(`id="thread-%d-pin"`, older), fmt.Sprintf(`id="thread-%d-archive"`, older), fmt.Sprintf(`id="thread-%d-pin"`, older+1), fmt.Sprintf(`id="thread-%d-archive"`, older+1))
 	mustNotContain(t, page, "Elsewhere")
 	if strings.Index(page, "Older") > strings.Index(page, "Newer") || !strings.Contains(page, `aria-label="Pinned"`) {
@@ -176,16 +176,22 @@ func TestProjectPageListsItsThreadsPinnedFirst(t *testing.T) {
 	pinned := status(t, s.post(fmt.Sprintf("/chat/%d/pin", older+1), url.Values{"pinned": {"1"}, "project_id": {strconv.FormatInt(project, 10)}}, hx, "true"), http.StatusOK)
 	mustContain(t, pinned, "Newer")
 	mustNotContain(t, pinned, "Elsewhere")
-	listing := status(t, s.get("/chat"), http.StatusOK)
+	full := status(t, s.get("/chat"), http.StatusOK)
+	listing := mainOf(full)
 	if n := strings.Count(listing, "Kitchen"); n != 2 {
 		t.Errorf("chat list names the project %d times, want 2", n)
 	}
-	mustContain(t, listing, "Elsewhere", `href="/projects"`)
+	mustContain(t, listing, "Elsewhere")
+	mustContain(t, full, `href="/projects"`)
 	emptyArchived := status(t, s.get(fmt.Sprintf("/projects/%d?view=archived", project)), http.StatusOK)
 	mustContain(t, emptyArchived, "Nothing archived", `name="view" value="archived"`)
 	status(t, s.post(fmt.Sprintf("/chat/%d/archive", older), url.Values{"archived": {"1"}, "project_id": {strconv.FormatInt(project, 10)}}), http.StatusSeeOther)
 	archivedView := status(t, s.get(fmt.Sprintf("/projects/%d?view=archived", project)), http.StatusOK)
 	mustContain(t, archivedView, "Older", fmt.Sprintf(`id="thread-%d-archive"`, older))
+}
+
+func mainOf(page string) string {
+	return page[strings.Index(page, `id="content"`):]
 }
 
 func TestThreadsMoveIntoAndOutOfAProjectAndTakeItsDefaults(t *testing.T) {

@@ -1,33 +1,13 @@
 {{define "title"}}Chat{{end}}
 {{define "heading"}}Chat{{end}}
+{{define "content_class"}}chat-content{{end}}
 {{define "content"}}{{$d := .Data}}
-<div class="flex min-h-[calc(100dvh-6.5rem)] flex-col gap-4 md:min-h-[calc(100dvh-7.5rem)]">
-  <form id="thread-search" action="/chat" method="get" role="search" class="flex flex-col gap-2 sm:flex-row sm:items-center"
-        hx-get="/chat" hx-target="#threads" hx-replace-url="true" hx-sync="this:replace" hx-indicator="#thread-spinner"
-        hx-trigger="input changed delay:250ms from:#thread-q, search from:#thread-q, submit">
-    <input type="hidden" name="view" value="{{$d.View}}">
-    <div role="group" class="field flex-1">
-      <label for="thread-q" class="sr-only">Search threads</label>
-      <div class="input-group h-9">
-        {{icon "search" "size-4 text-muted-foreground"}}
-        <input id="thread-q" name="q" type="search" value="{{$d.Q}}" placeholder="Search threads" autocomplete="off" data-search-input>
-        {{template "spinner" (dict "id" "thread-spinner" "label" "Searching")}}
-      </div>
-    </div>
-    <nav class="button-group" aria-label="Thread view">
-      <a class="btn" data-size="sm" data-variant="{{if $d.View}}outline{{else}}secondary{{end}}" href="/chat">Active</a>
-      <a class="btn" data-size="sm" data-variant="{{if $d.View}}secondary{{else}}outline{{end}}" href="/chat?view=archived">Archived</a>
-    </nav>
-    <noscript><button type="submit" class="btn" data-variant="outline">Search</button></noscript>
-  </form>
-  <div id="threads" class="flex flex-col gap-3">
-    {{template "chat_thread_list" (dict "threads" $d.Threads "q" $d.Q "view" $d.View "project_id" $d.ProjectID)}}
-  </div>
+<div class="reading gap-8 pt-10 pb-16 md:pt-16">
   <form method="post" action="/chat" enctype="multipart/form-data" hx-post="/chat" hx-encoding="multipart/form-data" hx-swap="none" hx-disabled-elt="find button[type=submit]"
-        class="sticky bottom-0 z-10 mt-auto flex flex-col gap-2 rounded-lg border bg-card p-3 shadow-sm" data-reset data-attach>
+        class="composer" data-reset data-attach>
     <input type="hidden" name="csrf_token" value="{{.CSRF}}">
     <label for="new-text" class="sr-only">New thread</label>
-    <textarea id="new-text" name="text" rows="2" class="textarea w-full" placeholder="Message the assistant" data-submit-on-enter autofocus></textarea>
+    <textarea id="new-text" name="text" rows="3" placeholder="Message the assistant" data-submit-on-enter autofocus></textarea>
     {{template "attach_field"}}
     <div class="flex flex-wrap items-center gap-2 text-xs">
       {{template "attach_button"}}
@@ -35,5 +15,28 @@
       <button type="submit" class="btn ms-auto" data-size="sm">{{icon "send"}}Start</button>
     </div>
   </form>
+  <section class="flex flex-col gap-3" aria-label="Threads">
+    <form id="thread-search" action="/chat" method="get" role="search" class="flex flex-col gap-2 sm:flex-row sm:items-center"
+          hx-get="/chat" hx-target="#threads" hx-replace-url="true" hx-sync="this:replace" hx-indicator="#thread-spinner"
+          hx-trigger="input changed delay:250ms from:#thread-q, search from:#thread-q, submit">
+      <input type="hidden" name="view" value="{{$d.View}}">
+      <div role="group" class="field flex-1">
+        <label for="thread-q" class="sr-only">Search threads</label>
+        <div class="input-group h-9">
+          {{icon "search" "size-4 text-muted-foreground"}}
+          <input id="thread-q" name="q" type="search" value="{{$d.Q}}" placeholder="Search threads" autocomplete="off" data-search-input>
+          {{template "spinner" (dict "id" "thread-spinner" "label" "Searching")}}
+        </div>
+      </div>
+      <nav class="button-group" aria-label="Thread view">
+        <a class="btn" data-size="sm" data-variant="{{if $d.View}}outline{{else}}secondary{{end}}" href="/chat">Active</a>
+        <a class="btn" data-size="sm" data-variant="{{if $d.View}}secondary{{else}}outline{{end}}" href="/chat?view=archived">Archived</a>
+      </nav>
+      <noscript><button type="submit" class="btn" data-variant="outline">Search</button></noscript>
+    </form>
+    <div id="threads" class="flex flex-col gap-5">
+      {{template "chat_thread_list" (dict "threads" $d.Threads "q" $d.Q "view" $d.View "project_id" $d.ProjectID)}}
+    </div>
+  </section>
 </div>
 {{end}}

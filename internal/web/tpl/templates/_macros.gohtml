@@ -1,19 +1,10 @@
 {{define "mode_badge"}}{{$paused := opt . "paused" false -}}
 {{if and (eq .mode "live") $paused -}}
-<span class="badge border-warning/30 bg-warning/10 text-warning">{{icon "lock"}}Live, paused</span>
+<span class="badge border-warning/30 bg-warning/10 text-warning" title="Routing is recorded; no mail is changed">{{icon "lock"}}Live, paused</span>
 {{- else if eq .mode "live" -}}
-<span class="badge" data-variant="destructive">{{icon "zap"}}Live</span>
+<span class="badge" data-variant="destructive" title="atrium files, flags and trashes mail by your rules">{{icon "zap"}}Live</span>
 {{- else -}}
-<span class="badge border-warning/30 bg-warning/10 text-warning">{{icon "eye-off"}}Shadow</span>
-{{- end}}{{end}}
-
-{{define "mode_note"}}{{$paused := opt . "paused" false -}}
-{{if and (eq .mode "live") $paused -}}
-Paused: routing is recorded but no mail is changed. Resume to apply it.
-{{- else if eq .mode "live" -}}
-Live mode: atrium files read mail, flags unread mail from your contacts and trashes mail your deletion rules match.
-{{- else -}}
-Shadow mode: nothing is changed automatically. Proposals you approve still run.
+<span class="badge border-warning/30 bg-warning/10 text-warning" title="Nothing changes automatically; approved proposals still run">{{icon "eye-off"}}Shadow</span>
 {{- end}}{{end}}
 
 {{define "action_badge"}}{{$badge := badge "action" .Status -}}

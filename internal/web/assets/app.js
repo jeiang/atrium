@@ -1,9 +1,34 @@
-(() => {
-  const dark = window.matchMedia("(prefers-color-scheme: dark)");
-  const apply = () => document.documentElement.classList.toggle("dark", dark.matches);
-  apply();
-  dark.addEventListener("change", apply);
-})();
+const THEME_COOKIE = "atrium_theme";
+const RAIL_COOKIE = "atrium_rail";
+const systemDark = window.matchMedia("(prefers-color-scheme: dark)");
+
+const setCookie = (name, value) => {
+  const secure = location.protocol === "https:" ? "; Secure" : "";
+  document.cookie = `${name}=${value}; Path=/; Max-Age=31536000; SameSite=Lax${secure}`;
+};
+
+const applyTheme = () => {
+  const root = document.documentElement;
+  const theme = root.dataset.theme || "system";
+  root.classList.toggle("dark", theme === "dark" || (theme === "system" && systemDark.matches));
+};
+applyTheme();
+systemDark.addEventListener("change", applyTheme);
+
+const sidebarOpen = (open) => {
+  const sidebar = document.getElementById("sidebar");
+  if (!sidebar) return;
+  sidebar.toggleAttribute("data-open", open);
+  document.getElementById("sidebar-backdrop")?.toggleAttribute("data-open", open);
+  const toggle = document.getElementById("nav-toggle");
+  toggle?.setAttribute("aria-expanded", String(open));
+  if (open) sidebar.querySelector("a, button")?.focus();
+  else toggle?.focus();
+};
+
+window.matchMedia("(min-width: 768px)").addEventListener("change", (event) => {
+  if (event.matches && document.getElementById("sidebar")?.hasAttribute("data-open")) sidebarOpen(false);
+});
 
 document.addEventListener("htmx:configRequest", (event) => {
   if (event.detail.verb !== "get") return;
@@ -156,20 +181,30 @@ document.addEventListener("keydown", (event) => {
     event.preventDefault();
     event.target.form.requestSubmit();
   }
-  const nav = document.getElementById("sidebar");
-  if (event.key === "Escape" && nav && nav.close && window.innerWidth < 768 && nav.getAttribute("aria-hidden") === "false") {
-    nav.close();
-    document.getElementById("nav-toggle")?.focus();
-  }
+  if (event.key === "Escape" && document.getElementById("sidebar")?.hasAttribute("data-open")) sidebarOpen(false);
 });
 
 const actions = {
-  "toggle-sidebar": () => {
-    const sidebar = document.getElementById("sidebar");
-    if (!sidebar || !sidebar.toggle) return;
-    sidebar.toggle();
-    if (window.innerWidth < 768 && sidebar.getAttribute("aria-hidden") === "false") sidebar.querySelector("a")?.focus();
+  "set-theme": (button) => {
+    const theme = button.dataset.themeValue;
+    document.documentElement.dataset.theme = theme;
+    document.querySelector('meta[name="color-scheme"]')?.setAttribute("content", theme === "system" ? "light dark" : theme);
+    document.querySelectorAll('[data-action="set-theme"]').forEach((other) => other.setAttribute("aria-pressed", String(other === button)));
+    setCookie(THEME_COOKIE, theme);
+    applyTheme();
   },
+  "toggle-rail": (button) => {
+    const sidebar = document.getElementById("sidebar");
+    const rail = sidebar.dataset.rail !== "true";
+    const label = rail ? "Expand sidebar" : "Collapse sidebar";
+    sidebar.dataset.rail = String(rail);
+    button.setAttribute("aria-expanded", String(!rail));
+    button.setAttribute("aria-label", label);
+    button.title = label;
+    setCookie(RAIL_COOKIE, rail ? "1" : "0");
+  },
+  "open-sidebar": () => sidebarOpen(true),
+  "close-sidebar": () => sidebarOpen(false),
   "close-dialog": (button) => button.closest("dialog")?.close(),
   "copy-value": async (button) => {
     const text = document.getElementById(button.dataset.target)?.textContent || "";
@@ -356,7 +391,7 @@ const panelOpen = (open, opener = document.activeElement, restoreFocus = true) =
   if (open && mobile) {
     panel.setAttribute("role", "dialog");
     panel.setAttribute("aria-modal", "true");
-    ["#thread", "#panel-handle", "main > header", "#sidebar"].forEach((selector) => {
+    ["#thread", "#panel-handle", ".topbar", "#sidebar"].forEach((selector) => {
       const target = document.querySelector(selector);
       if (!target) return;
       if (!panelInert.has(target)) panelInert.set(target, target.hasAttribute("inert"));

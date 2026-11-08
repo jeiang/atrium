@@ -12,34 +12,34 @@
 {{else if .q}}
 {{template "empty_state" (dict "icon_name" "search" "title" "Nothing matches" "body" (partial "chat_search_empty_body" .q))}}
 {{else if eq .view "archived"}}
-{{template "empty_state" (dict "icon_name" "archive" "title" "Nothing archived" "body" "Archive a thread from the list or its header to tuck it away.")}}
+{{template "empty_state" (dict "icon_name" "archive" "title" "Nothing archived")}}
 {{else}}
-{{template "empty_state" (dict "icon_name" "messages-square" "title" "No threads yet" "body" (ternary $project_id "Start one below." "Start one below. Scheduled runs live under Scheduled."))}}
+{{template "empty_state" (dict "icon_name" "messages-square" "title" "No threads yet")}}
 {{end}}
 {{- end}}
 
 {{define "chat_search_empty_body"}}No thread mentions “{{.}}”.{{end}}
 
 {{define "chat_thread_group"}}{{$project_id := .project_id}}
-<section class="flex flex-col gap-2" aria-label="{{.title}}">
-  <h2 class="px-1 text-xs font-medium uppercase tracking-wide text-muted-foreground" tabindex="-1" data-focus-fallback>{{.title}}</h2>
-  <ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list">
+<section class="flex flex-col gap-1" aria-label="{{.title}}">
+  <h2 class="eyebrow px-2" tabindex="-1" data-focus-fallback>{{.title}}</h2>
+  <ul class="flex flex-col" role="list">
     {{range .items}}{{template "chat_thread_row" (dict "t" . "project_id" $project_id)}}{{end}}
   </ul>
 </section>
 {{- end}}
 
 {{define "chat_thread_row"}}{{$t := .t}}{{$project_id := .project_id}}
-<li class="flex items-center gap-1 pe-2 hover:bg-accent">
-  <a href="/chat/{{$t.ID}}" class="flex min-w-0 flex-1 flex-col gap-1 px-4 py-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-    <span class="flex items-center gap-2">
-      <span class="truncate text-sm font-medium">{{or (str $t.Title) "Untitled thread"}}</span>
+<li class="group flex items-center gap-1 rounded-lg pe-1 hover:bg-surface-2">
+  <a href="/chat/{{$t.ID}}" class="flex min-w-0 flex-1 items-center gap-3 rounded-lg px-2 py-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+    <span class="flex min-w-0 items-center gap-2">
+      <span class="truncate text-sm text-ink">{{or (str $t.Title) "Untitled thread"}}</span>
       {{template "run_badge" (str $t.RunState)}}
       {{if and $t.ProjectName (not $project_id)}}<span class="badge truncate" data-variant="outline">{{icon "folder" "size-3"}}{{str $t.ProjectName}}</span>{{end}}
     </span>
-    <span class="flex gap-3 text-xs text-muted-foreground tabular-nums">
+    <span class="ms-auto flex shrink-0 gap-3 text-xs text-ink-3 tabular-nums">
+      <span class="max-sm:hidden">${{printf "%.3f" $t.Cost}}</span>
       <span>{{template "when" (dict "epoch" $t.UpdatedAt "style" "datetime")}}</span>
-      <span>${{printf "%.3f" $t.Cost}}</span>
     </span>
   </a>
   {{if not $t.Archived}}

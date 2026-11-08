@@ -74,7 +74,29 @@ type Frame struct {
 	SettingsURL       string
 	BrandURL          string
 	Footer            []NavItem
+	Path              string
+	Theme             string
+	Rail              bool
+	Threads           *SidebarThreads
 	Data              any
+}
+
+type SidebarThreads struct {
+	Pinned   []SidebarThread
+	Dated    []SidebarGroup
+	Projects []SidebarGroup
+}
+
+type SidebarGroup struct {
+	Label   string
+	URL     string
+	Threads []SidebarThread
+}
+
+type SidebarThread struct {
+	URL     string
+	Title   string
+	Running bool
 }
 
 type AuthView struct {
