@@ -1,7 +1,6 @@
 package embed
 
 import (
-	"cmp"
 	"context"
 	"database/sql"
 	"encoding/json"
@@ -9,17 +8,15 @@ import (
 	"fmt"
 	"log/slog"
 	"math"
-	"slices"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
-	Model  = "embeddinggemma"
 	KNNMax = 4096
 
 	VisibilityPublic  = "public"
@@ -30,48 +27,22 @@ var log = logx.Logger("atrium.embed")
 
 type TextsFunc func(ctx context.Context, url string, texts []string) ([][]float64, error)
 
-type Options struct {
-	Model     string
-	BodyChars int
-	Batch     int
-	Dim       int
-}
-
-type optionsKey struct{}
-
-func WithOptions(ctx context.Context, o Options) context.Context {
-	return context.WithValue(ctx, optionsKey{}, o)
-}
-
-func options(ctx context.Context) Options {
-	o, _ := ctx.Value(optionsKey{}).(Options)
-	if o.Model == "" {
-		o.Model = Model
-	}
-	if o.BodyChars <= 0 {
-		o.BodyChars = config.EmbedBodyChars
-	}
-	if o.Batch <= 0 {
-		o.Batch = config.EmbedBatch
-	}
-	if o.Dim <= 0 {
-		o.Dim = config.EmbedDim
-	}
-	return o
-}
-
 func DocumentText(ctx context.Context, subject, name, addr, body string) string {
 	if subject == "" {
 		subject = "none"
 	}
-	return "title: " + subject + " | text: From: " + name + " <" + addr + ">\n\n" + py.Clip(body, options(ctx).BodyChars)
+	from := addr
+	if name != "" {
+		from = name + " <" + addr + ">"
+	}
+	return "title: " + subject + " | text: From: " + from + "\n\n" + py.Clip(body, endpoint.From(ctx).EmbedBodyChars)
 }
 
-func NotionDocumentText(title, path, markdown string) string {
+func NotionDocumentText(ctx context.Context, title, path, markdown string) string {
 	if title == "" {
 		title = "none"
 	}
-	return "title: " + title + " | text: " + path + "\n\n" + py.Clip(markdown, config.EmbedBodyChars)
+	return "title: " + title + " | text: " + path + "\n\n" + py.Clip(markdown, endpoint.From(ctx).EmbedBodyChars)
 }
 
 func QueryText(query string) string {
@@ -83,90 +54,39 @@ type embeddingsRequest struct {
 	Input []string `json:"input"`
 }
 
+type embeddingsReply struct {
+	Data []struct {
+		Index     int       `json:"index"`
+		Embedding []float64 `json:"embedding"`
+	} `json:"data"`
+}
+
 func Texts(ctx context.Context, url string, texts []string) ([][]float64, error) {
-	raw, err := httpx.PostJSON(ctx, url+"/embeddings", embeddingsRequest{options(ctx).Model, texts})
+	s := endpoint.From(ctx)
+	raw, err := httpx.PostJSON(ctx, url+"/embeddings", embeddingsRequest{s.EmbedModel, texts})
 	if err != nil {
 		return nil, err
 	}
-	var reply any
+	var reply embeddingsReply
 	if err := json.Unmarshal(raw, &reply); err != nil {
 		return nil, fmt.Errorf("%w: %w", httpx.ErrPayload, err)
 	}
-	data, err := httpx.Key(reply, "data")
-	if err != nil {
-		return nil, err
+	if len(reply.Data) != len(texts) {
+		return nil, fmt.Errorf("%w: embedding response has %d vectors for %d texts", httpx.ErrPayload, len(reply.Data), len(texts))
 	}
-	items, ok := data.([]any)
-	if !ok {
-		return nil, fmt.Errorf("%w: embeddings data is %s, not list", httpx.ErrShape, httpx.TypeName(data))
-	}
-	type entry struct {
-		index float64
-		item  any
-	}
-	entries := make([]entry, len(items))
-	for i, item := range items {
-		d, ok := item.(map[string]any)
-		if !ok {
-			return nil, fmt.Errorf("%w: '%s' object has no attribute 'get'", httpx.ErrShape, httpx.TypeName(item))
+	out := make([][]float64, len(texts))
+	seen := make([]bool, len(texts))
+	for _, entry := range reply.Data {
+		if entry.Index < 0 || entry.Index >= len(texts) || seen[entry.Index] {
+			return nil, fmt.Errorf("%w: embedding response index %d is out of range or repeated", httpx.ErrPayload, entry.Index)
 		}
-		entries[i].item = item
-		if idx, ok := d["index"]; ok {
-			n, ok := idx.(float64)
-			if !ok {
-				return nil, fmt.Errorf("%w: embeddings index is %s", httpx.ErrShape, httpx.TypeName(idx))
-			}
-			entries[i].index = n
+		if len(entry.Embedding) != s.Dim {
+			return nil, fmt.Errorf("%w: embedding response shape mismatch: expected %dx%d", httpx.ErrPayload, len(texts), s.Dim)
 		}
-	}
-	slices.SortStableFunc(entries, func(a, b entry) int { return cmp.Compare(a.index, b.index) })
-	vectors := make([]any, len(entries))
-	for i, e := range entries {
-		if vectors[i], err = httpx.Key(e.item, "embedding"); err != nil {
-			return nil, err
-		}
-	}
-	dim := options(ctx).Dim
-	shape := fmt.Errorf("%w: embedding response shape mismatch: expected %dx%d", httpx.ErrPayload, len(texts), dim)
-	if len(vectors) != len(texts) {
-		return nil, shape
-	}
-	for _, v := range vectors {
-		n, err := pyLen(v)
-		if err != nil {
-			return nil, err
-		}
-		if n != dim {
-			return nil, shape
-		}
-	}
-	out := make([][]float64, len(vectors))
-	for i, v := range vectors {
-		list, ok := v.([]any)
-		if !ok {
-			return nil, fmt.Errorf("%w: embedding is %s, not list", httpx.ErrShape, httpx.TypeName(v))
-		}
-		vec := make([]float64, len(list))
-		for j, x := range list {
-			if vec[j], err = httpx.Float(x); err != nil {
-				return nil, err
-			}
-		}
-		out[i] = Normalize(vec)
+		seen[entry.Index] = true
+		out[entry.Index] = Normalize(entry.Embedding)
 	}
 	return out, nil
-}
-
-func pyLen(v any) (int, error) {
-	switch t := v.(type) {
-	case []any:
-		return len(t), nil
-	case map[string]any:
-		return len(t), nil
-	case string:
-		return len([]rune(t)), nil
-	}
-	return 0, fmt.Errorf("%w: object of type '%s' has no len()", httpx.ErrShape, httpx.TypeName(v))
 }
 
 func Normalize(vector []float64) []float64 {
@@ -241,7 +161,7 @@ func FillMessages(ctx context.Context, d *db.DB, url string, idx Index) (int, er
 
 func messageBatch(ctx context.Context, d *db.DB, url string, idx Index, where string, mark bool) (int, error) {
 	rows, err := d.Read.QueryContext(ctx,
-		"SELECT id, account FROM messages WHERE "+where+" AND gone_at IS NULL ORDER BY id LIMIT ?", options(ctx).Batch)
+		"SELECT id, account FROM messages WHERE "+where+" AND gone_at IS NULL ORDER BY id LIMIT ?", endpoint.From(ctx).Batch)
 	if err != nil {
 		return 0, err
 	}
@@ -340,7 +260,7 @@ func FillNotion(ctx context.Context, d *db.DB, url string, idx Index) (int, erro
 func notionBatch(ctx context.Context, d *db.DB, url string, texts TextsFunc, idx Index, where string, mark bool) (int, error) {
 	rows, err := d.Read.QueryContext(ctx,
 		"SELECT rid, title, path, markdown, private FROM notion_pages WHERE "+where+" AND in_trash = 0 ORDER BY rid LIMIT ?",
-		options(ctx).Batch)
+		endpoint.From(ctx).Batch)
 	if err != nil {
 		return 0, err
 	}
@@ -354,7 +274,7 @@ func notionBatch(ctx context.Context, d *db.DB, url string, texts TextsFunc, idx
 	}
 	docs := make([]string, len(batch))
 	for i, p := range batch {
-		docs[i] = NotionDocumentText(p.title, p.path, p.markdown)
+		docs[i] = NotionDocumentText(ctx, p.title, p.path, p.markdown)
 	}
 	vectors, err := texts(ctx, url, docs)
 	if err != nil {

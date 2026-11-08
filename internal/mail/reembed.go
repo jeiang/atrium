@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 )
 
@@ -66,11 +67,11 @@ func ReembedStep(ctx context.Context, d *db.DB, now float64) (bool, error) {
 		}
 	}
 	r := Read(ctx, d.Read)
-	opts := embed.Options{Model: target.Model, BodyChars: r.Int(KeyEmbedBodyChars), Batch: r.Int(KeyEmbedBatch), Dim: building.Dimension}
+	opts := endpoint.Settings{EmbedModel: target.Model, EmbedBodyChars: r.Int(KeyEmbedBodyChars), Batch: r.Int(KeyEmbedBatch), Dim: building.Dimension}
 	if r.Err() != nil {
 		return false, r.Err()
 	}
-	fill := embed.WithOptions(ctx, opts)
+	fill := endpoint.With(ctx, opts)
 	n, err := embed.FillMessages(fill, d, target.URL, building)
 	if err == nil && n == 0 {
 		n, err = embed.FillNotion(fill, d, target.URL, building)

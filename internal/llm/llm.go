@@ -10,15 +10,13 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
-	Model     = "qwen"
 	Uncertain = "uncertain"
-	MaxTokens = 80
 )
 
 const FolderSystem = "You file email into mail folders for the mailbox owner. You get the allowed folders with their typical sender " +
@@ -116,40 +114,10 @@ type Neighbor struct{ Folder, FromDomain, Subject string }
 
 type Message struct{ Subject, FromName, FromAddr string }
 
-type Options struct {
-	Model      string
-	MaxTokens  int
-	BodyChars  int
-	TopSenders int
-}
-
-type optionsKey struct{}
-
-func WithOptions(ctx context.Context, o Options) context.Context {
-	return context.WithValue(ctx, optionsKey{}, o)
-}
-
-func options(ctx context.Context) Options {
-	o, _ := ctx.Value(optionsKey{}).(Options)
-	if o.Model == "" {
-		o.Model = Model
-	}
-	if o.MaxTokens <= 0 {
-		o.MaxTokens = MaxTokens
-	}
-	if o.BodyChars <= 0 {
-		o.BodyChars = config.LLMBodyChars
-	}
-	if o.TopSenders <= 0 {
-		o.TopSenders = config.LLMTopSenders
-	}
-	return o
-}
-
-func BodyChars(ctx context.Context) int { return options(ctx).BodyChars }
+func BodyChars(ctx context.Context) int { return endpoint.From(ctx).LLMBodyChars }
 
 func FolderCatalog(ctx context.Context, rows []FolderSender) string {
-	topSenders := options(ctx).TopSenders
+	topSenders := endpoint.From(ctx).TopSenders
 	byFolder := map[string]map[string]int{}
 	for _, r := range rows {
 		if byFolder[r.Folder] == nil {
@@ -176,11 +144,11 @@ func FolderPrompt(ctx context.Context, catalog string, neighbors []Neighbor, m M
 	}
 	return "Allowed folders:\n" + catalog + "\n\nSimilar filed messages (folder in brackets):\n" + strings.Join(similar, "\n") + "\n\n" +
 		"Message to file:\nSubject: " + m.Subject + "\nFrom: " + m.FromName + " <" + m.FromAddr + ">\n" +
-		"Body:\n" + py.Clip(body, options(ctx).BodyChars)
+		"Body:\n" + py.Clip(body, endpoint.From(ctx).LLMBodyChars)
 }
 
 func messagePrompt(ctx context.Context, m Message, body string) string {
-	return "From: " + m.FromName + " <" + m.FromAddr + ">\nSubject: " + m.Subject + "\nBody:\n" + py.Clip(body, options(ctx).BodyChars)
+	return "From: " + m.FromName + " <" + m.FromAddr + ">\nSubject: " + m.Subject + "\nBody:\n" + py.Clip(body, endpoint.From(ctx).LLMBodyChars)
 }
 
 type chatRequest struct {
@@ -208,12 +176,12 @@ type chatMessage struct {
 }
 
 func ChatJSON(ctx context.Context, url, system, user string, schema any, maxTokens int) (json.RawMessage, error) {
-	o := options(ctx)
+	s := endpoint.From(ctx)
 	if maxTokens <= 0 {
-		maxTokens = o.MaxTokens
+		maxTokens = s.MaxTokens
 	}
 	req := chatRequest{
-		Model:       o.Model,
+		Model:       s.ChatModel,
 		Messages:    []chatMessage{{"system", system}, {"user", user}},
 		MaxTokens:   maxTokens,
 		CachePrompt: true,

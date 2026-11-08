@@ -16,6 +16,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/llm"
@@ -135,7 +136,7 @@ var probeSchema = map[string]any{
 }
 
 func probeChat(ctx context.Context, e Endpoint) (string, int) {
-	raw, err := llm.ChatJSON(llm.WithOptions(ctx, llm.Options{Model: e.Model, MaxTokens: 32}), e.URL, "Reply with JSON only.", `Return {"ok": true}.`, probeSchema, 32)
+	raw, err := llm.ChatJSON(endpoint.With(ctx, endpoint.Settings{ChatModel: e.Model, MaxTokens: 32}), e.URL, "Reply with JSON only.", `Return {"ok": true}.`, probeSchema, 0)
 	if err != nil {
 		return httpx.Message(err), 0
 	}
