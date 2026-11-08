@@ -3,14 +3,18 @@ package memorycmd
 import (
 	"fmt"
 
+	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/secrets"
 )
 
 func Command(cfgEnv config.Env) *cli.Command {
-	return &cli.Command{Name: "memory", Commands: []*cli.Command{treeCommand(cfgEnv)}}
+	return &cli.Command{Name: "memory", Commands: []*cli.Command{treeCommand(cfgEnv), workCommand(cfgEnv)}}
 }
 
 func open(env *cli.Env, cfgEnv config.Env) (*db.DB, error) {
@@ -68,4 +72,45 @@ func rootsOf(nodes []memory.Node) []memory.Node {
 		roots = append(roots, n)
 	}
 	return roots
+}
+
+func workCommand(cfgEnv config.Env) *cli.Command {
+	return &cli.Command{
+		Name: "work",
+		Help: "Drain one batch of pending memory summaries",
+		Setup: func(args *cli.Args) cli.Handler {
+			thread := args.IntArg("thread", cli.Opt{Help: "thread id"})
+			return func(env *cli.Env) int {
+				d, err := open(env, cfgEnv)
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				defer func() { _ = d.Close() }()
+				key, err := secrets.Credential(env.Ctx, d.Read, secrets.AnthropicAPIKey)
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				client, err := anthropic.New(py.Strip(key), cfgEnv)
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				model, err := memory.Model(env.Ctx, d.Read)
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				effort, err := memory.Effort(env.Ctx, d.Read)
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				n, err := memory.Work(env.Ctx, d, int64(*thread), memory.WorkOptions{
+					Now: assistant.Now(), Client: client, Model: model, Effort: effort,
+				})
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				_, _ = fmt.Fprintf(env.Stdout, "thread %d: %d nodes summarized\n", *thread, n)
+				return cli.ExitOK
+			}
+		},
+	}
 }

@@ -115,6 +115,11 @@ func Rebuild(ctx context.Context, q db.Querier, threadID int64, now float64) err
 			continue
 		}
 		delete(desired, k)
+		if n.State == Summary || n.State == Fallback {
+			if n.FromSeq == spec.fromSeq && n.ToSeq == spec.toSeq {
+				continue
+			}
+		}
 		if n.FromSeq == spec.fromSeq && n.ToSeq == spec.toSeq && n.Bytes == spec.bytes && n.Text == spec.text {
 			continue
 		}
@@ -134,7 +139,7 @@ func Rebuild(ctx context.Context, q db.Querier, threadID int64, now float64) err
 			return err
 		}
 	}
-	return nil
+	return Queue(ctx, q, threadID, now)
 }
 
 func Tree(ctx context.Context, q db.Querier, threadID int64) ([]Node, error) {

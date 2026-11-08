@@ -23,6 +23,7 @@ const (
 	MediaChannelsName      = "media-channels"
 	MediaSweepName         = "media-sweep"
 	MediaThumbnailsName    = "media-thumbnails"
+	MemoryWorkName         = "memory-work"
 )
 
 type RunKind uint8
@@ -70,6 +71,7 @@ var Builtins = []Builtin{
 	{MediaChannelsName, KeyMediaChannels, "*/30 * * * *", "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run).", JobBuiltin, CallableRun},
 	{MediaSweepName, KeyMediaSweep, "*/10 * * * *", "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run).", JobBuiltin, CallableRun},
 	{MediaThumbnailsName, KeyMediaThumbnails, "daily 04:00", "Daily: generate missing episode thumbnails for the media library (no model run).", JobBuiltin, CallableRun},
+	{MemoryWorkName, KeyMemoryWork, "*/2 * * * *", "Every 2 minutes: summarize pending memory nodes (no model run when the queue is empty).", JobBuiltin, CallableRun},
 }
 
 var builtinsByName = func() map[string]Builtin {
