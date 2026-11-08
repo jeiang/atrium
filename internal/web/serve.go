@@ -149,6 +149,9 @@ func serve(env *cli.Env, a serveArgs) int {
 		return cli.ExitError
 	}
 	if err := run(env.Ctx, a, hosts, policy); err != nil {
+		if env.Ctx.Err() != nil {
+			return cli.ExitOK
+		}
 		log.Error("serve failed", logx.Err, err.Error())
 		return cli.ExitError
 	}

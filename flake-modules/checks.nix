@@ -111,16 +111,14 @@
 
         sqlite-vec-provenance =
           pkgs.runCommand "atrium-sqlite-vec-provenance" {
-            nativeBuildInputs = [pkgs.gnutar pkgs.gzip pkgs.diffutils pkgs.gnugrep];
-            src = pkgs.fetchurl {
-              url = "https://github.com/asg017/sqlite-vec/releases/download/v0.1.9/sqlite-vec-0.1.9-amalgamation.tar.gz";
-              hash = "sha256-Os1ny0r/CAxwUJJv08+CJ5Bf5bfuOCnY7lAkqxKDz2E=";
-            };
+            nativeBuildInputs = [pkgs.diffutils pkgs.gnugrep];
+            src = pkgs.sqlite-vec.src;
+            headerHash = "8e4d7bfcd779c89bd19a6b2959fce24ee391b2eaf79a85a979377a36627cb060";
           } ''
             set -euo pipefail
-            tar -xzf $src
-            diff -u sqlite-vec.c ${../third_party/sqlite-vec/sqlite-vec.c}
-            diff -u sqlite-vec.h ${../third_party/sqlite-vec/sqlite-vec.h}
+            test "${pkgs.sqlite-vec.version}" = "0.1.9"
+            diff -u $src/sqlite-vec.c ${../third_party/sqlite-vec/sqlite-vec.c}
+            echo "$headerHash  ${../third_party/sqlite-vec/sqlite-vec.h}" | sha256sum -c -
             grep -q '#define SQLITE_VEC_VERSION "v0.1.9"' ${../third_party/sqlite-vec/sqlite-vec.h}
             grep -q '#define SQLITE_VERSION        "3.53.4"' ${../third_party/sqlite-vec/sqlite3.h}
             touch $out

@@ -5,7 +5,9 @@ Vendored for the cgo build of `internal/db` (github.com/mattn/go-sqlite3).
 - `sqlite-vec.c`, `sqlite-vec.h`: `sqlite-vec-0.1.9-amalgamation.tar.gz`
   from <https://github.com/asg017/sqlite-vec/releases/tag/v0.1.9>
   (sha256 `3acd67cb4aff080c7050926fd3cf8227905fe5b7ee3829d8ee5024ab1283cf61`),
-  unmodified.
+  unmodified. The `sqlite-vec-provenance` check compares `sqlite-vec.c` with
+  nixpkgs' `sqlite-vec` 0.1.9 source and pins the generated `sqlite-vec.h` by
+  sha256 `8e4d7bfcd779c89bd19a6b2959fce24ee391b2eaf79a85a979377a36627cb060`.
 - `LICENSE-MIT`, `LICENSE-APACHE`: from the same tag; sqlite-vec is
   dual-licensed MIT or Apache-2.0.
 - `sqlite3.h`: SQLite 3.53.4 (public domain), the version
