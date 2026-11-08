@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
@@ -106,7 +107,7 @@ func deref[T any](p *T) T {
 func (r *Runner) Run(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, client *anthropic.Client, runID int64, o Options) (*journal.Run, error) {
 	s, err := r.prepare(ctx, d, cfg, env, client, runID, o)
 	if err != nil {
-		now := float64(time.Now().UnixMicro()) / 1e6
+		now := assistant.Now()
 		if o.Now != nil {
 			now = o.Now()
 		}
@@ -230,7 +231,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	}
 	now := o.Now
 	if now == nil {
-		now = func() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
+		now = assistant.Now
 	}
 	writer := progress.NewWriter(d.Write, runID, now)
 	tc := &tool.Context{
@@ -282,7 +283,8 @@ func (s *state) heartbeat(ctx context.Context) func() {
 			case <-beatCtx.Done():
 				return
 			case <-t.C:
-				if err := s.renew(beatCtx); errors.As(err, new(LeaseLost)) {
+				if err := s.renew(beatCtx); err != nil {
+					log.Warn("could not renew the run lease; aborting its tools", logx.RunID, s.run.ID, logx.Err, err)
 					s.x.abort()
 					return
 				}

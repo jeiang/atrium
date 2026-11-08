@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/registry"
@@ -60,8 +61,6 @@ const (
 	archived     = "archived"
 )
 
-func wallClock() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
-
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
 		run := o.Runner
@@ -74,7 +73,7 @@ func Module(o Options) web.Module {
 		}
 		now := o.Now
 		if now == nil {
-			now = wallClock
+			now = assistant.Now
 		}
 		poll := o.Poll
 		if poll == 0 {

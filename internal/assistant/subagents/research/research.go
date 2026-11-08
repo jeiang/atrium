@@ -11,7 +11,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"time"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant"
@@ -192,8 +191,17 @@ func (r *Research) handle(ctx context.Context, tc *tool.Context, args py.Dict) (
 	}
 	now := tc.Now
 	if now == nil {
-		now = func() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
+		now = assistant.Now
 	}
+	limits := assistant.Read(ctx, tc.DB.Read)
+	maxConcurrent := limits.Int(assistant.KeySubagentMaxConcurrent)
+	if err := limits.Err(); err != nil {
+		return nil, err
+	}
+	if err := slots.acquire(ctx, maxConcurrent); err != nil {
+		return nil, err
+	}
+	defer slots.release()
 	var child int64
 	title := role + ": " + threads.TitleFrom(task)
 	if err := tc.DB.WithTx(ctx, func(tx *sql.Tx) (err error) {
@@ -243,14 +251,10 @@ func (r *Research) handle(ctx context.Context, tc *tool.Context, args py.Dict) (
 
 func (r *Research) runChild(ctx context.Context, tc *tool.Context, child int64, text, role string, agent subagents.Agent) error {
 	set := assistant.Read(ctx, tc.DB.Read)
-	maxConcurrent, maxSteps, maxCost := set.Int(assistant.KeySubagentMaxConcurrent), set.Int(assistant.KeySubagentMaxSteps), set.Float(assistant.KeySubagentMaxCostUSD)
+	maxSteps, maxCost := set.Int(assistant.KeySubagentMaxSteps), set.Float(assistant.KeySubagentMaxCostUSD)
 	if err := set.Err(); err != nil {
 		return err
 	}
-	if err := slots.acquire(ctx, maxConcurrent); err != nil {
-		return err
-	}
-	defer slots.release()
 	svc := service.New(ctx, tc.DB, tc.Cfg, tc.Env, r.runner)
 	svc.Client = tc.Client
 	svc.Now = tc.Now

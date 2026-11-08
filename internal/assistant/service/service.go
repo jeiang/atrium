@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/files"
@@ -115,7 +116,7 @@ func (s *Service) now() float64 {
 	if s.Now != nil {
 		return s.Now()
 	}
-	return float64(time.Now().UnixMicro()) / 1e6
+	return assistant.Now()
 }
 
 type Start struct {
