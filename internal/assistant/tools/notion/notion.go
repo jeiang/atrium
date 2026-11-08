@@ -39,12 +39,14 @@ func str(d py.Dict, key string) string {
 	return s
 }
 
-func dictGet(d py.Dict, key string) any {
+type getter interface{ Get(string) (any, bool) }
+
+func dictGet(d getter, key string) any {
 	v, _ := d.Get(key)
 	return v
 }
 
-func required(args py.Dict, name string) (string, error) {
+func required(args tool.Args, name string) (string, error) {
 	text, _, err := tool.TextArg(args, name, true)
 	return text, err
 }

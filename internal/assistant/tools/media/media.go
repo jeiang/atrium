@@ -117,13 +117,19 @@ func intArg(value any, message string) (int64, error) {
 	switch v := value.(type) {
 	case int64:
 		return v, nil
+	case json.Number:
+		i, err := v.Int64()
+		if err != nil {
+			return 0, tool.Error(message)
+		}
+		return i, nil
 	case *big.Int:
 		return 0, tool.Error("value is too large")
 	}
 	return 0, tool.Error(message)
 }
 
-func boolArg(args py.Dict, name string, def bool) (bool, error) {
+func boolArg(args tool.Args, name string, def bool) (bool, error) {
 	value, ok := args.Get(name)
 	if !ok {
 		return def, nil
@@ -175,7 +181,7 @@ func torrentDict(t media.Torrent) py.Dict {
 	}
 }
 
-func mediaDownloads(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
+func mediaDownloads(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 	settings, err := media.Load(ctx, tc.DB.Read, tc.Env)
 	if err != nil {
 		return nil, err
@@ -214,7 +220,7 @@ func mediaDownloads(ctx context.Context, tc *tool.Context, _ py.Dict) (any, erro
 	}, nil
 }
 
-func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	settings, err := media.Load(ctx, tc.DB.Read, tc.Env)
 	if err != nil {
 		return nil, err
@@ -248,7 +254,7 @@ func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args py.Dict) (an
 	}, nil
 }
 
-func mediaChannels(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
+func mediaChannels(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 	rows, err := media.ListChannels(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
@@ -268,7 +274,7 @@ func mediaChannels(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error
 	return py.Dict{{Key: "channels", Value: listed}, {Key: "last_check", Value: status.LastCheck}, {Key: "errors", Value: errs}}, nil
 }
 
-func mediaAddMagnet(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	magnet, _, err := tool.TextArg(args, "magnet", true)
 	if err != nil {
 		return nil, err
@@ -360,7 +366,7 @@ func tmdbFailed(err error) error {
 	return err
 }
 
-func mediaChannelAdd(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	pattern, _, err := tool.TextArg(args, "regex", true)
 	if err != nil {
 		return nil, err
@@ -374,7 +380,10 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args py.Dict) (any, 
 		return nil, err
 	}
 	client := settings.TMDB()
-	tmdbID, _ := args.Get("tmdb_id")
+	tmdbID, hasTMDB, err := tool.IntArg(args, "tmdb_id", false)
+	if err != nil {
+		return nil, err
+	}
 	imdbText, _, err := tool.TextArg(args, "imdb_id", false)
 	if err != nil {
 		return nil, err
@@ -383,17 +392,10 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args py.Dict) (any, 
 	var name string
 	var stored *int64
 	switch {
-	case tmdbID != nil:
-		id, isInt := tmdbID.(int64)
-		_, isBig := tmdbID.(*big.Int)
-		if !isInt && !isBig {
-			return nil, tool.Error("tmdb_id must be an integer")
-		}
+	case hasTMDB:
+		id := tmdbID
 		if client == nil {
 			return nil, tool.NotConfigured("media_tmdb_token is not set; give imdb_id instead")
-		}
-		if isBig {
-			return nil, tool.Error(fmt.Sprintf("TMDB show %v has no IMDb id", tmdbID))
 		}
 		var err error
 		if imdb, name, err = showFromTMDB(ctx, client, id); err != nil {
@@ -437,7 +439,7 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args py.Dict) (any, 
 	return out, nil
 }
 
-func mediaChannelRemove(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func mediaChannelRemove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw, _ := args.Get("id")
 	id, err := intArg(raw, "id must be an integer")
 	if err != nil {

@@ -1,6 +1,7 @@
 package mailtools
 
 import (
+	"encoding/json"
 	"math/big"
 	"time"
 
@@ -22,6 +23,12 @@ func intArg(value any, message string) (int64, error) {
 	switch v := value.(type) {
 	case int64:
 		return v, nil
+	case json.Number:
+		i, err := v.Int64()
+		if err != nil {
+			return 0, tool.Error(message)
+		}
+		return i, nil
 	case *big.Int:
 		return 0, tool.Error("value is too large")
 	}

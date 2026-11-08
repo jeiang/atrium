@@ -14,7 +14,7 @@ import (
 
 const Name = "propose"
 
-type Builder func(ctx context.Context, tc *tool.Context, payload py.Dict) (*int64, error)
+type Builder func(ctx context.Context, tc *tool.Context, payload map[string]any) (*int64, error)
 
 var (
 	mu    sync.RWMutex
@@ -44,7 +44,7 @@ func builder(kind string) Builder {
 	return kinds[kind]
 }
 
-func propose(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func propose(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	kind, ok, err := tool.TextArg(args, "kind", true)
 	if err != nil {
 		return nil, err
@@ -59,7 +59,7 @@ func propose(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	if fn == nil {
 		return nil, tool.Error("unknown proposal kind " + shown + "; allowed: " + strings.Join(Kinds(), ", "))
 	}
-	dict, isObject := payload.(py.Dict)
+	dict, isObject := payload.(map[string]any)
 	if !isObject {
 		return nil, tool.Error("payload must be an object")
 	}

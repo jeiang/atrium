@@ -55,7 +55,7 @@ func openLoopTools() []tool.Tool {
 	}
 }
 
-func oneOf(args py.Dict, name string, allowed []string) (string, error) {
+func oneOf(args tool.Args, name string, allowed []string) (string, error) {
 	value, _, err := tool.TextArg(args, name, false)
 	if err != nil {
 		return "", err
@@ -71,7 +71,7 @@ func oneOf(args py.Dict, name string, allowed []string) (string, error) {
 	return "", tool.Error(name + " must be one of " + strings.Join(allowed, ", "))
 }
 
-func openLoops(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func openLoops(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	state, err := oneOf(args, "state", openloops.States[:])
 	if err != nil {
 		return nil, err
@@ -112,7 +112,7 @@ func openLoops(ctx context.Context, tc *tool.Context, args py.Dict) (any, error)
 	}, nil
 }
 
-func commitments(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func commitments(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	status, err := oneOf(args, "status", openloops.CommitmentStatuses[:])
 	if err != nil {
 		return nil, err

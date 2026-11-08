@@ -20,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
 )
 
@@ -52,7 +51,7 @@ func newHarness(t *testing.T, script ...anthropictest.Response) *harness {
 		err := r.Add(tool.Tool{
 			Name: "probe", Description: "Return a fixed result", InputSchema: json.RawMessage(`{"type":"object","properties":{"n":{"type":"integer"}}}`),
 			Effect: tool.Read, Contexts: tool.Kinds{tool.Chat, tool.Cron},
-			Handler: func(context.Context, *tool.Context, py.Dict) (any, error) { return "same", nil },
+			Handler: func(context.Context, *tool.Context, tool.Args) (any, error) { return "same", nil },
 		})
 		return r, err
 	}

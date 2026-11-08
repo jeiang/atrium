@@ -86,7 +86,7 @@ func aliasHits(ctx context.Context, tc *tool.Context, query string, snippetChars
 	return hits, nil
 }
 
-func searchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func searchKnowledge(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	query, err := required(args, "query")
 	if err != nil {
 		return nil, err
@@ -166,7 +166,7 @@ func livePage(ctx context.Context, tc *tool.Context, pageID string) (py.Dict, er
 	}, nil
 }
 
-func fetchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func fetchKnowledge(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw, err := required(args, "page_id")
 	if err != nil {
 		return nil, err

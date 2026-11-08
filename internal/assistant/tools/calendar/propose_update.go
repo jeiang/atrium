@@ -23,7 +23,7 @@ func proposed(id int64, created bool, err error) (any, error) {
 	return py.Dict{{Key: "proposed", Value: true}, {Key: "proposal_id", Value: id}}, nil
 }
 
-func proposeUpdate(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func proposeUpdate(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw := py.Dict{}
 	for _, name := range []string{"uid", "title", "start", "end", "location", "notes"} {
 		v, err := optionalText(args, name)
@@ -38,7 +38,7 @@ func proposeUpdate(ctx context.Context, tc *tool.Context, args py.Dict) (any, er
 	return proposed((&calendar.Proposals{DB: tc.DB, Now: tc.Now, Env: tc.Env}).ProposeUpdate(ctx, raw))
 }
 
-func proposeRSVP(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func proposeRSVP(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw := py.Dict{}
 	for _, name := range []string{"calendar", "uid", "response", "title"} {
 		v, err := optionalText(args, name)

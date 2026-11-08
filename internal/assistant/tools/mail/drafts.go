@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"math/big"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/mail/drafts"
@@ -61,16 +60,19 @@ func draftFailed(err error) error {
 	return err
 }
 
-func replyID(args py.Dict) (any, error) {
-	value, _ := args.Get("in_reply_to_message_id")
-	switch value.(type) {
-	case nil, int64, *big.Int:
-		return value, nil
+func replyID(args tool.Args) (any, error) {
+	value, ok := args.Get("in_reply_to_message_id")
+	if !ok || value == nil {
+		return nil, nil
 	}
-	return nil, tool.Error("in_reply_to_message_id must be an integer message_id from mail_search")
+	id, _, err := tool.IntArg(args, "in_reply_to_message_id", true)
+	if err != nil {
+		return nil, tool.Error("in_reply_to_message_id must be an integer message_id from mail_search")
+	}
+	return id, nil
 }
 
-func draftEmailCreate(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func draftEmailCreate(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	account, _, err := tool.TextArg(args, "account", true)
 	if err != nil {
 		return nil, err
@@ -93,7 +95,7 @@ func draftEmailCreate(ctx context.Context, tc *tool.Context, args py.Dict) (any,
 	return py.Dict{{Key: "draft_id", Value: id}, {Key: "status", Value: drafts.Draft}, {Key: "note", Value: notSent}}, nil
 }
 
-func draftEmailUpdate(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func draftEmailUpdate(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw, _ := args.Get("draft_id")
 	id, err := intArg(raw, "draft_id must be an integer")
 	if err != nil {
@@ -101,9 +103,18 @@ func draftEmailUpdate(ctx context.Context, tc *tool.Context, args py.Dict) (any,
 	}
 	changes := map[string]any{}
 	for _, key := range [...]string{"account", "to", "cc", "subject", "body", "in_reply_to_message_id"} {
-		if v, ok := args.Get(key); ok {
-			changes[key] = v
+		v, ok := args.Get(key)
+		if !ok {
+			continue
 		}
+		if key == "in_reply_to_message_id" && v != nil {
+			id, _, err := tool.IntArg(args, key, true)
+			if err != nil {
+				return nil, tool.Error("in_reply_to_message_id must be an integer message_id from mail_search")
+			}
+			v = id
+		}
+		changes[key] = v
 	}
 	row, err := store(tc).Update(ctx, id, changes)
 	if err != nil {

@@ -18,7 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
 )
 
@@ -84,7 +83,7 @@ func TestResumedRunSupersedesTheOriginalLoop(t *testing.T) {
 		err := r.Add(tool.Tool{
 			Name: "count", Description: "Count invocations", InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
 			Effect: tool.Write, Contexts: tool.Kinds{tool.Cron},
-			Handler: func(context.Context, *tool.Context, py.Dict) (any, error) {
+			Handler: func(context.Context, *tool.Context, tool.Args) (any, error) {
 				calls.Add(1)
 				return "counted", nil
 			},

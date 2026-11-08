@@ -61,7 +61,7 @@ func Tools() []tool.Tool {
 	}}
 }
 
-func contactsLookup(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func contactsLookup(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	query, _, err := tool.TextArg(args, "query", true)
 	if err != nil {
 		return nil, err

@@ -43,7 +43,7 @@ func init() {
 	)
 }
 
-func selfDiagnose(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func selfDiagnose(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	scope, ok, err := tool.TextArg(args, "scope", false)
 	if err != nil {
 		return nil, err

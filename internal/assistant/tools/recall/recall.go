@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant"
@@ -33,16 +32,10 @@ func slice(s string, offset, limit int64) string {
 	return s[start:end]
 }
 
-func recall(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
-	raw, _ := args.Get("result_id")
-	var resultID int64
-	switch v := raw.(type) {
-	case int64:
-		resultID = v
-	case *big.Int:
-		return nil, tool.Error("value is too large")
-	default:
-		return nil, tool.Error("result_id must be an integer")
+func recall(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+	resultID, _, err := tool.IntArg(args, "result_id", true)
+	if err != nil {
+		return nil, err
 	}
 	offset, err := tool.BoundedInt(args, "offset", 0, 1_000_000_000, 0)
 	if err != nil {

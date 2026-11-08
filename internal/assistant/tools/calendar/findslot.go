@@ -9,7 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-func findSlot(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func findSlot(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	start, err := requiredText(args, "start")
 	if err != nil {
 		return nil, err

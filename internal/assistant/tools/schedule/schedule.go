@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/big"
 	"strings"
 	"time"
 
@@ -69,16 +68,10 @@ func describe(ctx context.Context, q db.Querier, job *scheduler.Job) (py.Dict, e
 	return found, nil
 }
 
-func agentJob(ctx context.Context, q db.Querier, args py.Dict) (*scheduler.Job, error) {
-	raw, _ := args.Get("id")
-	var id int64
-	switch v := raw.(type) {
-	case int64:
-		id = v
-	case *big.Int:
-		return nil, tool.Error("value is too large")
-	default:
-		return nil, tool.Error("id must be an integer")
+func agentJob(ctx context.Context, q db.Querier, args tool.Args) (*scheduler.Job, error) {
+	id, _, err := tool.IntArg(args, "id", true)
+	if err != nil {
+		return nil, err
 	}
 	job, err := scheduler.GetJob(ctx, q, id)
 	if err != nil {
@@ -93,7 +86,7 @@ func agentJob(ctx context.Context, q db.Querier, args py.Dict) (*scheduler.Job, 
 	return job, nil
 }
 
-func text(args py.Dict, name string) (*string, error) {
+func text(args tool.Args, name string) (*string, error) {
 	s, ok, err := tool.TextArg(args, name, false)
 	if err != nil || !ok {
 		return nil, err
@@ -101,7 +94,7 @@ func text(args py.Dict, name string) (*string, error) {
 	return &s, nil
 }
 
-func create(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	var fields [3]string
 	for i, name := range []string{"name", "prompt", "schedule"} {
 		s, _, err := tool.TextArg(args, name, true)
@@ -128,7 +121,7 @@ func create(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	return describe(ctx, tc.DB.Read, job)
 }
 
-func update(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func update(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	var updated *scheduler.Job
 	err := tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
 		job, err := agentJob(ctx, tx, args)
@@ -161,7 +154,7 @@ func update(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	return describe(ctx, tc.DB.Read, updated)
 }
 
-func cancel(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func cancel(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	var id int64
 	err := tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
 		job, err := agentJob(ctx, tx, args)
@@ -177,7 +170,7 @@ func cancel(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	return py.Dict{{Key: "cancelled", Value: id}}, nil
 }
 
-func list(ctx context.Context, tc *tool.Context, _ py.Dict) (any, error) {
+func list(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 	jobs, err := scheduler.ListJobs(ctx, tc.DB.Read, false)
 	if err != nil {
 		return nil, err

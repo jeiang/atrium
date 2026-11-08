@@ -125,7 +125,7 @@ func taskText(task string, contextIDs []string) string {
 	return task + "\n\nStarting points from the parent conversation (ids): " + strings.Join(contextIDs, ", ")
 }
 
-func cleanIDs(args py.Dict, maxIDs int) ([]string, error) {
+func cleanIDs(args tool.Args, maxIDs int) ([]string, error) {
 	value, _ := args.Get("context_ids")
 	if value == nil {
 		return nil, nil
@@ -139,7 +139,7 @@ func cleanIDs(args py.Dict, maxIDs int) ([]string, error) {
 		switch v := item.(type) {
 		case string:
 			ids = append(ids, py.Clip(v, 200))
-		case int, int64, *big.Int:
+		case int, int64, json.Number, *big.Int:
 			ids = append(ids, py.Clip(fmt.Sprint(v), 200))
 		default:
 			return nil, tool.Error("context_ids must contain strings or integers")
@@ -152,7 +152,7 @@ func sortedURLs(allowed map[string]struct{}) []string {
 	return slices.Sorted(maps.Keys(allowed))
 }
 
-func (r *Research) handle(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func (r *Research) handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	roleValue, _ := args.Get("role")
 	task, _, err := tool.TextArg(args, "task", true)
 	if err != nil {

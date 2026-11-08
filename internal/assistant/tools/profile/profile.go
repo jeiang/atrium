@@ -68,7 +68,7 @@ func optional(s *string) any {
 	return *s
 }
 
-func get(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func get(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	key, ok, err := tool.TextArg(args, "key", false)
 	if err != nil {
 		return nil, err
@@ -87,7 +87,7 @@ func get(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	return py.Dict{{Key: "entries", Value: entries}}, nil
 }
 
-func set(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func set(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	key, keyOK, err := tool.TextArg(args, "key", true)
 	if err != nil {
 		return nil, err

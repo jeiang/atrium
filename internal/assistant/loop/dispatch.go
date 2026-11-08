@@ -103,11 +103,7 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 	if err != nil {
 		return nil, nil, err
 	}
-	dict, ok := args.(py.Dict)
-	if !ok {
-		return fail("tool input must be an object")
-	}
-	value, err = x.call(ctx, t, dict)
+	value, err = x.call(ctx, t, tool.Args(args))
 	if err == nil {
 		return nil, value, nil
 	}
@@ -124,7 +120,7 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 	return fail(fmt.Sprintf("%s failed: %s", use.Name, className(err)))
 }
 
-func (x *dispatcher) call(ctx context.Context, t *tool.Tool, args py.Dict) (value any, err error) {
+func (x *dispatcher) call(ctx context.Context, t *tool.Tool, args tool.Args) (value any, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			err = fmt.Errorf("panic: %v\n%s", p, debug.Stack())

@@ -65,10 +65,10 @@ func (s *service) wikiHub(w http.ResponseWriter, r *http.Request) {
 	tc := &tool.Context{
 		DB: s.deps.DB, Cfg: s.deps.Cfg, Env: s.deps.Env, Kind: tool.Chat, AllowedURLs: map[string]struct{}{}, Now: s.now,
 	}
-	made, err := notiontools.CreatePage(ctx, tc, py.Dict{
-		{Key: "title", Value: project.Name},
-		{Key: "markdown", Value: projects.HubMarkdown(*project)},
-		{Key: "sources", Value: []any{fmt.Sprintf("atrium project %d", id)}},
+	made, err := notiontools.CreatePage(ctx, tc, tool.Args{
+		"title":    project.Name,
+		"markdown": projects.HubMarkdown(*project),
+		"sources":  []any{fmt.Sprintf("atrium project %d", id)},
 	})
 	if reason, refused := refusal(err); refused {
 		s.fragment(w, r, http.StatusUnprocessableEntity, "_project_hub.gohtml", hubView{Project: project, Error: &reason})

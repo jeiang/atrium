@@ -129,7 +129,7 @@ func recipients(ctx context.Context, q db.Querier, ids []int64) (map[int64]any, 
 	return out, nil
 }
 
-func mailSearch(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func mailSearch(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	query, _, err := tool.TextArg(args, "query", true)
 	if err != nil {
 		return nil, err
@@ -197,7 +197,7 @@ func mailSearch(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 	return py.Dict{{Key: "semantic", Value: found.Semantic}, {Key: "results", Value: results}}, nil
 }
 
-func mailRead(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
+func mailRead(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	raw, _ := args.Get("message_id")
 	var id int64
 	switch v := raw.(type) {
