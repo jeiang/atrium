@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/router"
+	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -171,13 +172,13 @@ func Count(rows []Row) Tally {
 	var t Tally
 	for _, r := range rows {
 		t.Stages.Add(r.Stage)
-		if r.Action == "file" && r.Dest.String != "" {
+		if r.Action == rules.ActionFile && r.Dest.String != "" {
 			t.Dests.Add(r.Dest.String)
 		}
 		switch r.Action {
-		case "delete":
+		case rules.ActionDelete:
 			t.Deletes++
-		case "none":
+		case rules.ActionNone:
 			t.NoLabel++
 		}
 		switch r.Outcome() {

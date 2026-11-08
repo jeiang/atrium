@@ -277,7 +277,7 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 		return nil, err
 	}
 	if corrected != nil {
-		return &Decision{Stage: "correction", Action: "file", Dest: new(corrected.Folder), Key: new(corrected.Source), Confidence: new(1.0)}, nil
+		return &Decision{Stage: "correction", Action: rules.ActionFile, Dest: new(corrected.Folder), Key: new(corrected.Source), Confidence: new(1.0)}, nil
 	}
 	rule, err := rules.FirstMatch(m, ruleList, r.now())
 	if err != nil {
@@ -291,7 +291,7 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 		return nil, err
 	}
 	if learned != nil {
-		return &Decision{Stage: "learned", Action: "file", Dest: new(learned.Dest), Key: new(learned.Level), Confidence: new(learned.Purity),
+		return &Decision{Stage: "learned", Action: rules.ActionFile, Dest: new(learned.Dest), Key: new(learned.Level), Confidence: new(learned.Purity),
 			Detail: py.Dict{{Key: "n", Value: learned.N}}}, nil
 	}
 	if !m.Embedded {
@@ -302,7 +302,7 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 		return nil, err
 	}
 	if folder, share, ok := Vote(neighbors[:min(t.KNNK, len(neighbors))]); ok && share >= t.KNNMinShare {
-		return &Decision{Stage: "knn", Action: "file", Dest: new(folder), Key: new("vote"), Confidence: new(share)}, nil
+		return &Decision{Stage: "knn", Action: rules.ActionFile, Dest: new(folder), Key: new("vote"), Confidence: new(share)}, nil
 	}
 	if len(neighbors) > 0 && lc.Available {
 		if lc.Down {
@@ -322,13 +322,13 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 			return nil, err
 		}
 		if folder != llm.Uncertain {
-			return &Decision{Stage: "llm", Action: "file", Dest: new(folder), Key: new("chat"), Detail: py.Dict{{Key: "confident", Value: confident}}}, nil
+			return &Decision{Stage: "llm", Action: rules.ActionFile, Dest: new(folder), Key: new("chat"), Detail: py.Dict{{Key: "confident", Value: confident}}}, nil
 		}
 	}
 	if t.Uncertain != "" {
-		return &Decision{Stage: "fallback", Action: "file", Dest: new(t.Uncertain)}, nil
+		return &Decision{Stage: "fallback", Action: rules.ActionFile, Dest: new(t.Uncertain)}, nil
 	}
-	return &Decision{Stage: "fallback", Action: "none"}, nil
+	return &Decision{Stage: "fallback", Action: rules.ActionNone}, nil
 }
 
 func (r *Router) Record(ctx context.Context, m *rules.Message, d *Decision) error {

@@ -22,6 +22,7 @@ const (
 	secondsPerDay = 86400
 	ActionFile    = "file"
 	ActionDelete  = "delete"
+	ActionNone    = "none"
 )
 
 var log = logx.Logger("atrium.rules")
