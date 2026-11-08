@@ -2,9 +2,8 @@ package web
 
 import (
 	"net/http"
+	"net/url"
 	"strings"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func sameOrigin(r *http.Request) bool {
@@ -16,6 +15,6 @@ func sameOrigin(r *http.Request) bool {
 	if origin == "null" {
 		return false
 	}
-	parts, err := py.URLSplit(origin)
-	return err == nil && strings.EqualFold(parts.Netloc, r.Host)
+	parsed, err := url.Parse(origin)
+	return err == nil && strings.EqualFold(parsed.Host, r.Host)
 }

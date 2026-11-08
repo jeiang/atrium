@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -75,7 +74,7 @@ func checkZone(value string) error {
 }
 
 func checkPublicURL(value string) error {
-	u, err := url.Parse(py.Strip(value))
+	u, err := url.Parse(strings.TrimSpace(value))
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return settings.Invalid("must be an http or https URL")
 	}
@@ -85,7 +84,7 @@ func checkPublicURL(value string) error {
 func snoozeDays(value string) ([]int, bool) {
 	var days []int
 	for _, part := range strings.Split(value, ",") {
-		n, err := strconv.Atoi(py.Strip(part))
+		n, err := strconv.Atoi(strings.TrimSpace(part))
 		if err != nil || n < 1 || n > 365 {
 			return nil, false
 		}
@@ -112,11 +111,11 @@ func loadCore(ctx context.Context, q db.Querier) (core, error) {
 		key  string
 		into func(value string) error
 	}{
-		{KeyTZ, func(v string) error { c.tz = py.Strip(v); return nil }},
-		{KeyPublicURL, func(v string) error { c.publicURL = strings.TrimRight(py.Strip(v), "/"); return nil }},
+		{KeyTZ, func(v string) error { c.tz = strings.TrimSpace(v); return nil }},
+		{KeyPublicURL, func(v string) error { c.publicURL = strings.TrimRight(strings.TrimSpace(v), "/"); return nil }},
 		{KeyHTTPTimeout, func(v string) error {
-			n, ok := py.ParseInt(v)
-			if !ok {
+			n, err := strconv.ParseInt(strings.TrimSpace(v), 10, 64)
+			if err != nil {
 				return settings.Invalid(KeyHTTPTimeout + " must be a whole number")
 			}
 			c.httpTimeout = time.Duration(n) * time.Second
@@ -180,7 +179,7 @@ func (s *State) PublicURL(env Env) string {
 
 func (s *State) HTTPTimeout(env Env) time.Duration {
 	if value, ok := s.coreValue(env, KeyHTTPTimeout); ok {
-		if n, ok := py.ParseInt(value); ok {
+		if n, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64); err == nil {
 			return time.Duration(n) * time.Second
 		}
 	}

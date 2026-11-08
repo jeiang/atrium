@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/auth/oidc"
@@ -19,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/sdnotify"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -135,8 +135,8 @@ func publicHosts(given []string, env config.Env) []string {
 	if len(given) > 0 {
 		return given
 	}
-	if host, _ := env("ATRIUM_PUBLIC_HOST"); py.Strip(host) != "" {
-		return []string{py.Strip(host)}
+	if host, _ := env("ATRIUM_PUBLIC_HOST"); strings.TrimSpace(host) != "" {
+		return []string{strings.TrimSpace(host)}
 	}
 	return nil
 }

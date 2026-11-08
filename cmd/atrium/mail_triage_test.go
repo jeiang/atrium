@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/executors"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/imapscript"
 	"github.com/jeiang/atrium/internal/testutil/llmstub"
@@ -48,11 +47,11 @@ func TestMailTriageProposalArchivesThroughTheCLI(t *testing.T) {
 	}
 	messageID, _ := res.LastInsertId()
 	account := "icloud"
-	payload := py.Dict{{Key: "items", Value: []any{py.Dict{
-		{Key: "id", Value: messageID}, {Key: "uid", Value: 301}, {Key: "uidvalidity", Value: 1544650202},
-		{Key: "msgid", Value: "m@x"}, {Key: "digest", Value: "d"}, {Key: "mailbox", Value: "INBOX"},
-		{Key: "imap_name", Value: "INBOX"}, {Key: "action", Value: "archive"},
-	}}}}
+	payload := map[string]any{"items": []any{map[string]any{
+		"id": messageID, "uid": 301, "uidvalidity": 1544650202,
+		"msgid": "m@x", "digest": "d", "mailbox": "INBOX",
+		"imap_name": "INBOX", "action": "archive",
+	}}}
 	id, _, err := proposals.Create(settings.With(context.Background(), f.settings), d, executors.MailTriage, &account, "Triage",
 		payload, map[string]any{}, "triage-archive-1", 0)
 	if err != nil {

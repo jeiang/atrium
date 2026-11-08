@@ -6,9 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
@@ -29,11 +29,11 @@ type Resolved struct {
 
 func (r Resolved) Pinned() bool { return r.Origin == FromPin }
 
-func (r Resolved) Float() (float64, error) { return py.ParseFloat(r.Value) }
+func (r Resolved) Float() (float64, error) { return parseFloat(r.Value) }
 
 func (r Resolved) Int() (int64, error) {
-	n, ok := py.ParseInt(r.Value)
-	if !ok {
+	n, err := strconv.ParseInt(strings.TrimSpace(r.Value), 10, 64)
+	if err != nil {
 		return 0, fmt.Errorf("invalid integer %s", strconv.Quote(r.Value))
 	}
 	return n, nil

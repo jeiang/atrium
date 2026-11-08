@@ -11,7 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -38,7 +37,7 @@ type (
 	Tool        = tool.Tool
 	ToolContext = tool.Context
 	ToolHandler = tool.Handler
-	ToolArgs    = py.Dict
+	ToolArgs    = tool.Args
 	Effect      = tool.Effect
 	Kind        = tool.Kind
 	Kinds       = tool.Kinds

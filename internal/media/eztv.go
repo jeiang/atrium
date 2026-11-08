@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -9,8 +10,6 @@ import (
 	"strings"
 
 	"regexp"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 var (
@@ -54,8 +53,6 @@ func truthy(v any) bool {
 	case []any:
 		return len(v) > 0
 	case map[string]any:
-		return len(v) > 0
-	case py.Dict:
 		return len(v) > 0
 	}
 	return true
@@ -130,28 +127,23 @@ func (s Settings) FetchReleases(ctx context.Context, imdb string) ([]Release, er
 	if res.status != http.StatusOK {
 		return nil, EztvError(fmt.Sprintf("EZTV: %d", res.status))
 	}
-	parsed, err := py.JSONLoads(res.body)
-	body, isDict := parsed.(py.Dict)
-	if err != nil || !isDict {
+	var body map[string]any
+	if err := json.Unmarshal(res.body, &body); err != nil || body == nil {
 		return nil, EztvError("EZTV: not JSON")
 	}
-	torrents, _ := body.Get("torrents")
-	list, _ := torrents.([]any)
+	list, _ := body["torrents"].([]any)
 	out := []Release{}
 	for _, item := range list {
-		t, ok := item.(py.Dict)
+		t, ok := item.(map[string]any)
 		if !ok {
 			continue
 		}
-		hash, _ := t.Get("hash")
-		magnet, _ := t.Get("magnet_url")
+		hash, magnet := t["hash"], t["magnet_url"]
 		if !truthy(hash) || !truthy(magnet) {
 			continue
 		}
-		title, _ := t.Get("title")
-		size, _ := t.Get("size_bytes")
-		season, _ := t.Get("season")
-		episode, _ := t.Get("episode")
+		title, size := t["title"], t["size_bytes"]
+		season, episode := t["season"], t["episode"]
 		out = append(out, Release{
 			Hash:      strings.ToLower(pyText(hash)),
 			Title:     orEmpty(title),

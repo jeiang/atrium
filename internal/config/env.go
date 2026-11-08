@@ -4,11 +4,10 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	_ "time/tzdata"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -38,7 +37,7 @@ func get(env Env, name string) string {
 	return v
 }
 
-func stripped(env Env, name string) string { return py.Strip(get(env, name)) }
+func stripped(env Env, name string) string { return strings.TrimSpace(get(env, name)) }
 
 func Zone(name string) (*time.Location, error) {
 	if name != "" && name != "Local" {

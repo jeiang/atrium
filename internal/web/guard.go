@@ -12,7 +12,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -87,7 +86,7 @@ func newGuard(auth Policy, allowedHosts []string, public func(*http.Request) boo
 }
 
 func hostname(value string) string {
-	value = py.Lower(py.Strip(value))
+	value = strings.ToLower(strings.TrimSpace(value))
 	if strings.HasPrefix(value, "[") {
 		if end := strings.IndexByte(value, ']'); end >= 0 {
 			return value[:end+1]
@@ -100,7 +99,7 @@ func hostname(value string) string {
 
 func hasGroup(value, group string) bool {
 	for _, part := range strings.Split(value, ",") {
-		if py.Strip(part) == group {
+		if strings.TrimSpace(part) == group {
 			return true
 		}
 	}
@@ -209,7 +208,7 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			supplied, has := "", false
 			if values := r.Header.Values(CSRFHeader); len(values) > 0 {
 				supplied, has = values[0], true
-			} else if mediaType, _, _ := strings.Cut(r.Header.Get("Content-Type"), ";"); py.Lower(py.Strip(mediaType)) == formType {
+			} else if mediaType, _, _ := strings.Cut(r.Header.Get("Content-Type"), ";"); strings.ToLower(strings.TrimSpace(mediaType)) == formType {
 				r.Body = http.MaxBytesReader(w, r.Body, int64(limit))
 				if err := r.ParseForm(); err != nil {
 					var tooLarge *http.MaxBytesError

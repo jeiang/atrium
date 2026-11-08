@@ -12,7 +12,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/py"
 	"golang.org/x/oauth2"
 	gcal "google.golang.org/api/calendar/v3"
 	"google.golang.org/api/googleapi"
@@ -97,8 +96,8 @@ type Ref struct {
 	UID      string
 }
 
-func (r Ref) Dict() py.Dict {
-	return py.Dict{{Key: "calendar", Value: r.Calendar}, {Key: "uid", Value: r.UID}}
+func (r Ref) Dict() map[string]any {
+	return map[string]any{"calendar": r.Calendar, "uid": r.UID}
 }
 
 func Zone(ctx context.Context, env config.Env) (*time.Location, error) {
@@ -242,7 +241,7 @@ type Listing struct {
 	tz        *time.Location
 }
 
-func (l Listing) Dict() py.Dict {
+func (l Listing) Dict() map[string]any {
 	events := make([]any, len(l.Events))
 	for i, row := range l.Events {
 		events[i] = row.Dict(l.tz)
@@ -251,7 +250,7 @@ func (l Listing) Dict() py.Dict {
 	for i, note := range l.Notes {
 		notes[i] = note
 	}
-	return py.Dict{{Key: "events", Value: events}, {Key: "truncated", Value: l.Truncated}, {Key: "notes", Value: notes}}
+	return map[string]any{"events": events, "truncated": l.Truncated, "notes": notes}
 }
 
 func ListEvents(ctx context.Context, env config.Env, set Settings, start, end any, filter Filter) (*Listing, error) {

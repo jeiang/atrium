@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/emersion/go-ical"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type Row struct {
@@ -19,10 +18,10 @@ type Row struct {
 	Location string
 }
 
-func (r Row) Dict(tz *time.Location) py.Dict {
-	return py.Dict{
-		{Key: "uid", Value: r.UID}, {Key: "calendar", Value: r.Calendar}, {Key: "start", Value: fmtValue(r.Start, tz)},
-		{Key: "end", Value: fmtValue(r.End, tz)}, {Key: "title", Value: r.Title}, {Key: "location", Value: r.Location},
+func (r Row) Dict(tz *time.Location) map[string]any {
+	return map[string]any{
+		"uid": r.UID, "calendar": r.Calendar, "start": fmtValue(r.Start, tz),
+		"end": fmtValue(r.End, tz), "title": r.Title, "location": r.Location,
 	}
 }
 

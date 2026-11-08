@@ -18,7 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	mailaccounts "github.com/jeiang/atrium/internal/mail/accounts"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -133,7 +132,7 @@ func (s *State) RegisterPassword(id string) error {
 		Key: PasswordKey(id), Module: "mail", Type: settings.String, Page: "/settings/mail"}))
 }
 
-func NormalizePassword(value string) string { return strings.Join(py.Split(value), "") }
+func NormalizePassword(value string) string { return strings.Join(strings.Fields(value), "") }
 
 func (s *State) LoadStoredAccounts(ctx context.Context, q db.Querier) error {
 	s.mu.RLock()
@@ -242,7 +241,7 @@ func NewAccount(name, label, presetName, login string, enabled bool) (AccountSpe
 	if label == "" {
 		label = name
 	}
-	return AccountSpec{Name: name, Label: label, Preset: presetName, Login: py.Strip(login), Enabled: enabled, AuthMethod: mailaccounts.Password}, nil
+	return AccountSpec{Name: name, Label: label, Preset: presetName, Login: strings.TrimSpace(login), Enabled: enabled, AuthMethod: mailaccounts.Password}, nil
 }
 
 type accountEntry struct {
@@ -285,7 +284,7 @@ func loadAccounts(env Env, reg *settings.Registry) ([]AccountSpec, map[string]st
 				return nil, nil, fmt.Errorf("config: %s: duplicate id", where)
 			}
 		}
-		if py.Strip(e.Login) == "" || e.PasswordFile == "" {
+		if strings.TrimSpace(e.Login) == "" || e.PasswordFile == "" {
 			return nil, nil, fmt.Errorf("config: %s: login and password_file are required", where)
 		}
 		passwordFile, err := scalar(env, where+" password_file", e.PasswordFile)

@@ -2,12 +2,11 @@ package media
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strconv"
 	"strings"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const (
@@ -78,37 +77,35 @@ func (t *TMDB) get(ctx context.Context, path string, params ...param) (any, erro
 	if res.status != http.StatusOK {
 		return nil, TmdbError("TMDB: " + strconv.Itoa(res.status))
 	}
-	parsed, err := py.JSONLoads(res.body)
-	if err != nil {
+	var parsed any
+	if err := json.Unmarshal(res.body, &parsed); err != nil {
 		return nil, TmdbError("TMDB: not JSON")
 	}
 	return parsed, nil
 }
 
-func (t *TMDB) getDict(ctx context.Context, path string, params ...param) (py.Dict, error) {
+func (t *TMDB) getDict(ctx context.Context, path string, params ...param) (map[string]any, error) {
 	body, err := t.get(ctx, path, params...)
 	if err != nil {
 		return nil, err
 	}
-	dict, _ := body.(py.Dict)
+	dict, _ := body.(map[string]any)
 	return dict, nil
 }
 
-func listOf(d py.Dict, key string) []py.Dict {
-	v, _ := d.Get(key)
-	items, _ := v.([]any)
-	out := make([]py.Dict, 0, len(items))
+func listOf(d map[string]any, key string) []map[string]any {
+	items, _ := d[key].([]any)
+	out := make([]map[string]any, 0, len(items))
 	for _, item := range items {
-		if entry, ok := item.(py.Dict); ok {
+		if entry, ok := item.(map[string]any); ok {
 			out = append(out, entry)
 		}
 	}
 	return out
 }
 
-func textOf(d py.Dict, key string) string {
-	v, _ := d.Get(key)
-	s, _ := v.(string)
+func textOf(d map[string]any, key string) string {
+	s, _ := d[key].(string)
 	return s
 }
 
@@ -117,9 +114,8 @@ func yearOf(date string) string {
 	return string(runes[:min(4, len(runes))])
 }
 
-func idOf(d py.Dict) (int64, bool) {
-	v, _ := d.Get("id")
-	switch n := v.(type) {
+func idOf(d map[string]any) (int64, bool) {
+	switch n := d["id"].(type) {
 	case int64:
 		return n, true
 	case float64:
@@ -132,7 +128,7 @@ func idOf(d py.Dict) (int64, bool) {
 	return 0, false
 }
 
-func tvResult(d py.Dict) (TVResult, bool) {
+func tvResult(d map[string]any) (TVResult, bool) {
 	id, ok := idOf(d)
 	if !ok {
 		return TVResult{}, false
@@ -196,11 +192,11 @@ func (t *TMDB) ShowByImdb(ctx context.Context, imdb string) (*TVResult, error) {
 	return &show, nil
 }
 
-func (t *TMDB) Show(ctx context.Context, tmdbID int64) (py.Dict, error) {
+func (t *TMDB) Show(ctx context.Context, tmdbID int64) (map[string]any, error) {
 	return t.getDict(ctx, "tv/"+strconv.FormatInt(tmdbID, 10))
 }
 
-func (t *TMDB) Season(ctx context.Context, tmdbID, number int64) (py.Dict, error) {
+func (t *TMDB) Season(ctx context.Context, tmdbID, number int64) (map[string]any, error) {
 	return t.getDict(ctx, "tv/"+strconv.FormatInt(tmdbID, 10)+"/season/"+strconv.FormatInt(number, 10))
 }
 

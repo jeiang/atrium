@@ -9,7 +9,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 const draftPrompt = "Scheduled task: turn queued mail into calendar event proposals. A local model flagged the mails below as " +
@@ -27,12 +26,12 @@ type Result struct {
 	Proposed   int
 }
 
-func (r Result) Dict() py.Dict {
+func (r Result) Dict() map[string]any {
 	var run any
 	if r.RunID != 0 {
 		run = r.RunID
 	}
-	return py.Dict{{Key: "candidates", Value: r.Candidates}, {Key: "run_id", Value: run}, {Key: "proposed", Value: r.Proposed}}
+	return map[string]any{"candidates": r.Candidates, "run_id": run, "proposed": r.Proposed}
 }
 
 func DraftEventProposals(ctx context.Context, svc *service.Service, limit int, now func() float64) (Result, error) {

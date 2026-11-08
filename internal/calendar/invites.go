@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"github.com/emersion/go-ical"
-
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type Invite struct {
@@ -19,15 +17,15 @@ type Invite struct {
 	Notes    string
 }
 
-func (i Invite) Raw(target Target) py.Dict {
+func (i Invite) Raw(target Target) map[string]any {
 	var end any
 	if i.End != nil {
 		end = *i.End
 	}
-	return py.Dict{
-		{Key: "uid", Value: i.UID}, {Key: "title", Value: i.Title}, {Key: "start", Value: i.Start}, {Key: "end", Value: end},
-		{Key: "all_day", Value: i.AllDay}, {Key: "location", Value: i.Location}, {Key: "notes", Value: i.Notes},
-		{Key: "calendar", Value: string(target)},
+	return map[string]any{
+		"uid": i.UID, "title": i.Title, "start": i.Start, "end": end,
+		"all_day": i.AllDay, "location": i.Location, "notes": i.Notes,
+		"calendar": string(target),
 	}
 }
 

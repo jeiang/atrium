@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -170,14 +169,14 @@ func TestServeRecoversAStuckApprovedProposalOnlyOnceItIsOlderThanTheBound(t *tes
 	if err := db.Migrate(ctx, seed, filepath.Join(dir, "atrium.db")); err != nil {
 		t.Fatal(err)
 	}
-	pid, _, err := proposals.Create(ctx, seed, "rebalance_split", nil, "title", py.Dict{}, py.Dict{}, "fp", base)
+	pid, _, err := proposals.Create(ctx, seed, "rebalance_split", nil, "title", map[string]any{}, map[string]any{}, "fp", base)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if _, err := seed.Write.Exec("UPDATE proposals SET status = 'approved' WHERE id = ?", pid); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := proposals.BeginAction(ctx, seed.Write, pid, py.Dict{{Key: "op", Value: "move"}}, base); err != nil {
+	if _, err := proposals.BeginAction(ctx, seed.Write, pid, map[string]any{"op": "move"}, base); err != nil {
 		t.Fatal(err)
 	}
 	_ = seed.Close()

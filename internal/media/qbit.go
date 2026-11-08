@@ -18,7 +18,6 @@ import (
 
 	"regexp"
 
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/urlx"
 )
 
@@ -99,20 +98,16 @@ func accepted(reply string) bool {
 	if reply == okReply {
 		return true
 	}
-	tally, err := py.JSONLoads([]byte(reply))
-	if err != nil {
+	var d map[string]any
+	if err := json.Unmarshal([]byte(reply), &d); err != nil || d == nil {
 		return false
 	}
-	d, ok := tally.(py.Dict)
-	if !ok {
-		return false
-	}
-	if failures, _ := d.Get("failure_count"); truthy(failures) {
+	if failures := d["failure_count"]; truthy(failures) {
 		return false
 	}
 	total := 0.0
 	for _, key := range []string{"success_count", "pending_count"} {
-		v, _ := d.Get(key)
+		v := d[key]
 		n, ok := number(v)
 		if !ok {
 			return false

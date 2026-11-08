@@ -5,7 +5,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/calendar"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 func proposed(id int64, created bool, err error) (any, error) {
@@ -22,28 +21,28 @@ func proposed(id int64, created bool, err error) (any, error) {
 }
 
 func proposeUpdate(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	raw := py.Dict{}
+	raw := map[string]any{}
 	for _, name := range []string{"uid", "title", "start", "end", "location", "notes"} {
 		v, err := optionalText(args, name)
 		if err != nil {
 			return nil, err
 		}
-		raw = raw.Set(name, v)
+		raw[name] = v
 	}
 	flag, _ := args.Get("all_day")
 	target, _ := args.Get("calendar")
-	raw = raw.Set("all_day", truthy(flag)).Set("calendar", target)
+	raw["all_day"], raw["calendar"] = truthy(flag), target
 	return proposed((&calendar.Proposals{DB: tc.DB, Now: tc.Now, Env: tc.Env}).ProposeUpdate(ctx, raw))
 }
 
 func proposeRSVP(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	raw := py.Dict{}
+	raw := map[string]any{}
 	for _, name := range []string{"calendar", "uid", "response", "title"} {
 		v, err := optionalText(args, name)
 		if err != nil {
 			return nil, err
 		}
-		raw = raw.Set(name, v)
+		raw[name] = v
 	}
 	return proposed((&calendar.Proposals{DB: tc.DB, Now: tc.Now, Env: tc.Env}).ProposeRSVP(ctx, raw))
 }

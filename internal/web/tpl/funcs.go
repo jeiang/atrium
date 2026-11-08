@@ -17,7 +17,6 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/timex"
 )
 
@@ -183,11 +182,6 @@ func opt(m any, key string, def any) any {
 			return v
 		}
 	}
-	if d, ok := m.(py.Dict); ok {
-		if v, ok := d.Get(key); ok {
-			return v
-		}
-	}
 	rv := reflect.ValueOf(m)
 	for rv.IsValid() && (rv.Kind() == reflect.Pointer || rv.Kind() == reflect.Interface) {
 		if rv.IsNil() {
@@ -347,12 +341,6 @@ func elems(l any) []map[string]any {
 			switch m := elem.(type) {
 			case map[string]any:
 				out = append(out, m)
-			case py.Dict:
-				row := make(map[string]any, len(m))
-				for _, pair := range m {
-					row[pair.Key] = pair.Value
-				}
-				out = append(out, row)
 			default:
 				if erv.IsValid() && erv.Kind() == reflect.Struct {
 					row := make(map[string]any, erv.NumField())
@@ -450,17 +438,20 @@ func pyStr(v any) (string, error) {
 	return "", fmt.Errorf("urlencode: cannot quote %T", v)
 }
 
-func items(v any) ([]py.Pair, error) {
+type entry struct {
+	Key   string
+	Value any
+}
+
+func items(v any) ([]entry, error) {
 	switch x := v.(type) {
 	case map[string]any:
-		pairs := make([]py.Pair, 0, len(x))
+		out := make([]entry, 0, len(x))
 		for _, k := range slices.Sorted(maps.Keys(x)) {
-			pairs = append(pairs, py.Pair{Key: k, Value: x[k]})
+			out = append(out, entry{Key: k, Value: x[k]})
 		}
-		return pairs, nil
-	case py.Dict:
-		return x, nil
-	case []py.Pair:
+		return out, nil
+	case []entry:
 		return x, nil
 	}
 	return nil, fmt.Errorf("items: not a mapping: %T", v)
@@ -468,7 +459,7 @@ func items(v any) ([]py.Pair, error) {
 
 func urlencode(v any) (string, error) {
 	switch v.(type) {
-	case map[string]any, py.Dict, []py.Pair:
+	case map[string]any, []entry:
 		pairs, err := items(v)
 		if err != nil {
 			return "", err
@@ -487,28 +478,41 @@ func urlencode(v any) (string, error) {
 	return urlQuote(s), err
 }
 
-func odict(kv ...any) (py.Dict, error) {
+func odict(kv ...any) ([]entry, error) {
 	if len(kv)%2 != 0 {
 		return nil, errors.New("odict: odd number of arguments")
 	}
-	out := make(py.Dict, 0, len(kv)/2)
+	out := make([]entry, 0, len(kv)/2)
 	for i := 0; i < len(kv); i += 2 {
 		k, ok := kv[i].(string)
 		if !ok {
 			return nil, fmt.Errorf("odict: key %v is not a string", kv[i])
 		}
-		out = out.Set(k, kv[i+1])
+		out = setEntry(out, k, kv[i+1])
 	}
 	return out, nil
+}
+
+func setEntry(list []entry, key string, value any) []entry {
+	for i := range list {
+		if list[i].Key == key {
+			list[i].Value = value
+			return list
+		}
+	}
+	return append(list, entry{Key: key, Value: value})
 }
 
 func get(m any, key string) any {
 	switch x := m.(type) {
 	case map[string]any:
 		return x[key]
-	case py.Dict:
-		v, _ := x.Get(key)
-		return v
+	case []entry:
+		for i := len(x) - 1; i >= 0; i-- {
+			if x[i].Key == key {
+				return x[i].Value
+			}
+		}
 	}
 	return nil
 }

@@ -9,7 +9,6 @@ import (
 	"sync"
 
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/py"
 )
 
 type Kind string
@@ -298,7 +297,7 @@ func snakeCase(s string) bool {
 func (d Def) validate(value string) error {
 	switch d.Type {
 	case Int:
-		if _, ok := py.ParseInt(value); !ok {
+		if _, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64); err != nil {
 			return Invalid("must be a whole number")
 		}
 	case Float:
