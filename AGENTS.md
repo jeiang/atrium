@@ -28,7 +28,11 @@ external services, reverse proxy, persistence, and backups.
   before closing.
 - Use the declared Nix development environment. Nix selects the Go release;
   do not add a go.mod toolchain directive.
-- Use justfile recipes and flake checks as the command reference.
+- Fast loop: `just verify` (vet + build) after each edit, `just e2e <pattern>`
+  for the targeted CLI/HTTP test, `just changed` for the Go packages touched.
+- Before hand-off: `just check-quick` (statix, treefmt, gofmt, module
+  assertions), `just check-eval` after Nix changes, `just check` for everything;
+  Linux-only checks use `just linux <check>`. Recipes re-enter the dev shell.
 - Keep the required CI check passing. For an authorized merge, use
   `gh pr merge --auto --merge`.
 - Deployment consumes this repository from a separate host configuration.

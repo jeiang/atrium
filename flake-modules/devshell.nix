@@ -39,6 +39,7 @@
       ];
       env =
         {
+          ATRIUM_DEV_SHELL = "1";
           CGO_ENABLED = "1";
           GOFLAGS = "-tags=libsqlite3,sqlite_fts5";
           CGO_CFLAGS = "-I${sqlcipherLib}/include";
