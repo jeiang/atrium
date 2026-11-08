@@ -234,14 +234,15 @@ func NewLLMContext(ctx context.Context, q Querier, account, url string, folderMi
 		args = append(args, f)
 	}
 	rows, err = q.QueryContext(ctx,
-		"SELECT folder, from_domain FROM filed_messages WHERE account = ? AND folder IN ("+
-			strings.TrimSuffix(strings.Repeat("?,", len(folders)), ",")+")", args...)
+		"SELECT folder, from_domain, COUNT(*) FROM filed_messages WHERE account = ? AND folder IN ("+
+			strings.TrimSuffix(strings.Repeat("?,", len(folders)), ",")+") AND from_domain != '' "+
+			"GROUP BY folder, from_domain", args...)
 	if err != nil {
 		return LLMContext{}, err
 	}
 	senders, err := db.Collect(rows, func(r *sql.Rows) (llm.FolderSender, error) {
 		var s llm.FolderSender
-		err := r.Scan(&s.Folder, &s.FromDomain)
+		err := r.Scan(&s.Folder, &s.FromDomain, &s.N)
 		return s, err
 	})
 	if err != nil {

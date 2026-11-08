@@ -265,19 +265,37 @@ func PreviewRule(ctx context.Context, q rules.Querier, raw any, limit int, now f
 		query += " AND account = ?"
 		args = append(args, *rule.Account)
 	}
+	for _, c := range rule.Conditions {
+		if c.Field() != rules.AgeField {
+			continue
+		}
+		value, _ := c.Value()
+		var days float64
+		switch v := value.(type) {
+		case int64:
+			days = float64(v)
+		case float64:
+			days = v
+		}
+		if days > 0 {
+			query += " AND date_ts != 0 AND (? - date_ts) / 86400.0 >= ?"
+			args = append(args, now, days)
+		}
+	}
 	query += " ORDER BY date_ts DESC, id DESC"
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return Preview{}, err
 	}
-	all, err := db.Collect(rows, func(r *sql.Rows) (rules.Message, error) { return rules.ScanMessage(r) })
-	if err != nil {
-		return Preview{}, err
-	}
-	out := Preview{Total: len(all), Sample: []PreviewSample{}}
-	for i := range all {
-		m := &all[i]
-		ok, err := rule.Matches(m, now)
+	defer func() { _ = rows.Close() }()
+	out := Preview{Sample: []PreviewSample{}}
+	for rows.Next() {
+		m, err := rules.ScanMessage(rows)
+		if err != nil {
+			return Preview{}, err
+		}
+		out.Total++
+		ok, err := rule.Matches(&m, now)
 		if err != nil {
 			return Preview{}, err
 		}
@@ -296,7 +314,7 @@ func PreviewRule(ctx context.Context, q rules.Querier, raw any, limit int, now f
 			out.Sample = append(out.Sample, PreviewSample{m.ID, m.Account, m.Subject, m.FromAddr, m.FromName, folder, m.DateTS})
 		}
 	}
-	return out, nil
+	return out, rows.Err()
 }
 
 type Features struct {

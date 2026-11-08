@@ -107,7 +107,10 @@ func FolderSchema(folders []string) Object {
 	}
 }
 
-type FolderSender struct{ Folder, FromDomain string }
+type FolderSender struct {
+	Folder, FromDomain string
+	N                  int
+}
 
 type Neighbor struct{ Folder, FromDomain, Subject string }
 
@@ -152,7 +155,7 @@ func FolderCatalog(ctx context.Context, rows []FolderSender) string {
 		if byFolder[r.Folder] == nil {
 			byFolder[r.Folder] = map[string]int{}
 		}
-		byFolder[r.Folder][r.FromDomain]++
+		byFolder[r.Folder][r.FromDomain] += max(r.N, 1)
 	}
 	lines := make([]string, 0, len(byFolder))
 	for _, folder := range slices.Sorted(maps.Keys(byFolder)) {
