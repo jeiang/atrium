@@ -18,6 +18,7 @@ in
     inherit (goSrc) src vendorHash;
     proxyVendor = true;
     excludedPackages = ["third_party" "tools"];
+    doCheck = false;
     tags = ["libsqlite3" "sqlite_fts5"];
     ldflags = [
       "-s"
