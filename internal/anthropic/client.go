@@ -58,6 +58,7 @@ func spendCapNoRetry(req *http.Request, next option.MiddlewareNext) (*http.Respo
 	resp, err := next(req)
 	if resp != nil && resp.StatusCode == http.StatusTooManyRequests && resp.Header.Get("Retry-After") == "" {
 		resp.Header.Set("X-Should-Retry", "false")
+		resp.Header.Set(spendCapHeader, "1")
 	}
 	return resp, err
 }
@@ -74,7 +75,7 @@ func (p Params) sdkParams() sdk.BetaMessageNewParams {
 	for i, b := range p.Betas {
 		betas[i] = sdk.AnthropicBeta(b)
 	}
-	return sdk.BetaMessageNewParams{Model: sdk.Model(p.Model), MaxTokens: p.MaxTokens, Betas: betas}
+	return sdk.BetaMessageNewParams{Betas: betas}
 }
 
 func (c *Client) Create(ctx context.Context, p Params) (*Message, error) {
@@ -107,12 +108,10 @@ func (c *Client) Stream(ctx context.Context, p Params, observe func(Event) error
 		if observe == nil {
 			continue
 		}
-		e, err := eventOf(&acc, ev)
-		if err != nil {
-			return nil, err
-		}
-		if err := observe(e); err != nil {
-			return nil, err
+		if e := eventOf(&acc, ev); e != nil {
+			if err := observe(e); err != nil {
+				return nil, err
+			}
 		}
 	}
 	if err := stream.Err(); err != nil {
