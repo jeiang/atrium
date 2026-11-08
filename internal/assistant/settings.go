@@ -108,9 +108,17 @@ const (
 	KeyGrafanaCellChars  = "agent_grafana_cell_chars"
 )
 
-var efforts = []string{"low", "medium", "high", "xhigh", "max"}
+const DefaultContextLimit = 90_000
 
-var contextLimits = []string{"90000", "200000", "500000", "1000000"}
+var ContextLimits = []int64{90_000, 200_000, 500_000, 1_000_000}
+
+func contextLimitChoices() []string {
+	out := make([]string, len(ContextLimits))
+	for i, n := range ContextLimits {
+		out[i] = strconv.FormatInt(n, 10)
+	}
+	return out
+}
 
 func init() {
 	instance := []settings.Scope{settings.Instance}
@@ -133,15 +141,15 @@ func init() {
 	}
 	effort := func(key, value string) settings.Def {
 		d := adv(key, settings.Enum, value, nil)
-		d.Choices = efforts
+		d.Choices = pricing.Efforts
 		return d
 	}
 	chatModel := def(KeyDefaultModel, settings.Enum, settings.UI, pricing.DefaultModel, nil)
 	chatModel.Choices = pricing.IDs()
-	chatEffort := def(KeyDefaultEffort, settings.Enum, settings.UI, "medium", nil)
-	chatEffort.Choices = efforts
-	contextLimit := def(KeyDefaultContextLimit, settings.Enum, settings.UI, "90000", nil)
-	contextLimit.Choices = contextLimits
+	chatEffort := def(KeyDefaultEffort, settings.Enum, settings.UI, pricing.Medium, nil)
+	chatEffort.Choices = pricing.Efforts
+	contextLimit := def(KeyDefaultContextLimit, settings.Enum, settings.UI, strconv.FormatInt(DefaultContextLimit, 10), nil)
+	contextLimit.Choices = contextLimitChoices()
 	chat := capped(KeyBudgetChat, settings.Float, "1", settings.Within(0, 1))
 	chat.Peers = Ordered(false, []string{KeyBudgetUnattended}, nil)
 	fileCap := count(KeyFileCapBytes, 32<<20, 1<<20, 128<<20)

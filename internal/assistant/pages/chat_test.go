@@ -160,6 +160,35 @@ func TestLiveRunQueueStopAndKeepalive(t *testing.T) {
 	mustNotContain(t, done, "Try again")
 }
 
+func TestQueuedMessageJoinsAtTheNextStep(t *testing.T) {
+	s := newSite(t)
+	release := s.hold()
+	defer release()
+	s.api.Push(reply1(anthropictest.Text("first")), reply1(anthropictest.Text("second")))
+	thread := s.startThread("long job")
+	run := s.lastRun(thread)
+	s.waitRequests(1)
+	queued := status(t, s.multipart(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "queued note"}, nil, hx, "true"), http.StatusOK)
+	mustContain(t, queued, "data-queued=", "queued note")
+	release()
+	if got := s.settle(run); got.State != journal.Done {
+		t.Fatalf("run %s %v", got.State, got.Error)
+	}
+	if n := s.count("SELECT COUNT(*) FROM thread_queue WHERE thread_id = ? AND consumed_at IS NOT NULL AND run_id = ?", thread, run); n != 1 {
+		t.Errorf("consumed queue rows %d", n)
+	}
+	if n := s.count("SELECT COUNT(*) FROM thread_messages WHERE thread_id = ? AND role = ? AND content_json LIKE ?", thread, journal.User, "%queued note%"); n != 1 {
+		t.Errorf("queued message rows %d", n)
+	}
+	requests := s.api.Requests()
+	if len(requests) < 2 || !strings.Contains(string(requests[1].Body), "queued note") {
+		t.Errorf("the next request did not carry the queued message")
+	}
+	if page := status(t, s.get(fmt.Sprintf("/chat/%d", thread)), http.StatusOK); strings.Count(page, "queued note") != 1 {
+		t.Errorf("queued message rendered %d times", strings.Count(page, "queued note"))
+	}
+}
+
 func TestStreamsEndOnShutdown(t *testing.T) {
 	s := newSite(t)
 	release := s.hold()
@@ -357,6 +386,20 @@ func TestEditRegenerateBranch(t *testing.T) {
 	empty := s.startThread("")
 	mustContain(t, status(t, s.post(fmt.Sprintf("/chat/%d/regenerate", empty), nil, hx, "true"), http.StatusUnprocessableEntity), "Nothing to redo")
 	mustContain(t, status(t, s.multipart(fmt.Sprintf("/chat/%d/messages", empty), map[string]string{"text": "  "}, nil, hx, "true"), http.StatusUnprocessableEntity), "Nothing sent", "Type a message first.")
+}
+
+func TestEditedTextStopsMatchingSearch(t *testing.T) {
+	s := newSite(t)
+	s.api.Push(reply1(anthropictest.Text("answer one")), reply1(anthropictest.Text("answer two")), reply1(anthropictest.Text("answer three")))
+	thread := s.startThread("hello")
+	s.settle(s.lastRun(thread))
+	status(t, s.multipart(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "firstmarker"}, nil, hx, "true"), http.StatusOK)
+	s.settle(s.lastRun(thread))
+	mustContain(t, status(t, s.get("/chat?q=firstmarker", hx, "true"), http.StatusOK), fmt.Sprintf(`href="/chat/%d"`, thread))
+	status(t, s.multipart(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": "secondmarker", "edit": "1"}, nil, hx, "true"), http.StatusOK)
+	s.settle(s.lastRun(thread))
+	mustContain(t, status(t, s.get("/chat?q=secondmarker", hx, "true"), http.StatusOK), fmt.Sprintf(`href="/chat/%d"`, thread))
+	mustContain(t, status(t, s.get("/chat?q=firstmarker", hx, "true"), http.StatusOK), "Nothing matches")
 }
 
 func TestListFlagsOptionsProjectsDelete(t *testing.T) {

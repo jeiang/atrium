@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 )
 
@@ -47,11 +46,11 @@ func (s *site) newProject(kv ...string) int64 {
 
 func (s *site) newThread(title string, project int64) int64 {
 	s.t.Helper()
-	n := threads.NewThread{Kind: threads.Chat, Title: &title}
+	n := threads.Spec{Kind: threads.Chat, Title: &title}
 	if project != 0 {
 		n.ProjectID = &project
 	}
-	id, err := service.CreateThread(context.Background(), s.db.Write, s.now(), n)
+	id, err := threads.Create(context.Background(), s.db.Write, s.now(), n)
 	if err != nil {
 		s.t.Fatal(err)
 	}

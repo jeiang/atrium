@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -146,19 +147,6 @@ func emptyLimits(l journal.Limits) bool {
 	return l.MaxSteps == nil && l.MaxCostUSD == nil && l.SystemExtra == nil && l.AllowedTools == nil && l.ToolChoice == nil
 }
 
-func CreateThread(ctx context.Context, q db.Querier, now float64, n threads.NewThread) (int64, error) {
-	id, err := threads.Create(ctx, q, now, n)
-	if err != nil {
-		return 0, err
-	}
-	if n.Title != nil && *n.Title != "" {
-		if _, err := q.ExecContext(ctx, "INSERT INTO thread_fts (thread_id, text) VALUES (?, ?)", id, *n.Title); err != nil {
-			return 0, err
-		}
-	}
-	return id, nil
-}
-
 func Load(ctx context.Context, q db.Querier, env config.Env, threadID int64, now float64) (*threads.Thread, error) {
 	thread, err := threads.Get(ctx, q, threadID)
 	if err != nil {
@@ -210,7 +198,10 @@ func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now 
 			return 0, err
 		}
 	}
-	runID, err := journal.StartRun(ctx, s.DB.Write, threadID, o.kind(), thread.Model, thread.Effort, now, o.ParentRunID, new(journal.NewOwner()))
+	runID, err := journal.StartRun(ctx, s.DB, threadID, o.kind(), thread.Model, thread.Effort, now, o.ParentRunID, new(journal.NewOwner()))
+	if errors.Is(err, journal.ErrRunActive) {
+		return 0, RunActive(fmt.Sprintf("thread %d already has a run in progress", threadID))
+	}
 	if err != nil {
 		return 0, err
 	}
@@ -239,7 +230,11 @@ func (s *Service) PrepareRerun(ctx context.Context, threadID int64, now float64)
 	if err := progress.ClearThread(ctx, s.DB.Write, threadID); err != nil {
 		return 0, err
 	}
-	return journal.StartRun(ctx, s.DB.Write, threadID, threads.Chat, thread.Model, thread.Effort, now, nil, new(journal.NewOwner()))
+	runID, err := journal.StartRun(ctx, s.DB, threadID, threads.Chat, thread.Model, thread.Effort, now, nil, new(journal.NewOwner()))
+	if errors.Is(err, journal.ErrRunActive) {
+		return 0, RunActive(fmt.Sprintf("thread %d already has a run in progress", threadID))
+	}
+	return runID, err
 }
 
 func merged(stored, override journal.Limits) journal.Limits {
@@ -362,10 +357,11 @@ func (s *Service) lastOperator(ctx context.Context, threadID int64, refusal stri
 	if _, err := Load(ctx, s.DB.Read, s.Env, threadID, s.now()); err != nil {
 		return nil, err
 	}
-	last, err := journal.LastOperatorMessage(ctx, s.DB.Read, threadID)
+	history, err := journal.LoadHistory(ctx, s.DB.Read, threadID)
 	if err != nil {
 		return nil, err
 	}
+	last := history.LastOperator()
 	if last == nil {
 		return nil, NothingToRedo(refusal)
 	}
@@ -378,7 +374,7 @@ func (s *Service) EditLast(ctx context.Context, threadID int64, text string, att
 	if err != nil {
 		return 0, err
 	}
-	if err := journal.Supersede(ctx, s.DB, threadID, last.Seq, false); err != nil {
+	if err := s.supersede(ctx, threadID, last.Seq, false); err != nil {
 		return 0, err
 	}
 	return s.StartRun(ctx, threadID, text, Start{Kind: threads.Chat, Operator: true, Files: attachments})
@@ -390,7 +386,7 @@ func (s *Service) Regenerate(ctx context.Context, threadID int64) (int64, error)
 	if err != nil {
 		return 0, err
 	}
-	if err := journal.Supersede(ctx, s.DB, threadID, last.Seq, true); err != nil {
+	if err := s.supersede(ctx, threadID, last.Seq, true); err != nil {
 		return 0, err
 	}
 	runID, err := s.PrepareRerun(ctx, threadID, s.now())
@@ -398,6 +394,15 @@ func (s *Service) Regenerate(ctx context.Context, threadID int64) (int64, error)
 		return 0, err
 	}
 	return runID, s.inBackground(runID)
+}
+
+func (s *Service) supersede(ctx context.Context, threadID, fromSeq int64, keepMessage bool) error {
+	return s.DB.WithTx(ctx, func(tx *sql.Tx) error {
+		if err := journal.Supersede(ctx, tx, threadID, fromSeq, keepMessage); err != nil {
+			return err
+		}
+		return actx.Supersede(ctx, tx, threadID, fromSeq)
+	})
 }
 
 func (s *Service) StopRun(ctx context.Context, threadID, runID int64) (bool, error) {

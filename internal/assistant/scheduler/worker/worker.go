@@ -236,7 +236,7 @@ func (w *Worker) executePrompt(ctx context.Context, claim scheduler.Claim) strin
 	operator := job.Kind == scheduler.JobCron && job.PromptBy != nil && *job.PromptBy == scheduler.Operator
 	var threadID *int64
 	runID, err := func() (int64, error) {
-		id, err := service.CreateThread(ctx, d.Write, w.now(), threads.NewThread{Kind: kind, Title: &job.Name, JobID: &job.ID})
+		id, err := threads.Create(ctx, d.Write, w.now(), threads.Spec{Kind: kind, Title: &job.Name, JobID: &job.ID})
 		if err != nil {
 			return 0, err
 		}

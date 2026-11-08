@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 
+	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/service"
@@ -17,7 +18,7 @@ type WorkView struct {
 	Plan      *workspace.Plan    `json:"plan"`
 	Sources   []workspace.Source `json:"sources"`
 	Subagents []subagents.Card   `json:"subagents"`
-	Files     []workspace.File   `json:"files"`
+	Files     []files.Row        `json:"files"`
 	Drafts    []map[string]any   `json:"drafts"`
 	Code      []any              `json:"code"`
 }
@@ -41,7 +42,7 @@ func workView(ctx context.Context, q db.Querier, threadID int64, now float64) (W
 		}
 		w.Subagents = append(w.Subagents, card)
 	}
-	if w.Files, err = workspace.FilesOf(ctx, q, threadID); err != nil {
+	if w.Files, err = files.OfThread(ctx, q, threadID); err != nil {
 		return WorkView{}, err
 	}
 	rows, err := service.DraftsOf(ctx, q, threadID)
@@ -56,7 +57,7 @@ func workView(ctx context.Context, q db.Querier, threadID int64, now float64) (W
 		w.Sources = []workspace.Source{}
 	}
 	if w.Files == nil {
-		w.Files = []workspace.File{}
+		w.Files = []files.Row{}
 	}
 	return w, nil
 }

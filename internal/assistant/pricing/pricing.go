@@ -47,22 +47,30 @@ type Model struct {
 	ForcedTools   bool       `json:"forced_tools"`
 }
 
-var allEfforts = []string{"low", "medium", "high", "xhigh", "max"}
+const (
+	Low    = "low"
+	Medium = "medium"
+	High   = "high"
+	XHigh  = "xhigh"
+	Max    = "max"
+)
+
+var Efforts = []string{Low, Medium, High, XHigh, Max}
 
 var catalog = []Model{
 	{
-		ID: HaikuID, Name: "Haiku 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: allEfforts, ForcedTools: true,
+		ID: HaikuID, Name: "Haiku 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: Efforts, ForcedTools: true,
 		Thinking:  []Thinking{{Type: "adaptive"}, {Type: "disabled", MaxEffort: "high"}},
 		Rates:     Rates{Input: 0.10, Output: 0.50, CacheWrite5m: 0.125, CacheWrite1h: 0.20, CacheRead: 0.01},
 		LongRates: &Rates{Input: 0.50, Output: 2.50, CacheWrite5m: 0.625, CacheWrite1h: 1.00, CacheRead: 0.05},
 	},
 	{
-		ID: SonnetID, Name: "Sonnet 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: allEfforts,
+		ID: SonnetID, Name: "Sonnet 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: Efforts,
 		Thinking: []Thinking{{Type: "adaptive"}, {Type: "between_tools", MaxEffort: "high"}},
 		Rates:    Rates{Input: 2, Output: 10, CacheWrite5m: 2.50, CacheWrite1h: 4, CacheRead: 0.10},
 	},
 	{
-		ID: OpusID, Name: "Opus 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: allEfforts,
+		ID: OpusID, Name: "Opus 5.5", ContextWindow: 1_000_000, MaxOutput: 128_000, Efforts: Efforts,
 		Thinking: []Thinking{{Type: "adaptive"}},
 		Rates:    Rates{Input: 4, Output: 20, CacheWrite5m: 5, CacheWrite1h: 8, CacheRead: 0.20},
 	},

@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/subagents"
-	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/py"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -48,7 +48,7 @@ func (p *pages) subagentsPage(w http.ResponseWriter, r *http.Request, status int
 		views[i] = agentView(a)
 	}
 	p.settings(w, r, status, "subagents.gohtml", SubagentsData{
-		Agents: views, Pool: pool, Efforts: threads.Efforts[:], Draft: draft, Editing: editing, Error: formError, Focus: focus, StripParams: stripParams,
+		Agents: views, Pool: pool, Efforts: pricing.Efforts, Draft: draft, Editing: editing, Error: formError, Focus: focus, StripParams: stripParams,
 	}, toast)
 }
 
@@ -92,7 +92,7 @@ func (p *pages) subagentSave(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
 	draft := AgentView{
 		Name: web.FormString(form, "name", ""), Description: web.FormString(form, "description", ""), Prompt: web.FormString(form, "prompt", ""),
-		Effort: web.FormString(form, "effort", threads.Medium), Tools: form["tools"],
+		Effort: web.FormString(form, "effort", pricing.Medium), Tools: form["tools"],
 	}
 	ctx := detached(r)
 	err := p.deps.DB.WithTx(ctx, func(tx *sql.Tx) error {

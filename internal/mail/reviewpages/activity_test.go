@@ -141,7 +141,7 @@ func (s *site) profile(key string) any {
 func TestUndoingAProfileSetRestoresThePreviousValue(t *testing.T) {
 	s := newSite(t)
 	s.thread()
-	run, err := journal.StartRun(context.Background(), s.db.Write, 1, "chat", "m", "medium", 100, nil, nil)
+	run, err := journal.StartRun(context.Background(), s.db, 1, "chat", "m", "medium", 100, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}

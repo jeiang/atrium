@@ -9,6 +9,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -54,24 +56,17 @@ func Window(date *string, loc *time.Location, now float64) (float64, float64, er
 	return start, end + 1, nil
 }
 
-func TextsOf(contentJSON string) []string {
-	blocks, ok := py.JSONLoads([]byte(contentJSON))
-	list, isList := blocks.([]any)
-	if ok != nil || !isList {
-		return nil
-	}
+func textsOf(content []json.RawMessage) []string {
 	var out []string
-	for _, b := range list {
-		block, isDict := b.(py.Dict)
-		if !isDict {
+	for _, raw := range content {
+		var b struct {
+			Type string `json:"type"`
+			Text string `json:"text"`
+		}
+		if json.Unmarshal(raw, &b) != nil || b.Type != "text" {
 			continue
 		}
-		if kind, _ := block.Get("type"); kind != "text" {
-			continue
-		}
-		text, _ := block.Get("text")
-		s, _ := text.(string)
-		out = append(out, s)
+		out = append(out, b.Text)
 	}
 	return out
 }
@@ -123,9 +118,10 @@ func read(ctx context.Context, q db.Querier, start, end float64) ([]any, error) 
 		return nil, err
 	}
 	rows, err := q.QueryContext(ctx,
-		"SELECT t.id, t.kind, t.title FROM threads t WHERE t.kind IN ('chat', 'cron') AND EXISTS "+
-			"(SELECT 1 FROM thread_messages m WHERE m.thread_id = t.id AND m.created_at >= ? AND m.created_at < ? AND m.superseded = 0) "+
-			"ORDER BY t.id LIMIT ?", start, end, maxThreads)
+		"SELECT t.id, t.kind, t.title FROM threads t WHERE t.kind IN (?, ?) AND EXISTS "+
+			"(SELECT 1 FROM thread_messages m WHERE m.thread_id = t.id AND m.superseded = 0 AND m.created_at >= ? AND m.created_at < ?) "+
+			"ORDER BY (SELECT MAX(m.created_at) FROM thread_messages m WHERE m.thread_id = t.id AND m.superseded = 0) DESC, t.id DESC LIMIT ?",
+		threads.Chat, threads.Cron, start, end, maxThreads)
 	if err != nil {
 		return nil, err
 	}
@@ -161,25 +157,18 @@ func read(ctx context.Context, q db.Querier, start, end float64) ([]any, error) 
 }
 
 func lines(ctx context.Context, q db.Querier, threadID int64, start, end float64) ([]string, error) {
-	rows, err := q.QueryContext(ctx,
-		"SELECT role, content_json FROM thread_messages WHERE thread_id = ? AND created_at >= ? AND created_at < ? AND superseded = 0 ORDER BY seq",
-		threadID, start, end)
-	if err != nil {
-		return nil, err
-	}
-	type message struct{ role, content string }
-	messages, err := db.Collect(rows, func(r *sql.Rows) (message, error) {
-		var m message
-		return m, r.Scan(&m.role, &m.content)
-	})
+	history, err := journal.LoadHistory(ctx, q, threadID)
 	if err != nil {
 		return nil, err
 	}
 	var out []string
-	for _, m := range messages {
-		for _, text := range TextsOf(m.content) {
+	for _, m := range history.Messages {
+		if m.CreatedAt < start || m.CreatedAt >= end {
+			continue
+		}
+		for _, text := range textsOf(m.Content) {
 			if py.Strip(text) != "" {
-				out = append(out, m.role+": "+text)
+				out = append(out, m.Role+": "+text)
 			}
 		}
 	}

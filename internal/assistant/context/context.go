@@ -16,6 +16,16 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
+func Supersede(ctx gocontext.Context, q db.Querier, threadID, fromSeq int64) error {
+	if _, err := q.ExecContext(ctx,
+		"DELETE FROM context_ledger WHERE state IN (?, ?) AND run_id IN (SELECT id FROM runs WHERE thread_id = ? AND superseded = 1)",
+		StagedDrop, StagedFold, threadID); err != nil {
+		return err
+	}
+	_, err := q.ExecContext(ctx, "DELETE FROM context_projections WHERE thread_id = ? AND base_seq > ?", threadID, fromSeq)
+	return err
+}
+
 const (
 	CharsPerToken = 4
 	StubNote      = "Result stored; call recall(result_id, offset, limit) to read it in pages."

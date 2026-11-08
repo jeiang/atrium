@@ -52,6 +52,10 @@ func (s *service) wikiHub(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, http.StatusNotFound, "unknown project")
 		return
 	}
+	if project.Archived {
+		s.fail(w, r, http.StatusUnprocessableEntity, "project is archived")
+		return
+	}
 	if project.WikiHubID != nil && *project.WikiHubID != "" {
 		s.fragment(w, r, http.StatusOK, "_project_hub.gohtml", hubView{Project: project, HubID: *project.WikiHubID})
 		return

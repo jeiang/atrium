@@ -1,6 +1,7 @@
 package journal
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
@@ -57,8 +58,6 @@ func NewOwner() string {
 	return fmt.Sprintf("%s:%d:%s", host, os.Getpid(), hex.EncodeToString(suffix))
 }
 
-var jsonCompact = py.JSONOpts{Compact: true, NoEnsureASCII: true}
-
 type Run struct {
 	ID            int64      `json:"id"`
 	ThreadID      int64      `json:"thread_id"`
@@ -96,26 +95,32 @@ func runs(rows *sql.Rows, err error) ([]Run, error) {
 	return db.Collect(rows, func(r *sql.Rows) (Run, error) { return scanRun(r) })
 }
 
-func changed(res sql.Result, err error) (bool, error) {
-	if err != nil {
-		return false, err
-	}
-	n, err := res.RowsAffected()
-	return n > 0, err
-}
+var ErrRunActive = errors.New("journal: thread already has an active run")
 
-func StartRun(ctx context.Context, q db.Querier, threadID int64, kind, model, effort string, now float64, parentRunID *int64, owner *string) (int64, error) {
-	lease, err := leaseSeconds(ctx, q)
+func StartRun(ctx context.Context, d *db.DB, threadID int64, kind, model, effort string, now float64, parentRunID *int64, owner *string) (int64, error) {
+	lease, err := leaseSeconds(ctx, d.Read)
 	if err != nil {
 		return 0, err
 	}
-	res, err := q.ExecContext(ctx,
-		"INSERT INTO runs (thread_id, parent_run_id, kind, model, effort, state, started_at, owner, lease_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		threadID, parentRunID, kind, model, effort, Running, now, owner, now+lease)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
+	var id int64
+	err = d.WithTx(ctx, func(tx *sql.Tx) error {
+		active, err := ActiveRun(ctx, tx, threadID)
+		if err != nil {
+			return err
+		}
+		if active != nil {
+			return ErrRunActive
+		}
+		res, err := tx.ExecContext(ctx,
+			"INSERT INTO runs (thread_id, parent_run_id, kind, model, effort, state, started_at, owner, lease_until) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			threadID, parentRunID, kind, model, effort, Running, now, owner, now+lease)
+		if err != nil {
+			return err
+		}
+		id, err = res.LastInsertId()
+		return err
+	})
+	return id, err
 }
 
 type Limits struct {
@@ -126,28 +131,28 @@ type Limits struct {
 	ToolChoice   *string
 }
 
-func (l Limits) object() py.Dict {
-	var o py.Dict
-	if l.MaxSteps != nil {
-		o = append(o, py.Pair{Key: "max_steps", Value: *l.MaxSteps})
-	}
-	if l.MaxCostUSD != nil {
-		o = append(o, py.Pair{Key: "max_cost_usd", Value: *l.MaxCostUSD})
-	}
-	if l.SystemExtra != nil {
-		o = append(o, py.Pair{Key: "system_extra", Value: *l.SystemExtra})
-	}
+type limitsJSON struct {
+	MaxSteps     *int64    `json:"max_steps,omitempty"`
+	MaxCostUSD   *float64  `json:"max_cost_usd,omitempty"`
+	SystemExtra  *string   `json:"system_extra,omitempty"`
+	AllowedTools *[]string `json:"allowed_tools,omitempty"`
+	ToolChoice   *string   `json:"tool_choice,omitempty"`
+}
+
+func (l Limits) wire() limitsJSON {
+	w := limitsJSON{MaxSteps: l.MaxSteps, MaxCostUSD: l.MaxCostUSD, SystemExtra: l.SystemExtra, ToolChoice: l.ToolChoice}
 	if l.AllowedTools != nil {
-		o = append(o, py.Pair{Key: "allowed_tools", Value: l.AllowedTools})
+		w.AllowedTools = &l.AllowedTools
 	}
-	if l.ToolChoice != nil {
-		o = append(o, py.Pair{Key: "tool_choice", Value: *l.ToolChoice})
-	}
-	return o
+	return w
 }
 
 func SetLimits(ctx context.Context, q db.Querier, runID int64, l Limits) error {
-	_, err := q.ExecContext(ctx, "UPDATE runs SET limits_json = ? WHERE id = ?", py.JSONDumps(l.object()), runID)
+	body, err := json.Marshal(l.wire())
+	if err != nil {
+		return err
+	}
+	_, err = q.ExecContext(ctx, "UPDATE runs SET limits_json = ? WHERE id = ?", string(body), runID)
 	return err
 }
 
@@ -160,17 +165,15 @@ func LimitsOf(ctx context.Context, q db.Querier, runID int64) (Limits, error) {
 	if err != nil {
 		return Limits{}, err
 	}
-	var stored struct {
-		MaxSteps     *int64   `json:"max_steps"`
-		MaxCostUSD   *float64 `json:"max_cost_usd"`
-		SystemExtra  *string  `json:"system_extra"`
-		AllowedTools []string `json:"allowed_tools"`
-		ToolChoice   *string  `json:"tool_choice"`
-	}
+	var stored limitsJSON
 	if err := json.Unmarshal([]byte(*raw), &stored); err != nil {
 		return Limits{}, fmt.Errorf("journal: run %d limits_json: %w", runID, err)
 	}
-	return Limits{stored.MaxSteps, stored.MaxCostUSD, stored.SystemExtra, stored.AllowedTools, stored.ToolChoice}, nil
+	out := Limits{MaxSteps: stored.MaxSteps, MaxCostUSD: stored.MaxCostUSD, SystemExtra: stored.SystemExtra, ToolChoice: stored.ToolChoice}
+	if stored.AllowedTools != nil {
+		out.AllowedTools = *stored.AllowedTools
+	}
+	return out, nil
 }
 
 func SetSkills(ctx context.Context, q db.Querier, runID int64, names []string) error {
@@ -205,13 +208,8 @@ func FinishRun(ctx context.Context, q db.Querier, runID int64, state string, now
 	return err
 }
 
-func SetRunState(ctx context.Context, q db.Querier, runID int64, state string) error {
-	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ? WHERE id = ?", state, runID)
-	return err
-}
-
 func RequestStop(ctx context.Context, q db.Querier, runID int64) (bool, error) {
-	return changed(q.ExecContext(ctx, "UPDATE runs SET stop_requested = 1 WHERE id = ? AND state = ?", runID, Running))
+	return db.Changed(q.ExecContext(ctx, "UPDATE runs SET stop_requested = 1 WHERE id = ? AND state = ?", runID, Running))
 }
 
 func FinishUnlessQueued(ctx context.Context, d *db.DB, runID, threadID int64, state string, now float64) (bool, error) {
@@ -237,7 +235,7 @@ func RenewLease(ctx context.Context, q db.Querier, runID int64, owner string, no
 	if err != nil {
 		return false, err
 	}
-	return changed(q.ExecContext(ctx, "UPDATE runs SET lease_until = ? WHERE id = ? AND owner = ? AND state = ?",
+	return db.Changed(q.ExecContext(ctx, "UPDATE runs SET lease_until = ? WHERE id = ? AND owner = ? AND state = ?",
 		now+lease, runID, owner, Running))
 }
 
@@ -256,7 +254,7 @@ func ClaimResume(ctx context.Context, q db.Querier, runID int64, owner string, n
 	if err != nil {
 		return false, err
 	}
-	return changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = ?, lease_until = ? WHERE id = ? AND state = ?",
+	return db.Changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = ?, lease_until = ? WHERE id = ? AND state = ?",
 		Running, owner, now+lease, runID, Interrupted))
 }
 
@@ -281,26 +279,23 @@ func RunsOf(ctx context.Context, q db.Querier, threadID int64) ([]Run, error) {
 }
 
 type Message struct {
-	ID         int64             `json:"id"`
-	RunID      *int64            `json:"run_id"`
-	Seq        int64             `json:"seq"`
-	Role       string            `json:"role"`
-	Content    []json.RawMessage `json:"content"`
-	CreatedAt  float64           `json:"created_at"`
-	SystemSig  *string           `json:"system_sig"`
-	Superseded bool              `json:"superseded"`
+	ID        int64             `json:"id"`
+	RunID     *int64            `json:"run_id"`
+	Seq       int64             `json:"seq"`
+	Role      string            `json:"role"`
+	Content   []json.RawMessage `json:"content"`
+	CreatedAt float64           `json:"created_at"`
+	SystemSig *string           `json:"system_sig"`
 }
 
-func Dumps(content []json.RawMessage) (string, error) {
-	items := make([]any, len(content))
-	for i, b := range content {
-		v, err := py.JSONLoads(b)
-		if err != nil {
-			return "", fmt.Errorf("journal: content block: %w", err)
-		}
-		items[i] = v
+func dumps(content []json.RawMessage) (string, error) {
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(content); err != nil {
+		return "", fmt.Errorf("journal: content blocks: %w", err)
 	}
-	return py.JSONDumps(items, jsonCompact), nil
+	return strings.TrimSuffix(buf.String(), "\n"), nil
 }
 
 type textBlock struct {
@@ -308,16 +303,12 @@ type textBlock struct {
 	Text *string `json:"text"`
 }
 
-func AppendMessage(ctx context.Context, d *db.DB, threadID int64, runID *int64, role string, content []json.RawMessage, now float64, systemSig *string) (int64, error) {
-	body, err := Dumps(content)
-	if err != nil {
-		return 0, err
-	}
+func messageText(content []json.RawMessage) (string, error) {
 	var texts []string
 	for _, raw := range content {
 		var b textBlock
 		if err := json.Unmarshal(raw, &b); err != nil {
-			return 0, fmt.Errorf("journal: content block is not an object: %w", err)
+			return "", fmt.Errorf("journal: content block is not an object: %w", err)
 		}
 		if b.Type == "text" {
 			t := ""
@@ -327,23 +318,84 @@ func AppendMessage(ctx context.Context, d *db.DB, threadID int64, runID *int64, 
 			texts = append(texts, t)
 		}
 	}
-	text := py.Strip(strings.Join(texts, "\n"))
+	return py.Strip(strings.Join(texts, "\n")), nil
+}
+
+func ReindexThread(ctx context.Context, q db.Querier, threadID int64) error {
+	if _, err := q.ExecContext(ctx, "DELETE FROM thread_fts WHERE thread_id = ?", threadID); err != nil {
+		return err
+	}
+	var title *string
+	err := q.QueryRowContext(ctx, "SELECT title FROM threads WHERE id = ?", threadID).Scan(&title)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if title != nil && *title != "" {
+		if _, err := q.ExecContext(ctx, "INSERT INTO thread_fts (thread_id, text) VALUES (?, ?)", threadID, *title); err != nil {
+			return err
+		}
+	}
+	rows, err := q.QueryContext(ctx, "SELECT content_json FROM thread_messages WHERE thread_id = ? AND superseded = 0 ORDER BY seq", threadID)
+	if err != nil {
+		return err
+	}
+	bodies, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
+		var raw string
+		return raw, r.Scan(&raw)
+	})
+	if err != nil {
+		return err
+	}
+	for _, raw := range bodies {
+		var content []json.RawMessage
+		if err := json.Unmarshal([]byte(raw), &content); err != nil {
+			return fmt.Errorf("journal: thread %d content_json: %w", threadID, err)
+		}
+		text, err := messageText(content)
+		if err != nil {
+			return err
+		}
+		if text == "" {
+			continue
+		}
+		if _, err := q.ExecContext(ctx, "INSERT INTO thread_fts (thread_id, text) VALUES (?, ?)", threadID, text); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func AppendMessageTx(ctx context.Context, q db.Querier, threadID int64, runID *int64, role string, content []json.RawMessage, now float64, systemSig *string) (int64, error) {
+	body, err := dumps(content)
+	if err != nil {
+		return 0, err
+	}
 	var seq int64
-	err = d.WithTx(ctx, func(tx *sql.Tx) error {
-		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(seq), 0) + 1 FROM thread_messages WHERE thread_id = ?", threadID).Scan(&seq); err != nil {
-			return err
-		}
-		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO thread_messages (thread_id, run_id, seq, role, content_json, created_at, system_sig) VALUES (?, ?, ?, ?, ?, ?, ?)",
-			threadID, runID, seq, role, body, now, systemSig); err != nil {
-			return err
-		}
-		if text != "" {
-			if _, err := tx.ExecContext(ctx, "INSERT INTO thread_fts (thread_id, text) VALUES (?, ?)", threadID, text); err != nil {
-				return err
-			}
-		}
-		_, err := tx.ExecContext(ctx, "UPDATE threads SET updated_at = ? WHERE id = ?", now, threadID)
+	if err := q.QueryRowContext(ctx, "SELECT COALESCE(MAX(seq), 0) + 1 FROM thread_messages WHERE thread_id = ?", threadID).Scan(&seq); err != nil {
+		return 0, err
+	}
+	if _, err := q.ExecContext(ctx,
+		"INSERT INTO thread_messages (thread_id, run_id, seq, role, content_json, created_at, system_sig) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		threadID, runID, seq, role, body, now, systemSig); err != nil {
+		return 0, err
+	}
+	if err := ReindexThread(ctx, q, threadID); err != nil {
+		return 0, err
+	}
+	if _, err := q.ExecContext(ctx, "UPDATE threads SET updated_at = ? WHERE id = ?", now, threadID); err != nil {
+		return 0, err
+	}
+	return seq, nil
+}
+
+func AppendMessage(ctx context.Context, d *db.DB, threadID int64, runID *int64, role string, content []json.RawMessage, now float64, systemSig *string) (int64, error) {
+	var seq int64
+	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		seq, err = AppendMessageTx(ctx, tx, threadID, runID, role, content, now, systemSig)
 		return err
 	})
 	return seq, err
@@ -357,27 +409,50 @@ func decodeContent(id int64, raw string) ([]json.RawMessage, error) {
 	return content, nil
 }
 
-func MessagesOf(ctx context.Context, q db.Querier, threadID int64, includeSuperseded bool) ([]Message, error) {
-	query := "SELECT id, run_id, seq, role, content_json, created_at, system_sig, superseded FROM thread_messages WHERE thread_id = ?"
-	if !includeSuperseded {
-		query += " AND superseded = 0"
-	}
-	rows, err := q.QueryContext(ctx, query+" ORDER BY seq", threadID)
+func MessagesOf(ctx context.Context, q db.Querier, threadID int64) ([]Message, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT id, run_id, seq, role, content_json, created_at, system_sig FROM thread_messages WHERE thread_id = ? AND superseded = 0 ORDER BY seq",
+		threadID)
 	if err != nil {
 		return nil, err
 	}
 	return db.Collect(rows, func(r *sql.Rows) (Message, error) {
 		var m Message
 		var raw string
-		var superseded store.Flag
-		if err := r.Scan(&m.ID, &m.RunID, &m.Seq, &m.Role, &raw, &m.CreatedAt, &m.SystemSig, &superseded); err != nil {
+		if err := r.Scan(&m.ID, &m.RunID, &m.Seq, &m.Role, &raw, &m.CreatedAt, &m.SystemSig); err != nil {
 			return Message{}, err
 		}
-		m.Superseded = bool(superseded)
 		var err error
 		m.Content, err = decodeContent(m.ID, raw)
 		return m, err
 	})
+}
+
+type History struct {
+	ThreadID int64
+	Messages []Message
+	Calls    []ToolCall
+}
+
+func LoadHistory(ctx context.Context, q db.Querier, threadID int64) (History, error) {
+	messages, err := MessagesOf(ctx, q, threadID)
+	if err != nil {
+		return History{}, err
+	}
+	calls, err := ToolCallsForThread(ctx, q, threadID)
+	if err != nil {
+		return History{}, err
+	}
+	return History{ThreadID: threadID, Messages: messages, Calls: calls}, nil
+}
+
+func (h History) LastOperator() *Message {
+	for i := len(h.Messages) - 1; i >= 0; i-- {
+		if h.Messages[i].Role == User && HasText(h.Messages[i].Content) {
+			return &h.Messages[i]
+		}
+	}
+	return nil
 }
 
 func LastMessage(ctx context.Context, q db.Querier, threadID int64) (*Message, error) {
@@ -408,46 +483,25 @@ func HasText(content []json.RawMessage) bool {
 	return false
 }
 
-func LastOperatorMessage(ctx context.Context, q db.Querier, threadID int64) (*Message, error) {
-	all, err := MessagesOf(ctx, q, threadID, false)
-	if err != nil {
-		return nil, err
+func Supersede(ctx context.Context, q db.Querier, threadID, fromSeq int64, keepMessage bool) error {
+	first := fromSeq
+	if keepMessage {
+		first++
 	}
-	for i := len(all) - 1; i >= 0; i-- {
-		if all[i].Role == User && HasText(all[i].Content) {
-			return &all[i], nil
-		}
-	}
-	return nil, nil
-}
-
-func Supersede(ctx context.Context, d *db.DB, threadID, fromSeq int64, keepMessage bool) error {
-	return d.WithTx(ctx, func(tx *sql.Tx) error {
-		first := fromSeq
-		if keepMessage {
-			first++
-		}
-		if _, err := tx.ExecContext(ctx, "UPDATE thread_messages SET superseded = 1 WHERE thread_id = ? AND seq >= ?", threadID, first); err != nil {
-			return err
-		}
-		var runID *int64
-		err := tx.QueryRowContext(ctx, "SELECT run_id FROM thread_messages WHERE thread_id = ? AND seq = ?", threadID, fromSeq).Scan(&runID)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		if runID != nil {
-			if _, err := tx.ExecContext(ctx, "UPDATE runs SET superseded = 1 WHERE thread_id = ? AND id >= ?", threadID, *runID); err != nil {
-				return err
-			}
-			if _, err := tx.ExecContext(ctx,
-				"DELETE FROM context_ledger WHERE state IN ('staged_drop', 'staged_fold') AND run_id IN (SELECT id FROM runs WHERE thread_id = ? AND superseded = 1)",
-				threadID); err != nil {
-				return err
-			}
-		}
-		_, err = tx.ExecContext(ctx, "DELETE FROM context_projections WHERE thread_id = ? AND base_seq > ?", threadID, fromSeq)
+	if _, err := q.ExecContext(ctx, "UPDATE thread_messages SET superseded = 1 WHERE thread_id = ? AND seq >= ?", threadID, first); err != nil {
 		return err
-	})
+	}
+	var runID *int64
+	err := q.QueryRowContext(ctx, "SELECT run_id FROM thread_messages WHERE thread_id = ? AND seq = ?", threadID, fromSeq).Scan(&runID)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if runID != nil {
+		if _, err := q.ExecContext(ctx, "UPDATE runs SET superseded = 1 WHERE thread_id = ? AND id >= ?", threadID, *runID); err != nil {
+			return err
+		}
+	}
+	return ReindexThread(ctx, q, threadID)
 }
 
 type QueuedMessage struct {
@@ -462,7 +516,7 @@ type QueuedMessage struct {
 }
 
 func QueueMessage(ctx context.Context, d *db.DB, threadID int64, text string, now float64, files []json.RawMessage) (id int64, queued bool, err error) {
-	body, err := Dumps(append([]json.RawMessage{}, files...))
+	body, err := dumps(append([]json.RawMessage{}, files...))
 	if err != nil {
 		return 0, false, err
 	}
@@ -504,17 +558,28 @@ func Queued(ctx context.Context, q db.Querier, threadID int64) ([]QueuedMessage,
 	})
 }
 
-func TakeQueued(ctx context.Context, q db.Querier, threadID, runID int64, now float64) ([]QueuedMessage, error) {
-	rows, err := Queued(ctx, q, threadID)
+func ConsumeQueued(ctx context.Context, d *db.DB, threadID, runID int64, now float64, appendFn func(q db.Querier, m QueuedMessage) error) ([]QueuedMessage, error) {
+	var taken []QueuedMessage
+	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		rows, err := Queued(ctx, tx, threadID)
+		if err != nil {
+			return err
+		}
+		for _, row := range rows {
+			if err := appendFn(tx, row); err != nil {
+				return err
+			}
+			if _, err := tx.ExecContext(ctx, "UPDATE thread_queue SET consumed_at = ?, run_id = ? WHERE id = ?", now, runID, row.ID); err != nil {
+				return err
+			}
+			taken = append(taken, row)
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	for _, r := range rows {
-		if _, err := q.ExecContext(ctx, "UPDATE thread_queue SET consumed_at = ?, run_id = ? WHERE id = ?", now, runID, r.ID); err != nil {
-			return nil, err
-		}
-	}
-	return rows, nil
+	return taken, nil
 }
 
 type ToolCall struct {
@@ -542,10 +607,11 @@ func scanCall(row interface{ Scan(...any) error }) (ToolCall, error) {
 }
 
 func StartToolCall(ctx context.Context, q db.Querier, runID int64, toolUseID, name string, args json.RawMessage, replayClass string, now float64) (int64, error) {
-	body, err := py.JSONRedump(args, jsonCompact)
-	if err != nil {
-		return 0, err
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, args); err != nil {
+		return 0, fmt.Errorf("journal: tool args: %w", err)
 	}
+	body := buf.String()
 	sum := sha256.Sum256([]byte(body))
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO tool_calls (run_id, tool_use_id, name, args_json, args_sha256, replay_class, state, started_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
@@ -589,17 +655,8 @@ type CallKey struct {
 	ToolUseID string
 }
 
-func ToolCallsForThread(ctx context.Context, q db.Querier, threadID int64) (map[CallKey]ToolCall, error) {
-	rows, err := q.QueryContext(ctx,
+func ToolCallsForThread(ctx context.Context, q db.Querier, threadID int64) ([]ToolCall, error) {
+	return calls(q.QueryContext(ctx,
 		"SELECT c.id, c.run_id, c.tool_use_id, c.name, c.args_json, c.args_sha256, c.replay_class, c.state, c.error, c.result_id, c.started_at, c.finished_at "+
-			"FROM tool_calls c JOIN runs r ON r.id = c.run_id WHERE r.thread_id = ? ORDER BY c.id", threadID)
-	list, err := calls(rows, err)
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[CallKey]ToolCall, len(list))
-	for _, c := range list {
-		out[CallKey{c.RunID, c.ToolUseID}] = c
-	}
-	return out, nil
+			"FROM tool_calls c JOIN runs r ON r.id = c.run_id WHERE r.thread_id = ? AND r.superseded = 0 ORDER BY c.id", threadID))
 }

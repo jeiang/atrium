@@ -18,9 +18,9 @@ func callsByUse(ctx gocontext.Context, q db.Querier, threadID int64) (map[string
 		return nil, err
 	}
 	out := make(map[string]journal.ToolCall, len(all))
-	for key, c := range all {
-		if have, ok := out[key.ToolUseID]; !ok || c.ID > have.ID {
-			out[key.ToolUseID] = c
+	for _, c := range all {
+		if have, ok := out[c.ToolUseID]; !ok || c.ID > have.ID {
+			out[c.ToolUseID] = c
 		}
 	}
 	return out, nil
@@ -185,7 +185,7 @@ func Status(ctx gocontext.Context, q db.Querier, threadID int64) (py.Dict, error
 			})
 		}
 	}
-	messages, err := journal.MessagesOf(ctx, q, threadID, false)
+	messages, err := journal.MessagesOf(ctx, q, threadID)
 	if err != nil {
 		return nil, err
 	}
@@ -373,7 +373,7 @@ func Fold(ctx gocontext.Context, q db.Querier, threadID, runID int64, fromSeq, t
 	if err != nil {
 		return nil, err
 	}
-	messages, err := journal.MessagesOf(ctx, q, threadID, false)
+	messages, err := journal.MessagesOf(ctx, q, threadID)
 	if err != nil {
 		return nil, err
 	}
@@ -491,7 +491,7 @@ func Commit(ctx gocontext.Context, q db.Querier, threadID, runID int64, now floa
 	if len(staged) == 0 {
 		return nil, nil
 	}
-	messages, err := journal.MessagesOf(ctx, q, threadID, false)
+	messages, err := journal.MessagesOf(ctx, q, threadID)
 	if err != nil {
 		return nil, err
 	}
