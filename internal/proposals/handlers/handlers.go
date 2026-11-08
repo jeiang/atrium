@@ -13,17 +13,16 @@ import (
 )
 
 type Deps struct {
-	DB        *db.DB
-	Open      mailops.Opener
-	Syncer    *mailsync.Syncer
-	Now       func() float64
-	Env       config.Env
-	NewNotion func(token string) *notion.Client
+	DB     *db.DB
+	Open   mailops.Opener
+	Syncer *mailsync.Syncer
+	Now    func() float64
+	Env    config.Env
 }
 
 func Register(r *proposals.Registry, deps Deps) {
 	executors.Register(r, &executors.Executors{DB: deps.DB, Open: deps.Open, Now: deps.Now}, deps.Syncer)
 	calendar.Register(r, &calendar.Proposals{DB: deps.DB, Now: deps.Now, Env: deps.Env})
-	(&notion.Applier{DB: deps.DB, NewClient: deps.NewNotion, Now: deps.Now}).Register(r)
+	(&notion.Applier{DB: deps.DB, Now: deps.Now}).Register(r)
 	openloops.Register(r, &openloops.Reminders{DB: deps.DB, Now: deps.Now})
 }

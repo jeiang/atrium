@@ -14,14 +14,6 @@ import (
 
 const TokenKey = "notion_token"
 
-var apiBase = BaseURL
-
-func UseBaseURL(u string) func() {
-	saved := apiBase
-	apiBase = u
-	return func() { apiBase = saved }
-}
-
 func init() {
 	settings.MustRegister(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: TokenKey, Module: "notion", Type: settings.String}))
 }
@@ -37,9 +29,11 @@ func Token(ctx context.Context, q db.Querier) (string, error) {
 	return token, nil
 }
 
-func SharedPages(ctx context.Context, token string, hc *http.Client) (shared int, more bool, err error) {
-	client := NewClient(token)
-	client.HTTP = hc
+func SharedPages(ctx context.Context, q db.Querier, token string, hc *http.Client) (shared int, more bool, err error) {
+	client, err := newCandidate(ctx, q, token, hc)
+	if err != nil {
+		return 0, false, err
+	}
 	client.API.MaxRetries = 0
 	if err := client.do(ctx, http.MethodGet, "/v1/users/me", nil, nil); err != nil {
 		return 0, false, err

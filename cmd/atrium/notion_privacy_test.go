@@ -7,8 +7,6 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-
-	"github.com/jeiang/atrium/internal/notion"
 )
 
 func TestNotionSyncTreatsAFormulaPrivacyValueAsPrivate(t *testing.T) {
@@ -40,7 +38,7 @@ func TestNotionSyncTreatsAFormulaPrivacyValueAsPrivate(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	t.Cleanup(notion.UseBaseURL(srv.URL))
+	t.Setenv("ATRIUM_NOTION_BASE_URL", srv.URL)
 
 	f := newFixture(t, goldenData{}, map[string]string{"NOTION_TOKEN": "ntn_good"}, "")
 	ctx := context.Background()

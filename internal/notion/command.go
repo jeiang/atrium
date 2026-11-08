@@ -14,9 +14,8 @@ import (
 )
 
 type Options struct {
-	Env       config.Env
-	NewClient func(token string) *Client
-	Embed     embed.TextsFunc
+	Env   config.Env
+	Embed embed.TextsFunc
 }
 
 func (o Options) env() config.Env {
@@ -24,13 +23,6 @@ func (o Options) env() config.Env {
 		return config.OS
 	}
 	return o.Env
-}
-
-func (o Options) client(token string) *Client {
-	if o.NewClient == nil {
-		return NewClient(token)
-	}
-	return o.NewClient(token)
 }
 
 func Command(o Options) *cli.Command {
@@ -78,12 +70,8 @@ func (o Options) sync(ctx context.Context, d *db.DB, cfg config.Config, env *cli
 }
 
 func (o Options) syncPass(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env) error {
-	token, err := Token(ctx, d.Read)
+	client, err := NewClient(ctx, d.Read)
 	if err != nil {
-		return err
-	}
-	client := o.client(token)
-	if err := client.Configure(ctx, d.Read); err != nil {
 		return err
 	}
 	stats, err := o.locked(ctx, d, cfg, client)

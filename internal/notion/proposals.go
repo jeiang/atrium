@@ -303,9 +303,8 @@ func (p *Proposer) ProposeEdit(ctx context.Context, pageID, instruction string) 
 }
 
 type Applier struct {
-	DB        *db.DB
-	NewClient func(token string) *Client
-	Now       func() float64
+	DB  *db.DB
+	Now func() float64
 }
 
 func (a *Applier) now() float64 {
@@ -316,15 +315,7 @@ func (a *Applier) now() float64 {
 }
 
 func (a *Applier) client(ctx context.Context) (*Client, error) {
-	token, err := Token(ctx, a.DB.Read)
-	if err != nil {
-		return nil, err
-	}
-	client := NewClient(token)
-	if a.NewClient != nil {
-		client = a.NewClient(token)
-	}
-	return client, client.Configure(ctx, a.DB.Read)
+	return NewClient(ctx, a.DB.Read)
 }
 
 func freshPage(ctx context.Context, client *Client, pageID, snapshot string) error {

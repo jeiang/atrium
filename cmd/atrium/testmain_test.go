@@ -122,7 +122,7 @@ func requirementEnv(mediaRoot string) map[string]string {
 func init() {
 	defaults := requirementEnv(filepath.Join(testRoot, "media"))
 	defaults[anthropic.BaseURLEnv] = "http://127.0.0.1:9"
-	notion.UseBaseURL("http://127.0.0.1:9")
+	_ = os.Setenv("ATRIUM_NOTION_BASE_URL", "http://127.0.0.1:9")
 	defaults[settingEnv(ops.ListenKey)] = "127.0.0.1:0"
 	for _, name := range moduleNames {
 		defaults[flagEnv(name)] = "true"

@@ -9,6 +9,7 @@ import (
 	"math"
 	"net/http"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -46,40 +47,38 @@ type Client struct {
 	BaseURL string
 	HTTP    *http.Client
 	API     APILimits
-	Sleep   func(ctx context.Context, seconds float64) error
-	Clock   func() float64
-	last    float64
+	last    time.Time
 	paced   bool
 }
 
-func NewClient(token string) *Client {
-	api := defaultAPI()
-	return &Client{
-		token:   token,
-		BaseURL: apiBase,
-		HTTP:    &http.Client{Timeout: api.Timeout},
-		API:     api,
-		Sleep:   sleep,
-		Clock:   monotonic,
+func baseURL() string {
+	if u := strings.TrimRight(os.Getenv("ATRIUM_NOTION_BASE_URL"), "/"); u != "" {
+		return u
 	}
+	return BaseURL
 }
 
-func (c *Client) Configure(ctx context.Context, q db.Querier) error {
+func NewClient(ctx context.Context, q db.Querier) (*Client, error) {
+	token, err := Token(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	return newCandidate(ctx, q, token, nil)
+}
+
+func newCandidate(ctx context.Context, q db.Querier, token string, hc *http.Client) (*Client, error) {
 	limits, err := LoadAPI(ctx, q)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	client, err := transport.For(ctx, q, "notion", limits.Timeout)
-	if err != nil {
-		return err
+	if hc == nil {
+		hc, err = transport.For(ctx, q, "notion", limits.Timeout)
+		if err != nil {
+			return nil, err
+		}
 	}
-	c.API, c.HTTP = limits, client
-	return nil
+	return &Client{token: token, BaseURL: baseURL(), HTTP: hc, API: limits}, nil
 }
-
-var epoch = time.Now()
-
-func monotonic() float64 { return time.Since(epoch).Seconds() }
 
 func sleep(ctx context.Context, seconds float64) error {
 	timer := time.NewTimer(time.Duration(seconds * float64(time.Second)))
@@ -94,13 +93,13 @@ func sleep(ctx context.Context, seconds float64) error {
 
 func (c *Client) pace(ctx context.Context) error {
 	if c.paced {
-		if wait := MinInterval - (c.Clock() - c.last); wait > 0 {
-			if err := c.Sleep(ctx, wait); err != nil {
+		if wait := MinInterval - time.Since(c.last).Seconds(); wait > 0 {
+			if err := sleep(ctx, wait); err != nil {
 				return err
 			}
 		}
 	}
-	c.last, c.paced = c.Clock(), true
+	c.last, c.paced = time.Now(), true
 	return nil
 }
 
@@ -194,10 +193,10 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 			return json.Unmarshal(raw, out)
 		}
 		if retryable(status) && attempt < c.API.MaxRetries {
-			if err := c.Sleep(ctx, c.retryDelay(status, headers, attempt)); err != nil {
+			if err := sleep(ctx, c.retryDelay(status, headers, attempt)); err != nil {
 				return err
 			}
-			c.last = c.Clock()
+			c.last = time.Now()
 			continue
 		}
 		return refusal(status, raw)

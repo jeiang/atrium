@@ -53,7 +53,7 @@ func TestCredentialIntegrationsTestWithSpecificReasonsAndSaveOnlyWorkingSecrets(
 	notionFake := &fakeNotionAccess{}
 	notionSrv := httptest.NewServer(http.HandlerFunc(notionFake.handler))
 	t.Cleanup(notionSrv.Close)
-	t.Cleanup(notion.UseBaseURL(notionSrv.URL))
+	t.Setenv("ATRIUM_NOTION_BASE_URL", notionSrv.URL)
 	grafana := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		switch {
