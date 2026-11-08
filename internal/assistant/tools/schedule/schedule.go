@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 const Help = "ISO datetime for a one-off ('2026-11-02T09:00'), 'daily HH:MM', 'weekly mon HH:MM', or a 5-field cron expression " +
@@ -38,8 +39,8 @@ func describe(ctx context.Context, q db.Querier, job *scheduler.Job) (py.Dict, e
 		if err != nil {
 			return nil, &tool.Raised{Class: "ScheduleError"}
 		}
-		sec, us := py.SplitTimestamp(*job.NextDue)
-		due = py.ISOFormat(time.Unix(sec, us*1000).In(loc), "minutes")
+		sec, us := timex.SplitTimestamp(*job.NextDue)
+		due = time.Unix(sec, us*1000).In(loc).Format("2006-01-02T15:04-07:00")
 	}
 	found := py.Dict{
 		{Key: "id", Value: job.ID},
@@ -201,7 +202,7 @@ func Tools() []tool.Tool {
 			Name: "schedule_create",
 			Description: "Create a scheduled run: at the given time a new thread starts with `prompt` and read, notify and propose tools only. " +
 				"The prompt must be self-contained. " + Help + " At most 20 active schedules.",
-			InputSchema: json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string"}, "prompt": {"type": "string"}, "schedule": {"type": "string", "description": ` + py.JSONDumps(Help) + `}}, "required": ["name", "prompt", "schedule"], "additionalProperties": false}`),
+			InputSchema: json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string"}, "prompt": {"type": "string"}, "schedule": {"type": "string", "description": ` + jsonText(Help) + `}}, "required": ["name", "prompt", "schedule"], "additionalProperties": false}`),
 			Handler:     create,
 			Effect:      tool.Write,
 			Contexts:    chatOnly,
@@ -209,7 +210,7 @@ func Tools() []tool.Tool {
 		{
 			Name:        "schedule_update",
 			Description: "Change a schedule's name, prompt, schedule or enabled flag by id.",
-			InputSchema: json.RawMessage(`{"type": "object", "properties": {"id": {"type": "integer"}, "name": {"type": "string"}, "prompt": {"type": "string"}, "schedule": {"type": "string", "description": ` + py.JSONDumps(Help) + `}, "enabled": {"type": "boolean"}}, "required": ["id"], "additionalProperties": false}`),
+			InputSchema: json.RawMessage(`{"type": "object", "properties": {"id": {"type": "integer"}, "name": {"type": "string"}, "prompt": {"type": "string"}, "schedule": {"type": "string", "description": ` + jsonText(Help) + `}, "enabled": {"type": "boolean"}}, "required": ["id"], "additionalProperties": false}`),
 			Handler:     update,
 			Effect:      tool.Write,
 			Contexts:    chatOnly,
@@ -231,4 +232,9 @@ func Tools() []tool.Tool {
 			Contexts:    chatOnly,
 		},
 	}
+}
+
+func jsonText(s string) string {
+	b, _ := json.Marshal(s)
+	return string(b)
 }

@@ -3,6 +3,7 @@ package notiontools
 import (
 	"context"
 	"errors"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/tool"
@@ -124,10 +125,10 @@ func RegisterUndoers(r *writes.Registry, env config.Env) {
 
 func pageArg(payload py.Dict, key string) (string, error) {
 	v, _ := dictGet(payload, key).(string)
-	if py.Strip(v) == "" {
+	if strings.TrimSpace(v) == "" {
 		return "", tool.Error("payload." + key + " must be a Notion page id")
 	}
-	return py.Strip(v), nil
+	return strings.TrimSpace(v), nil
 }
 
 func proposed(err error) error {
@@ -144,7 +145,7 @@ func proposer(tc *tool.Context) *notion.Proposer {
 
 func proposeEdit(ctx context.Context, tc *tool.Context, payload py.Dict) (*int64, error) {
 	instruction, _ := dictGet(payload, "instruction").(string)
-	if py.Strip(instruction) == "" {
+	if strings.TrimSpace(instruction) == "" {
 		return nil, tool.Error("payload.instruction must be text")
 	}
 	page, err := pageArg(payload, "page_id")

@@ -28,6 +28,28 @@ const (
 
 var writeKinds = tool.Kinds{tool.Chat, tool.Nightly}
 
+func truthy(v any) bool {
+	switch v := v.(type) {
+	case nil:
+		return false
+	case string:
+		return v != ""
+	case bool:
+		return v
+	case int64:
+		return v != 0
+	case float64:
+		return v != 0
+	case []any:
+		return len(v) > 0
+	case map[string]any:
+		return len(v) > 0
+	case py.Dict:
+		return len(v) > 0
+	}
+	return true
+}
+
 func normalize(id string) string { return notionid.Normalize(id) }
 
 func checkMarkdown(ctx context.Context, tc *tool.Context, markdown string) error {
@@ -71,7 +93,7 @@ func livePageOf(ctx context.Context, q db.Querier, client *notion.Client, pageID
 	if err != nil {
 		return nil, err
 	}
-	if py.Truthy(dictGet(page, "in_trash")) {
+	if truthy(dictGet(page, "in_trash")) {
 		return nil, tool.Error("page is in the trash")
 	}
 	properties, _ := dictGet(page, "properties").(py.Dict)
@@ -128,7 +150,7 @@ func hubOf(ctx context.Context, tc *tool.Context, root, value string, defaultRoo
 
 func cleanArgs(wiki notion.Wiki, args py.Dict) (aliases, sources []string, err error) {
 	raw := dictGet(args, "aliases")
-	if !py.Truthy(raw) {
+	if !truthy(raw) {
 		raw = []any{}
 	}
 	if aliases, err = wiki.CleanAliases(raw); err == nil {
@@ -231,7 +253,7 @@ func createPage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 		return nil, err
 	}
 	markdown := ""
-	if v := dictGet(args, "markdown"); py.Truthy(v) {
+	if v := dictGet(args, "markdown"); truthy(v) {
 		s, ok := v.(string)
 		if !ok {
 			return nil, tool.Error("markdown must be a string")
@@ -273,7 +295,7 @@ func createPage(ctx context.Context, tc *tool.Context, args py.Dict) (any, error
 		if len(hits) > 0 {
 			parts := make([]string, 0, 5)
 			for _, h := range hits[:min(5, len(hits))] {
-				parts = append(parts, h.ID+" ("+py.Repr(h.Title)+", "+h.Match+")")
+				parts = append(parts, h.ID+" ("+strconv.Quote(h.Title)+", "+h.Match+")")
 			}
 			return nil, tool.Error("wiki already has matching page(s): " + strings.Join(parts, ", ") +
 				". Update that page, or pass allow_duplicate=true if this is genuinely a different entity.")
@@ -330,7 +352,7 @@ func newMarkdown(previous string, replace, appendText *string, section string) (
 				return "", err
 			}
 			if !ok {
-				return "", tool.Error("page has no section titled " + py.Repr(section) + "; use append_markdown to add one")
+				return "", tool.Error("page has no section titled " + strconv.Quote(section) + "; use append_markdown to add one")
 			}
 			return updated, nil
 		}
@@ -431,7 +453,7 @@ func rewrite(ctx context.Context, q db.Querier, wiki notion.Wiki, client *notion
 	if err != nil {
 		return
 	}
-	if py.Truthy(dictGet(current, "truncated")) {
+	if truthy(dictGet(current, "truncated")) {
 		err = tool.Error("page is too large to rewrite safely")
 		return
 	}
@@ -615,7 +637,7 @@ func addAlias(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) 
 	var taken []string
 	for _, h := range hits {
 		if h.ID != pageID && len(taken) < 5 {
-			taken = append(taken, h.ID+" ("+py.Repr(h.Title)+")")
+			taken = append(taken, h.ID+" ("+strconv.Quote(h.Title)+")")
 		}
 	}
 	if len(taken) > 0 {

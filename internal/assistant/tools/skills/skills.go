@@ -3,6 +3,7 @@ package skillstools
 import (
 	"context"
 	"encoding/json"
+	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/skills"
@@ -20,7 +21,7 @@ func load(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	shown := "None"
 	var found *skills.Skill
 	if ok {
-		shown = py.Repr(name)
+		shown = strconv.Quote(name)
 		if found, err = skills.Get(ctx, tc.DB.Read, name); err != nil {
 			return nil, err
 		}

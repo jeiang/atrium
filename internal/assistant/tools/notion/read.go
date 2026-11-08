@@ -13,6 +13,16 @@ import (
 
 var readKinds = tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub}
 
+func clip(s string, n int) string {
+	for i := range s {
+		if n == 0 {
+			return s[:i]
+		}
+		n--
+	}
+	return s
+}
+
 func meta(ctx context.Context, tc *tool.Context, pageID string) ([]any, string, error) {
 	local, err := notion.GetWiki(ctx, tc.DB.Read, pageID)
 	if err != nil || local == nil {
@@ -57,7 +67,7 @@ func aliasHits(ctx context.Context, tc *tool.Context, query string, snippetChars
 		}
 		hit := py.Dict{{Key: "page_id", Value: id}}
 		if row != nil {
-			head := py.Clip(row.Markdown, limits.HeadSource)
+			head := clip(row.Markdown, limits.HeadSource)
 			hit = append(hit, py.Pair{Key: "title", Value: row.Title}, py.Pair{Key: "path", Value: row.Path}, py.Pair{Key: "url", Value: row.URL},
 				py.Pair{Key: "snippet", Value: tool.Clip(notion.Plain(head, map[string]string{}), snippetChars)})
 		} else {
@@ -188,7 +198,7 @@ func fetchKnowledge(ctx context.Context, tc *tool.Context, args py.Dict) (any, e
 		return nil, err
 	}
 	text := str(page, "markdown")
-	page = page.Set("markdown", py.Clip(text, int(maxChars)))
+	page = page.Set("markdown", clip(text, int(maxChars)))
 	page = append(page, py.Pair{Key: "truncated", Value: int64(len([]rune(text))) > maxChars}, py.Pair{Key: "source", Value: source})
 	return withMeta(ctx, tc, page, pageID)
 }

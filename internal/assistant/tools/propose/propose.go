@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -52,7 +53,7 @@ func propose(ctx context.Context, tc *tool.Context, args py.Dict) (any, error) {
 	shown := "None"
 	var fn Builder
 	if ok {
-		shown = py.Repr(kind)
+		shown = strconv.Quote(kind)
 		fn = builder(kind)
 	}
 	if fn == nil {

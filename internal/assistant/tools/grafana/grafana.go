@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"math"
 	"math/big"
@@ -21,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/py"
+	"github.com/jeiang/atrium/internal/timex"
 )
 
 type limits struct {
@@ -108,7 +110,11 @@ func request(ctx context.Context, tc *tool.Context, lim limits, method, path, ra
 	}
 	var reader io.Reader
 	if body != nil {
-		reader = strings.NewReader(py.JSONDumps(body, py.JSONOpts{NoEnsureASCII: true, Compact: true}))
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return nil, err
+		}
+		reader = strings.NewReader(string(encoded))
 	}
 	if class := urlClass(target); class != "" {
 		return nil, tool.Error("grafana unreachable: " + class)
@@ -210,17 +216,17 @@ func pyStr(v any) string {
 	if s, ok := v.(string); ok {
 		return s
 	}
-	return py.ReprValue(v)
+	return fmt.Sprintf("%v", v)
 }
 
 func cell(v any, cellChars int) any {
 	switch v := v.(type) {
 	case float64:
-		return py.Round(v, 6)
+		return roundTo(v, 6)
 	case string:
 		return tool.Clip(v, cellChars)
 	case py.Dict, []any:
-		return tool.Clip(py.ReprValue(v), cellChars)
+		return tool.Clip(fmt.Sprintf("%v", v), cellChars)
 	}
 	return v
 }
@@ -240,8 +246,22 @@ func timeCell(v any, cellChars int) any {
 	if !(ms > 1e11) {
 		return cell(v, cellChars)
 	}
-	sec, us := py.SplitTimestamp(ms / 1000)
-	return py.ISOFormat(time.Unix(sec, us*1000).UTC(), "seconds")
+	sec, us := timex.SplitTimestamp(ms / 1000)
+	return time.Unix(sec, us*1000).UTC().Format("2006-01-02T15:04:05-07:00")
+}
+
+func roundTo(x float64, n int) float64 {
+	if math.IsNaN(x) || math.IsInf(x, 0) {
+		return x
+	}
+	if n == 0 {
+		return math.RoundToEven(x)
+	}
+	out, err := strconv.ParseFloat(strconv.FormatFloat(x, 'f', n, 64), 64)
+	if err != nil {
+		return x
+	}
+	return out
 }
 
 func sample(count, limit int) ([]int, error) {
