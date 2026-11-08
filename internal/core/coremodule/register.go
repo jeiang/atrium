@@ -11,6 +11,8 @@ import (
 	actionlinkpages "github.com/jeiang/atrium/internal/actionlink/pages"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/assistant/writes/writescmd"
+	"github.com/jeiang/atrium/internal/attention"
+	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/auth/loginlink"
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
@@ -47,8 +49,9 @@ func (m Module) Register(mc module.Context) module.Registration {
 		return snap.Enabled(name), nil
 	}
 	return module.Registration{
-		Name: module.Core,
-		Core: true,
+		Name:      module.Core,
+		Core:      true,
+		Attention: []attention.Source{attentionsources.Proposals()},
 		Pages: []web.Page{
 			{Module: about.Module(m.Version), Templates: about.Templates(), Nav: []web.NavItem{
 				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},

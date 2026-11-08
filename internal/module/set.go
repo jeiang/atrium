@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -229,6 +230,16 @@ func (n *Snapshot) Status(name string) (Status, bool) {
 		}
 	}
 	return Status{}, false
+}
+
+func (n *Snapshot) Attention() []attention.Source {
+	var out []attention.Source
+	for _, r := range n.set.regs {
+		if r.Core || n.Enabled(r.Name) {
+			out = append(out, r.Attention...)
+		}
+	}
+	return out
 }
 
 func (n *Snapshot) Enabled(name string) bool {
