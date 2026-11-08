@@ -10,6 +10,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -74,10 +75,11 @@ func Record(ctx context.Context, d *db.DB, messageID int64, folder, source strin
 			messageID, account, folder, ts, source); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO decisions (message_id, account, ts, stage, key, action, dest, confidence, detail) "+
-				"VALUES (?, ?, ?, 'correction', ?, 'file', ?, 1.0, ?)",
-			messageID, account, ts, source, folder, "{}"); err != nil {
+		confidence := 1.0
+		if err := message.RecordDecision(ctx, tx, message.DecisionRecord{
+			MessageID: messageID, Account: account, TS: ts, Stage: "correction", Key: &source, Action: "file", Dest: &folder,
+			Confidence: &confidence, Detail: map[string]any{},
+		}); err != nil {
 			return err
 		}
 		out = Correction{messageID, account, folder, ts, source}

@@ -53,6 +53,44 @@ type Querier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
 
+type Execer interface {
+	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
+}
+
+type DecisionRecord struct {
+	MessageID  int64
+	Account    string
+	TS         float64
+	Stage      string
+	Key        *string
+	Action     string
+	Dest       *string
+	Confidence *float64
+	Detail     any
+}
+
+func RecordDecision(ctx context.Context, q Execer, d DecisionRecord) error {
+	_, err := q.ExecContext(ctx,
+		"INSERT INTO decisions (message_id, account, ts, stage, key, action, dest, confidence, detail) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		d.MessageID, d.Account, d.TS, d.Stage, nullableString(d.Key), d.Action, nullableString(d.Dest), nullableFloat(d.Confidence),
+		py.JSONDumps(d.Detail))
+	return err
+}
+
+func nullableString(v *string) any {
+	if v == nil {
+		return nil
+	}
+	return *v
+}
+
+func nullableFloat(v *float64) any {
+	if v == nil {
+		return nil
+	}
+	return *v
+}
+
 func RawFile(cacheDir, rawPath string) (string, bool) {
 	if rawPath == "" {
 		return "", false
@@ -157,6 +195,10 @@ func LatestDecision(ctx context.Context, q Querier, messageID int64) (map[string
 	}
 	row["detail"] = parsed
 	return row, nil
+}
+
+func Body(ctx context.Context, q Querier, messageID int64) (string, error) {
+	return indexBody(ctx, q, messageID)
 }
 
 func indexBody(ctx context.Context, q Querier, messageID int64) (string, error) {

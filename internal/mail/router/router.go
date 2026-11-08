@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/corrections"
+	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/rules"
 	"github.com/jeiang/atrium/internal/py"
 )
@@ -266,17 +267,6 @@ func NewLLMContext(ctx context.Context, q Querier, account, url string, folderMi
 	return LLMContext{URL: url, Folders: folders, Catalog: llm.FolderCatalog(ctx, senders), Available: true}, nil
 }
 
-func MessageBody(ctx context.Context, q interface {
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}, id int64) (string, error) {
-	var body sql.NullString
-	err := q.QueryRowContext(ctx, "SELECT body FROM message_fts WHERE rowid = ?", id).Scan(&body)
-	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
-	}
-	return body.String, err
-}
-
 func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleList []rules.Rule, lc *LLMContext, t Tuning) (*Decision, error) {
 	_, ok := config.Account(m.Account)
 	if !ok {
@@ -318,7 +308,7 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 		if lc.Down {
 			return nil, nil
 		}
-		body, err := MessageBody(ctx, q, m.ID)
+		body, err := message.Body(ctx, q, m.ID)
 		if err != nil {
 			return nil, err
 		}
@@ -342,11 +332,10 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 }
 
 func (r *Router) Record(ctx context.Context, m *rules.Message, d *Decision) error {
-	_, err := r.DB.Write.ExecContext(ctx,
-		"INSERT INTO decisions (message_id, account, ts, stage, key, action, dest, confidence, detail) "+
-			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		m.ID, m.Account, r.now(), d.Stage, deref(d.Key), d.Action, deref(d.Dest), derefFloat(d.Confidence), py.JSONDumps(d.Detail))
-	return err
+	return message.RecordDecision(ctx, r.DB.Write, message.DecisionRecord{
+		MessageID: m.ID, Account: m.Account, TS: r.now(), Stage: d.Stage, Key: d.Key, Action: d.Action, Dest: d.Dest,
+		Confidence: d.Confidence, Detail: d.Detail,
+	})
 }
 
 func deref(s *string) any {

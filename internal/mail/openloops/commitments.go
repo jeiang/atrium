@@ -13,7 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/router"
+	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/py"
 )
 
@@ -173,7 +173,7 @@ func ScanCommitments(ctx context.Context, d *db.DB, env config.Env, now float64,
 	var stored int64
 rows:
 	for _, row := range rows {
-		body, err := router.MessageBody(ctx, d.Read, row.ID)
+		body, err := message.Body(ctx, d.Read, row.ID)
 		if err != nil {
 			return stored, err
 		}

@@ -649,6 +649,33 @@ func loadRules(ctx context.Context, q Querier, keep func(account sql.NullString)
 	return out, rows.Err()
 }
 
+type StoredRule struct {
+	ID         string
+	Account    *string
+	Action     string
+	Dest       *string
+	Conditions string
+}
+
+func ValidateStored(row StoredRule) error {
+	if row.ID == "" {
+		return ruleErrorf("rule needs a string id")
+	}
+	if row.Action != ActionFile && row.Action != ActionDelete {
+		return ruleErrorf("%s: unknown action %q", row.ID, row.Action)
+	}
+	if row.Action == ActionFile && (row.Dest == nil || *row.Dest == "") {
+		return ruleErrorf("%s: file rule needs dest", row.ID)
+	}
+	if row.Action == ActionDelete && row.Dest != nil {
+		return ruleErrorf("%s: delete rule takes no dest", row.ID)
+	}
+	if _, err := parseStored(row.Conditions); err != nil {
+		return ruleErrorf("%s: %s", row.ID, err)
+	}
+	return nil
+}
+
 func parseStored(text string) ([]Condition, error) {
 	raw, err := py.JSONLoads([]byte(text))
 	if err != nil {
