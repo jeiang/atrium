@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -22,19 +23,6 @@ func (s *service) registerChannels(r chi.Router) {
 
 func chToast(category, title, description string) *tpl.Toast {
 	return &tpl.Toast{Category: category, Title: title, Description: description}
-}
-
-func chLastCheck(v any) *float64 {
-	var f float64
-	switch x := v.(type) {
-	case float64:
-		f = x
-	case int64:
-		f = float64(x)
-	default:
-		return nil
-	}
-	return &f
 }
 
 func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toast, status int, q string, form *ChannelForm, results *[]SearchHit) {
@@ -58,7 +46,7 @@ func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toa
 	}
 	data := ChannelsPage{
 		Channels: channels,
-		Status:   ChannelStatusView{LastCheck: chLastCheck(state.LastCheck), Errors: errs},
+		Status:   ChannelStatusView{LastCheck: state.LastCheck, Errors: errs},
 		TMDB:     set.TMDBToken != "",
 		Q:        q,
 		Results:  results,
@@ -155,14 +143,15 @@ func (s *service) channelAdd(w http.ResponseWriter, r *http.Request) {
 		s.chPage(w, r, chToast("success", "Watching "+row.Name, "The first poll only records what is already out; later matches are downloaded."), http.StatusOK, "", nil, nil)
 		return
 	}
-	qb, err := set.Qbit()
+	out, err := media.Poll(ctx, s.deps.DB.Write, s.deps.Env, set, media.PollOptions{Now: s.now, Only: &row.ID, Force: true})
 	if err != nil {
+		var missing config.NotConfigured
+		var qbitErr media.QbitError
+		if !errors.As(err, &missing) && !errors.As(err, &qbitErr) {
+			panic(err)
+		}
 		s.chPage(w, r, chToast("error", "Watching "+row.Name, "Nothing downloaded: "+err.Error()), http.StatusOK, "", nil, nil)
 		return
-	}
-	out, err := media.Poll(ctx, s.deps.DB.Write, s.deps.Env, qb, set, media.PollOptions{Now: s.now, Only: &row.ID, Force: true})
-	if err != nil {
-		panic(err)
 	}
 	s.chPage(w, r, chPolled("Watching "+row.Name, "no matching releases yet", out), http.StatusOK, "", nil, nil)
 }
@@ -267,14 +256,15 @@ func (s *service) channelDelete(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) channelPoll(w http.ResponseWriter, r *http.Request) {
 	settings := s.settings(r.Context())
-	qb, err := settings.Qbit()
+	out, err := media.Poll(r.Context(), s.deps.DB.Write, s.deps.Env, settings, media.PollOptions{Now: s.now})
 	if err != nil {
+		var missing config.NotConfigured
+		var qbitErr media.QbitError
+		if !errors.As(err, &missing) && !errors.As(err, &qbitErr) {
+			panic(err)
+		}
 		s.chPage(w, r, chToast("error", "Not polled", err.Error()), http.StatusUnprocessableEntity, "", nil, nil)
 		return
-	}
-	out, err := media.Poll(r.Context(), s.deps.DB.Write, s.deps.Env, qb, settings, media.PollOptions{Now: s.now})
-	if err != nil {
-		panic(err)
 	}
 	s.chPage(w, r, chPolled("Polled", "nothing new", out), http.StatusOK, "", nil, nil)
 }

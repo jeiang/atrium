@@ -24,8 +24,7 @@ const (
 	DownloadsPage = "/media/downloads"
 	Import        = "import"
 
-	lastCheck  = "last_check"
-	lastErrors = "last_errors"
+	stateKey = "channels"
 )
 
 var log = logx.Logger("atrium.media")
@@ -46,7 +45,12 @@ type Channel struct {
 }
 
 type Status struct {
-	LastCheck any      `json:"last_check"`
+	LastCheck *float64 `json:"last_check"`
+	Errors    []string `json:"errors"`
+}
+
+type channelState struct {
+	LastCheck float64  `json:"last_check"`
 	Errors    []string `json:"errors"`
 }
 
@@ -233,17 +237,32 @@ func (t Tuning) expireSeen(ctx context.Context, q db.Querier, now float64) error
 	return err
 }
 
-func setState(ctx context.Context, q db.Querier, key string, value any) error {
-	body, err := json.Marshal(value)
+func saveChannelState(ctx context.Context, q db.Querier, state channelState) error {
+	body, err := json.Marshal(state)
 	if err != nil {
 		return err
 	}
-	_, err = q.ExecContext(ctx, "INSERT OR REPLACE INTO media_state (key, value) VALUES (?, ?)", key, string(body))
+	_, err = q.ExecContext(ctx, "INSERT OR REPLACE INTO media_state (key, value) VALUES (?, ?)", stateKey, string(body))
 	return err
 }
 
 func ChannelStatus(ctx context.Context, q db.Querier) (Status, error) {
-	rows, err := q.QueryContext(ctx, "SELECT key, value FROM media_state")
+	out := Status{Errors: []string{}}
+	var body string
+	err := q.QueryRowContext(ctx, "SELECT value FROM media_state WHERE key = ?", stateKey).Scan(&body)
+	if err == nil {
+		var state channelState
+		if err := json.Unmarshal([]byte(body), &state); err != nil {
+			return Status{}, err
+		}
+		out.LastCheck = &state.LastCheck
+		out.Errors = append(out.Errors, state.Errors...)
+		return out, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return Status{}, err
+	}
+	rows, err := q.QueryContext(ctx, "SELECT key, value FROM media_state WHERE key IN ('last_check', 'last_errors')")
 	if err != nil {
 		return Status{}, err
 	}
@@ -254,16 +273,17 @@ func ChannelStatus(ctx context.Context, q db.Querier) (Status, error) {
 	if err != nil {
 		return Status{}, err
 	}
-	out := Status{Errors: []string{}}
 	for _, kv := range state {
 		var v any
 		if err := json.Unmarshal([]byte(kv[1]), &v); err != nil {
 			return Status{}, err
 		}
 		switch kv[0] {
-		case lastCheck:
-			out.LastCheck = v
-		case lastErrors:
+		case "last_check":
+			if f, ok := v.(float64); ok {
+				out.LastCheck = &f
+			}
+		case "last_errors":
 			items, _ := v.([]any)
 			for _, item := range items {
 				text, _ := item.(string)
@@ -293,13 +313,17 @@ func (r PollResult) Dict() py.Dict {
 	return py.Dict{{Key: "added", Value: added}, {Key: "errors", Value: errs}}
 }
 
-func Poll(ctx context.Context, q db.Querier, env config.Env, qb *Qbit, settings Settings, opts PollOptions) (PollResult, error) {
+func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, opts PollOptions) (PollResult, error) {
 	now := opts.Now
 	if now == nil {
 		now = Now
 	}
 	stamp := now()
 	result := PollResult{Added: []Added{}, Errors: []string{}}
+	qb, err := settings.Qbit()
+	if err != nil {
+		return result, err
+	}
 	channels, err := ListChannels(ctx, q)
 	if err != nil {
 		return result, err
@@ -381,14 +405,7 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, qb *Qbit, settings 
 		}
 	}
 	if opts.Only == nil {
-		errs := make([]any, len(result.Errors))
-		for i, e := range result.Errors {
-			errs[i] = e
-		}
-		if err := setState(ctx, q, lastCheck, stamp); err != nil {
-			return result, err
-		}
-		if err := setState(ctx, q, lastErrors, errs); err != nil {
+		if err := saveChannelState(ctx, q, channelState{LastCheck: stamp, Errors: result.Errors}); err != nil {
 			return result, err
 		}
 	}

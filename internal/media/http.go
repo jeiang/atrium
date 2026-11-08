@@ -9,35 +9,11 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
-	"time"
 )
 
 type httpFailure struct{ class string }
 
 func (e *httpFailure) Error() string { return e.class }
-
-var clients sync.Map
-
-func clientFor(timeout time.Duration) *http.Client {
-	if found, ok := clients.Load(timeout); ok {
-		return found.(*http.Client)
-	}
-	made, _ := clients.LoadOrStore(timeout, newClient(timeout))
-	return made.(*http.Client)
-}
-
-func newClient(timeout time.Duration) *http.Client {
-	return &http.Client{
-		Transport: &http.Transport{
-			Proxy:                 http.ProxyFromEnvironment,
-			DialContext:           (&net.Dialer{Timeout: timeout}).DialContext,
-			TLSHandshakeTimeout:   timeout,
-			ResponseHeaderTimeout: timeout,
-		},
-		CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse },
-	}
-}
 
 type reply struct {
 	status int

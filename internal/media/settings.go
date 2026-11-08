@@ -185,6 +185,7 @@ type Settings struct {
 	TMDBToken string
 	QbitHTTP  *http.Client
 	TMDBHTTP  *http.Client
+	EZTVHTTP  *http.Client
 }
 
 func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
@@ -270,6 +271,9 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		return Settings{}, failure
 	}
 	if out.TMDBHTTP, failure = transport.For(ctx, q, "tmdb", out.TMDBTimeout); failure != nil {
+		return Settings{}, failure
+	}
+	if out.EZTVHTTP, failure = transport.For(ctx, q, "eztv", out.EZTVTimeout); failure != nil {
 		return Settings{}, failure
 	}
 	return out, nil

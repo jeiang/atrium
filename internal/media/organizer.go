@@ -34,6 +34,7 @@ type Item struct {
 	Torrent bool
 	Root    string
 	Files   []string
+	Subs    []string
 }
 
 type FileView struct {
@@ -86,6 +87,28 @@ func (t Tuning) VideosUnder(root string) []string {
 	return out
 }
 
+func (t Tuning) SubtitlesUnder(root string) []string {
+	out := []string{}
+	walkRoot := root
+	if link, err := os.Lstat(root); err == nil && link.Mode()&fs.ModeSymlink != 0 {
+		walkRoot = root + "/"
+	}
+	_ = filepath.WalkDir(walkRoot, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			if d != nil && d.IsDir() {
+				return fs.SkipDir
+			}
+			return nil
+		}
+		if d.Type().IsRegular() && t.IsSubtitle(d.Name()) {
+			out = append(out, path)
+		}
+		return nil
+	})
+	slices.Sort(out)
+	return out
+}
+
 func Items(ctx context.Context, qb *Qbit, root string) ([]Item, string, error) {
 	found := []Item{}
 	errText := ""
@@ -101,7 +124,7 @@ func Items(ctx context.Context, qb *Qbit, root string) ([]Item, string, error) {
 		if !t.HasTag(TagMedia) || t.HasTag(TagFiled) || t.HasTag(TagIgnored) {
 			continue
 		}
-		found = append(found, Item{ID: t.Hash, Name: t.Name, Torrent: true, Root: t.ContentPath, Files: qb.VideosUnder(t.ContentPath)})
+		found = append(found, Item{ID: t.Hash, Name: t.Name, Torrent: true, Root: t.ContentPath, Files: qb.VideosUnder(t.ContentPath), Subs: qb.SubtitlesUnder(t.ContentPath)})
 	}
 	importDir := filepath.Join(root, Import)
 	if info, err := os.Stat(importDir); err == nil && info.IsDir() {
@@ -112,7 +135,7 @@ func Items(ctx context.Context, qb *Qbit, root string) ([]Item, string, error) {
 		for _, entry := range entries {
 			entryRoot := filepath.Join(importDir, entry.Name())
 			if files := qb.VideosUnder(entryRoot); len(files) > 0 {
-				found = append(found, Item{ID: importPref + entry.Name(), Name: entry.Name(), Root: entryRoot, Files: files})
+				found = append(found, Item{ID: importPref + entry.Name(), Name: entry.Name(), Root: entryRoot, Files: files, Subs: qb.SubtitlesUnder(entryRoot)})
 			}
 		}
 	}
@@ -200,22 +223,51 @@ func (t Tuning) Defaults(item Item, root string) View {
 	return view
 }
 
-func Plan(view *View, root string) ([]Op, error) {
-	var ops []Op
+type PlanResult struct {
+	View  View
+	Ops   []Op
+	Error string
+}
+
+func subtitleOps(item Item, videoSrc, videoDst string) []Op {
+	stem := strings.TrimSuffix(filepath.Base(videoSrc), filepath.Ext(videoSrc))
+	var out []Op
+	for _, sub := range item.Subs {
+		base := filepath.Base(sub)
+		if !strings.HasPrefix(base, stem) {
+			continue
+		}
+		suffix := strings.TrimPrefix(strings.TrimSuffix(base, filepath.Ext(base)), stem)
+		dst := strings.TrimSuffix(videoDst, filepath.Ext(videoDst)) + suffix + filepath.Ext(base)
+		out = append(out, Op{sub, dst})
+	}
+	return out
+}
+
+func (t Tuning) Plan(view View, root string) PlanResult {
+	out := PlanResult{View: view}
+	fail := func(text string) PlanResult {
+		out.Error = text
+		return out
+	}
 	if len(view.Item.Files) == 0 {
-		return nil, PlanError("no video files found")
+		return fail("no video files found")
+	}
+	if view.Kind != KindMovie && view.Kind != KindTV {
+		return fail("unknown kind " + view.Kind)
 	}
 	if view.Kind == KindMovie {
 		src := largest(view.Item.Files)
 		dst, err := MoviePath(view.Title, view.Year, Ext(src))
 		if err != nil {
-			return nil, PlanError(err.Error())
+			return fail(err.Error())
 		}
-		view.MovieFile, view.MovieDest = relTo(view.Item, src), dst
-		ops = append(ops, Op{src, dst})
+		out.View.MovieFile, out.View.MovieDest = relTo(view.Item, src), dst
+		out.Ops = append(out.Ops, Op{src, dst})
+		out.Ops = append(out.Ops, subtitleOps(view.Item, src, dst)...)
 	} else {
-		for i := range view.Files {
-			fv := &view.Files[i]
+		for i := range out.View.Files {
+			fv := &out.View.Files[i]
 			src := view.Item.Files[i]
 			if strings.TrimSpace(fv.Episode) == "" {
 				fv.Dest = Skipped
@@ -224,33 +276,45 @@ func Plan(view *View, root string) ([]Op, error) {
 			season, okSeason := parseInt(fv.Season)
 			episode, okEpisode := parseInt(fv.Episode)
 			if !okSeason || !okEpisode {
-				return nil, PlanError(fv.Rel + ": season and episode must be numbers")
+				return fail(fv.Rel + ": season and episode must be numbers")
 			}
 			dst, err := EpisodePath(view.Title, view.Year, int(season), int(episode), Ext(fv.Rel))
 			if err != nil {
-				return nil, PlanError(fv.Rel + ": " + err.Error())
+				return fail(fv.Rel + ": " + err.Error())
 			}
 			fv.Dest = dst
-			ops = append(ops, Op{src, dst})
+			out.Ops = append(out.Ops, Op{src, dst})
+			out.Ops = append(out.Ops, subtitleOps(view.Item, src, dst)...)
 		}
-		if len(ops) == 0 {
-			return nil, PlanError("no episodes to file")
+		if len(out.Ops) == 0 {
+			return fail("no episodes to file")
 		}
 	}
 	seen := map[string]bool{}
-	for _, op := range ops {
+	for _, op := range out.Ops {
 		if seen[op.Dst] {
-			return nil, PlanError(op.Dst + " is the destination of two files")
+			return fail(op.Dst + " is the destination of two files")
 		}
 		seen[op.Dst] = true
 		if _, err := os.Lstat(filepath.Join(root, op.Dst)); err == nil {
-			return nil, PlanError(op.Dst + " already exists")
+			return fail(op.Dst + " already exists")
 		}
 	}
-	return ops, nil
+	return out
 }
 
-func (q *Qbit) Apply(ctx context.Context, item Item, ops []Op, root string) error {
+func (t Tuning) Planned(view View, root string) View { return t.Plan(view, root).View }
+
+func (q *Qbit) Apply(ctx context.Context, item Item, ops []Op, root string) (err error) {
+	var undo []func()
+	defer func() {
+		if err == nil {
+			return
+		}
+		for i := len(undo) - 1; i >= 0; i-- {
+			undo[i]()
+		}
+	}()
 	for _, op := range ops {
 		full := filepath.Join(root, op.Dst)
 		if err := os.MkdirAll(filepath.Dir(full), dirMode); err != nil {
@@ -260,8 +324,14 @@ func (q *Qbit) Apply(ctx context.Context, item Item, ops []Op, root string) erro
 			if err := os.Link(op.Src, full); err != nil {
 				return err
 			}
-		} else if err := os.Rename(op.Src, full); err != nil {
-			return err
+			placed := full
+			undo = append(undo, func() { _ = os.Remove(placed) })
+		} else {
+			if err := os.Rename(op.Src, full); err != nil {
+				return err
+			}
+			src, dst := op.Src, full
+			undo = append(undo, func() { _ = os.Rename(dst, src) })
 		}
 	}
 	if item.Torrent {
@@ -271,18 +341,6 @@ func (q *Qbit) Apply(ctx context.Context, item Item, ops []Op, root string) erro
 		return os.RemoveAll(item.Root)
 	}
 	return nil
-}
-
-func (t Tuning) Planned(view View, root string) View {
-	shown := view
-	shown.Files = slices.Clone(view.Files)
-	if _, err := Plan(&shown, root); err != nil {
-		var planErr PlanError
-		if errors.As(err, &planErr) {
-			shown.Error = string(planErr)
-		}
-	}
-	return shown
 }
 
 func (t Tuning) Edited(item Item, root string, form map[string]string) View {

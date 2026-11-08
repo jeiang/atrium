@@ -239,7 +239,7 @@ func dlWorld(t *testing.T, extra map[string]string) (*site, *dlQbitFake, string)
 func dlCompletedMedia(t *testing.T, root string, qb *dlQbitFake, hash, name string) string {
 	t.Helper()
 	content := filepath.Join(root, "downloads", name)
-	for _, f := range []string{name + ".mkv", "Sample/sample.mkv", "info.nfo"} {
+	for _, f := range []string{name + ".mkv", name + ".en.srt", "Sample/sample.mkv", "info.nfo"} {
 		full := filepath.Join(content, f)
 		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)
@@ -407,6 +407,9 @@ func TestDlFilingFromTheWeb(t *testing.T) {
 	}
 	if !os.SameFile(src, dst) {
 		t.Fatal("filing did not hardlink the source")
+	}
+	if _, err := os.Stat(filepath.Join(root, "tv", "Lanterns (2026)", "Season 01", "Lanterns (2026) - S01E08.en.srt")); err != nil {
+		t.Fatalf("the subtitle was not filed: %v", err)
 	}
 	if !slices.Contains(qb.tagsOf(dlHashA), "filed") {
 		t.Fatalf("tags %v", qb.tagsOf(dlHashA))

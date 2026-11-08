@@ -113,13 +113,13 @@ func orEmpty(v any) string {
 	return pyText(v)
 }
 
-func (t Tuning) FetchReleases(ctx context.Context, imdb string) ([]Release, error) {
-	target := t.EZTVURL + "?" + encodeParams([]param{{"imdb_id", imdb}, {"limit", strconv.Itoa(t.EZTVLimit)}})
+func (s Settings) FetchReleases(ctx context.Context, imdb string) ([]Release, error) {
+	target := s.EZTVURL + "?" + encodeParams([]param{{"imdb_id", imdb}, {"limit", strconv.Itoa(s.EZTVLimit)}})
 	req, err := http.NewRequest(http.MethodGet, target, nil)
 	if err != nil {
 		return nil, EztvError("EZTV unreachable: invalid URL")
 	}
-	res, err := send(ctx, clientFor(t.EZTVTimeout), req)
+	res, err := send(ctx, s.EZTVHTTP, req)
 	if err != nil {
 		var failure *httpFailure
 		if errors.As(err, &failure) {

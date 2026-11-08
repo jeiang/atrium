@@ -32,6 +32,7 @@ type TVResult struct {
 
 type MovieResult struct {
 	PosterPath string
+	Year       string
 }
 
 func NewTMDB(token string, client *http.Client) *TMDB {
@@ -156,7 +157,7 @@ func (t *TMDB) SearchMovie(ctx context.Context, query, year string) ([]MovieResu
 	}
 	out := []MovieResult{}
 	for _, r := range listOf(body, "results") {
-		out = append(out, MovieResult{PosterPath: textOf(r, "poster_path")})
+		out = append(out, MovieResult{PosterPath: textOf(r, "poster_path"), Year: yearOf(textOf(r, "release_date"))})
 	}
 	return out, nil
 }

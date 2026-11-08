@@ -141,7 +141,7 @@ func signText(secret []byte, rel, exp string) string {
 	return hex.EncodeToString(mac.Sum(nil))
 }
 
-func Sign(secret []byte, rel string, exp int64) string {
+func sign(secret []byte, rel string, exp int64) string {
 	return signText(secret, rel, strconv.FormatInt(exp, 10))
 }
 
@@ -185,7 +185,7 @@ func (l *Links) PublicURL(ctx context.Context, base, rel string, now float64, tt
 		return "", errEmptyLinkKey
 	}
 	exp := int64(now + float64(ttl))
-	return base + FilePrefix + urlQuote(rel) + "?exp=" + strconv.FormatInt(exp, 10) + "&sig=" + Sign(secret, rel, exp), nil
+	return base + FilePrefix + urlQuote(rel) + "?exp=" + strconv.FormatInt(exp, 10) + "&sig=" + sign(secret, rel, exp), nil
 }
 
 func (s Settings) VPNURL(rel string) string {

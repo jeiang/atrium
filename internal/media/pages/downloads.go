@@ -243,17 +243,14 @@ func (s *service) dlFilePost(w http.ResponseWriter, r *http.Request) {
 		s.dlDownloads(w, r, &tpl.Toast{Category: "error", Title: "Not filed", Description: text}, http.StatusUnprocessableEntity, nil)
 		return
 	}
-	view := client.Edited(item, root, form)
-	ops, err := media.Plan(&view, root)
-	if err != nil {
-		var planErr media.PlanError
-		if !errors.As(err, &planErr) {
-			panic(err)
-		}
-		view.Error = err.Error()
+	plan := client.Plan(client.Edited(item, root, form), root)
+	view := plan.View
+	if plan.Error != "" {
+		view.Error = plan.Error
 		s.dlDownloads(w, r, nil, http.StatusUnprocessableEntity, &view)
 		return
 	}
+	ops := plan.Ops
 	if form["action"] != "file" {
 		s.dlDownloads(w, r, nil, http.StatusOK, &view)
 		return

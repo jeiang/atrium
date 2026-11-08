@@ -3,7 +3,10 @@ package pages
 import (
 	"bytes"
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +17,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -107,8 +111,14 @@ func flWrite(t *testing.T, path string, data []byte) {
 	}
 }
 
+func flSign(key, rel string, exp int64) string {
+	mac := hmac.New(sha256.New, []byte(key))
+	_, _ = mac.Write([]byte(rel + "\n" + strconv.FormatInt(exp, 10)))
+	return hex.EncodeToString(mac.Sum(nil))
+}
+
 func flSigned(key, rel string, exp int64) string {
-	return fmt.Sprintf("%s%s?exp=%d&sig=%s", media.FilePrefix, urlQuote(rel), exp, media.Sign([]byte(key), rel, exp))
+	return fmt.Sprintf("%s%s?exp=%d&sig=%s", media.FilePrefix, urlQuote(rel), exp, flSign(key, rel, exp))
 }
 
 func flRange(spec string) [2]string { return [2]string{"Range", spec} }
@@ -291,7 +301,7 @@ func TestFlPathTraversalAndRoot(t *testing.T) {
 	flWrite(t, filepath.Join(filepath.Dir(w.root), "atrium.db"), []byte("database"))
 	signedPath := func(rel string) string { return flSigned(flKey, rel, flFar) }
 	rawPath := func(rel, rawRel string) string {
-		return fmt.Sprintf("%s%s?exp=%d&sig=%s", media.FilePrefix, rawRel, flFar, media.Sign([]byte(flKey), rel, flFar))
+		return fmt.Sprintf("%s%s?exp=%d&sig=%s", media.FilePrefix, rawRel, flFar, flSign(flKey, rel, flFar))
 	}
 	cases := map[string]string{
 		"parent traversal":         signedPath("movies/../../atrium.db"),
@@ -465,7 +475,7 @@ func TestFlGuardAdmitsSignedLinksOnly(t *testing.T) {
 	status(t, flGetHost(proxy, good, host, group), 200, "signed link with group")
 	status(t, flGetHost(proxy, bare, host, group), 403, "unsigned link with group is still checked by the route")
 	thumb := "/media/thumb/" + urlQuote(w.episodeRel)
-	sig := media.Sign([]byte(flKey), w.episodeRel, flFar)
+	sig := flSign(flKey, w.episodeRel, flFar)
 	status(t, flGetHost(proxy, fmt.Sprintf("%s?exp=%d&sig=%s", thumb, flFar, sig), host), 403, "signature does not unlock other paths")
 	status(t, flGetHost(proxy, flSigned(flKey, w.movieRel, flFar), host, flRange("bytes=10-19")), 206, "range through the guard")
 }

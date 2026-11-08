@@ -38,11 +38,7 @@ var channels = skippable(func(ctx context.Context, d *db.DB, env config.Env, now
 	if err != nil {
 		return nil, err
 	}
-	qb, err := settings.Qbit()
-	if err != nil {
-		return nil, err
-	}
-	result, err := media.Poll(ctx, d.Write, env, qb, settings, media.PollOptions{Now: now})
+	result, err := media.Poll(ctx, d.Write, env, settings, media.PollOptions{Now: now})
 	if err != nil {
 		return nil, err
 	}
