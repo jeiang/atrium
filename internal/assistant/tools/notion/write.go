@@ -191,7 +191,7 @@ func (w write) commit(ctx context.Context, tc *tool.Context, upsert func(*sql.Tx
 		if tc.RunID != 0 {
 			run = &tc.RunID
 		}
-		id, err = writes.Record(ctx, tx, writes.New{
+		id, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
 			TS: tc.Now(), ThreadID: thread, RunID: run, Tool: w.tool, Target: w.target,
 			Before: w.before, After: w.after, Undo: w.undo,
 		})

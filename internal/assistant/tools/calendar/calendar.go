@@ -153,7 +153,7 @@ func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 		if err := calendar.Track(ctx, tx, normalized, target, nil, tc.Now()); err != nil {
 			return err
 		}
-		_, err := writes.Record(ctx, tx, writes.New{
+		_, err := writes.Record(ctx, tx, tc.Undoers, writes.New{
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_create",
 			Target: target + ":" + normalized.UID,
 			After:  py.Dict{{Key: "calendar", Value: target}, {Key: "spec", Value: normalized.Dict()}},
@@ -195,7 +195,7 @@ func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 		if err := calendar.Untrack(ctx, tx, uid, tc.Now()); err != nil {
 			return err
 		}
-		_, err := writes.Record(ctx, tx, writes.New{
+		_, err := writes.Record(ctx, tx, tc.Undoers, writes.New{
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_delete",
 			Target: row.Calendar + ":" + uid,
 			Before: py.Dict{{Key: "calendar", Value: row.Calendar}, {Key: "spec", Value: stored}},

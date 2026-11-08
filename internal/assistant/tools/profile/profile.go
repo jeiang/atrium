@@ -121,7 +121,7 @@ func set(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 			key, value, tc.Now()); err != nil {
 			return err
 		}
-		writeID, err = writes.Record(ctx, tx, writes.New{
+		writeID, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "profile_set", Target: "profile:" + key,
 			Before: map[string]any{"value": optional(previous)},
 			After:  map[string]any{"value": value},

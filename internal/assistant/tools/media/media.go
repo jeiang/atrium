@@ -310,7 +310,7 @@ func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 			return nil, qbitFailed(err)
 		}
 	}
-	id, err := writes.Record(ctx, tc.DB.Write, writes.New{
+	id, err := writes.Record(ctx, tc.DB.Write, tc.Undoers, writes.New{
 		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "media_add_magnet", Target: hash,
 		After: py.Dict{{Key: "magnet", Value: magnet}, {Key: "media", Value: asMedia}},
 		Undo:  py.Dict{{Key: "op", Value: UndoTorrent}, {Key: "hash", Value: hash}},
@@ -420,7 +420,7 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any
 		if row, err = settings.AddChannel(ctx, tx, name, imdb, pattern, caseSensitive, stored, tc.Now, false); err != nil {
 			return err
 		}
-		writeID, err = writes.Record(ctx, tx, writes.New{
+		writeID, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "media_channel_add", Target: fmt.Sprintf("channel:%d", row.ID),
 			After: channelDict(*row),
 			Undo:  py.Dict{{Key: "op", Value: UndoChannelDelete}, {Key: "id", Value: row.ID}},
@@ -453,7 +453,7 @@ func mediaChannelRemove(ctx context.Context, tc *tool.Context, args tool.Args) (
 			return err
 		}
 		dict := channelDict(row)
-		writeID, err = writes.Record(ctx, tx, writes.New{
+		writeID, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
 			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "media_channel_remove", Target: fmt.Sprintf("channel:%d", id),
 			Before: dict,
 			Undo:   py.Dict{{Key: "op", Value: UndoChannelRestore}, {Key: "row", Value: dict}},

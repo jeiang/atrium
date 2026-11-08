@@ -6,6 +6,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/progress"
+	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 )
@@ -42,4 +43,5 @@ type Context struct {
 	Now         func() float64
 	Client      *anthropic.Client
 	Progress    *progress.Writer
+	Undoers     *writes.Registry
 }
