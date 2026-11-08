@@ -84,6 +84,7 @@ func ConnectionLost(err error) bool {
 }
 
 type Watcher struct {
+	Env   config.Env
 	Cfg   config.Config
 	Open  mailops.Opener
 	Pass  func(d *db.DB) *Pass
@@ -151,7 +152,7 @@ func (w *Watcher) connect(ctx context.Context) (*Pass, func(), error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	if !w.migrated {
-		if err := config.Boot(ctx, config.OS, d, w.Cfg); err != nil {
+		if err := config.Boot(ctx, w.Env, d, w.Cfg); err != nil {
 			_ = d.Close()
 			return nil, nil, err
 		}
@@ -165,7 +166,7 @@ func (w *Watcher) connect(ctx context.Context) (*Pass, func(), error) {
 	if w.Pass != nil {
 		return w.Pass(d), func() { _ = d.Close() }, nil
 	}
-	return New(d, w.Cfg, w.Open, nil), func() { _ = d.Close() }, nil
+	return New(w.Env, d, w.Cfg, w.Open, nil), func() { _ = d.Close() }, nil
 }
 
 func settleFor(ctx context.Context, q mail.Querier) (time.Duration, error) {
@@ -275,9 +276,9 @@ func (w *Watcher) cycle(ctx context.Context, account string, wait *retryBackoff)
 	})
 }
 
-func Watch(ctx context.Context, cfg config.Config, requested string, open mailops.Opener) error {
+func Watch(ctx context.Context, env config.Env, cfg config.Config, requested string, open mailops.Opener) error {
 	notifier := sdnotify.FromEnv()
-	w := &Watcher{Cfg: cfg, Open: open, Notify: notifier}
+	w := &Watcher{Env: env, Cfg: cfg, Open: open, Notify: notifier}
 	_, release, err := w.connect(ctx)
 	if err != nil {
 		return err

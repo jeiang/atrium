@@ -109,20 +109,20 @@ func Callables() map[string]worker.Callable {
 	}
 }
 
-func Command(clock func() float64) *cli.Command {
+func Command(cfgEnv config.Env, clock func() float64) *cli.Command {
 	return &cli.Command{
 		Name: "media",
 		Commands: []*cli.Command{
-			{Name: "poll", Help: "poll EZTV for every channel now", Setup: handler(channels, clock)},
-			{Name: "sweep", Help: "select files in new media torrents and remove filed torrents qBittorrent stopped", Setup: handler(sweep, clock)},
+			{Name: "poll", Help: "poll EZTV for every channel now", Setup: handler(cfgEnv, channels, clock)},
+			{Name: "sweep", Help: "select files in new media torrents and remove filed torrents qBittorrent stopped", Setup: handler(cfgEnv, sweep, clock)},
 		},
 	}
 }
 
-func handler(run job, clock func() float64) func(*cli.Args) cli.Handler {
+func handler(cfgEnv config.Env, run job, clock func() float64) func(*cli.Args) cli.Handler {
 	return func(*cli.Args) cli.Handler {
 		return func(env *cli.Env) int {
-			cfg, err := config.Load(config.OS)
+			cfg, err := config.Load(cfgEnv)
 			if err != nil {
 				return cli.Fail(env, err)
 			}
@@ -131,10 +131,10 @@ func handler(run job, clock func() float64) func(*cli.Args) cli.Handler {
 				return cli.Fail(env, err)
 			}
 			defer func() { _ = d.Close() }()
-			if err := config.Boot(env.Ctx, config.OS, d, cfg); err != nil {
+			if err := config.Boot(env.Ctx, cfgEnv, d, cfg); err != nil {
 				return cli.Fail(env, err)
 			}
-			out, err := run(env.Ctx, d, config.OS, clock)
+			out, err := run(env.Ctx, d, cfgEnv, clock)
 			if err != nil {
 				return cli.Fail(env, err)
 			}

@@ -42,14 +42,14 @@ func refuseDestination(cfg config.Config, dest string) error {
 func backupSetup(a *cli.Args) cli.Handler {
 	dest := a.Arg("dest", cli.Opt{Help: "path of the new archive; must not exist"})
 	return func(e *cli.Env) int {
-		cfg, err := config.Load(config.OS)
+		cfg, err := config.Load(e.Env)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
 		if _, err := os.Stat(cfg.DBPath); err != nil {
 			return cli.Fail(e, fmt.Errorf("database %s: %w", cfg.DBPath, err))
 		}
-		key, err := dbkey.Load(config.OS, settings.Default)
+		key, err := dbkey.Load(e.Env, settings.Default)
 		if err != nil {
 			return cli.Fail(e, err)
 		}

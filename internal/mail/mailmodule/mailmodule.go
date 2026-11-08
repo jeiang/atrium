@@ -59,8 +59,8 @@ type Module struct {
 	Now     func() float64
 }
 
-func (m Module) Register(module.Context) module.Registration {
-	mailCmds := mailcmd.Options{Clients: m.Clients, Now: m.Now}
+func (m Module) Register(mc module.Context) module.Registration {
+	mailCmds := mailcmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now}
 	return module.Registration{
 		Name: module.Mail,
 		Soft: []string{module.Contacts},
@@ -76,8 +76,8 @@ func (m Module) Register(module.Context) module.Registration {
 			{Module: accountpages.Module, Templates: accountpages.Templates()},
 		},
 		Commands: []*cli.Command{
-			run.SyncCommand(m.Clients),
-			run.WatchCommand(m.Clients),
+			run.SyncCommand(mc.Env, m.Clients),
+			run.WatchCommand(mc.Env, m.Clients),
 			mailCmds.RulesCommand(),
 			mailCmds.ShadowReportCommand(),
 			mailCmds.ReindexCommand(),
@@ -86,8 +86,8 @@ func (m Module) Register(module.Context) module.Registration {
 			mailCmds.GmailLabelsCommand(),
 			mailCmds.LiveCommand(),
 			mailCmds.ProposalsCommand(),
-			openloops.Command(m.Now),
-			watches.Command(m.Now),
+			openloops.Command(mc.Env, m.Now),
+			watches.Command(mc.Env, m.Now),
 			mailCmds.EndpointsCommand(),
 		},
 		Leaves: map[string]module.Leaf{

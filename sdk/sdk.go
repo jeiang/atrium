@@ -95,7 +95,7 @@ func RegisterMigrations(module string, ms ...Migration) { db.RegisterModuleMigra
 func RequireSetting(key string) Requirement { return module.Setting(key) }
 
 func OpenDB(env *Env) (*DB, Config, error) {
-	cfg, err := config.Load(config.OS)
+	cfg, err := config.Load(env.Env)
 	if err != nil {
 		return nil, cfg, err
 	}
@@ -103,7 +103,7 @@ func OpenDB(env *Env) (*DB, Config, error) {
 	if err != nil {
 		return nil, cfg, err
 	}
-	if err := config.Boot(env.Ctx, config.OS, d, cfg); err != nil {
+	if err := config.Boot(env.Ctx, env.Env, d, cfg); err != nil {
 		_ = d.Close()
 		return nil, cfg, err
 	}

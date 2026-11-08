@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/auth/loginlink"
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
 	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/logx"
@@ -29,23 +28,23 @@ type Module struct {
 	Guard   settingscmd.Guard
 }
 
-func (m Module) Register(module.Context) module.Registration {
+func (m Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
 		Name: module.Core,
 		Core: true,
 		Pages: []web.Page{
 			{Module: about.Module(m.Version), Templates: about.Templates()},
 			{Module: mailpages.PauseModule},
-			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(config.OS)}), Templates: reviewpages.Templates()},
+			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(mc.Env)}), Templates: reviewpages.Templates()},
 			{Module: startOps},
 			{Module: integrations.Module, Templates: integrations.Templates()},
 			{Module: settingspages.Module, Templates: settingspages.Templates()},
 		},
 		Commands: []*cli.Command{
-			settingscmd.Command(m.Guard),
+			settingscmd.Command(mc.Env, m.Guard),
 			loginlink.Command(),
-			secretscmd.Command(),
-			dbcmd.Command(),
+			secretscmd.Command(mc.Env),
+			dbcmd.Command(mc.Env),
 			backup.BackupCommand(),
 			backup.RestoreCommand(),
 		},

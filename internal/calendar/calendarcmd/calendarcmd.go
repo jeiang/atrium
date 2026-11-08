@@ -14,8 +14,8 @@ import (
 	"github.com/jeiang/atrium/internal/passrun"
 )
 
-func Command(tools registry.Source) *cli.Command {
-	return &cli.Command{Name: "calendar", Commands: []*cli.Command{candidatesCommand(config.OS, tools, nil), googleAuth(config.OS), syncCommand()}}
+func Command(env config.Env, tools registry.Source) *cli.Command {
+	return &cli.Command{Name: "calendar", Commands: []*cli.Command{candidatesCommand(env, tools, nil), googleAuth(env), syncCommand()}}
 }
 
 func syncCommand() *cli.Command {

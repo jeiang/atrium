@@ -29,43 +29,44 @@ var version = "dev"
 
 func main() {
 	ctx, stop := cli.SignalContext(context.Background())
-	code := newApp().Run(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	code := newApp(config.OS, settings.Default, sdk.Modules()).Run(ctx, os.Args[1:], os.Stdout, os.Stderr)
 	stop()
 	os.Exit(code)
 }
 
-func newApp() *cli.App {
+func newApp(env config.Env, reg *settings.Registry, mods []module.Module) *cli.App {
 	app := cli.New("atrium", logx.Setup)
 	app.Version = version
-	app.Bootstrap = bootstrap(config.OS, settings.Default)
-	app.Add(commands(imapclient.Opener, nil)...)
+	app.Env = env
+	app.Bootstrap = bootstrap(env, reg)
+	app.Add(commands(env, reg, mods, imapclient.Opener, nil)...)
 	return app
 }
 
-func newSet(clients run.Clients, now func() float64) *module.Set {
+func newSet(env config.Env, reg *settings.Registry, mods []module.Module, clients run.Clients, now func() float64) *module.Set {
 	var set *module.Set
 	guard := func(ctx context.Context, q db.Querier, key, value string) error {
 		return set.Guard(ctx, q, key, value)
 	}
-	mods := append([]module.Module{
+	all := append([]module.Module{
 		coremodule.Module{Version: version, Guard: guard},
 		contactsmodule.Module{},
 		mailmodule.Module{Clients: clients, Now: now},
 		calendarmodule.Module{},
-		notionmodule.Module{},
+		notionmodule.Module{Env: env},
 		mediamodule.Module{Now: now},
 		assistantmodule.Module{},
 		notifymodule.Module{},
 		grafanamodule.Module{},
-	}, sdk.Modules()...)
-	set, err := module.NewSet(settings.Default, config.OS, mods...)
+	}, mods...)
+	set, err := module.NewSet(reg, env, all...)
 	if err != nil {
 		panic(err)
 	}
 	return set
 }
 
-func commands(clients run.Clients, now func() float64) []*cli.Command {
-	set := newSet(clients, now)
+func commands(env config.Env, reg *settings.Registry, mods []module.Module, clients run.Clients, now func() float64) []*cli.Command {
+	set := newSet(env, reg, mods, clients, now)
 	return append(set.Commands(), web.ServeCommand(set.Pages()...))
 }

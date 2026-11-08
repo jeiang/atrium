@@ -46,11 +46,11 @@ func restoreSetup(a *cli.Args) cli.Handler {
 	replaceUnopenable := a.Bool("replace-unopenable", cli.Opt{Help: "replace an existing database that cannot be opened and locked with an available key; it is kept aside"})
 	archive := a.Arg("archive", cli.Opt{Help: "path of the backup archive"})
 	return func(e *cli.Env) int {
-		cfg, err := config.Load(config.OS)
+		cfg, err := config.Load(e.Env)
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		configured, err := dbkey.Load(config.OS, settings.Default)
+		configured, err := dbkey.Load(e.Env, settings.Default)
 		if err != nil {
 			return cli.Fail(e, err)
 		}

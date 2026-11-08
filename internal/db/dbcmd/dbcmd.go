@@ -19,8 +19,8 @@ import (
 
 const maxKeyInput = 1024
 
-func Command() *cli.Command {
-	s := &service{env: config.OS}
+func Command(env config.Env) *cli.Command {
+	s := &service{env: env}
 	return &cli.Command{
 		Name: "db",
 		Commands: []*cli.Command{
