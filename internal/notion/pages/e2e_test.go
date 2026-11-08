@@ -1,14 +1,12 @@
 package pages
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/httpx"
 )
 
 const unsafeMarkdown = "# Plan\n\n<script>alert(1)</script>\n\n[bad](javascript:alert(1)) [ok](https://example.test/x) " +
@@ -64,63 +62,14 @@ func TestNotionPagePropertiesArePlain(t *testing.T) {
 	mustNotContain(t, body, "Links", "0 linked")
 }
 
-func (s *site) answer(reply string) {
-	s.chat = func(string, string) (json.RawMessage, error) { return json.RawMessage(reply), nil }
-}
-
-func TestNotionActionsCreateProposalsOrReportErrors(t *testing.T) {
-	s := newSite(t, nil)
-	s.addPage(pageID, "Plan", "text", 0)
-	s.answer(`{}`)
-
-	missing := status(t, s.post("/notion/"+pageID+"/link", form("target", secretID), hx, "true"), http.StatusOK)
-	mustContain(t, missing, "unknown page "+secretID, "No proposal")
-	empty := status(t, s.post("/notion/"+pageID+"/edit", form("instruction", " "), hx, "true"), http.StatusOK)
-	mustContain(t, empty, "empty instruction")
-	unusable := status(t, s.post("/notion/"+pageID+"/edit", form("instruction", "shorten"), hx, "true"), http.StatusOK)
-	mustContain(t, unusable, "the model proposed no applicable edit")
-
-	s.answer(`{"updates": [{"old_str": "text", "new_str": "shorter text"}], "summary": "shorten"}`)
-	made := status(t, s.post("/notion/"+pageID+"/edit", form("instruction", "shorten")), http.StatusOK)
-	mustContain(t, made, "Review proposal #1", "Edit Plan", "Notion edit proposed", `href="/proposals/1"`)
-	var kind, title, state string
-	if err := s.db.Read.QueryRow("SELECT kind, title, status FROM proposals WHERE id = 1").Scan(&kind, &title, &state); err != nil {
-		t.Fatal(err)
-	}
-	if kind != "notion_edit" || title != "Edit Plan" || state != "pending" {
-		t.Errorf("proposal = %q %q %q", kind, title, state)
-	}
-
-	s.addPage(secretID, "Budget", "y", 0)
-	s.answer(`{"link": false, "reason": "unrelated"}`)
-	none := status(t, s.post("/notion/"+pageID+"/link", form("target", secretID), hx, "true"), http.StatusOK)
-	mustContain(t, none, "No proposal was made", `data-variant="destructive"`)
-	s.answer(`{"link": true, "reason": "same project"}`)
-	linked := status(t, s.post("/notion/"+pageID+"/link", form("target", secretID), hx, "true"), http.StatusOK)
-	mustContain(t, linked, "Review proposal #2", "Link Plan to Budget", "Notion link proposed")
-
-	s.chat = func(string, string) (json.RawMessage, error) {
-		return nil, &httpx.ServiceUnavailable{Msg: "chat model is down"}
-	}
-	down := status(t, s.post("/notion/"+pageID+"/edit", form("instruction", "again"), hx, "true"), http.StatusOK)
-	mustContain(t, down, "chat model is down", `role="alert"`)
-
-	rec := s.post("/notion/"+pageID+"/link", nil, hx, "true")
-	status(t, rec, http.StatusUnprocessableEntity)
-	mustContain(t, rec.Body.String(), `"loc":["body","target"]`, `"type":"missing"`)
-	if got := rec.Header().Get("Content-Type"); got != "application/json" {
-		t.Errorf("Content-Type = %q", got)
-	}
-}
-
-func TestProposeLinkDisablesEveryLinkButtonWhileRunning(t *testing.T) {
+func TestLinkDisablesEveryLinkButtonWhileRunning(t *testing.T) {
 	s := newSite(t, nil)
 	s.addPage(pageID, "Plan", "x", 0)
 	s.addPage(secretID, "Budget", "y", 0)
 	s.addVector(1, unit(0, 1, 0))
 	s.addVector(2, unit(0, 1, 0.5))
 	body := status(t, s.get("/notion/"+pageID), http.StatusOK)
-	mustContain(t, body, `id="related-list"`, `hx-disabled-elt="#related-list button"`, `aria-label="Propose a link to Budget"`,
+	mustContain(t, body, `id="related-list"`, `hx-disabled-elt="#related-list button"`, `aria-label="Link to Budget"`,
 		`hx-post="/notion/`+pageID+`/link"`, `href="/notion/`+secretID+`"`)
 }
 
@@ -133,7 +82,7 @@ func TestNotionPageIsAFragmentForHTMXAndPageOtherwise(t *testing.T) {
 
 	partial := status(t, s.get("/notion/"+pageID, hx, "true"), http.StatusOK)
 	mustContain(t, partial, `<article`, `id="page-title"`)
-	mustNotContain(t, partial, "<aside", "related-list", "<html", "Draft an edit")
+	mustNotContain(t, partial, "<aside", "related-list", "<html", "Edit page")
 
 	restored := status(t, s.get("/notion/"+pageID, hx, "true", "HX-History-Restore-Request", "true"), http.StatusOK)
 	mustContain(t, restored, "<html", "<aside", `id="related-list"`)

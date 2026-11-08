@@ -55,15 +55,10 @@ type articleData struct {
 	NotionPage pageView `json:"notion_page"`
 }
 
-type created struct {
-	ID    int64  `json:"id"`
-	Kind  string `json:"kind"`
-	Title string `json:"title"`
-}
-
 type actionView struct {
-	Error   string   `json:"error"`
-	Created *created `json:"created"`
+	Error  string `json:"error"`
+	Done   string `json:"done"`
+	Detail string `json:"detail"`
 }
 
 type hubView struct {

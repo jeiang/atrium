@@ -5,14 +5,20 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/jeiang/atrium/internal/assistant/tool"
+	notiontools "github.com/jeiang/atrium/internal/assistant/tools/notion"
+	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/notion"
-	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
-const noProposal = "No proposal was made. The pages may already be linked, or the model saw no reason to change them."
+const (
+	notLinked = "Not linked. The pages may already be linked, or the model saw no reason to link them."
+	linked    = "Linked"
+	edited    = "Edited"
+)
 
 func (s *service) view(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -43,32 +49,53 @@ func (s *service) link(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	pageID := web.PathParam(r, "page_id")
-	s.propose(w, r, func(ctx context.Context) (*int64, error) { return s.proposer.ProposeLink(ctx, pageID, target) })
+	s.act(w, r, linked, func(ctx context.Context, tc *tool.Context) (string, error) {
+		draft, err := s.drafter.Link(ctx, pageID, target)
+		if err != nil {
+			return "", err
+		}
+		if draft == nil {
+			return "", notion.DraftError(notLinked)
+		}
+		_, err = notiontools.RewritePage(ctx, tc, draft.SourceID, draft.Line, draft.Apply)
+		return draft.Title, err
+	})
 }
 
 func (s *service) edit(w http.ResponseWriter, r *http.Request) {
 	instruction := web.FormString(web.FormValues(r), "instruction", "")
 	pageID := web.PathParam(r, "page_id")
-	s.propose(w, r, func(ctx context.Context) (*int64, error) { return s.proposer.ProposeEdit(ctx, pageID, instruction) })
+	s.act(w, r, edited, func(ctx context.Context, tc *tool.Context) (string, error) {
+		draft, err := s.drafter.Edit(ctx, pageID, instruction)
+		if err != nil {
+			return "", err
+		}
+		_, err = notiontools.RewritePage(ctx, tc, draft.PageID, draft.Added(), draft.Apply)
+		return draft.Summary, err
+	})
 }
 
-func (s *service) propose(w http.ResponseWriter, r *http.Request, draft func(context.Context) (*int64, error)) {
+func (s *service) act(w http.ResponseWriter, r *http.Request, title string, run func(context.Context, *tool.Context) (string, error)) {
 	ctx := detached(r)
-	id, err := draft(ctx)
-	var refused notion.ProposalError
+	tc := &tool.Context{
+		DB: s.deps.DB, Cfg: s.deps.Cfg, Env: s.deps.Env, Kind: tool.Chat, AllowedURLs: map[string]struct{}{}, Now: s.now,
+		Undoers: toolset.Undoers(s.deps.Env),
+	}
+	detail, err := run(ctx, tc)
+	var drafted notion.DraftError
 	var unavailable *httpx.ServiceUnavailable
+	if reason, refused := refusal(err); refused {
+		s.fragment(w, r, http.StatusOK, "_notion_action.gohtml", actionView{Error: reason})
+		return
+	}
 	switch {
-	case errors.As(err, &refused):
-		s.fragment(w, r, http.StatusOK, "_notion_action.gohtml", actionView{Error: refused.Error()})
+	case errors.As(err, &drafted):
+		s.fragment(w, r, http.StatusOK, "_notion_action.gohtml", actionView{Error: drafted.Error()})
 	case errors.As(err, &unavailable):
 		s.fragment(w, r, http.StatusOK, "_notion_action.gohtml", actionView{Error: unavailable.Error()})
 	case err != nil:
 		panic(err)
-	case id == nil:
-		s.fragment(w, r, http.StatusOK, "_notion_action.gohtml", actionView{Error: noProposal})
 	default:
-		found, err := proposals.Get(ctx, s.deps.DB.Read, *id)
-		check(err)
-		s.fragment(w, r, http.StatusOK, "_notion_action.gohtml", actionView{Created: &created{ID: found.ID, Kind: found.Kind, Title: found.Title}})
+		s.fragment(w, r, http.StatusOK, "_notion_action.gohtml", actionView{Done: title, Detail: detail})
 	}
 }

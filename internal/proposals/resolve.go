@@ -23,6 +23,8 @@ const (
 
 	SettledText    = "settled by operator after checking the mailbox"
 	NotAppliedText = "the operator checked: the write did not happen"
+
+	UnknownOutcomeText = "Outcome unknown"
 )
 
 type Resolver struct {
@@ -32,6 +34,9 @@ type Resolver struct {
 
 func RecordResolution(ctx context.Context, x Execer, who Resolver, ts float64, kind string, rowID int64, proposalID *int64, outcome, prior string) error {
 	var proposal any
+	if prior == "" {
+		prior = UnknownOutcomeText
+	}
 	if proposalID != nil {
 		proposal = *proposalID
 	}
@@ -76,7 +81,7 @@ func (p *Pipeline) Resolve(ctx context.Context, id int64, outcome string, who Re
 			kind   string
 			undoOf *int64
 			state  ledger.State
-			error  string
+			error  sql.NullString
 		}
 		blocked, err := db.Collect(rows, func(r *sql.Rows) (held, error) {
 			var h held
@@ -111,7 +116,7 @@ func (p *Pipeline) Resolve(ctx context.Context, id int64, outcome string, who Re
 				state, state, SettledText, h.id); err != nil {
 				return err
 			}
-			if err := RecordResolution(ctx, tx, who, now, ResolveProposalAction, h.id, &id, recorded, h.error); err != nil {
+			if err := RecordResolution(ctx, tx, who, now, ResolveProposalAction, h.id, &id, recorded, h.error.String); err != nil {
 				return err
 			}
 			out.Settled = append(out.Settled, h.id)

@@ -129,7 +129,7 @@ func (s *State) RegisterPassword(id string) error {
 		return nil
 	}
 	return s.settings.Register(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{
-		Key: PasswordKey(id), Module: "mail", Type: settings.String, Page: "/settings/mail"}))
+		Key: PasswordKey(id), Module: "mail", Type: settings.String}))
 }
 
 func NormalizePassword(value string) string { return strings.Join(strings.Fields(value), "") }

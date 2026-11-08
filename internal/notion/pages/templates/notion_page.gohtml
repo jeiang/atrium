@@ -8,14 +8,14 @@
   <aside class="flex flex-col gap-6 max-lg:border-t max-lg:pt-6 lg:sticky lg:top-20" aria-label="Page actions">
     <section class="flex flex-col gap-3" aria-labelledby="edit-title">
       <header class="flex flex-col gap-1">
-        <h2 id="edit-title" class="text-sm font-medium">Draft an edit</h2>
+        <h2 id="edit-title" class="text-sm font-medium">Edit</h2>
       </header>
       <form class="flex flex-col items-start gap-2" hx-post="/notion/{{urlencode $p.ID}}/edit" hx-target="#edit-result" hx-disabled-elt="find button[type=submit]">
         <div role="group" class="field w-full">
           <label for="edit-instruction" class="sr-only">What should change?</label>
           <textarea id="edit-instruction" name="instruction" rows="4" required placeholder="What should change? For example: add a short summary at the top."></textarea>
         </div>
-        <button type="submit" class="btn" data-size="sm" title="Drafted as a proposal; Notion is unchanged until you approve it">{{icon "pencil"}}Draft edit</button>
+        <button type="submit" class="btn" data-size="sm">{{icon "pencil"}}Edit page</button>
       </form>
       <div id="edit-result" data-loading="action-loading" aria-live="polite" class="empty:hidden"></div>
     </section>
@@ -42,7 +42,7 @@
           {{else}}
           <button type="button" class="btn shrink-0" data-size="sm" data-variant="outline"
                   hx-post="/notion/{{urlencode $p.ID}}/link" hx-vals='{{tojson (dict "target" .ID)}}' hx-target="#link-result" hx-disabled-elt="#related-list button"
-                  aria-label="Propose a link to {{or .Title "Untitled"}}" title="The model picks a relation or a mention">{{icon "link"}}Propose link</button>
+                  aria-label="Link to {{or .Title "Untitled"}}">{{icon "link"}}Link</button>
           {{end}}
         </li>
         {{end}}
@@ -56,7 +56,7 @@
 
 <template id="action-loading">
   <div class="flex items-center gap-2 rounded-lg border bg-card p-3 text-sm text-muted-foreground" role="status">
-    {{icon "loader-circle" "size-4 shrink-0 animate-spin"}}The model is drafting a proposal. This can take a few seconds.
+    {{icon "loader-circle" "size-4 shrink-0 animate-spin"}}Working. This can take a few seconds.
   </div>
 </template>
 {{- end}}

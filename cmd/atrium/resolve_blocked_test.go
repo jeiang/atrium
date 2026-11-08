@@ -265,3 +265,62 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		t.Error("write_resolutions accepted a delete, want append-only")
 	}
 }
+
+func TestBlockedProposalWithoutErrorTextShowsOutcomeUnknownAndResolves(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "atrium.db")
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	ctx := settings.With(context.Background(), settings.New())
+	seed, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Migrate(ctx, seed, path); err != nil {
+		t.Fatal(err)
+	}
+	now := float64(time.Now().UnixNano()) / 1e9
+	pid, _, err := proposals.Create(ctx, seed, "deletion_rule", nil, "silent", map[string]any{}, map[string]any{}, "silent", now-5000)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := seed.Write.Exec("UPDATE proposals SET status = 'failed', decided_ts = ? WHERE id = ?", now-4000, pid); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := proposals.RecordAction(ctx, seed.Write, pid, "write", nil, map[string]any{"op": "move"}, nil, ledger.Unknown, nil, now-4000); err != nil {
+		t.Fatal(err)
+	}
+	if err := seed.Close(); err != nil {
+		t.Fatal(err)
+	}
+	id := strconv.FormatInt(pid, 10)
+
+	base := startServeIn(t, dir)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+	if status, body, _ := fetch(t, client, http.MethodGet, base+"/review", nil); status != http.StatusOK ||
+		!strings.Contains(body, "/proposals/"+id+"/resolve") || !strings.Contains(body, "Outcome unknown") {
+		t.Fatalf("GET /review = %d, want the blocked proposal with Outcome unknown: %.600s", status, body)
+	}
+	if status, body, _ := fetch(t, client, http.MethodPost, base+"/proposals/"+id+"/resolve", url.Values{}); status != http.StatusOK || !strings.Contains(body, "Marked as checked") {
+		t.Fatalf("POST resolve of a blocked write without error text = %d: %.600s", status, body)
+	}
+
+	check, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = check.Close() }()
+	var outcome, prior string
+	if err := check.Read.QueryRow("SELECT outcome, prior_error FROM write_resolutions WHERE proposal_id = ?", pid).Scan(&outcome, &prior); err != nil {
+		t.Fatal(err)
+	}
+	if outcome != proposals.OutcomeSettled || prior != "Outcome unknown" {
+		t.Errorf("resolution = %q %q, want settled with Outcome unknown", outcome, prior)
+	}
+}

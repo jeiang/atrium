@@ -251,6 +251,7 @@
 {{define "proposal_blocked"}}{{if .Blocked}}
 <div class="flex w-full flex-col gap-2 rounded-md border p-3 text-sm">
   <p class="text-muted-foreground">A write has an unknown or partial outcome, so atrium refuses to retry it. Check the mailbox, then record what you found. atrium does not touch the mailbox.</p>
+  <p class="break-words" data-blocked-error>{{.BlockedError}}</p>
   {{template "resolve_controls" (dict "path" (printf "/proposals/%v/resolve" .ID) "target" (printf "#proposal-%v" .ID) "undo" .BlockedUndo "forward" false)}}
 </div>
 {{end}}{{end}}
@@ -313,7 +314,7 @@
     {{end}}
     <header class="flex flex-col gap-2 p-4 pb-3">
       <div class="flex flex-wrap items-center gap-2" data-card-body>
-        <span class="badge" data-variant="secondary">{{icon (or $p.KindIcon "list-checks")}}{{$p.KindLabel}}</span>
+        <span class="badge" data-variant="secondary">{{icon (or $p.KindIcon (lbl "kind_icon" $p.Kind "list-checks"))}}{{or $p.KindLabel (lbl "kind" $p.Kind "")}}</span>
         {{if $p.Account}}<span class="badge" data-variant="outline">{{str $p.Account}}</span>{{end}}
         {{template "status_badge" $p.Status}}
         <span class="ml-auto text-xs text-muted-foreground">#{{$p.ID}} · {{template "when" (dict "epoch" $p.CreatedTS)}}</span>

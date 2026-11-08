@@ -4,16 +4,16 @@
 {{if opt . "error" ""}}
 <div class="alert" data-variant="destructive" role="alert">
   {{icon "circle-alert"}}
-  <h3>No proposal</h3>
+  <h3>Nothing changed</h3>
   <section><p>{{.Error}}</p></section>
 </div>
 {{else}}
 <div class="alert" role="status">
   {{icon "check"}}
-  <h3>{{lbl "kind" .Created.Kind}} proposed</h3>
+  <h3>{{.Done}}</h3>
   <section>
-    <p>{{.Created.Title}}</p>
-    <p><a class="font-medium text-foreground underline underline-offset-4" href="/proposals/{{.Created.ID}}">Review proposal #{{.Created.ID}}</a>. Nothing changes in Notion until you approve it.</p>
+    {{with .Detail}}<p>{{.}}</p>{{end}}
+    <p><a class="font-medium text-foreground underline underline-offset-4" href="/activity?category=wiki">Undo in Done</a></p>
   </section>
 </div>
 {{end}}

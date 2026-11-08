@@ -2,7 +2,6 @@ package settings
 
 import (
 	"fmt"
-	"maps"
 	"slices"
 	"strconv"
 	"strings"
@@ -47,7 +46,6 @@ type Def struct {
 	Check     func(value string) error
 	Peers     func(value string, peer func(key string) (string, error)) error
 	EnvAlias  string
-	Page      string
 	Kind      Kind
 	Surface   Surface
 	Encrypted bool
@@ -108,31 +106,19 @@ type PinSource interface {
 }
 
 type Registry struct {
-	mu     sync.RWMutex
-	defs   map[string]Def
-	claims map[string]string
-	pins   PinSource
+	mu   sync.RWMutex
+	defs map[string]Def
+	pins PinSource
 }
 
-var (
-	definitions []Def
-	claims      = map[string]string{}
-)
+var definitions []Def
 
 func New() *Registry {
-	r := &Registry{defs: make(map[string]Def, len(definitions)), claims: maps.Clone(claims)}
+	r := &Registry{defs: make(map[string]Def, len(definitions))}
 	for _, d := range definitions {
 		r.defs[d.Key] = d
 	}
 	return r
-}
-
-func Claim(page string, keys ...string) {
-	for _, k := range keys {
-		if k != "" {
-			claims[k] = page
-		}
-	}
 }
 
 func MustRegister(defs ...Def) {
@@ -198,7 +184,7 @@ func (r *Registry) Defs() []Def {
 	defer r.mu.RUnlock()
 	out := make([]Def, 0, len(r.defs))
 	for _, d := range r.defs {
-		out = append(out, r.claimed(d).clone())
+		out = append(out, d.clone())
 	}
 	slices.SortFunc(out, func(a, b Def) int { return strings.Compare(a.Key, b.Key) })
 	return out
@@ -208,7 +194,7 @@ func (r *Registry) Lookup(key string) (Def, bool) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	d, ok := r.defs[key]
-	return r.claimed(d).clone(), ok
+	return d.clone(), ok
 }
 
 func LookupOf(key string) (Def, bool) {
@@ -230,13 +216,6 @@ func RangeOf(key string) (int64, int64, bool) {
 		}
 	}
 	return 0, 0, false
-}
-
-func (r *Registry) claimed(d Def) Def {
-	if page, ok := r.claims[d.Key]; ok && d.Page == "" {
-		d.Page = page
-	}
-	return d
 }
 
 func (d Def) clone() Def {

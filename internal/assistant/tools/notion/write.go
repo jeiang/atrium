@@ -399,6 +399,23 @@ func updatePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	if err != nil {
 		return nil, err
 	}
+	return rewritePage(ctx, tc, wiki, pageID, sources, func(body string) (string, error) {
+		return notion.EditMarkdown(body, replace, appendText, section)
+	})
+}
+
+func RewritePage(ctx context.Context, tc *tool.Context, pageID, added string, edit notion.Edit) (map[string]any, error) {
+	if err := checkMarkdown(ctx, tc, added); err != nil {
+		return nil, err
+	}
+	wiki, err := wikiOf(ctx, tc)
+	if err != nil {
+		return nil, err
+	}
+	return rewritePage(ctx, tc, wiki, normalize(pageID), nil, edit)
+}
+
+func rewritePage(ctx context.Context, tc *tool.Context, wiki notion.Wiki, pageID string, sources []string, edit notion.Edit) (map[string]any, error) {
 	date, err := today(ctx, tc)
 	if err != nil {
 		return nil, err
@@ -411,10 +428,12 @@ func updatePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	if err != nil {
 		return nil, err
 	}
-	page, previous, updated, merged, edited, err := rewrite(ctx, tc.DB, wiki, client, pageID, replace, appendText, section, date, sources)
+	writer := &notion.Writer{DB: tc.DB, Client: client}
+	page, previous, updated, merged, edited, err := writer.Rewrite(ctx, pageID, edit, date, sources)
 	if err != nil {
 		var te tool.Error
-		if errors.As(err, &te) {
+		var refused notion.WikiError
+		if errors.As(err, &te) || errors.As(err, &refused) {
 			_ = writes.Discard(ctx, tc.DB.Write, id)
 		}
 		return nil, notionError(err)
@@ -437,12 +456,6 @@ func updatePage(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	out["write_id"] = id
 	out["changed"] = []any{"markdown"}
 	return out, nil
-}
-
-func rewrite(ctx context.Context, d *db.DB, wiki notion.Wiki, client *notion.Client, pageID string, replace, appendText *string, section, date string, sources []string) (
-	page notion.RemotePage, previous, updated string, merged []string, edited string, err error) {
-	writer := &notion.Writer{DB: d, Client: client}
-	return writer.Rewrite(ctx, pageID, replace, appendText, section, date, sources)
 }
 
 func replaceContent(text string) map[string]any {
