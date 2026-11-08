@@ -20,7 +20,6 @@ import (
 const (
 	DefaultDays = 14
 	MaxDays     = 366
-	DismissKind = "birthday"
 )
 
 func Date(year int, month time.Month, day int) time.Time {
@@ -55,18 +54,18 @@ func Occurrence(month, day int, today time.Time) (time.Time, error) {
 	return time.Time{}, errors.New("birthday date is unreachable")
 }
 
-type Dismissals map[[2]string]string
+type Dismissals map[string]string
 
 func DismissedKeys(ctx context.Context, q db.Querier) (Dismissals, error) {
-	rows, err := q.QueryContext(ctx, "SELECT kind, key, occurrence FROM watch_dismissed")
+	rows, err := q.QueryContext(ctx, "SELECT key, occurrence FROM watch_dismissed")
 	if err != nil {
 		return nil, err
 	}
 	out := Dismissals{}
 	_, err = db.Collect(rows, func(r *sql.Rows) (struct{}, error) {
-		var kind, key, occurrence string
-		err := r.Scan(&kind, &key, &occurrence)
-		out[[2]string{kind, key}] = occurrence
+		var key, occurrence string
+		err := r.Scan(&key, &occurrence)
+		out[key] = occurrence
 		return struct{}{}, err
 	})
 	return out, err
@@ -88,6 +87,7 @@ type Item struct {
 }
 
 func Upcoming(cards []contacts.Card, today time.Time, days int, dismissed Dismissals) ([]Item, error) {
+	today = Date(today.Year(), today.Month(), today.Day())
 	out := []Item{}
 	for _, card := range cards {
 		for _, entry := range card.Dates {
@@ -101,7 +101,7 @@ func Upcoming(cards []contacts.Card, today time.Time, days int, dismissed Dismis
 			}
 			key := ItemKey(card.Name, entry)
 			iso := when.Format("2006-01-02")
-			if dismissed[[2]string{DismissKind, key}] == iso {
+			if dismissed[key] == iso {
 				continue
 			}
 			var turning *int
@@ -149,8 +149,8 @@ func Dismiss(ctx context.Context, q db.Querier, key, occurrenceDate string, ts f
 		return fmt.Errorf("%w: Invalid isoformat string: %s", httpx.ErrPayload, strconv.Quote(occurrenceDate))
 	}
 	_, err := q.ExecContext(ctx,
-		"INSERT INTO watch_dismissed (kind, key, occurrence, ts) VALUES (?, ?, ?, ?) "+
-			"ON CONFLICT(kind, key) DO UPDATE SET occurrence = excluded.occurrence, ts = excluded.ts",
-		DismissKind, key, occurrenceDate, ts)
+		"INSERT INTO watch_dismissed (key, occurrence, ts) VALUES (?, ?, ?) "+
+			"ON CONFLICT(key) DO UPDATE SET occurrence = excluded.occurrence, ts = excluded.ts",
+		key, occurrenceDate, ts)
 	return err
 }

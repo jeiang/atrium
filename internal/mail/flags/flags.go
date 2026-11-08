@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -26,28 +25,7 @@ var (
 	automatedLocal = regexp.MustCompile(`(?i)no[-_.]?reply|do[-_.]?not[-_.]?reply|notifications?|mailer-daemon|postmaster|bounces?`)
 )
 
-type Contacts map[string]struct{}
-
-func LoadContacts(dir string) Contacts {
-	emails := Contacts{}
-	if info, err := os.Stat(dir); dir == "" || err != nil || !info.IsDir() {
-		return emails
-	}
-	for _, path := range contacts.VCFPaths(dir) {
-		data, err := os.ReadFile(path)
-		if err != nil {
-			continue
-		}
-		for _, card := range contacts.Parse(contacts.ReadText(data)) {
-			for _, email := range card.Emails {
-				emails[email] = struct{}{}
-			}
-		}
-	}
-	return emails
-}
-
-type Row struct {
+type row struct {
 	ID       int64
 	FromAddr string
 	FromName string
@@ -55,8 +33,8 @@ type Row struct {
 	ListID   string
 }
 
-func ContactsFlag(row Row, contacts Contacts) (bool, error) {
-	if _, ok := contacts[row.FromAddr]; row.FromAddr == "" || !ok || row.ListID != "" {
+func contactsFlag(row row, known map[string]struct{}) (bool, error) {
+	if _, ok := known[row.FromAddr]; row.FromAddr == "" || !ok || row.ListID != "" {
 		return false, nil
 	}
 	local, _, _ := strings.Cut(row.FromAddr, "@")
@@ -70,7 +48,7 @@ func AutomatedLocal(local string) (bool, error) {
 
 type Judge func(ctx context.Context, url string, m llm.Message, body string) (llm.Flags, error)
 
-func pending(ctx context.Context, d *db.DB, account string) ([]Row, error) {
+func pending(ctx context.Context, d *db.DB, account string) ([]row, error) {
 	rows, err := d.Read.QueryContext(ctx,
 		"SELECT m.id, m.from_addr, m.from_name, m.subject, m.list_id FROM messages m WHERE m.account = ? AND m.in_inbox = 1 "+
 			"AND m.seen = 0 AND m.sent = 0 AND m.gone_at IS NULL AND NOT EXISTS (SELECT 1 FROM flag_decisions f "+
@@ -78,8 +56,8 @@ func pending(ctx context.Context, d *db.DB, account string) ([]Row, error) {
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (Row, error) {
-		var row Row
+	return db.Collect(rows, func(r *sql.Rows) (row, error) {
+		var row row
 		err := r.Scan(&row.ID, &row.FromAddr, &row.FromName, &row.Subject, &row.ListID)
 		return row, err
 	})
@@ -122,7 +100,12 @@ func FlagAccount(ctx context.Context, d *db.DB, account string, judge Judge, now
 	if err != nil {
 		return 0, err
 	}
-	known := LoadContacts(contactsDir)
+	known := map[string]struct{}{}
+	for _, card := range contacts.Load(contactsDir) {
+		for _, email := range card.Emails {
+			known[email] = struct{}{}
+		}
+	}
 	available := true
 	done := 0
 	for _, row := range rows {
@@ -145,7 +128,7 @@ func FlagAccount(ctx context.Context, d *db.DB, account string, judge Judge, now
 				judged = true
 			}
 		}
-		match, err := ContactsFlag(row, known)
+		match, err := contactsFlag(row, known)
 		if err != nil {
 			return done, err
 		}
