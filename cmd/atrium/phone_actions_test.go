@@ -16,8 +16,8 @@ import (
 	"github.com/jeiang/atrium/internal/proposals"
 
 	"github.com/jeiang/atrium/internal/actionlink"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/actionlink/policy"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )

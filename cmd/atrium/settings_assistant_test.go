@@ -47,7 +47,7 @@ func TestAssistantSettingOrderingAndBuiltinSchedules(t *testing.T) {
 	refused("agent_preflight_share must be above agent_compact_share (0.875)", "set", "agent_preflight_share", "0.8")
 	accepted("set", "agent_compact_share", "0.9")
 	refused("agent_compact_share must be below agent_preflight_share (0.95)", "set", "agent_compact_share", "0.96")
-	refused("agent_schedule_daily_nudges", "set", "agent_schedule_daily_nudges", "*/5 * * * *")
+	refused("agent_schedule_weekly_review", "set", "agent_schedule_weekly_review", "*/5 * * * *")
 
 	base := startServeIn(t, dir)
 	_, page, _ := fetch(t, http.DefaultClient, "GET", base+"/scheduled", nil)
