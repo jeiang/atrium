@@ -84,3 +84,14 @@ func backupConns(ctx context.Context, src, dst *sql.DB, _ string) error {
 		})
 	})
 }
+
+func readOnlyDSN(path string, key Key) (string, error) {
+	s, err := dsn(path, false, key)
+	if err != nil {
+		return "", err
+	}
+	if strings.Contains(s, "?") {
+		return s + "&mode=ro", nil
+	}
+	return s + "?mode=ro", nil
+}

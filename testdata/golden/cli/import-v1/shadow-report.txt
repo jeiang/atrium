@@ -1,0 +1,25 @@
+== icloud ==
+decisions: 17
+by stage: correction=2, operator=2, learned=8, knn=3, llm=1, fallback=1
+proposed moves: 16, proposed deletes: 1, no label: 0
+      5  Bills
+      5  Receipts
+      3  Newsletters
+      2  Travel
+      1  Misc
+outcome: still in inbox=2, gone=2, moved=13, proposal equals actual=10 (76.9%)
+disagreements (proposed -> actual): 3
+     1  gadgets.example: Receipts -> Bills
+     1  unknown.example: Misc -> Bills
+     1  shopa.example: Receipts -> Bills
+flags (unread inbox): considered=3, contacts would-flag=2, 9B flag=2 of 3 judged, both=2, contacts-only=0, 9B-only=0
+
+== gmail ==
+decisions: 10
+by stage: correction=0, operator=0, learned=3, knn=0, llm=0, fallback=7
+proposed moves: 3, proposed deletes: 0, no label: 7
+      2  Work
+      1  Family
+outcome: still in inbox=3, gone=5, moved=2, proposal equals actual=2 (100.0%)
+disagreements (proposed -> actual): 0
+flags (unread inbox): considered=1, contacts would-flag=1, 9B flag=1 of 1 judged, both=1, contacts-only=0, 9B-only=0

@@ -8,7 +8,6 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -374,19 +373,16 @@ func TestLoginLinkFirstRunSetupThenOIDCSignIn(t *testing.T) {
 }
 
 func TestLoginLinkMigratesAGoldenDatabaseCopy(t *testing.T) {
-	data, err := os.ReadFile(filepath.Join(golden.Dir(), "atrium.db"))
-	if err != nil {
-		t.Fatal(err)
-	}
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
-	if err := os.WriteFile(path, data, 0o600); err != nil {
-		t.Fatal(err)
-	}
 	t.Setenv("ATRIUM_DB", path)
 	t.Setenv("ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	t.Setenv("ATRIUM_CORE_PUBLIC_URL", "https://atrium.example")
 	t.Cleanup(func() { settings.Default.SetPins(nil) })
+	var imported, importErrs bytes.Buffer
+	if code := newApp().Run(context.Background(), []string{"db", "import-v1", filepath.Join(golden.Dir(), "atrium.db")}, &imported, &importErrs); code != cli.ExitOK {
+		t.Fatalf("import-v1 on a golden copy: %d %s", code, importErrs.String())
+	}
 
 	counts := func(d *db.DB) map[string]int {
 		out := map[string]int{}
@@ -426,8 +422,8 @@ func TestLoginLinkMigratesAGoldenDatabaseCopy(t *testing.T) {
 		}
 	}
 	var version, links int
-	if err := migrated.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = 9").Scan(&version); err != nil || version != 1 {
-		t.Fatalf("migration 9 applied %d: %v", version, err)
+	if err := migrated.Read.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE version = 1").Scan(&version); err != nil || version != 1 {
+		t.Fatalf("baseline migration applied %d: %v", version, err)
 	}
 	if err := migrated.Read.QueryRow("SELECT COUNT(*) FROM auth_login_links").Scan(&links); err != nil || links != 1 {
 		t.Fatalf("links %d: %v", links, err)

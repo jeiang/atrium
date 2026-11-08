@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -115,7 +116,7 @@ func copyTree(t *testing.T, from, to string) {
 
 var pythonOrder = []string{
 	"sync", "watch", "rules", "shadow-report", "reindex", "rebalance", "deletions", "gmail-labels", "live", "proposals",
-	"notion", "agent", "calendar", "loops", "watches", "media", "serve",
+	"notion", "agent", "calendar", "loops", "watches", "media", "serve", "db",
 }
 
 func inPythonOrder(have []*cli.Command) []*cli.Command {
@@ -171,7 +172,6 @@ type rig struct {
 func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin string) *rig {
 	t.Helper()
 	dir := t.TempDir()
-	copyGoldenFile(t, filepath.Join(golden.Dir(), "atrium.db"), filepath.Join(dir, "atrium.db"))
 	copyTree(t, filepath.Join(golden.Dir(), "state", "cache"), filepath.Join(dir, "cache"))
 	srv := llmstub.Server(t, nil)
 	t.Cleanup(calendar.UseEndpoints(calendar.Endpoints{CalDAV: caldav.New(t, data.environment["ICLOUD_APPLE_ID"], data.environment["ICLOUD_APP_PASSWORD"]).URL + "/"}))
@@ -229,7 +229,17 @@ func newRig(t *testing.T, data goldenData, extraEnv map[string]string, stdin str
 	app := cli.New("atrium", logx.Setup)
 	app.Add(inPythonOrder(commands(clients, func() float64 { return data.world.Clock }))...)
 	app.Stdin = strings.NewReader(stdin)
-	return &rig{dir: dir, app: app}
+	r := &rig{dir: dir, app: app}
+	code, _, stderr := r.run(context.Background(), "db", "import-v1", filepath.Join(golden.Dir(), "atrium.db"))
+	if code != cli.ExitOK {
+		t.Fatalf("import-v1 into the fresh world database: exit %d stderr %q", code, stderr)
+	}
+	r.seedWorld(t, filepath.Join(golden.Dir(), "atrium.db"))
+	code, _, stderr = r.run(context.Background(), "reindex")
+	if code != cli.ExitOK {
+		t.Fatalf("embed the seeded world: exit %d stderr %q", code, stderr)
+	}
+	return r
 }
 
 func (r *rig) run(ctx context.Context, argv ...string) (code int, stdout, stderr string) {
@@ -316,6 +326,105 @@ func TestWritingCommandsTakeTheDatabaseLock(t *testing.T) {
 				t.Fatal("the command did not finish after the lock was released")
 			}
 		})
+	}
+}
+
+var seededTables = map[string]bool{
+	"schema_migrations": true, "module_migrations": true, "db_key_history": true, "secrets": true,
+	"settings_audit": true, "write_resolutions": true, "pass_runs": true, "pass_run_alerts": true,
+	"endpoint_probes": true, "integration_health": true, "auth_sessions": true, "auth_logins": true,
+	"auth_login_links": true, "mail_accounts": true, "ntfy_channels": true, "embed_index": true,
+}
+
+var ftsTables = map[string][]string{
+	"message_fts": {"subject", "sender", "body"},
+	"thread_fts":  {"thread_id", "text"},
+	"notion_fts":  {"title", "path", "body"},
+}
+
+func (r *rig) seedWorld(t *testing.T, source string) {
+	t.Helper()
+	v2, err := db.Connect(filepath.Join(r.dir, "atrium.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = v2.Close() }()
+	v1, err := db.OpenSource(source, db.Key{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = v1.Close() }()
+	columns := func(q db.Querier, table string) []string {
+		rows, err := q.QueryContext(context.Background(), "SELECT name FROM pragma_table_info(?)", table)
+		if err != nil {
+			t.Fatal(err)
+		}
+		names, err := db.Collect(rows, func(row *sql.Rows) (string, error) {
+			var name string
+			return name, row.Scan(&name)
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return names
+	}
+	rows, err := v2.Read.QueryContext(context.Background(), "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' ORDER BY name")
+	if err != nil {
+		t.Fatal(err)
+	}
+	tables, err := db.Collect(rows, func(row *sql.Rows) (string, error) {
+		var name string
+		return name, row.Scan(&name)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var stmts []string
+	for _, table := range tables {
+		if seededTables[table] || table == "message_vec" || table == "notion_vec" {
+			continue
+		}
+		if strings.HasPrefix(table, "message_fts_") || strings.HasPrefix(table, "thread_fts_") || strings.HasPrefix(table, "notion_fts_") {
+			continue
+		}
+		v1cols := columns(v1, table)
+		if len(v1cols) == 0 {
+			continue
+		}
+		have := map[string]bool{}
+		for _, c := range v1cols {
+			have[c] = true
+		}
+		var common []string
+		for _, c := range columns(v2.Read, table) {
+			if have[c] {
+				common = append(common, c)
+			}
+		}
+		if len(common) == 0 {
+			continue
+		}
+		quoted := make([]string, len(common))
+		for i, c := range common {
+			quoted[i] = `"` + strings.ReplaceAll(c, `"`, `""`) + `"`
+		}
+		if fts, ok := ftsTables[table]; ok {
+			_ = fts
+			stmts = append(stmts, "INSERT INTO main."+table+" (rowid, "+strings.Join(quoted, ", ")+") SELECT rowid, "+
+				strings.Join(quoted, ", ")+" FROM v1."+table+";")
+			continue
+		}
+		stmts = append(stmts, "INSERT OR IGNORE INTO main."+table+" ("+strings.Join(quoted, ", ")+") SELECT "+
+			strings.Join(quoted, ", ")+" FROM v1."+table+";")
+	}
+	script := "PRAGMA foreign_keys = OFF;\nATTACH DATABASE '" + strings.ReplaceAll(source, "'", "''") + "' AS v1;\n" +
+		strings.Join(stmts, "\n") + "\nDETACH DATABASE v1;\n"
+	saved := r.app.Stdin
+	r.app.Stdin = strings.NewReader(script)
+	defer func() { r.app.Stdin = saved }()
+	code, _, stderr := r.run(context.Background(), "db", "shell")
+	if code != cli.ExitOK {
+		t.Fatalf("seed the v2 world from the v1 fixture: exit %d stderr %q", code, stderr)
 	}
 }
 

@@ -30,6 +30,7 @@ func Command() *cli.Command {
 			{Name: "backup", Help: "write a consistent copy of the database, encrypted like the source", Setup: s.backup},
 			{Name: "shell", Help: "run SQL statements from standard input against the database", Setup: s.shell},
 			{Name: "check", Help: "verify database integrity and report FTS5 and vec0 table counts", Setup: s.check},
+			{Name: "import-v1", Help: "copy the learned-rule data from a v1 database into this fresh v2 database", Setup: s.importV1},
 		},
 	}
 }
