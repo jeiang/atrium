@@ -40,7 +40,7 @@ func mustJSONIndent(v any) string {
 
 const categorySQL = "CASE WHEN w.tool LIKE 'notion%' THEN 'wiki' WHEN w.tool LIKE 'media%' THEN 'media' ELSE 'assistant' END"
 
-const writeColumns = "id, ts, thread_id, tool, target, before_json, after_json, undo_json, undone_at, thread_kind, category"
+const writeColumns = "id, ts, thread_id, tool, target, before_json, after_json, undo_json, undone_at, state, error, thread_kind, category"
 
 func snippet(raw *string) (string, error) {
 	if raw == nil || *raw == "" {
@@ -60,7 +60,7 @@ func snippet(raw *string) (string, error) {
 func scanWrite(sc interface{ Scan(...any) error }) (ActivityEntry, error) {
 	var e ActivityEntry
 	var before, after, undo *string
-	if err := sc.Scan(&e.ID, &e.TS, &e.ThreadID, &e.Tool, &e.Target, &before, &after, &undo, &e.UndoneAt, &e.ThreadKind, &e.Category); err != nil {
+	if err := sc.Scan(&e.ID, &e.TS, &e.ThreadID, &e.Tool, &e.Target, &before, &after, &undo, &e.UndoneAt, &e.State, &e.Error, &e.ThreadKind, &e.Category); err != nil {
 		return e, err
 	}
 	var err error
@@ -71,13 +71,13 @@ func scanWrite(sc interface{ Scan(...any) error }) (ActivityEntry, error) {
 		return e, err
 	}
 	e.Source = sourceWrite
-	e.Undoable = undo != nil && *undo != "" && e.UndoneAt == nil
+	e.Undoable = undo != nil && *undo != "" && e.UndoneAt == nil && e.State != "unknown"
 	return e, nil
 }
 
 func getWrite(ctx context.Context, q db.Querier, id int64) (*ActivityEntry, error) {
 	e, err := scanWrite(q.QueryRowContext(ctx,
-		"SELECT w.id, w.ts, w.thread_id, w.tool, w.target, w.before_json, w.after_json, w.undo_json, w.undone_at, t.kind, "+categorySQL+
+		"SELECT w.id, w.ts, w.thread_id, w.tool, w.target, w.before_json, w.after_json, w.undo_json, w.undone_at, w.state, w.error, t.kind, "+categorySQL+
 			" FROM agent_writes w LEFT JOIN threads t ON t.id = w.thread_id WHERE w.id = ?", id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
@@ -270,6 +270,38 @@ func (s *service) resolveMail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.undone(w, r, mailEntry(*found, s.now()), notice)
+}
+
+func (s *service) resolveWrite(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "write_id")
+	if !ok {
+		return
+	}
+	ctx := detached(r)
+	known, err := getWrite(ctx, s.deps.DB.Write, id)
+	check(err)
+	if known == nil {
+		s.fail(w, r, http.StatusNotFound, "unknown write")
+		return
+	}
+	var notice *tpl.Toast
+	err = writes.Resolve(ctx, s.deps.DB, id, writes.Resolver{Actor: "operator", Source: "ui"}, s.now)
+	var refused writes.UndoError
+	switch {
+	case errors.As(err, &refused):
+		if !web.IsPartial(r) {
+			s.fail(w, r, http.StatusConflict, err.Error())
+			return
+		}
+		notice = toast("error", "Not resolved", err.Error())
+	case err != nil:
+		panic(err)
+	default:
+		notice = toast("success", "Resolved", fmt.Sprintf("Write %d was marked resolved.", id))
+	}
+	found, err := getWrite(ctx, s.deps.DB.Write, id)
+	check(err)
+	s.undone(w, r, *found, notice)
 }
 
 func (s *service) undoWrite(w http.ResponseWriter, r *http.Request) {

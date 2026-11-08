@@ -144,7 +144,7 @@ func Begin(ctx context.Context, q db.Querier, w New) (int64, error) {
 		return 0, err
 	}
 	res, err := q.ExecContext(ctx,
-		"INSERT INTO agent_writes (ts, thread_id, run_id, tool, target, before_json, after_json, undo_json) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO agent_writes (ts, thread_id, run_id, tool, target, before_json, after_json, undo_json, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'held')",
 		w.TS, w.ThreadID, w.RunID, w.Tool, w.Target, before, after, undo)
 	if err != nil {
 		return 0, err
@@ -161,7 +161,7 @@ func Settle(ctx context.Context, q db.Querier, reg *Registry, id int64, w New) e
 		return err
 	}
 	res, err := q.ExecContext(ctx,
-		"UPDATE agent_writes SET target = ?, before_json = ?, after_json = ?, undo_json = ? WHERE id = ?",
+		"UPDATE agent_writes SET target = ?, before_json = ?, after_json = ?, undo_json = ?, state = 'ok', error = NULL WHERE id = ? AND state = 'held'",
 		w.Target, before, after, undo, id)
 	if err != nil {
 		return err
@@ -176,9 +176,82 @@ func Settle(ctx context.Context, q db.Querier, reg *Registry, id int64, w New) e
 	return nil
 }
 
+func SettleUnknown(ctx context.Context, q db.Querier, id int64, w New, text string) error {
+	before, after, _, err := payloads(w)
+	if err != nil {
+		return err
+	}
+	res, err := q.ExecContext(ctx,
+		"UPDATE agent_writes SET target = ?, before_json = ?, after_json = ?, undo_json = NULL, state = 'unknown', error = ? WHERE id = ? AND state = 'held'",
+		w.Target, before, after, text, id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return UndoError("write intent " + strconv.FormatInt(id, 10) + " is gone")
+	}
+	return nil
+}
+
 func Discard(ctx context.Context, q db.Querier, id int64) error {
-	_, err := q.ExecContext(ctx, "DELETE FROM agent_writes WHERE id = ? AND undo_json IS NULL", id)
+	_, err := q.ExecContext(ctx, "DELETE FROM agent_writes WHERE id = ? AND state = 'held' AND undo_json IS NULL", id)
 	return err
+}
+
+type Resolver struct {
+	Actor  string
+	Source string
+}
+
+func Resolve(ctx context.Context, d *db.DB, id int64, who Resolver, now func() float64) error {
+	if who.Source != "cli" && who.Source != "ui" {
+		return UndoError("resolution source must be cli or ui")
+	}
+	row, err := get(ctx, d.Read, id)
+	if err != nil {
+		return err
+	}
+	if row == nil {
+		return UndoError(fmt.Sprintf("no write %d", id))
+	}
+	if row.State != "unknown" {
+		return UndoError(fmt.Sprintf("write %d has no unknown outcome", id))
+	}
+	prior := ""
+	if row.Error != nil {
+		prior = *row.Error
+	}
+	res, err := d.Write.ExecContext(ctx,
+		"UPDATE agent_writes SET state = 'resolved', resolved_at = ? WHERE id = ? AND state = 'unknown'", now(), id)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if n == 0 {
+		return UndoError(fmt.Sprintf("write %d has no unknown outcome", id))
+	}
+	_, err = d.Write.ExecContext(ctx,
+		"INSERT INTO write_resolutions (ts, actor, source, kind, row_id, proposal_id, outcome, prior_error) VALUES (?, ?, ?, 'agent_write', ?, NULL, 'resolved', ?)",
+		now(), who.Actor, who.Source, id, prior)
+	return err
+}
+
+func UnknownTarget(ctx context.Context, q db.Querier, prefix string) (int64, error) {
+	var id int64
+	err := q.QueryRowContext(ctx,
+		"SELECT id FROM agent_writes WHERE state = 'unknown' AND substr(target, 1, length(?)) = ? ORDER BY id LIMIT 1",
+		prefix, prefix).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return id, err
 }
 
 type row struct {
@@ -192,13 +265,16 @@ type row struct {
 	AfterJSON  *string
 	UndoJSON   *string
 	UndoneAt   *float64
+	State      string
+	Error      *string
+	ResolvedAt *float64
 }
 
 func get(ctx context.Context, q db.Querier, writeID int64) (*row, error) {
 	var r row
 	err := q.QueryRowContext(ctx,
-		"SELECT id, ts, thread_id, run_id, tool, target, before_json, after_json, undo_json, undone_at FROM agent_writes WHERE id = ?", writeID).
-		Scan(&r.ID, &r.TS, &r.ThreadID, &r.RunID, &r.Tool, &r.Target, &r.BeforeJSON, &r.AfterJSON, &r.UndoJSON, &r.UndoneAt)
+		"SELECT id, ts, thread_id, run_id, tool, target, before_json, after_json, undo_json, undone_at, state, error, resolved_at FROM agent_writes WHERE id = ?", writeID).
+		Scan(&r.ID, &r.TS, &r.ThreadID, &r.RunID, &r.Tool, &r.Target, &r.BeforeJSON, &r.AfterJSON, &r.UndoJSON, &r.UndoneAt, &r.State, &r.Error, &r.ResolvedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -253,6 +329,9 @@ func (r *Registry) resolve(ctx context.Context, q db.Querier, writeID int64) (Un
 	}
 	if row.UndoneAt != nil {
 		return nil, nil, UndoError("already undone")
+	}
+	if row.State == "unknown" {
+		return nil, nil, UndoError(fmt.Sprintf("write %d has an unknown outcome; resolve it first", writeID))
 	}
 	var raw json.RawMessage
 	if row.UndoJSON != nil && *row.UndoJSON != "" {

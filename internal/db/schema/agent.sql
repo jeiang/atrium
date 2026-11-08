@@ -125,7 +125,10 @@ CREATE TABLE IF NOT EXISTS agent_writes (
     before_json TEXT,
     after_json TEXT,
     undo_json TEXT,
-    undone_at REAL
+    undone_at REAL,
+    state TEXT NOT NULL DEFAULT 'ok',
+    error TEXT,
+    resolved_at REAL
 );
 CREATE TABLE IF NOT EXISTS context_ledger (
     id INTEGER PRIMARY KEY,

@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS write_resolutions (
     ts REAL NOT NULL,
     actor TEXT NOT NULL,
     source TEXT NOT NULL CHECK (source IN ('cli', 'ui')),
-    kind TEXT NOT NULL CHECK (kind IN ('proposal_action', 'auto_undo', 'auto_action')),
+    kind TEXT NOT NULL CHECK (kind IN ('proposal_action', 'auto_undo', 'auto_action', 'agent_write')),
     row_id INTEGER NOT NULL,
     proposal_id INTEGER,
     outcome TEXT NOT NULL,

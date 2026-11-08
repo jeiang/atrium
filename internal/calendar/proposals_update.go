@@ -334,6 +334,9 @@ func (p *Proposals) ExecuteUpdate(ctx context.Context, prop *proposals.Proposal,
 	if err != nil {
 		return nil, err
 	}
+	if err := p.guard(ctx, target); err != nil {
+		return nil, err
+	}
 	var plan func() (py.Dict, error)
 	switch target {
 	case ICloud:
@@ -375,6 +378,9 @@ func (p *Proposals) ExecuteRSVP(ctx context.Context, prop *proposals.Proposal, _
 	if err != nil {
 		return nil, err
 	}
+	if err := p.guard(ctx, target); err != nil {
+		return nil, err
+	}
 	var plan func() (py.Dict, error)
 	switch target {
 	case ICloud:
@@ -413,6 +419,9 @@ func (p *Proposals) Restore(ctx context.Context, plan json.RawMessage) (py.Dict,
 	}
 	target, err := ParseTarget(info.Calendar)
 	if err != nil {
+		return nil, err
+	}
+	if err := p.guard(ctx, target); err != nil {
 		return nil, err
 	}
 	switch target {
