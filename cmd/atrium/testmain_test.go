@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/calendar"
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/mail"
@@ -31,8 +33,16 @@ func settingEnv(key string) string {
 
 func flagEnv(name string) string { return settingEnv(module.FlagKey(name)) }
 
+var testRoot = func() string {
+	dir, err := os.MkdirTemp("", "atrium-test-")
+	if err != nil {
+		panic("cannot create the test root")
+	}
+	return dir
+}()
+
 var defaultAccountsFile = func() string {
-	dir := filepath.Join(os.TempDir(), "atrium-test-accounts")
+	dir := filepath.Join(testRoot, "accounts")
 	secret := filepath.Join(dir, "icloud.password")
 	path := filepath.Join(dir, "accounts.toml")
 	body := fmt.Sprintf("[[account]]\nid = \"icloud\"\npreset = \"icloud\"\nlogin = \"operator@icloud.invalid\"\npassword_file = %q\n", secret)
@@ -41,6 +51,22 @@ var defaultAccountsFile = func() string {
 	}
 	return path
 }()
+
+func setEnv(t *testing.T, name, value string) {
+	t.Helper()
+	if activeFixture != nil {
+		activeFixture.env[name] = value
+		return
+	}
+	t.Setenv(name, value)
+}
+
+func moduleEnv(dir string) map[string]string {
+	return map[string]string{
+		settingEnv(media.KeyRoot):   filepath.Join(dir, "media"),
+		settingEnv(contacts.DirKey): filepath.Join(dir, "media-contacts"),
+	}
+}
 
 func requirementEnv(mediaRoot string) map[string]string {
 	return map[string]string{
@@ -61,7 +87,7 @@ func requirementEnv(mediaRoot string) map[string]string {
 }
 
 func init() {
-	defaults := requirementEnv(filepath.Join(os.TempDir(), "atrium-test-media"))
+	defaults := requirementEnv(filepath.Join(testRoot, "media"))
 	defaults[anthropic.BaseURLEnv] = "http://127.0.0.1:9"
 	notion.UseBaseURL("http://127.0.0.1:9")
 	defaults[settingEnv(ops.ListenKey)] = "127.0.0.1:0"
@@ -73,4 +99,11 @@ func init() {
 			_ = os.Setenv(name, value)
 		}
 	}
+}
+
+func defaultApp() *cli.App {
+	if activeFixture != nil {
+		return activeFixture.app
+	}
+	return newApp(config.OS, settings.Default, nil)
 }

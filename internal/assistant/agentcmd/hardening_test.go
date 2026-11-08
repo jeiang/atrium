@@ -56,7 +56,7 @@ func newHarness(t *testing.T, script ...anthropictest.Response) *harness {
 		return r, err
 	}
 	a := cli.New("atrium", func(io.Writer) {})
-	a.Add(&cli.Command{Name: "agent", Commands: []*cli.Command{runCommand(env, tools)}}, settingscmd.Command(nil))
+	a.Add(&cli.Command{Name: "agent", Commands: []*cli.Command{runCommand(env, tools)}}, settingscmd.Command(config.OS, nil))
 	d, err := db.Connect(path)
 	if err != nil {
 		t.Fatal(err)

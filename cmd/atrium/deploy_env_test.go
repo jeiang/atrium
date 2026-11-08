@@ -40,7 +40,7 @@ func TestDatabaseTimeZoneReachesNonServeCommands(t *testing.T) {
 	}
 	run := func() (int, string) {
 		var out, errs bytes.Buffer
-		code := newApp().Run(context.Background(), []string{"shadow-report", "--since", "2026-01-01"}, &out, &errs)
+		code := defaultApp().Run(context.Background(), []string{"shadow-report", "--since", "2026-01-01"}, &out, &errs)
 		return code, errs.String()
 	}
 	if code, stderr := run(); code != cli.ExitOK {

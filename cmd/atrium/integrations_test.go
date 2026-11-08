@@ -62,6 +62,9 @@ func (h *healthServer) notices() []string {
 func unsetEnv(t *testing.T, names ...string) {
 	t.Helper()
 	for _, name := range names {
+		if activeFixture != nil {
+			delete(activeFixture.env, name)
+		}
 		t.Setenv(name, "")
 		_ = os.Unsetenv(name)
 	}

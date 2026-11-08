@@ -41,8 +41,8 @@ func davFixture(t *testing.T) (dir string, srv *caldavtest.Server) {
 	dir, _ = moduleFixture(t, flagsExcept("", ""))
 	srv = caldavtest.New(t, "operator@icloud.invalid", davPassword, "Home")
 	t.Cleanup(calendar.UseEndpoints(calendar.Endpoints{CalDAV: srv.URL + "/", CardDAV: srv.URL + "/"}))
-	t.Setenv(settingEnv(contacts.DirKey), filepath.Join(dir, "contacts"))
-	t.Setenv(settingEnv(calendar.CalendarDirKey), filepath.Join(dir, "calendars"))
+	activeFixture.env[settingEnv(contacts.DirKey)] = filepath.Join(dir, "contacts")
+	activeFixture.env[settingEnv(calendar.CalendarDirKey)] = filepath.Join(dir, "calendars")
 	return dir, srv
 }
 
@@ -57,7 +57,7 @@ func lookup(t *testing.T, query string) string {
 		defer api.mu.Unlock()
 		api.seen = append(api.seen, r)
 	}
-	t.Setenv(anthropic.BaseURLEnv, api.URL)
+	activeFixture.env[anthropic.BaseURLEnv] = api.URL
 	if ran := runApp("agent", "run", "--text", "who is "+query, "--kind", "chat"); ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 	}
@@ -119,8 +119,8 @@ func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothi
 	}
 
 	srv.RemoveObject(caldavtest.CalendarPath(0) + "dentist.ics")
-	t.Setenv("ICLOUD_APP_PASSWORD", davPassword)
-	t.Setenv(settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir, mailAccount{"icloud", "icloud", "operator@icloud.invalid", "wrong", false}))
+	activeFixture.env["ICLOUD_APP_PASSWORD"] = davPassword
+	activeFixture.env[settingEnv(config.KeyMailAccountsFile)] = accountsFile(t, dir, mailAccount{"icloud", "icloud", "operator@icloud.invalid", "wrong", false})
 	if got := runApp("calendar", "sync"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "401") {
 		t.Fatalf("sync with a bad password: %d %q", got.code, got.stderr)
 	}
@@ -131,14 +131,14 @@ func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothi
 		t.Errorf("caldav failed rows = %d, want 1", failed)
 	}
 
-	t.Setenv(settingEnv(calendar.AppleIDKey), "")
-	t.Setenv(settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir,
+	activeFixture.env[settingEnv(calendar.AppleIDKey)] = ""
+	activeFixture.env[settingEnv(config.KeyMailAccountsFile)] = accountsFile(t, dir,
 		mailAccount{"work", "icloud", "work@icloud.invalid", "wrong", false},
-		mailAccount{"home", "icloud", "operator@icloud.invalid", davPassword, false}))
+		mailAccount{"home", "icloud", "operator@icloud.invalid", davPassword, false})
 	if got := runApp("calendar", "sync"); !strings.Contains(got.stderr, "needs-settings") || !strings.Contains(got.stderr, "several iCloud mail accounts; set calendar_account") {
 		t.Fatalf("sync with two iCloud accounts and no calendar_account was not held for settings: %d %q", got.code, got.stderr)
 	}
-	t.Setenv(settingEnv(calendar.AccountKey), "home")
+	activeFixture.env[settingEnv(calendar.AccountKey)] = "home"
 	if got := runApp("calendar", "sync"); got.code != cli.ExitOK {
 		t.Fatalf("calendar sync: %d %q", got.code, got.stderr)
 	}

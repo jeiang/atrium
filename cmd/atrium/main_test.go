@@ -66,9 +66,13 @@ func startServeStoppable(t *testing.T, dir string) (string, *lockedBuffer, func(
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan int, 1)
 	logs := &lockedBuffer{}
+	app := defaultApp()
+	if activeFixture != nil {
+		app = activeFixture.app
+	}
 	go func() {
 		var stdout bytes.Buffer
-		done <- newApp().Run(ctx, []string{"serve", "--port", port, "--auth", "local"}, &stdout, logs)
+		done <- app.Run(ctx, []string{"serve", "--port", port, "--auth", "local"}, &stdout, logs)
 	}()
 	var once sync.Once
 	stop := func() {
