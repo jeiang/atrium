@@ -13,37 +13,37 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailops"
 )
 
-type runner func(ctx context.Context, cfg config.Config, requested string, open mailops.Opener) error
+type runner func(ctx context.Context, env config.Env, cfg config.Config, requested string, open mailops.Opener) error
 
 type Clients = func(cfg config.Config) mail.OpenFunc
 
-func SyncCommand(clients Clients) *cli.Command {
-	return command("sync", clients, func(ctx context.Context, cfg config.Config, requested string, open mailops.Opener) error {
-		_, err := Sync(ctx, cfg, requested, open)
+func SyncCommand(env config.Env, clients Clients) *cli.Command {
+	return command(env, "sync", clients, func(ctx context.Context, env config.Env, cfg config.Config, requested string, open mailops.Opener) error {
+		_, err := Sync(ctx, env, cfg, requested, open)
 		return err
 	})
 }
 
-func WatchCommand(clients Clients) *cli.Command {
-	return command("watch", clients, Watch)
+func WatchCommand(env config.Env, clients Clients) *cli.Command {
+	return command(env, "watch", clients, Watch)
 }
 
-func command(name string, clients Clients, run runner) *cli.Command {
+func command(cfgEnv config.Env, name string, clients Clients, run runner) *cli.Command {
 	return &cli.Command{
 		Name: name,
 		Setup: func(a *cli.Args) cli.Handler {
 			account := a.String("account", "", cli.Opt{})
 			return func(env *cli.Env) int {
-				return execute(env, *account, run, clients)
+				return execute(env, cfgEnv, *account, run, clients)
 			}
 		},
 	}
 }
 
-func execute(env *cli.Env, requested string, run runner, clients Clients) int {
-	cfg, err := config.Load(config.OS)
+func execute(env *cli.Env, cfgEnv config.Env, requested string, run runner, clients Clients) int {
+	cfg, err := config.Load(cfgEnv)
 	if err == nil {
-		err = run(env.Ctx, cfg, requested, clients(cfg))
+		err = run(env.Ctx, cfgEnv, cfg, requested, clients(cfg))
 	}
 	var unknown UnknownAccount
 	if errors.As(err, &unknown) {

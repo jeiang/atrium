@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/report"
@@ -70,7 +69,7 @@ func (o Options) ShadowReportCommand() *cli.Command {
 			if a.Has("since") {
 				given = since
 			}
-			out, err := report.Build(x.Ctx, x.DB.Read, config.OS, given, clockTime(x.Now()))
+			out, err := report.Build(x.Ctx, x.DB.Read, o.env(), given, clockTime(x.Now()))
 			if err != nil {
 				return err
 			}

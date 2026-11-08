@@ -82,7 +82,7 @@ func TestSelfDiagnoseQueriesMetricsAndLogsInTheConfiguredDialect(t *testing.T) {
 				defer api.mu.Unlock()
 				api.seen = append(api.seen, r)
 			}
-			t.Setenv(anthropic.BaseURLEnv, api.URL)
+			setEnv(t, anthropic.BaseURLEnv, api.URL)
 
 			ran := runApp("agent", "run", "--text", "how are you doing?", "--kind", "chat")
 			if ran.code != cli.ExitOK {

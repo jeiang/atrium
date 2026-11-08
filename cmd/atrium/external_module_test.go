@@ -6,10 +6,13 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/sdk"
 )
 
@@ -17,12 +20,17 @@ const extName = "extdemo"
 
 type extModule struct{}
 
-func init() {
-	sdk.Register(extName, extModule{})
-	sdk.RegisterMigrations(extName, sdk.Migration{Version: 1, Apply: func(ctx context.Context, tx *sql.Tx) error {
-		_, err := tx.ExecContext(ctx, "CREATE TABLE extdemo_pings (id INTEGER PRIMARY KEY, note TEXT NOT NULL)")
-		return err
-	}})
+var extOnce sync.Once
+
+func extModules() []module.Module {
+	extOnce.Do(func() {
+		settings.MustRegister(module.FlagDef(extName))
+		sdk.RegisterMigrations(extName, sdk.Migration{Version: 1, Apply: func(ctx context.Context, tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx, "CREATE TABLE extdemo_pings (id INTEGER PRIMARY KEY, note TEXT NOT NULL)")
+			return err
+		}})
+	})
+	return []module.Module{extModule{}}
 }
 
 func (extModule) Register(sdk.Context) sdk.Registration {
@@ -63,10 +71,11 @@ func extPings(t *testing.T, dir string) int {
 }
 
 func TestExternalModuleMigratesAndRunsOnlyWhenEnabled(t *testing.T) {
+	mods := extModules()
 	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(flagEnv(extName), "")
+	activeFixture.env[flagEnv(extName)] = ""
 
-	off := runApp(extName)
+	off := runAppWith(mods, extName)
 	if off.code != cli.ExitOK || off.stdout != "" {
 		t.Fatalf("disabled module: exit %d stdout %q stderr %q", off.code, off.stdout, off.stderr)
 	}
@@ -77,10 +86,10 @@ func TestExternalModuleMigratesAndRunsOnlyWhenEnabled(t *testing.T) {
 		t.Fatalf("disabled module wrote %d rows", n)
 	}
 
-	if set := runApp("settings", "set", extName+"_enabled", "true"); set.code != cli.ExitOK {
+	if set := runAppWith(mods, "settings", "set", extName+"_enabled", "true"); set.code != cli.ExitOK {
 		t.Fatalf("enable: exit %d stderr %q", set.code, set.stderr)
 	}
-	on := runApp(extName)
+	on := runAppWith(mods, extName)
 	if on.code != cli.ExitOK || on.stdout != "pong\n" {
 		t.Fatalf("enabled module: exit %d stdout %q stderr %q", on.code, on.stdout, on.stderr)
 	}
@@ -90,9 +99,10 @@ func TestExternalModuleMigratesAndRunsOnlyWhenEnabled(t *testing.T) {
 }
 
 func TestNewerExternalModuleSchemaIsRefusedBeforeWrites(t *testing.T) {
+	mods := extModules()
 	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv(flagEnv(extName), "true")
-	if first := runApp(extName); first.code != cli.ExitOK {
+	activeFixture.env[flagEnv(extName)] = "true"
+	if first := runAppWith(mods, extName); first.code != cli.ExitOK {
 		t.Fatalf("first run: exit %d stderr %q", first.code, first.stderr)
 	}
 	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
@@ -104,7 +114,7 @@ func TestNewerExternalModuleSchemaIsRefusedBeforeWrites(t *testing.T) {
 	}
 	_ = d.Close()
 
-	refused := runApp(extName)
+	refused := runAppWith(mods, extName)
 	if refused.code == cli.ExitOK || !strings.Contains(refused.stderr, "newer "+extName+" module") {
 		t.Fatalf("newer module schema: exit %d stderr %q", refused.code, refused.stderr)
 	}

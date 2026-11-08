@@ -125,7 +125,7 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	}
 	app := cli.New("atrium", logx.Setup)
 	app.Bootstrap = bootstrap(config.OS, settings.Default)
-	app.Add(commands(clients, nil)...)
+	app.Add(commands(config.OS, settings.Default, nil, clients, nil)...)
 	var out, errs bytes.Buffer
 	if code := app.Run(context.Background(), []string{"sync", "--account", "work"}, &out, &errs); code != 0 {
 		t.Fatalf("sync of the added account: %d %s", code, errs.String())

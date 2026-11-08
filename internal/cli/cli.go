@@ -12,6 +12,8 @@ import (
 	"unicode/utf8"
 
 	"regexp"
+
+	"github.com/jeiang/atrium/internal/config"
 )
 
 const (
@@ -151,6 +153,7 @@ type Env struct {
 	Stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
+	Env    config.Env
 	p      *parser
 	width  int
 }
@@ -164,6 +167,7 @@ func (e *Env) UsageError(format string, a ...any) int {
 type App struct {
 	Version   string
 	Stdin     io.Reader
+	Env       config.Env
 	Bootstrap func(ctx context.Context, stderr io.Writer) error
 	root      Command
 	setup     func(stderr io.Writer)
@@ -205,7 +209,11 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if stdin == nil {
 		stdin = os.Stdin
 	}
-	return s.handler(&Env{Ctx: ctx, Stdin: stdin, Stdout: stdout, Stderr: stderr, p: s.leaf, width: s.width})
+	env := a.Env
+	if env == nil {
+		env = config.OS
+	}
+	return s.handler(&Env{Ctx: ctx, Stdin: stdin, Stdout: stdout, Stderr: stderr, Env: env, p: s.leaf, width: s.width})
 }
 
 func formatWidth() int {

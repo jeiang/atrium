@@ -59,7 +59,7 @@ func TestSkillsExportImportRoundTripAndIndexBudget(t *testing.T) {
 		t.Fatalf("exported tree %v", tree)
 	}
 
-	t.Setenv("ATRIUM_DB", filepath.Join(dir, "second.db"))
+	activeFixture.env["ATRIUM_DB"] = filepath.Join(dir, "second.db")
 	if ran := runApp("skills", "import", first); ran.code != cli.ExitOK || !strings.Contains(ran.stdout, "created trip-plan\n") || !strings.Contains(ran.stdout, "unchanged wiki-capture\n") {
 		t.Fatalf("round-trip import: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
 	}

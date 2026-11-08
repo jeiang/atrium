@@ -31,6 +31,7 @@ type Module interface {
 
 type Context struct {
 	Current func() *Snapshot
+	Env     config.Env
 }
 
 func (c Context) Enabled(name string) bool {

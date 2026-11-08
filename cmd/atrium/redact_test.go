@@ -28,7 +28,7 @@ func TestStoredSecretsAreRedactedFromLogsAndAgentWrites(t *testing.T) {
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "profile_set", map[string]any{"key": "note", "value": "token " + secret})),
 		anthropictest.Reply("end_turn", anthropictest.Text("saved")),
 	)
-	t.Setenv(anthropic.BaseURLEnv, api.URL)
+	setEnv(t, anthropic.BaseURLEnv, api.URL)
 	ran := runApp("agent", "run", "--text", "remember my token", "--kind", "chat")
 	if ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)

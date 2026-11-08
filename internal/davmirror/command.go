@@ -17,7 +17,7 @@ func SyncCommand(help, pass string, sync func(ctx context.Context, d *db.DB) (St
 		Help: help,
 		Setup: func(*cli.Args) cli.Handler {
 			return func(env *cli.Env) int {
-				cfg, err := config.Load(config.OS)
+				cfg, err := config.Load(env.Env)
 				if err != nil {
 					return cli.Fail(env, err)
 				}
@@ -26,7 +26,7 @@ func SyncCommand(help, pass string, sync func(ctx context.Context, d *db.DB) (St
 					return cli.Fail(env, err)
 				}
 				defer func() { _ = d.Close() }()
-				if err := config.Boot(env.Ctx, config.OS, d, cfg); err != nil {
+				if err := config.Boot(env.Ctx, env.Env, d, cfg); err != nil {
 					return cli.Fail(env, err)
 				}
 				var st Stats

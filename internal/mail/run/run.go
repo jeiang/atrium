@@ -71,7 +71,7 @@ type Pass struct {
 	Extras  []Extra
 }
 
-func New(d *db.DB, cfg config.Config, open mailops.Opener, now func() float64) *Pass {
+func New(env config.Env, d *db.DB, cfg config.Config, open mailops.Opener, now func() float64) *Pass {
 	if now == nil {
 		now = wallClock
 	}
@@ -91,15 +91,15 @@ func New(d *db.DB, cfg config.Config, open mailops.Opener, now func() float64) *
 			if on, err := module.FlagOn(ctx, d.Read, module.Calendar); err != nil || !on {
 				return 0, 0, err
 			}
-			return candidates.ScanAccount(ctx, d, cfg, account, nil, config.OS, now)
+			return candidates.ScanAccount(ctx, d, cfg, account, nil, env, now)
 		},
 	}
 	p.Extras = []Extra{
 		{"open loops", func(ctx context.Context) (any, error) {
-			return openloops.Refresh(ctx, d, cfg, now(), openloops.Options{Clock: now}), nil
+			return openloops.Refresh(ctx, d, cfg, now(), openloops.Options{Env: env, Clock: now}), nil
 		}},
 		{"watches", func(ctx context.Context) (any, error) {
-			return watches.Refresh(ctx, d, now(), watches.Options{Clock: now}), nil
+			return watches.Refresh(ctx, d, now(), watches.Options{Env: env, Clock: now}), nil
 		}},
 	}
 	return p
@@ -218,18 +218,18 @@ func (p *Pass) checkpoint(ctx context.Context) {
 	}
 }
 
-func Sync(ctx context.Context, cfg config.Config, requested string, open mailops.Opener) ([]string, error) {
+func Sync(ctx context.Context, env config.Env, cfg config.Config, requested string, open mailops.Opener) ([]string, error) {
 	d, err := db.Connect(cfg.DBPath)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = d.Close() }()
-	if err := config.Boot(ctx, config.OS, d, cfg); err != nil {
+	if err := config.Boot(ctx, env, d, cfg); err != nil {
 		return nil, err
 	}
 	accounts, err := SelectAccounts(cfg, requested)
 	if err != nil {
 		return nil, err
 	}
-	return accounts, passrun.Track(ctx, d, passrun.Sync, func() error { return New(d, cfg, open, nil).Locked(ctx, ctx, accounts) })
+	return accounts, passrun.Track(ctx, d, passrun.Sync, func() error { return New(env, d, cfg, open, nil).Locked(ctx, ctx, accounts) })
 }

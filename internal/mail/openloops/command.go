@@ -10,11 +10,11 @@ import (
 	"github.com/jeiang/atrium/internal/py"
 )
 
-func Command(clock func() float64) *cli.Command {
+func Command(env config.Env, clock func() float64) *cli.Command {
 	if clock == nil {
 		clock = wallClock
 	}
 	return refreshcmd.Command("loops", func(ctx context.Context, d *db.DB, cfg config.Config) py.Dict {
-		return Refresh(ctx, d, cfg, clock(), Options{Clock: clock})
+		return Refresh(ctx, d, cfg, clock(), Options{Env: env, Clock: clock})
 	})
 }

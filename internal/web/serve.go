@@ -80,7 +80,7 @@ func ServeCommand(pages ...Page) *cli.Command {
 			hosts := args.Repeated("allowed-host", cli.Opt{Help: "accepted Host header; repeatable (proxy mode requires one, or ATRIUM_PUBLIC_HOST)"})
 			force := args.Bool("force-disable-auth", cli.Opt{Help: "start without authentication when none is configured"})
 			return func(env *cli.Env) int {
-				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, forceDisableAuth: *force, pages: pages, env: config.OS})
+				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, forceDisableAuth: *force, pages: pages, env: env.Env})
 			}
 		},
 	}

@@ -201,7 +201,7 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	}
 	app := cli.New("atrium", logx.Setup)
 	app.Bootstrap = bootstrap(config.OS, settings.Default)
-	app.Add(commands(clients, func() float64 { return data.world.Clock })...)
+	app.Add(commands(config.OS, settings.Default, nil, clients, func() float64 { return data.world.Clock })...)
 	app.Stdin = strings.NewReader(stdin)
 	copyFile(t, filepath.Join(golden.Dir(), "world.db"), filepath.Join(dir, "atrium.db"))
 	f := &fixture{t: t, dir: dir, env: vars, app: app}
@@ -210,6 +210,13 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 		t.Fatalf("embed the seeded world: exit %d stderr %q", code, stderr)
 	}
 	return f
+}
+
+func (f *fixture) lookup(name string) (string, bool) {
+	if v, ok := f.env[name]; ok {
+		return v, true
+	}
+	return config.OS(name)
 }
 
 func (f *fixture) Run(ctx context.Context, argv ...string) (code int, stdout, stderr string) {

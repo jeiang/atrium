@@ -15,7 +15,7 @@ type Module struct {
 	Now func() float64
 }
 
-func (m Module) Register(_ module.Context) module.Registration {
+func (m Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
 		Name: module.Media,
 		Requires: []module.Requirement{
@@ -27,7 +27,7 @@ func (m Module) Register(_ module.Context) module.Registration {
 			Templates: pages.Templates(),
 			Public:    pages.PublicCheck,
 		}},
-		Commands: []*cli.Command{mediacmd.Command(m.Now)},
+		Commands: []*cli.Command{mediacmd.Command(mc.Env, m.Now)},
 		Tools: func(r *registry.Registry) error {
 			return r.Add(mediatools.Tools()...)
 		},

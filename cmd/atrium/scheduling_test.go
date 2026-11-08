@@ -25,7 +25,7 @@ func toolResult(t *testing.T, name string, input map[string]any) string {
 		defer api.mu.Unlock()
 		api.seen = append(api.seen, r)
 	}
-	t.Setenv(anthropic.BaseURLEnv, api.URL)
+	setEnv(t, anthropic.BaseURLEnv, api.URL)
 	if ran := runApp("agent", "run", "--text", "please", "--kind", "chat"); ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 	}
@@ -43,7 +43,7 @@ func event(uid, start, end string) string {
 
 func TestFindSlotHonoursOverlapsAllDayEventsWorkingHoursAndDST(t *testing.T) {
 	dir, _ := moduleFixture(t, flagsExcept("", ""))
-	t.Setenv("ATRIUM_CORE_TZ", "America/New_York")
+	setEnv(t, "ATRIUM_CORE_TZ", "America/New_York")
 	t.Setenv(settingEnv(calendar.WorkDaysKey), "sun,mon")
 	mirror := filepath.Join(dir, "calendars")
 	t.Setenv(settingEnv(calendar.CalendarDirKey), mirror)

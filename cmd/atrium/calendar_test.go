@@ -33,7 +33,7 @@ func pinnedTokens(n int) string { return fmt.Sprintf("golden-token-urlsafe-%d", 
 func googleAuthApp() *cli.App {
 	app := cli.New("atrium", logx.Setup)
 	app.Bootstrap = bootstrap(config.OS, settings.Default)
-	app.Add(calendarcmd.Command(noTools))
+	app.Add(calendarcmd.Command(config.OS, noTools))
 	return app
 }
 
