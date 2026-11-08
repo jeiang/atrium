@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/journal"
@@ -40,7 +41,7 @@ type headMessage struct {
 	Content []json.RawMessage `json:"content"`
 }
 
-type Projection struct {
+type projection struct {
 	ID             int64
 	Kind           string
 	BaseSeq        int64
@@ -49,21 +50,21 @@ type Projection struct {
 	Head           []Message
 }
 
-func GetProjection(ctx gocontext.Context, q db.Querier, threadID int64) (Projection, error) {
-	var p Projection
+func getProjection(ctx gocontext.Context, q db.Querier, threadID int64) (projection, error) {
+	var p projection
 	var head string
 	err := q.QueryRowContext(ctx,
 		"SELECT id, kind, base_seq, strip_from_seq, strip_before_seq, head_json FROM context_projections WHERE thread_id = ? ORDER BY id DESC LIMIT 1",
 		threadID).Scan(&p.ID, &p.Kind, &p.BaseSeq, &p.StripFromSeq, &p.StripBeforeSeq, &head)
 	if errors.Is(err, sql.ErrNoRows) {
-		return Projection{Head: []Message{}}, nil
+		return projection{Head: []Message{}}, nil
 	}
 	if err != nil {
-		return Projection{}, err
+		return projection{}, err
 	}
 	var rows []headMessage
 	if err := json.Unmarshal([]byte(head), &rows); err != nil {
-		return Projection{}, fmt.Errorf("context: projection %d head_json: %w", p.ID, err)
+		return projection{}, fmt.Errorf("context: projection %d head_json: %w", p.ID, err)
 	}
 	p.Head = make([]Message, len(rows))
 	for i, m := range rows {
@@ -84,7 +85,7 @@ func dumpHead(head []Message) (string, error) {
 	return py.JSONDumps(items, compactJSON), nil
 }
 
-func SaveProjection(ctx gocontext.Context, q db.Querier, threadID, runID int64, kind string, baseSeq, stripFromSeq, stripBeforeSeq int64, head []Message, savedTokens int64, now float64) (int64, error) {
+func saveProjection(ctx gocontext.Context, q db.Querier, threadID, runID int64, kind string, baseSeq, stripFromSeq, stripBeforeSeq int64, head []Message, savedTokens int64, now float64) (int64, error) {
 	body, err := dumpHead(head)
 	if err != nil {
 		return 0, err
@@ -99,7 +100,75 @@ func SaveProjection(ctx gocontext.Context, q db.Querier, threadID, runID int64, 
 	return res.LastInsertId()
 }
 
-type LedgerRow struct {
+type State uint8
+
+const (
+	StateActive State = iota
+	StatePinned
+	StateStagedDrop
+	StateDropped
+	StateStagedFold
+	StateFolded
+)
+
+func parseState(value string) (State, bool) {
+	switch value {
+	case Active:
+		return StateActive, true
+	case Pinned:
+		return StatePinned, true
+	case StagedDrop:
+		return StateStagedDrop, true
+	case Dropped:
+		return StateDropped, true
+	case StagedFold:
+		return StateStagedFold, true
+	case Folded:
+		return StateFolded, true
+	}
+	return StateActive, false
+}
+
+type FoldRef struct {
+	From     int64
+	To       int64
+	Synopsis string
+	Sources  []any
+}
+
+type Entry struct {
+	ID       string
+	RunID    int64
+	Tokens   int64
+	State    State
+	ResultID *int64
+	Fold     *FoldRef
+}
+
+type Ledger struct {
+	Entries []Entry
+	index   map[string]int
+}
+
+func (l Ledger) Get(itemID string) (Entry, bool) {
+	i, ok := l.index[itemID]
+	if !ok {
+		return Entry{}, false
+	}
+	return l.Entries[i], true
+}
+
+func (l Ledger) withState(states ...State) []Entry {
+	var out []Entry
+	for _, e := range l.Entries {
+		if slices.Contains(states, e.State) {
+			out = append(out, e)
+		}
+	}
+	return out
+}
+
+type ledgerRow struct {
 	ID            int64
 	RunID         int64
 	ItemID        string
@@ -109,80 +178,75 @@ type LedgerRow struct {
 	Synopsis      *string
 	Tokens        int64
 	State         string
-	StagedAt      *float64
-	CommittedAt   *float64
 	FromSeq       *int64
 	ToSeq         *int64
 }
 
-func (r LedgerRow) from() int64 { return deref(r.FromSeq) }
-func (r LedgerRow) to() int64   { return deref(r.ToSeq) }
+func (r ledgerRow) entry() (Entry, bool, error) {
+	state, ok := parseState(r.State)
+	if !ok {
+		return Entry{}, false, nil
+	}
+	e := Entry{ID: r.ItemID, RunID: r.RunID, Tokens: r.Tokens, State: state}
+	if r.Kind != ItemFold {
+		e.ResultID = r.ResultID
+		return e, true, nil
+	}
+	if r.FromSeq == nil || r.ToSeq == nil {
+		return Entry{}, false, nil
+	}
+	sources, err := decodeSources(r.SourceIDsJSON)
+	if err != nil {
+		return Entry{}, false, err
+	}
+	e.Fold = &FoldRef{From: *r.FromSeq, To: *r.ToSeq, Synopsis: derefStr(r.Synopsis), Sources: sources}
+	return e, true, nil
+}
 
-func (r LedgerRow) sources() ([]any, error) {
-	if r.SourceIDsJSON == nil || *r.SourceIDsJSON == "" {
+func decodeSources(raw *string) ([]any, error) {
+	if raw == nil || *raw == "" {
 		return nil, nil
 	}
-	v, err := py.JSONLoads([]byte(*r.SourceIDsJSON))
+	v, err := py.JSONLoads([]byte(*raw))
 	if err != nil {
-		return nil, fmt.Errorf("context: ledger %d source_ids_json: %w", r.ID, err)
+		return nil, fmt.Errorf("context: ledger source_ids_json: %w", err)
 	}
 	list, _ := v.([]any)
 	return list, nil
 }
 
-type Ledger struct {
-	Rows  []LedgerRow
-	index map[string]int
-}
-
-func (l Ledger) Get(itemID string) (LedgerRow, bool) {
-	i, ok := l.index[itemID]
-	if !ok {
-		return LedgerRow{}, false
-	}
-	return l.Rows[i], true
-}
-
-func LedgerRows(ctx gocontext.Context, q db.Querier, threadID int64) (Ledger, error) {
+func loadLedger(ctx gocontext.Context, q db.Querier, threadID int64) (Ledger, error) {
 	rows, err := q.QueryContext(ctx,
-		"SELECT l.id, l.run_id, l.item_id, l.kind, l.result_id, l.source_ids_json, l.synopsis, l.tokens, l.state, l.staged_at, "+
-			"l.committed_at, l.from_seq, l.to_seq FROM context_ledger l JOIN runs r ON r.id = l.run_id WHERE r.thread_id = ? ORDER BY l.id",
-		threadID)
+		"SELECT l.id, l.run_id, l.item_id, l.kind, l.result_id, l.source_ids_json, l.synopsis, l.tokens, l.state, l.from_seq, l.to_seq "+
+			"FROM context_ledger l JOIN runs r ON r.id = l.run_id WHERE r.thread_id = ? ORDER BY l.id", threadID)
 	if err != nil {
 		return Ledger{}, err
 	}
-	list, err := db.Collect(rows, func(r *sql.Rows) (LedgerRow, error) {
-		var l LedgerRow
-		err := r.Scan(&l.ID, &l.RunID, &l.ItemID, &l.Kind, &l.ResultID, &l.SourceIDsJSON, &l.Synopsis, &l.Tokens, &l.State,
-			&l.StagedAt, &l.CommittedAt, &l.FromSeq, &l.ToSeq)
+	list, err := db.Collect(rows, func(r *sql.Rows) (ledgerRow, error) {
+		var l ledgerRow
+		err := r.Scan(&l.ID, &l.RunID, &l.ItemID, &l.Kind, &l.ResultID, &l.SourceIDsJSON, &l.Synopsis, &l.Tokens, &l.State, &l.FromSeq, &l.ToSeq)
 		return l, err
 	})
 	if err != nil {
 		return Ledger{}, err
 	}
 	out := Ledger{index: make(map[string]int, len(list))}
-	for _, r := range list {
-		if i, ok := out.index[r.ItemID]; ok {
-			out.Rows[i] = r
+	for _, row := range list {
+		e, ok, err := row.entry()
+		if err != nil {
+			return Ledger{}, err
+		}
+		if !ok {
 			continue
 		}
-		out.index[r.ItemID] = len(out.Rows)
-		out.Rows = append(out.Rows, r)
+		if i, ok := out.index[e.ID]; ok {
+			out.Entries[i] = e
+			continue
+		}
+		out.index[e.ID] = len(out.Entries)
+		out.Entries = append(out.Entries, e)
 	}
 	return out, nil
-}
-
-func (l Ledger) withState(states ...string) []LedgerRow {
-	var out []LedgerRow
-	for _, r := range l.Rows {
-		for _, s := range states {
-			if r.State == s {
-				out = append(out, r)
-				break
-			}
-		}
-	}
-	return out
 }
 
 type block struct {
@@ -246,16 +310,12 @@ func SetField(raw json.RawMessage, key string, value any) (json.RawMessage, erro
 	return encode(d.Set(key, value)), nil
 }
 
-func foldBlock(r LedgerRow) (json.RawMessage, error) {
-	sources, err := r.sources()
-	if err != nil {
-		return nil, err
+func foldBlock(e Entry) json.RawMessage {
+	text := fmt.Sprintf("[context fold of seq %d-%d] %s", e.Fold.From, e.Fold.To, e.Fold.Synopsis)
+	if len(e.Fold.Sources) > 0 {
+		text += "\nSources: " + joinStr(e.Fold.Sources)
 	}
-	text := fmt.Sprintf("[context fold of seq %s-%s] %s", optInt(r.FromSeq), optInt(r.ToSeq), optStr(r.Synopsis))
-	if len(sources) > 0 {
-		text += "\nSources: " + joinStr(sources)
-	}
-	return TextBlock(text), nil
+	return TextBlock(text)
 }
 
 func TextBlock(text string) json.RawMessage {
@@ -279,7 +339,7 @@ func mergeRoles(messages []Message) []Message {
 	return out
 }
 
-func tailOf(ctx gocontext.Context, q db.Querier, threadID int64, p Projection) ([]journal.Message, error) {
+func tailOf(ctx gocontext.Context, q db.Querier, threadID int64, p projection) ([]journal.Message, error) {
 	history, err := journal.LoadHistory(ctx, q, threadID)
 	if err != nil {
 		return nil, err
@@ -293,32 +353,32 @@ func tailOf(ctx gocontext.Context, q db.Querier, threadID int64, p Projection) (
 	return out, nil
 }
 
-func inFold(folds []LedgerRow, seq int64) bool {
+func inFold(folds []Entry, seq int64) bool {
 	for _, f := range folds {
-		if f.from() < seq && seq <= f.to() {
+		if f.Fold.From < seq && seq <= f.Fold.To {
 			return true
 		}
 	}
 	return false
 }
 
-func ActiveMessages(ctx gocontext.Context, q db.Querier, threadID int64, systemSig string) ([]Message, Projection, error) {
-	p, err := GetProjection(ctx, q, threadID)
+func ActiveMessages(ctx gocontext.Context, q db.Querier, threadID int64, systemSig string) ([]Message, error) {
+	p, err := getProjection(ctx, q, threadID)
 	if err != nil {
-		return nil, Projection{}, err
+		return nil, err
 	}
-	ledger, err := LedgerRows(ctx, q, threadID)
+	ledger, err := loadLedger(ctx, q, threadID)
 	if err != nil {
-		return nil, Projection{}, err
+		return nil, err
 	}
-	dropped := map[string]LedgerRow{}
-	for _, r := range ledger.withState(Dropped) {
-		dropped[r.ItemID] = r
+	dropped := map[string]Entry{}
+	for _, e := range ledger.withState(StateDropped) {
+		dropped[e.ID] = e
 	}
-	folds := ledger.withState(Folded)
-	foldAt := map[int64]LedgerRow{}
+	folds := ledger.withState(StateFolded)
+	foldAt := map[int64]Entry{}
 	for _, f := range folds {
-		foldAt[f.from()] = f
+		foldAt[f.Fold.From] = f
 	}
 	out := make([]Message, 0, len(p.Head))
 	for _, m := range p.Head {
@@ -326,16 +386,12 @@ func ActiveMessages(ctx gocontext.Context, q db.Querier, threadID int64, systemS
 	}
 	tail, err := tailOf(ctx, q, threadID, p)
 	if err != nil {
-		return nil, Projection{}, err
+		return nil, err
 	}
 	for _, m := range tail {
 		seq := m.Seq
 		if f, ok := foldAt[seq]; ok {
-			b, err := foldBlock(f)
-			if err != nil {
-				return nil, Projection{}, err
-			}
-			out = append(out, Message{Role: journal.User, Content: []json.RawMessage{b}, Seq: &seq, RunID: m.RunID})
+			out = append(out, Message{Role: journal.User, Content: []json.RawMessage{foldBlock(f)}, Seq: &seq, RunID: m.RunID})
 			continue
 		}
 		if inFold(folds, seq) {
@@ -352,7 +408,7 @@ func ActiveMessages(ctx gocontext.Context, q db.Querier, threadID int64, systemS
 				}
 				if r, ok := dropped[h.ToolUseID]; ok {
 					if content[i], err = dropStub(raw, r.ResultID); err != nil {
-						return nil, Projection{}, err
+						return nil, err
 					}
 				}
 			}
@@ -364,7 +420,7 @@ func ActiveMessages(ctx gocontext.Context, q db.Querier, threadID int64, systemS
 		}
 		out = append(out, Message{Role: m.Role, Content: content, Seq: &seq, RunID: m.RunID})
 	}
-	return mergeRoles(out), p, nil
+	return mergeRoles(out), nil
 }
 
 func deref(p *int64) int64 {
@@ -374,16 +430,9 @@ func deref(p *int64) int64 {
 	return *p
 }
 
-func optInt(p *int64) string {
+func derefStr(p *string) string {
 	if p == nil {
-		return "None"
-	}
-	return fmt.Sprint(*p)
-}
-
-func optStr(p *string) string {
-	if p == nil {
-		return "None"
+		return ""
 	}
 	return *p
 }

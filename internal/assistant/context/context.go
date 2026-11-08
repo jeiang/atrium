@@ -32,7 +32,6 @@ const (
 )
 
 const (
-	ModelContext          = 1_000_000
 	SummaryEffort         = "low"
 	BetaContextManagement = anthropic.BetaContextManagement
 	BetaCompaction        = anthropic.BetaCompaction
@@ -97,14 +96,14 @@ func EstimateContent(content []json.RawMessage) (int64, error) {
 	return EstimateValue(values), nil
 }
 
-func Serialize(value any) string {
+func serialize(value any) string {
 	if s, ok := value.(string); ok {
 		return s
 	}
 	return py.JSONDumps(value, valueJSON)
 }
 
-func Store(ctx gocontext.Context, q db.Querier, runID, callID int64, tool, body string, now float64) (int64, int64, error) {
+func store(ctx gocontext.Context, q db.Querier, runID, callID int64, tool, body string, now float64) (int64, int64, error) {
 	tokens := EstimateTokens(body)
 	sum := sha256.Sum256([]byte(body))
 	res, err := q.ExecContext(ctx,
@@ -123,7 +122,6 @@ type Tuning struct {
 	CompactShare      float64
 	PreflightShare    float64
 	ClearKeep         int
-	CommitSavings     int
 	PreserveMessages  int
 	SummaryMaxTokens  int
 	StubTokens        int
@@ -141,7 +139,6 @@ func ReadTuning(ctx gocontext.Context, q db.Querier) (Tuning, error) {
 		CompactShare:      r.Float(assistant.KeyCompactShare),
 		PreflightShare:    r.Float(assistant.KeyPreflightShare),
 		ClearKeep:         r.Int(assistant.KeyClearKeep),
-		CommitSavings:     r.Int(assistant.KeyCommitSavings),
 		PreserveMessages:  r.Int(assistant.KeyPreserveMessages),
 		SummaryMaxTokens:  r.Int(assistant.KeySummaryMaxTokens),
 		StubTokens:        r.Int(assistant.KeyStubTokens),
@@ -158,11 +155,11 @@ func ReadTuning(ctx gocontext.Context, q db.Querier) (Tuning, error) {
 }
 
 func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool string, value any, now float64, t Tuning) (string, *int64, error) {
-	body := Serialize(value)
+	body := serialize(value)
 	if EstimateTokens(body) <= int64(t.StubTokens) {
 		return body, nil, nil
 	}
-	resultID, tokens, err := Store(ctx, q, runID, callID, tool, body, now)
+	resultID, tokens, err := store(ctx, q, runID, callID, tool, body, now)
 	if err != nil {
 		return "", nil, err
 	}
@@ -186,10 +183,9 @@ type Limits struct {
 }
 
 func LimitsFor(contextLimit int64, t Tuning) Limits {
-	hard := min(contextLimit, ModelContext)
-	share := func(s float64) int64 { return int64(float64(hard) * s) }
+	share := func(s float64) int64 { return int64(float64(contextLimit) * s) }
 	return Limits{
-		Hard:         hard,
+		Hard:         contextLimit,
 		Preflight:    share(t.PreflightShare),
 		Compact:      share(t.CompactShare),
 		Clear:        share(t.ClearShare),

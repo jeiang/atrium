@@ -82,6 +82,14 @@ func (e UnknownModel) Error() string { return fmt.Sprintf("model %q is not in th
 
 func Models() []Model { return slices.Clone(catalog) }
 
+func MaxContextWindow() int64 {
+	var out int64
+	for _, m := range catalog {
+		out = max(out, m.ContextWindow)
+	}
+	return out
+}
+
 func IDs() []string {
 	out := make([]string, len(catalog))
 	for i, m := range catalog {
