@@ -28,7 +28,7 @@ type ProjectData struct {
 	Files    []files.Row       `json:"files"`
 	Threads  []threads.Listed  `json:"threads"`
 	View     string            `json:"view"`
-	Composer map[string]any    `json:"composer"`
+	Composer ComposerView      `json:"composer"`
 }
 
 type ProjectFormValues struct {

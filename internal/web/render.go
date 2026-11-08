@@ -62,7 +62,7 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 	if who, ok := IdentityOf(r.Context()); ok {
 		auth.Admin, auth.SignOut, auth.NoAuth = who.Admin, who.Source == SourceOIDC, who.NoAuth
 	}
-	nav, settings, settingsURL := rd.navFor(page)
+	nav, settings, settingsURL, brandURL, footer := rd.navFor(page)
 	f := &tpl.Frame{
 		Auth:        auth,
 		CSRF:        CSRFToken(r.Context()),
@@ -70,6 +70,8 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 		Nav:         nav,
 		Settings:    settings,
 		SettingsURL: settingsURL,
+		BrandURL:    brandURL,
+		Footer:      footer,
 		Data:        data,
 	}
 	rd.mu.Lock()
@@ -83,11 +85,11 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 	return f, nil
 }
 
-func (rd *Renderer) navFor(page string) ([]tpl.NavGroup, []tpl.NavItem, string) {
+func (rd *Renderer) navFor(page string) ([]tpl.NavGroup, []tpl.NavItem, string, string, []tpl.NavItem) {
 	var groups []tpl.NavGroup
 	index := map[string]int{}
-	var settings []tpl.NavItem
-	settingsURL := ""
+	var settings, footer []tpl.NavItem
+	settingsURL, brandURL := "", ""
 	primarySet := false
 	for _, item := range rd.nav {
 		if item.Module != "" && rd.moduleEnabled != nil && !rd.moduleEnabled(item.Module) {
@@ -97,6 +99,14 @@ func (rd *Renderer) navFor(page string) ([]tpl.NavGroup, []tpl.NavItem, string) 
 			continue
 		}
 		item.Current = item.Page == page
+		if item.Brand {
+			brandURL = item.URL
+			continue
+		}
+		if item.Footer {
+			footer = append(footer, item)
+			continue
+		}
 		if item.Settings {
 			settings = append(settings, item)
 			if settingsURL == "" {
@@ -124,7 +134,8 @@ func (rd *Renderer) navFor(page string) ([]tpl.NavGroup, []tpl.NavItem, string) 
 	sort.SliceStable(settings, func(i, j int) bool {
 		return settings[i].Order < settings[j].Order
 	})
-	return groups, settings, settingsURL
+	sort.SliceStable(footer, func(i, j int) bool { return footer[i].Order < footer[j].Order })
+	return groups, settings, settingsURL, brandURL, footer
 }
 
 func groupOrder(g tpl.NavGroup) int {

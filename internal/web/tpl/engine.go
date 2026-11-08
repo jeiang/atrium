@@ -45,6 +45,8 @@ type NavItem struct {
 	Primary    bool
 	PrimaryURL string
 	Badge      bool
+	Brand      bool
+	Footer     bool
 	Order      int
 	Current    bool
 }
@@ -67,6 +69,8 @@ type Frame struct {
 	Nav               []NavGroup
 	Settings          []NavItem
 	SettingsURL       string
+	BrandURL          string
+	Footer            []NavItem
 	Typed             bool
 	Data              any
 }

@@ -27,7 +27,7 @@ type listData struct {
 	ProjectID int64            `json:"project_id"`
 
 	Defaults threads.Options `json:"defaults"`
-	Composer map[string]any  `json:"composer"`
+	Composer ComposerView    `json:"composer"`
 }
 
 func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string, projectID int64) {
@@ -257,8 +257,8 @@ func (p *pages) chatOptions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	thread := threadOf(view)
-	p.fragment(w, r, http.StatusOK, "_options_saved.gohtml", map[string]any{
-		"view": view, "composer": composerData(thread.Model, thread.Effort, thread.Thinking, threads.ContextLimitOf(thread), bool(thread.WebSearch), thread.CostCapUSD, threadID),
+	p.fragment(w, r, http.StatusOK, "_options_saved.gohtml", OptionsSaved{
+		View: view, Composer: composerData(thread.Model, thread.Effort, thread.Thinking, threads.ContextLimitOf(thread), bool(thread.WebSearch), thread.CostCapUSD, threadID),
 	})
 }
 

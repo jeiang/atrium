@@ -84,13 +84,14 @@
     <span class="text-base font-semibold tracking-tight">atrium</span>
 {{end}}
 {{define "base_brand"}}
-  <a href="/chat" class="flex items-center gap-2 rounded-md px-2 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
+  <a href="{{or .BrandURL "/"}}" class="flex items-center gap-2 rounded-md px-2 py-1.5 outline-none focus-visible:ring-2 focus-visible:ring-ring">
     {{template "brand_mark"}}
   </a>
 {{end}}
 {{define "base_footer"}}
-  {{$about := eq .Page "about"}}
-  <a href="/about" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent{{if $about}} bg-accent font-medium{{end}}"{{if $about}} aria-current="page"{{end}}>{{icon "file-text"}}<span>About</span></a>
+  {{range .Footer}}
+  <a href="{{.URL}}" class="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent{{if .Current}} bg-accent font-medium{{end}}"{{if .Current}} aria-current="page"{{end}}>{{icon .Icon}}<span>{{.Label}}</span></a>
+  {{end}}
   <hr role="separator"/>
   <div class="flex flex-col gap-1.5 rounded-lg border bg-background p-3 text-xs">
     <div>{{template "mode_badge" (dict "mode" .Mode "paused" .Paused)}}</div>
