@@ -66,8 +66,6 @@ func errorClass(err error) string {
 	switch {
 	case errors.Is(err, io.EOF), errors.Is(err, io.ErrUnexpectedEOF):
 		return "protocol error"
-	case strings.Contains(err.Error(), "TLS handshake timeout"):
-		return "connect timeout"
 	case errors.As(err, &op) && op.Op == "dial":
 		if op.Timeout() {
 			return "connect timeout"
@@ -75,6 +73,10 @@ func errorClass(err error) string {
 		return "connect failed"
 	case errors.As(err, &cert), errors.As(err, &host), errors.As(err, &invalid), errors.As(err, &dns):
 		return "connect failed"
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() && !errors.As(err, &op) {
+		return "connect timeout"
 	}
 	var timeouter interface{ Timeout() bool }
 	if errors.As(err, &timeouter) && timeouter.Timeout() {
@@ -275,7 +277,7 @@ func sample(count, limit int) ([]int, error) {
 		return out, nil
 	}
 	if limit == 1 {
-		return nil, tool.Error("cannot sample a single row")
+		return []int{0}, nil
 	}
 	for i := range limit {
 		out = append(out, int(math.RoundToEven(float64(i*(count-1))/float64(limit-1))))
