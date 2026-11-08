@@ -555,7 +555,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		last = nil
 		s.callsKey, s.repeats = "", 0
 	}
-	spent, err := usage.RunCost(ctx, s.d.Read, s.run.ID)
+	spent, err := usage.TreeCost(ctx, s.d.Read, s.run.ID)
 	if err != nil {
 		return false, nil, err
 	}
@@ -634,6 +634,16 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if err != nil {
 		return false, nil, err
 	}
+	searched, err := block.HasKind(blocks, block.WebSearchResult)
+	if err != nil {
+		return false, nil, err
+	}
+	if searched {
+		if err := threads.Taint(context.WithoutCancel(ctx), s.d.Write, s.thread.ID, s.now()); err != nil {
+			return false, nil, err
+		}
+		s.x.tainted.Store(true)
+	}
 	if stop != nil {
 		return false, nil, stop
 	}
@@ -668,7 +678,7 @@ func (s *state) reserve(ctx context.Context, size int64) error {
 }
 
 func (s *state) reserveUSD(ctx context.Context, next float64, what string) error {
-	spent, err := usage.RunCost(ctx, s.d.Read, s.run.ID)
+	spent, err := usage.TreeCost(ctx, s.d.Read, s.run.ID)
 	if err != nil {
 		return err
 	}
@@ -676,15 +686,48 @@ func (s *state) reserveUSD(ctx context.Context, next float64, what string) error
 		return RunLimit(fmt.Sprintf("run cost cap: %s, with $%s of $%s already spent; raise %s to continue",
 			what, strconv.FormatFloat(spent, 'f', 2, 64), strconv.FormatFloat(s.maxCost, 'f', 2, 64), budget.RunCapKey(s.run.Model)))
 	}
+	for parentID := s.run.ParentRunID; parentID != nil; {
+		parent, err := journal.GetRun(ctx, s.d.Read, *parentID)
+		if err != nil {
+			return err
+		}
+		if parent == nil {
+			return fmt.Errorf("loop: run %d: no parent run %d", s.run.ID, *parentID)
+		}
+		limit, err := runCapOf(ctx, s.d.Read, *parent)
+		if err != nil {
+			return err
+		}
+		spent, err := usage.TreeCost(ctx, s.d.Read, parent.ID)
+		if err != nil {
+			return err
+		}
+		if spent+next > limit {
+			return RunLimit(fmt.Sprintf("parent run cost cap: %s, with $%s of $%s already spent by run %d and its subagents; raise %s to continue",
+				what, strconv.FormatFloat(spent, 'f', 2, 64), strconv.FormatFloat(limit, 'f', 2, 64), parent.ID, budget.RunCapKey(parent.Model)))
+		}
+		parentID = parent.ParentRunID
+	}
 	threadSpent, limit, err := budget.ThreadCap(ctx, s.d.Read, s.thread.ID)
 	if err != nil {
 		return err
 	}
 	if threadSpent+next > limit {
-		return RunLimit(fmt.Sprintf("thread cost cap: %s, with $%s of $%s already spent in this thread; raise %s to continue",
+		return RunLimit(fmt.Sprintf("thread cost cap: %s, with $%s of $%s already spent in this thread and its subagents; raise %s to continue",
 			what, strconv.FormatFloat(threadSpent, 'f', 2, 64), strconv.FormatFloat(limit, 'f', 2, 64), budget.ThreadCapKey))
 	}
 	return nil
+}
+
+func runCapOf(ctx context.Context, q db.Querier, run journal.Run) (float64, error) {
+	limits, err := journal.LimitsOf(ctx, q, run.ID)
+	if err != nil {
+		return 0, err
+	}
+	if limits.MaxCostUSD != nil {
+		return *limits.MaxCostUSD, nil
+	}
+	return budget.RunCap(ctx, q, run.Model)
 }
 
 func (s *state) answer(ctx context.Context, uses []ToolUse) error {

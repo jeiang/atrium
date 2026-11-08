@@ -222,6 +222,14 @@ func RunCost(ctx context.Context, q db.Querier, runID int64) (float64, error) {
 	return cost, err
 }
 
+func TreeCost(ctx context.Context, q db.Querier, runID int64) (float64, error) {
+	var cost float64
+	err := q.QueryRowContext(ctx,
+		"WITH RECURSIVE tree(id) AS (SELECT ? UNION SELECT r.id FROM runs r JOIN tree ON r.parent_run_id = tree.id) "+
+			"SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE run_id IN (SELECT id FROM tree)", runID).Scan(&cost)
+	return cost, err
+}
+
 type Summary struct {
 	Calls           int64   `json:"calls"`
 	Cost            float64 `json:"cost"`

@@ -71,3 +71,5 @@ type Context struct {
 type Park struct{ Question string }
 
 func (p *Park) Error() string { return "waiting for the operator: " + p.Question }
+
+type Tainted struct{ Value any }
