@@ -18,6 +18,10 @@ type migration struct {
 
 var migrations = []migration{
 	{1, func(ctx context.Context, tx *sql.Tx) error { return initSchema(ctx, tx) }},
+	{2, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, "ALTER TABLE threads ADD COLUMN tainted_at REAL")
+		return err
+	}},
 }
 
 type ModuleMigration struct {

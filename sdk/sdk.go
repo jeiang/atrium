@@ -57,7 +57,6 @@ const (
 	ExitUsage = cli.ExitUsage
 
 	Read    = tool.Read
-	Write   = tool.Write
 	Propose = tool.Propose
 	Notify  = tool.Notify
 

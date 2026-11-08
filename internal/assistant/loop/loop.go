@@ -96,6 +96,42 @@ type state struct {
 	stepsKey      string
 	invalid       error
 	toolChoice    *anthropic.ToolChoice
+	admission     admission
+}
+
+type admission struct {
+	allow            registry.Allow
+	model            string
+	cc               prompts.CacheControl
+	extra            string
+	webSearchMaxUses int
+	dynamicFiltering bool
+}
+
+func (s *state) admit(ctx context.Context) (registry.Set, error) {
+	a := s.admission
+	set, err := s.r.Registry.Admit(ctx, s.thread.ID, s.kind, a.allow, s.d.Read)
+	if err != nil {
+		return registry.Set{}, err
+	}
+	req, err := s.r.request(ctx, s.d.Read, s.thread, s.kind, a.model, s.run.Effort, set, a.cc, a.extra, a.webSearchMaxUses, a.dynamicFiltering)
+	if err != nil {
+		return registry.Set{}, err
+	}
+	byName := make(map[string]tool.Tool, len(set.Dispatch))
+	for _, t := range set.Dispatch {
+		byName[t.Name] = t
+	}
+	s.req, s.x.byName = req, byName
+	return set, nil
+}
+
+func (s *state) readmit(ctx context.Context) error {
+	if !s.x.tainted.Swap(false) {
+		return nil
+	}
+	_, err := s.admit(ctx)
+	return err
 }
 
 func deref[T any](p *T) T {
@@ -190,14 +226,6 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if o.Limits.AllowedTools != nil {
 		allow = registry.Only(o.Limits.AllowedTools)
 	}
-	set, err := r.Registry.Admit(ctx, found.ThreadID, kind, allow, d.Read)
-	if err != nil {
-		return nil, err
-	}
-	byName := make(map[string]tool.Tool, len(set.Dispatch))
-	for _, t := range set.Dispatch {
-		byName[t.Name] = t
-	}
 	ttl := prompts.TTL5m
 	if kind == tool.Chat {
 		if ttl, err = cacheTTL(ctx, d.Read); err != nil {
@@ -234,10 +262,6 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	}
 	limits := actx.LimitsFor(min(threads.ContextLimitOf(*thread), model.ContextWindow), tuning)
 	extra := deref(o.Limits.SystemExtra) + memoryPrompt
-	req, err := r.request(ctx, d.Read, *thread, kind, model.ID, found.Effort, set, prompts.PrefixCacheControl(kind, ttl), extra, webSearchMaxUses, dynamicFiltering)
-	if err != nil {
-		return nil, err
-	}
 	urls, err := threads.AllowedURLs(ctx, d.Read, thread.ID)
 	if err != nil {
 		return nil, err
@@ -256,9 +280,17 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		Embed: o.Embed, Now: now, Client: client, Progress: writer, Undoers: r.Undoers,
 	}
 	s := &state{
-		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, limits: limits, req: req,
+		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, limits: limits,
 		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, maxCost: maxCost, ttl: ttl,
-		x: &dispatcher{d: d, tc: tc, byName: byName, now: now, tuning: tuning, reg: r.Registry},
+		x: &dispatcher{d: d, tc: tc, now: now, tuning: tuning},
+		admission: admission{
+			allow: allow, model: model.ID, cc: prompts.PrefixCacheControl(kind, ttl), extra: extra,
+			webSearchMaxUses: webSearchMaxUses, dynamicFiltering: dynamicFiltering,
+		},
+	}
+	set, err := s.admit(ctx)
+	if err != nil {
+		return nil, err
 	}
 	s.x.guard = s.renew
 	s.x.lost, s.x.abort = context.WithCancel(context.Background())
@@ -477,6 +509,9 @@ func (s *state) unattended(ctx context.Context) (bool, error) {
 }
 
 func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, last *anchor) (bool, *anchor, error) {
+	if err := s.readmit(ctx); err != nil {
+		return false, nil, err
+	}
 	if _, err := budget.Check(ctx, s.d.Read, s.now(), loc, unattended); err != nil {
 		return false, nil, err
 	}
