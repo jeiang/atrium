@@ -23,6 +23,7 @@ const (
 	KeyMediaThumbnails = "agent_schedule_media_thumbnails"
 	KeyTaskReminders   = "agent_schedule_task_reminders"
 	KeyMemoryWork      = "agent_schedule_memory_work"
+	KeyPackageTracking = "agent_schedule_package_tracking"
 )
 
 func init() {

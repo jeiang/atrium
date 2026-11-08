@@ -618,6 +618,14 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "agent_schedule_package_tracking": {
+          "default": "0 * * * *",
+          "type": "string"
+        },
+        "agent_schedule_package_tracking_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "agent_schedule_task_reminders": {
           "default": "*/5 * * * *",
           "type": "string"
@@ -2226,6 +2234,76 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "mail_ship24_api_key_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_ship24_destination_country": {
+          "type": "string"
+        },
+        "mail_ship24_destination_country_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_ship24_destination_postcode": {
+          "type": "string"
+        },
+        "mail_ship24_destination_postcode_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_ship24_monthly_quota": {
+          "default": 10,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_ship24_monthly_quota_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_ship24_poll_days": {
+          "default": 30,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_ship24_poll_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_ship24_poll_limit": {
+          "default": 40,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_ship24_poll_limit_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_ship24_timeout_seconds": {
+          "default": 15,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "mail_ship24_timeout_seconds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_ship24_url": {
+          "default": "https://api.ship24.com/public/v1",
+          "type": "string"
+        },
+        "mail_ship24_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "mailops_batch": {
           "default": 100,
           "type": [
@@ -2561,6 +2639,20 @@
           ]
         },
         "sent_backfill_days_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ship24_ca_file": {
+          "type": "string"
+        },
+        "ship24_ca_file_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ship24_proxy": {
+          "type": "string"
+        },
+        "ship24_proxy_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

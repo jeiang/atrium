@@ -22,6 +22,38 @@ var migrations = []migration{
 		_, err := tx.ExecContext(ctx, "ALTER TABLE threads ADD COLUMN tainted_at REAL")
 		return err
 	}},
+	{3, func(ctx context.Context, tx *sql.Tx) error {
+		for _, stmt := range []string{
+			"ALTER TABLE packages ADD COLUMN aggregator TEXT NOT NULL DEFAULT ''",
+			"ALTER TABLE packages ADD COLUMN tracker_id TEXT NOT NULL DEFAULT ''",
+			"ALTER TABLE packages ADD COLUMN tracker_registered_ts REAL NOT NULL DEFAULT 0",
+			"ALTER TABLE packages ADD COLUMN last_sync_ts REAL NOT NULL DEFAULT 0",
+			"ALTER TABLE packages ADD COLUMN last_event_hash TEXT NOT NULL DEFAULT ''",
+			"ALTER TABLE packages ADD COLUMN last_event TEXT NOT NULL DEFAULT ''",
+			"ALTER TABLE packages ADD COLUMN last_event_ts REAL NOT NULL DEFAULT 0",
+			"ALTER TABLE packages ADD COLUMN notified_status TEXT NOT NULL DEFAULT ''",
+			`CREATE TABLE IF NOT EXISTS package_events (
+				id INTEGER PRIMARY KEY,
+				package_id INTEGER NOT NULL,
+				tracker_id TEXT NOT NULL DEFAULT '',
+				event_key TEXT NOT NULL,
+				event_ts REAL NOT NULL DEFAULT 0,
+				status TEXT NOT NULL DEFAULT '',
+				status_code TEXT NOT NULL DEFAULT '',
+				status_milestone TEXT NOT NULL DEFAULT '',
+				description TEXT NOT NULL DEFAULT '',
+				location TEXT NOT NULL DEFAULT '',
+				created_ts REAL NOT NULL,
+				UNIQUE (package_id, event_key)
+			)`,
+			"CREATE INDEX IF NOT EXISTS package_events_package ON package_events (package_id, event_ts)",
+		} {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
+				return err
+			}
+		}
+		return nil
+	}},
 }
 
 type ModuleMigration struct {

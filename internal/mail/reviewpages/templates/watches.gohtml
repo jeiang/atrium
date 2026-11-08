@@ -14,6 +14,7 @@
           <span class="text-sm font-medium">{{or .Merchant .Carrier "Package"}}</span>
           <span class="badge" data-variant="secondary">{{replace "_" " " .Status}}</span>
           {{if .Carrier}}<span class="badge" data-variant="outline">{{.Carrier}}</span>{{end}}
+          {{if .TrackerID}}<span class="badge" data-variant="outline">Ship24</span>{{end}}
         </div>
         <p class="text-xs text-muted-foreground">
           {{if .TrackingNumber}}<span class="font-mono">{{.TrackingNumber}}</span> · {{end}}
@@ -21,6 +22,7 @@
           {{.StatusText}} · <span class="tabular-nums">{{.Updated}}</span> ·
           <a class="underline" href="/messages/{{.LastMessageID}}">latest mail</a>
         </p>
+        {{if .LastEvent}}<p class="text-xs text-muted-foreground">{{.LastEvent}}{{if .LastSync}} · {{.LastSync}}{{end}}</p>{{end}}
       </div>
       <form method="post" action="/watches/packages/{{.ID}}/dismiss">
         <input type="hidden" name="csrf_token" value="{{$csrf}}">

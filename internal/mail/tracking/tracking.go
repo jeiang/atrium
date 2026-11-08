@@ -1,0 +1,663 @@
+package tracking
+
+import (
+	"bytes"
+	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"net/http"
+	"net/url"
+	"strconv"
+	"strings"
+	"time"
+
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/integrations/transport"
+	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/notify"
+	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/settings"
+)
+
+var log = logx.Logger("atrium.tracking")
+
+const Module = "mail"
+
+const (
+	KeyShip24URL           = "mail_ship24_url"
+	KeyShip24APIKey        = "mail_ship24_api_key"
+	KeyMonthlyQuota        = "mail_ship24_monthly_quota"
+	KeyTimeout             = "mail_ship24_timeout_seconds"
+	KeyPollLimit           = "mail_ship24_poll_limit"
+	KeyPollDays            = "mail_ship24_poll_days"
+	KeyDestinationCountry  = "mail_ship24_destination_country"
+	KeyDestinationPostcode = "mail_ship24_destination_postcode"
+	DefaultURL             = "https://api.ship24.com/public/v1"
+	delivered              = "delivered"
+	exception              = "exception"
+	outForDelivery         = "out_for_delivery"
+	inTransit              = "in_transit"
+	shipped                = "shipped"
+	ordered                = "ordered"
+	UndoUntrack            = "package_untrack"
+)
+
+func init() {
+	adv := func(key string, kind settings.Type, def string, check func(string) error) settings.Def {
+		return settings.Value(settings.Advanced, settings.Def{Key: key, Module: Module, Type: kind, Default: def, Check: check})
+	}
+	settings.MustRegister(
+		adv(KeyShip24URL, settings.String, DefaultURL, httpURL),
+		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyShip24APIKey, Module: Module, Type: settings.String}),
+		adv(KeyMonthlyQuota, settings.Int, "10", settings.Between(1, 1000)),
+		adv(KeyTimeout, settings.Int, "15", settings.Between(1, 300)),
+		adv(KeyPollLimit, settings.Int, "40", settings.Between(1, 200)),
+		adv(KeyPollDays, settings.Int, "30", settings.Between(1, 365)),
+		adv(KeyDestinationCountry, settings.String, "", countryCheck),
+		adv(KeyDestinationPostcode, settings.String, "", nil),
+	)
+}
+
+func httpURL(value string) error {
+	u, err := url.Parse(strings.TrimSpace(value))
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return settings.Invalid("must be an http or https URL")
+	}
+	return nil
+}
+
+func countryCheck(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	if len(value) < 2 || len(value) > 3 {
+		return settings.Invalid("must be a two- or three-letter country code")
+	}
+	for _, c := range value {
+		if c < 'A' || c > 'Z' {
+			return settings.Invalid("must be a two- or three-letter country code")
+		}
+	}
+	return nil
+}
+
+type Error string
+
+func (e Error) Error() string { return string(e) }
+
+type QuotaError string
+
+func (e QuotaError) Error() string { return string(e) }
+
+type Settings struct {
+	URL, Key            string
+	Quota, Timeout      int
+	PollLimit, PollDays int
+	Country, Postcode   string
+}
+
+func Load(ctx context.Context, q db.Querier) (Settings, error) {
+	read := func(key string) (string, error) {
+		found, err := settings.From(ctx).Resolve(ctx, q, key)
+		return strings.TrimSpace(found.Value), err
+	}
+	var s Settings
+	var err error
+	if s.URL, err = read(KeyShip24URL); err != nil {
+		return Settings{}, err
+	}
+	if s.Key, err = secrets.NewIn(settings.From(ctx), nil, q, nil).Value(ctx, KeyShip24APIKey); err != nil {
+		return Settings{}, err
+	}
+	for _, item := range []struct {
+		key  string
+		into *int
+	}{
+		{KeyMonthlyQuota, &s.Quota}, {KeyTimeout, &s.Timeout}, {KeyPollLimit, &s.PollLimit}, {KeyPollDays, &s.PollDays},
+	} {
+		value, err := read(item.key)
+		if err != nil {
+			return Settings{}, err
+		}
+		if *item.into, err = strconv.Atoi(value); err != nil {
+			return Settings{}, err
+		}
+	}
+	if s.Country, err = read(KeyDestinationCountry); err != nil {
+		return Settings{}, err
+	}
+	if s.Postcode, err = read(KeyDestinationPostcode); err != nil {
+		return Settings{}, err
+	}
+	return s, nil
+}
+
+type Client struct {
+	base, key string
+	http      *http.Client
+}
+
+func NewClient(client *http.Client, base, key string) *Client {
+	return &Client{http: client, base: strings.TrimRight(base, "/"), key: key}
+}
+
+func (c *Client) Close() { c.http.CloseIdleConnections() }
+
+type Tracker struct {
+	TrackerID      string `json:"trackerId"`
+	TrackingNumber string `json:"trackingNumber"`
+}
+
+type Event struct {
+	EventID            string `json:"eventId"`
+	Status             string `json:"status"`
+	OccurrenceDatetime string `json:"occurrenceDatetime"`
+	Location           string `json:"location"`
+	StatusCode         string `json:"statusCode"`
+	StatusMilestone    string `json:"statusMilestone"`
+}
+
+type Tracking struct {
+	Tracker  Tracker `json:"tracker"`
+	Shipment struct {
+		StatusCode      string `json:"statusCode"`
+		StatusMilestone string `json:"statusMilestone"`
+	} `json:"shipment"`
+	Events []Event `json:"events"`
+}
+
+func (c *Client) Create(ctx context.Context, number, courier, country, postcode string) (Tracker, error) {
+	body := map[string]any{"trackingNumber": number}
+	if courier != "" {
+		body["courierCode"] = []string{courier}
+	}
+	if country != "" {
+		body["destinationCountryCode"] = country
+	}
+	if postcode != "" {
+		body["destinationPostCode"] = postcode
+	}
+	status, raw, err := c.do(ctx, http.MethodPost, "/trackers", body)
+	if err != nil {
+		return Tracker{}, err
+	}
+	if status == http.StatusUnauthorized || status == http.StatusForbidden {
+		return Tracker{}, Error("Ship24 refused the API key")
+	}
+	if status != http.StatusCreated && status != http.StatusOK {
+		return Tracker{}, Error(fmt.Sprintf("Ship24 answered %d: %s", status, clip(string(raw), 200)))
+	}
+	var reply struct {
+		Data struct {
+			Tracker Tracker `json:"tracker"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &reply); err != nil || reply.Data.Tracker.TrackerID == "" {
+		return Tracker{}, Error("Ship24 returned an unexpected tracker")
+	}
+	return reply.Data.Tracker, nil
+}
+
+func (c *Client) Results(ctx context.Context, trackerID string) (Tracking, error) {
+	status, raw, err := c.do(ctx, http.MethodGet, "/trackers/"+url.PathEscape(trackerID)+"/results", nil)
+	if err != nil {
+		return Tracking{}, err
+	}
+	if status == http.StatusUnauthorized || status == http.StatusForbidden {
+		return Tracking{}, Error("Ship24 refused the API key")
+	}
+	if status == http.StatusNotFound {
+		return Tracking{}, Error("the tracker is gone")
+	}
+	if status != http.StatusOK {
+		return Tracking{}, Error(fmt.Sprintf("Ship24 answered %d", status))
+	}
+	var reply struct {
+		Data struct {
+			Trackings []Tracking `json:"trackings"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(raw, &reply); err != nil || len(reply.Data.Trackings) == 0 {
+		return Tracking{}, Error("Ship24 returned no tracking results")
+	}
+	return reply.Data.Trackings[0], nil
+}
+
+func (c *Client) Unsubscribe(ctx context.Context, trackerID string) error {
+	status, _, err := c.do(ctx, http.MethodPatch, "/trackers/"+url.PathEscape(trackerID), map[string]any{"isSubscribed": false})
+	if err != nil {
+		return err
+	}
+	if status == http.StatusNotFound {
+		return nil
+	}
+	if status != http.StatusOK {
+		return Error(fmt.Sprintf("Ship24 answered %d", status))
+	}
+	return nil
+}
+
+func (c *Client) do(ctx context.Context, method, path string, body any) (int, []byte, error) {
+	var reader io.Reader
+	if body != nil {
+		encoded, err := json.Marshal(body)
+		if err != nil {
+			return 0, nil, err
+		}
+		reader = bytes.NewReader(encoded)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, c.base+path, reader)
+	if err != nil {
+		return 0, nil, Error("the Ship24 URL is invalid")
+	}
+	req.Header.Set("Authorization", "Bearer "+c.key)
+	req.Header.Set("Accept", "application/json")
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	resp, err := c.http.Do(req)
+	if err != nil {
+		if ctx.Err() != nil {
+			return 0, nil, ctx.Err()
+		}
+		return 0, nil, Error("Ship24 is unreachable")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	raw, err := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+	if err != nil {
+		return 0, nil, Error("Ship24 did not return a complete reply")
+	}
+	return resp.StatusCode, raw, nil
+}
+
+func clip(text string, limit int) string {
+	text = strings.Join(strings.Fields(text), " ")
+	if len(text) <= limit {
+		return text
+	}
+	return text[:limit]
+}
+
+type Target struct {
+	ID                  int64
+	TrackingNumber      string
+	Carrier             string
+	Status              string
+	StatusText          string
+	Aggregator          string
+	TrackerID           string
+	LastEvent           string
+	LastEventHash       string
+	NotifiedStatus      string
+	LastEventTS         float64
+	LastSyncTS          float64
+	TrackerRegisteredTS float64
+}
+
+type Result struct {
+	PackageID  int64   `json:"package_id"`
+	TrackerID  string  `json:"tracker_id"`
+	Status     string  `json:"status"`
+	StatusText string  `json:"status_text"`
+	Events     []Event `json:"events"`
+	WriteID    int64   `json:"write_id,omitempty"`
+}
+
+func Resolve(ctx context.Context, d *db.DB, env config.Env, now float64, packageID int64, number, carrier string) (Target, Settings, error) {
+	s, err := Load(ctx, d.Read)
+	if err != nil {
+		return Target{}, Settings{}, err
+	}
+	var t Target
+	switch {
+	case packageID > 0:
+		err = d.Read.QueryRowContext(ctx,
+			"SELECT id, tracking_number, carrier, status, status_text, aggregator, tracker_id, last_event, last_event_hash, "+
+				"notified_status, last_event_ts, last_sync_ts, tracker_registered_ts FROM packages WHERE id = ?", packageID).
+			Scan(&t.ID, &t.TrackingNumber, &t.Carrier, &t.Status, &t.StatusText, &t.Aggregator, &t.TrackerID, &t.LastEvent,
+				&t.LastEventHash, &t.NotifiedStatus, &t.LastEventTS, &t.LastSyncTS, &t.TrackerRegisteredTS)
+		if errors.Is(err, sql.ErrNoRows) {
+			return Target{}, Settings{}, Error("no package with id " + strconv.FormatInt(packageID, 10))
+		}
+	case number != "":
+		err = d.Read.QueryRowContext(ctx,
+			"SELECT id, tracking_number, carrier, status, status_text, aggregator, tracker_id, last_event, last_event_hash, "+
+				"notified_status, last_event_ts, last_sync_ts, tracker_registered_ts FROM packages WHERE tracking_number = ?", number).
+			Scan(&t.ID, &t.TrackingNumber, &t.Carrier, &t.Status, &t.StatusText, &t.Aggregator, &t.TrackerID, &t.LastEvent,
+				&t.LastEventHash, &t.NotifiedStatus, &t.LastEventTS, &t.LastSyncTS, &t.TrackerRegisteredTS)
+		if errors.Is(err, sql.ErrNoRows) {
+			res, ierr := d.Write.ExecContext(ctx,
+				"INSERT INTO packages (carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
+					"source_message_id, last_message_id, updated_ts, first_seen) VALUES (?, ?, '', '', '', ?, '', 0, 0, ?, ?)",
+				carrier, number, ordered, now, now)
+			if ierr != nil {
+				return Target{}, Settings{}, ierr
+			}
+			id, ierr := res.LastInsertId()
+			if ierr != nil {
+				return Target{}, Settings{}, ierr
+			}
+			t = Target{ID: id, TrackingNumber: number, Carrier: carrier, Status: ordered}
+			err = nil
+		}
+	default:
+		return Target{}, Settings{}, Error("give package_id or tracking_number")
+	}
+	if err != nil {
+		return Target{}, Settings{}, err
+	}
+	if t.TrackerID != "" {
+		return t, s, nil
+	}
+	monthStart, err := monthStart(ctx, d.Read, env, now)
+	if err != nil {
+		return Target{}, Settings{}, err
+	}
+	var used int
+	if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM packages WHERE tracker_registered_ts >= ?", monthStart).Scan(&used); err != nil {
+		return Target{}, Settings{}, err
+	}
+	if used >= s.Quota {
+		return Target{}, Settings{}, QuotaError(fmt.Sprintf(
+			"the Ship24 monthly quota is exhausted (%d of %d registrations used this month; raise %s or wait until next month)",
+			used, s.Quota, KeyMonthlyQuota))
+	}
+	return t, s, nil
+}
+
+func monthStart(ctx context.Context, q db.Querier, env config.Env, now float64) (float64, error) {
+	loc, err := config.From(ctx).Location(env)
+	if err != nil {
+		return 0, err
+	}
+	at := time.Unix(int64(now), 0).In(loc)
+	return float64(time.Date(at.Year(), at.Month(), 1, 0, 0, 0, 0, loc).Unix()), nil
+}
+
+func clientFor(ctx context.Context, q db.Querier, s Settings) (*Client, error) {
+	if s.Key == "" {
+		return nil, config.NotConfigured(KeyShip24APIKey + " is not set")
+	}
+	hc, err := transport.For(ctx, q, "ship24", time.Duration(s.Timeout)*time.Second)
+	if err != nil {
+		return nil, err
+	}
+	return NewClient(hc, s.URL, s.Key), nil
+}
+
+func Register(ctx context.Context, d *db.DB, now float64, t Target, s Settings) (Result, error) {
+	client, err := clientFor(ctx, d.Read, s)
+	if err != nil {
+		return Result{}, err
+	}
+	defer client.Close()
+	tracker, err := client.Create(ctx, t.TrackingNumber, courierCode(t.Carrier), s.Country, s.Postcode)
+	if err != nil {
+		return Result{}, err
+	}
+	tracking, terr := client.Results(ctx, tracker.TrackerID)
+	if terr != nil {
+		tracking = Tracking{}
+	}
+	if _, err := save(ctx, d, now, t.ID, tracker.TrackerID, tracking, false, nil); err != nil {
+		return Result{}, err
+	}
+	return Result{PackageID: t.ID, TrackerID: tracker.TrackerID, Status: statusOf(tracking), StatusText: textOf(tracking), Events: tracking.Events}, nil
+}
+
+func Refresh(ctx context.Context, d *db.DB, now float64, t Target, s Settings, env config.Env) (Result, bool, error) {
+	client, err := clientFor(ctx, d.Read, s)
+	if err != nil {
+		return Result{}, false, err
+	}
+	defer client.Close()
+	tracking, err := client.Results(ctx, t.TrackerID)
+	if err != nil {
+		return Result{}, false, err
+	}
+	notified, err := save(ctx, d, now, t.ID, t.TrackerID, tracking, true, env)
+	if err != nil {
+		return Result{}, false, err
+	}
+	return Result{PackageID: t.ID, TrackerID: t.TrackerID, Status: statusOf(tracking), StatusText: textOf(tracking), Events: tracking.Events}, notified, nil
+}
+
+type PollResult struct {
+	Checked     int      `json:"checked"`
+	Updated     int      `json:"updated"`
+	Events      int      `json:"events"`
+	Notified    int      `json:"notified"`
+	RateLimited bool     `json:"rate_limited,omitempty"`
+	Errors      []string `json:"errors,omitempty"`
+}
+
+func Poll(ctx context.Context, d *db.DB, env config.Env, now float64) (PollResult, error) {
+	s, err := Load(ctx, d.Read)
+	if err != nil {
+		return PollResult{}, err
+	}
+	client, err := clientFor(ctx, d.Read, s)
+	if err != nil {
+		return PollResult{}, err
+	}
+	defer client.Close()
+	cutoff := now - float64(s.PollDays)*86400
+	rows, err := d.Read.QueryContext(ctx,
+		"SELECT id, tracking_number, carrier, status, status_text, aggregator, tracker_id, last_event, last_event_hash, "+
+			"notified_status, last_event_ts, last_sync_ts, tracker_registered_ts FROM packages "+
+			"WHERE dismissed = 0 AND aggregator = 'ship24' AND tracker_id <> '' AND status <> 'delivered' "+
+			"AND updated_ts >= ? ORDER BY last_sync_ts ASC LIMIT ?", cutoff, s.PollLimit)
+	if err != nil {
+		return PollResult{}, err
+	}
+	targets, err := db.Collect(rows, func(r *sql.Rows) (Target, error) {
+		var t Target
+		err := r.Scan(&t.ID, &t.TrackingNumber, &t.Carrier, &t.Status, &t.StatusText, &t.Aggregator, &t.TrackerID,
+			&t.LastEvent, &t.LastEventHash, &t.NotifiedStatus, &t.LastEventTS, &t.LastSyncTS, &t.TrackerRegisteredTS)
+		return t, err
+	})
+	if err != nil {
+		return PollResult{}, err
+	}
+	var out PollResult
+	for _, t := range targets {
+		out.Checked++
+		tracking, err := client.Results(ctx, t.TrackerID)
+		if err != nil {
+			if strings.Contains(err.Error(), "gone") {
+				if _, uerr := d.Write.ExecContext(ctx, "UPDATE packages SET aggregator = '', tracker_id = '' WHERE id = ?", t.ID); uerr != nil {
+					out.Errors = append(out.Errors, uerr.Error())
+				}
+				continue
+			}
+			if strings.Contains(err.Error(), "429") {
+				out.RateLimited = true
+				break
+			}
+			out.Errors = append(out.Errors, err.Error())
+			continue
+		}
+		notified, err := save(ctx, d, now, t.ID, t.TrackerID, tracking, true, env)
+		if err != nil {
+			out.Errors = append(out.Errors, err.Error())
+			continue
+		}
+		out.Updated++
+		out.Events += len(tracking.Events)
+		if notified {
+			out.Notified++
+		}
+	}
+	return out, nil
+}
+
+func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string, tracking Tracking, notifyTransition bool, env config.Env) (bool, error) {
+	var previous, notifiedStatus string
+	if err := d.Read.QueryRowContext(ctx, "SELECT status, notified_status FROM packages WHERE id = ?", id).Scan(&previous, &notifiedStatus); err != nil {
+		return false, err
+	}
+	next := statusOf(tracking)
+	latest := latestEvent(tracking)
+	text := textOf(tracking)
+	eventTS := eventTime(latest, now)
+	key := eventKey(latest)
+	notified := false
+	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		for _, e := range tracking.Events {
+			if _, err := tx.ExecContext(ctx,
+				"INSERT OR IGNORE INTO package_events (package_id, tracker_id, event_key, event_ts, status, status_code, status_milestone, description, location, created_ts) "+
+					"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				id, trackerID, eventKey(e), eventTime(e, now), e.Status, e.StatusCode, e.StatusMilestone, e.Status, e.Location, now); err != nil {
+				return err
+			}
+		}
+		sets := []string{"aggregator = 'ship24'", "tracker_id = ?", "last_sync_ts = ?", "status = ?", "status_text = ?",
+			"last_event = ?", "last_event_ts = ?", "last_event_hash = ?",
+			"tracker_registered_ts = CASE WHEN tracker_registered_ts = 0 THEN ? ELSE tracker_registered_ts END"}
+		args := []any{trackerID, now, next, text, text, eventTS, key, now}
+		if notifyTransition && (next == delivered || next == exception) && next != previous && next != notifiedStatus {
+			sets = append(sets, "notified_status = ?")
+			args = append(args, next)
+			notified = true
+		}
+		_, err := tx.ExecContext(ctx, "UPDATE packages SET "+strings.Join(sets, ", ")+" WHERE id = ?", append(args, id)...)
+		return err
+	})
+	if err != nil {
+		return false, err
+	}
+	if notified && notify.Enabled(ctx) {
+		title := "Package delivered"
+		if next == exception {
+			title = "Package exception"
+		}
+		body := text
+		if body == "" {
+			body = "Status " + next
+		}
+		if _, err := notify.Send(ctx, d.Write, env, notify.Message{
+			Title: title, Body: body, Channel: notify.Assistant, Now: func() float64 { return now },
+		}); err != nil {
+			log.Warn("package notification failed", logx.Err, err.Error())
+		}
+	}
+	return notified, nil
+}
+
+func statusOf(t Tracking) string {
+	switch t.Shipment.StatusMilestone {
+	case delivered:
+		return delivered
+	case exception, "failed_attempt":
+		return exception
+	case outForDelivery, "available_for_pickup":
+		return outForDelivery
+	case inTransit:
+		return inTransit
+	case "info_received":
+		return shipped
+	}
+	return ordered
+}
+
+func latestEvent(t Tracking) Event {
+	if len(t.Events) > 0 {
+		return t.Events[0]
+	}
+	return Event{StatusMilestone: t.Shipment.StatusMilestone, StatusCode: t.Shipment.StatusCode}
+}
+
+func textOf(t Tracking) string {
+	latest := latestEvent(t)
+	if latest.Status != "" {
+		return clip(latest.Status, 120)
+	}
+	return clip(latest.StatusMilestone, 120)
+}
+
+func eventTime(e Event, now float64) float64 {
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02T15:04:05.000Z", "2006-01-02T15:04:05"} {
+		if at, err := time.Parse(layout, e.OccurrenceDatetime); err == nil {
+			return float64(at.Unix())
+		}
+	}
+	return now
+}
+
+func eventKey(e Event) string {
+	if e.EventID != "" {
+		return e.EventID
+	}
+	sum := sha256.Sum256([]byte(e.Status + "\x00" + e.OccurrenceDatetime + "\x00" + e.Location))
+	return hex.EncodeToString(sum[:])
+}
+
+func courierCode(carrier string) string {
+	switch strings.ToLower(strings.TrimSpace(carrier)) {
+	case "ups":
+		return "ups"
+	case "usps", "us post", "us-post":
+		return "us-post"
+	case "fedex":
+		return "fedex"
+	case "dhl":
+		return "dhl"
+	}
+	return strings.ToLower(strings.TrimSpace(carrier))
+}
+
+type Undo struct {
+	Op        string `json:"op"`
+	PackageID int64  `json:"package_id"`
+	TrackerID string `json:"tracker_id"`
+	Before    Target `json:"before"`
+}
+
+func Untrack(ctx context.Context, q db.Querier, now float64, u Undo) (any, error) {
+	s, err := Load(ctx, q)
+	if err == nil && s.Key != "" && u.TrackerID != "" {
+		if client, cerr := clientFor(ctx, q, s); cerr == nil {
+			if uerr := client.Unsubscribe(ctx, u.TrackerID); uerr != nil {
+				client.Close()
+				return nil, Error(uerr.Error())
+			}
+			client.Close()
+		}
+	}
+	if _, err := q.ExecContext(ctx, "DELETE FROM package_events WHERE package_id = ?", u.PackageID); err != nil {
+		return nil, err
+	}
+	if _, err := q.ExecContext(ctx,
+		"UPDATE packages SET status = ?, status_text = ?, aggregator = ?, tracker_id = ?, last_event = ?, last_event_ts = ?, "+
+			"last_event_hash = ?, last_sync_ts = ?, notified_status = ?, tracker_registered_ts = ? WHERE id = ?",
+		u.Before.Status, u.Before.StatusText, u.Before.Aggregator, u.Before.TrackerID, u.Before.LastEvent, u.Before.LastEventTS,
+		u.Before.LastEventHash, u.Before.LastSyncTS, u.Before.NotifiedStatus, u.Before.TrackerRegisteredTS, u.PackageID); err != nil {
+		return nil, err
+	}
+	return map[string]any{"untracked": u.TrackerID}, nil
+}
+
+func Events(ctx context.Context, q db.Querier, packageID int64) ([]Event, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT COALESCE(event_key, ''), status, status_code, status_milestone, description, location, event_ts "+
+			"FROM package_events WHERE package_id = ? ORDER BY event_ts DESC LIMIT 10", packageID)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Event, error) {
+		var e Event
+		var ts float64
+		err := r.Scan(&e.EventID, &e.Status, &e.StatusCode, &e.StatusMilestone, &e.Status, &e.Location, &ts)
+		if err == nil {
+			e.OccurrenceDatetime = time.Unix(int64(ts), 0).UTC().Format(time.RFC3339)
+		}
+		return e, err
+	})
+}

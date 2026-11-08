@@ -25,6 +25,7 @@ const (
 	MediaThumbnailsName    = "media-thumbnails"
 	TaskRemindersName      = "task-reminders"
 	MemoryWorkName         = "memory-work"
+	PackageTrackingName    = "package-tracking"
 )
 
 type RunKind uint8
@@ -69,6 +70,7 @@ var Builtins = []Builtin{
 	{MediaThumbnailsName, KeyMediaThumbnails, "daily 04:00", "Daily: generate missing episode thumbnails for the media library (no model run).", JobBuiltin, CallableRun},
 	{TaskRemindersName, KeyTaskReminders, "*/5 * * * *", "Every 5 minutes: send due task reminders (no model run).", JobBuiltin, CallableRun},
 	{MemoryWorkName, KeyMemoryWork, "*/2 * * * *", "Every 2 minutes: summarize pending memory nodes (no model run when the queue is empty).", JobBuiltin, CallableRun},
+	{PackageTrackingName, KeyPackageTracking, "0 * * * *", "Hourly: refresh active Ship24 package trackers (no model run).", JobBuiltin, CallableRun},
 }
 
 var builtinsByName = func() map[string]Builtin {

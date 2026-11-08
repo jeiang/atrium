@@ -73,6 +73,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 	}
 	cmds = append(cmds, mailCmds.ScanCommands()...)
 	cmds = append(cmds, mailCmds.RefreshCommands()...)
+	cmds = append(cmds, mailCmds.TrackingCommands()...)
 	return module.Registration{
 		Name:      module.Mail,
 		Attention: []attention.Source{attentionsources.Drafts(), attentionsources.Loops(), attentionsources.Commitments(), attentionsources.Packages()},

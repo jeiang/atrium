@@ -64,6 +64,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEMORY_WORK` | `assistant.agent_schedule_memory_work` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MIN_INTERVAL_SECONDS` | `assistant.agent_schedule_min_interval_seconds` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_NIGHTLY` | `assistant.agent_schedule_nightly` |
+| `ATRIUM_ASSISTANT_AGENT_SCHEDULE_PACKAGE_TRACKING` | `assistant.agent_schedule_package_tracking` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_TASK_REMINDERS` | `assistant.agent_schedule_task_reminders` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_WEEKLY_REVIEW` | `assistant.agent_schedule_weekly_review` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULER_LEASE_SECONDS` | `assistant.agent_scheduler_lease_seconds` |
@@ -230,6 +231,14 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MAIL_MAIL_SEARCH_RRF_K` | `mail.mail_search_rrf_k` |
 | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_CHARS` | `mail.mail_search_snippet_chars` |
 | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_TOKENS` | `mail.mail_search_snippet_tokens` |
+| `ATRIUM_MAIL_MAIL_SHIP24_API_KEY` | `mail.mail_ship24_api_key` |
+| `ATRIUM_MAIL_MAIL_SHIP24_DESTINATION_COUNTRY` | `mail.mail_ship24_destination_country` |
+| `ATRIUM_MAIL_MAIL_SHIP24_DESTINATION_POSTCODE` | `mail.mail_ship24_destination_postcode` |
+| `ATRIUM_MAIL_MAIL_SHIP24_MONTHLY_QUOTA` | `mail.mail_ship24_monthly_quota` |
+| `ATRIUM_MAIL_MAIL_SHIP24_POLL_DAYS` | `mail.mail_ship24_poll_days` |
+| `ATRIUM_MAIL_MAIL_SHIP24_POLL_LIMIT` | `mail.mail_ship24_poll_limit` |
+| `ATRIUM_MAIL_MAIL_SHIP24_TIMEOUT_SECONDS` | `mail.mail_ship24_timeout_seconds` |
+| `ATRIUM_MAIL_MAIL_SHIP24_URL` | `mail.mail_ship24_url` |
 | `ATRIUM_MAIL_MAILOPS_BATCH` | `mail.mailops_batch` |
 | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_SCAN_LIMIT` | `mail.openloops_commitment_scan_limit` |
 | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_WINDOW_DAYS` | `mail.openloops_commitment_window_days` |
@@ -261,6 +270,8 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MAIL_RULE_MIN_N` | `mail.rule_min_n` |
 | `ATRIUM_MAIL_RULE_MIN_PURITY` | `mail.rule_min_purity` |
 | `ATRIUM_MAIL_SENT_BACKFILL_DAYS` | `mail.sent_backfill_days` |
+| `ATRIUM_MAIL_SHIP24_CA_FILE` | `mail.ship24_ca_file` |
+| `ATRIUM_MAIL_SHIP24_PROXY` | `mail.ship24_proxy` |
 | `ATRIUM_MAIL_TRIAGE_TOP_DESTS` | `mail.triage_top_dests` |
 | `ATRIUM_MAIL_UNCERTAIN_DEST` | `mail.uncertain_dest` |
 | `ATRIUM_MAIL_WATCHES_BODY_CHARS` | `mail.watches_body_chars` |

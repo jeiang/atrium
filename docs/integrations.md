@@ -18,6 +18,7 @@ sections below cover the console work atrium cannot do for you.
 | qBittorrent | `qbittorrent` | API key | Media torrent and library operations | API keys need qBittorrent 5.2 or newer |
 | TMDB | `tmdb` | API read access token | Media metadata | Read-only; media pages show the attribution |
 | Open-Meteo | `open_meteo` | None | Weather forecasts and place lookup | Public API; no key. The configured coordinates are sent to Open-Meteo |
+| Ship24 | `ship24` | Bearer API key | Live package tracking | Free plan registers 10 shipments a month; polling, no webhooks |
 | Google Calendar and Gmail | — | OAuth web client | Calendar events and Gmail over IMAP and SMTP | See [Google](#google) |
 | iCloud | — | App-specific password | IMAP, SMTP, CalDAV and CardDAV | See [iCloud](#icloud) |
 | EZTV | — | None | Media channel episode lists | Public API; only torrents tagged media are written |
@@ -155,6 +156,17 @@ Weather forecasts and place lookup need no credential. Set the location
 tool reads it, or geocodes a place named in the call. The tool fetches only
 the configured Open-Meteo hosts, and the request carries no operator data
 beyond the coordinates.
+
+## Ship24
+
+Ship24 supplies live package tracking for packages the operator registers
+with the `track_package` tool. Create an API key in the Ship24 dashboard and
+paste it on the Integrations page, or pin `mail_ship24_api_key` from the
+host. The free plan registers 10 shipments a month; the
+`mail_ship24_monthly_quota` setting (default 10) refuses further
+registrations once the month's count is exhausted. Atrium polls the active
+trackers hourly and stops polling delivered packages. There is no webhook
+route.
 
 ## EZTV
 

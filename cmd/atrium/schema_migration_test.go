@@ -125,3 +125,66 @@ func TestSchemaVersionOneDatabaseMigratesToTheFreshSchema(t *testing.T) {
 		}
 	}
 }
+
+func baselineV2(t *testing.T, path string) {
+	t.Helper()
+	baselineV1(t, path)
+	d := mustConnect(t, path)
+	defer func() { _ = d.Close() }()
+	if _, err := d.Write.Exec("ALTER TABLE threads ADD COLUMN tainted_at REAL"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (2, 2.0)"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, " +
+		"source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 10, 10)"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSchemaVersionTwoDatabaseMigratesToTheFreshSchema(t *testing.T) {
+	old := t.TempDir()
+	path := filepath.Join(old, "atrium.db")
+	baselineV2(t, path)
+
+	if code, _, stderr := runIn(t, old, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list on a version 2 database: exit %d %s", code, stderr)
+	}
+	d := mustConnect(t, path)
+	var tracker, aggregator, lastEvent string
+	var registered, synced float64
+	if err := d.Read.QueryRow("SELECT tracker_id, aggregator, last_event, tracker_registered_ts, last_sync_ts FROM packages WHERE id = 1").
+		Scan(&tracker, &aggregator, &lastEvent, &registered, &synced); err != nil {
+		t.Fatalf("package after migration: %v", err)
+	}
+	if tracker != "" || aggregator != "" || lastEvent != "" || registered != 0 || synced != 0 {
+		t.Errorf("migrated package tracker fields = %q %q %q %v %v, want empty and zero", tracker, aggregator, lastEvent, registered, synced)
+	}
+	var version int
+	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version < 3 {
+		t.Errorf("schema version = %d, %v; want %d", version, err, db.LatestSchemaVersion())
+	}
+	_ = d.Close()
+	if code, stdout, stderr := runIn(t, old, "db", "check"); code != cli.ExitOK || !strings.Contains(stdout, "integrity_check: ok") {
+		t.Fatalf("db check: exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+
+	fresh := t.TempDir()
+	if code, _, stderr := runIn(t, fresh, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list on a fresh database: exit %d %s", code, stderr)
+	}
+	migrated, created := schemaDump(t, path), schemaDump(t, filepath.Join(fresh, "atrium.db"))
+	if !slices.Equal(migrated, created) {
+		for _, line := range migrated {
+			if !slices.Contains(created, line) {
+				t.Errorf("only in the migrated schema: %s", line)
+			}
+		}
+		for _, line := range created {
+			if !slices.Contains(migrated, line) {
+				t.Errorf("only in the fresh schema: %s", line)
+			}
+		}
+	}
+}

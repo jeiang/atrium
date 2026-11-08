@@ -169,6 +169,15 @@ type Snapshot struct {
 
 func (s *Set) Current() *Snapshot { return s.cur.Load() }
 
+func (s *Set) Refresh(ctx context.Context, q db.Querier) error {
+	snap, err := s.Evaluate(ctx, q)
+	if err != nil {
+		return err
+	}
+	s.cur.Store(snap)
+	return nil
+}
+
 func (s *Set) Evaluate(ctx context.Context, q db.Querier) (*Snapshot, error) {
 	probe := Probe{Settings: s.reg, Q: q, Env: s.env}
 	statuses, _, err := evaluate(ctx, s.regs, func(ctx context.Context, r Registration, states map[string]State) ([]Unmet, bool, error) {
