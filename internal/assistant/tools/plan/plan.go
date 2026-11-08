@@ -54,6 +54,7 @@ func Tools() []tool.Tool {
 		InputSchema: json.RawMessage(`{"type": "object", "properties": {"items": {"type": "array", "maxItems": 20, "items": {"type": "object", "properties": {"text": {"type": "string", "maxLength": 200}, "done": {"type": "boolean"}}, "required": ["text"], "additionalProperties": false}}}, "required": ["items"], "additionalProperties": false}`),
 		Handler:     plan,
 		Effect:      tool.Read,
+		Annotated:   true,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron, tool.Nightly},
 	}}
 }

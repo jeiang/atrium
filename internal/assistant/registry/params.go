@@ -27,6 +27,8 @@ func webSearchTool() tool.Tool {
 		Description: "Anthropic web search (server tool); pair it with web_fetch to read results.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
 		Effect:      tool.Read,
+		Annotated:   true,
+		Flags:       tool.Flags{Web: true, UntrustedOutput: true, ExternalEffect: true},
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron, tool.Sub},
 		Server:      true,
 	}

@@ -39,6 +39,8 @@ func openLoopTools() []tool.Tool {
 			InputSchema: openLoopsSchema,
 			Handler:     openLoops,
 			Effect:      tool.Read,
+			Annotated:   true,
+			Flags:       tool.Flags{PrivateData: true},
 			Contexts:    loopKinds,
 		},
 		{
@@ -48,6 +50,8 @@ func openLoopTools() []tool.Tool {
 			InputSchema: commitmentsSchema,
 			Handler:     commitments,
 			Effect:      tool.Read,
+			Annotated:   true,
+			Flags:       tool.Flags{PrivateData: true},
 			Contexts:    loopKinds,
 		},
 	}

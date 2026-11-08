@@ -50,7 +50,7 @@ func newHarness(t *testing.T, script ...anthropictest.Response) *harness {
 		r := registry.New()
 		err := r.Add(tool.Tool{
 			Name: "probe", Description: "Return a fixed result", InputSchema: json.RawMessage(`{"type":"object","properties":{"n":{"type":"integer"}}}`),
-			Effect: tool.Read, Contexts: tool.Kinds{tool.Chat, tool.Cron},
+			Effect: tool.Read, Annotated: true, Contexts: tool.Kinds{tool.Chat, tool.Cron},
 			Handler: func(context.Context, *tool.Context, tool.Args) (any, error) { return "same", nil },
 		})
 		return r, err

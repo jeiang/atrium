@@ -73,6 +73,8 @@ func Tools() []tool.Tool {
 		InputSchema: json.RawMessage(`{"type": "object", "properties": {"result_id": {"type": "integer"}, "offset": {"type": "integer", "minimum": 0}, "limit": ` + recallLimitBound.Schema() + `}, "required": ["result_id"], "additionalProperties": false}`),
 		Handler:     recall,
 		Effect:      tool.Read,
+		Annotated:   true,
+		Flags:       tool.Flags{PrivateData: true},
 		Contexts:    tool.AllKinds,
 	}}
 }

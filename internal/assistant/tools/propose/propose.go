@@ -78,6 +78,7 @@ func Tools() []tool.Tool {
 		InputSchema: json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {"kind": {"type": "string", "enum": %s}, "payload": {"type": "object"}}, "required": ["kind", "payload"], "additionalProperties": false}`, allowed)),
 		Handler:     propose,
 		Effect:      tool.Propose,
+		Annotated:   true,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 	}}
 }

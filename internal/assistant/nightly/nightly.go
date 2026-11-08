@@ -39,6 +39,7 @@ func Tools() []tool.Tool {
 		InputSchema: inputSchema,
 		Handler:     threadsToday,
 		Effect:      tool.Read,
+		Annotated:   true,
 		Contexts:    tool.Kinds{tool.Nightly},
 	}}
 }

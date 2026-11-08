@@ -82,7 +82,7 @@ func TestResumedRunSupersedesTheOriginalLoop(t *testing.T) {
 		r := registry.New()
 		err := r.Add(tool.Tool{
 			Name: "count", Description: "Count invocations", InputSchema: json.RawMessage(`{"type":"object","properties":{}}`),
-			Effect: tool.Write, Contexts: tool.Kinds{tool.Cron},
+			Effect: tool.Write, Annotated: true, Contexts: tool.Kinds{tool.Cron},
 			Handler: func(context.Context, *tool.Context, tool.Args) (any, error) {
 				calls.Add(1)
 				return "counted", nil

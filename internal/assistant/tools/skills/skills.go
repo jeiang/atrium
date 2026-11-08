@@ -60,6 +60,7 @@ func Tools() []tool.Tool {
 		InputSchema: json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"], "additionalProperties": false}`),
 		Handler:     load,
 		Effect:      tool.Read,
+		Annotated:   true,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron, tool.Nightly},
 	}}
 }

@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/skills"
 	"github.com/jeiang/atrium/internal/assistant/tool"
+	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/timex"
@@ -99,6 +100,14 @@ func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 			return err
 		}
 		job, err = scheduler.GetJob(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		_, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
+			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "schedule_create", Target: fmt.Sprintf("schedule:%d", id),
+			After: map[string]any{"id": id, "name": fields[0], "schedule": fields[2]},
+			Undo:  scheduleDeleteUndo{Op: "schedule_delete", ID: id},
+		})
 		return err
 	})
 	if err != nil {
@@ -132,6 +141,18 @@ func update(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 			return err
 		}
 		updated, err = scheduler.UpdateJob(ctx, tx, job.ID, tc.Now(), u)
+		if err != nil {
+			return err
+		}
+		_, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
+			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "schedule_update", Target: fmt.Sprintf("schedule:%d", job.ID),
+			Before: map[string]any{"name": job.Name, "prompt": job.Prompt, "schedule": job.Schedule, "enabled": job.State.Active()},
+			After:  map[string]any{"name": updated.Name, "prompt": updated.Prompt, "schedule": updated.Schedule, "enabled": updated.State.Active()},
+			Undo: scheduleRestoreUndo{
+				Op: "schedule_restore", ID: job.ID, Name: job.Name, Prompt: job.Prompt, Schedule: job.Schedule,
+				State: string(job.State), NextDue: job.NextDue,
+			},
+		})
 		return err
 	})
 	if err != nil {
@@ -148,7 +169,19 @@ func cancel(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 			return err
 		}
 		id = job.ID
-		return scheduler.CancelJob(ctx, tx, id)
+		if err := scheduler.CancelJob(ctx, tx, id); err != nil {
+			return err
+		}
+		_, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
+			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "schedule_cancel", Target: fmt.Sprintf("schedule:%d", id),
+			Before: map[string]any{"enabled": true},
+			After:  map[string]any{"enabled": false},
+			Undo: scheduleRestoreUndo{
+				Op: "schedule_restore", ID: job.ID, Name: job.Name, Prompt: job.Prompt, Schedule: job.Schedule,
+				State: string(job.State), NextDue: job.NextDue,
+			},
+		})
+		return err
 	})
 	if err != nil {
 		return nil, err
@@ -183,24 +216,27 @@ func Tools() []tool.Tool {
 				"The prompt must be self-contained. " + Help + " At most 20 active schedules.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"name": {"type": "string"}, "prompt": {"type": "string"}, "schedule": {"type": "string", "description": ` + jsonText(Help) + `}}, "required": ["name", "prompt", "schedule"], "additionalProperties": false}`),
 			Handler:     create,
-			Effect:      tool.Write,
-			Contexts:    chatOnly,
+			Effect:      tool.WriteUndo, Undo: "schedule_delete",
+			Annotated: true,
+			Contexts:  chatOnly,
 		},
 		{
 			Name:        "schedule_update",
 			Description: "Change a schedule's name, prompt, schedule or enabled flag by id.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"id": {"type": "integer"}, "name": {"type": "string"}, "prompt": {"type": "string"}, "schedule": {"type": "string", "description": ` + jsonText(Help) + `}, "enabled": {"type": "boolean"}}, "required": ["id"], "additionalProperties": false}`),
 			Handler:     update,
-			Effect:      tool.Write,
-			Contexts:    chatOnly,
+			Effect:      tool.WriteUndo, Undo: "schedule_restore",
+			Annotated: true,
+			Contexts:  chatOnly,
 		},
 		{
 			Name:        "schedule_cancel",
 			Description: "Cancel a schedule by id. Its past runs and threads are kept.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"], "additionalProperties": false}`),
 			Handler:     cancel,
-			Effect:      tool.Write,
-			Contexts:    chatOnly,
+			Effect:      tool.WriteUndo, Undo: "schedule_restore",
+			Annotated: true,
+			Contexts:  chatOnly,
 		},
 		{
 			Name:        "schedule_list",
@@ -208,6 +244,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {}, "required": [], "additionalProperties": false}`),
 			Handler:     list,
 			Effect:      tool.Read,
+			Annotated:   true,
 			Contexts:    chatOnly,
 		},
 	}

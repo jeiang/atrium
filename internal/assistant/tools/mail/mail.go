@@ -48,6 +48,8 @@ func mailTools() []tool.Tool {
 			InputSchema: mailSearchSchema,
 			Handler:     mailSearch,
 			Effect:      tool.Read,
+			Annotated:   true,
+			Flags:       tool.Flags{PrivateData: true},
 			Contexts:    mailKinds,
 		},
 		{
@@ -57,6 +59,8 @@ func mailTools() []tool.Tool {
 			InputSchema: mailReadSchema,
 			Handler:     mailRead,
 			Effect:      tool.Read,
+			Annotated:   true,
+			Flags:       tool.Flags{PrivateData: true},
 			Contexts:    mailKinds,
 		},
 	}
