@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/memory"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/textsearch"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -24,7 +25,7 @@ const searchSchema = `{"type":"object","properties":{"query":{"type":"string","m
 func searchTools() []tool.Tool {
 	return []tool.Tool{{
 		Name: searchName, Description: searchDescription, InputSchema: json.RawMessage(searchSchema), Handler: searchThreads,
-		Effect: tool.Read, Marks: tool.Messages, Annotated: true,
+		Effect: tool.Read, Marks: tool.AllMarks, Annotated: true,
 		Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
 	}}
 }
@@ -65,6 +66,7 @@ func searchThreads(ctx context.Context, tc *tool.Context, args tool.Args) (any, 
 	defer func() { _ = rows.Close() }()
 	page := int64(assistant.Read(ctx, tc.DB.Read).Int(assistant.KeyRecallPageChars))
 	var hits []any
+	var ids []int64
 	seen := map[[3]int64]bool{}
 	for rows.Next() {
 		var threadID, projectID, from, to int64
@@ -80,6 +82,7 @@ func searchThreads(ctx context.Context, tc *tool.Context, args tool.Args) (any, 
 			continue
 		}
 		seen[key] = true
+		ids = append(ids, threadID)
 		var titleValue any
 		if title != nil {
 			titleValue = *title
@@ -98,7 +101,39 @@ func searchThreads(ctx context.Context, tc *tool.Context, args tool.Args) (any, 
 	if hits == nil {
 		hits = []any{}
 	}
-	return map[string]any{"hits": hits}, nil
+	marks, err := threadMarks(ctx, tc.DB.Read, ids)
+	if err != nil {
+		return nil, err
+	}
+	return tool.Marked{Value: map[string]any{"hits": hits}, Marks: tool.Messages | marks}, nil
+}
+
+func threadMarks(ctx context.Context, q db.Querier, ids []int64) (tool.Marks, error) {
+	if len(ids) == 0 {
+		return 0, nil
+	}
+	list := make([]any, len(ids))
+	for i, id := range ids {
+		list[i] = id
+	}
+	encoded, err := json.Marshal(list)
+	if err != nil {
+		return 0, err
+	}
+	rows, err := q.QueryContext(ctx, "SELECT marks FROM threads WHERE id IN (SELECT value FROM json_each(?))", encoded)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out tool.Marks
+	for rows.Next() {
+		var marks int64
+		if err := rows.Scan(&marks); err != nil {
+			return 0, err
+		}
+		out |= tool.Marks(marks)
+	}
+	return out, rows.Err()
 }
 
 func clip(text string, limit int) string {

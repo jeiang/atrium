@@ -318,16 +318,33 @@ behavior-parity target.
   mark time. The set is a bitmask: `untrusted` (someone else wrote the
   text), `pii` (identifiers that reach, locate or impersonate a person),
   `messages` (content from the operator's accounts) and `personal`
-  (knowledge-base records). Tools declare the marks a successful call may
-  add; a kind mark means the result holds private data. Mail, calendar,
-  file, memory, profile, Notion, contact and attention reads declare their
-  kinds; `mail_read`, `mail_search`, `open_loops`, `packages`, `attention`,
-  `calendar_list`, the file reads and the Grafana tools also declare
-  `untrusted`. `web_fetch`, `research` and a response carrying a server
-  `web_search_tool_result` mark the thread `untrusted`. `weather`, the
-  media reads, `task_list`, `schedule_list`, `plan` and `stale_wiki`
-  declare none. The nightly `threads_today` read carries the union of the
-  marks of the threads it returns. `untrusted` alone does not withdraw
+  (knowledge-base records). Tools declare the most a successful call may
+  add; that declaration is the admission bound. A handler returns the
+  marks of the fields it actually returned, and dispatch refuses a result
+  that reports marks outside the declared set (error result and a log
+  line); a handler that returns no marks gets the full declared set.
+  `contacts_lookup` returns name and organisation and marks nothing;
+  emails, phones and dates come back only through `include` and mark
+  `pii`. Empty results of `mail_search`, `calendar_list`, `file_search`,
+  `search_threads`, `packages`, `open_loops`, `commitments`,
+  `upcoming_birthdays` and `attention` mark nothing. `mail_read` marks
+  `pii` for headers and `messages`/`untrusted` for a body or attachment
+  names; `mail_search` marks `pii` for addresses and
+  `messages`/`untrusted` for subjects and snippets; `open_loops`,
+  `commitments` and `packages` mark the fields they return the same way.
+  A non-empty `calendar_list` marks `messages` and `untrusted`; `find_slot`
+  marks `messages`. `file_read` and a non-empty `file_search` mark
+  `messages` and `untrusted`. `search_threads` and `zoom` mark `messages`
+  plus the marks of the threads they read. `recall` marks nothing: it only
+  re-reads results stored in its own thread. `search_knowledge`,
+  `fetch_knowledge` and `profile_get` mark `personal`. Grafana reads and
+  `atrium_self_diagnose` mark `untrusted` only. `web_fetch`, `research`
+  and a response carrying a server `web_search_tool_result` mark the
+  thread `untrusted`; `research` declares all four marks and returns
+  `untrusted` plus the child thread's marks. `weather`, the media reads,
+  `task_list`, `schedule_list`, `plan` and `stale_wiki` declare none. The
+  nightly `threads_today` read declares all four and carries the union of
+  the marks of the threads it returns. `untrusted` alone does not withdraw
   egress. From the next model request of the same run on, and in every
   later run of that thread in any process, a marked thread cannot use
   `external_effect`, `cost`, `notify` or `write_undo` tools. Later runs are
@@ -339,16 +356,13 @@ behavior-parity target.
   everything before it is unchanged. The one exception is the Rule of Two:
   a thread marked only `untrusted` keeps the read-only `web` tools
   (`web_fetch`, `web_search`, `research`) while it cannot reach private
-  data, meaning its run offers no tool that declares a kind and its system
+  data, meaning its run offers no tool that returns a kind and its system
   prompt carries no profile or project block (only subagent runs qualify).
-  `recall` is `thread_scoped`: its query reads only stored results of its
-  own thread, so in a subagent run it neither counts as private reach nor
-  marks the thread; everywhere else it declares `messages`. Recall pages
-  are never themselves stubbed. So an `untrusted` subagent can search, read
-  a long page through `recall` and follow its links over several steps. A
-  research result marks the parent `untrusted` plus the child's marks, so
-  the parent, which holds private data, loses that egress. Branches inherit
-  the marks.
+  Recall pages are never themselves stubbed. So an `untrusted` subagent
+  can search, read a long page through `recall` and follow its links over
+  several steps. A research result marks the parent `untrusted` plus the
+  child's marks, so the parent, which holds private data, loses that
+  egress. Branches inherit the marks.
 - The public web service accepts an authenticating reverse proxy
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Local requests are
   administrators; a proxy request or OIDC session is an administrator only

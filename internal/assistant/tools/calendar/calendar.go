@@ -115,7 +115,10 @@ func list(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if err != nil {
 		return nil, wrap(err)
 	}
-	return listing.Dict(), nil
+	if len(listing.Events) == 0 {
+		return tool.Marked{Value: listing.Dict(), Marks: 0}, nil
+	}
+	return tool.Marked{Value: listing.Dict(), Marks: tool.Messages | tool.Untrusted}, nil
 }
 
 func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {

@@ -3,6 +3,7 @@ package contactsmodule
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
@@ -52,13 +53,16 @@ func syncCommand(env config.Env) *cli.Command {
 const schemaMaxContacts = 100
 
 var contactsSchema = json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"},` +
+	`"include":{"type":"array","items":{"enum":["emails","phones","dates"]},"uniqueItems":true},` +
 	`"limit":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaMaxContacts) + `}},` +
 	`"required":["query"],"additionalProperties":false}`)
+
+var includeFields = []string{"emails", "phones", "dates"}
 
 func Tools() []tool.Tool {
 	return []tool.Tool{{
 		Name:        "contacts_lookup",
-		Description: "Look up people in the operator's address book by name, email, phone or organisation.",
+		Description: "Look up people in the operator's address book by name, email, phone or organisation. Returns name and organisation; pass include for emails, phones or dates.",
 		InputSchema: contactsSchema,
 		Handler:     contactsLookup,
 		Effect:      tool.Read,
@@ -81,6 +85,10 @@ func contactsLookup(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 	if err != nil {
 		return nil, err
 	}
+	include, err := included(args)
+	if err != nil {
+		return nil, err
+	}
 	src, err := contacts.Resolve(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
@@ -90,21 +98,24 @@ func contactsLookup(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 	}
 	found := contacts.Search(src.Dir, query, int(limit))
 	results := make([]any, len(found))
+	marks := tool.Marks(0)
 	for i, c := range found {
 		card := map[string]any{}
 		if c.Name != "" {
 			card["name"] = c.Name
 		}
-		if len(c.Emails) > 0 {
-			card["emails"] = c.Emails
-		}
-		if len(c.Phones) > 0 {
-			card["phones"] = c.Phones
-		}
 		if c.Org != "" {
 			card["org"] = c.Org
 		}
-		if len(c.Dates) > 0 {
+		if include["emails"] && len(c.Emails) > 0 {
+			card["emails"] = c.Emails
+			marks |= tool.PII
+		}
+		if include["phones"] && len(c.Phones) > 0 {
+			card["phones"] = c.Phones
+			marks |= tool.PII
+		}
+		if include["dates"] && len(c.Dates) > 0 {
 			dates := make([]any, len(c.Dates))
 			for j, d := range c.Dates {
 				var year any
@@ -115,8 +126,29 @@ func contactsLookup(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 					"day": int64(d.Day), "year": year}
 			}
 			card["dates"] = dates
+			marks |= tool.PII
 		}
 		results[i] = card
 	}
-	return map[string]any{"results": results}, nil
+	return tool.Marked{Value: map[string]any{"results": results}, Marks: marks}, nil
+}
+
+func included(args tool.Args) (map[string]bool, error) {
+	value, ok := args.Get("include")
+	if !ok || value == nil {
+		return nil, nil
+	}
+	list, ok := value.([]any)
+	if !ok {
+		return nil, tool.Error("include must be a list of emails, phones or dates")
+	}
+	out := map[string]bool{}
+	for _, item := range list {
+		name, ok := item.(string)
+		if !ok || !slices.Contains(includeFields, name) {
+			return nil, tool.Error("include must be a list of emails, phones or dates")
+		}
+		out[name] = true
+	}
+	return out, nil
 }

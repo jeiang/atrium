@@ -163,7 +163,7 @@ func (r *Registry) Admit(ctx context.Context, kind tool.Kind, marks threads.Mark
 		if !enabled {
 			continue
 		}
-		private = private || t.MarksIn(kind).Kinds() != 0
+		private = private || t.Marks.Kinds() != 0
 		offered = append(offered, t)
 	}
 	var set Set

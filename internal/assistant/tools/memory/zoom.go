@@ -27,12 +27,17 @@ const schema = `{"type":"object","properties":{"id":{"type":"integer","descripti
 func Tools() []tool.Tool {
 	return append([]tool.Tool{{
 		Name: Name, Description: Description, InputSchema: json.RawMessage(schema), Handler: zoom,
-		Effect: tool.Read, Marks: tool.Messages, Annotated: true,
+		Effect: tool.Read, Marks: tool.AllMarks, Annotated: true,
 		Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
 	}}, searchTools()...)
 }
 
 func zoom(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+	marks, err := threadMarks(ctx, tc.DB.Read, []int64{tc.ThreadID})
+	if err != nil {
+		return nil, err
+	}
+	marks |= tool.Messages
 	id, _, err := tool.IntArg(args, "id", true)
 	if err != nil {
 		return nil, err
@@ -53,7 +58,7 @@ func zoom(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 		return nil, err
 	}
 	if n == 1 {
-		return leaf(ctx, tc, nodes, id, at)
+		return leaf(ctx, tc, nodes, id, at, marks)
 	}
 	level := bits.TrailingZeros64(uint64(n))
 	var parent *memory.Node
@@ -75,10 +80,10 @@ func zoom(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if len(children) != 2 {
 		return nil, rootsError(ctx, tc, id, n)
 	}
-	return map[string]any{"id": id, "n": n, "children": children}, nil
+	return tool.Marked{Value: map[string]any{"id": id, "n": n, "children": children}, Marks: marks}, nil
 }
 
-func leaf(ctx context.Context, tc *tool.Context, nodes []memory.Node, id, at int64) (any, error) {
+func leaf(ctx context.Context, tc *tool.Context, nodes []memory.Node, id, at int64, marks tool.Marks) (any, error) {
 	var found *memory.Node
 	for i := range nodes {
 		if nodes[i].Level == 0 && nodes[i].FromSeq == id {
@@ -90,10 +95,10 @@ func leaf(ctx context.Context, tc *tool.Context, nodes []memory.Node, id, at int
 		return nil, rootsError(ctx, tc, id, 1)
 	}
 	if len(found.ResultIDs) > 0 {
-		return map[string]any{
+		return tool.Marked{Value: map[string]any{
 			"id": id, "n": 1, "result_id": found.ResultIDs[0], "use": "recall",
 			"text": fmt.Sprintf("tool result %d; page it with recall", found.ResultIDs[0]),
-		}, nil
+		}, Marks: marks}, nil
 	}
 	messages, err := journal.MessagesOf(ctx, tc.DB.Read, tc.ThreadID)
 	if err != nil {
@@ -125,7 +130,7 @@ func leaf(ctx context.Context, tc *tool.Context, nodes []memory.Node, id, at int
 	if end < total {
 		next = end
 	}
-	return map[string]any{"id": id, "n": 1, "offset": at, "total_chars": total, "text": text, "next_offset": next}, nil
+	return tool.Marked{Value: map[string]any{"id": id, "n": 1, "offset": at, "total_chars": total, "text": text, "next_offset": next}, Marks: marks}, nil
 }
 
 func rootsError(ctx context.Context, tc *tool.Context, id, n int64) error {

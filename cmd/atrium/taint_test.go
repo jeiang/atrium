@@ -21,9 +21,11 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 var egressTools = []string{"notify", "web_fetch", "web_search", "research", "file_write", "task_add"}
@@ -185,6 +187,17 @@ func TestUntrustedOutputAloneKeepsEgress(t *testing.T) {
 	assertEgress(t, "in a later run", requestTools(t, requests[len(requests)-1]), true)
 }
 
+func threadMarkSet(t *testing.T, dir string, thread int64) int64 {
+	t.Helper()
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	var marks int64
+	if err := d.Read.QueryRow("SELECT marks FROM threads WHERE id = ?", thread).Scan(&marks); err != nil {
+		t.Fatal(err)
+	}
+	return marks
+}
+
 func threadTainted(t *testing.T, dir string, thread int64) bool {
 	t.Helper()
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
@@ -326,8 +339,12 @@ func TestGrafanaResultTaintsTheThread(t *testing.T) {
 		t.Fatal("grafana result did not reach the model")
 	}
 	assertEgress(t, "after a Grafana result", requestTools(t, requests[1]), false)
-	if !threadTainted(t, dir, latestThread(t, dir)) {
+	thread := latestThread(t, dir)
+	if !threadTainted(t, dir, thread) {
 		t.Error("thread not tainted after a Grafana result")
+	}
+	if marks := threadMarkSet(t, dir, thread); marks != int64(tool.Untrusted) {
+		t.Errorf("thread marks after a Grafana result = %d, want untrusted only", marks)
 	}
 }
 
@@ -440,4 +457,67 @@ func TestBranchOfAMarkedThreadIsNotOfferedEgress(t *testing.T) {
 		t.Fatalf("%d model requests in the branch run, want 1", len(requests))
 	}
 	assertEgress(t, "first request of a branch of a marked thread", requestTools(t, requests[0]), false)
+}
+
+func TestEmptyMailSearchLeavesTheThreadUnmarked(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	path := filepath.Join(dir, "atrium.db")
+	d := mustConnect(t, path)
+	if err := db.Migrate(context.Background(), d, path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT OR IGNORE INTO accounts (name, kind) VALUES ('icloud', 'icloud')"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT OR IGNORE INTO mailboxes (id, account, name, imap_name, role) VALUES (1, 'icloud', 'INBOX', 'INBOX', 'inbox')"); err != nil {
+		t.Fatal(err)
+	}
+	dbtest.AddMessage(t, d, 1, "the quarterly numbers are attached", map[string]any{
+		"subject": "Quarterly report", "from_addr": "boss@example.com", "from_name": "Boss",
+	})
+	_ = d.Close()
+	start := warm(t, api)
+	thread := latestThread(t, dir)
+
+	api.Push(
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("s1", "mail_search", map[string]any{"query": "zebracorn"})),
+		anthropictest.Reply("end_turn", anthropictest.Text("none")),
+	)
+	if ran := runApp(t, "agent", "run", "--thread", fmt.Sprint(thread), "--text", "search for nothing"); ran.code != cli.ExitOK {
+		t.Fatalf("empty search run: %d %s", ran.code, ran.stderr)
+	}
+	requests := api.Requests()[start:]
+	if len(requests) != 2 {
+		t.Fatalf("%d model requests, want 2", len(requests))
+	}
+	if after := requestTools(t, requests[1]); !slices.Contains(after, "web_fetch") {
+		t.Errorf("an empty mail search dropped web_fetch: %v", after)
+	}
+	if marks := threadMarkSet(t, dir, thread); marks != 0 {
+		t.Errorf("thread marks after an empty mail search = %d, want 0", marks)
+	}
+
+	start = len(api.Requests())
+	api.Push(
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("s2", "mail_search", map[string]any{"query": "Quarterly"})),
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": "https://example.com/"})),
+		anthropictest.Reply("end_turn", anthropictest.Text("done")),
+	)
+	if ran := runApp(t, "agent", "run", "--thread", fmt.Sprint(thread), "--text", "search the report"); ran.code != cli.ExitOK {
+		t.Fatalf("search run: %d %s", ran.code, ran.stderr)
+	}
+	requests = api.Requests()[start:]
+	if len(requests) != 3 {
+		t.Fatalf("%d model requests, want 3", len(requests))
+	}
+	if content := fmt.Sprint(toolResultFor(t, requests[1], "s2")["content"]); !strings.Contains(content, "Quarterly report") {
+		t.Errorf("the search did not return the message: %s", content)
+	}
+	if marks := threadMarkSet(t, dir, thread); marks != int64(tool.PII|tool.Messages|tool.Untrusted) {
+		t.Errorf("thread marks after a non-empty mail search = %d, want pii, messages and untrusted", marks)
+	}
+	refusal := toolResultFor(t, requests[2], "f1")
+	if refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "web_fetch is no longer available") {
+		t.Errorf("web_fetch after a non-empty mail search returned %v, want a refusal", refusal)
+	}
 }

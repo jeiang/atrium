@@ -42,7 +42,10 @@ func Tools() []tool.Tool {
 			if err := json.Unmarshal(raw, &out); err != nil {
 				return nil, err
 			}
-			return out, nil
+			if len(result.Items) == 0 {
+				return tool.Marked{Value: out, Marks: 0}, nil
+			}
+			return tool.Marked{Value: out, Marks: tool.PII | tool.Messages | tool.Untrusted}, nil
 		},
 	}}
 }

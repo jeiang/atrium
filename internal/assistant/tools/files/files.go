@@ -82,7 +82,7 @@ func read(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if !utf8.Valid(data) {
 		return nil, tool.Error(name + " is not a text file")
 	}
-	return string(data), nil
+	return tool.Marked{Value: string(data), Marks: tool.Messages | tool.Untrusted}, nil
 }
 
 func search(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -134,9 +134,9 @@ func search(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 		}
 	}
 	if out == nil {
-		return []string{}, nil
+		return tool.Marked{Value: []string{}, Marks: 0}, nil
 	}
-	return out, nil
+	return tool.Marked{Value: out, Marks: tool.Messages | tool.Untrusted}, nil
 }
 
 func write(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {

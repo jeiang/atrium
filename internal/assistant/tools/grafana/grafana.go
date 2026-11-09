@@ -55,7 +55,7 @@ var (
 	kinds      = []string{"prometheus", "logs"}
 	dropFields = []string{"id", "tsNs"}
 	contexts   = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}
-	readMarks  = tool.Messages | tool.Untrusted
+	readMarks  = tool.Untrusted
 )
 
 func errorClass(err error) string {

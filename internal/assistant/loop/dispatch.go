@@ -115,11 +115,20 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 	}
 	value, err = x.call(ctx, t, tool.Args(args))
 	if err == nil {
-		returned := tool.Marks(0)
+		marks := t.Marks
 		if marked, ok := value.(tool.Marked); ok {
-			value, returned = marked.Value, marked.Marks
+			value = marked.Value
+			marks = marked.Marks
+			if outside := marks &^ t.Marks; outside != 0 {
+				log.Error(fmt.Sprintf("tool %s returned marks %d outside its declared set %d", use.Name, marks, t.Marks),
+					logx.RunID, x.tc.RunID)
+				if err := threads.AddMarks(context.WithoutCancel(ctx), x.d.Write, x.tc.ThreadID, x.now(), t.Marks); err != nil {
+					return nil, nil, err
+				}
+				return fail(use.Name + " returned data outside its declared marks")
+			}
 		}
-		if err := threads.AddMarks(context.WithoutCancel(ctx), x.d.Write, x.tc.ThreadID, x.now(), t.MarksIn(x.tc.Kind)|returned); err != nil {
+		if err := threads.AddMarks(context.WithoutCancel(ctx), x.d.Write, x.tc.ThreadID, x.now(), marks); err != nil {
 			return nil, nil, err
 		}
 		return nil, value, nil

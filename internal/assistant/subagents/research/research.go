@@ -92,7 +92,7 @@ func (r *Research) Tool() tool.Tool {
 		Effect:      tool.Read,
 		Annotated:   true,
 		Flags:       tool.Flags{Web: true, ExternalEffect: true},
-		Marks:       tool.Untrusted,
+		Marks:       tool.AllMarks,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 		Parallel:    true,
 	}
@@ -248,7 +248,7 @@ func (r *Research) handle(ctx context.Context, tc *tool.Context, args tool.Args)
 		}
 		return nil, tool.Error(fmt.Sprintf("%s research stopped: %s (child thread %d)%s", role, reason, child, partial))
 	}
-	return map[string]any{"untrusted": true, "role": role, "child_thread_id": child, "digest": digest}, nil
+	return tool.Marked{Value: map[string]any{"untrusted": true, "role": role, "child_thread_id": child, "digest": digest}, Marks: marks.Set | tool.Untrusted}, nil
 }
 
 func (r *Research) runChild(ctx context.Context, tc *tool.Context, child int64, text, role string, agent subagents.Agent) error {

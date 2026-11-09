@@ -57,7 +57,14 @@ func packages(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 		return nil, err
 	}
 	out := make([]any, len(items))
+	marks := tool.Marks(0)
 	for i, p := range items {
+		if p.TrackingNumber != "" || p.OrderRef != "" {
+			marks |= tool.PII
+		}
+		if p.Merchant != "" || p.StatusText != "" || p.LastEvent != "" || p.LastEventDescription != "" {
+			marks |= tool.Messages | tool.Untrusted
+		}
 		item := map[string]any{"id": p.ID, "carrier": p.Carrier, "tracking_number": p.TrackingNumber, "merchant": p.Merchant, "order_ref": p.OrderRef, "status": p.Status, "status_text": tool.Clip(p.StatusText, 200), "updated": p.Updated, "source_message_id": p.SourceMessageID}
 		if p.TrackerID != "" {
 			item["tracker_id"] = p.TrackerID
@@ -68,7 +75,7 @@ func packages(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 		}
 		out[i] = item
 	}
-	return map[string]any{"packages": out, "note": "Status comes from emails the operator received and, for tracked packages, from Ship24. Use track_package to register a package for live updates."}, nil
+	return tool.Marked{Value: map[string]any{"packages": out, "note": "Status comes from emails the operator received and, for tracked packages, from Ship24. Use track_package to register a package for live updates."}, Marks: marks}, nil
 }
 
 func upcomingBirthdays(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -94,12 +101,16 @@ func upcomingBirthdays(ctx context.Context, tc *tool.Context, args tool.Args) (a
 		return nil, tool.NotConfigured(contacts.DirKey + " is not set")
 	}
 	out := make([]any, len(found))
+	marks := tool.Marks(0)
 	for i, item := range found {
 		d := map[string]any{"name": item.Name, "kind": item.Kind, "label": item.Label, "date": item.Date, "days_until": int64(item.DaysUntil)}
 		if item.Turning != nil {
 			d["turning"] = int64(*item.Turning)
 		}
+		if item.Date != "" {
+			marks |= tool.PII
+		}
 		out[i] = d
 	}
-	return map[string]any{"upcoming": out}, nil
+	return tool.Marked{Value: map[string]any{"upcoming": out}, Marks: marks}, nil
 }

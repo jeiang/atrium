@@ -45,7 +45,7 @@ func findSlot(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	for i, n := range found.Notes {
 		notes[i] = n
 	}
-	return map[string]any{"windows": windows, "notes": notes}, nil
+	return tool.Marked{Value: map[string]any{"windows": windows, "notes": notes}, Marks: tool.Messages}, nil
 }
 
 var durationBound = tool.NewCeiling(30, 5, 1440)

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 const (
@@ -50,7 +53,7 @@ func davFixture(t *testing.T) (dir string, srv *caldavtest.Server) {
 func lookup(t *testing.T, query string) string {
 	t.Helper()
 	api := &modelLog{Server: anthropictest.New(t,
-		anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "contacts_lookup", map[string]any{"query": query})),
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "contacts_lookup", map[string]any{"query": query, "include": []any{"emails"}})),
 		anthropictest.Reply("end_turn", anthropictest.Text("done")),
 	)}
 	api.OnRequest = func(r anthropictest.Request) {
@@ -161,5 +164,72 @@ func TestTriageSaysSoWhenThereIsNoContactSource(t *testing.T) {
 				t.Errorf("contacts %s: explanation shown = %v", on, shown)
 			}
 		})
+	}
+}
+
+func TestContactNameLookupKeepsEgressAndIdentifiersDropIt(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	contactsDir := filepath.Join(dir, "contacts")
+	setEnv(t, settingEnv(contacts.DirKey), contactsDir)
+	if err := os.MkdirAll(filepath.Join(contactsDir, "card"), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(contactsDir, "card", "alice.vcf"), []byte(aliceCard), 0o666); err != nil {
+		t.Fatal(err)
+	}
+	start := warm(t, api)
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "contacts_lookup", map[string]any{"query": "Alice"})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("named")))
+	if ran := runApp(t, "agent", "run", "--text", "who is Alice"); ran.code != cli.ExitOK {
+		t.Fatalf("name lookup run: %d %s", ran.code, ran.stderr)
+	}
+	requests := api.Requests()[start:]
+	if len(requests) != 2 {
+		t.Fatalf("%d model requests, want 2", len(requests))
+	}
+	if !slices.Contains(requestTools(t, requests[0]), "web_fetch") {
+		t.Fatalf("web_fetch not offered before the lookup: %v", requestTools(t, requests[0]))
+	}
+	if after := requestTools(t, requests[1]); !slices.Contains(after, "web_fetch") {
+		t.Errorf("a name lookup dropped web_fetch: %v", after)
+	}
+	content := fmt.Sprint(toolResultFor(t, requests[1], "c1")["content"])
+	if strings.Contains(content, "alice@example.com") {
+		t.Errorf("the default lookup returned an email: %s", content)
+	}
+	if !strings.Contains(content, "Alice Example") {
+		t.Errorf("the lookup result lacks the name: %s", content)
+	}
+	thread := latestThread(t, dir)
+	if marks := threadMarkSet(t, dir, thread); marks != 0 {
+		t.Errorf("thread marks after a name lookup = %d, want 0", marks)
+	}
+
+	start = len(api.Requests())
+	api.Push(
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("c2", "contacts_lookup", map[string]any{"query": "Alice", "include": []any{"emails"}})),
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": "https://example.com/"})),
+		anthropictest.Reply("end_turn", anthropictest.Text("done")),
+	)
+	if ran := runApp(t, "agent", "run", "--thread", fmt.Sprint(thread), "--text", "and her email?"); ran.code != cli.ExitOK {
+		t.Fatalf("identifier lookup run: %d %s", ran.code, ran.stderr)
+	}
+	requests = api.Requests()[start:]
+	if len(requests) != 3 {
+		t.Fatalf("%d model requests, want 3", len(requests))
+	}
+	if !slices.Contains(requestTools(t, requests[0]), "web_fetch") {
+		t.Fatalf("the second run did not start with web_fetch: %v", requestTools(t, requests[0]))
+	}
+	content = fmt.Sprint(toolResultFor(t, requests[1], "c2")["content"])
+	if !strings.Contains(content, "alice@example.com") {
+		t.Errorf("the include lookup did not return the email: %s", content)
+	}
+	refusal := toolResultFor(t, requests[2], "f1")
+	if refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "web_fetch is no longer available") {
+		t.Errorf("web_fetch after an identifier lookup returned %v, want a refusal", refusal)
+	}
+	if marks := threadMarkSet(t, dir, thread); marks != int64(tool.PII) {
+		t.Errorf("thread marks after an identifier lookup = %d, want pii", marks)
 	}
 }
