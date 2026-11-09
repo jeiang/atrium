@@ -3,9 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -14,11 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/settings"
 )
-
-type ntfyPost struct {
-	Title   string `json:"title"`
-	Message string `json:"message"`
-}
 
 func runAppContext(t *testing.T, f *fixture, ctx context.Context, args ...string) appRun {
 	t.Helper()
@@ -30,15 +23,7 @@ func runAppContext(t *testing.T, f *fixture, ctx context.Context, args ...string
 
 func TestDailyNudgesDigestPostsWithoutAModel(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
-	posts := make(chan ntfyPost, 4)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var p ntfyPost
-		if err := json.NewDecoder(r.Body).Decode(&p); err == nil {
-			posts <- p
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer srv.Close()
+	push, browser := pushRig(t, dir)
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
@@ -50,7 +35,7 @@ func TestDailyNudgesDigestPostsWithoutAModel(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	setEnv(t, settingEnv(notify.KeyURL), srv.URL)
+	browser.store(t, d)
 	exec("INSERT INTO proposals (id, kind, status, created_ts, title, fingerprint) VALUES (1, 'reminder', 'pending', 100, 'Call the dentist', 'fp1')")
 	today := time.Unix(int64(now), 0).UTC()
 	exec("INSERT INTO commitments (id, message_id, text, owner, due, status, created_ts) VALUES (1, 1, 'Send invoice', 'me', ?, 'open', 100)", today.AddDate(0, 0, -1).Format("2006-01-02"))
@@ -81,36 +66,22 @@ func TestDailyNudgesDigestPostsWithoutAModel(t *testing.T) {
 	exec("UPDATE jobs SET state = 'active', next_due = ?, lease_owner = NULL, lease_until = NULL WHERE name = 'daily-nudges'", now-1)
 	requests := len(api.Requests())
 	cancel, done = start()
-	var first ntfyPost
-	select {
-	case first = <-posts:
-	case <-time.After(15 * time.Second):
-		cancel()
-		ran := <-done
-		t.Fatalf("the digest never reached the fake ntfy server: exit %d stderr %s", ran.code, ran.stderr)
-	}
+	first := browser.decrypt(t, push.wait(t, 1).body)
 	cancel()
 	<-done
 	if len(api.Requests()) != requests {
 		t.Fatalf("the digest made a model call")
 	}
-	if !strings.Contains(first.Message, "Call the dentist") || !strings.Contains(first.Message, "Send invoice") {
-		t.Fatalf("digest does not list the items: %q", first.Message)
+	if !strings.Contains(fmt.Sprint(first["body"]), "Call the dentist") || !strings.Contains(fmt.Sprint(first["body"]), "Send invoice") {
+		t.Fatalf("digest does not list the items: %v", first)
 	}
 	exec("UPDATE ntfy_channels SET content = 'title' WHERE name = 'assistant'")
 	exec("UPDATE jobs SET state = 'active', next_due = ?, lease_owner = NULL, lease_until = NULL WHERE name = 'daily-nudges'", now)
 	cancel, done = start()
-	var second ntfyPost
-	select {
-	case second = <-posts:
-	case <-time.After(15 * time.Second):
-		cancel()
-		<-done
-		t.Fatal("the private digest never reached the fake ntfy server")
-	}
+	second := browser.decrypt(t, push.wait(t, 2).body)
 	cancel()
 	<-done
-	if strings.Contains(second.Message, "Call the dentist") || strings.Contains(second.Message, "Send invoice") {
-		t.Fatalf("private digest leaked titles: %q", second.Message)
+	if strings.Contains(fmt.Sprint(second), "Call the dentist") || strings.Contains(fmt.Sprint(second), "Send invoice") {
+		t.Fatalf("private digest leaked titles: %v", second)
 	}
 }

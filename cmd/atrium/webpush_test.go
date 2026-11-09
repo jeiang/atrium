@@ -27,8 +27,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations/transport"
+	"github.com/jeiang/atrium/internal/netguard"
 	"github.com/jeiang/atrium/internal/notify"
 )
 
@@ -42,16 +45,22 @@ type fakePush struct {
 	mu       sync.Mutex
 	status   int
 	received []pushRequest
+	arrived  chan pushRequest
 }
 
 func newFakePush(t *testing.T) *fakePush {
-	f := &fakePush{status: http.StatusCreated}
+	f := &fakePush{status: http.StatusCreated, arrived: make(chan pushRequest, 16)}
 	f.Server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		f.mu.Lock()
-		f.received = append(f.received, pushRequest{header: r.Header.Clone(), body: body})
+		req := pushRequest{header: r.Header.Clone(), body: body}
+		f.received = append(f.received, req)
 		status := f.status
 		f.mu.Unlock()
+		select {
+		case f.arrived <- req:
+		default:
+		}
 		w.WriteHeader(status)
 	}))
 	t.Cleanup(f.Close)
@@ -187,24 +196,8 @@ func checkVAPID(t *testing.T, header http.Header, publicKey, audience string) {
 }
 
 func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *testing.T) {
-	push := newFakePush(t)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	ca := filepath.Join(dir, "push-ca.pem")
-	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: push.Certificate().Raw}), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	setEnv(t, settingEnv(notify.KeyURL), "")
-	setEnv(t, settingEnv(notify.KeyPushSubject), "mailto:ops@example.test")
-	setEnv(t, settingEnv(transport.CAKey(notify.PushTransport)), ca)
-	restore := notify.UsePushAddresses(func(a netip.Addr) bool { return a.IsLoopback() })
-	t.Cleanup(restore)
-
-	key, err := ecdh.P256().GenerateKey(rand.Reader)
-	if err != nil {
-		t.Fatal(err)
-	}
-	browser := pushBrowser{key: key, secret: make([]byte, 16), endpoint: push.URL + "/push/device-1"}
-	_, _ = rand.Read(browser.secret)
+	push, browser := pushRig(t, dir)
 
 	base, logs := startServeLogged(t, dir)
 	jar, _ := cookiejar.New(nil)
@@ -270,24 +263,34 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 		t.Fatalf("resubscribe: %d, %d devices", code, devices())
 	}
 
-	if code, _ := post("/channels/assistant/content", url.Values{"content": {"full"}}); code != http.StatusOK {
-		t.Fatalf("content: %d", code)
+	payloadOf := func(n int) (pushRequest, map[string]any) {
+		t.Helper()
+		sent := push.wait(t, n)
+		return sent, browser.decrypt(t, sent.body)
 	}
-	if code, body := post("/channels/assistant/test", nil); code != http.StatusOK || !strings.Contains(body, "Test sent") {
-		t.Fatalf("channel test: %d\n%s", code, logs.String())
+	if ran := runApp(t, "live", "pause"); ran.code != 0 {
+		t.Fatalf("live pause: %d %s", ran.code, ran.stderr)
 	}
-	sent := push.last(t)
-	if sent.header.Get("Content-Encoding") != "aes128gcm" || sent.header.Get("TTL") == "" || sent.header.Get("Urgency") != "normal" {
+	sent, payload := payloadOf(1)
+	if sent.header.Get("Content-Encoding") != "aes128gcm" || sent.header.Get("TTL") == "" || sent.header.Get("Urgency") != "high" {
 		t.Errorf("push headers %v", sent.header)
 	}
 	checkVAPID(t, sent.header, publicKey, push.URL)
-	payload := browser.decrypt(t, sent.body)
-	if payload["title"] != "atrium test" || payload["body"] != "Test message for the assistant channel." || payload["url"] != "/settings/notifications" || len(payload) != 3 {
+	if payload["title"] != "atrium: mail writes paused" || payload["body"] != "Changed by the operator." || payload["url"] != "/settings/notifications" || len(payload) != 3 {
 		t.Errorf("payload %v", payload)
 	}
 	var delivered bool
 	if err := d.Read.QueryRow("SELECT delivered FROM notifications ORDER BY id DESC LIMIT 1").Scan(&delivered); err != nil || !delivered {
 		t.Errorf("inbox row delivered = %v, %v", delivered, err)
+	}
+	if code, _ := post("/channels/system/content", url.Values{"content": {"title"}}); code != http.StatusOK {
+		t.Fatalf("content: %d", code)
+	}
+	if ran := runApp(t, "live", "resume"); ran.code != 0 {
+		t.Fatalf("live resume: %d %s", ran.code, ran.stderr)
+	}
+	if _, payload := payloadOf(2); payload["title"] != "atrium" || payload["body"] != "Open atrium to read this notification." {
+		t.Errorf("title-only payload %v", payload)
 	}
 
 	if code, body := post("/push/test", nil); code != http.StatusOK || !strings.Contains(body, "Test sent") {
@@ -302,31 +305,46 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 	}
 
 	push.answer(http.StatusInternalServerError)
-	if code, body := post("/push/test", nil); code != http.StatusUnprocessableEntity || !strings.Contains(body, "web push 500") {
-		t.Fatalf("failing endpoint: %d", code)
+	for range notify.FailingAfter {
+		if code, body := post("/push/test", nil); code != http.StatusUnprocessableEntity || !strings.Contains(body, "web push 500") {
+			t.Fatalf("failing endpoint: %d", code)
+		}
 	}
 	var failures int
-	if err := d.Read.QueryRow("SELECT failure_count FROM push_subscriptions").Scan(&failures); err != nil || failures != 1 {
+	if err := d.Read.QueryRow("SELECT failure_count FROM push_subscriptions").Scan(&failures); err != nil || failures != notify.FailingAfter {
 		t.Errorf("failure_count = %d, %v", failures, err)
 	}
+	if page, _ := get(); !strings.Contains(page, "data-notify-failing") || !strings.Contains(page, "Push failing: Browser") {
+		t.Error("no failing banner after three failed pushes")
+	}
 
-	restore()
+	guarded := notify.UsePushAddresses(netguard.Public)
 	before := push.count()
 	if code, body := post("/push/test", nil); code != http.StatusUnprocessableEntity || !strings.Contains(body, "non-public address") || push.count() != before {
-		t.Fatalf("loopback endpoint without the test allowance: %d, %d requests", code, push.count()-before)
+		t.Fatalf("loopback endpoint under the real guard: %d, %d requests", code, push.count()-before)
 	}
-	t.Cleanup(notify.UsePushAddresses(func(a netip.Addr) bool { return a.IsLoopback() }))
+	guarded()
 
 	push.answer(http.StatusGone)
-	if code, _ := post("/channels/assistant/test", nil); code != http.StatusUnprocessableEntity {
-		t.Fatalf("gone endpoint: %d", code)
+	if ran := runApp(t, "live", "pause"); ran.code != 0 {
+		t.Fatalf("live pause: %d %s", ran.code, ran.stderr)
 	}
+	var failed int64
 	var failure string
-	if err := d.Read.QueryRow("SELECT COALESCE(error, '') FROM notifications ORDER BY id DESC LIMIT 1").Scan(&failure); err != nil || !strings.Contains(failure, "410") {
+	if err := d.Read.QueryRow("SELECT id, COALESCE(error, '') FROM notifications ORDER BY id DESC LIMIT 1").Scan(&failed, &failure); err != nil || !strings.Contains(failure, "410") {
 		t.Errorf("inbox error %q, %v", failure, err)
 	}
 	if n := devices(); n != 0 {
 		t.Fatalf("%d subscriptions after a 410, want 0", n)
+	}
+	push.answer(http.StatusCreated)
+	post("/push/subscriptions", browser.form())
+	get()
+	if code, _, _ := fetch(t, client, http.MethodPost, base+"/inbox/"+strconv.FormatInt(failed, 10)+"/resend", url.Values{}); code != http.StatusOK {
+		t.Fatalf("resend: %d", code)
+	}
+	if err := d.Read.QueryRow("SELECT delivered FROM notifications WHERE id = ?", failed).Scan(&delivered); err != nil || !delivered {
+		t.Errorf("resent row delivered = %v, %v", delivered, err)
 	}
 
 	push.answer(http.StatusCreated)
@@ -342,4 +360,49 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 	if code, _ := post("/push/unsubscribe", url.Values{"endpoint": {browser.endpoint}}); code != http.StatusOK || devices() != 0 {
 		t.Fatalf("unsubscribe: %d, %d devices", code, devices())
 	}
+}
+
+var allowLoopbackPush sync.Once
+
+func pushRig(t *testing.T, dir string) (*fakePush, pushBrowser) {
+	t.Helper()
+	push := newFakePush(t)
+	ca := filepath.Join(dir, "push-ca.pem")
+	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: push.Certificate().Raw}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, settingEnv(notify.KeyPushSubject), "mailto:ops@example.test")
+	setEnv(t, settingEnv(transport.CAKey(notify.PushTransport)), ca)
+	allowLoopbackPush.Do(func() { notify.UsePushAddresses(func(a netip.Addr) bool { return a.IsLoopback() }) })
+	key, err := ecdh.P256().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	browser := pushBrowser{key: key, secret: make([]byte, 16), endpoint: push.URL + "/push/device-1"}
+	_, _ = rand.Read(browser.secret)
+	return push, browser
+}
+
+func (b pushBrowser) store(t *testing.T, d *db.DB) {
+	t.Helper()
+	form := b.form()
+	if _, err := d.Write.Exec("INSERT INTO push_subscriptions (endpoint, p256dh, auth, label, created_ts) VALUES (?, ?, ?, 'Test device', 1)",
+		form.Get("endpoint"), form.Get("p256dh"), form.Get("auth")); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func (f *fakePush) wait(t *testing.T, n int) pushRequest {
+	t.Helper()
+	for deadline := time.Now().Add(15 * time.Second); time.Now().Before(deadline); time.Sleep(20 * time.Millisecond) {
+		f.mu.Lock()
+		if len(f.received) >= n {
+			got := f.received[n-1]
+			f.mu.Unlock()
+			return got
+		}
+		f.mu.Unlock()
+	}
+	t.Fatalf("%d pushes, want %d", f.count(), n)
+	return pushRequest{}
 }

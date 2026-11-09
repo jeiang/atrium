@@ -39,7 +39,7 @@ func Due(ctx context.Context, d *db.DB, env config.Env, now float64) (int, error
 		if body == "" {
 			body = fmt.Sprintf("Task #%d is due.", one.id)
 		}
-		result, err := notify.Send(ctx, d.Write, env, notify.Message{
+		result, err := notify.Send(ctx, d.Write, notify.Message{
 			Channel: notify.Assistant, Title: "atrium: reminder: " + one.title, Body: body,
 			Now: func() float64 { return now },
 		})

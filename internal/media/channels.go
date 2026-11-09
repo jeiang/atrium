@@ -375,11 +375,11 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, 
 			if settings.PublicURL != "" {
 				message.Click = settings.PublicURL + DownloadsPage
 			}
-			sent, err := notify.Send(ctx, q, env, message)
+			sent, err := notify.Send(ctx, q, message)
 			if err != nil {
-				result.Errors = append(result.Errors, "ntfy: "+err.Error())
-			} else if !sent.Delivered {
-				result.Errors = append(result.Errors, "ntfy: "+sent.Error)
+				result.Errors = append(result.Errors, "notify: "+err.Error())
+			} else if !sent.Delivered && sent.Error != notify.NoDevices {
+				result.Errors = append(result.Errors, "notify: "+sent.Error)
 			}
 		}
 		if _, err := settings.SelectFiles(ctx, qb, nil); err != nil {

@@ -5,13 +5,13 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/cookiejar"
-	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/proposals"
 
@@ -188,49 +188,26 @@ func contains(haystack, needle string) bool {
 	return len(needle) == 0 || len(haystack) >= len(needle) && (haystack == needle || contains(haystack[1:], needle) || haystack[:len(needle)] == needle)
 }
 
-type phoneNotice struct {
-	Title   string `json:"title"`
-	Message string `json:"message"`
-	Actions []struct {
-		Action string `json:"action"`
-		Label  string `json:"label"`
-		URL    string `json:"url"`
-		Method string `json:"method"`
-	} `json:"actions"`
-}
-
 func TestPhoneEligibleProposalCreationNotifiesWithActionButtons(t *testing.T) {
 	dir := t.TempDir()
-	notices := make(chan phoneNotice, 1)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var n phoneNotice
-		if err := json.NewDecoder(r.Body).Decode(&n); err == nil {
-			select {
-			case notices <- n:
-			default:
-			}
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer srv.Close()
-	setEnv(t, settingEnv(notify.KeyURL), srv.URL)
+	push, browser := pushRig(t, dir)
 	_, _, stop := startServeStoppable(t, dir)
 	defer stop()
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	browser.store(t, d)
 	reg := settings.New()
 	st := config.NewState(reg)
 	ctx := config.With(settings.With(audit.With(context.Background(), "test", audit.CLI), reg), st)
 	if err := notify.EnsureChannels(ctx, d.Write); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Write.Exec("UPDATE ntfy_channels SET content = 'full' WHERE name = 'assistant'"); err != nil {
-		t.Fatal(err)
-	}
 	if err := reg.Set(ctx, d.Write, policy.EnabledKey, "true"); err != nil {
 		t.Fatal(err)
 	}
-	if err := reg.Set(ctx, d.Write, notify.KeyURL, srv.URL); err != nil {
-		t.Fatal(err)
+	for key, value := range map[string]string{notify.KeyPushSubject: "mailto:ops@example.test", transport.CAKey(notify.PushTransport): filepath.Join(dir, "push-ca.pem")} {
+		if err := reg.Set(ctx, d.Write, key, value); err != nil {
+			t.Fatal(err)
+		}
 	}
 	now := float64(time.Now().Unix())
 	if proposals.OnCreate == nil {
@@ -239,24 +216,33 @@ func TestPhoneEligibleProposalCreationNotifiesWithActionButtons(t *testing.T) {
 	if _, _, err := proposals.Create(ctx, d, "reminder", nil, "Call the dentist", map[string]any{}, map[string]any{}, "fp-notify", now); err != nil {
 		t.Fatal(err)
 	}
-	select {
-	case n := <-notices:
-		if len(n.Actions) != 2 {
-			t.Fatalf("actions = %#v", n.Actions)
+	var n struct {
+		Body    string `json:"body"`
+		Actions []struct {
+			Action string `json:"action"`
+			Title  string `json:"title"`
+			URL    string `json:"url"`
+		} `json:"actions"`
+	}
+	waitFor(t, func() bool {
+		var failure string
+		_ = d.Read.QueryRow("SELECT COALESCE(error, '') FROM notifications WHERE title = 'atrium: reminder proposal' ORDER BY id DESC LIMIT 1").Scan(&failure)
+		if failure != "" {
+			t.Fatalf("phone notification not delivered: %s", failure)
 		}
-		if n.Actions[0].Label != "Approve" || n.Actions[1].Label != "Dismiss" {
-			t.Fatalf("action labels = %#v", n.Actions)
-		}
-		if !strings.HasPrefix(n.Actions[0].URL, "/actions/") || n.Actions[0].Method != "POST" {
-			t.Fatalf("approve action = %#v", n.Actions[0])
-		}
-		if strings.Contains(n.Message, "Call the dentist") {
-			t.Fatalf("notification leaked the mail subject: %q", n.Message)
-		}
-		if !strings.Contains(n.Message, "Proposal #") {
-			t.Fatalf("notification body = %q", n.Message)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("no phone notification was posted")
+		return push.count() > 0
+	})
+	raw, err := json.Marshal(browser.decrypt(t, push.wait(t, 1).body))
+	if err != nil || json.Unmarshal(raw, &n) != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	if len(n.Actions) != 2 || n.Actions[0].Title != "Approve" || n.Actions[1].Title != "Dismiss" {
+		t.Fatalf("actions = %#v", n.Actions)
+	}
+	if !strings.HasPrefix(n.Actions[0].URL, "/actions/") || n.Actions[0].Action == "" {
+		t.Fatalf("approve action = %#v", n.Actions[0])
+	}
+	if strings.Contains(n.Body, "Call the dentist") || !strings.Contains(n.Body, "Proposal #") {
+		t.Fatalf("notification body = %q", n.Body)
 	}
 }

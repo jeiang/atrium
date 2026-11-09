@@ -9,7 +9,18 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/integrations"
 )
+
+func init() {
+	integrations.SetNotifier(func(ctx context.Context, d *db.DB, env config.Env, title, body string) error {
+		if !Enabled(ctx) {
+			return nil
+		}
+		_, err := Send(ctx, d.Write, Message{Channel: System, Priority: 4, Title: title, Body: body})
+		return err
+	})
+}
 
 func PauseChanged(ctx context.Context, d *db.DB, env config.Env, paused bool) error {
 	if !Enabled(ctx) {
@@ -19,7 +30,7 @@ func PauseChanged(ctx context.Context, d *db.DB, env config.Env, paused bool) er
 	if paused {
 		title = "atrium: mail writes paused"
 	}
-	_, err := Send(ctx, d.Write, env, Message{Channel: System, Priority: 4, Title: title, Body: "Changed by the operator."})
+	_, err := Send(ctx, d.Write, Message{Channel: System, Priority: 4, Title: title, Body: "Changed by the operator."})
 	return err
 }
 
@@ -47,7 +58,7 @@ func noticeBudget(ctx context.Context, d *db.DB, env config.Env, now float64) er
 			continue
 		}
 		body := fmt.Sprintf("$%s of $%s spent this month.", strconv.FormatFloat(status.SpentUSD, 'f', 2, 64), strconv.FormatFloat(status.BudgetUSD, 'f', 2, 64))
-		if _, err := Send(ctx, d.Write, env, Message{Channel: System, Title: title, Body: body, Now: func() float64 { return now }}); err != nil {
+		if _, err := Send(ctx, d.Write, Message{Channel: System, Title: title, Body: body, Now: func() float64 { return now }}); err != nil {
 			return err
 		}
 	}

@@ -3,17 +3,14 @@
 package main
 
 import (
-	"io"
+	"fmt"
 	"net/http"
-	"net/http/httptest"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/passrun"
 )
@@ -55,31 +52,13 @@ func TestPassesRecordOutcomesAndPruneByRetention(t *testing.T) {
 
 func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 	t.Parallel()
-	var mu sync.Mutex
-	var notices []string
-	ntfy := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodGet && r.URL.Path != "/v1/health" {
-			w.WriteHeader(http.StatusForbidden)
-			return
-		}
-		if r.Method == http.MethodPost {
-			raw, _ := io.ReadAll(r.Body)
-			mu.Lock()
-			notices = append(notices, string(raw))
-			mu.Unlock()
-		}
-	}))
-	t.Cleanup(ntfy.Close)
-	count := func() int {
-		mu.Lock()
-		defer mu.Unlock()
-		return len(notices)
-	}
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(notify.KeyURL), ntfy.URL)
+	push, browser := pushRig(t, dir)
+	count := push.count
 	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", got.code, got.stderr)
 	}
+	browser.store(t, mustConnect(t, filepath.Join(dir, "atrium.db")))
 	if got := runApp(t, "backup", filepath.Join(dir, "missing", "x.backup")); got.code == cli.ExitOK {
 		t.Fatal("failing backup succeeded")
 	}
@@ -98,8 +77,11 @@ func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 		for count() == 0 && time.Now().Before(deadline) {
 			time.Sleep(20 * time.Millisecond)
 		}
-		if count() != 1 || !strings.Contains(notices[0], "backup is stale") {
-			t.Fatalf("notices %v, want one stale notice for backup", notices)
+		if count() != 1 {
+			t.Fatalf("%d notices, want one stale notice for backup", count())
+		}
+		if notice := browser.decrypt(t, push.wait(t, 1).body); !strings.Contains(fmt.Sprint(notice["title"]), "backup is stale") {
+			t.Fatalf("notice %v, want the backup stale notice", notice)
 		}
 	})
 

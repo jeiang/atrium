@@ -184,22 +184,10 @@ func init() {
 		err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM notifications WHERE delivered = 0").Scan(&n)
 		return one(float64(n)), err
 	}))
-	Register(gauge("atrium_notification_channel_failures", "Consecutive delivery failures reported by each notification channel.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
-		rows, err := q.QueryContext(ctx, "SELECT name, failures FROM ntfy_channels ORDER BY name")
-		if err != nil {
-			return nil, err
-		}
-		defer func() { _ = rows.Close() }()
-		var out []Sample
-		for rows.Next() {
-			var name string
-			var failures int64
-			if err := rows.Scan(&name, &failures); err != nil {
-				return nil, err
-			}
-			out = append(out, Sample{Labels: [][2]string{{"channel", name}}, Value: float64(failures)})
-		}
-		return out, rows.Err()
+	Register(gauge("atrium_notification_push_failing_devices", "Push devices whose last three or more deliveries failed.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
+		var n int64
+		err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM push_subscriptions WHERE failure_count >= 3").Scan(&n)
+		return one(float64(n)), err
 	}))
 	Register(gauge("atrium_mail_sync_last_success_timestamp_seconds", "Finish time of the last successful mail sync, by account.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
 		rows, err := q.QueryContext(ctx, "SELECT name, last_sync_at FROM accounts WHERE last_sync_at IS NOT NULL ORDER BY name")

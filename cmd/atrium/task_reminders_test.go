@@ -3,9 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
-	"encoding/json"
-	"net/http"
-	"net/http/httptest"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -16,11 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 )
 
-type reminderPost struct {
-	Title   string `json:"title"`
-	Message string `json:"message"`
-}
-
 func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	runAppContext := func(ctx context.Context, args ...string) appRun {
@@ -29,20 +22,12 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 		code := f.app.Run(ctx, args, &out, &errs)
 		return appRun{code, out.String(), errs.String()}
 	}
-	posts := make(chan reminderPost, 4)
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var p reminderPost
-		if err := json.NewDecoder(r.Body).Decode(&p); err == nil {
-			posts <- p
-		}
-		w.WriteHeader(http.StatusNoContent)
-	}))
-	defer srv.Close()
-	setEnv(t, settingEnv(notify.KeyURL), srv.URL)
+	push, browser := pushRig(t, dir)
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	d := mustConnect(t, dir+"/atrium.db")
+	browser.store(t, d)
 	ctx := config.With(settings.With(context.Background(), f.settings), f.state)
 	if err := notify.EnsureChannels(ctx, d.Write); err != nil {
 		t.Fatal(err)
@@ -85,30 +70,30 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	runOnce := func() reminderPost {
+	runOnce := func() map[string]any {
 		t.Helper()
 		cancel, done := start()
 		select {
-		case p := <-posts:
+		case p := <-push.arrived:
 			time.Sleep(300 * time.Millisecond)
 			cancel()
 			<-done
-			return p
+			return browser.decrypt(t, p.body)
 		case <-time.After(5 * time.Second):
 			cancel()
 			ran := <-done
 			t.Fatalf("no reminder was posted: exit %d stderr %s", ran.code, ran.stderr)
-			return reminderPost{}
+			return nil
 		}
 	}
 	runNone := func() {
 		t.Helper()
 		cancel, done := start()
 		select {
-		case p := <-posts:
+		case p := <-push.arrived:
 			cancel()
 			<-done
-			t.Fatalf("unexpected reminder: %#v", p)
+			t.Fatalf("unexpected reminder: %v", browser.decrypt(t, p.body))
 		case <-time.After(2 * time.Second):
 		}
 		cancel()
@@ -116,8 +101,8 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 	}
 	insert("Pay the rent", now-1, "open")
 	due()
-	if p := runOnce(); !strings.Contains(p.Title, "Pay the rent") {
-		t.Fatalf("reminder title = %q", p.Title)
+	if p := runOnce(); !strings.Contains(fmt.Sprint(p["title"]), "Pay the rent") {
+		t.Fatalf("reminder payload = %v", p)
 	}
 	due()
 	runNone()

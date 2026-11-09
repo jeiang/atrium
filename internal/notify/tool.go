@@ -63,7 +63,7 @@ func handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	} else if ok {
 		m.ThreadLink = &link
 	}
-	sent, err := Send(ctx, tc.DB.Write, tc.Env, m)
+	sent, err := Send(ctx, tc.DB.Write, m)
 	if err != nil {
 		return nil, err
 	}

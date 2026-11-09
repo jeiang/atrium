@@ -376,15 +376,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `notify_nightly_cap` | int | `1` | advanced | `ATRIUM_NOTIFY_NOTIFY_NIGHTLY_CAP` |
 | `notify_per_run_cap` | int | `3` | advanced | `ATRIUM_NOTIFY_NOTIFY_PER_RUN_CAP` |
 | `notify_title_chars` | int | `120` | advanced | `ATRIUM_NOTIFY_NOTIFY_TITLE_CHARS` |
-| `ntfy_ca_file` | string | none | advanced | `ATRIUM_NOTIFY_NTFY_CA_FILE` |
-| `ntfy_media_topic` | string | none | ui | `ATRIUM_NOTIFY_NTFY_MEDIA_TOPIC` |
-| `ntfy_proxy` | string | none | advanced | `ATRIUM_NOTIFY_NTFY_PROXY` |
-| `ntfy_timeout_seconds` | int | `10` | advanced | `ATRIUM_NOTIFY_NTFY_TIMEOUT_SECONDS` |
-| `ntfy_token_assistant` | string | none | secret | `ATRIUM_NOTIFY_NTFY_TOKEN_ASSISTANT` |
-| `ntfy_token_media` | string | none | secret | `ATRIUM_NOTIFY_NTFY_TOKEN_MEDIA` |
-| `ntfy_token_system` | string | none | secret | `ATRIUM_NOTIFY_NTFY_TOKEN_SYSTEM` |
-| `ntfy_topic` | string | none | ui | `ATRIUM_NOTIFY_NTFY_TOPIC` |
-| `ntfy_url` | string | none | ui | `ATRIUM_NOTIFY_NTFY_URL` |
 | `webpush_ca_file` | string | none | advanced | `ATRIUM_NOTIFY_WEBPUSH_CA_FILE` |
 | `webpush_subject` | string | none | ui | `ATRIUM_NOTIFY_WEBPUSH_SUBJECT` |
 | `webpush_vapid_private_key` | string | none | secret | `ATRIUM_NOTIFY_WEBPUSH_VAPID_PRIVATE_KEY` |

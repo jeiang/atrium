@@ -20,7 +20,7 @@ func Send(ctx context.Context, q db.Querier, env config.Env, now float64, source
 		return notify.Sent{}, false, nil
 	}
 	title, body := Text(result)
-	sent, err := notify.Send(ctx, q, env, notify.Message{
+	sent, err := notify.Send(ctx, q, notify.Message{
 		Channel: notify.Assistant, Title: title, Body: body,
 		Now: func() float64 { return now },
 	})

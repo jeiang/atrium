@@ -268,7 +268,7 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 		{module.Notion, "notion_token is not set"},
 		{module.Media, "media_root is not set"},
 		{module.Assistant, "anthropic_api_key is not set"},
-		{module.Notifications, "ntfy_url is not set"},
+		{module.Notifications, "webpush_subject is not set"},
 		{module.Contacts, "contacts_dir is not set"},
 		{module.Grafana, "grafana_url and grafana_viewer_token"},
 		{module.Grafana, "needs assistant"},

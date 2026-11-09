@@ -469,3 +469,14 @@ func pushClient(ctx context.Context, q db.Querier) (*http.Client, error) {
 	t.ForceAttemptHTTP2 = true
 	return client, nil
 }
+
+func failingDevices(ctx context.Context, q db.Querier) ([]string, error) {
+	rows, err := q.QueryContext(ctx, "SELECT label FROM push_subscriptions WHERE failure_count >= ? ORDER BY id", FailingAfter)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (string, error) {
+		var label string
+		return label, r.Scan(&label)
+	})
+}

@@ -3092,64 +3092,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "ntfy_ca_file": {
-          "type": "string"
-        },
-        "ntfy_ca_file_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "ntfy_media_topic": {
-          "type": "string"
-        },
-        "ntfy_media_topic_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "ntfy_proxy": {
-          "type": "string"
-        },
-        "ntfy_proxy_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "ntfy_timeout_seconds": {
-          "default": 10,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "ntfy_timeout_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "ntfy_token_assistant_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "ntfy_token_media_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "ntfy_token_system_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "ntfy_topic": {
-          "type": "string"
-        },
-        "ntfy_topic_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "ntfy_url": {
-          "type": "string"
-        },
-        "ntfy_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "webpush_ca_file": {
           "type": "string"
         },
