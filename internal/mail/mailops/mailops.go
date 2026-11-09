@@ -87,6 +87,10 @@ func (e *PartialMove) Error() string {
 
 func (e *PartialMove) Unwrap() error { return e.Err }
 
+func (e *PartialMove) OutcomeUnknown() bool { return e.Unconfirmed }
+
+func (e *PartialMove) Partial() bool { return true }
+
 func Session(ctx context.Context, open mail.OpenFunc, q db.Querier, account string, fn func(mail.Client) error) error {
 	client, err := open(ctx, mail.OpenOptions{Account: account, Q: q})
 	if err != nil {

@@ -15,7 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
-	"github.com/jeiang/atrium/internal/proposals/scanutil"
+	"github.com/jeiang/atrium/internal/mail/scanutil"
 )
 
 var log = logx.Logger("atrium.backlog")

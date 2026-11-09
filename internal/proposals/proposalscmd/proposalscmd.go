@@ -17,11 +17,11 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
+	"github.com/jeiang/atrium/internal/mail/scans"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/handlers"
-	"github.com/jeiang/atrium/internal/proposals/scans"
 	"github.com/jeiang/atrium/internal/settings"
 )
 

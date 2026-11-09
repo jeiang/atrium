@@ -14,8 +14,8 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
+	"github.com/jeiang/atrium/internal/mail/scanutil"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/proposals/scanutil"
 )
 
 var log = logx.Logger("atrium.gmail_labels")

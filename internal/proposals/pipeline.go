@@ -17,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
@@ -485,12 +484,16 @@ func (p *Pipeline) claim(ctx context.Context, id int64, status string) (bool, er
 
 type unknownOutcome interface{ OutcomeUnknown() bool }
 
+type partialOutcome interface{ Partial() bool }
+
 func outcomeUnknown(err error) bool {
 	var unknown unknownOutcome
-	if errors.As(err, &unknown) {
-		return unknown.OutcomeUnknown()
-	}
-	return mailops.OutcomeUnknown(err)
+	return errors.As(err, &unknown) && unknown.OutcomeUnknown()
+}
+
+func outcomePartial(err error) bool {
+	var partial partialOutcome
+	return errors.As(err, &partial) && partial.Partial()
 }
 
 func (p *Pipeline) sync(ctx context.Context, prop *Proposal) *string {
@@ -672,7 +675,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64) (UndoResult, error) {
 			state := ledger.UndoFailed
 			if outcomeUnknown(err) {
 				state = ledger.UndoUnknown
-			} else if _, partial := errors.AsType[*mailops.PartialMove](err); partial {
+			} else if outcomePartial(err) {
 				state = ledger.UndoPartial
 			}
 			text := err.Error()
