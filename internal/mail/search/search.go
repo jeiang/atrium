@@ -9,21 +9,13 @@ import (
 	"slices"
 	"strings"
 
-	"regexp"
-
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/textsearch"
 	"github.com/jeiang/atrium/internal/timex"
-)
-
-const (
-	RRFK          = 60
-	MaxTerms      = 12
-	SnippetTokens = 24
-	start, end    = "\x02", "\x03"
 )
 
 type limits struct {
@@ -39,83 +31,10 @@ func readLimits(ctx context.Context, q Querier) (limits, error) {
 	return l, r.Err()
 }
 
-var (
-	tokenRe = regexp.MustCompile(`"([^"]*)"|([^\W_]+)`)
-	wordRe  = regexp.MustCompile(`[^\W_]+`)
-)
-
 const baseSelect = "SELECT m.id, m.account, COALESCE(c.folder, m.folder, m.location) AS folder, m.from_addr, m.from_name, " +
 	"m.subject, m.date_ts FROM messages m LEFT JOIN corrections c ON c.message_id = m.id"
 
 type Querier = db.Querier
-
-func FTSQuery(text string) (string, error) { return ftsQuery(text, MaxTerms) }
-
-func ftsQuery(text string, maxTerms int) (string, error) {
-	var terms []string
-	for _, loc := range tokenRe.FindAllStringSubmatchIndex(text, -1) {
-		if loc[4] >= 0 && text[loc[4]:loc[5]] != "" {
-			terms = append(terms, `"`+text[loc[4]:loc[5]]+`"*`)
-			continue
-		}
-		phrase := ""
-		if loc[2] >= 0 {
-			phrase = text[loc[2]:loc[3]]
-		}
-		words := wordRe.FindAllString(phrase, -1)
-		if len(words) > 0 {
-			terms = append(terms, `"`+strings.Join(words, " ")+`"`)
-		}
-	}
-	return strings.Join(terms[:min(len(terms), maxTerms)], " "), nil
-}
-
-type Scored struct {
-	ID    int64
-	Score float64
-}
-
-func RRF(rankings ...[]int64) []Scored { return rrfWith(RRFK, rankings...) }
-
-func rrfWith(k int, rankings ...[]int64) []Scored {
-	scores := map[int64]float64{}
-	best := map[int64]int{}
-	var order []int64
-	for _, ranking := range rankings {
-		for i, item := range ranking {
-			rank := i + 1
-			if _, seen := scores[item]; !seen {
-				order = append(order, item)
-				best[item] = rank
-			}
-			scores[item] = scores[item] + 1.0/float64(k+rank)
-			best[item] = min(best[item], rank)
-		}
-	}
-	out := make([]Scored, len(order))
-	for i, id := range order {
-		out[i] = Scored{id, scores[id]}
-	}
-	slices.SortFunc(out, func(a, b Scored) int {
-		if a.Score != b.Score {
-			if a.Score > b.Score {
-				return -1
-			}
-			return 1
-		}
-		if best[a.ID] != best[b.ID] {
-			return best[a.ID] - best[b.ID]
-		}
-		switch {
-		case a.ID < b.ID:
-			return -1
-		case a.ID > b.ID:
-			return 1
-		}
-		return 0
-	})
-	return out
-}
 
 type Filters struct {
 	Account       *string  `json:"account"`
@@ -186,26 +105,6 @@ func filterSQL(f Filters) (string, []any) {
 	return strings.Join(clauses, " AND "), params
 }
 
-type Part struct {
-	Text        string
-	Highlighted bool
-}
-
-func SnippetParts(marked string) []Part {
-	parts := []Part{}
-	for _, chunk := range strings.Split(marked, start) {
-		if highlighted, plain, ok := strings.Cut(chunk, end); ok {
-			parts = append(parts, Part{highlighted, true})
-			if plain != "" {
-				parts = append(parts, Part{plain, false})
-			}
-		} else if chunk != "" {
-			parts = append(parts, Part{chunk, false})
-		}
-	}
-	return parts
-}
-
 type lexicalHit struct {
 	id      int64
 	snippet string
@@ -214,7 +113,7 @@ type lexicalHit struct {
 func lexical(ctx context.Context, q Querier, match string, f Filters, limit, snippetTokens int) ([]lexicalHit, error) {
 	where, params := filterSQL(f)
 	rows, err := q.QueryContext(ctx,
-		fmt.Sprintf("SELECT m.id, snippet(message_fts, 2, '%s', '%s', '…', %d) AS snip ", start, end, snippetTokens)+
+		fmt.Sprintf("SELECT m.id, snippet(message_fts, 2, '%s', '%s', '…', %d) AS snip ", textsearch.MarkStart, textsearch.MarkEnd, snippetTokens)+
 			"FROM message_fts JOIN messages m ON m.id = message_fts.rowid "+
 			"LEFT JOIN corrections c ON c.message_id = m.id WHERE message_fts MATCH ? AND "+where+
 			" ORDER BY bm25(message_fts, 5.0, 2.0, 1.0) LIMIT ?",
@@ -378,12 +277,12 @@ type Hit struct {
 }
 
 func newHit(info Info, head string, marked *string) Hit {
-	parts := []Part{}
+	parts := []textsearch.Part{}
 	switch {
 	case marked != nil && *marked != "":
-		parts = SnippetParts(*marked)
+		parts = textsearch.SnippetParts(*marked)
 	case head != "":
-		parts = []Part{{head, false}}
+		parts = []textsearch.Part{{Text: head}}
 	}
 	var snippet strings.Builder
 	for _, p := range parts {
@@ -447,7 +346,7 @@ func Search(ctx context.Context, q Querier, req Query, embedTexts embed.TextsFun
 		hits, err := recent(ctx, q, f, limit, lim.snippetChars)
 		return Result{Hits: hits}, err
 	}
-	match, err := ftsQuery(query, lim.maxTerms)
+	match, err := textsearch.FTSQueryTerms(query, lim.maxTerms)
 	if err != nil {
 		return Result{}, err
 	}
@@ -481,7 +380,7 @@ func Search(ctx context.Context, q Querier, req Query, embedTexts embed.TextsFun
 		lexIDs[i] = h.id
 		marked[h.id] = h.snippet
 	}
-	fused := rrfWith(lim.rrfK, lexIDs, sem)
+	fused := textsearch.RRFWith(lim.rrfK, lexIDs, sem)
 	fused = fused[:min(len(fused), max(limit, 0))]
 	fusedIDs := make([]int64, len(fused))
 	for i, s := range fused {

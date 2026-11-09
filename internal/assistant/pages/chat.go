@@ -16,7 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/search"
+	"github.com/jeiang/atrium/internal/textsearch"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -34,7 +34,7 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string) 
 	match := ""
 	if q != "" {
 		var err error
-		match, err = search.FTSQuery(q)
+		match, err = textsearch.FTSQuery(q)
 		check(err)
 	}
 	limit, err := config.From(r.Context()).Limit(r.Context(), p.deps.DB.Read, config.KeyChatThreadLimit)

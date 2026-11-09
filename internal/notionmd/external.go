@@ -1,11 +1,14 @@
-package notion
+package notionmd
 
 import (
 	"regexp"
 	"strings"
 )
 
-var mediaSrcRe = regexp.MustCompile(`(?is)<(?:img|image|audio|video|file|pdf|embed|iframe)\b[^>]*?\bsrc="([^"]*)"`)
+var (
+	mediaSrcRe = regexp.MustCompile(`(?is)<(?:img|image|audio|video|file|pdf|embed|iframe)\b[^>]*?\bsrc="([^"]*)"`)
+	schemeRe   = regexp.MustCompile(`(?i)^[a-z][a-z0-9+.-]*://`)
+)
 
 func ExternalURLs(markdown string) ([]string, error) {
 	var found []string
@@ -27,7 +30,7 @@ func ExternalURLs(markdown string) ([]string, error) {
 	out := []string{}
 	for _, u := range found {
 		u = strings.Trim(u, "<>")
-		if !wikiURLRe.MatchString(u) {
+		if !schemeRe.MatchString(u) {
 			continue
 		}
 		dup := false

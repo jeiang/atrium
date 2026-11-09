@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
@@ -51,7 +50,7 @@ func local(ts float64, loc *time.Location) time.Time {
 }
 
 func ReminderTime(due, tz string, hour int, now float64) (float64, error) {
-	loc, err := scheduler.Zone(tz)
+	loc, err := config.Zone(tz)
 	if err != nil {
 		return 0, err
 	}
@@ -72,7 +71,7 @@ func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, e
 	if tz == "" {
 		tz = config.From(ctx).TZName(r.env())
 	}
-	loc, err := scheduler.Zone(tz)
+	loc, err := config.Zone(tz)
 	if err != nil {
 		return 0, err
 	}

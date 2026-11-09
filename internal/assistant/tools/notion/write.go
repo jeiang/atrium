@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notionid"
+	"github.com/jeiang/atrium/internal/notionmd"
 )
 
 const (
@@ -58,7 +59,7 @@ func checkMarkdown(ctx context.Context, tc *tool.Context, markdown string) error
 	if len([]rune(markdown)) > maxMarkdown {
 		return tool.Error("markdown is limited to " + strconv.Itoa(maxMarkdown) + " characters")
 	}
-	urls, err := notion.ExternalURLs(markdown)
+	urls, err := notionmd.ExternalURLs(markdown)
 	if err != nil {
 		return err
 	}

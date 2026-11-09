@@ -17,8 +17,8 @@ import (
 
 	"regexp"
 
-	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notionid"
+	"github.com/jeiang/atrium/internal/notionmd"
 	"github.com/jeiang/atrium/internal/urlx"
 )
 
@@ -72,7 +72,7 @@ func Markdown(text string) template.HTML { return MarkdownWith(text, nil) }
 
 func MarkdownWith(text string, pages map[string]string) template.HTML {
 	var b bytes.Buffer
-	if err := renderer.Convert([]byte(notion.Commonmark(text, pages)), &b); err != nil {
+	if err := renderer.Convert([]byte(notionmd.Commonmark(text, pages)), &b); err != nil {
 		return ""
 	}
 	cleaned := strings.ReplaceAll(policy.Sanitize(b.String()), `rel="noreferrer"`, `rel="noopener noreferrer"`)

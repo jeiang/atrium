@@ -19,7 +19,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/accounts"
 )
 
 const (
@@ -34,7 +33,7 @@ var errNotConnected = errors.New("IMAP client is not connected")
 
 type conn struct {
 	user, password string
-	method         accounts.Method
+	method         config.AuthMethod
 	token          func(context.Context) (string, error)
 	invalidate     func()
 	addr           string
@@ -68,7 +67,7 @@ func New(host, user, password string) *conn {
 // auth failure can retry once with a fresh one.
 func NewXOAUTH2(host, user string, token func(context.Context) (string, error), invalidate func()) *conn {
 	c := newConn(host, user, "")
-	c.method = accounts.XOAUTH2
+	c.method = config.AuthXOAUTH2
 	c.token = token
 	c.invalidate = invalidate
 	return c
@@ -175,7 +174,7 @@ func (c *conn) Connect(ctx context.Context) error {
 	defer c.mu.Unlock()
 	c.shutdown()
 	if err := c.connect(ctx); err != nil {
-		if c.method != accounts.XOAUTH2 {
+		if c.method != config.AuthXOAUTH2 {
 			c.shutdown()
 			return err
 		}
@@ -229,7 +228,7 @@ func (c *conn) login(ctx context.Context) error {
 		return pyError("server not IMAP4 compliant")
 	}
 	args := []string{c.user}
-	if c.method != accounts.XOAUTH2 {
+	if c.method != config.AuthXOAUTH2 {
 		args = append(args, c.password)
 	}
 	for _, arg := range args {
@@ -238,7 +237,7 @@ func (c *conn) login(ctx context.Context) error {
 		}
 	}
 	if c.cl.State() == imap.ConnStateNotAuthenticated {
-		if c.method == accounts.XOAUTH2 {
+		if c.method == config.AuthXOAUTH2 {
 			if err := c.authenticate(ctx); err != nil {
 				return err
 			}

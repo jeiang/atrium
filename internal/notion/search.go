@@ -13,8 +13,9 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/mail/search"
 	"github.com/jeiang/atrium/internal/notionid"
+	"github.com/jeiang/atrium/internal/notionmd"
+	"github.com/jeiang/atrium/internal/textsearch"
 )
 
 const Account = "notion"
@@ -177,7 +178,7 @@ type lexicalHit struct {
 
 func lexical(ctx context.Context, q Querier, match string, includePrivate bool, limit int) ([]lexicalHit, error) {
 	rows, err := q.QueryContext(ctx,
-		fmt.Sprintf("SELECT p.rid, snippet(notion_fts, 2, '%s', '%s', '…', %d) AS snip ", markStart, markEnd, search.SnippetTokens)+
+		fmt.Sprintf("SELECT p.rid, snippet(notion_fts, 2, '%s', '%s', '…', %d) AS snip ", textsearch.MarkStart, textsearch.MarkEnd, textsearch.SnippetTokens)+
 			"FROM notion_fts JOIN notion_pages p ON p.rid = notion_fts.rowid "+
 			"WHERE notion_fts MATCH ? AND p.in_trash = 0 AND (? = 1 OR p.private = 0) "+
 			"ORDER BY bm25(notion_fts, 5.0, 2.0, 1.0) LIMIT ?",
@@ -296,28 +297,28 @@ func heads(ctx context.Context, q Querier, limits SearchLimits, rids []int64) (m
 		return nil, err
 	}
 	for _, h := range list {
-		out[h.rid] = clip(Plain(h.text, titles), limits.Snippet)
+		out[h.rid] = clip(notionmd.Plain(h.text, titles), limits.Snippet)
 	}
 	return out, nil
 }
 
 type Hit struct {
 	PageRef
-	Folder       string        `json:"folder"`
-	Score        *float64      `json:"score"`
-	LexicalRank  *int          `json:"lexical_rank"`
-	SemanticRank *int          `json:"semantic_rank"`
-	Snippet      string        `json:"snippet"`
-	SnippetParts []search.Part `json:"snippet_parts"`
+	Folder       string            `json:"folder"`
+	Score        *float64          `json:"score"`
+	LexicalRank  *int              `json:"lexical_rank"`
+	SemanticRank *int              `json:"semantic_rank"`
+	Snippet      string            `json:"snippet"`
+	SnippetParts []textsearch.Part `json:"snippet_parts"`
 }
 
 func newHit(info hitInfo, score *float64, lexRank, semRank *int, head string, marked *string) Hit {
-	parts := []search.Part{}
+	parts := []textsearch.Part{}
 	switch {
 	case marked != nil && *marked != "":
-		parts = search.SnippetParts(*marked)
+		parts = textsearch.SnippetParts(*marked)
 	case head != "":
-		parts = []search.Part{{Text: head}}
+		parts = []textsearch.Part{{Text: head}}
 	}
 	var snippet strings.Builder
 	for _, p := range parts {
@@ -363,7 +364,7 @@ type Listed struct {
 
 func ListPages(ctx context.Context, q Querier, query string, limit int) ([]Listed, error) {
 	query = strings.TrimSpace(query)
-	match, err := search.FTSQuery(query)
+	match, err := textsearch.FTSQuery(query)
 	if err != nil {
 		return nil, err
 	}
@@ -418,7 +419,7 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 		hits, err := recent(ctx, q, limits, includePrivate, limit)
 		return Result{Hits: hits}, err
 	}
-	match, err := search.FTSQuery(query)
+	match, err := textsearch.FTSQuery(query)
 	if err != nil {
 		return Result{}, err
 	}
@@ -472,10 +473,10 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 	}
 	marked := map[int64]string{}
 	for _, h := range lex {
-		marked[h.rid] = Plain(h.snippet, titles)
+		marked[h.rid] = notionmd.Plain(h.snippet, titles)
 	}
 	semRank := rank(sem)
-	fused := search.RRF(lexIDs, sem)
+	fused := textsearch.RRF(lexIDs, sem)
 	fused = fused[:min(len(fused), max(limit, 0))]
 	rids := make([]int64, len(fused))
 	for i, s := range fused {

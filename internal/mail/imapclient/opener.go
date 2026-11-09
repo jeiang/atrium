@@ -7,7 +7,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/accounts"
 	"github.com/jeiang/atrium/internal/mail/gmailauth"
 )
 
@@ -22,7 +21,7 @@ func Opener(_ config.Config) mail.OpenFunc {
 			return nil, err
 		}
 		_, password, ok := config.Credential(ctx, opts.Account)
-		if method != accounts.XOAUTH2 && !ok {
+		if method != config.AuthXOAUTH2 && !ok {
 			return nil, errors.New("missing credentials for " + opts.Account)
 		}
 		bodyCap := config.BodyCapBytes
@@ -34,7 +33,7 @@ func Opener(_ config.Config) mail.OpenFunc {
 			}
 		}
 		var conn mail.Conn
-		if method == accounts.XOAUTH2 {
+		if method == config.AuthXOAUTH2 {
 			c := NewXOAUTH2(spec.Host(), spec.Login, source.Token, source.Invalidate)
 			if err := c.Connect(ctx); err != nil {
 				c.Close()

@@ -17,7 +17,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-	mailaccounts "github.com/jeiang/atrium/internal/mail/accounts"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -31,7 +30,7 @@ type AccountSpec struct {
 	Login      string
 	Enabled    bool
 	Pinned     bool
-	AuthMethod mailaccounts.Method
+	AuthMethod AuthMethod
 }
 
 func (a AccountSpec) Host() string { return presets[a.Preset].host }
@@ -186,7 +185,7 @@ func (s *State) loadAccountsFromDB(ctx context.Context, q db.Querier, filePasswo
 		if err != nil {
 			return nil, nil, fmt.Errorf("config: stored mail account %q: %w", x.id, err)
 		}
-		if a.AuthMethod, err = mailaccounts.Parse(x.method); err != nil {
+		if a.AuthMethod, err = ParseAuthMethod(x.method); err != nil {
 			return nil, nil, fmt.Errorf("config: stored mail account %q: %w", x.id, err)
 		}
 		a.Pinned = x.pinned
@@ -241,7 +240,7 @@ func NewAccount(name, label, presetName, login string, enabled bool) (AccountSpe
 	if label == "" {
 		label = name
 	}
-	return AccountSpec{Name: name, Label: label, Preset: presetName, Login: strings.TrimSpace(login), Enabled: enabled, AuthMethod: mailaccounts.Password}, nil
+	return AccountSpec{Name: name, Label: label, Preset: presetName, Login: strings.TrimSpace(login), Enabled: enabled, AuthMethod: AuthPassword}, nil
 }
 
 type accountEntry struct {
