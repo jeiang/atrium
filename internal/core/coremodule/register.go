@@ -57,7 +57,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},
 			}},
 			{Module: mailpages.PauseModule},
-			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(mc.Env), Enabled: enabled}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Nav: []web.NavItem{
+			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(mc.Env), Enabled: enabled}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Recover: reviewpages.RecoverDrafts, Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
 				{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20},
 				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},

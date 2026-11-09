@@ -53,10 +53,15 @@ func runServe(t *testing.T, ctx context.Context, env config.Env, args ...string)
 	reg := settings.New()
 	app.Settings = reg
 	app.State = config.NewState(reg)
-	app.Add(ServeCommand(testBoot(env)))
+	app.Add(ServeCommand(testBoot(env), Page{Recover: recoverDrafts}))
 	var stdout, stderr bytes.Buffer
 	code := app.Run(ctx, append([]string{"serve"}, args...), &stdout, &stderr)
 	return code, stdout.String(), stderr.String()
+}
+
+func recoverDrafts(ctx context.Context, d *db.DB, cfg config.Config) error {
+	_, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx)
+	return err
 }
 
 func TestServeProxyNeedsAllowedHost(t *testing.T) {

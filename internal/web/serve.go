@@ -18,7 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/sdnotify"
 	"github.com/jeiang/atrium/internal/settings"
@@ -43,7 +42,9 @@ func recoverProposals(ctx context.Context, d *db.DB) error {
 	return err
 }
 
-func recoverEvery(ctx context.Context, d *db.DB, cfg config.Config) {
+type Recover func(context.Context, *db.DB, config.Config) error
+
+func recoverEvery(ctx context.Context, d *db.DB, cfg config.Config, recovers []Recover) {
 	t := time.NewTicker(recoverInterval)
 	defer t.Stop()
 	for {
@@ -57,8 +58,10 @@ func recoverEvery(ctx context.Context, d *db.DB, cfg config.Config) {
 			if err := recoverProposals(ctx, d); err != nil && ctx.Err() == nil {
 				log.Error("proposal recovery failed", logx.Err, err.Error())
 			}
-			if _, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx); err != nil && ctx.Err() == nil {
-				log.Error("draft recovery failed", logx.Err, err.Error())
+			for _, run := range recovers {
+				if err := run(ctx, d, cfg); err != nil && ctx.Err() == nil {
+					log.Error("recovery failed", logx.Err, err.Error())
+				}
 			}
 		}
 	}
@@ -74,6 +77,7 @@ type Page struct {
 	Home      string
 	Start     func(context.Context, *Deps) error
 	Nav       []tpl.NavItem
+	Recover   Recover
 }
 
 // Boot opens the application database and starts the modules that own it.
@@ -167,8 +171,16 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 	if _, err := a.state.Location(a.env); err != nil {
 		return fmt.Errorf("the tz setting is not a time zone: %w", err)
 	}
-	if _, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx); err != nil {
-		return err
+	var recovers []Recover
+	for _, p := range a.pages {
+		if p.Recover != nil {
+			recovers = append(recovers, p.Recover)
+		}
+	}
+	for _, run := range recovers {
+		if err := run(ctx, d, cfg); err != nil {
+			return err
+		}
 	}
 	if err := recoverProposals(ctx, d); err != nil {
 		return err
@@ -177,7 +189,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 	recovered := make(chan struct{})
 	go func() {
 		defer close(recovered)
-		recoverEvery(recovering, d, cfg)
+		recoverEvery(recovering, d, cfg, recovers)
 	}()
 	defer func() {
 		stopRecovering()

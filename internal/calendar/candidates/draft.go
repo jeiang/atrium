@@ -6,9 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/service"
-	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 const draftPrompt = "Scheduled task: turn queued mail into calendar event proposals. A local model flagged the mails below as " +
@@ -34,11 +32,13 @@ func (r Result) Dict() map[string]any {
 	return map[string]any{"candidates": r.Candidates, "run_id": run, "proposed": r.Proposed}
 }
 
-func DraftEventProposals(ctx context.Context, svc *service.Service, limit int, now func() float64) (Result, error) {
+type Run func(ctx context.Context, prompt string, now float64) (runID int64, done bool, err error)
+
+func DraftEventProposals(ctx context.Context, d *db.DB, run Run, limit int, now func() float64) (Result, error) {
 	if now == nil {
 		now = wallClock
 	}
-	items, err := Queued(ctx, svc.DB.Read, limit)
+	items, err := Queued(ctx, d.Read, limit)
 	if err != nil || len(items) == 0 {
 		return Result{}, err
 	}
@@ -48,13 +48,8 @@ func DraftEventProposals(ctx context.Context, svc *service.Service, limit int, n
 		ids[i] = item.MessageID
 		lines[i] = strconv.FormatInt(item.MessageID, 10) + " (calendar=" + string(defaultCalendar(ctx, item.Account)) + ")"
 	}
-	title := "Event candidates"
-	threadID, err := threads.Create(ctx, svc.DB.Write, now(), threads.Spec{Kind: threads.Cron, Title: &title})
-	if err != nil {
-		return Result{}, err
-	}
 	prompt := strings.NewReplacer("{ids}", strings.Join(lines, ", ")).Replace(draftPrompt)
-	runID, err := svc.RunOnce(ctx, threadID, prompt, service.Start{Kind: threads.Cron})
+	runID, done, err := run(ctx, prompt, now())
 	if err != nil {
 		return Result{}, err
 	}
@@ -62,19 +57,15 @@ func DraftEventProposals(ctx context.Context, svc *service.Service, limit int, n
 	if err != nil {
 		return Result{}, err
 	}
-	run, err := journal.GetRun(ctx, svc.DB.Read, runID)
-	if err != nil {
-		return Result{}, err
-	}
-	if run != nil && run.State == journal.Done {
-		if _, err := svc.DB.Write.ExecContext(ctx,
+	if done {
+		if _, err := d.Write.ExecContext(ctx,
 			"UPDATE event_candidates SET status = ?, ts = ? WHERE status = ? AND message_id IN (SELECT value FROM json_each(?))",
 			string(StatusReviewed), now(), string(StatusQueued), string(encoded)); err != nil {
 			return Result{}, err
 		}
 	}
 	var drafted int
-	if err := svc.DB.Read.QueryRowContext(ctx,
+	if err := d.Read.QueryRowContext(ctx,
 		"SELECT COUNT(*) FROM event_candidates WHERE status = ? AND message_id IN (SELECT value FROM json_each(?))",
 		string(StatusDrafted), string(encoded)).Scan(&drafted); err != nil {
 		return Result{}, err
