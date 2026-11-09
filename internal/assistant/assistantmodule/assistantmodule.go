@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	attentiontool "github.com/jeiang/atrium/internal/assistant/tools/attention"
 	filetools "github.com/jeiang/atrium/internal/assistant/tools/files"
+	kbtools "github.com/jeiang/atrium/internal/assistant/tools/kb"
 	memorytools "github.com/jeiang/atrium/internal/assistant/tools/memory"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
 	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
@@ -110,7 +111,7 @@ func addTools(r *registry.Registry) error {
 		askoperator.Tools(), attentiontool.Tools(), filetools.Tools(), memorytools.Tools(),
 		nightly.Tools(), webfetch.Tools(), recalltools.Tools(), plantools.Tools(),
 		profiletools.Tools(), proposetools.Tools(), scheduletools.Tools(), taskstools.Tools(),
-		weathertools.Tools(),
+		kbtools.Tools(), weathertools.Tools(),
 	} {
 		if err := r.Add(tools...); err != nil {
 			return err

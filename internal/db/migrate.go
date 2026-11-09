@@ -91,6 +91,70 @@ var migrations = []migration{
 		}
 		return nil
 	}},
+	{7, func(ctx context.Context, tx *sql.Tx) error {
+		for _, stmt := range []string{
+			"ALTER TABLE projects ADD COLUMN private INTEGER NOT NULL DEFAULT 0",
+			`CREATE TABLE IF NOT EXISTS kb_records (
+				id INTEGER PRIMARY KEY,
+				title TEXT NOT NULL,
+				aliases TEXT NOT NULL DEFAULT '[]',
+				body TEXT NOT NULL DEFAULT '',
+				scope TEXT NOT NULL CHECK (scope IN ('work', 'personal', 'ops')),
+				project_id INTEGER,
+				private INTEGER NOT NULL DEFAULT 0,
+				marks INTEGER NOT NULL DEFAULT 0,
+				writer TEXT NOT NULL CHECK (writer IN ('operator', 'chat', 'dreaming', 'worker', 'import')),
+				source_thread_id INTEGER,
+				source_seq INTEGER,
+				source_run_id INTEGER,
+				origin TEXT UNIQUE,
+				pinned INTEGER NOT NULL DEFAULT 0,
+				confirmed_at REAL,
+				retracted_at REAL,
+				expires_at REAL,
+				embedded INTEGER NOT NULL DEFAULT 0,
+				created_at REAL NOT NULL,
+				updated_at REAL NOT NULL
+			)`,
+			"CREATE INDEX IF NOT EXISTS kb_records_run ON kb_records (source_run_id) WHERE source_run_id IS NOT NULL",
+			"CREATE INDEX IF NOT EXISTS kb_records_project ON kb_records (project_id) WHERE project_id IS NOT NULL",
+			"CREATE INDEX IF NOT EXISTS kb_records_pending ON kb_records (embedded) WHERE embedded = 0",
+			"CREATE VIRTUAL TABLE IF NOT EXISTS kb_fts USING fts5(title, aliases, body)",
+			`CREATE TRIGGER IF NOT EXISTS kb_fts_insert AFTER INSERT ON kb_records BEGIN
+				INSERT INTO kb_fts (rowid, title, aliases, body) VALUES (new.id, new.title, new.aliases, new.body);
+			END`,
+			`CREATE TRIGGER IF NOT EXISTS kb_fts_update AFTER UPDATE OF title, aliases, body ON kb_records BEGIN
+				DELETE FROM kb_fts WHERE rowid = old.id;
+				INSERT INTO kb_fts (rowid, title, aliases, body) VALUES (new.id, new.title, new.aliases, new.body);
+			END`,
+			`CREATE TRIGGER IF NOT EXISTS kb_fts_delete AFTER DELETE ON kb_records BEGIN
+				DELETE FROM kb_fts WHERE rowid = old.id;
+			END`,
+		} {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
+				return err
+			}
+		}
+		rows, err := tx.QueryContext(ctx, "SELECT generation, dimension FROM embed_index ORDER BY generation")
+		if err != nil {
+			return err
+		}
+		gens, err := Collect(rows, func(r *sql.Rows) (struct{ gen, dim int64 }, error) {
+			var g struct{ gen, dim int64 }
+			err := r.Scan(&g.gen, &g.dim)
+			return g, err
+		})
+		if err != nil {
+			return err
+		}
+		for _, g := range gens {
+			if _, err := tx.ExecContext(ctx, fmt.Sprintf(
+				"CREATE VIRTUAL TABLE IF NOT EXISTS embed_kb_%d USING vec0(embedding FLOAT[%d] DISTANCE_METRIC=cosine)", g.gen, g.dim)); err != nil {
+				return err
+			}
+		}
+		return nil
+	}},
 }
 
 type ModuleMigration struct {

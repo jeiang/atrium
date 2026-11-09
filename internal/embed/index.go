@@ -33,6 +33,10 @@ func (i Index) NotionTable() string {
 	return fmt.Sprintf("embed_notion_%d", i.Generation)
 }
 
+func (i Index) KBTable() string {
+	return fmt.Sprintf("embed_kb_%d", i.Generation)
+}
+
 type rowQuerier interface {
 	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
 }
@@ -104,6 +108,7 @@ func (b *Build) Swap(ctx context.Context) (bool, error) {
 		for _, stmt := range []string{
 			"UPDATE messages SET embedded = 1 WHERE id IN (SELECT rowid FROM " + b.MessageTable() + ")",
 			"UPDATE notion_pages SET embedded = 1 WHERE rid IN (SELECT rowid FROM " + b.NotionTable() + ")",
+			"UPDATE kb_records SET embedded = 1 WHERE id IN (SELECT rowid FROM " + b.KBTable() + ")",
 		} {
 			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				return err
@@ -146,6 +151,22 @@ func DeleteNotion(ctx context.Context, q execer, rid int64) error {
 	return deleteNotion(ctx, q, rid, StateActive, StateBuilding)
 }
 
+func DeleteKB(ctx context.Context, q execer, id int64) error {
+	for _, state := range []string{StateActive, StateBuilding} {
+		i, ok, err := lookup(ctx, q, state)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		if _, err := q.ExecContext(ctx, "DELETE FROM "+i.KBTable()+" WHERE rowid = ?", id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func StaleNotion(ctx context.Context, q execer, rid int64) error {
 	return deleteNotion(ctx, q, rid, StateBuilding)
 }
@@ -175,6 +196,7 @@ func Create(ctx context.Context, d *db.DB, url, model string, dim int) (*Build, 
 		for _, stmt := range []string{
 			fmt.Sprintf("CREATE VIRTUAL TABLE %s USING vec0(account TEXT PARTITION KEY, embedding FLOAT[%d] DISTANCE_METRIC=cosine)", i.MessageTable(), dim),
 			fmt.Sprintf("CREATE VIRTUAL TABLE %s USING vec0(visibility TEXT PARTITION KEY, embedding FLOAT[%d] DISTANCE_METRIC=cosine)", i.NotionTable(), dim),
+			fmt.Sprintf("CREATE VIRTUAL TABLE %s USING vec0(embedding FLOAT[%d] DISTANCE_METRIC=cosine)", i.KBTable(), dim),
 		} {
 			if _, err := tx.ExecContext(ctx, stmt); err != nil {
 				return err
@@ -191,7 +213,7 @@ func Create(ctx context.Context, d *db.DB, url, model string, dim int) (*Build, 
 }
 
 func drop(ctx context.Context, tx *sql.Tx, i Index) error {
-	for _, stmt := range []string{"DROP TABLE IF EXISTS " + i.MessageTable(), "DROP TABLE IF EXISTS " + i.NotionTable()} {
+	for _, stmt := range []string{"DROP TABLE IF EXISTS " + i.MessageTable(), "DROP TABLE IF EXISTS " + i.NotionTable(), "DROP TABLE IF EXISTS " + i.KBTable()} {
 		if _, err := tx.ExecContext(ctx, stmt); err != nil {
 			return err
 		}
@@ -203,8 +225,10 @@ func drop(ctx context.Context, tx *sql.Tx, i Index) error {
 func counts(ctx context.Context, q rowQuerier, i Index) (done, total int, err error) {
 	err = q.QueryRowContext(ctx, "SELECT "+
 		"(SELECT COUNT(*) FROM messages WHERE gone_at IS NULL AND id IN (SELECT rowid FROM message_fts) AND id IN (SELECT rowid FROM "+i.MessageTable()+")) + "+
-		"(SELECT COUNT(*) FROM notion_pages WHERE in_trash = 0 AND rid IN (SELECT rowid FROM "+i.NotionTable()+")), "+
+		"(SELECT COUNT(*) FROM notion_pages WHERE in_trash = 0 AND rid IN (SELECT rowid FROM "+i.NotionTable()+")) + "+
+		"(SELECT COUNT(*) FROM kb_records WHERE retracted_at IS NULL AND scope != 'ops' AND id IN (SELECT rowid FROM "+i.KBTable()+")), "+
 		"(SELECT COUNT(*) FROM messages WHERE gone_at IS NULL AND id IN (SELECT rowid FROM message_fts)) + "+
-		"(SELECT COUNT(*) FROM notion_pages WHERE in_trash = 0)").Scan(&done, &total)
+		"(SELECT COUNT(*) FROM notion_pages WHERE in_trash = 0) + "+
+		"(SELECT COUNT(*) FROM kb_records WHERE retracted_at IS NULL AND scope != 'ops')").Scan(&done, &total)
 	return done, total, err
 }

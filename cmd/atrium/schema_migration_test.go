@@ -420,3 +420,89 @@ func TestSchemaVersionFiveDatabaseCarriesTaintIntoMarks(t *testing.T) {
 		}
 	}
 }
+
+func baselineV6(t *testing.T, path string) {
+	t.Helper()
+	baselineV5(t, path)
+	d := mustConnect(t, path)
+	defer func() { _ = d.Close() }()
+	for _, stmt := range []string{
+		"ALTER TABLE threads ADD COLUMN marks INTEGER NOT NULL DEFAULT 0",
+		"UPDATE threads SET marks = taint_web | (taint_private * 14) WHERE taint_private = 1 OR taint_web = 1",
+		"INSERT INTO schema_migrations (version, applied_at) VALUES (6, 6.0)",
+	} {
+		if _, err := d.Write.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestSchemaVersionSixDatabaseMigratesToTheKnowledgeStore(t *testing.T) {
+	old := t.TempDir()
+	path := filepath.Join(old, "atrium.db")
+	baselineV6(t, path)
+
+	if code, _, stderr := runIn(t, old, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list on a version 6 database: exit %d %s", code, stderr)
+	}
+	d := mustConnect(t, path)
+	var marks int
+	if err := d.Read.QueryRow("SELECT marks FROM threads WHERE title = 'both before migration 6'").Scan(&marks); err != nil || marks != 15 {
+		t.Errorf("thread marks after migration 7 = %d, %v; want 15", marks, err)
+	}
+	var private int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM pragma_table_info('projects') WHERE name = 'private' AND dflt_value = '0'").Scan(&private); err != nil || private != 1 {
+		t.Errorf("projects.private column = %d, %v; want one defaulted column", private, err)
+	}
+	var records int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_records").Scan(&records); err != nil || records != 0 {
+		t.Errorf("kb_records after migration = %d, %v; want an empty table", records, err)
+	}
+	var version int
+	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version < 7 {
+		t.Errorf("schema version = %d, %v; want %d", version, err, db.LatestSchemaVersion())
+	}
+	_ = d.Close()
+	if code, stdout, stderr := runIn(t, old, "db", "check"); code != cli.ExitOK || !strings.Contains(stdout, "integrity_check: ok") {
+		t.Fatalf("db check: exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+
+	fresh := t.TempDir()
+	if code, _, stderr := runIn(t, fresh, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list on a fresh database: exit %d %s", code, stderr)
+	}
+	migrated, created := schemaDump(t, path), schemaDump(t, filepath.Join(fresh, "atrium.db"))
+	if !slices.Equal(migrated, created) {
+		for _, line := range migrated {
+			if !slices.Contains(created, line) {
+				t.Errorf("only in the migrated schema: %s", line)
+			}
+		}
+		for _, line := range created {
+			if !slices.Contains(migrated, line) {
+				t.Errorf("only in the fresh schema: %s", line)
+			}
+		}
+	}
+
+	other := t.TempDir()
+	otherPath := filepath.Join(other, "atrium.db")
+	baselineV6(t, otherPath)
+	build := mustConnect(t, otherPath)
+	if _, err := build.Write.Exec("UPDATE embed_index SET generation = 3, dimension = 8"); err != nil {
+		t.Fatal(err)
+	}
+	_ = build.Close()
+	if code, _, stderr := runIn(t, other, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list on a generation 3 database: exit %d %s", code, stderr)
+	}
+	check := mustConnect(t, otherPath)
+	defer func() { _ = check.Close() }()
+	var ddl string
+	if err := check.Read.QueryRow("SELECT sql FROM sqlite_master WHERE name = 'embed_kb_3'").Scan(&ddl); err != nil {
+		t.Fatalf("embed_kb_3 after migration: %v", err)
+	}
+	if !strings.Contains(ddl, "FLOAT[8]") {
+		t.Errorf("embed_kb_3 = %q, want FLOAT[8]", ddl)
+	}
+}

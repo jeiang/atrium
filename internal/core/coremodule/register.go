@@ -2,6 +2,7 @@ package coremodule
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -18,6 +19,8 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
+	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
@@ -100,6 +103,23 @@ func startOps(ctx context.Context, d *web.Deps) error {
 
 const embedEvery = time.Minute
 
+func kbPending(ctx context.Context, d *db.DB) error {
+	embedURL, err := embed.EmbedURL(ctx, d.Read)
+	if err != nil {
+		return nil
+	}
+	modelCtx, err := embed.WithModels(ctx, d.Read)
+	if err != nil {
+		return nil
+	}
+	_, err = embed.KBPending(modelCtx, d, embedURL, nil)
+	var unavailable *httpx.ServiceUnavailable
+	if errors.As(err, &unavailable) || errors.Is(err, httpx.ErrPayload) || errors.Is(err, httpx.ErrMissing) {
+		return nil
+	}
+	return err
+}
+
 func startEmbed(_ chi.Router, d *web.Deps) {
 	ctx, cancel := context.WithCancel(d.Ctx)
 	done := make(chan struct{})
@@ -112,6 +132,9 @@ func startEmbed(_ chi.Router, d *web.Deps) {
 			}
 			if more {
 				continue
+			}
+			if err := kbPending(ctx, d.DB); err != nil && ctx.Err() == nil {
+				log.Warn("knowledge embedding failed", logx.Err, err.Error())
 			}
 			select {
 			case <-ctx.Done():
