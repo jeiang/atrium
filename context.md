@@ -93,7 +93,8 @@ behavior-parity target.
   deletes the subscription; other failures are counted per device, and a
   device with three consecutive failures raises an admin banner.
 - The attention query covers the enabled queues: proposals, drafts, open
-  loops, commitments, event candidates, thread plans, packages and tasks.
+  loops, commitments, event candidates, thread plans, packages, tasks and
+  unanswered `ask_operator` questions, listed until the operator answers.
   Packages come from shipping emails; a package the operator registers with
   `track_package` is polled through Ship24, stores its events, and notifies
   once when it is delivered or hits an exception.

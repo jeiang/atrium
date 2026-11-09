@@ -78,7 +78,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 	chat.Tools = mc.Tools
 	return module.Registration{
 		Name:      module.Assistant,
-		Attention: []attention.Source{attentionsources.Plans(), tasks.AttentionSource()},
+		Attention: []attention.Source{attentionsources.Plans(), attentionsources.Questions(), tasks.AttentionSource()},
 		Requires:  []module.Requirement{{Name: secrets.AnthropicAPIKey, Check: anthropicKey}},
 		Pages: []web.Page{{
 			Module:    chatpages.Module(chat),
