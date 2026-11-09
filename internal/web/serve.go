@@ -27,15 +27,11 @@ import (
 const (
 	defaultHost     = "127.0.0.1"
 	shutdownTimeout = 10 * time.Second
-)
-
-var (
 	recoverInterval = time.Minute
-	recoverClock    = func() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 )
 
 func recoverProposals(ctx context.Context, d *db.DB) error {
-	n, err := proposals.RecoverStuck(ctx, d, recoverClock())
+	n, err := proposals.RecoverStuck(ctx, d, float64(time.Now().UnixNano())/1e9)
 	if n > 0 {
 		log.Warn("recovered interrupted approved proposals", "count", n)
 	}

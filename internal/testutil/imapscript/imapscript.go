@@ -45,15 +45,12 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"os"
 	"regexp"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"time"
-
-	"github.com/emersion/go-imap/v2/imapclient"
 )
 
 const cleanupTimeout = 5 * time.Second
@@ -183,20 +180,6 @@ func expand(line string) (string, error) {
 	}
 }
 
-// Load parses the script at path or fails the test.
-func Load(t testing.TB, path string) *Script {
-	t.Helper()
-	b, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	s, err := Parse(path, string(b))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return s
-}
-
 // MustParse parses an inline script or fails the test.
 func MustParse(t testing.TB, text string) *Script {
 	t.Helper()
@@ -218,18 +201,7 @@ type Server struct {
 	errs  []error
 }
 
-// Serve starts a Server for s. At cleanup it stops accepting, waits for every section and reports each
-// mismatch, unconsumed step and missing connection with t.Errorf.
-func Serve(t testing.TB, s *Script) *Server {
-	t.Helper()
-	ln, err := net.Listen("tcp", "127.0.0.1:0")
-	if err != nil {
-		t.Fatal(err)
-	}
-	return serve(t, s, ln)
-}
-
-// ServeTLS is Serve over TLS with a throwaway CA. It returns the CA file path
+// ServeTLS serves s over TLS with a throwaway CA. It returns the CA file path
 // for SSL_CERT_FILE, which the production client reads through the system pool.
 func ServeTLS(t testing.TB, s *Script) (*Server, string) {
 	t.Helper()
@@ -268,18 +240,6 @@ func serve(t testing.TB, s *Script, ln net.Listener) *Server {
 
 // Addr is the listener's host:port.
 func (srv *Server) Addr() string { return srv.ln.Addr().String() }
-
-// Dial connects a go-imap client to the server; cleanup closes it before the server's cleanup runs.
-func (srv *Server) Dial(t testing.TB, options *imapclient.Options) *imapclient.Client {
-	t.Helper()
-	conn, err := net.Dial("tcp", srv.Addr())
-	if err != nil {
-		t.Fatal(err)
-	}
-	c := imapclient.New(conn, options)
-	t.Cleanup(func() { _ = c.Close() })
-	return c
-}
 
 func (srv *Server) run() {
 	var wg sync.WaitGroup

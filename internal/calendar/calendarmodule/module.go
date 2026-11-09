@@ -19,7 +19,7 @@ import (
 type Module struct{}
 
 func (Module) Register(mc module.Context) module.Registration {
-	command := calendarcmd.Command(mc.Env, mc.Tools, calendar.AuthOptions{})
+	command := calendarcmd.Command(mc.Env, mc.Tools)
 	return module.Registration{
 		Name:      module.Calendar,
 		Attention: []attention.Source{attentionsources.Candidates()},

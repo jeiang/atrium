@@ -6,35 +6,27 @@ import (
 	"io"
 	"net/http"
 	"net/http/cookiejar"
-	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"testing"
-	"time"
 
-	"github.com/jeiang/atrium/internal/auth/loginlink"
-	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/auth/oidc/oidctest"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/secrets"
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 	"github.com/jeiang/atrium/internal/web"
-	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
+const linkPublic = "http://127.0.0.1"
+
 type linkSite struct {
-	t        *testing.T
-	base     string
-	db       *db.DB
-	clock    *time.Time
-	idp      *oidctest.Provider
-	settings *settings.Registry
-	state    *config.State
+	t    *testing.T
+	base string
+	db   *db.DB
+	idp  *oidctest.Provider
 }
 
 type linkReply struct {
@@ -60,6 +52,9 @@ func (s *linkSite) browser() *linkBrowser {
 
 func (b *linkBrowser) do(method, target string, form url.Values) linkReply {
 	b.t.Helper()
+	if rest, ok := strings.CutPrefix(target, linkPublic+"/"); ok {
+		target = "/" + rest
+	}
 	if !strings.HasPrefix(target, "http") {
 		target = b.site.base + target
 	}
@@ -73,7 +68,6 @@ func (b *linkBrowser) do(method, target string, form url.Values) linkReply {
 	}
 	if form != nil {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-		req.Header.Set("Origin", b.site.base)
 	}
 	resp, err := b.http.Do(req)
 	if err != nil {
@@ -113,82 +107,58 @@ func (b *linkBrowser) post(target string, form url.Values) linkReply {
 
 func (b *linkBrowser) sessionToken() string { return b.cookie("atrium_session") }
 
-func newLinkSite(t *testing.T) *linkSite {
+func linkEnv(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
-	listener := httptest.NewUnstartedServer(nil)
-	base := "http://" + listener.Listener.Addr().String()
 	setEnv(t, "ATRIUM_DB", path)
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	setEnv(t, "ATRIUM_MODE", "shadow")
-	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", base)
+	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", linkPublic)
 	setEnv(t, settingEnv(secrets.OIDCClientSecret), "s3cret-for-the-test")
-	reg := settings.New()
-	st := config.NewState(reg)
-	pins, err := config.LoadPins(testLookupFor(t), reg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	reg.SetPins(pins)
-	site := &linkSite{t: t, base: base, settings: reg, state: st}
+	return path
+}
+
+func newLinkSite(t *testing.T) *linkSite {
+	t.Helper()
+	path := linkEnv(t)
+	site := &linkSite{t: t}
 	site.idp = oidctest.New(t, oidctest.Options{ClientSecret: "s3cret-for-the-test"})
 	site.idp.AddUser(oidctest.User{Name: "owner", Email: "owner@example.com", Groups: []string{"atrium_access", "atrium_admin"}})
 	site.idp.AddUser(oidctest.User{Name: "guest", Email: "guest@example.com", Groups: []string{"atrium_access"}})
 	if out := site.link(t, "--minutes", "1"); out == "" {
 		t.Fatal("no link printed while migrating")
 	}
-	d, err := db.Connect(path)
+	base, _, stop, err := startServeAppArgs(t, newTestApp(t, nil), &lockedBuffer{}, "--auth", "oidc", "--allowed-host", "127.0.0.1")
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(stop)
+	site.base = base
+	d := mustConnect(t, path)
 	t.Cleanup(func() { _ = d.Close() })
 	site.db = d
-	cfg, err := config.Load(testLookupFor(t))
-	if err != nil {
-		t.Fatal(err)
-	}
-	render, err := web.NewRenderer(tpl.Config{State: st})
-	if err != nil {
-		t.Fatal(err)
-	}
-	now := time.Now()
-	site.clock = &now
-	links := loginlink.New(d, loginlink.WithNow(func() time.Time { return *site.clock }))
-	app, err := web.New(web.Options{
-		Cfg: cfg, Env: testLookupFor(t), DB: d, Settings: reg, State: st, Auth: []string{web.AuthOIDC}, AllowedHosts: []string{"127.0.0.1"},
-		Render: render, OIDC: oidc.New(d, testLookupFor(t)), LoginLinks: links,
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	listener.Config.Handler = app
-	listener.Start()
-	t.Cleanup(func() {
-		listener.Close()
-		app.Close()
-	})
 	return site
 }
 
 func (s *linkSite) link(t *testing.T, args ...string) string {
 	t.Helper()
-	var out, errs bytes.Buffer
-	code := newAppWith(testLookupFor(t), s.settings, s.state, nil, nil, nil, quietLog).Run(context.Background(), append([]string{"login-link"}, args...), &out, &errs)
-	if code != cli.ExitOK {
-		t.Fatalf("login-link exit %d: %s", code, errs.String())
+	got := runApp(t, append([]string{"login-link"}, args...)...)
+	if got.code != cli.ExitOK {
+		t.Fatalf("login-link exit %d: %s", got.code, got.stderr)
 	}
-	if strings.Contains(errs.String(), "#") || strings.Count(out.String(), "\n") != 1 {
-		t.Fatalf("unexpected output %q %q", out.String(), errs.String())
+	if strings.Contains(got.stderr, "#") || strings.Count(got.stdout, "\n") != 1 {
+		t.Fatalf("unexpected output %q %q", got.stdout, got.stderr)
 	}
-	return strings.TrimSpace(out.String())
+	return strings.TrimSpace(got.stdout)
 }
 
-func fragmentOf(t *testing.T, link, base string) string {
+func fragmentOf(t *testing.T, link string) string {
 	t.Helper()
-	token, ok := strings.CutPrefix(link, base+"/login/link#")
+	token, ok := strings.CutPrefix(link, linkPublic+"/login/link#")
 	if !ok || token == "" {
-		t.Fatalf("link %q does not start with %q", link, base+"/login/link#")
+		t.Fatalf("link %q does not start with %q", link, linkPublic+"/login/link#")
 	}
 	return token
 }
@@ -216,7 +186,7 @@ func linkExpect(t *testing.T, got linkReply, status int, contains ...string) {
 func TestLoginLinkOpensAnAdminSessionOnceWithNoOIDCConfigured(t *testing.T) {
 	t.Parallel()
 	site := newLinkSite(t)
-	token := fragmentOf(t, site.link(t), site.base)
+	token := fragmentOf(t, site.link(t))
 
 	b := site.browser()
 	landing := b.get("/login/link")
@@ -246,7 +216,7 @@ func TestLoginLinkOpensAnAdminSessionOnceWithNoOIDCConfigured(t *testing.T) {
 func TestLoginLinkExpiresAndRejectsTampering(t *testing.T) {
 	t.Parallel()
 	site := newLinkSite(t)
-	token := fragmentOf(t, site.link(t, "--minutes", "1"), site.base)
+	token := fragmentOf(t, site.link(t, "--minutes", "1"))
 	nonce, mac, _ := strings.Cut(token, ".")
 	flip := func(s string) string {
 		if s[0] == 'A' {
@@ -271,14 +241,16 @@ func TestLoginLinkExpiresAndRejectsTampering(t *testing.T) {
 		t.Fatal("sessions exist after refused links")
 	}
 
-	*site.clock = site.clock.Add(2 * time.Minute)
+	if _, err := site.db.Write.Exec("UPDATE auth_login_links SET expires_at = issued_at - 1 WHERE used_at IS NULL"); err != nil {
+		t.Fatal(err)
+	}
 	late := site.browser()
 	linkExpect(t, late.post("/login/link", url.Values{"token": {token}}), http.StatusGone, "This link expired.")
 	if late.sessionToken() != "" || site.sessions() != 0 {
 		t.Fatal("an expired link created a session")
 	}
 
-	fresh := fragmentOf(t, site.link(t, "--minutes", "10"), site.base)
+	fresh := fragmentOf(t, site.link(t, "--minutes", "10"))
 	linkExpect(t, site.browser().post("/login/link", url.Values{"token": {fresh}}), http.StatusSeeOther)
 	if site.sessions() != 1 {
 		t.Fatal("a valid link did not open a session")
@@ -288,7 +260,7 @@ func TestLoginLinkExpiresAndRejectsTampering(t *testing.T) {
 func TestLoginLinkIssueAndRedeemAreAuditedWithoutTheToken(t *testing.T) {
 	t.Parallel()
 	site := newLinkSite(t)
-	token := fragmentOf(t, site.link(t), site.base)
+	token := fragmentOf(t, site.link(t))
 	nonce, mac, _ := strings.Cut(token, ".")
 	site.browser().post("/login/link", url.Values{"token": {token}})
 	site.browser().post("/login/link", url.Values{"token": {token}})
@@ -325,7 +297,7 @@ func TestLoginLinkIssueAndRedeemAreAuditedWithoutTheToken(t *testing.T) {
 
 func TestLoginLinkRefusesBadLifetimesAndMissingPublicURL(t *testing.T) {
 	t.Parallel()
-	newLinkSite(t)
+	linkEnv(t)
 	for _, minutes := range []string{"0", "999"} {
 		var out, errs bytes.Buffer
 		if code := defaultApp(t).Run(context.Background(), []string{"login-link", "--minutes", minutes}, &out, &errs); code != cli.ExitUsage || out.Len() != 0 {
@@ -343,7 +315,7 @@ func TestLoginLinkFirstRunSetupThenOIDCSignIn(t *testing.T) {
 	t.Parallel()
 	site := newLinkSite(t)
 	owner := site.browser()
-	linkExpect(t, owner.post("/login/link", url.Values{"token": {fragmentOf(t, site.link(t), site.base)}}), http.StatusSeeOther)
+	linkExpect(t, owner.post("/login/link", url.Values{"token": {fragmentOf(t, site.link(t))}}), http.StatusSeeOther)
 	before := owner.sessionToken()
 
 	anon := site.browser()
