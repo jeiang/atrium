@@ -26,7 +26,7 @@ func watchTools() []tool.Tool {
 			Handler:     packages,
 			Effect:      tool.Read,
 			Annotated:   true,
-			Flags:       tool.Flags{PrivateData: true},
+			Marks:       tool.PII | tool.Messages | tool.Untrusted,
 			Contexts:    loopKinds,
 		},
 		{
@@ -37,7 +37,7 @@ func watchTools() []tool.Tool {
 			Handler:     upcomingBirthdays,
 			Effect:      tool.Read,
 			Annotated:   true,
-			Flags:       tool.Flags{PrivateData: true},
+			Marks:       tool.PII,
 			Contexts:    loopKinds,
 		},
 	}

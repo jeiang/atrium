@@ -343,3 +343,80 @@ func TestSchemaVersionFourDatabaseSplitsTaintIntoKinds(t *testing.T) {
 		}
 	}
 }
+
+func baselineV5(t *testing.T, path string) {
+	t.Helper()
+	baselineV4(t, path)
+	d := mustConnect(t, path)
+	defer func() { _ = d.Close() }()
+	for _, stmt := range []string{
+		"ALTER TABLE threads ADD COLUMN taint_private INTEGER NOT NULL DEFAULT 0",
+		"ALTER TABLE threads ADD COLUMN taint_web INTEGER NOT NULL DEFAULT 0",
+		"UPDATE threads SET taint_private = 1, taint_web = 1 WHERE tainted_at IS NOT NULL",
+		"INSERT INTO schema_migrations (version, applied_at) VALUES (5, 5.0)",
+		"INSERT INTO threads (kind, title, effort, created_at, updated_at) VALUES ('chat', 'unmarked before migration 6', 'medium', 1, 1)",
+		"INSERT INTO threads (kind, title, effort, created_at, updated_at, tainted_at, taint_private, taint_web) VALUES ('chat', 'private before migration 6', 'medium', 1, 1, 3, 1, 0)",
+		"INSERT INTO threads (kind, title, effort, created_at, updated_at, tainted_at, taint_private, taint_web) VALUES ('chat', 'web before migration 6', 'medium', 1, 1, 4, 0, 1)",
+		"INSERT INTO threads (kind, title, effort, created_at, updated_at, tainted_at, taint_private, taint_web) VALUES ('chat', 'both before migration 6', 'medium', 1, 1, 5, 1, 1)",
+	} {
+		if _, err := d.Write.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestSchemaVersionFiveDatabaseCarriesTaintIntoMarks(t *testing.T) {
+	old := t.TempDir()
+	path := filepath.Join(old, "atrium.db")
+	baselineV5(t, path)
+
+	if code, _, stderr := runIn(t, old, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list on a version 5 database: exit %d %s", code, stderr)
+	}
+	d := mustConnect(t, path)
+	for title, want := range map[string]struct {
+		marks int
+		at    sql.NullFloat64
+	}{
+		"unmarked before migration 6": {0, sql.NullFloat64{}},
+		"private before migration 6":  {14, sql.NullFloat64{Float64: 3, Valid: true}},
+		"web before migration 6":      {1, sql.NullFloat64{Float64: 4, Valid: true}},
+		"both before migration 6":     {15, sql.NullFloat64{Float64: 5, Valid: true}},
+		"tainted before migration 5":  {15, sql.NullFloat64{Float64: 2, Valid: true}},
+	} {
+		var marks int
+		var at sql.NullFloat64
+		if err := d.Read.QueryRow("SELECT marks, tainted_at FROM threads WHERE title = ?", title).Scan(&marks, &at); err != nil {
+			t.Fatalf("%s after migration: %v", title, err)
+		}
+		if marks != want.marks || at != want.at {
+			t.Errorf("%s: marks %d tainted_at %v, want %d %v", title, marks, at, want.marks, want.at)
+		}
+	}
+	var version int
+	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version < 6 {
+		t.Errorf("schema version = %d, %v; want %d", version, err, db.LatestSchemaVersion())
+	}
+	_ = d.Close()
+	if code, stdout, stderr := runIn(t, old, "db", "check"); code != cli.ExitOK || !strings.Contains(stdout, "integrity_check: ok") {
+		t.Fatalf("db check: exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+
+	fresh := t.TempDir()
+	if code, _, stderr := runIn(t, fresh, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list on a fresh database: exit %d %s", code, stderr)
+	}
+	migrated, created := schemaDump(t, path), schemaDump(t, filepath.Join(fresh, "atrium.db"))
+	if !slices.Equal(migrated, created) {
+		for _, line := range migrated {
+			if !slices.Contains(created, line) {
+				t.Errorf("only in the migrated schema: %s", line)
+			}
+		}
+		for _, line := range created {
+			if !slices.Contains(migrated, line) {
+				t.Errorf("only in the fresh schema: %s", line)
+			}
+		}
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
 	askoperatortools "github.com/jeiang/atrium/internal/assistant/tools/askoperator"
+	attentiontool "github.com/jeiang/atrium/internal/assistant/tools/attention"
 	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
 	filetools "github.com/jeiang/atrium/internal/assistant/tools/files"
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
@@ -60,6 +61,7 @@ func Registry() (*registry.Registry, error) {
 	r := registry.New(settings.New())
 	for _, group := range [][]tool.Tool{
 		askoperatortools.Tools(),
+		attentiontool.Tools(),
 		filetools.Tools(),
 		memorytools.Tools(),
 		mailtools.Tools(),

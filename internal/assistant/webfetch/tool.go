@@ -66,7 +66,8 @@ func Tool(f *Fetcher) tool.Tool {
 		},
 		Effect:    tool.Read,
 		Annotated: true,
-		Flags:     tool.Flags{Web: true, UntrustedOutput: true, ExternalEffect: true},
+		Flags:     tool.Flags{Web: true, ExternalEffect: true},
+		Marks:     tool.Untrusted,
 		Contexts:  tool.Kinds{tool.Chat, tool.Cron, tool.Sub},
 	}
 }

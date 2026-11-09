@@ -60,6 +60,6 @@ var findSlotTool = tool.Tool{
 	Handler:   findSlot,
 	Effect:    tool.Read,
 	Annotated: true,
-	Flags:     tool.Flags{PrivateData: true},
+	Marks:     tool.Messages,
 	Contexts:  tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
 }

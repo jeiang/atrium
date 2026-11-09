@@ -24,7 +24,7 @@ const searchSchema = `{"type":"object","properties":{"query":{"type":"string","m
 func searchTools() []tool.Tool {
 	return []tool.Tool{{
 		Name: searchName, Description: searchDescription, InputSchema: json.RawMessage(searchSchema), Handler: searchThreads,
-		Effect: tool.Read, Flags: tool.Flags{PrivateData: true}, Annotated: true,
+		Effect: tool.Read, Marks: tool.Messages, Annotated: true,
 		Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
 	}}
 }

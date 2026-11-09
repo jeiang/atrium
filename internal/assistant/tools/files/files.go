@@ -41,12 +41,12 @@ func Tools() []tool.Tool {
 		{
 			Name: readName, Description: "Read a text file from this thread's or its project's files directory. Returns the text; refuses binary files, paths outside the files directory and files over the size cap.",
 			InputSchema: json.RawMessage(readSchema), Handler: read, Effect: tool.Read,
-			Flags: tool.Flags{PrivateData: true}, Annotated: true, Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
+			Marks: tool.Messages | tool.Untrusted, Annotated: true, Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
 		},
 		{
 			Name: searchName, Description: "Search this thread's and its project's files for a text query, returning matching file names and line snippets.",
 			InputSchema: json.RawMessage(searchSchema), Handler: search, Effect: tool.Read,
-			Flags: tool.Flags{PrivateData: true}, Annotated: true, Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
+			Marks: tool.Messages | tool.Untrusted, Annotated: true, Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
 		},
 		{
 			Name: writeName, Description: "Write a text file into this thread's files directory, replacing it if it exists. Undo restores the prior content or removes a new file.",

@@ -92,7 +92,7 @@ type state struct {
 	invalid       error
 	toolChoice    *anthropic.ToolChoice
 	admission     admission
-	taint         threads.Taint
+	marks         threads.Marks
 	hist          *history
 	sig           string
 	offered       registry.Set
@@ -108,29 +108,29 @@ type admission struct {
 }
 
 func (s *state) admit(ctx context.Context) (registry.Set, error) {
-	taint, err := threads.ReadTaint(ctx, s.d.Read, s.thread.ID)
+	marks, err := threads.ReadMarks(ctx, s.d.Read, s.thread.ID)
 	if err != nil {
 		return registry.Set{}, err
 	}
-	set, err := s.r.Registry.Admit(ctx, s.kind, taint, s.admission.allow, s.d.Read)
+	set, err := s.r.Registry.Admit(ctx, s.kind, marks, s.admission.allow, s.d.Read)
 	if err != nil {
 		return registry.Set{}, err
 	}
-	return set, s.offer(ctx, set, taint)
+	return set, s.offer(ctx, set, marks)
 }
 
-func (s *state) offer(ctx context.Context, set registry.Set, taint threads.Taint) error {
+func (s *state) offer(ctx context.Context, set registry.Set, marks threads.Marks) error {
 	a := s.admission
 	req, err := s.r.request(ctx, s.d.Read, s.thread, s.kind, a.model, s.run.Effort, set, a.cc, a.extra, a.webSearchMaxUses, a.dynamicFiltering)
 	if err != nil {
 		return err
 	}
 	s.req, s.offered = req, set
-	s.use(set, taint)
+	s.use(set, marks)
 	return nil
 }
 
-func (s *state) use(set registry.Set, taint threads.Taint) {
+func (s *state) use(set registry.Set, marks threads.Marks) {
 	byName := make(map[string]tool.Tool, len(set.Dispatch))
 	for _, t := range set.Dispatch {
 		byName[t.Name] = t
@@ -140,26 +140,26 @@ func (s *state) use(set registry.Set, taint threads.Taint) {
 			s.x.withdrawn[name] = struct{}{}
 		}
 	}
-	s.x.byName, s.taint = byName, taint
+	s.x.byName, s.marks = byName, marks
 }
 
 func (s *state) readmit(ctx context.Context) error {
-	taint, err := threads.ReadTaint(ctx, s.d.Read, s.thread.ID)
+	marks, err := threads.ReadMarks(ctx, s.d.Read, s.thread.ID)
 	if err != nil {
 		return err
 	}
-	if taint.Private == s.taint.Private && taint.Web == s.taint.Web {
+	if marks.Set == s.marks.Set {
 		return nil
 	}
-	set, err := s.r.Registry.Admit(ctx, s.kind, taint, s.admission.allow, s.d.Read)
+	set, err := s.r.Registry.Admit(ctx, s.kind, marks, s.admission.allow, s.d.Read)
 	if err != nil {
 		return err
 	}
 	if narrows(s.offered, set) {
-		s.use(set, taint)
+		s.use(set, marks)
 		return nil
 	}
-	return s.offer(ctx, set, taint)
+	return s.offer(ctx, set, marks)
 }
 
 func narrows(offered, set registry.Set) bool {
@@ -660,7 +660,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		return false, nil, err
 	}
 	if searched {
-		if err := threads.AddTaint(context.WithoutCancel(ctx), s.d.Write, s.thread.ID, s.now(), false, true); err != nil {
+		if err := threads.AddMarks(context.WithoutCancel(ctx), s.d.Write, s.thread.ID, s.now(), tool.Untrusted); err != nil {
 			return false, nil, err
 		}
 	}

@@ -25,6 +25,7 @@ import (
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/textx"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 type Kind string
@@ -294,7 +295,7 @@ type Spec struct {
 	ParentRunID          *int64
 	BranchedFromThreadID *int64
 	BranchedFromSeq      *int64
-	Taint                Taint
+	Marks                Marks
 }
 
 func resolve(ctx context.Context, q db.Querier, kind Kind, projectID *int64, explicit Options) (Options, error) {
@@ -385,11 +386,11 @@ func Create(ctx context.Context, q db.Querier, now float64, s Spec) (int64, erro
 		web = *s.WebSearch
 	}
 	res, err := q.ExecContext(ctx,
-		"INSERT INTO threads (kind, title, job_id, parent_thread_id, model, effort, context_limit, project_id, allowed_urls, role, parent_run_id, branched_from_thread_id, branched_from_seq, created_at, updated_at, thinking, web_search, cost_cap_usd, environment, repo, base_branch, agent, beta_set, speed, tainted_at, taint_private, taint_web) "+
-			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		"INSERT INTO threads (kind, title, job_id, parent_thread_id, model, effort, context_limit, project_id, allowed_urls, role, parent_run_id, branched_from_thread_id, branched_from_seq, created_at, updated_at, thinking, web_search, cost_cap_usd, environment, repo, base_branch, agent, beta_set, speed, tainted_at, marks) "+
+			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		s.Kind, s.Title, s.JobID, s.ParentID, o.Model, o.Effort, o.ContextLimit, s.ProjectID, jsonx.Dumps(urls), s.Role, s.ParentRunID,
 		s.BranchedFromThreadID, s.BranchedFromSeq, now, now, o.Thinking, b2i(web), o.CostCapUSD, s.Environment, s.Repo, s.BaseBranch, s.Agent, s.BetaSet, s.Speed,
-		s.Taint.At, b2i(s.Taint.Private), b2i(s.Taint.Web))
+		s.Marks.At, int64(s.Marks.Set))
 	if err != nil {
 		return 0, err
 	}
@@ -410,31 +411,30 @@ func b2i(b bool) int {
 	return 0
 }
 
-type Taint struct {
-	At      *float64
-	Private bool
-	Web     bool
+type Marks struct {
+	At  *float64
+	Set tool.Marks
 }
 
-func (t Taint) Any() bool { return t.Private || t.Web }
-
-func AddTaint(ctx context.Context, q db.Querier, threadID int64, now float64, private, web bool) error {
-	if !private && !web {
+func AddMarks(ctx context.Context, q db.Querier, threadID int64, now float64, marks tool.Marks) error {
+	if marks == 0 {
 		return nil
 	}
 	_, err := q.ExecContext(ctx,
-		"UPDATE threads SET tainted_at = COALESCE(tainted_at, ?), taint_private = MAX(taint_private, ?), taint_web = MAX(taint_web, ?) WHERE id = ?",
-		now, b2i(private), b2i(web), threadID)
+		"UPDATE threads SET tainted_at = COALESCE(tainted_at, ?), marks = marks | ? WHERE id = ?",
+		now, int64(marks), threadID)
 	return err
 }
 
-func ReadTaint(ctx context.Context, q db.Querier, threadID int64) (Taint, error) {
-	var t Taint
-	err := q.QueryRowContext(ctx, "SELECT tainted_at, taint_private, taint_web FROM threads WHERE id = ?", threadID).Scan(&t.At, &t.Private, &t.Web)
+func ReadMarks(ctx context.Context, q db.Querier, threadID int64) (Marks, error) {
+	var m Marks
+	var set int64
+	err := q.QueryRowContext(ctx, "SELECT tainted_at, marks FROM threads WHERE id = ?", threadID).Scan(&m.At, &set)
 	if errors.Is(err, sql.ErrNoRows) {
-		return Taint{}, nil
+		return Marks{}, nil
 	}
-	return t, err
+	m.Set = tool.Marks(set)
+	return m, err
 }
 
 func EffortFixed(thinking string) bool { return thinking == "between_tools" || thinking == "disabled" }

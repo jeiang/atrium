@@ -326,7 +326,7 @@ func baseTools() []tool.Tool {
 			Handler:     list,
 			Effect:      tool.Read,
 			Annotated:   true,
-			Flags:       tool.Flags{PrivateData: true},
+			Marks:       tool.Messages | tool.Untrusted,
 			Contexts:    tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
 		},
 		{

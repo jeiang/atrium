@@ -46,7 +46,7 @@ func mailTools() []tool.Tool {
 			Handler:     mailSearch,
 			Effect:      tool.Read,
 			Annotated:   true,
-			Flags:       tool.Flags{PrivateData: true},
+			Marks:       tool.PII | tool.Messages | tool.Untrusted,
 			Contexts:    mailKinds,
 		},
 		{
@@ -57,7 +57,7 @@ func mailTools() []tool.Tool {
 			Handler:     mailRead,
 			Effect:      tool.Read,
 			Annotated:   true,
-			Flags:       tool.Flags{PrivateData: true},
+			Marks:       tool.PII | tool.Messages | tool.Untrusted,
 			Contexts:    mailKinds,
 		},
 	}

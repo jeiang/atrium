@@ -63,7 +63,7 @@ func Tools() []tool.Tool {
 		Handler:     contactsLookup,
 		Effect:      tool.Read,
 		Annotated:   true,
-		Flags:       tool.Flags{PrivateData: true},
+		Marks:       tool.PII,
 		Contexts:    tool.AllKinds,
 	}}
 }
