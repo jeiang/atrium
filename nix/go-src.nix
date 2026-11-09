@@ -10,6 +10,8 @@
       (root + "/sdk")
       (root + "/tools/settingsgen")
       (root + "/docs/config")
+      (root + "/docs/tools.md")
+      (root + "/docs/integrations.md")
       (root + "/nix/monitoring")
       (lib.fileset.maybeMissing (root + "/third_party"))
       (lib.fileset.maybeMissing (root + "/testdata"))
