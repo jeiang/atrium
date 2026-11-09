@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"time"
 
@@ -94,6 +95,7 @@ type state struct {
 	taint         threads.Taint
 	hist          *history
 	sig           string
+	offered       registry.Set
 }
 
 type admission struct {
@@ -106,25 +108,39 @@ type admission struct {
 }
 
 func (s *state) admit(ctx context.Context) (registry.Set, error) {
-	a := s.admission
 	taint, err := threads.ReadTaint(ctx, s.d.Read, s.thread.ID)
 	if err != nil {
 		return registry.Set{}, err
 	}
-	set, err := s.r.Registry.Admit(ctx, s.kind, taint, a.allow, s.d.Read)
+	set, err := s.r.Registry.Admit(ctx, s.kind, taint, s.admission.allow, s.d.Read)
 	if err != nil {
 		return registry.Set{}, err
 	}
+	return set, s.offer(ctx, set, taint)
+}
+
+func (s *state) offer(ctx context.Context, set registry.Set, taint threads.Taint) error {
+	a := s.admission
 	req, err := s.r.request(ctx, s.d.Read, s.thread, s.kind, a.model, s.run.Effort, set, a.cc, a.extra, a.webSearchMaxUses, a.dynamicFiltering)
 	if err != nil {
-		return registry.Set{}, err
+		return err
 	}
+	s.req, s.offered = req, set
+	s.use(set, taint)
+	return nil
+}
+
+func (s *state) use(set registry.Set, taint threads.Taint) {
 	byName := make(map[string]tool.Tool, len(set.Dispatch))
 	for _, t := range set.Dispatch {
 		byName[t.Name] = t
 	}
-	s.req, s.x.byName, s.taint = req, byName, taint
-	return set, nil
+	for name := range s.x.byName {
+		if _, ok := byName[name]; !ok {
+			s.x.withdrawn[name] = struct{}{}
+		}
+	}
+	s.x.byName, s.taint = byName, taint
 }
 
 func (s *state) readmit(ctx context.Context) error {
@@ -135,8 +151,32 @@ func (s *state) readmit(ctx context.Context) error {
 	if taint.Private == s.taint.Private && taint.Web == s.taint.Web {
 		return nil
 	}
-	_, err = s.admit(ctx)
-	return err
+	set, err := s.r.Registry.Admit(ctx, s.kind, taint, s.admission.allow, s.d.Read)
+	if err != nil {
+		return err
+	}
+	if narrows(s.offered, set) {
+		s.use(set, taint)
+		return nil
+	}
+	return s.offer(ctx, set, taint)
+}
+
+func narrows(offered, set registry.Set) bool {
+	names := func(tools []tool.Tool) []string {
+		out := make([]string, len(tools))
+		for i, t := range tools {
+			out[i] = t.Name
+		}
+		return out
+	}
+	listed := names(offered.Dispatch)
+	for _, t := range set.Dispatch {
+		if !slices.Contains(listed, t.Name) {
+			return false
+		}
+	}
+	return slices.Equal(names(offered.Server), names(set.Server))
 }
 
 func deref[T any](p *T) T {
@@ -312,7 +352,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, contextLimit: contextLimit,
 		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, maxCost: maxCost, ttl: ttl,
-		x: &dispatcher{d: d, tc: tc, now: now, tuning: tuning},
+		x: &dispatcher{d: d, tc: tc, now: now, tuning: tuning, withdrawn: map[string]struct{}{}},
 		admission: admission{
 			allow: allow, model: model.ID, cc: prompts.PrefixCacheControl(kind, ttl), extra: extra,
 			webSearchMaxUses: webSearchMaxUses, dynamicFiltering: dynamicFiltering,

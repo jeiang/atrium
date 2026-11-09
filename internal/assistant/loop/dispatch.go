@@ -82,14 +82,15 @@ func toolErrorText(err error) (string, bool) {
 }
 
 type dispatcher struct {
-	d      *db.DB
-	tc     *tool.Context
-	byName map[string]tool.Tool
-	now    func() float64
-	tuning actx.Tuning
-	guard  func(ctx context.Context) error
-	lost   context.Context
-	abort  context.CancelFunc
+	d         *db.DB
+	tc        *tool.Context
+	byName    map[string]tool.Tool
+	withdrawn map[string]struct{}
+	now       func() float64
+	tuning    actx.Tuning
+	guard     func(ctx context.Context) error
+	lost      context.Context
+	abort     context.CancelFunc
 }
 
 func (x *dispatcher) lookup(name string) *tool.Tool {
@@ -103,6 +104,9 @@ func (x *dispatcher) lookup(name string) *tool.Tool {
 func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (errText *string, value any, err error) {
 	fail := func(text string) (*string, any, error) { return new(text), nil, nil }
 	if t == nil {
+		if _, ok := x.withdrawn[use.Name]; ok {
+			return fail(use.Name + " is no longer available in this thread: it has read private data or web content")
+		}
 		return fail("unknown tool " + use.Name)
 	}
 	_, args, err := use.Args()

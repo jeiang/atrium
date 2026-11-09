@@ -315,8 +315,14 @@ behavior-parity target.
   `threads_today` read carries the kinds of the threads it returns.
   `untrusted_output` alone does not taint. From the next model request of
   the same run on, and in every later run of that thread in any process, a
-  tainted thread is not offered `external_effect`, `cost`, `notify` or
-  `write_undo` tools. The one exception is the Rule of Two: a thread tainted
+  tainted thread cannot use `external_effect`, `cost`, `notify` or
+  `write_undo` tools. Later runs are not offered them. Within the run that
+  tainted it, the request keeps the tools array it started with so the
+  run's thinking blocks stay valid, and dispatch refuses a withdrawn tool
+  with an error result; only when a server tool (`web_search`) must go is
+  the array rebuilt, and the thinking signed before it is dropped. A
+  thinking block is resent only while everything before it is unchanged.
+  The one exception is the Rule of Two: a thread tainted
   only `web` keeps the read-only `web` tools (`web_fetch`, `web_search`,
   `research`) while it cannot reach private data, meaning its run offers no
   `private_data` tool and its system prompt carries no profile or project
