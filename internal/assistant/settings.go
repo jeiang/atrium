@@ -127,7 +127,7 @@ func init() {
 	}
 	chatModel := def(KeyDefaultModel, settings.Enum, settings.UI, pricing.DefaultModel, nil)
 	chatModel.Choices = pricing.IDs()
-	chatEffort := def(KeyDefaultEffort, settings.Enum, settings.UI, pricing.Medium, nil)
+	chatEffort := def(KeyDefaultEffort, settings.Enum, settings.UI, pricing.XHigh, nil)
 	chatEffort.Choices = pricing.Efforts
 	contextLimit := def(KeyDefaultContextLimit, settings.Enum, settings.UI, strconv.FormatInt(DefaultContextLimit, 10), nil)
 	contextLimit.Choices = contextLimitChoices()

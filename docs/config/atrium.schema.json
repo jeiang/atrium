@@ -886,7 +886,7 @@
           "type": "string"
         },
         "default_effort": {
-          "default": "medium",
+          "default": "xhigh",
           "enum": [
             "low",
             "medium",
