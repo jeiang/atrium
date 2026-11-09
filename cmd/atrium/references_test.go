@@ -47,6 +47,26 @@ func threadMessages(t *testing.T, dir string, thread int64) int {
 	return n
 }
 
+func waitIdle(t *testing.T, dir string, thread int64) {
+	t.Helper()
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	deadline := time.Now().Add(20 * time.Second)
+	for {
+		var active int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM runs WHERE thread_id = ? AND state = ?", thread, "running").Scan(&active); err != nil {
+			t.Fatal(err)
+		}
+		if active == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("the thread did not finish its run")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 func TestReferenceBringsAThreadVerbatimWithItsMarks(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
@@ -131,6 +151,7 @@ func TestReferenceBringsAThreadVerbatimWithItsMarks(t *testing.T) {
 	requests = api.Requests()
 	assertEgress(t, "a later run of the marked reader", requestTools(t, requests[len(requests)-1]), false)
 
+	waitIdle(t, dir, reader)
 	count := threadMessages(t, dir, reader)
 	tooMany := fmt.Sprintf("@thread/%d @thread/%d @thread/%d @thread/%d", source, others[0], others[1], others[2])
 	status, body, _ = fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, reader), url.Values{"text": {tooMany}})
