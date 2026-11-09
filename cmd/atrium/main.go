@@ -6,7 +6,9 @@ import (
 	"os"
 
 	"github.com/jeiang/atrium/internal/assistant/assistantmodule"
+	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/tools/grafana/grafanamodule"
+	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/calendar/calendarmodule"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -17,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailmodule"
+	"github.com/jeiang/atrium/internal/media/mediacmd"
 	"github.com/jeiang/atrium/internal/media/mediamodule"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify/notifymodule"
@@ -65,7 +68,7 @@ func newSet(env config.Env, reg *settings.Registry, st *config.State, mods []mod
 		calendarmodule.Module{},
 		notionmodule.Module{Env: env},
 		mediamodule.Module{Now: now},
-		assistantmodule.Module{},
+		assistantmodule.Module{Callables: []map[string]worker.Callable{calendarcmd.Callables(), mediacmd.Callables()}},
 		notifymodule.Module{},
 		grafanamodule.Module{},
 	}, mods...)

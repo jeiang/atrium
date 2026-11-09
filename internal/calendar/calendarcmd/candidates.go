@@ -5,11 +5,13 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/runner"
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/cli"
@@ -27,10 +29,29 @@ func Callables() map[string]worker.Callable {
 				if err != nil {
 					return worker.Result{}, err
 				}
-				out, err := candidates.DraftEventProposals(ctx, e.Service, limit, e.Now)
+				out, err := candidates.DraftEventProposals(ctx, e.Service.DB, assistantRun(e.Service), limit, e.Now)
 				return worker.Result{RunID: out.RunID}, err
 			},
 		},
+	}
+}
+
+func assistantRun(svc *service.Service) candidates.Run {
+	return func(ctx context.Context, prompt string, now float64) (int64, bool, error) {
+		title := "Event candidates"
+		threadID, err := threads.Create(ctx, svc.DB.Write, now, threads.Spec{Kind: threads.Cron, Title: &title})
+		if err != nil {
+			return 0, false, err
+		}
+		runID, err := svc.RunOnce(ctx, threadID, prompt, service.Start{Kind: threads.Cron})
+		if err != nil {
+			return 0, false, err
+		}
+		run, err := journal.GetRun(ctx, svc.DB.Read, runID)
+		if err != nil {
+			return 0, false, err
+		}
+		return runID, run != nil && run.State == journal.Done, nil
 	}
 }
 
@@ -61,7 +82,7 @@ func candidatesCommand(env config.Env, tools registry.Source, now func() float64
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				out, err := candidates.DraftEventProposals(e.Ctx, svc, limit, now)
+				out, err := candidates.DraftEventProposals(e.Ctx, d, assistantRun(svc), limit, now)
 				if err != nil {
 					return cli.Fail(e, err)
 				}

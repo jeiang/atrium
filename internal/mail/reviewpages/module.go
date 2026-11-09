@@ -45,6 +45,11 @@ func Templates() fs.FS {
 	return sub
 }
 
+func RecoverDrafts(ctx context.Context, d *db.DB, cfg config.Config) error {
+	_, err := (&drafts.Store{DB: d, Cfg: cfg}).RecoverStuck(ctx)
+	return err
+}
+
 type Options struct {
 	Open     mail.OpenFunc
 	Now      func() float64

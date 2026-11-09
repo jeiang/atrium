@@ -3,6 +3,7 @@ package agentcmd
 import (
 	"context"
 	"fmt"
+	"maps"
 
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	"github.com/jeiang/atrium/internal/assistant/registry"
@@ -10,11 +11,9 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/attention/digest"
-	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail/tracking"
-	"github.com/jeiang/atrium/internal/media/mediacmd"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/sdnotify"
 	"github.com/jeiang/atrium/internal/tasks/remind"
@@ -28,13 +27,10 @@ func attentionSources(ctx context.Context) []attention.Source {
 	return set.Current().Attention()
 }
 
-func callables() map[string]worker.Callable {
+func callables(jobs []map[string]worker.Callable) map[string]worker.Callable {
 	out := map[string]worker.Callable{}
-	for name, call := range calendarcmd.Callables() {
-		out[name] = call
-	}
-	for name, call := range mediacmd.Callables() {
-		out[name] = call
+	for _, set := range jobs {
+		maps.Copy(out, set)
 	}
 	for name, call := range memorycmd.Callables() {
 		out[name] = call
@@ -63,12 +59,12 @@ func callables() map[string]worker.Callable {
 	return out
 }
 
-func schedulerCommand(cfgEnv config.Env, tools registry.Source, enabled func(module string) bool) *cli.Command {
+func schedulerCommand(cfgEnv config.Env, tools registry.Source, enabled func(module string) bool, jobs ...map[string]worker.Callable) *cli.Command {
 	return &cli.Command{
 		Name: "scheduler",
 		Setup: func(*cli.Args) cli.Handler {
 			return func(env *cli.Env) int {
-				if err := runScheduler(env, cfgEnv, tools, enabled); err != nil {
+				if err := runScheduler(env, cfgEnv, tools, enabled, jobs); err != nil {
 					_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)
 					return cli.ExitError
 				}
@@ -78,7 +74,7 @@ func schedulerCommand(cfgEnv config.Env, tools registry.Source, enabled func(mod
 	}
 }
 
-func runScheduler(env *cli.Env, cfgEnv config.Env, tools registry.Source, enabled func(module string) bool) error {
+func runScheduler(env *cli.Env, cfgEnv config.Env, tools registry.Source, enabled func(module string) bool, jobs []map[string]worker.Callable) error {
 	ctx := env.Ctx
 	svc, closeApp, err := bootstrap(ctx, cfgEnv, tools)
 	if err != nil {
@@ -87,7 +83,7 @@ func runScheduler(env *cli.Env, cfgEnv config.Env, tools registry.Source, enable
 	defer closeApp()
 	notifier := sdnotify.New(func(name string) string { v, _ := cfgEnv(name); return v })
 	beat := sdnotify.NewHeartbeat()
-	w, err := worker.New(ctx, svc, callables(), enabled)
+	w, err := worker.New(ctx, svc, callables(jobs), enabled)
 	if err != nil {
 		return err
 	}

@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/nightly"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	attentiontool "github.com/jeiang/atrium/internal/assistant/tools/attention"
@@ -68,7 +69,8 @@ func testAnthropic(ctx context.Context, c integrations.Conn) (string, error) {
 }
 
 type Module struct {
-	Chat chatpages.Options
+	Chat      chatpages.Options
+	Callables []map[string]worker.Callable
 }
 
 func (m Module) Register(mc module.Context) module.Registration {
@@ -90,7 +92,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 60},
 			},
 		}},
-		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled), memorycmd.Command(mc.Env)},
+		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Callables...), memorycmd.Command(mc.Env)},
 		Tools:    addTools,
 	}
 }
