@@ -21,13 +21,14 @@ import (
 const (
 	categoryAssistant = "assistant"
 	categoryWiki      = "wiki"
+	categoryKnowledge = "knowledge"
 	categoryMedia     = "media"
 	categorySettings  = "settings"
 	pageSize          = 50
 	snippetLimit      = 800
 )
 
-var categories = []string{categoryMail, categoryAssistant, categoryWiki, categoryMedia, categorySettings}
+var categories = []string{categoryMail, categoryAssistant, categoryWiki, categoryKnowledge, categoryMedia, categorySettings}
 
 func mustJSON(v any) string {
 	b, _ := json.Marshal(v)
@@ -41,6 +42,7 @@ func mustJSONIndent(v any) string {
 
 var writeCategoryPrefixes = []struct{ Prefix, Category string }{
 	{"notion", categoryWiki},
+	{"kb", categoryKnowledge},
 	{"media", categoryMedia},
 }
 
