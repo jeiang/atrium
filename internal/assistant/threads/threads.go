@@ -192,7 +192,7 @@ func (o Options) Validate() (Options, error) {
 }
 
 func Defaults(ctx context.Context, q db.Querier) (Options, error) {
-	out := Options{Model: pricing.DefaultModel, Effort: pricing.Medium, ContextLimit: assistant.DefaultContextLimit, WebSearch: true}
+	out := Options{Model: pricing.DefaultModel, Effort: pricing.XHigh, ContextLimit: assistant.DefaultContextLimit, WebSearch: true}
 	if m, err := CleanModel(out.Model); err == nil {
 		out.Thinking = m.DefaultThinking()
 	}
