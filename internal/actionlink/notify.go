@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/actionlink/policy"
+	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -15,23 +16,30 @@ func init() { proposals.OnCreate = NotifyCreated }
 
 func NotifyCreated(ctx context.Context, d *db.DB, p *proposals.Proposal) {
 	pol, err := policy.Load(ctx, d.Read)
-	if err != nil || !pol.Allows(p.Kind) {
-		return
-	}
-	now := float64(time.Now().UnixNano()) / 1e9
-	approve, dismiss, err := MintPair(ctx, d.Write, p.ID, p.Fingerprint, now)
 	if err != nil {
 		return
 	}
+	allowed := pol.Allows(p.Kind)
+	if !allowed && p.Kind != permission.Kind {
+		return
+	}
+	now := float64(time.Now().UnixNano()) / 1e9
 	title, body := Text(p.Kind, p.ID)
-	_, _ = notify.Send(ctx, d.Write, notify.Message{
+	msg := notify.Message{
 		Channel: notify.Assistant, Title: title, Body: body, Click: fmt.Sprintf("/proposals/%d", p.ID),
-		Actions: []notify.Action{
+		Now: func() float64 { return now },
+	}
+	if allowed {
+		approve, dismiss, err := MintPair(ctx, d.Write, p.ID, p.Fingerprint, now)
+		if err != nil {
+			return
+		}
+		msg.Actions = []notify.Action{
 			{Action: "view", Label: "Approve", URL: "/actions/" + approve, Method: "POST"},
 			{Action: "view", Label: "Dismiss", URL: "/actions/" + dismiss, Method: "POST"},
-		},
-		Now: func() float64 { return now },
-	})
+		}
+	}
+	_, _ = notify.Send(ctx, d.Write, msg)
 }
 
 func Text(kind string, proposalID int64) (string, string) {

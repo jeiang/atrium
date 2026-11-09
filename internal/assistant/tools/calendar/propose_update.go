@@ -56,7 +56,7 @@ var updateTools = []tool.Tool{
 		Handler:     proposeUpdate,
 		Effect:      tool.Propose,
 		Annotated:   true,
-		Flags:       tool.Flags{ExternalEffect: true},
+		Channel:     tool.ChannelOwn,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 	},
 	{
@@ -68,7 +68,7 @@ var updateTools = []tool.Tool{
 		Handler:   proposeRSVP,
 		Effect:    tool.Propose,
 		Annotated: true,
-		Flags:     tool.Flags{ExternalEffect: true},
+		Channel:   tool.ChannelPeople,
 		Contexts:  tool.Kinds{tool.Chat, tool.Cron},
 	},
 }

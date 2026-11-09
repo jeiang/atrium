@@ -48,17 +48,18 @@ type routeRule struct {
 }
 
 type Deps struct {
-	Ctx      context.Context
-	Cfg      config.Config
-	Env      config.Env
-	DB       *db.DB
-	Settings *settings.Registry
-	State    *config.State
-	Render   *Renderer
-	Error    func(w http.ResponseWriter, r *http.Request, status int, detail string)
-	OnFrame  func(FrameFunc)
-	Stopping <-chan struct{}
-	OnClose  func(func())
+	Ctx       context.Context
+	Cfg       config.Config
+	Env       config.Env
+	DB        *db.DB
+	Settings  *settings.Registry
+	State     *config.State
+	Render    *Renderer
+	Error     func(w http.ResponseWriter, r *http.Request, status int, detail string)
+	OnFrame   func(FrameFunc)
+	Stopping  <-chan struct{}
+	OnClose   func(func())
+	ResumeRun func(ctx context.Context, runID int64) error
 
 	router chi.Router
 	routes *[]routeRule

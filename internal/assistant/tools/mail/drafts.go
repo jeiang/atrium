@@ -35,6 +35,7 @@ func draftTools() []tool.Tool {
 			Handler:     draftEmailCreate,
 			Effect:      tool.WriteUndo, Undo: "draft_delete",
 			Annotated: true,
+			Channel:   tool.ChannelOwn,
 			Contexts:  tool.Kinds{tool.Chat},
 		},
 		{
@@ -45,6 +46,7 @@ func draftTools() []tool.Tool {
 			Handler:     draftEmailUpdate,
 			Effect:      tool.WriteUndo, Undo: "draft_restore",
 			Annotated: true,
+			Channel:   tool.ChannelOwn,
 			Contexts:  tool.Kinds{tool.Chat},
 		},
 	}

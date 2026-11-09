@@ -4,6 +4,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -16,6 +17,7 @@ const (
 var DefaultKinds = []string{"reminder", "triage_label", "triage_archive", "triage_snooze", "memory", "profile"}
 
 var WebOnly = map[string]bool{
+	permission.Kind:     true,
 	"gmail_label_merge": true,
 	"inbox_backlog":     true,
 	"rebalance_split":   true,

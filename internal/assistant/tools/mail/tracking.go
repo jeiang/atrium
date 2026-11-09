@@ -25,7 +25,7 @@ func trackingTools() []tool.Tool {
 		InputSchema: trackPackageSchema,
 		Effect:      tool.Propose, Undo: tracking.UndoUntrack,
 		Annotated: true,
-		Flags:     tool.Flags{ExternalEffect: true, Cost: true},
+		Channel:   tool.ChannelOwn,
 		Contexts:  tool.Kinds{tool.Chat},
 		Approval:  &tool.Approval{Apply: trackPackage, Label: "Track package", Icon: "package", Module: module.Mail, Detail: "tracking_number"},
 	})}

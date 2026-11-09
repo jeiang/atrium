@@ -150,10 +150,12 @@ func TestWebSubagentRecallsALongPageAndFollowsItsLink(t *testing.T) {
 	if _, web := threadTaint(t, dir, parentOf(t, dir, child)); !web {
 		t.Error("parent not web-tainted after the subagent result")
 	}
-	assertEgress(t, "parent after the subagent result", requestTools(t, requests[6]), false)
+	assertTools(t, "parent after the subagent result", requestTools(t, requests[6]), []string{"web_fetch", "research"}, true)
+	assertTools(t, "parent after the subagent result", requestTools(t, requests[6]), []string{"web_search"}, false)
+	assertOwn(t, "parent after the subagent result", requestTools(t, requests[6]), true)
 }
 
-func TestChatThreadLosesWebFetchAfterAFetch(t *testing.T) {
+func TestMarkedChatAsksBeforeFetchingAndFetchesOnApproval(t *testing.T) {
 	srv, pages := webPages(t)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
@@ -167,29 +169,64 @@ func TestChatThreadLosesWebFetchAfterAFetch(t *testing.T) {
 	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
 		t.Fatalf("GET /chat = %d", status)
 	}
+	long := srv.URL + "/b?" + strings.Repeat("x", 220)
 	start := len(api.Requests())
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("read")))
-	text := "read " + srv.URL + "/a and " + srv.URL + "/b"
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f2", "web_fetch", map[string]any{"url": long})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("read both")))
+	text := "read " + srv.URL + "/a then " + long
 	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {text}}); status >= http.StatusBadRequest {
 		t.Fatalf("POST message = %d: %s", status, body)
 	}
-	for deadline := time.Now().Add(20 * time.Second); len(api.Requests()) < start+2; {
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	var proposal int64
+	var state string
+	for deadline := time.Now().Add(20 * time.Second); ; {
+		proposal, state = 0, ""
+		if err := d.Read.QueryRow("SELECT id FROM proposals WHERE kind = 'permission'").Scan(&proposal); err != nil {
+			proposal = 0
+		}
+		_ = d.Read.QueryRow("SELECT state FROM runs WHERE thread_id = ? ORDER BY id DESC LIMIT 1", thread).Scan(&state)
+		if proposal != 0 && state == "parked" {
+			break
+		}
 		if time.Now().After(deadline) {
-			t.Fatalf("%d model requests, want 2", len(api.Requests())-start)
+			t.Fatalf("no parked permission request: proposal %d state %q", proposal, state)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
-	requests := api.Requests()[start:]
-	assertEgress(t, "before the fetch", requestTools(t, requests[0]), true)
-	if body := string(requests[1].Body); !strings.Contains(body, "Paragraph 1 describes") {
-		t.Fatalf("page A did not reach the model: %s", body)
-	}
-	assertEgress(t, "after the fetch in a thread with private data", requestTools(t, requests[1]), false)
 	if hits := pages.seen(); !slices.Equal(hits, []string{"/a"}) {
-		t.Errorf("page fetches = %v, want /a", hits)
+		t.Fatalf("page fetches before approval = %v, want /a only", hits)
 	}
-	if _, web := threadTaint(t, dir, thread); !web {
-		t.Error("thread not web-tainted after web_fetch")
+	status, page, _ := fetch(t, client, "GET", fmt.Sprintf("%s/chat/%d", base, thread), nil)
+	if status != http.StatusOK || !strings.Contains(page, fmt.Sprintf(`id="needs-%d"`, proposal)) {
+		t.Fatalf("the thread does not list the permission request: %d", status)
+	}
+	code, body := hxFetch(t, client, http.MethodGet, base+fmt.Sprintf("/proposals/%d/card", proposal), nil)
+	if code != http.StatusOK || !strings.Contains(body, long) {
+		t.Fatalf("the card does not show the full URL: %d\n%s", code, body)
+	}
+	if code, body = hxFetch(t, client, http.MethodPost, base+fmt.Sprintf("/proposals/%d/approve", proposal), url.Values{"all": {"1"}}); code != http.StatusOK {
+		t.Fatalf("approve = %d\n%s", code, body)
+	}
+	for deadline := time.Now().Add(20 * time.Second); ; {
+		if err := d.Read.QueryRow("SELECT state FROM runs WHERE thread_id = ? ORDER BY id DESC LIMIT 1", thread).Scan(&state); err != nil {
+			t.Fatal(err)
+		}
+		if state == "done" {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("run state after approval = %q, want done", state)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if hits := pages.seen(); !slices.Equal(hits, []string{"/a", "/b"}) {
+		t.Errorf("page fetches after approval = %v, want /a then /b", hits)
+	}
+	requests := api.Requests()[start:]
+	if last := requests[len(requests)-1]; !strings.Contains(string(last.Body), pageBText) {
+		t.Errorf("the approved page did not reach the model: %s", last.Body)
 	}
 }

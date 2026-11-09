@@ -23,15 +23,16 @@ func (e InvalidError) Error() string { return string(e) }
 type Binder func(ctx context.Context, q db.Querier, t tool.Tool) (bound tool.Tool, ok bool, err error)
 
 type Registry struct {
-	tools    []tool.Tool
-	binders  map[string]Binder
-	settings *settings.Registry
+	tools       []tool.Tool
+	binders     map[string]Binder
+	settings    *settings.Registry
+	permissions Table
 }
 
 type Source func() (*Registry, error)
 
 func New(reg *settings.Registry) *Registry {
-	return &Registry{tools: []tool.Tool{webSearchTool()}, binders: map[string]Binder{}, settings: reg}
+	return &Registry{tools: []tool.Tool{webSearchTool()}, binders: map[string]Binder{}, settings: reg, permissions: DefaultTable()}
 }
 
 func (r *Registry) Add(tools ...tool.Tool) error {
@@ -60,14 +61,6 @@ func (r *Registry) Add(tools ...tool.Tool) error {
 
 func settingKey(name string) string { return "tool_" + name + "_enabled" }
 
-func PromptCarriesPrivate(kind tool.Kind) bool { return kind != tool.Sub }
-
-func egress(t tool.Tool) bool {
-	return t.Flags.ExternalEffect || t.Flags.Cost || t.Effect == tool.Notify || t.Effect == tool.WriteUndo
-}
-
-func webRead(t tool.Tool) bool { return t.Flags.Web && t.Effect == tool.Read }
-
 type Decision int
 
 const (
@@ -75,26 +68,6 @@ const (
 	Ask
 	Denied
 )
-
-type Rule struct {
-	Kind     tool.Kind
-	Effect   tool.Effect
-	Decision Decision
-}
-
-var Policy = []Rule{
-	{Kind: tool.Sub, Effect: tool.WriteUndo, Decision: Denied},
-}
-
-func Decide(rules []Rule, kind tool.Kind, effect tool.Effect) Decision {
-	decision := Allowed
-	for _, rule := range rules {
-		if rule.Kind == kind && rule.Effect == effect && rule.Decision > decision {
-			decision = rule.Decision
-		}
-	}
-	return decision
-}
 
 func (r *Registry) Bind(name string, b Binder) { r.binders[name] = b }
 
@@ -150,10 +123,10 @@ func (r *Registry) Admit(ctx context.Context, kind tool.Kind, marks threads.Mark
 	if err != nil {
 		return Set{}, err
 	}
-	var offered []tool.Tool
-	private := PromptCarriesPrivate(kind) || marks.Set.Kinds() != 0
+	var candidates []tool.Tool
+	privateTools := false
 	for _, t := range found {
-		if !allow.Has(t.Name) || Decide(Policy, kind, t.Effect) == Denied {
+		if !allow.Has(t.Name) {
 			continue
 		}
 		enabled, err := r.enabled(ctx, q, t.Name)
@@ -163,15 +136,26 @@ func (r *Registry) Admit(ctx context.Context, kind tool.Kind, marks threads.Mark
 		if !enabled {
 			continue
 		}
-		private = private || t.Marks.Kinds() != 0
-		offered = append(offered, t)
+		privateTools = privateTools || t.Marks.Kinds() != 0
+		candidates = append(candidates, t)
 	}
+	situation := Classify(marks.Set, PromptCarriesKnowledge(kind), privateTools)
 	var set Set
-	for _, t := range offered {
-		if marks.Set != 0 && egress(t) && (private || !webRead(t)) {
+	for _, t := range candidates {
+		if marks.Set != 0 && t.PromptStore {
 			continue
 		}
-		if t.Server {
+		decision := r.permissions.Decide(t.Channel, situation, kind)
+		if decision == Ask && !hasCard(t) && kind != tool.Chat {
+			decision = Denied
+		}
+		switch {
+		case decision == Denied:
+			continue
+		case t.Server:
+			if decision != Allowed {
+				continue
+			}
 			set.Server = append(set.Server, t)
 			continue
 		}
@@ -183,10 +167,13 @@ func (r *Registry) Admit(ctx context.Context, kind tool.Kind, marks threads.Mark
 			if !keep {
 				continue
 			}
-			if bound.Name != t.Name || bound.Effect != t.Effect || !slices.Equal(bound.Contexts, t.Contexts) {
-				return Set{}, InvalidError(fmt.Sprintf("binder for %s changed its name, effect or run kinds", t.Name))
+			if bound.Name != t.Name || bound.Effect != t.Effect || bound.Channel != t.Channel || !slices.Equal(bound.Contexts, t.Contexts) {
+				return Set{}, InvalidError(fmt.Sprintf("binder for %s changed its name, effect, channel or run kinds", t.Name))
 			}
 			t = bound
+		}
+		if t.ChannelOf != nil || (decision == Ask && !hasCard(t)) {
+			t = Gate(t, r.permissions, situation, kind)
 		}
 		set.Dispatch = append(set.Dispatch, t)
 	}
@@ -231,8 +218,18 @@ func validate(t tool.Tool) error {
 		return InvalidError(fmt.Sprintf("tool %s has unknown marks %d", t.Name, t.Marks))
 	case len(t.Contexts) == 0:
 		return InvalidError(fmt.Sprintf("tool %s has no run kinds", t.Name))
-	case t.Effect == tool.WriteUndo && (t.Flags.ExternalEffect || t.Flags.Cost):
-		return InvalidError(fmt.Sprintf("tool %s writes directly but has an external effect or cost; it must ask for approval", t.Name))
+	case !t.Channel.Valid():
+		return InvalidError(fmt.Sprintf("tool %s has unknown channel %d", t.Name, t.Channel))
+	case t.Effect == tool.WriteUndo && t.Channel != tool.ChannelOwn:
+		return InvalidError(fmt.Sprintf("tool %s writes directly but is not on the own-accounts channel", t.Name))
+	case (t.Effect == tool.Notify) != (t.Channel == tool.ChannelNotify):
+		return InvalidError(fmt.Sprintf("tool %s: the notify effect and the notify channel go together", t.Name))
+	case t.Server && t.Channel != tool.ChannelInternet:
+		return InvalidError(fmt.Sprintf("tool %s is a server tool outside the internet channel", t.Name))
+	case (t.Channel == tool.ChannelPeople || t.Channel == tool.ChannelInternet) && t.Effect != tool.Read && !hasCard(t):
+		return InvalidError(fmt.Sprintf("tool %s reaches people or the internet without a card", t.Name))
+	case t.PromptStore && t.Effect != tool.WriteUndo:
+		return InvalidError(fmt.Sprintf("tool %s is a prompt store but not a direct write", t.Name))
 	case t.Effect == tool.WriteUndo && t.Contexts.Has(tool.Sub):
 		return InvalidError(fmt.Sprintf("tool %s writes directly in sub-agent runs", t.Name))
 	case t.Approval != nil && (t.Effect != tool.Propose || t.Approval.Apply == nil || t.Approval.Label == "" || t.Approval.Module == ""):

@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/actionlink/policy"
+	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
@@ -45,7 +46,7 @@ func Handler(pipeline *proposals.Pipeline, now func() float64) http.HandlerFunc 
 			if prop == nil || prop.Fingerprint != claims.Hash {
 				return ErrInvalid
 			}
-			if !pol.Allows(prop.Kind) {
+			if prop.Kind == permission.Kind || !pol.Allows(prop.Kind) {
 				return ErrRefused
 			}
 			who := proposals.Resolver{Actor: "phone", Source: "phone"}
@@ -53,7 +54,7 @@ func Handler(pipeline *proposals.Pipeline, now func() float64) http.HandlerFunc 
 				_, err := pipeline.ApproveAndApply(ctx, prop.ID, nil, who)
 				return err
 			}
-			return proposals.Dismiss(ctx, pipeline.DB, prop.ID, proposals.Dismissed, who, now())
+			return pipeline.Dismiss(ctx, prop.ID, proposals.Dismissed, who)
 		})
 		switch {
 		case errors.Is(err, ErrUsed):

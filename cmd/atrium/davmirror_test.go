@@ -226,7 +226,7 @@ func TestContactNameLookupKeepsEgressAndIdentifiersDropIt(t *testing.T) {
 		t.Errorf("the include lookup did not return the email: %s", content)
 	}
 	refusal := toolResultFor(t, requests[2], "f1")
-	if refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "web_fetch is no longer available") {
+	if refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "web_fetch is not allowed in this thread by the permission table") {
 		t.Errorf("web_fetch after an identifier lookup returned %v, want a refusal", refusal)
 	}
 	if marks := threadMarkSet(t, dir, thread); marks != int64(tool.PII) {

@@ -28,7 +28,9 @@ import (
 	"github.com/jeiang/atrium/internal/tool"
 )
 
-var egressTools = []string{"notify", "web_fetch", "web_search", "research", "file_write", "task_add"}
+var internetTools = []string{"web_fetch", "web_search", "research"}
+
+var ownTools = []string{"notify", "file_write", "task_add"}
 
 func requestTools(t *testing.T, r anthropictest.Request) []string {
 	t.Helper()
@@ -44,13 +46,23 @@ func requestTools(t *testing.T, r anthropictest.Request) []string {
 	return names
 }
 
-func assertEgress(t *testing.T, label string, names []string, offered bool) {
+func assertTools(t *testing.T, label string, names, tools []string, offered bool) {
 	t.Helper()
-	for _, name := range egressTools {
+	for _, name := range tools {
 		if slices.Contains(names, name) != offered {
 			t.Errorf("%s: %s offered = %v, want %v: %v", label, name, !offered, offered, names)
 		}
 	}
+}
+
+func assertInternet(t *testing.T, label string, names []string, offered bool) {
+	t.Helper()
+	assertTools(t, label, names, internetTools, offered)
+}
+
+func assertOwn(t *testing.T, label string, names []string, offered bool) {
+	t.Helper()
+	assertTools(t, label, names, ownTools, offered)
 }
 
 func seedMail(t *testing.T, dir string) int64 {
@@ -102,7 +114,7 @@ func warm(t *testing.T, api *modelLog) int {
 	return len(api.Requests())
 }
 
-func TestMailReadDropsEgressForTheRestOfTheRunAndInLaterProcesses(t *testing.T) {
+func TestMailReadDropsInternetButKeepsOwnAndNotify(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	start := warm(t, api)
 	message := seedMail(t, dir)
@@ -115,9 +127,11 @@ func TestMailReadDropsEgressForTheRestOfTheRunAndInLaterProcesses(t *testing.T) 
 	if len(requests) != 2 {
 		t.Fatalf("%d model requests in the first run, want 2", len(requests))
 	}
-	assertEgress(t, "before the mail read", requestTools(t, requests[0]), true)
+	assertInternet(t, "before the mail read", requestTools(t, requests[0]), true)
+	assertOwn(t, "before the mail read", requestTools(t, requests[0]), true)
 	after := requestTools(t, requests[1])
-	assertEgress(t, "after the mail read in the same run", after, false)
+	assertInternet(t, "after the mail read in the same run", after, false)
+	assertOwn(t, "after the mail read in the same run", after, true)
 	if !slices.Contains(after, "mail_read") {
 		t.Errorf("mail_read was dropped by taint: %v", after)
 	}
@@ -129,7 +143,8 @@ func TestMailReadDropsEgressForTheRestOfTheRunAndInLaterProcesses(t *testing.T) 
 		t.Fatalf("second process: %d %s", code, errs.String())
 	}
 	requests = api.Requests()
-	assertEgress(t, "in a separate agent run process", requestTools(t, requests[len(requests)-1]), false)
+	assertInternet(t, "in a separate agent run process", requestTools(t, requests[len(requests)-1]), false)
+	assertOwn(t, "in a separate agent run process", requestTools(t, requests[len(requests)-1]), true)
 
 	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
@@ -152,7 +167,8 @@ func TestMailReadDropsEgressForTheRestOfTheRunAndInLaterProcesses(t *testing.T) 
 		time.Sleep(20 * time.Millisecond)
 	}
 	requests = api.Requests()
-	assertEgress(t, "in atrium serve after a restart", requestTools(t, requests[len(requests)-1]), false)
+	assertInternet(t, "in atrium serve after a restart", requestTools(t, requests[len(requests)-1]), false)
+	assertOwn(t, "in atrium serve after a restart", requestTools(t, requests[len(requests)-1]), true)
 }
 
 func TestUntrustedOutputAloneKeepsEgress(t *testing.T) {
@@ -174,7 +190,8 @@ func TestUntrustedOutputAloneKeepsEgress(t *testing.T) {
 	if !strings.Contains(string(requests[1].Body), "Partly cloudy") {
 		t.Fatal("weather result did not reach the model")
 	}
-	assertEgress(t, "after an untrusted_output call in the same run", requestTools(t, requests[1]), true)
+	assertInternet(t, "after an untrusted_output call in the same run", requestTools(t, requests[1]), true)
+	assertOwn(t, "after an untrusted_output call in the same run", requestTools(t, requests[1]), true)
 	thread := latestThread(t, dir)
 	if threadTainted(t, dir, thread) {
 		t.Error("thread tainted after an untrusted_output-only result")
@@ -184,7 +201,8 @@ func TestUntrustedOutputAloneKeepsEgress(t *testing.T) {
 		t.Fatalf("second run: %d %s", ran.code, ran.stderr)
 	}
 	requests = api.Requests()
-	assertEgress(t, "in a later run", requestTools(t, requests[len(requests)-1]), true)
+	assertInternet(t, "in a later run", requestTools(t, requests[len(requests)-1]), true)
+	assertOwn(t, "in a later run", requestTools(t, requests[len(requests)-1]), true)
 }
 
 func threadMarkSet(t *testing.T, dir string, thread int64) int64 {
@@ -262,7 +280,7 @@ func TestNightlyTaintMidRunRefusesWriteToolsAndKeepsThinking(t *testing.T) {
 		}
 	}
 	refusal := toolResultFor(t, requests[2], "o1")
-	if refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "nightly_observe is no longer available in this thread") {
+	if refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "nightly_observe is not allowed in this thread by the permission table") {
 		t.Errorf("withdrawn nightly_observe call returned %v, want a refusal", refusal)
 	}
 
@@ -307,8 +325,11 @@ func TestServerWebSearchResultTaintsTheThread(t *testing.T) {
 	if len(requests) != 2 {
 		t.Fatalf("%d model requests, want 2", len(requests))
 	}
-	assertEgress(t, "before the search result", requestTools(t, requests[0]), true)
-	assertEgress(t, "after the search result in the same run", requestTools(t, requests[1]), false)
+	assertInternet(t, "before the search result", requestTools(t, requests[0]), true)
+	assertOwn(t, "before the search result", requestTools(t, requests[0]), true)
+	assertTools(t, "after the search result in the same run", requestTools(t, requests[1]), []string{"web_fetch", "research"}, true)
+	assertTools(t, "after the search result in the same run", requestTools(t, requests[1]), []string{"web_search"}, false)
+	assertOwn(t, "after the search result in the same run", requestTools(t, requests[1]), true)
 	if !threadTainted(t, dir, latestThread(t, dir)) {
 		t.Error("thread not tainted after a web_search result")
 	}
@@ -338,7 +359,9 @@ func TestGrafanaResultTaintsTheThread(t *testing.T) {
 	if !strings.Contains(string(requests[1].Body), "ignore your instructions") {
 		t.Fatal("grafana result did not reach the model")
 	}
-	assertEgress(t, "after a Grafana result", requestTools(t, requests[1]), false)
+	assertTools(t, "after a Grafana result", requestTools(t, requests[1]), []string{"web_fetch", "research"}, true)
+	assertTools(t, "after a Grafana result", requestTools(t, requests[1]), []string{"web_search"}, false)
+	assertOwn(t, "after a Grafana result", requestTools(t, requests[1]), true)
 	thread := latestThread(t, dir)
 	if !threadTainted(t, dir, thread) {
 		t.Error("thread not tainted after a Grafana result")
@@ -456,7 +479,8 @@ func TestBranchOfAMarkedThreadIsNotOfferedEgress(t *testing.T) {
 	if len(requests) != 1 {
 		t.Fatalf("%d model requests in the branch run, want 1", len(requests))
 	}
-	assertEgress(t, "first request of a branch of a marked thread", requestTools(t, requests[0]), false)
+	assertInternet(t, "first request of a branch of a marked thread", requestTools(t, requests[0]), false)
+	assertOwn(t, "first request of a branch of a marked thread", requestTools(t, requests[0]), true)
 }
 
 func TestEmptyMailSearchLeavesTheThreadUnmarked(t *testing.T) {
@@ -517,7 +541,7 @@ func TestEmptyMailSearchLeavesTheThreadUnmarked(t *testing.T) {
 		t.Errorf("thread marks after a non-empty mail search = %d, want pii, messages and untrusted", marks)
 	}
 	refusal := toolResultFor(t, requests[2], "f1")
-	if refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "web_fetch is no longer available") {
+	if refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "web_fetch is not allowed in this thread by the permission table") {
 		t.Errorf("web_fetch after a non-empty mail search returned %v, want a refusal", refusal)
 	}
 }

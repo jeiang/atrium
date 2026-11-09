@@ -185,7 +185,7 @@ func (s *service) proposalDismiss(w http.ResponseWriter, r *http.Request) {
 	if forever != "" {
 		status = proposals.Suppressed
 	}
-	err := proposals.Dismiss(detached(r), s.deps.DB, id, status, proposals.Resolver{Actor: "operator", Source: "ui"}, s.now())
+	err := s.pipeline.Dismiss(detached(r), id, status, proposals.Resolver{Actor: "operator", Source: "ui"})
 	var refused proposals.ProposalError
 	if errors.As(err, &refused) {
 		s.card(w, r, id, toast("error", "Not dismissed", err.Error()))

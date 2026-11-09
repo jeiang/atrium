@@ -51,7 +51,7 @@ func Tools() []tool.Tool {
 		{
 			Name: writeName, Description: "Write a text file into this thread's files directory, replacing it if it exists. Undo restores the prior content or removes a new file.",
 			InputSchema: json.RawMessage(writeSchema), Handler: write, Effect: tool.WriteUndo, Undo: UndoOp,
-			Annotated: true, Contexts: tool.Kinds{tool.Chat},
+			Annotated: true, Channel: tool.ChannelOwn, Contexts: tool.Kinds{tool.Chat},
 		},
 	}
 }

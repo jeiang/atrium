@@ -24,7 +24,7 @@ func Tools() []tool.Tool {
 		Handler:     handle,
 		Effect:      tool.Notify,
 		Annotated:   true,
-		Flags:       tool.Flags{ExternalEffect: true},
+		Channel:     tool.ChannelNotify,
 		Contexts:    tool.DefaultKinds,
 	}}
 }

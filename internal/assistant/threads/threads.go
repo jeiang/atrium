@@ -426,6 +426,36 @@ func AddMarks(ctx context.Context, q db.Querier, threadID int64, now float64, ma
 	return err
 }
 
+func MarksOf(ctx context.Context, q db.Querier, targets []string) (tool.Marks, error) {
+	if len(targets) == 0 {
+		return 0, nil
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(targets)), ",")
+	args := make([]any, len(targets))
+	for i, target := range targets {
+		args[i] = target
+	}
+	rows, err := q.QueryContext(ctx,
+		"SELECT DISTINCT t.marks FROM agent_writes w JOIN threads t ON t.id = w.thread_id "+
+			"WHERE w.target IN ("+placeholders+") AND w.state = 'ok' AND w.undone_at IS NULL", args...)
+	if err != nil {
+		return 0, err
+	}
+	sets, err := db.Collect(rows, func(r *sql.Rows) (int64, error) {
+		var set int64
+		err := r.Scan(&set)
+		return set, err
+	})
+	if err != nil {
+		return 0, err
+	}
+	var marks tool.Marks
+	for _, set := range sets {
+		marks |= tool.Marks(set)
+	}
+	return marks, nil
+}
+
 func ReadMarks(ctx context.Context, q db.Querier, threadID int64) (Marks, error) {
 	var m Marks
 	var set int64

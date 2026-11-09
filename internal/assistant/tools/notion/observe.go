@@ -20,8 +20,10 @@ func observeTool() tool.Tool {
 		InputSchema: json.RawMessage(observeSchema),
 		Handler:     observe,
 		Effect:      tool.WriteUndo, Undo: "notion_page_restore, profile_restore",
-		Annotated: true,
-		Contexts:  tool.Kinds{tool.Nightly},
+		Annotated:   true,
+		Channel:     tool.ChannelOwn,
+		PromptStore: true,
+		Contexts:    tool.Kinds{tool.Nightly},
 	}
 }
 

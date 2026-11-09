@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/timex"
@@ -177,6 +178,7 @@ func list(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 		return nil, err
 	}
 	out := []any{}
+	targets := []string{}
 	for i := range jobs {
 		if jobs[i].Fixed() {
 			continue
@@ -186,8 +188,13 @@ func list(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 			return nil, err
 		}
 		out = append(out, d)
+		targets = append(targets, fmt.Sprintf("schedule:%d", jobs[i].ID))
 	}
-	return map[string]any{"schedules": out}, nil
+	marks, err := threads.MarksOf(ctx, tc.DB.Read, targets)
+	if err != nil {
+		return nil, err
+	}
+	return tool.Marked{Value: map[string]any{"schedules": out}, Marks: marks}, nil
 }
 
 func Tools() []tool.Tool {
@@ -200,6 +207,7 @@ func Tools() []tool.Tool {
 			Handler:     create,
 			Effect:      tool.WriteUndo, Undo: "schedule_delete",
 			Annotated: true,
+			Channel:   tool.ChannelOwn,
 			Contexts:  chatOnly,
 		},
 		{
@@ -209,6 +217,7 @@ func Tools() []tool.Tool {
 			Handler:     update,
 			Effect:      tool.WriteUndo, Undo: "schedule_restore",
 			Annotated: true,
+			Channel:   tool.ChannelOwn,
 			Contexts:  chatOnly,
 		},
 		{
@@ -218,6 +227,7 @@ func Tools() []tool.Tool {
 			Handler:     cancel,
 			Effect:      tool.WriteUndo, Undo: "schedule_restore",
 			Annotated: true,
+			Channel:   tool.ChannelOwn,
 			Contexts:  chatOnly,
 		},
 		{
@@ -227,6 +237,7 @@ func Tools() []tool.Tool {
 			Handler:     list,
 			Effect:      tool.Read,
 			Annotated:   true,
+			Marks:       tool.AllMarks,
 			Contexts:    chatOnly,
 		},
 	}
