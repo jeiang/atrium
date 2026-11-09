@@ -118,6 +118,19 @@
     exec ${lib.getExe cfg.package} backup "${cfg.backup.directory}/atrium-$(${pkgs.coreutils}/bin/date -u +%Y%m%dT%H%M%SZ).backup"
   '';
 
+  backupPruneScript = pkgs.writeShellScript "atrium-backup-prune" ''
+    set -euo pipefail
+    cutoff=$(( $(${pkgs.coreutils}/bin/date +%s) - ${toString (cfg.backup.keepDays * 86400)} ))
+    ${pkgs.findutils}/bin/find ${lib.escapeShellArg cfg.backup.directory} -maxdepth 1 -type f -name '*.backup' -printf '%T@ %p\0' \
+      | ${pkgs.coreutils}/bin/sort -z -rn \
+      | ${pkgs.coreutils}/bin/tail -z -n +${toString (cfg.backup.keep + 1)} \
+      | while IFS=' ' read -r -d "" stamp path; do
+        if (( ''${stamp%.*} < cutoff )); then
+          ${pkgs.coreutils}/bin/rm -f -- "$path"
+        fi
+      done
+  '';
+
   authArgs = auth: lib.concatMapStringsSep " " (mode: "--auth ${mode}") (lib.splitString "+" auth);
 
   webUnit = {
@@ -261,6 +274,7 @@
         serviceConfig = {
           Type = "oneshot";
           ExecStart = backupScript;
+          ExecStartPost = backupPruneScript;
           ReadWritePaths = [cfg.backup.directory];
           TimeoutStartSec = "2h";
         };
@@ -450,13 +464,25 @@ in {
       directory = mkOption {
         type = types.str;
         default = "/var/backups/atrium";
-        description = "Directory that receives one timestamped archive per run; owned by the atrium user. Pruning and off-host copies are left to the host.";
+        description = "Directory that receives one timestamped archive per run; owned by the atrium user. Off-host copies are left to the host.";
       };
 
       onCalendar = mkOption {
         type = types.str;
         default = "daily";
         description = "systemd OnCalendar expression of the backup timer.";
+      };
+
+      keep = mkOption {
+        type = types.ints.positive;
+        default = 5;
+        description = "Number of newest `*.backup` archives in backup.directory that pruning always keeps, whatever their age.";
+      };
+
+      keepDays = mkOption {
+        type = types.ints.unsigned;
+        default = 14;
+        description = "Archives modified within this many days are kept even beyond backup.keep; older ones are deleted after each successful run.";
       };
     };
 
