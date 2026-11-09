@@ -279,3 +279,64 @@ func TestGrafanaResultTaintsTheThread(t *testing.T) {
 		t.Error("thread not tainted after a Grafana result")
 	}
 }
+
+func replayedSignatures(t *testing.T, r anthropictest.Request) []string {
+	t.Helper()
+	var sigs []string
+	messages, _ := r.JSON(t)["messages"].([]any)
+	for _, raw := range messages {
+		m, _ := raw.(map[string]any)
+		content, _ := m["content"].([]any)
+		for _, b := range content {
+			if entry, _ := b.(map[string]any); entry["type"] == "thinking" {
+				sig, _ := entry["signature"].(string)
+				sigs = append(sigs, sig)
+			}
+		}
+	}
+	return sigs
+}
+
+func TestThinkingIsReplayedOnlyIntoTheContextItWasSignedIn(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	fakeOpenMeteo(t)
+	start := warm(t, api)
+	message := seedMail(t, dir)
+	api.Push(
+		anthropictest.Reply("tool_use", anthropictest.Thinking("weighing", "sig-weather"), anthropictest.ToolUse("w1", "weather", map[string]any{})),
+		anthropictest.Reply("end_turn", anthropictest.Thinking("summing", "sig-answer"), anthropictest.Text("sunny")),
+	)
+	if ran := runApp(t, "agent", "run", "--kind", "chat", "--text", "weather"); ran.code != cli.ExitOK {
+		t.Fatalf("weather run: %d %s", ran.code, ran.stderr)
+	}
+	thread := latestThread(t, dir)
+	api.Push(
+		anthropictest.Reply("tool_use", anthropictest.Thinking("reading", "sig-mail"), anthropictest.ToolUse("m1", "mail_read", map[string]any{"message_id": message})),
+		anthropictest.Reply("end_turn", anthropictest.Text("read")),
+	)
+	if ran := runApp(t, "agent", "run", "--thread", fmt.Sprint(thread), "--text", "read my latest mail"); ran.code != cli.ExitOK {
+		t.Fatalf("mail run: %d %s", ran.code, ran.stderr)
+	}
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("again")))
+	if ran := runApp(t, "agent", "run", "--thread", fmt.Sprint(thread), "--text", "and again"); ran.code != cli.ExitOK {
+		t.Fatalf("later run: %d %s", ran.code, ran.stderr)
+	}
+	requests := api.Requests()[start:]
+	if len(requests) != 5 {
+		t.Fatalf("%d model requests, want 5", len(requests))
+	}
+	for i, want := range [][]string{
+		nil,
+		{"sig-weather"},
+		{"sig-weather", "sig-answer"},
+		nil,
+		nil,
+	} {
+		if got := replayedSignatures(t, requests[i]); !slices.Equal(got, want) {
+			t.Errorf("request %d replayed thinking %v, want %v", i+1, got, want)
+		}
+	}
+	if !threadTainted(t, dir, thread) {
+		t.Error("thread not tainted after the mail read")
+	}
+}

@@ -93,6 +93,7 @@ type state struct {
 	admission     admission
 	taint         threads.Taint
 	hist          *history
+	sig           string
 }
 
 type admission struct {
@@ -610,7 +611,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if err := s.renew(ctx); err != nil {
 		return false, nil, err
 	}
-	seq, err := journal.AppendMessage(ctx, s.d, s.thread.ID, &s.run.ID, journal.Assistant, blocks, s.now(), new(s.req.sig))
+	seq, err := journal.AppendMessage(ctx, s.d, s.thread.ID, &s.run.ID, journal.Assistant, blocks, s.now(), new(s.sig))
 	if err != nil {
 		return false, nil, err
 	}
