@@ -11,6 +11,11 @@ func init() {
 	integrations.Register(integrations.Integration{
 		Name: "open_meteo", Label: "Open-Meteo", Module: Module,
 		Help: "Public weather forecasts and place lookup; no key.",
+		Fields: []integrations.Field{
+			{Key: KeyLatitude, Label: "Latitude", Number: true},
+			{Key: KeyLongitude, Label: "Longitude", Number: true},
+			{Key: KeyLocationName, Label: "Location name"},
+		},
 		Test: testOpenMeteo,
 	})
 }

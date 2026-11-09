@@ -145,8 +145,10 @@ Media pages that show TMDB data carry the attribution.
 
 Weather forecasts and place lookup need no credential. Set the location
 (`weather_latitude`, `weather_longitude` and optionally
-`weather_location_name`) on the assistant Configuration page; the `weather`
-tool reads it, or geocodes a place named in the call. The tool fetches only
+`weather_location_name`) on the Open-Meteo record on the Integrations page;
+the `weather` tool reads it, or geocodes a place named in the call. Latitude
+must be between -90 and 90 and longitude between -180 and 180, and a value
+pinned from the host is shown read-only. The tool fetches only
 the configured Open-Meteo hosts, and the request carries no operator data
 beyond the coordinates.
 

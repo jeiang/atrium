@@ -179,7 +179,10 @@ behavior-parity target.
   and a per-integration CA bundle and proxy. Certificate verification
   cannot be turned off. Open-Meteo is a keyless connection record for the
   `weather` tool: current conditions and an hourly/daily forecast for the
-  configured location or a named place, fetched over the shared transport. The Integrations page also has a Google OAuth wizard:
+  configured location or a named place, fetched over the shared transport.
+  The record carries the editable location fields (`weather_latitude`,
+  `weather_longitude` and `weather_location_name`), validated in range and
+  read-only when pinned. The Integrations page also has a Google OAuth wizard:
   the Cloud console steps, a Web-application client ID and secret, consent
   per capability (Calendar or Gmail) with PKCE and a paste-back fallback, and
   a Testing-mode warning about 7-day refresh tokens. The state and verifier

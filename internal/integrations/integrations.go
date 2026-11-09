@@ -41,11 +41,18 @@ type Conn struct {
 	Env         config.Env
 }
 
+type Field struct {
+	Key    string
+	Label  string
+	Number bool
+}
+
 type Integration struct {
 	Name, Label, Module string
 	Enables             string
 	URLKey, SecretKey   string
 	Help                string
+	Fields              []Field
 	Test                func(ctx context.Context, c Conn) (string, error)
 	Expires             func(ctx context.Context, q db.Querier) (*time.Time, error)
 }
@@ -116,21 +123,30 @@ func text(ctx context.Context, q db.Querier, key string) (string, error) {
 	return strings.TrimSpace(found.Value), err
 }
 
+type FieldView struct {
+	Key    string `json:"key"`
+	Label  string `json:"label"`
+	Value  string `json:"value"`
+	Number bool   `json:"number"`
+	Pinned bool   `json:"pinned"`
+}
+
 type Record struct {
-	Name         string     `json:"name"`
-	Label        string     `json:"label"`
-	Module       string     `json:"module"`
-	Help         string     `json:"help"`
-	URLKey       string     `json:"url_key"`
-	URL          string     `json:"url"`
-	URLPinned    bool       `json:"url_pinned"`
-	SecretKey    string     `json:"secret_key"`
-	SecretSet    bool       `json:"secret_set"`
-	SecretPinned bool       `json:"secret_pinned"`
-	State        string     `json:"state"`
-	Reason       string     `json:"reason"`
-	CheckedAt    *float64   `json:"checked_at"`
-	ExpiresAt    *time.Time `json:"expires_at"`
+	Name         string      `json:"name"`
+	Label        string      `json:"label"`
+	Module       string      `json:"module"`
+	Help         string      `json:"help"`
+	URLKey       string      `json:"url_key"`
+	URL          string      `json:"url"`
+	URLPinned    bool        `json:"url_pinned"`
+	SecretKey    string      `json:"secret_key"`
+	SecretSet    bool        `json:"secret_set"`
+	SecretPinned bool        `json:"secret_pinned"`
+	Fields       []FieldView `json:"fields"`
+	State        string      `json:"state"`
+	Reason       string      `json:"reason"`
+	CheckedAt    *float64    `json:"checked_at"`
+	ExpiresAt    *time.Time  `json:"expires_at"`
 }
 
 func (r Record) Configured() bool { return r.URLKey == "" && r.SecretSet || r.URL != "" }
@@ -154,6 +170,14 @@ func Records(ctx context.Context, q db.Querier) ([]Record, error) {
 				return nil, err
 			}
 			r.SecretSet, r.SecretPinned = status != settings.Unset, status == settings.Pinned
+		}
+		for _, f := range i.Fields {
+			found, err := settings.From(ctx).Resolve(ctx, q, f.Key)
+			if err != nil {
+				return nil, err
+			}
+			def, _ := settings.From(ctx).Lookup(f.Key)
+			r.Fields = append(r.Fields, FieldView{Key: f.Key, Label: f.Label, Value: strings.TrimSpace(found.Value), Number: f.Number, Pinned: found.Pinned() || !def.Editable()})
 		}
 		var expires *float64
 		err := q.QueryRowContext(ctx, "SELECT state, reason, checked_at, expires_at FROM integration_health WHERE name = ?", i.Name).
@@ -363,6 +387,32 @@ func TestAndSave(ctx context.Context, d *db.DB, env config.Env, name string, can
 		return false, err
 	}
 	return true, record(ctx, d, env, i, state, reason, expires, now, &c)
+}
+
+func SaveFields(ctx context.Context, d *db.DB, name string, values map[string]string) error {
+	i, ok := Get(name)
+	if !ok || len(i.Fields) == 0 {
+		return Unknown(name)
+	}
+	return d.WithTx(ctx, func(tx *sql.Tx) error {
+		reg := settings.From(ctx)
+		for _, f := range i.Fields {
+			value, present := values[f.Key]
+			if !present {
+				continue
+			}
+			if value = strings.TrimSpace(value); value == "" {
+				if err := reg.Unset(ctx, tx, f.Key); err != nil {
+					return err
+				}
+				continue
+			}
+			if err := reg.Set(ctx, tx, f.Key, value); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func Disconnect(ctx context.Context, d *db.DB, name string) error {
