@@ -1,10 +1,6 @@
-// Command integrationsdocs checks docs/integrations.md against the
-// production integration and OIDC preset registries. It needs no database or
-// module settings, so CI can run it without bootstrapping the app.
 package main
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -21,9 +17,8 @@ import (
 )
 
 func main() {
-	path := flag.String("path", "docs/integrations.md", "support matrix path")
-	flag.Parse()
-	raw, err := os.ReadFile(*path)
+	const path = "docs/integrations.md"
+	raw, err := os.ReadFile(path)
 	if err != nil {
 		fail(err)
 	}
@@ -40,7 +35,7 @@ func main() {
 		}
 	}
 	if len(missing) > 0 {
-		fail(fmt.Errorf("%s is missing: %s", *path, strings.Join(missing, ", ")))
+		fail(fmt.Errorf("%s is missing: %s", path, strings.Join(missing, ", ")))
 	}
 }
 

@@ -5,7 +5,7 @@ default:
   @just --list
 
 verify:
-  {{dev}} bash -c 'go vet ./... && go build ./... && go run ./cmd/toolsdocs -check && go run ./cmd/integrationsdocs'
+  {{dev}} bash -c 'go vet ./... && go build ./... && go run ./cmd/toolsdocs check && go run ./cmd/integrationsdocs'
 
 tools-docs:
   {{dev}} go run ./cmd/toolsdocs
