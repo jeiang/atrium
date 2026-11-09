@@ -22,6 +22,13 @@ func init() {
 		Help: "API read access token from your TMDB account settings.",
 		Test: testTMDB,
 	})
+	integrations.RegisterSection(integrations.Section{
+		Name: "media", Title: "Media libraries", Module: module,
+		Fields: []integrations.Field{
+			{Key: KeyMoviesURL, Label: "Movies URL"},
+			{Key: KeyTVURL, Label: "TV URL"},
+		},
+	})
 }
 
 func testQbit(ctx context.Context, c integrations.Conn) (string, error) {

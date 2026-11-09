@@ -86,8 +86,8 @@ behavior-parity target.
   `ntfy_channels` table stays and only its `content` column is read.
 - Web Push devices subscribe from the Notifications settings page. The VAPID
   key is a generated secret (`webpush_vapid_private_key`, pinnable) and the
-  subject comes from `webpush_subject`, which the notifications module
-  requires. A push carries the title, a body of at most 240 characters, a
+  subject comes from `webpush_subject`, edited on the Notifications page,
+  which the notifications module requires. A push carries the title, a body of at most 240 characters, a
   URL path and, for phone actions, the action links; it is encrypted per
   RFC 8291 and sent only over HTTPS to public addresses. A 404 or 410
   deletes the subscription; other failures are counted per device, and a
@@ -208,7 +208,7 @@ behavior-parity target.
   registry (`settings.New()`); an `ATRIUM_<MODULE>_<KEY>` variable or
   configuration-file value pins a setting, otherwise a value
   stored in the database applies, and every command reads the same stored
-  values. Settings outside the six settings tabs are set through the CLI,
+  values. Settings not shown on a settings tab are set through the CLI,
   env or Nix; saving a working integration turns its module on, and the
   settings audit rows show on the Done page.
   Secrets set through `atrium secrets` are stored write-only in the database
@@ -386,7 +386,7 @@ behavior-parity target.
 - **Chat is home.** Five navigation entries: chat and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings.
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
-- **Settings has six tabs:** Assistant, Mail accounts, Integrations, Notifications, Sign-in, and Usage. Advanced settings move to Nix, the CLI, or the agent.
+- **Settings has six tabs:** Assistant, Mail accounts, Integrations, Notifications, Sign-in, and Usage. They edit the everyday module settings: the calendar and media library sections, mail behavior, the Notion wiki and Grafana datasource fields, the weather location, the push subject and the monthly budget. Advanced settings move to Nix, the CLI, or the agent.
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.

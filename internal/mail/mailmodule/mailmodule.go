@@ -23,14 +23,19 @@ import (
 )
 
 func init() {
-	for _, e := range []struct{ kind, label, url, key string }{
-		{endpoint.EndpointChat, "Mail chat endpoint", endpoint.KeyChatURL, endpoint.KeyChatKey},
-		{endpoint.EndpointEmbed, "Mail embed endpoint", endpoint.KeyEmbedURL, endpoint.KeyEmbedKey},
+	for _, e := range []struct {
+		kind, label, url, key string
+		fields                []integrations.Field
+	}{
+		{endpoint.EndpointChat, "Mail chat endpoint", endpoint.KeyChatURL, endpoint.KeyChatKey,
+			[]integrations.Field{{Key: endpoint.KeyChatModel, Label: "Model"}}},
+		{endpoint.EndpointEmbed, "Mail embed endpoint", endpoint.KeyEmbedURL, endpoint.KeyEmbedKey, nil},
 	} {
 		integrations.Register(integrations.Integration{
 			Name: endpoint.Integration(e.kind), Label: e.label, Module: module.Mail, URLKey: e.url, SecretKey: e.key,
-			Help: "OpenAI-compatible base URL ending in /v1; the Bearer key is optional.",
-			Test: probeTest(e.kind),
+			Help:   "OpenAI-compatible base URL ending in /v1; the Bearer key is optional.",
+			Fields: e.fields,
+			Test:   probeTest(e.kind),
 		})
 	}
 }

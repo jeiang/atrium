@@ -13,8 +13,8 @@
       {{if $d.Push.Devices}}<form method="post" action="/settings/notifications/push/test"><input type="hidden" name="csrf_token" value="{{$csrf}}"><button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "send"}}Send test</button></form>{{end}}
     </div>
   </div>
-  {{if not $d.Push.Subject}}<p class="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning/10 p-3 text-sm text-warning" data-push-subject>{{icon "circle-alert"}}<span><code>webpush_subject</code> is not set.</span></p>{{end}}
   {{with $d.Push.Problem}}<p class="text-sm text-destructive" role="alert">{{.}}</p>{{end}}
+  {{template "settings_fields" (dict "Fields" $d.Push.Fields "Action" "/settings/notifications/push/subject" "CSRF" $csrf)}}
   <form method="post" action="/settings/notifications/push/subscriptions" data-push-form="subscribe" hidden>
     <input type="hidden" name="csrf_token" value="{{$csrf}}"><input type="hidden" name="endpoint"><input type="hidden" name="p256dh"><input type="hidden" name="auth">
   </form>

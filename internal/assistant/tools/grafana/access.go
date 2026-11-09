@@ -28,6 +28,11 @@ func init() {
 	integrations.Register(integrations.Integration{
 		Name: "grafana", Label: "Grafana", Module: "grafana", URLKey: KeyURL, SecretKey: KeyToken,
 		Help: "Service account token with the Viewer role; Viewer can query datasources.",
+		Fields: []integrations.Field{
+			{Key: KeyMetricsUID, Label: "Metrics datasource UID"},
+			{Key: KeyLogsUID, Label: "Logs datasource UID"},
+			{Key: KeyLogsType, Label: "Logs datasource type", Choices: []string{Loki, VictoriaLogs}},
+		},
 		Test: testAccess,
 	})
 }

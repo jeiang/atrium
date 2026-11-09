@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -29,19 +30,25 @@ type AssistantData struct {
 }
 
 type UsageData struct {
-	Budget       budget.Status     `json:"budget"`
-	Summary      usage.Summary     `json:"summary"`
-	Memory       usage.Summary     `json:"memory"`
-	Subscription usage.Summary     `json:"subscription"`
-	ByKind       []usage.KindRow   `json:"by_kind"`
-	ByThread     []usage.ThreadRow `json:"by_thread"`
+	Budget       budget.Status        `json:"budget"`
+	Summary      usage.Summary        `json:"summary"`
+	Memory       usage.Summary        `json:"memory"`
+	Subscription usage.Summary        `json:"subscription"`
+	ByKind       []usage.KindRow      `json:"by_kind"`
+	ByThread     []usage.ThreadRow    `json:"by_thread"`
+	Fields       []settings.FieldView `json:"fields"`
+	Saved        bool                 `json:"saved"`
+	Error        string               `json:"error"`
 }
+
+var usageFields = []settings.Field{{Key: budget.BudgetKey, Label: "Monthly budget", Number: true}}
 
 func (p *pages) settingsRoutes(r chi.Router) {
 	p.deps.Admin(http.MethodGet, "/settings", func(w http.ResponseWriter, r *http.Request) { redirect(w, r, "/settings/assistant") })
 	p.deps.Admin(http.MethodGet, "/settings/assistant", p.assistantSettings)
 	p.deps.Admin(http.MethodPost, "/settings/assistant", p.assistantSave)
 	p.deps.Admin(http.MethodGet, "/settings/usage", p.usagePage)
+	p.deps.Admin(http.MethodPost, "/settings/usage/budget", p.usageBudget)
 }
 
 func (p *pages) settings(w http.ResponseWriter, r *http.Request, status int, name string, data any, toast *tpl.Toast) {
@@ -81,11 +88,20 @@ func settingsRedirect(w http.ResponseWriter, location string) {
 }
 
 func (p *pages) usagePage(w http.ResponseWriter, r *http.Request) {
+	saved := web.QueryValue(r.URL.Query(), "saved") == "1"
+	var toast *tpl.Toast
+	if saved {
+		toast = notice("success", "Saved", "")
+	}
+	p.renderUsage(w, r, http.StatusOK, toast, saved, "")
+}
+
+func (p *pages) renderUsage(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, saved bool, problem string) {
 	ctx := r.Context()
 	loc, err := config.From(ctx).Location(p.deps.Env)
 	check(err)
 	now := p.now()
-	status, err := budget.StatusAt(ctx, p.deps.DB.Read, now, loc)
+	statusAt, err := budget.StatusAt(ctx, p.deps.DB.Read, now, loc)
 	check(err)
 	summary, err := usage.MonthSummary(ctx, p.deps.DB.Read, now, loc)
 	check(err)
@@ -97,5 +113,21 @@ func (p *pages) usagePage(w http.ResponseWriter, r *http.Request) {
 	check(err)
 	subscription, err := usage.SubscriptionSummary(ctx, p.deps.DB.Read, now, loc)
 	check(err)
-	p.settings(w, r, http.StatusOK, "usage.gohtml", UsageData{Budget: status, Summary: summary, Memory: memory, Subscription: subscription, ByKind: byKind, ByThread: byThread}, nil)
+	fields, err := settings.LoadFields(ctx, p.deps.DB.Read, usageFields)
+	check(err)
+	p.settings(w, r, status, "usage.gohtml", UsageData{Budget: statusAt, Summary: summary, Memory: memory, Subscription: subscription, ByKind: byKind, ByThread: byThread, Fields: fields, Saved: saved, Error: problem}, toast)
+}
+
+func (p *pages) usageBudget(w http.ResponseWriter, r *http.Request) {
+	form := web.FormValues(r)
+	ctx := audit.With(detached(r), "operator", audit.UI)
+	err := settings.SaveFields(ctx, p.deps.DB, usageFields, map[string]string{budget.BudgetKey: web.FormString(form, budget.BudgetKey, "")})
+	var invalid settings.Invalid
+	var pinned *settings.PinnedError
+	if errors.As(err, &invalid) || errors.As(err, &pinned) {
+		p.renderUsage(w, r, http.StatusUnprocessableEntity, notice("error", "Not saved", err.Error()), false, err.Error())
+		return
+	}
+	check(err)
+	settingsRedirect(w, "/settings/usage?saved=1")
 }

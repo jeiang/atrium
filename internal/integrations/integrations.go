@@ -41,10 +41,19 @@ type Conn struct {
 	Env         config.Env
 }
 
-type Field struct {
-	Key    string
-	Label  string
-	Number bool
+type Field = settings.Field
+
+type FieldView = settings.FieldView
+
+type Section struct {
+	Name, Title, Module string
+	Fields              []Field
+}
+
+type SectionView struct {
+	Name   string      `json:"name"`
+	Title  string      `json:"title"`
+	Fields []FieldView `json:"fields"`
 }
 
 type Integration struct {
@@ -62,6 +71,7 @@ type Notifier func(ctx context.Context, d *db.DB, env config.Env, title, body st
 var (
 	mu       sync.Mutex
 	registry []Integration
+	sections []Section
 	notifier Notifier
 )
 
@@ -76,6 +86,50 @@ func Register(i Integration) {
 		settings.Value(settings.Advanced, settings.Def{Key: transport.ProxyKey(i.Name), Module: i.Module, Type: settings.String, Check: proxyCheck}),
 	)
 	registry = append(registry, i)
+}
+
+func RegisterSection(s Section) {
+	mu.Lock()
+	defer mu.Unlock()
+	if slices.ContainsFunc(sections, func(r Section) bool { return r.Name == s.Name }) {
+		return
+	}
+	sections = append(sections, s)
+}
+
+func AllSections() []Section {
+	mu.Lock()
+	defer mu.Unlock()
+	return slices.Clone(sections)
+}
+
+func SectionNamed(name string) (Section, bool) {
+	for _, s := range AllSections() {
+		if s.Name == name {
+			return s, true
+		}
+	}
+	return Section{}, false
+}
+
+func LoadSections(ctx context.Context, q db.Querier) ([]SectionView, error) {
+	var out []SectionView
+	for _, s := range AllSections() {
+		fields, err := settings.LoadFields(ctx, q, s.Fields)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, SectionView{Name: s.Name, Title: s.Title, Fields: fields})
+	}
+	return out, nil
+}
+
+func SaveSection(ctx context.Context, d *db.DB, name string, values map[string]string) error {
+	s, ok := SectionNamed(name)
+	if !ok {
+		return Unknown(name)
+	}
+	return settings.SaveFields(ctx, d, s.Fields, values)
 }
 
 func proxyCheck(value string) error {
@@ -123,14 +177,6 @@ func text(ctx context.Context, q db.Querier, key string) (string, error) {
 	return strings.TrimSpace(found.Value), err
 }
 
-type FieldView struct {
-	Key    string `json:"key"`
-	Label  string `json:"label"`
-	Value  string `json:"value"`
-	Number bool   `json:"number"`
-	Pinned bool   `json:"pinned"`
-}
-
 type Record struct {
 	Name         string      `json:"name"`
 	Label        string      `json:"label"`
@@ -171,16 +217,13 @@ func Records(ctx context.Context, q db.Querier) ([]Record, error) {
 			}
 			r.SecretSet, r.SecretPinned = status != settings.Unset, status == settings.Pinned
 		}
-		for _, f := range i.Fields {
-			found, err := settings.From(ctx).Resolve(ctx, q, f.Key)
-			if err != nil {
-				return nil, err
-			}
-			def, _ := settings.From(ctx).Lookup(f.Key)
-			r.Fields = append(r.Fields, FieldView{Key: f.Key, Label: f.Label, Value: strings.TrimSpace(found.Value), Number: f.Number, Pinned: found.Pinned() || !def.Editable()})
+		fields, err := settings.LoadFields(ctx, q, i.Fields)
+		if err != nil {
+			return nil, err
 		}
+		r.Fields = fields
 		var expires *float64
-		err := q.QueryRowContext(ctx, "SELECT state, reason, checked_at, expires_at FROM integration_health WHERE name = ?", i.Name).
+		err = q.QueryRowContext(ctx, "SELECT state, reason, checked_at, expires_at FROM integration_health WHERE name = ?", i.Name).
 			Scan(&r.State, &r.Reason, &r.CheckedAt, &expires)
 		if err != nil && !errors.Is(err, sql.ErrNoRows) {
 			return nil, err
@@ -394,25 +437,7 @@ func SaveFields(ctx context.Context, d *db.DB, name string, values map[string]st
 	if !ok || len(i.Fields) == 0 {
 		return Unknown(name)
 	}
-	return d.WithTx(ctx, func(tx *sql.Tx) error {
-		reg := settings.From(ctx)
-		for _, f := range i.Fields {
-			value, present := values[f.Key]
-			if !present {
-				continue
-			}
-			if value = strings.TrimSpace(value); value == "" {
-				if err := reg.Unset(ctx, tx, f.Key); err != nil {
-					return err
-				}
-				continue
-			}
-			if err := reg.Set(ctx, tx, f.Key, value); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	return settings.SaveFields(ctx, d, i.Fields, values)
 }
 
 func Disconnect(ctx context.Context, d *db.DB, name string) error {

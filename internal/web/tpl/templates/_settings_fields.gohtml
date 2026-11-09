@@ -1,0 +1,14 @@
+{{define "settings_fields"}}{{$csrf := .CSRF}}
+<form method="post" action="{{.Action}}" class="grid gap-3 sm:grid-cols-2">
+  <input type="hidden" name="csrf_token" value="{{$csrf}}">
+  {{range .Fields}}
+  <div role="group" class="field">
+    <label for="{{.Key}}">{{.Label}}</label>
+    {{if .Pinned}}<code id="{{.Key}}" class="break-all font-mono text-xs" data-pinned>{{.Value}}</code>
+    {{else if .Choices}}{{$v := .Value}}<select id="{{.Key}}" name="{{.Key}}">{{range .Choices}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{.}}</option>{{end}}</select>
+    {{else}}<input id="{{.Key}}" name="{{.Key}}" {{if .Number}}type="number" {{if .Whole}}step="1"{{else}}step="any"{{end}}{{else}}type="text"{{end}} value="{{.Value}}" autocomplete="off" spellcheck="false">{{end}}
+  </div>
+  {{end}}
+  <div class="sm:col-span-2"><button type="submit" class="btn" data-size="sm">{{icon "check"}}Save</button></div>
+</form>
+{{end}}

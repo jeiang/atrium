@@ -82,7 +82,9 @@ SMTP, CalDAV and CardDAV is an app-specific password:
 - Atrium can accept, test and store it, but cannot create it.
 
 Mail accounts come from `mailAccounts`; calendar and contacts reuse an iCloud
-mail account for their CalDAV and CardDAV login.
+mail account for their CalDAV and CardDAV login. The Calendar section on the
+Integrations page edits `calendar_account`, `icloud_apple_id`, `icloud_calendar`,
+`default_event_minutes`, `work_hours` and `work_days`.
 
 ## Notion
 
@@ -98,14 +100,17 @@ Atrium uses read, update and insert content, and no comments or users.
 
 Create the internal integration at
 [notion.so/my-integrations](https://www.notion.so/my-integrations), share the
-wiki pages with it, then paste its token.
+wiki pages with it, then paste its token. The Notion record on the
+Integrations page edits `wiki_root`, `sensitivity_property`,
+`notion_private_value` and `wiki_log_title`.
 
 ## Grafana
 
 Create a service account in Grafana and paste its token. The Viewer role is
 enough: it can query datasources. A token has no expiry by default; set a
 TTL if your policy requires one. The Test button searches dashboards and
-reports a token that may not search as needing the Viewer role.
+reports a token that may not search as needing the Viewer role. The Grafana
+record edits `grafana_metrics_uid`, `grafana_logs_uid` and `grafana_logs_type`.
 
 ## Anthropic
 
@@ -127,7 +132,8 @@ may carry an expiry.
 
 The chat and embed endpoints are OpenAI-compatible base URLs ending in `/v1`,
 with an optional Bearer key. The probe lists models and, for embeddings, the
-dimension. A hosted endpoint warns that mail content leaves this host.
+dimension. A hosted endpoint warns that mail content leaves this host. The
+chat endpoint record edits `mail_chat_model`.
 
 ## qBittorrent
 
@@ -139,7 +145,8 @@ no API keys.
 
 Create an API read access token in your TMDB account settings and paste it.
 Every request carries it as a Bearer token, never as a query parameter.
-Media pages that show TMDB data carry the attribution.
+Media pages that show TMDB data carry the attribution. The Media libraries
+section on the Integrations page edits `media_movies_url` and `media_tv_url`.
 
 ## Open-Meteo
 

@@ -9,6 +9,8 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
 | `action_link_key` | string | none | secret | `ATRIUM_ACTION_LINKS_ACTION_LINK_KEY` |
+| `phone_actions_enabled` | bool | `false` | ui | `ATRIUM_ACTION_LINKS_PHONE_ACTIONS_ENABLED` |
+| `phone_actions_kinds` | string | `reminder,triage_label,triage_archive,triage_snooze,memory,profile` | ui | `ATRIUM_ACTION_LINKS_PHONE_ACTIONS_KINDS` |
 
 ## anthropic
 
