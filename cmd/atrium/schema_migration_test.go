@@ -270,3 +270,76 @@ func TestSchemaVersionThreeDatabaseMigratesToTheFreshSchema(t *testing.T) {
 		}
 	}
 }
+
+func baselineV4(t *testing.T, path string) {
+	t.Helper()
+	baselineV3(t, path)
+	d := mustConnect(t, path)
+	defer func() { _ = d.Close() }()
+	for _, stmt := range []string{
+		`CREATE TABLE IF NOT EXISTS push_subscriptions (
+			id INTEGER PRIMARY KEY,
+			endpoint TEXT NOT NULL UNIQUE,
+			p256dh TEXT NOT NULL,
+			auth TEXT NOT NULL,
+			label TEXT NOT NULL DEFAULT '',
+			created_ts REAL NOT NULL,
+			last_ok_ts REAL,
+			failure_count INTEGER NOT NULL DEFAULT 0,
+			last_error TEXT
+		)`,
+		"INSERT INTO schema_migrations (version, applied_at) VALUES (4, 4.0)",
+		"INSERT INTO threads (kind, title, effort, created_at, updated_at, tainted_at) VALUES ('chat', 'tainted before migration 5', 'medium', 1, 1, 2)",
+	} {
+		if _, err := d.Write.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestSchemaVersionFourDatabaseSplitsTaintIntoKinds(t *testing.T) {
+	old := t.TempDir()
+	path := filepath.Join(old, "atrium.db")
+	baselineV4(t, path)
+
+	if code, _, stderr := runIn(t, old, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list on a version 4 database: exit %d %s", code, stderr)
+	}
+	d := mustConnect(t, path)
+	for title, want := range map[string]bool{"tainted before migration 5": true, "before migration 2": false} {
+		var private, web bool
+		var at sql.NullFloat64
+		if err := d.Read.QueryRow("SELECT taint_private, taint_web, tainted_at FROM threads WHERE title = ?", title).Scan(&private, &web, &at); err != nil {
+			t.Fatalf("%s after migration: %v", title, err)
+		}
+		if private != want || web != want || at.Valid != want {
+			t.Errorf("%s: private %v web %v tainted_at %v, want %v", title, private, web, at, want)
+		}
+	}
+	var version int
+	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version < 5 {
+		t.Errorf("schema version = %d, %v; want %d", version, err, db.LatestSchemaVersion())
+	}
+	_ = d.Close()
+	if code, stdout, stderr := runIn(t, old, "db", "check"); code != cli.ExitOK || !strings.Contains(stdout, "integrity_check: ok") {
+		t.Fatalf("db check: exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+
+	fresh := t.TempDir()
+	if code, _, stderr := runIn(t, fresh, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list on a fresh database: exit %d %s", code, stderr)
+	}
+	migrated, created := schemaDump(t, path), schemaDump(t, filepath.Join(fresh, "atrium.db"))
+	if !slices.Equal(migrated, created) {
+		for _, line := range migrated {
+			if !slices.Contains(created, line) {
+				t.Errorf("only in the migrated schema: %s", line)
+			}
+		}
+		for _, line := range created {
+			if !slices.Contains(migrated, line) {
+				t.Errorf("only in the fresh schema: %s", line)
+			}
+		}
+	}
+}

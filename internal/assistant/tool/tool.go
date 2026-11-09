@@ -26,7 +26,10 @@ type Flags struct {
 	ExternalEffect  bool
 	Cost            bool
 	Web             bool
+	ThreadScoped    bool
 }
+
+func (f Flags) PrivateIn(kind Kind) bool { return f.PrivateData && (kind != Sub || !f.ThreadScoped) }
 
 type Approval struct {
 	Apply  Handler
@@ -72,4 +75,8 @@ type Park struct{ Question string }
 
 func (p *Park) Error() string { return "waiting for the operator: " + p.Question }
 
-type Tainted struct{ Value any }
+type Tainted struct {
+	Value   any
+	Private bool
+	Web     bool
+}

@@ -91,6 +91,7 @@ type state struct {
 	invalid       error
 	toolChoice    *anthropic.ToolChoice
 	admission     admission
+	taint         threads.Taint
 	hist          *history
 }
 
@@ -105,7 +106,11 @@ type admission struct {
 
 func (s *state) admit(ctx context.Context) (registry.Set, error) {
 	a := s.admission
-	set, err := s.r.Registry.Admit(ctx, s.thread.ID, s.kind, a.allow, s.d.Read)
+	taint, err := threads.ReadTaint(ctx, s.d.Read, s.thread.ID)
+	if err != nil {
+		return registry.Set{}, err
+	}
+	set, err := s.r.Registry.Admit(ctx, s.kind, taint, a.allow, s.d.Read)
 	if err != nil {
 		return registry.Set{}, err
 	}
@@ -117,15 +122,19 @@ func (s *state) admit(ctx context.Context) (registry.Set, error) {
 	for _, t := range set.Dispatch {
 		byName[t.Name] = t
 	}
-	s.req, s.x.byName = req, byName
+	s.req, s.x.byName, s.taint = req, byName, taint
 	return set, nil
 }
 
 func (s *state) readmit(ctx context.Context) error {
-	if !s.x.tainted.Swap(false) {
+	taint, err := threads.ReadTaint(ctx, s.d.Read, s.thread.ID)
+	if err != nil {
+		return err
+	}
+	if taint.Private == s.taint.Private && taint.Web == s.taint.Web {
 		return nil
 	}
-	_, err := s.admit(ctx)
+	_, err = s.admit(ctx)
 	return err
 }
 
@@ -610,10 +619,9 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		return false, nil, err
 	}
 	if searched {
-		if err := threads.Taint(context.WithoutCancel(ctx), s.d.Write, s.thread.ID, s.now()); err != nil {
+		if err := threads.AddTaint(context.WithoutCancel(ctx), s.d.Write, s.thread.ID, s.now(), false, true); err != nil {
 			return false, nil, err
 		}
-		s.x.tainted.Store(true)
 	}
 	if stop != nil {
 		return false, nil, stop

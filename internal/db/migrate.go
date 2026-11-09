@@ -68,6 +68,18 @@ var migrations = []migration{
 		)`)
 		return err
 	}},
+	{5, func(ctx context.Context, tx *sql.Tx) error {
+		for _, stmt := range []string{
+			"ALTER TABLE threads ADD COLUMN taint_private INTEGER NOT NULL DEFAULT 0",
+			"ALTER TABLE threads ADD COLUMN taint_web INTEGER NOT NULL DEFAULT 0",
+			"UPDATE threads SET taint_private = 1, taint_web = 1 WHERE tainted_at IS NOT NULL",
+		} {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
+				return err
+			}
+		}
+		return nil
+	}},
 }
 
 type ModuleMigration struct {
