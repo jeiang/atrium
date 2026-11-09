@@ -135,7 +135,8 @@ func TestReferenceBringsAThreadVerbatimWithItsMarks(t *testing.T) {
 	if marks := threadMarkSet(t, dir, reader); marks != sourceMarks {
 		t.Errorf("reader marks = %d, want the source's %d", marks, sourceMarks)
 	}
-	assertEgress(t, "the run that referenced a marked thread", requestTools(t, request), false)
+	assertInternet(t, "the run that referenced a marked thread", requestTools(t, request), false)
+	assertOwn(t, "the run that referenced a marked thread", requestTools(t, request), true)
 
 	before = len(api.Requests())
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("again")))
@@ -149,7 +150,8 @@ func TestReferenceBringsAThreadVerbatimWithItsMarks(t *testing.T) {
 		time.Sleep(20 * time.Millisecond)
 	}
 	requests = api.Requests()
-	assertEgress(t, "a later run of the marked reader", requestTools(t, requests[len(requests)-1]), false)
+	assertInternet(t, "a later run of the marked reader", requestTools(t, requests[len(requests)-1]), false)
+	assertOwn(t, "a later run of the marked reader", requestTools(t, requests[len(requests)-1]), true)
 
 	waitIdle(t, dir, reader)
 	count := threadMessages(t, dir, reader)
