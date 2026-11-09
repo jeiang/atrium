@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/config"
@@ -43,10 +44,77 @@ type UsageData struct {
 
 var usageFields = []settings.Field{{Key: budget.BudgetKey, Label: "Monthly budget", Number: true}}
 
+type PermissionsData struct {
+	Channels []string        `json:"channels"`
+	Rows     []PermissionRow `json:"rows"`
+	Saved    bool            `json:"saved"`
+	Error    string          `json:"error"`
+}
+
+type PermissionRow struct {
+	Label string               `json:"label"`
+	Cells []settings.FieldView `json:"cells"`
+}
+
+func permissionFields() []settings.Field {
+	out := make([]settings.Field, 0, len(registry.PermissionChannelLabels)*len(registry.PermissionSituationLabels))
+	for s := range registry.PermissionSituationLabels {
+		for c := range registry.PermissionChannelLabels {
+			out = append(out, settings.Field{Key: registry.PermissionKey(c, s), Label: registry.PermissionChannelLabels[c]})
+		}
+	}
+	return out
+}
+
+func (p *pages) permissionsPage(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, saved bool, formError string) {
+	fields := permissionFields()
+	views, err := settings.LoadFields(r.Context(), p.deps.DB.Read, fields)
+	check(err)
+	channels := len(registry.PermissionChannelLabels)
+	rows := make([]PermissionRow, 0, len(registry.PermissionSituationLabels))
+	for s, label := range registry.PermissionSituationLabels {
+		rows = append(rows, PermissionRow{Label: label, Cells: views[s*channels : (s+1)*channels]})
+	}
+	p.settings(w, r, status, "settings_permissions.gohtml", PermissionsData{
+		Channels: registry.PermissionChannelLabels[:], Rows: rows, Saved: saved, Error: formError,
+	}, toast)
+}
+
+func (p *pages) permissionsSettings(w http.ResponseWriter, r *http.Request) {
+	var toast *tpl.Toast
+	saved := web.QueryValue(r.URL.Query(), "saved") == "1"
+	if saved {
+		toast = notice("success", "Saved", "")
+	}
+	p.permissionsPage(w, r, http.StatusOK, toast, saved, "")
+}
+
+func (p *pages) permissionsSave(w http.ResponseWriter, r *http.Request) {
+	form := web.FormValues(r)
+	fields := permissionFields()
+	values := make(map[string]string, len(fields))
+	for _, f := range fields {
+		if value, ok := web.Value(form, f.Key); ok {
+			values[f.Key] = value
+		}
+	}
+	err := settings.SaveFields(audit.With(detached(r), "operator", audit.UI), p.deps.DB, fields, values)
+	var invalid settings.Invalid
+	var pinned *settings.PinnedError
+	if errors.As(err, &invalid) || errors.As(err, &pinned) {
+		p.permissionsPage(w, r, http.StatusUnprocessableEntity, notice("error", "Not saved", err.Error()), false, err.Error())
+		return
+	}
+	check(err)
+	settingsRedirect(w, "/settings/permissions?saved=1")
+}
+
 func (p *pages) settingsRoutes(r chi.Router) {
 	p.deps.Admin(http.MethodGet, "/settings", func(w http.ResponseWriter, r *http.Request) { redirect(w, r, "/settings/assistant") })
 	p.deps.Admin(http.MethodGet, "/settings/assistant", p.assistantSettings)
 	p.deps.Admin(http.MethodPost, "/settings/assistant", p.assistantSave)
+	p.deps.Admin(http.MethodGet, "/settings/permissions", p.permissionsSettings)
+	p.deps.Admin(http.MethodPost, "/settings/permissions", p.permissionsSave)
 	p.deps.Admin(http.MethodGet, "/settings/usage", p.usagePage)
 	p.deps.Admin(http.MethodPost, "/settings/usage/budget", p.usageBudget)
 }

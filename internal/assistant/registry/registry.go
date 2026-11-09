@@ -23,16 +23,15 @@ func (e InvalidError) Error() string { return string(e) }
 type Binder func(ctx context.Context, q db.Querier, t tool.Tool) (bound tool.Tool, ok bool, err error)
 
 type Registry struct {
-	tools       []tool.Tool
-	binders     map[string]Binder
-	settings    *settings.Registry
-	permissions Table
+	tools    []tool.Tool
+	binders  map[string]Binder
+	settings *settings.Registry
 }
 
 type Source func() (*Registry, error)
 
 func New(reg *settings.Registry) *Registry {
-	return &Registry{tools: []tool.Tool{webSearchTool()}, binders: map[string]Binder{}, settings: reg, permissions: DefaultTable()}
+	return &Registry{tools: []tool.Tool{webSearchTool()}, binders: map[string]Binder{}, settings: reg}
 }
 
 func (r *Registry) Add(tools ...tool.Tool) error {
@@ -140,12 +139,16 @@ func (r *Registry) Admit(ctx context.Context, kind tool.Kind, marks threads.Mark
 		candidates = append(candidates, t)
 	}
 	situation := Classify(marks.Set, PromptCarriesKnowledge(kind), privateTools)
+	table, err := r.loadTable(ctx, q)
+	if err != nil {
+		return Set{}, err
+	}
 	var set Set
 	for _, t := range candidates {
 		if marks.Set != 0 && t.PromptStore {
 			continue
 		}
-		decision := r.permissions.Decide(t.Channel, situation, kind)
+		decision := table.Decide(t.Channel, situation, kind)
 		if decision == Ask && !hasCard(t) && kind != tool.Chat {
 			decision = Denied
 		}
@@ -173,7 +176,7 @@ func (r *Registry) Admit(ctx context.Context, kind tool.Kind, marks threads.Mark
 			t = bound
 		}
 		if t.ChannelOf != nil || (decision == Ask && !hasCard(t)) {
-			t = Gate(t, r.permissions, situation, kind)
+			t = Gate(t, table, situation, kind)
 		}
 		set.Dispatch = append(set.Dispatch, t)
 	}

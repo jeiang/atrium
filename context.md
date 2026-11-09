@@ -364,7 +364,12 @@ behavior-parity target.
   allow, ask or deny. Own and notify always allow; people always asks;
   internet allows, asks or denies by situation. Code floors keep people
   and internet at ask or deny whenever untrusted text is present, so
-  editing the table can only tighten those cells. A tool that already has
+  editing the table can only tighten those cells. The 24 cells are
+  `permission_<channel>_<situation>` enum settings, edited on Settings ›
+  Permissions; a save is validated against the key's choices (the
+  untrusted people and internet cells offer only ask or deny), and the
+  table load clamps every cell to its floor and treats an unknown value as
+  the default. A tool that already has
   an approval card asks through that card. Otherwise an ask wraps the
   tool in a permission gate: the call creates a `permission` proposal and
   parks the run; approving resumes the run and performs the call once,
