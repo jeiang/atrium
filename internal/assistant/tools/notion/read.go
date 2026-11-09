@@ -216,7 +216,7 @@ func readTools() []tool.Tool {
 			Handler:     searchKnowledge,
 			Effect:      tool.Read,
 			Annotated:   true,
-			Flags:       tool.Flags{PrivateData: true},
+			Marks:       tool.Personal,
 			Contexts:    readKinds,
 		},
 		{
@@ -226,7 +226,7 @@ func readTools() []tool.Tool {
 			Handler:     fetchKnowledge,
 			Effect:      tool.Read,
 			Annotated:   true,
-			Flags:       tool.Flags{PrivateData: true},
+			Marks:       tool.Personal,
 			Contexts:    readKinds,
 		},
 	}

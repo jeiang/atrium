@@ -145,13 +145,13 @@ func (s Set) Has(name string) bool {
 		slices.ContainsFunc(s.Server, func(t tool.Tool) bool { return t.Name == name })
 }
 
-func (r *Registry) Admit(ctx context.Context, kind tool.Kind, taint threads.Taint, allow Allow, q db.Querier) (Set, error) {
+func (r *Registry) Admit(ctx context.Context, kind tool.Kind, marks threads.Marks, allow Allow, q db.Querier) (Set, error) {
 	found, err := r.For(kind)
 	if err != nil {
 		return Set{}, err
 	}
 	var offered []tool.Tool
-	private := PromptCarriesPrivate(kind) || taint.Private
+	private := PromptCarriesPrivate(kind) || marks.Set.Kinds() != 0
 	for _, t := range found {
 		if !allow.Has(t.Name) || Decide(Policy, kind, t.Effect) == Denied {
 			continue
@@ -163,12 +163,12 @@ func (r *Registry) Admit(ctx context.Context, kind tool.Kind, taint threads.Tain
 		if !enabled {
 			continue
 		}
-		private = private || t.Flags.PrivateIn(kind)
+		private = private || t.MarksIn(kind).Kinds() != 0
 		offered = append(offered, t)
 	}
 	var set Set
 	for _, t := range offered {
-		if taint.Any() && egress(t) && (private || !webRead(t)) {
+		if marks.Set != 0 && egress(t) && (private || !webRead(t)) {
 			continue
 		}
 		if t.Server {
@@ -227,6 +227,8 @@ func validate(t tool.Tool) error {
 		return InvalidError(fmt.Sprintf("server tool %s has a handler", t.Name))
 	case !t.Effect.Valid():
 		return InvalidError(fmt.Sprintf("tool %s has unknown effect %q", t.Name, t.Effect))
+	case t.Marks&^tool.AllMarks != 0:
+		return InvalidError(fmt.Sprintf("tool %s has unknown marks %d", t.Name, t.Marks))
 	case len(t.Contexts) == 0:
 		return InvalidError(fmt.Sprintf("tool %s has no run kinds", t.Name))
 	case t.Effect == tool.WriteUndo && (t.Flags.ExternalEffect || t.Flags.Cost):

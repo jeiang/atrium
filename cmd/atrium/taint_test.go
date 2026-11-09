@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -389,4 +390,54 @@ func TestThinkingIsReplayedOnlyIntoTheContextItWasSignedIn(t *testing.T) {
 	if !threadTainted(t, dir, thread) {
 		t.Error("thread not tainted after the mail read")
 	}
+}
+
+func TestBranchOfAMarkedThreadIsNotOfferedEgress(t *testing.T) {
+	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	warm(t, api)
+	message := seedMail(t, dir)
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("m1", "mail_read", map[string]any{"message_id": message})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("read")))
+	if ran := runApp(t, "agent", "run", "--text", "read my latest mail"); ran.code != cli.ExitOK {
+		t.Fatalf("marking run: %d %s", ran.code, ran.stderr)
+	}
+	thread := latestThread(t, dir)
+	if !threadTainted(t, dir, thread) {
+		t.Fatal("thread not marked after the mail read")
+	}
+
+	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
+		t.Fatalf("GET /chat = %d", status)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	var seq int64
+	if err := d.Read.QueryRow("SELECT MIN(seq) FROM thread_messages WHERE thread_id = ? AND superseded = 0", thread).Scan(&seq); err != nil {
+		t.Fatalf("first message of thread %d: %v", thread, err)
+	}
+	_ = d.Close()
+	status, body, h := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/branch", base, thread), url.Values{"seq": {fmt.Sprint(seq)}})
+	if status != http.StatusSeeOther {
+		t.Fatalf("branch = %d: %s", status, body)
+	}
+	child, err := strconv.ParseInt(strings.TrimPrefix(h.Get("Location"), "/chat/"), 10, 64)
+	if err != nil {
+		t.Fatalf("branch location %q: %v", h.Get("Location"), err)
+	}
+
+	start := len(api.Requests())
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("branched")))
+	if ran := runApp(t, "agent", "run", "--thread", fmt.Sprint(child), "--text", "continue"); ran.code != cli.ExitOK {
+		t.Fatalf("branch run: %d %s", ran.code, ran.stderr)
+	}
+	requests := api.Requests()[start:]
+	if len(requests) != 1 {
+		t.Fatalf("%d model requests in the branch run, want 1", len(requests))
+	}
+	assertEgress(t, "first request of a branch of a marked thread", requestTools(t, requests[0]), false)
 }

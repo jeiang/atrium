@@ -115,12 +115,11 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 	}
 	value, err = x.call(ctx, t, tool.Args(args))
 	if err == nil {
-		tainted, dynamic := value.(tool.Tainted)
-		if dynamic {
-			value = tainted.Value
+		returned := tool.Marks(0)
+		if marked, ok := value.(tool.Marked); ok {
+			value, returned = marked.Value, marked.Marks
 		}
-		private, web := t.Flags.PrivateIn(x.tc.Kind) || tainted.Private, t.Flags.Web || tainted.Web
-		if err := threads.AddTaint(context.WithoutCancel(ctx), x.d.Write, x.tc.ThreadID, x.now(), private, web); err != nil {
+		if err := threads.AddMarks(context.WithoutCancel(ctx), x.d.Write, x.tc.ThreadID, x.now(), t.MarksIn(x.tc.Kind)|returned); err != nil {
 			return nil, nil, err
 		}
 		return nil, value, nil

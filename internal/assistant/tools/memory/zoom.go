@@ -27,7 +27,7 @@ const schema = `{"type":"object","properties":{"id":{"type":"integer","descripti
 func Tools() []tool.Tool {
 	return append([]tool.Tool{{
 		Name: Name, Description: Description, InputSchema: json.RawMessage(schema), Handler: zoom,
-		Effect: tool.Read, Flags: tool.Flags{PrivateData: true}, Annotated: true,
+		Effect: tool.Read, Marks: tool.Messages, Annotated: true,
 		Contexts: tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub},
 	}}, searchTools()...)
 }

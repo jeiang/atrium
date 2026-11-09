@@ -82,7 +82,7 @@ func (s *Service) Branch(ctx context.Context, threadID, seq int64) (int64, error
 	if err != nil {
 		return 0, err
 	}
-	taint, err := threads.ReadTaint(ctx, s.DB.Read, threadID)
+	marks, err := threads.ReadMarks(ctx, s.DB.Read, threadID)
 	if err != nil {
 		return 0, err
 	}
@@ -94,7 +94,7 @@ func (s *Service) Branch(ctx context.Context, threadID, seq int64) (int64, error
 		Kind: threads.Chat, Title: source.Title, ProjectID: source.ProjectID,
 		Model: source.Model, Effort: source.Effort, ContextLimit: limit,
 		AllowedURLs: source.AllowedURLs, BranchedFromThreadID: &threadID, BranchedFromSeq: &seq,
-		Taint: taint,
+		Marks: marks,
 	})
 	if err != nil {
 		return 0, err

@@ -118,7 +118,7 @@ var selfDiagnoseTool = tool.Tool{
 		`"minutes": ` + minutesBound.Schema() + `}, "required": [], "additionalProperties": false}`),
 	Handler:   selfDiagnose,
 	Effect:    tool.Read,
-	Flags:     flags,
+	Marks:     readMarks,
 	Annotated: true,
 	Contexts:  contexts,
 }

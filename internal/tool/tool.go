@@ -21,15 +21,24 @@ func (a Args) Get(name string) (any, bool) {
 type Handler func(ctx context.Context, tc *Context, args Args) (any, error)
 
 type Flags struct {
-	UntrustedOutput bool
-	PrivateData     bool
-	ExternalEffect  bool
-	Cost            bool
-	Web             bool
-	ThreadScoped    bool
+	ExternalEffect bool
+	Cost           bool
+	Web            bool
+	ThreadScoped   bool
 }
 
-func (f Flags) PrivateIn(kind Kind) bool { return f.PrivateData && (kind != Sub || !f.ThreadScoped) }
+type Marks uint8
+
+const (
+	Untrusted Marks = 1 << iota
+	PII
+	Messages
+	Personal
+)
+
+const AllMarks = Untrusted | PII | Messages | Personal
+
+func (m Marks) Kinds() Marks { return m &^ Untrusted }
 
 type Approval struct {
 	Apply  Handler
@@ -47,11 +56,19 @@ type Tool struct {
 	Effect      Effect
 	Undo        string
 	Flags       Flags
+	Marks       Marks
 	Annotated   bool
 	Contexts    Kinds
 	Server      bool
 	Parallel    bool
 	Approval    *Approval
+}
+
+func (t Tool) MarksIn(kind Kind) Marks {
+	if kind == Sub && t.Flags.ThreadScoped {
+		return 0
+	}
+	return t.Marks
 }
 
 type Context struct {
@@ -75,8 +92,7 @@ type Park struct{ Question string }
 
 func (p *Park) Error() string { return "waiting for the operator: " + p.Question }
 
-type Tainted struct {
-	Value   any
-	Private bool
-	Web     bool
+type Marked struct {
+	Value any
+	Marks Marks
 }

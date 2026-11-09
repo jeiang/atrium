@@ -80,6 +80,17 @@ var migrations = []migration{
 		}
 		return nil
 	}},
+	{6, func(ctx context.Context, tx *sql.Tx) error {
+		for _, stmt := range []string{
+			"ALTER TABLE threads ADD COLUMN marks INTEGER NOT NULL DEFAULT 0",
+			"UPDATE threads SET marks = taint_web | (taint_private * 14) WHERE taint_private = 1 OR taint_web = 1",
+		} {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
+				return err
+			}
+		}
+		return nil
+	}},
 }
 
 type ModuleMigration struct {

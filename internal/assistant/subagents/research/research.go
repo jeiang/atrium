@@ -91,7 +91,8 @@ func (r *Research) Tool() tool.Tool {
 		Handler:     r.handle,
 		Effect:      tool.Read,
 		Annotated:   true,
-		Flags:       tool.Flags{Web: true, UntrustedOutput: true, ExternalEffect: true},
+		Flags:       tool.Flags{Web: true, ExternalEffect: true},
+		Marks:       tool.Untrusted,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 		Parallel:    true,
 	}
@@ -217,11 +218,11 @@ func (r *Research) handle(ctx context.Context, tc *tool.Context, args tool.Args)
 	if err := r.runChild(ctx, tc, child, text, role, *agent); err != nil {
 		return nil, err
 	}
-	taint, err := threads.ReadTaint(ctx, tc.DB.Read, child)
+	marks, err := threads.ReadMarks(ctx, tc.DB.Read, child)
 	if err != nil {
 		return nil, err
 	}
-	if err := threads.AddTaint(context.WithoutCancel(ctx), tc.DB.Write, tc.ThreadID, now(), taint.Private, true); err != nil {
+	if err := threads.AddMarks(context.WithoutCancel(ctx), tc.DB.Write, tc.ThreadID, now(), marks.Set|tool.Untrusted); err != nil {
 		return nil, err
 	}
 	runs, err := journal.RunsOf(ctx, tc.DB.Read, child)

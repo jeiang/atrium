@@ -229,9 +229,13 @@ behavior-parity target.
   shipped to artemis on 2026-11-08) plus additive migrations in
   `internal/db/migrate.go`; migration 2 adds `threads.tainted_at`,
   migration 3 the package tracker columns and `package_events`,
-  migration 4 `push_subscriptions`, and migration 5 the taint kinds
+  migration 4 `push_subscriptions`, migration 5 the taint kinds
   `threads.taint_private` and `threads.taint_web` (threads tainted before
-  it get both).
+  it get both), and migration 6 `threads.marks`, a bitmask (untrusted 1,
+  pii 2, messages 4, personal 8) backfilled from the taint columns
+  (`taint_web` → untrusted, `taint_private` → pii, messages and personal).
+  `taint_private` and `taint_web` are dormant after migration 6: no longer
+  read or written, and kept because dropping them would rewrite the table.
   `atrium db import-v1` is the only path from a v1
   database: it copies the learned rules, corrections, routing decisions and
   the unsent message history their derivation reads into a fresh v2
@@ -310,33 +314,41 @@ behavior-parity target.
   directly through the same path as `notion_update_page`, with Undo on
   Done; approvals are only for external or costly actions. Old
   `notion_link` and `notion_edit` proposals stay readable and dismissable.
-- Taint has two kinds, recorded on the thread with `threads.tainted_at`
-  as the first taint time. A successful `private_data` tool call taints it
-  `private`; a successful `web` tool call (`web_fetch`, `research`) or a
-  response carrying a server `web_search_tool_result` taints it `web`. The
-  Grafana tools are `private_data` and `untrusted_output`. The nightly
-  `threads_today` read carries the kinds of the threads it returns.
-  `untrusted_output` alone does not taint. From the next model request of
-  the same run on, and in every later run of that thread in any process, a
-  tainted thread cannot use `external_effect`, `cost`, `notify` or
-  `write_undo` tools. Later runs are not offered them. Within the run that
-  tainted it, the request keeps the tools array it started with so the
-  run's thinking blocks stay valid, and dispatch refuses a withdrawn tool
-  with an error result; only when a server tool (`web_search`) must go is
-  the array rebuilt, and the thinking signed before it is dropped. A
-  thinking block is resent only while everything before it is unchanged.
-  The one exception is the Rule of Two: a thread tainted
-  only `web` keeps the read-only `web` tools (`web_fetch`, `web_search`,
-  `research`) while it cannot reach private data, meaning its run offers no
-  `private_data` tool and its system prompt carries no profile or project
-  block (only subagent runs qualify). `recall` is `thread_scoped`: its query
-  reads only stored results of its own thread, so in a subagent run it
-  neither counts as private reach nor taints `private`; everywhere else it
-  stays `private_data`. Recall pages are never themselves stubbed. So a
-  `web` subagent can search, read a long page through `recall` and follow
-  its links over several steps. A research result taints the parent `web`
-  plus the child's kinds, so the parent, which holds private data, loses
-  that egress. Branches inherit the taint kinds.
+- Threads carry marks, recorded with `threads.tainted_at` as the first
+  mark time. The set is a bitmask: `untrusted` (someone else wrote the
+  text), `pii` (identifiers that reach, locate or impersonate a person),
+  `messages` (content from the operator's accounts) and `personal`
+  (knowledge-base records). Tools declare the marks a successful call may
+  add; a kind mark means the result holds private data. Mail, calendar,
+  file, memory, profile, Notion, contact and attention reads declare their
+  kinds; `mail_read`, `mail_search`, `open_loops`, `packages`, `attention`,
+  `calendar_list`, the file reads and the Grafana tools also declare
+  `untrusted`. `web_fetch`, `research` and a response carrying a server
+  `web_search_tool_result` mark the thread `untrusted`. `weather`, the
+  media reads, `task_list`, `schedule_list`, `plan` and `stale_wiki`
+  declare none. The nightly `threads_today` read carries the union of the
+  marks of the threads it returns. `untrusted` alone does not withdraw
+  egress. From the next model request of the same run on, and in every
+  later run of that thread in any process, a marked thread cannot use
+  `external_effect`, `cost`, `notify` or `write_undo` tools. Later runs are
+  not offered them. Within the run that marked it, the request keeps the
+  tools array it started with so the run's thinking blocks stay valid, and
+  dispatch refuses a withdrawn tool with an error result; only when a
+  server tool (`web_search`) must go is the array rebuilt, and the thinking
+  signed before it is dropped. A thinking block is resent only while
+  everything before it is unchanged. The one exception is the Rule of Two:
+  a thread marked only `untrusted` keeps the read-only `web` tools
+  (`web_fetch`, `web_search`, `research`) while it cannot reach private
+  data, meaning its run offers no tool that declares a kind and its system
+  prompt carries no profile or project block (only subagent runs qualify).
+  `recall` is `thread_scoped`: its query reads only stored results of its
+  own thread, so in a subagent run it neither counts as private reach nor
+  marks the thread; everywhere else it declares `messages`. Recall pages
+  are never themselves stubbed. So an `untrusted` subagent can search, read
+  a long page through `recall` and follow its links over several steps. A
+  research result marks the parent `untrusted` plus the child's marks, so
+  the parent, which holds private data, loses that egress. Branches inherit
+  the marks.
 - The public web service accepts an authenticating reverse proxy
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Local requests are
   administrators; a proxy request or OIDC session is an administrator only

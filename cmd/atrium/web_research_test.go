@@ -77,10 +77,11 @@ func threadTaint(t *testing.T, dir string, thread int64) (private, web bool) {
 	t.Helper()
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
 	defer func() { _ = d.Close() }()
-	if err := d.Read.QueryRow("SELECT taint_private, taint_web FROM threads WHERE id = ?", thread).Scan(&private, &web); err != nil {
+	var marks int64
+	if err := d.Read.QueryRow("SELECT marks FROM threads WHERE id = ?", thread).Scan(&marks); err != nil {
 		t.Fatal(err)
 	}
-	return private, web
+	return marks&14 != 0, marks&1 != 0
 }
 
 func parentOf(t *testing.T, dir string, child int64) int64 {

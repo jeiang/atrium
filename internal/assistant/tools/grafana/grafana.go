@@ -55,7 +55,7 @@ var (
 	kinds      = []string{"prometheus", "logs"}
 	dropFields = []string{"id", "tsNs"}
 	contexts   = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}
-	flags      = tool.Flags{UntrustedOutput: true, PrivateData: true}
+	readMarks  = tool.Messages | tool.Untrusted
 )
 
 func errorClass(err error) string {
@@ -603,7 +603,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(emptySchema),
 			Handler:     datasources,
 			Effect:      tool.Read,
-			Flags:       flags,
+			Marks:       readMarks,
 			Annotated:   true,
 			Contexts:    contexts,
 		},
@@ -616,7 +616,7 @@ func Tools() []tool.Tool {
 				`"limit": ` + queryLimitBound.Schema() + `}, "required": ["datasource_uid", "expr"], "additionalProperties": false}`),
 			Handler:   query,
 			Effect:    tool.Read,
-			Flags:     flags,
+			Marks:     readMarks,
 			Annotated: true,
 			Contexts:  contexts,
 		},
@@ -626,7 +626,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(emptySchema),
 			Handler:     alerts,
 			Effect:      tool.Read,
-			Flags:       flags,
+			Marks:       readMarks,
 			Annotated:   true,
 			Contexts:    contexts,
 		},
@@ -636,7 +636,7 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"query": {"type": "string"}}, "required": [], "additionalProperties": false}`),
 			Handler:     searchDashboards,
 			Effect:      tool.Read,
-			Flags:       flags,
+			Marks:       readMarks,
 			Annotated:   true,
 			Contexts:    contexts,
 		},

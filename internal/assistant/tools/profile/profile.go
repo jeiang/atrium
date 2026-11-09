@@ -180,7 +180,7 @@ func Tools() []tool.Tool {
 			Handler:     get,
 			Effect:      tool.Read,
 			Annotated:   true,
-			Flags:       tool.Flags{PrivateData: true},
+			Marks:       tool.Personal,
 			Contexts:    tool.Kinds{tool.Chat, tool.Cron, tool.Nightly},
 		},
 		{

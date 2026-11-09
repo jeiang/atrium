@@ -40,7 +40,7 @@ func openLoopTools() []tool.Tool {
 			Handler:     openLoops,
 			Effect:      tool.Read,
 			Annotated:   true,
-			Flags:       tool.Flags{PrivateData: true},
+			Marks:       tool.PII | tool.Messages | tool.Untrusted,
 			Contexts:    loopKinds,
 		},
 		{
@@ -51,7 +51,7 @@ func openLoopTools() []tool.Tool {
 			Handler:     commitments,
 			Effect:      tool.Read,
 			Annotated:   true,
-			Flags:       tool.Flags{PrivateData: true},
+			Marks:       tool.Messages | tool.Untrusted,
 			Contexts:    loopKinds,
 		},
 	}

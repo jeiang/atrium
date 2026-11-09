@@ -21,7 +21,6 @@ func Tools() []tool.Tool {
 		Handler:     handle,
 		Effect:      tool.Read,
 		Annotated:   true,
-		Flags:       tool.Flags{UntrustedOutput: true},
 		Contexts:    tool.AllKinds,
 	}}
 }

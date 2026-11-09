@@ -18,7 +18,7 @@ func Tools() []tool.Tool {
 		Description: "Read the attention view across the enabled queues: overdue, due soon, needs decision, waiting on them and upcoming.",
 		InputSchema: json.RawMessage(schema),
 		Effect:      tool.Read,
-		Flags:       tool.Flags{PrivateData: true, UntrustedOutput: true},
+		Marks:       tool.PII | tool.Messages | tool.Untrusted,
 		Annotated:   true,
 		Contexts:    tool.Kinds{tool.Cron},
 		Handler: func(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
