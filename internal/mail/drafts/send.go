@@ -182,9 +182,9 @@ func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusal
 	recipients := append(addresses(d.ToAddrs), addresses(d.CcAddrs)...)
 	var refused smtp.Refusals
 	if method == config.AuthXOAUTH2 {
-		refused, err = smtp.SendXOAUTH2(ctx, d.Account, user, msg, recipients, s.SMTP, source.Token, source.Invalidate)
+		refused, err = smtp.SendXOAUTH2(ctx, d.Account, user, msg, recipients, source.Token, source.Invalidate)
 	} else {
-		refused, err = smtp.Send(ctx, config.Credential, d.Account, msg, recipients, s.SMTP)
+		refused, err = smtp.Send(ctx, config.Credential, d.Account, msg, recipients)
 	}
 	return msg, refused, err
 }

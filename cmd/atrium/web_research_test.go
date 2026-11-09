@@ -101,7 +101,7 @@ func hasWebTools(names []string) bool {
 func TestWebSubagentRecallsALongPageAndFollowsItsLink(t *testing.T) {
 	srv, pages := webPages(t)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	start := warm(t, api, nil)
+	start := warm(t, api)
 	search := json.RawMessage(`{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{"query":"library hours"}}`)
 	result := json.RawMessage(`{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[` +
 		`{"type":"web_search_result","url":"` + srv.URL + `/a","title":"A","encrypted_content":"e","page_age":null},` +
@@ -155,7 +155,7 @@ func TestWebSubagentRecallsALongPageAndFollowsItsLink(t *testing.T) {
 func TestChatThreadLosesWebFetchAfterAFetch(t *testing.T) {
 	srv, pages := webPages(t)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
-	warm(t, api, nil)
+	warm(t, api)
 	thread := latestThread(t, dir)
 	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)

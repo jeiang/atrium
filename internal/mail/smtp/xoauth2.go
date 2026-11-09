@@ -13,15 +13,12 @@ type XOAUTH2Session interface {
 }
 
 // SendXOAUTH2 submits msg with an XOAUTH2 bearer token instead of a password.
-func SendXOAUTH2(ctx context.Context, account, user string, msg *Message, recipients []string, factory Factory,
+func SendXOAUTH2(ctx context.Context, account, user string, msg *Message, recipients []string,
 	token func(context.Context) (string, error), invalidate func()) (Refusals, error) {
 	if len(recipients) == 0 {
 		return nil, &Failure{Kind: "NoRecipients", Msg: "no recipients"}
 	}
-	if factory == nil {
-		factory = defaultFactory()
-	}
-	return send(ctx, factory, account, user, "", msg, recipients, token, invalidate)
+	return send(ctx, defaultFactory(), account, user, "", msg, recipients, token, invalidate)
 }
 
 func (s *session) LoginXOAUTH2(ctx context.Context, user string, token func(context.Context) (string, error), invalidate func()) error {

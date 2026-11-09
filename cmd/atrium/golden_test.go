@@ -278,6 +278,23 @@ func (f *fixture) Serve() string {
 	return f.base
 }
 
+type notionVector struct {
+	RowID      int64  `json:"rowid"`
+	Visibility string `json:"visibility"`
+	Embedding  []byte `json:"embedding"`
+}
+
+func copyFile(t *testing.T, from, to string) {
+	t.Helper()
+	data, err := os.ReadFile(from)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(to, data, 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func seedNotionVectors(t *testing.T, path string) {
 	t.Helper()
 	var vectors []notionVector
@@ -377,19 +394,6 @@ func TestWritingCommandsTakeTheDatabaseLock(t *testing.T) {
 			}
 		})
 	}
-}
-
-var seededTables = map[string]bool{
-	"schema_migrations": true, "module_migrations": true, "db_key_history": true, "secrets": true,
-	"settings_audit": true, "write_resolutions": true, "pass_runs": true, "pass_run_alerts": true,
-	"endpoint_probes": true, "integration_health": true, "auth_sessions": true, "auth_logins": true,
-	"auth_login_links": true, "mail_accounts": true, "ntfy_channels": true, "embed_index": true,
-}
-
-var ftsTables = map[string][]string{
-	"message_fts": {"subject", "sender", "body"},
-	"thread_fts":  {"thread_id", "text"},
-	"notion_fts":  {"title", "path", "body"},
 }
 
 func goldenEnv(t *testing.T, g cliGolden) map[string]string {

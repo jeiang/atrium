@@ -23,14 +23,11 @@ const (
 	thumbsDir  = "thumbs"
 )
 
-type Runner func(ctx context.Context, argv []string) (stdout, stderr string, code int, err error)
-
 var ffmpegMu sync.Mutex
 
 type Artwork struct {
 	Cache string
 	TMDB  *TMDB
-	Run   Runner
 	Tuning
 }
 
@@ -196,9 +193,6 @@ func (a *Artwork) Poster(ctx context.Context, kind, name string, season int64) (
 func (a *Artwork) run(ctx context.Context, argv []string) (string, string, int, error) {
 	ctx, cancel := context.WithTimeout(ctx, a.FFmpegTimeout)
 	defer cancel()
-	if a.Run != nil {
-		return a.Run(ctx, argv)
-	}
 	return execRun(ctx, argv)
 }
 
