@@ -4,8 +4,8 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
-	"github.com/jeiang/atrium/internal/proposals/scans"
-	"github.com/jeiang/atrium/internal/proposals/scanutil"
+	"github.com/jeiang/atrium/internal/mail/scans"
+	"github.com/jeiang/atrium/internal/mail/scanutil"
 )
 
 func (o Options) scanGroup(name string, scan func(x *exec) (scanutil.Result, error)) *cli.Command {

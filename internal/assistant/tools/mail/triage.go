@@ -12,9 +12,9 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/mail/executors"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/proposals/executors"
 )
 
 func RegisterProposalKinds() {

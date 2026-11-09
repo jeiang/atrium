@@ -7,8 +7,8 @@ import (
 	"github.com/jeiang/atrium/internal/mail/deletions"
 	"github.com/jeiang/atrium/internal/mail/gmaillabels"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
+	"github.com/jeiang/atrium/internal/mail/scanutil"
 	"github.com/jeiang/atrium/internal/passrun"
-	"github.com/jeiang/atrium/internal/proposals/scanutil"
 )
 
 type Scan struct {

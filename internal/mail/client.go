@@ -109,6 +109,8 @@ func (e *WriteInterrupted) Error() string { return e.Err.Error() }
 
 func (e *WriteInterrupted) Unwrap() error { return e.Err }
 
+func (e *WriteInterrupted) OutcomeUnknown() bool { return true }
+
 type CopyUID struct {
 	UIDValidity uint32
 	Mapping     map[uint32]uint32
