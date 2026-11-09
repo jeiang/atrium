@@ -74,8 +74,6 @@ func Tools() []tool.Tool {
 		Handler:     recall,
 		Effect:      tool.Read,
 		Annotated:   true,
-		Marks:       tool.Messages,
-		Flags:       tool.Flags{ThreadScoped: true},
 		Contexts:    tool.AllKinds,
 	}}
 }

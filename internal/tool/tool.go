@@ -24,7 +24,6 @@ type Flags struct {
 	ExternalEffect bool
 	Cost           bool
 	Web            bool
-	ThreadScoped   bool
 }
 
 type Marks uint8
@@ -62,13 +61,6 @@ type Tool struct {
 	Server      bool
 	Parallel    bool
 	Approval    *Approval
-}
-
-func (t Tool) MarksIn(kind Kind) Marks {
-	if kind == Sub && t.Flags.ThreadScoped {
-		return 0
-	}
-	return t.Marks
 }
 
 type Context struct {

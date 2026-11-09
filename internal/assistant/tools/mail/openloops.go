@@ -92,10 +92,17 @@ func openLoops(ctx context.Context, tc *tool.Context, args tool.Args) (any, erro
 		return nil, err
 	}
 	loops := make([]any, len(items))
+	marks := tool.Marks(0)
 	for i, l := range items {
+		if l.Counterpart != "" {
+			marks |= tool.PII
+		}
+		if l.Subject != "" {
+			marks |= tool.Messages | tool.Untrusted
+		}
 		loops[i] = map[string]any{"state": l.State, "message_id": l.LastMessageID, "counterpart": l.Counterpart, "subject": tool.Clip(l.Subject, 200), "days_open": l.Days, "since": localTime(l.Since, loc).Format("2006-01-02T15:04"), "account": l.Account}
 	}
-	return map[string]any{"loops": loops, "note": "owe_reply: the last message in the thread is theirs and awaits the operator; waiting_on_them: the operator wrote last."}, nil
+	return tool.Marked{Value: map[string]any{"loops": loops, "note": "owe_reply: the last message in the thread is theirs and awaits the operator; waiting_on_them: the operator wrote last."}, Marks: marks}, nil
 }
 
 func commitments(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -112,14 +119,18 @@ func commitments(ctx context.Context, tc *tool.Context, args tool.Args) (any, er
 		return nil, err
 	}
 	out := make([]any, len(items))
+	marks := tool.Marks(0)
 	for i, c := range items {
 		subject := ""
 		if c.Subject != nil {
 			subject = *c.Subject
 		}
+		if c.Text != "" || subject != "" {
+			marks |= tool.Messages | tool.Untrusted
+		}
 		out[i] = map[string]any{"text": c.Text, "owner": c.Owner, "due": nilString(c.Due), "status": c.Status, "message_id": c.MessageID, "subject": tool.Clip(subject, 200), "reminder_proposal_id": nilInt(c.ProposalID)}
 	}
-	return map[string]any{"commitments": out}, nil
+	return tool.Marked{Value: map[string]any{"commitments": out}, Marks: marks}, nil
 }
 
 func nilString(p *string) any {

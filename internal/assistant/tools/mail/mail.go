@@ -187,6 +187,7 @@ func mailSearch(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 		return nil, err
 	}
 	results := make([]any, len(found.Hits))
+	marks := tool.Marks(0)
 	for i, h := range found.Hits {
 		from := h.FromAddr
 		if h.FromName != "" {
@@ -196,9 +197,15 @@ func mailSearch(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 		if !ok {
 			recips = []any{}
 		}
+		if list, ok := recips.([]any); h.FromAddr != "" || (ok && len(list) > 0) {
+			marks |= tool.PII
+		}
+		if h.Subject != "" || h.Snippet != "" {
+			marks |= tool.Messages | tool.Untrusted
+		}
 		results[i] = map[string]any{"message_id": h.ID, "account": h.Account, "folder": h.Folder, "date": iso(h.DateTS), "from": from, "to": recips, "subject": h.Subject, "snippet": tool.Clip(h.Snippet, snippetChars)}
 	}
-	return map[string]any{"semantic": found.Semantic, "results": results}, nil
+	return tool.Marked{Value: map[string]any{"semantic": found.Semantic, "results": results}, Marks: marks}, nil
 }
 
 func mailRead(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -230,5 +237,13 @@ func mailRead(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 			attachments[i] = a.ContentType
 		}
 	}
-	return map[string]any{"untrusted": true, "message_id": found.ID, "account": found.Account, "folder": found.Folder, "date": iso(found.DateTS), "headers": headers, "body": clip(found.Body, int(maxChars)), "truncated": int64(utf8.RuneCountInString(found.Body)) > maxChars, "attachments": attachments}, nil
+	body := clip(found.Body, int(maxChars))
+	marks := tool.Marks(0)
+	if len(headers) > 0 {
+		marks |= tool.PII
+	}
+	if body != "" || len(attachments) > 0 {
+		marks |= tool.Messages | tool.Untrusted
+	}
+	return tool.Marked{Value: map[string]any{"untrusted": true, "message_id": found.ID, "account": found.Account, "folder": found.Folder, "date": iso(found.DateTS), "headers": headers, "body": body, "truncated": int64(utf8.RuneCountInString(found.Body)) > maxChars, "attachments": attachments}, Marks: marks}, nil
 }
