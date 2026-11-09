@@ -32,7 +32,7 @@ func research(task string) anthropictest.Response {
 func TestSubagentRequestOmitsTheOperatorProfile(t *testing.T) {
 	_, api, _ := moduleFixture(t, flagsExcept("", ""))
 	const home = "Maple Street 12"
-	warm(t, api, nil)
+	warm(t, api)
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("p1", "profile_set", map[string]any{"key": "home", "value": home})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("saved")))
 	if ran := runApp(t, "agent", "run", "--text", "remember where I live"); ran.code != cli.ExitOK {
@@ -81,7 +81,7 @@ func TestSubagentSpendCountsTowardTheParentRunCap(t *testing.T) {
 	setEnv(t, settingEnv(budget.RunCapKey(pricing.HaikuID)), "0.05")
 	over := anthropictest.Usage{Input: 1000, Output: 120_000}
 
-	start := warm(t, api, nil)
+	start := warm(t, api)
 	api.Push(research("look this up"))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("expensive digest")).WithUsage(over))
 	runApp(t, "agent", "run", "--text", "research something")

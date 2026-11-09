@@ -4,18 +4,19 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
-	dir, _, f := moduleFixture(t, flagsExcept("", ""))
+	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	runAppContext := func(ctx context.Context, args ...string) appRun {
 		var out bytes.Buffer
 		var errs lockedBuffer
@@ -27,23 +28,39 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	d := mustConnect(t, dir+"/atrium.db")
-	browser.store(t, d)
-	ctx := config.With(settings.With(context.Background(), f.settings), f.state)
-	if err := notify.EnsureChannels(ctx, d.Write); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.Write.Exec("UPDATE ntfy_channels SET content = 'full' WHERE name = 'assistant'"); err != nil {
-		t.Fatal(err)
-	}
-	now := float64(time.Now().Unix())
-	insert := func(title string, remindAt float64, status string) int64 {
-		t.Helper()
-		res, err := d.Write.Exec("INSERT INTO tasks (title, notes, remind_at, status, priority, created_ts, updated_ts) VALUES (?, '', ?, ?, 'normal', ?, ?)", title, remindAt, status, now, now)
-		if err != nil {
-			t.Fatal(err)
+	base, _, stopServe := startServeStoppable(t, dir)
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	for _, step := range []struct {
+		path string
+		form url.Values
+	}{
+		{"/push/subscriptions", browser.form()},
+		{"/channels/assistant/content", url.Values{"content": {"full"}}},
+	} {
+		fetch(t, client, http.MethodGet, base+"/settings/notifications", nil)
+		if code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/notifications"+step.path, step.form); code != http.StatusOK {
+			t.Fatalf("POST %s = %d %s", step.path, code, body)
 		}
-		id, _ := res.LastInsertId()
-		return id
+	}
+	stopServe()
+	now := float64(time.Now().Unix())
+	tasks := 0
+	insert := func(title string, remindAt float64, done bool) {
+		t.Helper()
+		tasks++
+		api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse(fmt.Sprintf("add%d", tasks), "task_add", map[string]any{"title": title, "remind_at": remindAt})))
+		if done {
+			api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse(fmt.Sprintf("done%d", tasks), "task_done", map[string]any{"id": tasks})))
+		}
+		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("added")))
+		if ran := runApp(t, "agent", "run", "--kind", "chat", "--text", "add a task"); ran.code != cli.ExitOK {
+			t.Fatalf("task run: %d %s", ran.code, ran.stderr)
+		}
+		var status string
+		if err := d.Read.QueryRow("SELECT status FROM tasks WHERE id = ? AND title = ?", tasks, title).Scan(&status); err != nil || (status == "done") != done {
+			t.Fatalf("task %q status = %q, %v", title, status, err)
+		}
 	}
 	start := func() (context.CancelFunc, chan appRun) {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -99,16 +116,15 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 		cancel()
 		<-done
 	}
-	insert("Pay the rent", now-1, "open")
+	insert("Pay the rent", now-1, false)
 	due()
 	if p := runOnce(); !strings.Contains(fmt.Sprint(p["title"]), "Pay the rent") {
 		t.Fatalf("reminder payload = %v", p)
 	}
 	due()
 	runNone()
-	insert("Done task", now-1, "done")
-	insert("Future task", now+3600, "open")
+	insert("Done task", now-1, true)
+	insert("Future task", now+3600, false)
 	due()
 	runNone()
-
 }

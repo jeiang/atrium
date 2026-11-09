@@ -33,7 +33,7 @@ func SenderAddress(preset, user string) string {
 	return user
 }
 
-func Send(ctx context.Context, creds Credentials, account string, msg *Message, recipients []string, factory Factory) (Refusals, error) {
+func Send(ctx context.Context, creds Credentials, account string, msg *Message, recipients []string) (Refusals, error) {
 	user, password, ok := creds(ctx, account)
 	if !ok {
 		return nil, &Failure{Kind: "Config", Msg: account + " is not configured: no enabled account with a login and password"}
@@ -41,10 +41,7 @@ func Send(ctx context.Context, creds Credentials, account string, msg *Message, 
 	if len(recipients) == 0 {
 		return nil, &Failure{Kind: "NoRecipients", Msg: "no recipients"}
 	}
-	if factory == nil {
-		factory = defaultFactory()
-	}
-	refused, err := send(ctx, factory, account, user, password, msg, recipients, nil, nil)
+	refused, err := send(ctx, defaultFactory(), account, user, password, msg, recipients, nil, nil)
 	var unknown *OutcomeUnknown
 	if errors.As(err, &unknown) {
 		return nil, unknown

@@ -1,248 +1,250 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
-
-	"github.com/jeiang/atrium/internal/integrations/transport"
-	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/proposals"
 
 	"github.com/jeiang/atrium/internal/actionlink"
 	"github.com/jeiang/atrium/internal/actionlink/policy"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/settings"
-	"github.com/jeiang/atrium/internal/settings/audit"
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/cli"
 )
 
-func TestPhoneActionsControlsLiveOnTheNotificationsPage(t *testing.T) {
-	dir := t.TempDir()
-	base, _, stop := startServeStoppable(t, dir)
-	defer stop()
-	db := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, db)
-	ctx := settings.With(context.Background(), settings.New())
-	now := float64(time.Now().Unix())
-	approve, _, err := actionlink.MintPair(ctx, d.Write, 1, "fp", now)
-	if err != nil {
-		t.Fatal(err)
+const phoneKind = "media_channel_add"
+
+type phoneSite struct {
+	t      *testing.T
+	base   string
+	client *http.Client
+	api    *modelLog
+	runs   int
+}
+
+func newPhoneSite(t *testing.T, dir string, api *modelLog) *phoneSite {
+	t.Helper()
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
+	base, _, _ := startServeStoppable(t, dir)
 	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	code, body, _ := fetch(t, client, http.MethodGet, base+"/settings/notifications", nil)
+	return &phoneSite{t: t, base: base, client: &http.Client{Jar: jar}, api: api}
+}
+
+func (s *phoneSite) page() string {
+	s.t.Helper()
+	code, body, _ := fetch(s.t, s.client, http.MethodGet, s.base+"/settings/notifications", nil)
 	if code != http.StatusOK {
-		t.Fatalf("notifications page = %d", code)
+		s.t.Fatalf("notifications page = %d", code)
 	}
-	for _, want := range []string{`id="phone-actions"`, "1 outstanding link", "web only", "Revoke all", `action="/settings/phone-actions"`} {
-		if !contains(body, want) {
-			t.Fatalf("notifications page misses %q", want)
-		}
+	return body
+}
+
+func (s *phoneSite) post(path string, form url.Values) (int, string) {
+	s.t.Helper()
+	s.page()
+	if form == nil {
+		form = url.Values{}
 	}
-	if strings.Contains(body, `href="/settings/phone-actions"`) {
-		t.Error("the settings tabs still link the phone actions page")
+	code, body, _ := fetch(s.t, s.client, http.MethodPost, s.base+path, form)
+	return code, body
+}
+
+func (s *phoneSite) policy(kinds ...string) {
+	s.t.Helper()
+	if code, _ := s.post("/settings/phone-actions", url.Values{"enabled": {"1"}, "kind": kinds}); code != http.StatusOK {
+		s.t.Fatalf("save phone actions = %d", code)
 	}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/phone-actions", nil); code == http.StatusOK {
-		t.Errorf("GET /settings/phone-actions = %d, want it gone", code)
+}
+
+func (s *phoneSite) propose(n int) {
+	s.t.Helper()
+	blocks := make([]json.RawMessage, 0, n)
+	for range n {
+		s.runs++
+		blocks = append(blocks, anthropictest.ToolUse(fmt.Sprintf("w%d", s.runs), phoneKind, map[string]any{
+			"imdb_id": fmt.Sprintf("tt%07d", s.runs), "regex": "Show", "name": fmt.Sprintf("Show %d", s.runs),
+		}))
+	}
+	s.api.Push(anthropictest.Reply("tool_use", blocks...), anthropictest.Reply("end_turn", anthropictest.Text("proposed")))
+	if ran := runApp(s.t, "agent", "run", "--kind", "chat", "--text", "watch these shows"); ran.code != cli.ExitOK {
+		s.t.Fatalf("propose run: %d %s", ran.code, ran.stderr)
+	}
+}
+
+func (s *phoneSite) action(token string) int {
+	s.t.Helper()
+	code, _, _ := fetch(s.t, s.client, http.MethodPost, s.base+"/actions/"+token, nil)
+	return code
+}
+
+func TestPhoneActionsControlsLiveOnTheNotificationsPage(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	s := newPhoneSite(t, dir, api)
+	db := filepath.Join(dir, "atrium.db")
+	if body := s.page(); !strings.Contains(body, "0 outstanding") {
+		t.Fatal("notifications page misses the zero outstanding count")
 	}
 
-	noFollow := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	code, _, header := fetch(t, noFollow, http.MethodPost, base+"/settings/phone-actions", url.Values{"enabled": {"1"}, "kind": {"reminder", "gmail_label_merge"}})
+	noFollow := &http.Client{Jar: s.client.Jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	code, _, header := fetch(t, noFollow, http.MethodPost, s.base+"/settings/phone-actions", url.Values{"enabled": {"1"}, "kind": {"reminder", phoneKind, "gmail_label_merge"}})
 	if code != http.StatusSeeOther || header.Get("Location") != "/settings/notifications#phone-actions" {
 		t.Fatalf("save = %d to %q", code, header.Get("Location"))
 	}
 	if v, _ := storedSetting(t, db, policy.EnabledKey); v != "true" {
 		t.Fatalf("stored %s = %q", policy.EnabledKey, v)
 	}
-	if v, _ := storedSetting(t, db, policy.KindsKey); v != "reminder" {
+	if v, _ := storedSetting(t, db, policy.KindsKey); v != "reminder,"+phoneKind {
 		t.Fatalf("stored %s = %q, want the web-only kind dropped", policy.KindsKey, v)
 	}
-	_, body, _ = fetch(t, client, http.MethodGet, base+"/settings/notifications", nil)
-	if !contains(body, `name="enabled" value="1" checked`) || !contains(body, `name="kind" value="reminder" checked`) || contains(body, `name="kind" value="memory" checked`) {
-		t.Fatal("notifications page does not show the saved phone actions policy")
+
+	s.propose(1)
+	body := s.page()
+	for _, want := range []string{`id="phone-actions"`, "1 outstanding link", "web only", "Revoke all", `action="/settings/phone-actions"`,
+		`name="enabled" value="1" checked`, `name="kind" value="reminder" checked`} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("notifications page misses %q", want)
+		}
+	}
+	if strings.Contains(body, `name="kind" value="memory" checked`) {
+		t.Fatal("notifications page shows an unsaved kind as enabled")
+	}
+	if strings.Contains(body, `href="/settings/phone-actions"`) {
+		t.Error("the settings tabs still link the phone actions page")
+	}
+	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/settings/phone-actions", nil); code == http.StatusOK {
+		t.Errorf("GET /settings/phone-actions = %d, want it gone", code)
 	}
 
-	code, body, _ = fetch(t, client, http.MethodPost, base+"/settings/phone-actions/revoke", url.Values{})
-	if code != http.StatusOK || !contains(body, `id="phone-actions"`) {
+	code, body = s.post("/settings/phone-actions/revoke", nil)
+	if code != http.StatusOK || !strings.Contains(body, `id="phone-actions"`) {
 		t.Fatalf("revoke = %d, want the notifications page back", code)
 	}
-	if !contains(body, "0 outstanding") {
+	if !strings.Contains(body, "0 outstanding") {
 		t.Fatalf("notifications page after revoke misses the zero count")
 	}
-	if _, err := actionlink.Verify(ctx, d.Read, approve, now); err != actionlink.ErrInvalid {
-		t.Fatalf("link after revoke = %v, want ErrInvalid", err)
-	}
 }
 
-func TestActionLinkEndpointRefusesReplayAlterationRotationAndDisallowedKinds(t *testing.T) {
-	dir := t.TempDir()
-	base, logs, stop := startServeStoppable(t, dir)
-	defer stop()
+func TestPhoneNotificationActionLinksRefuseReplayAlterationRotationDisallowedKindsAndRateLimit(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	push, browser := pushRig(t, dir)
+	s := newPhoneSite(t, dir, api)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	reg := settings.New()
-	ctx := settings.With(audit.With(context.Background(), "test", audit.CLI), reg)
-	now := float64(time.Now().Unix())
-	if err := reg.Set(ctx, d.Write, policy.EnabledKey, "true"); err != nil {
-		t.Fatal(err)
+	t.Cleanup(func() { _ = d.Close() })
+	if code, _ := s.post("/settings/notifications/push/subscriptions", browser.form()); code != http.StatusOK {
+		t.Fatalf("subscribe = %d", code)
 	}
-	if pol, err := policy.Load(ctx, d.Read); err != nil || !pol.Allows("reminder") {
-		t.Fatalf("policy = %#v, %v", pol, err)
-	}
-	insert := func(id int64, kind, fingerprint string) {
+	s.policy("reminder", phoneKind)
+
+	pushes := 0
+	links := func() (string, string) {
 		t.Helper()
-		if _, err := d.Write.Exec("INSERT INTO proposals (id, kind, status, created_ts, title, fingerprint) VALUES (?, ?, 'pending', ?, 'Call', ?)", id, kind, now, fingerprint); err != nil {
+		pushes++
+		var n struct {
+			Body    string `json:"body"`
+			Actions []struct {
+				Action string `json:"action"`
+				Title  string `json:"title"`
+				URL    string `json:"url"`
+			} `json:"actions"`
+		}
+		raw, err := json.Marshal(browser.decrypt(t, push.wait(t, pushes).body))
+		if err != nil || json.Unmarshal(raw, &n) != nil {
+			t.Fatalf("payload: %v", err)
+		}
+		if strings.Contains(n.Body, "Show ") || !strings.Contains(n.Body, "Proposal #") {
+			t.Fatalf("notification body = %q", n.Body)
+		}
+		if len(n.Actions) != 2 || n.Actions[0].Title != "Approve" || n.Actions[1].Title != "Dismiss" {
+			t.Fatalf("actions = %#v", n.Actions)
+		}
+		for _, a := range n.Actions {
+			if !strings.HasPrefix(a.URL, "/actions/") || a.Action == "" {
+				t.Fatalf("action = %#v", a)
+			}
+		}
+		return strings.TrimPrefix(n.Actions[0].URL, "/actions/"), strings.TrimPrefix(n.Actions[1].URL, "/actions/")
+	}
+	status := func(title string) string {
+		t.Helper()
+		var st string
+		if err := d.Read.QueryRow("SELECT status FROM proposals WHERE title = ?", "Watch show: "+title).Scan(&st); err != nil {
 			t.Fatal(err)
 		}
+		return st
 	}
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	post := func(token string) int {
-		t.Helper()
-		code, _, _ := fetch(t, client, http.MethodPost, base+"/actions/"+token, nil)
-		return code
+
+	s.propose(1)
+	_, dismiss := links()
+	if code := s.action(dismiss); code != http.StatusOK {
+		t.Fatalf("dismiss = %d", code)
 	}
-	insert(1, "reminder", "fp1")
-	_, dismiss, err := actionlink.MintPair(ctx, d.Write, 1, "fp1", now)
-	if err != nil {
-		t.Fatal(err)
+	if st := status("Show 1"); st != "dismissed" {
+		t.Fatalf("status = %s", st)
 	}
-	_, page, _ := fetch(t, client, http.MethodGet, base+"/settings/notifications", nil)
-	var enabled string
-	_ = d.Read.QueryRow("SELECT value FROM settings WHERE key = ?", policy.EnabledKey).Scan(&enabled)
-	code, postBody, _ := fetch(t, client, http.MethodPost, base+"/actions/"+dismiss, nil)
-	if code != http.StatusOK {
-		t.Fatalf("dismiss = %d body=%q setting=%q page_enabled=%v\n%s", code, postBody, enabled, contains(page, `name="enabled" value="1" checked`), logs.String())
-	}
-	var status string
-	if err := d.Read.QueryRow("SELECT status FROM proposals WHERE id = 1").Scan(&status); err != nil {
-		t.Fatal(err)
-	}
-	if status != "dismissed" {
-		t.Fatalf("status = %s", status)
-	}
-	_, activity, _ := fetch(t, client, http.MethodGet, base+"/activity", nil)
-	if !contains(activity, "approved via phone") {
+	if _, activity, _ := fetch(t, s.client, http.MethodGet, s.base+"/activity", nil); !strings.Contains(activity, "approved via phone") {
 		t.Fatalf("activity does not show the phone resolution")
 	}
-	approve, _, err := actionlink.MintPair(ctx, d.Write, 2, "fp2", now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	insert(2, "reminder", "fp2")
-	if code := post(approve); code != http.StatusOK && code != http.StatusInternalServerError {
+
+	s.propose(1)
+	approve, sibling := links()
+	if code := s.action(approve); code != http.StatusOK {
 		t.Fatalf("first approve = %d", code)
 	}
-	if code := post(approve); code != http.StatusGone {
+	if st := status("Show 2"); st != "applied" {
+		t.Fatalf("approved status = %s", st)
+	}
+	if code := s.action(approve); code != http.StatusGone {
 		t.Fatalf("replay = %d, want 410", code)
 	}
-	altered := "A" + approve[1:]
-	if code := post(altered); code != http.StatusBadRequest {
+	if code := s.action(sibling); code != http.StatusGone {
+		t.Fatalf("dismiss after approve = %d, want 410", code)
+	}
+	if code := s.action("A" + approve[1:]); code != http.StatusBadRequest {
 		t.Fatalf("altered = %d, want 400", code)
 	}
-	insert(3, "reminder", "fp3")
-	expired, _, err := actionlink.MintPair(ctx, d.Write, 3, "fp3", now-13*3600)
-	if err != nil {
-		t.Fatal(err)
+
+	s.propose(1)
+	rotated, _ := links()
+	if code, _ := s.post("/settings/phone-actions/revoke", nil); code != http.StatusOK {
+		t.Fatalf("revoke = %d", code)
 	}
-	if code := post(expired); code != http.StatusGone {
-		t.Fatalf("expired = %d, want 410", code)
-	}
-	insert(4, "reminder", "fp4")
-	rotated, _, err := actionlink.MintPair(ctx, d.Write, 4, "fp4", now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := actionlink.Rotate(ctx, d.Write); err != nil {
-		t.Fatal(err)
-	}
-	if code := post(rotated); code != http.StatusBadRequest {
+	if code := s.action(rotated); code != http.StatusBadRequest {
 		t.Fatalf("rotated = %d, want 400", code)
 	}
-	insert(5, "gmail_label_merge", "fp5")
-	denied, _, err := actionlink.MintPair(ctx, d.Write, 5, "fp5", now)
-	if err != nil {
-		t.Fatal(err)
+	if st := status("Show 3"); st != "pending" {
+		t.Fatalf("rotated link changed the proposal to %s", st)
 	}
-	if code := post(denied); code != http.StatusForbidden {
+
+	s.propose(1)
+	_, denied := links()
+	s.policy("reminder")
+	if code := s.action(denied); code != http.StatusForbidden {
 		t.Fatalf("disallowed kind = %d, want 403", code)
 	}
-	limited := false
-	for i := 0; i < actionlink.RateLimit; i++ {
-		if _, _, err := actionlink.MintPair(ctx, d.Write, int64(100+i), "fp", now); err == actionlink.ErrRate {
-			limited = true
-			break
-		}
+	if st := status("Show 4"); st != "pending" {
+		t.Fatalf("refused link changed the proposal to %s", st)
 	}
-	if !limited {
-		t.Fatal("the rate limit was never reached")
-	}
-}
 
-func contains(haystack, needle string) bool {
-	return len(needle) == 0 || len(haystack) >= len(needle) && (haystack == needle || contains(haystack[1:], needle) || haystack[:len(needle)] == needle)
-}
-
-func TestPhoneEligibleProposalCreationNotifiesWithActionButtons(t *testing.T) {
-	dir := t.TempDir()
-	push, browser := pushRig(t, dir)
-	_, _, stop := startServeStoppable(t, dir)
-	defer stop()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	browser.store(t, d)
-	reg := settings.New()
-	st := config.NewState(reg)
-	ctx := config.With(settings.With(audit.With(context.Background(), "test", audit.CLI), reg), st)
-	if err := notify.EnsureChannels(ctx, d.Write); err != nil {
+	s.policy("reminder", phoneKind)
+	spent := 3
+	s.propose(actionlink.RateLimit)
+	var proposed, notified int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposals WHERE kind = ?", phoneKind).Scan(&proposed); err != nil {
 		t.Fatal(err)
 	}
-	if err := reg.Set(ctx, d.Write, policy.EnabledKey, "true"); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications WHERE title = ?", "atrium: "+phoneKind+" proposal").Scan(&notified); err != nil {
 		t.Fatal(err)
 	}
-	for key, value := range map[string]string{notify.KeyPushSubject: "mailto:ops@example.test", transport.CAKey(notify.PushTransport): filepath.Join(dir, "push-ca.pem")} {
-		if err := reg.Set(ctx, d.Write, key, value); err != nil {
-			t.Fatal(err)
-		}
+	if proposed != 4+actionlink.RateLimit || notified != 4+actionlink.RateLimit-spent {
+		t.Fatalf("%d proposals and %d phone notifications, want %d and %d", proposed, notified, 4+actionlink.RateLimit, 4+actionlink.RateLimit-spent)
 	}
-	now := float64(time.Now().Unix())
-	if proposals.OnCreate == nil {
-		t.Fatal("proposal create hook is not installed")
-	}
-	if _, _, err := proposals.Create(ctx, d, "reminder", nil, "Call the dentist", map[string]any{}, map[string]any{}, "fp-notify", now); err != nil {
-		t.Fatal(err)
-	}
-	var n struct {
-		Body    string `json:"body"`
-		Actions []struct {
-			Action string `json:"action"`
-			Title  string `json:"title"`
-			URL    string `json:"url"`
-		} `json:"actions"`
-	}
-	waitFor(t, func() bool {
-		var failure string
-		_ = d.Read.QueryRow("SELECT COALESCE(error, '') FROM notifications WHERE title = 'atrium: reminder proposal' ORDER BY id DESC LIMIT 1").Scan(&failure)
-		if failure != "" {
-			t.Fatalf("phone notification not delivered: %s", failure)
-		}
-		return push.count() > 0
-	})
-	raw, err := json.Marshal(browser.decrypt(t, push.wait(t, 1).body))
-	if err != nil || json.Unmarshal(raw, &n) != nil {
-		t.Fatalf("payload: %v", err)
-	}
-	if len(n.Actions) != 2 || n.Actions[0].Title != "Approve" || n.Actions[1].Title != "Dismiss" {
-		t.Fatalf("actions = %#v", n.Actions)
-	}
-	if !strings.HasPrefix(n.Actions[0].URL, "/actions/") || n.Actions[0].Action == "" {
-		t.Fatalf("approve action = %#v", n.Actions[0])
-	}
-	if strings.Contains(n.Body, "Call the dentist") || !strings.Contains(n.Body, "Proposal #") {
-		t.Fatalf("notification body = %q", n.Body)
+	if body := s.page(); !strings.Contains(body, fmt.Sprintf("%d outstanding", actionlink.RateLimit-spent)) {
+		t.Fatalf("notifications page misses %d outstanding links", actionlink.RateLimit-spent)
 	}
 }

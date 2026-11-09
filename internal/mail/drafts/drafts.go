@@ -24,7 +24,6 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mime"
-	"github.com/jeiang/atrium/internal/mail/smtp"
 )
 
 type Status string
@@ -87,7 +86,6 @@ type Store struct {
 	DB    *db.DB
 	Cfg   config.Config
 	Open  mail.OpenFunc
-	SMTP  smtp.Factory
 	MsgID func(domain string) string
 	Now   func() float64
 }

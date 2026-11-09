@@ -99,7 +99,7 @@ func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 func TestComposerThreadCostCapRefusesTheNextRequest(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, settingEnv(assistant.KeyDefaultModel), pricing.HaikuID)
-	warm(t, api, nil)
+	warm(t, api)
 	base, _, stop := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
