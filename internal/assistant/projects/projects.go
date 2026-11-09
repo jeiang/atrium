@@ -27,6 +27,7 @@ type Project struct {
 	Effort       string     `json:"effort"`
 	ContextLimit int64      `json:"context_limit"`
 	WikiHubID    *string    `json:"wiki_hub_id"`
+	Private      store.Flag `json:"private"`
 	Archived     store.Flag `json:"archived"`
 	CreatedAt    float64    `json:"created_at"`
 	UpdatedAt    float64    `json:"updated_at"`
@@ -34,14 +35,14 @@ type Project struct {
 	LastActivity *float64   `json:"last_activity"`
 }
 
-const listSQL = "SELECT p.id, p.name, p.instructions, p.effort, p.context_limit, p.wiki_hub_id, p.archived, p.created_at, p.updated_at, " +
+const listSQL = "SELECT p.id, p.name, p.instructions, p.effort, p.context_limit, p.wiki_hub_id, p.private, p.archived, p.created_at, p.updated_at, " +
 	"(SELECT COUNT(*) FROM threads t WHERE t.project_id = p.id AND t.kind = 'chat' AND t.archived = 0) AS thread_count, " +
 	"(SELECT MAX(t.updated_at) FROM threads t WHERE t.project_id = p.id AND t.kind = 'chat' AND t.archived = 0) AS last_activity " +
 	"FROM projects p"
 
 func scan(r interface{ Scan(...any) error }) (Project, error) {
 	var p Project
-	err := r.Scan(&p.ID, &p.Name, &p.Instructions, &p.Effort, &p.ContextLimit, &p.WikiHubID, &p.Archived, &p.CreatedAt,
+	err := r.Scan(&p.ID, &p.Name, &p.Instructions, &p.Effort, &p.ContextLimit, &p.WikiHubID, &p.Private, &p.Archived, &p.CreatedAt,
 		&p.UpdatedAt, &p.ThreadCount, &p.LastActivity)
 	return p, err
 }
@@ -52,6 +53,7 @@ type Fields struct {
 	Effort       string
 	ContextLimit any
 	WikiHubID    string
+	Private      bool
 }
 
 type cleaned struct {
@@ -60,6 +62,7 @@ type cleaned struct {
 	Effort       string
 	ContextLimit int64
 	WikiHubID    *string
+	Private      bool
 }
 
 func clean(ctx context.Context, q db.Querier, f Fields) (cleaned, error) {
@@ -87,7 +90,7 @@ func clean(ctx context.Context, q db.Querier, f Fields) (cleaned, error) {
 	if err != nil {
 		return cleaned{}, ProjectError(err.Error())
 	}
-	out := cleaned{Name: name, Instructions: instructions, Effort: effort, ContextLimit: limit}
+	out := cleaned{Name: name, Instructions: instructions, Effort: effort, ContextLimit: limit, Private: f.Private}
 	if hub := strings.TrimSpace(f.WikiHubID); hub != "" {
 		found := notionid.IDsInText(hub)
 		if len(found) == 0 {
@@ -104,8 +107,8 @@ func Create(ctx context.Context, q db.Querier, now float64, f Fields) (int64, er
 		return 0, err
 	}
 	res, err := q.ExecContext(ctx,
-		"INSERT INTO projects (name, instructions, effort, context_limit, wiki_hub_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-		v.Name, v.Instructions, v.Effort, v.ContextLimit, v.WikiHubID, now, now)
+		"INSERT INTO projects (name, instructions, effort, context_limit, wiki_hub_id, private, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+		v.Name, v.Instructions, v.Effort, v.ContextLimit, v.WikiHubID, store.Bit(v.Private), now, now)
 	if err != nil {
 		return 0, err
 	}
@@ -118,8 +121,8 @@ func Update(ctx context.Context, q db.Querier, projectID int64, now float64, f F
 		return false, err
 	}
 	return db.Changed(q.ExecContext(ctx,
-		"UPDATE projects SET name = ?, instructions = ?, effort = ?, context_limit = ?, wiki_hub_id = ?, updated_at = ? WHERE id = ?",
-		v.Name, v.Instructions, v.Effort, v.ContextLimit, v.WikiHubID, now, projectID))
+		"UPDATE projects SET name = ?, instructions = ?, effort = ?, context_limit = ?, wiki_hub_id = ?, private = ?, updated_at = ? WHERE id = ?",
+		v.Name, v.Instructions, v.Effort, v.ContextLimit, v.WikiHubID, store.Bit(v.Private), now, projectID))
 }
 
 func Get(ctx context.Context, q db.Querier, projectID int64) (*Project, error) {
@@ -140,6 +143,15 @@ func List(ctx context.Context, q db.Querier, archived bool) ([]Project, error) {
 		return nil, err
 	}
 	return db.Collect(rows, func(r *sql.Rows) (Project, error) { return scan(r) })
+}
+
+func Private(ctx context.Context, q db.Querier, projectID int64) (bool, error) {
+	var private int64
+	err := q.QueryRowContext(ctx, "SELECT private FROM projects WHERE id = ?", projectID).Scan(&private)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return private != 0, err
 }
 
 func SetArchived(ctx context.Context, q db.Querier, projectID int64, value bool) (bool, error) {

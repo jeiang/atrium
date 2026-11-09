@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/block"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/textx"
@@ -115,6 +116,19 @@ func resolve(ctx context.Context, q db.Querier, reader int64, tok Token, limit i
 	}
 	if src == nil {
 		return Block{}, Refused(fmt.Sprintf("thread %d is unknown or deleted", tok.ThreadID))
+	}
+	if src.ProjectID != nil {
+		private, err := projects.Private(ctx, q, *src.ProjectID)
+		if err != nil {
+			return Block{}, err
+		}
+		readerThread, err := threads.Get(ctx, q, reader)
+		if err != nil {
+			return Block{}, err
+		}
+		if private && (readerThread == nil || readerThread.ProjectID == nil || *readerThread.ProjectID != *src.ProjectID) {
+			return Block{}, Refused(fmt.Sprintf("thread %d belongs to a private project", tok.ThreadID))
+		}
 	}
 	marks, err := threads.ReadMarks(ctx, q, tok.ThreadID)
 	if err != nil {

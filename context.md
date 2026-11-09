@@ -173,7 +173,10 @@ behavior-parity target.
   embedder re-embeds in the background under `atrium serve` and swaps the
   index when complete. The rebuild loop runs for every install, so a
   Notion-only install keeps its index fresh, and Notion document embeddings
-  use the same `mail_embed_body_chars` limit as mail.
+  use the same `mail_embed_body_chars` limit as mail. Knowledge records are
+  embedded into the same generation-numbered index (title, aliases and body,
+  same limit); the core loop drains pending records when an embed endpoint is
+  set, and a retracted record leaves the index.
 - qBittorrent (API key), TMDB (read token) and Ship24 (API key) are connection records on the Integrations settings
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-integration CA bundle and proxy. Certificate verification
@@ -233,8 +236,10 @@ behavior-parity target.
   `threads.taint_private` and `threads.taint_web` (threads tainted before
   it get both), and migration 6 `threads.marks`, a bitmask (untrusted 1,
   pii 2, messages 4, personal 8) backfilled from the taint columns
-  (`taint_web` → untrusted, `taint_private` → pii, messages and personal).
-  `taint_private` and `taint_web` are dormant after migration 6: no longer
+  (`taint_web` → untrusted, `taint_private` → pii, messages and personal),
+  and migration 7 the knowledge store: `kb_records`, its FTS5 table and
+  triggers, `projects.private` and one `embed_kb_<generation>` vec0 table per
+  existing embedding generation. `taint_private` and `taint_web` are dormant after migration 6: no longer
   read or written, and kept because dropping them would rewrite the table.
   `atrium db import-v1` is the only path from a v1
   database: it copies the learned rules, corrections, routing decisions and

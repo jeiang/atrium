@@ -23,6 +23,7 @@ type ProjectFormValues struct {
 	Effort       string  `json:"effort"`
 	ContextLimit *int64  `json:"context_limit"`
 	WikiHubID    *string `json:"wiki_hub_id"`
+	Private      bool    `json:"private"`
 }
 
 type ProjectFormData struct {
@@ -40,7 +41,7 @@ type ProjectEditData struct {
 
 func projectValues(found projects.Project) ProjectFormValues {
 	limit := found.ContextLimit
-	return ProjectFormValues{Name: found.Name, Instructions: found.Instructions, Effort: found.Effort, ContextLimit: &limit, WikiHubID: found.WikiHubID}
+	return ProjectFormValues{Name: found.Name, Instructions: found.Instructions, Effort: found.Effort, ContextLimit: &limit, WikiHubID: found.WikiHubID, Private: bool(found.Private)}
 }
 
 func submittedProject(form url.Values) projects.Fields {
@@ -50,6 +51,7 @@ func submittedProject(form url.Values) projects.Fields {
 		Effort:       web.FormString(form, "effort", ""),
 		ContextLimit: web.FormString(form, "context_limit", ""),
 		WikiHubID:    web.FormString(form, "wiki_hub_id", ""),
+		Private:      web.FormString(form, "private", "") == "1",
 	}
 }
 
@@ -73,7 +75,7 @@ func submittedValues(f projects.Fields, fallback ProjectFormValues) ProjectFormV
 			}
 		}
 	}
-	return ProjectFormValues{Name: f.Name, Instructions: f.Instructions, Effort: effort, ContextLimit: &limit, WikiHubID: &hub}
+	return ProjectFormValues{Name: f.Name, Instructions: f.Instructions, Effort: effort, ContextLimit: &limit, WikiHubID: &hub, Private: f.Private}
 }
 
 func editPath(id int64) string { return "/projects/" + strconv.FormatInt(id, 10) + "/edit" }

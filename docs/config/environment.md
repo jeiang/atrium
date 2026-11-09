@@ -29,6 +29,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_SERIES` | `assistant.agent_grafana_max_series` |
 | `ATRIUM_ASSISTANT_AGENT_GRAFANA_TIMEOUT_SECONDS` | `assistant.agent_grafana_timeout_seconds` |
 | `ATRIUM_ASSISTANT_AGENT_JOURNAL_LEASE_SECONDS` | `assistant.agent_journal_lease_seconds` |
+| `ATRIUM_ASSISTANT_AGENT_KB_WRITE_CHARS` | `assistant.agent_kb_write_chars` |
 | `ATRIUM_ASSISTANT_AGENT_MAIL_BODY_CHARS` | `assistant.agent_mail_body_chars` |
 | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_LOOPS_LIMIT` | `assistant.agent_mail_max_loops_limit` |
 | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_RESULTS` | `assistant.agent_mail_max_results` |

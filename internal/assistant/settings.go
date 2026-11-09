@@ -71,6 +71,7 @@ const (
 	KeyRecallMaxPageChars  = "agent_recall_max_page_chars"
 	KeyProfileKeyChars     = "agent_profile_key_chars"
 	KeyProfileValueChars   = "agent_profile_value_chars"
+	KeyKBWriteChars        = "agent_kb_write_chars"
 
 	KeyMailMaxResults    = "agent_mail_max_results"
 	KeyMailSnippetChars  = "agent_mail_snippet_chars"
@@ -196,6 +197,7 @@ func init() {
 		recallMax,
 		count(KeyProfileKeyChars, 64, 8, 500),
 		count(KeyProfileValueChars, 500, 20, 5000),
+		count(KeyKBWriteChars, 4000, 200, 20000),
 
 		count(KeyMailMaxResults, 20, 1, 200),
 		count(KeyMailSnippetChars, 300, 20, 5000),

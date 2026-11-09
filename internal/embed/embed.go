@@ -50,6 +50,13 @@ func NotionDocumentText(ctx context.Context, title, path, markdown string) strin
 	return "title: " + title + " | text: " + path + "\n\n" + textutil.Clip(markdown, endpoint.From(ctx).EmbedBodyChars)
 }
 
+func KBDocumentText(ctx context.Context, title, aliases, body string) string {
+	if title == "" {
+		title = "none"
+	}
+	return "title: " + title + " | text: " + aliases + "\n\n" + textutil.Clip(body, endpoint.From(ctx).EmbedBodyChars)
+}
+
 func QueryText(query string) string {
 	return "task: search result | query: " + query
 }
@@ -217,6 +224,31 @@ var notionSource = source[notionRow]{
 	},
 }
 
+type kbRow struct {
+	id                   int64
+	title, aliases, body string
+}
+
+var kbSource = source[kbRow]{
+	pending: "embedded = 0 AND retracted_at IS NULL AND scope != 'ops'",
+	missing: func(i Index) string { return "id NOT IN (SELECT rowid FROM " + i.KBTable() + ")" },
+	query: func(where string) string {
+		return "SELECT id, title, aliases, body FROM kb_records WHERE " + where + " AND retracted_at IS NULL AND scope != 'ops' ORDER BY id LIMIT ?"
+	},
+	scan: func(r *sql.Rows) (kbRow, error) {
+		var k kbRow
+		err := r.Scan(&k.id, &k.title, &k.aliases, &k.body)
+		return k, err
+	},
+	document: func(ctx context.Context, k kbRow) string {
+		return KBDocumentText(ctx, k.title, k.aliases, k.body)
+	},
+	table:  func(i Index) string { return i.KBTable() },
+	insert: "INSERT INTO %s (rowid, embedding) VALUES (?, ?)",
+	mark:   "UPDATE kb_records SET embedded = 1 WHERE id = ?",
+	id:     func(k kbRow) int64 { return k.id },
+}
+
 func textsOr(texts TextsFunc) TextsFunc {
 	if texts == nil {
 		return Texts
@@ -247,7 +279,12 @@ func fill[T any](ctx context.Context, d *db.DB, url string, idx Index, src sourc
 			if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE rowid = ?", src.id(item)); err != nil {
 				return err
 			}
-			if _, err := tx.ExecContext(ctx, fmt.Sprintf(src.insert, table), src.id(item), src.partition(item), Serialize(vectors[i])); err != nil {
+			args := []any{src.id(item)}
+			if src.partition != nil {
+				args = append(args, src.partition(item))
+			}
+			args = append(args, Serialize(vectors[i]))
+			if _, err := tx.ExecContext(ctx, fmt.Sprintf(src.insert, table), args...); err != nil {
 				return err
 			}
 			if !mark {
@@ -313,12 +350,20 @@ func NotionPending(ctx context.Context, d *db.DB, url string, texts TextsFunc) (
 	return drain(ctx, d, url, notionSource, texts)
 }
 
+func KBPending(ctx context.Context, d *db.DB, url string, texts TextsFunc) (int, error) {
+	return drain(ctx, d, url, kbSource, texts)
+}
+
 func Fill(ctx context.Context, d *db.DB, url string, idx Index, texts TextsFunc) (int, error) {
 	n, err := fill(ctx, d, url, idx, messageSource, messageSource.missing(idx), false, texts)
 	if err != nil || n > 0 {
 		return n, err
 	}
-	return fill(ctx, d, url, idx, notionSource, notionSource.missing(idx), false, texts)
+	n, err = fill(ctx, d, url, idx, notionSource, notionSource.missing(idx), false, texts)
+	if err != nil || n > 0 {
+		return n, err
+	}
+	return fill(ctx, d, url, idx, kbSource, kbSource.missing(idx), false, texts)
 }
 
 func collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error) {
