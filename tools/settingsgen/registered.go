@@ -1,6 +1,7 @@
 package main
 
 import (
+	_ "github.com/jeiang/atrium/internal/actionlink/policy"
 	_ "github.com/jeiang/atrium/internal/assistant"
 	_ "github.com/jeiang/atrium/internal/assistant/assistantmodule"
 	_ "github.com/jeiang/atrium/internal/assistant/budget"

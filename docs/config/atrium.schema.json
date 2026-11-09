@@ -8,6 +8,25 @@
         "action_link_key_file": {
           "description": "path of a file holding the value",
           "type": "string"
+        },
+        "phone_actions_enabled": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "phone_actions_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "phone_actions_kinds": {
+          "default": "reminder,triage_label,triage_archive,triage_snooze,memory,profile",
+          "type": "string"
+        },
+        "phone_actions_kinds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
         }
       },
       "type": "object"

@@ -53,12 +53,18 @@ type account struct {
 }
 
 type page struct {
-	Accounts []account         `json:"accounts"`
-	Presets  []string          `json:"presets"`
-	Indexes  []vecindex.Index  `json:"indexes"`
-	Failed   string            `json:"failed"`
-	Error    string            `json:"error"`
-	Form     map[string]string `json:"form"`
+	Accounts []account            `json:"accounts"`
+	Presets  []string             `json:"presets"`
+	Indexes  []vecindex.Index     `json:"indexes"`
+	Fields   []settings.FieldView `json:"fields"`
+	Failed   string               `json:"failed"`
+	Error    string               `json:"error"`
+	Form     map[string]string    `json:"form"`
+}
+
+var mailFields = []settings.Field{
+	{Key: mail.KeyUncertainDest, Label: "Uncertain destination"},
+	{Key: mail.KeyLoopsRemindHour, Label: "Loop reminder hour", Number: true, Whole: true},
 }
 
 type handlers struct{ d *web.Deps }
@@ -74,6 +80,7 @@ func Module(r chi.Router, d *web.Deps) {
 	d.Admin(http.MethodPost, "/settings/mail/accounts/{id}", h.update)
 	d.Admin(http.MethodPost, "/settings/mail/accounts/{id}/test", h.test)
 	d.Admin(http.MethodPost, "/settings/mail/accounts/{id}/remove", h.remove)
+	d.Admin(http.MethodPost, "/settings/mail/settings", h.saveSettings)
 }
 
 func (h handlers) ctx(r *http.Request) context.Context {
@@ -104,6 +111,9 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toa
 	if data.Indexes, err = mail.EmbedIndexes(r.Context(), h.d.DB); err != nil {
 		panic(err)
 	}
+	if data.Fields, err = settings.LoadFields(r.Context(), h.d.DB.Read, mailFields); err != nil {
+		panic(err)
+	}
 	f, err := h.d.Render.Frame(r, "settings", data)
 	if err != nil {
 		panic(err)
@@ -121,8 +131,9 @@ func (h handlers) index(w http.ResponseWriter, r *http.Request) {
 func (h handlers) refuse(w http.ResponseWriter, r *http.Request, failed string, form map[string]string, err error) bool {
 	var why refusal
 	var invalid settings.Invalid
+	var pinned *settings.PinnedError
 	var encryption settings.EncryptionRequired
-	if !errors.As(err, &why) && !errors.As(err, &invalid) && !errors.As(err, &encryption) {
+	if !errors.As(err, &why) && !errors.As(err, &invalid) && !errors.As(err, &pinned) && !errors.As(err, &encryption) {
 		return false
 	}
 	h.render(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()}, page{Failed: failed, Error: err.Error(), Form: form})
@@ -136,6 +147,24 @@ func (h handlers) fail(w http.ResponseWriter, r *http.Request, failed string, fo
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (h handlers) saveSettings(w http.ResponseWriter, r *http.Request) {
+	form := web.FormValues(r)
+	values := make(map[string]string, len(mailFields))
+	for _, f := range mailFields {
+		if value, ok := web.Value(form, f.Key); ok {
+			values[f.Key] = value
+		}
+	}
+	err := settings.SaveFields(h.ctx(r), h.d.DB, mailFields, values)
+	if err != nil && h.refuse(w, r, "mail", nil, err) {
+		return
+	}
+	if err != nil {
+		panic(err)
+	}
+	h.render(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: "Saved"}, page{})
 }
 
 func (h handlers) stored(ctx context.Context, id string) (config.AccountSpec, error) {

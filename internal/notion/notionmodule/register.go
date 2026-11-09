@@ -24,6 +24,12 @@ func init() {
 	integrations.Register(integrations.Integration{
 		Name: "notion", Label: "Notion", Module: module.Notion, SecretKey: notion.TokenKey,
 		Help: "Internal integration token with the wiki pages shared with it; a personal access token also works.",
+		Fields: []integrations.Field{
+			{Key: notion.WikiRootKey, Label: "Wiki root"},
+			{Key: notion.SensitivityPropertyKey, Label: "Sensitivity property"},
+			{Key: notion.PrivateValueKey, Label: "Private value"},
+			{Key: notion.WikiLogTitleKey, Label: "Wiki log title"},
+		},
 		Test: testToken,
 	})
 }

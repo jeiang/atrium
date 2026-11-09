@@ -11,6 +11,11 @@
     {{with .Error}}<p class="w-full text-xs text-destructive">{{.}}</p>{{end}}
   </div>
   {{end}}
+  <div class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" data-section="mail">
+    {{if and (eq $d.Failed "mail") $d.Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$d.Error}}</p>{{end}}
+    <span class="font-medium">Mail behavior</span>
+    {{template "settings_fields" (dict "Fields" $d.Fields "Action" "/settings/mail/settings" "CSRF" $csrf)}}
+  </div>
   {{range $d.Accounts}}
   <form method="post" action="/settings/mail/accounts/{{.ID}}" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" data-account="{{.ID}}" data-state="{{.State}}" autocomplete="off">
     <input type="hidden" name="csrf_token" value="{{$csrf}}">

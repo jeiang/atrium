@@ -7,6 +7,8 @@ An environment variable pins its setting and wins over the configuration file an
 | Variable | Setting |
 | --- | --- |
 | `ATRIUM_ACTION_LINKS_ACTION_LINK_KEY` | `action_links.action_link_key` |
+| `ATRIUM_ACTION_LINKS_PHONE_ACTIONS_ENABLED` | `action_links.phone_actions_enabled` |
+| `ATRIUM_ACTION_LINKS_PHONE_ACTIONS_KINDS` | `action_links.phone_actions_kinds` |
 | `ATRIUM_ANTHROPIC_ANTHROPIC_ADMIN_KEY` | `anthropic.anthropic_admin_key` |
 | `ATRIUM_ANTHROPIC_ANTHROPIC_API_KEY` | `anthropic.anthropic_api_key` |
 | `ANTHROPIC_API_KEY` | `anthropic.anthropic_api_key` |

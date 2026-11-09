@@ -39,11 +39,12 @@ const (
 var log = logx.Logger("atrium.integrations")
 
 type page struct {
-	Records []Record    `json:"records"`
-	Failed  string      `json:"failed"`
-	Error   string      `json:"error"`
-	HoldFor string      `json:"hold_for"`
-	Hold    module.Hold `json:"hold"`
+	Records  []Record      `json:"records"`
+	Sections []SectionView `json:"sections"`
+	Failed   string        `json:"failed"`
+	Error    string        `json:"error"`
+	HoldFor  string        `json:"hold_for"`
+	Hold     module.Hold   `json:"hold"`
 }
 
 type handlers struct{ d *web.Deps }
@@ -79,6 +80,7 @@ func Module(r chi.Router, d *web.Deps) {
 	d.Admin(http.MethodGet, path, h.index)
 	d.Admin(http.MethodPost, path+"/{name}/test", h.test)
 	d.Admin(http.MethodPost, path+"/{name}/settings", h.saveSettings)
+	d.Admin(http.MethodPost, path+"/sections/{name}", h.saveSection)
 	d.Admin(http.MethodPost, path+"/{name}/disconnect", h.disconnect)
 	d.Admin(http.MethodGet, googlePath, h.google)
 	d.Admin(http.MethodPost, googlePath, h.googleSave)
@@ -140,6 +142,9 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toa
 		panic(err)
 	}
 	data.Records = records
+	if data.Sections, err = LoadSections(r.Context(), h.d.DB.Read); err != nil {
+		panic(err)
+	}
 	f, err := h.d.Render.Frame(r, "settings", data)
 	if err != nil {
 		panic(err)
@@ -219,6 +224,30 @@ func (h handlers) test(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: "Connection works"}, data)
 }
 
+func (h handlers) saveSection(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	s, ok := SectionNamed(name)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	form := web.FormValues(r)
+	values := make(map[string]string, len(s.Fields))
+	for _, f := range s.Fields {
+		if value, ok := web.Value(form, f.Key); ok {
+			values[f.Key] = value
+		}
+	}
+	err := SaveSection(h.ctx(r), h.d.DB, name, values)
+	if err != nil && h.refuse(w, r, name, err) {
+		return
+	}
+	if err != nil {
+		panic(err)
+	}
+	h.render(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: "Saved"}, page{})
+}
+
 func (h handlers) saveSettings(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	i, ok := Get(name)
@@ -229,7 +258,9 @@ func (h handlers) saveSettings(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
 	values := make(map[string]string, len(i.Fields))
 	for _, f := range i.Fields {
-		values[f.Key] = web.FormString(form, f.Key, "")
+		if value, ok := web.Value(form, f.Key); ok {
+			values[f.Key] = value
+		}
 	}
 	err := SaveFields(h.ctx(r), h.d.DB, name, values)
 	if err != nil && h.refuse(w, r, name, err) {
