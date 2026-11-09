@@ -78,6 +78,7 @@ func Module(r chi.Router, d *web.Deps) {
 	})
 	d.Admin(http.MethodGet, path, h.index)
 	d.Admin(http.MethodPost, path+"/{name}/test", h.test)
+	d.Admin(http.MethodPost, path+"/{name}/settings", h.saveSettings)
 	d.Admin(http.MethodPost, path+"/{name}/disconnect", h.disconnect)
 	d.Admin(http.MethodGet, googlePath, h.google)
 	d.Admin(http.MethodPost, googlePath, h.googleSave)
@@ -216,6 +217,28 @@ func (h handlers) test(w http.ResponseWriter, r *http.Request) {
 		data.HoldFor, data.Hold = name, h.enable(h.ctx(r), i.gate())
 	}
 	h.render(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: "Connection works"}, data)
+}
+
+func (h handlers) saveSettings(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	i, ok := Get(name)
+	if !ok || len(i.Fields) == 0 {
+		http.NotFound(w, r)
+		return
+	}
+	form := web.FormValues(r)
+	values := make(map[string]string, len(i.Fields))
+	for _, f := range i.Fields {
+		values[f.Key] = web.FormString(form, f.Key, "")
+	}
+	err := SaveFields(h.ctx(r), h.d.DB, name, values)
+	if err != nil && h.refuse(w, r, name, err) {
+		return
+	}
+	if err != nil {
+		panic(err)
+	}
+	h.render(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: "Saved"}, page{})
 }
 
 func (h handlers) disconnect(w http.ResponseWriter, r *http.Request) {
