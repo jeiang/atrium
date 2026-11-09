@@ -2,8 +2,11 @@ package loop
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"hash"
 	"slices"
 	"time"
 
@@ -258,6 +261,9 @@ func (s *state) active(ctx context.Context, loc *time.Location, h *history) ([]a
 	for _, r := range runs {
 		byID[r.ID] = r
 	}
+	sum := sha256.New()
+	feed(sum, "", []json.RawMessage{json.RawMessage(s.run.Model), json.RawMessage(s.run.Effort), json.RawMessage(s.thread.Thinking), json.RawMessage(s.req.sig)})
+	feed(sum, journal.User, h.prefix)
 	var out []actx.Message
 	for _, m := range messages {
 		if m.Seq < h.from {
@@ -278,7 +284,7 @@ func (s *state) active(ctx context.Context, loc *time.Location, h *history) ([]a
 				content = append(slices.Clone(content), actx.TextBlock(TimeStamp(run.StartedAt, loc)))
 			}
 		case journal.Assistant:
-			if s.keepsThinking(m, run, known) {
+			if s.keepsThinking(m, hex.EncodeToString(sum.Sum(nil))) {
 				break
 			}
 			if content, err = actx.StripThinking(content); err != nil {
@@ -288,6 +294,7 @@ func (s *state) active(ctx context.Context, loc *time.Location, h *history) ([]a
 				continue
 			}
 		}
+		feed(sum, m.Role, content)
 		seq := m.Seq
 		if n := len(out); n > 0 && out[n-1].Role == m.Role {
 			out[n-1].Content = append(slices.Clone(out[n-1].Content), content...)
@@ -296,6 +303,7 @@ func (s *state) active(ctx context.Context, loc *time.Location, h *history) ([]a
 		}
 		out = append(out, actx.Message{Role: m.Role, Content: content, Seq: &seq, RunID: m.RunID})
 	}
+	s.sig = hex.EncodeToString(sum.Sum(nil))
 	if len(h.prefix) == 0 {
 		return out, nil
 	}
@@ -306,14 +314,15 @@ func (s *state) active(ctx context.Context, loc *time.Location, h *history) ([]a
 	return append([]actx.Message{{Role: journal.User, Content: h.prefix}}, out...), nil
 }
 
-func (s *state) keepsThinking(m journal.Message, run journal.Run, known bool) bool {
-	if s.thread.Thinking == "disabled" {
-		return false
+func feed(sum hash.Hash, role string, content []json.RawMessage) {
+	for _, b := range content {
+		_, _ = fmt.Fprintf(sum, "%s\x00%d\x00", role, len(b))
+		sum.Write(b)
 	}
-	if known && run.ID == s.run.ID {
-		return true
-	}
-	return known && run.Model == s.run.Model && m.SystemSig != nil && *m.SystemSig == s.req.sig
+}
+
+func (s *state) keepsThinking(m journal.Message, sig string) bool {
+	return s.thread.Thinking != "disabled" && m.SystemSig != nil && *m.SystemSig == sig
 }
 
 type anchor struct {
