@@ -190,8 +190,11 @@ behavior-parity target.
   and assistant history. Uploaded files live beside the database under
   `files/`; the Notion wiki also has external state. The database alone is
   not a complete backup; `atrium backup` archives the database and `files/`,
-  and `atrium restore` (with a `--verify` dry run) restores them. Rebuildable
-  message and media caches are separate.
+  and `atrium restore` (with a `--verify` dry run) restores them. The
+  module's optional `atrium-backup` timer prunes `*.backup` files in its
+  directory after each successful run, keeping the newest `backup.keep`
+  (default 5) plus any from the last `backup.keepDays` (default 14) days.
+  Rebuildable message and media caches are separate.
 - Database connections: one write connection, a read pool, and one
   dedicated KNN reader (semantic search and mail routing) with a 192 MiB
   page cache; every other connection uses a 2 MiB cache, and all use
