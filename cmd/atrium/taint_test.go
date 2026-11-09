@@ -195,27 +195,16 @@ func threadTainted(t *testing.T, dir string, thread int64) bool {
 	return tainted
 }
 
-func TestNightlyReadingATaintedThreadDropsWriteTools(t *testing.T) {
-	_, api, _ := moduleFixture(t, flagsExcept("", ""))
+func TestNightlyTaintMidRunRefusesWriteToolsAndKeepsThinking(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
-	nightly := func(label string) []string {
-		t.Helper()
-		start := len(api.Requests())
-		api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("n1", "threads_today", nil)))
-		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("summary")))
-		if ran := runApp(t, "agent", "run", "--kind", "nightly", "--text", "nightly"); ran.code != cli.ExitOK {
-			t.Fatalf("%s nightly run: %d %s", label, ran.code, ran.stderr)
-		}
-		requests := api.Requests()[start:]
-		if len(requests) != 2 {
-			t.Fatalf("%s: %d model requests, want 2", label, len(requests))
-		}
-		if first := requestTools(t, requests[0]); !slices.Contains(first, "nightly_observe") {
-			t.Fatalf("%s: nightly_observe not offered before threads_today: %v", label, first)
-		}
-		return requestTools(t, requests[1])
+	start := len(api.Requests())
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("n1", "threads_today", nil)))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("summary")))
+	if ran := runApp(t, "agent", "run", "--kind", "nightly", "--text", "nightly"); ran.code != cli.ExitOK {
+		t.Fatalf("trusted nightly run: %d %s", ran.code, ran.stderr)
 	}
-	if after := nightly("trusted"); !slices.Contains(after, "nightly_observe") {
+	if after := requestTools(t, api.Requests()[start+1]); !slices.Contains(after, "nightly_observe") {
 		t.Errorf("reading only untainted threads dropped nightly_observe: %v", after)
 	}
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("p1", "profile_get", nil)))
@@ -223,9 +212,70 @@ func TestNightlyReadingATaintedThreadDropsWriteTools(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "what is in my profile"); ran.code != cli.ExitOK {
 		t.Fatalf("tainting run: %d %s", ran.code, ran.stderr)
 	}
-	if after := nightly("tainted"); slices.Contains(after, "nightly_observe") {
-		t.Errorf("reading a tainted thread kept nightly_observe: %v", after)
+
+	start = len(api.Requests())
+	api.Push(
+		anthropictest.Reply("tool_use", anthropictest.Thinking("scan", "sig-scan"), anthropictest.ToolUse("n1", "threads_today", nil)),
+		anthropictest.Reply("tool_use", anthropictest.Thinking("observe", "sig-observe"), anthropictest.ToolUse("o1", "nightly_observe", map[string]any{})),
+		anthropictest.Reply("end_turn", anthropictest.Text("summary")),
+	)
+	if ran := runApp(t, "agent", "run", "--kind", "nightly", "--text", "nightly"); ran.code != cli.ExitOK {
+		t.Fatalf("tainted nightly run: %d %s", ran.code, ran.stderr)
 	}
+	thread := latestThread(t, dir)
+	if !threadTainted(t, dir, thread) {
+		t.Fatal("nightly thread not tainted after reading a tainted thread")
+	}
+	requests := api.Requests()[start:]
+	if len(requests) != 3 {
+		t.Fatalf("%d model requests in the tainted nightly run, want 3", len(requests))
+	}
+	tools := func(r anthropictest.Request) string {
+		var body map[string]json.RawMessage
+		if err := json.Unmarshal(r.Body, &body); err != nil {
+			t.Fatal(err)
+		}
+		return string(body["tools"])
+	}
+	for i, r := range requests[1:] {
+		if tools(r) != tools(requests[0]) {
+			t.Errorf("request %d changed the tools array within the run", i+2)
+		}
+	}
+	for i, want := range [][]string{nil, {"sig-scan"}, {"sig-scan", "sig-observe"}} {
+		if got := replayedSignatures(t, requests[i]); !slices.Equal(got, want) {
+			t.Errorf("request %d replayed thinking %v, want %v", i+1, got, want)
+		}
+	}
+	refusal := toolResultFor(t, requests[2], "o1")
+	if refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "nightly_observe is no longer available in this thread") {
+		t.Errorf("withdrawn nightly_observe call returned %v, want a refusal", refusal)
+	}
+
+	start = len(api.Requests())
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("again")))
+	if ran := runApp(t, "agent", "run", "--thread", fmt.Sprint(thread), "--text", "again"); ran.code != cli.ExitOK {
+		t.Fatalf("later nightly run: %d %s", ran.code, ran.stderr)
+	}
+	if after := requestTools(t, api.Requests()[start]); slices.Contains(after, "nightly_observe") {
+		t.Errorf("a later run of the tainted thread offered nightly_observe: %v", after)
+	}
+}
+
+func toolResultFor(t *testing.T, r anthropictest.Request, id string) map[string]any {
+	t.Helper()
+	messages, _ := r.JSON(t)["messages"].([]any)
+	for _, raw := range messages {
+		m, _ := raw.(map[string]any)
+		content, _ := m["content"].([]any)
+		for _, b := range content {
+			if entry, _ := b.(map[string]any); entry["type"] == "tool_result" && entry["tool_use_id"] == id {
+				return entry
+			}
+		}
+	}
+	t.Fatalf("no tool_result for %s", id)
+	return nil
 }
 
 func TestServerWebSearchResultTaintsTheThread(t *testing.T) {
