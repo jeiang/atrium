@@ -23,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/progress"
+	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/workspace"
 	"github.com/jeiang/atrium/internal/config"
@@ -209,6 +210,13 @@ func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now 
 			return fail(err)
 		}
 	}
+	marks, err := references.Marks(o.Files)
+	if err != nil {
+		return fail(err)
+	}
+	if err := threads.AddMarks(ctx, s.DB.Write, threadID, now, marks); err != nil {
+		return fail(err)
+	}
 	content := append(append([]json.RawMessage{}, o.Files...), actx.TextBlock(text))
 	if _, err := journal.AppendMessage(ctx, s.DB, threadID, &runID, journal.User, content, now, nil); err != nil {
 		return fail(err)
@@ -327,6 +335,11 @@ func (s *Service) Send(ctx context.Context, threadID int64, text string, attachm
 	if thread == nil {
 		return Sent{}, UnknownThread(threadID)
 	}
+	refs, err := references.Resolve(ctx, s.DB.Read, threadID, text)
+	if err != nil {
+		return Sent{}, err
+	}
+	attachments = append(attachments, refs...)
 	id, queued, err := journal.QueueMessage(ctx, s.DB, threadID, text, s.now(), attachments)
 	if err != nil {
 		return Sent{}, err
@@ -362,6 +375,11 @@ func (s *Service) EditLast(ctx context.Context, threadID int64, text string, att
 	if err != nil {
 		return 0, err
 	}
+	refs, err := references.Resolve(ctx, s.DB.Read, threadID, text)
+	if err != nil {
+		return 0, err
+	}
+	attachments = append(attachments, refs...)
 	if err := s.supersede(ctx, threadID, last.Seq, false); err != nil {
 		return 0, err
 	}

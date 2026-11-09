@@ -226,12 +226,14 @@ const actions = {
   "close-sidebar": () => sidebarOpen(false),
   "close-dialog": (button) => button.closest("dialog")?.close(),
   "copy-value": async (button) => {
-    const text = document.getElementById(button.dataset.target)?.textContent || "";
+    const target = button.dataset.target ? document.getElementById(button.dataset.target) : null;
+    const text = button.dataset.copy ?? target?.textContent ?? "";
     try {
       await navigator.clipboard.writeText(text);
     } catch {
+      if (!target) return;
       const range = document.createRange();
-      range.selectNodeContents(document.getElementById(button.dataset.target));
+      range.selectNodeContents(target);
       const selection = window.getSelection();
       selection.removeAllRanges();
       selection.addRange(range);
@@ -935,3 +937,129 @@ document.addEventListener("click", (event) => {
   }
   if (event.target.id === "palette") palette().close();
 });
+
+const refPicker = () => document.getElementById("ref-picker");
+const refField = () => document.querySelector("textarea[data-submit-on-enter]");
+let refRequest = null;
+let refTimer = 0;
+let refSpan = null;
+
+const refTokenAt = (field) => {
+  const caret = field.selectionStart;
+  if (caret !== field.selectionEnd) return null;
+  const before = field.value.slice(0, caret);
+  const match = /(?:^|\s)@([^\s@]*)$/.exec(before);
+  if (!match) return null;
+  return { start: caret - match[1].length - 1, end: caret, query: match[1] };
+};
+
+const refOptions = () => [...refPicker().querySelectorAll('[role="option"]')];
+
+const refSelect = (option) => {
+  const list = refPicker();
+  list.querySelectorAll('[role="option"][aria-selected="true"]').forEach((other) => other.setAttribute("aria-selected", "false"));
+  if (!option) {
+    list.removeAttribute("aria-activedescendant");
+    return;
+  }
+  option.setAttribute("aria-selected", "true");
+  list.setAttribute("aria-activedescendant", option.id);
+  option.scrollIntoView({ block: "nearest" });
+};
+
+const refClose = () => {
+  const list = refPicker();
+  if (list) list.hidden = true;
+  refSpan = null;
+  clearTimeout(refTimer);
+  refRequest?.abort();
+  refRequest = null;
+};
+
+const refFill = () => {
+  const field = refField();
+  const list = refPicker();
+  if (!field || !list) return;
+  const span = refTokenAt(field);
+  if (!span) {
+    refClose();
+    return;
+  }
+  refSpan = span;
+  clearTimeout(refTimer);
+  refTimer = setTimeout(async () => {
+    refRequest?.abort();
+    refRequest = new AbortController();
+    try {
+      const thread = document.getElementById("workspace")?.dataset.thread || "";
+      const query = new URLSearchParams({ q: span.query, ref: thread });
+      const response = await fetch(`/chat/palette?${query}`, { signal: refRequest.signal, credentials: "same-origin" });
+      if (!response.ok) return;
+      const template = document.createElement("template");
+      template.innerHTML = await response.text();
+      list.replaceChildren(template.content);
+      const options = refOptions();
+      refSelect(options[0]);
+      list.hidden = options.length === 0;
+    } catch {
+      return;
+    }
+  }, 120);
+};
+
+const refPick = (option) => {
+  const field = refField();
+  const span = refSpan;
+  if (!field || !span || !option) return;
+  const token = option.dataset.refToken;
+  if (!token) return;
+  const after = field.value.slice(span.end);
+  field.value = field.value.slice(0, span.start) + token + " " + after;
+  const caret = span.start + token.length + 1;
+  field.focus();
+  field.setSelectionRange(caret, caret);
+  refClose();
+};
+
+document.addEventListener("input", (event) => {
+  if (event.target !== refField()) return;
+  refFill();
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.target !== refField()) return;
+  const list = refPicker();
+  if (!list || list.hidden) return;
+  const options = refOptions();
+  const current = options.findIndex((option) => option.getAttribute("aria-selected") === "true");
+  if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+    event.preventDefault();
+    const step = event.key === "ArrowDown" ? 1 : -1;
+    if (options.length) refSelect(options[(current + step + options.length) % options.length]);
+  } else if (event.key === "Enter" && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    event.preventDefault();
+    refPick(options[current]);
+  } else if (event.key === "Escape") {
+    event.preventDefault();
+    refClose();
+  }
+});
+
+document.addEventListener("mousedown", (event) => {
+  const option = event.target.closest && event.target.closest('#ref-picker [role="option"]');
+  if (option) event.preventDefault();
+});
+
+document.addEventListener("click", (event) => {
+  const option = event.target.closest && event.target.closest('#ref-picker [role="option"]');
+  if (option) refPick(option);
+});
+
+document.addEventListener("focusout", (event) => {
+  if (event.target !== refField()) return;
+  setTimeout(() => {
+    if (document.activeElement !== refField()) refClose();
+  }, 100);
+});
+
+document.addEventListener("submit", () => refClose());

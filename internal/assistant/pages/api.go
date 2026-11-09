@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/projects"
+	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/numx"
@@ -172,11 +173,14 @@ func (p *pages) apiRefused(w http.ResponseWriter, err error) bool {
 	var redo service.NothingToRedo
 	var unknown service.UnknownThread
 	var option threads.OptionError
+	var refused references.Refused
 	switch {
 	case err == nil:
 		return false
 	case errors.As(err, &exceeded):
 		web.APIError(w, http.StatusConflict, "budget_exceeded", err.Error())
+	case errors.As(err, &refused):
+		web.APIError(w, http.StatusUnprocessableEntity, "reference_refused", err.Error())
 	case errors.As(err, &active):
 		web.APIError(w, http.StatusConflict, "run_active", "Wait for the current reply to finish, then send again.")
 	case errors.As(err, &redo):

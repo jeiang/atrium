@@ -1,2 +1,3 @@
-{{range .Data}}<div id="palette-thread-{{.ID}}" role="option" aria-selected="false" class="palette-option" data-palette-href="/chat/{{.ID}}">{{icon "messages-square"}}<span class="truncate">{{or (str .Title) "Untitled thread"}}</span></div>
-{{end}}
+{{if .Data.Ref}}{{range .Data.Threads}}<div id="ref-thread-{{.ID}}" role="option" aria-selected="false" class="palette-option" data-ref-token="@thread/{{.ID}}">{{icon "messages-square"}}<span class="truncate">{{or (str .Title) "Untitled thread"}}</span></div>
+{{end}}{{else}}{{range .Data.Threads}}<div id="palette-thread-{{.ID}}" role="option" aria-selected="false" class="palette-option" data-palette-href="/chat/{{.ID}}">{{icon "messages-square"}}<span class="truncate">{{or (str .Title) "Untitled thread"}}</span></div>
+{{end}}{{end}}

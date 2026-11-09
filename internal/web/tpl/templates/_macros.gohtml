@@ -92,6 +92,8 @@
 
 {{define "preview_attrs"}}href="{{safeurl .}}" hx-get="{{safeurl .}}" hx-target="#preview-body" hx-swap="innerHTML show:top"{{end}}
 
+{{define "reference_button"}}<button type="button" class="btn" data-size="icon-sm" data-variant="ghost" data-action="copy-value" data-copy="@thread/{{.thread.ID}}/m{{.seq}}" aria-label="Reference" title="Copy a reference to this message">{{icon "link" "size-3.5"}}</button>{{end}}
+
 {{define "branch_button"}}<form method="post" action="/chat/{{.thread.ID}}/branch" class="inline">
   <input type="hidden" name="csrf_token" value="{{.csrf}}">
   <input type="hidden" name="seq" value="{{.seq}}">
@@ -107,6 +109,8 @@
 </ul>
 {{end}}
 {{- end}}
+
+{{define "ref_picker"}}<div id="ref-picker" class="ref-picker" role="listbox" aria-label="Reference a thread" hidden></div>{{end}}
 
 {{define "attach_field"}}<input type="file" name="upload" multiple class="sr-only" tabindex="-1" data-upload>
 <ul class="flex flex-wrap gap-1 empty:hidden" aria-label="Files to send" data-chips></ul>{{end}}
@@ -155,21 +159,28 @@
 
 {{define "chat_item"}}{{$item := .Item}}{{$thread := opt . "thread" nil}}{{$last_seq := opt . "last_seq" nil}}{{$busy := opt . "busy" false}}{{$csrf := opt . "csrf" ""}}
 {{if eq $item.Kind "user"}}
-<li class="msg group" data-role="user" data-seq="{{$item.Seq}}">
+<li class="msg group" data-role="user" data-seq="{{$item.Seq}}" id="m{{$item.Seq}}">
   <span class="msg-avatar" aria-hidden="true">{{icon "user"}}</span>
   <div class="msg-body">
-    <div class="msg-user" data-text>{{$item.Text}}</div>
+    <div class="msg-user" data-text>{{reflinks $item.Text}}</div>
     {{if $thread}}{{template "file_chips" (dict "thread_id" $thread.ID "files" ($item.Files))}}{{end}}
+    {{range $item.References}}
+    <details class="rounded-lg border px-3 py-2 text-xs text-muted-foreground">
+      <summary class="cursor-pointer">Referenced: {{.Title}} · {{.Tokens}} tokens</summary>
+      <div class="mt-2 whitespace-pre-wrap break-words">{{.Text}}</div>
+    </details>
+    {{end}}
     {{if and $thread (eq $thread.Kind "chat")}}
     <div class="msg-actions">
       {{if and (eq $item.Seq (int $last_seq)) (not $busy)}}<button type="button" class="btn" data-size="icon-sm" data-variant="ghost" data-action="edit-message" aria-label="Edit" title="Edit message">{{icon "pencil" "size-3.5"}}</button>{{end}}
+      {{template "reference_button" (dict "thread" $thread "seq" $item.Seq)}}
       {{template "branch_button" (dict "thread" $thread "seq" $item.Seq "csrf" $csrf "compact" true)}}
     </div>
     {{end}}
   </div>
 </li>
 {{else if eq $item.Kind "assistant"}}
-<li class="msg group" data-role="assistant" data-seq="{{$item.Seq}}">
+<li class="msg group" data-role="assistant" data-seq="{{$item.Seq}}" id="m{{$item.Seq}}">
   <span class="msg-avatar" data-role="assistant" aria-hidden="true">a</span>
   <div class="msg-body">
     <div class="markdown prose-assistant">{{markdown $item.Text}}</div>
@@ -189,6 +200,7 @@
       {{if and $last_seq (gt $item.Seq (int $last_seq)) (not $busy)}}
       <button type="button" class="btn" data-size="sm" data-variant="ghost" hx-post="/chat/{{$thread.ID}}/regenerate" hx-target="#transcript" hx-swap="innerHTML" hx-disabled-elt="this">{{icon "refresh-cw" "size-3.5"}}Regenerate</button>
       {{end}}
+      {{template "reference_button" (dict "thread" $thread "seq" $item.Seq)}}
       {{template "branch_button" (dict "thread" $thread "seq" $item.Seq "csrf" $csrf)}}
     </div>
     {{end}}

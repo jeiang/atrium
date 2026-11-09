@@ -68,6 +68,7 @@
   <p id="composer-editing" class="flex items-center gap-2 text-xs text-muted-foreground" hidden>{{icon "pencil" "size-3.5"}}Editing your last message<button type="button" class="btn" data-size="sm" data-variant="ghost" data-action="cancel-edit">Cancel</button></p>
   <label for="composer-text" class="sr-only">Message</label>
   <textarea id="composer-text" name="text" rows="2" placeholder="Message the assistant" data-submit-on-enter required autofocus></textarea>
+  {{template "ref_picker"}}
   {{template "attach_field"}}
   <div class="flex flex-wrap items-center gap-2 text-xs">
     {{template "attach_button"}}

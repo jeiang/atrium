@@ -13,6 +13,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/budget"
+	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/runner"
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
@@ -161,11 +162,14 @@ func (p *pages) refused(w http.ResponseWriter, r *http.Request, err error) bool 
 	var active service.RunActive
 	var redo service.NothingToRedo
 	var unknown service.UnknownThread
+	var refused references.Refused
 	switch {
 	case err == nil:
 		return false
 	case errors.As(err, &exceeded):
 		p.failure(w, r, "Budget reached", err.Error())
+	case errors.As(err, &refused):
+		p.failure(w, r, "Not sent", err.Error())
 	case errors.As(err, &active):
 		p.failure(w, r, "Still working", "Wait for the current reply to finish, then send again.")
 	case errors.As(err, &redo):

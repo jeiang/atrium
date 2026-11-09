@@ -51,6 +51,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_PROJECT_NAME_CHARS` | `assistant.agent_project_name_chars` |
 | `ATRIUM_ASSISTANT_AGENT_RECALL_MAX_PAGE_CHARS` | `assistant.agent_recall_max_page_chars` |
 | `ATRIUM_ASSISTANT_AGENT_RECALL_PAGE_CHARS` | `assistant.agent_recall_page_chars` |
+| `ATRIUM_ASSISTANT_AGENT_REF_TOKENS` | `assistant.agent_ref_tokens` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_CALENDAR_CANDIDATES` | `assistant.agent_schedule_calendar_candidates` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_DAILY_NUDGES` | `assistant.agent_schedule_daily_nudges` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MAX_ACTIVE_JOBS` | `assistant.agent_schedule_max_active_jobs` |

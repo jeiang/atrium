@@ -2,12 +2,35 @@ package tpl
 
 import (
 	"fmt"
+	"html"
+	"html/template"
 	"reflect"
+	"regexp"
 	"strings"
 )
 
 func init() {
-	registerFuncs(map[string]any{"has": has, "ctxlabel": ctxlabel, "toolverb": toolverb})
+	registerFuncs(map[string]any{"has": has, "ctxlabel": ctxlabel, "toolverb": toolverb, "reflinks": reflinks})
+}
+
+var refTokenRe = regexp.MustCompile(`(?:^|\s)@thread/(\d+)(?:/m(\d+))?\b`)
+
+func reflinks(v any) template.HTML {
+	text := str(v)
+	var b strings.Builder
+	last := 0
+	for _, m := range refTokenRe.FindAllStringSubmatchIndex(text, -1) {
+		at := m[0] + strings.IndexByte(text[m[0]:m[1]], '@')
+		b.WriteString(html.EscapeString(text[last:at]))
+		href := "/chat/" + text[m[2]:m[3]]
+		if m[4] >= 0 {
+			href += "#m" + text[m[4]:m[5]]
+		}
+		b.WriteString(`<a class="underline underline-offset-4" href="` + html.EscapeString(href) + `">` + html.EscapeString(text[at:m[1]]) + `</a>`)
+		last = m[1]
+	}
+	b.WriteString(html.EscapeString(text[last:]))
+	return template.HTML(b.String())
 }
 
 func toolverb(name string) string {
