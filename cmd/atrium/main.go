@@ -4,8 +4,10 @@ import (
 	"context"
 	"io"
 	"os"
+	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/assistantmodule"
+	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/tools/grafana/grafanamodule"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
@@ -18,10 +20,12 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
+	"github.com/jeiang/atrium/internal/mail/mailcmd"
 	"github.com/jeiang/atrium/internal/mail/mailmodule"
 	"github.com/jeiang/atrium/internal/media/mediacmd"
 	"github.com/jeiang/atrium/internal/media/mediamodule"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/notify/notifymodule"
 	"github.com/jeiang/atrium/internal/notion/notionmodule"
 	"github.com/jeiang/atrium/internal/settings"
@@ -68,8 +72,8 @@ func newSet(env config.Env, reg *settings.Registry, st *config.State, mods []mod
 		calendarmodule.Module{},
 		notionmodule.Module{Env: env},
 		mediamodule.Module{Now: now},
-		assistantmodule.Module{Callables: []map[string]worker.Callable{calendarcmd.Callables(), mediacmd.Callables()}},
-		notifymodule.Module{},
+		assistantmodule.Module{Callables: []map[string]worker.Callable{calendarcmd.Callables(), mediacmd.Callables(), mailcmd.Callables()}},
+		notifymodule.Module{Budget: budgetStatus},
 		grafanamodule.Module{},
 	}, mods...)
 	set, err := module.NewSet(reg, st, env, all...)
@@ -77,4 +81,9 @@ func newSet(env config.Env, reg *settings.Registry, st *config.State, mods []mod
 		panic(err)
 	}
 	return set
+}
+
+func budgetStatus(ctx context.Context, q db.Querier, now float64, loc *time.Location) (notify.Budget, error) {
+	st, err := budget.StatusAt(ctx, q, now, loc)
+	return notify.Budget{SpentUSD: st.SpentUSD, BudgetUSD: st.BudgetUSD, Share: st.Share}, err
 }

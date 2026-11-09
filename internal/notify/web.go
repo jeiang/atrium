@@ -58,15 +58,15 @@ type handlers struct {
 	phone Section
 }
 
-func Module(phone Section) web.Module {
-	return func(_ chi.Router, d *web.Deps) { serve(d, phone) }
+func Module(phone Section, budget BudgetStatus) web.Module {
+	return func(_ chi.Router, d *web.Deps) { serve(d, phone, budget) }
 }
 
-func serve(d *web.Deps, phone Section) {
+func serve(d *web.Deps, phone Section, budget BudgetStatus) {
 	done := make(chan struct{})
 	go func() {
 		defer close(done)
-		watchStale(d.Ctx, d.DB, d.Env, d.Stopping)
+		watchStale(d.Ctx, d.DB, d.Env, d.Stopping, budget)
 	}()
 	d.OnClose(func() { <-done })
 	h := handlers{d, phone}

@@ -15,7 +15,7 @@ const staleEvery = 5 * time.Minute
 
 var staleLog = logx.Logger("atrium.notify.stale")
 
-func watchStale(base context.Context, d *db.DB, env config.Env, stopping <-chan struct{}) {
+func watchStale(base context.Context, d *db.DB, env config.Env, stopping <-chan struct{}, budget BudgetStatus) {
 	ctx, cancel := context.WithCancel(base)
 	defer cancel()
 	go func() {
@@ -31,7 +31,7 @@ func watchStale(base context.Context, d *db.DB, env config.Env, stopping <-chan 
 	defer t.Stop()
 	for ctx.Err() == nil {
 		warn("stale pass check failed", noticeStale(ctx, d, env))
-		warn("budget threshold check failed", noticeBudget(ctx, d, env, stamp()))
+		warn("budget threshold check failed", noticeBudget(ctx, d, env, stamp(), budget))
 		select {
 		case <-ctx.Done():
 		case <-t.C:
