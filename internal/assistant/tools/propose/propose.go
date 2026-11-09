@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/jeiang/atrium/internal/assistant/tool"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 const Name = "propose"

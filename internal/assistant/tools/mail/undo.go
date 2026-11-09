@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/tracking"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 type draftDeleteUndo struct {

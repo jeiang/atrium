@@ -10,12 +10,12 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (

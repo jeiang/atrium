@@ -14,7 +14,6 @@ import (
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	attentiontool "github.com/jeiang/atrium/internal/assistant/tools/attention"
 	filetools "github.com/jeiang/atrium/internal/assistant/tools/files"
@@ -35,6 +34,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/tasks"
+	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/web"
 )
 

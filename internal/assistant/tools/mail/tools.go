@@ -7,9 +7,9 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/timex"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 func Tools() []tool.Tool {

@@ -18,11 +18,11 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/timex"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 var queryLimitBound = tool.NewCeiling(100, 1, 200)

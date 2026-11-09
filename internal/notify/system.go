@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations"
@@ -34,12 +33,23 @@ func PauseChanged(ctx context.Context, d *db.DB, env config.Env, paused bool) er
 	return err
 }
 
-func noticeBudget(ctx context.Context, d *db.DB, env config.Env, now float64) error {
+type Budget struct {
+	SpentUSD  float64
+	BudgetUSD float64
+	Share     float64
+}
+
+type BudgetStatus func(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Budget, error)
+
+func noticeBudget(ctx context.Context, d *db.DB, env config.Env, now float64, budget BudgetStatus) error {
+	if budget == nil {
+		return nil
+	}
 	loc, err := config.From(ctx).Location(env)
 	if err != nil {
 		return err
 	}
-	status, err := budget.StatusAt(ctx, d.Read, now, loc)
+	status, err := budget(ctx, d.Read, now, loc)
 	if err != nil {
 		return err
 	}

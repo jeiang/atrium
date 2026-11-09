@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 
-	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 type scheduleDeleteUndo struct {

@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/mail/openloops"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 var loopKinds = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}

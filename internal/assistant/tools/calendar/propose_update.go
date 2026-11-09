@@ -3,8 +3,8 @@ package calendartools
 import (
 	"context"
 
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/calendar"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 func proposed(id int64, created bool, err error) (any, error) {

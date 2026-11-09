@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant/tool"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 // Render writes the tool catalog as Markdown. The output is deterministic so

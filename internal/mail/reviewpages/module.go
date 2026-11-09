@@ -12,7 +12,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/actionlink"
-	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/drafts"
@@ -23,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/proposals/handlers"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 //go:embed templates/*.gohtml

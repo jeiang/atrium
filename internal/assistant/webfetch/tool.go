@@ -9,9 +9,9 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/textutil"
 	"github.com/jeiang/atrium/internal/textx"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 const schemaTextDefault = 12000

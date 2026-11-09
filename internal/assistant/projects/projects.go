@@ -11,8 +11,8 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/store"
 	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/db/store"
 	"github.com/jeiang/atrium/internal/notionid"
 )
 

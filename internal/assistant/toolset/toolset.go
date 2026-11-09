@@ -4,7 +4,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/nightly"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	askoperatortools "github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
 	filetools "github.com/jeiang/atrium/internal/assistant/tools/files"
@@ -21,11 +20,12 @@ import (
 	taskstools "github.com/jeiang/atrium/internal/assistant/tools/tasks"
 	weathertools "github.com/jeiang/atrium/internal/assistant/tools/weather"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
-	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	contactstools "github.com/jeiang/atrium/internal/contacts/contactsmodule"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 func Undoers(env config.Env) *writes.Registry {

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 func Command(env config.Env) *cli.Command {

@@ -4,8 +4,8 @@ import (
 	"context"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/calendar"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 func findSlot(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {

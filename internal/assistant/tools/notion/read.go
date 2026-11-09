@@ -5,10 +5,10 @@ import (
 	"encoding/json"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notionmd"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 var readKinds = tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub}
