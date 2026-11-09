@@ -15,9 +15,9 @@ import (
 
 	filestore "github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 const UndoOp = "file_restore"

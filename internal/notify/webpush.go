@@ -23,7 +23,6 @@ import (
 	webpush "github.com/SherClockHolmes/webpush-go"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/logx"
@@ -31,6 +30,7 @@ import (
 	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 const (

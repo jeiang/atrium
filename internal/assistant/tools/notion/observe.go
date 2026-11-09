@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 const observeName = "nightly_observe"

@@ -13,9 +13,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/jeiang/atrium/internal/assistant/store"
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/db/store"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 const NoDevices = "no push devices"

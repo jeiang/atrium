@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notion"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 func makeClient(ctx context.Context, q db.Querier, env config.Env) (*notion.Client, error) {

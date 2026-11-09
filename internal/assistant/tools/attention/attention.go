@@ -5,9 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 const schema = `{"type":"object","properties":{},"additionalProperties":false}`

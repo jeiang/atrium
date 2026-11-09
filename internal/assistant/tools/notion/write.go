@@ -10,12 +10,12 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/notionmd"
+	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (

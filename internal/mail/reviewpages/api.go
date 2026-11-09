@@ -10,12 +10,12 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/approval"
-	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/web"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 var appResolver = proposals.Resolver{Actor: "operator", Source: "ui"}

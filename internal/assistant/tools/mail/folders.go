@@ -9,8 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
@@ -20,6 +18,8 @@ import (
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/safety"
+	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (

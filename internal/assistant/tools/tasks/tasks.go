@@ -6,10 +6,10 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/tasks"
+	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (

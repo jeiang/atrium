@@ -7,7 +7,6 @@ import (
 	"net/http"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	notiontools "github.com/jeiang/atrium/internal/assistant/tools/notion"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -17,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notion/pages"
+	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/web"
 )
 

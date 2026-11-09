@@ -6,7 +6,6 @@ import (
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -15,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 type Module struct{}

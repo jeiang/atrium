@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/projects"
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	notiontools "github.com/jeiang/atrium/internal/assistant/tools/notion"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/notion"
+	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/web"
 )
 

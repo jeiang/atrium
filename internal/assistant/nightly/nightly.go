@@ -12,10 +12,10 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/timex"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 const Prompt = "Nightly consolidation. Call threads_today (no date) to read the last 24 hours of chat and scheduled threads. " +

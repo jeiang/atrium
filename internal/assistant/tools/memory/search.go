@@ -8,8 +8,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/memory"
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/textsearch"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 const searchName = "search_threads"

@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 const StaleMonthsKey = "nightly_stale_months"

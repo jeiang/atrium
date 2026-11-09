@@ -7,8 +7,8 @@ import (
 	"errors"
 
 	"github.com/jeiang/atrium/internal/assistant/progress"
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/assistant/workspace"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 const Name = "plan"

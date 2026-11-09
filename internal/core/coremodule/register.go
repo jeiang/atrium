@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/actionlink"
 	actionlinkpages "github.com/jeiang/atrium/internal/actionlink/pages"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
-	"github.com/jeiang/atrium/internal/assistant/writes/writescmd"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/auth/loginlink"
@@ -31,6 +30,7 @@ import (
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
 	"github.com/jeiang/atrium/internal/web"
+	"github.com/jeiang/atrium/internal/writes/writescmd"
 )
 
 type Module struct {

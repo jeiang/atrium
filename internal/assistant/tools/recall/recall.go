@@ -9,7 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/tool"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 func slice(s string, offset, limit int64) string {

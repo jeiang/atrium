@@ -13,7 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/textx"
 
 	"github.com/jeiang/atrium/internal/anthropic"
-	"github.com/jeiang/atrium/internal/assistant/store"
+	"github.com/jeiang/atrium/internal/db/store"
 )
 
 const (

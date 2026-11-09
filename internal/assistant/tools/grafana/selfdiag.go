@@ -7,8 +7,8 @@ import (
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 const (
