@@ -86,67 +86,68 @@ func threadsToday(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 	if err != nil {
 		return nil, err
 	}
-	found, tainted, err := read(ctx, tc.DB.Read, start, end)
+	found, taint, err := read(ctx, tc.DB.Read, start, end)
 	if err != nil {
 		return nil, err
 	}
 	out := map[string]any{"untrusted": true, "from": localISO(start, loc), "to": localISO(end, loc), "threads": found}
-	if tainted {
-		return tool.Tainted{Value: out}, nil
+	if taint.Any() {
+		return tool.Tainted{Value: out, Private: taint.Private, Web: taint.Web}, nil
 	}
 	return out, nil
 }
 
 type threadRow struct {
-	id      int64
-	kind    string
-	title   any
-	tainted bool
+	id    int64
+	kind  string
+	title any
+	taint threads.Taint
 }
 
-func read(ctx context.Context, q db.Querier, start, end float64) ([]any, bool, error) {
+func read(ctx context.Context, q db.Querier, start, end float64) ([]any, threads.Taint, error) {
 	r := assistant.Read(ctx, q)
 	maxThreads, threadChars, totalChars := r.Int(assistant.KeyNightlyMaxThreads), r.Int(assistant.KeyNightlyThreadChars), r.Int(assistant.KeyNightlyTotalChars)
 	if err := r.Err(); err != nil {
-		return nil, false, err
+		return nil, threads.Taint{}, err
 	}
 	rows, err := q.QueryContext(ctx,
-		"SELECT t.id, t.kind, t.title, t.tainted_at IS NOT NULL FROM threads t WHERE t.kind IN (?, ?) AND EXISTS "+
+		"SELECT t.id, t.kind, t.title, t.taint_private, t.taint_web FROM threads t WHERE t.kind IN (?, ?) AND EXISTS "+
 			"(SELECT 1 FROM thread_messages m WHERE m.thread_id = t.id AND m.superseded = 0 AND m.created_at >= ? AND m.created_at < ?) "+
 			"ORDER BY (SELECT MAX(m.created_at) FROM thread_messages m WHERE m.thread_id = t.id AND m.superseded = 0) DESC, t.id DESC LIMIT ?",
 		threads.Chat, threads.Cron, start, end, maxThreads)
 	if err != nil {
-		return nil, false, err
+		return nil, threads.Taint{}, err
 	}
 	listed, err := db.Collect(rows, func(r *sql.Rows) (threadRow, error) {
 		var t threadRow
 		var title *string
-		err := r.Scan(&t.id, &t.kind, &title, &t.tainted)
+		err := r.Scan(&t.id, &t.kind, &title, &t.taint.Private, &t.taint.Web)
 		if title != nil {
 			t.title = *title
 		}
 		return t, err
 	})
 	if err != nil {
-		return nil, false, err
+		return nil, threads.Taint{}, err
 	}
 	found := []any{}
-	tainted := false
+	var taint threads.Taint
 	budget := totalChars
 	for _, t := range listed {
 		lines, err := lines(ctx, q, t.id, start, end)
 		if err != nil {
-			return nil, false, err
+			return nil, threads.Taint{}, err
 		}
 		text := tool.Clip(strings.Join(lines, "\n"), min(threadChars, budget))
 		budget -= utf8.RuneCountInString(text)
 		found = append(found, map[string]any{"thread_id": t.id, "kind": t.kind, "title": t.title, "text": text})
-		tainted = tainted || t.tainted
+		taint.Private = taint.Private || t.taint.Private
+		taint.Web = taint.Web || t.taint.Web
 		if budget <= 0 {
 			break
 		}
 	}
-	return found, tainted, nil
+	return found, taint, nil
 }
 
 func lines(ctx context.Context, q db.Querier, threadID int64, start, end float64) ([]string, error) {

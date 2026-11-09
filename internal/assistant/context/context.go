@@ -98,7 +98,7 @@ func ReadTuning(ctx gocontext.Context, q db.Querier) (Tuning, error) {
 
 func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool string, value any, now float64, t Tuning) (string, *int64, error) {
 	body := serialize(value)
-	if EstimateTokens(body) <= int64(t.StubTokens) {
+	if tool == recallTool || EstimateTokens(body) <= int64(t.StubTokens) {
 		return body, nil, nil
 	}
 	tokens := EstimateTokens(body)

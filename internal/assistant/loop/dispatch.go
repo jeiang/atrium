@@ -8,7 +8,6 @@ import (
 	"runtime/debug"
 	"strconv"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
@@ -17,7 +16,6 @@ import (
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/progress"
-	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/config"
@@ -84,15 +82,14 @@ func toolErrorText(err error) (string, bool) {
 }
 
 type dispatcher struct {
-	d       *db.DB
-	tc      *tool.Context
-	byName  map[string]tool.Tool
-	now     func() float64
-	tuning  actx.Tuning
-	guard   func(ctx context.Context) error
-	lost    context.Context
-	abort   context.CancelFunc
-	tainted atomic.Bool
+	d      *db.DB
+	tc     *tool.Context
+	byName map[string]tool.Tool
+	now    func() float64
+	tuning actx.Tuning
+	guard  func(ctx context.Context) error
+	lost   context.Context
+	abort  context.CancelFunc
 }
 
 func (x *dispatcher) lookup(name string) *tool.Tool {
@@ -118,11 +115,9 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 		if dynamic {
 			value = tainted.Value
 		}
-		if dynamic || registry.Taints(*t) {
-			if err := threads.Taint(context.WithoutCancel(ctx), x.d.Write, x.tc.ThreadID, x.now()); err != nil {
-				return nil, nil, err
-			}
-			x.tainted.Store(true)
+		private, web := t.Flags.PrivateIn(x.tc.Kind) || tainted.Private, t.Flags.Web || tainted.Web
+		if err := threads.AddTaint(context.WithoutCancel(ctx), x.d.Write, x.tc.ThreadID, x.now(), private, web); err != nil {
+			return nil, nil, err
 		}
 		return nil, value, nil
 	}

@@ -58,7 +58,7 @@ func (r *Runner) systemBlocks(ctx context.Context, q db.Querier, thread threads.
 		return nil, err
 	}
 	p.Extra = extra
-	if kind == tool.Sub {
+	if !registry.PromptCarriesPrivate(kind) {
 		return prompts.SystemBlocks(p, cc), nil
 	}
 	if r.Profile != nil {

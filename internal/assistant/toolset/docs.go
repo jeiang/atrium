@@ -50,6 +50,9 @@ func flags(f tool.Flags) string {
 	if f.Web {
 		out = append(out, "web")
 	}
+	if f.ThreadScoped {
+		out = append(out, "thread_scoped")
+	}
 	if len(out) == 0 {
 		return "—"
 	}

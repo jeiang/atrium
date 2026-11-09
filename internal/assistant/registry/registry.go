@@ -60,7 +60,13 @@ func (r *Registry) Add(tools ...tool.Tool) error {
 
 func settingKey(name string) string { return "tool_" + name + "_enabled" }
 
-func Taints(t tool.Tool) bool { return t.Flags.PrivateData || t.Flags.Web }
+func PromptCarriesPrivate(kind tool.Kind) bool { return kind != tool.Sub }
+
+func egress(t tool.Tool) bool {
+	return t.Flags.ExternalEffect || t.Flags.Cost || t.Effect == tool.Notify || t.Effect == tool.WriteUndo
+}
+
+func webRead(t tool.Tool) bool { return t.Flags.Web && t.Effect == tool.Read }
 
 type Decision int
 
@@ -139,25 +145,15 @@ func (s Set) Has(name string) bool {
 		slices.ContainsFunc(s.Server, func(t tool.Tool) bool { return t.Name == name })
 }
 
-func (r *Registry) Admit(ctx context.Context, threadID int64, kind tool.Kind, allow Allow, q db.Querier) (Set, error) {
+func (r *Registry) Admit(ctx context.Context, kind tool.Kind, taint threads.Taint, allow Allow, q db.Querier) (Set, error) {
 	found, err := r.For(kind)
 	if err != nil {
 		return Set{}, err
 	}
-	taintedAt, err := threads.TaintedAt(ctx, q, threadID)
-	if err != nil {
-		return Set{}, err
-	}
-	tainted := taintedAt != nil
-	var set Set
+	var offered []tool.Tool
+	private := PromptCarriesPrivate(kind) || taint.Private
 	for _, t := range found {
-		if !allow.Has(t.Name) {
-			continue
-		}
-		if Decide(Policy, kind, t.Effect) == Denied {
-			continue
-		}
-		if tainted && (t.Flags.ExternalEffect || t.Flags.Cost || t.Effect == tool.Notify || t.Effect == tool.WriteUndo) {
+		if !allow.Has(t.Name) || Decide(Policy, kind, t.Effect) == Denied {
 			continue
 		}
 		enabled, err := r.enabled(ctx, q, t.Name)
@@ -165,6 +161,14 @@ func (r *Registry) Admit(ctx context.Context, threadID int64, kind tool.Kind, al
 			return Set{}, err
 		}
 		if !enabled {
+			continue
+		}
+		private = private || t.Flags.PrivateIn(kind)
+		offered = append(offered, t)
+	}
+	var set Set
+	for _, t := range offered {
+		if taint.Any() && egress(t) && (private || !webRead(t)) {
 			continue
 		}
 		if t.Server {

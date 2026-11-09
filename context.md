@@ -221,8 +221,10 @@ behavior-parity target.
   the baseline in `internal/db/schema/` (migration 1, frozen since v2
   shipped to artemis on 2026-11-08) plus additive migrations in
   `internal/db/migrate.go`; migration 2 adds `threads.tainted_at`,
-  migration 3 the package tracker columns and `package_events`, and
-  migration 4 `push_subscriptions`.
+  migration 3 the package tracker columns and `package_events`,
+  migration 4 `push_subscriptions`, and migration 5 the taint kinds
+  `threads.taint_private` and `threads.taint_web` (threads tainted before
+  it get both).
   `atrium db import-v1` is the only path from a v1
   database: it copies the learned rules, corrections, routing decisions and
   the unsent message history their derivation reads into a fresh v2
@@ -295,22 +297,33 @@ behavior-parity target.
 - The registry restricts tools by run kind. Scheduled runs read, propose,
   and notify; nightly runs may also update Notion and the profile with undo.
   Research subagents have restricted tools and bounded runs, and their system
-  prompt omits the operator profile and project block.
+  prompt omits the operator profile and project block. The built-in `web`
+  subagent has `recall`, `web_fetch` and `web_search`.
 - Notion edits are free: the Notion page Edit and Link buttons write
   directly through the same path as `notion_update_page`, with Undo on
   Done; approvals are only for external or costly actions. Old
   `notion_link` and `notion_edit` proposals stay readable and dismissable.
-- A successful call to a `private_data` or `web` tool taints its thread
-  (`threads.tainted_at`), as does a response carrying a server
-  `web_search_tool_result`. The Grafana tools are `private_data` and
-  `untrusted_output`. The nightly `threads_today` read taints only when a
-  thread it returns is tainted. From the next model request of the same run
-  on, and in every later run of that thread in any process, the thread is not
-  offered `external_effect`, `notify` or `write_undo` tools. Branches
-  inherit the taint. `untrusted_output` alone does not taint. The first web
-  read therefore removes the web tools for the rest of the thread, a web
-  subagent included; this is kept because the `web` subagent can also call
-  `recall`.
+- Taint has two kinds, recorded on the thread with `threads.tainted_at`
+  as the first taint time. A successful `private_data` tool call taints it
+  `private`; a successful `web` tool call (`web_fetch`, `research`) or a
+  response carrying a server `web_search_tool_result` taints it `web`. The
+  Grafana tools are `private_data` and `untrusted_output`. The nightly
+  `threads_today` read carries the kinds of the threads it returns.
+  `untrusted_output` alone does not taint. From the next model request of
+  the same run on, and in every later run of that thread in any process, a
+  tainted thread is not offered `external_effect`, `cost`, `notify` or
+  `write_undo` tools. The one exception is the Rule of Two: a thread tainted
+  only `web` keeps the read-only `web` tools (`web_fetch`, `web_search`,
+  `research`) while it cannot reach private data, meaning its run offers no
+  `private_data` tool and its system prompt carries no profile or project
+  block (only subagent runs qualify). `recall` is `thread_scoped`: its query
+  reads only stored results of its own thread, so in a subagent run it
+  neither counts as private reach nor taints `private`; everywhere else it
+  stays `private_data`. Recall pages are never themselves stubbed. So a
+  `web` subagent can search, read a long page through `recall` and follow
+  its links over several steps. A research result taints the parent `web`
+  plus the child's kinds, so the parent, which holds private data, loses
+  that egress. Branches inherit the taint kinds.
 - The public web service accepts an authenticating reverse proxy
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Local requests are
   administrators; a proxy request or OIDC session is an administrator only

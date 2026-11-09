@@ -11,6 +11,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -55,9 +56,19 @@ func ReadLimits(ctx context.Context, q db.Querier) (Limits, error) {
 	return lim, r.Err()
 }
 
+var fetchAllowed atomic.Pointer[func(netip.Addr) bool]
+
+func UseAddresses(allow func(netip.Addr) bool) (restore func()) {
+	previous := fetchAllowed.Swap(&allow)
+	return func() { fetchAllowed.Store(previous) }
+}
+
 func (f *Fetcher) allowed(ip netip.Addr) bool {
 	if f.Allowed != nil {
 		return f.Allowed(ip)
+	}
+	if allow := fetchAllowed.Load(); allow != nil {
+		return (*allow)(ip)
 	}
 	return netguard.Public(ip)
 }
