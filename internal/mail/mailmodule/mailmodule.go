@@ -85,7 +85,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 			}},
 		},
 		Pages: []web.Page{
-			{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
+			{Module: pages.Module, Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
 				{Section: "review", Label: "Mail decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 40},
 				{Section: "library", Label: "Mail rules", URL: "/rules", Icon: "scroll-text", Page: "rules", Order: 30},
 				{Label: "Mail accounts", URL: "/settings/mail", Page: "mail", Settings: true, Order: 20},

@@ -60,60 +60,40 @@ func Globals() map[string]any {
 	}
 }
 
-type Options struct {
-	Open     mail.OpenFunc
-	Now      func() float64
-	PageSize int
-}
-
 type service struct {
-	deps     *web.Deps
-	now      func() float64
-	live     *live.Live
-	applier  *applier.Applier
-	drafts   *drafts.Store
-	pageSize int
+	deps    *web.Deps
+	now     func() float64
+	live    *live.Live
+	applier *applier.Applier
+	drafts  *drafts.Store
 }
 
-const defaultPageSize = 50
+const pageSize = 50
 
 const learnedLimit = 50
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
-func Module(o Options) web.Module {
-	return func(r chi.Router, d *web.Deps) {
-		open := o.Open
-		if open == nil {
-			open = imapclient.Opener(d.Cfg)
-		}
-		now := o.Now
-		if now == nil {
-			now = wallClock
-		}
-		pageSize := o.PageSize
-		if pageSize <= 0 {
-			pageSize = defaultPageSize
-		}
-		syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: now}
-		registry := proposals.NewRegistry()
-		handlers.Register(registry, handlers.Deps{DB: d.DB, Open: open, Syncer: syncer, Now: now, Env: d.Env})
-		l := &live.Live{DB: d.DB, Cfg: d.Cfg, Registry: registry, Now: now}
-		s := &service{deps: d, now: now, live: l, applier: applier.New(l, open, syncer), drafts: &drafts.Store{DB: d.DB, Cfg: d.Cfg}, pageSize: pageSize}
+func Module(r chi.Router, d *web.Deps) {
+	open := imapclient.Opener(d.Cfg)
+	syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: wallClock}
+	registry := proposals.NewRegistry()
+	handlers.Register(registry, handlers.Deps{DB: d.DB, Open: open, Syncer: syncer, Now: wallClock, Env: d.Env})
+	l := &live.Live{DB: d.DB, Cfg: d.Cfg, Registry: registry, Now: wallClock}
+	s := &service{deps: d, now: wallClock, live: l, applier: applier.New(l, open, syncer), drafts: &drafts.Store{DB: d.DB, Cfg: d.Cfg}}
 
-		r.Get("/messages/{message_id}", s.messagePage)
-		r.Get("/messages/{message_id}/correct", s.correctForm)
-		r.Post("/messages/{message_id}/correct", s.correctSubmit)
-		r.Post("/live/actions/{action_id}/undo", s.liveUndo)
-		r.Get("/triage", s.triagePage)
-		r.Get("/rules", s.rulesPage)
-		r.Get("/rules/new", s.ruleNew)
-		r.Get("/rules/condition", s.ruleCondition)
-		r.Post("/rules/preview", s.rulePreview)
-		r.Post("/rules", s.ruleCreate)
-		r.Get("/rules/{rule_id}/edit", s.ruleEdit)
-		r.Post("/rules/{rule_id}", s.ruleUpdate)
-		r.Post("/rules/{rule_id}/move", s.ruleMove)
-		r.Delete("/rules/{rule_id}", s.ruleDelete)
-	}
+	r.Get("/messages/{message_id}", s.messagePage)
+	r.Get("/messages/{message_id}/correct", s.correctForm)
+	r.Post("/messages/{message_id}/correct", s.correctSubmit)
+	r.Post("/live/actions/{action_id}/undo", s.liveUndo)
+	r.Get("/triage", s.triagePage)
+	r.Get("/rules", s.rulesPage)
+	r.Get("/rules/new", s.ruleNew)
+	r.Get("/rules/condition", s.ruleCondition)
+	r.Post("/rules/preview", s.rulePreview)
+	r.Post("/rules", s.ruleCreate)
+	r.Get("/rules/{rule_id}/edit", s.ruleEdit)
+	r.Post("/rules/{rule_id}", s.ruleUpdate)
+	r.Post("/rules/{rule_id}/move", s.ruleMove)
+	r.Delete("/rules/{rule_id}", s.ruleDelete)
 }

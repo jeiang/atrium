@@ -69,19 +69,16 @@ func testAnthropic(ctx context.Context, c integrations.Conn) (string, error) {
 }
 
 type Module struct {
-	Chat      chatpages.Options
 	Callables []map[string]worker.Callable
 }
 
 func (m Module) Register(mc module.Context) module.Registration {
-	chat := m.Chat
-	chat.Tools = mc.Tools
 	return module.Registration{
 		Name:      module.Assistant,
 		Attention: []attention.Source{attentionsources.Plans(), tasks.AttentionSource()},
 		Requires:  []module.Requirement{{Name: secrets.AnthropicAPIKey, Check: anthropicKey}},
 		Pages: []web.Page{{
-			Module:    chatpages.Module(chat),
+			Module:    chatpages.Module(chatpages.Options{Tools: mc.Tools}),
 			Templates: chatpages.Templates(),
 			Home:      "/chat",
 			Nav: []web.NavItem{

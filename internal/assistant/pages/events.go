@@ -115,7 +115,7 @@ func (p *pages) stream(r *http.Request, w io.Writer, flusher *http.ResponseContr
 			_ = flusher.Flush()
 			return nil
 		}
-		if time.Since(quiet) >= p.keepalive {
+		if time.Since(quiet) >= streamKeepAlive {
 			quiet = time.Now()
 			if _, err := io.WriteString(w, ": keepalive\n\n"); err != nil {
 				return nil
@@ -129,7 +129,7 @@ func (p *pages) stream(r *http.Request, w io.Writer, flusher *http.ResponseContr
 			return nil
 		case <-p.deps.Stopping:
 			return nil
-		case <-time.After(p.poll):
+		case <-time.After(streamPoll):
 		}
 	}
 }
@@ -165,7 +165,7 @@ func (p *pages) drainRunDone(ctx context.Context, w io.Writer, runID, last int64
 			return last, nil
 		case <-p.deps.Stopping:
 			return last, nil
-		case <-time.After(p.poll):
+		case <-time.After(streamPoll):
 		}
 	}
 }

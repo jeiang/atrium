@@ -27,15 +27,13 @@ func Templates() fs.FS {
 }
 
 type Options struct {
-	Now  func() float64
-	Exec media.Runner
+	Now func() float64
 }
 
 type service struct {
 	deps  *web.Deps
 	now   func() float64
 	links *media.Links
-	exec  media.Runner
 }
 
 func (s *service) settings(ctx context.Context) media.Settings {
@@ -47,9 +45,7 @@ func (s *service) settings(ctx context.Context) media.Settings {
 }
 
 func (s *service) artwork(set media.Settings) *media.Artwork {
-	art := media.NewArtwork(s.deps.Cfg.MediaCacheDir(), set.TMDB(), set.Tuning)
-	art.Run = s.exec
-	return art
+	return media.NewArtwork(s.deps.Cfg.MediaCacheDir(), set.TMDB(), set.Tuning)
 }
 
 func PublicCheck(cfg config.Config, _ config.Env, d *db.DB, reg *settings.Registry) func(*http.Request) bool {
@@ -62,7 +58,7 @@ func Module(o Options) web.Module {
 		if now == nil {
 			now = media.Now
 		}
-		s := &service{deps: d, now: now, links: media.NewLinks(d.Settings, d.DB, d.Cfg.MediaLinkKeyPath()), exec: o.Exec}
+		s := &service{deps: d, now: now, links: media.NewLinks(d.Settings, d.DB, d.Cfg.MediaLinkKeyPath())}
 		s.registerDownloads(r)
 		s.registerChannels(r)
 		s.registerLibrary(r)

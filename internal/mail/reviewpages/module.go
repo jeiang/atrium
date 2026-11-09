@@ -15,11 +15,9 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/writes"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
-	"github.com/jeiang/atrium/internal/mail/smtp"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/handlers"
@@ -51,12 +49,8 @@ func RecoverDrafts(ctx context.Context, d *db.DB, cfg config.Config) error {
 }
 
 type Options struct {
-	Open     mail.OpenFunc
-	Now      func() float64
-	Writes   *writes.Registry
-	Registry *proposals.Registry
-	Enabled  func(context.Context, db.Querier, string) (bool, error)
-	SMTP     smtp.Factory
+	Writes  *writes.Registry
+	Enabled func(context.Context, db.Querier, string) (bool, error)
 }
 
 type service struct {
@@ -73,20 +67,11 @@ func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
-		open := o.Open
-		if open == nil {
-			open = imapclient.Opener(d.Cfg)
-		}
-		now := o.Now
-		if now == nil {
-			now = wallClock
-		}
-		registry := o.Registry
-		if registry == nil {
-			registry = proposals.NewRegistry()
-			syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: now}
-			handlers.Register(registry, handlers.Deps{DB: d.DB, Open: open, Syncer: syncer, Now: now, Env: d.Env})
-		}
+		open := imapclient.Opener(d.Cfg)
+		now := wallClock
+		registry := proposals.NewRegistry()
+		syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: now}
+		handlers.Register(registry, handlers.Deps{DB: d.DB, Open: open, Syncer: syncer, Now: now, Env: d.Env})
 		undo := o.Writes
 		if undo == nil {
 			undo = writes.NewRegistry()
@@ -97,7 +82,7 @@ func Module(o Options) web.Module {
 			pipeline: &proposals.Pipeline{DB: d.DB, Registry: registry, Now: now, Enabled: o.Enabled},
 			live:     &live.Live{DB: d.DB, Cfg: d.Cfg, Registry: registry, Now: now},
 			writes:   undo,
-			drafts:   &drafts.Store{DB: d.DB, Cfg: d.Cfg, Open: open, SMTP: o.SMTP, Now: now},
+			drafts:   &drafts.Store{DB: d.DB, Cfg: d.Cfg, Open: open, Now: now},
 			registry: registry,
 		}
 

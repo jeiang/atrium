@@ -11,10 +11,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/budget"
-	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/runner"
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
@@ -38,58 +36,35 @@ func Templates() fs.FS {
 }
 
 type Options struct {
-	Runner    *loop.Runner
-	Client    *anthropic.Client
-	Now       func() float64
-	Poll      time.Duration
-	KeepAlive time.Duration
-	Tools     registry.Source
+	Tools registry.Source
 }
 
 type pages struct {
-	deps      *web.Deps
-	svc       *service.Service
-	now       func() float64
-	poll      time.Duration
-	keepalive time.Duration
+	deps *web.Deps
+	svc  *service.Service
+	now  func() float64
 }
 
 const (
-	emptyMessage = "Type a message first."
-	archived     = "archived"
+	emptyMessage    = "Type a message first."
+	archived        = "archived"
+	streamPoll      = 300 * time.Millisecond
+	streamKeepAlive = 15 * time.Second
 )
 
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
-		run := o.Runner
-		if run == nil {
-			made, err := runner.New(o.Tools)
-			if err != nil {
-				panic(err)
-			}
-			run = made
-		}
-		now := o.Now
-		if now == nil {
-			now = assistant.Now
-		}
-		poll := o.Poll
-		if poll == 0 {
-			poll = 300 * time.Millisecond
+		run, err := runner.New(o.Tools)
+		if err != nil {
+			panic(err)
 		}
 		base, cancel := context.WithCancel(d.Ctx)
 		svc := service.New(base, d.DB, d.Cfg, d.Env, run)
-		svc.Client = o.Client
-		svc.Now = o.Now
 		checked := make(chan struct{})
-		if o.Client == nil {
-			go func() {
-				defer close(checked)
-				svc.CheckCatalog(base)
-			}()
-		} else {
-			close(checked)
-		}
+		go func() {
+			defer close(checked)
+			svc.CheckCatalog(base)
+		}()
 		shutdown := func() {
 			svc.Close()
 			cancel()
@@ -98,14 +73,10 @@ func Module(o Options) web.Module {
 		if d.OnClose != nil {
 			d.OnClose(shutdown)
 		}
-		keepalive := o.KeepAlive
-		if keepalive == 0 {
-			keepalive = 15 * time.Second
-		}
-		p := &pages{deps: d, svc: svc, now: now, poll: poll, keepalive: keepalive}
+		p := &pages{deps: d, svc: svc, now: assistant.Now}
 		d.OnFrame(p.sidebar)
 		tz := config.From(base).TZName(d.Env)
-		stamp := now()
+		stamp := assistant.Now()
 		if err := d.DB.WithTx(base, func(tx *sql.Tx) error {
 			return scheduler.Ensure(base, tx, tz, stamp)
 		}); err != nil && !errors.Is(err, context.Canceled) {
