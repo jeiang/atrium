@@ -388,6 +388,13 @@ func AliasMatches(ctx context.Context, q db.Querier, query string) ([]string, er
 
 func rstrip(s string) string { return strings.TrimRightFunc(s, unicode.IsSpace) }
 
+func group(s string, loc []int, i int) string {
+	if loc[2*i] < 0 {
+		return ""
+	}
+	return s[loc[2*i]:loc[2*i+1]]
+}
+
 func (w Wiki) linkLabel(url string) (string, error) {
 	text := labelSchema.ReplaceAllString(url, "")
 	text = strings.TrimRight(text, "/")

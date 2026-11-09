@@ -8,7 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/mail/search"
+	"github.com/jeiang/atrium/internal/textsearch"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -26,7 +26,7 @@ func (p *pages) today(w http.ResponseWriter, r *http.Request) {
 func (p *pages) palette(w http.ResponseWriter, r *http.Request) {
 	q := strings.TrimSpace(web.QueryValue(r.URL.Query(), "q"))
 	var found []threads.Listed
-	match, err := search.FTSQuery(q)
+	match, err := textsearch.FTSQuery(q)
 	if q == "" || (err == nil && match != "") {
 		found, err = threads.ListThreads(r.Context(), p.deps.DB.Read, threads.ListOpts{Match: match, Limit: paletteThreads})
 		check(err)

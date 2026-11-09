@@ -1,15 +1,11 @@
-package notion
+package notionmd
 
 import (
 	"regexp"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/notionid"
-)
-
-const (
-	markStart = "\x02"
-	markEnd   = "\x03"
+	"github.com/jeiang/atrium/internal/textsearch"
 )
 
 var (
@@ -251,12 +247,12 @@ func balanced(s string) string {
 	openAt := -1
 	for _, ch := range s {
 		switch string(ch) {
-		case markStart:
+		case textsearch.MarkStart:
 			if openAt >= 0 {
 				continue
 			}
 			openAt = len(out)
-		case markEnd:
+		case textsearch.MarkEnd:
 			if openAt < 0 {
 				continue
 			}

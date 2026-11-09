@@ -16,7 +16,6 @@ import (
 	vecindex "github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/mail"
-	mailaccounts "github.com/jeiang/atrium/internal/mail/accounts"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
@@ -167,12 +166,12 @@ func (h handlers) add(w http.ResponseWriter, r *http.Request) {
 	ctx := h.ctx(r)
 	a, err := config.NewAccount(kept["id"], kept["label"], kept["preset"], kept["login"], true)
 	if err == nil {
-		a.AuthMethod, err = mailaccounts.Parse(kept["auth_method"])
+		a.AuthMethod, err = config.ParseAuthMethod(kept["auth_method"])
 	}
 	switch {
 	case err != nil:
 		err = refusal(err.Error())
-	case !mailaccounts.Allowed(a.Preset, a.AuthMethod):
+	case !config.AuthAllowed(a.Preset, a.AuthMethod):
 		err = refusal("XOAUTH2 is Gmail-only")
 	case a.Login == "" || password == "":
 		err = refusal("login and password are required")
@@ -215,9 +214,9 @@ func (h handlers) update(w http.ResponseWriter, r *http.Request) {
 		}
 		a, err = config.NewAccount(id, strings.TrimSpace(web.FormString(form, "label", current.Label)), current.Preset, login, web.FormString(form, "enabled", "") != "")
 		if err == nil {
-			a.AuthMethod, err = mailaccounts.Parse(web.FormString(form, "auth_method", string(current.AuthMethod)))
+			a.AuthMethod, err = config.ParseAuthMethod(web.FormString(form, "auth_method", string(current.AuthMethod)))
 		}
-		if err == nil && !mailaccounts.Allowed(a.Preset, a.AuthMethod) {
+		if err == nil && !config.AuthAllowed(a.Preset, a.AuthMethod) {
 			err = refusal("XOAUTH2 is Gmail-only")
 		}
 		if err == nil && a.Login == "" {

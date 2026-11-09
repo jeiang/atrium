@@ -11,8 +11,8 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/mail/search"
 	"github.com/jeiang/atrium/internal/numx"
+	"github.com/jeiang/atrium/internal/textsearch"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -219,7 +219,7 @@ func (p *pages) apiThreads(w http.ResponseWriter, r *http.Request) {
 	match := ""
 	if q := strings.TrimSpace(web.QueryValue(query, "q")); q != "" {
 		var err error
-		match, err = search.FTSQuery(q)
+		match, err = textsearch.FTSQuery(q)
 		check(err)
 	}
 	opts := threads.ListOpts{Match: match, Limit: limit + 1, Archived: view == archived, ProjectID: projectID}

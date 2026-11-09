@@ -9,7 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/tool"
-	"github.com/jeiang/atrium/internal/mail/search"
+	"github.com/jeiang/atrium/internal/textsearch"
 )
 
 const searchName = "search_threads"
@@ -44,7 +44,7 @@ func searchThreads(ctx context.Context, tc *tool.Context, args tool.Args) (any, 
 	if err != nil {
 		return nil, err
 	}
-	match, err := search.FTSQuery(query)
+	match, err := textsearch.FTSQuery(query)
 	if err != nil {
 		return nil, tool.Error("invalid query")
 	}

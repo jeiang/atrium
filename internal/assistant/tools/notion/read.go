@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/tool"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/notion"
+	"github.com/jeiang/atrium/internal/notionmd"
 )
 
 var readKinds = tool.Kinds{tool.Chat, tool.Cron, tool.Nightly, tool.Sub}
@@ -72,7 +73,7 @@ func aliasHits(ctx context.Context, tc *tool.Context, query string, snippetChars
 			hit["title"] = row.Title
 			hit["path"] = row.Path
 			hit["url"] = row.URL
-			hit["snippet"] = tool.Clip(notion.Plain(head, map[string]string{}), snippetChars)
+			hit["snippet"] = tool.Clip(notionmd.Plain(head, map[string]string{}), snippetChars)
 		} else {
 			title := ""
 			if local != nil {

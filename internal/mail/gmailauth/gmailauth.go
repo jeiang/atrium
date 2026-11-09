@@ -14,7 +14,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/accounts"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -163,13 +162,13 @@ func (s *Source) refresh(ctx context.Context) (string, time.Time, error) {
 
 // Resolve returns the account's auth method and, for a Gmail XOAUTH2 account,
 // the token source built from the Google client and the wizard's refresh token.
-func Resolve(ctx context.Context, q db.Querier, account string) (accounts.Method, *Source, error) {
+func Resolve(ctx context.Context, q db.Querier, account string) (config.AuthMethod, *Source, error) {
 	spec, ok := config.From(ctx).Account(account)
 	if !ok {
 		return "", nil, errors.New("unknown mail account " + account)
 	}
-	if spec.Preset != config.Gmail || spec.AuthMethod != accounts.XOAUTH2 {
-		return accounts.Password, nil, nil
+	if spec.Preset != config.Gmail || spec.AuthMethod != config.AuthXOAUTH2 {
+		return config.AuthPassword, nil, nil
 	}
 	found, err := settings.From(ctx).Resolve(ctx, q, ClientIDKey)
 	if err != nil {
@@ -197,5 +196,5 @@ func Resolve(ctx context.Context, q db.Querier, account string) (accounts.Method
 	if len(missing) > 0 {
 		return "", nil, errors.New(strings.Join(missing, ", ") + " not set")
 	}
-	return accounts.XOAUTH2, &Source{ClientID: found.Value, ClientSecret: secret, RefreshToken: refresh, TokenURL: config.GoogleTokenURL()}, nil
+	return config.AuthXOAUTH2, &Source{ClientID: found.Value, ClientSecret: secret, RefreshToken: refresh, TokenURL: config.GoogleTokenURL()}, nil
 }

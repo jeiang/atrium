@@ -9,7 +9,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/accounts"
 	"github.com/jeiang/atrium/internal/mail/gmailauth"
 	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/mail/smtp"
@@ -163,7 +162,7 @@ func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusal
 		return nil, nil, err
 	}
 	user, _, ok := config.Credential(ctx, d.Account)
-	if !ok && method != accounts.XOAUTH2 {
+	if !ok && method != config.AuthXOAUTH2 {
 		return nil, nil, &smtp.Failure{Kind: "Config", Msg: d.Account + " is not configured"}
 	}
 	if user == "" {
@@ -182,7 +181,7 @@ func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusal
 	}, s.now(), makeID(domain))
 	recipients := append(addresses(d.ToAddrs), addresses(d.CcAddrs)...)
 	var refused smtp.Refusals
-	if method == accounts.XOAUTH2 {
+	if method == config.AuthXOAUTH2 {
 		refused, err = smtp.SendXOAUTH2(ctx, d.Account, user, msg, recipients, s.SMTP, source.Token, source.Invalidate)
 	} else {
 		refused, err = smtp.Send(ctx, config.Credential, d.Account, msg, recipients, s.SMTP)
