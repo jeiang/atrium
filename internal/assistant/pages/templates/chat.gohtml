@@ -19,6 +19,7 @@
     <input type="hidden" name="csrf_token" value="{{.CSRF}}">
     <label for="new-text" class="sr-only">New thread</label>
     <textarea id="new-text" name="text" rows="3" placeholder="Message the assistant" data-submit-on-enter autofocus></textarea>
+    {{template "ref_picker"}}
     {{template "attach_field"}}
     <div class="flex flex-wrap items-center gap-2 text-xs">
       {{template "attach_button"}}

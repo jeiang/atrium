@@ -51,6 +51,7 @@ const (
 	KeyMessageCapBytes = "agent_message_cap_bytes"
 	KeyFileNameChars   = "agent_file_name_chars"
 
+	KeyRefTokens               = "agent_ref_tokens"
 	KeyProjectNameChars        = "agent_project_name_chars"
 	KeyProjectInstructionChars = "agent_project_instruction_chars"
 	KeyPlanItems               = "agent_workspace_plan_items"
@@ -174,6 +175,7 @@ func init() {
 		fileCap,
 		messageCap,
 		count(KeyFileNameChars, 80, 8, 200),
+		count(KeyRefTokens, 8000, 1000, 32000),
 
 		count(KeyProjectNameChars, 80, 8, 500),
 		count(KeyProjectInstructionChars, 20000, 100, 200000),

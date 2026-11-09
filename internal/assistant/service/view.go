@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/progress"
+	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
@@ -70,6 +71,14 @@ type Step struct {
 	Error         any            `json:"error"`
 }
 
+type Reference struct {
+	ThreadID int64  `json:"thread_id"`
+	Seq      *int64 `json:"seq,omitempty"`
+	Title    string `json:"title"`
+	Text     string `json:"text"`
+	Tokens   int64  `json:"tokens"`
+}
+
 type Item struct {
 	Seq        int64          `json:"seq"`
 	RunID      *int64         `json:"run_id"`
@@ -77,10 +86,26 @@ type Item struct {
 	Kind       string         `json:"kind"`
 	Text       string         `json:"text"`
 	Files      []Attachment   `json:"files"`
+	References []Reference    `json:"references,omitempty"`
 	Steps      []*Step        `json:"steps"`
 	Citations  []Citation     `json:"citations"`
 	Draft      map[string]any `json:"draft"`
 	ProposalID int64          `json:"proposal_id,omitempty"`
+}
+
+func referenceOf(d map[string]any) (Reference, bool) {
+	id, ok := d["thread_id"].(int64)
+	if !ok {
+		return Reference{}, false
+	}
+	ref := Reference{ThreadID: id, Title: text(d, "title"), Text: text(d, "text")}
+	if seq, ok := d["seq"].(int64); ok {
+		ref.Seq = &seq
+	}
+	if n, ok := d["tokens"].(int64); ok {
+		ref.Tokens = n
+	}
+	return ref, true
 }
 
 func get(d map[string]any, key string, fallback any) any {
@@ -195,6 +220,7 @@ func Items(messages []journal.Message, calls []journal.ToolCall, drafts map[int6
 	}
 	for _, m := range messages {
 		base := Item{Seq: m.Seq, RunID: m.RunID, CreatedAt: m.CreatedAt}
+		var refs []Reference
 		hasUse, err := block.HasKind(m.Content, block.ToolUse)
 		if err != nil {
 			return nil, fmt.Errorf("service: message %d: %w", m.ID, err)
@@ -214,15 +240,20 @@ func Items(messages []journal.Message, calls []journal.ToolCall, drafts map[int6
 				attached = append(attached, Attachment{
 					ID: b.Get("file_id"), Name: name, MediaType: b.String("media_type"), Kind: b.Get("kind"),
 				})
+			case b.Kind == references.Type && m.Role == journal.User:
+				if ref, ok := referenceOf(b.Value); ok {
+					refs = append(refs, ref)
+				}
 			case b.Kind == block.Text && m.Role == journal.User:
 				activity = nil
 				item := base
-				item.Kind, item.Text, item.Files = ItemUser, b.Text(), attached
+				item.Kind, item.Text, item.Files, item.References = ItemUser, b.Text(), attached, refs
 				if item.Files == nil {
 					item.Files = []Attachment{}
 				}
 				items = append(items, &item)
 				attached = nil
+				refs = nil
 			case b.Kind == block.Text && final:
 				activity = nil
 				items = addAnswer(items, base, b.Value)

@@ -493,6 +493,17 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "agent_ref_tokens": {
+          "default": 8000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_ref_tokens_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "agent_schedule_calendar_candidates": {
           "default": "0 * * * *",
           "type": "string"

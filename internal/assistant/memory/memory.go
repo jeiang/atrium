@@ -10,6 +10,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/settings"
@@ -192,6 +193,8 @@ func render(m journal.Message) (string, []int64, error) {
 			}
 		case block.Attachment:
 			parts = append(parts, "[attachment]")
+		case references.Type:
+			parts = append(parts, referenceLine(b.Value))
 		}
 	}
 	return strings.Join(parts, "\n"), ids, nil
@@ -213,6 +216,14 @@ func resultID(content string) int64 {
 		return 0
 	}
 	return *found.ResultID
+}
+
+func referenceLine(value map[string]any) string {
+	threadID, _ := value["thread_id"].(int64)
+	if seq, ok := value["seq"].(int64); ok {
+		return fmt.Sprintf("[reference thread %d m%d]", threadID, seq)
+	}
+	return fmt.Sprintf("[reference thread %d]", threadID)
 }
 
 func fit(source string, limit int) nodeSpec {

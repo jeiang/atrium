@@ -22,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
+	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/usage"
@@ -449,8 +450,15 @@ func (s *state) injectQueued(ctx context.Context) (bool, error) {
 	texts := make(map[int64]string, len(queued))
 	taken, err := journal.ConsumeQueued(ctx, s.d, s.thread.ID, s.run.ID, s.now(), func(q db.Querier, row journal.QueuedMessage) error {
 		texts[row.ID] = row.Text
+		marks, err := references.Marks(row.Files)
+		if err != nil {
+			return err
+		}
+		if err := threads.AddMarks(ctx, q, s.thread.ID, s.now(), marks); err != nil {
+			return err
+		}
 		content := append(append([]json.RawMessage{}, row.Files...), actx.TextBlock(row.Text))
-		_, err := journal.AppendMessageTx(ctx, q, s.thread.ID, &s.run.ID, journal.User, content, s.now(), nil)
+		_, err = journal.AppendMessageTx(ctx, q, s.thread.ID, &s.run.ID, journal.User, content, s.now(), nil)
 		return err
 	})
 	if err != nil {

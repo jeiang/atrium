@@ -398,7 +398,7 @@
   }
 
   .composer {
-    @apply flex flex-col gap-2 rounded-2xl border border-line-strong bg-surface p-3 transition-shadow;
+    @apply relative flex flex-col gap-2 rounded-2xl border border-line-strong bg-surface p-3 transition-shadow;
     box-shadow: 0 8px 24px -18px oklch(0 0 0 / 0.35);
 
     &:focus-within {
@@ -412,6 +412,9 @@
   .composer-dock {
     @apply sticky bottom-0 z-10 mt-auto bg-gradient-to-t from-background from-70% to-transparent pt-6;
     padding-bottom: max(1rem, env(safe-area-inset-bottom));
+  }
+  .ref-picker {
+    @apply absolute inset-x-0 bottom-full z-20 mb-2 flex max-h-64 flex-col overflow-y-auto rounded-xl border bg-surface p-1.5 text-ink shadow-xl;
   }
 
   .welcome {

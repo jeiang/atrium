@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/projects"
+	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
@@ -116,6 +117,10 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
+	refs, err := references.Resolve(ctx, p.deps.DB.Read, 0, text)
+	if p.refused(w, r, err) {
+		return
+	}
 	var project *int64
 	if projectID != 0 {
 		found, err := projects.Get(ctx, p.deps.DB.Read, projectID)
@@ -159,7 +164,7 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if text != "" {
-		_, err := p.svc.StartRun(ctx, threadID, text, service.Start{Kind: threads.Chat, Operator: true, Files: attached})
+		_, err := p.svc.StartRun(ctx, threadID, text, service.Start{Kind: threads.Chat, Operator: true, Files: append(attached, refs...)})
 		if p.refused(w, r, err) {
 			return
 		}

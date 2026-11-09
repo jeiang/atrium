@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
+	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
@@ -372,6 +373,10 @@ func (req request) buildMessages(ctx context.Context, q db.Querier, scope files.
 			content[end] = marked
 		}
 		expanded, err := files.Expand(ctx, q, scope, content)
+		if err != nil {
+			return nil, err
+		}
+		expanded, err = references.Expand(expanded)
 		if err != nil {
 			return nil, err
 		}
