@@ -26,10 +26,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/mail/drafts"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 type smtpFake struct {
@@ -161,7 +160,7 @@ func TestDraftSendOverXOAUTH2RefreshesTheTokenOnlyAtAuth(t *testing.T) {
 	tokenSrv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(tokenSrv.Close)
 	t.Setenv("ATRIUM_GOOGLE_TOKEN_URL", tokenSrv.URL)
-	dir, _, f := moduleFixture(t, flagsExcept("", ""))
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "GOOGLE_OAUTH_CLIENT_SECRET", "secret")
 	setEnv(t, "GOOGLE_GMAIL_REFRESH_TOKEN", "refresh")
 
@@ -199,16 +198,21 @@ func TestDraftSendOverXOAUTH2RefreshesTheTokenOnlyAtAuth(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("d1", "draft_email_create", map[string]any{
+		"account": "oauth", "to": []string{"to@x.test"}, "subject": "Hi", "body": "body",
+	})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("drafted")))
+	if ran := runApp(t, "agent", "run", "--text", "draft a hello"); ran.code != cli.ExitOK {
+		t.Fatalf("draft run: %d %s", ran.code, ran.stderr)
+	}
+	var id int64
+	if err := d.Read.QueryRow("SELECT id FROM drafts WHERE account = 'oauth' AND status = 'draft'").Scan(&id); err != nil {
+		t.Fatalf("the agent did not save a draft: %v", err)
+	}
 	base := startServeIn(t, dir)
-	cfg, err := config.Load(config.Map(f.env))
-	if err != nil {
-		t.Fatal(err)
-	}
-	store := &drafts.Store{DB: d, Cfg: cfg}
-	id, err := store.Create(config.With(settings.With(context.Background(), f.settings), f.state), nil, "oauth", []string{"to@x.test"}, nil, "Hi", "body", nil)
-	if err != nil {
-		t.Fatal(err)
-	}
 
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}

@@ -8,18 +8,18 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/executors"
-	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/imapscript"
 	"github.com/jeiang/atrium/internal/testutil/llmstub"
 )
 
 func TestMailTriageProposalArchivesThroughTheCLI(t *testing.T) {
-	dir, _, f := moduleFixture(t, flagsExcept("", ""))
+	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
 	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
@@ -46,16 +46,19 @@ func TestMailTriageProposalArchivesThroughTheCLI(t *testing.T) {
 		t.Fatal(err)
 	}
 	messageID, _ := res.LastInsertId()
-	account := "icloud"
-	payload := map[string]any{"items": []any{map[string]any{
-		"id": messageID, "uid": 301, "uidvalidity": 1544650202,
-		"msgid": "m@x", "digest": "d", "mailbox": "INBOX",
-		"imap_name": "INBOX", "action": "archive",
-	}}}
-	id, _, err := proposals.Create(settings.With(context.Background(), f.settings), d, executors.MailTriage, &account, "Triage",
-		payload, map[string]any{}, "triage-archive-1", 0)
-	if err != nil {
-		t.Fatal(err)
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("p1", "propose", map[string]any{
+		"kind": executors.MailTriage, "payload": map[string]any{"items": []any{map[string]any{"id": messageID, "action": executors.TriageArchive}}},
+	})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("proposed")))
+	if ran := runApp(t, "agent", "run", "--text", "triage my inbox"); ran.code != cli.ExitOK {
+		t.Fatalf("propose run: %d %s", ran.code, ran.stderr)
+	}
+	var id int64
+	if err := d.Read.QueryRow("SELECT id FROM proposals WHERE kind = ? AND status = 'pending'", executors.MailTriage).Scan(&id); err != nil {
+		t.Fatalf("the agent did not create a triage proposal: %v", err)
 	}
 
 	script := imapscript.MustParse(t, `

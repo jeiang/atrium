@@ -14,8 +14,8 @@ import (
 	"github.com/jeiang/atrium/internal/passrun"
 )
 
-func Command(env config.Env, tools registry.Source, auth calendar.AuthOptions) *cli.Command {
-	return &cli.Command{Name: "calendar", Commands: []*cli.Command{candidatesCommand(env, tools, nil), googleAuth(env, auth), syncCommand(env)}}
+func Command(env config.Env, tools registry.Source) *cli.Command {
+	return &cli.Command{Name: "calendar", Commands: []*cli.Command{candidatesCommand(env, tools, nil), googleAuth(env), syncCommand(env)}}
 }
 
 func syncCommand(env config.Env) *cli.Command {
@@ -29,7 +29,7 @@ func syncCommand(env config.Env) *cli.Command {
 		})
 }
 
-func googleAuth(env config.Env, auth calendar.AuthOptions) *cli.Command {
+func googleAuth(env config.Env) *cli.Command {
 	return &cli.Command{
 		Name: "google-auth",
 		Setup: func(a *cli.Args) cli.Handler {
@@ -51,11 +51,7 @@ func googleAuth(env config.Env, auth calendar.AuthOptions) *cli.Command {
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				auth.ClientID = set.GoogleClientID
-				auth.ClientSecret = config.GoogleOAuthSecret(env)
-				auth.Port = *port
-				auth.Out = e.Stdout
-				auth.Env = env
+				auth := calendar.AuthOptions{ClientID: set.GoogleClientID, ClientSecret: config.GoogleOAuthSecret(env), Port: *port, Out: e.Stdout, Env: env}
 				token, err := calendar.Authorize(e.Ctx, auth)
 				var failed calendar.Error
 				if errors.As(err, &failed) {

@@ -14,7 +14,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 const APIKey = "fake-anthropic-key"
@@ -91,17 +90,6 @@ func (s *Server) Remaining() int {
 
 func (s *Server) Env() config.Env {
 	return config.Map(map[string]string{"ANTHROPIC_API_KEY": APIKey, anthropic.BaseURLEnv: s.URL})
-}
-
-func PinKey(t testing.TB, reg *settings.Registry) {
-	t.Helper()
-	previous := reg.PinSource()
-	pins, err := config.LoadPins(config.Map(map[string]string{"ANTHROPIC_API_KEY": APIKey}), reg)
-	if err != nil {
-		t.Fatal(err)
-	}
-	reg.SetPins(pins)
-	t.Cleanup(func() { reg.SetPins(previous) })
 }
 
 func (s *Server) Client() *anthropic.Client {

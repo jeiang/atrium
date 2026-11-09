@@ -57,7 +57,6 @@ type Provider struct {
 	refresh     map[string]string
 	access      map[string]string
 	auths       []url.Values
-	tokenCalls  []url.Values
 	Down        bool
 	Tamper      func(claims map[string]any)
 	Forge       string
@@ -151,21 +150,6 @@ func (p *Provider) Authorizations() []url.Values {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	return append([]url.Values(nil), p.auths...)
-}
-
-func (p *Provider) TokenCalls() []url.Values {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return append([]url.Values(nil), p.tokenCalls...)
-}
-
-func (p *Provider) RotateKey(dropOld bool) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if dropOld {
-		p.keys = nil
-	}
-	p.addKeyLocked()
 }
 
 func (p *Provider) addKey() {
@@ -314,7 +298,6 @@ func (p *Provider) token(w http.ResponseWriter, r *http.Request) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	p.tokenCalls = append(p.tokenCalls, r.PostForm)
 	if !p.clientOK(r) {
 		oauthError(w, http.StatusUnauthorized, "invalid_client")
 		return

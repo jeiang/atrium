@@ -93,7 +93,6 @@ type Options struct {
 	Modules      []Module
 	Home         string
 	OIDC         *oidc.Service
-	LoginLinks   *loginlink.Service
 	Policy       *Policy
 	OnReady      func(*Deps) error
 }
@@ -142,12 +141,12 @@ func New(o Options) (*Server, error) {
 	if o.State != nil {
 		o.Ctx = config.With(o.Ctx, o.State)
 	}
-	if auth.OIDC() && (o.OIDC == nil || o.Render == nil || (o.LoginLinks == nil && o.DB == nil)) {
+	if auth.OIDC() && (o.OIDC == nil || o.Render == nil || o.DB == nil) {
 		return nil, errors.New("oidc auth needs a session service, a renderer and a database")
 	}
-	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, links: o.LoginLinks, settings: o.Settings, state: o.State}
+	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, settings: o.Settings, state: o.State}
 	s.mux.Use(instrument)
-	if s.links == nil && o.DB != nil {
+	if o.DB != nil {
 		s.links = loginlink.New(o.DB)
 	}
 	if s.errPage == nil && o.Render != nil {

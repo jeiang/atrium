@@ -26,7 +26,6 @@ func Templates() fs.FS {
 
 type Options struct {
 	Chat notion.ChatFunc
-	Now  func() float64
 }
 
 type service struct {
@@ -39,11 +38,7 @@ func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
-		now := o.Now
-		if now == nil {
-			now = wallClock
-		}
-		s := &service{deps: d, now: now, drafter: &notion.Drafter{DB: d.DB, Chat: o.Chat}}
+		s := &service{deps: d, now: wallClock, drafter: &notion.Drafter{DB: d.DB, Chat: o.Chat}}
 
 		r.Get("/library/wiki", s.wiki)
 		r.Get("/notion/{page_id}", s.view)

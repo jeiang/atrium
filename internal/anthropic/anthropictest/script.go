@@ -75,11 +75,6 @@ func (r Response) WithUsage(u Usage) Response {
 	return r
 }
 
-func (r Response) WithContextManagement(cm json.RawMessage) Response {
-	r.ContextManagement = cm
-	return r
-}
-
 func Failure(status int, errType, message string) Response {
 	return Response{Status: status, ErrorBody: ErrorBody(errType, message)}
 }
