@@ -1,9 +1,7 @@
 {{define "title"}}Usage · Settings{{end}}
 {{define "heading"}}Settings · Usage{{end}}
-{{define "body_attrs"}}{{if .Data.Saved}} data-strip-params="saved"{{end}}{{end}}
 {{define "content"}}{{$d := .Data}}{{$s := $d.Summary}}{{$b := $d.Budget}}
 {{template "settings_nav" (dict "Tab" "usage" "Settings" .Settings)}}
-{{with $d.Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.}}</p>{{end}}
 <section class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="This month">
   <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
     <span class="text-xs text-muted-foreground">Spent this month</span>
@@ -28,11 +26,6 @@
     <span class="text-xs text-muted-foreground">{{$s.OutputTokens}} output tokens · {{$s.ReasoningTokens}} reasoning · {{$s.Searches}} web searches</span>
     <span class="text-xs text-muted-foreground">{{$s.ToolCalls}} tool calls · {{printf "%.1f" (fdiv $s.WallMS 1000.0)}}s in requests{{if $s.Partial}} · {{$s.Partial}} partial{{end}}{{if $s.Unpriced}} · {{$s.Unpriced}} unpriced{{end}}</span>
   </div>
-</section>
-
-<section class="flex flex-col gap-3 rounded-lg border bg-card p-4" aria-labelledby="budget-h">
-  <h2 id="budget-h" class="text-sm font-medium">Monthly budget</h2>
-  {{template "settings_fields" (dict "Fields" $d.Fields "Action" "/settings/usage/budget" "CSRF" .CSRF)}}
 </section>
 
 <section class="flex flex-col gap-2" aria-labelledby="by-kind">

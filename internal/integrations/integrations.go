@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settingspage"
 )
 
 const (
@@ -55,6 +56,7 @@ type Section struct {
 }
 
 type SectionView struct {
+	Module      string      `json:"module"`
 	Name        string      `json:"name"`
 	Title       string      `json:"title"`
 	Template    string      `json:"template"`
@@ -93,6 +95,7 @@ func Register(i Integration) {
 		settings.Value(settings.Advanced, settings.Def{Key: transport.ProxyKey(i.Name), Module: i.Module, Type: settings.String, Check: proxyCheck}),
 	)
 	registry = append(registry, i)
+	settingspage.Want(i.Module)
 }
 
 func RegisterSection(s Section) {
@@ -102,6 +105,7 @@ func RegisterSection(s Section) {
 		return
 	}
 	sections = append(sections, s)
+	settingspage.Want(s.Module)
 }
 
 func AllSections() []Section {
@@ -132,7 +136,7 @@ func LoadSections(ctx context.Context, q db.Querier) ([]SectionView, error) {
 				return nil, err
 			}
 		}
-		out = append(out, SectionView{Name: s.Name, Title: s.Title, Template: s.Template, Integration: s.Integration, Fields: fields, Data: data})
+		out = append(out, SectionView{Module: s.Module, Name: s.Name, Title: s.Title, Template: s.Template, Integration: s.Integration, Fields: fields, Data: data})
 	}
 	return out, nil
 }

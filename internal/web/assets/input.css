@@ -370,6 +370,12 @@
       &[aria-current="page"] {
         @apply bg-clay-soft font-medium text-ink;
       }
+      &[data-mark]::after {
+        @apply ms-auto size-1.5 shrink-0 rounded-full bg-ink-3 content-[''] max-md:ms-2;
+      }
+      &[data-mark="warning"]::after {
+        @apply bg-warning;
+      }
     }
     & h2 {
       @apply px-2 pt-4 pb-1 max-md:hidden;

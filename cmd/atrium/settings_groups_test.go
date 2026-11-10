@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jeiang/atrium/internal/calendar"
 )
 
 func TestDeclaredSettingGroupSavesFromItsModulePage(t *testing.T) {
@@ -65,7 +67,7 @@ func TestExternalModuleSettingsGroupGetsAPage(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("GET /settings/%s = %d", extName, status)
 	}
-	for _, want := range []string{`<a href="/settings/` + extName + `" aria-current="page">Extdemo</a>`, `data-group="` + extName + `.general"`, "Greeting", `value="hello"`} {
+	for _, want := range []string{`<a href="/settings/` + extName + `" aria-current="page" data-mark="off">Extdemo</a>`, `data-group="` + extName + `.general"`, "Greeting", `value="hello"`} {
 		if !strings.Contains(body, want) {
 			t.Errorf("the module page does not render %s", want)
 		}
@@ -80,5 +82,37 @@ func TestExternalModuleSettingsGroupGetsAPage(t *testing.T) {
 	status, body, _ = fetch(t, client, http.MethodPost, base+"/settings/modules/"+extName, url.Values{"enabled": {"true"}})
 	if status != http.StatusOK || !strings.Contains(body, `data-module="`+extName+`" data-enabled="true"`) || !strings.Contains(body, "data-restart") {
 		t.Errorf("turning the module on = %d, on %v, restart note %v", status, strings.Contains(body, `data-enabled="true"`), strings.Contains(body, "data-restart"))
+	}
+}
+
+func TestModuleWithASectionGetsAPageAndKeepsRefusalsThere(t *testing.T) {
+	t.Parallel()
+	unsetEnv(t, settingEnv(calendar.AppleIDKey))
+	base := startSettingsServe(t, nil)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/calendar", nil)
+	if status != http.StatusOK {
+		t.Fatalf("GET /settings/calendar = %d", status)
+	}
+	for _, want := range []string{`data-section="calendar"`, `name="default_event_minutes"`, `name="back" value="/settings/calendar"`, `data-module="calendar"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("/settings/calendar does not render %s", want)
+		}
+	}
+	const action = "/settings/integrations/sections/calendar"
+	status, body, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"default_event_minutes": {"45"}, "back": {"/settings/calendar"}})
+	if status != http.StatusOK || !strings.Contains(body, "<title>Calendar · Settings") || !strings.Contains(body, "data-saved") || !strings.Contains(body, `value="45"`) {
+		t.Errorf("saving from the module page = %d, back on the page %v, saved %v", status, strings.Contains(body, "<title>Calendar · Settings"), strings.Contains(body, "data-saved"))
+	}
+	status, body, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"default_event_minutes": {"0"}, "back": {"/settings/calendar"}})
+	if status != http.StatusUnprocessableEntity || !strings.Contains(body, "<title>Calendar · Settings") || !strings.Contains(body, "must be between 5 and 1440") {
+		t.Errorf("a refused value = %d, on the module page %v: %.200s", status, strings.Contains(body, "<title>Calendar · Settings"), body)
+	}
+	if row := runSettings(t, "get", "default_event_minutes").row(t); row.Value == nil || *row.Value != "45" {
+		t.Errorf("default_event_minutes = %+v, want 45", row)
 	}
 }

@@ -54,6 +54,7 @@ type NavItem struct {
 	Footer     bool
 	Order      int
 	Current    bool
+	Mark       string
 }
 
 type NavGroup struct {

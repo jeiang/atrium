@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
@@ -155,16 +156,7 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toa
 	if data.Sections, err = LoadSections(r.Context(), h.d.DB.Read); err != nil {
 		panic(err)
 	}
-	for i := range data.Sections {
-		if data.Sections[i].Name == data.SubmittedSection {
-			settings.EchoFields(r.Context(), data.Sections[i].Fields, data.Submitted)
-		}
-	}
-	for i := range data.Records {
-		if data.Records[i].Name == data.SubmittedRecord {
-			settings.EchoFields(r.Context(), data.Records[i].Fields, data.Submitted)
-		}
-	}
+	h.echo(r.Context(), &data)
 	f, err := h.d.Render.Frame(r, "settings", data)
 	if err != nil {
 		panic(err)
@@ -175,45 +167,78 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toa
 	}
 }
 
-func (h handlers) connections(ctx context.Context, f *tpl.Frame) error {
-	owner, ok := strings.CutPrefix(f.Path, "/settings/")
-	if f.Page != "settings" || !ok || f.Path == path {
-		return nil
-	}
+func (h handlers) owned(ctx context.Context, owner string) (page, error) {
+	var view page
 	all, err := Records(ctx, h.d.DB.Read)
 	if err != nil {
-		return err
+		return view, err
 	}
-	var view page
 	for _, record := range all {
 		if record.Module == owner {
 			view.Records = append(view.Records, record)
 		}
 	}
-	if len(view.Records) == 0 {
+	sections, err := LoadSections(ctx, h.d.DB.Read)
+	if err != nil {
+		return view, err
+	}
+	for _, section := range sections {
+		inCard := slices.ContainsFunc(view.Records, func(r Record) bool { return r.Name == section.Integration })
+		if inCard || section.Integration == "" && section.Module == owner {
+			view.Sections = append(view.Sections, section)
+		}
+	}
+	return view, nil
+}
+
+func (h handlers) connections(ctx context.Context, f *tpl.Frame) error {
+	owner, ok := strings.CutPrefix(f.Path, "/settings/")
+	if f.Page != "settings" || !ok || f.Path == path {
 		return nil
 	}
-	if view.Sections, err = LoadSections(ctx, h.d.DB.Read); err != nil {
+	view, err := h.owned(ctx, owner)
+	if err != nil || len(view.Records)+len(view.Sections) == 0 {
 		return err
 	}
 	if name, ok := strings.CutPrefix(f.Saved, savedPrefix); ok {
+		view.Saved = name
 		if i, known := Get(name); known {
-			view.Saved, view.HoldFor, view.Hold = name, name, h.held(ctx, i.gate())
+			view.HoldFor, view.Hold = name, h.held(ctx, i.gate())
 		}
 	}
 	f.Connections = view
 	return nil
 }
 
+func owner(name string) string {
+	if i, ok := Get(name); ok {
+		return i.Module
+	}
+	s, _ := SectionNamed(name)
+	return s.Module
+}
+
 func (h handlers) back(w http.ResponseWriter, r *http.Request, name string) bool {
-	i, ok := Get(name)
 	back := web.FormString(web.FormValues(r), "back", "")
-	if !ok || back != "/settings/"+i.Module {
+	if back != "/settings/"+owner(name) {
 		return false
 	}
 	w.Header().Set("Location", back+"?saved="+savedPrefix+name)
 	w.WriteHeader(http.StatusSeeOther)
 	return true
+}
+
+func (h handlers) echo(ctx context.Context, data *page) {
+	for i := range data.Sections {
+		if data.Sections[i].Name == data.SubmittedSection {
+			settings.EchoFields(ctx, data.Sections[i].Fields, data.Submitted)
+		}
+	}
+	for i := range data.Records {
+		if data.Records[i].Name == data.SubmittedRecord {
+			settings.EchoFields(ctx, data.Records[i].Fields, data.Submitted)
+		}
+	}
 }
 
 func (h handlers) index(w http.ResponseWriter, r *http.Request) {
@@ -242,7 +267,21 @@ func (h handlers) refuse(w http.ResponseWriter, r *http.Request, name string, er
 		if errors.As(err, &field) {
 			data.FieldError = field.Key
 		}
-		h.render(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()}, data)
+		toast := &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()}
+		back := web.FormString(web.FormValues(r), "back", "")
+		if h.d.SettingsPage != nil && back == "/settings/"+owner(name) && h.d.SettingsPage(w, r, http.StatusUnprocessableEntity, back, func(f *tpl.Frame) {
+			view, loadErr := h.owned(r.Context(), owner(name))
+			if loadErr != nil {
+				panic(loadErr)
+			}
+			view.Failed, view.Error, view.FieldError = data.Failed, data.Error, data.FieldError
+			view.SubmittedSection, view.SubmittedRecord, view.Submitted = data.SubmittedSection, data.SubmittedRecord, data.Submitted
+			h.echo(r.Context(), &view)
+			f.Connections, f.Toast = view, toast
+		}) {
+			return true
+		}
+		h.render(w, r, http.StatusUnprocessableEntity, toast, data)
 	default:
 		return false
 	}
@@ -336,6 +375,9 @@ func (h handlers) saveSection(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		panic(err)
+	}
+	if h.back(w, r, name) {
+		return
 	}
 	h.render(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: "Saved"}, page{})
 }

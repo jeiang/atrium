@@ -27,6 +27,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 var log = logx.Logger("atrium.web")
@@ -60,6 +61,8 @@ type Deps struct {
 	Stopping  <-chan struct{}
 	OnClose   func(func())
 	ResumeRun func(ctx context.Context, runID int64) error
+
+	SettingsPage func(w http.ResponseWriter, r *http.Request, status int, url string, mutate func(*tpl.Frame)) bool
 
 	router chi.Router
 	routes *[]routeRule
