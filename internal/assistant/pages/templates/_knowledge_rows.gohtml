@@ -2,17 +2,15 @@
 
 {{define "knowledge_rows"}}
 {{if .rows}}
-<ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card text-sm" role="list" aria-label="Knowledge records">
+<ul class="rows" role="list" aria-label="Knowledge records">
   {{range .rows}}
-  <li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
-    <a class="min-w-0 truncate font-medium underline-offset-4 hover:underline" href="/library/knowledge/{{.ID}}">{{or .Title "Untitled"}}</a>
-    <span class="badge" data-variant="outline">{{.Scope}}</span>
-    <span class="text-xs text-muted-foreground">{{.Writer}}</span>
-    {{if .Confirmed}}<span class="badge" data-variant="secondary">confirmed</span>{{end}}
-    {{if .Pinned}}<span class="badge" data-variant="secondary">pinned</span>{{end}}
-    {{if .Retracted}}<span class="badge" data-variant="outline">retracted</span>{{end}}
-    {{range .Marks}}<span class="badge" data-variant="outline">{{.}}</span>{{end}}
-    <span class="ms-auto text-xs text-muted-foreground tabular-nums">{{template "when" (dict "epoch" .Updated "style" "datetime")}}</span>
+  <li class="row">
+    <span class="row-main">
+      <a class="row-title" href="/library/knowledge/{{.ID}}">{{or .Title "Untitled"}}</a>
+      <span class="row-meta">{{.Scope}} · {{.Writer}}{{if .Pinned}} · pinned{{end}}{{if .Retracted}} · retracted{{end}}</span>
+    </span>
+    {{if not (or .Confirmed .Retracted)}}<span class="badge" data-variant="outline"><span class="size-1.5 rounded-full bg-warning"></span>Unconfirmed</span>{{end}}
+    <span class="row-when">{{template "when" (dict "epoch" .Updated "style" "date")}}</span>
   </li>
   {{end}}
 </ul>

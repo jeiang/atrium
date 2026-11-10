@@ -1,12 +1,14 @@
-{{$d := .Data}}{{if $d.Items}}
-<section class="flex flex-col gap-1" aria-labelledby="needs-strip-h" data-needs-strip>
-  <div class="flex items-center gap-2 px-2">
+{{$d := .Data}}{{$csrf := .CSRF}}{{$mode := .Mode}}{{if or $d.Proposals $d.Blocked $d.Drafts}}
+<section class="flex flex-col gap-3" aria-labelledby="needs-strip-h" data-needs-strip>
+  <div class="flex items-center gap-2">
     <h2 id="needs-strip-h" class="eyebrow">Needs you</h2>
-    <a href="/review" class="ms-auto text-xs text-ink-3 underline-offset-4 hover:text-ink hover:underline" data-needs-all>View all <span class="tabular-nums">{{$d.Count}}</span></a>
+    <span class="count">{{$d.Count}}</span>
+    {{if $d.More}}<a href="/review" class="ms-auto text-xs text-ink-3 underline-offset-4 hover:text-ink hover:underline" data-needs-all>View all</a>{{end}}
   </div>
-  <ul class="flex flex-col" role="list">
-    {{range $d.Items}}<li><a href="{{.URL}}" class="flex min-w-0 items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" data-needs-item>{{icon .Icon "size-4 shrink-0 text-ink-3"}}<span class="truncate text-sm text-ink">{{.Title}}</span><span class="ms-auto shrink-0 text-xs text-ink-3">{{.Label}}</span></a></li>
-    {{end}}
+  <ul class="flex flex-col gap-3" role="list">
+    {{range $d.Proposals}}{{template "proposal_card" (dict "p" . "mode" $mode "toast" nil "pending_oob" false "pending_count" 0)}}{{end}}
+    {{range $d.Blocked}}{{template "proposal_card" (dict "p" . "mode" $mode "toast" nil "pending_oob" false "pending_count" 0)}}{{end}}
+    {{range $d.Drafts}}{{template "draft_card" (dict "d" . "configured" $d.Configured "csrf" $csrf "partial" false "toast" nil)}}{{end}}
   </ul>
 </section>
 {{end}}

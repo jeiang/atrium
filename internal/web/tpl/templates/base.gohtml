@@ -35,6 +35,14 @@
     </div>
   </main>
 
+  {{if .Threads}}
+  <nav class="tabbar" aria-label="Places">
+    <a href="/chat" class="tab"{{if eq .Path "/chat"}} aria-current="page"{{end}}>{{icon "sun"}}Today</a>
+    <a href="/chat?view=all" class="tab">{{icon "messages-square"}}Threads</a>
+    {{range .Nav}}{{range .Items}}{{if ne .Icon "layout-grid"}}<a href="{{.URL}}" class="tab"{{if .Current}} aria-current="page"{{end}}>{{icon .Icon}}{{.Label}}{{if and .Badge $.PendingCount}}<span class="count">{{$.PendingCount}}</span>{{end}}</a>{{end}}{{end}}{{end}}
+  </nav>
+  {{end}}
+
   <dialog id="reader" class="drawer" data-side="right" aria-label="Message">
     <article class="w-full max-w-none sm:max-w-2xl">
       <header class="flex-row items-center justify-between border-b">
@@ -87,6 +95,7 @@
       </details>
       {{end}}
       <a href="/projects/new" class="sb-item sb-thread text-ink-3">{{icon "folder"}}<span class="sb-label">New project</span></a>
+      <a href="/chat?view=all" class="sb-item sb-thread text-ink-3">{{icon "messages-square"}}<span class="sb-label">All threads</span></a>
     </div>
     {{end}}
   </nav>
@@ -123,8 +132,7 @@
       <div role="group" aria-labelledby="palette-h-actions">
         <div id="palette-h-actions" role="presentation" class="palette-head">Actions</div>
         {{if .Threads}}
-        <div id="palette-action-new" role="option" aria-selected="false" class="palette-option" data-palette-href="/chat">{{icon "plus"}}<span class="truncate">New thread</span></div>
-        <div id="palette-action-today" role="option" aria-selected="false" class="palette-option" data-palette-href="/today">{{icon "sun"}}<span class="truncate">Today</span></div>
+        <div id="palette-action-new" role="option" aria-selected="false" class="palette-option" data-palette-href="/chat">{{icon "square-pen"}}<span class="truncate">New thread</span></div>
         {{end}}
         <div id="palette-action-light" role="option" aria-selected="false" class="palette-option" data-palette-theme="light">{{icon "sun"}}<span class="truncate">Light theme</span></div>
         <div id="palette-action-dark" role="option" aria-selected="false" class="palette-option" data-palette-theme="dark">{{icon "moon"}}<span class="truncate">Dark theme</span></div>

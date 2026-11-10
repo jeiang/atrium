@@ -1,39 +1,15 @@
-{{define "title"}}Chat{{end}}
-{{define "heading"}}Chat{{end}}
+{{define "title"}}{{if .Data.View}}Threads{{else}}Today{{end}}{{end}}
+{{define "heading"}}{{if .Data.View}}Threads{{else}}Today{{end}}{{end}}
+{{define "preload"}}<link rel="preload" href="/static/fonts/source-serif-4-600-normal.woff2" as="font" type="font/woff2" crossorigin>{{end}}
 {{define "content_class"}}chat-content{{end}}
 {{define "content"}}{{$d := .Data}}
-<div class="reading gap-8 pt-10 pb-16 md:pt-16">
-  {{if $d.Welcome}}
-  <section class="welcome" aria-labelledby="welcome-h" data-welcome>
-    <span class="welcome-mark" aria-hidden="true">a</span>
-    <h2 id="welcome-h" class="text-xl font-semibold tracking-tight text-ink">What can I take off your plate?</h2>
-    <ul class="flex flex-wrap justify-center gap-2" role="list" aria-label="Suggestions">
-      {{range list "What needs my attention today?" "Summarise my unread mail" "Plan my week"}}
-      <li><button type="button" class="btn" data-variant="outline" data-size="sm" data-action="fill-composer" data-target="new-text" data-text="{{.}}">{{.}}</button></li>
-      {{end}}
-    </ul>
-  </section>
-  {{end}}
-  <form method="post" action="/chat" enctype="multipart/form-data" hx-post="/chat" hx-encoding="multipart/form-data" hx-swap="none" hx-disabled-elt="find button[type=submit]"
-        class="composer" data-reset data-attach>
-    <input type="hidden" name="csrf_token" value="{{.CSRF}}">
-    <label for="new-text" class="sr-only">New thread</label>
-    <textarea id="new-text" name="text" rows="3" placeholder="Message the assistant" data-submit-on-enter autofocus></textarea>
-    {{template "ref_picker"}}
-    {{template "attach_field"}}
-    <div class="ask-row">
-      {{template "attach_button"}}
-      {{template "ask_opts" (dict "c" $d.Composer)}}
-      <button type="submit" class="ask-send ms-auto" aria-label="Start" title="Start">{{icon "arrow-up"}}</button>
-    </div>
-  </form>
-  <div hx-get="/review/strip" hx-trigger="load" hx-swap="outerHTML" data-needs-strip></div>
-  {{if not $d.Welcome}}
+{{if or $d.View $d.Q}}
+<div class="reading gap-5 pt-6 pb-16">
   <section class="flex flex-col gap-3" aria-label="Threads">
     <form id="thread-search" action="/chat" method="get" role="search" class="flex flex-col gap-2 sm:flex-row sm:items-center"
           hx-get="/chat" hx-target="#threads" hx-replace-url="true" hx-sync="this:replace" hx-indicator="#thread-spinner"
           hx-trigger="input changed delay:250ms from:#thread-q, search from:#thread-q, submit">
-      <input type="hidden" name="view" value="{{$d.View}}">
+      <input type="hidden" name="view" value="{{or $d.View "all"}}">
       <div role="group" class="field flex-1">
         <label for="thread-q" class="sr-only">Search threads</label>
         <div class="input-group h-9">
@@ -43,8 +19,8 @@
         </div>
       </div>
       <nav class="button-group" aria-label="Thread view">
-        <a class="btn" data-size="sm" data-variant="{{if $d.View}}outline{{else}}secondary{{end}}" href="/chat">Active</a>
-        <a class="btn" data-size="sm" data-variant="{{if $d.View}}secondary{{else}}outline{{end}}" href="/chat?view=archived">Archived</a>
+        <a class="btn" data-size="sm" data-variant="{{if eq $d.View "archived"}}outline{{else}}secondary{{end}}" href="/chat?view=all">Active</a>
+        <a class="btn" data-size="sm" data-variant="{{if eq $d.View "archived"}}secondary{{else}}outline{{end}}" href="/chat?view=archived">Archived</a>
       </nav>
       <noscript><button type="submit" class="btn" data-variant="outline">Search</button></noscript>
     </form>
@@ -52,6 +28,47 @@
       {{template "chat_thread_list" (dict "threads" $d.Threads "q" $d.Q "view" $d.View)}}
     </div>
   </section>
-  {{end}}
 </div>
+{{else}}
+<div class="day">
+  <div class="reading gap-8 pt-8 pb-8 lg:pt-12">
+    {{if $d.Welcome}}
+    <section class="welcome" aria-labelledby="welcome-h" data-welcome>
+      <span class="welcome-mark" aria-hidden="true">a</span>
+      <h2 id="welcome-h" class="text-xl font-semibold tracking-tight text-ink">What can I take off your plate?</h2>
+      <ul class="flex flex-wrap justify-center gap-2" role="list" aria-label="Suggestions">
+        {{range list "What needs my attention today?" "Summarise my unread mail" "Plan my week"}}
+        <li><button type="button" class="btn" data-variant="outline" data-size="sm" data-action="fill-composer" data-target="new-text" data-text="{{.}}">{{.}}</button></li>
+        {{end}}
+      </ul>
+    </section>
+    {{else}}
+    <header class="brief" data-brief>
+      <p class="eyebrow">{{$d.Date}}</p>
+      <h2>{{if eq .PendingCount 1}}One thing needs you.{{else if .PendingCount}}{{.PendingCount}} things need you.{{else}}Nothing needs you.{{end}}</h2>
+    </header>
+    {{end}}
+    <div hx-get="/review/strip" hx-trigger="load" hx-swap="outerHTML" data-needs-strip></div>
+  </div>
+  <aside class="day-panel" aria-label="Today">
+    {{if $d.Agenda}}<div hx-get="/chat/agenda" hx-trigger="load" hx-swap="outerHTML"></div>{{end}}
+    <div hx-get="/activity/recent" hx-trigger="load" hx-swap="outerHTML"></div>
+  </aside>
+  <div class="composer-dock reading">
+    <form method="post" action="/chat" enctype="multipart/form-data" hx-post="/chat" hx-encoding="multipart/form-data" hx-swap="none" hx-disabled-elt="find button[type=submit]"
+          class="composer" data-reset data-attach>
+      <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+      <label for="new-text" class="sr-only">New thread</label>
+      <textarea id="new-text" name="text" rows="2" placeholder="Ask, or tell me what to do" data-submit-on-enter autofocus></textarea>
+      {{template "ref_picker"}}
+      {{template "attach_field"}}
+      <div class="ask-row">
+        {{template "attach_button"}}
+        {{template "ask_opts" (dict "c" $d.Composer)}}
+        <button type="submit" class="ask-send ms-auto" aria-label="Start" title="Start">{{icon "arrow-up"}}</button>
+      </div>
+    </form>
+  </div>
+</div>
+{{end}}
 {{end}}

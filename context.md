@@ -27,13 +27,18 @@ behavior-parity target.
   dropped.
 - The web interface is server-rendered Go templates with Basecoat, htmx
   and one static script under a strict CSP; a push service worker is the
-  only other script. A sidebar holds New chat, Today, the
-  thread list (pinned, by day, by project groups) and the Review, Library,
-  Apps and Settings entries; Review, Library and Apps are tabbed sections.
-  `/chat` is home: a welcome screen with starter prompts until the first
-  thread exists, then the composer, a Needs you strip of up to three
-  review items and the recent threads. Today is one chat thread per
-  calendar day in the configured time zone, found by role and title. A
+  only other script. A sidebar holds Today, the Review, Library and Apps
+  entries, the thread list (pinned, by day, by project groups) and
+  Settings; Review, Library and Apps are tabbed sections. Below 768px a
+  tab bar holds Today, Threads, Review and Library. `/chat` is home and
+  shows the day: a welcome screen with starter prompts until the first
+  thread exists, then a headline built in code from the Review count, up
+  to three Needs you cards that act in place, a docked ask bar that starts
+  a new thread, and a panel with the day's calendar events and the most
+  recent undoable writes. The thread list is at `/chat?view=all`. The ask
+  bar keeps the run options behind one chip. Today is also one chat thread
+  per calendar day in the configured time zone, found by role and title,
+  reached at `/today`; the digest posts there and home does not show it. A
   ⌘K / Ctrl+K command palette searches threads, pages and actions. There
   is no tutorial text; guidance is `title` tooltips on controls.
   Media is the app at `/apps/media`. The Library section holds Knowledge
@@ -45,7 +50,8 @@ behavior-parity target.
   project can be marked private so its knowledge and threads stay inside
   it. The sidebar collapses to a rail; chat uses a
   centred reading column with serif
-  assistant prose. Drafts and proposals the assistant creates are cards in
+  assistant prose, the operator's messages in a bubble on the right, and
+  a thread menu for pin, archive, delete and the settings summary. Drafts and proposals the assistant creates are cards in
   the thread that act through the Drafts and `/proposals/{id}/…` endpoints,
   so the send gate and approval pipeline are unchanged. There is no
   Proposals page: pending approvals show in their thread, in the thread's
@@ -574,7 +580,7 @@ behavior-parity target.
 
 ### Life-management redesign
 
-- **Chat is home.** Five navigation entries: chat and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings.
+- **The day is home.** Five navigation entries: today and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings. The home brief does not yet include the morning digest text or the next event in its headline.
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
 - **Settings has six tabs:** Assistant, Mail accounts, Integrations, Notifications, Sign-in, and Usage. They edit the everyday module settings: the calendar and media library sections, mail behavior, the Notion wiki and Grafana datasource fields, the weather location, the push subject and the monthly budget. Advanced settings move to Nix, the CLI, or the agent.

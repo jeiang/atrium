@@ -1,0 +1,9 @@
+{{with .Data.Events}}
+<section class="flex flex-col gap-3" aria-labelledby="agenda-h" data-agenda>
+  <h2 id="agenda-h" class="eyebrow">Today</h2>
+  <ol class="agenda">
+    {{range .}}<li class="agenda-event"{{with .State}} data-state="{{.}}"{{end}}><time>{{.Time}}</time><span class="agenda-rail"></span><div class="agenda-body"><span class="agenda-title">{{.Title}}</span>{{with .Meta}}<span class="agenda-meta">{{.}}</span>{{end}}</div></li>
+    {{end}}
+  </ol>
+</section>
+{{end}}
