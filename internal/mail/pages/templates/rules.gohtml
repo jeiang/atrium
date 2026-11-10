@@ -47,7 +47,7 @@
 {{define "content"}}
 <div class="flex flex-wrap items-center justify-between gap-3">
   {{template "account_switch" (dict "path" "/rules" "current" .Data.Account)}}
-  <a class="btn" href="/rules/new{{if .Data.Account}}?account={{queryval .Data.Account}}{{end}}">{{icon "plus"}}New rule</a>
+  <a class="btn" data-variant="outline" href="/rules/new{{if .Data.Account}}?account={{queryval .Data.Account}}{{end}}">{{icon "plus"}}New rule</a>
 </div>
 
 {{template "tabs" (dict
