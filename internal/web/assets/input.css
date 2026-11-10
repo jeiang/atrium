@@ -716,6 +716,13 @@
   .agenda-title {
     @apply font-medium text-ink;
   }
+  .agenda-ask {
+    @apply ms-1 inline-flex align-middle text-ink-3 hover:text-ink;
+
+    & svg {
+      @apply size-3.5;
+    }
+  }
   .agenda-meta {
     @apply text-[13px] text-ink-2;
   }

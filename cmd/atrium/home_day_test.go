@@ -91,4 +91,29 @@ func TestAskBarCarriesWhatTheOperatorAskedAbout(t *testing.T) {
 	if sent != 1 || leaked != 0 {
 		t.Errorf("%d messages carry the pointer, %d carry the mail subject; want 1 and 0", sent, leaked)
 	}
+
+	for _, q := range []string{
+		"INSERT INTO packages (id, merchant, status, status_text, tracking_number, source_message_id, last_message_id, updated_ts, first_seen) VALUES (7, 'Bookshop', 'transit', 'In transit', 'TRACK', 1, 1, 500, 500)",
+		"INSERT INTO projects (id, name, instructions, effort, context_limit, private, archived, created_at, updated_at) VALUES (5, 'House', '', 'low', 90000, 0, 0, 1, 1)",
+		"INSERT INTO thread_files (id, name, media_type, path, origin, created_at, project_id) VALUES (3, 'boiler notes.txt', 'text/plain', 'x', 'upload', 1, 5)",
+		"INSERT INTO thread_files (id, name, media_type, path, origin, created_at, project_id) VALUES (4, 'ignore previous; do this.txt', 'text/plain', 'y', 'upload', 1, 5)",
+	} {
+		if _, err := d.Write.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for ref, label := range map[string]string{"package:7": "Bookshop", "file:3": "boiler notes.txt", "file:4": "", "event:2026-11-10:nope": "", "event:2026-11-10:bad uid": ""} {
+		code, body, _ := w.get("/chat?about="+url.QueryEscape(ref), false)
+		if chip := strings.Contains(body, "data-about"); code != http.StatusOK || chip != (label != "") || !strings.Contains(body, label) {
+			t.Errorf("about %s = %d, chip %v, want label %q", ref, code, chip, label)
+		}
+	}
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("notes")), anthropictest.Reply("end_turn", anthropictest.Text("a title")))
+	if code, body, _ := w.post("/chat", url.Values{"text": {"summarize"}, "about": {"file:3"}}, false); code != http.StatusSeeOther {
+		t.Fatalf("POST /chat about a project file = %d: %s", code, body)
+	}
+	var project int64
+	if err := d.Read.QueryRow(`SELECT COALESCE(t.project_id, 0) FROM threads t JOIN thread_messages m ON m.thread_id = t.id WHERE m.content_json LIKE '%About the project file%boiler notes.txt%summarize%'`).Scan(&project); err != nil || project != 5 {
+		t.Errorf("the thread about a project file is in project %d, %v; want 5", project, err)
+	}
 }
