@@ -139,7 +139,7 @@ func validateNotion(ctx context.Context, q db.Querier, values map[string]string)
 		return err
 	}
 	if enabled == "true" && parent == "" {
-		return settings.Invalid("set a parent page before turning the export on")
+		return settings.FieldInvalid{Key: NotionParentKey, Err: settings.Invalid("set a parent page before turning the export on")}
 	}
 	private, pinned, err := effective(ctx, q, values, NotionPrivateKey)
 	if err != nil {
