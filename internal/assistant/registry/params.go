@@ -30,7 +30,7 @@ func webSearchTool() tool.Tool {
 		Annotated:   true,
 		Channel:     tool.ChannelInternet,
 		Marks:       tool.Untrusted,
-		Contexts:    tool.Kinds{tool.Chat, tool.Cron, tool.Sub},
+		Contexts:    tool.Kinds{tool.Sub},
 		Server:      true,
 	}
 }

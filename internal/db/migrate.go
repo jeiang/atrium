@@ -272,7 +272,12 @@ func Migrate(ctx context.Context, d *DB, path string) error {
 			return err
 		}
 	}
-	if err := d.WithTx(ctx, func(tx *sql.Tx) error { return seed(ctx, tx, time.Now()) }); err != nil {
+	if err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		if err := seed(ctx, tx, time.Now()); err != nil {
+			return err
+		}
+		return retire(ctx, tx)
+	}); err != nil {
 		return err
 	}
 	return Ready(ctx, d)

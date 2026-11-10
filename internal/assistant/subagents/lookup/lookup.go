@@ -22,7 +22,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/subagents"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -252,7 +251,7 @@ func (l *Lookup) handle(ctx context.Context, tc *tool.Context, args tool.Args) (
 		}
 		return nil, tool.Error(fmt.Sprintf("lookup stopped: %s (child thread %d)", reason, child))
 	}
-	answer, found, err := lastReport(ctx, tc.DB.Read, child)
+	answer, found, err := report.Last(ctx, tc.DB.Read, child)
 	if err != nil {
 		return nil, err
 	}
@@ -266,7 +265,7 @@ func (l *Lookup) handle(ctx context.Context, tc *tool.Context, args tool.Args) (
 		}); err != nil {
 			return nil, err
 		}
-		answer, found, err = lastReport(ctx, tc.DB.Read, child)
+		answer, found, err = report.Last(ctx, tc.DB.Read, child)
 		if err != nil {
 			return nil, err
 		}
@@ -305,50 +304,6 @@ func parentProject(ctx context.Context, q db.Querier, threadID int64) (*int64, e
 		return nil, err
 	}
 	return project, nil
-}
-
-func lastReport(ctx context.Context, q db.Querier, child int64) (map[string]any, bool, error) {
-	var toolUseID string
-	err := q.QueryRowContext(ctx,
-		"SELECT c.tool_use_id FROM tool_calls c JOIN runs r ON r.id = c.run_id "+
-			"WHERE r.thread_id = ? AND c.name = ? AND c.state = ? ORDER BY c.id DESC LIMIT 1",
-		child, report.Name, journal.OK).Scan(&toolUseID)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, false, nil
-	}
-	if err != nil {
-		return nil, false, err
-	}
-	messages, err := journal.MessagesOf(ctx, q, child)
-	if err != nil {
-		return nil, false, err
-	}
-	for i := len(messages) - 1; i >= 0; i-- {
-		var blocks []map[string]any
-		if err := json.Unmarshal([]byte(jsonx.Dumps(messages[i].Content)), &blocks); err != nil {
-			return nil, false, fmt.Errorf("lookup: child %d message %d: %w", child, messages[i].ID, err)
-		}
-		for _, block := range blocks {
-			if block["type"] != "tool_result" || block["tool_use_id"] != toolUseID || block["is_error"] == true {
-				continue
-			}
-			content, _ := block["content"].(string)
-			var stub struct {
-				ResultID *int64 `json:"result_id"`
-			}
-			if json.Unmarshal([]byte(content), &stub) == nil && stub.ResultID != nil {
-				if err := q.QueryRowContext(ctx, "SELECT body FROM tool_results WHERE result_id = ?", *stub.ResultID).Scan(&content); err != nil {
-					return nil, false, err
-				}
-			}
-			var answer map[string]any
-			if err := json.Unmarshal([]byte(content), &answer); err != nil {
-				return nil, false, fmt.Errorf("lookup: child %d report: %w", child, err)
-			}
-			return answer, true, nil
-		}
-	}
-	return nil, false, nil
 }
 
 func reportMarks(fields []report.Field, answer map[string]any, child tool.Marks) tool.Marks {

@@ -6,6 +6,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/report"
 	"github.com/jeiang/atrium/internal/assistant/subagents/lookup"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
+	"github.com/jeiang/atrium/internal/assistant/subagents/websearch"
 	askoperatortools "github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	attentiontool "github.com/jeiang/atrium/internal/assistant/tools/attention"
 	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
@@ -87,6 +88,7 @@ func Registry() (*registry.Registry, error) {
 		nightly.Tools(),
 		[]tool.Tool{(&research.Research{}).Tool()},
 		[]tool.Tool{lookup.New(nil).Tool()},
+		[]tool.Tool{websearch.New(nil).Tool()},
 		[]tool.Tool{report.Tool()},
 		contactstools.Tools(),
 	} {

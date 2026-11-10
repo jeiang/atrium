@@ -3879,6 +3879,52 @@
         "dynamic_filtering_file": {
           "description": "path of a file holding the value",
           "type": "string"
+        },
+        "search_web_max_cost_usd": {
+          "default": 0.15,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "search_web_max_cost_usd_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "search_web_max_searches": {
+          "default": 5,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "search_web_max_searches_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "search_web_max_steps": {
+          "default": 8,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "search_web_max_steps_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "search_web_model": {
+          "default": "claude-haiku-5-5",
+          "enum": [
+            "claude-haiku-5-5",
+            "claude-sonnet-5-5",
+            "claude-opus-5-5"
+          ],
+          "type": "string"
+        },
+        "search_web_model_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
         }
       },
       "type": "object"

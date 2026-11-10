@@ -113,7 +113,7 @@ func (s *state) admit(ctx context.Context) (registry.Set, error) {
 	if err != nil {
 		return registry.Set{}, err
 	}
-	set, err := s.r.Registry.Admit(ctx, s.kind, marks, s.admission.allow, s.d.Read)
+	set, err := s.r.Registry.Admit(ctx, s.kind, s.thread.Role, bool(s.thread.WebSearch), marks, s.admission.allow, s.d.Read)
 	if err != nil {
 		return registry.Set{}, err
 	}
@@ -152,7 +152,7 @@ func (s *state) readmit(ctx context.Context) error {
 	if marks.Set == s.marks.Set {
 		return nil
 	}
-	set, err := s.r.Registry.Admit(ctx, s.kind, marks, s.admission.allow, s.d.Read)
+	set, err := s.r.Registry.Admit(ctx, s.kind, s.thread.Role, bool(s.thread.WebSearch), marks, s.admission.allow, s.d.Read)
 	if err != nil {
 		return err
 	}
@@ -318,6 +318,9 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	webSearchMaxUses, err := readWebSearchMaxUses(ctx, d.Read)
 	if err != nil {
 		return nil, err
+	}
+	if o.Limits.WebSearchMaxUses != nil {
+		webSearchMaxUses = int(*o.Limits.WebSearchMaxUses)
 	}
 	dynamicFiltering, err := readWebSearchDynamicFiltering(ctx, d.Read)
 	if err != nil {

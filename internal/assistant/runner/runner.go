@@ -6,6 +6,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/report"
 	"github.com/jeiang/atrium/internal/assistant/subagents/lookup"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
+	"github.com/jeiang/atrium/internal/assistant/subagents/websearch"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/kb"
@@ -23,6 +24,10 @@ func New(tools registry.Source) (*loop.Runner, error) {
 	}
 	lk := lookup.New(r)
 	if err := lk.Install(reg); err != nil {
+		return nil, err
+	}
+	ws := websearch.New(r)
+	if err := ws.Install(reg); err != nil {
 		return nil, err
 	}
 	if err := reg.Add(report.Tool()); err != nil {

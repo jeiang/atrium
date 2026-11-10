@@ -143,7 +143,7 @@ func (o Start) kind() tool.Kind {
 }
 
 func emptyLimits(l journal.Limits) bool {
-	return l.MaxSteps == nil && l.MaxCostUSD == nil && l.SystemExtra == nil && l.AllowedTools == nil && l.ToolChoice == nil && len(l.Report) == 0
+	return l.MaxSteps == nil && l.MaxCostUSD == nil && l.SystemExtra == nil && l.AllowedTools == nil && l.ToolChoice == nil && len(l.Report) == 0 && l.WebSearchMaxUses == nil
 }
 
 func Load(ctx context.Context, q db.Querier, env config.Env, threadID int64, now float64) (*threads.Thread, error) {

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
@@ -17,7 +16,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
-	"github.com/jeiang/atrium/internal/cli"
 )
 
 const (
@@ -93,66 +91,6 @@ func parentOf(t *testing.T, dir string, child int64) int64 {
 		t.Fatal(err)
 	}
 	return parent
-}
-
-func hasWebTools(names []string) bool {
-	return slices.Contains(names, "web_fetch") && slices.Contains(names, "web_search")
-}
-
-func TestWebSubagentRecallsALongPageAndFollowsItsLink(t *testing.T) {
-	srv, pages := webPages(t)
-	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	start := warm(t, api)
-	search := json.RawMessage(`{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{"query":"library hours"}}`)
-	result := json.RawMessage(`{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[` +
-		`{"type":"web_search_result","url":"` + srv.URL + `/a","title":"A","encrypted_content":"e","page_age":null},` +
-		`{"type":"web_search_result","url":"` + srv.URL + `/b","title":"B","encrypted_content":"e","page_age":null}]}`)
-	api.Push(research("find the library opening hours"))
-	api.Push(anthropictest.Reply("pause_turn", search, result))
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})))
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("r1", "recall", map[string]any{"result_id": 1})))
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f2", "web_fetch", map[string]any{"url": srv.URL + "/b"})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("Findings: opens at nine ["+srv.URL+"/b]")))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("It opens at nine.")))
-	if ran := runApp(t, "agent", "run", "--text", "when does the library open"); ran.code != cli.ExitOK {
-		t.Fatalf("research run: %d %s", ran.code, ran.stderr)
-	}
-	requests := api.Requests()[start:]
-	if len(requests) != 7 {
-		t.Fatalf("%d model requests, want 7", len(requests))
-	}
-	if first := requestTools(t, requests[1]); !slices.Contains(first, "recall") || !hasWebTools(first) {
-		t.Errorf("web subagent tools = %v, want recall, web_fetch and web_search", first)
-	}
-	stubbed := string(requests[3].Body)
-	if !strings.Contains(stubbed, "result_id") || strings.Contains(stubbed, pageAMarker) {
-		t.Fatalf("page A was not stored behind a stub: %s", stubbed)
-	}
-	if tools := requestTools(t, requests[3]); !hasWebTools(tools) || !slices.Contains(tools, "recall") {
-		t.Errorf("web subagent after fetching page A: %v", tools)
-	}
-	if body := string(requests[4].Body); !strings.Contains(body, pageAMarker) {
-		t.Errorf("recall did not return the stored page A: %s", body[max(0, len(body)-3000):])
-	}
-	if tools := requestTools(t, requests[4]); !hasWebTools(tools) {
-		t.Errorf("web subagent lost its web tools after recall: %v", tools)
-	}
-	if body := string(requests[5].Body); !strings.Contains(body, pageBText) || strings.Contains(body, "not allowed") {
-		t.Errorf("second fetch did not return page B: %s", body)
-	}
-	if hits := pages.seen(); !slices.Equal(hits, []string{"/a", "/b"}) {
-		t.Errorf("page fetches = %v, want /a then /b", hits)
-	}
-	child := latestThread(t, dir)
-	if private, web := threadTaint(t, dir, child); private || !web {
-		t.Errorf("subagent thread taint: private %v web %v, want web only", private, web)
-	}
-	if _, web := threadTaint(t, dir, parentOf(t, dir, child)); !web {
-		t.Error("parent not web-tainted after the subagent result")
-	}
-	assertTools(t, "parent after the subagent result", requestTools(t, requests[6]), []string{"web_fetch", "research"}, true)
-	assertTools(t, "parent after the subagent result", requestTools(t, requests[6]), []string{"web_search"}, false)
-	assertOwn(t, "parent after the subagent result", requestTools(t, requests[6]), true)
 }
 
 func TestMarkedChatAsksBeforeFetchingAndFetchesOnApproval(t *testing.T) {

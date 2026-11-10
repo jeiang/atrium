@@ -328,7 +328,11 @@ behavior-parity target.
   and notify; nightly runs may also update Notion and the profile with undo.
   Research subagents have restricted tools and bounded runs, and their system
   prompt omits the operator profile and project block. The built-in `web`
-  subagent has `recall`, `web_fetch` and `web_search`.
+  subagent is retired; `search_web` runs a `search_web` child with the
+  server `web_search`, `web_fetch`, `recall` and `report`. The server
+  `web_search` is offered only to that child (chat and cron offer
+  `search_web` when the thread's `web_search` option is on), and it is
+  excluded from the operator's subagent tool pool.
 - Notion edits are free: the Notion page Edit and Link buttons write
   directly through the same path as `notion_update_page`, with Undo on
   Done; approvals are only for external or costly actions. Old
@@ -416,6 +420,25 @@ behavior-parity target.
   a text field adds `untrusted`. `lookup` is offered in chat and cron
   runs, not nightly or subagent runs, and its child is a sub thread in
   the parent's project.
+- `search_web` searches the public web in a child subagent and returns a
+  cited answer. It is offered in chat and cron runs when the thread's
+  `web_search` option is on; its channel is internet, so the permission
+  table can ask with the exact `query` and `question` on the card. The
+  child is a `search_web` sub thread with no project; it has the server
+  `web_search` (at most `search_web_max_searches`, default 5),
+  `web_fetch`, `recall` and `report`, and its allowlist starts with the
+  URLs typed in `query`/`question`, never the parent's. Its run caps are
+  `search_web_max_cost_usd` (default 0.15, search fees included) and
+  `search_web_max_steps` (default 8); it uses `search_web_model` (default
+  Haiku 5.5) at medium effort and shares the subagent concurrency gate.
+  The child reports an answer and up to `max_sources` citations. Code
+  keeps a citation only when its URL appeared in a `web_search_tool_result`
+  or a successful `web_fetch`; a fetched page's quote must occur in the
+  stored text (whitespace-folded, case-insensitive) to count as fetched,
+  otherwise it is marked search-only, and a citation outside the verified
+  set is dropped with its `[n]` marker. Only surviving URLs are added to
+  the parent's allowlist. The server `web_search` is offered only to this
+  child, and the seeded `web` research role is retired.
 - An operator message may carry reference blocks: `@thread/12` (a whole
   thread) or `@thread/12/m34` (one message) is resolved when the message
   is sent and stored as
