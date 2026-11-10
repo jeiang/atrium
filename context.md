@@ -251,9 +251,10 @@ behavior-parity target.
   it get both), and migration 6 `threads.marks`, a bitmask (untrusted 1,
   pii 2, messages 4, personal 8) backfilled from the taint columns
   (`taint_web` → untrusted, `taint_private` → pii, messages and personal),
-  and migration 7 the knowledge store: `kb_records`, its FTS5 table and
+  migration 7 the knowledge store: `kb_records`, its FTS5 table and
   triggers, `projects.private` and one `embed_kb_<generation>` vec0 table per
-  existing embedding generation. `taint_private` and `taint_web` are dormant after migration 6: no longer
+  existing embedding generation, and migration 8 `export_pages`, the
+  record-to-page mapping of the knowledge export. `taint_private` and `taint_web` are dormant after migration 6: no longer
   read or written, and kept because dropping them would rewrite the table.
   `atrium db import-v1` is the only path from a v1
   database: it copies the learned rules, corrections, routing decisions and
@@ -321,6 +322,12 @@ behavior-parity target.
   call. A write whose outcome is unknown stays blocked; further writes to the
   same calendar are refused until the operator resolves it with
   `atrium writes resolve <id>` or the Activity page.
+- The knowledge export is export-only: a built-in job renders live,
+  non-expired, non-`ops` records into the Notion page named by
+  `export_notion_parent` and overwrites the pages it created. Each external
+  write records an `agent_writes` intent first; an unknown outcome blocks the
+  target until `atrium writes resolve <id>`. Pages the export did not create
+  are never touched, and edits made in Notion are overwritten on the next run.
 - The assistant can prepare mail drafts but cannot send them. Sending is
   currently an operator action. Delegated sending is a product goal, not
   permission granted by the existing tools.

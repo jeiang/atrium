@@ -564,6 +564,14 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "agent_schedule_knowledge_export": {
+          "default": "daily 03:30",
+          "type": "string"
+        },
+        "agent_schedule_knowledge_export_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "agent_schedule_max_active_jobs": {
           "default": 20,
           "type": [
@@ -1629,6 +1637,45 @@
       "additionalProperties": false,
       "properties": {
         "key_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "export": {
+      "additionalProperties": false,
+      "properties": {
+        "export_notion_enabled": {
+          "default": false,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "export_notion_enabled_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "export_notion_kinds": {
+          "default": "pii,messages,personal",
+          "type": "string"
+        },
+        "export_notion_kinds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "export_notion_parent": {
+          "type": "string"
+        },
+        "export_notion_parent_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "export_notion_private_to": {
+          "type": "string"
+        },
+        "export_notion_private_to_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }

@@ -1,0 +1,18 @@
+{{define "export_settings"}}{{$csrf := .CSRF}}{{$parent := ""}}{{$private := ""}}
+{{range $f := .Fields}}{{if eq $f.Key "export_notion_parent"}}{{$parent = $f.Value}}{{end}}{{if eq $f.Key "export_notion_private_to"}}{{$private = $f.Value}}{{end}}{{end}}
+<form method="post" action="{{.Action}}" class="grid gap-3 sm:grid-cols-2"{{if $private}} data-confirm-submit="Include private records in the export to {{$parent}}?"{{end}}>
+  <input type="hidden" name="csrf_token" value="{{$csrf}}">
+  {{range $f := .Fields}}
+  <div role="group" class="field">
+    {{if $f.Bool}}<input type="hidden" name="{{$f.Key}}" value="false">
+    <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="{{$f.Key}}" value="true"{{if eq $f.Value "true"}} checked{{end}}> {{$f.Label}}</label>
+    {{else if $f.Options}}<span>{{$f.Label}}</span>
+    <div class="flex flex-wrap gap-3">{{range $f.Options}}<label class="flex items-center gap-2 text-sm"><input type="checkbox" name="{{$f.Key}}" value="{{.Value}}"{{if .Checked}} checked{{end}}> {{.Label}}</label>{{end}}</div>
+    {{else}}<label for="{{$f.Key}}">{{$f.Label}}</label>
+    <input id="{{$f.Key}}" name="{{$f.Key}}" type="text" value="{{$f.Value}}" autocomplete="off" spellcheck="false">
+    {{end}}
+  </div>
+  {{end}}
+  <div class="sm:col-span-2"><button type="submit" class="btn" data-size="sm">{{icon "check"}}Save</button></div>
+</form>
+{{end}}
