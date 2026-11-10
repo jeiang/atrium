@@ -48,7 +48,7 @@ func (s *service) triagePage(w http.ResponseWriter, r *http.Request) {
 		data.NextOffset = shown
 	}
 	if plain && offset == 0 {
-		check, err := triage.Triage(ctx, s.deps.DB.Read, triage.Filter{Account: account, Attention: triage.AttentionCheck, Limit: checkRows})
+		check, err := triage.Triage(ctx, s.deps.DB.Read, triage.Filter{Account: account, Attention: triage.AttentionCheck, PerSender: true, Limit: checkRows})
 		if err != nil {
 			panic(err)
 		}
