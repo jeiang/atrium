@@ -10,7 +10,6 @@ import (
 	"slices"
 	"sort"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/jeiang/atrium/internal/assistant"
@@ -19,14 +18,10 @@ import (
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/module"
 )
 
-const (
-	retentionDays = 14
-	factTTLHours  = 24
-)
+const retentionDays = 14
 
 func Callables() map[string]worker.Callable {
 	return map[string]worker.Callable{
@@ -67,11 +62,6 @@ func Sample(ctx context.Context, d *db.DB, env config.Env, now float64) error {
 	if err != nil {
 		return err
 	}
-	loc, err := config.From(ctx).Location(env)
-	if err != nil {
-		return err
-	}
-	stamp := time.Unix(int64(now), 0).In(loc).Format("15:04")
 	for _, host := range hosts {
 		for _, metric := range Metrics[:len(Metrics)-1] {
 			expr := strings.ReplaceAll(queries[metric], "{{selector}}", selector)
@@ -103,9 +93,6 @@ func Sample(ctx context.Context, d *db.DB, env config.Env, now float64) error {
 			if err := record(ctx, d, now, host, metric, &value, state, nil); err != nil {
 				return err
 			}
-			if err := fact(ctx, d, now, host, metric, stamp, value, state); err != nil {
-				return err
-			}
 		}
 	}
 	alerts, err := firingAlerts(ctx, d, lim, "instance", hosts)
@@ -121,9 +108,6 @@ func Sample(ctx context.Context, d *db.DB, env config.Env, now float64) error {
 		}
 		value := float64(len(names))
 		if err := record(ctx, d, now, host, MetricAlerts, &value, nil, new(string(detail))); err != nil {
-			return err
-		}
-		if err := fact(ctx, d, now, host, MetricAlerts, stamp, value, nil); err != nil {
 			return err
 		}
 	}
@@ -146,33 +130,6 @@ func record(ctx context.Context, d *db.DB, now float64, host, metric string, val
 		"INSERT INTO ops_samples (ts, host, metric, value, state, detail) VALUES (?, ?, ?, ?, ?, ?)",
 		now, host, metric, value, state, detail)
 	return err
-}
-
-func fact(ctx context.Context, d *db.DB, now float64, host, metric, stamp string, value float64, state *string) error {
-	title := host + " " + metric
-	body := fmt.Sprintf("%s at %s", formatMetric(metric, value, state), stamp)
-	_, err := kb.UpsertFact(ctx, d, "ops:"+host+":"+metric, title, body, now+factTTLHours*3600, now)
-	return err
-}
-
-func formatMetric(metric string, value float64, state *string) string {
-	switch metric {
-	case MetricUp:
-		if state != nil {
-			return *state
-		}
-		if value != 0 {
-			return "up"
-		}
-		return "down"
-	case MetricCPU, MetricMemory, MetricDisk:
-		return fmt.Sprintf("%.1f%%", value)
-	case MetricFailedUnits:
-		return fmt.Sprintf("%.0f failed", value)
-	case MetricAlerts:
-		return fmt.Sprintf("%.0f firing", value)
-	}
-	return fmt.Sprintf("%v", value)
 }
 
 func instantValue(payload any) (float64, bool, error) {

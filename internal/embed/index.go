@@ -226,9 +226,9 @@ func counts(ctx context.Context, q rowQuerier, i Index) (done, total int, err er
 	err = q.QueryRowContext(ctx, "SELECT "+
 		"(SELECT COUNT(*) FROM messages WHERE gone_at IS NULL AND id IN (SELECT rowid FROM message_fts) AND id IN (SELECT rowid FROM "+i.MessageTable()+")) + "+
 		"(SELECT COUNT(*) FROM notion_pages WHERE in_trash = 0 AND rid IN (SELECT rowid FROM "+i.NotionTable()+")) + "+
-		"(SELECT COUNT(*) FROM kb_records WHERE retracted_at IS NULL AND scope != 'ops' AND id IN (SELECT rowid FROM "+i.KBTable()+")), "+
+		"(SELECT COUNT(*) FROM kb_records WHERE retracted_at IS NULL AND id IN (SELECT rowid FROM "+i.KBTable()+")), "+
 		"(SELECT COUNT(*) FROM messages WHERE gone_at IS NULL AND id IN (SELECT rowid FROM message_fts)) + "+
 		"(SELECT COUNT(*) FROM notion_pages WHERE in_trash = 0) + "+
-		"(SELECT COUNT(*) FROM kb_records WHERE retracted_at IS NULL AND scope != 'ops')").Scan(&done, &total)
+		"(SELECT COUNT(*) FROM kb_records WHERE retracted_at IS NULL)").Scan(&done, &total)
 	return done, total, err
 }

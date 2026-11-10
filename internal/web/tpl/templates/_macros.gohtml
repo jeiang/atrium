@@ -138,6 +138,11 @@
       {{else if eq (str $state) "started"}}<span class="badge ms-auto" data-variant="outline">{{icon "loader-circle" "animate-spin"}}running</span>{{end}}
     </summary>
     <div class="trace-body trace-code">{{or (.Result) "(no result yet)"}}</div>
+    {{with .Results}}
+    <ul class="trace-body flex flex-col gap-1">
+      {{range .}}<li class="break-words">{{.Title}} <span class="text-ink-3">{{.URL}}</span></li>{{end}}
+    </ul>
+    {{end}}
     {{with .ChildThreadID}}<a class="trace-link" href="/chat/{{.}}">Subagent transcript</a>{{end}}
   </details>
 </li>

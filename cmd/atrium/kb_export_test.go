@@ -398,10 +398,39 @@ func TestKnowledgeExportsToNotionWithProvenance(t *testing.T) {
 	}
 }
 
+func settingValue(t *testing.T, d *db.DB, key string) string {
+	t.Helper()
+	var value string
+	if err := d.Read.QueryRow("SELECT COALESCE((SELECT value FROM settings WHERE key = ?), '')", key).Scan(&value); err != nil {
+		t.Fatal(err)
+	}
+	return value
+}
+
+func integrationCard(body, name string) string {
+	marker := `data-integration="` + name + `"`
+	start := strings.Index(body, marker)
+	if start < 0 {
+		return ""
+	}
+	rest := body[start+len(marker):]
+	if end := strings.Index(rest, `data-integration="`); end >= 0 {
+		return rest[:end]
+	}
+	return rest
+}
+
 func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 	fake := &exportNotion{}
 	dir, f, d := exportFixture(t, fake)
-	exportEnable(t, "pii,messages,personal")
+	for key, value := range map[string]string{
+		"public_url":            "https://atrium.invalid",
+		kbexport.NotionKindsKey: "pii,messages,personal",
+	} {
+		if ran := runApp(t, "settings", "set", key, value); ran.code != cli.ExitOK {
+			t.Fatalf("settings set %s: %d %s", key, ran.code, ran.stderr)
+		}
+	}
 	exportRecord(t, d, "Diary", "private", "personal", "operator", 0, 1, 0, 0, 0)
 	base := startServeIn(t, dir)
 	jar, err := cookiejar.New(nil)
@@ -409,56 +438,112 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar}
-	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/integrations", nil); status != http.StatusOK {
-		t.Fatalf("GET integrations = %d", status)
-	}
-	save := func(private string) {
-		t.Helper()
-		form := url.Values{
-			"export_notion_enabled":    {"true"},
-			"export_notion_parent":     {exportParent},
-			"export_notion_kinds":      {"pii", "messages", "personal"},
-			"export_notion_private_to": {private},
-		}
-		if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/integrations/sections/export", form); status != http.StatusOK {
-			t.Fatalf("POST export section = %d: %.300s", status, body)
-		}
-	}
-	save("11111111111111111111111111111111")
 	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/integrations", nil)
 	if status != http.StatusOK {
 		t.Fatalf("GET integrations = %d", status)
 	}
-	if !strings.Contains(body, `data-confirm-submit="Include private records in the export to `+exportParent+`?"`) {
-		t.Errorf("the private switch does not name the destination")
+	if strings.Contains(body, "Knowledge export") || strings.Contains(body, `data-section="export"`) {
+		t.Errorf("the standalone Knowledge export section is still rendered")
+	}
+	notion := integrationCard(body, "notion")
+	if !strings.Contains(notion, `data-section="export_notion"`) || !strings.Contains(notion, "Export knowledge to Notion") {
+		t.Errorf("the Notion card does not contain the export group")
+	}
+	if !strings.Contains(body, `data-section="export_obsidian"`) || !strings.Contains(body, "Obsidian export") {
+		t.Errorf("the Obsidian export section is missing")
+	}
+	if !strings.Contains(notion, "Parent page") || !strings.Contains(notion, "Include private records") {
+		t.Errorf("the Notion export group lacks its controls")
+	}
+	form := url.Values{
+		"export_notion_enabled": {"true"},
+		"export_notion_parent":  {""},
+		"export_notion_kinds":   {"pii", "messages", "personal"},
+	}
+	status, body, _ = fetch(t, client, http.MethodPost, base+"/settings/integrations/sections/export_notion", form)
+	if status != http.StatusUnprocessableEntity || !strings.Contains(body, "set a parent page") {
+		t.Fatalf("enabling without a destination = %d: %.300s", status, body)
+	}
+	if got := settingValue(t, d, kbexport.NotionEnabledKey); got == "true" {
+		t.Errorf("the refused save stored the export as enabled")
+	}
+	form.Set("export_notion_parent", "https://www.notion.so/Team/Page-0123456789abcdef0123456789abcdef?pvs=4")
+	status, body, _ = fetch(t, client, http.MethodPost, base+"/settings/integrations/sections/export_notion", form)
+	if status != http.StatusOK {
+		t.Fatalf("POST export section = %d: %.300s", status, body)
+	}
+	const normalized = "01234567-89ab-cdef-0123-456789abcdef"
+	if got := settingValue(t, d, kbexport.NotionParentKey); got != normalized {
+		t.Errorf("stored parent = %q, want %q", got, normalized)
+	}
+	if !strings.Contains(body, `value="`+normalized+`"`) {
+		t.Errorf("the page does not show the normalized parent id")
 	}
 	runExport(t, f, d)
 	if fake.byTitle("Diary") != nil {
 		t.Errorf("private record exported to a destination that was not named")
 	}
-	save(exportParent)
+	status, body, _ = fetch(t, client, http.MethodGet, base+"/settings/integrations", nil)
+	if status != http.StatusOK {
+		t.Fatalf("GET integrations = %d", status)
+	}
+	if !strings.Contains(body, `data-confirm-private="export_notion_parent"`) || !strings.Contains(body, `data-confirm-destination="`+normalized+`"`) {
+		t.Errorf("the private switch does not name the destination")
+	}
+	form.Set("export_notion_private_to", normalized)
+	if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/integrations/sections/export_notion", form); status != http.StatusOK {
+		t.Fatalf("POST export section = %d: %.300s", status, body)
+	}
+	if got := settingValue(t, d, kbexport.NotionPrivateKey); got != normalized {
+		t.Errorf("stored private destination = %q, want %q", got, normalized)
+	}
+	var actor, source, value string
+	if err := d.Read.QueryRow("SELECT actor, source, COALESCE(new_value, '') FROM settings_audit WHERE key = ? ORDER BY id DESC LIMIT 1", kbexport.NotionPrivateKey).Scan(&actor, &source, &value); err != nil {
+		t.Fatalf("settings audit: %v", err)
+	}
+	if actor != "operator" || source != "ui" || value != normalized {
+		t.Errorf("settings audit = %s/%s/%s, want operator/ui/%s", actor, source, value, normalized)
+	}
 	runExport(t, f, d)
 	if fake.byTitle("Diary") == nil {
 		t.Errorf("private record missing after naming the destination")
 	}
-	rows, err := d.Read.Query("SELECT actor, source, COALESCE(new_value, '') FROM settings_audit WHERE key = ? ORDER BY id", kbexport.NotionPrivateKey)
-	if err != nil {
-		t.Fatal(err)
+	form.Set("export_notion_parent", "fedcba9876543210fedcba9876543210")
+	form.Set("export_notion_private_to", "")
+	if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/integrations/sections/export_notion", form); status != http.StatusOK {
+		t.Fatalf("POST export section = %d: %.300s", status, body)
 	}
-	defer func() { _ = rows.Close() }()
-	var audited []string
-	for rows.Next() {
-		var actor, source, value string
-		if err := rows.Scan(&actor, &source, &value); err != nil {
-			t.Fatal(err)
+	if got := settingValue(t, d, kbexport.NotionPrivateKey); got != "" {
+		t.Errorf("changing the destination kept the private confirmation: %q", got)
+	}
+	runExport(t, f, d)
+	if page := fake.byTitle("Diary"); page == nil || !page.trashed {
+		t.Errorf("the private record page was not removed after the destination changed")
+	}
+}
+
+func TestExportWithoutADestinationIsSkipped(t *testing.T) {
+	fake := &exportNotion{}
+	_, f, d := exportFixture(t, fake)
+	for key, value := range map[string]string{
+		"public_url":              "https://atrium.invalid",
+		kbexport.NotionEnabledKey: "true",
+		kbexport.NotionKindsKey:   "pii,messages,personal",
+	} {
+		if ran := runApp(t, "settings", "set", key, value); ran.code != cli.ExitOK {
+			t.Fatalf("settings set %s: %d %s", key, ran.code, ran.stderr)
 		}
-		audited = append(audited, actor+"/"+source+"/"+value)
 	}
-	if err := rows.Err(); err != nil {
+	runExport(t, f, d)
+	if fake.count() != 0 {
+		t.Errorf("the export ran without a destination: %d requests", fake.count())
+	}
+	var status string
+	if err := d.Read.QueryRow("SELECT status FROM job_runs ORDER BY id DESC LIMIT 1").Scan(&status); err != nil {
 		t.Fatal(err)
 	}
-	if len(audited) != 2 || !strings.Contains(audited[0], "operator/ui/") || !strings.Contains(audited[1], exportParent) {
-		t.Errorf("settings audit = %v", audited)
+	if status == "error" {
+		t.Errorf("the export job failed without a destination")
 	}
 }
 
@@ -637,14 +722,14 @@ func TestKnowledgeExportsToAnObsidianFolder(t *testing.T) {
 		"export_obsidian_kinds":      {"messages", "personal"},
 		"export_obsidian_private_to": {vault},
 	}
-	if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/integrations/sections/export", form); status != http.StatusOK {
+	if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/integrations/sections/export_obsidian", form); status != http.StatusOK {
 		t.Fatalf("POST export section = %d: %.300s", status, body)
 	}
 	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/integrations", nil)
 	if status != http.StatusOK {
 		t.Fatalf("GET integrations = %d", status)
 	}
-	if !strings.Contains(body, `data-confirm-submit="Include private records in the export to `+vault+`?"`) {
+	if !strings.Contains(body, `data-confirm-private="export_obsidian_dir"`) || !strings.Contains(body, `data-confirm-destination="`+vault+`"`) {
 		t.Errorf("the private switch does not name the folder")
 	}
 	var actor, source string

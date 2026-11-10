@@ -28,7 +28,7 @@ type EditInput struct {
 }
 
 func validScope(scope string) bool {
-	return scope == ScopeWork || scope == ScopePersonal || scope == ScopeOps
+	return scope == ScopeWork || scope == ScopePersonal
 }
 
 func stateOf(r Record) map[string]any { return stateMap(r) }
@@ -80,7 +80,7 @@ func load(ctx context.Context, q db.Querier, id int64) (Record, error) {
 
 func OperatorEdit(ctx context.Context, d *db.DB, reg *writes.Registry, id int64, in EditInput, now float64) (Record, int64, error) {
 	if !validScope(in.Scope) {
-		return Record{}, 0, Refused("scope must be work, personal or ops")
+		return Record{}, 0, Refused("scope must be work or personal")
 	}
 	var out Record
 	var writeID int64
@@ -132,7 +132,7 @@ func OperatorCreate(ctx context.Context, d *db.DB, reg *writes.Registry, in Edit
 		return Record{}, 0, Refused("title and body are required")
 	}
 	if !validScope(in.Scope) {
-		return Record{}, 0, Refused("scope must be work, personal or ops")
+		return Record{}, 0, Refused("scope must be work or personal")
 	}
 	var out Record
 	var writeID int64

@@ -48,7 +48,7 @@ type RetrieveOptions struct {
 func eligibleWhere(alias string, project int64, now float64) (string, []any) {
 	clause, args := privateClause(alias, project)
 	return alias + ".retracted_at IS NULL AND (" + alias + ".expires_at IS NULL OR " + alias + ".expires_at > ?) " +
-			"AND " + alias + ".scope != 'ops' AND (" + alias + ".marks & 7) = 0 AND " + alias + ".pinned = 0 AND " + clause,
+			"AND (" + alias + ".marks & 7) = 0 AND " + alias + ".pinned = 0 AND " + clause,
 		append([]any{now}, args...)
 }
 

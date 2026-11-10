@@ -346,8 +346,27 @@ func Items(messages []journal.Message, calls []journal.ToolCall, drafts map[int6
 				if s, ok := content.(string); ok {
 					detail = parsed(s)
 				}
-				if found.Name == loopResearch {
+				if found.Name == loopResearch || found.Name == loopWebSearch {
 					found.ChildThreadID = get(detail, "child_thread_id", nil)
+				}
+				if found.Name == loopWebSearch {
+					if list, ok := get(detail, "sources", nil).([]any); ok {
+						for _, raw := range list {
+							source, ok := raw.(map[string]any)
+							if !ok {
+								continue
+							}
+							url := text(source, "url")
+							if url == "" {
+								continue
+							}
+							title := text(source, "title")
+							if title == "" {
+								title = url
+							}
+							found.Results = append(found.Results, SearchResult{URL: url, Title: title})
+						}
+					}
 				}
 				if found.Name == draftCreate {
 					if id, ok := draftKey(get(detail, "draft_id", nil)); ok {
@@ -400,7 +419,10 @@ func Items(messages []journal.Message, calls []journal.ToolCall, drafts map[int6
 	return items, nil
 }
 
-const loopResearch = "research"
+const (
+	loopResearch  = "research"
+	loopWebSearch = "search_web"
+)
 
 func fallbackNote(block map[string]any) string {
 	model := func(key string) string {

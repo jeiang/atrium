@@ -230,10 +230,10 @@ type kbRow struct {
 }
 
 var kbSource = source[kbRow]{
-	pending: "embedded = 0 AND retracted_at IS NULL AND scope != 'ops'",
+	pending: "embedded = 0 AND retracted_at IS NULL",
 	missing: func(i Index) string { return "id NOT IN (SELECT rowid FROM " + i.KBTable() + ")" },
 	query: func(where string) string {
-		return "SELECT id, title, aliases, body FROM kb_records WHERE " + where + " AND retracted_at IS NULL AND scope != 'ops' ORDER BY id LIMIT ?"
+		return "SELECT id, title, aliases, body FROM kb_records WHERE " + where + " AND retracted_at IS NULL ORDER BY id LIMIT ?"
 	},
 	scan: func(r *sql.Rows) (kbRow, error) {
 		var k kbRow

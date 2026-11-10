@@ -186,6 +186,51 @@ var migrations = []migration{
 		}
 		return nil
 	}},
+	{10, func(ctx context.Context, tx *sql.Tx) error {
+		for _, stmt := range []string{
+			`CREATE TABLE IF NOT EXISTS ops_findings (
+				id INTEGER PRIMARY KEY,
+				fact TEXT NOT NULL,
+				severity TEXT NOT NULL CHECK (severity IN ('info', 'warning', 'critical')),
+				title TEXT NOT NULL,
+				body TEXT NOT NULL,
+				marks INTEGER NOT NULL DEFAULT 0,
+				run_id INTEGER,
+				thread_id INTEGER,
+				created_at REAL NOT NULL,
+				resolved_at REAL,
+				resolved_reason TEXT
+			)`,
+			"CREATE INDEX IF NOT EXISTS ops_findings_open ON ops_findings (resolved_at, created_at)",
+			"CREATE INDEX IF NOT EXISTS ops_findings_fact ON ops_findings (fact, resolved_at)",
+			"DELETE FROM export_pages WHERE record_id IN (SELECT id FROM kb_records WHERE scope = 'ops')",
+			`UPDATE agent_writes SET before_json = '{"purged":true}', after_json = '{"purged":true}', undo_json = '{"purged":true}' ` +
+				"WHERE target IN (SELECT 'kb:' || id FROM kb_records WHERE scope = 'ops')",
+		} {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
+				return err
+			}
+		}
+		rows, err := tx.QueryContext(ctx, "SELECT name FROM sqlite_master WHERE type = 'table' AND name LIKE 'embed_kb_%'")
+		if err != nil {
+			return err
+		}
+		tables, err := Collect(rows, func(r *sql.Rows) (string, error) {
+			var name string
+			err := r.Scan(&name)
+			return name, err
+		})
+		if err != nil {
+			return err
+		}
+		for _, name := range tables {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM "+quoteIdent(name)+" WHERE rowid IN (SELECT id FROM kb_records WHERE scope = 'ops')"); err != nil {
+				return err
+			}
+		}
+		_, err = tx.ExecContext(ctx, "DELETE FROM kb_records WHERE scope = 'ops'")
+		return err
+	}},
 }
 
 type ModuleMigration struct {

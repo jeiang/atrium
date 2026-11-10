@@ -106,6 +106,7 @@ type admission struct {
 	extra            string
 	webSearchMaxUses int
 	dynamicFiltering bool
+	report           json.RawMessage
 }
 
 func (s *state) admit(ctx context.Context) (registry.Set, error) {
@@ -122,7 +123,7 @@ func (s *state) admit(ctx context.Context) (registry.Set, error) {
 
 func (s *state) offer(ctx context.Context, set registry.Set, marks threads.Marks) error {
 	a := s.admission
-	req, err := s.r.request(ctx, s.d.Read, s.thread, s.kind, a.model, s.run.Effort, set, a.cc, a.extra, a.webSearchMaxUses, a.dynamicFiltering)
+	req, err := s.r.request(ctx, s.d.Read, s.thread, s.kind, a.model, s.run.Effort, set, a.cc, a.extra, a.webSearchMaxUses, a.dynamicFiltering, a.report)
 	if err != nil {
 		return err
 	}
@@ -359,7 +360,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		x: &dispatcher{d: d, tc: tc, now: now, tuning: tuning, withdrawn: map[string]struct{}{}},
 		admission: admission{
 			allow: allow, model: model.ID, cc: prompts.PrefixCacheControl(kind, ttl), extra: extra,
-			webSearchMaxUses: webSearchMaxUses, dynamicFiltering: dynamicFiltering,
+			webSearchMaxUses: webSearchMaxUses, dynamicFiltering: dynamicFiltering, report: o.Limits.Report,
 		},
 	}
 	set, err := s.admit(ctx)

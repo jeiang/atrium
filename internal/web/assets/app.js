@@ -155,6 +155,13 @@ document.addEventListener("htmx:afterRequest", (event) => {
 });
 
 document.addEventListener("submit", (event) => {
+  const box = event.target.querySelector?.("input[data-confirm-private]:checked");
+  if (box) {
+    const source = document.getElementById(box.dataset.confirmPrivate);
+    const stored = (box.dataset.confirmDestination || "").trim();
+    const destination = (source?.value || stored).trim();
+    if (destination && destination === stored && !window.confirm(`Include private records in the export to ${destination}?`)) event.preventDefault();
+  }
   const question = event.submitter?.dataset.confirmSubmit ?? event.target.dataset.confirmSubmit;
   if (question && !window.confirm(question)) event.preventDefault();
 });

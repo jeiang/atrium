@@ -24,10 +24,12 @@ import (
 
 type fakeOpenAI struct {
 	*httptest.Server
-	mu    sync.Mutex
-	dim   int
-	auth  map[string][]string
-	chats int
+	mu         sync.Mutex
+	dim        int
+	auth       map[string][]string
+	chats      int
+	chatReply  string
+	chatBodies []map[string]any
 }
 
 func newFakeOpenAI(t *testing.T) *fakeOpenAI {
@@ -36,13 +38,22 @@ func newFakeOpenAI(t *testing.T) *fakeOpenAI {
 		f.mu.Lock()
 		defer f.mu.Unlock()
 		f.auth[r.URL.Path] = append(f.auth[r.URL.Path], r.Header.Get("Authorization"))
-		_, _ = io.Copy(io.Discard, r.Body)
+		raw, _ := io.ReadAll(r.Body)
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/models"):
 			_, _ = io.WriteString(w, `{"data":[{"id":"qwen"},{"id":"embeddinggemma"}]}`)
 		case strings.HasSuffix(r.URL.Path, "/chat/completions"):
 			f.chats++
-			_, _ = io.WriteString(w, `{"choices":[{"message":{"content":"{\"ok\": true}"}}]}`)
+			var payload map[string]any
+			if json.Unmarshal(raw, &payload) == nil {
+				f.chatBodies = append(f.chatBodies, payload)
+			}
+			reply := f.chatReply
+			if reply == "" {
+				reply = `{"ok": true}`
+			}
+			content, _ := json.Marshal(reply)
+			_, _ = io.WriteString(w, `{"choices":[{"message":{"content":`+string(content)+`}}]}`)
 		case strings.HasSuffix(r.URL.Path, "/embeddings"):
 			vec, _ := json.Marshal(make([]float64, f.dim))
 			_, _ = io.WriteString(w, `{"data":[{"index":0,"embedding":`+string(vec)+`}]}`)
@@ -56,6 +67,18 @@ func (f *fakeOpenAI) seen(path string) []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]string(nil), f.auth[path]...)
+}
+
+func (f *fakeOpenAI) setChatReply(reply string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.chatReply = reply
+}
+
+func (f *fakeOpenAI) chatCalls() (int, []map[string]any) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.chats, append([]map[string]any(nil), f.chatBodies...)
 }
 
 func TestEndpointProbeGatesTheMailModuleAndSendsTheKeyOnlyToItsEndpoint(t *testing.T) {

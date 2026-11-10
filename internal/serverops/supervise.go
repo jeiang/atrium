@@ -19,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -39,6 +38,7 @@ type change struct {
 
 type delta struct {
 	Changes []change `json:"changes"`
+	Pending bool     `json:"pending,omitempty"`
 }
 
 type sample struct {
@@ -71,12 +71,37 @@ func workerThread(ctx context.Context, d *db.DB, now float64) (int64, error) {
 func Supervise(ctx context.Context, e worker.Env) error {
 	d := e.Service.DB
 	now := e.Now()
+	set := assistant.Read(ctx, d.Read)
+	if err := set.Err(); err != nil {
+		return err
+	}
+	local := set.Text(KeyCondenser) == CondenserLocal
 	changes, err := detect(ctx, d.Read)
 	if err != nil {
 		return err
 	}
-	if err := retractResolved(ctx, d, now); err != nil {
+	if err := resolveFindings(ctx, d, now); err != nil {
 		return err
+	}
+	if err := pruneFindings(ctx, d, now); err != nil {
+		return err
+	}
+	retrying := false
+	if len(changes) == 0 && local {
+		id, err := WorkerThreadID(ctx, d.Read)
+		if err != nil {
+			return err
+		}
+		if id != 0 {
+			last, err := lastDelta(ctx, d.Read, id)
+			if err != nil {
+				return err
+			}
+			if last != nil && last.Pending && len(last.Changes) > 0 {
+				changes = last.Changes
+				retrying = true
+			}
+		}
 	}
 	if len(changes) == 0 {
 		return nil
@@ -85,23 +110,23 @@ func Supervise(ctx context.Context, e worker.Env) error {
 	if err != nil {
 		return err
 	}
-	fingerprint := fingerprint(changes)
-	last, err := lastFingerprint(ctx, d.Read, threadID)
+	fp := fingerprint(changes)
+	last, err := lastDelta(ctx, d.Read, threadID)
 	if err != nil {
 		return err
 	}
-	if last == fingerprint {
+	if !retrying && last != nil && fingerprint(last.Changes) == fp {
 		return nil
 	}
-	set := assistant.Read(ctx, d.Read)
-	if err := set.Err(); err != nil {
-		return err
-	}
-	budget := set.Float(KeyWorkerMonthlyUSD)
 	loc, err := config.From(ctx).Location(e.Service.Env)
 	if err != nil {
 		return err
 	}
+	text, marks := deltaText(changes)
+	if local {
+		return condense(ctx, e, threadID, now, loc, changes, text, marks)
+	}
+	budget := set.Float(KeyWorkerMonthlyUSD)
 	spend, err := usage.ThreadMonthToDate(ctx, d.Read, threadID, now, loc)
 	if err != nil {
 		return err
@@ -109,7 +134,6 @@ func Supervise(ctx context.Context, e worker.Env) error {
 	if spend >= budget {
 		return nil
 	}
-	text, marks := deltaText(changes)
 	if marks != 0 {
 		if err := threads.AddMarks(ctx, d.Write, threadID, now, marks); err != nil {
 			return err
@@ -269,8 +293,10 @@ func fingerprint(changes []change) string {
 	return strings.Join(parts, ";")
 }
 
-func deltaText(changes []change) (string, tool.Marks) {
-	payload, err := json.Marshal(delta{Changes: changes})
+func deltaText(changes []change) (string, tool.Marks) { return deltaMessage(changes, false) }
+
+func deltaMessage(changes []change, pending bool) (string, tool.Marks) {
+	payload, err := json.Marshal(delta{Changes: changes, Pending: pending})
 	if err != nil {
 		payload = []byte(`{"changes":[]}`)
 	}
@@ -308,24 +334,24 @@ func thresholdLabel(metric string) string {
 	return "the memory threshold"
 }
 
-func lastFingerprint(ctx context.Context, q db.Querier, threadID int64) (string, error) {
+func lastDelta(ctx context.Context, q db.Querier, threadID int64) (*delta, error) {
 	var raw string
 	err := q.QueryRowContext(ctx,
 		"SELECT content_json FROM thread_messages WHERE thread_id = ? AND role = 'user' AND superseded = 0 "+
 			"AND content_json LIKE '%OPS_DELTA %' ORDER BY seq DESC LIMIT 1",
 		threadID).Scan(&raw)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil
+		return nil, nil
 	}
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	var blocks []struct {
 		Type string `json:"type"`
 		Text string `json:"text"`
 	}
 	if err := json.Unmarshal([]byte(raw), &blocks); err != nil {
-		return "", err
+		return nil, err
 	}
 	for _, block := range blocks {
 		if block.Type != "text" || !strings.HasPrefix(block.Text, DeltaMarker) {
@@ -337,27 +363,26 @@ func lastFingerprint(ctx context.Context, q db.Querier, threadID int64) (string,
 		}
 		var d delta
 		if err := json.Unmarshal([]byte(payload), &d); err != nil {
-			return "", err
+			return nil, err
 		}
-		return fingerprint(d.Changes), nil
+		return &d, nil
 	}
-	return "", nil
+	return nil, nil
 }
 
-func retractResolved(ctx context.Context, d *db.DB, now float64) error {
-	rows, err := d.Read.QueryContext(ctx,
-		"SELECT id, origin FROM kb_records WHERE scope = 'ops' AND origin LIKE 'finding:%' AND retracted_at IS NULL")
+func resolveFindings(ctx context.Context, d *db.DB, now float64) error {
+	rows, err := d.Read.QueryContext(ctx, "SELECT id, fact FROM ops_findings WHERE resolved_at IS NULL")
 	if err != nil {
 		return err
 	}
 	type finding struct {
-		id     int64
-		origin string
+		id   int64
+		fact string
 	}
 	var findings []finding
 	for rows.Next() {
 		var f finding
-		if err := rows.Scan(&f.id, &f.origin); err != nil {
+		if err := rows.Scan(&f.id, &f.fact); err != nil {
 			_ = rows.Close()
 			return err
 		}
@@ -369,19 +394,24 @@ func retractResolved(ctx context.Context, d *db.DB, now float64) error {
 	}
 	_ = rows.Close()
 	for _, f := range findings {
-		fact := strings.TrimPrefix(f.origin, "finding:")
-		normal, err := normalFact(ctx, d.Read, fact)
+		normal, err := normalFact(ctx, d.Read, f.fact)
 		if err != nil {
 			return err
 		}
 		if !normal {
 			continue
 		}
-		if _, err := kb.RetractFact(ctx, d, f.id, now); err != nil {
+		if _, err := d.Write.ExecContext(ctx,
+			"UPDATE ops_findings SET resolved_at = ?, resolved_reason = 'normal' WHERE id = ? AND resolved_at IS NULL", now, f.id); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func pruneFindings(ctx context.Context, d *db.DB, now float64) error {
+	_, err := d.Write.ExecContext(ctx, "DELETE FROM ops_findings WHERE resolved_at IS NOT NULL AND resolved_at < ?", now-30*24*3600)
+	return err
 }
 
 func normalFact(ctx context.Context, q db.Querier, fact string) (bool, error) {
