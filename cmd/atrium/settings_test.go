@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -143,5 +144,41 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 		if unknown.code != cli.ExitUsage || unknown.stdout != "" || !strings.Contains(unknown.stderr, `error: settings: unknown key "no_such_key"`) {
 			t.Errorf("settings %v: exit %d stdout %q stderr %q", args, unknown.code, unknown.stdout, unknown.stderr)
 		}
+	}
+}
+
+func writeSettingsConfig(t *testing.T, dir, body string) string {
+	t.Helper()
+	path := filepath.Join(dir, "settings.toml")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestRemovedSettingsDoNotBlockStartup(t *testing.T) {
+	t.Parallel()
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
+		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('agent_profile_key_chars', '99')"); err != nil {
+		t.Fatal(err)
+	}
+	_ = d.Close()
+
+	setEnv(t, "ATRIUM_CONFIG", writeSettingsConfig(t, dir, "[assistant]\nnightly_stale_months = 3\n[notion]\nnotion_link_max_tokens = 200\n"))
+	setEnv(t, "ATRIUM_ASSISTANT_AGENT_PROFILE_VALUE_CHARS", "500")
+	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
+		t.Fatalf("settings list with removed pins: %d %s", ran.code, ran.stderr)
+	}
+	if strings.Contains(runApp(t, "settings", "list").stdout, "nightly_stale_months") {
+		t.Error("a removed setting is still listed")
+	}
+
+	setEnv(t, "ATRIUM_CONFIG", writeSettingsConfig(t, dir, "[assistant]\nnot_a_setting = 1\n"))
+	if ran := runApp(t, "settings", "list"); ran.code == cli.ExitOK || !strings.Contains(ran.stderr, `unknown key "assistant.not_a_setting"`) {
+		t.Errorf("unknown key = exit %d stderr %q, want a startup error", ran.code, ran.stderr)
 	}
 }

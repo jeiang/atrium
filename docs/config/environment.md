@@ -328,12 +328,8 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_NOTION_NOTION_BLOCK_DEPTH` | `notion.notion_block_depth` |
 | `ATRIUM_NOTION_NOTION_BRANCH_LIMIT` | `notion.notion_branch_limit` |
 | `ATRIUM_NOTION_NOTION_CA_FILE` | `notion.notion_ca_file` |
-| `ATRIUM_NOTION_NOTION_EDIT_MAX_TOKENS` | `notion.notion_edit_max_tokens` |
-| `ATRIUM_NOTION_NOTION_EDIT_PAGE_CHARS` | `notion.notion_edit_page_chars` |
 | `ATRIUM_NOTION_NOTION_HEAD_SOURCE_CHARS` | `notion.notion_head_source_chars` |
 | `ATRIUM_NOTION_NOTION_LABEL_CHARS` | `notion.notion_label_chars` |
-| `ATRIUM_NOTION_NOTION_LINK_MAX_TOKENS` | `notion.notion_link_max_tokens` |
-| `ATRIUM_NOTION_NOTION_LINK_PAGE_CHARS` | `notion.notion_link_page_chars` |
 | `ATRIUM_NOTION_NOTION_MAX_ALIASES` | `notion.notion_max_aliases` |
 | `ATRIUM_NOTION_NOTION_MAX_RETRIES` | `notion.notion_max_retries` |
 | `ATRIUM_NOTION_NOTION_MAX_SOURCES` | `notion.notion_max_sources` |

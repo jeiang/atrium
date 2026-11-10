@@ -3186,28 +3186,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "notion_edit_max_tokens": {
-          "default": 1500,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notion_edit_max_tokens_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_edit_page_chars": {
-          "default": 12000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notion_edit_page_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "notion_head_source_chars": {
           "default": 1000,
           "type": [
@@ -3227,28 +3205,6 @@
           ]
         },
         "notion_label_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_link_max_tokens": {
-          "default": 160,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notion_link_max_tokens_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_link_page_chars": {
-          "default": 2500,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notion_link_page_chars_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

@@ -18,10 +18,6 @@ const (
 	MaxAliasesKey          = "notion_max_aliases"
 	MaxSourcesKey          = "notion_max_sources"
 	LabelCharsKey          = "notion_label_chars"
-	LinkPageCharsKey       = "notion_link_page_chars"
-	EditPageCharsKey       = "notion_edit_page_chars"
-	LinkMaxTokensKey       = "notion_link_max_tokens"
-	EditMaxTokensKey       = "notion_edit_max_tokens"
 	BranchLimitKey         = "notion_branch_limit"
 	RelatedLimitKey        = "notion_related_limit"
 	SnippetCharsKey        = "notion_snippet_chars"
@@ -55,10 +51,6 @@ func init() {
 		number(MaxAliasesKey, settings.Int, "20", settings.Between(1, 100)),
 		number(MaxSourcesKey, settings.Int, "12", settings.Between(1, 50)),
 		number(LabelCharsKey, settings.Int, "48", settings.Between(8, 200)),
-		number(LinkPageCharsKey, settings.Int, "2500", settings.Between(100, 50000)),
-		number(EditPageCharsKey, settings.Int, "12000", settings.Between(100, 100000)),
-		number(LinkMaxTokensKey, settings.Int, "160", settings.Between(16, 4096)),
-		number(EditMaxTokensKey, settings.Int, "1500", settings.Between(64, 16384)),
 		number(BranchLimitKey, settings.Int, "50", settings.Between(1, 500)),
 		number(RelatedLimitKey, settings.Int, "10", settings.Between(1, 50)),
 		number(SnippetCharsKey, settings.Int, "220", settings.Between(20, 2000)),
@@ -173,24 +165,6 @@ func LoadSearch(ctx context.Context, q db.Querier) (SearchLimits, error) {
 		Related:    r.int(RelatedLimitKey),
 		Snippet:    r.int(SnippetCharsKey),
 		HeadSource: r.int(HeadSourceCharsKey),
-	}
-	return out, r.err
-}
-
-type DraftLimits struct {
-	LinkPageChars int
-	EditPageChars int
-	LinkMaxTokens int
-	EditMaxTokens int
-}
-
-func LoadDrafts(ctx context.Context, q db.Querier) (DraftLimits, error) {
-	r := resolver{ctx: ctx, q: q}
-	out := DraftLimits{
-		LinkPageChars: r.int(LinkPageCharsKey),
-		EditPageChars: r.int(EditPageCharsKey),
-		LinkMaxTokens: r.int(LinkMaxTokensKey),
-		EditMaxTokens: r.int(EditMaxTokensKey),
 	}
 	return out, r.err
 }

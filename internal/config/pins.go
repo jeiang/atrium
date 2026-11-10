@@ -11,6 +11,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -51,6 +52,12 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 		}
 		if ok {
 			pins.m[d.Key] = found
+		}
+	}
+	for _, retired := range settings.Retired {
+		name := retired.EnvName()
+		if strings.TrimSpace(get(env, name)) != "" || strings.TrimSpace(get(env, name+strings.ToUpper(fileSuffix))) != "" {
+			logx.Logger("atrium.config").Warn("ignoring a removed setting", "key", retired.Module+"."+retired.Key, "source", "env "+name)
 		}
 	}
 	return pins, nil
@@ -124,6 +131,10 @@ func (p *Pins) readFile(env Env, reg *settings.Registry, defs []settings.Def, pa
 			dotted := module + "." + name
 			d, isFile, ok := keyOf(keys, name)
 			if !ok {
+				if retired, gone := settings.RetiredAt(module, name); gone {
+					logx.Logger("atrium.config").Warn("ignoring a removed setting", "key", retired.Module+"."+retired.Key, "source", path)
+					continue
+				}
 				return fmt.Errorf("config: %s: unknown key %q", path, dotted)
 			}
 			if err := p.add(env, reg, d, path, dotted, isFile, table[name]); err != nil {

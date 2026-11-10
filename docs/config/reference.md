@@ -391,12 +391,8 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `notion_block_depth` | int | `5` | advanced | `ATRIUM_NOTION_NOTION_BLOCK_DEPTH` |
 | `notion_branch_limit` | int | `50` | advanced | `ATRIUM_NOTION_NOTION_BRANCH_LIMIT` |
 | `notion_ca_file` | string | none | advanced | `ATRIUM_NOTION_NOTION_CA_FILE` |
-| `notion_edit_max_tokens` | int | `1500` | advanced | `ATRIUM_NOTION_NOTION_EDIT_MAX_TOKENS` |
-| `notion_edit_page_chars` | int | `12000` | advanced | `ATRIUM_NOTION_NOTION_EDIT_PAGE_CHARS` |
 | `notion_head_source_chars` | int | `1000` | advanced | `ATRIUM_NOTION_NOTION_HEAD_SOURCE_CHARS` |
 | `notion_label_chars` | int | `48` | advanced | `ATRIUM_NOTION_NOTION_LABEL_CHARS` |
-| `notion_link_max_tokens` | int | `160` | advanced | `ATRIUM_NOTION_NOTION_LINK_MAX_TOKENS` |
-| `notion_link_page_chars` | int | `2500` | advanced | `ATRIUM_NOTION_NOTION_LINK_PAGE_CHARS` |
 | `notion_max_aliases` | int | `20` | advanced | `ATRIUM_NOTION_NOTION_MAX_ALIASES` |
 | `notion_max_retries` | int | `5` | advanced | `ATRIUM_NOTION_NOTION_MAX_RETRIES` |
 | `notion_max_sources` | int | `12` | advanced | `ATRIUM_NOTION_NOTION_MAX_SOURCES` |
