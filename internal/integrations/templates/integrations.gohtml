@@ -6,7 +6,7 @@
   <a class="flex flex-col gap-1 rounded-lg border bg-card p-4 text-sm" href="/settings/integrations/google" data-integration="google">
     <span class="font-medium">Google Calendar and Gmail</span>
   </a>
-  {{range $d.Records}}
+  {{range $d.Records}}{{$name := .Name}}
   <div class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" data-integration="{{.Name}}" data-state="{{.State}}">
     {{if and (eq $d.Failed .Name) $d.Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$d.Error}}</p>{{end}}
     <form method="post" action="/settings/integrations/{{.Name}}/test" class="flex flex-col gap-3" autocomplete="off">
@@ -41,15 +41,17 @@
     {{if .Fields}}
     {{template "settings_fields" (dict "Fields" .Fields "Action" (printf "/settings/integrations/%s/settings" .Name) "CSRF" $csrf)}}
     {{end}}
+    {{range $d.Sections}}{{if eq .Integration $name}}
+    <div class="flex flex-col gap-3 border-t pt-3" data-section="{{.Name}}">
+      {{template "integration_section" (dict "Section" . "CSRF" $csrf "Failed" $d.Failed "Error" $d.Error)}}
+    </div>
+    {{end}}{{end}}
   </div>
   {{end}}
-  {{range $d.Sections}}
+  {{range $d.Sections}}{{if not .Integration}}
   <div class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" data-section="{{.Name}}">
-    {{if and (eq $d.Failed .Name) $d.Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$d.Error}}</p>{{end}}
-    <span class="font-medium">{{.Title}}</span>
-    {{if .Template}}{{partial .Template (dict "Section" . "Fields" .Fields "Action" (printf "/settings/integrations/sections/%s" .Name) "CSRF" $csrf)}}
-    {{else}}{{template "settings_fields" (dict "Fields" .Fields "Action" (printf "/settings/integrations/sections/%s" .Name) "CSRF" $csrf)}}{{end}}
+    {{template "integration_section" (dict "Section" . "CSRF" $csrf "Failed" $d.Failed "Error" $d.Error)}}
   </div>
-  {{end}}
+  {{end}}{{end}}
 </div>
 {{end}}

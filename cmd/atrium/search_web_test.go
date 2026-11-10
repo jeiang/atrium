@@ -38,9 +38,23 @@ func searchResult(t *testing.T, r anthropictest.Request, id string) map[string]a
 	return out
 }
 
+func reportSchema(t *testing.T, r anthropictest.Request) map[string]any {
+	t.Helper()
+	for _, raw := range r.JSON(t)["tools"].([]any) {
+		entry, _ := raw.(map[string]any)
+		if entry["name"] != "report" {
+			continue
+		}
+		schema, _ := entry["input_schema"].(map[string]any)
+		return schema
+	}
+	t.Fatal("the request has no report tool")
+	return nil
+}
+
 func TestSearchWebRunsAnIsolatedChildAndVerifiesCitations(t *testing.T) {
 	srv, pages := webPages(t)
-	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	const home = "Maple Street 12"
 	warm(t, api)
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("p1", "profile_set", map[string]any{"key": "home", "value": home})))
@@ -51,18 +65,22 @@ func TestSearchWebRunsAnIsolatedChildAndVerifiesCitations(t *testing.T) {
 	start := len(api.Requests())
 	api.Push(
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("s1", "search_web", map[string]any{
-			"query": "library hours", "question": "When does the library open?", "max_sources": 3,
+			"query": "library hours", "question": "When does the library open?", "max_sources": 4,
 		})),
 		webSearchReply("library hours",
 			anthropictest.SearchResult{URL: srv.URL + "/a", Title: "A"},
-			anthropictest.SearchResult{URL: srv.URL + "/b", Title: "B"}),
-		anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})),
+			anthropictest.SearchResult{URL: srv.URL + "/b", Title: "B"},
+			anthropictest.SearchResult{URL: srv.URL + "/c", Title: "C"}),
+		anthropictest.Reply("tool_use",
+			anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"}),
+			anthropictest.ToolUse("f2", "web_fetch", map[string]any{"url": srv.URL + "/c"})),
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("r1", "report", map[string]any{"answer": map[string]any{
-			"answer": "The library opens at nine [1]. Page B is [2]. Bogus [3].",
+			"answer": "The library opens at nine [1]. Page B is [2]. Page C is [3]. Bogus [4].",
 			"citations": []any{
 				map[string]any{"n": 1, "url": srv.URL + "/a", "quote": pageAMarker},
 				map[string]any{"n": 2, "url": srv.URL + "/b", "quote": "not fetched"},
-				map[string]any{"n": 3, "url": "https://example.invalid/x", "quote": "nope"},
+				map[string]any{"n": 3, "url": srv.URL + "/c", "quote": nil},
+				map[string]any{"n": 4, "url": "https://example.invalid/x", "quote": "nope"},
 			},
 		}})),
 		anthropictest.Reply("end_turn", anthropictest.Text("done")),
@@ -99,17 +117,38 @@ func TestSearchWebRunsAnIsolatedChildAndVerifiesCitations(t *testing.T) {
 			t.Errorf("web_search max_uses = %v, want 5", entry["max_uses"])
 		}
 	}
-	result := searchResult(t, requests[5], "s1")
-	answer, _ := result["answer"].(string)
-	if strings.Contains(answer, "[3]") {
-		t.Errorf("the dropped citation marker survived: %q", answer)
+	schema := reportSchema(t, child)
+	props, _ := schema["properties"].(map[string]any)
+	answer, _ := props["answer"].(map[string]any)
+	answerProps, _ := answer["properties"].(map[string]any)
+	if _, ok := answerProps["answer"]; !ok {
+		t.Errorf("the report schema lacks the answer field: %v", answerProps)
 	}
-	if !strings.Contains(answer, "[1]") || !strings.Contains(answer, "[2]") {
-		t.Errorf("the surviving citation markers are missing: %q", answer)
+	if required := fmt.Sprint(answer["required"]); !strings.Contains(required, "answer") || !strings.Contains(required, "citations") {
+		t.Errorf("the report schema required = %v, want answer and citations", answer["required"])
+	}
+	citations, _ := answerProps["citations"].(map[string]any)
+	if citations["maxItems"] != float64(4) {
+		t.Errorf("the report schema citations maxItems = %v, want 4", citations["maxItems"])
+	}
+	items, _ := citations["items"].(map[string]any)
+	itemProps, _ := items["properties"].(map[string]any)
+	for _, name := range []string{"n", "url", "quote"} {
+		if _, ok := itemProps[name]; !ok {
+			t.Errorf("the report schema lacks citation field %s: %v", name, itemProps)
+		}
+	}
+	result := searchResult(t, requests[5], "s1")
+	answerText, _ := result["answer"].(string)
+	if strings.Contains(answerText, "[4]") {
+		t.Errorf("the dropped citation marker survived: %q", answerText)
+	}
+	if !strings.Contains(answerText, "[1]") || !strings.Contains(answerText, "[2]") || !strings.Contains(answerText, "[3]") {
+		t.Errorf("the surviving citation markers are missing: %q", answerText)
 	}
 	sources, _ := result["sources"].([]any)
-	if len(sources) != 2 {
-		t.Fatalf("sources = %v, want 2", sources)
+	if len(sources) != 3 {
+		t.Fatalf("sources = %v, want 3", sources)
 	}
 	verified := map[float64]string{}
 	for _, raw := range sources {
@@ -117,11 +156,13 @@ func TestSearchWebRunsAnIsolatedChildAndVerifiesCitations(t *testing.T) {
 		n, _ := source["n"].(float64)
 		verified[n], _ = source["verified"].(string)
 	}
-	if verified[1] != "fetched" || verified[2] != "search" {
-		t.Errorf("verified = %v, want 1 fetched and 2 search", verified)
+	if verified[1] != "fetched" || verified[2] != "search" || verified[3] != "search" {
+		t.Errorf("verified = %v, want 1 fetched and 2,3 search", verified)
 	}
-	if hits := pages.seen(); !slices.Equal(hits, []string{"/a"}) {
-		t.Errorf("page fetches = %v, want /a", hits)
+	hits := pages.seen()
+	slices.Sort(hits)
+	if !slices.Equal(hits, []string{"/a", "/c"}) {
+		t.Errorf("page fetches = %v, want /a and /c", hits)
 	}
 	childID, _ := result["child_thread_id"].(float64)
 	parent := parentOf(t, dir, int64(childID))
@@ -144,7 +185,7 @@ func TestSearchWebRunsAnIsolatedChildAndVerifiesCitations(t *testing.T) {
 			normalized[n] = struct{}{}
 		}
 	}
-	for _, want := range []string{srv.URL + "/a", srv.URL + "/b"} {
+	for _, want := range []string{srv.URL + "/a", srv.URL + "/b", srv.URL + "/c"} {
 		n, _ := webfetch.NormalizeURL(want)
 		if _, ok := normalized[n]; !ok {
 			t.Errorf("parent allowlist lacks %s: %v", want, allowed)
@@ -152,6 +193,64 @@ func TestSearchWebRunsAnIsolatedChildAndVerifiesCitations(t *testing.T) {
 	}
 	if _, ok := normalized["https://example.invalid/x"]; ok {
 		t.Errorf("the dropped citation URL reached the parent allowlist: %v", allowed)
+	}
+	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
+		t.Fatalf("GET /chat = %d", status)
+	}
+	status, body, _ := fetch(t, client, "GET", fmt.Sprintf("%s/chat/%d", base, parent), nil)
+	if status != http.StatusOK {
+		t.Fatalf("GET the parent thread = %d", status)
+	}
+	if !strings.Contains(body, fmt.Sprintf("/chat/%d", int64(childID))) {
+		t.Errorf("the parent thread does not link the search child")
+	}
+	for _, want := range []string{srv.URL + "/a", srv.URL + "/b", srv.URL + "/c"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("the parent thread does not show the source %s", want)
+		}
+	}
+}
+
+func TestSearchWebDropsMarkersWithoutCitations(t *testing.T) {
+	srv, _ := webPages(t)
+	_, api, _ := moduleFixture(t, flagsExcept("", ""))
+	start := warm(t, api)
+	api.Push(
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("s1", "search_web", map[string]any{
+			"query": "library hours", "max_sources": 3,
+		})),
+		webSearchReply("library hours", anthropictest.SearchResult{URL: srv.URL + "/a", Title: "A"}),
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("r1", "report", map[string]any{"answer": map[string]any{
+			"answer":    "The library opens at nine [1].",
+			"citations": nil,
+		}})),
+		anthropictest.Reply("end_turn", anthropictest.Text("done")),
+		anthropictest.Reply("end_turn", anthropictest.Text("ok")),
+	)
+	if ran := runApp(t, "agent", "run", "--text", "when does the library open"); ran.code != cli.ExitOK {
+		t.Fatalf("search run: %d %s", ran.code, ran.stderr)
+	}
+	requests := api.Requests()[start:]
+	if len(requests) != 5 {
+		t.Fatalf("%d model requests, want 5", len(requests))
+	}
+	result := searchResult(t, requests[4], "s1")
+	answer, _ := result["answer"].(string)
+	if strings.Contains(answer, "[1]") {
+		t.Errorf("the unsourced citation marker survived: %q", answer)
+	}
+	if result["unsourced"] != true {
+		t.Errorf("unsourced = %v, want true", result["unsourced"])
+	}
+	sources, _ := result["sources"].([]any)
+	if len(sources) != 0 {
+		t.Errorf("sources = %v, want none", sources)
 	}
 }
 

@@ -351,10 +351,14 @@ behavior-parity target.
   `atrium writes resolve <id>` or the Activity page.
 - The knowledge export is export-only: a built-in job renders live,
   non-expired records into the Notion page named by
-  `export_notion_parent` and overwrites the pages it created. Each external
-  write records an `agent_writes` intent first; an unknown outcome blocks the
-  target until `atrium writes resolve <id>`. Pages the export did not create
-  are never touched, and edits made in Notion are overwritten on the next run.
+  `export_notion_parent` and overwrites the pages it created; a target with no
+  destination is skipped. The Notion controls sit in the Notion record on the
+  Integrations page, the Obsidian folder has its own section, and the parent
+  page accepts a pasted page URL or id stored as the normalized id. Each
+  external write records an `agent_writes` intent first; an unknown outcome
+  blocks the target until `atrium writes resolve <id>`. Pages the export did
+  not create are never touched, and edits made in Notion are overwritten on
+  the next run.
 - The assistant can prepare mail drafts but cannot send them. Sending is
   currently an operator action. Delegated sending is a product goal, not
   permission granted by the existing tools.

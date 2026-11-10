@@ -105,13 +105,17 @@ Integrations page edits `wiki_root`, `sensitivity_property`,
 `notion_private_value` and `wiki_log_title`.
 
 The knowledge base is projected into Notion by the `knowledge-export` job; the
-wiki pages above are not touched. Set the destination page under **Knowledge
-export** on the Integrations page (`export_notion_parent`), choose the kinds
-(`export_notion_kinds`) and, to include private records, type the same page id
-into `export_notion_private_to`. The export overwrites its own pages on every
-run and trashes the page of a record that is retracted or leaves the export
-set; edits made in Notion are lost. A write with an unknown outcome blocks the
-export until it is resolved.
+wiki pages above are not touched. The **Export knowledge to Notion** group in
+the Notion record on the Integrations page sets the export: paste the parent
+page's URL or id (`export_notion_parent`, stored as the normalized page id),
+choose what to include (`export_notion_kinds`) and turn on Include private
+records to store the same destination in `export_notion_private_to`. The
+export overwrites its own pages on every run and trashes the page of a record
+that is retracted or leaves the export set; edits made in Notion are lost. A
+write with an unknown outcome blocks the export until it is resolved. The
+**Obsidian export** section writes a vault folder instead (`export_obsidian_dir`,
+normally pinned by the host); its private switch stores the folder path in
+`export_obsidian_private_to`.
 
 ## Grafana
 
