@@ -59,14 +59,17 @@ const columns = "r.id, r.title, r.aliases, r.body, r.scope, r.project_id, r.priv
 
 type scanner interface{ Scan(...any) error }
 
-func scan(row scanner) (Record, error) {
+func scan(row scanner) (Record, error) { return scanExtra(row) }
+
+func scanExtra(row scanner, extra ...any) (Record, error) {
 	var r Record
 	var aliases string
 	var private, pinned, embedded int64
 	var marks int64
-	err := row.Scan(&r.ID, &r.Title, &aliases, &r.Body, &r.Scope, &r.ProjectID, &private, &marks, &r.Writer,
+	dest := []any{&r.ID, &r.Title, &aliases, &r.Body, &r.Scope, &r.ProjectID, &private, &marks, &r.Writer,
 		&r.SourceThreadID, &r.SourceSeq, &r.SourceRunID, &r.Origin, &pinned, &r.ConfirmedAt, &r.RetractedAt,
-		&r.ExpiresAt, &embedded, &r.CreatedAt, &r.UpdatedAt)
+		&r.ExpiresAt, &embedded, &r.CreatedAt, &r.UpdatedAt}
+	err := row.Scan(append(dest, extra...)...)
 	if err != nil {
 		return Record{}, err
 	}
@@ -260,5 +263,34 @@ func History(ctx context.Context, q db.Querier, id int64) ([]WriteRow, error) {
 		var w WriteRow
 		err := r.Scan(&w.ID, &w.TS, &w.Tool, &w.UndoneAt)
 		return w, err
+	})
+}
+
+type ExportFilter struct {
+	Now            float64
+	Kinds          tool.Marks
+	IncludePrivate bool
+}
+
+type ExportRecord struct {
+	Record
+	Private bool
+}
+
+func Exportable(ctx context.Context, q db.Querier, f ExportFilter) ([]ExportRecord, error) {
+	where := "r.retracted_at IS NULL AND (r.expires_at IS NULL OR r.expires_at > ?) AND r.scope != 'ops'" +
+		" AND ((r.marks & 14) & ~?) = 0"
+	args := []any{f.Now, int64(f.Kinds.Kinds())}
+	if !f.IncludePrivate {
+		where += " AND NOT (r.private = 1 OR COALESCE(p.private, 0) = 1)"
+	}
+	rows, err := q.QueryContext(ctx, "SELECT "+columns+", COALESCE(p.private, 0)"+fromClause()+" WHERE "+where+" ORDER BY r.id", args...)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (ExportRecord, error) {
+		var private int64
+		rec, err := scanExtra(r, &private)
+		return ExportRecord{Record: rec, Private: rec.Private || private != 0}, err
 	})
 }

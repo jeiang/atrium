@@ -47,13 +47,15 @@ type FieldView = settings.FieldView
 
 type Section struct {
 	Name, Title, Module string
+	Template            string
 	Fields              []Field
 }
 
 type SectionView struct {
-	Name   string      `json:"name"`
-	Title  string      `json:"title"`
-	Fields []FieldView `json:"fields"`
+	Name     string      `json:"name"`
+	Title    string      `json:"title"`
+	Template string      `json:"template"`
+	Fields   []FieldView `json:"fields"`
 }
 
 type Integration struct {
@@ -119,7 +121,7 @@ func LoadSections(ctx context.Context, q db.Querier) ([]SectionView, error) {
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, SectionView{Name: s.Name, Title: s.Title, Fields: fields})
+		out = append(out, SectionView{Name: s.Name, Title: s.Title, Template: s.Template, Fields: fields})
 	}
 	return out, nil
 }

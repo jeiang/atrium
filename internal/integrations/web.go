@@ -6,6 +6,8 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -224,6 +226,29 @@ func (h handlers) test(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: "Connection works"}, data)
 }
 
+func fieldValues(fields []Field, form url.Values) map[string]string {
+	values := make(map[string]string, len(fields))
+	for _, f := range fields {
+		if !f.Multi {
+			if value, ok := web.Value(form, f.Key); ok {
+				values[f.Key] = value
+			}
+			continue
+		}
+		picked := make([]string, 0, len(f.Choices))
+		for _, value := range form[f.Key] {
+			if value != "" && value != "none" {
+				picked = append(picked, value)
+			}
+		}
+		if len(picked) == 0 {
+			picked = append(picked, "none")
+		}
+		values[f.Key] = strings.Join(picked, ",")
+	}
+	return values
+}
+
 func (h handlers) saveSection(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
 	s, ok := SectionNamed(name)
@@ -232,12 +257,7 @@ func (h handlers) saveSection(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form := web.FormValues(r)
-	values := make(map[string]string, len(s.Fields))
-	for _, f := range s.Fields {
-		if value, ok := web.Value(form, f.Key); ok {
-			values[f.Key] = value
-		}
-	}
+	values := fieldValues(s.Fields, form)
 	err := SaveSection(h.ctx(r), h.d.DB, name, values)
 	if err != nil && h.refuse(w, r, name, err) {
 		return
@@ -256,12 +276,7 @@ func (h handlers) saveSettings(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form := web.FormValues(r)
-	values := make(map[string]string, len(i.Fields))
-	for _, f := range i.Fields {
-		if value, ok := web.Value(form, f.Key); ok {
-			values[f.Key] = value
-		}
-	}
+	values := fieldValues(i.Fields, form)
 	err := SaveFields(h.ctx(r), h.d.DB, name, values)
 	if err != nil && h.refuse(w, r, name, err) {
 		return

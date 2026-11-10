@@ -155,6 +155,17 @@ var migrations = []migration{
 		}
 		return nil
 	}},
+	{8, func(ctx context.Context, tx *sql.Tx) error {
+		_, err := tx.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS export_pages (
+			target TEXT NOT NULL CHECK (target IN ('notion', 'obsidian')),
+			record_id INTEGER NOT NULL,
+			remote_id TEXT NOT NULL,
+			hash TEXT NOT NULL,
+			updated_at REAL NOT NULL,
+			PRIMARY KEY (target, record_id)
+		)`)
+		return err
+	}},
 }
 
 type ModuleMigration struct {
