@@ -79,6 +79,7 @@ func MarkdownWith(text string, pages map[string]string) template.HTML {
 	cleaned = emptyHeadRe.ReplaceAllString(cleaned, "")
 	cleaned = subMatches(taskRe, cleaned, taskBox)
 	cleaned = subMatches(hrefRe, cleaned, func(s string, loc []int) string { return internalHref(s, loc, pages) })
+	cleaned = kbCiteRe.ReplaceAllString(cleaned, `<a class="underline underline-offset-4" href="/library/knowledge/$1">[K$1]</a>`)
 	return template.HTML(cleaned)
 }
 
@@ -98,6 +99,7 @@ var (
 	emptyHeadRe = regexp.MustCompile(`<thead>\s*<tr>\s*(?:<th>\s*</th>\s*)+</tr>\s*</thead>\s*`)
 	taskRe      = regexp.MustCompile(`(<li>(?:\s*<p>)?)\[([ xX])\] `)
 	hrefRe      = regexp.MustCompile(`href="([^"]*)"`)
+	kbCiteRe    = regexp.MustCompile(`\[K(\d+)\]`)
 )
 
 var notionHosts = []string{"notion.so", "www.notion.so", "app.notion.com"}

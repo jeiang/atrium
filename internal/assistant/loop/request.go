@@ -24,6 +24,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/timex"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -337,7 +338,11 @@ func messageTokens(m actx.Message) (int64, error) {
 		return 0, err
 	}
 	hidden, err := files.HiddenTokens(m.Content)
-	return shown + hidden, err
+	if err != nil {
+		return 0, err
+	}
+	knowledge, err := kb.HiddenTokens(m.Content)
+	return shown + hidden + knowledge, err
 }
 
 func (req request) estimate(active []actx.Message, a *anchor) (int64, error) {
@@ -377,6 +382,10 @@ func (req request) buildMessages(ctx context.Context, q db.Querier, scope files.
 			return nil, err
 		}
 		expanded, err = references.Expand(expanded)
+		if err != nil {
+			return nil, err
+		}
+		expanded, err = kb.Expand(expanded)
 		if err != nil {
 			return nil, err
 		}

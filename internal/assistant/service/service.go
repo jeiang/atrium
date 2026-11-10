@@ -29,6 +29,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/tool"
@@ -218,10 +219,46 @@ func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now 
 		return fail(err)
 	}
 	content := append(append([]json.RawMessage{}, o.Files...), actx.TextBlock(text))
+	if o.kind() == tool.Chat || o.kind() == tool.Cron {
+		block, err := s.knowledge(ctx, thread, text, now)
+		if err != nil {
+			return fail(err)
+		}
+		if block != nil {
+			content = append(content, block)
+		}
+	}
 	if _, err := journal.AppendMessage(ctx, s.DB, threadID, &runID, journal.User, content, now, nil); err != nil {
 		return fail(err)
 	}
 	return runID, nil
+}
+
+func (s *Service) knowledge(ctx context.Context, thread *threads.Thread, text string, now float64) (json.RawMessage, error) {
+	r := assistant.Read(ctx, s.DB.Read)
+	budget := int64(r.Int(assistant.KeyKBRetrievalTokens))
+	distance := r.Float(assistant.KeyKBRetrievalDistance)
+	if err := r.Err(); err != nil {
+		return nil, err
+	}
+	if budget == 0 {
+		return nil, nil
+	}
+	project := int64(0)
+	if thread.ProjectID != nil {
+		project = *thread.ProjectID
+	}
+	found, err := kb.Retrieve(ctx, s.DB, kb.RetrieveOptions{
+		ThreadID: thread.ID, ProjectID: project, Text: references.Strip(text), Now: now,
+		Distance: distance, Budget: budget, Embed: s.embed,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if len(found.Records) == 0 {
+		return nil, nil
+	}
+	return kb.Block(found)
 }
 
 func (s *Service) PrepareRerun(ctx context.Context, threadID int64, now float64) (int64, error) {

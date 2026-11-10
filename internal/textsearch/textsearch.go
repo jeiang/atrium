@@ -106,3 +106,24 @@ func SnippetParts(marked string) []Part {
 	}
 	return parts
 }
+
+func FTSQueryAny(text string) (string, error) { return FTSQueryAnyTerms(text, MaxTerms) }
+
+func FTSQueryAnyTerms(text string, maxTerms int) (string, error) {
+	var terms []string
+	for _, loc := range tokenRe.FindAllStringSubmatchIndex(text, -1) {
+		if loc[4] >= 0 && text[loc[4]:loc[5]] != "" {
+			terms = append(terms, `"`+text[loc[4]:loc[5]]+`"*`)
+			continue
+		}
+		phrase := ""
+		if loc[2] >= 0 {
+			phrase = text[loc[2]:loc[3]]
+		}
+		words := wordRe.FindAllString(phrase, -1)
+		if len(words) > 0 {
+			terms = append(terms, `"`+strings.Join(words, " ")+`"`)
+		}
+	}
+	return strings.Join(terms[:min(len(terms), maxTerms)], " OR "), nil
+}

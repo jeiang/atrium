@@ -78,6 +78,21 @@ func Parse(text string) []Token {
 	return out
 }
 
+func Strip(text string) string {
+	tokens := Parse(text)
+	if len(tokens) == 0 {
+		return text
+	}
+	var b strings.Builder
+	last := 0
+	for _, tok := range tokens {
+		b.WriteString(text[last:tok.Start])
+		last = tok.End
+	}
+	b.WriteString(text[last:])
+	return b.String()
+}
+
 func Resolve(ctx context.Context, q db.Querier, reader int64, text string) ([]json.RawMessage, error) {
 	tokens := Parse(text)
 	if len(tokens) == 0 {

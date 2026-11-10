@@ -170,6 +170,12 @@
       <div class="mt-2 whitespace-pre-wrap break-words">{{.Text}}</div>
     </details>
     {{end}}
+    {{with $item.Knowledge}}
+    <div class="flex flex-wrap items-center gap-1.5 text-xs" aria-label="Knowledge used">
+      <span class="text-muted-foreground">Knowledge used:</span>
+      {{range .}}<a class="badge" data-variant="outline" href="/library/knowledge/{{.ID}}">{{.Cite}} {{.Title}}</a>{{end}}
+    </div>
+    {{end}}
     {{if and $thread (eq $thread.Kind "chat")}}
     <div class="msg-actions">
       {{if and (eq $item.Seq (int $last_seq)) (not $busy)}}<button type="button" class="btn" data-size="icon-sm" data-variant="ghost" data-action="edit-message" aria-label="Edit" title="Edit message">{{icon "pencil" "size-3.5"}}</button>{{end}}

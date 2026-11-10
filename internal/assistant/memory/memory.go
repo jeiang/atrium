@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -195,9 +196,28 @@ func render(m journal.Message) (string, []int64, error) {
 			parts = append(parts, "[attachment]")
 		case references.Type:
 			parts = append(parts, referenceLine(b.Value))
+		case kb.Type:
+			parts = append(parts, knowledgeLine(b.Value))
 		}
 	}
 	return strings.Join(parts, "\n"), ids, nil
+}
+
+func knowledgeLine(value any) string {
+	d, ok := value.(map[string]any)
+	if !ok {
+		return "[knowledge]"
+	}
+	records, _ := d["records"].([]any)
+	ids := make([]string, 0, len(records))
+	for _, raw := range records {
+		if rec, ok := raw.(map[string]any); ok {
+			if id, ok := rec["id"].(int64); ok {
+				ids = append(ids, "K"+strconv.FormatInt(id, 10))
+			}
+		}
+	}
+	return "[knowledge " + strings.Join(ids, " ") + "]"
 }
 
 func digest(value any) string {
