@@ -22,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/integrations"
+	"github.com/jeiang/atrium/internal/kb/kbcmd"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	mailpages "github.com/jeiang/atrium/internal/mail/pages"
@@ -83,6 +84,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 			loginlink.Command(),
 			secretscmd.Command(mc.Env),
 			dbcmd.Command(mc.Env),
+			kbcmd.Command(mc.Env),
 			backup.BackupCommand(),
 			backup.RestoreCommand(),
 		},

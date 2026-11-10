@@ -118,6 +118,33 @@ func TestKnowledgeWrittenInAMarkedThreadMarksItsReader(t *testing.T) {
 		t.Fatalf("thread after mail_read is unmarked, want the read's marks")
 	}
 
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("k2", "kb_write", map[string]any{
+		"title": "Plumber", "body": "Sam, 0412 345 678.", "scope": "personal",
+	})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("saved")))
+	if ran := runApp(t, "agent", "run", "--thread", strconv.FormatInt(marked, 10), "--text", "remember the plumber"); ran.code != cli.ExitOK {
+		t.Fatalf("kb_write in the marked thread: %d %s", ran.code, ran.stderr)
+	}
+	var markedID, markedMarks int64
+	if err := d.Read.QueryRow("SELECT id, marks FROM kb_records WHERE title = 'Plumber'").Scan(&markedID, &markedMarks); err != nil {
+		t.Fatalf("record from the marked thread: %v", err)
+	}
+	if want := kbMarks(t, d, marked); markedMarks != want {
+		t.Errorf("record from the marked thread marks = %d, want the writer's %d", markedMarks, want)
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("s3", "kb_search", map[string]any{"query": "plumber"})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("found")))
+	if ran := runApp(t, "agent", "run", "--text", "who is the plumber"); ran.code != cli.ExitOK {
+		t.Fatalf("kb_search of the marked record: %d %s", ran.code, ran.stderr)
+	}
+	readerOfMarked := latestThread(t, dir)
+	if got, want := kbMarks(t, d, readerOfMarked), kbMarks(t, d, marked)|8; got != want {
+		t.Errorf("reader of the marked record marks = %d, want the writer's marks plus personal (%d)", got, want)
+	}
+	if found := kbResults(t, d, readerOfMarked, "s3"); len(found) != 1 {
+		t.Errorf("kb_search of the marked record returned %v, want one", found)
+	}
+
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("s1", "kb_search", map[string]any{"query": "dentist"})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("found")))
 	if ran := runApp(t, "agent", "run", "--text", "what do I know about the dentist"); ran.code != cli.ExitOK {
