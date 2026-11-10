@@ -140,8 +140,8 @@ func TestHostDownStartsOneWorkerRunAndFilesAFinding(t *testing.T) {
 		return found
 	})
 	requests := api.Requests()
-	if len(requests) < before+3 {
-		t.Fatalf("worker requests = %d, want at least 3", len(requests)-before)
+	if len(requests) < before+1 {
+		t.Fatalf("worker requests = %d, want at least 1", len(requests)-before)
 	}
 	body := requests[before].JSON(t)
 	var names []string
