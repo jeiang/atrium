@@ -108,6 +108,16 @@ func TestLookupReturnsTypedFieldsWithoutUntrusted(t *testing.T) {
 	if system := systemText(t, requests[1]); !strings.Contains(system, "Fields:") || !strings.Contains(system, "- when: date") {
 		t.Errorf("the lookup child system prompt lacks the field list: %s", system)
 	}
+	schema := reportSchema(t, requests[1])
+	props, _ := schema["properties"].(map[string]any)
+	reportAnswer, _ := props["answer"].(map[string]any)
+	answerProps, _ := reportAnswer["properties"].(map[string]any)
+	for name, kind := range map[string]string{"when": "string", "urgent": "boolean"} {
+		field, _ := answerProps[name].(map[string]any)
+		if !strings.Contains(fmt.Sprint(field["type"]), kind) {
+			t.Errorf("the report schema field %s type = %v, want %s", name, field["type"], kind)
+		}
+	}
 	result := lookupResult(t, requests[4], "l1")
 	answer, _ := result["answer"].(map[string]any)
 	if answer["when"] != "2026-01-02" || answer["urgent"] != false {
