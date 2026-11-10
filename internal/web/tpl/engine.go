@@ -13,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 //go:embed templates/*.gohtml templates/basecoat/*.gohtml
@@ -73,6 +74,8 @@ type Frame struct {
 	Nav               []NavGroup
 	Settings          []NavItem
 	SettingsURL       string
+	SettingGroups     []settings.GroupView
+	Saved             string
 	BrandURL          string
 	Footer            []NavItem
 	Tabs              []NavItem

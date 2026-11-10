@@ -1,5 +1,15 @@
-{{define "settings_tabs"}}{{$tab := .Tab}}
-<nav aria-label="Settings sections" class="-mb-2 flex flex-wrap gap-x-1 border-b text-sm">
-  {{range .Settings}}<a href="{{.URL}}" class="-mb-px whitespace-nowrap border-b-2 px-3 py-2 font-medium {{if eq $tab .Page}}border-primary text-foreground{{else}}border-transparent text-muted-foreground hover:text-foreground{{end}}"{{if eq $tab .Page}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}
+{{define "settings_nav"}}{{$tab := .Tab}}{{$group := ""}}
+<nav aria-label="Settings sections" class="set-nav">
+  {{range .Settings}}{{if ne .Group $group}}{{$group = .Group}}<h2 class="eyebrow">{{.Group}}</h2>{{end}}<a href="{{.URL}}"{{if eq $tab .Page}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}
 </nav>
 {{end}}
+
+{{define "settings_groups"}}{{$csrf := .CSRF}}{{range .SettingGroups}}
+<form method="post" action="/settings/groups/{{.Module}}/{{.Name}}" class="set-group" data-group="{{.Module}}.{{.Name}}">
+  <input type="hidden" name="csrf_token" value="{{$csrf}}">
+  <h2>{{.Title}}</h2>
+  {{with .Error}}<p class="px-4 py-2 text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.}}</p>{{end}}
+  {{template "settings_rows" .Fields}}
+  <footer>{{if .Saved}}<span class="text-xs text-ink-3" role="status" data-saved>Saved</span>{{end}}<button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button></footer>
+</form>
+{{end}}{{end}}

@@ -49,8 +49,8 @@ func init() {
 		text(KeyAdminEmails, nil),
 		text(KeyAccessDomains, nil),
 		text(KeyAdminDomains, nil),
-		settings.Value(settings.Advanced, settings.Def{Key: KeyIdleDays, Module: module, Type: settings.Int, Default: "7", Check: settings.Between(1, 365)}),
-		settings.Value(settings.Advanced, settings.Def{Key: KeyMaxDays, Module: module, Type: settings.Int, Default: "30", Check: settings.Between(1, 365)}),
+		settings.Value(settings.UI, settings.Def{Key: KeyIdleDays, Label: "Sign out after idle (days)", Module: module, Type: settings.Int, Default: "7", Check: settings.Between(1, 365)}),
+		settings.Value(settings.UI, settings.Def{Key: KeyMaxDays, Label: "Sign out after (days)", Module: module, Type: settings.Int, Default: "30", Check: settings.Between(1, 365)}),
 		settings.Value(settings.Advanced, settings.Def{Key: KeyRecheckMinutes, Module: module, Type: settings.Int, Default: "60", Check: settings.Between(1, 1440)}),
 	)
 }

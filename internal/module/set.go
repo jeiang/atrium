@@ -113,6 +113,22 @@ func (s *Set) validate() error {
 				return settings.UnknownKey(rq.Key)
 			}
 		}
+		groups := map[string]bool{}
+		for _, g := range r.Settings {
+			if g.Name == "" || g.Title == "" || groups[g.Name] {
+				return &InvalidGroup{Module: r.Name, Group: g.Name}
+			}
+			groups[g.Name] = true
+			for _, key := range g.Keys {
+				def, ok := s.reg.Lookup(key)
+				if !ok {
+					return settings.UnknownKey(key)
+				}
+				if !def.Editable() {
+					return &InvalidGroup{Module: r.Name, Group: g.Name}
+				}
+			}
+		}
 		for _, c := range r.Commands {
 			if commands[c.Name] {
 				return DuplicateCommand(c.Name)

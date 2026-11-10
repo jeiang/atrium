@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/sdnotify"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settingspage"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -36,7 +37,47 @@ func (s *Set) Pages() []web.Page {
 			pages = append(pages, p)
 		}
 	}
-	return pages
+	return append(pages, settingspage.Page(s.settingPages()))
+}
+
+func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic) {
+	var groups []settingspage.Group
+	var generic []settingspage.Generic
+	for _, r := range s.regs {
+		if len(r.Settings) == 0 {
+			continue
+		}
+		home, tabs := "", map[string]string{}
+		for _, p := range r.Pages {
+			for _, item := range p.Nav {
+				if !item.Settings {
+					continue
+				}
+				tabs[item.URL] = item.Page
+				if home == "" {
+					home = item.URL
+				}
+			}
+		}
+		own := false
+		for _, g := range r.Settings {
+			g.Module = r.Name
+			at := settingspage.Group{Group: g, URL: g.Page}
+			if g.Page == "" {
+				at.URL, own = home, true
+				if home == "" {
+					at.URL = "/settings/" + r.Name
+					tabs[at.URL] = "module:" + r.Name
+				}
+			}
+			at.Tab = tabs[at.URL]
+			groups = append(groups, at)
+		}
+		if own && home == "" {
+			generic = append(generic, settingspage.Generic{Module: r.Name, URL: "/settings/" + r.Name, Tab: "module:" + r.Name})
+		}
+	}
+	return groups, generic
 }
 
 func (s *Set) gatePage(owner string, p web.Page) web.Page {

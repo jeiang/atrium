@@ -3,6 +3,7 @@ package module
 import (
 	"context"
 	"errors"
+	"strconv"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
@@ -59,6 +60,7 @@ type Registration struct {
 	Needs     []string
 	Requires  []Requirement
 	Pages     []web.Page
+	Settings  []settings.Group
 	Commands  []*cli.Command
 	Leaves    map[string]Leaf
 	Tools     func(r *registry.Registry) error
@@ -176,6 +178,12 @@ type InvalidLeaf struct{ Module, Path string }
 
 func (e *InvalidLeaf) Error() string {
 	return "module: " + e.Module + " leaf " + e.Path + " sets both Always and Needs"
+}
+
+type InvalidGroup struct{ Module, Group string }
+
+func (e *InvalidGroup) Error() string {
+	return "module: " + e.Module + " has an invalid settings group " + strconv.Quote(e.Group)
 }
 
 type InvalidPage struct{ Module string }

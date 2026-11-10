@@ -254,7 +254,7 @@ behavior-parity target.
   registry (`settings.New()`); an `ATRIUM_<MODULE>_<KEY>` variable or
   configuration-file value pins a setting, otherwise a value
   stored in the database applies, and every command reads the same stored
-  values. Settings not shown on a settings tab are set through the CLI,
+  values. Settings not shown on a settings page are set through the CLI,
   env or Nix; saving a working integration turns its module on, and the
   settings audit rows show on the Done page.
   Secrets set through `atrium secrets` are stored write-only in the database
@@ -583,7 +583,7 @@ behavior-parity target.
 - **The day is home.** Five navigation entries: today and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings. The home brief does not yet include the morning digest text or the next event in its headline.
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
-- **Settings has six tabs:** Assistant, Mail accounts, Integrations, Notifications, Sign-in, and Usage. They edit the everyday module settings: the calendar and media library sections, mail behavior, the Notion wiki and Grafana datasource fields, the weather location, the push subject and the monthly budget. Advanced settings move to Nix, the CLI, or the agent.
+- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Permissions, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its registration (`Settings` on the registration, a label on the setting) and that render and save through one shared path; an external module declares them through the `sdk` package and gets a page at `/settings/{module}`. Not yet done: connection records still sit together on the Connections page instead of on their module's page, module on/off and health are not on the pages, and Permissions and Usage are still separate pages. Advanced settings stay with Nix, the CLI, or the agent.
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.

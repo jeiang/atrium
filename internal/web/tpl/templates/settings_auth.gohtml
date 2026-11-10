@@ -1,7 +1,7 @@
 {{define "title"}}Sign-in · Settings{{end}}
 {{define "heading"}}Settings · Sign-in{{end}}
 {{define "content"}}{{$d := .Data}}
-{{template "settings_tabs" (dict "Tab" "auth" "Auth" .Auth "Settings" .Settings)}}
+{{template "settings_nav" (dict "Tab" "auth" "Settings" .Settings)}}
 <div class="flex max-w-xl flex-col gap-6">
   {{template "_oidc_state.gohtml" .}}
   <hr role="separator">
@@ -14,4 +14,5 @@
   <div id="oidc-setup" class="flex flex-col gap-6">{{template "_oidc_setup.gohtml" .}}</div>
   {{template "_oidc_test.gohtml" .}}
 </div>
+{{template "settings_groups" .}}
 {{end}}

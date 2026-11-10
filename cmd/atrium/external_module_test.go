@@ -16,7 +16,10 @@ import (
 	"github.com/jeiang/atrium/sdk"
 )
 
-const extName = "extdemo"
+const (
+	extName     = "extdemo"
+	extGreeting = "extdemo_greeting"
+)
 
 type extModule struct{}
 
@@ -25,6 +28,7 @@ var extOnce sync.Once
 func extModules() []module.Module {
 	extOnce.Do(func() {
 		settings.MustRegister(module.FlagDef(extName))
+		sdk.RegisterSetting(sdk.Shown("Greeting", sdk.Setting{Key: extGreeting, Module: extName, Type: sdk.String, Default: "hello"}))
 		sdk.RegisterMigrations(extName, sdk.Migration{Version: 1, Apply: func(ctx context.Context, tx *sql.Tx) error {
 			_, err := tx.ExecContext(ctx, "CREATE TABLE extdemo_pings (id INTEGER PRIMARY KEY, note TEXT NOT NULL)")
 			return err
@@ -34,7 +38,9 @@ func extModules() []module.Module {
 }
 
 func (extModule) Register(sdk.Context) sdk.Registration {
-	return sdk.Registration{Name: extName, Commands: []*sdk.Command{{
+	return sdk.Registration{Name: extName, Settings: []sdk.SettingGroup{
+		{Name: "general", Title: "General", Keys: []string{extGreeting}},
+	}, Commands: []*sdk.Command{{
 		Name: extName,
 		Setup: func(*sdk.Args) sdk.Handler {
 			return func(env *sdk.Env) int {

@@ -26,10 +26,10 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_context_max_ids` | int | `50` | advanced | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_IDS` |
 | `agent_context_max_sources` | int | `100` | advanced | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_SOURCES` |
 | `agent_context_summary_chars` | int | `4000` | advanced | `ATRIUM_ASSISTANT_AGENT_CONTEXT_SUMMARY_CHARS` |
-| `agent_effort_cron` | enum (low, medium, high, xhigh, max) | `high` | advanced | `ATRIUM_ASSISTANT_AGENT_EFFORT_CRON` |
-| `agent_effort_nightly` | enum (low, medium, high, xhigh, max) | `high` | advanced | `ATRIUM_ASSISTANT_AGENT_EFFORT_NIGHTLY` |
+| `agent_effort_cron` | enum (low, medium, high, xhigh, max) | `high` | ui | `ATRIUM_ASSISTANT_AGENT_EFFORT_CRON` |
+| `agent_effort_nightly` | enum (low, medium, high, xhigh, max) | `high` | ui | `ATRIUM_ASSISTANT_AGENT_EFFORT_NIGHTLY` |
 | `agent_effort_sub` | enum (low, medium, high, xhigh, max) | `medium` | advanced | `ATRIUM_ASSISTANT_AGENT_EFFORT_SUB` |
-| `agent_effort_subagent` | enum (low, medium, high, xhigh, max) | `medium` | advanced | `ATRIUM_ASSISTANT_AGENT_EFFORT_SUBAGENT` |
+| `agent_effort_subagent` | enum (low, medium, high, xhigh, max) | `medium` | ui | `ATRIUM_ASSISTANT_AGENT_EFFORT_SUBAGENT` |
 | `agent_file_cap_bytes` | int | `33554432` | advanced | `ATRIUM_ASSISTANT_AGENT_FILE_CAP_BYTES` |
 | `agent_file_name_chars` | int | `80` | advanced | `ATRIUM_ASSISTANT_AGENT_FILE_NAME_CHARS` |
 | `agent_grafana_cell_chars` | int | `300` | advanced | `ATRIUM_ASSISTANT_AGENT_GRAFANA_CELL_CHARS` |
@@ -87,7 +87,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_subagent_description_chars` | int | `160` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_DESCRIPTION_CHARS` |
 | `agent_subagent_digest_chars` | int | `6000` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_DIGEST_CHARS` |
 | `agent_subagent_max_concurrent` | int | `2` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_MAX_CONCURRENT` |
-| `agent_subagent_max_cost_usd` | float | `0.25` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_MAX_COST_USD` |
+| `agent_subagent_max_cost_usd` | float | `0.25` | ui | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_MAX_COST_USD` |
 | `agent_subagent_max_steps` | int | `12` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_MAX_STEPS` |
 | `agent_subagent_prompt_chars` | int | `4000` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_PROMPT_CHARS` |
 | `agent_subagent_task_chars` | int | `4000` | advanced | `ATRIUM_ASSISTANT_AGENT_SUBAGENT_TASK_CHARS` |
@@ -102,19 +102,19 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_workspace_plan_items` | int | `20` | advanced | `ATRIUM_ASSISTANT_AGENT_WORKSPACE_PLAN_ITEMS` |
 | `anthropic_ca_file` | string | none | advanced | `ATRIUM_ASSISTANT_ANTHROPIC_CA_FILE` |
 | `anthropic_proxy` | string | none | advanced | `ATRIUM_ASSISTANT_ANTHROPIC_PROXY` |
-| `budget_chat_share` | float | `1` | advanced | `ATRIUM_ASSISTANT_BUDGET_CHAT_SHARE` |
-| `budget_unattended_share` | float | `0.8` | advanced | `ATRIUM_ASSISTANT_BUDGET_UNATTENDED_SHARE` |
+| `budget_chat_share` | float | `1` | ui | `ATRIUM_ASSISTANT_BUDGET_CHAT_SHARE` |
+| `budget_unattended_share` | float | `0.8` | ui | `ATRIUM_ASSISTANT_BUDGET_UNATTENDED_SHARE` |
 | `cache_ttl_chat` | enum (5m, 1h) | `5m` | ui | `ATRIUM_ASSISTANT_CACHE_TTL_CHAT` |
 | `default_context_limit` | enum (90000, 200000, 500000, 1000000) | `90000` | ui | `ATRIUM_ASSISTANT_DEFAULT_CONTEXT_LIMIT` |
 | `default_effort` | enum (low, medium, high, xhigh, max) | `xhigh` | ui | `ATRIUM_ASSISTANT_DEFAULT_EFFORT` |
 | `default_model` | enum (claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5) | `claude-haiku-5-5` | ui | `ATRIUM_ASSISTANT_DEFAULT_MODEL` |
 | `digest_notify` | bool | `true` | ui | `ATRIUM_ASSISTANT_DIGEST_NOTIFY` |
 | `doom_loop_threshold` | int | `3` | advanced | `ATRIUM_ASSISTANT_DOOM_LOOP_THRESHOLD` |
-| `dreaming_max_cost_usd` | float | `0.30` | advanced | `ATRIUM_ASSISTANT_DREAMING_MAX_COST_USD` |
-| `dreaming_monthly_usd` | float | `3` | advanced | `ATRIUM_ASSISTANT_DREAMING_MONTHLY_USD` |
-| `max_run_cost_usd_haiku_5_5` | float | `2` | advanced | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_HAIKU_5_5` |
-| `max_run_cost_usd_opus_5_5` | float | `10` | advanced | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_OPUS_5_5` |
-| `max_run_cost_usd_sonnet_5_5` | float | `6` | advanced | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_SONNET_5_5` |
+| `dreaming_max_cost_usd` | float | `0.30` | ui | `ATRIUM_ASSISTANT_DREAMING_MAX_COST_USD` |
+| `dreaming_monthly_usd` | float | `3` | ui | `ATRIUM_ASSISTANT_DREAMING_MONTHLY_USD` |
+| `max_run_cost_usd_haiku_5_5` | float | `2` | ui | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_HAIKU_5_5` |
+| `max_run_cost_usd_opus_5_5` | float | `10` | ui | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_OPUS_5_5` |
+| `max_run_cost_usd_sonnet_5_5` | float | `6` | ui | `ATRIUM_ASSISTANT_MAX_RUN_COST_USD_SONNET_5_5` |
 | `max_steps_chat` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_CHAT` |
 | `max_steps_cron` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_CRON` |
 | `max_steps_nightly` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` |
@@ -122,14 +122,14 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `monthly_budget_usd` | float | `150` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
 | `open_meteo_ca_file` | string | none | advanced | `ATRIUM_ASSISTANT_OPEN_METEO_CA_FILE` |
 | `open_meteo_proxy` | string | none | advanced | `ATRIUM_ASSISTANT_OPEN_METEO_PROXY` |
-| `ops_condenser` | enum (haiku, local) | `haiku` | advanced | `ATRIUM_ASSISTANT_OPS_CONDENSER` |
+| `ops_condenser` | enum (haiku, local) | `haiku` | ui | `ATRIUM_ASSISTANT_OPS_CONDENSER` |
 | `ops_condenser_max_tokens` | int | `2000` | advanced | `ATRIUM_ASSISTANT_OPS_CONDENSER_MAX_TOKENS` |
 | `ops_condenser_model` | string | none | advanced | `ATRIUM_ASSISTANT_OPS_CONDENSER_MODEL` |
-| `ops_worker_max_run_usd` | float | `0.10` | advanced | `ATRIUM_ASSISTANT_OPS_WORKER_MAX_RUN_USD` |
+| `ops_worker_max_run_usd` | float | `0.10` | ui | `ATRIUM_ASSISTANT_OPS_WORKER_MAX_RUN_USD` |
 | `ops_worker_monthly_usd` | float | `5` | ui | `ATRIUM_ASSISTANT_OPS_WORKER_MONTHLY_USD` |
 | `prompt_subagent` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` |
 | `prompt_system` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SYSTEM` |
-| `thread_cost_cap_usd` | float | `10` | advanced | `ATRIUM_ASSISTANT_THREAD_COST_CAP_USD` |
+| `thread_cost_cap_usd` | float | `10` | ui | `ATRIUM_ASSISTANT_THREAD_COST_CAP_USD` |
 | `weather_forecast_days` | int | `7` | advanced | `ATRIUM_ASSISTANT_WEATHER_FORECAST_DAYS` |
 | `weather_geocoding_url` | string | `https://geocoding-api.open-meteo.com/v1/search` | advanced | `ATRIUM_ASSISTANT_WEATHER_GEOCODING_URL` |
 | `weather_hourly_hours` | int | `24` | advanced | `ATRIUM_ASSISTANT_WEATHER_HOURLY_HOURS` |
@@ -157,8 +157,8 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `oidc_preset` | enum (generic, pocket_id, authelia, authentik, keycloak, google, entra) | `generic` | ui | `ATRIUM_AUTH_OIDC_PRESET` |
 | `oidc_recheck_minutes` | int | `60` | advanced | `ATRIUM_AUTH_OIDC_RECHECK_MINUTES` |
 | `oidc_scopes` | string | none | ui | `ATRIUM_AUTH_OIDC_SCOPES` |
-| `oidc_session_idle_days` | int | `7` | advanced | `ATRIUM_AUTH_OIDC_SESSION_IDLE_DAYS` |
-| `oidc_session_max_days` | int | `30` | advanced | `ATRIUM_AUTH_OIDC_SESSION_MAX_DAYS` |
+| `oidc_session_idle_days` | int | `7` | ui | `ATRIUM_AUTH_OIDC_SESSION_IDLE_DAYS` |
+| `oidc_session_max_days` | int | `30` | ui | `ATRIUM_AUTH_OIDC_SESSION_MAX_DAYS` |
 
 ## calendar
 
@@ -298,8 +298,8 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `mail_search_snippet_chars` | int | `220` | advanced | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_CHARS` |
 | `mail_search_snippet_tokens` | int | `24` | advanced | `ATRIUM_MAIL_MAIL_SEARCH_SNIPPET_TOKENS` |
 | `mail_ship24_api_key` | string | none | secret | `ATRIUM_MAIL_MAIL_SHIP24_API_KEY` |
-| `mail_ship24_destination_country` | string | none | advanced | `ATRIUM_MAIL_MAIL_SHIP24_DESTINATION_COUNTRY` |
-| `mail_ship24_destination_postcode` | string | none | advanced | `ATRIUM_MAIL_MAIL_SHIP24_DESTINATION_POSTCODE` |
+| `mail_ship24_destination_country` | string | none | ui | `ATRIUM_MAIL_MAIL_SHIP24_DESTINATION_COUNTRY` |
+| `mail_ship24_destination_postcode` | string | none | ui | `ATRIUM_MAIL_MAIL_SHIP24_DESTINATION_POSTCODE` |
 | `mail_ship24_monthly_quota` | int | `10` | advanced | `ATRIUM_MAIL_MAIL_SHIP24_MONTHLY_QUOTA` |
 | `mail_ship24_poll_days` | int | `30` | advanced | `ATRIUM_MAIL_MAIL_SHIP24_POLL_DAYS` |
 | `mail_ship24_poll_limit` | int | `40` | advanced | `ATRIUM_MAIL_MAIL_SHIP24_POLL_LIMIT` |
@@ -310,11 +310,11 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `openloops_commitment_window_days` | int | `14` | advanced | `ATRIUM_MAIL_OPENLOOPS_COMMITMENT_WINDOW_DAYS` |
 | `openloops_commitments_per_message` | int | `5` | advanced | `ATRIUM_MAIL_OPENLOOPS_COMMITMENTS_PER_MESSAGE` |
 | `openloops_owe_max_age_days` | int | `45` | advanced | `ATRIUM_MAIL_OPENLOOPS_OWE_MAX_AGE_DAYS` |
-| `openloops_remind_ahead_days` | int | `1` | advanced | `ATRIUM_MAIL_OPENLOOPS_REMIND_AHEAD_DAYS` |
+| `openloops_remind_ahead_days` | int | `1` | ui | `ATRIUM_MAIL_OPENLOOPS_REMIND_AHEAD_DAYS` |
 | `openloops_remind_hour` | int | `9` | ui | `ATRIUM_MAIL_OPENLOOPS_REMIND_HOUR` |
 | `openloops_remind_overdue_days` | int | `14` | advanced | `ATRIUM_MAIL_OPENLOOPS_REMIND_OVERDUE_DAYS` |
-| `openloops_snooze_default_days` | int | `3` | advanced | `ATRIUM_MAIL_OPENLOOPS_SNOOZE_DEFAULT_DAYS` |
-| `openloops_waiting_after_days` | int | `3` | advanced | `ATRIUM_MAIL_OPENLOOPS_WAITING_AFTER_DAYS` |
+| `openloops_snooze_default_days` | int | `3` | ui | `ATRIUM_MAIL_OPENLOOPS_SNOOZE_DEFAULT_DAYS` |
+| `openloops_waiting_after_days` | int | `3` | ui | `ATRIUM_MAIL_OPENLOOPS_WAITING_AFTER_DAYS` |
 | `openloops_waiting_max_age_days` | int | `60` | advanced | `ATRIUM_MAIL_OPENLOOPS_WAITING_MAX_AGE_DAYS` |
 | `openloops_window_days` | int | `120` | advanced | `ATRIUM_MAIL_OPENLOOPS_WINDOW_DAYS` |
 | `rebalance_cluster_iterations` | int | `15` | advanced | `ATRIUM_MAIL_REBALANCE_CLUSTER_ITERATIONS` |
@@ -346,7 +346,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `watches_scan_limit` | int | `25` | advanced | `ATRIUM_MAIL_WATCHES_SCAN_LIMIT` |
 | `watches_stale_package_days` | int | `60` | advanced | `ATRIUM_MAIL_WATCHES_STALE_PACKAGE_DAYS` |
 | `write_attempts` | int | `3` | advanced | `ATRIUM_MAIL_WRITE_ATTEMPTS` |
-| `write_cap` | int | `100` | advanced | `ATRIUM_MAIL_WRITE_CAP` |
+| `write_cap` | int | `100` | ui | `ATRIUM_MAIL_WRITE_CAP` |
 
 ## media
 
@@ -394,8 +394,8 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | --- | --- | --- | --- | --- |
 | `backfill_done` | string | none | advanced | `ATRIUM_MEMORY_BACKFILL_DONE` |
 | `concurrency` | int | `4` | advanced | `ATRIUM_MEMORY_CONCURRENCY` |
-| `effort` | string | `low` | advanced | `ATRIUM_MEMORY_EFFORT` |
-| `model` | string | `claude-haiku-5-5` | advanced | `ATRIUM_MEMORY_MODEL` |
+| `effort` | string | `low` | ui | `ATRIUM_MEMORY_EFFORT` |
+| `model` | string | `claude-haiku-5-5` | ui | `ATRIUM_MEMORY_MODEL` |
 | `node_bytes` | int | `512` | advanced | `ATRIUM_MEMORY_NODE_BYTES` |
 | `tail_messages` | int | `6` | advanced | `ATRIUM_MEMORY_TAIL_MESSAGES` |
 | `verbatim_tokens` | int | `16000` | advanced | `ATRIUM_MEMORY_VERBATIM_TOKENS` |
@@ -407,8 +407,8 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
 | `notify_body_chars` | int | `1000` | advanced | `ATRIUM_NOTIFY_NOTIFY_BODY_CHARS` |
-| `notify_nightly_cap` | int | `1` | advanced | `ATRIUM_NOTIFY_NOTIFY_NIGHTLY_CAP` |
-| `notify_per_run_cap` | int | `3` | advanced | `ATRIUM_NOTIFY_NOTIFY_PER_RUN_CAP` |
+| `notify_nightly_cap` | int | `1` | ui | `ATRIUM_NOTIFY_NOTIFY_NIGHTLY_CAP` |
+| `notify_per_run_cap` | int | `3` | ui | `ATRIUM_NOTIFY_NOTIFY_PER_RUN_CAP` |
 | `notify_title_chars` | int | `120` | advanced | `ATRIUM_NOTIFY_NOTIFY_TITLE_CHARS` |
 | `webpush_ca_file` | string | none | advanced | `ATRIUM_NOTIFY_WEBPUSH_CA_FILE` |
 | `webpush_subject` | string | none | ui | `ATRIUM_NOTIFY_WEBPUSH_SUBJECT` |
@@ -487,14 +487,14 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `page_size` | int | `50` | advanced | `ATRIUM_WEB_PAGE_SIZE` |
 | `preview_bytes` | int | `200000` | advanced | `ATRIUM_WEB_PREVIEW_BYTES` |
 | `run_history` | int | `30` | advanced | `ATRIUM_WEB_RUN_HISTORY` |
-| `snooze_choices` | string | `1,3,7,14` | advanced | `ATRIUM_WEB_SNOOZE_CHOICES` |
+| `snooze_choices` | string | `1,3,7,14` | ui | `ATRIUM_WEB_SNOOZE_CHOICES` |
 
 ## web_search
 
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
 | `dynamic_filtering` | bool | `false` | advanced | `ATRIUM_WEB_SEARCH_DYNAMIC_FILTERING` |
-| `search_web_max_cost_usd` | float | `0.15` | advanced | `ATRIUM_WEB_SEARCH_SEARCH_WEB_MAX_COST_USD` |
+| `search_web_max_cost_usd` | float | `0.15` | ui | `ATRIUM_WEB_SEARCH_SEARCH_WEB_MAX_COST_USD` |
 | `search_web_max_searches` | int | `5` | advanced | `ATRIUM_WEB_SEARCH_SEARCH_WEB_MAX_SEARCHES` |
 | `search_web_max_steps` | int | `8` | advanced | `ATRIUM_WEB_SEARCH_SEARCH_WEB_MAX_STEPS` |
 | `search_web_model` | enum (claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5) | `claude-haiku-5-5` | ui | `ATRIUM_WEB_SEARCH_SEARCH_WEB_MODEL` |

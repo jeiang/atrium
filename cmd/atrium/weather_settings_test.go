@@ -80,7 +80,7 @@ func TestPinnedWeatherLocationShowsReadOnly(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("GET /settings/integrations = %d", status)
 	}
-	if !strings.Contains(body, `id="weather_latitude" class="break-all font-mono text-xs" data-pinned`) {
+	if !strings.Contains(body, `id="weather_latitude" class="set-pinned" data-pinned`) {
 		t.Fatalf("the pinned latitude is not read-only: %.500s", body)
 	}
 	if strings.Contains(body, `name="weather_latitude"`) {

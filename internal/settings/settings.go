@@ -37,6 +37,7 @@ const (
 
 type Def struct {
 	Key       string
+	Label     string
 	Module    string
 	Type      Type
 	Default   string
@@ -69,6 +70,12 @@ func Deploy(d Def) Def {
 func Value(surface Surface, d Def) Def {
 	d.Kind = ValueKind
 	d.Surface = surface
+	return d
+}
+
+func Shown(label string, d Def) Def {
+	d.Label = label
+	d.Surface = UI
 	return d
 }
 

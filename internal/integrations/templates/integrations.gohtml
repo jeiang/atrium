@@ -1,7 +1,7 @@
 {{define "title"}}Integrations · Settings{{end}}
 {{define "heading"}}Settings · Integrations{{end}}
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
-{{template "settings_tabs" (dict "Tab" "integrations" "Auth" .Auth "Settings" .Settings)}}
+{{template "settings_nav" (dict "Tab" "integrations" "Settings" .Settings)}}
 <div class="flex flex-col gap-3">
   <a class="flex flex-col gap-1 rounded-lg border bg-card p-4 text-sm" href="/settings/integrations/google" data-integration="google">
     <span class="font-medium">Google Calendar and Gmail</span>
@@ -34,7 +34,7 @@
         {{end}}
       </div>
       <div class="flex flex-wrap gap-2">
-        <button type="submit" class="btn" data-size="sm">{{icon "check"}}Test</button>
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "check"}}Test</button>
         {{if and (not .URLPinned) (not .SecretPinned) (or .URL .SecretSet)}}<button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/settings/integrations/{{.Name}}/disconnect" formnovalidate data-confirm-submit="Disconnect {{.Label}}? Its {{.Module}} module needs settings again; its data stays.">{{icon "x"}}Disconnect</button>{{end}}
       </div>
     </form>

@@ -357,6 +357,66 @@
     @apply hidden;
   }
 
+  #content:has(> .set-nav) {
+    @apply max-w-5xl md:grid md:grid-cols-[12.5rem_minmax(0,1fr)] md:items-start md:gap-x-8;
+
+    & > :not(.set-nav) {
+      @apply md:col-start-2;
+    }
+  }
+  .set-nav {
+    @apply flex gap-px overflow-x-auto text-sm max-md:-mx-1 max-md:border-b max-md:pb-2 md:sticky md:top-16 md:col-start-1 md:row-span-full md:row-start-1 md:flex-col;
+    scrollbar-width: none;
+
+    & a {
+      @apply flex h-8 shrink-0 items-center rounded-lg px-2 whitespace-nowrap text-ink-2 hover:bg-surface-2 hover:text-ink;
+
+      &[aria-current="page"] {
+        @apply bg-clay-soft font-medium text-ink;
+      }
+    }
+    & h2 {
+      @apply px-2 pt-4 pb-1 max-md:hidden;
+    }
+  }
+  .set-group {
+    @apply flex flex-col rounded-xl border bg-surface text-sm;
+
+    & > h2 {
+      @apply flex min-h-11 items-center border-b px-4 font-medium text-ink;
+    }
+  }
+  .set-rows {
+    @apply flex flex-col text-sm;
+  }
+  .set-row {
+    @apply flex min-h-11 flex-wrap items-center gap-x-4 gap-y-1 border-t px-4 py-2 first-of-type:border-t-0;
+
+    & > label,
+    & > span {
+      @apply min-w-0 flex-1 text-ink;
+    }
+    & > :is(input:not([type="checkbox"]), select) {
+      @apply w-28 max-w-full flex-none sm:w-56;
+    }
+  }
+  .set-rows .set-row {
+    @apply px-0;
+  }
+  :is(.set-group, .set-rows) > footer {
+    @apply flex items-center justify-end gap-3 border-t px-4 py-2;
+  }
+  .set-rows > footer {
+    @apply px-0;
+  }
+  .set-pinned {
+    @apply inline-flex items-center gap-1.5 font-mono text-xs break-all text-ink-2;
+
+    & svg {
+      @apply size-3 shrink-0 text-ink-3;
+    }
+  }
+
   .rows {
     @apply flex flex-col divide-y rounded-xl border bg-surface text-sm;
   }

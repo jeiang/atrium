@@ -2,28 +2,30 @@
 {{define "heading"}}Settings · Assistant{{end}}
 {{define "body_attrs"}}{{if .Data.Saved}} data-strip-params="saved"{{end}}{{end}}
 {{define "content"}}{{$d := .Data}}
-{{template "settings_tabs" (dict "Tab" "assistant" "Auth" .Auth "Settings" .Settings)}}
-<form method="post" action="/settings/assistant" class="flex max-w-xl flex-col gap-4">
+{{template "settings_nav" (dict "Tab" "assistant" "Settings" .Settings)}}
+<form method="post" action="/settings/assistant" class="set-group">
   <input type="hidden" name="csrf_token" value="{{.CSRF}}">
-  {{with $d.Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.}}</p>{{end}}
-  <div role="group" class="field">
+  <h2>New threads</h2>
+  {{with $d.Error}}<p class="px-4 py-2 text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.}}</p>{{end}}
+  <div role="group" class="set-row">
     <label for="default-model">Default model</label>
-    <select id="default-model" name="model">
+    <select id="default-model" name="model" class="select">
       {{range $d.Models}}<option value="{{.ID}}"{{if eq .ID $d.Defaults.Model}} selected{{end}}>{{.Name}}</option>{{end}}
     </select>
   </div>
-  <div role="group" class="field">
+  <div role="group" class="set-row">
     <label for="default-effort">Default effort</label>
-    <select id="default-effort" name="effort">
+    <select id="default-effort" name="effort" class="select">
       {{range $d.Efforts}}<option value="{{.}}"{{if eq . $d.Defaults.Effort}} selected{{end}}>{{.}}</option>{{end}}
     </select>
   </div>
-  <div role="group" class="field">
+  <div role="group" class="set-row">
     <label for="default-context">Default context</label>
-    <select id="default-context" name="context_limit">
+    <select id="default-context" name="context_limit" class="select">
       {{range $d.ContextLimits}}<option value="{{.}}"{{if eq . $d.Defaults.ContextLimit}} selected{{end}}>{{ctxlabel .}}</option>{{end}}
     </select>
   </div>
-  <div><button type="submit" class="btn">{{icon "check"}}Save</button></div>
+  <footer><button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button></footer>
 </form>
+{{template "settings_groups" .}}
 {{end}}
