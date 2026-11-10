@@ -1,97 +1,88 @@
 {{define "title"}}Channels{{end}}
 {{define "heading"}}Media · Channels{{end}}
-{{define "content"}}{{$csrf := .CSRF}}{{$q := .Data.Q}}{{$form := .Data.Form}}{{$status := .Data.Status}}
+{{define "content"}}{{$csrf := .CSRF}}{{$q := .Data.Q}}{{$form := .Data.Form}}{{$status := .Data.Status}}{{$picked := or $form.Name $form.IMDb}}
+<div class="mx-auto flex w-full max-w-3xl flex-col gap-5">
+<div class="flex flex-wrap items-center gap-2">
+  {{if .Data.TMDB}}
+  <form method="get" action="/apps/media/channels" class="flex min-w-64 flex-1 items-center gap-2" role="search">
+    <label for="q" class="sr-only">Find a show to watch for</label>
+    <div class="input-group h-9 flex-1">
+      {{icon "search" "ms-3 size-4 shrink-0 p-0 text-muted-foreground"}}
+      <input id="q" name="q" type="search" value="{{$q}}" placeholder="Find a show to watch for">
+    </div>
+    <button type="submit" class="btn" data-size="sm" data-variant="outline">Search</button>
+  </form>
+  {{else}}<span class="flex-1"></span>{{end}}
+  <form method="post" action="/apps/media/channels/poll">
+    <input type="hidden" name="csrf_token" value="{{$csrf}}">
+    <button type="submit" class="btn" data-size="sm" data-variant="outline" title="{{if $status.LastCheck}}Last check {{ts $status.LastCheck "datetime"}}{{else}}Not checked yet{{end}}">{{icon "refresh-cw"}}Check now</button>
+  </form>
+</div>
+{{range $status.Errors}}<p class="text-xs text-destructive" role="alert">{{.}}</p>{{end}}
 
-<section class="flex flex-col gap-3" aria-labelledby="channels-h">
-  <div class="flex flex-wrap items-center justify-between gap-2">
-    <h2 id="channels-h" class="text-sm font-medium">Watching ({{len .Data.Channels}})</h2>
-    <form method="post" action="/apps/media/channels/poll">
-      <input type="hidden" name="csrf_token" value="{{$csrf}}">
-      <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "play"}}Check now</button>
-    </form>
+{{if .Data.Searched}}
+<section class="flex flex-col gap-2" aria-labelledby="find-h">
+  <h2 id="find-h" class="eyebrow">Results for “{{$q}}”</h2>
+  <ul class="rows" role="list" aria-label="Search results">
+    {{range .Data.Results}}
+    <li class="row">
+      <span class="row-main"><span class="row-title no-underline">{{.Name}}</span>{{if .Year}}<span class="row-meta">{{.Year}}</span>{{end}}</span>
+      <a class="btn" data-size="sm" data-variant="outline" href="/apps/media/channels?tmdb_id={{.TmdbID}}&amp;name={{queryval .Name}}&amp;q={{queryval $q}}#new-channel">{{icon "plus"}}Watch</a>
+    </li>
+    {{else}}
+    <li class="row text-ink-3">No shows found.</li>
+    {{end}}
+  </ul>
+</section>
+{{end}}
+
+<form id="new-channel" method="post" action="/apps/media/channels" class="set-group" aria-labelledby="new-h"{{if and .Data.TMDB (not $picked)}} hidden{{end}}>
+  <h2 id="new-h">{{if $form.Name}}Watch {{$form.Name}}{{else}}New channel{{end}}</h2>
+  <input type="hidden" name="csrf_token" value="{{$csrf}}">
+  <input type="hidden" name="tmdb_id" value="{{$form.TmdbID}}">
+  <div role="radiogroup" class="set-row" aria-label="Quality" data-quality data-base="{{$form.Base}}">
+    <span>Quality</span>
+    <span class="flex flex-wrap gap-3 text-sm">
+      {{range list "any" "720p" "1080p" "2160p"}}<label class="flex items-center gap-1.5"><input type="radio" class="input" name="quality" value="{{.}}"{{if eq . "1080p"}} checked{{end}}>{{.}}</label>{{end}}
+    </span>
   </div>
-  <p class="text-xs text-muted-foreground">{{if $status.LastCheck}}Last check {{template "when" (dict "epoch" $status.LastCheck "style" "datetime")}}.{{else}}Not checked yet.{{end}}</p>
-  {{range $status.Errors}}<p class="text-xs text-destructive" role="alert">{{.}}</p>{{end}}
+  <div role="group" class="set-row"><label for="backfill">Download episodes that are already out</label><input id="backfill" type="checkbox" role="switch" class="input" name="backfill" value="1"{{if $form.Backfill}} checked{{end}}></div>
+  <details class="border-t"{{if or (not .Data.TMDB) (not $form.IMDb)}} open{{end}}>
+    <summary class="set-row cursor-pointer list-none text-ink-2"><span>Advanced</span>{{icon "chevron-down" "size-4 text-ink-3"}}</summary>
+    <div role="group" class="set-row"><label for="name">Show</label><input id="name" name="name" type="text" class="input" value="{{$form.Name}}" placeholder="Lanterns" required></div>
+    <div role="group" class="set-row"><label for="imdb">IMDb id</label><input id="imdb" name="imdb" type="text" class="input font-mono" value="{{$form.IMDb}}" placeholder="tt1234567" required></div>
+    <div role="group" class="set-row"><label for="pattern">Title pattern</label><input id="pattern" name="pattern" type="text" class="input font-mono" value="{{$form.Pattern}}" placeholder="^Lanterns S\d+E\d+ 1080p" spellcheck="false" autocomplete="off" required title="Matched against EZTV release titles every 30 minutes; matches download as media torrents"></div>
+    <div role="group" class="set-row"><label for="case">Case-sensitive</label><input id="case" class="input" type="checkbox" role="switch" name="case_sensitive" value="1"{{if $form.CaseSensitive}} checked{{end}}></div>
+  </details>
+  <div id="preview" class="border-t px-4 py-2 empty:hidden" hx-post="/apps/media/channels/preview" hx-include="#new-channel" hx-trigger="{{if $form.IMDb}}load, {{end}}input changed delay:500ms from:#pattern, change from:#case, change from:#imdb" hx-indicator="#preview-spinner"></div>
+  <footer>
+    {{template "spinner" (dict "id" "preview-spinner" "label" "Fetching releases")}}
+    <button type="submit" class="btn" data-size="sm">{{icon "plus"}}Watch</button>
+  </footer>
+</form>
+
+<section class="flex flex-col gap-2" aria-labelledby="channels-h">
+  <div class="flex items-center gap-2"><h2 id="channels-h" class="eyebrow">Watching</h2>{{if .Data.Channels}}<span class="count">{{len .Data.Channels}}</span>{{end}}</div>
   {{if .Data.Channels}}
-  <ul class="flex flex-col gap-3" role="list" aria-label="Channels">
+  <ul class="rows" role="list" aria-label="Channels">
     {{range .Data.Channels}}
-    <li class="flex flex-wrap items-center justify-between gap-3 rounded-lg border bg-card p-4">
-      <div class="flex min-w-0 grow basis-64 flex-col gap-1">
-        <div class="flex flex-wrap items-center gap-2">
-          <span class="text-sm font-medium">{{.Name}}</span>
-          <span class="badge" data-variant="outline">tt{{.IMDb}}</span>
-          {{if .CaseSensitive}}<span class="badge" data-variant="secondary">case-sensitive</span>{{end}}
-          {{if not .Primed}}<span class="badge" data-variant="outline">first check pending</span>{{end}}
-        </div>
-        <code class="break-all font-mono text-xs">{{.Pattern}}</code>
-      </div>
+    <li class="row">
+      <span class="row-main">
+        <span class="row-title no-underline">{{.Name}}</span>
+        <span class="row-meta font-mono text-xs">{{.Pattern}}{{if .CaseSensitive}} · case-sensitive{{end}}</span>
+      </span>
+      {{if not .Primed}}<span class="badge" data-variant="outline">first check pending</span>{{end}}
       <form method="post" action="/apps/media/channels/{{.ID}}/delete">
         <input type="hidden" name="csrf_token" value="{{$csrf}}">
-        <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "trash-2"}}Remove</button>
+        <button type="submit" class="btn" data-size="sm" data-variant="ghost" title="tt{{.IMDb}}">Stop</button>
       </form>
     </li>
     {{end}}
   </ul>
   {{else}}
-  {{template "empty_state" (dict "icon_name" "tv" "title" "No channels")}}
+  <p class="text-sm text-ink-3" data-empty>No channels</p>
   {{end}}
 </section>
-
-<section class="flex flex-col gap-3" aria-labelledby="find-h">
-  <h2 id="find-h" class="text-sm font-medium">Find a show</h2>
-  {{if .Data.TMDB}}
-  <form method="get" action="/apps/media/channels" class="flex flex-wrap items-end gap-2">
-    <div role="group" class="field min-w-64 flex-1">
-      <label for="q">TMDB search</label>
-      <input id="q" name="q" type="search" value="{{$q}}" placeholder="Show name">
-    </div>
-    <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "search"}}Search</button>
-  </form>
-  {{if .Data.Searched}}
-  <ul class="flex flex-col divide-y rounded-lg border text-sm" role="list" aria-label="Search results">
-    {{range .Data.Results}}
-    <li class="flex flex-wrap items-center gap-3 px-3 py-2">
-      <span class="flex-1">{{.Name}}{{if .Year}} <span class="text-muted-foreground">({{.Year}})</span>{{end}}</span>
-      <a class="btn" data-size="sm" href="/apps/media/channels?tmdb_id={{.TmdbID}}&amp;name={{queryval .Name}}&amp;q={{queryval $q}}#new-channel">Use</a>
-    </li>
-    {{else}}
-    <li class="px-3 py-2 text-muted-foreground">No shows found.</li>
-    {{end}}
-  </ul>
-  {{end}}
-  {{else}}
-  <p class="text-xs text-muted-foreground">No TMDB read token is set: enter the IMDb id directly.</p>
-  {{end}}
-</section>
-
-<form id="new-channel" method="post" action="/apps/media/channels" class="flex flex-col gap-3 rounded-lg border p-4" aria-labelledby="new-h">
-  <h2 id="new-h" class="text-sm font-medium">New channel</h2>
-  <input type="hidden" name="csrf_token" value="{{$csrf}}">
-  <input type="hidden" name="tmdb_id" value="{{$form.TmdbID}}">
-  <div class="grid gap-3 sm:grid-cols-2">
-    <div role="group" class="field">
-      <label for="name">Show</label>
-      <input id="name" name="name" type="text" value="{{$form.Name}}" placeholder="Lanterns" required>
-    </div>
-    <div role="group" class="field">
-      <label for="imdb">IMDb id</label>
-      <input id="imdb" name="imdb" type="text" value="{{$form.IMDb}}" class="font-mono" placeholder="tt1234567" required>
-    </div>
-  </div>
-  <div class="grid gap-3 sm:grid-cols-[1fr_auto]">
-    <div role="group" class="field">
-      <label for="pattern">Title regex</label>
-      <input id="pattern" name="pattern" type="text" value="{{$form.Pattern}}" class="font-mono" placeholder="^Lanterns S\d+E\d+ 1080p" spellcheck="false" autocomplete="off" required title="Matched against EZTV release titles every 30 minutes; matches download as media torrents">
-    </div>
-    <label class="flex h-8 items-center gap-2 self-end text-sm"><input id="case" class="input" type="checkbox" name="case_sensitive" value="1"{{if $form.CaseSensitive}} checked{{end}}>Case-sensitive</label>
-  </div>
-  <label class="flex items-start gap-2 text-sm"><input class="input mt-0.5" type="checkbox" name="backfill" value="1"{{if $form.Backfill}} checked{{end}}>Download matching releases that are already out</label>
-  <div class="flex flex-wrap items-center gap-2">
-    <button type="submit" class="btn" data-size="sm">{{icon "plus"}}Watch</button>
-    <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/apps/media/channels/preview" hx-include="#new-channel" hx-target="#preview" hx-indicator="#preview-spinner">{{icon "search"}}Preview against EZTV</button>
-    {{template "spinner" (dict "id" "preview-spinner" "label" "Fetching releases")}}
-  </div>
-  <div id="preview" hx-post="/apps/media/channels/preview" hx-include="#new-channel" hx-trigger="{{if $form.IMDb}}load, {{end}}input changed delay:500ms from:#pattern, change from:#case, change from:#imdb" hx-indicator="#preview-spinner"></div>
-</form>
 {{template "tmdb_attribution"}}
+</div>
 {{end}}
