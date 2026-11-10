@@ -67,7 +67,7 @@ func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toa
 }
 
 func patternBase(name string) string {
-	return "^" + regexp.QuoteMeta(name) + ` S\d+E\d+`
+	return "^" + regexp.QuoteMeta(name) + `( \d{4})? S\d+E\d+`
 }
 
 func (s *service) channelsIndex(w http.ResponseWriter, r *http.Request) {
