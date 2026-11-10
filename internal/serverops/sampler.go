@@ -45,12 +45,13 @@ func Callables() map[string]worker.Callable {
 func Sample(ctx context.Context, d *db.DB, env config.Env, now float64) error {
 	set := assistant.Read(ctx, d.Read)
 	hosts := SplitHosts(set.Text(KeyHosts))
+	selector := set.Text(KeyLabelSelector)
 	queries := map[string]string{
-		MetricUp:          defaultQueryUp,
-		MetricCPU:         defaultQueryCPU,
-		MetricMemory:      defaultQueryMemory,
-		MetricDisk:        defaultQueryDisk,
-		MetricFailedUnits: defaultQueryFailedUnit,
+		MetricUp:          set.Text(KeyQueryUp),
+		MetricCPU:         set.Text(KeyQueryCPU),
+		MetricMemory:      set.Text(KeyQueryMemory),
+		MetricDisk:        set.Text(KeyQueryDisk),
+		MetricFailedUnits: set.Text(KeyQueryFailedUnit),
 	}
 	uid := set.Text(grafanatools.KeyMetricsUID)
 	if err := set.Err(); err != nil {
@@ -73,7 +74,8 @@ func Sample(ctx context.Context, d *db.DB, env config.Env, now float64) error {
 	stamp := time.Unix(int64(now), 0).In(loc).Format("15:04")
 	for _, host := range hosts {
 		for _, metric := range Metrics[:len(Metrics)-1] {
-			expr := strings.ReplaceAll(queries[metric], "{{host}}", host)
+			expr := strings.ReplaceAll(queries[metric], "{{selector}}", selector)
+			expr = strings.ReplaceAll(expr, "{{host}}", host)
 			payload, err := grafanatools.Query(ctx, d.Read, lim, http.MethodPost, "/api/ds/query", "", map[string]any{
 				"queries": []any{map[string]any{
 					"refId": "A", "datasource": map[string]any{"uid": uid}, "expr": expr, "instant": true, "range": false,

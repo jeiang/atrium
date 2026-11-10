@@ -231,6 +231,12 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `grafana_url` | string | none | ui | `ATRIUM_GRAFANA_GRAFANA_URL` |
 | `grafana_viewer_token` | string | none | secret | `ATRIUM_GRAFANA_GRAFANA_VIEWER_TOKEN` |
 | `ops_hosts` | string | none | ui | `ATRIUM_GRAFANA_OPS_HOSTS` |
+| `ops_label_selector` | string | `job="node"` | advanced | `ATRIUM_GRAFANA_OPS_LABEL_SELECTOR` |
+| `ops_query_cpu` | string | `100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle",{{selector}},instance=~"{{host}}(:.*)?"}[5m])) * 100)` | advanced | `ATRIUM_GRAFANA_OPS_QUERY_CPU` |
+| `ops_query_disk` | string | `(1 - node_filesystem_avail_bytes{{{selector}},instance=~"{{host}}(:.*)?" ,mountpoint="/"} / node_filesystem_size_bytes{{{selector}},instance=~"{{host}}(:.*)?" ,mountpoint="/"}) * 100` | advanced | `ATRIUM_GRAFANA_OPS_QUERY_DISK` |
+| `ops_query_failed_units` | string | `sum by(instance) (node_systemd_unit_state{state="failed",{{selector}},instance=~"{{host}}(:.*)?"} == 1)` | advanced | `ATRIUM_GRAFANA_OPS_QUERY_FAILED_UNITS` |
+| `ops_query_mem` | string | `(1 - node_memory_MemAvailable_bytes{{{selector}},instance=~"{{host}}(:.*)?"} / node_memory_MemTotal_bytes{{{selector}},instance=~"{{host}}(:.*)?"}) * 100` | advanced | `ATRIUM_GRAFANA_OPS_QUERY_MEM` |
+| `ops_query_up` | string | `up{{{selector}},instance=~"{{host}}(:.*)?"}` | advanced | `ATRIUM_GRAFANA_OPS_QUERY_UP` |
 
 ## mail
 

@@ -349,7 +349,12 @@ behavior-parity target.
   datasource and the alerts endpoint, records typed samples in
   `ops_samples` (up, cpu_pct, mem_pct, disk_root_pct, failed_units,
   alerts_firing; 14-day retention) and upserts one typed `ops` fact per
-  host and metric with a 24-hour expiry. When a fact changes state, crosses
+  host and metric with a 24-hour expiry. The label selector and the five
+  queries are settings (`ops_label_selector`, `ops_query_up`,
+  `ops_query_cpu`, `ops_query_mem`, `ops_query_disk`,
+  `ops_query_failed_units`); each query is a single-line PromQL template
+  with `{{host}}` and optionally `{{selector}}`, validated on save, and
+  `ops_hosts` accepts address-shaped ids only. When a fact changes state, crosses
   the 90% memory or disk threshold, or its firing alert set changes, and
   the change set differs from the last worker run's, it starts one worker
   run in the persistent `Ops` thread with the typed change set and quoted

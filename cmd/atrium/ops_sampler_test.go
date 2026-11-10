@@ -70,7 +70,7 @@ func (f *fakeOpsGrafana) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			value = 61.5
 		case strings.Contains(expr, "node_filesystem_avail_bytes"):
 			value = 40
-		case strings.Contains(expr, "node_systemd_units"):
+		case strings.Contains(expr, "node_systemd_unit_state"):
 			value = 0
 		default:
 			value = f.upValue()
@@ -260,6 +260,35 @@ func TestOpsSamplerWritesTypedFactsWithoutAModel(t *testing.T) {
 	}
 	if len(future.Hits) != 0 {
 		t.Errorf("facts still visible after 24h: %d hits", len(future.Hits))
+	}
+}
+
+func TestOpsQuerySettingsRefuseNonQueryValues(t *testing.T) {
+	dir := t.TempDir()
+	if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list: exit %d %s", code, stderr)
+	}
+	bad := []struct{ key, value string }{
+		{"ops_query_up", `up{`},
+		{"ops_query_up", `up{job="node"}`},
+		{"ops_query_up", "up{job=\"node\"}\nnode_systemd_unit_state"},
+		{"ops_label_selector", `job="node"}`},
+		{"ops_hosts", `node"}`},
+	}
+	for _, c := range bad {
+		if code, _, _ := runIn(t, dir, "settings", "set", c.key, c.value); code == cli.ExitOK {
+			t.Errorf("settings set %s %q was accepted", c.key, c.value)
+		}
+	}
+	good := []struct{ key, value string }{
+		{"ops_label_selector", `job="node"`},
+		{"ops_query_up", `up{{{selector}},instance=~"{{host}}(:.*)?"}`},
+		{"ops_hosts", "node-a"},
+	}
+	for _, c := range good {
+		if code, _, stderr := runIn(t, dir, "settings", "set", c.key, c.value); code != cli.ExitOK {
+			t.Errorf("settings set %s %q: exit %d %s", c.key, c.value, code, stderr)
+		}
 	}
 }
 

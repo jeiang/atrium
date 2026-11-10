@@ -187,6 +187,12 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_GRAFANA_GRAFANA_URL` | `grafana.grafana_url` |
 | `ATRIUM_GRAFANA_GRAFANA_VIEWER_TOKEN` | `grafana.grafana_viewer_token` |
 | `ATRIUM_GRAFANA_OPS_HOSTS` | `grafana.ops_hosts` |
+| `ATRIUM_GRAFANA_OPS_LABEL_SELECTOR` | `grafana.ops_label_selector` |
+| `ATRIUM_GRAFANA_OPS_QUERY_CPU` | `grafana.ops_query_cpu` |
+| `ATRIUM_GRAFANA_OPS_QUERY_DISK` | `grafana.ops_query_disk` |
+| `ATRIUM_GRAFANA_OPS_QUERY_FAILED_UNITS` | `grafana.ops_query_failed_units` |
+| `ATRIUM_GRAFANA_OPS_QUERY_MEM` | `grafana.ops_query_mem` |
+| `ATRIUM_GRAFANA_OPS_QUERY_UP` | `grafana.ops_query_up` |
 | `ATRIUM_MAIL_BIRTHDAYS_DEFAULT_DAYS` | `mail.birthdays_default_days` |
 | `ATRIUM_MAIL_BIRTHDAYS_MAX_DAYS` | `mail.birthdays_max_days` |
 | `ATRIUM_MAIL_DELETION_INTERVAL_SECONDS` | `mail.deletion_interval_seconds` |
