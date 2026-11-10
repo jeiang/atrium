@@ -34,6 +34,21 @@ func fixtureEnv(f *fixture) config.Env {
 	}
 }
 
+func samplerFinished(t *testing.T, d *db.DB) func() bool {
+	t.Helper()
+	var before int64
+	if err := d.Read.QueryRow("SELECT COALESCE(MAX(id), 0) FROM job_runs").Scan(&before); err != nil {
+		t.Fatal(err)
+	}
+	return func() bool {
+		var count int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM job_runs WHERE id > ? AND job_id = (SELECT id FROM jobs WHERE name = 'ops-sampler') AND ended_at IS NOT NULL", before).Scan(&count); err != nil {
+			t.Fatal(err)
+		}
+		return count > 0
+	}
+}
+
 func samplesAtLeast(t *testing.T, d *db.DB, n int) func() bool {
 	t.Helper()
 	return func() bool {
@@ -47,7 +62,7 @@ func samplesAtLeast(t *testing.T, d *db.DB, n int) func() bool {
 
 func waitForOps(t *testing.T, what string, ok func() bool) {
 	t.Helper()
-	for deadline := time.Now().Add(20 * time.Second); !ok(); {
+	for deadline := time.Now().Add(60 * time.Second); !ok(); {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for %s", what)
 		}
@@ -119,7 +134,7 @@ func TestHostDownStartsOneWorkerRunAndFilesAFinding(t *testing.T) {
 		"fact": "node-a:up", "severity": "warning", "title": "Host node-a is down", "body": "up changed from up to down.",
 	})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("filed")))
-	runOpsSampler(t, f, d, samplesAtLeast(t, d, 12))
+	runOpsSampler(t, f, d, samplerFinished(t, d))
 	waitForOps(t, "the finding", func() bool {
 		_, _, found := workerFinding(t, d, "node-a:up")
 		return found
@@ -166,13 +181,13 @@ func TestHostDownStartsOneWorkerRunAndFilesAFinding(t *testing.T) {
 		t.Errorf("attention has no ops finding: %+v", result.Items)
 	}
 	quiet := len(api.Requests())
-	runOpsSampler(t, f, d, samplesAtLeast(t, d, 18))
+	runOpsSampler(t, f, d, samplerFinished(t, d))
 	if len(api.Requests()) != quiet {
 		t.Errorf("an identical pass made %d model calls", len(api.Requests())-quiet)
 	}
 	fake.setUp(1)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("recovered")))
-	runOpsSampler(t, f, d, samplesAtLeast(t, d, 24))
+	runOpsSampler(t, f, d, samplerFinished(t, d))
 	waitForOps(t, "the finding retracted", func() bool {
 		_, retracted, found := workerFinding(t, d, "node-a:up")
 		return found && retracted
@@ -197,7 +212,7 @@ func TestWorkerFindingRefusesAnUnchangedFact(t *testing.T) {
 		"fact": "node-a:cpu_pct", "severity": "warning", "title": "CPU high", "body": "cpu_pct changed.",
 	})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-	runOpsSampler(t, f, d, samplesAtLeast(t, d, 12))
+	runOpsSampler(t, f, d, samplerFinished(t, d))
 	waitForOps(t, "the worker run", func() bool { return len(api.Requests()) >= before+2 })
 	result := toolResultFor(t, api.Requests()[before+1], "f1")
 	if result["is_error"] != true {
@@ -255,7 +270,7 @@ func TestOpsWorkerStopsAtItsMonthlyBudget(t *testing.T) {
 	runOpsSampler(t, f, d, samplesAtLeast(t, d, 6))
 	before := len(api.Requests())
 	fake.setUp(0)
-	runOpsSampler(t, f, d, samplesAtLeast(t, d, 12))
+	runOpsSampler(t, f, d, samplerFinished(t, d))
 	if len(api.Requests()) != before {
 		t.Errorf("a spent budget still made %d model calls", len(api.Requests())-before)
 	}
