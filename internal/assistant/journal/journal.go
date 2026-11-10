@@ -129,18 +129,20 @@ type Limits struct {
 	SystemExtra  *string
 	AllowedTools []string
 	ToolChoice   *string
+	Report       json.RawMessage
 }
 
 type limitsJSON struct {
-	MaxSteps     *int64    `json:"max_steps,omitempty"`
-	MaxCostUSD   *float64  `json:"max_cost_usd,omitempty"`
-	SystemExtra  *string   `json:"system_extra,omitempty"`
-	AllowedTools *[]string `json:"allowed_tools,omitempty"`
-	ToolChoice   *string   `json:"tool_choice,omitempty"`
+	MaxSteps     *int64          `json:"max_steps,omitempty"`
+	MaxCostUSD   *float64        `json:"max_cost_usd,omitempty"`
+	SystemExtra  *string         `json:"system_extra,omitempty"`
+	AllowedTools *[]string       `json:"allowed_tools,omitempty"`
+	ToolChoice   *string         `json:"tool_choice,omitempty"`
+	Report       json.RawMessage `json:"report,omitempty"`
 }
 
 func (l Limits) wire() limitsJSON {
-	w := limitsJSON{MaxSteps: l.MaxSteps, MaxCostUSD: l.MaxCostUSD, SystemExtra: l.SystemExtra, ToolChoice: l.ToolChoice}
+	w := limitsJSON{MaxSteps: l.MaxSteps, MaxCostUSD: l.MaxCostUSD, SystemExtra: l.SystemExtra, ToolChoice: l.ToolChoice, Report: l.Report}
 	if l.AllowedTools != nil {
 		w.AllowedTools = &l.AllowedTools
 	}
@@ -169,7 +171,7 @@ func LimitsOf(ctx context.Context, q db.Querier, runID int64) (Limits, error) {
 	if err := json.Unmarshal([]byte(*raw), &stored); err != nil {
 		return Limits{}, fmt.Errorf("journal: run %d limits_json: %w", runID, err)
 	}
-	out := Limits{MaxSteps: stored.MaxSteps, MaxCostUSD: stored.MaxCostUSD, SystemExtra: stored.SystemExtra, ToolChoice: stored.ToolChoice}
+	out := Limits{MaxSteps: stored.MaxSteps, MaxCostUSD: stored.MaxCostUSD, SystemExtra: stored.SystemExtra, ToolChoice: stored.ToolChoice, Report: stored.Report}
 	if stored.AllowedTools != nil {
 		out.AllowedTools = *stored.AllowedTools
 	}

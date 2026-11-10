@@ -188,7 +188,9 @@ func (r *Registry) SubagentPool() ([]tool.Tool, error) {
 	if err != nil {
 		return nil, err
 	}
-	return slices.DeleteFunc(all, func(t tool.Tool) bool { return t.Effect != tool.Read || !t.Contexts.Has(tool.Sub) }), nil
+	return slices.DeleteFunc(all, func(t tool.Tool) bool {
+		return t.Name == "report" || t.Effect != tool.Read || !t.Contexts.Has(tool.Sub)
+	}), nil
 }
 
 func (r *Registry) enabled(ctx context.Context, q db.Querier, name string) (bool, error) {

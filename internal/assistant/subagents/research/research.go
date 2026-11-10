@@ -10,7 +10,6 @@ import (
 	"math/big"
 	"slices"
 	"strings"
-	"sync"
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant"
@@ -36,40 +35,6 @@ const schemaFormat = `{"type":"object","properties":{"role":%s,"task":{"type":"s
 	`"description":"Self-contained brief: question, constraints, what to return."},` +
 	`"context_ids":{"type":"array","items":{"type":["string","integer"]},"maxItems":20}},` +
 	`"required":["role","task"],"additionalProperties":false}`
-
-type gate struct {
-	mu     sync.Mutex
-	active int
-	wake   chan struct{}
-}
-
-var slots = &gate{wake: make(chan struct{})}
-
-func (g *gate) acquire(ctx context.Context, limit int) error {
-	for {
-		g.mu.Lock()
-		if g.active < limit {
-			g.active++
-			g.mu.Unlock()
-			return nil
-		}
-		wake := g.wake
-		g.mu.Unlock()
-		select {
-		case <-wake:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-}
-
-func (g *gate) release() {
-	g.mu.Lock()
-	g.active--
-	close(g.wake)
-	g.wake = make(chan struct{})
-	g.mu.Unlock()
-}
 
 type Research struct{ runner *loop.Runner }
 
@@ -198,10 +163,10 @@ func (r *Research) handle(ctx context.Context, tc *tool.Context, args tool.Args)
 	if err := limits.Err(); err != nil {
 		return nil, err
 	}
-	if err := slots.acquire(ctx, maxConcurrent); err != nil {
+	if err := subagents.Slots.Acquire(ctx, maxConcurrent); err != nil {
 		return nil, err
 	}
-	defer slots.release()
+	defer subagents.Slots.Release()
 	var child int64
 	title := role + ": " + threads.TitleFrom(task)
 	if err := tc.DB.WithTx(ctx, func(tx *sql.Tx) (err error) {
