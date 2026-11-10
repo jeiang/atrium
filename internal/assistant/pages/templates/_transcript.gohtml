@@ -3,7 +3,7 @@
 {{define "chat_transcript"}}{{$v := .view}}{{$csrf := .csrf}}{{$t := $v.Thread}}{{$active := $v.Active}}{{$busy := and $active (eq $active.State "running")}}
 {{range $v.Items}}{{template "chat_item" (dict "Item" . "thread" $t "last_seq" $v.LastOperatorSeq "busy" $busy "csrf" $csrf)}}{{end}}
 {{range $v.Runs}}{{if and (eq .State "failed") (not .Superseded)}}
-<li class="ps-10" data-run="{{.ID}}">
+<li data-run="{{.ID}}">
   <div class="alert" data-variant="destructive" role="alert">
     {{icon "circle-alert"}}
     <p>Run {{.ID}} stopped: {{.Error}}</p>
@@ -27,7 +27,7 @@
 {{- end}}
 
 {{define "chat_parked"}}
-<li class="msg-indent" id="run-{{.run_id}}">
+<li id="run-{{.run_id}}">
   <div class="flex flex-col gap-3 rounded-lg border border-clay/40 bg-card p-4" data-card="question">
     <p class="eyebrow flex items-center gap-1.5 text-clay">{{icon "messages-square" "size-3.5"}}Question</p>
     <p class="text-pretty">{{.question.Text}}</p>
@@ -41,7 +41,7 @@
 {{- end}}
 
 {{define "chat_interrupted"}}
-<li class="ps-10" id="run-{{.run_id}}">
+<li id="run-{{.run_id}}">
   <div class="alert" role="alert">
     {{icon "circle-alert"}}
     <p>This run was interrupted while a write was in flight. Resume to let the assistant check what happened and continue.</p>

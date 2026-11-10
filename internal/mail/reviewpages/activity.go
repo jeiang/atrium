@@ -287,6 +287,10 @@ func (s *service) undone(w http.ResponseWriter, r *http.Request, entry ActivityE
 		http.Redirect(w, r, "/activity", http.StatusSeeOther)
 		return
 	}
+	if receiptView(r) {
+		s.fragment(w, r, http.StatusOK, "_receipt.gohtml", activityRowData{E: entry}, notice)
+		return
+	}
 	s.fragment(w, r, http.StatusOK, "_activity_row.gohtml", activityRowData{E: entry}, notice)
 }
 

@@ -115,7 +115,7 @@
 {{define "attach_field"}}<input type="file" name="upload" multiple class="sr-only" tabindex="-1" data-upload>
 <ul class="flex flex-wrap gap-1 empty:hidden" aria-label="Files to send" data-chips></ul>{{end}}
 
-{{define "attach_button"}}<button type="button" class="btn" data-size="sm" data-variant="ghost" data-action="pick-files" title="Attach files: PDF, images, text, CSV, docx, xlsx">{{icon "paperclip" "size-3.5"}}Attach</button>{{end}}
+{{define "attach_button"}}<button type="button" class="btn" data-size="icon-sm" data-variant="ghost" data-action="pick-files" aria-label="Attach files" title="Attach files: PDF, images, text, CSV, docx, xlsx">{{icon "paperclip"}}</button>{{end}}
 
 {{define "activity_step"}}{{$state := .State}}
 {{if eq .Kind "thinking"}}
@@ -165,7 +165,6 @@
 {{define "chat_item"}}{{$item := .Item}}{{$thread := opt . "thread" nil}}{{$last_seq := opt . "last_seq" nil}}{{$busy := opt . "busy" false}}{{$csrf := opt . "csrf" ""}}
 {{if eq $item.Kind "user"}}
 <li class="msg group" data-role="user" data-seq="{{$item.Seq}}" id="m{{$item.Seq}}">
-  <span class="msg-avatar" aria-hidden="true">{{icon "user"}}</span>
   <div class="msg-body">
     <div class="msg-user" data-text>{{reflinks $item.Text}}</div>
     {{if $thread}}{{template "file_chips" (dict "thread_id" $thread.ID "files" ($item.Files))}}{{end}}
@@ -192,7 +191,6 @@
 </li>
 {{else if eq $item.Kind "assistant"}}
 <li class="msg group" data-role="assistant" data-seq="{{$item.Seq}}" id="m{{$item.Seq}}">
-  <span class="msg-avatar" data-role="assistant" aria-hidden="true">a</span>
   <div class="msg-body">
     <div class="markdown prose-assistant">{{markdown $item.Text}}</div>
     {{with $item.Citations}}
@@ -218,7 +216,7 @@
   </div>
 </li>
 {{else if eq $item.Kind "activity"}}
-<li class="msg-indent" data-seq="{{$item.Seq}}" data-run="{{str $item.RunID}}">
+<li data-seq="{{$item.Seq}}" data-run="{{str $item.RunID}}">
   <details class="activity">
     <summary>{{icon "chevron-right" "activity-chevron"}}<span>{{template "activity_summary" $item.Steps}}</span><span class="text-ink-3">{{len $item.Steps}} step{{if ne (len $item.Steps) 1}}s{{end}}</span></summary>
     <ol class="activity-steps">
@@ -227,7 +225,7 @@
   </details>
 </li>
 {{else if eq $item.Kind "digest"}}
-<li class="msg-indent" data-seq="{{$item.Seq}}">
+<li data-seq="{{$item.Seq}}">
   <div class="rounded-xl border bg-card px-3 py-2.5 text-sm">
     <div class="flex items-center gap-2 font-medium">{{icon "sun" "size-4 shrink-0 text-muted-foreground"}}Morning digest</div>
     <ul class="mt-1 flex flex-col gap-0.5 text-muted-foreground">
@@ -237,7 +235,7 @@
 </li>
 {{else if eq $item.Kind "draft"}}
 {{$d := $item.Draft}}
-<li id="draft-{{get $d "id"}}" class="msg-indent" data-seq="{{$item.Seq}}" data-draft="{{get $d "id"}}" hx-get="/drafts/{{get $d "id"}}/card" hx-trigger="load" hx-swap="outerHTML">
+<li id="draft-{{get $d "id"}}" data-seq="{{$item.Seq}}" data-draft="{{get $d "id"}}" hx-get="/drafts/{{get $d "id"}}/card" hx-trigger="load" hx-swap="outerHTML">
   <a class="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 text-sm hover:border-line-strong" {{template "preview_attrs" (printf "/drafts/%v" (get $d "id"))}}>
     {{icon "mail" "size-4 shrink-0 text-muted-foreground"}}
     <span class="flex min-w-0 flex-1 flex-col">
@@ -248,14 +246,13 @@
   </a>
 </li>
 {{else if eq $item.Kind "proposal"}}
-<li id="proposal-{{$item.ProposalID}}" class="msg-indent" data-seq="{{$item.Seq}}" hx-get="/proposals/{{$item.ProposalID}}/card" hx-trigger="load" hx-swap="outerHTML">
+<li id="proposal-{{$item.ProposalID}}" data-seq="{{$item.Seq}}" hx-get="/proposals/{{$item.ProposalID}}/card" hx-trigger="load" hx-swap="outerHTML">
   <a class="flex items-center gap-3 rounded-xl border bg-card px-3 py-2.5 text-sm hover:border-line-strong" href="/review#proposal-{{$item.ProposalID}}">
     {{icon "list-checks" "size-4 shrink-0 text-muted-foreground"}}<span class="truncate font-medium">Proposal #{{$item.ProposalID}}</span>
   </a>
 </li>
 {{else if eq $item.Kind "queued"}}
-<li class="msg" data-queued="{{$item.ID}}">
-  <span class="msg-avatar" aria-hidden="true">{{icon "user"}}</span>
+<li class="msg" data-role="user" data-queued="{{$item.ID}}">
   <div class="msg-body">
     <div class="msg-user border border-dashed border-line-strong bg-transparent">{{$item.Text}}</div>
     {{if $item.Files}}<span class="text-xs text-muted-foreground">{{icon "paperclip" "size-3"}} {{join ", " (mapattr "name" $item.Files)}}</span>{{end}}

@@ -2,28 +2,28 @@
 {{template "chat_meter" (dict "view" .Data.View "oob" true)}}
 
 {{define "thread_settings"}}{{$t := .t}}{{$c := .cost}}
-<details class="rounded-lg border bg-card px-3 py-2 text-xs">
-  <summary class="cursor-pointer font-medium text-ink-2">Settings and cost</summary>
-  <dl class="mt-3 grid grid-cols-2 gap-x-6 gap-y-2 pb-1 sm:grid-cols-3">
-    <div><dt class="text-muted-foreground">Model</dt><dd>{{$t.Model}}</dd></div>
-    <div><dt class="text-muted-foreground">Thinking {{icon "lock" "size-3"}}</dt><dd>{{$t.Thinking}}</dd></div>
-    <div><dt class="text-muted-foreground">Web search {{icon "lock" "size-3"}}</dt><dd>{{if $t.WebSearch}}On{{else}}Off{{end}}</dd></div>
-    <div><dt class="text-muted-foreground">Cost cap {{icon "lock" "size-3"}}</dt><dd>{{if $t.CostCapUSD}}${{printf "%.2f" (float $t.CostCapUSD)}}{{else}}Instance default{{end}}</dd></div>
-    <div><dt class="text-muted-foreground">Project {{icon "lock" "size-3"}}</dt><dd>{{if $t.ProjectID}}#{{str $t.ProjectID}}{{else}}None{{end}}</dd></div>
-    <div><dt class="text-muted-foreground">Cost</dt><dd data-cost>${{printf "%.3f" $c}}</dd></div>
-  </dl>
-</details>
+<dl class="grid grid-cols-2 gap-x-6 gap-y-2 border-b px-2 pt-1 pb-3 text-xs">
+    <div><dt>Model</dt><dd>{{$t.Model}}</dd></div>
+    <div><dt>Thinking {{icon "lock" "size-3"}}</dt><dd>{{$t.Thinking}}</dd></div>
+    <div><dt>Web search {{icon "lock" "size-3"}}</dt><dd>{{if $t.WebSearch}}On{{else}}Off{{end}}</dd></div>
+    <div><dt>Cost cap {{icon "lock" "size-3"}}</dt><dd>{{if $t.CostCapUSD}}${{printf "%.2f" (float $t.CostCapUSD)}}{{else}}Instance default{{end}}</dd></div>
+    <div><dt>Project {{icon "lock" "size-3"}}</dt><dd>{{if $t.ProjectID}}#{{str $t.ProjectID}}{{else}}None{{end}}</dd></div>
+    <div><dt>Cost</dt><dd data-cost>${{printf "%.3f" $c}}</dd></div>
+</dl>
 {{- end}}
 
 {{define "chat_thread"}}{{$d := .d}}{{$csrf := .csrf}}{{$v := $d.View}}{{$t := $v.Thread}}{{$active := $v.Active}}{{$busy := and $active (eq $active.State "running")}}
-<header class="flex flex-wrap items-center gap-1 text-xs text-ink-3">
+<header class="thread-head">
   {{if ne $t.Kind "chat"}}<span class="badge" data-variant="outline">{{lbl "thread_kind" $t.Kind}}</span>{{end}}
-  <span class="px-1 tabular-nums">{{template "when" (dict "epoch" $t.CreatedAt "style" "datetime")}}</span>
+  <span class="font-mono tabular-nums">{{template "when" (dict "epoch" $t.CreatedAt "style" "datetime")}}</span>
   {{if $t.ProjectID}}<a href="/projects/{{str $t.ProjectID}}/edit" class="btn" data-size="sm" data-variant="ghost">{{icon "folder"}}{{if $d.Project}}{{$d.Project.Name}}{{else}}Project{{end}}</a>{{end}}
   {{if $t.ParentThreadID}}<a href="/chat/{{str $t.ParentThreadID}}" class="btn" data-size="sm" data-variant="ghost">{{icon "arrow-left"}}Parent thread</a>{{end}}
   {{with $v.BranchedFrom}}<a href="/chat/{{.ID}}" class="btn" data-size="sm" data-variant="ghost" title="Branched from message {{str $t.BranchedFromSeq}}">{{icon "git-branch"}}Branched from “{{truncate 40 (or .Title "Untitled thread")}}”</a>{{end}}
-  {{if eq $t.Kind "chat"}}
-  <span class="ms-auto flex flex-wrap items-center gap-0.5">
+  <details class="thread-menu ms-auto" data-menu>
+    <summary class="btn" data-size="icon-sm" data-variant="ghost" aria-label="Thread menu" title="Thread menu">{{icon "ellipsis"}}</summary>
+    <div class="menu-pop">
+    {{template "thread_settings" (dict "t" $t "cost" $v.Cost "csrf" $csrf)}}
+    {{if eq $t.Kind "chat"}}
     {{if or $d.Projects $t.ProjectID}}
     <form method="post" action="/chat/{{$t.ID}}/project" class="flex items-center gap-1">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
@@ -39,22 +39,22 @@
     <form method="post" action="/chat/{{$t.ID}}/pin">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
       <input type="hidden" name="pinned" value="{{if $t.Pinned}}0{{else}}1{{end}}">
-      <button type="submit" class="btn" data-size="icon-sm" data-variant="ghost" title="{{if $t.Pinned}}Unpin{{else}}Pin{{end}}" aria-label="{{if $t.Pinned}}Unpin{{else}}Pin{{end}}">{{icon (ternary $t.Pinned "pin-off" "pin")}}</button>
+      <button type="submit" class="menu-item">{{icon (ternary $t.Pinned "pin-off" "pin")}}{{if $t.Pinned}}Unpin{{else}}Pin{{end}}</button>
     </form>
     {{end}}
     <form method="post" action="/chat/{{$t.ID}}/archive">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
       <input type="hidden" name="archived" value="{{if $t.Archived}}0{{else}}1{{end}}">
-      <button type="submit" class="btn" data-size="icon-sm" data-variant="ghost" title="{{if $t.Archived}}Unarchive{{else}}Archive{{end}}" aria-label="{{if $t.Archived}}Unarchive{{else}}Archive{{end}}">{{icon (ternary $t.Archived "archive-restore" "archive")}}</button>
+      <button type="submit" class="menu-item">{{icon (ternary $t.Archived "archive-restore" "archive")}}{{if $t.Archived}}Unarchive{{else}}Archive{{end}}</button>
     </form>
     <form method="post" action="/chat/{{$t.ID}}/delete" data-confirm-submit="Delete this thread, its subagent transcripts and its files? This cannot be undone.">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
-      <button type="submit" class="btn" data-size="icon-sm" data-variant="ghost" title="Delete" aria-label="Delete">{{icon "trash-2"}}</button>
+      <button type="submit" class="menu-item text-danger">{{icon "trash-2"}}Delete</button>
     </form>
-  </span>
-  {{end}}
+    {{end}}
+    </div>
+  </details>
 </header>
-{{template "thread_settings" (dict "t" $t "cost" $v.Cost "csrf" $csrf)}}
 <ol id="transcript" class="flex flex-col gap-6 pb-4" aria-label="Conversation" data-thread="{{$t.ID}}">
   {{template "chat_transcript" (dict "view" $v "csrf" $csrf)}}
 </ol>
@@ -67,18 +67,18 @@
   <input type="hidden" name="edit" value="">
   <p id="composer-editing" class="flex items-center gap-2 text-xs text-muted-foreground" hidden>{{icon "pencil" "size-3.5"}}Editing your last message<button type="button" class="btn" data-size="sm" data-variant="ghost" data-action="cancel-edit">Cancel</button></p>
   <label for="composer-text" class="sr-only">Message</label>
-  <textarea id="composer-text" name="text" rows="2" placeholder="Message the assistant" data-submit-on-enter required autofocus></textarea>
+  <textarea id="composer-text" name="text" rows="2" placeholder="Reply, or tell me what to change" data-submit-on-enter required autofocus></textarea>
   {{template "ref_picker"}}
   {{template "attach_field"}}
-  <div class="flex flex-wrap items-center gap-2 text-xs">
+  <div class="ask-row">
     {{template "attach_button"}}
     {{if eq $t.Kind "chat"}}
-    {{template "composer_options" (dict "c" $d.Composer)}}
+    {{template "ask_opts" (dict "c" $d.Composer)}}
     {{end}}
     {{template "spinner" (dict "id" "composer-spinner" "label" "Sending")}}
     <span class="ms-auto flex items-center gap-1">
       <button type="button" class="btn" data-size="sm" data-variant="outline" hx-post="/chat/{{$t.ID}}/stop" hx-swap="none" data-stop{{if not $busy}} hidden{{end}}>{{icon "square" "size-3.5"}}Stop</button>
-      <button type="submit" class="btn" data-size="sm">{{icon "send"}}<span data-send{{if $busy}} hidden{{end}}>Send</span><span data-queue{{if not $busy}} hidden{{end}}>Queue</span></button>
+      <button type="submit" class="ask-send">{{icon "arrow-up"}}<span class="sr-only" data-send{{if $busy}} hidden{{end}}>Send</span><span class="sr-only" data-queue{{if not $busy}} hidden{{end}}>Queue</span></button>
     </span>
   </div>
 </form>

@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/projects"
@@ -17,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/textsearch"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -26,6 +28,8 @@ type listData struct {
 	Q       string           `json:"q"`
 	View    string           `json:"view"`
 	Welcome bool             `json:"welcome"`
+	Date    string           `json:"date"`
+	Agenda  bool             `json:"agenda"`
 
 	Defaults threads.Options `json:"defaults"`
 	Composer ComposerView    `json:"composer"`
@@ -56,6 +60,10 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string) 
 		p.fragment(w, r, http.StatusOK, "_thread_list.gohtml", data)
 		return
 	}
+	loc, err := config.From(r.Context()).Location(p.deps.Env)
+	check(err)
+	data.Date = time.Unix(int64(p.now()), 0).In(loc).Format("Monday, January 2")
+	data.Agenda = module.IsEnabled(r.Context(), module.Calendar)
 	data.Welcome = len(found) == 0 && q == "" && view == ""
 	if data.Welcome {
 		exists, err := threads.HasChat(r.Context(), p.deps.DB.Read)
@@ -68,7 +76,7 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string) 
 func (p *pages) chatIndex(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	view := web.QueryValue(query, "view")
-	if view != "" && view != archived {
+	if view != "" && view != archived && view != allThreads {
 		p.fail(w, r, http.StatusUnprocessableEntity, "unknown view")
 		return
 	}
@@ -194,7 +202,7 @@ func (p *pages) setFlag(w http.ResponseWriter, r *http.Request, column string, s
 	if web.IsPartial(r) {
 		view := web.FormString(form, "view", "")
 		if view != archived {
-			view = ""
+			view = allThreads
 		}
 		p.listing(w, r, strings.TrimSpace(web.FormString(form, "q", "")), view)
 		return

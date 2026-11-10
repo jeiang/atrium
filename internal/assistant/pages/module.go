@@ -101,6 +101,7 @@ func Module(o Options) web.Module {
 		r.Get("/chat/composer-options", p.composerOptions)
 		r.Get("/chat/palette", p.palette)
 		r.Get("/today", p.today)
+		r.Get("/chat/agenda", p.agenda)
 		r.Post("/chat/{thread_id}/pin", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "pinned", threads.SetPinned) })
 		r.Post("/chat/{thread_id}/archive", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "archived", threads.SetArchived) })
 		r.Get("/chat/{thread_id}", p.chatThread)

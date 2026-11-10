@@ -92,6 +92,8 @@ var icons = map[string]template.HTML{
 	"monitor":         `<rect width="20" height="14" x="2" y="3" rx="2"/><path d="M8 21h8"/><path d="M12 17v4"/>`,
 	"chevron-right":   `<path d="m9 18 6-6-6-6"/>`,
 	"menu":            `<path d="M4 12h16"/><path d="M4 6h16"/><path d="M4 18h16"/>`,
+	"arrow-up":        `<path d="m5 12 7-7 7 7"/><path d="M12 19V5"/>`,
+	"ellipsis":        `<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>`,
 	"square-pen":      `<path d="M12 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.375 2.625a1 1 0 0 1 3 3l-9.013 9.014a2 2 0 0 1-.853.505l-2.873.84a.5.5 0 0 1-.62-.62l.84-2.873a2 2 0 0 1 .506-.852z"/>`,
 }
 

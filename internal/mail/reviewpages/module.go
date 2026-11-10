@@ -109,6 +109,7 @@ func Module(o Options) web.Module {
 		d.Public(http.MethodPost, "/actions/{token}", actionlink.Handler(s.pipeline, s.now))
 
 		r.Get("/activity", s.activityPage)
+		r.Get("/activity/recent", s.recentActivity)
 		r.Post("/activity/mail/{action_id}/undo", s.undoMail)
 		r.Post("/activity/mail/{action_id}/resolve", s.resolveMail)
 		r.Post("/activity/write/{write_id}/undo", s.undoWrite)

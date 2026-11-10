@@ -3,12 +3,11 @@
 {{define "chat_run_live"}}
 <li id="run-{{.run_id}}" class="flex flex-col gap-6" data-live-run="{{.run_id}}" data-thread="{{.thread_id}}" data-after="{{.after}}"
     hx-get="/chat/{{.thread_id}}/runs/{{.run_id}}?after={{.after}}" hx-trigger="run-done" hx-swap="outerHTML">
-  <details class="activity msg-indent" open>
+  <details class="activity" open>
     <summary role="status" data-live-status>{{icon "loader-circle" "size-3.5 animate-spin"}}<span data-live-label>thinking…</span></summary>
     <ol class="activity-steps" data-live-steps></ol>
   </details>
   <div class="msg" data-live-answer hidden>
-    <span class="msg-avatar" data-role="assistant" aria-hidden="true">a</span>
     <div class="msg-body"><div class="prose-assistant whitespace-pre-wrap break-words" data-live-text></div></div>
   </div>
 </li>
