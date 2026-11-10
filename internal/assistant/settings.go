@@ -43,6 +43,9 @@ const (
 	KeySubagentTaskChars     = "agent_subagent_task_chars"
 	KeySubagentContextIDs    = "agent_subagent_context_ids"
 
+	KeyDreamingMaxCost = "dreaming_max_cost_usd"
+	KeyDreamingMonthly = "dreaming_monthly_usd"
+
 	KeyNightlyMaxThreads  = "agent_nightly_max_threads"
 	KeyNightlyThreadChars = "agent_nightly_thread_chars"
 	KeyNightlyTotalChars  = "agent_nightly_total_chars"
@@ -170,6 +173,8 @@ func init() {
 		count(KeySubagentTaskChars, 4000, 100, 100000),
 		count(KeySubagentContextIDs, 20, 1, 200),
 
+		capped(KeyDreamingMaxCost, settings.Float, "0.30", settings.Within(0, 10)),
+		capped(KeyDreamingMonthly, settings.Float, "3", settings.Within(0, 100)),
 		count(KeyNightlyMaxThreads, 30, 1, 500),
 		count(KeyNightlyThreadChars, 3000, 100, 100000),
 		count(KeyNightlyTotalChars, 40000, 1000, 400000),

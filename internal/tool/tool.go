@@ -83,6 +83,7 @@ type Context struct {
 	Client      *anthropic.Client
 	Progress    *progress.Writer
 	Undoers     *writes.Registry
+	Sources     []int64
 }
 
 // Park stops the run and waits for the operator. The loop leaves the tool call

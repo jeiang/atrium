@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/nightly"
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -27,11 +26,16 @@ import (
 var log = logx.Logger("atrium.agent.scheduler")
 
 type Env struct {
-	Service *service.Service
-	Now     func() float64
+	Service  *service.Service
+	Now      func() float64
+	JobID    int64
+	JobRunID int64
 }
 
-type Result struct{ RunID int64 }
+type Result struct {
+	RunID int64
+	Runs  []int64
+}
 
 type Callable struct {
 	Modules []string
@@ -208,7 +212,7 @@ func (w *Worker) settle(ctx context.Context, claim scheduler.Claim, runID int64,
 	}
 	o := scheduler.Outcome{Status: scheduler.StatusOK, ThreadID: threadID, Tokens: tokens, Cost: cost}
 	switch {
-	case run.State != journal.Done && run.Error != nil && *run.Error == budget.SpendCapText:
+	case run.State != journal.Done && run.Error != nil && budget.IsCapError(*run.Error):
 		o.Status = scheduler.StatusSkippedBudget
 		o.Error = run.Error
 	case run.State != journal.Done:
@@ -227,9 +231,6 @@ func (w *Worker) settle(ctx context.Context, claim scheduler.Claim, runID int64,
 func (w *Worker) executePrompt(ctx context.Context, claim scheduler.Claim) scheduler.Status {
 	job, d := claim.Job, w.Service.DB
 	kind, prompt := threads.Cron, job.Prompt
-	if job.Kind == scheduler.JobNightly {
-		kind, prompt = threads.Nightly, nightly.Prompt
-	}
 	if spec, ok := scheduler.BuiltinFor(job.Name); ok && spec.Run == scheduler.PromptRun {
 		prompt = spec.Prompt
 	}
@@ -267,6 +268,46 @@ func (w *Worker) executePrompt(ctx context.Context, claim scheduler.Claim) sched
 	return status
 }
 
+func (w *Worker) settleRuns(ctx context.Context, claim scheduler.Claim, runs []int64, threadID *int64) (scheduler.Status, error) {
+	d := w.Service.DB
+	var tokens int64
+	var cost float64
+	status := scheduler.StatusOK
+	var failure *string
+	for _, runID := range runs {
+		run, err := journal.GetRun(ctx, d.Read, runID)
+		if err != nil {
+			return "", err
+		}
+		n, err := scheduler.RunTokens(ctx, d.Read, runID)
+		if err != nil {
+			return "", err
+		}
+		c, err := usage.RunCost(ctx, d.Read, runID)
+		if err != nil {
+			return "", err
+		}
+		tokens += n
+		cost += c
+		switch {
+		case run.State != journal.Done && run.Error != nil && budget.IsCapError(*run.Error):
+			status = scheduler.StatusSkippedBudget
+			failure = run.Error
+		case run.State != journal.Done:
+			status = scheduler.StatusError
+			text := run.State
+			if run.Error != nil && *run.Error != "" {
+				text = *run.Error
+			}
+			failure = &text
+		}
+	}
+	if status == scheduler.StatusOK && claim.Missed {
+		status = scheduler.StatusMissed
+	}
+	return status, w.finish(ctx, claim, scheduler.Outcome{Status: status, ThreadID: threadID, Tokens: tokens, Cost: cost, Error: failure})
+}
+
 func (w *Worker) failedRun(ctx context.Context, claim scheduler.Claim, threadID *int64, err error) scheduler.Status {
 	if interrupted(ctx, err) {
 		log.Info(fmt.Sprintf("job %d interrupted; its run resumes on restart", claim.Job.ID), logx.Job, claim.Job.ID)
@@ -288,11 +329,15 @@ func (w *Worker) executeCallable(ctx context.Context, claim scheduler.Claim, cal
 			return scheduler.StatusSkippedModule
 		}
 	}
-	result, err := call.Run(ctx, Env{Service: w.Service, Now: w.now})
+	result, err := call.Run(ctx, Env{Service: w.Service, Now: w.now, JobID: claim.Job.ID, JobRunID: claim.JobRunID})
 	if err != nil {
 		return w.failedRun(ctx, claim, nil, err)
 	}
-	if result.RunID == 0 {
+	runs := result.Runs
+	if len(runs) == 0 && result.RunID != 0 {
+		runs = []int64{result.RunID}
+	}
+	if len(runs) == 0 {
 		status := scheduler.StatusOK
 		if claim.Missed {
 			status = scheduler.StatusMissed
@@ -300,24 +345,16 @@ func (w *Worker) executeCallable(ctx context.Context, claim scheduler.Claim, cal
 		_ = w.finish(ctx, claim, scheduler.Outcome{Status: status})
 		return status
 	}
-	run, err := journal.GetRun(ctx, w.Service.DB.Read, result.RunID)
-	if err != nil {
-		return w.failedRun(ctx, claim, nil, err)
-	}
 	var threadID *int64
-	if run != nil {
+	if run, err := journal.GetRun(ctx, w.Service.DB.Read, runs[0]); err != nil {
+		return w.failedRun(ctx, claim, nil, err)
+	} else if run != nil {
 		threadID = &run.ThreadID
-		status, err := w.settle(ctx, claim, result.RunID, threadID)
-		if err != nil {
-			return w.failedRun(ctx, claim, threadID, err)
-		}
-		return status
 	}
-	status := scheduler.StatusOK
-	if claim.Missed {
-		status = scheduler.StatusMissed
+	status, err := w.settleRuns(ctx, claim, runs, threadID)
+	if err != nil {
+		return w.failedRun(ctx, claim, threadID, err)
 	}
-	_ = w.finish(ctx, claim, scheduler.Outcome{Status: status})
 	return status
 }
 

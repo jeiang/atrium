@@ -131,6 +131,7 @@ type Limits struct {
 	ToolChoice       *string
 	Report           json.RawMessage
 	WebSearchMaxUses *int64
+	Sources          []int64
 }
 
 type limitsJSON struct {
@@ -141,12 +142,16 @@ type limitsJSON struct {
 	ToolChoice       *string         `json:"tool_choice,omitempty"`
 	Report           json.RawMessage `json:"report,omitempty"`
 	WebSearchMaxUses *int64          `json:"web_search_max_uses,omitempty"`
+	Sources          *[]int64        `json:"sources,omitempty"`
 }
 
 func (l Limits) wire() limitsJSON {
 	w := limitsJSON{MaxSteps: l.MaxSteps, MaxCostUSD: l.MaxCostUSD, SystemExtra: l.SystemExtra, ToolChoice: l.ToolChoice, Report: l.Report, WebSearchMaxUses: l.WebSearchMaxUses}
 	if l.AllowedTools != nil {
 		w.AllowedTools = &l.AllowedTools
+	}
+	if l.Sources != nil {
+		w.Sources = &l.Sources
 	}
 	return w
 }
@@ -176,6 +181,9 @@ func LimitsOf(ctx context.Context, q db.Querier, runID int64) (Limits, error) {
 	out := Limits{MaxSteps: stored.MaxSteps, MaxCostUSD: stored.MaxCostUSD, SystemExtra: stored.SystemExtra, ToolChoice: stored.ToolChoice, Report: stored.Report, WebSearchMaxUses: stored.WebSearchMaxUses}
 	if stored.AllowedTools != nil {
 		out.AllowedTools = *stored.AllowedTools
+	}
+	if stored.Sources != nil {
+		out.Sources = *stored.Sources
 	}
 	return out, nil
 }
