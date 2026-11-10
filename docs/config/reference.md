@@ -16,7 +16,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
-| `anthropic_admin_key` | string | none | secret | `ATRIUM_ANTHROPIC_ANTHROPIC_ADMIN_KEY` |
 | `anthropic_api_key` | string | none | secret | `ATRIUM_ANTHROPIC_ANTHROPIC_API_KEY` |
 
 ## assistant
@@ -428,12 +427,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `sensitivity_property` | string | `sensitivity` | ui | `ATRIUM_NOTION_SENSITIVITY_PROPERTY` |
 | `wiki_log_title` | string | `Wiki Log` | ui | `ATRIUM_NOTION_WIKI_LOG_TITLE` |
 | `wiki_root` | string | none | ui | `ATRIUM_NOTION_WIKI_ROOT` |
-
-## openai
-
-| Key | Type | Default | Class | Environment variable |
-| --- | --- | --- | --- | --- |
-| `openai_admin_key` | string | none | secret | `ATRIUM_OPENAI_OPENAI_ADMIN_KEY` |
 
 ## permissions
 

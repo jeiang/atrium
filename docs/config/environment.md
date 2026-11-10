@@ -9,7 +9,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ACTION_LINKS_ACTION_LINK_KEY` | `action_links.action_link_key` |
 | `ATRIUM_ACTION_LINKS_PHONE_ACTIONS_ENABLED` | `action_links.phone_actions_enabled` |
 | `ATRIUM_ACTION_LINKS_PHONE_ACTIONS_KINDS` | `action_links.phone_actions_kinds` |
-| `ATRIUM_ANTHROPIC_ANTHROPIC_ADMIN_KEY` | `anthropic.anthropic_admin_key` |
 | `ATRIUM_ANTHROPIC_ANTHROPIC_API_KEY` | `anthropic.anthropic_api_key` |
 | `ANTHROPIC_API_KEY` | `anthropic.anthropic_api_key` |
 | `ATRIUM_ASSISTANT_AGENT_EFFORT_CRON` | `assistant.agent_effort_cron` |
@@ -360,7 +359,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_NOTION_SENSITIVITY_PROPERTY` | `notion.sensitivity_property` |
 | `ATRIUM_NOTION_WIKI_LOG_TITLE` | `notion.wiki_log_title` |
 | `ATRIUM_NOTION_WIKI_ROOT` | `notion.wiki_root` |
-| `ATRIUM_OPENAI_OPENAI_ADMIN_KEY` | `openai.openai_admin_key` |
 | `ATRIUM_PERMISSIONS_PERMISSION_INTERNET_CLEAN` | `permissions.permission_internet_clean` |
 | `ATRIUM_PERMISSIONS_PERMISSION_INTERNET_KINDS` | `permissions.permission_internet_kinds` |
 | `ATRIUM_PERMISSIONS_PERMISSION_INTERNET_PII` | `permissions.permission_internet_pii` |

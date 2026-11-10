@@ -39,7 +39,7 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 		t.Errorf("set with the value in argv: exit %d stdout %q stderr %q", argv.code, argv.stdout, argv.stderr)
 	}
 	status := runSecrets(t, "", "status")
-	for _, want := range []string{"action_link_key: set\n", "anthropic_admin_key: unset\n", "openai_admin_key: unset\n"} {
+	for _, want := range []string{"action_link_key: set\n", "google_oauth_client_secret: unset\n"} {
 		if !strings.Contains(status.stdout, want) {
 			t.Errorf("status = %q, want %q", status.stdout, want)
 		}
@@ -68,8 +68,8 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 		t.Fatalf("secrets delete: exit %d stdout %q stderr %q", del.code, del.stdout, del.stderr)
 	}
 
-	refused := runSecrets(t, value, "set", secrets.AnthropicAdminKey)
-	want := "error: " + settings.EncryptionRequired(secrets.AnthropicAdminKey).Error() + "\n"
+	refused := runSecrets(t, value, "set", secrets.GoogleOAuthClientSecret)
+	want := "error: " + settings.EncryptionRequired(secrets.GoogleOAuthClientSecret).Error() + "\n"
 	if refused.code != cli.ExitError || refused.stdout != "" || refused.stderr != want || !strings.Contains(want, "encrypt the database first") {
 		t.Fatalf("flagged set on plaintext: exit %d stdout %q stderr %q, want %q", refused.code, refused.stdout, refused.stderr, want)
 	}
