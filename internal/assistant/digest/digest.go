@@ -145,11 +145,12 @@ func blockLines(content []json.RawMessage) (string, []block.DigestLine, bool, er
 
 func dreamingOf(ctx context.Context, q db.Querier, now float64) (dreaming, error) {
 	var out dreaming
-	var jobRun, threadID int64
+	var jobRun, jobID, threadID int64
 	var status string
+	var jobStarted float64
 	err := q.QueryRowContext(ctx,
-		"SELECT jr.id, jr.status, COALESCE(jr.thread_id, 0) FROM job_runs jr JOIN jobs j ON j.id = jr.job_id "+
-			"WHERE j.name = 'nightly' AND jr.ended_at IS NOT NULL AND jr.ended_at >= ? ORDER BY jr.id DESC LIMIT 1", now-86400).Scan(&jobRun, &status, &threadID)
+		"SELECT jr.id, jr.job_id, jr.status, COALESCE(jr.thread_id, 0), COALESCE(jr.started_at, jr.due_at) FROM job_runs jr JOIN jobs j ON j.id = jr.job_id "+
+			"WHERE j.name = 'nightly' AND jr.ended_at IS NOT NULL AND jr.ended_at >= ? ORDER BY jr.id DESC LIMIT 1", now-86400).Scan(&jobRun, &jobID, &status, &threadID, &jobStarted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return out, nil
 	}
@@ -158,41 +159,66 @@ func dreamingOf(ctx context.Context, q db.Querier, now float64) (dreaming, error
 	}
 	out.skipped = status == "skipped_budget"
 	out.failed = status == "error"
-	if threadID == 0 {
-		return out, nil
-	}
-	var runID int64
-	var started float64
-	err = q.QueryRowContext(ctx, "SELECT id, started_at FROM runs WHERE thread_id = ? ORDER BY id DESC LIMIT 1", threadID).Scan(&runID, &started)
-	if errors.Is(err, sql.ErrNoRows) {
-		return out, nil
-	}
+	rows, err := q.QueryContext(ctx,
+		"SELECT r.id, r.started_at FROM runs r JOIN threads t ON t.id = r.thread_id WHERE t.job_id = ? AND r.started_at >= ? ORDER BY r.id", jobID, jobStarted)
 	if err != nil {
 		return out, err
 	}
-	out.run = runID
+	type runStart struct {
+		id      int64
+		started float64
+	}
+	runs, err := db.Collect(rows, func(r *sql.Rows) (runStart, error) {
+		var run runStart
+		err := r.Scan(&run.id, &run.started)
+		return run, err
+	})
+	if err != nil {
+		return out, err
+	}
+	if len(runs) == 0 && threadID != 0 {
+		var runID int64
+		var started float64
+		err = q.QueryRowContext(ctx, "SELECT id, started_at FROM runs WHERE thread_id = ? ORDER BY id DESC LIMIT 1", threadID).Scan(&runID, &started)
+		if errors.Is(err, sql.ErrNoRows) {
+			return out, nil
+		}
+		if err != nil {
+			return out, err
+		}
+		runs = []runStart{{id: runID, started: started}}
+	}
+	if len(runs) == 0 {
+		return out, nil
+	}
+	out.run = runs[0].id
+	ids := make([]any, 0, len(runs))
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(runs)), ",")
+	for _, run := range runs {
+		ids = append(ids, run.id)
+	}
 	visible := "r.private = 0 AND (r.project_id IS NULL OR r.project_id NOT IN (SELECT id FROM projects WHERE private = 1))"
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM kb_records r WHERE r.source_run_id = ? AND r.created_at >= ? AND "+visible, runID, started).Scan(&out.new); err != nil {
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM kb_records r WHERE r.source_run_id IN ("+marks+") AND "+visible, ids...).Scan(&out.new); err != nil {
 		return out, err
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_writes w JOIN kb_records r ON w.target = 'kb:' || r.id WHERE w.run_id = ? AND w.tool = 'kb_write' AND r.created_at < ? AND "+visible, runID, started).Scan(&out.edited); err != nil {
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_writes w JOIN kb_records r ON w.target = 'kb:' || r.id WHERE w.run_id IN ("+marks+") AND w.tool = 'kb_write' AND r.id NOT IN (SELECT id FROM kb_records WHERE source_run_id IN ("+marks+")) AND "+visible, append(append([]any{}, ids...), ids...)...).Scan(&out.edited); err != nil {
 		return out, err
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_writes w JOIN kb_records r ON w.target = 'kb:' || r.id WHERE w.run_id = ? AND w.tool = 'kb_retract' AND "+visible, runID).Scan(&out.retracted); err != nil {
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_writes w JOIN kb_records r ON w.target = 'kb:' || r.id WHERE w.run_id IN ("+marks+") AND w.tool = 'kb_retract' AND "+visible, ids...).Scan(&out.retracted); err != nil {
 		return out, err
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_writes WHERE run_id = ? AND tool = 'task_add'", runID).Scan(&out.tasks); err != nil {
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_writes WHERE run_id IN ("+marks+") AND tool = 'task_add'", ids...).Scan(&out.tasks); err != nil {
 		return out, err
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM kb_records r WHERE r.source_run_id = ? AND r.retracted_at IS NULL AND r.title LIKE 'Lesson: %' AND "+visible, runID).Scan(&out.lessons); err != nil {
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM kb_records r WHERE r.source_run_id IN ("+marks+") AND r.retracted_at IS NULL AND r.title LIKE 'Lesson: %' AND "+visible, ids...).Scan(&out.lessons); err != nil {
 		return out, err
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM kb_records r WHERE r.source_run_id = ? AND r.retracted_at IS NULL AND r.marks != 0 AND "+visible, runID).Scan(&out.marked); err != nil {
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM kb_records r WHERE r.source_run_id IN ("+marks+") AND r.retracted_at IS NULL AND r.marks != 0 AND "+visible, ids...).Scan(&out.marked); err != nil {
 		return out, err
 	}
-	rows, err := q.QueryContext(ctx,
-		"SELECT r.id, r.title, r.source_thread_id, r.marks FROM kb_records r WHERE r.source_run_id = ? AND r.retracted_at IS NULL AND r.aliases LIKE ? AND "+visible+" ORDER BY r.id LIMIT 2",
-		runID, `%"conflict"%`)
+	rows, err = q.QueryContext(ctx,
+		"SELECT r.id, r.title, r.source_thread_id, r.marks FROM kb_records r WHERE r.source_run_id IN ("+marks+") AND r.retracted_at IS NULL AND r.aliases LIKE ? AND "+visible+" ORDER BY r.id LIMIT 2",
+		append(ids, `%"conflict"%`)...)
 	if err != nil {
 		return out, err
 	}
@@ -221,7 +247,6 @@ func dreamingOf(ctx context.Context, q db.Querier, now float64) (dreaming, error
 	}
 	return out, nil
 }
-
 func markedKind(kind string) bool {
 	switch kind {
 	case "event_candidate", "commitment", "draft", "loop", "package":
