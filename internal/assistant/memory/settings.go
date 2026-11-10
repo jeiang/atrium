@@ -8,10 +8,10 @@ import (
 )
 
 const (
-	NodeBytesKey   = "node_bytes"
-	ModelKey       = "model"
-	EffortKey      = "effort"
-	ConcurrencyKey = "concurrency"
+	NodeBytesKey   = "memory_node_bytes"
+	ModelKey       = "memory_model"
+	EffortKey      = "memory_effort"
+	ConcurrencyKey = "memory_concurrency"
 )
 
 func init() {
@@ -31,13 +31,11 @@ func init() {
 	}))
 }
 
-const BackfillDoneKey = "backfill_done"
-
 const (
-	ViewLowKey        = "view_low"
-	ViewHighKey       = "view_high"
-	TailMessagesKey   = "tail_messages"
-	VerbatimTokensKey = "verbatim_tokens"
+	ViewLowKey        = "memory_view_low"
+	ViewHighKey       = "memory_view_high"
+	TailMessagesKey   = "memory_tail_messages"
+	VerbatimTokensKey = "memory_verbatim_tokens"
 )
 
 func init() {
@@ -56,12 +54,6 @@ func init() {
 	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
 		Key: VerbatimTokensKey, Module: "memory", Type: settings.Int, Default: "16000",
 		Min: 0, Max: 200000, Check: settings.Between(0, 200000),
-	}))
-}
-
-func init() {
-	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
-		Key: BackfillDoneKey, Module: "memory", Type: settings.String, Default: "",
 	}))
 }
 

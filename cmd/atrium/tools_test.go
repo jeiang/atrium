@@ -80,7 +80,7 @@ func TestWebSearchAllowedCallers(t *testing.T) {
 	}
 	assertServerCallers(t, requests[1], "direct")
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('dynamic_filtering', 'true')"); err != nil {
+	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('search_web_dynamic_filtering', 'true')"); err != nil {
 		t.Fatal(err)
 	}
 	_ = d.Close()

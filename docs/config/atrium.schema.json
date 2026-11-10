@@ -48,39 +48,6 @@
     "assistant": {
       "additionalProperties": false,
       "properties": {
-        "agent_context_max_ids": {
-          "default": 50,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_context_max_ids_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_context_max_sources": {
-          "default": 100,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_context_max_sources_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_context_summary_chars": {
-          "default": 4000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_context_summary_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "agent_effort_cron": {
           "default": "high",
           "enum": [
@@ -108,21 +75,6 @@
           "type": "string"
         },
         "agent_effort_nightly_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_effort_sub": {
-          "default": "medium",
-          "enum": [
-            "low",
-            "medium",
-            "high",
-            "xhigh",
-            "max"
-          ],
-          "type": "string"
-        },
-        "agent_effort_sub_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -402,61 +354,6 @@
           ]
         },
         "agent_nightly_total_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_notion_max_markdown_chars": {
-          "default": 100000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_notion_max_markdown_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_notion_max_results": {
-          "default": 10,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_notion_max_results_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_notion_page_chars": {
-          "default": 12000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_notion_page_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_notion_snippet_chars": {
-          "default": 300,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_notion_snippet_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_notion_stale_seconds": {
-          "default": 86400,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_notion_stale_seconds_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -3222,92 +3119,85 @@
     "memory": {
       "additionalProperties": false,
       "properties": {
-        "backfill_done": {
-          "type": "string"
-        },
-        "backfill_done_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "concurrency": {
+        "memory_concurrency": {
           "default": 4,
           "type": [
             "integer",
             "string"
           ]
         },
-        "concurrency_file": {
+        "memory_concurrency_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "effort": {
+        "memory_effort": {
           "default": "low",
           "type": "string"
         },
-        "effort_file": {
+        "memory_effort_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "model": {
+        "memory_model": {
           "default": "claude-haiku-5-5",
           "type": "string"
         },
-        "model_file": {
+        "memory_model_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "node_bytes": {
+        "memory_node_bytes": {
           "default": 512,
           "type": [
             "integer",
             "string"
           ]
         },
-        "node_bytes_file": {
+        "memory_node_bytes_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "tail_messages": {
+        "memory_tail_messages": {
           "default": 6,
           "type": [
             "integer",
             "string"
           ]
         },
-        "tail_messages_file": {
+        "memory_tail_messages_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "verbatim_tokens": {
+        "memory_verbatim_tokens": {
           "default": 16000,
           "type": [
             "integer",
             "string"
           ]
         },
-        "verbatim_tokens_file": {
+        "memory_verbatim_tokens_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "view_high": {
+        "memory_view_high": {
           "default": 128000,
           "type": [
             "integer",
             "string"
           ]
         },
-        "view_high_file": {
+        "memory_view_high_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "view_low": {
+        "memory_view_low": {
           "default": 64000,
           "type": [
             "integer",
             "string"
           ]
         },
-        "view_low_file": {
+        "memory_view_low_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
@@ -3907,28 +3797,6 @@
     "web": {
       "additionalProperties": false,
       "properties": {
-        "activity_page_size": {
-          "default": 50,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "activity_page_size_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "activity_snippet_chars": {
-          "default": 800,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "activity_snippet_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "body_cap_bytes": {
           "default": 1048576,
           "type": [
@@ -3951,39 +3819,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "learned_limit": {
-          "default": 50,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "learned_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "loop_limit": {
-          "default": 100,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "loop_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "page_size": {
-          "default": 50,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "page_size_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "preview_bytes": {
           "default": 200000,
           "type": [
@@ -3995,22 +3830,33 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "run_history": {
+        "snooze_choices": {
+          "default": "1,3,7,14",
+          "type": "string"
+        },
+        "snooze_choices_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "web_page_size": {
+          "default": 50,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "web_page_size_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "web_run_history": {
           "default": 30,
           "type": [
             "integer",
             "string"
           ]
         },
-        "run_history_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "snooze_choices": {
-          "default": "1,3,7,14",
-          "type": "string"
-        },
-        "snooze_choices_file": {
+        "web_run_history_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
@@ -4020,14 +3866,14 @@
     "web_search": {
       "additionalProperties": false,
       "properties": {
-        "dynamic_filtering": {
+        "search_web_dynamic_filtering": {
           "default": false,
           "type": [
             "boolean",
             "string"
           ]
         },
-        "dynamic_filtering_file": {
+        "search_web_dynamic_filtering_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

@@ -16,15 +16,11 @@ const (
 	KeyPublicURL         = "public_url"
 	KeyHTTPTimeout       = "http_timeout_seconds"
 	KeyBodyCap           = "body_cap_bytes"
-	KeyPageSize          = "page_size"
-	KeyLearnedLimit      = "learned_limit"
+	KeyPageSize          = "web_page_size"
 	KeyChatThreadLimit   = "chat_thread_limit"
-	KeyLoopLimit         = "loop_limit"
 	KeySnoozeChoices     = "snooze_choices"
 	KeyPreviewBytes      = "preview_bytes"
-	KeyRunHistory        = "run_history"
-	KeyActivityPageSize  = "activity_page_size"
-	KeyActivitySnippet   = "activity_snippet_chars"
+	KeyRunHistory        = "web_run_history"
 	coreModule           = "core"
 	webModule            = "web"
 	defaultHTTPTimeout   = 600
@@ -49,16 +45,12 @@ func init() {
 			Check: settings.Between(1, 3600)}),
 		advanced(KeyBodyCap, "1048576", 1, 1<<30),
 		advanced(KeyPageSize, "50", 10, 500),
-		advanced(KeyLearnedLimit, "50", 10, 500),
 		advanced(KeyChatThreadLimit, "50", 1, 500),
-		advanced(KeyLoopLimit, "100", 1, 1000),
 		settings.Value(settings.UI, settings.Def{
 			Key: KeySnoozeChoices, Label: "Snooze choices (days)", Module: webModule, Type: settings.String, Default: defaultSnoozeChoices,
 			Check: checkSnoozeChoices}),
 		advanced(KeyPreviewBytes, "200000", 1000, 10_000_000),
 		advanced(KeyRunHistory, "30", 1, 500),
-		advanced(KeyActivityPageSize, "50", 10, 500),
-		advanced(KeyActivitySnippet, "800", 80, 10_000),
 	)
 }
 

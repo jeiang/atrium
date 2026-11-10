@@ -3,13 +3,13 @@ package memory
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 type Estimate struct {
@@ -88,7 +88,13 @@ func Backfill(ctx context.Context, d *db.DB, threadID *int64, client *anthropic.
 		}
 	}
 	if threadID == nil {
-		if err := settings.From(ctx).Set(ctx, d.Write, BackfillDoneKey, fmt.Sprintf("%d", time.Now().Unix())); err != nil {
+		err := d.WithTx(ctx, func(tx *sql.Tx) error {
+			_, err := tx.ExecContext(ctx,
+				"INSERT INTO memory_state (key, value) VALUES ('backfill_done', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+				fmt.Sprintf("%d", time.Now().Unix()))
+			return err
+		})
+		if err != nil {
 			return done, err
 		}
 	}
@@ -112,9 +118,10 @@ func backfillThreads(ctx context.Context, q db.Querier, threadID *int64) ([]int6
 
 // BackfillDone reports the recorded completion timestamp, if any.
 func BackfillDone(ctx context.Context, q db.Querier) (string, error) {
-	found, err := settings.From(ctx).Resolve(ctx, q, BackfillDoneKey)
-	if err != nil {
-		return "", err
+	var value string
+	err := q.QueryRowContext(ctx, "SELECT value FROM memory_state WHERE key = 'backfill_done'").Scan(&value)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
 	}
-	return found.Value, nil
+	return value, err
 }

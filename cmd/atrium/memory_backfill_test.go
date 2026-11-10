@@ -51,7 +51,7 @@ func TestMemoryBackfillIsIdempotentAndRefusesAfterDone(t *testing.T) {
 		t.Error("backfill recorded no memory usage")
 	}
 	var done string
-	if err := d.Read.QueryRow("SELECT value FROM settings WHERE key = 'backfill_done'").Scan(&done); err != nil {
+	if err := d.Read.QueryRow("SELECT value FROM memory_state WHERE key = 'backfill_done'").Scan(&done); err != nil {
 		t.Fatalf("backfill_done: %v", err)
 	}
 	if done == "" {

@@ -21,7 +21,7 @@ func TestCoreSettingsRejectBadValuesAndDriveTheWebLayer(t *testing.T) {
 	for _, tc := range []struct{ key, value string }{
 		{"tz", "Mars/Olympus"},
 		{"body_cap_bytes", "0"},
-		{"page_size", "9"},
+		{"web_page_size", "9"},
 		{"snooze_choices", "1,x"},
 		{"public_url", "ftp://atrium.test"},
 		{"http_timeout_seconds", "3601"},

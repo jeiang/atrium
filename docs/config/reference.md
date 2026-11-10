@@ -23,12 +23,8 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
-| `agent_context_max_ids` | int | `50` | advanced | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_IDS` |
-| `agent_context_max_sources` | int | `100` | advanced | `ATRIUM_ASSISTANT_AGENT_CONTEXT_MAX_SOURCES` |
-| `agent_context_summary_chars` | int | `4000` | advanced | `ATRIUM_ASSISTANT_AGENT_CONTEXT_SUMMARY_CHARS` |
 | `agent_effort_cron` | enum (low, medium, high, xhigh, max) | `high` | ui | `ATRIUM_ASSISTANT_AGENT_EFFORT_CRON` |
 | `agent_effort_nightly` | enum (low, medium, high, xhigh, max) | `high` | ui | `ATRIUM_ASSISTANT_AGENT_EFFORT_NIGHTLY` |
-| `agent_effort_sub` | enum (low, medium, high, xhigh, max) | `medium` | advanced | `ATRIUM_ASSISTANT_AGENT_EFFORT_SUB` |
 | `agent_effort_subagent` | enum (low, medium, high, xhigh, max) | `medium` | ui | `ATRIUM_ASSISTANT_AGENT_EFFORT_SUBAGENT` |
 | `agent_file_cap_bytes` | int | `33554432` | advanced | `ATRIUM_ASSISTANT_AGENT_FILE_CAP_BYTES` |
 | `agent_file_name_chars` | int | `80` | advanced | `ATRIUM_ASSISTANT_AGENT_FILE_NAME_CHARS` |
@@ -54,11 +50,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_nightly_max_threads` | int | `30` | advanced | `ATRIUM_ASSISTANT_AGENT_NIGHTLY_MAX_THREADS` |
 | `agent_nightly_thread_chars` | int | `3000` | advanced | `ATRIUM_ASSISTANT_AGENT_NIGHTLY_THREAD_CHARS` |
 | `agent_nightly_total_chars` | int | `40000` | advanced | `ATRIUM_ASSISTANT_AGENT_NIGHTLY_TOTAL_CHARS` |
-| `agent_notion_max_markdown_chars` | int | `100000` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_MAX_MARKDOWN_CHARS` |
-| `agent_notion_max_results` | int | `10` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_MAX_RESULTS` |
-| `agent_notion_page_chars` | int | `12000` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_PAGE_CHARS` |
-| `agent_notion_snippet_chars` | int | `300` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_SNIPPET_CHARS` |
-| `agent_notion_stale_seconds` | int | `86400` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_STALE_SECONDS` |
 | `agent_preview_chars` | int | `600` | advanced | `ATRIUM_ASSISTANT_AGENT_PREVIEW_CHARS` |
 | `agent_project_instruction_chars` | int | `20000` | advanced | `ATRIUM_ASSISTANT_AGENT_PROJECT_INSTRUCTION_CHARS` |
 | `agent_project_name_chars` | int | `80` | advanced | `ATRIUM_ASSISTANT_AGENT_PROJECT_NAME_CHARS` |
@@ -392,15 +383,14 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
-| `backfill_done` | string | none | advanced | `ATRIUM_MEMORY_BACKFILL_DONE` |
-| `concurrency` | int | `4` | advanced | `ATRIUM_MEMORY_CONCURRENCY` |
-| `effort` | string | `low` | ui | `ATRIUM_MEMORY_EFFORT` |
-| `model` | string | `claude-haiku-5-5` | ui | `ATRIUM_MEMORY_MODEL` |
-| `node_bytes` | int | `512` | advanced | `ATRIUM_MEMORY_NODE_BYTES` |
-| `tail_messages` | int | `6` | advanced | `ATRIUM_MEMORY_TAIL_MESSAGES` |
-| `verbatim_tokens` | int | `16000` | advanced | `ATRIUM_MEMORY_VERBATIM_TOKENS` |
-| `view_high` | int | `128000` | advanced | `ATRIUM_MEMORY_VIEW_HIGH` |
-| `view_low` | int | `64000` | advanced | `ATRIUM_MEMORY_VIEW_LOW` |
+| `memory_concurrency` | int | `4` | advanced | `ATRIUM_MEMORY_MEMORY_CONCURRENCY` |
+| `memory_effort` | string | `low` | ui | `ATRIUM_MEMORY_MEMORY_EFFORT` |
+| `memory_model` | string | `claude-haiku-5-5` | ui | `ATRIUM_MEMORY_MEMORY_MODEL` |
+| `memory_node_bytes` | int | `512` | advanced | `ATRIUM_MEMORY_MEMORY_NODE_BYTES` |
+| `memory_tail_messages` | int | `6` | advanced | `ATRIUM_MEMORY_MEMORY_TAIL_MESSAGES` |
+| `memory_verbatim_tokens` | int | `16000` | advanced | `ATRIUM_MEMORY_MEMORY_VERBATIM_TOKENS` |
+| `memory_view_high` | int | `128000` | advanced | `ATRIUM_MEMORY_MEMORY_VIEW_HIGH` |
+| `memory_view_low` | int | `64000` | advanced | `ATRIUM_MEMORY_MEMORY_VIEW_LOW` |
 
 ## notify
 
@@ -478,22 +468,18 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
-| `activity_page_size` | int | `50` | advanced | `ATRIUM_WEB_ACTIVITY_PAGE_SIZE` |
-| `activity_snippet_chars` | int | `800` | advanced | `ATRIUM_WEB_ACTIVITY_SNIPPET_CHARS` |
 | `body_cap_bytes` | int | `1048576` | advanced | `ATRIUM_WEB_BODY_CAP_BYTES` |
 | `chat_thread_limit` | int | `50` | advanced | `ATRIUM_WEB_CHAT_THREAD_LIMIT` |
-| `learned_limit` | int | `50` | advanced | `ATRIUM_WEB_LEARNED_LIMIT` |
-| `loop_limit` | int | `100` | advanced | `ATRIUM_WEB_LOOP_LIMIT` |
-| `page_size` | int | `50` | advanced | `ATRIUM_WEB_PAGE_SIZE` |
 | `preview_bytes` | int | `200000` | advanced | `ATRIUM_WEB_PREVIEW_BYTES` |
-| `run_history` | int | `30` | advanced | `ATRIUM_WEB_RUN_HISTORY` |
 | `snooze_choices` | string | `1,3,7,14` | ui | `ATRIUM_WEB_SNOOZE_CHOICES` |
+| `web_page_size` | int | `50` | advanced | `ATRIUM_WEB_WEB_PAGE_SIZE` |
+| `web_run_history` | int | `30` | advanced | `ATRIUM_WEB_WEB_RUN_HISTORY` |
 
 ## web_search
 
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
-| `dynamic_filtering` | bool | `false` | advanced | `ATRIUM_WEB_SEARCH_DYNAMIC_FILTERING` |
+| `search_web_dynamic_filtering` | bool | `false` | advanced | `ATRIUM_WEB_SEARCH_SEARCH_WEB_DYNAMIC_FILTERING` |
 | `search_web_max_cost_usd` | float | `0.15` | ui | `ATRIUM_WEB_SEARCH_SEARCH_WEB_MAX_COST_USD` |
 | `search_web_max_searches` | int | `5` | advanced | `ATRIUM_WEB_SEARCH_SEARCH_WEB_MAX_SEARCHES` |
 | `search_web_max_steps` | int | `8` | advanced | `ATRIUM_WEB_SEARCH_SEARCH_WEB_MAX_STEPS` |

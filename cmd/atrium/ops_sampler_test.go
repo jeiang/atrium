@@ -173,7 +173,7 @@ func TestSchemaVersionEightMigratesToOpsSamples(t *testing.T) {
 		t.Errorf("ops_samples after migration = %d, %v, want one table", n, err)
 	}
 	var version int
-	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version != 10 {
+	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version != 11 {
 		t.Errorf("schema version = %d, %v, want %d", version, err, db.LatestSchemaVersion())
 	}
 	_ = d.Close()
@@ -387,7 +387,7 @@ func TestSchemaVersionNineDatabaseDropsOpsRecords(t *testing.T) {
 		t.Errorf("ops_findings after migration = %d, %v, want one table", findings, err)
 	}
 	var version int
-	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version != 10 {
+	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version != 11 {
 		t.Errorf("schema version = %d, %v, want %d", version, err, db.LatestSchemaVersion())
 	}
 	_ = d.Close()
