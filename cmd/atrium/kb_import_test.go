@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -260,5 +261,141 @@ INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url
 	}
 	if got := loadPrivate("notion:55555555-5555-5555-5555-555555555555"); got != 0 {
 		t.Errorf("notes private = %d, want not private", got)
+	}
+}
+
+func TestKnowledgeImportCleansNotionMarkup(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, settingEnv(notion.WikiRootKey), "00000000-0000-0000-0000-000000000001")
+	if ran := runApp(t, "settings", "list"); ran.code != 0 {
+		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
+	}
+	const (
+		alphaID = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+		betaID  = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
+		gammaID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
+	)
+	alphaMarkdown := "# Alpha\n\n" +
+		"<table header-row=\"true\"><tr><td>Name</td><td>Value</td></tr><tr><td>a|b</td><td>line<br>two</td></tr></table>\n\n" +
+		"Mention <page url=\"https://app.notion.com/Beta-" + betaID + "\">Beta</page> and [Other](https://app.notion.com/Other-" + gammaID + ").\n\n" +
+		"<callout icon=\"tip\">Callout text</callout>\n\n" +
+		"<details><summary>Toggle title</summary>Hidden text</details>\n\n" +
+		"<foo>unknown</foo> Tom &amp; Jerry<br>after break.\n\n" +
+		"```\n<table>inside code</table>\n```\n\n" +
+		"[Example](https://example.com/x)\n"
+	seed := fmt.Sprintf(`
+INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url, last_edited_time, edited_ts) VALUES
+  ('%s', '00000000-0000-0000-0000-000000000001', 'Alpha', '%s', 0, 0, 'https://notion.invalid/alpha', '2026-01-01T00:00:00Z', 1),
+  ('%s', '00000000-0000-0000-0000-000000000001', 'Beta', 'Beta body.', 0, 0, 'https://notion.invalid/beta', '2026-01-01T00:00:00Z', 1);
+`, alphaID, strings.ReplaceAll(alphaMarkdown, "'", "''"), betaID)
+	if code, stdout, stderr := kbImportRun(t, seed, "db", "shell"); code != 0 {
+		t.Fatalf("seed: %d %s %s", code, stdout, stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+
+	code, stdout, stderr := kbImportRun(t, "", "kb", "import")
+	if code != 0 {
+		t.Fatalf("import: %d %s %s", code, stderr, stdout)
+	}
+	first := kbImportStats(t, stdout)
+	if first.Notion.Created != 2 {
+		t.Fatalf("import stats = %+v, want 2 notion pages created", first)
+	}
+	type record struct {
+		id          int64
+		body        string
+		marks       int64
+		confirmedAt *float64
+	}
+	load := func(origin string) record {
+		t.Helper()
+		var r record
+		if err := d.Read.QueryRow("SELECT id, body, marks, confirmed_at FROM kb_records WHERE origin = ?", origin).
+			Scan(&r.id, &r.body, &r.marks, &r.confirmedAt); err != nil {
+			t.Fatalf("load %s: %v", origin, err)
+		}
+		return r
+	}
+	alpha := load("notion:" + alphaID)
+	beta := load("notion:" + betaID)
+	cleanBody := alpha.body
+	outside := strings.Replace(alpha.body, "```\n<table>inside code</table>\n```", "", 1)
+	for _, want := range []string{
+		"| Name | Value |",
+		"| --- | --- |",
+		`| a\|b | line two |`,
+		fmt.Sprintf("[K%d]", beta.id),
+		"> Callout text",
+		"**Toggle title**",
+		"Hidden text",
+		"unknown",
+		"Tom & Jerry\nafter break.",
+		"```\n<table>inside code</table>\n```",
+		"[Example](https://example.com/x)",
+	} {
+		if !strings.Contains(alpha.body, want) {
+			t.Errorf("alpha body missing %q:\n%s", want, alpha.body)
+		}
+	}
+	for _, bad := range []string{"<table", "<page", "<callout", "<details", "<foo", "<br", "app.notion.com", "notion.so"} {
+		if strings.Contains(outside, bad) {
+			t.Errorf("alpha body outside code still has %q:\n%s", bad, outside)
+		}
+	}
+	if regexp.MustCompile(`<[A-Za-z]`).MatchString(outside) {
+		t.Errorf("alpha body outside code still has a raw tag:\n%s", outside)
+	}
+	if alpha.marks != 1 || alpha.confirmedAt != nil {
+		t.Errorf("alpha marks = %d confirmed = %v, want untrusted and unconfirmed", alpha.marks, alpha.confirmedAt)
+	}
+
+	code, stdout, stderr = kbImportRun(t, "", "kb", "import")
+	if code != 0 {
+		t.Fatalf("second import: %d %s %s", code, stderr, stdout)
+	}
+	second := kbImportStats(t, stdout)
+	if second.Notion.Created+second.Notion.Updated != 0 || second.Notion.Kept != 2 || len(second.ChangedInAtrium) != 0 {
+		t.Errorf("second import = %+v, want everything unchanged", second)
+	}
+
+	if _, err := d.Write.Exec("UPDATE kb_records SET body = ?, marks = 0, confirmed_at = 123 WHERE id = ?", alphaMarkdown, alpha.id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO agent_writes (ts, tool, target) VALUES (1, 'kb_confirm', ?)", fmt.Sprintf("kb:%d", alpha.id)); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr = kbImportRun(t, "", "kb", "import")
+	if code != 0 {
+		t.Fatalf("third import: %d %s %s", code, stderr, stdout)
+	}
+	third := kbImportStats(t, stdout)
+	if third.Notion.Updated != 1 || third.Notion.Kept != 1 || len(third.Notes) != 1 || !strings.Contains(third.Notes[0], "confirmed") {
+		t.Errorf("third import = %+v, want the confirmed record updated and reported", third)
+	}
+	alpha = load("notion:" + alphaID)
+	if alpha.body != cleanBody || alpha.marks != 0 || alpha.confirmedAt == nil || *alpha.confirmedAt != 123 {
+		t.Errorf("confirmed record = marks %d confirmed %v, want cleaned body, no marks and the original confirmation", alpha.marks, alpha.confirmedAt)
+	}
+	if strings.Contains(strings.Replace(alpha.body, "```\n<table>inside code</table>\n```", "", 1), "<table") {
+		t.Errorf("confirmed record body was not cleaned:\n%s", alpha.body)
+	}
+
+	if _, err := d.Write.Exec("UPDATE kb_records SET body = 'Edited in the tab.' WHERE id = ?", beta.id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO agent_writes (ts, tool, target) VALUES (1, 'kb_edit', ?)", fmt.Sprintf("kb:%d", beta.id)); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr = kbImportRun(t, "", "kb", "import")
+	if code != 0 {
+		t.Fatalf("fourth import: %d %s %s", code, stderr, stdout)
+	}
+	fourth := kbImportStats(t, stdout)
+	if fourth.Notion.Kept != 2 || len(fourth.ChangedInAtrium) != 1 || fourth.ChangedInAtrium[0] != "notion:"+betaID {
+		t.Errorf("fourth import = %+v, want the edited record kept and reported", fourth)
+	}
+	if got := load("notion:" + betaID).body; got != "Edited in the tab." {
+		t.Errorf("edited record body = %q, want the tab edit kept", got)
 	}
 }
