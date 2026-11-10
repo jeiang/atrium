@@ -1678,6 +1678,28 @@
         "export_notion_private_to_file": {
           "description": "path of a file holding the value",
           "type": "string"
+        },
+        "export_obsidian_dir": {
+          "type": "string"
+        },
+        "export_obsidian_dir_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "export_obsidian_kinds": {
+          "default": "pii,messages,personal",
+          "type": "string"
+        },
+        "export_obsidian_kinds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "export_obsidian_private_to": {
+          "type": "string"
+        },
+        "export_obsidian_private_to_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
         }
       },
       "type": "object"
