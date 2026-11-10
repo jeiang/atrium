@@ -27,12 +27,15 @@ func TestDeclaredSettingGroupSavesFromItsModulePage(t *testing.T) {
 		}
 	}
 	const action = "/settings/groups/assistant/spending"
-	status, body, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"thread_cost_cap_usd": {"12"}})
+	status, body, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"thread_cost_cap_usd": {"12"}, "monthly_budget_usd": {"150"}})
 	if status != http.StatusOK || !strings.Contains(body, "data-saved") {
 		t.Fatalf("POST %s = %d, saved marker %v", action, status, strings.Contains(body, "data-saved"))
 	}
 	if row := runSettings(t, "get", "thread_cost_cap_usd").row(t); row.Value == nil || *row.Value != "12" || row.Source == nil || *row.Source != "db" {
 		t.Errorf("thread_cost_cap_usd = %+v, want 12 from the database", row)
+	}
+	if row := runSettings(t, "get", "monthly_budget_usd").row(t); row.Source != nil && *row.Source == "db" {
+		t.Errorf("saving the group stored an unchanged key: %+v", row)
 	}
 	status, body, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"thread_cost_cap_usd": {"-1"}})
 	if status != http.StatusUnprocessableEntity || !strings.Contains(body, "must be greater than 0") {
