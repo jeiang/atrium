@@ -66,6 +66,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEMORY_WORK` | `assistant.agent_schedule_memory_work` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MIN_INTERVAL_SECONDS` | `assistant.agent_schedule_min_interval_seconds` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_NIGHTLY` | `assistant.agent_schedule_nightly` |
+| `ATRIUM_ASSISTANT_AGENT_SCHEDULE_OPS_SAMPLER` | `assistant.agent_schedule_ops_sampler` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_PACKAGE_TRACKING` | `assistant.agent_schedule_package_tracking` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_TASK_REMINDERS` | `assistant.agent_schedule_task_reminders` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_WEEKLY_REVIEW` | `assistant.agent_schedule_weekly_review` |
@@ -105,10 +106,13 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_MAX_STEPS_CHAT` | `assistant.max_steps_chat` |
 | `ATRIUM_ASSISTANT_MAX_STEPS_CRON` | `assistant.max_steps_cron` |
 | `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` | `assistant.max_steps_nightly` |
+| `ATRIUM_ASSISTANT_MAX_STEPS_WORKER` | `assistant.max_steps_worker` |
 | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` | `assistant.monthly_budget_usd` |
 | `ATRIUM_ASSISTANT_NIGHTLY_STALE_MONTHS` | `assistant.nightly_stale_months` |
 | `ATRIUM_ASSISTANT_OPEN_METEO_CA_FILE` | `assistant.open_meteo_ca_file` |
 | `ATRIUM_ASSISTANT_OPEN_METEO_PROXY` | `assistant.open_meteo_proxy` |
+| `ATRIUM_ASSISTANT_OPS_WORKER_MAX_RUN_USD` | `assistant.ops_worker_max_run_usd` |
+| `ATRIUM_ASSISTANT_OPS_WORKER_MONTHLY_USD` | `assistant.ops_worker_monthly_usd` |
 | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` | `assistant.prompt_subagent` |
 | `ATRIUM_ASSISTANT_PROMPT_SYSTEM` | `assistant.prompt_system` |
 | `ATRIUM_ASSISTANT_THREAD_COST_CAP_USD` | `assistant.thread_cost_cap_usd` |
@@ -182,6 +186,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_GRAFANA_GRAFANA_PROXY` | `grafana.grafana_proxy` |
 | `ATRIUM_GRAFANA_GRAFANA_URL` | `grafana.grafana_url` |
 | `ATRIUM_GRAFANA_GRAFANA_VIEWER_TOKEN` | `grafana.grafana_viewer_token` |
+| `ATRIUM_GRAFANA_OPS_HOSTS` | `grafana.ops_hosts` |
 | `ATRIUM_MAIL_BIRTHDAYS_DEFAULT_DAYS` | `mail.birthdays_default_days` |
 | `ATRIUM_MAIL_BIRTHDAYS_MAX_DAYS` | `mail.birthdays_max_days` |
 | `ATRIUM_MAIL_DELETION_INTERVAL_SECONDS` | `mail.deletion_interval_seconds` |

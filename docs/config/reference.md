@@ -77,6 +77,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_schedule_memory_work` | string | `*/2 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEMORY_WORK` |
 | `agent_schedule_min_interval_seconds` | int | `3600` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MIN_INTERVAL_SECONDS` |
 | `agent_schedule_nightly` | string | `daily 02:30` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_NIGHTLY` |
+| `agent_schedule_ops_sampler` | string | `*/15 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_OPS_SAMPLER` |
 | `agent_schedule_package_tracking` | string | `0 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_PACKAGE_TRACKING` |
 | `agent_schedule_task_reminders` | string | `*/5 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_TASK_REMINDERS` |
 | `agent_schedule_weekly_review` | string | `weekly sun 18:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_WEEKLY_REVIEW` |
@@ -116,10 +117,13 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `max_steps_chat` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_CHAT` |
 | `max_steps_cron` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_CRON` |
 | `max_steps_nightly` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` |
+| `max_steps_worker` | int | `8` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_WORKER` |
 | `monthly_budget_usd` | float | `150` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
 | `nightly_stale_months` | int | `6` | advanced | `ATRIUM_ASSISTANT_NIGHTLY_STALE_MONTHS` |
 | `open_meteo_ca_file` | string | none | advanced | `ATRIUM_ASSISTANT_OPEN_METEO_CA_FILE` |
 | `open_meteo_proxy` | string | none | advanced | `ATRIUM_ASSISTANT_OPEN_METEO_PROXY` |
+| `ops_worker_max_run_usd` | float | `0.10` | advanced | `ATRIUM_ASSISTANT_OPS_WORKER_MAX_RUN_USD` |
+| `ops_worker_monthly_usd` | float | `5` | ui | `ATRIUM_ASSISTANT_OPS_WORKER_MONTHLY_USD` |
 | `prompt_subagent` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` |
 | `prompt_system` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SYSTEM` |
 | `thread_cost_cap_usd` | float | `10` | advanced | `ATRIUM_ASSISTANT_THREAD_COST_CAP_USD` |
@@ -226,6 +230,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `grafana_proxy` | string | none | advanced | `ATRIUM_GRAFANA_GRAFANA_PROXY` |
 | `grafana_url` | string | none | ui | `ATRIUM_GRAFANA_GRAFANA_URL` |
 | `grafana_viewer_token` | string | none | secret | `ATRIUM_GRAFANA_GRAFANA_VIEWER_TOKEN` |
+| `ops_hosts` | string | none | ui | `ATRIUM_GRAFANA_OPS_HOSTS` |
 
 ## mail
 

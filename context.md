@@ -254,7 +254,8 @@ behavior-parity target.
   migration 7 the knowledge store: `kb_records`, its FTS5 table and
   triggers, `projects.private` and one `embed_kb_<generation>` vec0 table per
   existing embedding generation, and migration 8 `export_pages`, the
-  record-to-page mapping of the knowledge export. `taint_private` and `taint_web` are dormant after migration 6: no longer
+  record-to-page mapping of the knowledge export, and migration 9
+  `ops_samples`, the server-ops sampler's typed samples (14-day retention). `taint_private` and `taint_web` are dormant after migration 6: no longer
   read or written, and kept because dropping them would rewrite the table.
   `atrium db import-v1` is the only path from a v1
   database: it copies the learned rules, corrections, routing decisions and
@@ -340,6 +341,12 @@ behavior-parity target.
   `web_search` is offered only to that child (chat and cron offer
   `search_web` when the thread's `web_search` option is on), and it is
   excluded from the operator's subagent tool pool.
+- The `ops-sampler` built-in job runs every 15 minutes with no model call.
+  It reads the configured `ops_hosts` through the Grafana metrics
+  datasource and the alerts endpoint, records typed samples in
+  `ops_samples` (up, cpu_pct, mem_pct, disk_root_pct, failed_units,
+  alerts_firing; 14-day retention) and upserts one typed `ops` fact per
+  host and metric with a 24-hour expiry.
 - Notion edits are free: the Notion page Edit and Link buttons write
   directly through the same path as `notion_update_page`, with Undo on
   Done; approvals are only for external or costly actions. Old

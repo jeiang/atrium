@@ -634,6 +634,14 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "agent_schedule_ops_sampler": {
+          "default": "*/15 * * * *",
+          "type": "string"
+        },
+        "agent_schedule_ops_sampler_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "agent_schedule_package_tracking": {
           "default": "0 * * * *",
           "type": "string"
@@ -1053,6 +1061,17 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "max_steps_worker": {
+          "default": 8,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "max_steps_worker_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "monthly_budget_usd": {
           "default": 150,
           "type": [
@@ -1086,6 +1105,28 @@
           "type": "string"
         },
         "open_meteo_proxy_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ops_worker_max_run_usd": {
+          "default": 0.1,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "ops_worker_max_run_usd_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ops_worker_monthly_usd": {
+          "default": 5,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "ops_worker_monthly_usd_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -1740,6 +1781,13 @@
           "type": "string"
         },
         "grafana_viewer_token_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ops_hosts": {
+          "type": "string"
+        },
+        "ops_hosts_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }

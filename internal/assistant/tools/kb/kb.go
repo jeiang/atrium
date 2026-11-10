@@ -18,7 +18,7 @@ import (
 
 var (
 	writeBound = tool.NewBound(assistant.KeyKBWriteChars, "")
-	scopeEnum  = []string{kb.ScopeWork, kb.ScopePersonal}
+	scopeEnum  = []string{kb.ScopeWork, kb.ScopePersonal, kb.ScopeOps}
 )
 
 var markNames = []struct {
@@ -101,7 +101,7 @@ func search(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 		return nil, err
 	}
 	if scope != "" && !slices.Contains(scopeEnum, scope) {
-		return nil, tool.Error("scope must be work or personal")
+		return nil, tool.Error("scope must be work, personal or ops")
 	}
 	limit, err := tool.BoundedInt(args, "limit", 10, 20, 1)
 	if err != nil {
@@ -135,7 +135,10 @@ func search(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if len(results) == 0 {
 		return out, nil
 	}
-	return tool.Marked{Value: out, Marks: tool.Personal | marks}, nil
+	if scope != kb.ScopeOps {
+		marks |= tool.Personal
+	}
+	return tool.Marked{Value: out, Marks: marks}, nil
 }
 
 func get(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -175,7 +178,13 @@ func get(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if len(results) == 0 {
 		return out, nil
 	}
-	return tool.Marked{Value: out, Marks: tool.Personal | marks}, nil
+	for _, r := range found {
+		if r.Scope != kb.ScopeOps {
+			marks |= tool.Personal
+			break
+		}
+	}
+	return tool.Marked{Value: out, Marks: marks}, nil
 }
 
 func aliasesArg(args tool.Args) ([]string, error) {
@@ -284,7 +293,7 @@ func retract(ctx context.Context, tc *tool.Context, args tool.Args) (any, error)
 }
 
 const searchSchema = `{"type": "object", "properties": {"query": {"type": "string", "maxLength": 200}, ` +
-	`"scope": {"enum": ["work", "personal"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 20}}, ` +
+	`"scope": {"enum": ["work", "personal", "ops"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 20}}, ` +
 	`"required": ["query"], "additionalProperties": false}`
 
 const getSchema = `{"type": "object", "properties": {"ids": {"type": "array", "items": {"type": "integer"}, ` +

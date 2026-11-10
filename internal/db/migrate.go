@@ -166,6 +166,26 @@ var migrations = []migration{
 		)`)
 		return err
 	}},
+	{9, func(ctx context.Context, tx *sql.Tx) error {
+		for _, stmt := range []string{
+			`CREATE TABLE IF NOT EXISTS ops_samples (
+				id INTEGER PRIMARY KEY,
+				ts REAL NOT NULL,
+				host TEXT NOT NULL,
+				metric TEXT NOT NULL,
+				value REAL,
+				state TEXT,
+				detail TEXT
+			)`,
+			"CREATE INDEX IF NOT EXISTS ops_samples_key ON ops_samples (host, metric, ts)",
+			"CREATE INDEX IF NOT EXISTS ops_samples_ts ON ops_samples (ts)",
+		} {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
+				return err
+			}
+		}
+		return nil
+	}},
 }
 
 type ModuleMigration struct {

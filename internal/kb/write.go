@@ -304,6 +304,35 @@ func Write(ctx context.Context, d *db.DB, reg *writes.Registry, w Writer, in Wri
 	return out, writeID, nil
 }
 
+func UpsertFact(ctx context.Context, d *db.DB, origin, title, body string, expires, now float64) (Record, error) {
+	if origin == "" || title == "" || body == "" {
+		return Record{}, errors.New("kb: a fact needs an origin, title and body")
+	}
+	var out Record
+	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		var id int64
+		err := tx.QueryRowContext(ctx,
+			"INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, origin, pinned, embedded, expires_at, created_at, updated_at) "+
+				"VALUES (?, '[]', ?, ?, NULL, 0, 0, ?, ?, 0, 0, ?, ?, ?) "+
+				"ON CONFLICT(origin) DO UPDATE SET title = excluded.title, body = excluded.body, expires_at = excluded.expires_at, "+
+				"retracted_at = NULL, embedded = 0, updated_at = excluded.updated_at RETURNING id",
+			title, body, ScopeOps, WriterWorker, origin, expires, now, now).Scan(&id)
+		if err != nil {
+			return err
+		}
+		rec, err := Get(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		out = *rec
+		return nil
+	})
+	if err != nil {
+		return Record{}, err
+	}
+	return out, nil
+}
+
 func Retract(ctx context.Context, d *db.DB, reg *writes.Registry, w Writer, id int64, reason string) (Record, int64, error) {
 	var out Record
 	var writeID int64

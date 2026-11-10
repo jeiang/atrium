@@ -57,7 +57,7 @@ func selfDiagnose(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 	if err != nil {
 		return nil, err
 	}
-	lim, err := readLimits(ctx, tc)
+	lim, err := ReadLimits(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -80,7 +80,7 @@ func selfDiagnose(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 		if err != nil {
 			return nil, err
 		}
-		metrics, err := compactResults(payload, lim.metricRows, lim)
+		metrics, err := compactResults(payload, lim.MetricRows, lim)
 		if err != nil {
 			return nil, err
 		}
@@ -93,12 +93,12 @@ func selfDiagnose(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 		if logsQuery == "" {
 			logsQuery = defaultLogQueries[logsType]
 		}
-		q := map[string]any{"refId": "logs", "datasource": map[string]any{"uid": logsUID}, "expr": logsQuery, "queryType": "range", "maxLines": int64(lim.logRows)}
+		q := map[string]any{"refId": "logs", "datasource": map[string]any{"uid": logsUID}, "expr": logsQuery, "queryType": "range", "maxLines": int64(lim.LogRows)}
 		payload, err := request(ctx, tc, lim, http.MethodPost, "/api/ds/query", "", map[string]any{"queries": []any{q}, "from": from, "to": "now"})
 		if err != nil {
 			return nil, err
 		}
-		logs, err := compactResults(payload, lim.logRows, lim)
+		logs, err := compactResults(payload, lim.LogRows, lim)
 		if err != nil {
 			return nil, err
 		}
