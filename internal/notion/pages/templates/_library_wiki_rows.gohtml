@@ -2,13 +2,14 @@
 
 {{define "library_wiki_rows"}}
 {{if .pages}}
-<ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card text-sm" role="list" aria-label="Wiki pages">
+<ul class="rows" role="list" aria-label="Wiki pages">
   {{range .pages}}
-  <li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
-    <a class="min-w-0 truncate font-medium underline-offset-4 hover:underline" href="/notion/{{urlencode .ID}}">{{or .Title "Untitled"}}</a>
-    {{if .Path}}<span class="min-w-0 truncate text-xs text-muted-foreground">{{page_path .Path}}</span>{{end}}
-    {{if .Private}}<span class="badge" data-variant="outline">private</span>{{end}}
-    <span class="ms-auto text-xs text-muted-foreground tabular-nums">{{template "when" (dict "epoch" .EditedTS "style" "datetime")}}</span>
+  <li class="row">
+    <span class="row-main">
+      <a class="row-title" href="/notion/{{urlencode .ID}}">{{or .Title "Untitled"}}</a>
+      {{if or .Path .Private}}<span class="row-meta">{{if .Path}}{{page_path .Path}}{{end}}{{if and .Path .Private}} · {{end}}{{if .Private}}private{{end}}</span>{{end}}
+    </span>
+    <span class="row-when">{{template "when" (dict "epoch" .EditedTS "style" "date")}}</span>
   </li>
   {{end}}
 </ul>

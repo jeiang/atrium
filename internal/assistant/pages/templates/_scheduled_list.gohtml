@@ -11,36 +11,22 @@
       <span class="text-xs text-muted-foreground">{{.tz}}</span>
     </div>
     {{if .jobs}}
-    <ul class="grid gap-4 md:grid-cols-2 xl:grid-cols-3" role="list">
+    <ul class="rows" role="list">
       {{range .jobs}}
-      <li class="flex flex-col gap-3 rounded-lg border bg-card p-4" data-job="{{.ID}}">
-        <header class="flex items-start gap-2">
-          <div class="flex min-w-0 flex-1 flex-col gap-1">
-            <h3 class="truncate text-sm font-medium" title="{{.Name}}">{{.Name}}</h3>
-            <p class="text-xs text-muted-foreground">{{.Cadence}}</p>
-          </div>
-          <label class="flex items-center gap-2 text-xs text-muted-foreground">
-            <span class="sr-only">{{.Name}} enabled</span>
-            <input id="job-toggle-{{.ID}}" type="checkbox" role="switch" class="input"{{if .Enabled}} checked{{end}}
-                    hx-post="/scheduled/{{.ID}}/toggle" hx-trigger="change" hx-target="#scheduled-list" hx-swap="outerHTML">
-          </label>
-        </header>
-        <p class="line-clamp-2 text-xs text-muted-foreground">{{.Prompt}}</p>
-        <dl class="flex flex-col gap-1 text-xs">
-          <div class="flex gap-2"><dt class="w-16 shrink-0 text-muted-foreground">Next run</dt><dd>{{if .NextDueText}}{{str .NextDueText}}{{else}}{{if .Enabled}}Not scheduled{{else}}Paused{{end}}{{end}}</dd></div>
-          <div class="flex flex-wrap items-center gap-2">
-            <dt class="w-16 shrink-0 text-muted-foreground">Last run</dt>
-            <dd class="flex items-center gap-2">
-              {{if .LastStatus}}{{$status := (str .LastStatus)}}{{$title := lbl "job_run_hint" $status ""}}{{if .LastError}}{{$title = (str .LastError)}}{{end}}{{template "scheduled_status" (dict "status" $status "title" $title)}}{{str .LastStartedText}}{{else}}Never{{end}}
-            </dd>
-          </div>
-        </dl>
-        <footer class="mt-auto flex items-center gap-2">
-          <span class="badge" data-variant="outline">{{if has (list "nightly" "builtin") .Kind}}{{lbl "job_source" .Kind}}{{else}}{{lbl "job_source" .CreatedBy}}{{end}}</span>
-          {{if not (has (list "nightly" "builtin") .Kind)}}
-          <button id="job-delete-{{.ID}}" type="button" class="btn ms-auto" data-size="icon-sm" data-variant="ghost" aria-label="Delete {{.Name}}" hx-post="/scheduled/{{.ID}}/cancel" hx-target="#scheduled-list" hx-swap="outerHTML" hx-confirm="Delete {{.Name}}?">{{icon "trash-2" "size-3.5"}}</button>
-          {{end}}
-        </footer>
+      <li class="row" data-job="{{.ID}}">
+        <span class="row-main">
+          <span class="row-title" title="{{.Prompt}}">{{.Name}}</span>
+          <span class="row-meta">{{.Cadence}} · {{if has (list "nightly" "builtin") .Kind}}{{lbl "job_source" .Kind}}{{else}}{{lbl "job_source" .CreatedBy}}{{end}} · {{if .NextDueText}}next {{str .NextDueText}}{{else if .Enabled}}Not scheduled{{else}}Paused{{end}}</span>
+        </span>
+        {{if .LastStatus}}{{$status := (str .LastStatus)}}{{$title := lbl "job_run_hint" $status ""}}{{if .LastError}}{{$title = (str .LastError)}}{{end}}{{if ne $status "ok"}}{{template "scheduled_status" (dict "status" $status "title" $title)}}{{end}}<span class="row-when max-sm:hidden" title="Last run">{{str .LastStartedText}}</span>{{end}}
+        {{if not (has (list "nightly" "builtin") .Kind)}}
+        <button id="job-delete-{{.ID}}" type="button" class="btn" data-size="icon-sm" data-variant="ghost" aria-label="Delete {{.Name}}" hx-post="/scheduled/{{.ID}}/cancel" hx-target="#scheduled-list" hx-swap="outerHTML" hx-confirm="Delete {{.Name}}?">{{icon "trash-2" "size-3.5"}}</button>
+        {{end}}
+        <label class="flex items-center">
+          <span class="sr-only">{{.Name}} enabled</span>
+          <input id="job-toggle-{{.ID}}" type="checkbox" role="switch" class="input"{{if .Enabled}} checked{{end}}
+                  hx-post="/scheduled/{{.ID}}/toggle" hx-trigger="change" hx-target="#scheduled-list" hx-swap="outerHTML">
+        </label>
       </li>
       {{end}}
     </ul>
