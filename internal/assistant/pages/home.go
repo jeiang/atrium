@@ -70,7 +70,7 @@ func agendaOf(rows []calendar.Row, tz *time.Location, now time.Time) []agendaEve
 
 func (p *pages) agenda(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	if !module.IsEnabled(ctx, module.Calendar) {
+	if !module.IsEnabled(p.deps.Ctx, module.Calendar) {
 		p.fail(w, r, http.StatusNotFound, "calendar is off")
 		return
 	}
