@@ -1,7 +1,10 @@
 {{define "title"}}{{or .Data.Record.Title "Knowledge record"}}{{end}}
 {{define "heading"}}Knowledge{{end}}
 {{define "content"}}{{$d := .Data}}{{$r := $d.Record}}
-<a href="/library/knowledge" class="btn self-start" data-size="sm" data-variant="ghost">{{icon "arrow-left"}}Knowledge</a>
+<div class="flex flex-wrap items-center justify-between gap-2">
+  <a href="/library/knowledge" class="btn" data-size="sm" data-variant="ghost">{{icon "arrow-left"}}Knowledge</a>
+  <a href="/chat?about=knowledge:{{$r.ID}}" class="btn" data-size="sm" data-variant="outline">{{icon "messages-square"}}Ask about this</a>
+</div>
 <div class="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_--spacing(80)]">
   <article class="flex min-w-0 flex-col gap-4">
     <header class="flex flex-col gap-2">

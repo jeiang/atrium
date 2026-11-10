@@ -20,6 +20,7 @@
       <dt class="text-muted-foreground">Date</dt>
       <dd>{{template "when" (dict "epoch" $m.DateTS "style" "datetime")}}</dd>
     </dl>
+    <a class="btn self-start" data-size="sm" data-variant="outline" href="/chat?about=mail:{{$m.ID}}">{{icon "messages-square"}}Ask about this</a>
   </header>
 
   {{template "mail_decision_card" (dict "m" $m "mode" $mode "toast" (opt . "toast" nil) "correct" (opt . "correct" nil))}}

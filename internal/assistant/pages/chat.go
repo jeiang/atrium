@@ -2,6 +2,7 @@ package pages
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -32,9 +33,43 @@ type listData struct {
 	Date    string             `json:"date"`
 	Digest  []block.DigestLine `json:"digest"`
 	Agenda  bool               `json:"agenda"`
+	About   *About             `json:"about"`
 
 	Defaults threads.Options `json:"defaults"`
 	Composer ComposerView    `json:"composer"`
+}
+
+type About struct {
+	Ref   string `json:"ref"`
+	Label string `json:"label"`
+	Line  string `json:"-"`
+}
+
+func (p *pages) about(ctx context.Context, ref string) *About {
+	kind, raw, _ := strings.Cut(ref, ":")
+	id, err := strconv.ParseInt(raw, 10, 64)
+	if err != nil {
+		return nil
+	}
+	a := About{Ref: kind + ":" + strconv.FormatInt(id, 10)}
+	switch kind {
+	case "mail":
+		err = p.deps.DB.Read.QueryRowContext(ctx, "SELECT COALESCE(subject, '') FROM messages WHERE id = ?", id).Scan(&a.Label)
+		a.Line = "About mail message " + strconv.FormatInt(id, 10) + "."
+	case "knowledge":
+		err = p.deps.DB.Read.QueryRowContext(ctx, "SELECT title FROM kb_records WHERE id = ?", id).Scan(&a.Label)
+		a.Line = "About knowledge record " + strconv.FormatInt(id, 10) + "."
+	default:
+		return nil
+	}
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	check(err)
+	if a.Label == "" {
+		a.Label = strings.TrimSuffix(strings.TrimPrefix(a.Line, "About "), ".")
+	}
+	return &a
 }
 
 func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string) {
@@ -68,7 +103,8 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string) 
 	data.Date = day.Format("Monday, January 2")
 	data.Digest = p.digestLines(r.Context(), day)
 	data.Agenda = module.IsEnabled(p.deps.Ctx, module.Calendar)
-	data.Welcome = len(found) == 0 && q == "" && view == ""
+	data.About = p.about(r.Context(), web.QueryValue(r.URL.Query(), "about"))
+	data.Welcome = len(found) == 0 && q == "" && view == "" && data.About == nil
 	if data.Welcome {
 		exists, err := threads.HasChat(r.Context(), p.deps.DB.Read)
 		check(err)
@@ -132,6 +168,9 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 	refs, err := references.Resolve(ctx, p.deps.DB.Read, 0, text)
 	if p.refused(w, r, err) {
 		return
+	}
+	if about := p.about(ctx, web.FormString(form, "about", "")); about != nil && text != "" {
+		text = about.Line + "\n\n" + text
 	}
 	var project *int64
 	if projectID != 0 {
