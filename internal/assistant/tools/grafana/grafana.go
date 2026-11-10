@@ -55,7 +55,7 @@ func ReadLimits(ctx context.Context, q db.Querier) (Limits, error) {
 var (
 	kinds      = []string{"prometheus", "logs"}
 	dropFields = []string{"id", "tsNs"}
-	contexts   = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}
+	contexts   = tool.Kinds{tool.Chat, tool.Cron, tool.Sub, tool.Worker}
 	readMarks  = tool.Untrusted
 )
 

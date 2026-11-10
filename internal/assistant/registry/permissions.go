@@ -26,7 +26,7 @@ const (
 	situationCount = 6
 )
 
-func PromptCarriesKnowledge(kind tool.Kind) bool { return kind != tool.Sub }
+func PromptCarriesKnowledge(kind tool.Kind) bool { return kind != tool.Sub && kind != tool.Worker }
 
 func Classify(m tool.Marks, knowledge, privateTools bool) Situation {
 	untrusted := m&tool.Untrusted != 0

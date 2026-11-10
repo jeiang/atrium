@@ -211,6 +211,10 @@ func (r *Registry) enabled(ctx context.Context, q db.Querier, name string) (bool
 	return found.Value != "false", nil
 }
 
+func sharedWorkerTool(name string) bool {
+	return name == "kb_search" || name == "kb_get" || name == "atrium_self_diagnose" || strings.HasPrefix(name, "grafana_")
+}
+
 func validate(t tool.Tool) error {
 	switch {
 	case t.Name == "":
@@ -245,6 +249,8 @@ func validate(t tool.Tool) error {
 		return InvalidError(fmt.Sprintf("tool %s writes directly in sub-agent runs", t.Name))
 	case t.Approval != nil && (t.Effect != tool.Propose || t.Approval.Apply == nil || t.Approval.Label == "" || t.Approval.Module == ""):
 		return InvalidError(fmt.Sprintf("tool %s has an incomplete approval", t.Name))
+	case t.Contexts.Has(tool.Worker) && len(t.Contexts) > 1 && !sharedWorkerTool(t.Name):
+		return InvalidError(fmt.Sprintf("tool %s is available to worker runs and other run kinds", t.Name))
 	}
 	for _, k := range t.Contexts {
 		if !k.Valid() {

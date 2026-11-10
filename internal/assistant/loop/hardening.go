@@ -19,15 +19,20 @@ var maxStepsKeys = map[tool.Kind]string{
 	tool.Chat:    "max_steps_chat",
 	tool.Cron:    "max_steps_cron",
 	tool.Nightly: "max_steps_nightly",
+	tool.Worker:  "max_steps_worker",
 }
 
 func init() {
 	defs := []settings.Def{settings.Value(settings.Advanced, settings.Def{
 		Key: DoomLoopThresholdKey, Module: "assistant", Type: settings.Int, Default: "3",
 		Check: settings.Between(2, 20)})}
-	for _, kind := range []tool.Kind{tool.Chat, tool.Cron, tool.Nightly} {
+	for _, kind := range []tool.Kind{tool.Chat, tool.Cron, tool.Nightly, tool.Worker} {
+		defaultSteps := "24"
+		if kind == tool.Worker {
+			defaultSteps = "8"
+		}
 		defs = append(defs, settings.Value(settings.Advanced, settings.Def{
-			Key: maxStepsKeys[kind], Module: "assistant", Type: settings.Int, Default: "24",
+			Key: maxStepsKeys[kind], Module: "assistant", Type: settings.Int, Default: defaultSteps,
 			Check: settings.Between(1, 200)}))
 	}
 	settings.MustRegister(defs...)

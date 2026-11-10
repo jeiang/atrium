@@ -137,6 +137,8 @@ func (o Start) kind() tool.Kind {
 		return tool.Nightly
 	case threads.Subagent:
 		return tool.Sub
+	case threads.Worker:
+		return tool.Worker
 	default:
 		return tool.Chat
 	}
@@ -169,7 +171,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env, threadID int64, now
 	if err != nil {
 		return nil, err
 	}
-	if _, err := budget.Check(ctx, q, now, loc, root == threads.Cron || root == threads.Nightly); err != nil {
+	if _, err := budget.Check(ctx, q, now, loc, root == threads.Cron || root == threads.Nightly || root == threads.Worker); err != nil {
 		return nil, err
 	}
 	return thread, nil

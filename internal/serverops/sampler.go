@@ -33,7 +33,10 @@ func Callables() map[string]worker.Callable {
 		scheduler.OpsSamplerName: {
 			Modules: []string{module.Grafana},
 			Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
-				return worker.Result{}, Sample(ctx, e.Service.DB, e.Service.Env, e.Now())
+				if err := Sample(ctx, e.Service.DB, e.Service.Env, e.Now()); err != nil {
+					return worker.Result{}, err
+				}
+				return worker.Result{}, Supervise(ctx, e)
 			},
 		},
 	}

@@ -35,11 +35,12 @@ const (
 	Cron     Kind = "cron"
 	Nightly  Kind = "nightly"
 	Subagent Kind = "subagent"
+	Worker   Kind = "worker"
 )
 
 func ParseKind(value string) (Kind, bool) {
 	switch Kind(value) {
-	case Chat, Cron, Nightly, Subagent:
+	case Chat, Cron, Nightly, Subagent, Worker:
 		return Kind(value), true
 	}
 	return "", false
@@ -319,7 +320,7 @@ func resolve(ctx context.Context, q db.Querier, kind Kind, projectID *int64, exp
 		}
 		projectEffort, projectLimit = true, true
 	}
-	if kind != Chat {
+	if kind != Chat && kind != Worker {
 		effort, ok, err := EffortOf(ctx, q, kind)
 		if err != nil {
 			return Options{}, err

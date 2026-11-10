@@ -100,6 +100,9 @@ func search(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if err != nil {
 		return nil, err
 	}
+	if tc.Kind == tool.Worker {
+		scope = kb.ScopeOps
+	}
 	if scope != "" && !slices.Contains(scopeEnum, scope) {
 		return nil, tool.Error("scope must be work, personal or ops")
 	}
@@ -165,6 +168,9 @@ func get(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	found, err := kb.Read(ctx, tc.DB.Read, kb.ReadFilter{IDs: ids, ProjectID: project, Now: tc.Now()})
 	if err != nil {
 		return nil, err
+	}
+	if tc.Kind == tool.Worker {
+		found = slices.DeleteFunc(found, func(r kb.Record) bool { return r.Scope != kb.ScopeOps })
 	}
 	results := make([]any, 0, len(found))
 	var marks tool.Marks
@@ -322,7 +328,7 @@ func Tools() []tool.Tool {
 			Effect:      tool.Read,
 			Annotated:   true,
 			Marks:       tool.AllMarks,
-			Contexts:    tool.AllKinds,
+			Contexts:    append(tool.Kinds{tool.Worker}, tool.AllKinds...),
 		},
 		{
 			Name:        "kb_get",
@@ -332,7 +338,7 @@ func Tools() []tool.Tool {
 			Effect:      tool.Read,
 			Annotated:   true,
 			Marks:       tool.AllMarks,
-			Contexts:    tool.AllKinds,
+			Contexts:    append(tool.Kinds{tool.Worker}, tool.AllKinds...),
 		},
 		{
 			Name: "kb_write",

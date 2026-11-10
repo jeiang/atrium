@@ -335,7 +335,10 @@ behavior-parity target.
 - The registry restricts tools by run kind. Scheduled runs read, propose,
   and notify; nightly runs may also update Notion and the profile with undo.
   Research subagents have restricted tools and bounded runs, and their system
-  prompt omits the operator profile and project block. The built-in `web`
+  prompt omits the operator profile and project block. The server-ops
+  worker is a separate run kind: it has only `ops_samples`, `ops_finding`,
+  the Grafana reads and `kb_search`/`kb_get` forced to the `ops` scope, and
+  its system prompt carries no profile or project block. The built-in `web`
   subagent is retired; `search_web` runs a `search_web` child with the
   server `web_search`, `web_fetch`, `recall` and `report`. The server
   `web_search` is offered only to that child (chat and cron offer
@@ -346,7 +349,15 @@ behavior-parity target.
   datasource and the alerts endpoint, records typed samples in
   `ops_samples` (up, cpu_pct, mem_pct, disk_root_pct, failed_units,
   alerts_firing; 14-day retention) and upserts one typed `ops` fact per
-  host and metric with a 24-hour expiry.
+  host and metric with a 24-hour expiry. When a fact changes state, crosses
+  the 90% memory or disk threshold, or its firing alert set changes, and
+  the change set differs from the last worker run's, it starts one worker
+  run in the persistent `Ops` thread with the typed change set and quoted
+  alert names; the worker files `ops_finding` records (scope `ops`, marks
+  from the thread) and the sampler retracts a finding once its fact is
+  back to normal. Findings of severity warning or critical appear in the
+  attention view; the worker has no notify, people or internet tool and
+  never restarts or changes a host.
 - Notion edits are free: the Notion page Edit and Link buttons write
   directly through the same path as `notion_update_page`, with Undo on
   Done; approvals are only for external or costly actions. Old
@@ -375,7 +386,9 @@ behavior-parity target.
   plus the marks of the threads they read. `recall` marks nothing: it only
   re-reads results stored in its own thread. `search_knowledge`,
   `fetch_knowledge` and `profile_get` mark `personal`. Grafana reads and
-  `atrium_self_diagnose` mark `untrusted` only. `web_fetch`, `research`
+  `atrium_self_diagnose` mark `untrusted` only. `ops_samples` marks
+  `untrusted` when it returns alert details; `ops_finding` and
+  `worker_status` mark nothing. `web_fetch`, `research`
   and a response carrying a server `web_search_tool_result` mark the
   thread `untrusted`; `research` declares all four marks and returns
   `untrusted` plus the child thread's marks. `weather`, the media reads,

@@ -163,7 +163,7 @@ func Read(ctx context.Context, q db.Querier, f ReadFilter) ([]Record, error) {
 		return nil, err
 	}
 	clause, args := privateClause("r", f.ProjectID)
-	where := "(r.expires_at IS NULL OR r.expires_at > ?) AND r.scope != 'ops' AND " + clause +
+	where := "(r.expires_at IS NULL OR r.expires_at > ?) AND " + clause +
 		" AND r.id IN (SELECT value FROM json_each(?))"
 	args = append([]any{f.Now}, append(args, string(raw))...)
 	rows, err := q.QueryContext(ctx, "SELECT "+columns+fromClause()+" WHERE "+where, args...)
