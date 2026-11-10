@@ -287,6 +287,89 @@ func Tool() tool.Tool {
 	}
 }
 
+func Schema(raw json.RawMessage) (json.RawMessage, error) {
+	var spec Spec
+	if err := json.Unmarshal(raw, &spec); err != nil {
+		return nil, fmt.Errorf("report: spec: %w", err)
+	}
+	properties := make(map[string]any, len(spec.Fields))
+	required := make([]string, 0, len(spec.Fields))
+	for _, field := range spec.Fields {
+		properties[field.Name] = fieldSchema(field)
+		required = append(required, field.Name)
+	}
+	return json.Marshal(map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"answer": map[string]any{
+				"type":                 "object",
+				"properties":           properties,
+				"required":             required,
+				"additionalProperties": false,
+			},
+		},
+		"required":             []string{"answer"},
+		"additionalProperties": false,
+	})
+}
+
+func fieldSchema(field Field) map[string]any {
+	if field.List {
+		item := field
+		item.List = false
+		limit := field.Max
+		if limit <= 0 {
+			limit = defaultListMax
+		}
+		return map[string]any{
+			"type":     []string{"array", "null"},
+			"items":    fieldSchema(item),
+			"maxItems": limit,
+		}
+	}
+	switch field.Type {
+	case Number:
+		return map[string]any{"type": []string{"number", "null"}}
+	case Date:
+		return map[string]any{"type": []string{"string", "null"}}
+	case Boolean:
+		return map[string]any{"type": []string{"boolean", "null"}}
+	case Enum:
+		schema := map[string]any{"type": []string{"string", "null"}}
+		if len(field.Values) > 0 {
+			schema["enum"] = field.Values
+		}
+		return schema
+	case ID:
+		schema := map[string]any{"type": []string{"integer", "null"}}
+		if len(field.Within) > 0 {
+			schema["enum"] = field.Within
+		}
+		return schema
+	case Text:
+		limit := field.Max
+		if limit <= 0 {
+			limit = defaultTextMax
+		}
+		return map[string]any{"type": []string{"string", "null"}, "maxLength": limit}
+	case Object:
+		properties := make(map[string]any, len(field.Fields))
+		required := make([]string, 0, len(field.Fields))
+		for _, sub := range field.Fields {
+			properties[sub.Name] = fieldSchema(sub)
+			required = append(required, sub.Name)
+		}
+		return map[string]any{
+			"type":                 []string{"object", "null"},
+			"properties":           properties,
+			"required":             required,
+			"additionalProperties": false,
+		}
+	default:
+		return map[string]any{"type": []string{"string", "null"}}
+	}
+}
+
 func handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	answer, ok := args["answer"].(map[string]any)
 	if !ok {

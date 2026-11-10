@@ -21,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/jeiang/atrium/internal/assistant/report"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
@@ -82,7 +83,7 @@ func (r *Runner) systemBlocks(ctx context.Context, q db.Querier, thread threads.
 }
 
 func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Thread, kind tool.Kind, model, effort string, set registry.Set,
-	cc prompts.CacheControl, extra string, webSearchMaxUses int, dynamicFiltering bool) (request, error) {
+	cc prompts.CacheControl, extra string, webSearchMaxUses int, dynamicFiltering bool, reportSpec json.RawMessage) (request, error) {
 	system, err := r.systemBlocks(ctx, q, thread, kind, cc, extra)
 	if err != nil {
 		return request{}, err
@@ -90,6 +91,18 @@ func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Threa
 	cacheControl, err := cc.JSON()
 	if err != nil {
 		return request{}, err
+	}
+	if len(reportSpec) > 0 {
+		schema, err := report.Schema(reportSpec)
+		if err != nil {
+			return request{}, err
+		}
+		set.Dispatch = slices.Clone(set.Dispatch)
+		for i := range set.Dispatch {
+			if set.Dispatch[i].Name == report.Name {
+				set.Dispatch[i].InputSchema = schema
+			}
+		}
 	}
 	toolParams, err := set.Params(webSearchMaxUses, cacheControl, dynamicFiltering)
 	if err != nil {
