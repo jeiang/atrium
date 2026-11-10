@@ -74,16 +74,26 @@ type Row struct {
 	ActionHasUndo  int64    `json:"action_has_undo"`
 	Agreement      string   `json:"agreement"`
 	Current        *string  `json:"current"`
+	More           int      `json:"more"`
 	Applied        *Applied `json:"applied"`
 }
 
-func scanRow(r *sql.Rows) (Row, error) {
+func scanRow(r *sql.Rows) (Row, error) { return scanInto(r) }
+
+func scanSender(r *sql.Rows) (Row, error) {
+	var more, nth int
+	row, err := scanInto(r, &more, &nth)
+	row.More = more
+	return row, err
+}
+
+func scanInto(r *sql.Rows, extra ...any) (Row, error) {
 	var row Row
 	var seen, flagged int64
-	if err := r.Scan(&row.DecisionID, &row.TS, &row.Stage, &row.Key, &row.Action, &row.Dest, &row.Confidence, &row.Detail,
+	if err := r.Scan(append([]any{&row.DecisionID, &row.TS, &row.Stage, &row.Key, &row.Action, &row.Dest, &row.Confidence, &row.Detail,
 		&row.MessageID, &row.Account, &row.Subject, &row.FromAddr, &row.FromName, &row.DateTS, &seen, &flagged,
 		&row.Actual, &row.ActualInbox, &row.CorrectedTo, &row.ActionID, &row.ActionKind, &row.ActionState, &row.ActionError,
-		&row.ActionUndoneTS, &row.ActionHasUndo, &row.Agreement); err != nil {
+		&row.ActionUndoneTS, &row.ActionHasUndo, &row.Agreement}, extra...)...); err != nil {
 		return row, err
 	}
 	row.Seen, row.Flagged = seen != 0, flagged != 0
@@ -124,6 +134,7 @@ type Filter struct {
 	Stage     string
 	Agreement string
 	Attention string
+	PerSender bool
 	Limit     int
 	Offset    int
 	Q         string
@@ -192,12 +203,18 @@ func Triage(ctx context.Context, q report.Querier, f Filter) (Page, error) {
 	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM ("+base+")"+where, params...).Scan(&page.Total); err != nil {
 		return page, err
 	}
-	rows, err := q.QueryContext(ctx, "SELECT * FROM ("+base+")"+where+" ORDER BY decision_id DESC LIMIT ? OFFSET ?",
+	query, scan := "SELECT * FROM ("+base+")"+where, scanRow
+	if f.PerSender {
+		query = "SELECT * FROM (SELECT *, COUNT(*) OVER sender - 1 AS more, ROW_NUMBER() OVER (sender ORDER BY decision_id DESC) AS nth FROM (" +
+			base + ")" + where + " WINDOW sender AS (PARTITION BY account, lower(from_addr))) WHERE nth = 1"
+		scan = scanSender
+	}
+	rows, err := q.QueryContext(ctx, query+" ORDER BY decision_id DESC LIMIT ? OFFSET ?",
 		append(slices.Clone(params), f.Limit, f.Offset)...)
 	if err != nil {
 		return page, err
 	}
-	page.Rows, err = db.Collect(rows, scanRow)
+	page.Rows, err = db.Collect(rows, scan)
 	if page.Rows == nil {
 		page.Rows = []Row{}
 	}

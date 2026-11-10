@@ -2,7 +2,7 @@
 <li id="decision-{{$r.MessageID}}" class="group/row grid gap-x-4 gap-y-2 px-4 py-3 lg:grid-cols-[minmax(0,1fr)_--spacing(64)_--spacing(48)_auto] lg:items-center">
   <div class="flex min-w-0 flex-col gap-0.5">
     <a class="truncate text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded-sm" {{template "open_attrs" $r.MessageID}}{{if $focus}} autofocus{{end}}>{{or $r.Subject "(no subject)"}}</a>
-    <p class="truncate text-xs text-muted-foreground">{{sender $r}} · {{template "when" (dict "epoch" $r.DateTS)}} · {{$r.Account}}</p>
+    <p class="truncate text-xs text-muted-foreground">{{sender $r}} · {{template "when" (dict "epoch" $r.DateTS)}} · {{$r.Account}}{{if $r.More}} · <a class="underline underline-offset-4" href="/triage?q={{$r.FromAddr}}" data-more>{{$r.More}} more from this sender</a>{{end}}</p>
   </div>
   <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm">
     <span class="sr-only">Now in</span>

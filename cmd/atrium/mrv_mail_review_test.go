@@ -580,6 +580,8 @@ func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.
 
 func TestMrvDecisionsListEachDecisionOnceAcrossCheckAndFiled(t *testing.T) {
 	m := mrvMailFixture(t, "shadow")
+	h, x := mailtest.RawWith("Second statement", "pay@bank.test", "statement-2", "Another statement is ready.")
+	m.fake.Boxes["INBOX"].Box.Add(h, x, []string{`\Seen`}, nil)
 	if got := runApp(t, "sync"); got.code != cli.ExitOK {
 		t.Fatalf("sync: %d %s", got.code, got.stderr)
 	}
@@ -600,6 +602,13 @@ func TestMrvDecisionsListEachDecisionOnceAcrossCheckAndFiled(t *testing.T) {
 		if n != 1 {
 			t.Errorf("decision %s is listed %d times", id, n)
 		}
+	}
+	check, _, _ := strings.Cut(body, ">Filed<")
+	if n := strings.Count(check, `id="decision-`); n != 1 || !strings.Contains(check, "1 more from this sender") {
+		t.Errorf("two decisions to check from one sender show %d rows, with the count %v", n, strings.Contains(check, "1 more from this sender"))
+	}
+	if code, all, _ := mrvDo(t, client, http.MethodGet, base+"/triage?q=pay%40bank.test", nil); code != http.StatusOK || strings.Count(all, "tatement</a>") != 2 {
+		t.Errorf("the sender's list = %d with %d statements, want 2", code, strings.Count(all, "tatement</a>"))
 	}
 	if strings.Contains(body, "data-check") != strings.Contains(body, ">Filed<") {
 		t.Error("the check section and the Filed heading do not appear together")
