@@ -36,8 +36,14 @@ behavior-parity target.
   calendar day in the configured time zone, found by role and title. A
   ⌘K / Ctrl+K command palette searches threads, pages and actions. There
   is no tutorial text; guidance is `title` tooltips on controls.
-  Media is the app at `/apps/media`. Projects have no pages of their own
-  beyond create and edit. The sidebar collapses to a rail; chat uses a
+  Media is the app at `/apps/media`. The Library section holds Knowledge
+  (`/library/knowledge`): the operator's records with search, scope and
+  state filters, a record page with confirm, edit, retract, restore and
+  administrator-only purge, and a profile view that renders the system
+  prompt's profile block, each pinned record's place in it and an add-fact
+  form. Projects have no pages of their own beyond create and edit, and a
+  project can be marked private so its knowledge and threads stay inside
+  it. The sidebar collapses to a rail; chat uses a
   centred reading column with serif
   assistant prose. Drafts and proposals the assistant creates are cards in
   the thread that act through the Drafts and `/proposals/{id}/…` endpoints,
@@ -45,8 +51,8 @@ behavior-parity target.
   Proposals page: pending approvals show in their thread, in the thread's
   Work panel and on Review Needs you, which also lists blocked proposals.
   The agent acts directly on internal, undoable actions (tasks, Notion and
-  profile edits, nightly observations, mail folders and moves) and records
-  undo on Done; external, irreversible or paid actions ask with an approval
+  profile edits, nightly observations, knowledge records, mail folders and
+  moves) and records undo on Done; external, irreversible or paid actions ask with an approval
   card, and the tool registry enforces this from each tool's effect. The
   light, dark or system
   theme and the rail state are cookies the server applies on the next

@@ -40,6 +40,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_grafana_max_series` | int | `20` | advanced | `ATRIUM_ASSISTANT_AGENT_GRAFANA_MAX_SERIES` |
 | `agent_grafana_timeout_seconds` | int | `15` | advanced | `ATRIUM_ASSISTANT_AGENT_GRAFANA_TIMEOUT_SECONDS` |
 | `agent_journal_lease_seconds` | int | `1800` | advanced | `ATRIUM_ASSISTANT_AGENT_JOURNAL_LEASE_SECONDS` |
+| `agent_kb_profile_tokens` | int | `2000` | advanced | `ATRIUM_ASSISTANT_AGENT_KB_PROFILE_TOKENS` |
 | `agent_kb_write_chars` | int | `4000` | advanced | `ATRIUM_ASSISTANT_AGENT_KB_WRITE_CHARS` |
 | `agent_mail_body_chars` | int | `8000` | advanced | `ATRIUM_ASSISTANT_AGENT_MAIL_BODY_CHARS` |
 | `agent_mail_max_loops_limit` | int | `100` | advanced | `ATRIUM_ASSISTANT_AGENT_MAIL_MAX_LOOPS_LIMIT` |

@@ -1,0 +1,43 @@
+{{template "knowledge_form" (dict "form" .Data "csrf" .CSRF)}}
+
+{{define "knowledge_form"}}{{$f := .form}}{{$v := $f.Values}}
+<form method="post" action="{{$f.Action}}" class="flex flex-col gap-4" hx-post="{{$f.Action}}" hx-target="body" hx-disabled-elt="find button[type=submit]">
+  <input type="hidden" name="csrf_token" value="{{.csrf}}">
+  {{if $f.Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$f.Error}}</p>{{end}}
+  <div role="group" class="field">
+    <label for="kb-title">Title</label>
+    <input id="kb-title" name="title" type="text" value="{{$v.Title}}" maxlength="200" required>
+  </div>
+  <div role="group" class="field">
+    <label for="kb-body">Body</label>
+    <textarea id="kb-body" name="body" rows="10" class="w-full" required>{{$v.Body}}</textarea>
+  </div>
+  <div role="group" class="field">
+    <label for="kb-aliases">Aliases</label>
+    <textarea id="kb-aliases" name="aliases" rows="3" class="w-full" placeholder="One per line">{{$v.Aliases}}</textarea>
+  </div>
+  <div class="grid gap-3 sm:grid-cols-2">
+    <div role="group" class="field">
+      <label for="kb-scope">Scope</label>
+      <select id="kb-scope" name="scope" class="select">
+        <option value="work"{{if eq $v.Scope "work"}} selected{{end}}>work</option>
+        <option value="personal"{{if eq $v.Scope "personal"}} selected{{end}}>personal</option>
+        <option value="ops"{{if eq $v.Scope "ops"}} selected{{end}}>ops</option>
+      </select>
+    </div>
+    <fieldset class="flex flex-col gap-2">
+      <legend class="text-sm font-medium">Marks</legend>
+      {{range $mark := list "untrusted" "pii" "messages" "personal"}}
+      <label class="flex items-center gap-2 text-sm"><input type="hidden" name="{{$mark}}" value="0"><input type="checkbox" name="{{$mark}}" value="1"{{if index $v.Marks $mark}} checked{{end}}> {{$mark}}</label>
+      {{end}}
+    </fieldset>
+  </div>
+  <div class="flex flex-wrap gap-4">
+    <label class="flex items-center gap-2 text-sm"><input type="hidden" name="private" value="0"><input type="checkbox" name="private" value="1"{{if $v.Private}} checked{{end}}> Private</label>
+    <label class="flex items-center gap-2 text-sm"><input type="hidden" name="pinned" value="0"><input type="checkbox" name="pinned" value="1"{{if $v.Pinned}} checked{{end}}> Pinned to the profile</label>
+  </div>
+  <div class="flex justify-end">
+    <button type="submit" class="btn">{{icon "check"}}Save</button>
+  </div>
+</form>
+{{- end}}

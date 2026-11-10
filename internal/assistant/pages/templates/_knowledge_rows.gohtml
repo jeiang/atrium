@@ -1,0 +1,33 @@
+{{template "knowledge_rows" (dict "rows" .Data.Rows "bulk" .Data.Bulk "q" .Data.Q "scope" .Data.Scope "state" .Data.State "csrf" .CSRF)}}
+
+{{define "knowledge_rows"}}
+{{if .rows}}
+<ul class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card text-sm" role="list" aria-label="Knowledge records">
+  {{range .rows}}
+  <li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
+    <a class="min-w-0 truncate font-medium underline-offset-4 hover:underline" href="/library/knowledge/{{.ID}}">{{or .Title "Untitled"}}</a>
+    <span class="badge" data-variant="outline">{{.Scope}}</span>
+    <span class="text-xs text-muted-foreground">{{.Writer}}</span>
+    {{if .Confirmed}}<span class="badge" data-variant="secondary">confirmed</span>{{end}}
+    {{if .Pinned}}<span class="badge" data-variant="secondary">pinned</span>{{end}}
+    {{if .Retracted}}<span class="badge" data-variant="outline">retracted</span>{{end}}
+    {{range .Marks}}<span class="badge" data-variant="outline">{{.}}</span>{{end}}
+    <span class="ms-auto text-xs text-muted-foreground tabular-nums">{{template "when" (dict "epoch" .Updated "style" "datetime")}}</span>
+  </li>
+  {{end}}
+</ul>
+{{else if .q}}
+{{template "empty_state" (dict "icon_name" "search" "title" "No matching records")}}
+{{else}}
+{{template "empty_state" (dict "icon_name" "book-open" "title" "No knowledge records yet")}}
+{{end}}
+{{if .bulk}}
+<form class="flex justify-end pt-2" method="post" action="/library/knowledge/confirm-all" hx-post="/library/knowledge/confirm-all" hx-target="body">
+  <input type="hidden" name="csrf_token" value="{{.csrf}}">
+  <input type="hidden" name="q" value="{{.q}}">
+  <input type="hidden" name="scope" value="{{.scope}}">
+  <input type="hidden" name="state" value="{{.state}}">
+  <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "check"}}Confirm all shown</button>
+</form>
+{{end}}
+{{- end}}
