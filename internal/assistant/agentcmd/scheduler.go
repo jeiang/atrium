@@ -5,13 +5,13 @@ import (
 	"fmt"
 	"maps"
 
+	"github.com/jeiang/atrium/internal/assistant/digest"
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/attention"
-	"github.com/jeiang/atrium/internal/attention/digest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/module"
@@ -52,7 +52,7 @@ func callables(jobs []map[string]worker.Callable) map[string]worker.Callable {
 	out[scheduler.DailyNudgesName] = worker.Callable{
 		Modules: []string{module.Assistant},
 		Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
-			_, _, err := digest.Send(ctx, e.Service.DB.Write, e.Service.Env, e.Now(), attentionSources(ctx))
+			_, err := digest.Run(ctx, e.Service, e.Now, attentionSources(ctx))
 			return worker.Result{}, err
 		},
 	}

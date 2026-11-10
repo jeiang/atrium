@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -26,7 +27,9 @@ const systemExtra = "Dreaming step. You consolidate the last day into the knowle
 	"Use kb_search before writing. Write one record per durable fact: preferences, decisions and their reasons, stable facts and reusable lessons. Never store secrets, one-off events, receipts, or anything mail or the calendar can answer again. " +
 	"Create with kb_write and pass source.thread_id set to the gathered thread the fact came from. Edit an unconfirmed record with kb_write id instead of duplicating it, and retract a superseded unconfirmed record with kb_retract. " +
 	"Never edit or retract a confirmed, operator or import record; when a gathered fact contradicts one, write a new unconfirmed record that names the conflict. " +
-	"Use task_add for a follow-up the operator asked for. End with a short list of what you wrote."
+	"Use task_add for a follow-up the operator asked for. " +
+	"When a signal shows a mistake (an undone write, a dismissed proposal, a failed run, a denied permission request), write a lesson record titled `Lesson: <short rule>` with the tool names as aliases and source.thread_id set to the thread where it happened. " +
+	"End with a short list of what you wrote."
 
 var allowedTools = []string{"kb_search", "kb_get", "kb_write", "kb_retract", "task_add", "task_list"}
 
@@ -43,8 +46,14 @@ type gathered struct {
 	to      float64
 	threads []gatheredThread
 	records []string
+	signals []signal
 	marks   tool.Marks
 	sources []int64
+}
+
+type signal struct {
+	text   string
+	thread int64
 }
 
 func Run(ctx context.Context, svc *service.Service, now func() float64, jobID, jobRunID int64) ([]int64, error) {
@@ -202,6 +211,16 @@ func gather(ctx context.Context, q db.Querier, now float64, loc *time.Location) 
 		return gathered{}, err
 	}
 	out.records = records
+	found, err := signals(ctx, q, from)
+	if err != nil {
+		return gathered{}, err
+	}
+	out.signals = found
+	for _, sig := range found {
+		if sig.thread != 0 && !slices.Contains(out.sources, sig.thread) {
+			out.sources = append(out.sources, sig.thread)
+		}
+	}
 	return out, nil
 }
 
@@ -226,6 +245,63 @@ func lines(ctx context.Context, q db.Querier, threadID int64, start, end float64
 		}
 	}
 	return out, nil
+}
+
+func signals(ctx context.Context, q db.Querier, from float64) ([]signal, error) {
+	var out []signal
+	rows, err := q.QueryContext(ctx,
+		"SELECT r.thread_id, r.kind, COALESCE(r.error, '') FROM runs r WHERE r.state = 'failed' AND r.started_at >= ? ORDER BY r.id DESC LIMIT 10", from)
+	if err != nil {
+		return nil, err
+	}
+	failed, err := db.Collect(rows, func(r *sql.Rows) (signal, error) {
+		var thread int64
+		var kind, text string
+		err := r.Scan(&thread, &kind, &text)
+		return signal{text: fmt.Sprintf("failed %s run in thread %d: %s", kind, thread, firstLine(text)), thread: thread}, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, failed...)
+	rows, err = q.QueryContext(ctx,
+		"SELECT tool, target, COALESCE(thread_id, 0) FROM agent_writes WHERE undone_at >= ? ORDER BY id DESC LIMIT 10", from)
+	if err != nil {
+		return nil, err
+	}
+	undone, err := db.Collect(rows, func(r *sql.Rows) (signal, error) {
+		var toolName, target string
+		var thread int64
+		err := r.Scan(&toolName, &target, &thread)
+		return signal{text: fmt.Sprintf("operator undid %s on %s (thread %d)", toolName, target, thread), thread: thread}, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, undone...)
+	rows, err = q.QueryContext(ctx,
+		"SELECT id, kind, title FROM proposals WHERE status = 'dismissed' AND decided_ts >= ? ORDER BY id DESC LIMIT 10", from)
+	if err != nil {
+		return nil, err
+	}
+	dismissed, err := db.Collect(rows, func(r *sql.Rows) (signal, error) {
+		var id int64
+		var kind, title string
+		err := r.Scan(&id, &kind, &title)
+		return signal{text: fmt.Sprintf("operator dismissed %s proposal %d: %s", kind, id, title)}, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	out = append(out, dismissed...)
+	return out, nil
+}
+
+func firstLine(text string) string {
+	if i := strings.IndexByte(text, '\n'); i >= 0 {
+		return text[:i]
+	}
+	return text
 }
 
 func recordIndex(ctx context.Context, q db.Querier, now float64) ([]string, error) {
@@ -273,6 +349,12 @@ func prompt(data gathered, now float64, loc *time.Location) string {
 	b.WriteString("Threads (the allowed source ids for kb_write):\n")
 	for _, t := range data.threads {
 		fmt.Fprintf(&b, "\n### thread %d · %s · marks %s · %s\n%s\n", t.id, t.kind, markNames(t.marks), t.title, t.text)
+	}
+	if len(data.signals) > 0 {
+		b.WriteString("\nSignals (data):\n")
+		for _, sig := range data.signals {
+			b.WriteString("- " + sig.text + "\n")
+		}
 	}
 	b.WriteString("\nExisting live records:\n")
 	for _, line := range data.records {

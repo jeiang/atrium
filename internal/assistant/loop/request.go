@@ -377,6 +377,10 @@ func (req request) buildMessages(ctx context.Context, q db.Querier, scope files.
 			}
 			content[end] = marked
 		}
+		content, err := block.ExpandDigest(content)
+		if err != nil {
+			return nil, err
+		}
 		expanded, err := files.Expand(ctx, q, scope, content)
 		if err != nil {
 			return nil, err

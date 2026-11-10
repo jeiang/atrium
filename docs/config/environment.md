@@ -96,6 +96,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_DEFAULT_CONTEXT_LIMIT` | `assistant.default_context_limit` |
 | `ATRIUM_ASSISTANT_DEFAULT_EFFORT` | `assistant.default_effort` |
 | `ATRIUM_ASSISTANT_DEFAULT_MODEL` | `assistant.default_model` |
+| `ATRIUM_ASSISTANT_DIGEST_NOTIFY` | `assistant.digest_notify` |
 | `ATRIUM_ASSISTANT_DOOM_LOOP_THRESHOLD` | `assistant.doom_loop_threshold` |
 | `ATRIUM_ASSISTANT_DREAMING_MAX_COST_USD` | `assistant.dreaming_max_cost_usd` |
 | `ATRIUM_ASSISTANT_DREAMING_MONTHLY_USD` | `assistant.dreaming_monthly_usd` |

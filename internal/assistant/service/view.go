@@ -82,18 +82,19 @@ type Reference struct {
 }
 
 type Item struct {
-	Seq        int64          `json:"seq"`
-	RunID      *int64         `json:"run_id"`
-	CreatedAt  float64        `json:"created_at"`
-	Kind       string         `json:"kind"`
-	Text       string         `json:"text"`
-	Files      []Attachment   `json:"files"`
-	References []Reference    `json:"references,omitempty"`
-	Knowledge  []KnowledgeRef `json:"knowledge,omitempty"`
-	Steps      []*Step        `json:"steps"`
-	Citations  []Citation     `json:"citations"`
-	Draft      map[string]any `json:"draft"`
-	ProposalID int64          `json:"proposal_id,omitempty"`
+	Seq        int64              `json:"seq"`
+	RunID      *int64             `json:"run_id"`
+	CreatedAt  float64            `json:"created_at"`
+	Kind       string             `json:"kind"`
+	Text       string             `json:"text"`
+	Files      []Attachment       `json:"files"`
+	References []Reference        `json:"references,omitempty"`
+	Knowledge  []KnowledgeRef     `json:"knowledge,omitempty"`
+	Steps      []*Step            `json:"steps"`
+	Citations  []Citation         `json:"citations"`
+	Draft      map[string]any     `json:"draft"`
+	ProposalID int64              `json:"proposal_id,omitempty"`
+	Digest     []block.DigestLine `json:"digest,omitempty"`
 }
 
 type KnowledgeRef struct {
@@ -285,6 +286,17 @@ func Items(messages []journal.Message, calls []journal.ToolCall, drafts map[int6
 							break
 						}
 					}
+				}
+			case b.Kind == block.Digest && m.Role == journal.User:
+				_, lines, ok, err := block.DigestLines(m.Content)
+				if err != nil {
+					return nil, err
+				}
+				if ok {
+					activity = nil
+					item := base
+					item.Kind, item.Digest = "digest", lines
+					items = append(items, &item)
 				}
 			case b.Kind == block.Text && m.Role == journal.User:
 				activity = nil

@@ -326,3 +326,33 @@ func TestDreamingMonthlyCapRaisesAttention(t *testing.T) {
 		t.Fatalf("attention items = %+v, want the monthly cap item", items)
 	}
 }
+
+func TestUndoneWriteBecomesALesson(t *testing.T) {
+	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "add a task"); ran.code != cli.ExitOK {
+		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, dir+"/atrium.db")
+	source := chatThread(t, d)
+	if _, err := d.Write.Exec("INSERT INTO agent_writes (ts, thread_id, tool, target, state, before_json, after_json, undo_json, undone_at) VALUES (?, ?, 'task_add', 'task:1', 'ok', '{}', '{}', '{}', ?)",
+		float64(time.Now().Unix())-60, source, float64(time.Now().Unix())-30); err != nil {
+		t.Fatal(err)
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w1", "kb_write", map[string]any{
+		"title": "Lesson: confirm the task before adding", "body": "The operator undid a task_add.",
+		"aliases": []any{"task_add"}, "source": map[string]any{"thread_id": source},
+	})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("wrote the lesson")))
+	requests := len(api.Requests())
+	dreamingRun(t, f, d)
+	if text := requestText(t, api.Requests()[requests]); !strings.Contains(text, "operator undid task_add") {
+		t.Errorf("gather text lacks the undone write signal: %q", text)
+	}
+	var title string
+	if err := d.Read.QueryRow("SELECT title FROM kb_records WHERE title LIKE 'Lesson: %'").Scan(&title); err != nil {
+		t.Fatal(err)
+	}
+	if title != "Lesson: confirm the task before adding" {
+		t.Errorf("lesson title = %q", title)
+	}
+}

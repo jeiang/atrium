@@ -91,11 +91,20 @@ behavior-parity target.
   A record is confirmed by the operator, and confirmed records and records
   written by the operator or the import cannot be edited or retracted by
   the agent. Pinned, confirmed, unmarked records form the system prompt's
-  profile block within `agent_kb_profile_tokens`. The nightly dreaming job
+  profile block within `agent_kb_profile_tokens`. Dreaming also receives
+  code-built signals (failed runs, undone writes, dismissed proposals and
+  denied permission requests) and may write `Lesson: …` records with the
+  tool names as aliases and the thread where it happened as their source.
+  The nightly dreaming job
   gathers the last 24 hours in code (chat and scheduled threads, skipping
   threads of private projects, plus a compact index of live records) and
   runs one Haiku write step with `kb_search`, `kb_get`, `kb_write`,
-  `kb_retract`, `task_add` and `task_list`. Records carry provenance to a
+  `kb_retract`, `task_add` and `task_list`. The morning digest runs in code
+  after the nightly run and posts a card of at most ten lines into the
+  day's Today thread; with `digest_notify` on it also pushes the lines.
+  Titles appear only for unmarked sources; marked items and records show
+  as counts that link to the review page or the unconfirmed Knowledge
+  filter. Nothing is posted when there is nothing to act on. Records carry provenance to a
   gathered `source.thread_id`; the write thread takes the union of the
   gathered marks, so records from clean threads are unmarked while records
   from marked sources stay unconfirmed and out of the prompt until the

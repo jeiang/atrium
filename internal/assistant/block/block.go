@@ -20,7 +20,75 @@ const (
 	ServerToolUse    = "server_tool_use"
 	WebSearchResult  = "web_search_tool_result"
 	Fallback         = "fallback"
+	Digest           = "digest"
 )
+
+type DigestLine struct {
+	Text string `json:"text"`
+	URL  string `json:"url,omitempty"`
+}
+
+func DigestBlock(date string, lines []DigestLine) json.RawMessage {
+	body, _ := json.Marshal(map[string]any{"type": Digest, "date": date, "lines": lines})
+	return body
+}
+
+func DigestLines(content []json.RawMessage) (string, []DigestLine, bool, error) {
+	for _, raw := range content {
+		b, err := Decode(raw)
+		if err != nil {
+			return "", nil, false, err
+		}
+		if b.Kind != Digest {
+			continue
+		}
+		var date string
+		var lines []DigestLine
+		body, err := json.Marshal(b.Value)
+		if err != nil {
+			return "", nil, false, err
+		}
+		var found struct {
+			Date  string       `json:"date"`
+			Lines []DigestLine `json:"lines"`
+		}
+		if err := json.Unmarshal(body, &found); err != nil {
+			return "", nil, false, err
+		}
+		date, lines = found.Date, found.Lines
+		return date, lines, true, nil
+	}
+	return "", nil, false, nil
+}
+
+func ExpandDigest(content []json.RawMessage) ([]json.RawMessage, error) {
+	_, lines, ok, err := DigestLines(content)
+	if err != nil || !ok {
+		return content, err
+	}
+	text := "Morning digest from atrium (data):"
+	for _, line := range lines {
+		text += "\n- " + line.Text
+	}
+	out := make([]json.RawMessage, 0, len(content)+1)
+	for _, raw := range content {
+		b, err := Decode(raw)
+		if err != nil {
+			return nil, err
+		}
+		if b.Kind == Digest {
+			out = append(out, DigestText(text))
+			continue
+		}
+		out = append(out, raw)
+	}
+	return out, nil
+}
+
+func DigestText(text string) json.RawMessage {
+	body, _ := json.Marshal(map[string]any{"type": Text, "text": text})
+	return body
+}
 
 type Block struct {
 	Kind  string
