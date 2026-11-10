@@ -209,7 +209,7 @@ func (r *Registry) enabled(ctx context.Context, q db.Querier, name string) (bool
 }
 
 func sharedWorkerTool(name string) bool {
-	return name == "kb_search" || name == "kb_get" || name == "atrium_self_diagnose" || strings.HasPrefix(name, "grafana_")
+	return name == "atrium_self_diagnose" || strings.HasPrefix(name, "grafana_")
 }
 
 func validate(t tool.Tool) error {

@@ -18,7 +18,7 @@ import (
 
 var (
 	writeBound = tool.NewBound(assistant.KeyKBWriteChars, "")
-	scopeEnum  = []string{kb.ScopeWork, kb.ScopePersonal, kb.ScopeOps}
+	scopeEnum  = []string{kb.ScopeWork, kb.ScopePersonal}
 )
 
 var markNames = []struct {
@@ -100,11 +100,8 @@ func search(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if err != nil {
 		return nil, err
 	}
-	if tc.Kind == tool.Worker {
-		scope = kb.ScopeOps
-	}
 	if scope != "" && !slices.Contains(scopeEnum, scope) {
-		return nil, tool.Error("scope must be work, personal or ops")
+		return nil, tool.Error("scope must be work or personal")
 	}
 	limit, err := tool.BoundedInt(args, "limit", 10, 20, 1)
 	if err != nil {
@@ -138,9 +135,7 @@ func search(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if len(results) == 0 {
 		return out, nil
 	}
-	if scope != kb.ScopeOps {
-		marks |= tool.Personal
-	}
+	marks |= tool.Personal
 	return tool.Marked{Value: out, Marks: marks}, nil
 }
 
@@ -169,9 +164,6 @@ func get(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if tc.Kind == tool.Worker {
-		found = slices.DeleteFunc(found, func(r kb.Record) bool { return r.Scope != kb.ScopeOps })
-	}
 	results := make([]any, 0, len(found))
 	var marks tool.Marks
 	for _, r := range found {
@@ -184,12 +176,7 @@ func get(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if len(results) == 0 {
 		return out, nil
 	}
-	for _, r := range found {
-		if r.Scope != kb.ScopeOps {
-			marks |= tool.Personal
-			break
-		}
-	}
+	marks |= tool.Personal
 	return tool.Marked{Value: out, Marks: marks}, nil
 }
 
@@ -313,7 +300,7 @@ func retract(ctx context.Context, tc *tool.Context, args tool.Args) (any, error)
 }
 
 const searchSchema = `{"type": "object", "properties": {"query": {"type": "string", "maxLength": 200}, ` +
-	`"scope": {"enum": ["work", "personal", "ops"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 20}}, ` +
+	`"scope": {"enum": ["work", "personal"]}, "limit": {"type": "integer", "minimum": 1, "maximum": 20}}, ` +
 	`"required": ["query"], "additionalProperties": false}`
 
 const getSchema = `{"type": "object", "properties": {"ids": {"type": "array", "items": {"type": "integer"}, ` +
@@ -342,7 +329,7 @@ func Tools() []tool.Tool {
 			Effect:      tool.Read,
 			Annotated:   true,
 			Marks:       tool.AllMarks,
-			Contexts:    append(tool.Kinds{tool.Worker}, tool.AllKinds...),
+			Contexts:    tool.AllKinds,
 		},
 		{
 			Name:        "kb_get",
@@ -352,7 +339,7 @@ func Tools() []tool.Tool {
 			Effect:      tool.Read,
 			Annotated:   true,
 			Marks:       tool.AllMarks,
-			Contexts:    append(tool.Kinds{tool.Worker}, tool.AllKinds...),
+			Contexts:    tool.AllKinds,
 		},
 		{
 			Name: "kb_write",

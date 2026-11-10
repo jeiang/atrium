@@ -3,8 +3,10 @@ package reviewpages
 import (
 	"cmp"
 	"context"
+	"database/sql"
 	"net/http"
 	"slices"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
@@ -27,7 +29,36 @@ type needsData struct {
 	Proposals  []ProposalView  `json:"proposals"`
 	Blocked    []ProposalView  `json:"blocked"`
 	Drafts     []DraftView     `json:"drafts"`
+	Findings   []FindingView   `json:"findings"`
 	Configured map[string]bool `json:"configured"`
+}
+
+type FindingView struct {
+	ID       int64   `json:"id"`
+	Severity string  `json:"severity"`
+	Host     string  `json:"host"`
+	Metric   string  `json:"metric"`
+	Title    string  `json:"title"`
+	Body     string  `json:"body"`
+	Created  float64 `json:"created"`
+}
+
+func (s *service) findings(ctx context.Context) []FindingView {
+	rows, err := s.deps.DB.Read.QueryContext(ctx,
+		"SELECT id, fact, severity, title, body, created_at FROM ops_findings WHERE resolved_at IS NULL "+
+			"ORDER BY created_at DESC, id DESC LIMIT 20")
+	check(err)
+	out, err := db.Collect(rows, func(r *sql.Rows) (FindingView, error) {
+		var f FindingView
+		var fact string
+		if err := r.Scan(&f.ID, &fact, &f.Severity, &f.Title, &f.Body, &f.Created); err != nil {
+			return FindingView{}, err
+		}
+		f.Host, f.Metric, _ = strings.Cut(fact, ":")
+		return f, nil
+	})
+	check(err)
+	return out
 }
 
 type needsLists struct {
@@ -55,7 +86,7 @@ func (s *service) needsPage(w http.ResponseWriter, r *http.Request) {
 	found := s.needs(ctx)
 	data := needsData{
 		Proposals: proposalViews(found.pending, s.registry), Blocked: proposalViews(found.blocked, s.registry),
-		Drafts: s.draftViews(r, found.drafts), Configured: accountConfigured(ctx),
+		Drafts: s.draftViews(r, found.drafts), Findings: s.findings(ctx), Configured: accountConfigured(ctx),
 	}
 	s.page(w, r, http.StatusOK, "review_needs", "review.gohtml", data, nil)
 }

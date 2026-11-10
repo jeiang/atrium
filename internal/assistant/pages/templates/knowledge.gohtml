@@ -18,7 +18,6 @@
         <option value=""{{if eq $d.Scope ""}} selected{{end}}>Every scope</option>
         <option value="work"{{if eq $d.Scope "work"}} selected{{end}}>Work</option>
         <option value="personal"{{if eq $d.Scope "personal"}} selected{{end}}>Personal</option>
-        <option value="ops"{{if eq $d.Scope "ops"}} selected{{end}}>Ops</option>
       </select>
       <input type="hidden" name="state" value="{{$d.State}}">
       <noscript><button type="submit" class="btn" data-variant="outline">Search</button></noscript>

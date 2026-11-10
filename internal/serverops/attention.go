@@ -2,9 +2,7 @@ package serverops
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/usage"
@@ -38,8 +36,8 @@ func (s source) Items(ctx context.Context, q db.Querier, now float64) ([]attenti
 
 func findingItems(ctx context.Context, q db.Querier, now float64) ([]attention.Item, error) {
 	rows, err := q.QueryContext(ctx,
-		"SELECT id, title, aliases, origin, updated_at FROM kb_records WHERE scope = 'ops' AND origin LIKE 'finding:%' "+
-			"AND retracted_at IS NULL AND (expires_at IS NULL OR expires_at > ?) ORDER BY updated_at DESC LIMIT 20", now)
+		"SELECT id, fact, severity, title, created_at FROM ops_findings WHERE resolved_at IS NULL "+
+			"AND severity IN ('warning', 'critical') ORDER BY created_at DESC, id DESC LIMIT 20")
 	if err != nil {
 		return nil, err
 	}
@@ -47,26 +45,14 @@ func findingItems(ctx context.Context, q db.Querier, now float64) ([]attention.I
 	var out []attention.Item
 	for rows.Next() {
 		var id int64
-		var title, aliases, origin string
+		var fact, severity, title string
 		var written float64
-		if err := rows.Scan(&id, &title, &aliases, &origin, &written); err != nil {
+		if err := rows.Scan(&id, &fact, &severity, &title, &written); err != nil {
 			return nil, err
-		}
-		severity := ""
-		var list []string
-		if err := json.Unmarshal([]byte(aliases), &list); err == nil {
-			for _, alias := range list {
-				if strings.HasPrefix(alias, "severity:") {
-					severity = strings.TrimPrefix(alias, "severity:")
-				}
-			}
-		}
-		if severity != "warning" && severity != "critical" {
-			continue
 		}
 		out = append(out, attention.Item{
 			Kind: "ops_finding", SourceID: fmt.Sprint(id), Title: title,
-			Detail:  severity + " · " + strings.TrimPrefix(origin, "finding:"),
+			Detail:  severity + " · " + fact,
 			Created: written, Group: attention.NeedsDecision,
 		})
 	}
