@@ -76,7 +76,6 @@ func Page(groups []Group, generic []Generic, control Control) web.Page {
 	}
 	return web.Page{Templates: files, Nav: nav, Module: func(r chi.Router, d *web.Deps) {
 		h := handlers{d: d, groups: groups, generic: generic, control: control}
-		d.SettingsPage = h.renderAt
 		d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
 			if f.Page != "settings" {
 				return nil
@@ -105,8 +104,12 @@ func Page(groups []Group, generic []Generic, control Control) web.Page {
 			return err
 		})
 		for _, g := range generic {
+			data := pageData{Title: title(g.Module), Tab: g.Tab}
 			d.Admin(http.MethodGet, g.URL, func(w http.ResponseWriter, r *http.Request) {
-				h.render(w, r, http.StatusOK, pageData{Title: title(g.Module), Tab: g.Tab}, nil)
+				h.render(w, r, http.StatusOK, data, nil)
+			})
+			d.SettingsAt(g.URL, func(w http.ResponseWriter, r *http.Request, status int, mutate func(*tpl.Frame)) {
+				h.render(w, r, status, data, mutate)
 			})
 		}
 		d.Admin(http.MethodPost, "/settings/groups/{module}/{name}", h.save)
@@ -132,37 +135,17 @@ func (h handlers) views(ctx context.Context, q db.Querier, url string) ([]settin
 	return out, nil
 }
 
-func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, data pageData, groups []settings.GroupView) {
+func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, data pageData, mutate func(*tpl.Frame)) {
 	f, err := h.d.Render.Frame(r, "settings", data)
 	if err != nil {
 		panic(err)
 	}
-	if groups != nil {
-		f.SettingGroups = groups
+	if mutate != nil {
+		mutate(f)
 	}
 	if err := h.d.Render.Page(w, r, status, "settings_module.gohtml", f); err != nil {
 		panic(err)
 	}
-}
-
-func (h handlers) renderAt(w http.ResponseWriter, r *http.Request, status int, url string, mutate func(*tpl.Frame)) bool {
-	for _, g := range h.generic {
-		if g.URL != url {
-			continue
-		}
-		at := r.Clone(r.Context())
-		at.URL.Path, at.URL.RawQuery = url, ""
-		f, err := h.d.Render.Frame(at, "settings", pageData{Title: title(g.Module), Tab: g.Tab})
-		if err != nil {
-			panic(err)
-		}
-		mutate(f)
-		if err := h.d.Render.Page(w, r, status, "settings_module.gohtml", f); err != nil {
-			panic(err)
-		}
-		return true
-	}
-	return false
 }
 
 func (h handlers) save(w http.ResponseWriter, r *http.Request) {
@@ -211,10 +194,10 @@ func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 		}
-		if h.renderAt(w, r, http.StatusUnprocessableEntity, group.URL, func(f *tpl.Frame) { f.SettingGroups = views }) {
-			return
+		shown := func(f *tpl.Frame) { f.SettingGroups = views }
+		if !h.d.SettingsPage(w, r, http.StatusUnprocessableEntity, group.URL, shown) {
+			h.render(w, r, http.StatusUnprocessableEntity, pageData{Title: title(module), Tab: group.Tab}, shown)
 		}
-		h.render(w, r, http.StatusUnprocessableEntity, pageData{Title: title(module), Tab: group.Tab}, views)
 		return
 	}
 	if err != nil {

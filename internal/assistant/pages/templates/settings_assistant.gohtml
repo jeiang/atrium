@@ -26,7 +26,23 @@
       {{range $d.ContextLimits}}<option value="{{.}}"{{if eq . $d.Defaults.ContextLimit}} selected{{end}}>{{ctxlabel .}}</option>{{end}}
     </select>
   </div>
-  <footer><button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button></footer>
+  <footer>{{if eq $d.Saved "1"}}<span class="text-xs text-ink-3" role="status" data-saved>Saved</span>{{end}}<button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button></footer>
+</form>
+<form method="post" action="/settings/permissions" class="set-group" data-group="permissions">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  <h2>Permissions</h2>
+  {{with $d.Refused}}<p class="px-4 py-2 text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.}}</p>{{end}}
+  <div class="overflow-x-auto"><table class="set-matrix">
+    <thead><tr><th scope="col">Situation</th>{{range $d.Channels}}<th scope="col">{{.}}</th>{{end}}</tr></thead>
+    <tbody>
+      {{range $d.Rows}}<tr><th scope="row">{{.Label}}</th>
+        {{range .Cells}}{{$cell := .}}<td><select class="select" name="{{$cell.Key}}" aria-label="{{$cell.Label}}"{{if $cell.Pinned}} disabled{{end}}>
+          {{range $cell.Choices}}<option value="{{.}}"{{if eq . $cell.Value}} selected{{end}}>{{.}}</option>{{end}}
+        </select></td>{{end}}
+      </tr>{{end}}
+    </tbody>
+  </table></div>
+  <footer>{{if eq $d.Saved "permissions"}}<span class="text-xs text-ink-3" role="status" data-saved>Saved</span>{{end}}<button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button></footer>
 </form>
 {{template "settings_connections" .}}
 {{template "settings_groups" .}}

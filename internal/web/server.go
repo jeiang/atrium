@@ -48,6 +48,8 @@ type routeRule struct {
 	access  access
 }
 
+type SettingsRender func(w http.ResponseWriter, r *http.Request, status int, mutate func(*tpl.Frame))
+
 type Deps struct {
 	Ctx       context.Context
 	Cfg       config.Config
@@ -62,10 +64,25 @@ type Deps struct {
 	OnClose   func(func())
 	ResumeRun func(ctx context.Context, runID int64) error
 
-	SettingsPage func(w http.ResponseWriter, r *http.Request, status int, url string, mutate func(*tpl.Frame)) bool
+	settingsPages map[string]SettingsRender
 
 	router chi.Router
 	routes *[]routeRule
+}
+
+func (d *Deps) SettingsAt(url string, render SettingsRender) {
+	d.settingsPages[url] = render
+}
+
+func (d *Deps) SettingsPage(w http.ResponseWriter, r *http.Request, status int, url string, mutate func(*tpl.Frame)) bool {
+	render, ok := d.settingsPages[url]
+	if !ok {
+		return false
+	}
+	at := r.Clone(r.Context())
+	at.URL.Path, at.URL.RawQuery = url, ""
+	render(w, at, status, mutate)
+	return true
 }
 
 func (d *Deps) Public(method, pattern string, h http.HandlerFunc) {
@@ -182,7 +199,7 @@ func New(o Options) (*Server, error) {
 	s.stop = make(chan struct{})
 	deps := &Deps{
 		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Render: o.Render, Error: s.Error, Stopping: s.stop,
-		OnFrame: func(FrameFunc) {},
+		OnFrame: func(FrameFunc) {}, settingsPages: map[string]SettingsRender{},
 		OnClose: func(f func()) { s.closers = append(s.closers, f) },
 		router:  s.mux, routes: &s.routes,
 	}

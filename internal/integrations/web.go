@@ -269,7 +269,7 @@ func (h handlers) refuse(w http.ResponseWriter, r *http.Request, name string, er
 		}
 		toast := &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()}
 		back := web.FormString(web.FormValues(r), "back", "")
-		if h.d.SettingsPage != nil && back == "/settings/"+owner(name) && h.d.SettingsPage(w, r, http.StatusUnprocessableEntity, back, func(f *tpl.Frame) {
+		if back == "/settings/"+owner(name) && h.d.SettingsPage(w, r, http.StatusUnprocessableEntity, back, func(f *tpl.Frame) {
 			view, loadErr := h.owned(r.Context(), owner(name))
 			if loadErr != nil {
 				panic(loadErr)

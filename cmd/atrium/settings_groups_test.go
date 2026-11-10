@@ -114,4 +114,17 @@ func TestModuleWithASectionGetsAPageAndKeepsRefusalsThere(t *testing.T) {
 	if row := runSettings(t, "get", "default_event_minutes").row(t); row.Value == nil || *row.Value != "45" {
 		t.Errorf("default_event_minutes = %+v, want 45", row)
 	}
+	for _, c := range []struct {
+		action, back, title string
+		form                url.Values
+	}{
+		{"/settings/integrations/open_meteo/settings", "/settings/assistant", "<title>Assistant · Settings", url.Values{"weather_latitude": {"north"}}},
+		{"/settings/integrations/mail_chat/test", "/settings/mail", "<title>Mail · Settings", url.Values{"url": {"http://127.0.0.1:1/v1"}}},
+	} {
+		c.form.Set("back", c.back)
+		status, body, _ := fetch(t, client, http.MethodPost, base+c.action, c.form)
+		if status != http.StatusUnprocessableEntity || !strings.Contains(body, c.title) || !strings.Contains(body, `role="alert"`) {
+			t.Errorf("a refusal from %s = %d, on its page %v: %.200s", c.back, status, strings.Contains(body, c.title), body)
+		}
+	}
 }

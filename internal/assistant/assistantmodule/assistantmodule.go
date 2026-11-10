@@ -95,7 +95,6 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Section: "library", Label: "Files", URL: "/library/files", Icon: "paperclip", Page: "library_files", Order: 20},
 				{Section: "library", Label: "Scheduled", URL: "/scheduled", Icon: "clock", Page: "scheduled", Order: 40},
 				{Label: "Assistant", URL: "/settings/assistant", Page: "assistant", Settings: true, Primary: true, PrimaryURL: "/settings", Order: 10},
-				{Label: "Permissions", URL: "/settings/permissions", Page: "permissions", Settings: true, Order: 20},
 				{Group: "Instance", Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 60},
 			},
 		}},
