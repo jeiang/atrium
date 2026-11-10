@@ -38,6 +38,12 @@ func (f *fakeOpsGrafana) setUp(value float64) {
 	f.up = value
 }
 
+func (f *fakeOpsGrafana) setAlerts(alerts []map[string]any) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.alerts = alerts
+}
+
 func (f *fakeOpsGrafana) upValue() float64 {
 	f.mu.Lock()
 	defer f.mu.Unlock()

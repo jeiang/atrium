@@ -393,7 +393,13 @@ behavior-parity target.
   normal; resolved findings are pruned after 30 days. Findings of severity
   warning or critical appear in the attention view and on Needs you; the
   worker has no notify, people or internet tool and never restarts or
-  changes a host.
+  changes a host. `ops_condenser` (default `haiku`) chooses how findings are
+  produced: `haiku` starts the worker run; `local` makes one JSON-schema
+  chat call to the `mail_chat_url` endpoint with `ops_condenser_model`
+  (empty uses `mail_chat_model`) and `ops_condenser_max_tokens` (default
+  2,000), files the validated findings, and records no Anthropic usage. A
+  local failure ends the sampler run with an error and retries on the next
+  pass without falling back to Haiku.
 - The Notion page view is read-only: the Edit and Link buttons are gone,
   and old `notion_link` and `notion_edit` proposals stay readable and
   dismissable. Approvals are only for external or costly actions.

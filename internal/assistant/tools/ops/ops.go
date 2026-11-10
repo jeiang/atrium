@@ -18,8 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/writes"
 )
 
-const findingUndoOp = "ops_finding_delete"
-
 const samplesSchema = `{"type": "object", "properties": {` +
 	`"host": {"type": "string", "description": "One configured host id; omit for every host."}, ` +
 	`"metric": {"type": "string", "enum": ["up", "cpu_pct", "mem_pct", "disk_root_pct", "failed_units", "alerts_firing"]}, ` +
@@ -141,31 +139,17 @@ func finding(ctx context.Context, tc *tool.Context, args tool.Args) (any, error)
 	if err != nil {
 		return nil, err
 	}
-	if !slices.Contains(changed, fact) {
-		return nil, tool.Error("fact is not in this run's change set")
+	if err := serverops.CheckFinding(fact, severity, title, body, changed); err != nil {
+		return nil, err
 	}
 	marks, err := threadMarks(ctx, tc.DB.Read, tc.ThreadID)
 	if err != nil {
 		return nil, err
 	}
 	now := tc.Now()
-	var id int64
-	err = tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx,
-			"INSERT INTO ops_findings (fact, severity, title, body, marks, run_id, thread_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-			fact, severity, title, body, int64(marks), tc.RunID, tc.ThreadID, now)
-		if err != nil {
-			return err
-		}
-		if id, err = res.LastInsertId(); err != nil {
-			return err
-		}
-		_, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
-			TS: now, ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "ops_finding", Target: "ops_finding:" + fmt.Sprint(id),
-			After: map[string]any{"fact": fact, "severity": severity, "title": title, "body": body},
-			Undo:  findingUndo{Op: findingUndoOp, ID: id, Applied: now},
-		})
-		return err
+	id, err := serverops.WriteFinding(ctx, tc.DB, tc.Undoers, serverops.Finding{
+		Fact: fact, Severity: severity, Title: title, Body: body, Marks: marks,
+		ThreadID: tc.ThreadID, RunID: tc.RunID, Tool: "ops_finding", Now: now,
 	})
 	if err != nil {
 		return nil, err
@@ -374,7 +358,7 @@ func status(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 		return nil, err
 	}
 	return map[string]any{
-		"last_sample": last, "hosts": hosts, "findings": findings,
+		"last_sample": last, "hosts": hosts, "findings": findings, "mode": set.Text(serverops.KeyCondenser),
 		"spend_usd": spend, "budget_usd": set.Float(serverops.KeyWorkerMonthlyUSD),
 	}, nil
 }
@@ -399,35 +383,7 @@ func liveFindings(ctx context.Context, q db.Querier) ([]any, error) {
 	return out, rows.Err()
 }
 
-type findingUndo struct {
-	Op      string  `json:"op"`
-	ID      int64   `json:"id"`
-	Applied float64 `json:"applied"`
-}
-
-func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, error) {
-	var u findingUndo
-	if err := json.Unmarshal(payload, &u); err != nil {
-		return nil, writes.UndoError("finding undo payload is invalid")
-	}
-	var created float64
-	err := q.QueryRowContext(ctx, "SELECT created_at FROM ops_findings WHERE id = ?", u.ID).Scan(&created)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, writes.UndoError(fmt.Sprintf("finding %d is gone", u.ID))
-	}
-	if err != nil {
-		return nil, err
-	}
-	if created != u.Applied {
-		return nil, writes.UndoError(fmt.Sprintf("finding %d changed since this write", u.ID))
-	}
-	if _, err := q.ExecContext(ctx, "DELETE FROM ops_findings WHERE id = ?", u.ID); err != nil {
-		return nil, err
-	}
-	return map[string]any{"id": u.ID, "deleted": true}, nil
-}
-
-func RegisterUndoer(r *writes.Registry) { r.Register(findingUndoOp, undo) }
+func RegisterUndoer(r *writes.Registry) { serverops.RegisterUndoer(r) }
 
 func Tools() []tool.Tool {
 	return []tool.Tool{
@@ -448,7 +404,7 @@ func Tools() []tool.Tool {
 				"Severity warning or critical surfaces in the operator's attention view; the sampler resolves the finding when the fact is back to normal.",
 			InputSchema: json.RawMessage(findingSchema),
 			Handler:     finding,
-			Effect:      tool.WriteUndo, Undo: findingUndoOp,
+			Effect:      tool.WriteUndo, Undo: serverops.FindingUndoOp,
 			Annotated: true,
 			Channel:   tool.ChannelOwn,
 			Contexts:  tool.Kinds{tool.Worker},

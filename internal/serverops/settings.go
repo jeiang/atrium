@@ -19,6 +19,14 @@ const (
 	KeyQueryFailedUnit  = "ops_query_failed_units"
 	KeyWorkerMonthlyUSD = "ops_worker_monthly_usd"
 	KeyWorkerMaxRunUSD  = "ops_worker_max_run_usd"
+	KeyCondenser        = "ops_condenser"
+	KeyCondenserModel   = "ops_condenser_model"
+	KeyCondenserTokens  = "ops_condenser_max_tokens"
+)
+
+const (
+	CondenserHaiku = "haiku"
+	CondenserLocal = "local"
 )
 
 const (
@@ -169,6 +177,17 @@ func init() {
 		settings.Value(settings.Advanced, settings.Def{
 			Key: KeyWorkerMaxRunUSD, Module: "assistant", Type: settings.Float, Default: "0.10",
 			Check: settings.Between(0, 10000),
+		}),
+		settings.Value(settings.Advanced, settings.Def{
+			Key: KeyCondenser, Module: "assistant", Type: settings.Enum,
+			Choices: []string{CondenserHaiku, CondenserLocal}, Default: CondenserHaiku,
+		}),
+		settings.Value(settings.Advanced, settings.Def{
+			Key: KeyCondenserModel, Module: "assistant", Type: settings.String,
+		}),
+		settings.Value(settings.Advanced, settings.Def{
+			Key: KeyCondenserTokens, Module: "assistant", Type: settings.Int, Default: "2000",
+			Check: settings.Between(64, 8192),
 		}),
 	)
 }

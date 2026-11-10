@@ -1108,6 +1108,36 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "ops_condenser": {
+          "default": "haiku",
+          "enum": [
+            "haiku",
+            "local"
+          ],
+          "type": "string"
+        },
+        "ops_condenser_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ops_condenser_max_tokens": {
+          "default": 2000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "ops_condenser_max_tokens_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ops_condenser_model": {
+          "type": "string"
+        },
+        "ops_condenser_model_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "ops_worker_max_run_usd": {
           "default": 0.1,
           "type": [

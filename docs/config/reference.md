@@ -122,6 +122,9 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `monthly_budget_usd` | float | `150` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
 | `open_meteo_ca_file` | string | none | advanced | `ATRIUM_ASSISTANT_OPEN_METEO_CA_FILE` |
 | `open_meteo_proxy` | string | none | advanced | `ATRIUM_ASSISTANT_OPEN_METEO_PROXY` |
+| `ops_condenser` | enum (haiku, local) | `haiku` | advanced | `ATRIUM_ASSISTANT_OPS_CONDENSER` |
+| `ops_condenser_max_tokens` | int | `2000` | advanced | `ATRIUM_ASSISTANT_OPS_CONDENSER_MAX_TOKENS` |
+| `ops_condenser_model` | string | none | advanced | `ATRIUM_ASSISTANT_OPS_CONDENSER_MODEL` |
 | `ops_worker_max_run_usd` | float | `0.10` | advanced | `ATRIUM_ASSISTANT_OPS_WORKER_MAX_RUN_USD` |
 | `ops_worker_monthly_usd` | float | `5` | ui | `ATRIUM_ASSISTANT_OPS_WORKER_MONTHLY_USD` |
 | `prompt_subagent` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` |
