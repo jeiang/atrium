@@ -1,0 +1,39 @@
+{{define "title"}}Knowledge{{end}}
+{{define "heading"}}Knowledge{{end}}
+{{define "content"}}{{$d := .Data}}
+<section class="flex flex-col gap-3" aria-label="Knowledge records">
+  <div class="flex flex-wrap items-center gap-2">
+    <form id="kb-search" action="/library/knowledge" method="get" role="search" class="flex flex-1 items-center gap-2"
+          hx-get="/library/knowledge" hx-target="#kb-rows" hx-replace-url="true" hx-sync="this:replace" hx-indicator="#kb-spinner"
+          hx-trigger="input changed delay:250ms from:#kb-q, search from:#kb-q, change from:#kb-scope, submit">
+      <div role="group" class="field flex-1">
+        <label for="kb-q" class="sr-only">Search knowledge</label>
+        <div class="input-group h-9">
+          {{icon "search" "ms-3 size-4 shrink-0 p-0 text-muted-foreground"}}
+          <input id="kb-q" name="q" type="search" value="{{$d.Q}}" placeholder="Search knowledge" autocomplete="off">
+          {{template "spinner" (dict "id" "kb-spinner" "label" "Searching")}}
+        </div>
+      </div>
+      <select id="kb-scope" name="scope" class="select w-auto" aria-label="Scope">
+        <option value=""{{if eq $d.Scope ""}} selected{{end}}>Every scope</option>
+        <option value="work"{{if eq $d.Scope "work"}} selected{{end}}>Work</option>
+        <option value="personal"{{if eq $d.Scope "personal"}} selected{{end}}>Personal</option>
+        <option value="ops"{{if eq $d.Scope "ops"}} selected{{end}}>Ops</option>
+      </select>
+      <input type="hidden" name="state" value="{{$d.State}}">
+      <noscript><button type="submit" class="btn" data-variant="outline">Search</button></noscript>
+    </form>
+    <a class="btn" data-size="sm" href="/library/knowledge/new">{{icon "plus"}}New record</a>
+    <a class="btn" data-size="sm" data-variant="outline" href="/library/knowledge/profile">{{icon "user"}}Profile</a>
+  </div>
+  <nav class="flex flex-wrap gap-1" aria-label="Knowledge filters">
+    {{range $state := list "all" "unconfirmed" "pinned" "imported" "retracted"}}
+    <a class="btn" data-size="sm" data-variant="{{if eq $state $d.State}}secondary{{else}}ghost{{end}}"
+       href="/library/knowledge?state={{$state}}{{if $d.Q}}&q={{urlencode $d.Q}}{{end}}{{if $d.Scope}}&scope={{$d.Scope}}{{end}}">{{$state}}</a>
+    {{end}}
+  </nav>
+  <div id="kb-rows">
+    {{template "knowledge_rows" (dict "rows" $d.Rows "bulk" $d.Bulk "q" $d.Q "scope" $d.Scope "state" $d.State "csrf" .CSRF)}}
+  </div>
+</section>
+{{- end}}

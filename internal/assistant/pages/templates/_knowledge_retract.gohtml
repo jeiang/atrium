@@ -1,0 +1,25 @@
+{{template "knowledge_retract" (dict "d" .Data "csrf" .CSRF)}}
+
+{{define "knowledge_retract"}}{{$d := .d}}
+<div class="flex flex-col gap-2 rounded-lg border bg-card p-3 text-sm">
+  <p>Retracted {{or $d.Record.Title "the record"}}.</p>
+  {{if $d.SameRun}}
+  <p class="text-xs text-muted-foreground">Other live records from the same run:</p>
+  <ul class="flex flex-col divide-y" role="list">
+    {{range $d.SameRun}}
+    <li class="flex items-center gap-2 py-1.5">
+      <a class="min-w-0 flex-1 truncate underline-offset-4 hover:underline" href="/library/knowledge/{{.ID}}">{{or .Title "Untitled"}}</a>
+      <form method="post" action="/library/knowledge/{{.ID}}/retract" hx-post="/library/knowledge/{{.ID}}/retract" hx-target="#kb-retract-result">
+        <input type="hidden" name="csrf_token" value="{{$.csrf}}">
+        <button type="submit" class="btn" data-size="sm" data-variant="ghost">Retract</button>
+      </form>
+    </li>
+    {{end}}
+  </ul>
+  <form method="post" action="/library/knowledge/runs/{{$d.Record.SourceRunID}}/retract" hx-post="/library/knowledge/runs/{{$d.Record.SourceRunID}}/retract" hx-target="body">
+    <input type="hidden" name="csrf_token" value="{{.csrf}}">
+    <button type="submit" class="btn" data-size="sm" data-variant="outline">Retract all from this run</button>
+  </form>
+  {{end}}
+</div>
+{{- end}}

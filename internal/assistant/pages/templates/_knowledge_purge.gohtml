@@ -1,0 +1,13 @@
+{{template "knowledge_purge" (dict "r" .Data "csrf" .CSRF)}}
+
+{{define "knowledge_purge"}}{{$r := .r}}
+<form method="post" action="/library/knowledge/{{$r.ID}}/purge" class="flex flex-col gap-3" hx-post="/library/knowledge/{{$r.ID}}/purge">
+  <input type="hidden" name="csrf_token" value="{{.csrf}}">
+  <h2 class="text-sm font-medium">Purge {{or $r.Title "this record"}}?</h2>
+  <p class="text-sm text-muted-foreground">The record, its search text and its embeddings are deleted, and earlier undo snapshots are blanked. Transcripts and backups keep any copies.</p>
+  <div class="flex justify-end gap-2">
+    <button type="button" class="btn" data-variant="ghost" data-action="close-dialog">Cancel</button>
+    <button type="submit" class="btn" data-variant="destructive">Purge</button>
+  </div>
+</form>
+{{- end}}

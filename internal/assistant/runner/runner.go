@@ -4,9 +4,9 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
-	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/kb"
 )
 
 func New(tools registry.Source) (*loop.Runner, error) {
@@ -14,7 +14,7 @@ func New(tools registry.Source) (*loop.Runner, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := &loop.Runner{Registry: reg, Undoers: toolset.Undoers(config.OS), Profile: profiletools.Block}
+	r := &loop.Runner{Registry: reg, Undoers: toolset.Undoers(config.OS), Profile: kb.ProfileBlock}
 	rs := research.New(r)
 	if err := rs.Install(reg); err != nil {
 		return nil, err

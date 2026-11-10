@@ -19,10 +19,12 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 //go:embed templates/*.gohtml
@@ -44,6 +46,7 @@ type pages struct {
 	deps *web.Deps
 	svc  *service.Service
 	now  func() float64
+	reg  *writes.Registry
 }
 
 const (
@@ -82,7 +85,7 @@ func Module(o Options) web.Module {
 		if d.OnClose != nil {
 			d.OnClose(shutdown)
 		}
-		p := &pages{deps: d, svc: svc, now: assistant.Now}
+		p := &pages{deps: d, svc: svc, now: assistant.Now, reg: toolset.Undoers(d.Env)}
 		d.OnFrame(p.sidebar)
 		tz := config.From(base).TZName(d.Env)
 		stamp := assistant.Now()
@@ -124,6 +127,7 @@ func Module(o Options) web.Module {
 		r.Post("/projects/{project_id}/files/{file_id}/delete", p.projectFileDelete)
 		r.Get("/library/files", p.libraryFiles)
 
+		p.knowledgeRoutes(r)
 		p.projectRoutes(r)
 		p.scheduledRoutes(r)
 		p.settingsRoutes(r)

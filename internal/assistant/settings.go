@@ -72,6 +72,7 @@ const (
 	KeyProfileKeyChars     = "agent_profile_key_chars"
 	KeyProfileValueChars   = "agent_profile_value_chars"
 	KeyKBWriteChars        = "agent_kb_write_chars"
+	KeyKBProfileTokens     = "agent_kb_profile_tokens"
 
 	KeyMailMaxResults    = "agent_mail_max_results"
 	KeyMailSnippetChars  = "agent_mail_snippet_chars"
@@ -198,6 +199,7 @@ func init() {
 		count(KeyProfileKeyChars, 64, 8, 500),
 		count(KeyProfileValueChars, 500, 20, 5000),
 		count(KeyKBWriteChars, 4000, 200, 20000),
+		count(KeyKBProfileTokens, 2000, 200, 20000),
 
 		count(KeyMailMaxResults, 20, 1, 200),
 		count(KeyMailSnippetChars, 300, 20, 5000),

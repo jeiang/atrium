@@ -193,3 +193,72 @@ func MarksOf(records []Record) tool.Marks {
 	}
 	return set
 }
+
+type ListFilter struct {
+	Query string
+	Scope string
+	State string
+	Limit int
+}
+
+func List(ctx context.Context, q db.Querier, f ListFilter) ([]Record, error) {
+	where := "1 = 1"
+	var args []any
+	if f.Query != "" {
+		where += " AND (r.title LIKE ? OR r.body LIKE ? OR r.aliases LIKE ?)"
+		like := "%" + f.Query + "%"
+		args = append(args, like, like, like)
+	}
+	if f.Scope != "" {
+		where += " AND r.scope = ?"
+		args = append(args, f.Scope)
+	}
+	switch f.State {
+	case "unconfirmed":
+		where += " AND r.confirmed_at IS NULL AND r.retracted_at IS NULL"
+	case "pinned":
+		where += " AND r.pinned = 1 AND r.retracted_at IS NULL"
+	case "retracted":
+		where += " AND r.retracted_at IS NOT NULL"
+	case "imported":
+		where += " AND r.writer = 'import'"
+	}
+	limit := f.Limit
+	if limit <= 0 {
+		limit = 200
+	}
+	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM kb_records r WHERE "+where+" ORDER BY r.updated_at DESC, r.id DESC LIMIT ?",
+		append(args, limit)...)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Record, error) { return scan(r) })
+}
+
+func SameRun(ctx context.Context, q db.Querier, runID, exclude int64) ([]Record, error) {
+	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM kb_records r WHERE r.source_run_id = ? AND r.retracted_at IS NULL AND r.id != ? ORDER BY r.id",
+		runID, exclude)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (Record, error) { return scan(r) })
+}
+
+type WriteRow struct {
+	ID       int64
+	TS       float64
+	Tool     string
+	UndoneAt *float64
+}
+
+func History(ctx context.Context, q db.Querier, id int64) ([]WriteRow, error) {
+	rows, err := q.QueryContext(ctx, "SELECT id, ts, tool, undone_at FROM agent_writes WHERE target = ? ORDER BY id DESC", "kb:"+fmt.Sprint(id))
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (WriteRow, error) {
+		var w WriteRow
+		err := r.Scan(&w.ID, &w.TS, &w.Tool, &w.UndoneAt)
+		return w, err
+	})
+}

@@ -251,6 +251,17 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "agent_kb_profile_tokens": {
+          "default": 2000,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_kb_profile_tokens_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "agent_kb_write_chars": {
           "default": 4000,
           "type": [
