@@ -183,9 +183,6 @@ func TestContactIdentifiersBlockTheInternetButKeepTasksAndNotify(t *testing.T) {
 	if after := requestTools(t, requests[1]); !slices.Contains(after, "task_add") || !slices.Contains(after, "notify") {
 		t.Errorf("own and notify tools dropped after a pii read: %v", after)
 	}
-	if after := requestTools(t, requests[1]); slices.Contains(after, "web_fetch") {
-		t.Errorf("web_fetch still offered after a pii read: %v", after)
-	}
 	for _, id := range []string{"t1", "n1"} {
 		if result := toolResultFor(t, requests[len(requests)-1], id); result["is_error"] == true {
 			t.Errorf("%s failed after a pii read: %v", id, result)

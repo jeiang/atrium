@@ -62,29 +62,60 @@ func TestNightlyRunOmitsWriteUndoTools(t *testing.T) {
 
 func TestWebSearchAllowedCallers(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	ran := runApp(t, "agent", "run", "--text", "warm")
-	for _, raw := range lastTools(t, api, ran) {
+	script := func() {
+		api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("s1", "search_web", map[string]any{"query": "atrium"})))
+		api.Push(anthropictest.Reply("pause_turn", anthropictest.WebSearch("ws1", "atrium", anthropictest.SearchResult{URL: "https://example.com/a", Title: "A"})...))
+		api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("r1", "report", map[string]any{"answer": map[string]any{"answer": "", "citations": []any{}}})))
+		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
+		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("ok")))
+	}
+	start := warm(t, api)
+	script()
+	if ran := runApp(t, "agent", "run", "--text", "search"); ran.code != cli.ExitOK {
+		t.Fatalf("search run: %d %s", ran.code, ran.stderr)
+	}
+	requests := api.Requests()[start:]
+	if len(requests) != 5 {
+		t.Fatalf("%d model requests, want 5", len(requests))
+	}
+	assertServerCallers(t, requests[1], "direct")
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('dynamic_filtering', 'true')"); err != nil {
+		t.Fatal(err)
+	}
+	_ = d.Close()
+	start = len(api.Requests())
+	script()
+	if ran := runApp(t, "agent", "run", "--text", "search again"); ran.code != cli.ExitOK {
+		t.Fatalf("second search run: %d %s", ran.code, ran.stderr)
+	}
+	requests = api.Requests()[start:]
+	if len(requests) != 5 {
+		t.Fatalf("%d model requests, want 5", len(requests))
+	}
+	assertServerCallers(t, requests[1], "")
+}
+
+func assertServerCallers(t *testing.T, r anthropictest.Request, want string) {
+	t.Helper()
+	for _, raw := range r.JSON(t)["tools"].([]any) {
 		entry, _ := raw.(map[string]any)
 		if entry["name"] != "web_search" {
 			continue
 		}
 		callers, _ := entry["allowed_callers"].([]any)
-		if len(callers) != 1 || callers[0] != "direct" {
-			t.Fatalf("web_search allowed_callers = %v, want [direct]", entry["allowed_callers"])
+		if want == "" {
+			if len(callers) != 0 {
+				t.Errorf("web_search allowed_callers = %v, want none", callers)
+			}
+			return
 		}
-	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('dynamic_filtering', 'true')"); err != nil {
-		t.Fatal(err)
-	}
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
-	ran = runApp(t, "agent", "run", "--text", "hi")
-	for _, raw := range lastTools(t, api, ran) {
-		entry, _ := raw.(map[string]any)
-		if entry["name"] == "web_search" && entry["allowed_callers"] != nil {
-			t.Errorf("web_search kept allowed_callers with dynamic filtering: %v", entry["allowed_callers"])
+		if len(callers) != 1 || callers[0] != want {
+			t.Errorf("web_search allowed_callers = %v, want [%s]", callers, want)
 		}
+		return
 	}
+	t.Fatal("the child request has no web_search server tool")
 }
 
 func TestFileToolsReadSearchAndTraversal(t *testing.T) {

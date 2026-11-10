@@ -381,3 +381,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_WEB_RUN_HISTORY` | `web.run_history` |
 | `ATRIUM_WEB_SNOOZE_CHOICES` | `web.snooze_choices` |
 | `ATRIUM_WEB_SEARCH_DYNAMIC_FILTERING` | `web_search.dynamic_filtering` |
+| `ATRIUM_WEB_SEARCH_SEARCH_WEB_MAX_COST_USD` | `web_search.search_web_max_cost_usd` |
+| `ATRIUM_WEB_SEARCH_SEARCH_WEB_MAX_SEARCHES` | `web_search.search_web_max_searches` |
+| `ATRIUM_WEB_SEARCH_SEARCH_WEB_MAX_STEPS` | `web_search.search_web_max_steps` |
+| `ATRIUM_WEB_SEARCH_SEARCH_WEB_MODEL` | `web_search.search_web_model` |
