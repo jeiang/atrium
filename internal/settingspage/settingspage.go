@@ -180,16 +180,20 @@ func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form := web.FormValues(r)
-	values := make(map[string]string, len(group.Keys))
-	for _, key := range group.Keys {
-		if value, ok := web.Value(form, key); ok {
-			values[key] = value
-		}
-	}
 	ctx := audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
 	fields, err := settings.From(ctx).Fields(group.Keys)
 	if err != nil {
 		panic(err)
+	}
+	current, err := settings.LoadFields(ctx, h.d.DB.Read, fields)
+	if err != nil {
+		panic(err)
+	}
+	values := make(map[string]string, len(group.Keys))
+	for _, f := range current {
+		if value, ok := web.Value(form, f.Key); ok && !f.Pinned && strings.TrimSpace(value) != f.Value {
+			values[f.Key] = value
+		}
 	}
 	err = settings.SaveFields(ctx, h.d.DB, fields, values)
 	var invalid settings.Invalid
