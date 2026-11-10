@@ -30,7 +30,7 @@
     {{end}}
   </ul>
   {{else}}
-  {{template "empty_state" (dict "icon_name" "package" "title" "No packages in transit")}}
+  <p class="text-sm text-ink-3" data-empty>No packages in transit.</p>
   {{end}}
 </section>
 {{end}}

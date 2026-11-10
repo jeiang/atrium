@@ -40,7 +40,7 @@
   {{end}}
 </ul>
 {{else}}
-{{template "empty_state" (dict "icon_name" "check" "title" "Nothing here" "body" .empty)}}
+<p class="text-sm text-ink-3" data-empty>{{.empty}}</p>
 {{end}}{{end}}
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
 <section class="flex flex-col gap-3" aria-labelledby="owe-h">
@@ -83,7 +83,7 @@
     {{end}}
   </ul>
   {{else}}
-  {{template "empty_state" (dict "icon_name" "check" "title" "No open commitments")}}
+  <p class="text-sm text-ink-3" data-empty>No open commitments.</p>
   {{end}}
 </section>
 {{end}}
