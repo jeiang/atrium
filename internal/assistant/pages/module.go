@@ -21,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -189,7 +190,8 @@ func (p *pages) refused(w http.ResponseWriter, r *http.Request, err error) bool 
 	case errors.As(err, &unknown):
 		p.fail(w, r, http.StatusNotFound, "unknown thread")
 	default:
-		panic(err)
+		log.Error("request failed", logx.Err, err.Error())
+		p.failure(w, r, "Something went wrong", "Try again.")
 	}
 	return true
 }
