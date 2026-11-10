@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"slices"
 
-	"github.com/jeiang/atrium/internal/assistant/nightly"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
@@ -61,7 +60,7 @@ const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untruste
 	"of the most important items."
 
 var Builtins = []Builtin{
-	{NightlyName, KeyNightlySchedule, "daily 02:30", nightly.Prompt, JobNightly, PromptRun},
+	{NightlyName, KeyNightlySchedule, "daily 02:30", "Nightly: gather the last day and write knowledge records (one model run).", JobNightly, CallableRun},
 	{WeeklyReviewName, KeyWeeklyReview, "weekly sun 18:00", weeklyReviewPrompt, JobBuiltin, PromptRun},
 	{DailyNudgesName, KeyDailyNudges, "daily 08:00", "Daily: send the attention digest (no model run).", JobBuiltin, CallableRun},
 	{CalendarCandidatesName, KeyCalendarCands, "0 * * * *", "Hourly: if event candidates are queued, draft calendar event proposals from them (no model run when the queue is empty).", JobBuiltin, CallableRun},

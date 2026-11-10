@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
@@ -224,83 +223,6 @@ func threadTainted(t *testing.T, dir string, thread int64) bool {
 		t.Fatal(err)
 	}
 	return tainted
-}
-
-func TestNightlyTaintMidRunKeepsWriteToolsAndMarksTheirRecords(t *testing.T) {
-	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	warm(t, api)
-	start := len(api.Requests())
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("n1", "threads_today", nil)))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("summary")))
-	if ran := runApp(t, "agent", "run", "--kind", "nightly", "--text", "nightly"); ran.code != cli.ExitOK {
-		t.Fatalf("trusted nightly run: %d %s", ran.code, ran.stderr)
-	}
-	if after := requestTools(t, api.Requests()[start+1]); !slices.Contains(after, "kb_write") {
-		t.Errorf("reading only untainted threads dropped kb_write: %v", after)
-	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w1", "kb_write", map[string]any{"title": "tea", "body": "green"})))
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("g1", "kb_get", map[string]any{"ids": []any{1}})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("read")))
-	if ran := runApp(t, "agent", "run", "--text", "what do you know about tea"); ran.code != cli.ExitOK {
-		t.Fatalf("tainting run: %d %s", ran.code, ran.stderr)
-	}
-
-	start = len(api.Requests())
-	api.Push(
-		anthropictest.Reply("tool_use", anthropictest.Thinking("scan", "sig-scan"), anthropictest.ToolUse("n1", "threads_today", nil)),
-		anthropictest.Reply("tool_use", anthropictest.Thinking("observe", "sig-observe"), anthropictest.ToolUse("o1", "kb_write", map[string]any{"title": "coffee", "body": "black"})),
-		anthropictest.Reply("end_turn", anthropictest.Text("summary")),
-	)
-	if ran := runApp(t, "agent", "run", "--kind", "nightly", "--text", "nightly"); ran.code != cli.ExitOK {
-		t.Fatalf("tainted nightly run: %d %s", ran.code, ran.stderr)
-	}
-	thread := latestThread(t, dir)
-	if !threadTainted(t, dir, thread) {
-		t.Fatal("nightly thread not tainted after reading a tainted thread")
-	}
-	requests := api.Requests()[start:]
-	if len(requests) != 3 {
-		t.Fatalf("%d model requests in the tainted nightly run, want 3", len(requests))
-	}
-	tools := func(r anthropictest.Request) string {
-		var body map[string]json.RawMessage
-		if err := json.Unmarshal(r.Body, &body); err != nil {
-			t.Fatal(err)
-		}
-		return string(body["tools"])
-	}
-	for i, r := range requests[1:] {
-		if tools(r) != tools(requests[0]) {
-			t.Errorf("request %d changed the tools array within the run", i+2)
-		}
-	}
-	for i, want := range [][]string{nil, {"sig-scan"}, {"sig-scan", "sig-observe"}} {
-		if got := replayedSignatures(t, requests[i]); !slices.Equal(got, want) {
-			t.Errorf("request %d replayed thinking %v, want %v", i+1, got, want)
-		}
-	}
-	written := toolResultFor(t, requests[2], "o1")
-	if written["is_error"] == true {
-		t.Errorf("kb_write after the mid-run mark returned %v, want a write", written)
-	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	var recordMarks int64
-	if err := d.Read.QueryRow("SELECT marks FROM kb_records WHERE title = 'coffee'").Scan(&recordMarks); err != nil {
-		t.Fatal(err)
-	}
-	_ = d.Close()
-	if marks := threadMarkSet(t, dir, thread); recordMarks != marks || recordMarks == 0 {
-		t.Errorf("record marks = %d, want the writer thread's marks %d", recordMarks, marks)
-	}
-
-	start = len(api.Requests())
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("again")))
-	if ran := runApp(t, "agent", "run", "--thread", fmt.Sprint(thread), "--text", "again"); ran.code != cli.ExitOK {
-		t.Fatalf("later nightly run: %d %s", ran.code, ran.stderr)
-	}
-	if after := requestTools(t, api.Requests()[start]); !slices.Contains(after, "kb_write") {
-		t.Errorf("a later run of the tainted thread dropped kb_write: %v", after)
-	}
 }
 
 func toolResultFor(t *testing.T, r anthropictest.Request, id string) map[string]any {

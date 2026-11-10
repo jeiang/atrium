@@ -131,6 +131,12 @@ const SpendCapText = "Anthropic spend limit reached: the organization's API usag
 
 func SpendCap() BudgetExceeded { return BudgetExceeded(SpendCapText) }
 
+func IsCapError(text string) bool {
+	return text == SpendCapText || strings.HasPrefix(text, "run cost cap:") ||
+		strings.HasPrefix(text, "parent run cost cap:") || strings.HasPrefix(text, "thread cost cap:") ||
+		strings.HasPrefix(text, "run cost ceiling reached")
+}
+
 const ThreadCapKey = "thread_cost_cap_usd"
 
 func ThreadCap(ctx context.Context, q db.Querier, threadID int64) (spent, limit float64, own bool, err error) {

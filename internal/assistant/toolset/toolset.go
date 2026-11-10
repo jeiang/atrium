@@ -1,7 +1,6 @@
 package toolset
 
 import (
-	"github.com/jeiang/atrium/internal/assistant/nightly"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/report"
 	"github.com/jeiang/atrium/internal/assistant/subagents/lookup"
@@ -79,7 +78,6 @@ func Registry() (*registry.Registry, error) {
 		grafanatools.Tools(),
 		notify.Tools(),
 		webfetch.Tools(),
-		nightly.Tools(),
 		[]tool.Tool{(&research.Research{}).Tool()},
 		[]tool.Tool{lookup.New(nil).Tool()},
 		[]tool.Tool{websearch.New(nil).Tool()},
