@@ -954,6 +954,17 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "digest_notify": {
+          "default": true,
+          "type": [
+            "boolean",
+            "string"
+          ]
+        },
+        "digest_notify_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "doom_loop_threshold": {
           "default": 3,
           "type": [

@@ -107,6 +107,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `default_context_limit` | enum (90000, 200000, 500000, 1000000) | `90000` | ui | `ATRIUM_ASSISTANT_DEFAULT_CONTEXT_LIMIT` |
 | `default_effort` | enum (low, medium, high, xhigh, max) | `xhigh` | ui | `ATRIUM_ASSISTANT_DEFAULT_EFFORT` |
 | `default_model` | enum (claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5) | `claude-haiku-5-5` | ui | `ATRIUM_ASSISTANT_DEFAULT_MODEL` |
+| `digest_notify` | bool | `true` | ui | `ATRIUM_ASSISTANT_DIGEST_NOTIFY` |
 | `doom_loop_threshold` | int | `3` | advanced | `ATRIUM_ASSISTANT_DOOM_LOOP_THRESHOLD` |
 | `dreaming_max_cost_usd` | float | `0.30` | advanced | `ATRIUM_ASSISTANT_DREAMING_MAX_COST_USD` |
 | `dreaming_monthly_usd` | float | `3` | advanced | `ATRIUM_ASSISTANT_DREAMING_MONTHLY_USD` |
