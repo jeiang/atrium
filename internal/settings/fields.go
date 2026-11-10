@@ -52,9 +52,11 @@ func LoadFields(ctx context.Context, q db.Querier, fields []Field) ([]FieldView,
 			Number: f.Number, Whole: f.Whole, Bool: f.Bool, Multi: f.Multi, Choices: f.Choices,
 			Pinned: found.Pinned() || !def.Editable(),
 		}
-		selected := strings.Split(view.Value, ",")
-		for _, choice := range f.Choices {
-			view.Options = append(view.Options, FieldOption{Value: choice, Label: choice, Checked: slices.Contains(selected, choice)})
+		if f.Multi {
+			selected := strings.Split(view.Value, ",")
+			for _, choice := range f.Choices {
+				view.Options = append(view.Options, FieldOption{Value: choice, Label: choice, Checked: slices.Contains(selected, choice)})
+			}
 		}
 		out = append(out, view)
 	}
