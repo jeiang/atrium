@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http/httptest"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"sort"
 	"strings"
@@ -66,7 +67,9 @@ func waitForOps(t *testing.T, d *db.DB, what string, ok func() bool) {
 		if time.Now().After(deadline) {
 			var state, runErr string
 			_ = d.Read.QueryRow("SELECT r.state, COALESCE(r.error, '') FROM runs r JOIN threads th ON th.id = r.thread_id WHERE th.kind = 'worker' ORDER BY r.id DESC LIMIT 1").Scan(&state, &runErr)
-			t.Fatalf("timed out waiting for %s (worker run: %s %s)", what, state, runErr)
+			var buf [1 << 20]byte
+			n := runtime.Stack(buf[:], true)
+			t.Fatalf("timed out waiting for %s (worker run: %s %s)\n%s", what, state, runErr, buf[:n])
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
