@@ -506,3 +506,47 @@ func TestSchemaVersionSixDatabaseMigratesToTheKnowledgeStore(t *testing.T) {
 		t.Errorf("embed_kb_3 = %q, want FLOAT[8]", ddl)
 	}
 }
+
+func TestSchemaVersionTenMigratesBackfillStateOutOfSettings(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "atrium.db")
+	if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list: exit %d %s", code, stderr)
+	}
+	d := mustConnect(t, path)
+	for _, stmt := range []string{
+		"DROP TABLE memory_state",
+		"DELETE FROM schema_migrations WHERE version = 11",
+		"INSERT INTO settings (key, value) VALUES ('backfill_done', '1700000000')",
+	} {
+		if _, err := d.Write.Exec(stmt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = d.Close()
+	if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list after removing migration 11: exit %d %s", code, stderr)
+	}
+	d = mustConnect(t, path)
+	var done string
+	if err := d.Read.QueryRow("SELECT value FROM memory_state WHERE key = 'backfill_done'").Scan(&done); err != nil || done != "1700000000" {
+		t.Errorf("migrated backfill state = %q, %v, want the stored timestamp", done, err)
+	}
+	var version int
+	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version != 11 {
+		t.Errorf("schema version = %d, %v, want %d", version, err, db.LatestSchemaVersion())
+	}
+	_ = d.Close()
+	fresh := t.TempDir()
+	if code, _, stderr := runIn(t, fresh, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list on a fresh database: exit %d %s", code, stderr)
+	}
+	migrated, created := schemaDump(t, path), schemaDump(t, filepath.Join(fresh, "atrium.db"))
+	if !slices.Equal(migrated, created) {
+		for _, line := range migrated {
+			if !slices.Contains(created, line) {
+				t.Errorf("only in the migrated schema: %s", line)
+			}
+		}
+	}
+}

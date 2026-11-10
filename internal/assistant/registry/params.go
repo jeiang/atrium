@@ -8,7 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/tool"
 )
 
-const DynamicFilteringKey = "dynamic_filtering"
+const DynamicFilteringKey = "search_web_dynamic_filtering"
 
 func init() {
 	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{

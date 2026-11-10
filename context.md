@@ -72,7 +72,7 @@ behavior-parity target.
   frozen-prefix work lands.
 - Assistant history is a per-thread memory tree. A run sends its own
   messages and, newest first, earlier whole exchanges within
-  `verbatim_tokens` (default 16,000, at most a quarter of the context left
+  `memory_verbatim_tokens` (default 16,000, at most a quarter of the context left
   after the tools and system prompt) verbatim, tool calls and results
   included; each operator message ends with its run's start time in the
   configured time zone. Older messages come first as memory-tree lines,
@@ -290,6 +290,9 @@ behavior-parity target.
   `ops_samples`, the server-ops sampler's typed samples (14-day retention),
   and migration 10 `ops_findings`, the worker's findings; migration 10 also
   deletes the ops rows the sampler and worker once wrote to `kb_records`.
+  Migration 11 adds `memory_state` and copies the memory backfill
+  timestamp into it from the `backfill_done` settings row, which is no
+  longer a setting.
   `taint_private` and `taint_web` are dormant after migration 6: no longer
   read or written, and kept because dropping them would rewrite the table.
   `atrium db import-v1` is the only path from a v1

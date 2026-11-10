@@ -24,7 +24,6 @@ const (
 	KeyEffortCron          = "agent_effort_cron"
 	KeyEffortNightly       = "agent_effort_nightly"
 	KeyEffortSubagent      = "agent_effort_subagent"
-	KeyEffortSub           = "agent_effort_sub"
 
 	KeyWebSearchMaxUses = "agent_web_search_max_uses"
 
@@ -67,9 +66,6 @@ const (
 	KeyWebfetchTextDefault  = "agent_webfetch_text_default"
 	KeyWebfetchUserAgent    = "agent_webfetch_user_agent"
 
-	KeyContextMaxIDs       = "agent_context_max_ids"
-	KeyContextSummaryChars = "agent_context_summary_chars"
-	KeyContextMaxSources   = "agent_context_max_sources"
 	KeyRecallPageChars     = "agent_recall_page_chars"
 	KeyRecallMaxPageChars  = "agent_recall_max_page_chars"
 	KeyKBWriteChars        = "agent_kb_write_chars"
@@ -81,12 +77,6 @@ const (
 	KeyMailSnippetChars  = "agent_mail_snippet_chars"
 	KeyMailBodyChars     = "agent_mail_body_chars"
 	KeyMailMaxLoopsLimit = "agent_mail_max_loops_limit"
-
-	KeyNotionMaxResults  = "agent_notion_max_results"
-	KeyNotionPageChars   = "agent_notion_page_chars"
-	KeyNotionStaleSecs   = "agent_notion_stale_seconds"
-	KeyNotionSnippet     = "agent_notion_snippet_chars"
-	KeyNotionMaxMarkdown = "agent_notion_max_markdown_chars"
 
 	KeyMediaTorrentLimit = "agent_media_torrent_limit"
 
@@ -156,7 +146,6 @@ func init() {
 		settings.Shown("Scheduled run effort", effort(KeyEffortCron, "high")),
 		settings.Shown("Nightly run effort", effort(KeyEffortNightly, "high")),
 		settings.Shown("Research effort", effort(KeyEffortSubagent, "medium")),
-		effort(KeyEffortSub, "medium"),
 		count(KeyWebSearchMaxUses, 5, 1, 20),
 
 		adv(KeyStubTokens, settings.Int, "2000", settings.Between(100, 50000)),
@@ -197,9 +186,6 @@ func init() {
 		count(KeyWebfetchTextDefault, 12000, 100, 200000),
 		adv(KeyWebfetchUserAgent, settings.String, "atrium-webfetch/1", headerValue),
 
-		count(KeyContextMaxIDs, 50, 1, 500),
-		count(KeyContextSummaryChars, 4000, 100, 100000),
-		count(KeyContextMaxSources, 100, 1, 1000),
 		recallPage,
 		recallMax,
 		count(KeyKBWriteChars, 4000, 200, 20000),
@@ -211,12 +197,6 @@ func init() {
 		count(KeyMailSnippetChars, 300, 20, 5000),
 		count(KeyMailBodyChars, 8000, 100, 100000),
 		count(KeyMailMaxLoopsLimit, 100, 1, 1000),
-
-		count(KeyNotionMaxResults, 10, 1, 100),
-		count(KeyNotionPageChars, 12000, 100, 200000),
-		adv(KeyNotionStaleSecs, settings.Int, "86400", settings.Between(60, 2592000)),
-		count(KeyNotionSnippet, 300, 20, 5000),
-		count(KeyNotionMaxMarkdown, 100000, 1000, 1000000),
 
 		count(KeyMediaTorrentLimit, 50, 1, 500),
 

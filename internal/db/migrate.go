@@ -231,6 +231,17 @@ var migrations = []migration{
 		_, err = tx.ExecContext(ctx, "DELETE FROM kb_records WHERE scope = 'ops'")
 		return err
 	}},
+	{11, func(ctx context.Context, tx *sql.Tx) error {
+		for _, stmt := range []string{
+			"CREATE TABLE IF NOT EXISTS memory_state (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
+			"INSERT OR IGNORE INTO memory_state (key, value) SELECT 'backfill_done', value FROM settings WHERE key = 'backfill_done'",
+		} {
+			if _, err := tx.ExecContext(ctx, stmt); err != nil {
+				return err
+			}
+		}
+		return nil
+	}},
 }
 
 type ModuleMigration struct {
