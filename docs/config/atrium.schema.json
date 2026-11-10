@@ -612,6 +612,14 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "agent_schedule_ops_sampler": {
+          "default": "*/15 * * * *",
+          "type": "string"
+        },
+        "agent_schedule_ops_sampler_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "agent_schedule_package_tracking": {
           "default": "0 * * * *",
           "type": "string"
@@ -1064,6 +1072,17 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "max_steps_worker": {
+          "default": 8,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "max_steps_worker_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "monthly_budget_usd": {
           "default": 150,
           "type": [
@@ -1086,6 +1105,28 @@
           "type": "string"
         },
         "open_meteo_proxy_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ops_worker_max_run_usd": {
+          "default": 0.1,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "ops_worker_max_run_usd_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ops_worker_monthly_usd": {
+          "default": 5,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "ops_worker_monthly_usd_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -1762,6 +1803,61 @@
           "type": "string"
         },
         "grafana_viewer_token_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ops_hosts": {
+          "type": "string"
+        },
+        "ops_hosts_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ops_label_selector": {
+          "default": "job=\"node\"",
+          "type": "string"
+        },
+        "ops_label_selector_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ops_query_cpu": {
+          "default": "100 - (avg by(instance) (rate(node_cpu_seconds_total{mode=\"idle\",{{selector}},instance=~\"{{host}}(:.*)?\"}[5m])) * 100)",
+          "type": "string"
+        },
+        "ops_query_cpu_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ops_query_disk": {
+          "default": "(1 - node_filesystem_avail_bytes{{{selector}},instance=~\"{{host}}(:.*)?\" ,mountpoint=\"/\"} / node_filesystem_size_bytes{{{selector}},instance=~\"{{host}}(:.*)?\" ,mountpoint=\"/\"}) * 100",
+          "type": "string"
+        },
+        "ops_query_disk_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ops_query_failed_units": {
+          "default": "sum by(instance) (node_systemd_unit_state{state=\"failed\",{{selector}},instance=~\"{{host}}(:.*)?\"} == 1)",
+          "type": "string"
+        },
+        "ops_query_failed_units_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ops_query_mem": {
+          "default": "(1 - node_memory_MemAvailable_bytes{{{selector}},instance=~\"{{host}}(:.*)?\"} / node_memory_MemTotal_bytes{{{selector}},instance=~\"{{host}}(:.*)?\"}) * 100",
+          "type": "string"
+        },
+        "ops_query_mem_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ops_query_up": {
+          "default": "up{{{selector}},instance=~\"{{host}}(:.*)?\"}",
+          "type": "string"
+        },
+        "ops_query_up_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }

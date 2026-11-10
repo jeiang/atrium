@@ -552,7 +552,7 @@ func (s *state) body(ctx context.Context) error {
 
 func (s *state) unattended(ctx context.Context) (bool, error) {
 	root, err := threads.RootKind(ctx, s.d.Read, s.thread.ID)
-	return root == threads.Cron || root == threads.Nightly, err
+	return root == threads.Cron || root == threads.Nightly || root == threads.Worker, err
 }
 
 func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, last *anchor) (done bool, next *anchor, err error) {

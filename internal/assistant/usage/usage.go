@@ -203,6 +203,13 @@ func MonthToDate(ctx context.Context, q db.Querier, now float64, loc *time.Locat
 	return cost, err
 }
 
+func ThreadMonthToDate(ctx context.Context, q db.Querier, threadID int64, now float64, loc *time.Location) (float64, error) {
+	var cost float64
+	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE thread_id = ? AND ts >= ?",
+		threadID, MonthStart(now, loc)).Scan(&cost)
+	return cost, err
+}
+
 func PromptTokens(ctx context.Context, q db.Querier, threadID int64) (int64, error) {
 	var tokens int64
 	err := q.QueryRowContext(ctx,

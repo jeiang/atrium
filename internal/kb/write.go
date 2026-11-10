@@ -305,6 +305,109 @@ func Write(ctx context.Context, d *db.DB, reg *writes.Registry, w Writer, in Wri
 	return out, writeID, nil
 }
 
+func UpsertFact(ctx context.Context, d *db.DB, origin, title, body string, expires, now float64) (Record, error) {
+	if origin == "" || title == "" || body == "" {
+		return Record{}, errors.New("kb: a fact needs an origin, title and body")
+	}
+	var out Record
+	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		var id int64
+		err := tx.QueryRowContext(ctx,
+			"INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, origin, pinned, embedded, expires_at, created_at, updated_at) "+
+				"VALUES (?, '[]', ?, ?, NULL, 0, 0, ?, ?, 0, 0, ?, ?, ?) "+
+				"ON CONFLICT(origin) DO UPDATE SET title = excluded.title, body = excluded.body, expires_at = excluded.expires_at, "+
+				"retracted_at = NULL, embedded = 0, updated_at = excluded.updated_at RETURNING id",
+			title, body, ScopeOps, WriterWorker, origin, expires, now, now).Scan(&id)
+		if err != nil {
+			return err
+		}
+		rec, err := Get(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		out = *rec
+		return nil
+	})
+	if err != nil {
+		return Record{}, err
+	}
+	return out, nil
+}
+
+func UpsertFinding(ctx context.Context, d *db.DB, reg *writes.Registry, w Writer, origin, title, body, severity string, marks tool.Marks, now float64) (Record, int64, error) {
+	if origin == "" || title == "" || body == "" {
+		return Record{}, 0, errors.New("kb: a finding needs an origin, title and body")
+	}
+	if severity != "info" && severity != "warning" && severity != "critical" {
+		return Record{}, 0, errors.New("kb: a finding severity must be info, warning or critical")
+	}
+	aliases, err := aliasesJSON([]string{"severity:" + severity})
+	if err != nil {
+		return Record{}, 0, err
+	}
+	var out Record
+	var writeID int64
+	err = d.WithTx(ctx, func(tx *sql.Tx) error {
+		var id int64
+		err := tx.QueryRowContext(ctx,
+			"INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, origin, pinned, embedded, expires_at, created_at, updated_at, source_thread_id, source_run_id) "+
+				"VALUES (?, ?, ?, ?, NULL, 0, ?, ?, ?, 0, 0, NULL, ?, ?, ?, ?) "+
+				"ON CONFLICT(origin) DO UPDATE SET title = excluded.title, aliases = excluded.aliases, body = excluded.body, marks = excluded.marks, "+
+				"retracted_at = NULL, embedded = 0, updated_at = excluded.updated_at RETURNING id",
+			title, aliases, body, ScopeOps, int64(marks), WriterWorker, origin, now, now, w.ThreadID, w.RunID).Scan(&id)
+		if err != nil {
+			return err
+		}
+		rec, err := Get(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		out = *rec
+		writeID, err = writes.Record(ctx, tx, reg, writes.New{
+			TS: now, ThreadID: &w.ThreadID, RunID: &w.RunID, Tool: "ops_finding", Target: "kb:" + fmt.Sprint(id),
+			After: map[string]any{"title": title, "body": body, "severity": severity, "fact": origin},
+			Undo:  undoPayload{Op: UndoOp, ID: id, Applied: now},
+		})
+		return err
+	})
+	if err != nil {
+		return Record{}, 0, err
+	}
+	return out, writeID, nil
+}
+
+func RetractFact(ctx context.Context, d *db.DB, id int64, now float64) (Record, error) {
+	var out Record
+	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		rec, err := Get(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if rec == nil {
+			return tool.Error(fmt.Sprintf("%s is unknown", Cite(id)))
+		}
+		if rec.Retracted() {
+			out = *rec
+			return nil
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded = 0, updated_at = ? WHERE id = ?",
+			now, now, id); err != nil {
+			return err
+		}
+		if err := embed.DeleteKB(ctx, tx, id); err != nil {
+			return err
+		}
+		next := *rec
+		next.RetractedAt, next.Embedded, next.UpdatedAt = &now, false, now
+		out = next
+		return nil
+	})
+	if err != nil {
+		return Record{}, err
+	}
+	return out, nil
+}
+
 func Retract(ctx context.Context, d *db.DB, reg *writes.Registry, w Writer, id int64, reason string) (Record, int64, error) {
 	var out Record
 	var writeID int64

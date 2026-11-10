@@ -19,6 +19,7 @@ import (
 	filetools "github.com/jeiang/atrium/internal/assistant/tools/files"
 	kbtools "github.com/jeiang/atrium/internal/assistant/tools/kb"
 	memorytools "github.com/jeiang/atrium/internal/assistant/tools/memory"
+	opstools "github.com/jeiang/atrium/internal/assistant/tools/ops"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
 	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
 	recalltools "github.com/jeiang/atrium/internal/assistant/tools/recall"
@@ -33,6 +34,7 @@ import (
 	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/tasks"
 	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/web"
@@ -75,7 +77,7 @@ type Module struct {
 func (m Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
 		Name:      module.Assistant,
-		Attention: []attention.Source{attentionsources.Plans(), attentionsources.Questions(), tasks.AttentionSource(), dreaming.Attention(mc.Env)},
+		Attention: []attention.Source{attentionsources.Plans(), attentionsources.Questions(), tasks.AttentionSource(), serverops.AttentionSource(mc.Env), dreaming.Attention(mc.Env)},
 		Requires:  []module.Requirement{{Name: secrets.AnthropicAPIKey, Check: anthropicKey}},
 		Pages: []web.Page{{
 			Module:    chatpages.Module(chatpages.Options{Tools: mc.Tools}),
@@ -112,7 +114,7 @@ func addTools(r *registry.Registry) error {
 		askoperator.Tools(), attentiontool.Tools(), filetools.Tools(), memorytools.Tools(),
 		webfetch.Tools(), recalltools.Tools(), plantools.Tools(),
 		proposetools.Tools(), scheduletools.Tools(), taskstools.Tools(),
-		kbtools.Tools(), weathertools.Tools(),
+		kbtools.Tools(), weathertools.Tools(), opstools.Tools(),
 	} {
 		if err := r.Add(tools...); err != nil {
 			return err

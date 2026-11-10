@@ -19,6 +19,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/timex"
@@ -27,26 +28,26 @@ import (
 
 var queryLimitBound = tool.NewCeiling(100, 1, 200)
 
-type limits struct {
-	timeout    time.Duration
-	series     int
-	metricRows int
-	logRows    int
-	alerts     int
-	dashboards int
-	cellChars  int
+type Limits struct {
+	Timeout    time.Duration
+	Series     int
+	MetricRows int
+	LogRows    int
+	Alerts     int
+	Dashboards int
+	CellChars  int
 }
 
-func readLimits(ctx context.Context, tc *tool.Context) (limits, error) {
-	r := assistant.Read(ctx, tc.DB.Read)
-	lim := limits{
-		timeout:    time.Duration(r.Int(assistant.KeyGrafanaTimeout)) * time.Second,
-		series:     r.Int(assistant.KeyGrafanaSeries),
-		metricRows: r.Int(assistant.KeyGrafanaMetricRows),
-		logRows:    r.Int(assistant.KeyGrafanaLogRows),
-		alerts:     r.Int(assistant.KeyGrafanaAlerts),
-		dashboards: r.Int(assistant.KeyGrafanaDashboards),
-		cellChars:  r.Int(assistant.KeyGrafanaCellChars),
+func ReadLimits(ctx context.Context, q db.Querier) (Limits, error) {
+	r := assistant.Read(ctx, q)
+	lim := Limits{
+		Timeout:    time.Duration(r.Int(assistant.KeyGrafanaTimeout)) * time.Second,
+		Series:     r.Int(assistant.KeyGrafanaSeries),
+		MetricRows: r.Int(assistant.KeyGrafanaMetricRows),
+		LogRows:    r.Int(assistant.KeyGrafanaLogRows),
+		Alerts:     r.Int(assistant.KeyGrafanaAlerts),
+		Dashboards: r.Int(assistant.KeyGrafanaDashboards),
+		CellChars:  r.Int(assistant.KeyGrafanaCellChars),
 	}
 	return lim, r.Err()
 }
@@ -54,7 +55,7 @@ func readLimits(ctx context.Context, tc *tool.Context) (limits, error) {
 var (
 	kinds      = []string{"prometheus", "logs"}
 	dropFields = []string{"id", "tsNs"}
-	contexts   = tool.Kinds{tool.Chat, tool.Cron, tool.Sub}
+	contexts   = tool.Kinds{tool.Chat, tool.Cron, tool.Sub, tool.Worker}
 	readMarks  = tool.Untrusted
 )
 
@@ -97,11 +98,15 @@ func urlClass(target string) string {
 	return ""
 }
 
-func request(ctx context.Context, tc *tool.Context, lim limits, method, path, rawQuery string, body any) (any, error) {
+func request(ctx context.Context, tc *tool.Context, lim Limits, method, path, rawQuery string, body any) (any, error) {
+	return Query(ctx, tc.DB.Read, lim, method, path, rawQuery, body)
+}
+
+func Query(ctx context.Context, q db.Querier, lim Limits, method, path, rawQuery string, body any) (any, error) {
 	if method != http.MethodGet && (method != http.MethodPost || path != "/api/ds/query") {
 		return nil, tool.Error("grafana tools are read-only")
 	}
-	access, err := Load(ctx, tc.DB.Read)
+	access, err := Load(ctx, q)
 	var missing config.NotConfigured
 	if errors.As(err, &missing) {
 		return nil, tool.NotConfigured(err.Error())
@@ -133,7 +138,7 @@ func request(ctx context.Context, tc *tool.Context, lim limits, method, path, ra
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	client, err := transport.For(ctx, tc.DB.Read, "grafana", lim.timeout)
+	client, err := transport.For(ctx, q, "grafana", lim.Timeout)
 	var invalid transport.Error
 	if errors.As(err, &invalid) {
 		return nil, tool.Error("grafana unreachable: " + invalid.Error())
@@ -158,7 +163,7 @@ func request(ctx context.Context, tc *tool.Context, lim limits, method, path, ra
 		return nil, tool.Error("grafana unreachable: " + errorClass(err))
 	}
 	if resp.StatusCode >= 400 {
-		return nil, tool.Error("grafana " + strconv.Itoa(resp.StatusCode) + ": " + tool.Clip(strings.ToValidUTF8(string(raw), "\ufffd"), lim.cellChars))
+		return nil, tool.Error("grafana " + strconv.Itoa(resp.StatusCode) + ": " + tool.Clip(strings.ToValidUTF8(string(raw), "\ufffd"), lim.CellChars))
 	}
 	value, err := jsonx.Loads(raw)
 	if err != nil {
@@ -373,7 +378,7 @@ func compactFrame(frameValue any, rowCap, cellChars int) (map[string]any, error)
 	return out, nil
 }
 
-func compactResults(payloadValue any, rowCap int, lim limits) (any, error) {
+func compactResults(payloadValue any, rowCap int, lim Limits) (any, error) {
 	payload, err := attr(payloadValue)
 	if err != nil {
 		return nil, err
@@ -390,7 +395,7 @@ func compactResults(payloadValue any, rowCap int, lim limits) (any, error) {
 				return nil, err
 			}
 			if e := get(result, "error"); truthy(e) {
-				return nil, tool.Error("query error: " + tool.Clip(pyStr(e), lim.cellChars))
+				return nil, tool.Error("query error: " + tool.Clip(pyStr(e), lim.CellChars))
 			}
 			if f := get(result, "frames"); truthy(f) {
 				list, err := items(f)
@@ -401,9 +406,9 @@ func compactResults(payloadValue any, rowCap int, lim limits) (any, error) {
 			}
 		}
 	}
-	series := make([]any, 0, min(len(frames), lim.series))
-	for _, f := range frames[:min(len(frames), lim.series)] {
-		c, err := compactFrame(f, rowCap, lim.cellChars)
+	series := make([]any, 0, min(len(frames), lim.Series))
+	for _, f := range frames[:min(len(frames), lim.Series)] {
+		c, err := compactFrame(f, rowCap, lim.CellChars)
 		if err != nil {
 			return nil, err
 		}
@@ -413,7 +418,7 @@ func compactResults(payloadValue any, rowCap int, lim limits) (any, error) {
 }
 
 func datasources(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
-	lim, err := readLimits(ctx, tc)
+	lim, err := ReadLimits(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -455,7 +460,7 @@ func query(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if !slices.Contains(kinds, kind) {
 		return nil, tool.Error("kind must be one of " + strings.Join(kinds, ", "))
 	}
-	lim, err := readLimits(ctx, tc)
+	lim, err := ReadLimits(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -463,7 +468,7 @@ func query(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	q := map[string]any{"refId": "A", "datasource": map[string]any{"uid": uid}, "expr": expr, "maxDataPoints": int64(lim.metricRows)}
+	q := map[string]any{"refId": "A", "datasource": map[string]any{"uid": uid}, "expr": expr, "maxDataPoints": int64(lim.MetricRows)}
 	var rowCap int
 	if kind == "prometheus" {
 		q["range"] = true
@@ -473,11 +478,11 @@ func query(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 		} else if ok {
 			q["interval"] = step
 		}
-		rowCap = int(min(limit, int64(lim.metricRows)))
+		rowCap = int(min(limit, int64(lim.MetricRows)))
 	} else {
 		q["queryType"] = "range"
 		q["maxLines"] = limit
-		rowCap = int(min(limit, int64(lim.logRows)))
+		rowCap = int(min(limit, int64(lim.LogRows)))
 	}
 	start, ok, err := tool.TextArg(args, "start", false)
 	if err != nil {
@@ -502,7 +507,7 @@ func query(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 }
 
 func alerts(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
-	lim, err := readLimits(ctx, tc)
+	lim, err := ReadLimits(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -534,8 +539,8 @@ func alerts(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 			firing = append(firing, a)
 		}
 	}
-	out := make([]any, 0, min(len(firing), lim.alerts))
-	for _, a := range firing[:min(len(firing), lim.alerts)] {
+	out := make([]any, 0, min(len(firing), lim.Alerts))
+	for _, a := range firing[:min(len(firing), lim.Alerts)] {
 		var summary any = ""
 		if ann := get(a, "annotations"); truthy(ann) {
 			ad, err := attr(ann)
@@ -550,7 +555,7 @@ func alerts(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 		}
 		out = append(out, map[string]any{
 			"labels":    orDefault(a, "labels", map[string]any{}),
-			"summary":   tool.Clip(text, lim.cellChars),
+			"summary":   tool.Clip(text, lim.CellChars),
 			"active_at": get(a, "activeAt"),
 			"value":     get(a, "value"),
 		})
@@ -563,11 +568,11 @@ func searchDashboards(ctx context.Context, tc *tool.Context, args tool.Args) (an
 	if err != nil {
 		return nil, err
 	}
-	lim, err := readLimits(ctx, tc)
+	lim, err := ReadLimits(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
-	rawQuery := "query=" + url.QueryEscape(text) + "&type=dash-db&limit=" + strconv.Itoa(lim.dashboards)
+	rawQuery := "query=" + url.QueryEscape(text) + "&type=dash-db&limit=" + strconv.Itoa(lim.Dashboards)
 	found, err := request(ctx, tc, lim, http.MethodGet, "/api/search", rawQuery, nil)
 	if err != nil {
 		return nil, err
@@ -576,8 +581,8 @@ func searchDashboards(ctx context.Context, tc *tool.Context, args tool.Args) (an
 	if err != nil {
 		return nil, err
 	}
-	out := make([]any, 0, min(len(list), lim.dashboards))
-	for _, v := range list[:min(len(list), lim.dashboards)] {
+	out := make([]any, 0, min(len(list), lim.Dashboards))
+	for _, v := range list[:min(len(list), lim.Dashboards)] {
 		d, err := attr(v)
 		if err != nil {
 			return nil, err

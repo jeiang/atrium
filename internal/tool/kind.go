@@ -9,11 +9,12 @@ const (
 	Cron    Kind = "cron"
 	Nightly Kind = "nightly"
 	Sub     Kind = "sub"
+	Worker  Kind = "worker"
 )
 
 func ParseKind(value string) (Kind, bool) {
 	switch Kind(value) {
-	case Chat, Cron, Nightly, Sub:
+	case Chat, Cron, Nightly, Sub, Worker:
 		return Kind(value), true
 	}
 	return "", false
@@ -28,7 +29,7 @@ var (
 
 func (ks Kinds) Has(k Kind) bool { return slices.Contains(ks, k) }
 
-func (k Kind) Valid() bool { return AllKinds.Has(k) }
+func (k Kind) Valid() bool { return AllKinds.Has(k) || k == Worker }
 
 type Effect string
 
