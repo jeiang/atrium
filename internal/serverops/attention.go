@@ -64,6 +64,9 @@ func budgetItem(ctx context.Context, q db.Querier, now float64, env config.Env) 
 	if err := set.Err(); err != nil {
 		return nil, err
 	}
+	if set.Text(KeyCondenser) == CondenserLocal {
+		return nil, nil
+	}
 	budget := set.Float(KeyWorkerMonthlyUSD)
 	threadID, err := WorkerThreadID(ctx, q)
 	if err != nil || threadID == 0 {

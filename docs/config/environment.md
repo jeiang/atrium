@@ -111,6 +111,9 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` | `assistant.monthly_budget_usd` |
 | `ATRIUM_ASSISTANT_OPEN_METEO_CA_FILE` | `assistant.open_meteo_ca_file` |
 | `ATRIUM_ASSISTANT_OPEN_METEO_PROXY` | `assistant.open_meteo_proxy` |
+| `ATRIUM_ASSISTANT_OPS_CONDENSER` | `assistant.ops_condenser` |
+| `ATRIUM_ASSISTANT_OPS_CONDENSER_MAX_TOKENS` | `assistant.ops_condenser_max_tokens` |
+| `ATRIUM_ASSISTANT_OPS_CONDENSER_MODEL` | `assistant.ops_condenser_model` |
 | `ATRIUM_ASSISTANT_OPS_WORKER_MAX_RUN_USD` | `assistant.ops_worker_max_run_usd` |
 | `ATRIUM_ASSISTANT_OPS_WORKER_MONTHLY_USD` | `assistant.ops_worker_monthly_usd` |
 | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` | `assistant.prompt_subagent` |
