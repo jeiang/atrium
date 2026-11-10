@@ -17,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
-	kbtools "github.com/jeiang/atrium/internal/assistant/tools/kb"
 	opstools "github.com/jeiang/atrium/internal/assistant/tools/ops"
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/cli"
@@ -75,22 +74,22 @@ func waitForOps(t *testing.T, d *db.DB, what string, ok func() bool) {
 	}
 }
 
-func workerFinding(t *testing.T, d *db.DB, fact string) (id int64, retracted bool, found bool) {
+func workerFinding(t *testing.T, d *db.DB, fact string) (id int64, resolved bool, found bool) {
 	t.Helper()
-	var retractedAt *float64
-	err := d.Read.QueryRow("SELECT id, retracted_at FROM kb_records WHERE origin = ?", "finding:"+fact).Scan(&id, &retractedAt)
+	var resolvedAt *float64
+	err := d.Read.QueryRow("SELECT id, resolved_at FROM ops_findings WHERE fact = ? ORDER BY id DESC LIMIT 1", fact).Scan(&id, &resolvedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, false, false
 	}
 	if err != nil {
 		t.Fatal(err)
 	}
-	return id, retractedAt != nil, true
+	return id, resolvedAt != nil, true
 }
 
 func workerToolNames() []string {
 	var names []string
-	for _, set := range [][]tool.Tool{opstools.Tools(), kbtools.Tools(), grafanatools.Tools()} {
+	for _, set := range [][]tool.Tool{opstools.Tools(), grafanatools.Tools()} {
 		for _, def := range set {
 			if def.Contexts.Has(tool.Worker) {
 				names = append(names, def.Name)
@@ -157,6 +156,11 @@ func TestHostDownStartsOneWorkerRunAndFilesAFinding(t *testing.T) {
 	if want := workerToolNames(); !slices.Equal(names, want) {
 		t.Errorf("worker tools = %v, want %v", names, want)
 	}
+	for _, name := range []string{"kb_search", "kb_get"} {
+		if slices.Contains(names, name) {
+			t.Errorf("worker tools include %s", name)
+		}
+	}
 	system, _ := body["system"].([]any)
 	if len(system) != 2 {
 		t.Errorf("worker system blocks = %d, want the base and the worker prompt", len(system))
@@ -166,6 +170,13 @@ func TestHostDownStartsOneWorkerRunAndFilesAFinding(t *testing.T) {
 	threadID, err := serverops.WorkerThreadID(context.Background(), d.Read)
 	if err != nil || threadID == 0 {
 		t.Fatalf("worker thread = %d, %v", threadID, err)
+	}
+	findingID, _, _ := workerFinding(t, d, "node-a:up")
+	var severity, findingTitle, findingBody string
+	var marks int64
+	if err := d.Read.QueryRow("SELECT severity, title, body, marks FROM ops_findings WHERE id = ?", findingID).
+		Scan(&severity, &findingTitle, &findingBody, &marks); err != nil || severity != "warning" || findingTitle != "Host node-a is down" || marks != 1 {
+		t.Errorf("finding = %q %q %q %d, %v", severity, findingTitle, findingBody, marks, err)
 	}
 	var runs int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM runs WHERE thread_id = ? AND kind = 'worker'", threadID).Scan(&runs); err != nil || runs != 1 {
@@ -193,9 +204,9 @@ func TestHostDownStartsOneWorkerRunAndFilesAFinding(t *testing.T) {
 	fake.setUp(1)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("recovered")))
 	runOpsSampler(t, f, d, samplerFinished(t, d))
-	waitForOps(t, d, "the finding retracted", func() bool {
-		_, retracted, found := workerFinding(t, d, "node-a:up")
-		return found && retracted
+	waitForOps(t, d, "the finding resolved", func() bool {
+		_, resolved, found := workerFinding(t, d, "node-a:up")
+		return found && resolved
 	})
 }
 
@@ -236,8 +247,8 @@ func TestWorkerStatusLeavesTheChatUnmarked(t *testing.T) {
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
 	defer func() { _ = d.Close() }()
 	now := float64(time.Now().Unix())
-	res, err := d.Write.Exec("INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, origin, pinned, embedded, created_at, updated_at) "+
-		"VALUES ('Host node-a is down', '[\"severity:warning\"]', 'up is down', 'ops', NULL, 0, 1, 'worker', 'finding:node-a:up', 0, 0, ?, ?)", now, now)
+	res, err := d.Write.Exec("INSERT INTO ops_findings (fact, severity, title, body, marks, created_at) "+
+		"VALUES ('node-a:up', 'warning', 'Host node-a is down', 'up is down', 1, ?)", now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,14 +262,14 @@ func TestWorkerStatusLeavesTheChatUnmarked(t *testing.T) {
 	if marks := threadMarkSet(t, dir, statusThread); marks != 0 {
 		t.Errorf("thread marks after worker_status = %d, want none", marks)
 	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("k1", "kb_get", map[string]any{"ids": []any{id}})))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("k1", "worker_finding", map[string]any{"id": id})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("finding")))
 	if ran := runApp(t, "agent", "run", "--text", "read the finding"); ran.code != cli.ExitOK {
-		t.Fatalf("kb_get chat: %d %s", ran.code, ran.stderr)
+		t.Fatalf("worker_finding chat: %d %s", ran.code, ran.stderr)
 	}
 	getThread := latestThread(t, dir)
 	if marks := threadMarkSet(t, dir, getThread); marks&int64(tool.Untrusted) == 0 {
-		t.Errorf("thread marks after kb_get of the finding = %d, want untrusted", marks)
+		t.Errorf("thread marks after worker_finding = %d, want untrusted", marks)
 	}
 }
 

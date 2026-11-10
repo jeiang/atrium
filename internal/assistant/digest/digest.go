@@ -242,7 +242,7 @@ func dreamingOf(ctx context.Context, q db.Querier, now float64) (dreaming, error
 	} else {
 		out.exportID = id
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM kb_records WHERE scope = 'ops' AND origin LIKE 'finding:%' AND retracted_at IS NULL").Scan(&out.opsFinding); err != nil {
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM ops_findings WHERE resolved_at IS NULL").Scan(&out.opsFinding); err != nil {
 		return out, err
 	}
 	return out, nil

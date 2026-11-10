@@ -15,6 +15,7 @@ import (
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	mediatools "github.com/jeiang/atrium/internal/assistant/tools/media"
 	memorytools "github.com/jeiang/atrium/internal/assistant/tools/memory"
+	opstools "github.com/jeiang/atrium/internal/assistant/tools/ops"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
 	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
 	recalltools "github.com/jeiang/atrium/internal/assistant/tools/recall"
@@ -40,6 +41,7 @@ func Undoers(env config.Env) *writes.Registry {
 	scheduletools.RegisterUndoers(r)
 	filetools.RegisterUndoer(r)
 	taskstools.RegisterUndoer(r)
+	opstools.RegisterUndoer(r)
 	return r
 }
 
@@ -69,6 +71,7 @@ func Registry() (*registry.Registry, error) {
 		calendartools.Tools(),
 		mediatools.Tools(),
 		kbtools.Tools(),
+		opstools.Tools(),
 		scheduletools.Tools(),
 		plantools.Tools(),
 		recalltools.Tools(),

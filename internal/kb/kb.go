@@ -15,12 +15,10 @@ import (
 const (
 	ScopeWork     = "work"
 	ScopePersonal = "personal"
-	ScopeOps      = "ops"
 
 	WriterOperator = "operator"
 	WriterChat     = "chat"
 	WriterDreaming = "dreaming"
-	WriterWorker   = "worker"
 	WriterImport   = "import"
 
 	UndoOp = "kb_restore"
@@ -136,9 +134,7 @@ func privateClause(alias string, project int64) (string, []any) {
 func liveWhere(alias string, project int64, now float64, scope string) (string, []any) {
 	where := alias + ".retracted_at IS NULL AND (" + alias + ".expires_at IS NULL OR " + alias + ".expires_at > ?)"
 	args := []any{now}
-	if scope == "" {
-		where += " AND " + alias + ".scope != 'ops'"
-	} else {
+	if scope != "" {
 		where += " AND " + alias + ".scope = ?"
 		args = append(args, scope)
 	}
@@ -278,7 +274,7 @@ type ExportRecord struct {
 }
 
 func Exportable(ctx context.Context, q db.Querier, f ExportFilter) ([]ExportRecord, error) {
-	where := "r.retracted_at IS NULL AND (r.expires_at IS NULL OR r.expires_at > ?) AND r.scope != 'ops'" +
+	where := "r.retracted_at IS NULL AND (r.expires_at IS NULL OR r.expires_at > ?)" +
 		" AND ((r.marks & 14) & ~?) = 0"
 	args := []any{f.Now, int64(f.Kinds.Kinds())}
 	if !f.IncludePrivate {

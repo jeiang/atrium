@@ -17,7 +17,6 @@ import (
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/serverops"
 )
 
@@ -135,14 +134,11 @@ func runOpsSampler(t *testing.T, f *fixture, d *db.DB, wait func() bool) {
 
 func samplesExist(t *testing.T, d *db.DB) func() bool {
 	return func() bool {
-		var n, facts int
+		var n int
 		if err := d.Read.QueryRow("SELECT COUNT(*) FROM ops_samples").Scan(&n); err != nil {
 			t.Fatal(err)
 		}
-		if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_records WHERE scope = 'ops' AND marks = 0 AND writer = 'worker'").Scan(&facts); err != nil {
-			t.Fatal(err)
-		}
-		return n >= 6 && facts >= 6
+		return n >= 6
 	}
 }
 
@@ -171,7 +167,7 @@ func TestSchemaVersionEightMigratesToOpsSamples(t *testing.T) {
 		t.Errorf("ops_samples after migration = %d, %v, want one table", n, err)
 	}
 	var version int
-	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version != 9 {
+	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version != 10 {
 		t.Errorf("schema version = %d, %v, want %d", version, err, db.LatestSchemaVersion())
 	}
 	_ = d.Close()
@@ -189,7 +185,7 @@ func TestSchemaVersionEightMigratesToOpsSamples(t *testing.T) {
 	}
 }
 
-func TestOpsSamplerWritesTypedFactsWithoutAModel(t *testing.T) {
+func TestOpsSamplerWritesSamplesAndNoKnowledge(t *testing.T) {
 	fake := &fakeOpsGrafana{alerts: []map[string]any{
 		{"state": "firing", "labels": map[string]any{"alertname": "HighCPU", "instance": "node-a:9100"}},
 		{"state": "inactive", "labels": map[string]any{"alertname": "Ignored", "instance": "node-a:9100"}},
@@ -224,29 +220,11 @@ func TestOpsSamplerWritesTypedFactsWithoutAModel(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT detail FROM ops_samples WHERE metric = 'alerts_firing'").Scan(&detail); err != nil || !strings.Contains(detail, "HighCPU") || strings.Contains(detail, "Ignored") {
 		t.Errorf("alerts detail = %q, %v", detail, err)
 	}
-	var facts int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_records WHERE scope = 'ops' AND marks = 0 AND writer = 'worker'").Scan(&facts); err != nil || facts != 6 {
-		t.Errorf("ops facts = %d, %v, want 6 unmarked worker facts", facts, err)
+	var opsRows int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_records WHERE scope = 'ops'").Scan(&opsRows); err != nil || opsRows != 0 {
+		t.Errorf("knowledge rows after a sampler pass = %d, %v, want none", opsRows, err)
 	}
 	now := float64(time.Now().Unix())
-	var expired int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_records WHERE scope = 'ops' AND expires_at <= ?", now).Scan(&expired); err != nil || expired != 0 {
-		t.Errorf("ops facts with no 24h expiry = %d, %v", expired, err)
-	}
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("k1", "kb_search", map[string]any{"query": "node-a", "scope": "ops"})))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("found")))
-	if ran := runApp(t, "agent", "run", "--text", "what is the host doing"); ran.code != cli.ExitOK {
-		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
-	}
-	thread := latestThread(t, dir)
-	if marks := threadMarkSet(t, dir, thread); marks != 0 {
-		t.Errorf("chat thread marks after an ops search = %d, want none", marks)
-	}
-	last := api.Requests()[len(api.Requests())-1]
-	result := toolResultFor(t, last, "k1")
-	if result["is_error"] == true || !strings.Contains(fmt.Sprint(result["content"]), "node-a") {
-		t.Errorf("kb_search scope ops returned %v", result)
-	}
 	if _, err := d.Write.Exec("INSERT INTO ops_samples (ts, host, metric, value) VALUES (?, 'node-a', 'cpu_pct', 1)", now-15*24*3600); err != nil {
 		t.Fatal(err)
 	}
@@ -257,12 +235,18 @@ func TestOpsSamplerWritesTypedFactsWithoutAModel(t *testing.T) {
 		}
 		return old == 0
 	})
-	future, err := kb.Search(context.Background(), d.Read, kb.SearchFilter{Query: "node-a", Scope: kb.ScopeOps, Limit: 10, Now: now + 25*3600})
-	if err != nil {
-		t.Fatal(err)
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("k1", "kb_search", map[string]any{"query": "node-a"})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("found")))
+	if ran := runApp(t, "agent", "run", "--text", "what is the host doing"); ran.code != cli.ExitOK {
+		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
 	}
-	if len(future.Hits) != 0 {
-		t.Errorf("facts still visible after 24h: %d hits", len(future.Hits))
+	last := api.Requests()[len(api.Requests())-1]
+	result := toolResultFor(t, last, "k1")
+	if result["is_error"] == true {
+		t.Errorf("kb_search returned %v", result)
+	}
+	if strings.Contains(fmt.Sprint(result["content"]), "node-a") {
+		t.Errorf("kb_search returned ops data: %v", result)
 	}
 }
 
@@ -315,5 +299,105 @@ func TestOpsSamplerNeverWritesToGrafana(t *testing.T) {
 			continue
 		}
 		t.Errorf("the sampler sent %s %s", request.Method, request.Path)
+	}
+}
+
+func TestSchemaVersionNineDatabaseDropsOpsRecords(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "atrium.db")
+	if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list: exit %d %s", code, stderr)
+	}
+	d := mustConnect(t, path)
+	if _, err := d.Write.Exec("DROP TABLE ops_findings"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("DELETE FROM schema_migrations WHERE version = 10"); err != nil {
+		t.Fatal(err)
+	}
+	now := float64(time.Now().Unix())
+	res, err := d.Write.Exec("INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, origin, pinned, embedded, created_at, updated_at) "+
+		"VALUES ('Host node-a is down', '[]', 'up is down', 'ops', NULL, 0, 1, 'worker', 'finding:node-a:up', 0, 0, ?, ?)", now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	findingID, _ := res.LastInsertId()
+	res, err = d.Write.Exec("INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, origin, pinned, embedded, created_at, updated_at) "+
+		"VALUES ('node-a up', '[]', 'up at 10:00', 'ops', NULL, 0, 0, 'worker', 'ops:node-a:up', 0, 0, ?, ?)", now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	factID, _ := res.LastInsertId()
+	res, err = d.Write.Exec("INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, pinned, embedded, created_at, updated_at) "+
+		"VALUES ('Boiler code', '[]', '4417', 'work', NULL, 0, 0, 'operator', 0, 0, ?, ?)", now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keepID, _ := res.LastInsertId()
+	blob := make([]byte, 768*4)
+	for _, id := range []int64{findingID, factID, keepID} {
+		if _, err := d.Write.Exec("INSERT INTO embed_kb_0 (rowid, embedding) VALUES (?, ?)", id, blob); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := d.Write.Exec("INSERT INTO export_pages (target, record_id, remote_id, hash, updated_at) VALUES ('notion', ?, 'page', 'hash', ?)", findingID, now); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO agent_writes (ts, tool, target, after_json, undo_json) VALUES (?, 'ops_finding', ?, '{}', '{}')", now, "kb:"+fmt.Sprint(findingID)); err != nil {
+		t.Fatal(err)
+	}
+	_ = d.Close()
+	if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list after migration: exit %d %s", code, stderr)
+	}
+	d = mustConnect(t, path)
+	defer func() { _ = d.Close() }()
+	var opsRows int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_records WHERE scope = 'ops'").Scan(&opsRows); err != nil || opsRows != 0 {
+		t.Errorf("ops knowledge rows = %d, %v, want none", opsRows, err)
+	}
+	var kept int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_records WHERE id = ?", keepID).Scan(&kept); err != nil || kept != 1 {
+		t.Errorf("work record after migration = %d, %v, want one", kept, err)
+	}
+	for _, id := range []int64{findingID, factID} {
+		var fts, emb, pages int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_fts WHERE rowid = ?", id).Scan(&fts); err != nil || fts != 0 {
+			t.Errorf("fts rows for %d = %d, %v", id, fts, err)
+		}
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM embed_kb_0 WHERE rowid = ?", id).Scan(&emb); err != nil || emb != 0 {
+			t.Errorf("embedding rows for %d = %d, %v", id, emb, err)
+		}
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM export_pages WHERE record_id = ?", id).Scan(&pages); err != nil || pages != 0 {
+			t.Errorf("export pages for %d = %d, %v", id, pages, err)
+		}
+	}
+	var purged int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM agent_writes WHERE target = ? AND undo_json = '{\"purged\":true}'", "kb:"+fmt.Sprint(findingID)).Scan(&purged); err != nil || purged != 1 {
+		t.Errorf("agent writes purged = %d, %v, want one", purged, err)
+	}
+	var findings int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'ops_findings'").Scan(&findings); err != nil || findings != 1 {
+		t.Errorf("ops_findings after migration = %d, %v, want one table", findings, err)
+	}
+	var version int
+	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version != 10 {
+		t.Errorf("schema version = %d, %v, want %d", version, err, db.LatestSchemaVersion())
+	}
+	_ = d.Close()
+	if code, stdout, stderr := runIn(t, dir, "db", "check"); code != cli.ExitOK || !strings.Contains(stdout, "integrity_check: ok") {
+		t.Fatalf("db check: exit %d stdout %q stderr %q", code, stdout, stderr)
+	}
+	fresh := t.TempDir()
+	if code, _, stderr := runIn(t, fresh, "settings", "list"); code != cli.ExitOK {
+		t.Fatalf("settings list on a fresh database: exit %d %s", code, stderr)
+	}
+	migrated, created := schemaDump(t, path), schemaDump(t, filepath.Join(fresh, "atrium.db"))
+	if !slices.Equal(migrated, created) {
+		for _, line := range migrated {
+			if !slices.Contains(created, line) {
+				t.Errorf("only in the migrated schema: %s", line)
+			}
+		}
 	}
 }

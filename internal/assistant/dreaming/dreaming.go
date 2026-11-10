@@ -450,7 +450,7 @@ func firstLine(text string) string {
 func recordIndex(ctx context.Context, q db.Querier, now float64, allowed tool.Marks) ([]string, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT r.id, r.title, r.scope, r.writer, r.confirmed_at IS NOT NULL, r.marks FROM kb_records r LEFT JOIN projects p ON p.id = r.project_id "+
-			"WHERE r.retracted_at IS NULL AND (r.expires_at IS NULL OR r.expires_at > ?) AND r.scope != 'ops' "+
+			"WHERE r.retracted_at IS NULL AND (r.expires_at IS NULL OR r.expires_at > ?) "+
 			"AND NOT ((r.private = 1 OR COALESCE(p.private, 0) = 1) AND (r.project_id IS NULL OR r.project_id != 0)) "+
 			"AND (r.marks & ?) = 0 ORDER BY r.updated_at DESC LIMIT 200", now, ^int64(allowed))
 	if err != nil {

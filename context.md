@@ -73,7 +73,7 @@ behavior-parity target.
   are fixed for the run and carry the cache breakpoints, so later steps read
   them from the prompt cache and write only the new tail. A chat or cron
   operator message may also carry a knowledge block: eligible records
-  (unmarked, unpinned, live, not ops, private only inside its project)
+  (unmarked, unpinned, live, private only inside its project)
   matched by exact title or alias, full-text search and one embedding,
   within `kb_retrieval_tokens` (default 1,500; 0 disables) and
   `kb_retrieval_distance` (default 0.35). The block is stored with the
@@ -276,9 +276,12 @@ behavior-parity target.
   (`taint_web` → untrusted, `taint_private` → pii, messages and personal),
   migration 7 the knowledge store: `kb_records`, its FTS5 table and
   triggers, `projects.private` and one `embed_kb_<generation>` vec0 table per
-  existing embedding generation, and migration 8 `export_pages`, the
-  record-to-page mapping of the knowledge export, and migration 9
-  `ops_samples`, the server-ops sampler's typed samples (14-day retention). `taint_private` and `taint_web` are dormant after migration 6: no longer
+  existing embedding generation, migration 8 `export_pages`, the
+  record-to-page mapping of the knowledge export, migration 9
+  `ops_samples`, the server-ops sampler's typed samples (14-day retention),
+  and migration 10 `ops_findings`, the worker's findings; migration 10 also
+  deletes the ops rows the sampler and worker once wrote to `kb_records`.
+  `taint_private` and `taint_web` are dormant after migration 6: no longer
   read or written, and kept because dropping them would rewrite the table.
   `atrium db import-v1` is the only path from a v1
   database: it copies the learned rules, corrections, routing decisions and
@@ -347,7 +350,7 @@ behavior-parity target.
   same calendar are refused until the operator resolves it with
   `atrium writes resolve <id>` or the Activity page.
 - The knowledge export is export-only: a built-in job renders live,
-  non-expired, non-`ops` records into the Notion page named by
+  non-expired records into the Notion page named by
   `export_notion_parent` and overwrites the pages it created; a target with no
   destination is skipped. The Notion controls sit in the Notion record on the
   Integrations page, the Obsidian folder has its own section, and the parent
@@ -364,8 +367,8 @@ behavior-parity target.
   with undo, restricted to the threads it gathered.
   Research subagents have restricted tools and bounded runs, and their system
   prompt omits the operator profile and project block. The server-ops
-  worker is a separate run kind: it has only `ops_samples`, `ops_finding`,
-  the Grafana reads and `kb_search`/`kb_get` forced to the `ops` scope, and
+  worker is a separate run kind: it has `ops_samples`, `ops_findings`,
+  `ops_finding`, `atrium_self_diagnose` and the Grafana reads, and
   its system prompt carries no profile or project block. The built-in `web`
   subagent is retired; `search_web` runs a `search_web` child with the
   server `web_search`, `web_fetch`, `recall` and `report`. The server
@@ -376,8 +379,7 @@ behavior-parity target.
   It reads the configured `ops_hosts` through the Grafana metrics
   datasource and the alerts endpoint, records typed samples in
   `ops_samples` (up, cpu_pct, mem_pct, disk_root_pct, failed_units,
-  alerts_firing; 14-day retention) and upserts one typed `ops` fact per
-  host and metric with a 24-hour expiry. The label selector and the five
+  alerts_firing; 14-day retention). The label selector and the five
   queries are settings (`ops_label_selector`, `ops_query_up`,
   `ops_query_cpu`, `ops_query_mem`, `ops_query_disk`,
   `ops_query_failed_units`); each query is a single-line PromQL template
@@ -386,11 +388,12 @@ behavior-parity target.
   the 90% memory or disk threshold, or its firing alert set changes, and
   the change set differs from the last worker run's, it starts one worker
   run in the persistent `Ops` thread with the typed change set and quoted
-  alert names; the worker files `ops_finding` records (scope `ops`, marks
-  from the thread) and the sampler retracts a finding once its fact is
-  back to normal. Findings of severity warning or critical appear in the
-  attention view; the worker has no notify, people or internet tool and
-  never restarts or changes a host.
+  alert names; the worker files findings in `ops_findings` (marks from the
+  thread) and the sampler resolves a finding once its fact is back to
+  normal; resolved findings are pruned after 30 days. Findings of severity
+  warning or critical appear in the attention view and on Needs you; the
+  worker has no notify, people or internet tool and never restarts or
+  changes a host.
 - The Notion page view is read-only: the Edit and Link buttons are gone,
   and old `notion_link` and `notion_edit` proposals stay readable and
   dismissable. Approvals are only for external or costly actions.
@@ -421,8 +424,9 @@ behavior-parity target.
   marks of the records they return; an empty result marks nothing.
   Grafana reads and
   `atrium_self_diagnose` mark `untrusted` only. `ops_samples` marks
-  `untrusted` when it returns alert details; `ops_finding` and
-  `worker_status` mark nothing. `web_fetch`, `research`
+  `untrusted` when it returns alert details; `ops_findings` returns the
+  findings' stored marks, `worker_finding` adds `untrusted`, and
+  `ops_finding` and `worker_status` mark nothing. `web_fetch`, `research`
   and a response carrying a server `web_search_tool_result` mark the
   thread `untrusted`; `research` declares all four marks and returns
   `untrusted` plus the child thread's marks. `weather`, the media reads,

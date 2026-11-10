@@ -1,7 +1,7 @@
 {{define "title"}}Needs you{{end}}
 {{define "heading"}}Needs you{{end}}
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}{{$mode := .Mode}}
-{{if or $d.Proposals $d.Blocked $d.Drafts}}
+{{if or $d.Proposals $d.Blocked $d.Drafts $d.Findings}}
 {{if $d.Proposals}}
 <section class="flex flex-col gap-3" aria-labelledby="needs-proposals-h">
   <h2 id="needs-proposals-h" class="text-sm font-medium">Proposals <span class="tabular-nums text-muted-foreground">{{len $d.Proposals}}</span></h2>
@@ -23,6 +23,24 @@
   <h2 id="needs-drafts-h" class="text-sm font-medium">Drafts <span class="tabular-nums text-muted-foreground">{{len $d.Drafts}}</span></h2>
   <ul class="flex flex-col gap-4" role="list" aria-label="Drafts">
     {{range $d.Drafts}}{{template "draft_card" (dict "d" . "configured" $d.Configured "csrf" $csrf "partial" false "toast" nil)}}{{end}}
+  </ul>
+</section>
+{{end}}
+{{if $d.Findings}}
+<section class="flex flex-col gap-3" aria-labelledby="needs-findings-h">
+  <h2 id="needs-findings-h" class="text-sm font-medium">Findings <span class="tabular-nums text-muted-foreground">{{len $d.Findings}}</span></h2>
+  <ul class="flex flex-col gap-3" role="list" aria-label="Findings">
+    {{range $d.Findings}}
+    <li class="flex flex-col gap-1 rounded-lg border border-border p-3" data-finding="{{.ID}}">
+      <div class="flex min-w-0 items-center gap-2">
+        <span class="badge" data-variant="outline">{{.Severity}}</span>
+        <span class="truncate text-sm text-ink">{{.Title}}</span>
+        <span class="ms-auto shrink-0 text-xs text-muted-foreground">{{template "when" (dict "epoch" .Created "style" "datetime")}}</span>
+      </div>
+      <p class="text-xs text-muted-foreground">{{.Host}} · {{.Metric}}</p>
+      <p class="whitespace-pre-wrap text-sm text-ink">{{.Body}}</p>
+    </li>
+    {{end}}
   </ul>
 </section>
 {{end}}

@@ -20,7 +20,7 @@ import (
 const knowledgeFrame = "library_knowledge"
 
 var knowledgeStates = []string{"all", "unconfirmed", "pinned", "imported", "retracted"}
-var knowledgeScopes = []string{"", kb.ScopeWork, kb.ScopePersonal, kb.ScopeOps}
+var knowledgeScopes = []string{"", kb.ScopeWork, kb.ScopePersonal}
 
 var knowledgeMarks = []struct {
 	Name  string
@@ -155,7 +155,7 @@ func (p *pages) knowledgeRoutes(r chi.Router) {
 func knowledgeFilter(q url.Values) (query, scope, state string) {
 	query = web.QueryValue(q, "q")
 	scope = web.QueryValue(q, "scope")
-	if scope != kb.ScopeWork && scope != kb.ScopePersonal && scope != kb.ScopeOps {
+	if scope != kb.ScopeWork && scope != kb.ScopePersonal {
 		scope = ""
 	}
 	state = web.QueryValue(q, "state")
