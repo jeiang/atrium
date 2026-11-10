@@ -22,6 +22,14 @@
         {{if not (has (list "nightly" "builtin") .Kind)}}
         <button id="job-delete-{{.ID}}" type="button" class="btn" data-size="icon-sm" data-variant="ghost" aria-label="Delete {{.Name}}" hx-post="/scheduled/{{.ID}}/cancel" hx-target="#scheduled-list" hx-swap="outerHTML" hx-confirm="Delete {{.Name}}?">{{icon "trash-2" "size-3.5"}}</button>
         {{end}}
+        <details class="sched-edit" data-menu>
+          <summary class="btn" data-size="icon-sm" data-variant="ghost" aria-label="Edit the schedule of {{.Name}}" title="Edit schedule">{{icon "pencil" "size-3.5"}}</summary>
+          <form class="menu-pop end-0 top-full mt-1" hx-post="/scheduled/{{.ID}}/schedule" hx-target="#scheduled-list" hx-swap="outerHTML">
+            <label for="job-schedule-{{.ID}}" class="px-1 text-xs text-ink-3">Schedule</label>
+            <input id="job-schedule-{{.ID}}" name="schedule" class="input font-mono text-xs" value="{{.Schedule}}" autocomplete="off" spellcheck="false" required>
+            <button type="submit" class="btn self-end" data-size="sm" data-variant="outline">Save</button>
+          </form>
+        </details>
         <label class="flex items-center">
           <span class="sr-only">{{.Name}} enabled</span>
           <input id="job-toggle-{{.ID}}" type="checkbox" role="switch" class="input"{{if .Enabled}} checked{{end}}

@@ -577,3 +577,35 @@ func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.
 		t.Fatalf("undo of a superseded record write = %d, body %q: %s", code, profile(), body)
 	}
 }
+
+func TestMrvDecisionsListEachDecisionOnceAcrossCheckAndFiled(t *testing.T) {
+	m := mrvMailFixture(t, "shadow")
+	if got := runApp(t, "sync"); got.code != cli.ExitOK {
+		t.Fatalf("sync: %d %s", got.code, got.stderr)
+	}
+	base, _, _ := startServeApp(t, m.app, &lockedBuffer{})
+	client := mrvClient(t)
+	code, body, _ := mrvDo(t, client, http.MethodGet, base+"/triage", nil)
+	if code != http.StatusOK {
+		t.Fatalf("GET /triage = %d", code)
+	}
+	seen := map[string]int{}
+	for _, part := range strings.Split(body, `id="decision-`)[1:] {
+		seen[part[:strings.IndexByte(part, '"')]]++
+	}
+	if len(seen) == 0 {
+		t.Fatal("the decisions page lists no decision after a sync")
+	}
+	for id, n := range seen {
+		if n != 1 {
+			t.Errorf("decision %s is listed %d times", id, n)
+		}
+	}
+	if strings.Contains(body, "data-check") != strings.Contains(body, ">Filed<") {
+		t.Error("the check section and the Filed heading do not appear together")
+	}
+	code, filtered, _ := mrvDo(t, client, http.MethodGet, base+"/triage?agreement=pending", nil)
+	if code != http.StatusOK || strings.Contains(filtered, "data-check") {
+		t.Errorf("a filtered list = %d, shows the check section %v", code, strings.Contains(filtered, "data-check"))
+	}
+}

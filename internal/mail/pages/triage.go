@@ -12,6 +12,8 @@ import (
 	"github.com/jeiang/atrium/internal/web"
 )
 
+const checkRows = 20
+
 func (s *service) triagePage(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	var offset int
@@ -27,9 +29,12 @@ func (s *service) triagePage(w http.ResponseWriter, r *http.Request) {
 	account, stage, agreement := web.QueryValue(q, "account"), web.QueryValue(q, "stage"), web.QueryValue(q, "agreement")
 	text := strings.TrimSpace(web.QueryValue(q, "q"))
 	ctx := r.Context()
-	found, err := triage.Triage(ctx, s.deps.DB.Read, triage.Filter{
-		Account: account, Stage: stage, Agreement: agreement, Limit: pageSize, Offset: offset, Q: text,
-	})
+	filter := triage.Filter{Account: account, Stage: stage, Agreement: agreement, Limit: pageSize, Offset: offset, Q: text}
+	plain := stage == "" && agreement == "" && text == ""
+	if plain {
+		filter.Attention = triage.AttentionRest
+	}
+	found, err := triage.Triage(ctx, s.deps.DB.Read, filter)
 	var unknown triage.FilterError
 	if errors.As(err, &unknown) {
 		s.fail(w, r, http.StatusUnprocessableEntity, unknown.Error())
@@ -41,6 +46,13 @@ func (s *service) triagePage(w http.ResponseWriter, r *http.Request) {
 	}
 	if shown := offset + len(found.Rows); shown < found.Total {
 		data.NextOffset = shown
+	}
+	if plain && offset == 0 {
+		check, err := triage.Triage(ctx, s.deps.DB.Read, triage.Filter{Account: account, Attention: triage.AttentionCheck, Limit: checkRows})
+		if err != nil {
+			panic(err)
+		}
+		data.Check = check.Rows
 	}
 	if web.IsPartial(r) {
 		name := "_decisions.gohtml"

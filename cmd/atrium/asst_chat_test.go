@@ -770,4 +770,21 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 	if code, _, _ := w.post("/scheduled/"+digest+"/toggle", url.Values{}, false); code != http.StatusNotFound {
 		t.Errorf("toggle of a cancelled job: %d, want 404", code)
 	}
+	nightly := jobID("nightly")
+	schedule := func(id string) string {
+		var out string
+		if err := d.Read.QueryRow("SELECT schedule FROM jobs WHERE id = ?", id).Scan(&out); err != nil {
+			t.Fatal(err)
+		}
+		return out
+	}
+	if code, body, _ := w.post("/scheduled/"+nightly+"/schedule", url.Values{"schedule": {"daily 03:15"}}, true); code != http.StatusOK || schedule(nightly) != "daily 03:15" {
+		t.Errorf("edit the nightly schedule = %d, stored %q: %.200s", code, schedule(nightly), body)
+	}
+	if row := runSettings(t, "get", "agent_schedule_nightly").row(t); row.Value == nil || *row.Value != "daily 03:15" {
+		t.Errorf("agent_schedule_nightly = %+v, want the edited schedule", row)
+	}
+	if code, _, _ := w.post("/scheduled/"+nightly+"/schedule", url.Values{"schedule": {"whenever"}}, true); code != http.StatusUnprocessableEntity || schedule(nightly) != "daily 03:15" {
+		t.Errorf("an invalid schedule = %d, stored %q, want a refusal that keeps the old one", code, schedule(nightly))
+	}
 }

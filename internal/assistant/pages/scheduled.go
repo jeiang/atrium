@@ -1,14 +1,18 @@
 package pages
 
 import (
+	"database/sql"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/timex"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -88,6 +92,7 @@ func (p *pages) scheduledRoutes(r chi.Router) {
 	r.Get("/scheduled", p.scheduledIndex)
 	r.Post("/scheduled/{job_id}/toggle", p.scheduleToggle)
 	r.Post("/scheduled/{job_id}/cancel", p.scheduleCancel)
+	r.Post("/scheduled/{job_id}/schedule", p.scheduleEdit)
 }
 
 func (p *pages) scheduledData(r *http.Request) ScheduledData {
@@ -156,6 +161,38 @@ func (p *pages) scheduleToggle(w http.ResponseWriter, r *http.Request) {
 	}
 	enabled := !job.State.Active()
 	_, err := scheduler.UpdateJob(detached(r), p.deps.DB.Write, id, p.now(), scheduler.JobUpdate{Enabled: &enabled, Actor: scheduler.Operator})
+	p.attempted(w, r, err, "Schedule updated")
+}
+
+func (p *pages) scheduleEdit(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "job_id")
+	if !ok {
+		return
+	}
+	job, ok := p.loadJob(w, r, id)
+	if !ok {
+		return
+	}
+	schedule := strings.TrimSpace(web.FormString(web.FormValues(r), "schedule", ""))
+	ctx := audit.With(detached(r), "operator", audit.UI)
+	err := p.deps.DB.WithTx(ctx, func(tx *sql.Tx) error {
+		if schedule == "" {
+			return scheduler.Error("schedule is empty")
+		}
+		if builtin, known := scheduler.BuiltinFor(job.Name); known {
+			if err := settings.From(ctx).Set(ctx, tx, builtin.Setting, schedule); err != nil {
+				return err
+			}
+		}
+		_, err := scheduler.UpdateJob(ctx, tx, id, p.now(), scheduler.JobUpdate{Schedule: &schedule, Actor: scheduler.Operator})
+		return err
+	})
+	var invalid settings.Invalid
+	var pinned *settings.PinnedError
+	if errors.As(err, &invalid) || errors.As(err, &pinned) {
+		p.scheduledShow(w, r, http.StatusUnprocessableEntity, notice("error", "Not saved", err.Error()))
+		return
+	}
 	p.attempted(w, r, err, "Schedule updated")
 }
 
