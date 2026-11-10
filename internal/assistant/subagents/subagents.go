@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"sync"
 	"unicode/utf8"
 
 	"regexp"
@@ -35,6 +36,42 @@ const (
 )
 
 var name = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,31}$`)
+
+type Gate struct {
+	mu     sync.Mutex
+	active int
+	wake   chan struct{}
+}
+
+func NewGate() *Gate { return &Gate{wake: make(chan struct{})} }
+
+func (g *Gate) Acquire(ctx context.Context, limit int) error {
+	for {
+		g.mu.Lock()
+		if g.active < limit {
+			g.active++
+			g.mu.Unlock()
+			return nil
+		}
+		wake := g.wake
+		g.mu.Unlock()
+		select {
+		case <-wake:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+}
+
+func (g *Gate) Release() {
+	g.mu.Lock()
+	g.active--
+	close(g.wake)
+	g.wake = make(chan struct{})
+	g.mu.Unlock()
+}
+
+var Slots = NewGate()
 
 type Error string
 

@@ -388,6 +388,26 @@ behavior-parity target.
   approve or dismiss a permission request. Branches inherit the marks.
   A thinking block is resent only while everything before it is
   unchanged.
+- `lookup` reads one source in a child subagent and returns typed
+  fields. The child has only the source's read tools, `recall` and
+  `report`; it has no own, notify, people or internet tool, so its
+  reads cannot leave. The parent asks for 1-12 fields of type number,
+  date, boolean, enum, id or text, with optional enum values, an id
+  kind (mail message, file, knowledge record or thread) and list. The
+  child finishes by calling `report`; an invalid report returns an
+  error listing each bad field, and a run that ends without a valid
+  report gets one forced step with thinking disabled and
+  `tool_choice` set to `report`. The parent reads the last successful
+  report, never the child's prose. The marks returned to the parent are
+  per non-null field: boolean and enum fields carry none (the parent
+  chose the possible values), number, date and id fields carry the
+  child's kind marks without `untrusted`, and text fields carry the
+  child's kind marks plus `untrusted`. A child that read only contact
+  names and organisations returns no marks, so the parent's internet
+  tools stay open; a child that read mail returns `pii`/`messages`, and
+  a text field adds `untrusted`. `lookup` is offered in chat and cron
+  runs, not nightly or subagent runs, and its child is a sub thread in
+  the parent's project.
 - An operator message may carry reference blocks: `@thread/12` (a whole
   thread) or `@thread/12/m34` (one message) is resolved when the message
   is sent and stored as
