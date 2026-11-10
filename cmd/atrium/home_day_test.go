@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 )
 
@@ -60,7 +61,7 @@ func TestKnowledgeSelectedRecordsConfirmTogetherAndHomeShowsReceipts(t *testing.
 }
 
 func TestAskBarCarriesWhatTheOperatorAskedAbout(t *testing.T) {
-	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
@@ -76,6 +77,7 @@ func TestAskBarCarriesWhatTheOperatorAskedAbout(t *testing.T) {
 	if code, body, _ := w.get("/chat?about=mail:999999", false); code != http.StatusOK || strings.Contains(body, "data-about") {
 		t.Errorf("an unknown reference = %d, chip %v", code, strings.Contains(body, "data-about"))
 	}
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("a code")), anthropictest.Reply("end_turn", anthropictest.Text("a title")))
 	if code, body, _ := w.post("/chat", url.Values{"text": {"what is this"}, "about": {ref}}, false); code != http.StatusSeeOther {
 		t.Fatalf("POST /chat = %d: %s", code, body)
 	}
