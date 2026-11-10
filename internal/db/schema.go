@@ -41,6 +41,8 @@ type seeds struct {
 	} `json:"subagents"`
 }
 
+var RetiredSubagents = []string{"notion"}
+
 func seed(ctx context.Context, q Querier, now time.Time) error {
 	raw, err := schemaFS.ReadFile("schema/seeds.json")
 	if err != nil {
@@ -52,6 +54,9 @@ func seed(ctx context.Context, q Querier, now time.Time) error {
 	}
 	ts := float64(now.UnixNano()) / 1e9
 	for _, a := range s.Subagents {
+		if slices.Contains(RetiredSubagents, a.Name) {
+			continue
+		}
 		if _, err := q.ExecContext(ctx,
 			"INSERT OR IGNORE INTO subagents (name, description, prompt, effort, tools_json, enabled, builtin, updated_at) VALUES (?, ?, ?, ?, ?, 1, 1, ?)",
 			a.Name, a.Description, a.Prompt, a.Effort, a.ToolsJSON, ts); err != nil {

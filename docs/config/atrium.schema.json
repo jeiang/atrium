@@ -471,28 +471,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "agent_profile_key_chars": {
-          "default": 64,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_profile_key_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_profile_value_chars": {
-          "default": 500,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_profile_value_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "agent_project_instruction_chars": {
           "default": 20000,
           "type": [
@@ -1053,17 +1031,6 @@
           ]
         },
         "monthly_budget_usd_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "nightly_stale_months": {
-          "default": 6,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "nightly_stale_months_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

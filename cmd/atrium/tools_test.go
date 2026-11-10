@@ -19,7 +19,7 @@ func TestDisabledToolIsNotOffered(t *testing.T) {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('tool_profile_set_enabled', 'false')"); err != nil {
+	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('tool_kb_search_enabled', 'false')"); err != nil {
 		t.Fatal(err)
 	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
@@ -28,11 +28,11 @@ func TestDisabledToolIsNotOffered(t *testing.T) {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
 	}
 	names := offeredTools(t, api, ran)
-	if slices.Contains(names, "profile_set") {
-		t.Errorf("disabled profile_set was offered: %v", names)
+	if slices.Contains(names, "kb_search") {
+		t.Errorf("disabled kb_search was offered: %v", names)
 	}
-	if !slices.Contains(names, "profile_get") {
-		t.Errorf("enabled profile_get was not offered: %v", names)
+	if !slices.Contains(names, "kb_get") {
+		t.Errorf("enabled kb_get was not offered: %v", names)
 	}
 }
 
@@ -50,13 +50,13 @@ func TestNightlyRunOmitsWriteUndoTools(t *testing.T) {
 	_, api, _ := moduleFixture(t, flagsExcept("", ""))
 	ran := runApp(t, "agent", "run", "--text", "hi", "--kind", "nightly")
 	names := offeredTools(t, api, ran)
-	for _, name := range []string{"profile_set", "ask_operator"} {
+	for _, name := range []string{"ask_operator"} {
 		if slices.Contains(names, name) {
 			t.Errorf("nightly run was offered the chat-only tool %s: %v", name, names)
 		}
 	}
-	if !slices.Contains(names, "profile_get") {
-		t.Errorf("nightly run was not offered the read tool profile_get: %v", names)
+	if !slices.Contains(names, "kb_get") {
+		t.Errorf("nightly run was not offered the read tool kb_get: %v", names)
 	}
 }
 

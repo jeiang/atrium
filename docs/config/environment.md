@@ -49,8 +49,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_NOTION_SNIPPET_CHARS` | `assistant.agent_notion_snippet_chars` |
 | `ATRIUM_ASSISTANT_AGENT_NOTION_STALE_SECONDS` | `assistant.agent_notion_stale_seconds` |
 | `ATRIUM_ASSISTANT_AGENT_PREVIEW_CHARS` | `assistant.agent_preview_chars` |
-| `ATRIUM_ASSISTANT_AGENT_PROFILE_KEY_CHARS` | `assistant.agent_profile_key_chars` |
-| `ATRIUM_ASSISTANT_AGENT_PROFILE_VALUE_CHARS` | `assistant.agent_profile_value_chars` |
 | `ATRIUM_ASSISTANT_AGENT_PROJECT_INSTRUCTION_CHARS` | `assistant.agent_project_instruction_chars` |
 | `ATRIUM_ASSISTANT_AGENT_PROJECT_NAME_CHARS` | `assistant.agent_project_name_chars` |
 | `ATRIUM_ASSISTANT_AGENT_RECALL_MAX_PAGE_CHARS` | `assistant.agent_recall_max_page_chars` |
@@ -105,7 +103,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_MAX_STEPS_CRON` | `assistant.max_steps_cron` |
 | `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` | `assistant.max_steps_nightly` |
 | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` | `assistant.monthly_budget_usd` |
-| `ATRIUM_ASSISTANT_NIGHTLY_STALE_MONTHS` | `assistant.nightly_stale_months` |
 | `ATRIUM_ASSISTANT_OPEN_METEO_CA_FILE` | `assistant.open_meteo_ca_file` |
 | `ATRIUM_ASSISTANT_OPEN_METEO_PROXY` | `assistant.open_meteo_proxy` |
 | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` | `assistant.prompt_subagent` |

@@ -60,8 +60,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_notion_snippet_chars` | int | `300` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_SNIPPET_CHARS` |
 | `agent_notion_stale_seconds` | int | `86400` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_STALE_SECONDS` |
 | `agent_preview_chars` | int | `600` | advanced | `ATRIUM_ASSISTANT_AGENT_PREVIEW_CHARS` |
-| `agent_profile_key_chars` | int | `64` | advanced | `ATRIUM_ASSISTANT_AGENT_PROFILE_KEY_CHARS` |
-| `agent_profile_value_chars` | int | `500` | advanced | `ATRIUM_ASSISTANT_AGENT_PROFILE_VALUE_CHARS` |
 | `agent_project_instruction_chars` | int | `20000` | advanced | `ATRIUM_ASSISTANT_AGENT_PROJECT_INSTRUCTION_CHARS` |
 | `agent_project_name_chars` | int | `80` | advanced | `ATRIUM_ASSISTANT_AGENT_PROJECT_NAME_CHARS` |
 | `agent_recall_max_page_chars` | int | `16000` | advanced | `ATRIUM_ASSISTANT_AGENT_RECALL_MAX_PAGE_CHARS` |
@@ -116,7 +114,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `max_steps_cron` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_CRON` |
 | `max_steps_nightly` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` |
 | `monthly_budget_usd` | float | `150` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
-| `nightly_stale_months` | int | `6` | advanced | `ATRIUM_ASSISTANT_NIGHTLY_STALE_MONTHS` |
 | `open_meteo_ca_file` | string | none | advanced | `ATRIUM_ASSISTANT_OPEN_METEO_CA_FILE` |
 | `open_meteo_proxy` | string | none | advanced | `ATRIUM_ASSISTANT_OPEN_METEO_PROXY` |
 | `prompt_subagent` | string | none | ui | `ATRIUM_ASSISTANT_PROMPT_SUBAGENT` |

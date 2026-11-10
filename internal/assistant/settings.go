@@ -69,8 +69,6 @@ const (
 	KeyContextMaxSources   = "agent_context_max_sources"
 	KeyRecallPageChars     = "agent_recall_page_chars"
 	KeyRecallMaxPageChars  = "agent_recall_max_page_chars"
-	KeyProfileKeyChars     = "agent_profile_key_chars"
-	KeyProfileValueChars   = "agent_profile_value_chars"
 	KeyKBWriteChars        = "agent_kb_write_chars"
 	KeyKBProfileTokens     = "agent_kb_profile_tokens"
 	KeyKBRetrievalTokens   = "agent_kb_retrieval_tokens"
@@ -198,8 +196,6 @@ func init() {
 		count(KeyContextMaxSources, 100, 1, 1000),
 		recallPage,
 		recallMax,
-		count(KeyProfileKeyChars, 64, 8, 500),
-		count(KeyProfileValueChars, 500, 20, 5000),
 		count(KeyKBWriteChars, 4000, 200, 20000),
 		count(KeyKBProfileTokens, 2000, 200, 20000),
 		count(KeyKBRetrievalTokens, 1500, 0, 20000),

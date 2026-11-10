@@ -44,10 +44,10 @@ var moduleCases = []moduleCase{
 		command: []string{"rules", "export"}, output: nonEmpty},
 	{module: module.Calendar, tool: "calendar_list", table: "agent_events",
 		command: []string{"calendar", "candidates"}, output: nonEmpty},
-	{module: module.Notion, tool: "search_knowledge", table: "notion_pages", method: "POST", path: "/notion/missing/link", form: url.Values{}, status: http.StatusUnprocessableEntity},
+	{module: module.Notion, table: "notion_pages", method: "GET", path: "/library/wiki", status: http.StatusOK},
 	{module: module.Media, tool: "media_downloads", table: "media_channels", method: "GET", path: "/apps/media/channels", status: http.StatusOK,
 		command: []string{"media", "poll"}, output: nonEmpty},
-	{module: module.Assistant, tool: "profile_set", table: "threads", method: "GET", path: "/library/files", status: http.StatusOK,
+	{module: module.Assistant, tool: "kb_search", table: "threads", method: "GET", path: "/library/files", status: http.StatusOK,
 		command: []string{"agent", "run", "--text", "hello", "--kind", "chat"}, output: func(stdout, _ string, code int) bool {
 			return code == cli.ExitOK && strings.HasPrefix(stdout, "{")
 		}},
@@ -208,8 +208,10 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 				}
 			}
 			if c.module != module.Assistant {
-				if names := offeredTools(t, api, runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")); slices.Contains(names, c.tool) {
-					t.Errorf("tool %s is offered while %s is off", c.tool, c.module)
+				if c.tool != "" {
+					if names := offeredTools(t, api, runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")); slices.Contains(names, c.tool) {
+						t.Errorf("tool %s is offered while %s is off", c.tool, c.module)
+					}
 				}
 			} else if n := len(api.Requests()); n != 0 {
 				t.Errorf("assistant is off but %d model requests were sent", n)
@@ -235,8 +237,10 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 			if c.module != module.Assistant {
 				ran = runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")
 			}
-			if names := offeredTools(t, api, ran); !slices.Contains(names, c.tool) {
-				t.Errorf("tool %s is missing while %s is on: %v", c.tool, c.module, names)
+			if c.tool != "" {
+				if names := offeredTools(t, api, ran); !slices.Contains(names, c.tool) {
+					t.Errorf("tool %s is missing while %s is on: %v", c.tool, c.module, names)
+				}
 			}
 			if c.table != "" && !tableExists(t, dir, c.table) {
 				t.Errorf("table %s is missing", c.table)

@@ -30,14 +30,19 @@ func research(task string) anthropictest.Response {
 }
 
 func TestSubagentRequestOmitsTheOperatorProfile(t *testing.T) {
-	_, api, _ := moduleFixture(t, flagsExcept("", ""))
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	const home = "Maple Street 12"
 	warm(t, api)
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("p1", "profile_set", map[string]any{"key": "home", "value": home})))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("p1", "kb_write", map[string]any{"title": "home", "body": home})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("saved")))
 	if ran := runApp(t, "agent", "run", "--text", "remember where I live"); ran.code != cli.ExitOK {
 		t.Fatalf("profile run: %d %s", ran.code, ran.stderr)
 	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	if _, err := d.Write.Exec("UPDATE kb_records SET pinned = 1, confirmed_at = 1 WHERE id = 1"); err != nil {
+		t.Fatal(err)
+	}
+	_ = d.Close()
 	start := len(api.Requests())
 	api.Push(research("find the library opening hours"))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("open 9-5")))

@@ -5,26 +5,11 @@
 <div class="grid grid-cols-1 items-start gap-8 lg:grid-cols-[minmax(0,1fr)_--spacing(80)]">
   {{template "notion_article" $p}}
 
-  <aside class="flex flex-col gap-6 max-lg:border-t max-lg:pt-6 lg:sticky lg:top-20" aria-label="Page actions">
-    <section class="flex flex-col gap-3" aria-labelledby="edit-title">
-      <header class="flex flex-col gap-1">
-        <h2 id="edit-title" class="text-sm font-medium">Edit</h2>
-      </header>
-      <form class="flex flex-col items-start gap-2" hx-post="/notion/{{urlencode $p.ID}}/edit" hx-target="#edit-result" hx-disabled-elt="find button[type=submit]">
-        <div role="group" class="field w-full">
-          <label for="edit-instruction" class="sr-only">What should change?</label>
-          <textarea id="edit-instruction" name="instruction" rows="4" required placeholder="What should change? For example: add a short summary at the top."></textarea>
-        </div>
-        <button type="submit" class="btn" data-size="sm">{{icon "pencil"}}Edit page</button>
-      </form>
-      <div id="edit-result" data-loading="action-loading" aria-live="polite" class="empty:hidden"></div>
-    </section>
-
-    <section class="flex flex-col gap-3 border-t pt-6" aria-labelledby="related-title">
+  <aside class="flex flex-col gap-6 max-lg:border-t max-lg:pt-6 lg:sticky lg:top-20" aria-label="Related pages">
+    <section class="flex flex-col gap-3" aria-labelledby="related-title">
       <header class="flex flex-col gap-1">
         <h2 id="related-title" class="text-sm font-medium">Related pages</h2>
       </header>
-      <div id="link-result" data-loading="action-loading" aria-live="polite" class="empty:hidden"></div>
       {{if $d.Related}}
       <ul id="related-list" class="flex flex-col divide-y overflow-hidden rounded-lg border bg-card" role="list">
         {{range $d.Related}}
@@ -37,13 +22,7 @@
               <span><span class="sr-only">Similarity </span>{{printf "%.0f%%" (mul .Score 100)}}</span>
             </p>
           </div>
-          {{if .Linked}}
-          <span class="badge shrink-0" data-variant="secondary">{{icon "link"}}Linked</span>
-          {{else}}
-          <button type="button" class="btn shrink-0" data-size="sm" data-variant="outline"
-                  hx-post="/notion/{{urlencode $p.ID}}/link" hx-vals='{{tojson (dict "target" .ID)}}' hx-target="#link-result" hx-disabled-elt="#related-list button"
-                  aria-label="Link to {{or .Title "Untitled"}}">{{icon "link"}}Link</button>
-          {{end}}
+          {{if .Linked}}<span class="badge shrink-0" data-variant="secondary">{{icon "link"}}Linked</span>{{end}}
         </li>
         {{end}}
       </ul>
@@ -54,9 +33,4 @@
   </aside>
 </div>
 
-<template id="action-loading">
-  <div class="flex items-center gap-2 rounded-lg border bg-card p-3 text-sm text-muted-foreground" role="status">
-    {{icon "loader-circle" "size-4 shrink-0 animate-spin"}}Working. This can take a few seconds.
-  </div>
-</template>
 {{- end}}

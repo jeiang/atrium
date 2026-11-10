@@ -18,12 +18,11 @@ import (
 )
 
 type ProjectFormValues struct {
-	Name         string  `json:"name"`
-	Instructions string  `json:"instructions"`
-	Effort       string  `json:"effort"`
-	ContextLimit *int64  `json:"context_limit"`
-	WikiHubID    *string `json:"wiki_hub_id"`
-	Private      bool    `json:"private"`
+	Name         string `json:"name"`
+	Instructions string `json:"instructions"`
+	Effort       string `json:"effort"`
+	ContextLimit *int64 `json:"context_limit"`
+	Private      bool   `json:"private"`
 }
 
 type ProjectFormData struct {
@@ -41,7 +40,7 @@ type ProjectEditData struct {
 
 func projectValues(found projects.Project) ProjectFormValues {
 	limit := found.ContextLimit
-	return ProjectFormValues{Name: found.Name, Instructions: found.Instructions, Effort: found.Effort, ContextLimit: &limit, WikiHubID: found.WikiHubID, Private: bool(found.Private)}
+	return ProjectFormValues{Name: found.Name, Instructions: found.Instructions, Effort: found.Effort, ContextLimit: &limit, Private: bool(found.Private)}
 }
 
 func submittedProject(form url.Values) projects.Fields {
@@ -50,13 +49,11 @@ func submittedProject(form url.Values) projects.Fields {
 		Instructions: web.FormString(form, "instructions", ""),
 		Effort:       web.FormString(form, "effort", ""),
 		ContextLimit: web.FormString(form, "context_limit", ""),
-		WikiHubID:    web.FormString(form, "wiki_hub_id", ""),
 		Private:      web.FormString(form, "private", "") == "1",
 	}
 }
 
 func submittedValues(f projects.Fields, fallback ProjectFormValues) ProjectFormValues {
-	hub := f.WikiHubID
 	effort := fallback.Effort
 	for _, choice := range pricing.Efforts {
 		if f.Effort == choice {
@@ -75,7 +72,7 @@ func submittedValues(f projects.Fields, fallback ProjectFormValues) ProjectFormV
 			}
 		}
 	}
-	return ProjectFormValues{Name: f.Name, Instructions: f.Instructions, Effort: effort, ContextLimit: &limit, WikiHubID: &hub, Private: f.Private}
+	return ProjectFormValues{Name: f.Name, Instructions: f.Instructions, Effort: effort, ContextLimit: &limit, Private: f.Private}
 }
 
 func editPath(id int64) string { return "/projects/" + strconv.FormatInt(id, 10) + "/edit" }

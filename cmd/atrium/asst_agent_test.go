@@ -259,11 +259,11 @@ func TestAsstToolChoiceFollowsTheCatalogAndRefusesAnUnavailableTool(t *testing.T
 		model, force string
 		want         string
 	}{
-		{pricing.HaikuID, "profile_get", `{"name":"profile_get","type":"tool"}`},
+		{pricing.HaikuID, "kb_get", `{"name":"kb_get","type":"tool"}`},
 		{pricing.SonnetID, "any", ""},
 	} {
 		asstSet(t, "default_model", tc.model)
-		api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("tc-"+tc.model, "profile_get", nil)), asstReply("done"))
+		api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("tc-"+tc.model, "kb_get", nil)), asstReply("done"))
 		start := len(api.Requests())
 		if v, _ := asstRun(t, "--text", "go", "--tool-choice", tc.force); v.State != "done" {
 			t.Fatalf("%s/%s: %+v %q", tc.model, tc.force, v, v.err())

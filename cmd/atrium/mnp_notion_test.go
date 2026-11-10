@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
-	"net/url"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -124,50 +123,6 @@ func mnpNotionSite(t *testing.T, fake *mnpNotion, wikiRoot string) (*mnpBrowser,
 	return b, d
 }
 
-func mnpNewProject(t *testing.T, b *mnpBrowser) string {
-	t.Helper()
-	b.want(http.MethodGet, "/library/wiki", nil, http.StatusOK)
-	req, err := http.NewRequest(http.MethodPost, b.base+"/projects", strings.NewReader(url.Values{
-		"name": {"Kitchen"}, "instructions": {"Always answer in metric units."}, "effort": {"high"}, "context_limit": {"200000"},
-	}.Encode()))
-	if err != nil {
-		t.Fatal(err)
-	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
-	for _, c := range b.client.Jar.Cookies(req.URL) {
-		if c.Name == "atrium_csrf" {
-			req.Header.Set("X-CSRF-Token", c.Value)
-		}
-	}
-	resp, err := b.client.Do(req)
-	if err != nil {
-		t.Fatal(err)
-	}
-	_ = resp.Body.Close()
-	if resp.StatusCode != http.StatusSeeOther {
-		t.Fatalf("create project: %d", resp.StatusCode)
-	}
-	return strings.TrimSuffix(strings.TrimPrefix(resp.Header.Get("Location"), "/projects/"), "/edit")
-}
-
-func mnpHub(t *testing.T, d *db.DB, id string) *string {
-	t.Helper()
-	var hub *string
-	if err := d.Read.QueryRow("SELECT wiki_hub_id FROM projects WHERE id = ?", id).Scan(&hub); err != nil {
-		t.Fatal(err)
-	}
-	return hub
-}
-
-func mnpWrites(t *testing.T, d *db.DB) int {
-	t.Helper()
-	var n int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM agent_writes").Scan(&n); err != nil {
-		t.Fatal(err)
-	}
-	return n
-}
-
 func TestMnpNotionPageMarkdownIsSanitized(t *testing.T) {
 	t.Parallel()
 	const page = "11111111-1111-1111-1111-111111111111"
@@ -183,63 +138,4 @@ func TestMnpNotionPageMarkdownIsSanitized(t *testing.T) {
 			t.Errorf("rendered page contains %q", bad)
 		}
 	}
-}
-
-func TestMnpWikiHubCreateWritesOnceAndRefusalsWriteNothing(t *testing.T) {
-	t.Parallel()
-	const root = "00000000-0000-0000-0000-000000000100"
-	hx := "HX-Request"
-
-	t.Run("created", func(t *testing.T) {
-		fake := &mnpNotion{parents: map[string]string{}}
-		b, d := mnpNotionSite(t, fake, root)
-		id := mnpNewProject(t, b)
-		code, reply := b.do(http.MethodPost, "/projects/"+id+"/wiki-hub", url.Values{}, hx, "true")
-		if code != http.StatusOK || !strings.Contains(reply, "Wiki hub created") {
-			t.Fatalf("create hub = %d, Notion saw %v: %.600s", code, fake.paths, reply)
-		}
-		hub := mnpHub(t, d, id)
-		if kitchens := fake.titled("Kitchen"); hub == nil || len(kitchens) != 1 || kitchens[0] != root {
-			t.Fatalf("hub %v, Kitchen page parents %v; want one page under the wiki root", hub, kitchens)
-		}
-		b.want(http.MethodGet, "/projects/"+id+"/edit", nil, http.StatusOK, *hub)
-		var threadID, runID *int64
-		if err := d.Read.QueryRow("SELECT thread_id, run_id FROM agent_writes WHERE tool = 'notion_create_page'").Scan(&threadID, &runID); err != nil {
-			t.Fatal(err)
-		}
-		if threadID != nil || runID != nil {
-			t.Errorf("hub write belongs to thread %v run %v, want neither", threadID, runID)
-		}
-		code, again := b.do(http.MethodPost, "/projects/"+id+"/wiki-hub", url.Values{}, hx, "true")
-		if code != http.StatusOK || !strings.Contains(again, *hub) || strings.Contains(again, "Wiki hub created") {
-			t.Errorf("second create = %d: %.600s", code, again)
-		}
-		if n := len(fake.titled("Kitchen")); n != 1 || mnpWrites(t, d) != 1 {
-			t.Errorf("%d Kitchen pages, %d writes after a repeated create; want 1 and 1", n, mnpWrites(t, d))
-		}
-	})
-
-	t.Run("missing wiki root", func(t *testing.T) {
-		b, d := mnpNotionSite(t, &mnpNotion{parents: map[string]string{}}, "")
-		id := mnpNewProject(t, b)
-		code, reply := b.do(http.MethodPost, "/projects/"+id+"/wiki-hub", url.Values{}, hx, "true")
-		if code != http.StatusUnprocessableEntity || !strings.Contains(reply, "ATRIUM_NOTION_WIKI_ROOT") {
-			t.Errorf("create without a wiki root = %d: %.600s", code, reply)
-		}
-		if hub := mnpHub(t, d, id); hub != nil || mnpWrites(t, d) != 0 {
-			t.Errorf("hub %v, %d writes; want none", hub, mnpWrites(t, d))
-		}
-	})
-
-	t.Run("notion refuses", func(t *testing.T) {
-		b, d := mnpNotionSite(t, &mnpNotion{refuse: true, parents: map[string]string{}}, root)
-		id := mnpNewProject(t, b)
-		code, reply := b.do(http.MethodPost, "/projects/"+id+"/wiki-hub", url.Values{}, hx, "true")
-		if code != http.StatusUnprocessableEntity || !strings.Contains(reply, "Notion refused the page") {
-			t.Errorf("refused create = %d: %.600s", code, reply)
-		}
-		if hub := mnpHub(t, d, id); hub != nil || mnpWrites(t, d) != 0 {
-			t.Errorf("hub %v, %d writes; want none", hub, mnpWrites(t, d))
-		}
-	})
 }

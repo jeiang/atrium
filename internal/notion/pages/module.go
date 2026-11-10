@@ -1,7 +1,6 @@
 package pages
 
 import (
-	"context"
 	"embed"
 	"io/fs"
 	"net/http"
@@ -9,7 +8,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -24,28 +22,21 @@ func Templates() fs.FS {
 	return sub
 }
 
-type Options struct {
-	Chat notion.ChatFunc
-}
+type Options struct{}
 
 type service struct {
-	deps    *web.Deps
-	now     func() float64
-	drafter *notion.Drafter
+	deps *web.Deps
+	now  func() float64
 }
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
-		s := &service{deps: d, now: wallClock, drafter: &notion.Drafter{DB: d.DB, Chat: o.Chat}}
+		s := &service{deps: d, now: wallClock}
 
 		r.Get("/library/wiki", s.wiki)
 		r.Get("/notion/{page_id}", s.view)
-		r.Post("/notion/{page_id}/link", s.link)
-		r.Post("/notion/{page_id}/edit", s.edit)
-
-		r.Post("/projects/{project_id}/wiki-hub", s.wikiHub)
 	}
 }
 
@@ -70,5 +61,3 @@ func (s *service) fragment(w http.ResponseWriter, r *http.Request, status int, n
 func (s *service) fail(w http.ResponseWriter, r *http.Request, status int, detail string) {
 	s.deps.Error(w, r, status, detail)
 }
-
-func detached(r *http.Request) context.Context { return context.WithoutCancel(r.Context()) }

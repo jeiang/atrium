@@ -186,3 +186,79 @@ func TestKnowledgeImportIsIdempotent(t *testing.T) {
 		t.Error("the record whose source is gone was removed")
 	}
 }
+
+func TestKnowledgeImportTreatsUniformPrivacyAsDefault(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, settingEnv(notion.WikiRootKey), "00000000-0000-0000-0000-000000000001")
+	if ran := runApp(t, "settings", "list"); ran.code != 0 {
+		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
+	}
+	seed := `
+INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url, last_edited_time, edited_ts) VALUES
+  ('44444444-4444-4444-4444-444444444444', '00000000-0000-0000-0000-000000000001', 'Kitchen',
+   'The kettle is blue.', 1, 0, 'https://notion.invalid/kitchen', '2026-01-01T00:00:00Z', 1),
+  ('55555555-5555-5555-5555-555555555555', '00000000-0000-0000-0000-000000000001', 'Notes',
+   'The spare key is with the neighbour.', 1, 0, 'https://notion.invalid/notes', '2026-01-01T00:00:00Z', 1);
+`
+	if code, stdout, stderr := kbImportRun(t, seed, "db", "shell"); code != 0 {
+		t.Fatalf("seed: %d %s %s", code, stdout, stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+
+	code, stdout, stderr := kbImportRun(t, "", "kb", "import")
+	if code != 0 {
+		t.Fatalf("import: %d %s %s", code, stderr, stdout)
+	}
+	first := kbImportStats(t, stdout)
+	if first.Notion.Created != 2 || first.Private != 0 || len(first.Notes) != 1 {
+		t.Fatalf("import stats = %+v, want 2 created, no private records and the uniform-privacy note", first)
+	}
+	loadPrivate := func(origin string) int64 {
+		t.Helper()
+		var private int64
+		if err := d.Read.QueryRow("SELECT private FROM kb_records WHERE origin = ?", origin).Scan(&private); err != nil {
+			t.Fatalf("load %s: %v", origin, err)
+		}
+		return private
+	}
+	if got := loadPrivate("notion:44444444-4444-4444-4444-444444444444"); got != 0 {
+		t.Errorf("kitchen private = %d, want the sync default treated as not private", got)
+	}
+	if got := loadPrivate("notion:55555555-5555-5555-5555-555555555555"); got != 0 {
+		t.Errorf("notes private = %d, want the sync default treated as not private", got)
+	}
+
+	if _, err := d.Write.Exec("UPDATE kb_records SET private = 1 WHERE origin LIKE 'notion:%'"); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr = kbImportRun(t, "", "kb", "import")
+	if code != 0 {
+		t.Fatalf("legacy import: %d %s %s", code, stderr, stdout)
+	}
+	legacy := kbImportStats(t, stdout)
+	if legacy.Notion.Updated != 2 || legacy.Private != 0 || len(legacy.Notes) != 1 {
+		t.Fatalf("legacy import = %+v, want both untouched records updated to not private", legacy)
+	}
+	if got := loadPrivate("notion:44444444-4444-4444-4444-444444444444"); got != 0 {
+		t.Errorf("kitchen private after the legacy import = %d, want not private", got)
+	}
+
+	if _, err := d.Write.Exec("UPDATE notion_pages SET private = 0 WHERE id = '55555555-5555-5555-5555-555555555555'"); err != nil {
+		t.Fatal(err)
+	}
+	code, stdout, stderr = kbImportRun(t, "", "kb", "import")
+	if code != 0 {
+		t.Fatalf("second import: %d %s %s", code, stderr, stdout)
+	}
+	second := kbImportStats(t, stdout)
+	if second.Notion.Updated != 1 || second.Private != 1 || len(second.Notes) != 0 {
+		t.Fatalf("second import = %+v, want the untouched kitchen record updated to private", second)
+	}
+	if got := loadPrivate("notion:44444444-4444-4444-4444-444444444444"); got != 1 {
+		t.Errorf("kitchen private = %d, want an explicit private flag imported", got)
+	}
+	if got := loadPrivate("notion:55555555-5555-5555-5555-555555555555"); got != 0 {
+		t.Errorf("notes private = %d, want not private", got)
+	}
+}

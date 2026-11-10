@@ -31,7 +31,7 @@
   <ul class="flex flex-col gap-1 text-sm" data-sources>
     {{range $w.Sources}}
     <li class="flex min-w-0 items-center gap-2">
-      {{if eq .Kind "mail"}}{{icon "mail" "size-3.5 shrink-0 text-muted-foreground"}}{{else if eq .Kind "notion"}}{{icon "book-user" "size-3.5 shrink-0 text-muted-foreground"}}{{else}}{{icon "globe" "size-3.5 shrink-0 text-muted-foreground"}}{{end}}
+      {{if eq .Kind "mail"}}{{icon "mail" "size-3.5 shrink-0 text-muted-foreground"}}{{else if eq .Kind "knowledge"}}{{icon "book-open" "size-3.5 shrink-0 text-muted-foreground"}}{{else}}{{icon "globe" "size-3.5 shrink-0 text-muted-foreground"}}{{end}}
       {{if eq .Kind "web"}}<a class="truncate underline-offset-4 hover:underline" {{template "external" .URL}}>{{.Title}}</a>
       {{else}}<a class="truncate underline-offset-4 hover:underline" {{template "preview_attrs" .URL}}>{{.Title}}</a>{{end}}
       {{if .Via}}<span class="badge shrink-0" data-variant="outline">{{.Via}}</span>{{end}}

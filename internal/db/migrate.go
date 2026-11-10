@@ -272,10 +272,28 @@ func Migrate(ctx context.Context, d *DB, path string) error {
 			return err
 		}
 	}
-	if err := d.WithTx(ctx, func(tx *sql.Tx) error { return seed(ctx, tx, time.Now()) }); err != nil {
+	if err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		if err := seed(ctx, tx, time.Now()); err != nil {
+			return err
+		}
+		return purgeRetired(ctx, tx)
+	}); err != nil {
 		return err
 	}
 	return Ready(ctx, d)
+}
+
+func purgeRetired(ctx context.Context, q Querier) error {
+	if len(RetiredSubagents) == 0 {
+		return nil
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?, ", len(RetiredSubagents)), ", ")
+	args := make([]any, len(RetiredSubagents))
+	for i, name := range RetiredSubagents {
+		args[i] = name
+	}
+	_, err := q.ExecContext(ctx, "DELETE FROM subagents WHERE builtin = 1 AND name IN ("+marks+")", args...)
+	return err
 }
 
 func pending(applied map[int]bool, mods map[string]map[int]bool) bool {

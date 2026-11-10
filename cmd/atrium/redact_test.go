@@ -26,7 +26,7 @@ func TestStoredSecretsAreRedactedFromLogsAndAgentWrites(t *testing.T) {
 	}
 
 	api := anthropictest.New(t,
-		anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "profile_set", map[string]any{"key": "note", "value": "token " + secret})),
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "kb_write", map[string]any{"title": "note", "body": "token " + secret})),
 		anthropictest.Reply("end_turn", anthropictest.Text("saved")),
 	)
 	setEnv(t, anthropic.BaseURLEnv, api.URL)
@@ -39,7 +39,7 @@ func TestStoredSecretsAreRedactedFromLogsAndAgentWrites(t *testing.T) {
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
 	var after string
-	if err := d.Read.QueryRow("SELECT after_json FROM agent_writes WHERE tool = 'profile_set'").Scan(&after); err != nil {
+	if err := d.Read.QueryRow("SELECT after_json FROM agent_writes WHERE tool = 'kb_write'").Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(after, secret) || !strings.Contains(after, logx.Redacted) {

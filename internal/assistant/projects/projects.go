@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db/store"
-	"github.com/jeiang/atrium/internal/notionid"
 )
 
 type ProjectError string
@@ -52,7 +51,6 @@ type Fields struct {
 	Instructions string
 	Effort       string
 	ContextLimit any
-	WikiHubID    string
 	Private      bool
 }
 
@@ -61,7 +59,6 @@ type cleaned struct {
 	Instructions string
 	Effort       string
 	ContextLimit int64
-	WikiHubID    *string
 	Private      bool
 }
 
@@ -91,13 +88,6 @@ func clean(ctx context.Context, q db.Querier, f Fields) (cleaned, error) {
 		return cleaned{}, ProjectError(err.Error())
 	}
 	out := cleaned{Name: name, Instructions: instructions, Effort: effort, ContextLimit: limit, Private: f.Private}
-	if hub := strings.TrimSpace(f.WikiHubID); hub != "" {
-		found := notionid.IDsInText(hub)
-		if len(found) == 0 {
-			return cleaned{}, ProjectError("The wiki hub must be a Notion page id or URL.")
-		}
-		out.WikiHubID = &found[0]
-	}
 	return out, nil
 }
 
@@ -107,8 +97,8 @@ func Create(ctx context.Context, q db.Querier, now float64, f Fields) (int64, er
 		return 0, err
 	}
 	res, err := q.ExecContext(ctx,
-		"INSERT INTO projects (name, instructions, effort, context_limit, wiki_hub_id, private, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		v.Name, v.Instructions, v.Effort, v.ContextLimit, v.WikiHubID, store.Bit(v.Private), now, now)
+		"INSERT INTO projects (name, instructions, effort, context_limit, private, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		v.Name, v.Instructions, v.Effort, v.ContextLimit, store.Bit(v.Private), now, now)
 	if err != nil {
 		return 0, err
 	}
@@ -121,8 +111,8 @@ func Update(ctx context.Context, q db.Querier, projectID int64, now float64, f F
 		return false, err
 	}
 	return db.Changed(q.ExecContext(ctx,
-		"UPDATE projects SET name = ?, instructions = ?, effort = ?, context_limit = ?, wiki_hub_id = ?, private = ?, updated_at = ? WHERE id = ?",
-		v.Name, v.Instructions, v.Effort, v.ContextLimit, v.WikiHubID, store.Bit(v.Private), now, projectID))
+		"UPDATE projects SET name = ?, instructions = ?, effort = ?, context_limit = ?, private = ?, updated_at = ? WHERE id = ?",
+		v.Name, v.Instructions, v.Effort, v.ContextLimit, store.Bit(v.Private), now, projectID))
 }
 
 func Get(ctx context.Context, q db.Querier, projectID int64) (*Project, error) {
@@ -158,21 +148,6 @@ func SetArchived(ctx context.Context, q db.Querier, projectID int64, value bool)
 	return db.Changed(q.ExecContext(ctx, "UPDATE projects SET archived = ? WHERE id = ?", store.Bit(value), projectID))
 }
 
-func SetHub(ctx context.Context, q db.Querier, projectID int64, pageID string, now float64) (bool, error) {
-	var archived int
-	err := q.QueryRowContext(ctx, "SELECT archived FROM projects WHERE id = ?", projectID).Scan(&archived)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	if err != nil {
-		return false, err
-	}
-	if archived != 0 {
-		return false, ProjectError("project is archived")
-	}
-	return db.Changed(q.ExecContext(ctx, "UPDATE projects SET wiki_hub_id = ?, updated_at = ? WHERE id = ?", pageID, now, projectID))
-}
-
 func MoveThread(ctx context.Context, q db.Querier, threadID int64, projectID *int64) (bool, error) {
 	if projectID != nil {
 		var one int
@@ -206,10 +181,6 @@ func SystemBlock(ctx context.Context, q db.Querier, t threads.Thread) (*string, 
 	var parts []string
 	if p.Instructions != "" {
 		parts = append(parts, fmt.Sprintf("This thread belongs to the operator's project “%s”. Follow the project's instructions:\n<project_instructions>\n%s\n</project_instructions>", p.Name, p.Instructions))
-	}
-	if p.WikiHubID != nil && *p.WikiHubID != "" {
-		parts = append(parts, fmt.Sprintf("The project's wiki hub page has id %s. Keep it updated with durable project knowledge "+
-			"(decisions, status, open questions, sources) as you learn it, updating that hub page or pages under it rather than creating duplicates.", *p.WikiHubID))
 	}
 	if len(parts) == 0 {
 		return nil, nil
