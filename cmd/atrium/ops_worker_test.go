@@ -139,10 +139,10 @@ func TestHostDownStartsOneWorkerRunAndFilesAFinding(t *testing.T) {
 		"fact": "node-a:up", "severity": "warning", "title": "Host node-a is down", "body": "up changed from up to down.",
 	})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("filed")))
-	runOpsSampler(t, f, d, samplerFinished(t, d))
-	waitForOps(t, d, "the finding", func() bool {
+	finished := samplerFinished(t, d)
+	runOpsSampler(t, f, d, func() bool {
 		_, _, found := workerFinding(t, d, "node-a:up")
-		return found
+		return found && finished()
 	})
 	requests := api.Requests()
 	if len(requests) < before+1 {
@@ -217,8 +217,10 @@ func TestWorkerFindingRefusesAnUnchangedFact(t *testing.T) {
 		"fact": "node-a:cpu_pct", "severity": "warning", "title": "CPU high", "body": "cpu_pct changed.",
 	})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-	runOpsSampler(t, f, d, samplerFinished(t, d))
-	waitForOps(t, d, "the worker run", func() bool { return len(api.Requests()) >= before+2 })
+	finished := samplerFinished(t, d)
+	runOpsSampler(t, f, d, func() bool {
+		return finished() && len(api.Requests()) >= before+2
+	})
 	result := toolResultFor(t, api.Requests()[before+1], "f1")
 	if result["is_error"] != true {
 		t.Errorf("ops_finding on an unchanged fact = %v, want an error", result)
