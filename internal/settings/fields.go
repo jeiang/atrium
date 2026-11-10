@@ -39,6 +39,51 @@ type FieldView struct {
 	Pinned  bool          `json:"pinned"`
 }
 
+type Group struct {
+	Module string
+	Name   string
+	Title  string
+	Page   string
+	Keys   []string
+}
+
+type GroupView struct {
+	Module string      `json:"module"`
+	Name   string      `json:"name"`
+	Title  string      `json:"title"`
+	Fields []FieldView `json:"fields"`
+	Saved  bool        `json:"saved"`
+	Error  string      `json:"error"`
+}
+
+type ModuleView struct {
+	Name    string `json:"name"`
+	Title   string `json:"title"`
+	On      bool   `json:"on"`
+	Running bool   `json:"running"`
+	Reason  string `json:"reason"`
+	Pinned  string `json:"pinned"`
+}
+
+func (r *Registry) Fields(keys []string) ([]Field, error) {
+	out := make([]Field, 0, len(keys))
+	for _, key := range keys {
+		def, ok := r.Lookup(key)
+		if !ok {
+			return nil, UnknownKey(key)
+		}
+		label := def.Label
+		if label == "" {
+			label = key
+		}
+		out = append(out, Field{
+			Key: key, Label: label, Choices: def.Choices,
+			Bool: def.Type == Bool, Number: def.Type == Int || def.Type == Float, Whole: def.Type == Int,
+		})
+	}
+	return out, nil
+}
+
 func LoadFields(ctx context.Context, q db.Querier, fields []Field) ([]FieldView, error) {
 	reg := From(ctx)
 	out := make([]FieldView, 0, len(fields))

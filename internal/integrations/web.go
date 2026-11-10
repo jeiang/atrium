@@ -51,7 +51,10 @@ type page struct {
 	SubmittedRecord  string            `json:"-"`
 	Submitted        map[string]string `json:"-"`
 	FieldError       string            `json:"field_error"`
+	Saved            string            `json:"saved"`
 }
+
+const savedPrefix = "connection."
 
 type handlers struct{ d *web.Deps }
 
@@ -83,6 +86,7 @@ func Module(r chi.Router, d *web.Deps) {
 		}
 		return rows.Err()
 	})
+	d.OnFrame(h.connections)
 	d.Admin(http.MethodGet, path, h.index)
 	d.Admin(http.MethodPost, path+"/{name}/test", h.test)
 	d.Admin(http.MethodPost, path+"/{name}/settings", h.saveSettings)
@@ -171,6 +175,47 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toa
 	}
 }
 
+func (h handlers) connections(ctx context.Context, f *tpl.Frame) error {
+	owner, ok := strings.CutPrefix(f.Path, "/settings/")
+	if f.Page != "settings" || !ok || f.Path == path {
+		return nil
+	}
+	all, err := Records(ctx, h.d.DB.Read)
+	if err != nil {
+		return err
+	}
+	var view page
+	for _, record := range all {
+		if record.Module == owner {
+			view.Records = append(view.Records, record)
+		}
+	}
+	if len(view.Records) == 0 {
+		return nil
+	}
+	if view.Sections, err = LoadSections(ctx, h.d.DB.Read); err != nil {
+		return err
+	}
+	if name, ok := strings.CutPrefix(f.Saved, savedPrefix); ok {
+		if i, known := Get(name); known {
+			view.Saved, view.HoldFor, view.Hold = name, name, h.held(ctx, i.gate())
+		}
+	}
+	f.Connections = view
+	return nil
+}
+
+func (h handlers) back(w http.ResponseWriter, r *http.Request, name string) bool {
+	i, ok := Get(name)
+	back := web.FormString(web.FormValues(r), "back", "")
+	if !ok || back != "/settings/"+i.Module {
+		return false
+	}
+	w.Header().Set("Location", back+"?saved="+savedPrefix+name)
+	w.WriteHeader(http.StatusSeeOther)
+	return true
+}
+
 func (h handlers) index(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, http.StatusOK, nil, page{})
 }
@@ -247,6 +292,9 @@ func (h handlers) test(w http.ResponseWriter, r *http.Request) {
 	if i, _ := Get(name); saved {
 		data.HoldFor, data.Hold = name, h.enable(h.ctx(r), i.gate())
 	}
+	if h.back(w, r, name) {
+		return
+	}
 	h.render(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: "Connection works"}, data)
 }
 
@@ -307,6 +355,9 @@ func (h handlers) saveSettings(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		panic(err)
+	}
+	if h.back(w, r, name) {
+		return
 	}
 	h.render(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: "Saved"}, page{})
 }

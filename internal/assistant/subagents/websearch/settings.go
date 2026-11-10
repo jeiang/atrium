@@ -14,12 +14,12 @@ const (
 
 func init() {
 	model := settings.Value(settings.UI, settings.Def{
-		Key: KeyModel, Module: "web_search", Type: settings.Enum, Default: pricing.DefaultModel,
+		Key: KeyModel, Label: "Web search model", Module: "web_search", Type: settings.Enum, Default: pricing.DefaultModel,
 	})
 	model.Choices = pricing.IDs()
 	settings.MustRegister(
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyMaxCostUSD, Module: "web_search", Type: settings.Float, Default: "0.15", Check: settings.Within(0, 2),
+		settings.Value(settings.UI, settings.Def{
+			Key: KeyMaxCostUSD, Label: "Web search run cost cap (USD)", Module: "web_search", Type: settings.Float, Default: "0.15", Check: settings.Within(0, 2),
 		}),
 		settings.Value(settings.Advanced, settings.Def{
 			Key: KeyMaxSteps, Module: "web_search", Type: settings.Int, Default: "8", Check: settings.Between(1, 24),

@@ -78,6 +78,7 @@ func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, e
 		Tabs:        nav.tabs,
 		Pages:       nav.pages,
 		Path:        r.URL.Path,
+		Saved:       QueryValue(r.URL.Query(), "saved"),
 		Theme:       themeOf(r),
 		Rail:        cookieValue(r, railCookie, false) == "1",
 		Data:        data,

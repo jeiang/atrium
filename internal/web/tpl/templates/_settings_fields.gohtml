@@ -1,19 +1,22 @@
-{{define "settings_fields"}}{{$csrf := .CSRF}}
-<form method="post" action="{{.Action}}" class="grid gap-3 sm:grid-cols-2">
-  <input type="hidden" name="csrf_token" value="{{$csrf}}">
-  {{range $f := .Fields}}
-  <div role="group" class="field">
-    {{if $f.Bool}}<input type="hidden" name="{{$f.Key}}" value="false">
-    <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="{{$f.Key}}" value="true"{{if eq $f.Value "true"}} checked{{end}}> {{$f.Label}}</label>
-    {{else if $f.Options}}<span>{{$f.Label}}</span>
-    <div class="flex flex-wrap gap-3">{{range $f.Options}}<label class="flex items-center gap-2 text-sm"><input type="checkbox" name="{{$f.Key}}" value="{{.Value}}"{{if .Checked}} checked{{end}}> {{.Label}}</label>{{end}}</div>
-    {{else}}<label for="{{$f.Key}}">{{$f.Label}}</label>
-    {{if $f.Pinned}}<code id="{{$f.Key}}" class="break-all font-mono text-xs" data-pinned>{{$f.Value}}</code>
-    {{else if $f.Choices}}{{$v := $f.Value}}<select id="{{$f.Key}}" name="{{$f.Key}}">{{range $f.Choices}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{.}}</option>{{end}}</select>
-    {{else}}<input id="{{$f.Key}}" name="{{$f.Key}}" {{if $f.Number}}type="number" {{if $f.Whole}}step="1"{{else}}step="any"{{end}}{{else}}type="text"{{end}} value="{{$f.Value}}" autocomplete="off" spellcheck="false">{{end}}
-    {{end}}
-  </div>
-  {{end}}
-  <div class="sm:col-span-2"><button type="submit" class="btn" data-size="sm">{{icon "check"}}Save</button></div>
+{{define "settings_fields"}}
+<form method="post" action="{{.Action}}" class="set-rows">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">{{with opt . "Back" ""}}<input type="hidden" name="back" value="{{.}}">{{end}}
+  {{template "settings_rows" .Fields}}
+  <footer><button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button></footer>
 </form>
 {{end}}
+
+{{define "settings_rows"}}{{range $f := .}}
+<div role="group" class="set-row">
+  {{if $f.Bool}}<input type="hidden" name="{{$f.Key}}" value="false">
+  <label for="{{$f.Key}}">{{$f.Label}}</label>
+  {{if $f.Pinned}}<code class="set-pinned" data-pinned>{{icon "lock"}}{{$f.Value}}</code>{{else}}<input id="{{$f.Key}}" type="checkbox" role="switch" class="input" name="{{$f.Key}}" value="true"{{if eq $f.Value "true"}} checked{{end}}>{{end}}
+  {{else if $f.Options}}<span>{{$f.Label}}</span>
+  <div class="flex flex-wrap justify-end gap-3">{{range $f.Options}}<label class="flex items-center gap-2 text-sm"><input type="checkbox" name="{{$f.Key}}" value="{{.Value}}"{{if .Checked}} checked{{end}}> {{.Label}}</label>{{end}}</div>
+  {{else}}<label for="{{$f.Key}}">{{$f.Label}}</label>
+  {{if $f.Pinned}}<code id="{{$f.Key}}" class="set-pinned" data-pinned>{{icon "lock"}}{{$f.Value}}</code>
+  {{else if $f.Choices}}{{$v := $f.Value}}<select id="{{$f.Key}}" name="{{$f.Key}}" class="select">{{range $f.Choices}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{.}}</option>{{end}}</select>
+  {{else}}<input id="{{$f.Key}}" name="{{$f.Key}}" class="input" {{if $f.Number}}type="number" {{if $f.Whole}}step="1"{{else}}step="any"{{end}}{{else}}type="text"{{end}} value="{{$f.Value}}" autocomplete="off" spellcheck="false">{{end}}
+  {{end}}
+</div>
+{{end}}{{end}}

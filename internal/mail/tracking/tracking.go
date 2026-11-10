@@ -59,8 +59,8 @@ func init() {
 		adv(KeyTimeout, settings.Int, "15", settings.Between(1, 300)),
 		adv(KeyPollLimit, settings.Int, "40", settings.Between(1, 200)),
 		adv(KeyPollDays, settings.Int, "30", settings.Between(1, 365)),
-		adv(KeyDestinationCountry, settings.String, "", countryCheck),
-		adv(KeyDestinationPostcode, settings.String, "", nil),
+		settings.Shown("Destination country", adv(KeyDestinationCountry, settings.String, "", countryCheck)),
+		settings.Shown("Destination postcode", adv(KeyDestinationPostcode, settings.String, "", nil)),
 	)
 }
 

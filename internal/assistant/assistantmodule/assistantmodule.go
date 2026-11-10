@@ -8,12 +8,17 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
+	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
+	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
+	"github.com/jeiang/atrium/internal/assistant/subagents/websearch"
 	"github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	attentiontool "github.com/jeiang/atrium/internal/assistant/tools/attention"
 	filetools "github.com/jeiang/atrium/internal/assistant/tools/files"
@@ -35,6 +40,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/serverops"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tasks"
 	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/web"
@@ -90,9 +96,19 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Section: "library", Label: "Scheduled", URL: "/scheduled", Icon: "clock", Page: "scheduled", Order: 40},
 				{Label: "Assistant", URL: "/settings/assistant", Page: "assistant", Settings: true, Primary: true, PrimaryURL: "/settings", Order: 10},
 				{Label: "Permissions", URL: "/settings/permissions", Page: "permissions", Settings: true, Order: 20},
-				{Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 60},
+				{Group: "Instance", Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 60},
 			},
 		}},
+		Settings: []settings.Group{
+			{Name: "spending", Title: "Spending", Keys: append([]string{
+				budget.BudgetKey, budget.ChatKey, budget.UnattendedKey, budget.ThreadCapKey,
+			}, append(runCaps(), assistant.KeySubagentMaxCostUSD, websearch.KeyMaxCostUSD, assistant.KeyDreamingMaxCost,
+				assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
+			{Name: "background", Title: "Background work", Keys: []string{
+				assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, websearch.KeyModel,
+				memory.ModelKey, memory.EffortKey, serverops.KeyCondenser,
+			}},
+		},
 		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Callables...), memorycmd.Command(mc.Env)},
 		Tools:    addTools,
 	}
@@ -121,4 +137,13 @@ func addTools(r *registry.Registry) error {
 		}
 	}
 	return nil
+}
+
+func runCaps() []string {
+	models := pricing.Models()
+	keys := make([]string, len(models))
+	for i, m := range models {
+		keys[i] = budget.RunCapKey(m.ID)
+	}
+	return keys
 }

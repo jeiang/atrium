@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/auth/loginlink"
+	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -32,6 +33,7 @@ import (
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals/proposalscmd"
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/writes/writescmd"
@@ -70,12 +72,15 @@ func (m Module) Register(mc module.Context) module.Registration {
 			{Start: startOps},
 			{Module: startEmbed},
 			{Module: integrations.Module, Templates: integrations.Templates(), Nav: []web.NavItem{
-				{Label: "Integrations", URL: "/settings/integrations", Page: "integrations", Settings: true, Order: 30},
+				{Label: "Connections", URL: "/settings/integrations", Page: "integrations", Settings: true, Order: 30},
 			}},
 			{Module: actionlinkpages.Module, Templates: actionlinkpages.Templates()},
 			{Nav: []web.NavItem{
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Auth: true, Order: 50},
 			}},
+		},
+		Settings: []settings.Group{
+			{Name: "sessions", Title: "Sessions", Page: "/settings/auth", Keys: []string{oidc.KeyIdleDays, oidc.KeyMaxDays}},
 		},
 		Commands: []*cli.Command{
 			writescmd.Command(mc.Env),

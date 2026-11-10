@@ -139,6 +139,7 @@ func init() {
 	contextLimit.Choices = contextLimitChoices()
 	chat := capped(KeyBudgetChat, settings.Float, "1", settings.Within(0, 1))
 	chat.Peers = Ordered([]string{KeyBudgetUnattended}, nil)
+	chat = settings.Shown("Chat stops at this share of the budget", chat)
 	fileCap := count(KeyFileCapBytes, 32<<20, 1<<20, 128<<20)
 	messageCap := count(KeyMessageCapBytes, 64<<20, 1<<20, 256<<20)
 	messageCap.Peers = Ordered([]string{KeyFileCapBytes}, nil)
@@ -152,9 +153,9 @@ func init() {
 		chatModel,
 		chatEffort,
 		contextLimit,
-		effort(KeyEffortCron, "high"),
-		effort(KeyEffortNightly, "high"),
-		effort(KeyEffortSubagent, "medium"),
+		settings.Shown("Scheduled run effort", effort(KeyEffortCron, "high")),
+		settings.Shown("Nightly run effort", effort(KeyEffortNightly, "high")),
+		settings.Shown("Research effort", effort(KeyEffortSubagent, "medium")),
 		effort(KeyEffortSub, "medium"),
 		count(KeyWebSearchMaxUses, 5, 1, 20),
 
@@ -164,7 +165,7 @@ func init() {
 
 		adv(KeyJournalLeaseSeconds, settings.Int, "1800", settings.Between(1800, 86400)),
 
-		capped(KeySubagentMaxCostUSD, settings.Float, "0.25", settings.Within(0, 2)),
+		settings.Shown("Research run cost cap (USD)", capped(KeySubagentMaxCostUSD, settings.Float, "0.25", settings.Within(0, 2))),
 		count(KeySubagentMaxSteps, 12, 1, 24),
 		count(KeySubagentMaxConcurrent, 2, 1, 16),
 		count(KeySubagentDigestChars, 6000, 100, 100000),
@@ -173,8 +174,8 @@ func init() {
 		count(KeySubagentTaskChars, 4000, 100, 100000),
 		count(KeySubagentContextIDs, 20, 1, 200),
 
-		capped(KeyDreamingMaxCost, settings.Float, "0.30", settings.Within(0, 10)),
-		capped(KeyDreamingMonthly, settings.Float, "3", settings.Within(0, 100)),
+		settings.Shown("Nightly run cost cap (USD)", capped(KeyDreamingMaxCost, settings.Float, "0.30", settings.Within(0, 10))),
+		settings.Shown("Nightly monthly cap (USD)", capped(KeyDreamingMonthly, settings.Float, "3", settings.Within(0, 100))),
 		count(KeyNightlyMaxThreads, 30, 1, 500),
 		count(KeyNightlyThreadChars, 3000, 100, 100000),
 		count(KeyNightlyTotalChars, 40000, 1000, 400000),

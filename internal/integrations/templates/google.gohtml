@@ -1,7 +1,7 @@
 {{define "title"}}Google · Integrations{{end}}
 {{define "heading"}}Settings · Integrations · Google{{end}}
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
-{{template "settings_tabs" (dict "Tab" "integrations" "Auth" .Auth "Settings" .Settings)}}
+{{template "settings_nav" (dict "Tab" "integrations" "Settings" .Settings)}}
 <div class="flex flex-col gap-4">
   <section class="rounded-lg border bg-card p-4 text-sm">
     <h2 class="font-medium">1. Create the Google client</h2>

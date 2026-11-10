@@ -2,6 +2,7 @@ package module
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/sdnotify"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settingspage"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -36,7 +38,86 @@ func (s *Set) Pages() []web.Page {
 			pages = append(pages, p)
 		}
 	}
-	return pages
+	return append(pages, settingspage.Page(s.settingPages()))
+}
+
+func (s *Set) settingState(ctx context.Context, q db.Querier, name string) (settings.ModuleView, error) {
+	held, err := s.Held(ctx, q, name)
+	if err != nil {
+		return settings.ModuleView{}, err
+	}
+	view := settings.ModuleView{On: held.Result == "", Running: s.enabled(name)}
+	if held.Result == HoldNeeds {
+		view.Reason = held.Detail
+	}
+	source, pinned, err := s.reg.Pinned(FlagKey(name))
+	if pinned {
+		view.Pinned = source
+	}
+	return view, err
+}
+
+func (s *Set) settingToggle(ctx context.Context, d *db.DB, name string, on bool) error {
+	if on {
+		_, err := s.Enable(ctx, d, name)
+		return err
+	}
+	return d.WithTx(ctx, func(tx *sql.Tx) error {
+		return s.reg.Set(ctx, tx, FlagKey(name), "false")
+	})
+}
+
+func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, settingspage.Control) {
+	var groups []settingspage.Group
+	var generic []settingspage.Generic
+	control := settingspage.Control{State: s.settingState, Set: s.settingToggle}
+	for _, r := range s.regs {
+		if !r.Core {
+			for _, p := range r.Pages {
+				for _, item := range p.Nav {
+					if item.Settings && item.Primary {
+						control.Modules = append(control.Modules, settingspage.Module{Name: r.Name, URL: item.URL})
+					}
+				}
+			}
+		}
+		if len(r.Settings) == 0 {
+			continue
+		}
+		home, tabs := "", map[string]string{}
+		for _, p := range r.Pages {
+			for _, item := range p.Nav {
+				if !item.Settings {
+					continue
+				}
+				tabs[item.URL] = item.Page
+				if home == "" {
+					home = item.URL
+				}
+			}
+		}
+		own := false
+		for _, g := range r.Settings {
+			g.Module = r.Name
+			at := settingspage.Group{Group: g, URL: g.Page}
+			if g.Page == "" {
+				at.URL, own = home, true
+				if home == "" {
+					at.URL = "/settings/" + r.Name
+					tabs[at.URL] = "module:" + r.Name
+				}
+			}
+			at.Tab = tabs[at.URL]
+			groups = append(groups, at)
+		}
+		if own && home == "" {
+			generic = append(generic, settingspage.Generic{Module: r.Name, URL: "/settings/" + r.Name, Tab: "module:" + r.Name})
+			if !r.Core {
+				control.Modules = append(control.Modules, settingspage.Module{Name: r.Name, URL: "/settings/" + r.Name})
+			}
+		}
+	}
+	return groups, generic, control
 }
 
 func (s *Set) gatePage(owner string, p web.Page) web.Page {

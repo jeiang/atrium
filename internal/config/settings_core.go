@@ -52,8 +52,8 @@ func init() {
 		advanced(KeyLearnedLimit, "50", 10, 500),
 		advanced(KeyChatThreadLimit, "50", 1, 500),
 		advanced(KeyLoopLimit, "100", 1, 1000),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeySnoozeChoices, Module: webModule, Type: settings.String, Default: defaultSnoozeChoices,
+		settings.Value(settings.UI, settings.Def{
+			Key: KeySnoozeChoices, Label: "Snooze choices (days)", Module: webModule, Type: settings.String, Default: defaultSnoozeChoices,
 			Check: checkSnoozeChoices}),
 		advanced(KeyPreviewBytes, "200000", 1000, 10_000_000),
 		advanced(KeyRunHistory, "30", 1, 500),

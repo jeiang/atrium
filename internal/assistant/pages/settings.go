@@ -56,18 +56,20 @@ type PermissionRow struct {
 	Cells []settings.FieldView `json:"cells"`
 }
 
-func permissionFields() []settings.Field {
+func permissionFields(reg *settings.Registry) []settings.Field {
 	out := make([]settings.Field, 0, len(registry.PermissionChannelLabels)*len(registry.PermissionSituationLabels))
 	for s := range registry.PermissionSituationLabels {
 		for c := range registry.PermissionChannelLabels {
-			out = append(out, settings.Field{Key: registry.PermissionKey(c, s), Label: registry.PermissionChannelLabels[c]})
+			key := registry.PermissionKey(c, s)
+			def, _ := reg.Lookup(key)
+			out = append(out, settings.Field{Key: key, Label: registry.PermissionChannelLabels[c], Choices: def.Choices})
 		}
 	}
 	return out
 }
 
 func (p *pages) permissionsPage(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, saved bool, formError string) {
-	fields := permissionFields()
+	fields := permissionFields(settings.From(r.Context()))
 	views, err := settings.LoadFields(r.Context(), p.deps.DB.Read, fields)
 	check(err)
 	channels := len(registry.PermissionChannelLabels)
@@ -91,7 +93,7 @@ func (p *pages) permissionsSettings(w http.ResponseWriter, r *http.Request) {
 
 func (p *pages) permissionsSave(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	fields := permissionFields()
+	fields := permissionFields(settings.From(r.Context()))
 	values := make(map[string]string, len(fields))
 	for _, f := range fields {
 		if value, ok := web.Value(form, f.Key); ok {

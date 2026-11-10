@@ -20,11 +20,11 @@ const (
 
 func init() {
 	settings.MustRegister(
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyPerRunCap, Module: module, Type: settings.Int, Default: "3",
+		settings.Value(settings.UI, settings.Def{
+			Key: KeyPerRunCap, Label: "Notifications per run", Module: module, Type: settings.Int, Default: "3",
 			Check: settings.Between(0, 100)}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyNightlyCap, Module: module, Type: settings.Int, Default: "1",
+		settings.Value(settings.UI, settings.Def{
+			Key: KeyNightlyCap, Label: "Notifications per night", Module: module, Type: settings.Int, Default: "1",
 			Check: settings.Between(0, 100)}),
 		settings.Value(settings.Advanced, settings.Def{
 			Key: KeyTitleChars, Module: module, Type: settings.Int, Default: "120",

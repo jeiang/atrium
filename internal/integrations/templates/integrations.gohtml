@@ -1,52 +1,12 @@
 {{define "title"}}Integrations · Settings{{end}}
 {{define "heading"}}Settings · Integrations{{end}}
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
-{{template "settings_tabs" (dict "Tab" "integrations" "Auth" .Auth "Settings" .Settings)}}
+{{template "settings_nav" (dict "Tab" "integrations" "Settings" .Settings)}}
 <div class="flex flex-col gap-3">
   <a class="flex flex-col gap-1 rounded-lg border bg-card p-4 text-sm" href="/settings/integrations/google" data-integration="google">
     <span class="font-medium">Google Calendar and Gmail</span>
   </a>
-  {{range $d.Records}}{{$name := .Name}}
-  <div class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" data-integration="{{.Name}}" data-state="{{.State}}">
-    {{if and (eq $d.Failed .Name) $d.Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$d.Error}}</p>{{end}}
-    <form method="post" action="/settings/integrations/{{.Name}}/test" class="flex flex-col gap-3" autocomplete="off">
-      <input type="hidden" name="csrf_token" value="{{$csrf}}">
-      <div class="flex flex-wrap items-center gap-2">
-        <span class="font-medium"{{with .Help}} title="{{.}}"{{end}}>{{.Label}}</span>
-        <span class="badge" data-variant="{{if eq .State "ok"}}secondary{{else if eq .State "untested"}}outline{{else}}destructive{{end}}">{{replace "_" " " .State}}</span>
-        <span class="text-xs text-muted-foreground">{{.Module}}</span>
-        {{with .CheckedAt}}<span class="text-xs text-muted-foreground">{{ts .}}</span>{{end}}
-      </div>
-      {{with .Reason}}<p class="text-xs text-muted-foreground">{{.}}</p>{{end}}
-      {{if eq $d.HoldFor .Name}}{{template "module_hold" $d.Hold}}{{end}}
-      <div class="grid gap-3 sm:grid-cols-2">
-        {{if .URLKey}}
-        <div role="group" class="field">
-          <label for="url-{{.Name}}">URL</label>
-          {{if .URLPinned}}<code id="url-{{.Name}}" class="break-all font-mono text-xs" data-pinned>{{.URL}}</code>{{else}}<input id="url-{{.Name}}" name="url" type="url" value="{{.URL}}"{{with .Help}} title="{{.}}"{{end}}>{{end}}
-        </div>
-        {{end}}
-        {{if .SecretKey}}
-        <div role="group" class="field">
-          <label for="secret-{{.Name}}">Credential</label>
-          {{if .SecretPinned}}<span id="secret-{{.Name}}" class="text-xs text-muted-foreground" data-pinned>set by deployment</span>{{else}}<input id="secret-{{.Name}}" name="secret" type="password" autocomplete="new-password" placeholder="{{if .SecretSet}}set; type to replace{{end}}"{{with .Help}} title="{{.}}"{{end}}>{{end}}
-        </div>
-        {{end}}
-      </div>
-      <div class="flex flex-wrap gap-2">
-        <button type="submit" class="btn" data-size="sm">{{icon "check"}}Test</button>
-        {{if and (not .URLPinned) (not .SecretPinned) (or .URL .SecretSet)}}<button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/settings/integrations/{{.Name}}/disconnect" formnovalidate data-confirm-submit="Disconnect {{.Label}}? Its {{.Module}} module needs settings again; its data stays.">{{icon "x"}}Disconnect</button>{{end}}
-      </div>
-    </form>
-    {{if .Fields}}
-    {{template "settings_fields" (dict "Fields" .Fields "Action" (printf "/settings/integrations/%s/settings" .Name) "CSRF" $csrf)}}
-    {{end}}
-    {{range $d.Sections}}{{if eq .Integration $name}}
-    <div class="flex flex-col gap-3 border-t pt-3" data-section="{{.Name}}">
-      {{template "integration_section" (dict "Section" . "CSRF" $csrf "Failed" $d.Failed "Error" $d.Error "FieldError" $d.FieldError)}}
-    </div>
-    {{end}}{{end}}
-  </div>
+  {{range $d.Records}}{{template "integration_card" (dict "View" $d "Record" . "CSRF" $csrf "Back" "")}}
   {{end}}
   {{range $d.Sections}}{{if not .Integration}}
   <div class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" data-section="{{.Name}}">

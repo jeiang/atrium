@@ -18,7 +18,9 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailcmd"
 	"github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/run"
+	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -93,9 +95,16 @@ func (m Module) Register(mc module.Context) module.Registration {
 			{Module: pages.Module, Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
 				{Section: "review", Label: "Mail decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 40},
 				{Section: "library", Label: "Mail rules", URL: "/rules", Icon: "scroll-text", Page: "rules", Order: 30},
-				{Label: "Mail accounts", URL: "/settings/mail", Page: "mail", Settings: true, Order: 20},
+				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Primary: true, Order: 15},
 			}},
 			{Module: accountpages.Module, Templates: accountpages.Templates()},
+		},
+		Settings: []settings.Group{
+			{Name: "safety", Title: "Safety", Keys: []string{mail.KeyWriteCap}},
+			{Name: "loops", Title: "Open loops", Keys: []string{
+				mail.KeyLoopsWaitingAfterDays, mail.KeyLoopsRemindAheadDays, mail.KeyLoopsSnoozeDefaultDays, config.KeySnoozeChoices,
+			}},
+			{Name: "packages", Title: "Packages", Keys: []string{tracking.KeyDestinationCountry, tracking.KeyDestinationPostcode}},
 		},
 		Commands: cmds,
 		Leaves: map[string]module.Leaf{

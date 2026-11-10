@@ -42,8 +42,9 @@ type (
 	Kind        = tool.Kind
 	Kinds       = tool.Kinds
 
-	Setting     = settings.Def
-	SettingType = settings.Type
+	Setting      = settings.Def
+	SettingGroup = settings.Group
+	SettingType  = settings.Type
 
 	DB        = db.DB
 	Querier   = db.Querier
@@ -85,6 +86,12 @@ func Register(name string, m Module) {
 func Modules() []Module { return slices.Clone(modules) }
 
 func RegisterSetting(def Setting) { settings.MustRegister(def) }
+
+func Shown(label string, def Setting) Setting {
+	return settings.Shown(label, settings.Value(settings.UI, def))
+}
+
+func Hidden(def Setting) Setting { return settings.Value(settings.Advanced, def) }
 
 func RegisterMigrations(module string, ms ...Migration) { db.RegisterModuleMigrations(module, ms...) }
 

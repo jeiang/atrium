@@ -167,8 +167,8 @@ func ThreadCap(ctx context.Context, q db.Querier, threadID int64) (spent, limit 
 func registerRunCaps() []settings.Def {
 	var defs []settings.Def
 	for _, m := range pricing.Models() {
-		defs = append(defs, settings.Value(settings.Advanced, settings.Def{
-			Key: RunCapKey(m.ID), Module: "assistant", Type: settings.Float, Default: strconv.FormatFloat(m.RunCapUSD, 'f', -1, 64),
+		defs = append(defs, settings.Value(settings.UI, settings.Def{
+			Key: RunCapKey(m.ID), Label: "Run cost cap, " + m.Name + " (USD)", Module: "assistant", Type: settings.Float, Default: strconv.FormatFloat(m.RunCapUSD, 'f', -1, 64),
 			Check: settings.Above(0)}))
 	}
 	return defs
@@ -178,13 +178,13 @@ func init() {
 	settings.MustRegister(registerRunCaps()...)
 	settings.MustRegister(
 		settings.Value(settings.UI, settings.Def{
-			Key: BudgetKey, Module: "assistant", Type: settings.Float, Default: "150",
+			Key: BudgetKey, Label: "Monthly budget (USD)", Module: "assistant", Type: settings.Float, Default: "150",
 			Check: settings.Above(0)}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: UnattendedKey, Module: "assistant", Type: settings.Float, Default: "0.8",
+		settings.Value(settings.UI, settings.Def{
+			Key: UnattendedKey, Label: "Scheduled runs stop at this share of the budget", Module: "assistant", Type: settings.Float, Default: "0.8",
 			Check: settings.Within(0, 1), Peers: assistant.Ordered(nil, []string{ChatKey})}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: ThreadCapKey, Module: "assistant", Type: settings.Float, Default: "10",
+		settings.Value(settings.UI, settings.Def{
+			Key: ThreadCapKey, Label: "Thread cost cap (USD)", Module: "assistant", Type: settings.Float, Default: "10",
 			Check: settings.Above(0)}),
 	)
 }
