@@ -376,6 +376,9 @@
       &[data-mark="warning"]::after {
         @apply bg-warning;
       }
+      &[data-mark="on"]::after {
+        @apply bg-success;
+      }
     }
     & h2 {
       @apply px-2 pt-4 pb-1 max-md:hidden;
@@ -391,8 +394,39 @@
   .set-group {
     @apply flex flex-col rounded-xl border bg-surface text-sm;
 
-    & > h2 {
-      @apply flex min-h-11 items-center border-b px-4 font-medium text-ink;
+    & h2 {
+      @apply flex min-h-11 flex-wrap items-center gap-2 border-b px-4 py-1.5 font-medium text-ink;
+    }
+    & footer {
+      @apply flex items-center justify-end gap-2 border-t px-4 py-2;
+    }
+    & details > summary::-webkit-details-marker {
+      display: none;
+    }
+    & details[open] > summary svg:last-child {
+      @apply rotate-180;
+    }
+  }
+  .set-account + .set-account {
+    @apply border-t;
+  }
+  .set-matrix {
+    @apply w-full border-collapse text-[13px];
+
+    & th {
+      @apply px-4 py-2 text-start font-medium whitespace-nowrap text-ink-3;
+    }
+    & tbody th {
+      @apply font-normal text-ink;
+    }
+    & td {
+      @apply px-2 py-1.5;
+    }
+    & tbody tr {
+      @apply border-t;
+    }
+    & select {
+      @apply h-8 w-24 text-[13px];
     }
   }
   .set-rows {
@@ -402,21 +436,15 @@
     @apply flex min-h-11 flex-wrap items-center gap-x-4 gap-y-1 border-t px-4 py-2 first-of-type:border-t-0;
 
     & > label,
-    & > span {
+    & > span:first-child {
       @apply min-w-0 flex-1 text-ink;
     }
     & > :is(input:not([type="checkbox"]), select) {
       @apply w-28 max-w-full flex-none sm:w-56;
     }
   }
-  .set-rows .set-row {
-    @apply px-0;
-  }
-  :is(.set-group, .set-rows) > footer {
-    @apply flex items-center justify-end gap-3 border-t px-4 py-2;
-  }
   .set-rows > footer {
-    @apply px-0;
+    @apply flex items-center justify-end gap-2 border-t px-4 py-2;
   }
   .set-pinned {
     @apply inline-flex items-center gap-1.5 font-mono text-xs break-all text-ink-2;

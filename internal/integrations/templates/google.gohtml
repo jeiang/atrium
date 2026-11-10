@@ -26,7 +26,7 @@
         <input id="google-client-secret" name="client_secret" type="password" autocomplete="new-password" placeholder="{{if $d.ClientSecretSet}}set; type to replace{{end}}">
       </div>
     </div>
-    <div><button type="submit" class="btn" data-size="sm">{{icon "check"}}Save</button></div>
+    <div><button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "check"}}Save</button></div>
   </form>
 
   <form method="post" action="/settings/integrations/google/start" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm">
@@ -38,7 +38,7 @@
         {{range $d.Capabilities}}<option value="{{.Name}}"{{if eq .Name $d.Selected}} selected{{end}}>{{.Label}}</option>{{end}}
       </select>
     </div>
-    <div><button type="submit" class="btn" data-size="sm">{{icon "external-link"}}Connect Google</button></div>
+    <div><button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "external-link"}}Connect Google</button></div>
   </form>
 
   <form method="post" action="/settings/integrations/google/paste" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm">
@@ -48,7 +48,7 @@
       <label for="google-paste">Redirect URL</label>
       <textarea id="google-paste" name="paste" rows="2" spellcheck="false" placeholder="https://…/callback?state=…&amp;code=…" title="When the redirect cannot reach atrium, paste the full URL from the address bar">{{$d.Paste}}</textarea>
     </div>
-    <div><button type="submit" class="btn" data-size="sm">{{icon "check"}}Finish consent</button></div>
+    <div><button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "check"}}Finish consent</button></div>
   </form>
 
   <section class="flex flex-col gap-2 rounded-lg border bg-card p-4 text-sm">
@@ -60,7 +60,7 @@
     {{template "module_hold" $d.Hold}}
     <form method="post" action="/settings/integrations/google/test">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
-      <button type="submit" class="btn" data-size="sm" title="Refresh tokens expire after 7 days while the consent screen is in Testing">{{icon "refresh-cw"}}Test refresh token</button>
+      <button type="submit" class="btn" data-size="sm" data-variant="outline" title="Refresh tokens expire after 7 days while the consent screen is in Testing">{{icon "refresh-cw"}}Test refresh token</button>
     </form>
   </section>
 

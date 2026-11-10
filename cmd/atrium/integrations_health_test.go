@@ -47,7 +47,7 @@ func TestIntegrationTestSavesOnlyWorkingConfigAndHealthNotifiesOncePerChange(t *
 		if !strings.Contains(page, `data-integration="grafana" data-state="untested"`) || !strings.Contains(page, `id="url-grafana" name="url"`) {
 			t.Fatal("grafana is not listed as an untested editable integration")
 		}
-		if !strings.Contains(page, `id="url-qbittorrent" class="break-all font-mono text-xs" data-pinned`) {
+		if !strings.Contains(page, `id="url-qbittorrent" class="set-pinned" data-pinned`) {
 			t.Error("the deployment-only qBittorrent URL is editable")
 		}
 		if code, body := s.post("/grafana/test", url.Values{"url": {badSrv.URL}, "secret": {"viewer-token"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "test failed (failing)") {
