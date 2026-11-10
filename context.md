@@ -464,8 +464,8 @@ behavior-parity target.
   internet allows, asks or denies by situation. Code floors keep people
   and internet at ask or deny whenever untrusted text is present, so
   editing the table can only tighten those cells. The 24 cells are
-  `permission_<channel>_<situation>` enum settings, edited on Settings ›
-  Permissions; a save is validated against the key's choices (the
+  `permission_<channel>_<situation>` enum settings, edited in the
+  Permissions group on Settings › Assistant; a save is validated against the key's choices (the
   untrusted people and internet cells offer only ask or deny), and the
   table load clamps every cell to its floor and treats an unknown value as
   the default. A tool that already has
@@ -589,7 +589,7 @@ behavior-parity target.
 - **The day is home.** Five navigation entries: today and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings. The home brief lists the morning digest lines and names the next event.
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
-- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Permissions, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its registration (`Settings` on the registration, a label on the setting) and that render and save through one shared path; an external module declares them through the `sdk` package and gets a page at `/settings/{module}`. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Media, Notion and Grafana each have a page with their connections and sections, and the list marks a module that is off or needs settings. Not yet done: a refused connection test from the Assistant or Mail page answers on the Connections page, and Permissions is still a separate page. Advanced settings stay with Nix, the CLI, or the agent.
+- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its registration (`Settings` on the registration, a label on the setting) and that render and save through one shared path; an external module declares them through the `sdk` package and gets a page at `/settings/{module}`. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Media, Notion and Grafana each have a page with their connections and sections, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.

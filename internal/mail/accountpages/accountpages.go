@@ -76,6 +76,9 @@ func healthName(id string) string { return "mail_" + id }
 func Module(r chi.Router, d *web.Deps) {
 	h := handlers{d}
 	d.Admin(http.MethodGet, "/settings/mail", h.index)
+	d.SettingsAt("/settings/mail", func(w http.ResponseWriter, r *http.Request, status int, mutate func(*tpl.Frame)) {
+		h.renderWith(w, r, status, page{}, mutate)
+	})
 	d.Admin(http.MethodPost, "/settings/mail/accounts", h.add)
 	d.Admin(http.MethodPost, "/settings/mail/accounts/{id}", h.update)
 	d.Admin(http.MethodPost, "/settings/mail/accounts/{id}/test", h.test)
@@ -103,6 +106,10 @@ func (h handlers) accounts(ctx context.Context) ([]account, error) {
 }
 
 func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, data page) {
+	h.renderWith(w, r, status, data, func(f *tpl.Frame) { f.Toast = toast })
+}
+
+func (h handlers) renderWith(w http.ResponseWriter, r *http.Request, status int, data page, mutate func(*tpl.Frame)) {
 	list, err := h.accounts(r.Context())
 	if err != nil {
 		panic(err)
@@ -121,7 +128,7 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toa
 	if err != nil {
 		panic(err)
 	}
-	f.Toast = toast
+	mutate(f)
 	if err := h.d.Render.Page(w, r, status, "mail_accounts.gohtml", f); err != nil {
 		panic(err)
 	}

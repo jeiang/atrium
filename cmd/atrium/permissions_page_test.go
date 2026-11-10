@@ -23,22 +23,22 @@ func TestPermissionsPageSavesWithinBounds(t *testing.T) {
 	}
 	client := &http.Client{Jar: jar}
 	status, page, _ := fetch(t, client, http.MethodGet, base+"/settings/permissions", nil)
-	if status != http.StatusOK {
-		t.Fatalf("GET /settings/permissions = %d", status)
+	if status != http.StatusOK || !strings.Contains(page, "<title>Assistant · Settings") {
+		t.Fatalf("GET /settings/permissions = %d, on the Assistant page %v", status, strings.Contains(page, "<title>Assistant · Settings"))
 	}
 	if n := strings.Count(page, `name="permission_`); n != 24 {
 		t.Fatalf("%d permission selects, want 24", n)
 	}
 	noFollow := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	status, body, header := fetch(t, noFollow, http.MethodPost, base+"/settings/permissions", url.Values{"permission_internet_kinds": {"allow"}})
-	if status != http.StatusSeeOther || header.Get("Location") != "/settings/permissions?saved=1" {
+	if status != http.StatusSeeOther || header.Get("Location") != "/settings/assistant?saved=permissions" {
 		t.Fatalf("save = %d %q: %s", status, header.Get("Location"), body)
 	}
 	if status, activity, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); status != http.StatusOK || !strings.Contains(activity, "permission_internet_kinds") {
 		t.Fatalf("the activity does not show the change: %d", status)
 	}
 	status, body, _ = fetch(t, noFollow, http.MethodPost, base+"/settings/permissions", url.Values{"permission_internet_untrusted_kinds": {"allow"}})
-	if status != http.StatusUnprocessableEntity {
+	if status != http.StatusUnprocessableEntity || !strings.Contains(body, "<title>Assistant · Settings") {
 		t.Fatalf("bounded save = %d: %s", status, body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))

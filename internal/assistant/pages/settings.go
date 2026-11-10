@@ -26,8 +26,11 @@ type AssistantData struct {
 	Defaults      threads.Options `json:"defaults"`
 	Efforts       []string        `json:"efforts"`
 	ContextLimits []int64         `json:"context_limits"`
-	Saved         bool            `json:"saved"`
+	Saved         string          `json:"saved"`
 	Error         string          `json:"error"`
+	Channels      []string        `json:"channels"`
+	Rows          []PermissionRow `json:"rows"`
+	Refused       string          `json:"refused"`
 }
 
 type UsageData struct {
@@ -37,13 +40,6 @@ type UsageData struct {
 	Subscription usage.Summary     `json:"subscription"`
 	ByKind       []usage.KindRow   `json:"by_kind"`
 	ByThread     []usage.ThreadRow `json:"by_thread"`
-}
-
-type PermissionsData struct {
-	Channels []string        `json:"channels"`
-	Rows     []PermissionRow `json:"rows"`
-	Saved    bool            `json:"saved"`
-	Error    string          `json:"error"`
 }
 
 type PermissionRow struct {
@@ -63,29 +59,6 @@ func permissionFields(reg *settings.Registry) []settings.Field {
 	return out
 }
 
-func (p *pages) permissionsPage(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, saved bool, formError string) {
-	fields := permissionFields(settings.From(r.Context()))
-	views, err := settings.LoadFields(r.Context(), p.deps.DB.Read, fields)
-	check(err)
-	channels := len(registry.PermissionChannelLabels)
-	rows := make([]PermissionRow, 0, len(registry.PermissionSituationLabels))
-	for s, label := range registry.PermissionSituationLabels {
-		rows = append(rows, PermissionRow{Label: label, Cells: views[s*channels : (s+1)*channels]})
-	}
-	p.settings(w, r, status, "settings_permissions.gohtml", PermissionsData{
-		Channels: registry.PermissionChannelLabels[:], Rows: rows, Saved: saved, Error: formError,
-	}, toast)
-}
-
-func (p *pages) permissionsSettings(w http.ResponseWriter, r *http.Request) {
-	var toast *tpl.Toast
-	saved := web.QueryValue(r.URL.Query(), "saved") == "1"
-	if saved {
-		toast = notice("success", "Saved", "")
-	}
-	p.permissionsPage(w, r, http.StatusOK, toast, saved, "")
-}
-
 func (p *pages) permissionsSave(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
 	fields := permissionFields(settings.From(r.Context()))
@@ -99,18 +72,21 @@ func (p *pages) permissionsSave(w http.ResponseWriter, r *http.Request) {
 	var invalid settings.Invalid
 	var pinned *settings.PinnedError
 	if errors.As(err, &invalid) || errors.As(err, &pinned) {
-		p.permissionsPage(w, r, http.StatusUnprocessableEntity, notice("error", "Not saved", err.Error()), false, err.Error())
+		p.assistantPage(w, r, http.StatusUnprocessableEntity, AssistantData{Refused: err.Error()}, toasted(notice("error", "Not saved", err.Error())))
 		return
 	}
 	check(err)
-	settingsRedirect(w, "/settings/permissions?saved=1")
+	settingsRedirect(w, "/settings/assistant?saved=permissions")
 }
 
 func (p *pages) settingsRoutes(r chi.Router) {
 	p.deps.Admin(http.MethodGet, "/settings", func(w http.ResponseWriter, r *http.Request) { redirect(w, r, "/settings/assistant") })
 	p.deps.Admin(http.MethodGet, "/settings/assistant", p.assistantSettings)
 	p.deps.Admin(http.MethodPost, "/settings/assistant", p.assistantSave)
-	p.deps.Admin(http.MethodGet, "/settings/permissions", p.permissionsSettings)
+	p.deps.Admin(http.MethodGet, "/settings/permissions", func(w http.ResponseWriter, r *http.Request) { redirect(w, r, "/settings/assistant") })
+	p.deps.SettingsAt("/settings/assistant", func(w http.ResponseWriter, r *http.Request, status int, mutate func(*tpl.Frame)) {
+		p.assistantPage(w, r, status, AssistantData{}, mutate)
+	})
 	p.deps.Admin(http.MethodPost, "/settings/permissions", p.permissionsSave)
 	p.deps.Admin(http.MethodGet, "/settings/usage", p.usagePage)
 }
@@ -119,19 +95,33 @@ func (p *pages) settings(w http.ResponseWriter, r *http.Request, status int, nam
 	p.render(w, r, status, settingsFrame, name, data, toast)
 }
 
-func (p *pages) assistantPage(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, saved bool, formError string) {
+func toasted(toast *tpl.Toast) func(*tpl.Frame) {
+	return func(f *tpl.Frame) { f.Toast = toast }
+}
+
+func (p *pages) assistantPage(w http.ResponseWriter, r *http.Request, status int, data AssistantData, mutate func(*tpl.Frame)) {
 	defaults, err := threads.Defaults(r.Context(), p.deps.DB.Read)
 	check(err)
-	p.settings(w, r, status, "settings_assistant.gohtml", AssistantData{Models: pricing.Models(), Defaults: defaults, Efforts: pricing.Efforts, ContextLimits: assistant.ContextLimits, Saved: saved, Error: formError}, toast)
+	views, err := settings.LoadFields(r.Context(), p.deps.DB.Read, permissionFields(settings.From(r.Context())))
+	check(err)
+	channels := len(registry.PermissionChannelLabels)
+	for s, label := range registry.PermissionSituationLabels {
+		data.Rows = append(data.Rows, PermissionRow{Label: label, Cells: views[s*channels : (s+1)*channels]})
+	}
+	data.Models, data.Defaults, data.Efforts, data.ContextLimits, data.Channels = pricing.Models(), defaults, pricing.Efforts, assistant.ContextLimits, registry.PermissionChannelLabels[:]
+	f, err := p.deps.Render.Frame(r, settingsFrame, data)
+	check(err)
+	mutate(f)
+	check(p.deps.Render.Page(w, r, status, "settings_assistant.gohtml", f))
 }
 
 func (p *pages) assistantSettings(w http.ResponseWriter, r *http.Request) {
 	var toast *tpl.Toast
-	saved := web.QueryValue(r.URL.Query(), "saved") == "1"
-	if saved {
+	saved := web.QueryValue(r.URL.Query(), "saved")
+	if saved == "1" || saved == "permissions" {
 		toast = notice("success", "Saved", "")
 	}
-	p.assistantPage(w, r, http.StatusOK, toast, saved, "")
+	p.assistantPage(w, r, http.StatusOK, AssistantData{Saved: saved}, toasted(toast))
 }
 
 func (p *pages) assistantSave(w http.ResponseWriter, r *http.Request) {
@@ -139,7 +129,7 @@ func (p *pages) assistantSave(w http.ResponseWriter, r *http.Request) {
 	err := threads.SetDefaults(audit.With(detached(r), "operator", audit.UI), p.deps.DB, web.FormString(form, "model", ""), web.FormString(form, "effort", ""), web.FormString(form, "context_limit", ""))
 	var refused threads.OptionError
 	if errors.As(err, &refused) {
-		p.assistantPage(w, r, http.StatusUnprocessableEntity, notice("error", "Not saved", err.Error()), false, err.Error())
+		p.assistantPage(w, r, http.StatusUnprocessableEntity, AssistantData{Error: err.Error()}, toasted(notice("error", "Not saved", err.Error())))
 		return
 	}
 	check(err)
