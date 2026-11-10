@@ -21,10 +21,10 @@
     <textarea id="new-text" name="text" rows="3" placeholder="Message the assistant" data-submit-on-enter autofocus></textarea>
     {{template "ref_picker"}}
     {{template "attach_field"}}
-    <div class="flex flex-wrap items-center gap-2 text-xs">
+    <div class="ask-row">
       {{template "attach_button"}}
-      {{template "composer_options" (dict "c" $d.Composer)}}
-      <button type="submit" class="btn ms-auto" data-size="sm">{{icon "send"}}Start</button>
+      {{template "ask_opts" (dict "c" $d.Composer)}}
+      <button type="submit" class="ask-send ms-auto" aria-label="Start" title="Start">{{icon "arrow-up"}}</button>
     </div>
   </form>
   <div hx-get="/review/strip" hx-trigger="load" hx-swap="outerHTML" data-needs-strip></div>

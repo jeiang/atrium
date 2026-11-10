@@ -635,7 +635,8 @@ const connectLive = (li) => {
     const bubble = document.createElement("li");
     bubble.className = "msg";
     bubble.dataset.liveUser = runId;
-    bubble.innerHTML = `<span class="msg-avatar" aria-hidden="true"></span><div class="msg-body"><div class="msg-user"></div></div>`;
+    bubble.dataset.role = "user";
+    bubble.innerHTML = `<div class="msg-body"><div class="msg-user"></div></div>`;
     bubble.querySelector(".msg-user").textContent = data.text;
     li.before(bubble);
     if (queued) queued.remove();
@@ -1070,3 +1071,31 @@ document.addEventListener("focusout", (event) => {
 });
 
 document.addEventListener("submit", () => refClose());
+
+function syncAskOpts() {
+  document.querySelectorAll("[data-ask-opts]").forEach((box) => {
+    const model = box.querySelector('select[name="model"]');
+    const effort = box.querySelector('select[name="effort"]');
+    if (!model || !effort) return;
+    box.querySelector("[data-opts-label]").textContent = `${model.selectedOptions[0].textContent} · ${effort.value}`;
+  });
+}
+
+document.addEventListener("change", (event) => {
+  if (event.target.closest("[data-ask-opts]")) syncAskOpts();
+});
+
+document.addEventListener("htmx:afterSettle", syncAskOpts);
+
+document.addEventListener("click", (event) => {
+  document.querySelectorAll("details[data-menu][open]").forEach((menu) => {
+    if (!menu.contains(event.target)) menu.open = false;
+  });
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Escape") return;
+  document.querySelectorAll("details[data-menu][open]").forEach((menu) => {
+    menu.open = false;
+  });
+});

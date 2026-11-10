@@ -34,3 +34,10 @@
   {{if $c.Coding}}<label class="flex items-center gap-1 text-xs text-muted-foreground"><input type="checkbox" name="coding" value="1"> Coding</label>{{end}}
 </span>
 {{- end}}
+
+{{define "ask_opts"}}{{$c := .c}}
+<details class="ask-opts" data-menu data-ask-opts>
+  <summary class="chip" title="Model, effort, context, cost cap"><span data-opts-label>{{range $c.Models}}{{if eq .ID $c.Model}}{{.Name}}{{end}}{{end}}{{if not $c.Known}}{{$c.Model}}{{end}} · {{$c.Effort}}</span></summary>
+  <div class="menu-pop ask-opts-pop">{{template "composer_options" (dict "c" $c)}}</div>
+</details>
+{{- end}}

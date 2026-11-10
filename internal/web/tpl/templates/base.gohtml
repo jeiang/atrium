@@ -68,9 +68,14 @@
     <button type="button" class="btn ms-auto md:hidden" data-variant="ghost" data-size="icon-sm" data-action="close-sidebar" aria-label="Close navigation">{{icon "x"}}</button>
   </div>
   <nav class="sb-body" aria-label="Primary">
+    {{if .Threads}}<a href="/chat" class="sb-item" title="Today"{{if eq $path "/chat"}} aria-current="page"{{end}} data-today>{{icon "sun"}}<span class="sb-label">Today</span></a>{{end}}
+    {{range .Nav}}
+    <section class="sb-section"{{with .Label}} aria-label="{{.}}"{{end}}>
+      {{with .Label}}<h2 class="sb-title">{{.}}</h2>{{end}}
+      {{range .Items}}<a href="{{.URL}}" class="sb-item" title="{{.Label}}"{{if .Current}} aria-current="page"{{end}}>{{icon .Icon}}<span class="sb-label">{{.Label}}</span>{{if .Badge}}{{template "pending_badge" (dict "count" $.PendingCount)}}{{end}}</a>{{end}}
+    </section>
+    {{end}}
     {{with .Threads}}
-    <a href="/chat" class="btn sb-new" title="New chat">{{icon "plus"}}<span>New chat</span></a>
-    <a href="/today" class="sb-item" title="Today" data-today>{{icon "sun"}}<span class="sb-label">Today</span></a>
     <div class="sb-threads">
       {{if .Pinned}}{{template "sb_threads" (dict "label" "Pinned" "threads" .Pinned "path" $path)}}{{end}}
       {{range .Dated}}{{template "sb_threads" (dict "label" .Label "threads" .Threads "path" $path)}}{{end}}
@@ -83,12 +88,6 @@
       {{end}}
       <a href="/projects/new" class="sb-item sb-thread text-ink-3">{{icon "folder"}}<span class="sb-label">New project</span></a>
     </div>
-    {{end}}
-    {{range .Nav}}
-    <section class="sb-section"{{with .Label}} aria-label="{{.}}"{{end}}>
-      {{with .Label}}<h2 class="sb-title">{{.}}</h2>{{end}}
-      {{range .Items}}<a href="{{.URL}}" class="sb-item" title="{{.Label}}"{{if .Current}} aria-current="page"{{end}}>{{icon .Icon}}<span class="sb-label">{{.Label}}</span>{{if .Badge}}{{template "pending_badge" (dict "count" $.PendingCount)}}{{end}}</a>{{end}}
-    </section>
     {{end}}
   </nav>
   <div class="sb-foot">
@@ -124,7 +123,7 @@
       <div role="group" aria-labelledby="palette-h-actions">
         <div id="palette-h-actions" role="presentation" class="palette-head">Actions</div>
         {{if .Threads}}
-        <div id="palette-action-new" role="option" aria-selected="false" class="palette-option" data-palette-href="/chat">{{icon "plus"}}<span class="truncate">New chat</span></div>
+        <div id="palette-action-new" role="option" aria-selected="false" class="palette-option" data-palette-href="/chat">{{icon "plus"}}<span class="truncate">New thread</span></div>
         <div id="palette-action-today" role="option" aria-selected="false" class="palette-option" data-palette-href="/today">{{icon "sun"}}<span class="truncate">Today</span></div>
         {{end}}
         <div id="palette-action-light" role="option" aria-selected="false" class="palette-option" data-palette-theme="light">{{icon "sun"}}<span class="truncate">Light theme</span></div>

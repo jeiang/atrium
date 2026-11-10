@@ -3,7 +3,7 @@
 {{define "chat_work"}}{{$w := .}}
 {{if $w.Needs}}
 <section class="flex flex-col gap-2" aria-labelledby="work-needs">
-  <h2 id="work-needs" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "bell" "size-3.5"}}Needs you</h2>
+  <h2 id="work-needs" class="eyebrow flex items-center gap-1.5">{{icon "bell" "size-3.5"}}Needs you</h2>
   <ul class="flex flex-col gap-2" data-needs>
     {{range $w.Needs}}
     <li id="needs-{{.ID}}" class="rounded-md border px-3 py-2 text-sm" hx-get="/proposals/{{.ID}}/card?view=row" hx-trigger="load" hx-swap="outerHTML">
@@ -14,20 +14,20 @@
 </section>
 {{end}}
 
+{{if $w.Plan}}
 <section class="flex flex-col gap-2" aria-labelledby="work-plan">
-  <h2 id="work-plan" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "list-checks" "size-3.5"}}Plan</h2>
-  {{if $w.Plan}}
+  <h2 id="work-plan" class="eyebrow flex items-center gap-1.5">{{icon "list-checks" "size-3.5"}}Plan</h2>
   <ol class="flex flex-col gap-1 text-sm" data-plan>
     {{range $w.Plan.items}}
     <li class="flex items-start gap-2">{{if .Done}}{{icon "check" "mt-0.5 size-3.5 shrink-0 text-success"}}{{else}}{{icon "circle-dot" "mt-0.5 size-3.5 shrink-0 text-muted-foreground"}}{{end}}<span class="{{if .Done}}text-muted-foreground line-through{{end}}">{{.Text}}</span></li>
     {{end}}
   </ol>
-  {{end}}
 </section>
+{{end}}
 
+{{if $w.Sources}}
 <section class="flex flex-col gap-2" aria-labelledby="work-sources">
-  <h2 id="work-sources" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "globe" "size-3.5"}}Sources</h2>
-  {{if $w.Sources}}
+  <h2 id="work-sources" class="eyebrow flex items-center gap-1.5">{{icon "globe" "size-3.5"}}Sources</h2>
   <ul class="flex flex-col gap-1 text-sm" data-sources>
     {{range $w.Sources}}
     <li class="flex min-w-0 items-center gap-2">
@@ -38,12 +38,12 @@
     </li>
     {{end}}
   </ul>
-  {{end}}
 </section>
+{{end}}
 
+{{if $w.Subagents}}
 <section class="flex flex-col gap-2" aria-labelledby="work-subagents">
-  <h2 id="work-subagents" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "users" "size-3.5"}}Subagents</h2>
-  {{if $w.Subagents}}
+  <h2 id="work-subagents" class="eyebrow flex items-center gap-1.5">{{icon "users" "size-3.5"}}Subagents</h2>
   <ul class="flex flex-col gap-2" data-subagents>
     {{range $w.Subagents}}
     <li class="flex flex-col gap-1 rounded-md border px-3 py-2 text-xs" data-child="{{.ThreadID}}" data-status="{{.Status}}">
@@ -58,12 +58,12 @@
     </li>
     {{end}}
   </ul>
-  {{end}}
 </section>
+{{end}}
 
+{{if or $w.Files $w.Drafts}}
 <section class="flex flex-col gap-2" aria-labelledby="work-files">
-  <h2 id="work-files" class="flex items-center gap-1.5 text-xs font-medium uppercase tracking-wide text-muted-foreground">{{icon "file-text" "size-3.5"}}Files</h2>
-  {{if or $w.Files $w.Drafts}}
+  <h2 id="work-files" class="eyebrow flex items-center gap-1.5">{{icon "file-text" "size-3.5"}}Files</h2>
   <ul class="flex flex-col gap-1 text-sm" data-files>
     {{range $w.Files}}
     <li class="flex items-center gap-1 rounded-md border px-3 py-2 hover:bg-accent" data-file="{{.ID}}">
@@ -75,6 +75,6 @@
     <li><a class="flex items-center gap-2 rounded-md border px-3 py-2 hover:bg-accent" {{template "preview_attrs" (printf "/drafts/%v" (get . "id"))}}>{{icon "mail" "size-3.5 shrink-0 text-muted-foreground"}}<span class="truncate">{{or (get . "subject") "(no subject)"}}</span>{{$ds := get . "status"}}{{with badge "draft_status" $ds}}<span class="badge ms-auto shrink-0" data-variant="{{.Variant}}">{{.Label}}</span>{{else}}<span class="badge ms-auto shrink-0" data-variant="outline">{{$ds}}</span>{{end}}</a></li>
     {{end}}
   </ul>
-  {{end}}
 </section>
+{{end}}
 {{- end}}
