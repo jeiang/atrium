@@ -71,7 +71,15 @@ behavior-parity target.
   summary's two children or one message's source. The tools, the system
   prompt with the profile and project block, and the older-history lines
   are fixed for the run and carry the cache breakpoints, so later steps read
-  them from the prompt cache and write only the new tail. Client- and
+  them from the prompt cache and write only the new tail. A chat or cron
+  operator message may also carry a knowledge block: eligible records
+  (unmarked, unpinned, live, not ops, private only inside its project)
+  matched by exact title or alias, full-text search and one embedding,
+  within `kb_retrieval_tokens` (default 1,500; 0 disables) and
+  `kb_retrieval_distance` (default 0.35). The block is stored with the
+  message and expanded when the request is built, so it replays byte for
+  byte and adds nothing to the tools, system prompt or history prefix;
+  retrieval adds no marks. Client- and
   server-side transcript compaction and their settings are gone; the chat
   meter and the attachment check measure against the thread's context
   limit, and the old projection and ledger rows stay untouched.

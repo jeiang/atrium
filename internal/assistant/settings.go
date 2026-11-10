@@ -73,6 +73,8 @@ const (
 	KeyProfileValueChars   = "agent_profile_value_chars"
 	KeyKBWriteChars        = "agent_kb_write_chars"
 	KeyKBProfileTokens     = "agent_kb_profile_tokens"
+	KeyKBRetrievalTokens   = "agent_kb_retrieval_tokens"
+	KeyKBRetrievalDistance = "agent_kb_retrieval_distance"
 
 	KeyMailMaxResults    = "agent_mail_max_results"
 	KeyMailSnippetChars  = "agent_mail_snippet_chars"
@@ -200,6 +202,8 @@ func init() {
 		count(KeyProfileValueChars, 500, 20, 5000),
 		count(KeyKBWriteChars, 4000, 200, 20000),
 		count(KeyKBProfileTokens, 2000, 200, 20000),
+		count(KeyKBRetrievalTokens, 1500, 0, 20000),
+		capped(KeyKBRetrievalDistance, settings.Float, "0.35", settings.Within(0, 2)),
 
 		count(KeyMailMaxResults, 20, 1, 200),
 		count(KeyMailSnippetChars, 300, 20, 5000),

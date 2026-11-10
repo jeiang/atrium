@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math/big"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode"
 
@@ -19,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/kb"
 )
 
 const draftCreate = "draft_email_create"
@@ -87,10 +89,41 @@ type Item struct {
 	Text       string         `json:"text"`
 	Files      []Attachment   `json:"files"`
 	References []Reference    `json:"references,omitempty"`
+	Knowledge  []KnowledgeRef `json:"knowledge,omitempty"`
 	Steps      []*Step        `json:"steps"`
 	Citations  []Citation     `json:"citations"`
 	Draft      map[string]any `json:"draft"`
 	ProposalID int64          `json:"proposal_id,omitempty"`
+}
+
+type KnowledgeRef struct {
+	ID    int64  `json:"id"`
+	Cite  string `json:"cite"`
+	Title string `json:"title"`
+}
+
+func knowledgeOf(value any) ([]KnowledgeRef, bool) {
+	d, ok := value.(map[string]any)
+	if !ok {
+		return nil, false
+	}
+	records, ok := d["records"].([]any)
+	if !ok {
+		return nil, false
+	}
+	out := make([]KnowledgeRef, 0, len(records))
+	for _, raw := range records {
+		rec, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		id, ok := rec["id"].(int64)
+		if !ok {
+			continue
+		}
+		out = append(out, KnowledgeRef{ID: id, Cite: "K" + strconv.FormatInt(id, 10), Title: text(rec, "title")})
+	}
+	return out, true
 }
 
 func referenceOf(d map[string]any) (Reference, bool) {
@@ -243,6 +276,15 @@ func Items(messages []journal.Message, calls []journal.ToolCall, drafts map[int6
 			case b.Kind == references.Type && m.Role == journal.User:
 				if ref, ok := referenceOf(b.Value); ok {
 					refs = append(refs, ref)
+				}
+			case b.Kind == kb.Type && m.Role == journal.User:
+				if refs, ok := knowledgeOf(b.Value); ok {
+					for i := len(items) - 1; i >= 0; i-- {
+						if items[i].Kind == ItemUser && items[i].Seq == m.Seq {
+							items[i].Knowledge = refs
+							break
+						}
+					}
 				}
 			case b.Kind == block.Text && m.Role == journal.User:
 				activity = nil
