@@ -37,8 +37,15 @@ type Module struct {
 	URL  string
 }
 
+var wanted = map[string]bool{}
+
+func Want(module string) { wanted[module] = true }
+
+func Wanted(module string) bool { return wanted[module] }
+
 type Control struct {
 	Modules []Module
+	Mark    func(name string) string
 	State   func(ctx context.Context, q db.Querier, name string) (settings.ModuleView, error)
 	Set     func(ctx context.Context, d *db.DB, name string, on bool) error
 }
@@ -51,6 +58,7 @@ type pageData struct {
 type handlers struct {
 	d       *web.Deps
 	groups  []Group
+	generic []Generic
 	control Control
 }
 
@@ -68,12 +76,18 @@ func Page(groups []Group, generic []Generic, control Control) web.Page {
 		nav[i] = tpl.NavItem{Label: title(g.Module), URL: g.URL, Page: g.Tab, Settings: true, Order: 45}
 	}
 	return web.Page{Templates: files, Nav: nav, Module: func(r chi.Router, d *web.Deps) {
-		h := handlers{d: d, groups: groups, control: control}
+		h := handlers{d: d, groups: groups, generic: generic, control: control}
+		d.SettingsPage = h.renderAt
 		d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
 			if f.Page != "settings" {
 				return nil
 			}
 			for _, m := range control.Modules {
+				for i := range f.Settings {
+					if f.Settings[i].URL == m.URL {
+						f.Settings[i].Mark = control.Mark(m.Name)
+					}
+				}
 				if m.URL != f.Path {
 					continue
 				}
@@ -133,6 +147,26 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, dat
 	}
 }
 
+func (h handlers) renderAt(w http.ResponseWriter, r *http.Request, status int, url string, mutate func(*tpl.Frame)) bool {
+	for _, g := range h.generic {
+		if g.URL != url {
+			continue
+		}
+		at := r.Clone(r.Context())
+		at.URL.Path, at.URL.RawQuery = url, ""
+		f, err := h.d.Render.Frame(at, "settings", pageData{Title: title(g.Module), Tab: g.Tab})
+		if err != nil {
+			panic(err)
+		}
+		mutate(f)
+		if err := h.d.Render.Page(w, r, status, "settings_module.gohtml", f); err != nil {
+			panic(err)
+		}
+		return true
+	}
+	return false
+}
+
 func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 	module, name := chi.URLParam(r, "module"), chi.URLParam(r, "name")
 	var group *Group
@@ -174,6 +208,9 @@ func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 			}
+		}
+		if h.renderAt(w, r, http.StatusUnprocessableEntity, group.URL, func(f *tpl.Frame) { f.SettingGroups = views }) {
+			return
 		}
 		h.render(w, r, http.StatusUnprocessableEntity, pageData{Title: title(module), Tab: group.Tab}, views)
 		return

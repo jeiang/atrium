@@ -59,7 +59,7 @@ func TestSettingsFieldsSaveFromTheirTabs(t *testing.T) {
 		{"/settings/mail", "/settings/mail/settings", "uncertain_dest", "Later"},
 		{"/settings/mail", "/settings/mail/settings", "openloops_remind_hour", "8"},
 		{"/settings/notifications", "/settings/notifications/push/subject", "webpush_subject", "mailto:ops@example.invalid"},
-		{"/settings/usage", "/settings/usage/budget", "monthly_budget_usd", "200"},
+		{"/settings/assistant", "/settings/groups/assistant/spending", "monthly_budget_usd", "200"},
 	}
 	pages := map[string]string{}
 	for _, c := range cases {
@@ -104,7 +104,7 @@ func TestSettingsFieldsRefuseInvalidValues(t *testing.T) {
 		action, key, value, want string
 	}{
 		{"/settings/integrations/sections/calendar", "default_event_minutes", "0", "must be between 5 and 1440"},
-		{"/settings/usage/budget", "monthly_budget_usd", "0", "must be greater than 0"},
+		{"/settings/groups/assistant/spending", "monthly_budget_usd", "0", "must be greater than 0"},
 		{"/settings/integrations/grafana/settings", "grafana_logs_type", "bogus", "must be one of"},
 		{"/settings/integrations/sections/media", "media_movies_url", "not-a-url", "must be an http or https URL"},
 		{"/settings/integrations/sections/calendar", "work_hours", "9-5", "must be HH:MM-HH:MM"},

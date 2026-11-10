@@ -1,6 +1,6 @@
 {{define "settings_nav"}}{{$tab := .Tab}}{{$group := ""}}
 <nav aria-label="Settings sections" class="set-nav">
-  {{range .Settings}}{{if ne .Group $group}}{{$group = .Group}}<h2 class="eyebrow">{{.Group}}</h2>{{end}}<a href="{{.URL}}"{{if eq $tab .Page}} aria-current="page"{{end}}>{{.Label}}</a>{{end}}
+  {{range .Settings}}{{if ne .Group $group}}{{$group = .Group}}<h2 class="eyebrow">{{.Group}}</h2>{{end}}<a href="{{.URL}}"{{if eq $tab .Page}} aria-current="page"{{end}}{{with .Mark}} data-mark="{{.}}"{{end}}>{{.Label}}</a>{{end}}
 </nav>
 {{end}}
 

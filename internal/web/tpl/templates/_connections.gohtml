@@ -36,19 +36,24 @@
     {{end}}
     {{range $v.Sections}}{{if eq .Integration $name}}
     <div class="flex flex-col gap-3 border-t pt-3" data-section="{{.Name}}">
-      {{template "integration_section" (dict "Section" . "CSRF" $csrf "Failed" $v.Failed "Error" $v.Error "FieldError" $v.FieldError)}}
+      {{template "integration_section" (dict "Section" . "CSRF" $csrf "Failed" $v.Failed "Error" $v.Error "FieldError" $v.FieldError "Back" $back)}}
     </div>
     {{end}}{{end}}
   </div>
 {{end}}{{end}}
 
-{{define "settings_connections"}}{{$csrf := .CSRF}}{{$back := .Path}}{{with .Connections}}{{$v := .}}{{range .Records}}{{template "integration_card" (dict "View" $v "Record" . "CSRF" $csrf "Back" $back)}}{{end}}{{end}}{{end}}
+{{define "settings_connections"}}{{$csrf := .CSRF}}{{$back := .Path}}{{with .Connections}}{{$v := .}}{{range .Records}}{{template "integration_card" (dict "View" $v "Record" . "CSRF" $csrf "Back" $back)}}{{end}}
+{{range .Sections}}{{if not .Integration}}
+<div class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" data-section="{{.Name}}">
+  {{template "integration_section" (dict "Section" . "CSRF" $csrf "Failed" $v.Failed "Error" $v.Error "FieldError" $v.FieldError "Back" $back "Saved" $v.Saved)}}
+</div>
+{{end}}{{end}}{{end}}{{end}}
 
 {{define "integration_section"}}{{$s := .Section}}
 {{if and (eq .Failed $s.Name) .Error (not .FieldError)}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.Error}}</p>{{end}}
-<span class="font-medium">{{$s.Title}}</span>
-{{if $s.Template}}{{partial $s.Template (dict "Section" $s "Fields" $s.Fields "Action" (printf "/settings/integrations/sections/%s" $s.Name) "CSRF" .CSRF "Error" .Error "FieldError" .FieldError)}}
-{{else}}{{template "settings_fields" (dict "Fields" $s.Fields "Action" (printf "/settings/integrations/sections/%s" $s.Name) "CSRF" .CSRF)}}{{end}}
+<span class="font-medium">{{$s.Title}}</span>{{if eq (opt . "Saved" "") $s.Name}} <span class="text-xs text-ink-3" role="status" data-saved>Saved</span>{{end}}
+{{if $s.Template}}{{partial $s.Template (dict "Section" $s "Fields" $s.Fields "Action" (printf "/settings/integrations/sections/%s" $s.Name) "CSRF" .CSRF "Error" .Error "FieldError" .FieldError "Back" (opt . "Back" ""))}}
+{{else}}{{template "settings_fields" (dict "Fields" $s.Fields "Action" (printf "/settings/integrations/sections/%s" $s.Name) "CSRF" .CSRF "Back" (opt . "Back" ""))}}{{end}}
 {{end}}
 
 {{define "module_hold"}}{{if eq .Result "enabled"}}<p class="text-xs text-muted-foreground" role="status" data-module-hold="enabled">{{.Module}} module turned on; restart the atrium units to start it.</p>{{else if eq .Result "pinned"}}<p class="text-xs text-warning" role="status" data-module-hold="pinned">{{.Module}} module stays off: pinned by {{.Detail}}.</p>{{else if eq .Result "needs-settings"}}<p class="text-xs text-warning" role="status" data-module-hold="needs-settings">{{.Module}} module stays off: {{.Detail}}.</p>{{end}}{{end}}

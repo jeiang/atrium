@@ -57,6 +57,20 @@ func (s *Set) settingState(ctx context.Context, q db.Querier, name string) (sett
 	return view, err
 }
 
+func (s *Set) settingMark(name string) string {
+	snap := s.Current()
+	if snap == nil {
+		return ""
+	}
+	switch st, _ := snap.Status(name); st.State {
+	case NeedsSettings:
+		return "warning"
+	case Off:
+		return "off"
+	}
+	return ""
+}
+
 func (s *Set) settingToggle(ctx context.Context, d *db.DB, name string, on bool) error {
 	if on {
 		_, err := s.Enable(ctx, d, name)
@@ -70,7 +84,7 @@ func (s *Set) settingToggle(ctx context.Context, d *db.DB, name string, on bool)
 func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, settingspage.Control) {
 	var groups []settingspage.Group
 	var generic []settingspage.Generic
-	control := settingspage.Control{State: s.settingState, Set: s.settingToggle}
+	control := settingspage.Control{State: s.settingState, Set: s.settingToggle, Mark: s.settingMark}
 	for _, r := range s.regs {
 		if !r.Core {
 			for _, p := range r.Pages {
@@ -80,9 +94,6 @@ func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, sett
 					}
 				}
 			}
-		}
-		if len(r.Settings) == 0 {
-			continue
 		}
 		home, tabs := "", map[string]string{}
 		for _, p := range r.Pages {
@@ -96,7 +107,7 @@ func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, sett
 				}
 			}
 		}
-		own := false
+		own := home == "" && !r.Core && settingspage.Wanted(r.Name)
 		for _, g := range r.Settings {
 			g.Module = r.Name
 			at := settingspage.Group{Group: g, URL: g.Page}
