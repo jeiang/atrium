@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"maps"
 
+	"github.com/jeiang/atrium/internal/assistant/dreaming"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
@@ -39,6 +40,13 @@ func callables(jobs []map[string]worker.Callable) map[string]worker.Callable {
 		Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
 			_, err := remind.Due(ctx, e.Service.DB, e.Service.Env, e.Now())
 			return worker.Result{}, err
+		},
+	}
+	out[scheduler.NightlyName] = worker.Callable{
+		Modules: []string{module.Assistant},
+		Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
+			runs, err := dreaming.Run(ctx, e.Service, e.Now, e.JobID, e.JobRunID)
+			return worker.Result{Runs: runs}, err
 		},
 	}
 	out[scheduler.DailyNudgesName] = worker.Callable{

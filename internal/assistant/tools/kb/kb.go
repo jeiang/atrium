@@ -268,6 +268,11 @@ func write(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if tc.Kind == tool.Nightly {
+		if source == nil || !slices.Contains(tc.Sources, source.ThreadID) {
+			return nil, tool.Error("source.thread_id must be one of the threads gathered for this run")
+		}
+	}
 	rec, writeID, err := kb.Write(ctx, tc.DB, tc.Undoers, kb.Writer{
 		ThreadID: tc.ThreadID, RunID: tc.RunID, Kind: string(tc.Kind), Now: tc.Now(),
 	}, kb.WriteInput{ID: id, Title: title, Body: body, Aliases: aliases, Scope: scope, Source: source})
@@ -288,6 +293,15 @@ func retract(ctx context.Context, tc *tool.Context, args tool.Args) (any, error)
 	}
 	if len([]rune(reason)) > 200 {
 		return nil, tool.Error("reason is limited to 200 characters")
+	}
+	if tc.Kind == tool.Nightly {
+		rec, err := kb.Get(ctx, tc.DB.Read, id)
+		if err != nil {
+			return nil, err
+		}
+		if rec == nil || rec.SourceThreadID == nil || !slices.Contains(tc.Sources, *rec.SourceThreadID) {
+			return nil, tool.Error("only records from the threads gathered for this run can be retracted")
+		}
 	}
 	rec, writeID, err := kb.Retract(ctx, tc.DB, tc.Undoers, kb.Writer{
 		ThreadID: tc.ThreadID, RunID: tc.RunID, Kind: string(tc.Kind), Now: tc.Now(),

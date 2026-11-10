@@ -91,10 +91,17 @@ behavior-parity target.
   A record is confirmed by the operator, and confirmed records and records
   written by the operator or the import cannot be edited or retracted by
   the agent. Pinned, confirmed, unmarked records form the system prompt's
-  profile block within `agent_kb_profile_tokens`. The nightly run writes
-  knowledge records with `source.thread_id` set instead of observations or
-  wiki pages; those records take the day's marks, so they stay out of the
-  prompt until the operator confirms them. The Notion wiki is read-only
+  profile block within `agent_kb_profile_tokens`. The nightly dreaming job
+  gathers the last 24 hours in code (chat and scheduled threads, skipping
+  threads of private projects, plus a compact index of live records) and
+  runs one Haiku write step with `kb_search`, `kb_get`, `kb_write`,
+  `kb_retract`, `task_add` and `task_list`. Records carry provenance to a
+  gathered `source.thread_id`; the write thread takes the union of the
+  gathered marks, so records from clean threads are unmarked while records
+  from marked sources stay unconfirmed and out of the prompt until the
+  operator confirms them. Dreaming is capped at `dreaming_max_cost_usd`
+  ($0.30) per night and `dreaming_monthly_usd` ($3) per calendar month; at
+  the monthly cap it does not run and raises an attention item. The Notion wiki is read-only
   for the operator: sync and the Wiki tab remain, the agent has no Notion
   tools, and the old `notion_link`/`notion_edit` proposals stay readable.
 - Notifications are recorded in an in-app inbox first and pushed best
@@ -177,7 +184,10 @@ behavior-parity target.
   `max_tokens`, `model_context_window_exceeded`, an empty `pause_turn` or
   `end_turn`, a repeated identical tool call and result (`doom_loop_threshold`,
   default 3) and the per-run-kind step cap (`max_steps_chat`, `_cron`,
-  `_nightly`, default 24; subagents use `agent_subagent_max_steps`). A server fallback is shown in the thread
+  `_nightly`, default 24; subagents use `agent_subagent_max_steps`). The
+  nightly dreaming run also has its own caps (`dreaming_max_cost_usd`,
+  default $0.30 per night, and `dreaming_monthly_usd`, default $3 per
+  calendar month). A server fallback is shown in the thread
   and its tokens are recorded as a separate usage row priced at the model
   that served them. Mail classification and embeddings
   use separately configured OpenAI-compatible endpoints, local or hosted,
@@ -337,7 +347,8 @@ behavior-parity target.
   currently an operator action. Delegated sending is a product goal, not
   permission granted by the existing tools.
 - The registry restricts tools by run kind. Scheduled runs read, propose,
-  and notify; nightly runs may also write knowledge records with undo.
+  and notify; the nightly dreaming run may also write knowledge records
+  with undo, restricted to the threads it gathered.
   Research subagents have restricted tools and bounded runs, and their system
   prompt omits the operator profile and project block. The server-ops
   worker is a separate run kind: it has only `ops_samples`, `ops_finding`,
@@ -402,9 +413,7 @@ behavior-parity target.
   and a response carrying a server `web_search_tool_result` mark the
   thread `untrusted`; `research` declares all four marks and returns
   `untrusted` plus the child thread's marks. `weather`, the media reads,
-  `plan` declares none. The nightly `threads_today` read
-  declares all four and carries the union of the marks of the threads it
-  returns. `task_list` and `schedule_list` declare all four as their
+  `plan` declares none. `task_list` and `schedule_list` declare all four as their
   bound and return the marks of the threads that wrote the listed rows
   through `agent_writes`; they mark nothing when those threads were
   clean. A cron thread starts with the marks of the thread that wrote its

@@ -9,8 +9,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
+	"github.com/jeiang/atrium/internal/assistant/dreaming"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
-	"github.com/jeiang/atrium/internal/assistant/nightly"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
@@ -77,7 +77,7 @@ type Module struct {
 func (m Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
 		Name:      module.Assistant,
-		Attention: []attention.Source{attentionsources.Plans(), attentionsources.Questions(), tasks.AttentionSource(), serverops.AttentionSource(mc.Env)},
+		Attention: []attention.Source{attentionsources.Plans(), attentionsources.Questions(), tasks.AttentionSource(), serverops.AttentionSource(mc.Env), dreaming.Attention(mc.Env)},
 		Requires:  []module.Requirement{{Name: secrets.AnthropicAPIKey, Check: anthropicKey}},
 		Pages: []web.Page{{
 			Module:    chatpages.Module(chatpages.Options{Tools: mc.Tools}),
@@ -112,7 +112,7 @@ func anthropicKey(ctx context.Context, p module.Probe) (string, error) {
 func addTools(r *registry.Registry) error {
 	for _, tools := range [][]tool.Tool{
 		askoperator.Tools(), attentiontool.Tools(), filetools.Tools(), memorytools.Tools(),
-		nightly.Tools(), webfetch.Tools(), recalltools.Tools(), plantools.Tools(),
+		webfetch.Tools(), recalltools.Tools(), plantools.Tools(),
 		proposetools.Tools(), scheduletools.Tools(), taskstools.Tools(),
 		kbtools.Tools(), weathertools.Tools(), opstools.Tools(),
 	} {

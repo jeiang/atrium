@@ -110,7 +110,8 @@ func sourceOf(ctx context.Context, q db.Querier, w Writer, in WriteInput, projec
 		if private && projectOf(srcProject) != projectOf(project) {
 			return 0, nil, nil, tool.Error(fmt.Sprintf("source thread %d belongs to a private project", in.Source.ThreadID))
 		}
-		return in.Source.ThreadID, in.Source.Seq, nil, nil
+		run := w.RunID
+		return in.Source.ThreadID, in.Source.Seq, &run, nil
 	}
 	var first sql.NullInt64
 	if err := q.QueryRowContext(ctx, "SELECT MIN(seq) FROM thread_messages WHERE thread_id = ? AND run_id = ?",

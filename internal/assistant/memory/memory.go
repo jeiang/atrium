@@ -111,6 +111,9 @@ func Rebuild(ctx context.Context, q db.Querier, threadID int64, now float64) err
 		seen[k] = true
 		spec, ok := desired[k]
 		if !ok {
+			if _, err := q.ExecContext(ctx, "DELETE FROM memory_jobs WHERE node_id = ?", n.ID); err != nil {
+				return err
+			}
 			if _, err := q.ExecContext(ctx, "DELETE FROM memory_nodes WHERE id = ?", n.ID); err != nil {
 				return err
 			}
