@@ -210,6 +210,9 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `export_notion_kinds` | string | `pii,messages,personal` | ui | `ATRIUM_EXPORT_EXPORT_NOTION_KINDS` |
 | `export_notion_parent` | string | none | ui | `ATRIUM_EXPORT_EXPORT_NOTION_PARENT` |
 | `export_notion_private_to` | string | none | ui | `ATRIUM_EXPORT_EXPORT_NOTION_PRIVATE_TO` |
+| `export_obsidian_dir` | string | none | ui | `ATRIUM_EXPORT_EXPORT_OBSIDIAN_DIR` |
+| `export_obsidian_kinds` | string | `pii,messages,personal` | ui | `ATRIUM_EXPORT_EXPORT_OBSIDIAN_KINDS` |
+| `export_obsidian_private_to` | string | none | ui | `ATRIUM_EXPORT_EXPORT_OBSIDIAN_PRIVATE_TO` |
 
 ## grafana
 

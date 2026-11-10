@@ -51,6 +51,7 @@
       web.allowedHost = "atrium.example.org";
       backup.enable = true;
       media.enable = true;
+      knowledgeExport.obsidianDirectory = "/var/lib/atrium-vault";
     };
     defaults = host {web.allowedHost = "atrium.example.org";};
     failing = system: builtins.filter (lib.hasInfix "services.atrium") (map (a: a.message) (builtins.filter (a: !a.assertion) system.config.assertions));
@@ -73,6 +74,13 @@
     in
       assert builtins.all notifying notifyUnits;
       assert !(builtins.any notifying ["atrium-sync.service" "atrium-scan.service" "atrium-notion-sync.service" "atrium-backup.service"]); true;
+    vaultExport = let
+      scheduler = unitText "atrium-agent-scheduler.service";
+    in
+      assert cfg.renderedSettings.export.export_obsidian_dir == "/var/lib/atrium-vault";
+      assert lib.hasInfix "ReadWritePaths=/var/lib/atrium-vault" scheduler;
+      assert lib.hasInfix "ReadWritePaths=/var/lib/media" scheduler;
+      assert !(defaults.config.services.atrium.renderedSettings ? export); true;
     unit = name: pkgs.writeText name (builtins.unsafeDiscardStringContext nixos.config.systemd.units.${name}.text);
     inherit (cfg) unitNames;
     configFile = (pkgs.formats.toml {}).generate "atrium.toml" cfg.renderedSettings;
@@ -86,7 +94,7 @@
           touch $out
         '';
 
-        module = assert exampleEvaluates && unknownKeyRefused && credentialsMatch && backupAbsentByDefault && notifyOnLongRunning;
+        module = assert exampleEvaluates && unknownKeyRefused && credentialsMatch && backupAbsentByDefault && notifyOnLongRunning && vaultExport;
           pkgs.linkFarm "atrium-units" (map (name: {
               inherit name;
               path = unit name;

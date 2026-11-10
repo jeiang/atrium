@@ -93,6 +93,17 @@ func linkText(text string) string {
 	return strings.NewReplacer(`\`, `\\`, `[`, `\[`, `]`, `\]`).Replace(text)
 }
 
+func SourceURL(r kb.Record, src Source) string {
+	if r.SourceThreadID == nil || src.PublicURL == "" {
+		return ""
+	}
+	url := src.PublicURL + "/chat/" + strconv.FormatInt(*r.SourceThreadID, 10)
+	if r.SourceSeq != nil {
+		url += "#m" + strconv.FormatInt(*r.SourceSeq, 10)
+	}
+	return url
+}
+
 func footnote(r kb.Record, src Source) string {
 	parts := make([]string, 0, 5)
 	switch {
@@ -102,12 +113,8 @@ func footnote(r kb.Record, src Source) string {
 			label = src.ThreadTitle
 		}
 		source := label
-		if src.PublicURL != "" {
-			source = "[" + linkText(label) + "](" + src.PublicURL + "/chat/" + strconv.FormatInt(*r.SourceThreadID, 10)
-			if r.SourceSeq != nil {
-				source += "#m" + strconv.FormatInt(*r.SourceSeq, 10)
-			}
-			source += ")"
+		if url := SourceURL(r, src); url != "" {
+			source = "[" + linkText(label) + "](" + url + ")"
 		}
 		parts = append(parts, "Source: "+source)
 	case r.Origin != nil:

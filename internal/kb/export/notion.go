@@ -20,6 +20,8 @@ const (
 type pageEntry struct {
 	recordID int64
 	page     render.Page
+	path     string
+	front    string
 }
 
 type storedPage struct {
@@ -157,7 +159,7 @@ func syncNotion(ctx context.Context, d *db.DB, now float64, client *notion.Clien
 		if err := deletePage(ledger, d.Write, TargetNotion, recordID); err != nil {
 			return out, err
 		}
-		out.Trashed++
+		out.Removed++
 	}
 	return out, nil
 }

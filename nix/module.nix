@@ -55,6 +55,7 @@
     lib.mapAttrsToList (key: path: "${key}:${path}") cfg.secretFiles
     ++ lib.mapAttrsToList (id: account: "${accountCredential id}:${account.passwordFile}") cfg.mailAccounts;
   mediaRoot = cfg.settings.media.media_root or null;
+  obsidianDir = cfg.knowledgeExport.obsidianDirectory;
 
   appEnvironment = {
     ATRIUM_DB = "${cfg.stateDir}/atrium.db";
@@ -107,6 +108,10 @@
     SupplementaryGroups = [cfg.media.group];
     UMask = "0002";
     ReadWritePaths = [mediaRoot];
+  };
+
+  exportWriter = lib.optionalAttrs (obsidianDir != null) {
+    ReadWritePaths = lib.optional cfg.media.enable mediaRoot ++ [obsidianDir];
   };
 
   mediaPath = lib.optional cfg.media.enable pkgs.ffmpeg-headless;
@@ -187,6 +192,7 @@
         path = mediaPath;
         serviceConfig =
           mediaWriter
+          // exportWriter
           // {
             ExecStart = "${lib.getExe cfg.package} agent scheduler";
             Type = "notify";
@@ -448,6 +454,14 @@ in {
       };
     };
 
+    knowledgeExport = {
+      obsidianDirectory = mkOption {
+        type = types.nullOr types.str;
+        default = null;
+        description = "Folder that receives the generated Obsidian vault; the scheduler unit writes it and the operator syncs it. Pins export.export_obsidian_dir.";
+      };
+    };
+
     media = {
       enable = mkEnableOption "the Media section: filing, EZTV channels and the library; needs settings.media.media_root";
 
@@ -545,6 +559,9 @@ in {
       (lib.optionalAttrs (cfg.observability.tracesEndpoint != null) {
         core.otel_traces_endpoint = cfg.observability.tracesEndpoint;
       })
+      (lib.optionalAttrs (obsidianDir != null) {
+        export.export_obsidian_dir = obsidianDir;
+      })
     ];
 
     assertions = [
@@ -559,6 +576,10 @@ in {
       {
         assertion = !cfg.media.enable || mediaRoot != null;
         message = "services.atrium.media.enable needs services.atrium.settings.media.media_root";
+      }
+      {
+        assertion = obsidianDir == null || lib.hasPrefix "/" obsidianDir;
+        message = "services.atrium.knowledgeExport.obsidianDirectory must be an absolute path";
       }
       {
         assertion = cfg.web.auth == "local" || cfg.web.allowedHost != null;
