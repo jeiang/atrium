@@ -5,26 +5,28 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/attention"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 )
 
-type source struct{}
+type source struct {
+	env config.Env
+}
 
-func AttentionSource() attention.Source { return source{} }
+func AttentionSource(env config.Env) attention.Source { return source{env: env} }
 
 func (source) Name() string { return "ops" }
 
-func (source) Items(ctx context.Context, q db.Querier, now float64) ([]attention.Item, error) {
+func (s source) Items(ctx context.Context, q db.Querier, now float64) ([]attention.Item, error) {
 	items, err := findingItems(ctx, q, now)
 	if err != nil {
 		return nil, err
 	}
-	budget, err := budgetItem(ctx, q, now)
+	budget, err := budgetItem(ctx, q, now, s.env)
 	if err != nil {
 		return nil, err
 	}
@@ -71,7 +73,7 @@ func findingItems(ctx context.Context, q db.Querier, now float64) ([]attention.I
 	return out, rows.Err()
 }
 
-func budgetItem(ctx context.Context, q db.Querier, now float64) (*attention.Item, error) {
+func budgetItem(ctx context.Context, q db.Querier, now float64, env config.Env) (*attention.Item, error) {
 	set := assistant.Read(ctx, q)
 	if err := set.Err(); err != nil {
 		return nil, err
@@ -81,7 +83,10 @@ func budgetItem(ctx context.Context, q db.Querier, now float64) (*attention.Item
 	if err != nil || threadID == 0 {
 		return nil, err
 	}
-	loc := time.UTC
+	loc, err := config.From(ctx).Location(env)
+	if err != nil {
+		return nil, err
+	}
 	spend, err := usage.ThreadMonthToDate(ctx, q, threadID, now, loc)
 	if err != nil {
 		return nil, err

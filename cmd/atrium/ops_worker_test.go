@@ -20,11 +20,19 @@ import (
 	opstools "github.com/jeiang/atrium/internal/assistant/tools/ops"
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
 )
+
+func fixtureEnv(f *fixture) config.Env {
+	return func(name string) (string, bool) {
+		value, ok := f.env[name]
+		return value, ok
+	}
+}
 
 func samplesAtLeast(t *testing.T, d *db.DB, n int) func() bool {
 	t.Helper()
@@ -143,7 +151,8 @@ func TestHostDownStartsOneWorkerRunAndFilesAFinding(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM runs WHERE thread_id = ? AND kind = 'worker'", threadID).Scan(&runs); err != nil || runs != 1 {
 		t.Errorf("worker runs = %d, %v, want one", runs, err)
 	}
-	result, err := attention.Query(settings.With(context.Background(), f.settings), d.Read, float64(time.Now().Unix()), serverops.AttentionSource())
+	ctx := config.With(settings.With(context.Background(), f.settings), f.state)
+	result, err := attention.Query(ctx, d.Read, float64(time.Now().Unix()), serverops.AttentionSource(fixtureEnv(f)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +259,8 @@ func TestOpsWorkerStopsAtItsMonthlyBudget(t *testing.T) {
 	if len(api.Requests()) != before {
 		t.Errorf("a spent budget still made %d model calls", len(api.Requests())-before)
 	}
-	result, err := attention.Query(settings.With(context.Background(), f.settings), d.Read, float64(time.Now().Unix()), serverops.AttentionSource())
+	ctx := config.With(settings.With(context.Background(), f.settings), f.state)
+	result, err := attention.Query(ctx, d.Read, float64(time.Now().Unix()), serverops.AttentionSource(fixtureEnv(f)))
 	if err != nil {
 		t.Fatal(err)
 	}
