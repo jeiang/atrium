@@ -11,6 +11,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notion"
+	"github.com/jeiang/atrium/internal/notionid"
+	"github.com/jeiang/atrium/internal/notionmd"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -61,6 +63,7 @@ type ImportStats struct {
 
 type importItem struct {
 	Origin    string
+	NotionID  string
 	Title     string
 	Aliases   []string
 	Body      string
@@ -200,16 +203,12 @@ func notionItems(ctx context.Context, q db.Querier) ([]importItem, bool, error) 
 		if strings.TrimSpace(title) == "" {
 			title = "Untitled"
 		}
-		marks := tool.Untrusted
-		if hasPII(body) {
-			marks |= tool.PII
-		}
 		if p.private != 0 {
 			privatePages++
 		}
 		out = append(out, importItem{
-			Origin: "notion:" + p.id, Title: title, Aliases: aliases, Body: body,
-			Scope: ScopePersonal, Private: p.private != 0, Marks: marks,
+			Origin: "notion:" + p.id, NotionID: notionid.Normalize(p.id), Title: title, Aliases: aliases, Body: body,
+			Scope: ScopePersonal, Private: p.private != 0, Marks: tool.Untrusted,
 		})
 	}
 	uniform := len(out) > 0 && privatePages == len(out)
@@ -261,7 +260,7 @@ func existingByOrigin(ctx context.Context, q db.Querier) (map[string]existingRec
 }
 
 func writtenTargets(ctx context.Context, q db.Querier) (map[int64]bool, error) {
-	rows, err := q.QueryContext(ctx, "SELECT DISTINCT target FROM agent_writes WHERE target LIKE 'kb:%'")
+	rows, err := q.QueryContext(ctx, "SELECT DISTINCT target FROM agent_writes WHERE target LIKE 'kb:%' AND tool != 'kb_confirm'")
 	if err != nil {
 		return nil, err
 	}
@@ -283,7 +282,16 @@ func writtenTargets(ctx context.Context, q db.Querier) (map[int64]bool, error) {
 	return out, nil
 }
 
+func effectiveItem(rec existingRecord, item importItem) importItem {
+	if rec.confirmedAt != nil {
+		item.Confirmed = true
+		item.Marks &^= tool.Untrusted
+	}
+	return item
+}
+
 func sameItem(rec existingRecord, item importItem) bool {
+	item = effectiveItem(rec, item)
 	aliases, _ := aliasesJSON(item.Aliases)
 	confirmed := rec.confirmedAt != nil
 	retracted := rec.retractedAt != nil
@@ -292,33 +300,45 @@ func sameItem(rec existingRecord, item importItem) bool {
 		(rec.pinned != 0) == item.Pinned && confirmed == item.Confirmed && retracted == item.Retracted
 }
 
-func importOne(ctx context.Context, tx *sql.Tx, item importItem, rec *existingRecord, now float64) (string, error) {
+func importOne(ctx context.Context, tx *sql.Tx, item importItem, rec *existingRecord, now float64) (string, int64, error) {
+	if rec != nil {
+		item = effectiveItem(*rec, item)
+	}
 	aliases, err := aliasesJSON(item.Aliases)
 	if err != nil {
-		return "", err
+		return "", 0, err
 	}
 	var confirmed, retracted any
-	if item.Confirmed {
+	switch {
+	case rec != nil && rec.confirmedAt != nil:
+		confirmed = *rec.confirmedAt
+	case item.Confirmed:
 		confirmed = now
 	}
 	if item.Retracted {
 		retracted = now
 	}
 	if rec == nil {
-		_, err := tx.ExecContext(ctx,
+		res, err := tx.ExecContext(ctx,
 			"INSERT INTO kb_records (title, aliases, body, scope, private, marks, writer, origin, pinned, confirmed_at, retracted_at, embedded, created_at, updated_at) "+
 				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
 			item.Title, aliases, item.Body, item.Scope, b2i(item.Private), int64(item.Marks), WriterImport, item.Origin,
 			b2i(item.Pinned), confirmed, retracted, now, now)
-		return "created", err
+		if err != nil {
+			return "", 0, err
+		}
+		id, err := res.LastInsertId()
+		return "created", id, err
 	}
 	_, err = tx.ExecContext(ctx,
 		"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, private = ?, marks = ?, pinned = ?, confirmed_at = ?, "+
 			"retracted_at = ?, embedded = 0, updated_at = ? WHERE id = ?",
 		item.Title, aliases, item.Body, item.Scope, b2i(item.Private), int64(item.Marks), b2i(item.Pinned), confirmed,
 		retracted, now, rec.id)
-	return "updated", err
+	return "updated", rec.id, err
 }
+
+func notionRefToken(id string) string { return "\x1fkb:" + id + "\x1f" }
 
 func Import(ctx context.Context, d *db.DB, dryRun bool, now float64) (ImportStats, error) {
 	stats := ImportStats{DryRun: dryRun, Notes: []string{}, ChangedInAtrium: []string{}, Missing: []string{}, FailedItems: []string{}}
@@ -360,7 +380,44 @@ func Import(ctx context.Context, d *db.DB, dryRun bool, now float64) (ImportStat
 	if err != nil {
 		return stats, err
 	}
+	rawBodies := make([]string, len(notionPages))
+	refs := make(map[string]string, len(notionPages))
+	for i, item := range notionPages {
+		rawBodies[i] = item.Body
+		if rec, ok := existing[item.Origin]; ok {
+			refs[item.NotionID] = "[" + Cite(rec.id) + "]"
+		} else {
+			refs[item.NotionID] = notionRefToken(item.NotionID)
+		}
+	}
+	convertNotion := func() {
+		for i := range notionPages {
+			notionPages[i].Body = notionmd.Import(rawBodies[i], refs)
+		}
+	}
+	convertNotion()
+	failed := map[string]bool{}
+	for _, item := range notionPages {
+		if len(item.Body) > MaxImportBodyChars {
+			failed[item.NotionID] = true
+		}
+	}
+	if len(failed) > 0 {
+		for id := range failed {
+			delete(refs, id)
+		}
+		convertNotion()
+	}
+	for i := range notionPages {
+		notionPages[i].Marks = tool.Untrusted
+		if hasPII(notionPages[i].Body) {
+			notionPages[i].Marks |= tool.PII
+		}
+	}
 	seen := map[string]bool{}
+	recordIDs := map[string]int64{}
+	pending := map[string]bool{}
+	confirmedUpdated := 0
 	err = d.WithTx(ctx, func(tx *sql.Tx) error {
 		for _, source := range sources {
 			for _, item := range source.items {
@@ -372,6 +429,9 @@ func Import(ctx context.Context, d *db.DB, dryRun bool, now float64) (ImportStat
 				}
 				rec, found := existing[item.Origin]
 				if found {
+					if item.NotionID != "" {
+						recordIDs[item.NotionID] = rec.id
+					}
 					if written[rec.id] {
 						source.counts.Kept++
 						stats.ChangedInAtrium = append(stats.ChangedInAtrium, item.Origin)
@@ -382,15 +442,28 @@ func Import(ctx context.Context, d *db.DB, dryRun bool, now float64) (ImportStat
 						continue
 					}
 					if !dryRun {
-						if _, err := importOne(ctx, tx, item, &rec, now); err != nil {
+						_, id, err := importOne(ctx, tx, item, &rec, now)
+						if err != nil {
 							return err
 						}
+						if item.NotionID != "" {
+							recordIDs[item.NotionID] = id
+							pending[item.Origin] = true
+						}
+					}
+					if item.NotionID != "" && rec.confirmedAt != nil {
+						confirmedUpdated++
 					}
 					source.counts.Updated++
 				} else {
 					if !dryRun {
-						if _, err := importOne(ctx, tx, item, nil, now); err != nil {
+						_, id, err := importOne(ctx, tx, item, nil, now)
+						if err != nil {
 							return err
+						}
+						if item.NotionID != "" {
+							recordIDs[item.NotionID] = id
+							pending[item.Origin] = true
 						}
 					}
 					source.counts.Created++
@@ -403,10 +476,40 @@ func Import(ctx context.Context, d *db.DB, dryRun bool, now float64) (ImportStat
 				}
 			}
 		}
+		if dryRun {
+			return nil
+		}
+		for _, item := range notionPages {
+			if !pending[item.Origin] {
+				continue
+			}
+			id, ok := recordIDs[item.NotionID]
+			if !ok {
+				continue
+			}
+			body := item.Body
+			for pageID, recordID := range recordIDs {
+				body = strings.ReplaceAll(body, notionRefToken(pageID), "["+Cite(recordID)+"]")
+			}
+			if body == item.Body {
+				continue
+			}
+			if _, err := tx.ExecContext(ctx,
+				"UPDATE kb_records SET body = ?, embedded = 0, updated_at = ? WHERE id = ?", body, now, id); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 	if err != nil {
 		return stats, err
+	}
+	if confirmedUpdated > 0 {
+		verb := "updated"
+		if dryRun {
+			verb = "would be updated"
+		}
+		stats.Notes = append(stats.Notes, fmt.Sprintf("notion: %d confirmed records %s and kept confirmed; an operator confirm is not a content edit", confirmedUpdated, verb))
 	}
 	for origin := range existing {
 		if !seen[origin] {

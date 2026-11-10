@@ -144,7 +144,8 @@ func tableRows(s string, loc []int) ([][]string, int) {
 
 func cellText(raw string) string {
 	flat := sub(breakRe, raw, true, func([]int) string { return " " })
-	return sub(pipeRe, flat, true, func([]int) string { return `\\|` })
+	flat = strings.ReplaceAll(flat, "\n", " ")
+	return sub(pipeRe, flat, true, func([]int) string { return `\|` })
 }
 
 func tableMarkdown(s string, loc []int) string {
