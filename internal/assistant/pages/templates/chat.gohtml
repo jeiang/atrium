@@ -45,7 +45,8 @@
     {{else}}
     <header class="brief" data-brief>
       <p class="eyebrow">{{$d.Date}}</p>
-      <h2>{{if eq .PendingCount 1}}One thing needs you.{{else if .PendingCount}}{{.PendingCount}} things need you.{{else}}Nothing needs you.{{end}}</h2>
+      <h2>{{if eq .PendingCount 1}}One thing needs you{{else if .PendingCount}}{{.PendingCount}} things need you{{else}}Nothing needs you{{end}}<span id="brief-next"></span>.</h2>
+      {{with $d.Digest}}<ul class="brief-lines" data-digest>{{range .}}<li>{{if .URL}}<a href="{{.URL}}">{{.Text}}</a>{{else}}{{.Text}}{{end}}</li>{{end}}</ul>{{end}}
     </header>
     {{end}}
     <div hx-get="/review/strip" hx-trigger="load" hx-swap="outerHTML" data-needs-strip></div>

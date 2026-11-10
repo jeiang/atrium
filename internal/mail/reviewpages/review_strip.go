@@ -2,6 +2,7 @@ package reviewpages
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -62,4 +63,38 @@ func (s *service) recentActivity(w http.ResponseWriter, r *http.Request) {
 
 func receiptView(r *http.Request) bool {
 	return web.FormString(web.FormValues(r), "view", "") == "receipt"
+}
+
+var receiptVerbs = map[string]string{
+	"task_add": "Added a task", "task_update": "Changed a task", "task_done": "Completed a task",
+	"kb_write": "Wrote a knowledge record", "kb_retract": "Retracted a knowledge record", "kb_confirm": "Confirmed a knowledge record",
+	"kb_purge": "Purged a knowledge record", "kb_export": "Exported knowledge",
+	"mail_move": "Moved mail", "mail_folder_create": "Created a mail folder",
+	"draft_email_create": "Drafted an email", "draft_email_update": "Changed a draft",
+	"calendar_delete":  "Deleted a calendar event",
+	"media_add_magnet": "Added a download", "media_channel_add": "Started watching a show", "media_channel_remove": "Stopped watching a show",
+	"schedule_create": "Created a schedule", "schedule_update": "Changed a schedule", "schedule_cancel": "Cancelled a schedule",
+	"track_package": "Started tracking a package", "ops_finding": "Filed a server finding",
+}
+
+var mailVerbs = map[string]string{"file": "Filed", "flag": "Flagged", "delete": "Deleted", "move": "Moved"}
+
+func (e ActivityEntry) Summary() string {
+	switch {
+	case e.Write != nil:
+		if verb, ok := receiptVerbs[e.Write.Tool]; ok {
+			return verb
+		}
+		return strings.ReplaceAll(e.Write.Tool, "_", " ")
+	case e.Mail != nil:
+		subject := "(no subject)"
+		if e.Mail.Subject != nil && *e.Mail.Subject != "" {
+			subject = *e.Mail.Subject
+		}
+		if verb, ok := mailVerbs[e.Mail.Kind]; ok {
+			return verb + " " + subject
+		}
+		return e.Mail.Kind + " " + subject
+	}
+	return ""
 }

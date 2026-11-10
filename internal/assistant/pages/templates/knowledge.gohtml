@@ -32,7 +32,7 @@
     {{end}}
   </nav>
   <div id="kb-rows">
-    {{template "knowledge_rows" (dict "rows" $d.Rows "bulk" $d.Bulk "q" $d.Q "scope" $d.Scope "state" $d.State "csrf" .CSRF)}}
+    {{template "knowledge_rows" (dict "rows" $d.Rows "unconfirmed" $d.Unconfirmed "bulk" $d.Bulk "q" $d.Q "scope" $d.Scope "state" $d.State "csrf" .CSRF)}}
   </div>
 </section>
 {{- end}}

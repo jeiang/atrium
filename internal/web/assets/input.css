@@ -602,6 +602,13 @@
       @apply font-serif text-[26px]/8 font-semibold tracking-[-0.01em] text-balance text-ink lg:text-[32px]/[38px];
     }
   }
+  .brief-lines {
+    @apply flex max-w-[60ch] flex-col gap-1 font-serif text-base/[1.62] text-ink-2;
+
+    & a {
+      @apply underline-offset-4 hover:underline;
+    }
+  }
   .count {
     @apply inline-grid h-5 min-w-5 place-items-center rounded-full bg-clay-soft px-1.5 text-xs/none font-medium text-ink tabular-nums;
   }

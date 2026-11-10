@@ -35,7 +35,9 @@ behavior-parity target.
   thread exists, then a headline built in code from the Review count, up
   to three Needs you cards that act in place, a docked ask bar that starts
   a new thread, and a panel with the day's calendar events and the most
-  recent undoable writes. The thread list is at `/chat?view=all`. The ask
+  recent undoable writes as plain sentences. The headline adds the next
+  timed event and the brief lists the day's digest lines when one was
+  posted. The thread list is at `/chat?view=all`. The ask
   bar keeps the run options behind one chip. Today is also one chat thread
   per calendar day in the configured time zone, found by role and title,
   reached at `/today`; the digest posts there and home does not show it. A
@@ -43,7 +45,8 @@ behavior-parity target.
   is no tutorial text; guidance is `title` tooltips on controls.
   Media is the app at `/apps/media`. The Library section holds Knowledge
   (`/library/knowledge`): the operator's records with search, scope and
-  state filters, a record page with confirm, edit, retract, restore and
+  state filters, checkboxes on unconfirmed rows with Confirm selected, a
+  record page with confirm, edit, retract, restore and
   administrator-only purge, and a profile view that renders the system
   prompt's profile block and each pinned record's place in it. Projects
   have no pages of their own beyond create and edit, and a
@@ -580,10 +583,10 @@ behavior-parity target.
 
 ### Life-management redesign
 
-- **The day is home.** Five navigation entries: today and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings. The home brief does not yet include the morning digest text or the next event in its headline.
+- **The day is home.** Five navigation entries: today and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings. The home brief lists the morning digest lines and names the next event.
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
-- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Permissions, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its registration (`Settings` on the registration, a label on the setting) and that render and save through one shared path; an external module declares them through the `sdk` package and gets a page at `/settings/{module}`. A module page opens with the module's state and an on/off button (effective after a restart) and shows that module's connection records. Calendar, Media, Notion and Grafana each have a page with their connections and sections, and the list marks a module that is off or needs settings. Not yet done: a refused connection test from the Assistant or Mail page answers on the Connections page, and Permissions is still a separate page. Advanced settings stay with Nix, the CLI, or the agent.
+- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Permissions, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its registration (`Settings` on the registration, a label on the setting) and that render and save through one shared path; an external module declares them through the `sdk` package and gets a page at `/settings/{module}`. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Media, Notion and Grafana each have a page with their connections and sections, and the list marks a module that is off or needs settings. Not yet done: a refused connection test from the Assistant or Mail page answers on the Connections page, and Permissions is still a separate page. Advanced settings stay with Nix, the CLI, or the agent.
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.
