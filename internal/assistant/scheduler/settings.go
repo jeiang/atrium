@@ -24,6 +24,7 @@ const (
 	KeyTaskReminders   = "agent_schedule_task_reminders"
 	KeyMemoryWork      = "agent_schedule_memory_work"
 	KeyPackageTracking = "agent_schedule_package_tracking"
+	KeyKnowledgeExport = "agent_schedule_knowledge_export"
 )
 
 func init() {

@@ -56,6 +56,7 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_REF_TOKENS` | `assistant.agent_ref_tokens` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_CALENDAR_CANDIDATES` | `assistant.agent_schedule_calendar_candidates` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_DAILY_NUDGES` | `assistant.agent_schedule_daily_nudges` |
+| `ATRIUM_ASSISTANT_AGENT_SCHEDULE_KNOWLEDGE_EXPORT` | `assistant.agent_schedule_knowledge_export` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MAX_ACTIVE_JOBS` | `assistant.agent_schedule_max_active_jobs` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_CHANNELS` | `assistant.agent_schedule_media_channels` |
 | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_SWEEP` | `assistant.agent_schedule_media_sweep` |
@@ -166,6 +167,10 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_CORE_PUBLIC_URL` | `core.public_url` |
 | `ATRIUM_CORE_TZ` | `core.tz` |
 | `ATRIUM_DB_KEY` | `db.key` |
+| `ATRIUM_EXPORT_EXPORT_NOTION_ENABLED` | `export.export_notion_enabled` |
+| `ATRIUM_EXPORT_EXPORT_NOTION_KINDS` | `export.export_notion_kinds` |
+| `ATRIUM_EXPORT_EXPORT_NOTION_PARENT` | `export.export_notion_parent` |
+| `ATRIUM_EXPORT_EXPORT_NOTION_PRIVATE_TO` | `export.export_notion_private_to` |
 | `ATRIUM_GRAFANA_GRAFANA_CA_FILE` | `grafana.grafana_ca_file` |
 | `ATRIUM_GRAFANA_GRAFANA_LOGS_QUERY` | `grafana.grafana_logs_query` |
 | `ATRIUM_GRAFANA_GRAFANA_LOGS_TYPE` | `grafana.grafana_logs_type` |

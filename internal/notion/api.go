@@ -304,6 +304,12 @@ func (c *Client) CreatePage(ctx context.Context, body any) (RemotePage, error) {
 	return page, err
 }
 
+func (c *Client) SetTitle(ctx context.Context, pageID, title string) error {
+	return c.do(ctx, http.MethodPatch, "/v1/pages/"+pageID, map[string]any{
+		"properties": map[string]any{"title": map[string]any{"title": richText(title)}},
+	}, nil)
+}
+
 func (c *Client) SetTrash(ctx context.Context, pageID string, inTrash bool) error {
 	return c.do(ctx, http.MethodPatch, "/v1/pages/"+pageID, map[string]any{"in_trash": inTrash}, nil)
 }

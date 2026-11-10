@@ -13,7 +13,7 @@ sections below cover the console work atrium cannot do for you.
 | Grafana | `grafana` | Service account token | Read-only dashboard and datasource queries | Viewer role is enough; optional token expiry |
 | Mail chat endpoint | `mail_chat` | Optional Bearer key | Chat and routing calls to an OpenAI-compatible endpoint | A hosted endpoint sends mail content off this host |
 | Mail embed endpoint | `mail_embed` | Optional Bearer key | Embeddings for mail search and routing | Same as the chat endpoint |
-| Notion | `notion` | Internal integration token or personal access token | Wiki read, update and insert | Share the pages with the integration; a personal token acts as the user and lasts at most a year |
+| Notion | `notion` | Internal integration token or personal access token | Wiki read, update and insert; knowledge export | Share the pages with the integration; a personal token acts as the user and lasts at most a year |
 | qBittorrent | `qbittorrent` | API key | Media torrent and library operations | API keys need qBittorrent 5.2 or newer |
 | TMDB | `tmdb` | API read access token | Media metadata | Read-only; media pages show the attribution |
 | Open-Meteo | `open_meteo` | None | Weather forecasts and place lookup | Public API; no key. The configured coordinates are sent to Open-Meteo |
@@ -103,6 +103,15 @@ Create the internal integration at
 wiki pages with it, then paste its token. The Notion record on the
 Integrations page edits `wiki_root`, `sensitivity_property`,
 `notion_private_value` and `wiki_log_title`.
+
+The knowledge base is projected into Notion by the `knowledge-export` job; the
+wiki pages above are not touched. Set the destination page under **Knowledge
+export** on the Integrations page (`export_notion_parent`), choose the kinds
+(`export_notion_kinds`) and, to include private records, type the same page id
+into `export_notion_private_to`. The export overwrites its own pages on every
+run and trashes the page of a record that is retracted or leaves the export
+set; edits made in Notion are lost. A write with an unknown outcome blocks the
+export until it is resolved.
 
 ## Grafana
 

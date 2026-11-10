@@ -1,12 +1,17 @@
 {{define "settings_fields"}}{{$csrf := .CSRF}}
 <form method="post" action="{{.Action}}" class="grid gap-3 sm:grid-cols-2">
   <input type="hidden" name="csrf_token" value="{{$csrf}}">
-  {{range .Fields}}
+  {{range $f := .Fields}}
   <div role="group" class="field">
-    <label for="{{.Key}}">{{.Label}}</label>
-    {{if .Pinned}}<code id="{{.Key}}" class="break-all font-mono text-xs" data-pinned>{{.Value}}</code>
-    {{else if .Choices}}{{$v := .Value}}<select id="{{.Key}}" name="{{.Key}}">{{range .Choices}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{.}}</option>{{end}}</select>
-    {{else}}<input id="{{.Key}}" name="{{.Key}}" {{if .Number}}type="number" {{if .Whole}}step="1"{{else}}step="any"{{end}}{{else}}type="text"{{end}} value="{{.Value}}" autocomplete="off" spellcheck="false">{{end}}
+    {{if $f.Bool}}<input type="hidden" name="{{$f.Key}}" value="false">
+    <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="{{$f.Key}}" value="true"{{if eq $f.Value "true"}} checked{{end}}> {{$f.Label}}</label>
+    {{else if $f.Options}}<span>{{$f.Label}}</span>
+    <div class="flex flex-wrap gap-3">{{range $f.Options}}<label class="flex items-center gap-2 text-sm"><input type="checkbox" name="{{$f.Key}}" value="{{.Value}}"{{if .Checked}} checked{{end}}> {{.Label}}</label>{{end}}</div>
+    {{else}}<label for="{{$f.Key}}">{{$f.Label}}</label>
+    {{if $f.Pinned}}<code id="{{$f.Key}}" class="break-all font-mono text-xs" data-pinned>{{$f.Value}}</code>
+    {{else if $f.Choices}}{{$v := $f.Value}}<select id="{{$f.Key}}" name="{{$f.Key}}">{{range $f.Choices}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{.}}</option>{{end}}</select>
+    {{else}}<input id="{{$f.Key}}" name="{{$f.Key}}" {{if $f.Number}}type="number" {{if $f.Whole}}step="1"{{else}}step="any"{{end}}{{else}}type="text"{{end}} value="{{$f.Value}}" autocomplete="off" spellcheck="false">{{end}}
+    {{end}}
   </div>
   {{end}}
   <div class="sm:col-span-2"><button type="submit" class="btn" data-size="sm">{{icon "check"}}Save</button></div>

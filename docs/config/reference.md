@@ -67,6 +67,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_ref_tokens` | int | `8000` | advanced | `ATRIUM_ASSISTANT_AGENT_REF_TOKENS` |
 | `agent_schedule_calendar_candidates` | string | `0 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_CALENDAR_CANDIDATES` |
 | `agent_schedule_daily_nudges` | string | `daily 08:00` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_DAILY_NUDGES` |
+| `agent_schedule_knowledge_export` | string | `daily 03:30` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_KNOWLEDGE_EXPORT` |
 | `agent_schedule_max_active_jobs` | int | `20` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MAX_ACTIVE_JOBS` |
 | `agent_schedule_media_channels` | string | `*/30 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_CHANNELS` |
 | `agent_schedule_media_sweep` | string | `*/10 * * * *` | advanced | `ATRIUM_ASSISTANT_AGENT_SCHEDULE_MEDIA_SWEEP` |
@@ -200,6 +201,15 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
 | `key` | string | none | secret | `ATRIUM_DB_KEY` |
+
+## export
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `export_notion_enabled` | bool | `false` | ui | `ATRIUM_EXPORT_EXPORT_NOTION_ENABLED` |
+| `export_notion_kinds` | string | `pii,messages,personal` | ui | `ATRIUM_EXPORT_EXPORT_NOTION_KINDS` |
+| `export_notion_parent` | string | none | ui | `ATRIUM_EXPORT_EXPORT_NOTION_PARENT` |
+| `export_notion_private_to` | string | none | ui | `ATRIUM_EXPORT_EXPORT_NOTION_PRIVATE_TO` |
 
 ## grafana
 

@@ -26,6 +26,7 @@ const (
 	TaskRemindersName      = "task-reminders"
 	MemoryWorkName         = "memory-work"
 	PackageTrackingName    = "package-tracking"
+	KnowledgeExportName    = "knowledge-export"
 )
 
 type RunKind uint8
@@ -70,6 +71,7 @@ var Builtins = []Builtin{
 	{TaskRemindersName, KeyTaskReminders, "*/5 * * * *", "Every 5 minutes: send due task reminders (no model run).", JobBuiltin, CallableRun},
 	{MemoryWorkName, KeyMemoryWork, "*/2 * * * *", "Every 2 minutes: summarize pending memory nodes (no model run when the queue is empty).", JobBuiltin, CallableRun},
 	{PackageTrackingName, KeyPackageTracking, "0 * * * *", "Hourly: refresh active Ship24 package trackers (no model run).", JobBuiltin, CallableRun},
+	{KnowledgeExportName, KeyKnowledgeExport, "daily 03:30", "Daily: project the knowledge base into the configured export targets (no model run).", JobBuiltin, CallableRun},
 }
 
 var builtinsByName = func() map[string]Builtin {
