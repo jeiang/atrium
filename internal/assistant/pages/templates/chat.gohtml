@@ -60,7 +60,8 @@
           class="composer" data-reset data-attach>
       <input type="hidden" name="csrf_token" value="{{.CSRF}}">
       <label for="new-text" class="sr-only">New thread</label>
-      <textarea id="new-text" name="text" rows="2" placeholder="Ask, or tell me what to do" data-submit-on-enter autofocus></textarea>
+      {{with $d.About}}<p class="flex min-w-0" data-about><input type="hidden" name="about" value="{{.Ref}}"><span class="chip max-w-full shrink">{{icon "link"}}<span class="truncate">{{.Label}}</span><a href="/chat" class="hover:text-ink" aria-label="Remove {{.Label}}">{{icon "x"}}</a></span></p>{{end}}
+      <textarea id="new-text" name="text" rows="2" placeholder="Ask, or tell me what to do" data-submit-on-enter data-focus-wide{{if $d.About}} autofocus{{end}}></textarea>
       {{template "ref_picker"}}
       {{template "attach_field"}}
       <div class="ask-row">

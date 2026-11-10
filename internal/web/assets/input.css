@@ -563,6 +563,18 @@
   .ask-row {
     @apply flex flex-wrap items-center gap-1 text-xs;
   }
+  @media (width < 48rem) {
+    .day .composer:not(:focus-within):has(textarea:placeholder-shown):not(:has([data-chips] li, [data-about])) {
+      @apply flex-row items-center rounded-full py-1.5 ps-4 pe-1.5;
+
+      & textarea {
+        @apply min-h-9 py-1.5;
+      }
+      & .ask-row > :not(.ask-send) {
+        @apply hidden;
+      }
+    }
+  }
   .ask-send {
     @apply grid size-8 shrink-0 cursor-pointer place-items-center rounded-full bg-clay text-clay-ink hover:bg-clay-hover disabled:opacity-50;
 
@@ -763,7 +775,7 @@
     @apply relative flex min-h-[calc(100dvh-3rem)] flex-1 flex-col md:grid md:grid-cols-[minmax(0,1fr)_auto_var(--panel-w)];
   }
   .workspace-panel {
-    @apply flex-col gap-3 border-s bg-background p-3 max-md:fixed max-md:inset-y-0 max-md:right-0 max-md:z-40 max-md:hidden max-md:w-[88vw] max-md:max-w-sm max-md:overflow-y-auto max-md:shadow-xl max-md:data-open:flex md:sticky md:top-12 md:flex md:h-[calc(100dvh-3rem)] md:overflow-y-auto;
+    @apply flex-col gap-3 border-s bg-background p-3 max-md:fixed max-md:inset-x-0 max-md:bottom-0 max-md:z-40 max-md:hidden max-md:max-h-[80dvh] max-md:min-h-[40dvh] max-md:overflow-y-auto max-md:rounded-t-2xl max-md:border-s-0 max-md:border-t max-md:pb-[max(0.75rem,env(safe-area-inset-bottom))] max-md:shadow-xl max-md:data-open:flex md:sticky md:top-12 md:flex md:h-[calc(100dvh-3rem)] md:overflow-y-auto;
   }
 
   .eyebrow {

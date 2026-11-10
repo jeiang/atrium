@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 )
 
@@ -56,5 +57,38 @@ func TestKnowledgeSelectedRecordsConfirmTogetherAndHomeShowsReceipts(t *testing.
 	code, body, _ = w.get("/chat", false)
 	if code != http.StatusOK || !strings.Contains(body, "data-brief") || !strings.Contains(body, `id="brief-next"`) || !strings.Contains(body, `hx-get="/activity/recent"`) {
 		t.Errorf("home = %d, brief or receipts placeholder missing", code)
+	}
+}
+
+func TestAskBarCarriesWhatTheOperatorAskedAbout(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	message := seedMail(t, dir)
+	base, _, stop := startServeStoppable(t, dir)
+	defer stop()
+	w := asstBrowse(t, base)
+	ref := fmt.Sprintf("mail:%d", message)
+	code, body, _ := w.get("/chat?about="+ref, false)
+	if code != http.StatusOK || !strings.Contains(body, "data-about") || !strings.Contains(body, "Your one-time code") || !strings.Contains(body, `name="about" value="`+ref+`"`) {
+		t.Fatalf("home with an about reference = %d, chip %v", code, strings.Contains(body, "data-about"))
+	}
+	if code, body, _ := w.get("/chat?about=mail:999999", false); code != http.StatusOK || strings.Contains(body, "data-about") {
+		t.Errorf("an unknown reference = %d, chip %v", code, strings.Contains(body, "data-about"))
+	}
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("a code")), anthropictest.Reply("end_turn", anthropictest.Text("a title")))
+	if code, body, _ := w.post("/chat", url.Values{"text": {"what is this"}, "about": {ref}}, false); code != http.StatusSeeOther {
+		t.Fatalf("POST /chat = %d: %s", code, body)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	var sent, leaked int
+	pointer := fmt.Sprintf("%%About mail message %d.%%what is this%%", message)
+	if err := d.Read.QueryRow("SELECT COUNT(*), COALESCE(SUM(content_json LIKE '%one-time code%'), 0) FROM thread_messages WHERE role = 'user' AND content_json LIKE ?", pointer).Scan(&sent, &leaked); err != nil {
+		t.Fatal(err)
+	}
+	if sent != 1 || leaked != 0 {
+		t.Errorf("%d messages carry the pointer, %d carry the mail subject; want 1 and 0", sent, leaked)
 	}
 }

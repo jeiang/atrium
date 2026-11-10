@@ -1116,3 +1116,7 @@ document.addEventListener("change", (event) => {
   pattern.value = quality === "any" ? group.dataset.base : `${group.dataset.base} ${quality}`;
   pattern.dispatchEvent(new Event("input", { bubbles: true }));
 });
+
+document.addEventListener("DOMContentLoaded", () => {
+  if (!window.matchMedia("(width < 48rem)").matches) document.querySelector("[data-focus-wide]")?.focus();
+});

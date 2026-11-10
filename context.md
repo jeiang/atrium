@@ -34,7 +34,9 @@ behavior-parity target.
   shows the day: a welcome screen with starter prompts until the first
   thread exists, then a headline built in code from the Review count, up
   to three Needs you cards that act in place, a docked ask bar that starts
-  a new thread, and a panel with the day's calendar events and the most
+  a new thread (one row on a phone until it is used; it can carry one
+  "about" chip for a mail message or knowledge record, sent as a line
+  that names the item by id), and a panel with the day's calendar events and the most
   recent undoable writes as plain sentences. The headline adds the next
   timed event and the brief lists the day's digest lines when one was
   posted. The thread list is at `/chat?view=all`. The ask
