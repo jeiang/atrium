@@ -134,7 +134,7 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	back := "/chat/" + strconv.FormatInt(threadID, 10)
-	if _, edit := web.Value(form, "edit"); edit {
+	if edit, _ := web.Value(form, "edit"); edit != "" {
 		_, err := p.svc.EditLast(ctx, threadID, text, attached)
 		if p.refused(w, r, err) {
 			return
