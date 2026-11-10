@@ -3,7 +3,6 @@ package export
 import (
 	"context"
 	"errors"
-	"fmt"
 	"strings"
 	"time"
 
@@ -68,7 +67,7 @@ func runNotion(ctx context.Context, d *db.DB, env config.Env, now float64) (Resu
 	}
 	parent = notionid.Normalize(parent)
 	if parent == "" {
-		return out, fmt.Errorf("export: %s is not set", NotionParentKey)
+		return out, nil
 	}
 	if err := blocked(ctx, d.Read); err != nil {
 		return out, err

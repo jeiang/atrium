@@ -48,14 +48,19 @@ type FieldView = settings.FieldView
 type Section struct {
 	Name, Title, Module string
 	Template            string
+	Integration         string
 	Fields              []Field
+	Validate            func(ctx context.Context, q db.Querier, values map[string]string) error
+	Data                func(ctx context.Context, q db.Querier) (any, error)
 }
 
 type SectionView struct {
-	Name     string      `json:"name"`
-	Title    string      `json:"title"`
-	Template string      `json:"template"`
-	Fields   []FieldView `json:"fields"`
+	Name        string      `json:"name"`
+	Title       string      `json:"title"`
+	Template    string      `json:"template"`
+	Integration string      `json:"integration,omitempty"`
+	Fields      []FieldView `json:"fields"`
+	Data        any         `json:"data,omitempty"`
 }
 
 type Integration struct {
@@ -121,7 +126,13 @@ func LoadSections(ctx context.Context, q db.Querier) ([]SectionView, error) {
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, SectionView{Name: s.Name, Title: s.Title, Template: s.Template, Fields: fields})
+		var data any
+		if s.Data != nil {
+			if data, err = s.Data(ctx, q); err != nil {
+				return nil, err
+			}
+		}
+		out = append(out, SectionView{Name: s.Name, Title: s.Title, Template: s.Template, Integration: s.Integration, Fields: fields, Data: data})
 	}
 	return out, nil
 }
@@ -130,6 +141,11 @@ func SaveSection(ctx context.Context, d *db.DB, name string, values map[string]s
 	s, ok := SectionNamed(name)
 	if !ok {
 		return Unknown(name)
+	}
+	if s.Validate != nil {
+		if err := s.Validate(ctx, d.Read, values); err != nil {
+			return err
+		}
 	}
 	return settings.SaveFields(ctx, d, s.Fields, values)
 }
