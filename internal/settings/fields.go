@@ -113,6 +113,22 @@ func LoadFields(ctx context.Context, q db.Querier, fields []Field) ([]FieldView,
 	return out, nil
 }
 
+func EchoFields(ctx context.Context, fields []FieldView, values map[string]string) {
+	for i := range fields {
+		field := &fields[i]
+		def, ok := From(ctx).Lookup(field.Key)
+		value, submitted := values[field.Key]
+		if !ok || def.IsSecret() || field.Pinned || !submitted {
+			continue
+		}
+		field.Value = value
+		selected := strings.Split(value, ",")
+		for j := range field.Options {
+			field.Options[j].Checked = slices.Contains(selected, field.Options[j].Value)
+		}
+	}
+}
+
 func SaveFields(ctx context.Context, d *db.DB, fields []Field, values map[string]string) error {
 	return d.WithTx(ctx, func(tx *sql.Tx) error {
 		reg := From(ctx)

@@ -10,7 +10,7 @@
   {{end}}
   {{range $d.Sections}}{{if not .Integration}}
   <div class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" data-section="{{.Name}}">
-    {{template "integration_section" (dict "Section" . "CSRF" $csrf "Failed" $d.Failed "Error" $d.Error)}}
+    {{template "integration_section" (dict "Section" . "CSRF" $csrf "Failed" $d.Failed "Error" $d.Error "FieldError" $d.FieldError)}}
   </div>
   {{end}}{{end}}
 </div>

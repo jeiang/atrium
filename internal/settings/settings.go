@@ -320,6 +320,15 @@ type Invalid string
 
 func (e Invalid) Error() string { return string(e) }
 
+type FieldInvalid struct {
+	Key string
+	Err Invalid
+}
+
+func (e FieldInvalid) Error() string { return e.Err.Error() }
+
+func (e FieldInvalid) Unwrap() error { return e.Err }
+
 type InvalidDef string
 
 func (e InvalidDef) Error() string { return string(e) }

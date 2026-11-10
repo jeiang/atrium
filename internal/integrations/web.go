@@ -41,13 +41,17 @@ const (
 var log = logx.Logger("atrium.integrations")
 
 type page struct {
-	Records  []Record      `json:"records"`
-	Sections []SectionView `json:"sections"`
-	Failed   string        `json:"failed"`
-	Error    string        `json:"error"`
-	HoldFor  string        `json:"hold_for"`
-	Hold     module.Hold   `json:"hold"`
-	Saved    string        `json:"saved"`
+	Records          []Record          `json:"records"`
+	Sections         []SectionView     `json:"sections"`
+	Failed           string            `json:"failed"`
+	Error            string            `json:"error"`
+	HoldFor          string            `json:"hold_for"`
+	Hold             module.Hold       `json:"hold"`
+	SubmittedSection string            `json:"-"`
+	SubmittedRecord  string            `json:"-"`
+	Submitted        map[string]string `json:"-"`
+	FieldError       string            `json:"field_error"`
+	Saved            string            `json:"saved"`
 }
 
 const savedPrefix = "connection."
@@ -151,6 +155,16 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toa
 	if data.Sections, err = LoadSections(r.Context(), h.d.DB.Read); err != nil {
 		panic(err)
 	}
+	for i := range data.Sections {
+		if data.Sections[i].Name == data.SubmittedSection {
+			settings.EchoFields(r.Context(), data.Sections[i].Fields, data.Submitted)
+		}
+	}
+	for i := range data.Records {
+		if data.Records[i].Name == data.SubmittedRecord {
+			settings.EchoFields(r.Context(), data.Records[i].Fields, data.Submitted)
+		}
+	}
 	f, err := h.d.Render.Frame(r, "settings", data)
 	if err != nil {
 		panic(err)
@@ -206,7 +220,7 @@ func (h handlers) index(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, http.StatusOK, nil, page{})
 }
 
-func (h handlers) refuse(w http.ResponseWriter, r *http.Request, name string, err error) bool {
+func (h handlers) refuse(w http.ResponseWriter, r *http.Request, name string, err error, submitted ...page) bool {
 	var failed *TestFailed
 	var invalid settings.Invalid
 	var pinned *settings.PinnedError
@@ -214,11 +228,21 @@ func (h handlers) refuse(w http.ResponseWriter, r *http.Request, name string, er
 	var encryption settings.EncryptionRequired
 	var empty settings.EmptyValue
 	var unknown Unknown
+	var field settings.FieldInvalid
 	switch {
 	case errors.As(err, &unknown):
 		http.NotFound(w, r)
 	case errors.As(err, &failed), errors.As(err, &invalid), errors.As(err, &pinned), errors.As(err, &scope), errors.As(err, &encryption), errors.As(err, &empty):
-		h.render(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()}, page{Failed: name, Error: err.Error()})
+		data := page{Failed: name, Error: err.Error()}
+		if len(submitted) > 0 {
+			data.SubmittedSection = submitted[0].SubmittedSection
+			data.SubmittedRecord = submitted[0].SubmittedRecord
+			data.Submitted = submitted[0].Submitted
+		}
+		if errors.As(err, &field) {
+			data.FieldError = field.Key
+		}
+		h.render(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()}, data)
 	default:
 		return false
 	}
@@ -307,7 +331,7 @@ func (h handlers) saveSection(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
 	values := fieldValues(s.Fields, form)
 	err := SaveSection(h.ctx(r), h.d.DB, name, values)
-	if err != nil && h.refuse(w, r, name, err) {
+	if err != nil && h.refuse(w, r, name, err, page{SubmittedSection: name, Submitted: fieldValues(s.Fields, form)}) {
 		return
 	}
 	if err != nil {
@@ -326,7 +350,7 @@ func (h handlers) saveSettings(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
 	values := fieldValues(i.Fields, form)
 	err := SaveFields(h.ctx(r), h.d.DB, name, values)
-	if err != nil && h.refuse(w, r, name, err) {
+	if err != nil && h.refuse(w, r, name, err, page{SubmittedRecord: name, Submitted: fieldValues(i.Fields, form)}) {
 		return
 	}
 	if err != nil {

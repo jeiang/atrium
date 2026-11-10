@@ -109,6 +109,10 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toa
 	if data.Push.Fields, err = settings.LoadFields(ctx, h.d.DB.Read, subjectFields); err != nil {
 		panic(err)
 	}
+	if status == http.StatusUnprocessableEntity && r.URL.Path == page+"/push/subject" {
+		form := web.FormValues(r)
+		settings.EchoFields(ctx, data.Push.Fields, map[string]string{KeyPushSubject: web.FormString(form, KeyPushSubject, "")})
+	}
 	if data.Push.Key, err = PushPublicKey(ctx, h.d.DB.Write); err != nil {
 		data.Push.Problem = err.Error()
 	}

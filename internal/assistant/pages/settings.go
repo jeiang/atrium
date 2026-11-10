@@ -185,6 +185,10 @@ func (p *pages) renderUsage(w http.ResponseWriter, r *http.Request, status int, 
 	check(err)
 	fields, err := settings.LoadFields(ctx, p.deps.DB.Read, usageFields)
 	check(err)
+	if status == http.StatusUnprocessableEntity {
+		form := web.FormValues(r)
+		settings.EchoFields(ctx, fields, map[string]string{budget.BudgetKey: web.FormString(form, budget.BudgetKey, "")})
+	}
 	p.settings(w, r, status, "usage.gohtml", UsageData{Budget: statusAt, Summary: summary, Memory: memory, Subscription: subscription, ByKind: byKind, ByThread: byThread, Fields: fields, Saved: saved, Error: problem}, toast)
 }
 

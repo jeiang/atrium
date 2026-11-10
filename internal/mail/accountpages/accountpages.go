@@ -114,6 +114,9 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toa
 	if data.Fields, err = settings.LoadFields(r.Context(), h.d.DB.Read, mailFields); err != nil {
 		panic(err)
 	}
+	if data.Failed == "mail" {
+		settings.EchoFields(r.Context(), data.Fields, data.Form)
+	}
 	f, err := h.d.Render.Frame(r, "settings", data)
 	if err != nil {
 		panic(err)
@@ -158,7 +161,7 @@ func (h handlers) saveSettings(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	err := settings.SaveFields(h.ctx(r), h.d.DB, mailFields, values)
-	if err != nil && h.refuse(w, r, "mail", nil, err) {
+	if err != nil && h.refuse(w, r, "mail", values, err) {
 		return
 	}
 	if err != nil {

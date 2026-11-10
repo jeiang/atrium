@@ -36,7 +36,7 @@
     {{end}}
     {{range $v.Sections}}{{if eq .Integration $name}}
     <div class="flex flex-col gap-3 border-t pt-3" data-section="{{.Name}}">
-      {{template "integration_section" (dict "Section" . "CSRF" $csrf "Failed" $v.Failed "Error" $v.Error)}}
+      {{template "integration_section" (dict "Section" . "CSRF" $csrf "Failed" $v.Failed "Error" $v.Error "FieldError" $v.FieldError)}}
     </div>
     {{end}}{{end}}
   </div>
@@ -45,9 +45,9 @@
 {{define "settings_connections"}}{{$csrf := .CSRF}}{{$back := .Path}}{{with .Connections}}{{$v := .}}{{range .Records}}{{template "integration_card" (dict "View" $v "Record" . "CSRF" $csrf "Back" $back)}}{{end}}{{end}}{{end}}
 
 {{define "integration_section"}}{{$s := .Section}}
-{{if and (eq .Failed $s.Name) .Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.Error}}</p>{{end}}
+{{if and (eq .Failed $s.Name) .Error (not .FieldError)}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.Error}}</p>{{end}}
 <span class="font-medium">{{$s.Title}}</span>
-{{if $s.Template}}{{partial $s.Template (dict "Section" $s "Fields" $s.Fields "Action" (printf "/settings/integrations/sections/%s" $s.Name) "CSRF" .CSRF)}}
+{{if $s.Template}}{{partial $s.Template (dict "Section" $s "Fields" $s.Fields "Action" (printf "/settings/integrations/sections/%s" $s.Name) "CSRF" .CSRF "Error" .Error "FieldError" .FieldError)}}
 {{else}}{{template "settings_fields" (dict "Fields" $s.Fields "Action" (printf "/settings/integrations/sections/%s" $s.Name) "CSRF" .CSRF)}}{{end}}
 {{end}}
 
