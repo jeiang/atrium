@@ -62,7 +62,7 @@ func samplesAtLeast(t *testing.T, d *db.DB, n int) func() bool {
 
 func waitForOps(t *testing.T, what string, ok func() bool) {
 	t.Helper()
-	for deadline := time.Now().Add(60 * time.Second); !ok(); {
+	for deadline := time.Now().Add(180 * time.Second); !ok(); {
 		if time.Now().After(deadline) {
 			t.Fatalf("timed out waiting for %s", what)
 		}

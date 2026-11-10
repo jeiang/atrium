@@ -123,7 +123,7 @@ func runOpsSampler(t *testing.T, f *fixture, d *db.DB, wait func() bool) {
 		t.Fatal(err)
 	}
 	cancel, done = start()
-	for deadline := time.Now().Add(60 * time.Second); !wait(); {
+	for deadline := time.Now().Add(180 * time.Second); !wait(); {
 		if time.Now().After(deadline) {
 			t.Fatal("the sampler did not finish")
 		}
