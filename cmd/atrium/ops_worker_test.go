@@ -60,11 +60,13 @@ func samplesAtLeast(t *testing.T, d *db.DB, n int) func() bool {
 	}
 }
 
-func waitForOps(t *testing.T, what string, ok func() bool) {
+func waitForOps(t *testing.T, d *db.DB, what string, ok func() bool) {
 	t.Helper()
 	for deadline := time.Now().Add(180 * time.Second); !ok(); {
 		if time.Now().After(deadline) {
-			t.Fatalf("timed out waiting for %s", what)
+			var state, runErr string
+			_ = d.Read.QueryRow("SELECT r.state, COALESCE(r.error, '') FROM runs r JOIN threads th ON th.id = r.thread_id WHERE th.kind = 'worker' ORDER BY r.id DESC LIMIT 1").Scan(&state, &runErr)
+			t.Fatalf("timed out waiting for %s (worker run: %s %s)", what, state, runErr)
 		}
 		time.Sleep(20 * time.Millisecond)
 	}
@@ -135,7 +137,7 @@ func TestHostDownStartsOneWorkerRunAndFilesAFinding(t *testing.T) {
 	})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("filed")))
 	runOpsSampler(t, f, d, samplerFinished(t, d))
-	waitForOps(t, "the finding", func() bool {
+	waitForOps(t, d, "the finding", func() bool {
 		_, _, found := workerFinding(t, d, "node-a:up")
 		return found
 	})
@@ -188,7 +190,7 @@ func TestHostDownStartsOneWorkerRunAndFilesAFinding(t *testing.T) {
 	fake.setUp(1)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("recovered")))
 	runOpsSampler(t, f, d, samplerFinished(t, d))
-	waitForOps(t, "the finding retracted", func() bool {
+	waitForOps(t, d, "the finding retracted", func() bool {
 		_, retracted, found := workerFinding(t, d, "node-a:up")
 		return found && retracted
 	})
@@ -213,7 +215,7 @@ func TestWorkerFindingRefusesAnUnchangedFact(t *testing.T) {
 	})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
 	runOpsSampler(t, f, d, samplerFinished(t, d))
-	waitForOps(t, "the worker run", func() bool { return len(api.Requests()) >= before+2 })
+	waitForOps(t, d, "the worker run", func() bool { return len(api.Requests()) >= before+2 })
 	result := toolResultFor(t, api.Requests()[before+1], "f1")
 	if result["is_error"] != true {
 		t.Errorf("ops_finding on an unchanged fact = %v, want an error", result)
