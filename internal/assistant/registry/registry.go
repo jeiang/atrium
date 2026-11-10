@@ -117,7 +117,7 @@ func (s Set) Has(name string) bool {
 		slices.ContainsFunc(s.Server, func(t tool.Tool) bool { return t.Name == name })
 }
 
-func (r *Registry) Admit(ctx context.Context, kind tool.Kind, marks threads.Marks, allow Allow, q db.Querier) (Set, error) {
+func (r *Registry) Admit(ctx context.Context, kind tool.Kind, role *string, webSearch bool, marks threads.Marks, allow Allow, q db.Querier) (Set, error) {
 	found, err := r.For(kind)
 	if err != nil {
 		return Set{}, err
@@ -126,6 +126,12 @@ func (r *Registry) Admit(ctx context.Context, kind tool.Kind, marks threads.Mark
 	privateTools := false
 	for _, t := range found {
 		if !allow.Has(t.Name) {
+			continue
+		}
+		if t.Name == "search_web" && !webSearch {
+			continue
+		}
+		if t.Server && t.Name == WebSearchName && (role == nil || *role != "search_web") {
 			continue
 		}
 		enabled, err := r.enabled(ctx, q, t.Name)
@@ -189,7 +195,7 @@ func (r *Registry) SubagentPool() ([]tool.Tool, error) {
 		return nil, err
 	}
 	return slices.DeleteFunc(all, func(t tool.Tool) bool {
-		return t.Name == "report" || t.Effect != tool.Read || !t.Contexts.Has(tool.Sub)
+		return t.Name == "report" || t.Name == WebSearchName || t.Effect != tool.Read || !t.Contexts.Has(tool.Sub)
 	}), nil
 }
 

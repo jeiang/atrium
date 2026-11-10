@@ -471,3 +471,7 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | Key | Type | Default | Class | Environment variable |
 | --- | --- | --- | --- | --- |
 | `dynamic_filtering` | bool | `false` | advanced | `ATRIUM_WEB_SEARCH_DYNAMIC_FILTERING` |
+| `search_web_max_cost_usd` | float | `0.15` | advanced | `ATRIUM_WEB_SEARCH_SEARCH_WEB_MAX_COST_USD` |
+| `search_web_max_searches` | int | `5` | advanced | `ATRIUM_WEB_SEARCH_SEARCH_WEB_MAX_SEARCHES` |
+| `search_web_max_steps` | int | `8` | advanced | `ATRIUM_WEB_SEARCH_SEARCH_WEB_MAX_STEPS` |
+| `search_web_model` | enum (claude-haiku-5-5, claude-sonnet-5-5, claude-opus-5-5) | `claude-haiku-5-5` | ui | `ATRIUM_WEB_SEARCH_SEARCH_WEB_MODEL` |

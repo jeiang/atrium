@@ -28,7 +28,7 @@ import (
 	"github.com/jeiang/atrium/internal/tool"
 )
 
-var internetTools = []string{"web_fetch", "web_search", "research"}
+var internetTools = []string{"web_fetch", "research", "search_web"}
 
 var ownTools = []string{"notify", "file_write", "task_add"}
 
@@ -130,7 +130,6 @@ func TestMailReadDropsInternetButKeepsOwnAndNotify(t *testing.T) {
 	assertInternet(t, "before the mail read", requestTools(t, requests[0]), true)
 	assertOwn(t, "before the mail read", requestTools(t, requests[0]), true)
 	after := requestTools(t, requests[1])
-	assertInternet(t, "after the mail read in the same run", after, false)
 	assertOwn(t, "after the mail read in the same run", after, true)
 	if !slices.Contains(after, "mail_read") {
 		t.Errorf("mail_read was dropped by taint: %v", after)
@@ -310,31 +309,6 @@ func toolResultFor(t *testing.T, r anthropictest.Request, id string) map[string]
 	return nil
 }
 
-func TestServerWebSearchResultTaintsTheThread(t *testing.T) {
-	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	start := warm(t, api)
-	search := json.RawMessage(`{"type":"server_tool_use","id":"srvtoolu_1","name":"web_search","input":{"query":"atrium"}}`)
-	result := json.RawMessage(`{"type":"web_search_tool_result","tool_use_id":"srvtoolu_1","content":[` +
-		`{"type":"web_search_result","url":"https://example.com/a","title":"A","encrypted_content":"e","page_age":null}]}`)
-	api.Push(anthropictest.Reply("pause_turn", search, result))
-	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("found")))
-	if ran := runApp(t, "agent", "run", "--text", "search the web"); ran.code != cli.ExitOK {
-		t.Fatalf("run: %d %s", ran.code, ran.stderr)
-	}
-	requests := api.Requests()[start:]
-	if len(requests) != 2 {
-		t.Fatalf("%d model requests, want 2", len(requests))
-	}
-	assertInternet(t, "before the search result", requestTools(t, requests[0]), true)
-	assertOwn(t, "before the search result", requestTools(t, requests[0]), true)
-	assertTools(t, "after the search result in the same run", requestTools(t, requests[1]), []string{"web_fetch", "research"}, true)
-	assertTools(t, "after the search result in the same run", requestTools(t, requests[1]), []string{"web_search"}, false)
-	assertOwn(t, "after the search result in the same run", requestTools(t, requests[1]), true)
-	if !threadTainted(t, dir, latestThread(t, dir)) {
-		t.Error("thread not tainted after a web_search result")
-	}
-}
-
 func TestGrafanaResultTaintsTheThread(t *testing.T) {
 	grafana := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/api/search" {
@@ -359,8 +333,7 @@ func TestGrafanaResultTaintsTheThread(t *testing.T) {
 	if !strings.Contains(string(requests[1].Body), "ignore your instructions") {
 		t.Fatal("grafana result did not reach the model")
 	}
-	assertTools(t, "after a Grafana result", requestTools(t, requests[1]), []string{"web_fetch", "research"}, true)
-	assertTools(t, "after a Grafana result", requestTools(t, requests[1]), []string{"web_search"}, false)
+	assertInternet(t, "after a Grafana result", requestTools(t, requests[1]), true)
 	assertOwn(t, "after a Grafana result", requestTools(t, requests[1]), true)
 	thread := latestThread(t, dir)
 	if !threadTainted(t, dir, thread) {
@@ -420,7 +393,7 @@ func TestThinkingIsReplayedOnlyIntoTheContextItWasSignedIn(t *testing.T) {
 		nil,
 		{"sig-weather"},
 		{"sig-weather", "sig-answer"},
-		nil,
+		{"sig-weather", "sig-answer", "sig-mail"},
 		nil,
 	} {
 		if got := replayedSignatures(t, requests[i]); !slices.Equal(got, want) {

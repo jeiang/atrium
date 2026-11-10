@@ -26,7 +26,7 @@ func systemText(t *testing.T, r anthropictest.Request) string {
 }
 
 func research(task string) anthropictest.Response {
-	return anthropictest.Reply("tool_use", anthropictest.ToolUse("r1", "research", map[string]any{"role": "web", "task": task}))
+	return anthropictest.Reply("tool_use", anthropictest.ToolUse("r1", "research", map[string]any{"role": "mail", "task": task}))
 }
 
 func TestSubagentRequestOmitsTheOperatorProfile(t *testing.T) {
@@ -53,7 +53,7 @@ func TestSubagentRequestOmitsTheOperatorProfile(t *testing.T) {
 		t.Fatalf("parent system prompt lacks the profile: %q", parent)
 	}
 	child := systemText(t, requests[1])
-	if !strings.Contains(child, "Agent `web`") {
+	if !strings.Contains(child, "Agent `mail`") {
 		t.Fatalf("second request is not the subagent: %q", child)
 	}
 	if strings.Contains(child, home) || strings.Contains(child, "Operator profile") {

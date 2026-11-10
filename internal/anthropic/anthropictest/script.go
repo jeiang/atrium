@@ -112,6 +112,21 @@ func Thinking(value, signature string) json.RawMessage {
 	return mustJSON(map[string]string{"type": "thinking", "thinking": value, "signature": signature})
 }
 
+type SearchResult struct {
+	URL   string
+	Title string
+}
+
+func WebSearch(id, query string, results ...SearchResult) []json.RawMessage {
+	use := mustJSON(map[string]any{"type": "server_tool_use", "id": id, "name": "web_search", "input": map[string]any{"query": query}})
+	content := make([]any, len(results))
+	for i, r := range results {
+		content[i] = map[string]any{"type": "web_search_result", "url": r.URL, "title": r.Title, "encrypted_content": "e", "page_age": nil}
+	}
+	result := mustJSON(map[string]any{"type": "web_search_tool_result", "tool_use_id": id, "content": content})
+	return []json.RawMessage{use, result}
+}
+
 func ToolUse(id, name string, input map[string]any) json.RawMessage {
 	if input == nil {
 		input = map[string]any{}
