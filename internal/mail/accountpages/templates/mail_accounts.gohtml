@@ -3,69 +3,79 @@
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
 {{template "settings_nav" (dict "Tab" "mail" "Settings" .Settings)}}
 {{template "settings_module_head" .}}
-<div class="flex flex-col gap-3">
-  {{range $d.Indexes}}
-  <div class="flex flex-wrap items-center gap-2 rounded-lg border bg-card p-4 text-sm" data-embed-index="{{.State}}" data-generation="{{.Generation}}">
-    <span class="font-medium">{{if eq .State "active"}}Embedding index{{else}}Re-embedding{{end}}</span>
-    <span class="text-xs text-muted-foreground">{{with .Model}}{{.}} · {{end}}{{.Dimension}} dimensions</span>
-    {{if eq .State "building"}}<span class="badge" data-variant="outline" data-progress>{{.Done}} of {{.Total}}</span>{{end}}
-    {{with .Error}}<p class="w-full text-xs text-destructive">{{.}}</p>{{end}}
-  </div>
-  {{end}}
-  <div class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" data-section="mail">
-    {{if and (eq $d.Failed "mail") $d.Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$d.Error}}</p>{{end}}
-    <span class="font-medium">Mail behavior</span>
-    {{template "settings_fields" (dict "Fields" $d.Fields "Action" "/settings/mail/settings" "CSRF" $csrf)}}
-  </div>
+<section class="set-group" data-section="accounts">
+  <h2>Accounts</h2>
   {{range $d.Accounts}}
-  <form method="post" action="/settings/mail/accounts/{{.ID}}" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" data-account="{{.ID}}" data-state="{{.State}}" autocomplete="off">
+  <form method="post" action="/settings/mail/accounts/{{.ID}}" class="set-account" data-account="{{.ID}}" data-state="{{.State}}" autocomplete="off">
     <input type="hidden" name="csrf_token" value="{{$csrf}}">
-    <div class="flex flex-wrap items-center gap-2">
-      <span class="font-medium">{{.Label}}</span>
-      <span class="badge" data-variant="{{if eq .State "ok"}}secondary{{else if eq .State "untested"}}outline{{else}}destructive{{end}}">{{replace "_" " " .State}}</span>
-      <span class="text-xs text-muted-foreground">{{.Preset}}</span>
-      {{if .Pinned}}<span class="text-xs text-muted-foreground" data-pinned>set by deployment</span>{{end}}
-      {{if not .Enabled}}<span class="badge" data-variant="outline">disabled</span>{{end}}
-    </div>
-    {{with .Reason}}<p class="text-xs text-muted-foreground">{{.}}</p>{{end}}
-    {{if and (eq $d.Failed .ID) $d.Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$d.Error}}</p>{{end}}
+    {{if and (eq $d.Failed .ID) $d.Error}}<p class="px-4 py-2 text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$d.Error}}</p>{{end}}
     {{if .Pinned}}
-    <code class="break-all font-mono text-xs">{{.Login}}</code>
+    <div class="set-row">
+      <span class="flex min-w-0 flex-col"><span class="font-medium">{{.Label}}</span><span class="truncate font-mono text-xs text-ink-3">{{.Login}}</span>{{with .Reason}}<span class="text-xs text-ink-3">{{.}}</span>{{end}}</span>
+      <span class="badge" data-variant="{{if eq .State "ok"}}secondary{{else if eq .State "untested"}}outline{{else}}destructive{{end}}">{{replace "_" " " .State}}</span>
+      {{if not .Enabled}}<span class="badge" data-variant="outline">disabled</span>{{end}}
+      <span class="set-pinned" data-pinned>{{icon "lock"}}set by deployment</span>
+      <button type="submit" class="btn" data-size="sm" data-variant="outline" formaction="/settings/mail/accounts/{{.ID}}/test" formnovalidate>Test</button>
+    </div>
     {{else}}
-    <div class="grid gap-3 sm:grid-cols-2">
-      <div role="group" class="field"><label for="label-{{.ID}}">Label</label><input id="label-{{.ID}}" name="label" value="{{.Label}}"></div>
-      <div role="group" class="field"><label for="login-{{.ID}}">Login</label><input id="login-{{.ID}}" name="login" value="{{.Login}}" required></div>
-      <div role="group" class="field"><label for="password-{{.ID}}">App password</label><input id="password-{{.ID}}" name="password" type="password" autocomplete="new-password" placeholder="{{if .PasswordSet}}set; type to replace{{end}}"></div>
-      {{if eq .Preset "gmail"}}<div role="group" class="field"><label for="auth-{{.ID}}">Auth method</label>
-        <select id="auth-{{.ID}}" name="auth_method">
+    <details{{if eq $d.Failed .ID}} open{{end}}>
+      <summary class="set-row cursor-pointer list-none">
+        <span class="flex min-w-0 flex-col"><span class="font-medium">{{.Label}}</span><span class="truncate font-mono text-xs text-ink-3">{{.Login}}</span>{{with .Reason}}<span class="text-xs text-ink-3">{{.}}</span>{{end}}</span>
+        <span class="badge" data-variant="{{if eq .State "ok"}}secondary{{else if eq .State "untested"}}outline{{else}}destructive{{end}}">{{replace "_" " " .State}}</span>
+        {{if not .Enabled}}<span class="badge" data-variant="outline">disabled</span>{{end}}
+        {{icon "chevron-down" "size-4 shrink-0 text-ink-3"}}
+      </summary>
+      <div role="group" class="set-row"><label for="label-{{.ID}}">Label</label><input id="label-{{.ID}}" name="label" class="input" value="{{.Label}}"></div>
+      <div role="group" class="set-row"><label for="login-{{.ID}}">Login</label><input id="login-{{.ID}}" name="login" class="input" value="{{.Login}}" required></div>
+      <div role="group" class="set-row"><label for="password-{{.ID}}">App password</label><input id="password-{{.ID}}" name="password" type="password" class="input" autocomplete="new-password" placeholder="{{if .PasswordSet}}set; type to replace{{end}}"></div>
+      {{if eq .Preset "gmail"}}<div role="group" class="set-row"><label for="auth-{{.ID}}">Auth method</label>
+        <select id="auth-{{.ID}}" name="auth_method" class="select">
           <option value="password"{{if ne .AuthMethod "xoauth2"}} selected{{end}}>App password</option>
           <option value="xoauth2"{{if eq .AuthMethod "xoauth2"}} selected{{end}}>Google OAuth (XOAUTH2)</option>
         </select></div>{{end}}
-      <label class="flex items-center gap-2"><input type="checkbox" name="enabled" value="1"{{if .Enabled}} checked{{end}}>Enabled</label>
-    </div>
+      <div role="group" class="set-row"><label for="enabled-{{.ID}}">Enabled</label><input id="enabled-{{.ID}}" type="checkbox" role="switch" class="input" name="enabled" value="1"{{if .Enabled}} checked{{end}}></div>
+      <footer>
+        <button type="submit" class="btn text-danger" data-size="sm" data-variant="ghost" formaction="/settings/mail/accounts/{{.ID}}/remove" formnovalidate data-confirm-submit="Remove {{.Label}}? Its cached mail stays.">Remove</button>
+        <button type="submit" class="btn" data-size="sm" data-variant="outline" formaction="/settings/mail/accounts/{{.ID}}/test" formnovalidate>Test</button>
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button>
+      </footer>
+    </details>
     {{end}}
-    <div class="flex flex-wrap gap-2">
-      {{if not .Pinned}}<button type="submit" class="btn" data-size="sm">{{icon "check"}}Save</button>{{end}}
-      <button type="submit" class="btn" data-size="sm" data-variant="outline" formaction="/settings/mail/accounts/{{.ID}}/test" formnovalidate>Test</button>
-      {{if not .Pinned}}<button type="submit" class="btn" data-size="sm" data-variant="destructive" formaction="/settings/mail/accounts/{{.ID}}/remove" formnovalidate data-confirm-submit="Remove {{.Label}}? Its cached mail stays.">{{icon "x"}}Remove</button>{{end}}
-    </div>
   </form>
   {{end}}
-  <form method="post" action="/settings/mail/accounts" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" data-account="new" autocomplete="off">
+  <form method="post" action="/settings/mail/accounts" class="set-account" data-account="new" autocomplete="off">
     <input type="hidden" name="csrf_token" value="{{$csrf}}">
-    <span class="font-medium">Add account</span>
-    {{if and (eq $d.Failed "new") $d.Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$d.Error}}</p>{{end}}
-    <div class="grid gap-3 sm:grid-cols-2">
-      <div role="group" class="field"><label for="new-id">Id</label><input id="new-id" name="id" value="{{with $d.Form}}{{.id}}{{end}}" required></div>
-      <div role="group" class="field"><label for="new-label">Label</label><input id="new-label" name="label" value="{{with $d.Form}}{{.label}}{{end}}"></div>
-      <div role="group" class="field"><label for="new-preset">Provider</label><select id="new-preset" name="preset">{{$chosen := ""}}{{with $d.Form}}{{$chosen = .preset}}{{end}}{{range $d.Presets}}<option value="{{.}}"{{if eq . $chosen}} selected{{end}}>{{.}}</option>{{end}}</select></div>
-      <div role="group" class="field"><label for="new-login">Login</label><input id="new-login" name="login" value="{{with $d.Form}}{{.login}}{{end}}" required></div>
-      <div role="group" class="field"><label for="new-password">App password</label><input id="new-password" name="password" type="password" autocomplete="new-password" required></div>
-      <div role="group" class="field"><label for="new-auth">Auth method</label><select id="new-auth" name="auth_method"><option value="password">App password</option><option value="xoauth2">Google OAuth (XOAUTH2)</option></select></div>
-    </div>
-    <div><button type="submit" class="btn" data-size="sm">{{icon "plus"}}Test and add</button></div>
+    <details{{if eq $d.Failed "new"}} open{{end}}>
+      <summary class="set-row cursor-pointer list-none"><span class="flex items-center gap-2 text-ink-2">{{icon "plus" "size-4"}}Add account</span></summary>
+      {{if and (eq $d.Failed "new") $d.Error}}<p class="px-4 py-2 text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$d.Error}}</p>{{end}}
+      <div role="group" class="set-row"><label for="new-id">Id</label><input id="new-id" name="id" class="input" value="{{with $d.Form}}{{.id}}{{end}}" required></div>
+      <div role="group" class="set-row"><label for="new-label">Label</label><input id="new-label" name="label" class="input" value="{{with $d.Form}}{{.label}}{{end}}"></div>
+      <div role="group" class="set-row"><label for="new-preset">Provider</label><select id="new-preset" name="preset" class="select">{{$chosen := ""}}{{with $d.Form}}{{$chosen = .preset}}{{end}}{{range $d.Presets}}<option value="{{.}}"{{if eq . $chosen}} selected{{end}}>{{.}}</option>{{end}}</select></div>
+      <div role="group" class="set-row"><label for="new-login">Login</label><input id="new-login" name="login" class="input" value="{{with $d.Form}}{{.login}}{{end}}" required></div>
+      <div role="group" class="set-row"><label for="new-password">App password</label><input id="new-password" name="password" type="password" class="input" autocomplete="new-password" required></div>
+      <div role="group" class="set-row"><label for="new-auth">Auth method</label><select id="new-auth" name="auth_method" class="select"><option value="password">App password</option><option value="xoauth2">Google OAuth (XOAUTH2)</option></select></div>
+      <footer><button type="submit" class="btn" data-size="sm" data-variant="outline">Test and add</button></footer>
+    </details>
   </form>
-</div>
+</section>
+<section class="set-group" data-section="mail">
+  <h2>Behavior</h2>
+  {{if and (eq $d.Failed "mail") $d.Error}}<p class="px-4 py-2 text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$d.Error}}</p>{{end}}
+  {{template "settings_fields" (dict "Fields" $d.Fields "Action" "/settings/mail/settings" "CSRF" $csrf)}}
+</section>
+{{with $d.Indexes}}
+<section class="set-group">
+  <h2>Search index</h2>
+  {{range .}}
+  <div class="set-row" data-embed-index="{{.State}}" data-generation="{{.Generation}}">
+    <span>{{if eq .State "active"}}Embedding index{{else}}Re-embedding{{end}}</span>
+    {{if eq .State "building"}}<span class="badge" data-variant="outline" data-progress>{{.Done}} of {{.Total}}</span>{{end}}
+    <span class="font-mono text-xs text-ink-3">{{with .Model}}{{.}} · {{end}}{{.Dimension}} dimensions</span>
+    {{with .Error}}<p class="basis-full text-xs text-destructive">{{.}}</p>{{end}}
+  </div>
+  {{end}}
+</section>
+{{end}}
 {{template "settings_connections" .}}
 {{template "settings_groups" .}}
 {{end}}

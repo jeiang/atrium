@@ -67,7 +67,7 @@ func (s *Set) settingMark(name string) string {
 	case Off:
 		return "off"
 	}
-	return ""
+	return "on"
 }
 
 func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, settingspage.Control) {

@@ -5,52 +5,46 @@
 {{template "settings_module_head" .}}
 {{with $d.Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.}}</p>{{end}}
 
-<section class="flex flex-col gap-3" aria-labelledby="push-h" data-push data-push-key="{{$d.Push.Key}}">
-  <div class="flex flex-wrap items-center justify-between gap-2">
-    <h2 id="push-h" class="text-sm font-medium">Push</h2>
-    <div class="flex flex-wrap gap-2">
-      <button type="button" class="btn" data-size="sm" data-action="push-enable" hidden>{{icon "bell"}}Enable push on this device</button>
+<section class="set-group" aria-labelledby="push-h" data-push data-push-key="{{$d.Push.Key}}">
+  <h2 id="push-h">
+    <span>Push</span>
+    <span class="ms-auto flex flex-wrap gap-2 font-normal">
+      <button type="button" class="btn" data-size="sm" data-variant="outline" data-action="push-enable" hidden>{{icon "bell"}}Enable push on this device</button>
       <button type="button" class="btn" data-size="sm" data-variant="outline" data-action="push-disable" hidden>{{icon "bell-off"}}Disable push on this device</button>
-      {{if $d.Push.Devices}}<form method="post" action="/settings/notifications/push/test"><input type="hidden" name="csrf_token" value="{{$csrf}}"><button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "send"}}Send test</button></form>{{end}}
-    </div>
-  </div>
-  {{with $d.Push.Problem}}<p class="text-sm text-destructive" role="alert">{{.}}</p>{{end}}
+      {{if $d.Push.Devices}}<button type="submit" form="push-test" class="btn" data-size="sm" data-variant="outline">{{icon "send"}}Send test</button>{{end}}
+    </span>
+  </h2>
+  {{with $d.Push.Problem}}<p class="px-4 py-2 text-sm text-destructive" role="alert">{{.}}</p>{{end}}
   {{template "settings_fields" (dict "Fields" $d.Push.Fields "Action" "/settings/notifications/push/subject" "CSRF" $csrf)}}
-  <form method="post" action="/settings/notifications/push/subscriptions" data-push-form="subscribe" hidden>
-    <input type="hidden" name="csrf_token" value="{{$csrf}}"><input type="hidden" name="endpoint"><input type="hidden" name="p256dh"><input type="hidden" name="auth">
-  </form>
-  <form method="post" action="/settings/notifications/push/unsubscribe" data-push-form="unsubscribe" hidden>
-    <input type="hidden" name="csrf_token" value="{{$csrf}}"><input type="hidden" name="endpoint">
-  </form>
-  {{if $d.Push.Devices}}
-  <ul class="flex flex-col divide-y rounded-lg border bg-card text-sm">
-    {{range $d.Push.Devices}}
-    <li class="flex flex-wrap items-center gap-2 px-4 py-2" data-push-device="{{.Endpoint}}">
-      <span class="font-medium">{{.Label}}</span>
-      <span class="text-xs text-muted-foreground">{{ts .CreatedTS}}</span>
-      {{if ge .Failures 3}}<span class="badge" data-variant="destructive">failing</span>{{else if .LastOKTS}}<span class="badge" data-variant="secondary">ok</span>{{end}}
-      {{with .LastError}}<span class="text-xs text-muted-foreground">{{str .}}</span>{{end}}
-      <form method="post" action="/settings/notifications/push/{{.ID}}/remove" class="ms-auto"><input type="hidden" name="csrf_token" value="{{$csrf}}"><button type="submit" class="btn" data-size="icon-sm" data-variant="ghost" aria-label="Remove {{.Label}}">{{icon "trash-2"}}</button></form>
-    </li>
-    {{end}}
-  </ul>
+  {{range $d.Push.Devices}}
+  <div class="set-row border-t" data-push-device="{{.Endpoint}}">
+    <span class="flex min-w-0 flex-col"><span class="font-medium">{{.Label}}</span><span class="font-mono text-xs text-ink-3">{{ts .CreatedTS}}{{with .LastError}} · {{str .}}{{end}}</span></span>
+    {{if ge .Failures 3}}<span class="badge" data-variant="destructive">failing</span>{{else if .LastOKTS}}<span class="badge" data-variant="secondary">ok</span>{{end}}
+    <button type="submit" form="push-remove-{{.ID}}" class="btn" data-size="icon-sm" data-variant="ghost" aria-label="Remove {{.Label}}">{{icon "trash-2"}}</button>
+  </div>
   {{end}}
 </section>
+{{if $d.Push.Devices}}<form id="push-test" method="post" action="/settings/notifications/push/test"><input type="hidden" name="csrf_token" value="{{$csrf}}"></form>{{end}}
+{{range $d.Push.Devices}}<form id="push-remove-{{.ID}}" method="post" action="/settings/notifications/push/{{.ID}}/remove"><input type="hidden" name="csrf_token" value="{{$csrf}}"></form>{{end}}
+<form method="post" action="/settings/notifications/push/subscriptions" data-push-form="subscribe" hidden>
+  <input type="hidden" name="csrf_token" value="{{$csrf}}"><input type="hidden" name="endpoint"><input type="hidden" name="p256dh"><input type="hidden" name="auth">
+</form>
+<form method="post" action="/settings/notifications/push/unsubscribe" data-push-form="unsubscribe" hidden>
+  <input type="hidden" name="csrf_token" value="{{$csrf}}"><input type="hidden" name="endpoint">
+</form>
 
-<section class="flex flex-col gap-3" aria-labelledby="channels-h">
-  <h2 id="channels-h" class="text-sm font-medium">Channels</h2>
-  <div class="grid gap-3 md:grid-cols-3">
-    {{range $d.Channels}}
-    <form method="post" action="/settings/notifications/channels/{{.Name}}/content" class="flex items-center gap-2 rounded-lg border bg-card p-4 text-sm" data-channel="{{.Name}}">
-      <input type="hidden" name="csrf_token" value="{{$csrf}}">
-      <label class="font-medium capitalize" for="content-{{.Name}}">{{.Name}}</label>
-      <select id="content-{{.Name}}" name="content" class="ms-auto text-xs">
-        {{$c := .Content}}{{range (list "auto" "full" "title")}}<option value="{{.}}"{{if eq . $c}} selected{{end}}>{{.}}</option>{{end}}
-      </select>
-      <button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button>
-    </form>
-    {{end}}
-  </div>
+<section class="set-group" aria-labelledby="channels-h">
+  <h2 id="channels-h">Channels</h2>
+  {{range $d.Channels}}
+  <form method="post" action="/settings/notifications/channels/{{.Name}}/content" class="set-row" data-channel="{{.Name}}">
+    <input type="hidden" name="csrf_token" value="{{$csrf}}">
+    <label class="capitalize" for="content-{{.Name}}">{{.Name}}</label>
+    <select id="content-{{.Name}}" name="content" class="select">
+      {{$c := .Content}}{{range (list "auto" "full" "title")}}<option value="{{.}}"{{if eq . $c}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+    <button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button>
+  </form>
+  {{end}}
 </section>
 
 {{template "phone_actions" (dict "Phone" $d.Phone "CSRF" $csrf)}}

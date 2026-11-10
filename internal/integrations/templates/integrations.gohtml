@@ -3,15 +3,15 @@
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
 {{template "settings_nav" (dict "Tab" "integrations" "Settings" .Settings)}}
 <div class="flex flex-col gap-3">
-  <a class="flex flex-col gap-1 rounded-lg border bg-card p-4 text-sm" href="/settings/integrations/google" data-integration="google">
-    <span class="font-medium">Google Calendar and Gmail</span>
+  <a class="set-group" href="/settings/integrations/google" data-integration="google">
+    <span class="set-row"><span>Google Calendar and Gmail</span>{{icon "chevron-right" "size-4 text-ink-3"}}</span>
   </a>
   {{range $d.Records}}{{template "integration_card" (dict "View" $d "Record" . "CSRF" $csrf "Back" "")}}
   {{end}}
   {{range $d.Sections}}{{if not .Integration}}
-  <div class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" data-section="{{.Name}}">
+  <section class="set-group" data-section="{{.Name}}">
     {{template "integration_section" (dict "Section" . "CSRF" $csrf "Failed" $d.Failed "Error" $d.Error "FieldError" $d.FieldError)}}
-  </div>
+  </section>
   {{end}}{{end}}
 </div>
 {{end}}

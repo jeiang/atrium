@@ -6,7 +6,7 @@
   {{if $t.Groups}}<div class="flex flex-wrap gap-2">{{range $t.Groups}}<span class="badge" data-variant="secondary">{{.}}</span>{{end}}</div>{{end}}
   <form hx-post="/settings/auth/activate" hx-target="#oidc-test" hx-swap="outerHTML">
     <input type="hidden" name="fingerprint" value="{{$t.Fingerprint}}">
-    <button type="submit" class="btn">{{icon "check"}}Activate</button>
+    <button type="submit" class="btn" data-variant="outline">{{icon "check"}}Activate</button>
   </form>
 </div>
 {{else if eq $t.Status "failed"}}

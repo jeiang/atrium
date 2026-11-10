@@ -28,7 +28,7 @@
     {{if $privatePinned}}<code class="break-all font-mono text-xs" data-pinned>{{$private}}</code>{{end}}
   </div>
   {{with $d}}{{if .Blocked}}<p class="text-xs"><a class="underline underline-offset-4" href="/activity?category=knowledge#activity-write-{{.Blocked}}">Blocked by write #{{.Blocked}}</a></p>{{else if .Last}}<p class="text-xs text-muted-foreground">Last export {{ts .Last}}</p>{{end}}{{end}}
-  <div><button type="submit" class="btn" data-size="sm">{{icon "check"}}Save</button></div>
+  <div><button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "check"}}Save</button></div>
 </form>
 {{end}}
 
@@ -55,6 +55,6 @@
     {{if $privatePinned}}<code class="break-all font-mono text-xs" data-pinned>{{$private}}</code>{{end}}
   </div>
   {{with $d}}{{if .Last}}<p class="text-xs text-muted-foreground">Last export {{ts .Last}}</p>{{end}}{{end}}
-  <div><button type="submit" class="btn" data-size="sm">{{icon "check"}}Save</button></div>
+  <div><button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "check"}}Save</button></div>
 </form>
 {{end}}
