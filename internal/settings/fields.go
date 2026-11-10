@@ -10,13 +10,14 @@ import (
 )
 
 type Field struct {
-	Key     string
-	Label   string
-	Number  bool
-	Whole   bool
-	Bool    bool
-	Multi   bool
-	Choices []string
+	Key          string
+	Label        string
+	Number       bool
+	Whole        bool
+	Bool         bool
+	Multi        bool
+	Choices      []string
+	ChoiceLabels map[string]string
 }
 
 type FieldOption struct {
@@ -55,7 +56,11 @@ func LoadFields(ctx context.Context, q db.Querier, fields []Field) ([]FieldView,
 		if f.Multi {
 			selected := strings.Split(view.Value, ",")
 			for _, choice := range f.Choices {
-				view.Options = append(view.Options, FieldOption{Value: choice, Label: choice, Checked: slices.Contains(selected, choice)})
+				label := choice
+				if f.ChoiceLabels[choice] != "" {
+					label = f.ChoiceLabels[choice]
+				}
+				view.Options = append(view.Options, FieldOption{Value: choice, Label: label, Checked: slices.Contains(selected, choice)})
 			}
 		}
 		out = append(out, view)
