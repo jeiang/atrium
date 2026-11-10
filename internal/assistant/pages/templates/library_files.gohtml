@@ -9,6 +9,7 @@
     <span class="min-w-0 truncate font-medium">{{.Name}}</span>
     <a class="inline-flex min-w-0 items-center gap-1 truncate text-xs text-muted-foreground underline-offset-4 hover:underline" href="{{.OwnerURL}}">{{icon (ternary .Project "folder" "messages-square") "size-3.5 shrink-0"}}{{.Owner}}</a>
     <span class="ms-auto text-xs text-muted-foreground tabular-nums">{{filesizeformat .Bytes}} · {{template "when" (dict "epoch" .CreatedAt "style" "datetime")}}</span>
+    {{if .Project}}<a class="btn" data-size="icon-sm" data-variant="ghost" href="/chat?about=file:{{.ID}}" aria-label="Ask about {{.Name}}" title="Ask about this">{{icon "messages-square" "size-3.5"}}</a>{{end}}
     <a class="btn" data-size="icon-sm" data-variant="ghost" href="{{.DownloadURL}}" download aria-label="Download {{.Name}}">{{icon "download" "size-3.5"}}</a>
   </li>
   {{end}}

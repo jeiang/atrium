@@ -31,6 +31,7 @@ type agendaEvent struct {
 	Title string `json:"title"`
 	Meta  string `json:"meta"`
 	State string `json:"state"`
+	Ask   string `json:"ask"`
 }
 
 type agendaData struct {
@@ -83,7 +84,7 @@ func agendaOf(rows []calendar.Row, tz *time.Location, now time.Time) []agendaEve
 		fields := row.Dict(tz)
 		first, _ := fields["start"].(string)
 		last, _ := fields["end"].(string)
-		event := agendaEvent{Time: "all day", Title: row.Title, Meta: row.Location}
+		event := agendaEvent{Time: "all day", Title: row.Title, Meta: row.Location, Ask: eventRef(now.Format(time.DateOnly), row.UID)}
 		start, err := time.ParseInLocation("2006-01-02T15:04:05", first[:min(len(first), 19)], tz)
 		end, endErr := time.ParseInLocation("2006-01-02T15:04:05", last[:min(len(last), 19)], tz)
 		if err == nil {

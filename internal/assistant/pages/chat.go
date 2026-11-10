@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -18,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
@@ -40,25 +42,71 @@ type listData struct {
 }
 
 type About struct {
-	Ref   string `json:"ref"`
-	Label string `json:"label"`
-	Line  string `json:"-"`
+	Ref     string `json:"ref"`
+	Label   string `json:"label"`
+	Line    string `json:"-"`
+	Project int64  `json:"-"`
+}
+
+var (
+	aboutUID  = regexp.MustCompile(`^[A-Za-z0-9@._+-]{1,200}$`)
+	aboutFile = regexp.MustCompile(`^[A-Za-z0-9._ ()+-]{1,200}$`)
+)
+
+func eventRef(day, uid string) string {
+	if !aboutUID.MatchString(uid) {
+		return ""
+	}
+	return "event:" + day + ":" + uid
+}
+
+func (p *pages) aboutEvent(ctx context.Context, rest string) *About {
+	day, uid, _ := strings.Cut(rest, ":")
+	start, err := time.Parse(time.DateOnly, day)
+	if err != nil || eventRef(day, uid) == "" || !module.IsEnabled(p.deps.Ctx, module.Calendar) {
+		return nil
+	}
+	set, err := calendar.LoadSettings(ctx, p.deps.DB.Read)
+	check(err)
+	listing, err := calendar.ListEvents(ctx, p.deps.Env, set, day, start.AddDate(0, 0, 1).Format(time.DateOnly), calendar.Filter{})
+	if err != nil {
+		return nil
+	}
+	for _, event := range listing.Events {
+		if event.UID == uid {
+			return &About{Ref: eventRef(day, uid), Label: event.Title, Line: "About the calendar event with uid " + uid + " on " + day + "."}
+		}
+	}
+	return nil
 }
 
 func (p *pages) about(ctx context.Context, ref string) *About {
 	kind, raw, _ := strings.Cut(ref, ":")
+	if kind == "event" {
+		return p.aboutEvent(ctx, raw)
+	}
 	id, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil {
 		return nil
 	}
-	a := About{Ref: kind + ":" + strconv.FormatInt(id, 10)}
+	number := strconv.FormatInt(id, 10)
+	a := About{Ref: kind + ":" + number}
 	switch kind {
 	case "mail":
 		err = p.deps.DB.Read.QueryRowContext(ctx, "SELECT COALESCE(subject, '') FROM messages WHERE id = ?", id).Scan(&a.Label)
-		a.Line = "About mail message " + strconv.FormatInt(id, 10) + "."
+		a.Line = "About mail message " + number + "."
 	case "knowledge":
 		err = p.deps.DB.Read.QueryRowContext(ctx, "SELECT title FROM kb_records WHERE id = ?", id).Scan(&a.Label)
-		a.Line = "About knowledge record " + strconv.FormatInt(id, 10) + "."
+		a.Line = "About knowledge record " + number + "."
+	case "package":
+		err = p.deps.DB.Read.QueryRowContext(ctx, "SELECT CASE WHEN merchant <> '' THEN merchant WHEN carrier <> '' THEN carrier ELSE 'Package' END FROM packages WHERE id = ?", id).Scan(&a.Label)
+		a.Line = "About tracked package " + number + "."
+	case "file":
+		err = p.deps.DB.Read.QueryRowContext(ctx, "SELECT name, project_id FROM thread_files WHERE id = ? AND project_id IS NOT NULL", id).Scan(&a.Label, &a.Project)
+		if err == nil && !aboutFile.MatchString(a.Label) {
+			return nil
+		}
+		a.Line = "About the project file " + strconv.Quote(a.Label) + "."
 	default:
 		return nil
 	}
@@ -171,6 +219,9 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 	}
 	if about := p.about(ctx, web.FormString(form, "about", "")); about != nil && text != "" {
 		text = about.Line + "\n\n" + text
+		if about.Project != 0 {
+			projectID = about.Project
+		}
 	}
 	var project *int64
 	if projectID != 0 {

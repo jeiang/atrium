@@ -22,8 +22,9 @@
         </p>
         {{if .LastEvent}}<p class="text-xs text-muted-foreground">{{.LastEvent}}{{if .LastEventDescription}} · {{.LastEventDescription}}{{end}}{{if .LastSync}} · {{.LastSync}}{{end}}</p>{{end}}
       </div>
-      <form method="post" action="/watches/packages/{{.ID}}/dismiss">
+      <form method="post" action="/watches/packages/{{.ID}}/dismiss" class="flex flex-wrap items-center gap-2">
         <input type="hidden" name="csrf_token" value="{{$csrf}}">
+        <a class="btn" data-size="sm" data-variant="outline" href="/chat?about=package:{{.ID}}">{{icon "messages-square"}}Ask about this</a>
         <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "x"}}Dismiss</button>
       </form>
     </li>
