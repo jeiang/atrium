@@ -262,6 +262,28 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "agent_kb_retrieval_distance": {
+          "default": 0.35,
+          "type": [
+            "number",
+            "string"
+          ]
+        },
+        "agent_kb_retrieval_distance_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "agent_kb_retrieval_tokens": {
+          "default": 1500,
+          "type": [
+            "integer",
+            "string"
+          ]
+        },
+        "agent_kb_retrieval_tokens_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "agent_kb_write_chars": {
           "default": 4000,
           "type": [
