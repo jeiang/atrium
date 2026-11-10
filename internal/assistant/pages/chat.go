@@ -63,7 +63,7 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string) 
 	loc, err := config.From(r.Context()).Location(p.deps.Env)
 	check(err)
 	data.Date = time.Unix(int64(p.now()), 0).In(loc).Format("Monday, January 2")
-	data.Agenda = module.IsEnabled(r.Context(), module.Calendar)
+	data.Agenda = module.IsEnabled(p.deps.Ctx, module.Calendar)
 	data.Welcome = len(found) == 0 && q == "" && view == ""
 	if data.Welcome {
 		exists, err := threads.HasChat(r.Context(), p.deps.DB.Read)
