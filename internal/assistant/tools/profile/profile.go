@@ -189,8 +189,10 @@ func Tools() []tool.Tool {
 			InputSchema: json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {"key": %s, "value": %s}, "required": ["key", "value"], "additionalProperties": false}`, keyBound.TextSchema(), valueBound.TextSchema())),
 			Handler:     set,
 			Effect:      tool.WriteUndo, Undo: "profile_restore",
-			Annotated: true,
-			Contexts:  tool.Kinds{tool.Chat},
+			Annotated:   true,
+			Channel:     tool.ChannelOwn,
+			PromptStore: true,
+			Contexts:    tool.Kinds{tool.Chat},
 		},
 	}
 }

@@ -49,6 +49,7 @@ func folderTools() []tool.Tool {
 			Handler:     mailFolderCreate,
 			Effect:      tool.WriteUndo, Undo: UndoFolderDelete,
 			Annotated: true,
+			Channel:   tool.ChannelOwn,
 			Contexts:  tool.Kinds{tool.Chat},
 		},
 		{
@@ -61,6 +62,7 @@ func folderTools() []tool.Tool {
 			Handler:     mailMove,
 			Effect:      tool.WriteUndo, Undo: UndoMoveBack,
 			Annotated: true,
+			Channel:   tool.ChannelOwn,
 			Contexts:  tool.Kinds{tool.Chat},
 		},
 	}

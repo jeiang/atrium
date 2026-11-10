@@ -3,6 +3,7 @@ package weathertools
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/integrations/transport"
@@ -21,8 +22,19 @@ func Tools() []tool.Tool {
 		Handler:     handle,
 		Effect:      tool.Read,
 		Annotated:   true,
+		Channel:     tool.ChannelNone,
+		ChannelOf:   channelOf,
 		Contexts:    tool.AllKinds,
 	}}
+}
+
+func channelOf(args tool.Args) tool.Channel {
+	if place, ok := args.Get("place"); ok {
+		if text, isText := place.(string); isText && strings.TrimSpace(text) != "" {
+			return tool.ChannelInternet
+		}
+	}
+	return tool.ChannelNone
 }
 
 func handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {

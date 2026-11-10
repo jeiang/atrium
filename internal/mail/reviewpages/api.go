@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/approval"
+	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/mail/drafts"
@@ -127,7 +128,7 @@ func (s *service) approvalOf(p *proposals.Proposal) apiApproval {
 		Args: []Arg{}, Preview: plainJSON(p.Preview), Result: plainJSON(p.Result),
 	}
 	if kind.Approval {
-		out.Args = approvalArgs(p.Preview)
+		out.Args = approvalArgs(p.Preview, p.Kind != permission.Kind)
 	}
 	return out
 }
@@ -265,7 +266,7 @@ func (s *service) apiDeny(w http.ResponseWriter, r *http.Request) {
 		status = proposals.Suppressed
 	}
 	ctx := detached(r)
-	err := proposals.Dismiss(ctx, s.deps.DB, found.ID, status, appResolver, s.now())
+	err := s.pipeline.Dismiss(ctx, found.ID, status, appResolver)
 	var refused proposals.ProposalError
 	if errors.As(err, &refused) {
 		web.APIError(w, http.StatusConflict, "not_dismissed", err.Error())

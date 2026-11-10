@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/block"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
@@ -23,6 +24,7 @@ import (
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/obs"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -105,7 +107,7 @@ func (x *dispatcher) invoke(ctx context.Context, t *tool.Tool, use ToolUse) (err
 	fail := func(text string) (*string, any, error) { return new(text), nil, nil }
 	if t == nil {
 		if _, ok := x.withdrawn[use.Name]; ok {
-			return fail(use.Name + " is no longer available in this thread: it has read private data or web content")
+			return fail(use.Name + " is not allowed in this thread by the permission table")
 		}
 		return fail("unknown tool " + use.Name)
 	}
@@ -302,6 +304,18 @@ func (x *dispatcher) executeParallel(ctx context.Context, uses []ToolUse, out []
 	return nil
 }
 
+func (x *dispatcher) permitted(ctx context.Context, use ToolUse, runID int64) (bool, error) {
+	_, args, err := use.Args()
+	if err != nil {
+		return false, err
+	}
+	fingerprint, err := permission.FingerprintOf(use.Name, runID, tool.Args(args))
+	if err != nil {
+		return false, err
+	}
+	return proposals.Known(ctx, x.d.Read, fingerprint)
+}
+
 func (x *dispatcher) settle(ctx context.Context, use ToolUse, call *journal.ToolCall) (json.RawMessage, error) {
 	if err := x.guard(ctx); err != nil {
 		return nil, err
@@ -309,7 +323,15 @@ func (x *dispatcher) settle(ctx context.Context, use ToolUse, call *journal.Tool
 	if call == nil {
 		return x.execute(ctx, use)
 	}
-	if call.ReplayClass == journal.Safe {
+	replay := call.ReplayClass == journal.Safe
+	if !replay && call.State == journal.Started {
+		permitted, err := x.permitted(ctx, use, call.RunID)
+		if err != nil {
+			return nil, err
+		}
+		replay = permitted
+	}
+	if replay {
 		if _, err := x.d.Write.ExecContext(ctx,
 			"UPDATE tool_calls SET state = ?, error = NULL, result_id = NULL, finished_at = NULL, started_at = ? WHERE id = ?",
 			journal.Started, x.now(), call.ID); err != nil {

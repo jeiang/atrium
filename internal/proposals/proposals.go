@@ -36,16 +36,19 @@ type Kind struct {
 	Approval bool
 }
 
+type DismissHook func(ctx context.Context, p *Proposal) error
+
 type Registry struct {
-	Executors map[string]Executor
-	Undoers   map[string]Undoer
-	kinds     []Kind
-	byName    map[string]Kind
-	Sync      SyncHook
+	Executors  map[string]Executor
+	Undoers    map[string]Undoer
+	Dismissers map[string]DismissHook
+	kinds      []Kind
+	byName     map[string]Kind
+	Sync       SyncHook
 }
 
 func NewRegistry() *Registry {
-	return &Registry{Executors: map[string]Executor{}, Undoers: map[string]Undoer{}, byName: map[string]Kind{}}
+	return &Registry{Executors: map[string]Executor{}, Undoers: map[string]Undoer{}, Dismissers: map[string]DismissHook{}, byName: map[string]Kind{}}
 }
 
 func (r *Registry) AddKind(k Kind) {

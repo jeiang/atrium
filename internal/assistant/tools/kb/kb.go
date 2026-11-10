@@ -333,6 +333,7 @@ func Tools() []tool.Tool {
 			Handler:     write,
 			Effect:      tool.WriteUndo, Undo: kb.UndoOp,
 			Annotated: true,
+			Channel:   tool.ChannelOwn,
 			Contexts:  tool.DefaultKinds,
 		},
 		{
@@ -342,6 +343,7 @@ func Tools() []tool.Tool {
 			Handler:     retract,
 			Effect:      tool.WriteUndo, Undo: kb.UndoOp,
 			Annotated: true,
+			Channel:   tool.ChannelOwn,
 			Contexts:  tool.DefaultKinds,
 		},
 	}

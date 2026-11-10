@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
@@ -228,8 +229,9 @@ func ThreadOf(ctx context.Context, q Querier, id int64) (int64, bool, error) {
 }
 
 func PendingInThread(ctx context.Context, q Querier, threadID int64) ([]*Proposal, error) {
-	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM proposals p WHERE p.status = 'pending' AND p.id IN "+
-		"(SELECT proposal_id FROM ("+threadRefs+" AND m.thread_id = ?)) ORDER BY p.created_ts, p.id", threadID)
+	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM proposals p WHERE p.status = 'pending' AND (p.id IN "+
+		"(SELECT proposal_id FROM ("+threadRefs+" AND m.thread_id = ?)) OR (p.kind = ? AND json_extract(p.payload, '$.thread_id') = ?)) "+
+		"ORDER BY p.created_ts, p.id", threadID, permission.Kind, threadID)
 	if err != nil {
 		return nil, err
 	}
@@ -470,6 +472,30 @@ func (p *Pipeline) now() float64 {
 		return p.Now()
 	}
 	return float64(time.Now().UnixNano()) / 1e9
+}
+
+func (p *Pipeline) Dismiss(ctx context.Context, id int64, status string, who Resolver) error {
+	prop, err := Get(ctx, p.DB.Write, id)
+	if err != nil {
+		return err
+	}
+	if prop == nil {
+		return ProposalError(fmt.Sprintf("unknown proposal %d", id))
+	}
+	var hook DismissHook
+	if p.Registry != nil {
+		hook = p.Registry.Dismissers[prop.Kind]
+	}
+	if hook == nil && prop.Kind == permission.Kind {
+		return ProposalError("decide permission requests in the web app")
+	}
+	if err := Dismiss(ctx, p.DB, id, status, who, p.now()); err != nil {
+		return err
+	}
+	if hook != nil {
+		return hook(ctx, prop)
+	}
+	return nil
 }
 
 func (p *Pipeline) claim(ctx context.Context, id int64, status string) (bool, error) {

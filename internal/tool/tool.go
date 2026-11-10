@@ -20,11 +20,17 @@ func (a Args) Get(name string) (any, bool) {
 
 type Handler func(ctx context.Context, tc *Context, args Args) (any, error)
 
-type Flags struct {
-	ExternalEffect bool
-	Cost           bool
-	Web            bool
-}
+type Channel uint8
+
+const (
+	ChannelNone Channel = iota
+	ChannelOwn
+	ChannelNotify
+	ChannelPeople
+	ChannelInternet
+)
+
+func (c Channel) Valid() bool { return c <= ChannelInternet }
 
 type Marks uint8
 
@@ -54,7 +60,9 @@ type Tool struct {
 	Handler     Handler
 	Effect      Effect
 	Undo        string
-	Flags       Flags
+	Channel     Channel
+	ChannelOf   func(Args) Channel
+	PromptStore bool
 	Marks       Marks
 	Annotated   bool
 	Contexts    Kinds

@@ -220,7 +220,7 @@ func Command(o Options) *cli.Command {
 				if *forever {
 					status = proposals.Suppressed
 				}
-				if err := proposals.Dismiss(x.Ctx, x.DB, int64(*id), status, operator, x.Now()); err != nil {
+				if err := x.Pipeline().Dismiss(x.Ctx, int64(*id), status, operator); err != nil {
 					return err
 				}
 				x.JSON(dismissView{ID: int64(*id), Dismissed: true})

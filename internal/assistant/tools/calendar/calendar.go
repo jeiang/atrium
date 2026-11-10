@@ -341,7 +341,7 @@ func baseTools() []tool.Tool {
 			Handler:     propose,
 			Effect:      tool.Propose,
 			Annotated:   true,
-			Flags:       tool.Flags{ExternalEffect: true},
+			Channel:     tool.ChannelOwn,
 			Contexts:    tool.Kinds{tool.Chat},
 		},
 		approval.Gate(tool.Tool{
@@ -350,7 +350,7 @@ func baseTools() []tool.Tool {
 			InputSchema: schema(`"uid":{"type":"string"}`, `["uid"]`),
 			Effect:      tool.Propose, Undo: "calendar_recreate",
 			Annotated: true,
-			Flags:     tool.Flags{ExternalEffect: true},
+			Channel:   tool.ChannelOwn,
 			Contexts:  tool.Kinds{tool.Chat},
 			Approval:  &tool.Approval{Apply: remove, Label: "Delete calendar event", Icon: "trash-2", Module: module.Calendar, Detail: "uid"},
 		}),
@@ -362,6 +362,7 @@ func baseTools() []tool.Tool {
 			Handler:     propose,
 			Effect:      tool.Propose,
 			Annotated:   true,
+			Channel:     tool.ChannelOwn,
 			Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 		},
 	}

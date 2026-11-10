@@ -6,6 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/live"
@@ -46,12 +47,12 @@ func proposalView(p *proposals.Proposal, kind proposals.Kind) ProposalView {
 		BlockedUndo: p.BlockedUndo, BlockedError: p.BlockedError, Preview: plainJSON(p.Preview), Result: plainJSON(p.Result), Approval: kind.Approval,
 	}
 	if kind.Approval {
-		v.Args = approvalArgs(p.Preview)
+		v.Args = approvalArgs(p.Preview, p.Kind != permission.Kind)
 	}
 	return v
 }
 
-func approvalArgs(preview any) []Arg {
+func approvalArgs(preview any, clip bool) []Arg {
 	d, _ := preview.(map[string]any)
 	args, _ := d["args"].(map[string]any)
 	keys := make([]string, 0, len(args))
@@ -63,12 +64,12 @@ func approvalArgs(preview any) []Arg {
 	for _, k := range keys {
 		label := strings.ReplaceAll(k, "_", " ")
 		r, size := utf8.DecodeRuneInString(label)
-		out = append(out, Arg{Label: strings.ToUpper(string(r)) + label[size:], Value: argText(args[k])})
+		out = append(out, Arg{Label: strings.ToUpper(string(r)) + label[size:], Value: argText(args[k], clip)})
 	}
 	return out
 }
 
-func argText(v any) string {
+func argText(v any, clip bool) string {
 	var text string
 	switch x := v.(type) {
 	case string:
@@ -83,7 +84,7 @@ func argText(v any) string {
 	default:
 		text = jsonx.Dumps(x)
 	}
-	if utf8.RuneCountInString(text) > 200 {
+	if clip && utf8.RuneCountInString(text) > 200 {
 		return textx.Clip(text, 199) + "…"
 	}
 	return text

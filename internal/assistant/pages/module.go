@@ -61,6 +61,14 @@ func Module(o Options) web.Module {
 		}
 		base, cancel := context.WithCancel(d.Ctx)
 		svc := service.New(base, d.DB, d.Cfg, d.Env, run)
+		d.ResumeRun = func(ctx context.Context, runID int64) error {
+			err := svc.StartResume(ctx, runID)
+			var notInterrupted service.NotInterrupted
+			if errors.As(err, &notInterrupted) {
+				return nil
+			}
+			return err
+		}
 		checked := make(chan struct{})
 		go func() {
 			defer close(checked)

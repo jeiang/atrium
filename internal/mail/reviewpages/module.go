@@ -71,7 +71,12 @@ func Module(o Options) web.Module {
 		now := wallClock
 		registry := proposals.NewRegistry()
 		syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: now}
-		handlers.Register(registry, handlers.Deps{DB: d.DB, Open: open, Syncer: syncer, Now: now, Env: d.Env})
+		handlers.Register(registry, handlers.Deps{DB: d.DB, Open: open, Syncer: syncer, Now: now, Env: d.Env, Resume: func(ctx context.Context, runID int64) error {
+			if d.ResumeRun == nil {
+				return proposals.ProposalError("the assistant module is not running")
+			}
+			return d.ResumeRun(ctx, runID)
+		}})
 		undo := o.Writes
 		if undo == nil {
 			undo = writes.NewRegistry()

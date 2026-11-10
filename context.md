@@ -347,29 +347,39 @@ behavior-parity target.
   and a response carrying a server `web_search_tool_result` mark the
   thread `untrusted`; `research` declares all four marks and returns
   `untrusted` plus the child thread's marks. `weather`, the media reads,
-  `task_list`, `schedule_list`, `plan` and `stale_wiki` declare none. The
-  nightly `threads_today` read declares all four and carries the union of
-  the marks of the threads it returns. `untrusted` alone does not withdraw
-  egress. From the next model request of the same run on, and in every
-  later run of that thread in any process, a marked thread cannot use
-  `external_effect`, `cost`, `notify` or `write_undo` tools. Later runs are
-  not offered them. Within the run that marked it, the request keeps the
-  tools array it started with so the run's thinking blocks stay valid, and
-  dispatch refuses a withdrawn tool with an error result; only when a
-  server tool (`web_search`) must go is the array rebuilt, and the thinking
-  signed before it is dropped. A thinking block is resent only while
-  everything before it is unchanged. The one exception is the Rule of Two:
-  a thread marked only `untrusted` keeps the read-only `web` tools
-  (`web_fetch`, `web_search`, `research`) while it cannot reach private
-  data, meaning its run offers no tool that returns a kind and its system
-  prompt carries no profile or project block (only subagent runs qualify).
-  Recall pages are never themselves stubbed. So an `untrusted` subagent
-  can search, read a long page through `recall` and follow its links over
-  several steps. A research result marks the parent `untrusted` plus the
-  child's marks, so the parent, which holds private data, loses that
-  egress. Branches inherit the marks. An operator message may carry
-  reference blocks: `@thread/12` (a whole thread) or `@thread/12/m34`
-  (one message) is resolved when the message is sent and stored as
+  `plan` and `stale_wiki` declare none. The nightly `threads_today` read
+  declares all four and carries the union of the marks of the threads it
+  returns. `task_list` and `schedule_list` declare all four as their
+  bound and return the marks of the threads that wrote the listed rows
+  through `agent_writes`; they mark nothing when those threads were
+  clean. A cron thread starts with the marks of the thread that wrote its
+  schedule unless the operator wrote the prompt. `profile_set` and
+  `nightly_observe` are refused on any marked thread.
+- Tools declare a channel: `none`, own accounts, notify, people or
+  internet. Admission classifies the thread into one of six situations:
+  nothing marked; kinds without untrusted text; `pii` without untrusted
+  text; untrusted text with knowledge in the prompt or a private tool
+  offered; untrusted text with any kind; untrusted text in an isolated
+  subagent run. The permission table maps the channel and situation to
+  allow, ask or deny. Own and notify always allow; people always asks;
+  internet allows, asks or denies by situation. Code floors keep people
+  and internet at ask or deny whenever untrusted text is present, so
+  editing the table can only tighten those cells. A tool that already has
+  an approval card asks through that card. Otherwise an ask wraps the
+  tool in a permission gate: the call creates a `permission` proposal and
+  parks the run; approving resumes the run and performs the call once,
+  dismissing resumes it with a denial result, and the handler never runs
+  while the request is pending or after it is dismissed. Cron, nightly
+  and subagent runs never park: an ask without a card is a deny there. A
+  tool that leaves the allow set is withdrawn from dispatch; the request
+  keeps its tools array so the run's thinking stays valid, and only a
+  server tool that must go rebuilds the request. Phone action links never
+  approve or dismiss a permission request. Branches inherit the marks.
+  A thinking block is resent only while everything before it is
+  unchanged.
+- An operator message may carry reference blocks: `@thread/12` (a whole
+  thread) or `@thread/12/m34` (one message) is resolved when the message
+  is sent and stored as
   `{"type":"reference","thread_id","seq","title","text","marks","tokens"}`.
   The text is the source thread's operator and assistant text, oldest
   first, newest exchanges only when it exceeds `agent_ref_tokens`

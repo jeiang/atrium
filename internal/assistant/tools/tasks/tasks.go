@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/tasks"
 	"github.com/jeiang/atrium/internal/tool"
@@ -29,6 +30,7 @@ func Tools() []tool.Tool {
 			Handler:     list,
 			Effect:      tool.Read,
 			Annotated:   true,
+			Marks:       tool.AllMarks,
 			Contexts:    tool.AllKinds,
 		},
 		{
@@ -38,6 +40,7 @@ func Tools() []tool.Tool {
 			Handler:     add,
 			Effect:      tool.WriteUndo, Undo: UndoDelete,
 			Annotated: true,
+			Channel:   tool.ChannelOwn,
 			Contexts:  tool.Kinds{tool.Chat, tool.Cron, tool.Nightly},
 		},
 		{
@@ -47,6 +50,7 @@ func Tools() []tool.Tool {
 			Handler:     update,
 			Effect:      tool.WriteUndo, Undo: UndoRestore,
 			Annotated: true,
+			Channel:   tool.ChannelOwn,
 			Contexts:  tool.Kinds{tool.Chat},
 		},
 		{
@@ -56,6 +60,7 @@ func Tools() []tool.Tool {
 			Handler:     done,
 			Effect:      tool.WriteUndo, Undo: UndoRestore,
 			Annotated: true,
+			Channel:   tool.ChannelOwn,
 			Contexts:  tool.Kinds{tool.Chat},
 		},
 	}
@@ -100,7 +105,19 @@ func list(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	return tasks.List(ctx, tc.DB.Read, status, int(limit))
+	found, err := tasks.List(ctx, tc.DB.Read, status, int(limit))
+	if err != nil {
+		return nil, err
+	}
+	targets := make([]string, len(found))
+	for i, task := range found {
+		targets[i] = "task:" + tasks.IDString(task.ID)
+	}
+	marks, err := threads.MarksOf(ctx, tc.DB.Read, targets)
+	if err != nil {
+		return nil, err
+	}
+	return tool.Marked{Value: found, Marks: marks}, nil
 }
 
 func add(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {

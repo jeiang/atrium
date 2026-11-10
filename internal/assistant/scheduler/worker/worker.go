@@ -236,7 +236,18 @@ func (w *Worker) executePrompt(ctx context.Context, claim scheduler.Claim) sched
 	operator := job.Kind == scheduler.JobCron && job.PromptBy != nil && *job.PromptBy == scheduler.Operator
 	var threadID *int64
 	runID, err := func() (int64, error) {
-		id, err := threads.Create(ctx, d.Write, w.now(), threads.Spec{Kind: kind, Title: &job.Name, JobID: &job.ID})
+		spec := threads.Spec{Kind: kind, Title: &job.Name, JobID: &job.ID}
+		if !operator {
+			marks, err := threads.MarksOf(ctx, d.Read, []string{fmt.Sprintf("schedule:%d", job.ID)})
+			if err != nil {
+				return 0, err
+			}
+			if marks != 0 {
+				now := w.now()
+				spec.Marks = threads.Marks{At: &now, Set: marks}
+			}
+		}
+		id, err := threads.Create(ctx, d.Write, w.now(), spec)
 		if err != nil {
 			return 0, err
 		}
