@@ -1,15 +1,21 @@
 package pages
 
 import (
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
 	"net/http"
 	"slices"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/textsearch"
 	"github.com/jeiang/atrium/internal/web"
@@ -29,6 +35,35 @@ type agendaEvent struct {
 
 type agendaData struct {
 	Events []agendaEvent `json:"events"`
+	Next   *agendaEvent  `json:"next"`
+}
+
+func (p *pages) digestLines(ctx context.Context, day time.Time) []block.DigestLine {
+	var thread int64
+	err := p.deps.DB.Read.QueryRowContext(ctx,
+		"SELECT id FROM threads WHERE kind = ? AND role = ? AND title = ? AND deleted_at IS NULL ORDER BY id LIMIT 1",
+		threads.Chat, threads.TodayRole, threads.TodayTitle(day)).Scan(&thread)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil
+	}
+	check(err)
+	rows, err := p.deps.DB.Read.QueryContext(ctx, "SELECT content_json FROM thread_messages WHERE thread_id = ? ORDER BY seq DESC LIMIT 20", thread)
+	check(err)
+	bodies, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
+		var body string
+		return body, r.Scan(&body)
+	})
+	check(err)
+	for _, body := range bodies {
+		var content []json.RawMessage
+		if json.Unmarshal([]byte(body), &content) != nil {
+			continue
+		}
+		if _, lines, ok, err := block.DigestLines(content); err == nil && ok {
+			return lines
+		}
+	}
+	return nil
 }
 
 func span(d time.Duration) string {
@@ -81,7 +116,14 @@ func (p *pages) agenda(w http.ResponseWriter, r *http.Request) {
 	now := time.Unix(int64(p.now()), 0).In(tz)
 	listing, err := calendar.ListEvents(ctx, p.deps.Env, set, now.Format(time.DateOnly), now.AddDate(0, 0, 1).Format(time.DateOnly), calendar.Filter{})
 	check(err)
-	p.fragment(w, r, http.StatusOK, "_agenda.gohtml", agendaData{Events: agendaOf(listing.Events, tz, now)})
+	data := agendaData{Events: agendaOf(listing.Events, tz, now)}
+	for i, event := range data.Events {
+		if event.State != "past" && event.Time != "all day" {
+			data.Next = &data.Events[i]
+			break
+		}
+	}
+	p.fragment(w, r, http.StatusOK, "_agenda.gohtml", data)
 }
 
 type paletteData struct {

@@ -47,7 +47,6 @@ type Control struct {
 	Modules []Module
 	Mark    func(name string) string
 	State   func(ctx context.Context, q db.Querier, name string) (settings.ModuleView, error)
-	Set     func(ctx context.Context, d *db.DB, name string, on bool) error
 }
 
 type pageData struct {
@@ -111,7 +110,6 @@ func Page(groups []Group, generic []Generic, control Control) web.Page {
 			})
 		}
 		d.Admin(http.MethodPost, "/settings/groups/{module}/{name}", h.save)
-		d.Admin(http.MethodPost, "/settings/modules/{name}", h.toggle)
 	}}
 }
 
@@ -224,23 +222,4 @@ func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Location", group.URL+"?saved="+module+"."+name)
 	w.WriteHeader(http.StatusSeeOther)
-}
-
-func (h handlers) toggle(w http.ResponseWriter, r *http.Request) {
-	name := chi.URLParam(r, "name")
-	for _, m := range h.control.Modules {
-		if m.Name != name {
-			continue
-		}
-		ctx := audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
-		err := h.control.Set(ctx, h.d.DB, name, web.FormString(web.FormValues(r), "enabled", "") == "true")
-		var pinned *settings.PinnedError
-		if err != nil && !errors.As(err, &pinned) {
-			panic(err)
-		}
-		w.Header().Set("Location", m.URL)
-		w.WriteHeader(http.StatusSeeOther)
-		return
-	}
-	http.NotFound(w, r)
 }

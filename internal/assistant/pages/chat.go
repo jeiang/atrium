@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/references"
@@ -24,12 +25,13 @@ import (
 )
 
 type listData struct {
-	Threads []threads.Listed `json:"threads"`
-	Q       string           `json:"q"`
-	View    string           `json:"view"`
-	Welcome bool             `json:"welcome"`
-	Date    string           `json:"date"`
-	Agenda  bool             `json:"agenda"`
+	Threads []threads.Listed   `json:"threads"`
+	Q       string             `json:"q"`
+	View    string             `json:"view"`
+	Welcome bool               `json:"welcome"`
+	Date    string             `json:"date"`
+	Digest  []block.DigestLine `json:"digest"`
+	Agenda  bool               `json:"agenda"`
 
 	Defaults threads.Options `json:"defaults"`
 	Composer ComposerView    `json:"composer"`
@@ -62,7 +64,9 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string) 
 	}
 	loc, err := config.From(r.Context()).Location(p.deps.Env)
 	check(err)
-	data.Date = time.Unix(int64(p.now()), 0).In(loc).Format("Monday, January 2")
+	day := time.Unix(int64(p.now()), 0).In(loc)
+	data.Date = day.Format("Monday, January 2")
+	data.Digest = p.digestLines(r.Context(), day)
 	data.Agenda = module.IsEnabled(p.deps.Ctx, module.Calendar)
 	data.Welcome = len(found) == 0 && q == "" && view == ""
 	if data.Welcome {

@@ -51,6 +51,8 @@ type knowledgeListData struct {
 	State string
 	Rows  []knowledgeRow
 	Bulk  bool
+
+	Unconfirmed bool
 }
 
 type knowledgeSource struct {
@@ -140,6 +142,7 @@ func (p *pages) knowledgeRoutes(r chi.Router) {
 	r.Get("/library/knowledge/new", p.knowledgeNew)
 	r.Post("/library/knowledge/new", p.knowledgeCreate)
 	r.Post("/library/knowledge/confirm-all", p.knowledgeConfirmAll)
+	r.Post("/library/knowledge/confirm", p.knowledgeConfirmSelected)
 	r.Get("/library/knowledge/profile", p.knowledgeProfile)
 	r.Post("/library/knowledge/profile", p.knowledgeProfileAdd)
 	r.Post("/library/knowledge/runs/{run_id}/retract", p.knowledgeRunRetract)
@@ -177,6 +180,9 @@ func (p *pages) knowledgeList(w http.ResponseWriter, r *http.Request) {
 	check(err)
 	data := knowledgeListData{Q: query, Scope: scope, State: state, Rows: rowsOf(found),
 		Bulk: state == "unconfirmed" || state == "imported"}
+	for _, row := range data.Rows {
+		data.Unconfirmed = data.Unconfirmed || !row.Confirmed && !row.Retracted
+	}
 	if web.IsPartial(r) {
 		p.renderFragment(w, r, http.StatusOK, "_knowledge_rows.gohtml", data, nil)
 		return
@@ -371,6 +377,34 @@ func (p *pages) knowledgeRunRetract(w http.ResponseWriter, r *http.Request) {
 	_, err := kb.RunRetract(detached(r), p.deps.DB, p.undoers(), runID, p.now())
 	check(err)
 	navigate(w, r, "/library/knowledge")
+}
+
+func (p *pages) knowledgeConfirmSelected(w http.ResponseWriter, r *http.Request) {
+	form := web.FormValues(r)
+	query, scope, state := knowledgeFilter(url.Values{"q": {web.FormString(form, "q", "")}, "scope": {web.FormString(form, "scope", "")}, "state": {web.FormString(form, "state", "")}})
+	ids := make([]int64, 0, len(form["id"]))
+	for _, raw := range form["id"] {
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil || id < 1 {
+			web.Unprocessable(w, web.BadInt("body", "id", raw))
+			return
+		}
+		ids = append(ids, id)
+	}
+	if len(ids) == 0 {
+		p.failure(w, r, "Nothing confirmed", "Select at least one record.")
+		return
+	}
+	for _, id := range ids {
+		_, _, err := kb.Confirm(detached(r), p.deps.DB, p.undoers(), id, p.now())
+		var refused kb.Refused
+		if errors.As(err, &refused) {
+			p.failure(w, r, "Not confirmed", err.Error())
+			return
+		}
+		check(err)
+	}
+	navigate(w, r, "/library/knowledge?"+url.Values{"q": {query}, "scope": {scope}, "state": {state}}.Encode())
 }
 
 func (p *pages) knowledgeConfirmAll(w http.ResponseWriter, r *http.Request) {

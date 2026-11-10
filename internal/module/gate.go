@@ -2,7 +2,6 @@ package module
 
 import (
 	"context"
-	"database/sql"
 	"net/http"
 	"strings"
 
@@ -71,20 +70,10 @@ func (s *Set) settingMark(name string) string {
 	return ""
 }
 
-func (s *Set) settingToggle(ctx context.Context, d *db.DB, name string, on bool) error {
-	if on {
-		_, err := s.Enable(ctx, d, name)
-		return err
-	}
-	return d.WithTx(ctx, func(tx *sql.Tx) error {
-		return s.reg.Set(ctx, tx, FlagKey(name), "false")
-	})
-}
-
 func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, settingspage.Control) {
 	var groups []settingspage.Group
 	var generic []settingspage.Generic
-	control := settingspage.Control{State: s.settingState, Set: s.settingToggle, Mark: s.settingMark}
+	control := settingspage.Control{State: s.settingState, Mark: s.settingMark}
 	for _, r := range s.regs {
 		if !r.Core {
 			for _, p := range r.Pages {

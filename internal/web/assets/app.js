@@ -1099,3 +1099,11 @@ document.addEventListener("keydown", (event) => {
     menu.open = false;
   });
 });
+
+document.addEventListener("change", (event) => {
+  const all = event.target.closest("[data-select-all]");
+  if (!all) return;
+  all.form.querySelectorAll('input[type="checkbox"][name="id"]').forEach((box) => {
+    box.checked = all.checked;
+  });
+});

@@ -19,12 +19,7 @@
   <h2>{{.Title}}</h2>
   <span class="badge" data-variant="outline"><span class="size-1.5 rounded-full {{if .Reason}}bg-warning{{else if .On}}bg-success{{else}}bg-ink-3{{end}}"></span>{{if .Reason}}Needs settings{{else if .On}}On{{else}}Off{{end}}</span>
   {{if ne .On .Running}}<span class="text-xs text-ink-3" data-restart>Restart atrium to apply</span>{{end}}
-  {{if .Pinned}}<span class="set-pinned ms-auto" data-pinned>{{icon "lock"}}{{.Pinned}}</span>
-  {{else if not .Reason}}<form method="post" action="/settings/modules/{{.Name}}" class="ms-auto"{{if .On}} data-confirm-submit="Turn off {{.Title}}? Its pages, tools and jobs stop after the next restart; its data stays."{{end}}>
-    <input type="hidden" name="csrf_token" value="{{$.CSRF}}">
-    <input type="hidden" name="enabled" value="{{not .On}}">
-    <button type="submit" class="btn" data-size="sm" data-variant="outline">{{if .On}}Turn off{{else}}Turn on{{end}}</button>
-  </form>{{end}}
+  {{with .Pinned}}<span class="set-pinned ms-auto" data-pinned>{{icon "lock"}}{{.}}</span>{{end}}
   {{with .Reason}}<p class="basis-full text-sm text-ink-2">{{.}}</p>{{end}}
 </header>
 {{end}}{{end}}
