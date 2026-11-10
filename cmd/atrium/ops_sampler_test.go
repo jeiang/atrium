@@ -135,11 +135,14 @@ func runOpsSampler(t *testing.T, f *fixture, d *db.DB, wait func() bool) {
 
 func samplesExist(t *testing.T, d *db.DB) func() bool {
 	return func() bool {
-		var n int
+		var n, facts int
 		if err := d.Read.QueryRow("SELECT COUNT(*) FROM ops_samples").Scan(&n); err != nil {
 			t.Fatal(err)
 		}
-		return n >= 6
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_records WHERE scope = 'ops' AND marks = 0 AND writer = 'worker'").Scan(&facts); err != nil {
+			t.Fatal(err)
+		}
+		return n >= 6 && facts >= 6
 	}
 }
 
