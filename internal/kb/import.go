@@ -220,6 +220,27 @@ func notionItems(ctx context.Context, q db.Querier) ([]importItem, bool, error) 
 	return out, uniform, nil
 }
 
+func notionTitles(ctx context.Context, q db.Querier) (map[string]string, error) {
+	rows, err := q.QueryContext(ctx, "SELECT id, title FROM notion_pages WHERE title != ''")
+	if err != nil {
+		return nil, err
+	}
+	type page struct{ id, title string }
+	pages, err := db.Collect(rows, func(r *sql.Rows) (page, error) {
+		var p page
+		err := r.Scan(&p.id, &p.title)
+		return p, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	titles := make(map[string]string, len(pages))
+	for _, p := range pages {
+		titles[notionid.Normalize(p.id)] = p.title
+	}
+	return titles, nil
+}
+
 type existingRecord struct {
 	id          int64
 	title       string
@@ -358,6 +379,10 @@ func Import(ctx context.Context, d *db.DB, dryRun bool, now float64) (ImportStat
 	if err != nil {
 		return stats, err
 	}
+	titles, err := notionTitles(ctx, d.Read)
+	if err != nil {
+		return stats, err
+	}
 	if uniformPrivate {
 		stats.Notes = append(stats.Notes, "notion: every page under the wiki root is private, so private is treated as a sync default rather than an operator choice; imported records are not private")
 	}
@@ -392,7 +417,7 @@ func Import(ctx context.Context, d *db.DB, dryRun bool, now float64) (ImportStat
 	}
 	convertNotion := func() {
 		for i := range notionPages {
-			notionPages[i].Body = notionmd.Import(rawBodies[i], refs)
+			notionPages[i].Body = notionmd.Import(rawBodies[i], refs, titles)
 		}
 	}
 	convertNotion()
