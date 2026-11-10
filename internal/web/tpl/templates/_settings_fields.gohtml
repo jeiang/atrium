@@ -3,8 +3,8 @@
   <input type="hidden" name="csrf_token" value="{{$csrf}}">
   {{range $f := .Fields}}
   <div role="group" class="field">
-    {{if $f.Bool}}<input type="hidden" name="{{$f.Key}}" value="0">
-    <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="{{$f.Key}}" value="1"{{if eq $f.Value "true"}} checked{{end}}> {{$f.Label}}</label>
+    {{if $f.Bool}}<input type="hidden" name="{{$f.Key}}" value="false">
+    <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="{{$f.Key}}" value="true"{{if eq $f.Value "true"}} checked{{end}}> {{$f.Label}}</label>
     {{else if $f.Options}}<span>{{$f.Label}}</span>
     <div class="flex flex-wrap gap-3">{{range $f.Options}}<label class="flex items-center gap-2 text-sm"><input type="checkbox" name="{{$f.Key}}" value="{{.Value}}"{{if .Checked}} checked{{end}}> {{.Label}}</label>{{end}}</div>
     {{else}}<label for="{{$f.Key}}">{{$f.Label}}</label>

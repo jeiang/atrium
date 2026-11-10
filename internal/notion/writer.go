@@ -69,7 +69,7 @@ func (w *Writer) Rewrite(ctx context.Context, pageID string, edit Edit, date str
 	if updated, merged, err = wiki.WithFooter(next, date, append(append([]string{}, prior...), sources...)); err != nil {
 		return
 	}
-	if err = w.Client.UpdateMarkdown(ctx, pageID, replaceContent(updated)); err != nil {
+	if err = w.Client.UpdateMarkdown(ctx, pageID, ReplaceContent(updated)); err != nil {
 		return
 	}
 	after, err := w.Client.GetPage(ctx, pageID)
@@ -139,7 +139,7 @@ func richText(text string) []any {
 	return []any{map[string]any{"type": "text", "text": map[string]any{"content": text}}}
 }
 
-func replaceContent(text string) map[string]any {
+func ReplaceContent(text string) map[string]any {
 	return map[string]any{"type": "replace_content", "replace_content": map[string]any{"new_str": text}}
 }
 

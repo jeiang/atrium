@@ -152,9 +152,10 @@ func Index(entries []Entry) Page {
 			if e.Scope != scope {
 				continue
 			}
-			line := "- " + e.Cite + " " + e.Title
+			name := html.EscapeString(strings.Join(strings.Fields(e.Title), " "))
+			line := "- " + e.Cite + " " + name
 			if e.Link != "" {
-				line = "- [" + e.Cite + " " + linkText(e.Title) + "](" + e.Link + ")"
+				line = "- [" + e.Cite + " " + linkText(name) + "](" + e.Link + ")"
 			}
 			if e.Writer != "" {
 				line += " · " + e.Writer

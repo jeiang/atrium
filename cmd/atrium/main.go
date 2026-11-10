@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/contacts/contactsmodule"
 	"github.com/jeiang/atrium/internal/core/coremodule"
 	"github.com/jeiang/atrium/internal/db"
+	kbcallables "github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
@@ -72,7 +73,7 @@ func newSet(env config.Env, reg *settings.Registry, st *config.State, mods []mod
 		calendarmodule.Module{},
 		notionmodule.Module{Env: env},
 		mediamodule.Module{Now: now},
-		assistantmodule.Module{Callables: []map[string]worker.Callable{calendarcmd.Callables(), mediacmd.Callables(), mailcmd.Callables()}},
+		assistantmodule.Module{Callables: []map[string]worker.Callable{calendarcmd.Callables(), mediacmd.Callables(), mailcmd.Callables(), kbcallables.Callables()}},
 		notifymodule.Module{Budget: budgetStatus},
 		grafanamodule.Module{},
 	}, mods...)
