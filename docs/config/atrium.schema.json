@@ -3417,6 +3417,320 @@
       },
       "type": "object"
     },
+    "permissions": {
+      "additionalProperties": false,
+      "properties": {
+        "permission_internet_clean": {
+          "default": "allow",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_internet_clean_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_internet_kinds": {
+          "default": "ask",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_internet_kinds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_internet_pii": {
+          "default": "deny",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_internet_pii_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_internet_untrusted_isolated": {
+          "default": "allow",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_internet_untrusted_isolated_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_internet_untrusted_kinds": {
+          "default": "deny",
+          "enum": [
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_internet_untrusted_kinds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_internet_untrusted_knowledge": {
+          "default": "ask",
+          "enum": [
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_internet_untrusted_knowledge_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_notify_clean": {
+          "default": "allow",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_notify_clean_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_notify_kinds": {
+          "default": "allow",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_notify_kinds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_notify_pii": {
+          "default": "allow",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_notify_pii_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_notify_untrusted_isolated": {
+          "default": "allow",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_notify_untrusted_isolated_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_notify_untrusted_kinds": {
+          "default": "allow",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_notify_untrusted_kinds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_notify_untrusted_knowledge": {
+          "default": "allow",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_notify_untrusted_knowledge_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_own_clean": {
+          "default": "allow",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_own_clean_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_own_kinds": {
+          "default": "allow",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_own_kinds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_own_pii": {
+          "default": "allow",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_own_pii_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_own_untrusted_isolated": {
+          "default": "allow",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_own_untrusted_isolated_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_own_untrusted_kinds": {
+          "default": "allow",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_own_untrusted_kinds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_own_untrusted_knowledge": {
+          "default": "allow",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_own_untrusted_knowledge_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_people_clean": {
+          "default": "ask",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_people_clean_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_people_kinds": {
+          "default": "ask",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_people_kinds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_people_pii": {
+          "default": "ask",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_people_pii_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_people_untrusted_isolated": {
+          "default": "ask",
+          "enum": [
+            "allow",
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_people_untrusted_isolated_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_people_untrusted_kinds": {
+          "default": "ask",
+          "enum": [
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_people_untrusted_kinds_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "permission_people_untrusted_knowledge": {
+          "default": "ask",
+          "enum": [
+            "ask",
+            "deny"
+          ],
+          "type": "string"
+        },
+        "permission_people_untrusted_knowledge_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "web": {
       "additionalProperties": false,
       "properties": {

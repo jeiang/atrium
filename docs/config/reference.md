@@ -420,6 +420,35 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | --- | --- | --- | --- | --- |
 | `openai_admin_key` | string | none | secret | `ATRIUM_OPENAI_OPENAI_ADMIN_KEY` |
 
+## permissions
+
+| Key | Type | Default | Class | Environment variable |
+| --- | --- | --- | --- | --- |
+| `permission_internet_clean` | enum (allow, ask, deny) | `allow` | ui | `ATRIUM_PERMISSIONS_PERMISSION_INTERNET_CLEAN` |
+| `permission_internet_kinds` | enum (allow, ask, deny) | `ask` | ui | `ATRIUM_PERMISSIONS_PERMISSION_INTERNET_KINDS` |
+| `permission_internet_pii` | enum (allow, ask, deny) | `deny` | ui | `ATRIUM_PERMISSIONS_PERMISSION_INTERNET_PII` |
+| `permission_internet_untrusted_isolated` | enum (allow, ask, deny) | `allow` | ui | `ATRIUM_PERMISSIONS_PERMISSION_INTERNET_UNTRUSTED_ISOLATED` |
+| `permission_internet_untrusted_kinds` | enum (ask, deny) | `deny` | ui | `ATRIUM_PERMISSIONS_PERMISSION_INTERNET_UNTRUSTED_KINDS` |
+| `permission_internet_untrusted_knowledge` | enum (ask, deny) | `ask` | ui | `ATRIUM_PERMISSIONS_PERMISSION_INTERNET_UNTRUSTED_KNOWLEDGE` |
+| `permission_notify_clean` | enum (allow, ask, deny) | `allow` | ui | `ATRIUM_PERMISSIONS_PERMISSION_NOTIFY_CLEAN` |
+| `permission_notify_kinds` | enum (allow, ask, deny) | `allow` | ui | `ATRIUM_PERMISSIONS_PERMISSION_NOTIFY_KINDS` |
+| `permission_notify_pii` | enum (allow, ask, deny) | `allow` | ui | `ATRIUM_PERMISSIONS_PERMISSION_NOTIFY_PII` |
+| `permission_notify_untrusted_isolated` | enum (allow, ask, deny) | `allow` | ui | `ATRIUM_PERMISSIONS_PERMISSION_NOTIFY_UNTRUSTED_ISOLATED` |
+| `permission_notify_untrusted_kinds` | enum (allow, ask, deny) | `allow` | ui | `ATRIUM_PERMISSIONS_PERMISSION_NOTIFY_UNTRUSTED_KINDS` |
+| `permission_notify_untrusted_knowledge` | enum (allow, ask, deny) | `allow` | ui | `ATRIUM_PERMISSIONS_PERMISSION_NOTIFY_UNTRUSTED_KNOWLEDGE` |
+| `permission_own_clean` | enum (allow, ask, deny) | `allow` | ui | `ATRIUM_PERMISSIONS_PERMISSION_OWN_CLEAN` |
+| `permission_own_kinds` | enum (allow, ask, deny) | `allow` | ui | `ATRIUM_PERMISSIONS_PERMISSION_OWN_KINDS` |
+| `permission_own_pii` | enum (allow, ask, deny) | `allow` | ui | `ATRIUM_PERMISSIONS_PERMISSION_OWN_PII` |
+| `permission_own_untrusted_isolated` | enum (allow, ask, deny) | `allow` | ui | `ATRIUM_PERMISSIONS_PERMISSION_OWN_UNTRUSTED_ISOLATED` |
+| `permission_own_untrusted_kinds` | enum (allow, ask, deny) | `allow` | ui | `ATRIUM_PERMISSIONS_PERMISSION_OWN_UNTRUSTED_KINDS` |
+| `permission_own_untrusted_knowledge` | enum (allow, ask, deny) | `allow` | ui | `ATRIUM_PERMISSIONS_PERMISSION_OWN_UNTRUSTED_KNOWLEDGE` |
+| `permission_people_clean` | enum (allow, ask, deny) | `ask` | ui | `ATRIUM_PERMISSIONS_PERMISSION_PEOPLE_CLEAN` |
+| `permission_people_kinds` | enum (allow, ask, deny) | `ask` | ui | `ATRIUM_PERMISSIONS_PERMISSION_PEOPLE_KINDS` |
+| `permission_people_pii` | enum (allow, ask, deny) | `ask` | ui | `ATRIUM_PERMISSIONS_PERMISSION_PEOPLE_PII` |
+| `permission_people_untrusted_isolated` | enum (allow, ask, deny) | `ask` | ui | `ATRIUM_PERMISSIONS_PERMISSION_PEOPLE_UNTRUSTED_ISOLATED` |
+| `permission_people_untrusted_kinds` | enum (ask, deny) | `ask` | ui | `ATRIUM_PERMISSIONS_PERMISSION_PEOPLE_UNTRUSTED_KINDS` |
+| `permission_people_untrusted_knowledge` | enum (ask, deny) | `ask` | ui | `ATRIUM_PERMISSIONS_PERMISSION_PEOPLE_UNTRUSTED_KNOWLEDGE` |
+
 ## web
 
 | Key | Type | Default | Class | Environment variable |
