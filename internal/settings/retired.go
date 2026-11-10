@@ -40,6 +40,8 @@ var Retired = []RetiredKey{
 	{Module: "memory", Key: "view_high"},
 	{Module: "memory", Key: "tail_messages"},
 	{Module: "memory", Key: "verbatim_tokens"},
+	{Module: "anthropic", Key: "anthropic_admin_key"},
+	{Module: "openai", Key: "openai_admin_key"},
 }
 
 func RetiredAt(module, key string) (RetiredKey, bool) {

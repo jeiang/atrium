@@ -34,10 +34,6 @@
     "anthropic": {
       "additionalProperties": false,
       "properties": {
-        "anthropic_admin_key_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "anthropic_api_key_file": {
           "description": "path of a file holding the value",
           "type": "string"
@@ -3464,16 +3460,6 @@
           "type": "string"
         },
         "wiki_root_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "openai": {
-      "additionalProperties": false,
-      "properties": {
-        "openai_admin_key_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
