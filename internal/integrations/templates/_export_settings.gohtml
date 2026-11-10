@@ -8,10 +8,11 @@
     <span>Enabled</span>
     <input type="checkbox" role="switch" class="input" name="export_notion_enabled" value="true"{{if eq $enabled "true"}} checked{{end}}>
   </label>
-  <div role="group" class="field">
+  <div role="group" class="field"{{if eq .FieldError "export_notion_parent"}} data-invalid{{end}}>
     <label for="export_notion_parent">Parent page</label>
     {{if $parentPinned}}<code id="export_notion_parent" class="break-all font-mono text-xs" data-pinned>{{$parent}}</code>
-    {{else}}<input id="export_notion_parent" name="export_notion_parent" type="text" value="{{$parent}}" placeholder="https://www.notion.so/…" autocomplete="off" spellcheck="false">{{end}}
+    {{else}}<input id="export_notion_parent" name="export_notion_parent" type="text" value="{{$parent}}" placeholder="https://www.notion.so/…" autocomplete="off" spellcheck="false"{{if eq .FieldError "export_notion_parent"}} aria-invalid="true" aria-describedby="export_notion_parent-error"{{end}}>{{end}}
+    {{if eq .FieldError "export_notion_parent"}}<p id="export_notion_parent-error" role="alert">{{.Error}}</p>{{end}}
     {{with $d}}{{with .PageURL}}<a class="break-all text-xs underline underline-offset-4" href="{{.}}" target="_blank" rel="noreferrer">{{$parent}}</a>{{end}}{{end}}
   </div>
   <fieldset class="flex flex-col gap-2">

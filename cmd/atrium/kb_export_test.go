@@ -16,6 +16,8 @@ import (
 	"testing"
 	"time"
 
+	"golang.org/x/net/html"
+
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	kbexport "github.com/jeiang/atrium/internal/kb/export"
@@ -418,6 +420,207 @@ func integrationCard(body, name string) string {
 		return rest[:end]
 	}
 	return rest
+}
+
+func exportForm(t *testing.T, body, action string) ([][2]string, map[string]bool) {
+	t.Helper()
+	z := html.NewTokenizer(strings.NewReader(body))
+	var fields [][2]string
+	checked := map[string]bool{}
+	inForm := false
+	for {
+		switch z.Next() {
+		case html.ErrorToken:
+			t.Fatalf("form %s not found or not closed", action)
+		case html.StartTagToken, html.SelfClosingTagToken:
+			token := z.Token()
+			attrs := map[string]string{}
+			for _, a := range token.Attr {
+				attrs[a.Key] = a.Val
+			}
+			if token.Data == "form" && attrs["action"] == action {
+				inForm = true
+			}
+			if !inForm || token.Data != "input" || attrs["name"] == "" {
+				continue
+			}
+			_, disabled := attrs["disabled"]
+			_, selected := attrs["checked"]
+			if attrs["type"] == "checkbox" {
+				checked[attrs["name"]+"="+attrs["value"]] = selected
+			}
+			if !disabled && (attrs["type"] != "checkbox" || selected) {
+				fields = append(fields, [2]string{attrs["name"], attrs["value"]})
+			}
+		case html.EndTagToken:
+			if inForm && z.Token().Data == "form" {
+				return fields, checked
+			}
+		}
+	}
+}
+
+func exportPost(t *testing.T, w *asstWeb, action string, fields [][2]string, hx bool) (int, string, http.Header) {
+	t.Helper()
+	var encoded []string
+	for _, field := range fields {
+		encoded = append(encoded, url.QueryEscape(field[0])+"="+url.QueryEscape(field[1]))
+	}
+	return w.send(http.MethodPost, action, strings.NewReader(strings.Join(encoded, "&")), "application/x-www-form-urlencoded", hx)
+}
+
+func TestNotionExportRefusedSaveKeepsForm(t *testing.T) {
+	for _, hx := range []bool{false, true} {
+		t.Run(fmt.Sprintf("htmx=%t", hx), func(t *testing.T) {
+			dir, _, d := exportFixture(t, &exportNotion{})
+			w := asstBrowse(t, startServeIn(t, dir))
+			const action = "/settings/integrations/sections/export_notion"
+			status, body, _ := w.get("/settings/integrations", false)
+			if status != http.StatusOK {
+				t.Fatalf("GET integrations = %d", status)
+			}
+			fields, _ := exportForm(t, body, action)
+			var submitted [][2]string
+			for _, field := range fields {
+				submitted = append(submitted, field)
+				if field == [2]string{"export_notion_enabled", "false"} {
+					submitted = append(submitted, [2]string{"export_notion_enabled", "true"})
+				}
+			}
+			fields = submitted[:0]
+			for _, field := range submitted {
+				if field != [2]string{"export_notion_kinds", "messages"} {
+					fields = append(fields, field)
+				}
+			}
+			invalid := slices.Clone(fields)
+			for i := range invalid {
+				if invalid[i][0] == "export_notion_parent" {
+					invalid[i][1] = "not a page"
+				}
+			}
+			status, body, _ = exportPost(t, w, action, invalid, hx)
+			if status != http.StatusUnprocessableEntity {
+				t.Fatalf("invalid parent save = %d", status)
+			}
+			returned, _ := exportForm(t, body, action)
+			if !slices.Equal(returned, invalid) {
+				t.Errorf("invalid parent form = %v, want %v", returned, invalid)
+			}
+			status, body, _ = exportPost(t, w, action, fields, hx)
+			if status != http.StatusUnprocessableEntity || !strings.Contains(body, "set a parent page") {
+				t.Fatalf("refused save = %d: %s", status, body)
+			}
+			returned, checked := exportForm(t, body, action)
+			if !slices.Equal(returned, fields) {
+				t.Errorf("refused form = %v, want %v", returned, fields)
+			}
+			for key, want := range map[string]bool{
+				"export_notion_enabled=true": true, "export_notion_kinds=pii": true,
+				"export_notion_kinds=messages": false, "export_notion_kinds=personal": true,
+			} {
+				if checked[key] != want {
+					t.Errorf("returned %s checked = %t, want %t", key, checked[key], want)
+				}
+			}
+			if !strings.Contains(body, `aria-describedby="export_notion_parent-error"`) {
+				t.Error("parent field has no associated error")
+			}
+			for i := range returned {
+				if returned[i][0] == "export_notion_parent" {
+					returned[i][1] = "https://www.notion.so/Team/Page-0123456789abcdef0123456789abcdef?pvs=4"
+				}
+			}
+			status, body, _ = exportPost(t, w, action, returned, hx)
+			if status != http.StatusOK {
+				t.Fatalf("corrected save = %d: %s", status, body)
+			}
+			if got := settingValue(t, d, kbexport.NotionEnabledKey); got != "true" {
+				t.Errorf("stored enabled = %q", got)
+			}
+			_, checked = exportForm(t, body, action)
+			if !checked["export_notion_enabled=true"] {
+				t.Error("saved form does not show enabled")
+			}
+			var disabled [][2]string
+			for _, field := range fields {
+				if field != [2]string{"export_notion_enabled", "true"} {
+					disabled = append(disabled, field)
+				}
+			}
+			if status, _, _ := exportPost(t, w, action, disabled, hx); status != http.StatusOK {
+				t.Fatalf("disable export = %d", status)
+			}
+			for i := range fields {
+				if fields[i][0] == "export_notion_parent" {
+					fields[i][1] = "https://www.notion.so/Team/Page-0123456789abcdef0123456789abcdef?pvs=4"
+				}
+			}
+			status, body, _ = exportPost(t, w, action, fields, hx)
+			if status != http.StatusOK || settingValue(t, d, kbexport.NotionEnabledKey) != "true" {
+				t.Errorf("same-submit enable and parent = %d", status)
+			}
+			_, checked = exportForm(t, body, action)
+			if !checked["export_notion_enabled=true"] {
+				t.Error("same-submit form does not show enabled")
+			}
+		})
+	}
+}
+
+func TestObsidianExportRefusedSaveKeepsForm(t *testing.T) {
+	dir, _, _ := obsidianFixture(t)
+	w := asstBrowse(t, startServeIn(t, dir))
+	const action = "/settings/integrations/sections/export_obsidian"
+	status, body, _ := w.get("/settings/integrations", false)
+	if status != http.StatusOK {
+		t.Fatalf("GET integrations = %d", status)
+	}
+	fields, _ := exportForm(t, body, action)
+	var submitted [][2]string
+	for _, field := range fields {
+		if field[0] == "export_obsidian_dir" {
+			field[1] = "relative/folder"
+		}
+		if field != [2]string{"export_obsidian_kinds", "messages"} {
+			submitted = append(submitted, field)
+		}
+	}
+	status, body, _ = exportPost(t, w, action, submitted, false)
+	if status != http.StatusUnprocessableEntity || !strings.Contains(body, "must be an absolute path") {
+		t.Fatalf("invalid folder save = %d: %s", status, body)
+	}
+	returned, checked := exportForm(t, body, action)
+	if !slices.Equal(returned, submitted) || checked["export_obsidian_kinds=messages"] {
+		t.Errorf("refused form = %v, want %v", returned, submitted)
+	}
+}
+
+func TestIntegrationSettingsRefusedSaveKeepsForm(t *testing.T) {
+	dir, _, _ := exportFixture(t, &exportNotion{})
+	w := asstBrowse(t, startServeIn(t, dir))
+	const action = "/settings/integrations/open_meteo/settings"
+	status, body, _ := w.get("/settings/integrations", false)
+	if status != http.StatusOK {
+		t.Fatalf("GET integrations = %d", status)
+	}
+	fields, _ := exportForm(t, body, action)
+	for i := range fields {
+		switch fields[i][0] {
+		case "weather_latitude":
+			fields[i][1] = "91"
+		case "weather_location_name":
+			fields[i][1] = "Draft location"
+		}
+	}
+	status, body, _ = exportPost(t, w, action, fields, false)
+	if status != http.StatusUnprocessableEntity {
+		t.Fatalf("invalid weather save = %d: %s", status, body)
+	}
+	returned, _ := exportForm(t, body, action)
+	if !slices.Equal(returned, fields) {
+		t.Errorf("refused form = %v, want %v", returned, fields)
+	}
 }
 
 func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
