@@ -1107,3 +1107,12 @@ document.addEventListener("change", (event) => {
     box.checked = all.checked;
   });
 });
+
+document.addEventListener("change", (event) => {
+  const group = event.target.closest("[data-quality]");
+  const pattern = document.getElementById("pattern");
+  if (!group || !pattern || !group.dataset.base) return;
+  const quality = event.target.value;
+  pattern.value = quality === "any" ? group.dataset.base : `${group.dataset.base} ${quality}`;
+  pattern.dispatchEvent(new Event("input", { bubbles: true }));
+});

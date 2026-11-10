@@ -27,6 +27,7 @@ type ChannelForm struct {
 	Pattern       string `json:"pattern"`
 	CaseSensitive bool   `json:"case_sensitive"`
 	Backfill      bool   `json:"backfill"`
+	Base          string `json:"base"`
 }
 
 type ChannelsPage struct {

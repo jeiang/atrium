@@ -3,6 +3,7 @@ package pages
 import (
 	"errors"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -65,6 +66,10 @@ func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toa
 	}
 }
 
+func patternBase(name string) string {
+	return "^" + regexp.QuoteMeta(name) + ` S\d+E\d+`
+}
+
 func (s *service) channelsIndex(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	q := strings.TrimSpace(web.QueryValue(query, "q"))
@@ -111,6 +116,12 @@ func (s *service) channelsIndex(w http.ResponseWriter, r *http.Request) {
 		notice = chToast("error", "TMDB failed", text)
 	}
 	form := ChannelForm{IMDb: imdb, Name: strings.TrimSpace(name), TmdbID: tmdbID, Pattern: pattern, Backfill: true}
+	if form.Name != "" {
+		form.Base = patternBase(form.Name)
+		if form.Pattern == "" {
+			form.Pattern = form.Base + " 1080p"
+		}
+	}
 	s.chPage(w, r, notice, http.StatusOK, q, &form, results, searched)
 }
 
