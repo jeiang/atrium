@@ -49,8 +49,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_AGENT_NOTION_SNIPPET_CHARS` | `assistant.agent_notion_snippet_chars` |
 | `ATRIUM_ASSISTANT_AGENT_NOTION_STALE_SECONDS` | `assistant.agent_notion_stale_seconds` |
 | `ATRIUM_ASSISTANT_AGENT_PREVIEW_CHARS` | `assistant.agent_preview_chars` |
-| `ATRIUM_ASSISTANT_AGENT_PROFILE_KEY_CHARS` | `assistant.agent_profile_key_chars` |
-| `ATRIUM_ASSISTANT_AGENT_PROFILE_VALUE_CHARS` | `assistant.agent_profile_value_chars` |
 | `ATRIUM_ASSISTANT_AGENT_PROJECT_INSTRUCTION_CHARS` | `assistant.agent_project_instruction_chars` |
 | `ATRIUM_ASSISTANT_AGENT_PROJECT_NAME_CHARS` | `assistant.agent_project_name_chars` |
 | `ATRIUM_ASSISTANT_AGENT_RECALL_MAX_PAGE_CHARS` | `assistant.agent_recall_max_page_chars` |
@@ -108,7 +106,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` | `assistant.max_steps_nightly` |
 | `ATRIUM_ASSISTANT_MAX_STEPS_WORKER` | `assistant.max_steps_worker` |
 | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` | `assistant.monthly_budget_usd` |
-| `ATRIUM_ASSISTANT_NIGHTLY_STALE_MONTHS` | `assistant.nightly_stale_months` |
 | `ATRIUM_ASSISTANT_OPEN_METEO_CA_FILE` | `assistant.open_meteo_ca_file` |
 | `ATRIUM_ASSISTANT_OPEN_METEO_PROXY` | `assistant.open_meteo_proxy` |
 | `ATRIUM_ASSISTANT_OPS_WORKER_MAX_RUN_USD` | `assistant.ops_worker_max_run_usd` |
@@ -178,6 +175,9 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_EXPORT_EXPORT_NOTION_KINDS` | `export.export_notion_kinds` |
 | `ATRIUM_EXPORT_EXPORT_NOTION_PARENT` | `export.export_notion_parent` |
 | `ATRIUM_EXPORT_EXPORT_NOTION_PRIVATE_TO` | `export.export_notion_private_to` |
+| `ATRIUM_EXPORT_EXPORT_OBSIDIAN_DIR` | `export.export_obsidian_dir` |
+| `ATRIUM_EXPORT_EXPORT_OBSIDIAN_KINDS` | `export.export_obsidian_kinds` |
+| `ATRIUM_EXPORT_EXPORT_OBSIDIAN_PRIVATE_TO` | `export.export_obsidian_private_to` |
 | `ATRIUM_GRAFANA_GRAFANA_CA_FILE` | `grafana.grafana_ca_file` |
 | `ATRIUM_GRAFANA_GRAFANA_LOGS_QUERY` | `grafana.grafana_logs_query` |
 | `ATRIUM_GRAFANA_GRAFANA_LOGS_TYPE` | `grafana.grafana_logs_type` |
@@ -347,12 +347,8 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_NOTION_NOTION_BLOCK_DEPTH` | `notion.notion_block_depth` |
 | `ATRIUM_NOTION_NOTION_BRANCH_LIMIT` | `notion.notion_branch_limit` |
 | `ATRIUM_NOTION_NOTION_CA_FILE` | `notion.notion_ca_file` |
-| `ATRIUM_NOTION_NOTION_EDIT_MAX_TOKENS` | `notion.notion_edit_max_tokens` |
-| `ATRIUM_NOTION_NOTION_EDIT_PAGE_CHARS` | `notion.notion_edit_page_chars` |
 | `ATRIUM_NOTION_NOTION_HEAD_SOURCE_CHARS` | `notion.notion_head_source_chars` |
 | `ATRIUM_NOTION_NOTION_LABEL_CHARS` | `notion.notion_label_chars` |
-| `ATRIUM_NOTION_NOTION_LINK_MAX_TOKENS` | `notion.notion_link_max_tokens` |
-| `ATRIUM_NOTION_NOTION_LINK_PAGE_CHARS` | `notion.notion_link_page_chars` |
 | `ATRIUM_NOTION_NOTION_MAX_ALIASES` | `notion.notion_max_aliases` |
 | `ATRIUM_NOTION_NOTION_MAX_RETRIES` | `notion.notion_max_retries` |
 | `ATRIUM_NOTION_NOTION_MAX_SOURCES` | `notion.notion_max_sources` |

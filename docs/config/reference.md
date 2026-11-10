@@ -60,8 +60,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `agent_notion_snippet_chars` | int | `300` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_SNIPPET_CHARS` |
 | `agent_notion_stale_seconds` | int | `86400` | advanced | `ATRIUM_ASSISTANT_AGENT_NOTION_STALE_SECONDS` |
 | `agent_preview_chars` | int | `600` | advanced | `ATRIUM_ASSISTANT_AGENT_PREVIEW_CHARS` |
-| `agent_profile_key_chars` | int | `64` | advanced | `ATRIUM_ASSISTANT_AGENT_PROFILE_KEY_CHARS` |
-| `agent_profile_value_chars` | int | `500` | advanced | `ATRIUM_ASSISTANT_AGENT_PROFILE_VALUE_CHARS` |
 | `agent_project_instruction_chars` | int | `20000` | advanced | `ATRIUM_ASSISTANT_AGENT_PROJECT_INSTRUCTION_CHARS` |
 | `agent_project_name_chars` | int | `80` | advanced | `ATRIUM_ASSISTANT_AGENT_PROJECT_NAME_CHARS` |
 | `agent_recall_max_page_chars` | int | `16000` | advanced | `ATRIUM_ASSISTANT_AGENT_RECALL_MAX_PAGE_CHARS` |
@@ -119,7 +117,6 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `max_steps_nightly` | int | `24` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_NIGHTLY` |
 | `max_steps_worker` | int | `8` | advanced | `ATRIUM_ASSISTANT_MAX_STEPS_WORKER` |
 | `monthly_budget_usd` | float | `150` | ui | `ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD` |
-| `nightly_stale_months` | int | `6` | advanced | `ATRIUM_ASSISTANT_NIGHTLY_STALE_MONTHS` |
 | `open_meteo_ca_file` | string | none | advanced | `ATRIUM_ASSISTANT_OPEN_METEO_CA_FILE` |
 | `open_meteo_proxy` | string | none | advanced | `ATRIUM_ASSISTANT_OPEN_METEO_PROXY` |
 | `ops_worker_max_run_usd` | float | `0.10` | advanced | `ATRIUM_ASSISTANT_OPS_WORKER_MAX_RUN_USD` |
@@ -217,6 +214,9 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `export_notion_kinds` | string | `pii,messages,personal` | ui | `ATRIUM_EXPORT_EXPORT_NOTION_KINDS` |
 | `export_notion_parent` | string | none | ui | `ATRIUM_EXPORT_EXPORT_NOTION_PARENT` |
 | `export_notion_private_to` | string | none | ui | `ATRIUM_EXPORT_EXPORT_NOTION_PRIVATE_TO` |
+| `export_obsidian_dir` | string | none | ui | `ATRIUM_EXPORT_EXPORT_OBSIDIAN_DIR` |
+| `export_obsidian_kinds` | string | `pii,messages,personal` | ui | `ATRIUM_EXPORT_EXPORT_OBSIDIAN_KINDS` |
+| `export_obsidian_private_to` | string | none | ui | `ATRIUM_EXPORT_EXPORT_OBSIDIAN_PRIVATE_TO` |
 
 ## grafana
 
@@ -415,12 +415,8 @@ The file named by `ATRIUM_CONFIG` is TOML with one table per module. Unknown key
 | `notion_block_depth` | int | `5` | advanced | `ATRIUM_NOTION_NOTION_BLOCK_DEPTH` |
 | `notion_branch_limit` | int | `50` | advanced | `ATRIUM_NOTION_NOTION_BRANCH_LIMIT` |
 | `notion_ca_file` | string | none | advanced | `ATRIUM_NOTION_NOTION_CA_FILE` |
-| `notion_edit_max_tokens` | int | `1500` | advanced | `ATRIUM_NOTION_NOTION_EDIT_MAX_TOKENS` |
-| `notion_edit_page_chars` | int | `12000` | advanced | `ATRIUM_NOTION_NOTION_EDIT_PAGE_CHARS` |
 | `notion_head_source_chars` | int | `1000` | advanced | `ATRIUM_NOTION_NOTION_HEAD_SOURCE_CHARS` |
 | `notion_label_chars` | int | `48` | advanced | `ATRIUM_NOTION_NOTION_LABEL_CHARS` |
-| `notion_link_max_tokens` | int | `160` | advanced | `ATRIUM_NOTION_NOTION_LINK_MAX_TOKENS` |
-| `notion_link_page_chars` | int | `2500` | advanced | `ATRIUM_NOTION_NOTION_LINK_PAGE_CHARS` |
 | `notion_max_aliases` | int | `20` | advanced | `ATRIUM_NOTION_NOTION_MAX_ALIASES` |
 | `notion_max_retries` | int | `5` | advanced | `ATRIUM_NOTION_NOTION_MAX_RETRIES` |
 | `notion_max_sources` | int | `12` | advanced | `ATRIUM_NOTION_NOTION_MAX_SOURCES` |

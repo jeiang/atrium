@@ -19,10 +19,10 @@ behavior-parity target.
   media, notifications, and read-only Grafana access. The assistant adds
   chat, files, projects, scheduled work, and research subagents. The
   new-thread composer takes the model, effort, context size, thinking, web
-  search and cost cap. The built-in system prompt and the Notion tool
-  descriptions carry the wiki guidance: search before writing, update the
-  section that changed, keep durable facts only, cite sources, and report
-  old review dates as possibly stale. There is no skills feature; the
+  search and cost cap. The built-in system prompt and the knowledge tool
+  descriptions carry the knowledge guidance: search before writing, one
+  record per durable fact, keep durable facts only, cite records, and report
+  possibly stale records. There is no skills feature; the
   `skills` table and `runs.skills_json` remain from it, unused and not
   dropped.
 - The web interface is server-rendered Go templates with Basecoat, htmx
@@ -40,8 +40,8 @@ behavior-parity target.
   (`/library/knowledge`): the operator's records with search, scope and
   state filters, a record page with confirm, edit, retract, restore and
   administrator-only purge, and a profile view that renders the system
-  prompt's profile block, each pinned record's place in it and an add-fact
-  form. Projects have no pages of their own beyond create and edit, and a
+  prompt's profile block and each pinned record's place in it. Projects
+  have no pages of their own beyond create and edit, and a
   project can be marked private so its knowledge and threads stay inside
   it. The sidebar collapses to a rail; chat uses a
   centred reading column with serif
@@ -50,9 +50,9 @@ behavior-parity target.
   so the send gate and approval pipeline are unchanged. There is no
   Proposals page: pending approvals show in their thread, in the thread's
   Work panel and on Review Needs you, which also lists blocked proposals.
-  The agent acts directly on internal, undoable actions (tasks, Notion and
-  profile edits, nightly observations, knowledge records, mail folders and
-  moves) and records undo on Done; external, irreversible or paid actions ask with an approval
+  The agent acts directly on internal, undoable actions (tasks, knowledge
+  records, mail folders and moves) and records undo on Done; external,
+  irreversible or paid actions ask with an approval
   card, and the tool registry enforces this from each tool's effect. The
   light, dark or system
   theme and the rail state are cookies the server applies on the next
@@ -83,16 +83,20 @@ behavior-parity target.
   server-side transcript compaction and their settings are gone; the chat
   meter and the attachment check measure against the thread's context
   limit, and the old projection and ledger rows stay untouched.
-- Memory is profile, then nightly observations, then wiki. A nightly run
-  records durable observations: a first sighting proposes a "sometimes
-  uses" note, a different value first seen at least 14 days earlier proposes
-  a replacement, and a contradiction with the profile proposes a profile
-  update instead, so the profile stays authoritative. Approving an
-  observation creates a `notion_capture` proposal that prepends the note to
-  the Wiki Log (undo restores the previous page markdown); a profile update
-  is undoable. `stale_wiki` lists pages whose last review is older than
-  `nightly_stale_months` (default 6); the nightly run re-checks them and the
-  weekly review lists them.
+- Memory is the knowledge store. A record has a title, aliases, a body, a
+  scope (personal or a project) and marks; `kb_search` and `kb_get` return
+  personal records plus the marks of the records they return, and
+  `kb_write`/`kb_retract` are undoable. A record written by `kb_write`
+  takes its writer thread's marks and project; an edit can only add marks.
+  A record is confirmed by the operator, and confirmed records and records
+  written by the operator or the import cannot be edited or retracted by
+  the agent. Pinned, confirmed, unmarked records form the system prompt's
+  profile block within `agent_kb_profile_tokens`. The nightly run writes
+  knowledge records with `source.thread_id` set instead of observations or
+  wiki pages; those records take the day's marks, so they stay out of the
+  prompt until the operator confirms them. The Notion wiki is read-only
+  for the operator: sync and the Wiki tab remain, the agent has no Notion
+  tools, and the old `notion_link`/`notion_edit` proposals stay readable.
 - Notifications are recorded in an in-app inbox first and pushed best
   effort through Web Push on one of three channels (assistant, media,
   system). Each channel's content setting sends the full text (`auto`,
@@ -333,7 +337,7 @@ behavior-parity target.
   currently an operator action. Delegated sending is a product goal, not
   permission granted by the existing tools.
 - The registry restricts tools by run kind. Scheduled runs read, propose,
-  and notify; nightly runs may also update Notion and the profile with undo.
+  and notify; nightly runs may also write knowledge records with undo.
   Research subagents have restricted tools and bounded runs, and their system
   prompt omits the operator profile and project block. The server-ops
   worker is a separate run kind: it has only `ops_samples`, `ops_finding`,
@@ -363,10 +367,9 @@ behavior-parity target.
   back to normal. Findings of severity warning or critical appear in the
   attention view; the worker has no notify, people or internet tool and
   never restarts or changes a host.
-- Notion edits are free: the Notion page Edit and Link buttons write
-  directly through the same path as `notion_update_page`, with Undo on
-  Done; approvals are only for external or costly actions. Old
-  `notion_link` and `notion_edit` proposals stay readable and dismissable.
+- The Notion page view is read-only: the Edit and Link buttons are gone,
+  and old `notion_link` and `notion_edit` proposals stay readable and
+  dismissable. Approvals are only for external or costly actions.
 - Threads carry marks, recorded with `threads.tainted_at` as the first
   mark time. The set is a bitmask: `untrusted` (someone else wrote the
   text), `pii` (identifiers that reach, locate or impersonate a person),
@@ -389,22 +392,24 @@ behavior-parity target.
   marks `messages`. `file_read` and a non-empty `file_search` mark
   `messages` and `untrusted`. `search_threads` and `zoom` mark `messages`
   plus the marks of the threads they read. `recall` marks nothing: it only
-  re-reads results stored in its own thread. `search_knowledge`,
-  `fetch_knowledge` and `profile_get` mark `personal`. Grafana reads and
+  re-reads results stored in its own thread. `kb_search` and `kb_get`
+  declare all four marks as their bound and return `personal` plus the
+  marks of the records they return; an empty result marks nothing.
+  Grafana reads and
   `atrium_self_diagnose` mark `untrusted` only. `ops_samples` marks
   `untrusted` when it returns alert details; `ops_finding` and
   `worker_status` mark nothing. `web_fetch`, `research`
   and a response carrying a server `web_search_tool_result` mark the
   thread `untrusted`; `research` declares all four marks and returns
   `untrusted` plus the child thread's marks. `weather`, the media reads,
-  `plan` and `stale_wiki` declare none. The nightly `threads_today` read
+  `plan` declares none. The nightly `threads_today` read
   declares all four and carries the union of the marks of the threads it
   returns. `task_list` and `schedule_list` declare all four as their
   bound and return the marks of the threads that wrote the listed rows
   through `agent_writes`; they mark nothing when those threads were
   clean. A cron thread starts with the marks of the thread that wrote its
-  schedule unless the operator wrote the prompt. `profile_set` and
-  `nightly_observe` are refused on any marked thread.
+  schedule unless the operator wrote the prompt. `kb_write` and
+  `kb_retract` are `write_undo`, so a marked thread is not offered them.
 - Tools declare a channel: `none`, own accounts, notify, people or
   internet. Admission classifies the thread into one of six situations:
   nothing marked; kinds without untrusted text; `pii` without untrusted

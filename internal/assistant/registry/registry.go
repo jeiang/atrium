@@ -151,9 +151,6 @@ func (r *Registry) Admit(ctx context.Context, kind tool.Kind, role *string, webS
 	}
 	var set Set
 	for _, t := range candidates {
-		if marks.Set != 0 && t.PromptStore {
-			continue
-		}
 		decision := table.Decide(t.Channel, situation, kind)
 		if decision == Ask && !hasCard(t) && kind != tool.Chat {
 			decision = Denied
@@ -243,8 +240,6 @@ func validate(t tool.Tool) error {
 		return InvalidError(fmt.Sprintf("tool %s is a server tool outside the internet channel", t.Name))
 	case (t.Channel == tool.ChannelPeople || t.Channel == tool.ChannelInternet) && t.Effect != tool.Read && !hasCard(t):
 		return InvalidError(fmt.Sprintf("tool %s reaches people or the internet without a card", t.Name))
-	case t.PromptStore && t.Effect != tool.WriteUndo:
-		return InvalidError(fmt.Sprintf("tool %s is a prompt store but not a direct write", t.Name))
 	case t.Effect == tool.WriteUndo && t.Contexts.Has(tool.Sub):
 		return InvalidError(fmt.Sprintf("tool %s writes directly in sub-agent runs", t.Name))
 	case t.Approval != nil && (t.Effect != tool.Propose || t.Approval.Apply == nil || t.Approval.Label == "" || t.Approval.Module == ""):

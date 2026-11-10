@@ -505,8 +505,8 @@ func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.
 	}
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w1", "file_write", map[string]any{"name": "note.txt", "content": "first"})))
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w2", "file_write", map[string]any{"name": "note.txt", "content": "second"})))
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("p1", "profile_set", map[string]any{"key": "tz", "value": "AST"})))
-	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("p2", "profile_set", map[string]any{"key": "tz", "value": "UTC"})))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("p1", "kb_write", map[string]any{"title": "tz", "body": "AST", "scope": "personal"})))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("p2", "kb_write", map[string]any{"id": 1, "body": "UTC"})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
 	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "write the note and set my timezone"); ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
@@ -516,7 +516,7 @@ func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.
 		return mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM agent_writes WHERE tool = ? ORDER BY id LIMIT 1 OFFSET ?", tool, nth)
 	}
 	fileFirst, fileSecond := writeID("file_write", 0), writeID("file_write", 1)
-	profileFirst, profileSecond := writeID("profile_set", 0), writeID("profile_set", 1)
+	profileFirst, profileSecond := writeID("kb_write", 0), writeID("kb_write", 1)
 	note := filepath.Join(dir, "files", "1", "note.txt")
 	content := func() string {
 		data, err := os.ReadFile(note)
@@ -529,8 +529,12 @@ func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.
 		d := mustConnect(t, dbPath)
 		defer func() { _ = d.Close() }()
 		var value string
-		if err := d.Read.QueryRow("SELECT value FROM agent_profile WHERE key = 'tz'").Scan(&value); err != nil {
+		var retracted *float64
+		if err := d.Read.QueryRow("SELECT body, retracted_at FROM kb_records WHERE id = 1").Scan(&value, &retracted); err != nil {
 			return "<none>"
+		}
+		if retracted != nil {
+			return "<retracted>"
 		}
 		return value
 	}
@@ -567,9 +571,9 @@ func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.
 		t.Fatalf("undo of a superseded profile write = %d, tz %q: %s", code, profile(), body)
 	}
 	if code, body := undo(profileSecond); code != http.StatusSeeOther || profile() != "AST" {
-		t.Fatalf("undo of the latest profile write = %d, tz %q: %s", code, profile(), body)
+		t.Fatalf("undo of the latest record write = %d, body %q: %s", code, profile(), body)
 	}
-	if code, body := undo(profileFirst); code != http.StatusSeeOther || profile() != "<none>" {
-		t.Fatalf("undo of the first profile write = %d, tz %q: %s", code, profile(), body)
+	if code, body := undo(profileFirst); code != http.StatusConflict || !strings.Contains(body, "changed since this write") || profile() != "AST" {
+		t.Fatalf("undo of a superseded record write = %d, body %q: %s", code, profile(), body)
 	}
 }

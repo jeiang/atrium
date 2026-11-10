@@ -6,17 +6,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/jeiang/atrium/internal/assistant/registry"
-	notiontools "github.com/jeiang/atrium/internal/assistant/tools/notion"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations"
-	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notion/pages"
-	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -74,27 +69,9 @@ func (m Module) Register(module.Context) module.Registration {
 				return "", err
 			},
 		}},
-		Pages: []web.Page{{Module: pages.Module(pages.Options{Chat: llm.ChatJSON}), Templates: pages.Templates(), Nav: []web.NavItem{
+		Pages: []web.Page{{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Nav: []web.NavItem{
 			{Section: "library", Label: "Wiki", URL: "/library/wiki", Icon: "book-open", Page: "library_wiki", Order: 10},
 		}}},
 		Commands: []*cli.Command{notion.Command(notion.Options{Env: env})},
-		Tools: func(r *registry.Registry) error {
-			if err := r.Add(notiontools.Tools()...); err != nil {
-				return err
-			}
-			for _, name := range []string{"notion_create_page", "notion_update_page", "notion_move_page", "notion_archive_page", "notion_add_alias"} {
-				r.Bind(name, wikiRequired)
-			}
-			return nil
-		},
 	}
-}
-
-func wikiRequired(ctx context.Context, q db.Querier, t tool.Tool) (tool.Tool, bool, error) {
-	wiki, err := notion.LoadWiki(ctx, q)
-	if err != nil {
-		return tool.Tool{}, false, err
-	}
-	_, err = wiki.RootID()
-	return t, err == nil, nil
 }

@@ -8,6 +8,7 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -490,5 +491,203 @@ func TestUnknownNotionWriteBlocksTheExport(t *testing.T) {
 	runExport(t, f, d)
 	if fake.byTitle("Dentist") == nil {
 		t.Errorf("export did not resume after the write was resolved")
+	}
+}
+
+func obsidianFixture(t *testing.T) (string, *fixture, *db.DB) {
+	t.Helper()
+	dir, _, f := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
+		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	return dir, f, d
+}
+
+func obsidianEnable(t *testing.T, vault string) {
+	t.Helper()
+	for key, value := range map[string]string{
+		"public_url":              "https://atrium.invalid",
+		kbexport.ObsidianDirKey:   vault,
+		kbexport.ObsidianKindsKey: "messages,personal",
+	} {
+		if ran := runApp(t, "settings", "set", key, value); ran.code != cli.ExitOK {
+			t.Fatalf("settings set %s: %d %s", key, ran.code, ran.stderr)
+		}
+	}
+}
+
+func TestKnowledgeExportsToAnObsidianFolder(t *testing.T) {
+	dir, f, d := obsidianFixture(t)
+	vault := t.TempDir()
+	obsidianEnable(t, vault)
+	loc, err := time.LoadLocation("America/Port_of_Spain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	updated := time.Unix(200, 0).In(loc).Format("2006-01-02")
+	threadID := exportSeed(t, d, "INSERT INTO threads (kind, title, effort, created_at, updated_at) VALUES ('chat', 'Trip planning', 'medium', 1, 1)")
+	clean := exportRecord(t, d, "Dentist visit", "Dr Ng at the Main St clinic.", "personal", "chat", 0, 0, threadID, 3, 7)
+	if _, err := d.Write.Exec("UPDATE kb_records SET confirmed_at = 150 WHERE id = ?", clean); err != nil {
+		t.Fatal(err)
+	}
+	untrusted := exportRecord(t, d, "Flight", "See [the fare](https://example.com/fare) and ![map](https://example.com/map.png)", "personal", "chat", 1, 0, 0, 0, 0)
+	pii := exportRecord(t, d, "Phone", "Call 555-0100", "personal", "chat", 2, 0, 0, 0, 0)
+	private := exportRecord(t, d, "Diary", "private", "personal", "operator", 0, 1, 0, 0, 0)
+	stray := filepath.Join(vault, "mine.md")
+	if err := os.WriteFile(stray, []byte("keep me"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	runExport(t, f, d)
+
+	cleanPath := filepath.Join(vault, "personal", "dentist-visit-K"+fmt.Sprint(clean)+".md")
+	content, err := os.ReadFile(cleanPath)
+	if err != nil {
+		t.Fatalf("clean record file: %v", err)
+	}
+	sourceLine := `source: "https://atrium.invalid/chat/` + fmt.Sprint(threadID) + `#m3"`
+	for _, want := range []string{
+		"atrium_id: K" + fmt.Sprint(clean),
+		`title: "Dentist visit"`,
+		"scope: personal",
+		"writer: chat",
+		"confirmed: true",
+		"updated: " + updated,
+		sourceLine,
+		"Dr Ng at the Main St clinic.",
+		"Source: [Trip planning](https://atrium.invalid/chat/" + fmt.Sprint(threadID) + "#m3)",
+		"writer chat",
+		"run 7",
+	} {
+		if !strings.Contains(string(content), want) {
+			t.Errorf("clean file lacks %q: %s", want, content)
+		}
+	}
+	untrustedPath := filepath.Join(vault, "personal", "flight-K"+fmt.Sprint(untrusted)+".md")
+	untrustedContent, err := os.ReadFile(untrustedPath)
+	if err != nil {
+		t.Fatalf("untrusted record file: %v", err)
+	}
+	for _, want := range []string{`hxxps://example\[.\]com/fare`, `\[image: map\]`, "unconfirmed"} {
+		if !strings.Contains(string(untrustedContent), want) {
+			t.Errorf("untrusted file lacks %q: %s", want, untrustedContent)
+		}
+	}
+	for _, banned := range []string{"](", "![", "https://example.com"} {
+		if strings.Contains(string(untrustedContent), banned) {
+			t.Errorf("untrusted file keeps %q: %s", banned, untrustedContent)
+		}
+	}
+	for _, absent := range []string{
+		filepath.Join(vault, "personal", "phone-K"+fmt.Sprint(pii)+".md"),
+		filepath.Join(vault, "personal", "diary-K"+fmt.Sprint(private)+".md"),
+	} {
+		if _, err := os.Stat(absent); !os.IsNotExist(err) {
+			t.Errorf("%s exists, want it excluded", absent)
+		}
+	}
+	index, err := os.ReadFile(filepath.Join(vault, "index.md"))
+	if err != nil {
+		t.Fatalf("index file: %v", err)
+	}
+	if !strings.Contains(string(index), "Dentist visit") || strings.Contains(string(index), "Phone") {
+		t.Errorf("index = %s", index)
+	}
+
+	before, err := os.Stat(cleanPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	runExport(t, f, d)
+	after, err := os.Stat(cleanPath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !after.ModTime().Equal(before.ModTime()) {
+		t.Errorf("a second run rewrote an unchanged file")
+	}
+
+	if _, err := d.Write.Exec("UPDATE kb_records SET retracted_at = 300 WHERE id = ?", clean); err != nil {
+		t.Fatal(err)
+	}
+	runExport(t, f, d)
+	if _, err := os.Stat(cleanPath); !os.IsNotExist(err) {
+		t.Errorf("retracted record file still exists")
+	}
+	if _, err := os.Stat(stray); err != nil {
+		t.Errorf("a file atrium did not create was removed: %v", err)
+	}
+	var mapped int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM export_pages WHERE target = 'obsidian' AND record_id = ?", clean).Scan(&mapped); err != nil || mapped != 0 {
+		t.Errorf("mapping row for the retracted record = %d, %v", mapped, err)
+	}
+
+	base := startServeIn(t, dir)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/integrations", nil); status != http.StatusOK {
+		t.Fatalf("GET integrations = %d", status)
+	}
+	form := url.Values{
+		"export_obsidian_dir":        {vault},
+		"export_obsidian_kinds":      {"messages", "personal"},
+		"export_obsidian_private_to": {vault},
+	}
+	if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/integrations/sections/export", form); status != http.StatusOK {
+		t.Fatalf("POST export section = %d: %.300s", status, body)
+	}
+	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/integrations", nil)
+	if status != http.StatusOK {
+		t.Fatalf("GET integrations = %d", status)
+	}
+	if !strings.Contains(body, `data-confirm-submit="Include private records in the export to `+vault+`?"`) {
+		t.Errorf("the private switch does not name the folder")
+	}
+	var actor, source string
+	if err := d.Read.QueryRow("SELECT actor, source FROM settings_audit WHERE key = ? ORDER BY id DESC LIMIT 1", kbexport.ObsidianPrivateKey).Scan(&actor, &source); err != nil {
+		t.Fatalf("settings audit: %v", err)
+	}
+	if actor != "operator" || source != "ui" {
+		t.Errorf("settings audit actor/source = %s/%s, want operator/ui", actor, source)
+	}
+	runExport(t, f, d)
+	if _, err := os.Stat(filepath.Join(vault, "personal", "diary-K"+fmt.Sprint(private)+".md")); err != nil {
+		t.Errorf("private record missing after naming the folder: %v", err)
+	}
+
+	if os.Geteuid() != 0 {
+		blocked := exportRecord(t, d, "Blocked", "new", "personal", "operator", 0, 0, 0, 0, 0)
+		scopeDir := filepath.Join(vault, "personal")
+		if err := os.Chmod(scopeDir, 0o555); err != nil {
+			t.Fatal(err)
+		}
+		runExport(t, f, d)
+		entries, err := os.ReadDir(scopeDir)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, entry := range entries {
+			if strings.HasSuffix(entry.Name(), ".tmp") {
+				t.Errorf("a failed write left %s", entry.Name())
+			}
+		}
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM export_pages WHERE target = 'obsidian' AND record_id = ?", blocked).Scan(&mapped); err != nil || mapped != 0 {
+			t.Errorf("a failed write recorded a mapping row: %d, %v", mapped, err)
+		}
+		blockedPath := filepath.Join(scopeDir, "blocked-K"+fmt.Sprint(blocked)+".md")
+		if _, err := os.Stat(blockedPath); !os.IsNotExist(err) {
+			t.Errorf("a failed write left a file")
+		}
+		if err := os.Chmod(scopeDir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		runExport(t, f, d)
+		if _, err := os.Stat(blockedPath); err != nil {
+			t.Errorf("the export did not resume after the write failed: %v", err)
+		}
 	}
 }

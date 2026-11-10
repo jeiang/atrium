@@ -22,13 +22,13 @@ import (
 )
 
 const (
-	WebFetch       = "web_fetch"
-	MailRead       = "mail_read"
-	FetchKnowledge = "fetch_knowledge"
+	WebFetch = "web_fetch"
+	MailRead = "mail_read"
+	KBGet    = "kb_get"
 
-	KindWeb    = "web"
-	KindMail   = "mail"
-	KindNotion = "notion"
+	KindWeb       = "web"
+	KindMail      = "mail"
+	KindKnowledge = "knowledge"
 )
 
 type PlanError string
@@ -120,7 +120,7 @@ type Source struct {
 	URL       string  `json:"url"`
 	Via       *string `json:"via"`
 	MessageID *int64  `json:"message_id,omitempty"`
-	PageID    *string `json:"page_id,omitempty"`
+	RecordID  *int64  `json:"record_id,omitempty"`
 }
 
 func parse(body string) map[string]any {
@@ -265,10 +265,17 @@ func sourceOf(c journal.ToolCall, result map[string]any) (*Source, error) {
 				URL: fmt.Sprintf("/messages/%d", id), MessageID: &id,
 			}, nil
 		}
-	case FetchKnowledge:
-		if argPage := str(args, "page_id"); argPage != "" {
-			page := first(str(result, "page_id"), argPage)
-			return &Source{Kind: KindNotion, Key: "n" + page, Title: first(str(result, "title"), page), URL: "/notion/" + page, PageID: &page}, nil
+	case KBGet:
+		if ids, ok := args["ids"].([]any); ok && len(ids) > 0 {
+			if id, ok := isInt(ids[0]); ok {
+				title := fmt.Sprintf("Record %d", id)
+				if results, ok := result["results"].([]any); ok && len(results) > 0 {
+					if item, ok := results[0].(map[string]any); ok {
+						title = first(str(item, "title"), title)
+					}
+				}
+				return &Source{Kind: KindKnowledge, Key: fmt.Sprintf("k%d", id), Title: title, URL: fmt.Sprintf("/library/knowledge/%d", id), RecordID: &id}, nil
+			}
 		}
 	}
 	return nil, nil

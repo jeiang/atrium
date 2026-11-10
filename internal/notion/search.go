@@ -605,3 +605,17 @@ func RelatedPages(ctx context.Context, q Querier, pageID string, limit int) ([]R
 	}
 	return out[:min(len(out), limit)], nil
 }
+
+func clip(s string, n int) string {
+	if n <= 0 {
+		return ""
+	}
+	i := 0
+	for pos := range s {
+		if i == n {
+			return s[:pos]
+		}
+		i++
+	}
+	return s
+}

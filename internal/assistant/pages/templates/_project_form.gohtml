@@ -27,7 +27,6 @@
     </div>
   </div>
   <label class="flex items-center gap-2 text-sm"><input type="hidden" name="private" value="0"><input type="checkbox" name="private" value="1"{{if $v.Private}} checked{{end}}> Private</label>
-  {{template "project_hub" (dict "project" $f.Project "hub_id" (or $v.WikiHubID "") "notice" nil "error" nil)}}
   <div class="flex justify-end">
     <button type="submit" class="btn">{{icon "check"}}{{if $f.Project}}Save{{else}}Create{{end}}</button>
   </div>

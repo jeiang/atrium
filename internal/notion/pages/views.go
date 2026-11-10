@@ -4,7 +4,6 @@ import (
 	"html/template"
 	"net/http"
 
-	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/urlx"
 )
@@ -53,19 +52,6 @@ type pageData struct {
 
 type articleData struct {
 	NotionPage pageView `json:"notion_page"`
-}
-
-type actionView struct {
-	Error  string `json:"error"`
-	Done   string `json:"done"`
-	Detail string `json:"detail"`
-}
-
-type hubView struct {
-	Project *projects.Project `json:"project"`
-	HubID   string            `json:"hub_id"`
-	Notice  *string           `json:"notice"`
-	Error   *string           `json:"error"`
 }
 
 func crumbs(path []notion.PathPart) []crumb {
