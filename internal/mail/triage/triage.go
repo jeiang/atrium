@@ -123,10 +123,17 @@ type Filter struct {
 	Account   string
 	Stage     string
 	Agreement string
+	Attention string
 	Limit     int
 	Offset    int
 	Q         string
 }
+
+const (
+	AttentionCheck = "check"
+	AttentionRest  = "rest"
+	attentionSQL   = "(" + agreementSQL + " = 'disagree' OR stage = 'fallback')"
+)
 
 type FilterError string
 
@@ -149,6 +156,15 @@ func Triage(ctx context.Context, q report.Querier, f Filter) (Page, error) {
 	}
 	var clauses []string
 	var params []any
+	switch f.Attention {
+	case "":
+	case AttentionCheck:
+		clauses = append(clauses, attentionSQL)
+	case AttentionRest:
+		clauses = append(clauses, "NOT "+attentionSQL)
+	default:
+		return Page{}, FilterError("unknown attention " + strconv.Quote(f.Attention))
+	}
 	if f.Account != "" {
 		clauses = append(clauses, "account = ?")
 		params = append(params, f.Account)

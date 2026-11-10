@@ -3,22 +3,22 @@
 {{define "mail_triage_flags_tab"}}Unread flags <span class="badge" data-variant="secondary">{{len .Data.Flags}}{{if .Data.FlagsCapped}}+{{end}}</span>{{end}}
 {{define "mail_triage_decisions_panel"}}{{$d := .Data -}}
 <div class="flex flex-col gap-3 pt-3">
-  <form class="flex flex-wrap items-end gap-3" action="/triage" method="get"
+  <form class="flex flex-wrap items-center gap-2" action="/triage" method="get"
         hx-get="/triage" hx-target="#decisions" hx-push-url="true" hx-trigger="change, input changed delay:300ms from:#t-q" hx-sync="this:replace" hx-indicator="#decisions">
     <input type="hidden" name="account" value="{{$d.Account}}">
-    <div role="group" class="field w-full sm:w-72">
-      <label for="t-q">Search</label>
+    <div role="group" class="field min-w-48 flex-1">
+      <label for="t-q" class="sr-only">Search</label>
       <input id="t-q" name="q" type="search" value="{{$d.Q}}" placeholder="sender, subject, folder, rule">
     </div>
     <div role="group" class="field w-auto">
-      <label for="t-stage">Stage</label>
+      <label for="t-stage" class="sr-only">Stage</label>
       <select id="t-stage" name="stage">
         <option value="">All stages</option>
         {{range $name := global "stages"}}<option value="{{$name}}"{{if eq $d.Stage $name}} selected{{end}}>{{lbl "stage" $name}}</option>{{end}}
       </select>
     </div>
     <div role="group" class="field w-auto">
-      <label for="t-agreement">Outcome</label>
+      <label for="t-agreement" class="sr-only">Outcome</label>
       <select id="t-agreement" name="agreement">
         {{range $o := list (list "" "Any outcome") (list "agree" "Matches where it went") (list "disagree" "Differs from where it went") (list "pending" "Still in inbox") (list "gone" "Gone")}}
         <option value="{{index $o 0}}"{{if eq $d.Agreement (index $o 0)}} selected{{end}}>{{index $o 1}}</option>
@@ -28,7 +28,7 @@
     <noscript><button type="submit" class="btn" data-variant="outline">Apply</button></noscript>
   </form>
   <div id="decisions" class="flex flex-col gap-2 transition-opacity [&.htmx-request]:opacity-60">
-    {{template "mail_decisions" (dict "rows" $d.Rows "offset" $d.Offset "mode" .Mode "stage" $d.Stage "agreement" $d.Agreement "q" $d.Q "next_offset" $d.NextOffset "total" $d.Total "account" $d.Account)}}
+    {{template "mail_decisions" (dict "rows" $d.Rows "check" $d.Check "offset" $d.Offset "mode" .Mode "stage" $d.Stage "agreement" $d.Agreement "q" $d.Q "next_offset" $d.NextOffset "total" $d.Total "account" $d.Account)}}
   </div>
 </div>
 {{end}}
@@ -66,63 +66,8 @@
 </div>
 {{end}}
 {{define "content"}}
-<div class="flex flex-wrap items-center justify-end gap-3">
-  {{template "account_switch" (dict "path" "/triage" "current" .Data.Account)}}
-</div>
-
-<div class="grid gap-4 {{if gt (len .Data.Summaries) 1}}lg:grid-cols-2{{end}}">
-  {{range $s := .Data.Summaries}}
-  {{$staged := sumvalues $s.ByStage}}
-  <section class="flex flex-col gap-4 rounded-lg border bg-card p-4" aria-labelledby="summary-{{$s.Account}}">
-    <header class="flex flex-wrap items-baseline gap-x-2">
-      <h2 id="summary-{{$s.Account}}" class="font-medium">{{$s.Account}}</h2>
-      <span class="text-sm text-muted-foreground tabular-nums">{{$s.Decisions}} {{if eq $s.Decisions 1}}decision{{else}}decisions{{end}}</span>
-    </header>
-    {{if $staged}}
-    <div class="flex flex-col gap-2">
-      <div class="flex h-2 gap-px overflow-hidden rounded-full bg-muted" role="img"
-        aria-label="By stage: {{$sep := ""}}{{range global "stages"}}{{$n := index $s.ByStage .}}{{if $n}}{{$sep}}{{lbl "stage" .}} {{$n}}{{$sep = ", "}}{{end}}{{end}}">
-        {{range global "stages"}}{{$n := index $s.ByStage .}}{{if $n}}
-        <span class="{{lbl "stage_dot" .}}" style="flex-grow: {{$n}}"></span>
-        {{end}}{{end}}
-      </div>
-      <ul class="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground" role="list" aria-hidden="true">
-        {{range global "stages"}}
-        <li class="inline-flex items-center gap-1.5"><span class="size-2 rounded-full {{lbl "stage_dot" .}}"></span>{{lbl "stage" .}} <span class="text-foreground tabular-nums">{{index $s.ByStage .}}</span></li>
-        {{end}}
-      </ul>
-    </div>
-    {{end}}
-    <dl class="grid grid-cols-2 gap-x-6 gap-y-3 text-sm sm:grid-cols-4">
-      <div class="flex flex-col gap-0.5">
-        <dt class="text-xs text-muted-foreground">Proposed</dt>
-        <dd class="tabular-nums"><span class="font-medium">{{$s.ProposedMoves}}</span> moves</dd>
-        <dd class="text-xs text-muted-foreground tabular-nums">{{$s.ProposedDeletes}} deletes · {{$s.NoLabel}} stay</dd>
-      </div>
-      <div class="flex flex-col gap-0.5">
-        <dt class="text-xs text-muted-foreground">Since then</dt>
-        <dd class="tabular-nums"><span class="font-medium">{{$s.Moved}}</span> moved</dd>
-        <dd class="text-xs text-muted-foreground tabular-nums">{{$s.StillInInbox}} in inbox · {{$s.Gone}} gone</dd>
-      </div>
-      <div class="flex flex-col gap-0.5">
-        <dt class="text-xs text-muted-foreground">Agreement</dt>
-        {{if not (isnil $s.AgreementPct)}}
-        <dd class="font-medium tabular-nums">{{percent $s.AgreementPct}}</dd>
-        <dd class="text-xs text-muted-foreground tabular-nums">{{$s.Agreed}} of {{$s.Moved}} moved</dd>
-        {{else}}
-        <dd class="text-muted-foreground">Nothing moved yet</dd>
-        {{end}}
-      </div>
-      <div class="flex flex-col gap-0.5">
-        <dt class="text-xs text-muted-foreground">Flag judgments</dt>
-        <dd class="tabular-nums"><span class="font-medium">{{$s.Flags.LLM}}</span> flagged by 9B <span class="text-muted-foreground">of {{$s.Flags.Judged}}</span></dd>
-        <dd class="text-xs text-muted-foreground tabular-nums">{{$s.Flags.Contacts}} contacts · {{$s.Flags.Both}} both</dd>
-      </div>
-    </dl>
-  </section>
-  {{end}}
-</div>
-
+<div class="triage">
+  <div class="flex min-w-0 flex-col gap-4">
 {{template "tabs" (dict
   "id" "triage-tabs"
   "tabsets" (list
@@ -131,4 +76,57 @@
   "class" "gap-0"
   "variant" "line"
   "label" "Decisions views")}}
+  </div>
+  <aside class="flex flex-col gap-4" aria-label="How filing is going">
+    {{template "account_switch" (dict "path" "/triage" "current" .Data.Account)}}
+    {{range $s := .Data.Summaries}}
+    {{$staged := sumvalues $s.ByStage}}
+    <section class="flex flex-col gap-3 text-sm" aria-labelledby="summary-{{$s.Account}}">
+      <header class="flex flex-wrap items-baseline gap-x-2">
+        <h2 id="summary-{{$s.Account}}" class="eyebrow">{{$s.Account}}</h2>
+        <span class="text-xs text-ink-3 tabular-nums">{{$s.Decisions}} {{if eq $s.Decisions 1}}decision{{else}}decisions{{end}}</span>
+      </header>
+      {{if $staged}}
+      <div class="flex h-1.5 gap-px overflow-hidden rounded-full bg-muted" role="img"
+        aria-label="By stage: {{$sep := ""}}{{range global "stages"}}{{$n := index $s.ByStage .}}{{if $n}}{{$sep}}{{lbl "stage" .}} {{$n}}{{$sep = ", "}}{{end}}{{end}}">
+        {{range global "stages"}}{{$n := index $s.ByStage .}}{{if $n}}
+        <span class="{{lbl "stage_dot" .}}" style="flex-grow: {{$n}}"></span>
+        {{end}}{{end}}
+      </div>
+      <ul class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-ink-3" role="list" aria-hidden="true">
+        {{range global "stages"}}{{$n := index $s.ByStage .}}{{if $n}}
+        <li class="inline-flex items-center gap-1.5"><span class="size-2 rounded-full {{lbl "stage_dot" .}}"></span>{{lbl "stage" .}} <span class="text-ink tabular-nums">{{$n}}</span></li>
+        {{end}}{{end}}
+      </ul>
+      {{end}}
+      <dl class="grid grid-cols-2 gap-x-4 gap-y-2">
+        <div class="flex flex-col">
+          <dt class="text-xs text-ink-3">Proposed</dt>
+          <dd class="tabular-nums"><span class="font-medium">{{$s.ProposedMoves}}</span> moves</dd>
+          <dd class="text-xs text-ink-3 tabular-nums">{{$s.ProposedDeletes}} deletes · {{$s.NoLabel}} stay</dd>
+        </div>
+        <div class="flex flex-col">
+          <dt class="text-xs text-ink-3">Since then</dt>
+          <dd class="tabular-nums"><span class="font-medium">{{$s.Moved}}</span> moved</dd>
+          <dd class="text-xs text-ink-3 tabular-nums">{{$s.StillInInbox}} in inbox · {{$s.Gone}} gone</dd>
+        </div>
+        <div class="flex flex-col">
+          <dt class="text-xs text-ink-3">Agreement</dt>
+          {{if not (isnil $s.AgreementPct)}}
+          <dd class="font-medium tabular-nums">{{percent $s.AgreementPct}}</dd>
+          <dd class="text-xs text-ink-3 tabular-nums">{{$s.Agreed}} of {{$s.Moved}} moved</dd>
+          {{else}}
+          <dd class="text-ink-3">Nothing moved yet</dd>
+          {{end}}
+        </div>
+        <div class="flex flex-col">
+          <dt class="text-xs text-ink-3">Flag judgments</dt>
+          <dd class="tabular-nums"><span class="font-medium">{{$s.Flags.LLM}}</span> <span class="text-ink-3">of {{$s.Flags.Judged}}</span></dd>
+          <dd class="text-xs text-ink-3 tabular-nums">{{$s.Flags.Contacts}} contacts · {{$s.Flags.Both}} both</dd>
+        </div>
+      </dl>
+    </section>
+    {{end}}
+  </aside>
+</div>
 {{end}}

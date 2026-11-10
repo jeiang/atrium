@@ -473,6 +473,10 @@
     @apply shrink-0 font-mono text-xs text-ink-3;
   }
 
+  .triage {
+    @apply flex flex-col gap-8 xl:grid xl:grid-cols-[minmax(0,1fr)_17rem] xl:items-start;
+  }
+
   .tabbar {
     @apply fixed inset-x-0 bottom-0 z-30 hidden h-(--tabbar-h) auto-cols-fr grid-flow-col border-t bg-surface;
     padding-bottom: env(safe-area-inset-bottom);

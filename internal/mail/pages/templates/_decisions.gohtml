@@ -1,6 +1,15 @@
-{{define "mail_decisions"}}
-<p class="text-xs text-muted-foreground tabular-nums" role="status">{{.total}} {{if eq .total 1}}decision{{else}}decisions{{end}}</p>
-<div class="overflow-hidden rounded-lg border bg-card">
+{{define "mail_decisions"}}{{$mode := .mode}}
+{{with .check}}
+<section class="flex flex-col gap-2" aria-labelledby="check-h" data-check>
+  <div class="flex items-center gap-2"><h2 id="check-h" class="eyebrow">Check these</h2><span class="count">{{len .}}</span></div>
+  <ul class="rows" role="list" aria-label="Decisions to check">
+    {{range .}}{{template "mail_triage_row" (dict "r" . "mode" $mode "focus_row" false)}}{{end}}
+  </ul>
+</section>
+<h2 class="eyebrow pt-2">Filed</h2>
+{{end}}
+<p class="text-xs text-ink-3 tabular-nums" role="status">{{.total}} {{if eq .total 1}}decision{{else}}decisions{{end}}</p>
+<div class="rows overflow-hidden">
   <div class="hidden gap-x-4 border-b px-4 py-2 text-xs font-medium text-muted-foreground lg:grid lg:grid-cols-[minmax(0,1fr)_--spacing(64)_--spacing(48)_auto]" aria-hidden="true">
     <span>Message</span><span>Now → proposed</span><span>Stage</span><span class="w-18"></span>
   </div>
@@ -9,4 +18,4 @@
   </ul>
 </div>
 {{end}}
-{{template "mail_decisions" (dict "rows" .Data.Rows "offset" .Data.Offset "mode" .Mode "stage" .Data.Stage "agreement" .Data.Agreement "q" .Data.Q "next_offset" .Data.NextOffset "total" .Data.Total "account" .Data.Account)}}
+{{template "mail_decisions" (dict "rows" .Data.Rows "check" .Data.Check "offset" .Data.Offset "mode" .Mode "stage" .Data.Stage "agreement" .Data.Agreement "q" .Data.Q "next_offset" .Data.NextOffset "total" .Data.Total "account" .Data.Account)}}
