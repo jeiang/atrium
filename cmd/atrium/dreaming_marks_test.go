@@ -273,7 +273,6 @@ func TestDreamingRecordIndexFollowsVisibility(t *testing.T) {
 	record("PII fact", "personal", 2, 0, nil, "")
 	record("Private fact", "personal", 0, 1, nil, "")
 	record("Project private fact", "personal", 0, 0, project, "")
-	record("Ops fact", "ops", 0, 0, nil, "")
 	record("Expired fact", "personal", 0, 0, nil, ", expires_at", now-100)
 	record("Retracted fact", "personal", 0, 0, nil, ", retracted_at", now-100)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("unmarked done")))
@@ -288,7 +287,7 @@ func TestDreamingRecordIndexFollowsVisibility(t *testing.T) {
 	if !strings.Contains(unmarked, "Visible fact") {
 		t.Errorf("unmarked index lacks the visible record: %q", unmarked)
 	}
-	for _, bad := range []string{"Marked fact", "PII fact", "Private fact", "Project private fact", "Ops fact", "Expired fact", "Retracted fact"} {
+	for _, bad := range []string{"Marked fact", "PII fact", "Private fact", "Project private fact", "Expired fact", "Retracted fact"} {
 		if strings.Contains(unmarked, bad) {
 			t.Errorf("unmarked index lists %q", bad)
 		}
@@ -299,7 +298,7 @@ func TestDreamingRecordIndexFollowsVisibility(t *testing.T) {
 			t.Errorf("marked index lacks %q: %q", want, markedText)
 		}
 	}
-	for _, bad := range []string{"PII fact", "Private fact", "Project private fact", "Ops fact", "Expired fact", "Retracted fact"} {
+	for _, bad := range []string{"PII fact", "Private fact", "Project private fact", "Expired fact", "Retracted fact"} {
 		if strings.Contains(markedText, bad) {
 			t.Errorf("marked index lists %q", bad)
 		}

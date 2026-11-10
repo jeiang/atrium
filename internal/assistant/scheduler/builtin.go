@@ -65,7 +65,7 @@ var Builtins = []Builtin{
 	{NightlyName, KeyNightlySchedule, "daily 02:30", "Nightly: gather the last day and write knowledge records (one model run).", JobNightly, CallableRun},
 	{WeeklyReviewName, KeyWeeklyReview, "weekly sun 18:00", weeklyReviewPrompt, JobBuiltin, PromptRun},
 	{DailyNudgesName, KeyDailyNudges, "daily 08:00", "Daily: send the attention digest (no model run).", JobBuiltin, CallableRun},
-	{OpsSamplerName, KeyOpsSamplerSchedule, "*/15 * * * *", "Every 15 minutes: sample host metrics and firing alerts into ops facts (no model run).", JobBuiltin, CallableRun},
+	{OpsSamplerName, KeyOpsSamplerSchedule, "*/15 * * * *", "Every 15 minutes: sample host metrics and firing alerts into ops samples (no model run).", JobBuiltin, CallableRun},
 	{CalendarCandidatesName, KeyCalendarCands, "0 * * * *", "Hourly: if event candidates are queued, draft calendar event proposals from them (no model run when the queue is empty).", JobBuiltin, CallableRun},
 	{MediaChannelsName, KeyMediaChannels, "*/30 * * * *", "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run).", JobBuiltin, CallableRun},
 	{MediaSweepName, KeyMediaSweep, "*/10 * * * *", "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run).", JobBuiltin, CallableRun},
