@@ -275,19 +275,34 @@ func TestKnowledgeImportCleansNotionMarkup(t *testing.T) {
 		betaID  = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 		gammaID = "cccccccc-cccc-cccc-cccc-cccccccccccc"
 	)
+	codeFence := "```\n<table>inside code</table>\nhttps://app.notion.com/code-page\n```"
+	inlineCode := "`https://app.notion.com/inline-page`"
 	alphaMarkdown := "# Alpha\n\n" +
 		"<table header-row=\"true\"><tr><td>Name</td><td>Value</td></tr><tr><td>a|b</td><td>line<br>two</td></tr></table>\n\n" +
 		"Mention <page url=\"https://app.notion.com/Beta-" + betaID + "\">Beta</page> and [Other](https://app.notion.com/Other-" + gammaID + ").\n\n" +
 		"<callout icon=\"tip\">Callout text</callout>\n\n" +
 		"<details><summary>Toggle title</summary>Hidden text</details>\n\n" +
 		"<foo>unknown</foo> Tom &amp; Jerry<br>after break.\n\n" +
-		"```\n<table>inside code</table>\n```\n\n" +
+		"Bare imported: https://app.notion.com/Beta-" + betaID + "?view=all#section\n" +
+		"Bare known: https://app.notion.com/Gamma-" + gammaID + "\n" +
+		"Scheme-less: app.notion.com/Beta-" + betaID + "\n" +
+		"Email: person@notion.com\n" +
+		"Bare unknown: https://app.notion.com/unknown\n" +
+		"Autolink: <https://app.notion.com/Beta-" + betaID + ">\n" +
+		"URL label: [https://app.notion.com/Beta-" + betaID + "](https://app.notion.com/Beta-" + betaID + ")\n" +
+		"Image: ![Picture](https://app.notion.com/Other-" + gammaID + ")\n" +
+		"Reference: [Known][notionref]\n\n[notionref]: https://app.notion.com/Other-" + gammaID + "\n\n" +
+		"<table><tr><td>https://app.notion.com/Beta-" + betaID + "</td></tr>" +
+		"<tr><td>[Cell](https://app.notion.com/Beta-" + betaID + ")</td></tr>" +
+		"<tr><td>![Cell image](https://app.notion.com/Other-" + gammaID + ")</td></tr></table>\n\n" +
+		codeFence + "\n\n" + inlineCode + "\n\n" +
 		"[Example](https://example.com/x)\n"
 	seed := fmt.Sprintf(`
 INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url, last_edited_time, edited_ts) VALUES
   ('%s', '00000000-0000-0000-0000-000000000001', 'Alpha', '%s', 0, 0, 'https://notion.invalid/alpha', '2026-01-01T00:00:00Z', 1),
-  ('%s', '00000000-0000-0000-0000-000000000001', 'Beta', 'Beta body.', 0, 0, 'https://notion.invalid/beta', '2026-01-01T00:00:00Z', 1);
-`, alphaID, strings.ReplaceAll(alphaMarkdown, "'", "''"), betaID)
+  ('%s', '00000000-0000-0000-0000-000000000001', 'Beta', 'Beta body.', 0, 0, 'https://notion.invalid/beta', '2026-01-01T00:00:00Z', 1),
+  ('%s', '', 'Gamma title', 'Outside the import.', 0, 0, 'https://notion.invalid/gamma', '2026-01-01T00:00:00Z', 1);
+`, alphaID, strings.ReplaceAll(alphaMarkdown, "'", "''"), betaID, gammaID)
 	if code, stdout, stderr := kbImportRun(t, seed, "db", "shell"); code != 0 {
 		t.Fatalf("seed: %d %s %s", code, stdout, stderr)
 	}
@@ -320,18 +335,31 @@ INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url
 	alpha := load("notion:" + alphaID)
 	beta := load("notion:" + betaID)
 	cleanBody := alpha.body
-	outside := strings.Replace(alpha.body, "```\n<table>inside code</table>\n```", "", 1)
+	outside := strings.ReplaceAll(strings.ReplaceAll(alpha.body, codeFence, ""), inlineCode, "")
 	for _, want := range []string{
 		"| Name | Value |",
 		"| --- | --- |",
 		`| a\|b | line two |`,
 		fmt.Sprintf("[K%d]", beta.id),
+		"Bare imported: " + fmt.Sprintf("[K%d]", beta.id),
+		"Scheme-less: " + fmt.Sprintf("[K%d]", beta.id),
+		"Email: person@notion.com",
+		"Bare known: Gamma title",
+		"Bare unknown: ",
+		"Autolink: " + fmt.Sprintf("[K%d]", beta.id),
+		"URL label: " + fmt.Sprintf("[K%d]", beta.id),
+		"Image: Picture",
+		"| " + fmt.Sprintf("[K%d]", beta.id) + " |",
+		"| Cell image |",
+		"Reference: Known",
+		codeFence,
+		inlineCode,
 		"> Callout text",
 		"**Toggle title**",
 		"Hidden text",
 		"unknown",
 		"Tom & Jerry\nafter break.",
-		"```\n<table>inside code</table>\n```",
+		"```\n<table>inside code</table>",
 		"[Example](https://example.com/x)",
 	} {
 		if !strings.Contains(alpha.body, want) {
@@ -346,8 +374,8 @@ INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url
 	if regexp.MustCompile(`<[A-Za-z]`).MatchString(outside) {
 		t.Errorf("alpha body outside code still has a raw tag:\n%s", outside)
 	}
-	if alpha.marks != 1 || alpha.confirmedAt != nil {
-		t.Errorf("alpha marks = %d confirmed = %v, want untrusted and unconfirmed", alpha.marks, alpha.confirmedAt)
+	if alpha.marks != 3 || alpha.confirmedAt != nil {
+		t.Errorf("alpha marks = %d confirmed = %v, want untrusted, pii and unconfirmed", alpha.marks, alpha.confirmedAt)
 	}
 
 	code, stdout, stderr = kbImportRun(t, "", "kb", "import")
@@ -374,10 +402,10 @@ INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url
 		t.Errorf("third import = %+v, want the confirmed record updated and reported", third)
 	}
 	alpha = load("notion:" + alphaID)
-	if alpha.body != cleanBody || alpha.marks != 0 || alpha.confirmedAt == nil || *alpha.confirmedAt != 123 {
-		t.Errorf("confirmed record = marks %d confirmed %v, want cleaned body, no marks and the original confirmation", alpha.marks, alpha.confirmedAt)
+	if alpha.body != cleanBody || alpha.marks != 2 || alpha.confirmedAt == nil || *alpha.confirmedAt != 123 {
+		t.Errorf("confirmed record = marks %d confirmed %v, want cleaned body, pii and the original confirmation", alpha.marks, alpha.confirmedAt)
 	}
-	if strings.Contains(strings.Replace(alpha.body, "```\n<table>inside code</table>\n```", "", 1), "<table") {
+	if strings.Contains(strings.ReplaceAll(strings.ReplaceAll(alpha.body, codeFence, ""), inlineCode, ""), "<table") {
 		t.Errorf("confirmed record body was not cleaned:\n%s", alpha.body)
 	}
 
