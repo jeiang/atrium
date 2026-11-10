@@ -2,6 +2,7 @@ package module
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"strings"
 
@@ -40,10 +41,46 @@ func (s *Set) Pages() []web.Page {
 	return append(pages, settingspage.Page(s.settingPages()))
 }
 
-func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic) {
+func (s *Set) settingState(ctx context.Context, q db.Querier, name string) (settings.ModuleView, error) {
+	held, err := s.Held(ctx, q, name)
+	if err != nil {
+		return settings.ModuleView{}, err
+	}
+	view := settings.ModuleView{On: held.Result == "", Running: s.enabled(name)}
+	if held.Result == HoldNeeds {
+		view.Reason = held.Detail
+	}
+	source, pinned, err := s.reg.Pinned(FlagKey(name))
+	if pinned {
+		view.Pinned = source
+	}
+	return view, err
+}
+
+func (s *Set) settingToggle(ctx context.Context, d *db.DB, name string, on bool) error {
+	if on {
+		_, err := s.Enable(ctx, d, name)
+		return err
+	}
+	return d.WithTx(ctx, func(tx *sql.Tx) error {
+		return s.reg.Set(ctx, tx, FlagKey(name), "false")
+	})
+}
+
+func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, settingspage.Control) {
 	var groups []settingspage.Group
 	var generic []settingspage.Generic
+	control := settingspage.Control{State: s.settingState, Set: s.settingToggle}
 	for _, r := range s.regs {
+		if !r.Core {
+			for _, p := range r.Pages {
+				for _, item := range p.Nav {
+					if item.Settings && item.Primary {
+						control.Modules = append(control.Modules, settingspage.Module{Name: r.Name, URL: item.URL})
+					}
+				}
+			}
+		}
 		if len(r.Settings) == 0 {
 			continue
 		}
@@ -75,9 +112,12 @@ func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic) {
 		}
 		if own && home == "" {
 			generic = append(generic, settingspage.Generic{Module: r.Name, URL: "/settings/" + r.Name, Tab: "module:" + r.Name})
+			if !r.Core {
+				control.Modules = append(control.Modules, settingspage.Module{Name: r.Name, URL: "/settings/" + r.Name})
+			}
 		}
 	}
-	return groups, generic
+	return groups, generic, control
 }
 
 func (s *Set) gatePage(owner string, p web.Page) web.Page {

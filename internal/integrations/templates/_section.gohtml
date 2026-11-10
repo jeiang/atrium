@@ -1,6 +1,0 @@
-{{define "integration_section"}}{{$s := .Section}}
-{{if and (eq .Failed $s.Name) .Error}}<p class="text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.Error}}</p>{{end}}
-<span class="font-medium">{{$s.Title}}</span>
-{{if $s.Template}}{{partial $s.Template (dict "Section" $s "Fields" $s.Fields "Action" (printf "/settings/integrations/sections/%s" $s.Name) "CSRF" .CSRF)}}
-{{else}}{{template "settings_fields" (dict "Fields" $s.Fields "Action" (printf "/settings/integrations/sections/%s" $s.Name) "CSRF" .CSRF)}}{{end}}
-{{end}}

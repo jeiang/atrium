@@ -3,6 +3,7 @@
 {{define "body_attrs"}}{{if .Data.Saved}} data-strip-params="saved"{{end}}{{end}}
 {{define "content"}}{{$d := .Data}}
 {{template "settings_nav" (dict "Tab" "assistant" "Settings" .Settings)}}
+{{template "settings_module_head" .}}
 <form method="post" action="/settings/assistant" class="set-group">
   <input type="hidden" name="csrf_token" value="{{.CSRF}}">
   <h2>New threads</h2>
@@ -27,5 +28,6 @@
   </div>
   <footer><button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button></footer>
 </form>
+{{template "settings_connections" .}}
 {{template "settings_groups" .}}
 {{end}}

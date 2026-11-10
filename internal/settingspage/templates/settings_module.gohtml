@@ -3,5 +3,7 @@
 {{define "body_attrs"}}{{if .Saved}} data-strip-params="saved"{{end}}{{end}}
 {{define "content"}}
 {{template "settings_nav" (dict "Tab" .Data.Tab "Settings" .Settings)}}
+{{template "settings_module_head" .}}
+{{template "settings_connections" .}}
 {{template "settings_groups" .}}
 {{end}}

@@ -32,21 +32,33 @@ type Generic struct {
 	Tab    string
 }
 
+type Module struct {
+	Name string
+	URL  string
+}
+
+type Control struct {
+	Modules []Module
+	State   func(ctx context.Context, q db.Querier, name string) (settings.ModuleView, error)
+	Set     func(ctx context.Context, d *db.DB, name string, on bool) error
+}
+
 type pageData struct {
 	Title string `json:"title"`
 	Tab   string `json:"tab"`
 }
 
 type handlers struct {
-	d      *web.Deps
-	groups []Group
+	d       *web.Deps
+	groups  []Group
+	control Control
 }
 
 func title(module string) string {
 	return strings.ToUpper(module[:1]) + module[1:]
 }
 
-func Page(groups []Group, generic []Generic) web.Page {
+func Page(groups []Group, generic []Generic, control Control) web.Page {
 	files, err := fs.Sub(assets, "templates")
 	if err != nil {
 		panic(err)
@@ -56,10 +68,21 @@ func Page(groups []Group, generic []Generic) web.Page {
 		nav[i] = tpl.NavItem{Label: title(g.Module), URL: g.URL, Page: g.Tab, Settings: true, Order: 45}
 	}
 	return web.Page{Templates: files, Nav: nav, Module: func(r chi.Router, d *web.Deps) {
-		h := handlers{d: d, groups: groups}
+		h := handlers{d: d, groups: groups, control: control}
 		d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
 			if f.Page != "settings" {
 				return nil
+			}
+			for _, m := range control.Modules {
+				if m.URL != f.Path {
+					continue
+				}
+				view, err := control.State(ctx, d.DB.Read, m.Name)
+				if err != nil {
+					return err
+				}
+				view.Name, view.Title = m.Name, title(m.Name)
+				f.SettingModule = &view
 			}
 			views, err := h.views(ctx, d.DB.Read, f.Path)
 			for i := range views {
@@ -74,6 +97,7 @@ func Page(groups []Group, generic []Generic) web.Page {
 			})
 		}
 		d.Admin(http.MethodPost, "/settings/groups/{module}/{name}", h.save)
+		d.Admin(http.MethodPost, "/settings/modules/{name}", h.toggle)
 	}}
 }
 
@@ -159,4 +183,23 @@ func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Location", group.URL+"?saved="+module+"."+name)
 	w.WriteHeader(http.StatusSeeOther)
+}
+
+func (h handlers) toggle(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	for _, m := range h.control.Modules {
+		if m.Name != name {
+			continue
+		}
+		ctx := audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
+		err := h.control.Set(ctx, h.d.DB, name, web.FormString(web.FormValues(r), "enabled", "") == "true")
+		var pinned *settings.PinnedError
+		if err != nil && !errors.As(err, &pinned) {
+			panic(err)
+		}
+		w.Header().Set("Location", m.URL)
+		w.WriteHeader(http.StatusSeeOther)
+		return
+	}
+	http.NotFound(w, r)
 }

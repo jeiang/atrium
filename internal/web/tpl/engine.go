@@ -75,6 +75,8 @@ type Frame struct {
 	Settings          []NavItem
 	SettingsURL       string
 	SettingGroups     []settings.GroupView
+	SettingModule     *settings.ModuleView
+	Connections       any
 	Saved             string
 	BrandURL          string
 	Footer            []NavItem

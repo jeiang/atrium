@@ -56,6 +56,15 @@ type GroupView struct {
 	Error  string      `json:"error"`
 }
 
+type ModuleView struct {
+	Name    string `json:"name"`
+	Title   string `json:"title"`
+	On      bool   `json:"on"`
+	Running bool   `json:"running"`
+	Reason  string `json:"reason"`
+	Pinned  string `json:"pinned"`
+}
+
 func (r *Registry) Fields(keys []string) ([]Field, error) {
 	out := make([]Field, 0, len(keys))
 	for _, key := range keys {

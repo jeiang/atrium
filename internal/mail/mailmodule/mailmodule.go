@@ -95,7 +95,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 			{Module: pages.Module, Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
 				{Section: "review", Label: "Mail decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 40},
 				{Section: "library", Label: "Mail rules", URL: "/rules", Icon: "scroll-text", Page: "rules", Order: 30},
-				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Order: 15},
+				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Primary: true, Order: 15},
 			}},
 			{Module: accountpages.Module, Templates: accountpages.Templates()},
 		},

@@ -1,6 +1,6 @@
 {{define "settings_fields"}}
 <form method="post" action="{{.Action}}" class="set-rows">
-  <input type="hidden" name="csrf_token" value="{{.CSRF}}">
+  <input type="hidden" name="csrf_token" value="{{.CSRF}}">{{with opt . "Back" ""}}<input type="hidden" name="back" value="{{.}}">{{end}}
   {{template "settings_rows" .Fields}}
   <footer><button type="submit" class="btn" data-size="sm" data-variant="outline">Save</button></footer>
 </form>

@@ -71,4 +71,11 @@ func TestExternalModuleSettingsGroupGetsAPage(t *testing.T) {
 	if status != http.StatusOK || !strings.Contains(body, `value="good day"`) {
 		t.Errorf("POST the group = %d, saved value shown %v", status, strings.Contains(body, `value="good day"`))
 	}
+	if !strings.Contains(body, `data-module="`+extName+`" data-enabled="false"`) {
+		t.Errorf("the module page does not show the module as off")
+	}
+	status, body, _ = fetch(t, client, http.MethodPost, base+"/settings/modules/"+extName, url.Values{"enabled": {"true"}})
+	if status != http.StatusOK || !strings.Contains(body, `data-module="`+extName+`" data-enabled="true"`) || !strings.Contains(body, "data-restart") {
+		t.Errorf("turning the module on = %d, on %v, restart note %v", status, strings.Contains(body, `data-enabled="true"`), strings.Contains(body, "data-restart"))
+	}
 }
