@@ -1,6 +1,7 @@
 package export
 
 import (
+	"path/filepath"
 	"slices"
 	"strings"
 
@@ -15,6 +16,10 @@ const (
 	NotionParentKey  = "export_notion_parent"
 	NotionKindsKey   = "export_notion_kinds"
 	NotionPrivateKey = "export_notion_private_to"
+
+	ObsidianDirKey     = "export_obsidian_dir"
+	ObsidianKindsKey   = "export_obsidian_kinds"
+	ObsidianPrivateKey = "export_obsidian_private_to"
 
 	KindsNone = "none"
 )
@@ -31,14 +36,23 @@ func init() {
 			Key: NotionKindsKey, Module: "export", Type: settings.String, Default: strings.Join(kindNames, ","), Check: kinds}),
 		settings.Value(settings.UI, settings.Def{
 			Key: NotionPrivateKey, Module: "export", Type: settings.String, Check: pageID}),
+		settings.Value(settings.UI, settings.Def{
+			Key: ObsidianDirKey, Module: "export", Type: settings.String, Check: dirPath}),
+		settings.Value(settings.UI, settings.Def{
+			Key: ObsidianKindsKey, Module: "export", Type: settings.String, Default: strings.Join(kindNames, ","), Check: kinds}),
+		settings.Value(settings.UI, settings.Def{
+			Key: ObsidianPrivateKey, Module: "export", Type: settings.String, Check: dirPath}),
 	)
 	integrations.RegisterSection(integrations.Section{
 		Name: "export", Title: "Knowledge export", Module: "export", Template: "export_settings",
 		Fields: []integrations.Field{
 			{Key: NotionEnabledKey, Label: "Notion export", Bool: true},
 			{Key: NotionParentKey, Label: "Notion destination"},
-			{Key: NotionKindsKey, Label: "Kinds", Multi: true, Choices: kindNames},
-			{Key: NotionPrivateKey, Label: "Include private records"},
+			{Key: NotionKindsKey, Label: "Notion kinds", Multi: true, Choices: kindNames},
+			{Key: NotionPrivateKey, Label: "Notion private records"},
+			{Key: ObsidianDirKey, Label: "Obsidian folder"},
+			{Key: ObsidianKindsKey, Label: "Obsidian kinds", Multi: true, Choices: kindNames},
+			{Key: ObsidianPrivateKey, Label: "Obsidian private records"},
 		},
 	})
 }
@@ -58,6 +72,17 @@ func pageID(value string) error {
 		if dash == hex {
 			return settings.Invalid("must be a Notion page id: 32 hexadecimal digits, dashes optional")
 		}
+	}
+	return nil
+}
+
+func dirPath(value string) error {
+	text := strings.TrimSpace(value)
+	if text == "" {
+		return nil
+	}
+	if !filepath.IsAbs(text) {
+		return settings.Invalid("must be an absolute path")
 	}
 	return nil
 }

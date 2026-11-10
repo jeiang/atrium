@@ -2,6 +2,7 @@ package export
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/kb/render"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/settings"
@@ -18,24 +20,49 @@ import (
 type Result struct {
 	Created int `json:"created"`
 	Updated int `json:"updated"`
-	Trashed int `json:"trashed"`
+	Removed int `json:"removed"`
 	Skipped int `json:"skipped"`
+}
+
+func (r Result) add(other Result) Result {
+	return Result{
+		Created: r.Created + other.Created, Updated: r.Updated + other.Updated,
+		Removed: r.Removed + other.Removed, Skipped: r.Skipped + other.Skipped,
+	}
 }
 
 func Run(ctx context.Context, d *db.DB, env config.Env, now float64) (Result, error) {
 	var out Result
-	read := func(key string) (string, error) {
-		found, err := settings.From(ctx).Resolve(ctx, d.Read, key)
-		return strings.TrimSpace(found.Value), err
-	}
-	enabled, err := read(NotionEnabledKey)
-	if err != nil {
+	var errs []error
+	if enabled, err := readSetting(ctx, d, NotionEnabledKey); err != nil {
 		return out, err
+	} else if enabled == "true" && module.IsEnabled(ctx, module.Notion) {
+		res, err := runNotion(ctx, d, env, now)
+		out = out.add(res)
+		if err != nil {
+			errs = append(errs, err)
+		}
 	}
-	if enabled != "true" {
-		return out, nil
+	if dir, err := readSetting(ctx, d, ObsidianDirKey); err != nil {
+		return out, err
+	} else if dir != "" {
+		res, err := runObsidian(ctx, d, env, now)
+		out = out.add(res)
+		if err != nil {
+			errs = append(errs, err)
+		}
 	}
-	parent, err := read(NotionParentKey)
+	return out, errors.Join(errs...)
+}
+
+func readSetting(ctx context.Context, d *db.DB, key string) (string, error) {
+	found, err := settings.From(ctx).Resolve(ctx, d.Read, key)
+	return strings.TrimSpace(found.Value), err
+}
+
+func runNotion(ctx context.Context, d *db.DB, env config.Env, now float64) (Result, error) {
+	var out Result
+	parent, err := readSetting(ctx, d, NotionParentKey)
 	if err != nil {
 		return out, err
 	}
@@ -46,11 +73,11 @@ func Run(ctx context.Context, d *db.DB, env config.Env, now float64) (Result, er
 	if err := blocked(ctx, d.Read); err != nil {
 		return out, err
 	}
-	privateTo, err := read(NotionPrivateKey)
+	privateTo, err := readSetting(ctx, d, NotionPrivateKey)
 	if err != nil {
 		return out, err
 	}
-	allow, err := read(NotionKindsKey)
+	allow, err := readSetting(ctx, d, NotionKindsKey)
 	if err != nil {
 		return out, err
 	}

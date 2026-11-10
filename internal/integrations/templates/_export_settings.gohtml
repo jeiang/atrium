@@ -1,6 +1,6 @@
-{{define "export_settings"}}{{$csrf := .CSRF}}{{$parent := ""}}{{$private := ""}}
-{{range $f := .Fields}}{{if eq $f.Key "export_notion_parent"}}{{$parent = $f.Value}}{{end}}{{if eq $f.Key "export_notion_private_to"}}{{$private = $f.Value}}{{end}}{{end}}
-<form method="post" action="{{.Action}}" class="grid gap-3 sm:grid-cols-2"{{if $private}} data-confirm-submit="Include private records in the export to {{$parent}}?"{{end}}>
+{{define "export_settings"}}{{$csrf := .CSRF}}{{$notion := ""}}{{$notionPrivate := ""}}{{$obsidian := ""}}{{$obsidianPrivate := ""}}
+{{range $f := .Fields}}{{if eq $f.Key "export_notion_parent"}}{{$notion = $f.Value}}{{end}}{{if eq $f.Key "export_notion_private_to"}}{{$notionPrivate = $f.Value}}{{end}}{{if eq $f.Key "export_obsidian_dir"}}{{$obsidian = $f.Value}}{{end}}{{if eq $f.Key "export_obsidian_private_to"}}{{$obsidianPrivate = $f.Value}}{{end}}{{end}}
+<form method="post" action="{{.Action}}" class="grid gap-3 sm:grid-cols-2"{{if or $notionPrivate $obsidianPrivate}} data-confirm-submit="Include private records in the export to {{if $notionPrivate}}{{$notion}}{{end}}{{if and $notionPrivate $obsidianPrivate}} and {{end}}{{if $obsidianPrivate}}{{$obsidian}}{{end}}?"{{end}}>
   <input type="hidden" name="csrf_token" value="{{$csrf}}">
   {{range $f := .Fields}}
   <div role="group" class="field">

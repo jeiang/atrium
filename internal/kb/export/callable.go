@@ -11,7 +11,7 @@ import (
 func Callables() map[string]worker.Callable {
 	return map[string]worker.Callable{
 		scheduler.KnowledgeExportName: {
-			Modules: []string{module.Assistant, module.Notion},
+			Modules: []string{module.Assistant},
 			Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
 				_, err := Run(ctx, e.Service.DB, e.Service.Env, e.Now())
 				return worker.Result{}, err

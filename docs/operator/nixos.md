@@ -85,6 +85,12 @@ The earlier unprefixed environment variables (`ATRIUM_MODE`, `ATRIUM_TZ`, `ATRIU
 
 After each successful run, `atrium-backup.service` prunes every `*.backup` file in `backup.directory`, including archives written by hand such as pre-migration backups: it keeps the newest `backup.keep` by modification time plus any modified within `backup.keepDays` days, and deletes the rest. The newest archive is never deleted, and a failed run prunes nothing. Copying archives off the host belongs to the host's own backup tooling. An archive made under a database key restores only with that key; the key must be kept outside the host's state (for example in the host's secrets store plus an offline copy), because after loss of the key a keyed archive cannot be opened. After `atrium db rekey`, archives made before the rekey still need the old key. The `restore-drill` flake check runs `atrium backup` and `atrium restore --verify` on the golden database, plaintext and keyed, and expects a corrupted archive, a wrong key and a missing key to be refused.
 
+## Knowledge export
+
+| Option | Type | Default | Meaning |
+| --- | --- | --- | --- |
+| `knowledgeExport.obsidianDirectory` | null or string | `null` | Folder the `knowledge-export` job writes the generated Obsidian vault to. It pins `export.export_obsidian_dir` and adds the folder to the scheduler unit's `ReadWritePaths`; the folder must exist and be writable by the atrium user. The operator syncs it, and atrium deletes only the files it created and recorded. |
+
 ## Monitoring
 
 | Option | Type | Default | Meaning |

@@ -174,6 +174,9 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_EXPORT_EXPORT_NOTION_KINDS` | `export.export_notion_kinds` |
 | `ATRIUM_EXPORT_EXPORT_NOTION_PARENT` | `export.export_notion_parent` |
 | `ATRIUM_EXPORT_EXPORT_NOTION_PRIVATE_TO` | `export.export_notion_private_to` |
+| `ATRIUM_EXPORT_EXPORT_OBSIDIAN_DIR` | `export.export_obsidian_dir` |
+| `ATRIUM_EXPORT_EXPORT_OBSIDIAN_KINDS` | `export.export_obsidian_kinds` |
+| `ATRIUM_EXPORT_EXPORT_OBSIDIAN_PRIVATE_TO` | `export.export_obsidian_private_to` |
 | `ATRIUM_GRAFANA_GRAFANA_CA_FILE` | `grafana.grafana_ca_file` |
 | `ATRIUM_GRAFANA_GRAFANA_LOGS_QUERY` | `grafana.grafana_logs_query` |
 | `ATRIUM_GRAFANA_GRAFANA_LOGS_TYPE` | `grafana.grafana_logs_type` |
