@@ -42,7 +42,7 @@ type seeds struct {
 	} `json:"subagents"`
 }
 
-var retired = []string{"web"}
+var retired = []string{"web", "notion"}
 
 func retire(ctx context.Context, q Querier) error {
 	if len(retired) == 0 {

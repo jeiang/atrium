@@ -53,6 +53,7 @@ type ImportStats struct {
 	Notion          SourceCounts `json:"notion"`
 	PII             int          `json:"pii"`
 	Private         int          `json:"private"`
+	Notes           []string     `json:"notes"`
 	ChangedInAtrium []string     `json:"changed_in_atrium"`
 	Missing         []string     `json:"missing"`
 	FailedItems     []string     `json:"failed_items"`
@@ -127,16 +128,16 @@ type notionRow struct {
 	private                              int64
 }
 
-func notionItems(ctx context.Context, q db.Querier) ([]importItem, error) {
+func notionItems(ctx context.Context, q db.Querier) ([]importItem, bool, error) {
 	wiki, err := notion.LoadWiki(ctx, q)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	rows, err := q.QueryContext(ctx,
 		"SELECT p.id, p.parent_id, p.title, p.markdown, p.private, COALESCE(w.aliases, '[]') "+
 			"FROM notion_pages p LEFT JOIN wiki_pages w ON w.page_id = p.id WHERE p.in_trash = 0 AND p.markdown != ''")
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	pages, err := db.Collect(rows, func(r *sql.Rows) (notionRow, error) {
 		var p notionRow
@@ -144,7 +145,7 @@ func notionItems(ctx context.Context, q db.Querier) ([]importItem, error) {
 		return p, err
 	})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	children := map[string][]string{}
 	listed := map[string]bool{}
@@ -153,7 +154,7 @@ func notionItems(ctx context.Context, q db.Querier) ([]importItem, error) {
 	}
 	rows, err = q.QueryContext(ctx, "SELECT page_id FROM wiki_pages")
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	ids, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
 		var id string
@@ -161,7 +162,7 @@ func notionItems(ctx context.Context, q db.Querier) ([]importItem, error) {
 		return id, err
 	})
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	for _, id := range ids {
 		listed[id] = true
@@ -178,13 +179,14 @@ func notionItems(ctx context.Context, q db.Querier) ([]importItem, error) {
 		queue = append(queue, children[id]...)
 	}
 	out := []importItem{}
+	privatePages := 0
 	for _, p := range pages {
 		if !under[p.id] && !listed[p.id] {
 			continue
 		}
 		body, _, sources, err := notion.SplitFooter(p.markdown)
 		if err != nil {
-			return nil, fmt.Errorf("notion page %s: %w", p.id, err)
+			return nil, false, fmt.Errorf("notion page %s: %w", p.id, err)
 		}
 		if strings.TrimSpace(body) == "" {
 			continue
@@ -202,12 +204,21 @@ func notionItems(ctx context.Context, q db.Querier) ([]importItem, error) {
 		if hasPII(body) {
 			marks |= tool.PII
 		}
+		if p.private != 0 {
+			privatePages++
+		}
 		out = append(out, importItem{
 			Origin: "notion:" + p.id, Title: title, Aliases: aliases, Body: body,
 			Scope: ScopePersonal, Private: p.private != 0, Marks: marks,
 		})
 	}
-	return out, nil
+	uniform := len(out) > 0 && privatePages == len(out)
+	if uniform {
+		for i := range out {
+			out[i].Private = false
+		}
+	}
+	return out, uniform, nil
 }
 
 type existingRecord struct {
@@ -310,7 +321,7 @@ func importOne(ctx context.Context, tx *sql.Tx, item importItem, rec *existingRe
 }
 
 func Import(ctx context.Context, d *db.DB, dryRun bool, now float64) (ImportStats, error) {
-	stats := ImportStats{DryRun: dryRun, ChangedInAtrium: []string{}, Missing: []string{}, FailedItems: []string{}}
+	stats := ImportStats{DryRun: dryRun, Notes: []string{}, ChangedInAtrium: []string{}, Missing: []string{}, FailedItems: []string{}}
 	sources := []struct {
 		counts *SourceCounts
 		items  []importItem
@@ -323,9 +334,12 @@ func Import(ctx context.Context, d *db.DB, dryRun bool, now float64) (ImportStat
 	if err != nil {
 		return stats, err
 	}
-	notionPages, err := notionItems(ctx, d.Read)
+	notionPages, uniformPrivate, err := notionItems(ctx, d.Read)
 	if err != nil {
 		return stats, err
+	}
+	if uniformPrivate {
+		stats.Notes = append(stats.Notes, "notion: every page under the wiki root is private, so private is treated as a sync default rather than an operator choice; imported records are not private")
 	}
 	sources = append(sources, struct {
 		counts *SourceCounts

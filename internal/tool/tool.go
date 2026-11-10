@@ -62,7 +62,6 @@ type Tool struct {
 	Undo        string
 	Channel     Channel
 	ChannelOf   func(Args) Channel
-	PromptStore bool
 	Marks       Marks
 	Annotated   bool
 	Contexts    Kinds

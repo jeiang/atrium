@@ -16,9 +16,7 @@ import (
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	mediatools "github.com/jeiang/atrium/internal/assistant/tools/media"
 	memorytools "github.com/jeiang/atrium/internal/assistant/tools/memory"
-	notiontools "github.com/jeiang/atrium/internal/assistant/tools/notion"
 	plantools "github.com/jeiang/atrium/internal/assistant/tools/plan"
-	profiletools "github.com/jeiang/atrium/internal/assistant/tools/profile"
 	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
 	recalltools "github.com/jeiang/atrium/internal/assistant/tools/recall"
 	scheduletools "github.com/jeiang/atrium/internal/assistant/tools/schedule"
@@ -36,11 +34,9 @@ import (
 
 func Undoers(env config.Env) *writes.Registry {
 	r := writes.NewRegistry()
-	profiletools.RegisterUndoer(r)
 	kb.RegisterUndoer(r)
 	calendartools.RegisterUndoers(r, env)
 	mediatools.RegisterUndoer(r, env)
-	notiontools.RegisterUndoers(r, env)
 	mailtools.RegisterUndoer(r)
 	scheduletools.RegisterUndoers(r)
 	filetools.RegisterUndoer(r)
@@ -73,8 +69,6 @@ func Registry() (*registry.Registry, error) {
 		mailtools.Tools(),
 		calendartools.Tools(),
 		mediatools.Tools(),
-		notiontools.Tools(),
-		profiletools.Tools(),
 		kbtools.Tools(),
 		scheduletools.Tools(),
 		plantools.Tools(),

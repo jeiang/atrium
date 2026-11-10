@@ -273,10 +273,9 @@ func TestServeRendersNotionPages(t *testing.T) {
 		status int
 		want   string
 	}{
-		{"/notion/missing/link", url.Values{}, http.StatusUnprocessableEntity, `"target"`},
-		{"/notion/missing/link", url.Values{"target": {"other"}}, http.StatusOK, "unknown page missing"},
-		{"/notion/missing/edit", url.Values{"instruction": {"shorten"}}, http.StatusOK, "unknown page missing"},
-		{"/projects/abc/wiki-hub", url.Values{}, http.StatusUnprocessableEntity, `"project_id"`},
+		{"/notion/missing/link", url.Values{}, http.StatusNotFound, "Nothing here"},
+		{"/notion/missing/edit", url.Values{"instruction": {"shorten"}}, http.StatusNotFound, "Nothing here"},
+		{"/projects/abc/wiki-hub", url.Values{}, http.StatusNotFound, "Nothing here"},
 		{"/projects/1/wiki-hub", url.Values{}, http.StatusNotFound, "Nothing here"},
 	} {
 		if status, body, _ := fetch(t, client, "POST", base+tc.path, tc.form); status != tc.status || !strings.Contains(body, tc.want) {

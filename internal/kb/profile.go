@@ -20,18 +20,6 @@ type ProfileRecord struct {
 	Tokens   int64  `json:"tokens"`
 }
 
-func profileLines(ctx context.Context, q db.Querier) ([]string, error) {
-	rows, err := q.QueryContext(ctx, "SELECT key, value FROM agent_profile ORDER BY key")
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (string, error) {
-		var key, value string
-		err := r.Scan(&key, &value)
-		return "- " + key + ": " + value, err
-	})
-}
-
 func ProfileEntries(ctx context.Context, q db.Querier, budget int64) ([]ProfileRecord, error) {
 	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM kb_records r WHERE r.pinned = 1 AND r.retracted_at IS NULL ORDER BY r.title, r.id")
 	if err != nil {
@@ -41,11 +29,7 @@ func ProfileEntries(ctx context.Context, q db.Querier, budget int64) ([]ProfileR
 	if err != nil {
 		return nil, err
 	}
-	lines, err := profileLines(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-	total := actx.EstimateTokens(ProfileHeader + "\n" + strings.Join(lines, "\n"))
+	total := actx.EstimateTokens(ProfileHeader)
 	out := make([]ProfileRecord, 0, len(found))
 	for _, rec := range found {
 		entry := ProfileRecord{Record: rec}
@@ -78,10 +62,7 @@ func ProfileBlock(ctx context.Context, q db.Querier) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	lines, err := profileLines(ctx, q)
-	if err != nil {
-		return "", err
-	}
+	var lines []string
 	for _, entry := range entries {
 		if entry.InPrompt {
 			lines = append(lines, "- "+entry.Title+": "+entry.Body)
