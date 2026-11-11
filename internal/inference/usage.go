@@ -425,7 +425,7 @@ func ByThread(ctx context.Context, q db.Querier, now float64, loc *time.Location
 			"SUM(input_tokens + cache_write_5m + cache_write_1h + cache_read) AS prompt_tokens, "+
 			"MAX(input_tokens + cache_write_5m + cache_write_1h + cache_read) AS max_prompt_tokens, "+
 			"SUM(output_tokens) AS output_tokens, SUM(reasoning_tokens) AS reasoning_tokens, SUM(searches) AS searches "+
-			"FROM usage WHERE month_start = ? AND budget_class <> ? "+
+			"FROM usage WHERE month_start = ? AND budget_class <> ? AND thread_id IS NOT NULL "+
 			"GROUP BY thread_id ORDER BY cost DESC LIMIT ?", MonthStart(now, loc), ClassSubscription, limit)
 	if err != nil {
 		return nil, err

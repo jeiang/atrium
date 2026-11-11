@@ -97,7 +97,7 @@ func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Locati
 					log.Warn(fmt.Sprintf("job %d has no next occurrence; disabling it", job.ID), logx.Job, job.ID)
 				}
 			}
-			if paused || overBudget {
+			if paused || (overBudget && SpendPolicy(job) == AlwaysSpends) {
 				status := StatusSkippedBudget
 				if paused {
 					status = StatusSkippedPause
