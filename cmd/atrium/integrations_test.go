@@ -18,8 +18,8 @@ import (
 	"time"
 
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
+	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/integrations"
-	"github.com/jeiang/atrium/internal/integrations/transport"
 )
 
 type healthServer struct {
@@ -105,6 +105,26 @@ func (s *integrationSite) post(path string, form url.Values) (int, string) {
 	}
 	code, body, _ := fetch(s.t, s.client, http.MethodPost, s.base+"/settings/integrations"+path, form)
 	return code, body
+}
+
+func (s *integrationSite) conn(path string, form url.Values) (int, string) {
+	s.t.Helper()
+	s.page()
+	if form == nil {
+		form = url.Values{}
+	}
+	code, body, _ := fetch(s.t, s.client, http.MethodPost, s.base+"/settings/connections"+path, form)
+	return code, body
+}
+
+func connectionState(t *testing.T, dir, id string) string {
+	t.Helper()
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	var state string
+	if err := d.Read.QueryRow("SELECT state FROM connections WHERE id = ?", id).Scan(&state); err != nil {
+		return ""
+	}
+	return state
 }
 
 func health(t *testing.T, dir, name string) string {

@@ -2932,10 +2932,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "media_qbittorrent_api_key_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "media_qbittorrent_timeout_seconds": {
           "default": 15,
           "type": [
@@ -3078,20 +3074,6 @@
           "type": "string"
         },
         "media_video_extensions_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "qbittorrent_ca_file": {
-          "type": "string"
-        },
-        "qbittorrent_ca_file_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "qbittorrent_proxy": {
-          "type": "string"
-        },
-        "qbittorrent_proxy_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },

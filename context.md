@@ -226,7 +226,7 @@ behavior-parity target.
   embedded into the same generation-numbered index (title, aliases and body,
   same limit); the core loop drains pending records when an embed endpoint is
   set, and a retracted record leaves the index.
-- qBittorrent (API key), TMDB (read token) and Ship24 (API key) are connection records on the Integrations settings
+- TMDB (read token) and Ship24 (API key) are connection records on the Integrations settings; qBittorrent (API key) is a connection record on `/settings/connections`
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-integration CA bundle and proxy. Certificate verification
   cannot be turned off. Open-Meteo is a keyless connection record for the

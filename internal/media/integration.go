@@ -5,18 +5,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strconv"
-	"strings"
 
 	"github.com/jeiang/atrium/internal/integrations"
 )
 
 func init() {
-	integrations.Register(integrations.Integration{
-		Name: "qbittorrent", Label: "qBittorrent", Module: module, URLKey: KeyQbitURL, SecretKey: KeyQbitAPIKey,
-		Help: "API key from qBittorrent 5.2 or newer.",
-		Test: testQbit,
-	})
 	integrations.Register(integrations.Integration{
 		Name: "tmdb", Label: "TMDB", Module: module, URLKey: KeyTMDBURL, SecretKey: KeyTMDBToken,
 		Help: "API read access token from your TMDB account settings.",
@@ -29,32 +22,6 @@ func init() {
 			{Key: KeyTVURL, Label: "TV URL"},
 		},
 	})
-}
-
-func testQbit(ctx context.Context, c integrations.Conn) (string, error) {
-	status, body, err := bearerGet(ctx, c, c.URL+"/api/v2/app/version")
-	if err != nil {
-		return "", err
-	}
-	switch {
-	case status == http.StatusUnauthorized || status == http.StatusForbidden:
-		return "", fmt.Errorf("%w: qBittorrent answered %d", integrations.ErrAuth, status)
-	case status != http.StatusOK:
-		return "", fmt.Errorf("qBittorrent answered %d", status)
-	case c.Secret != "" && !apiKeys(body):
-		return "", fmt.Errorf("qBittorrent %s has no API keys; upgrade to 5.2 or clear %s", strings.TrimSpace(body), KeyQbitAPIKey)
-	}
-	return "", nil
-}
-
-func apiKeys(version string) bool {
-	parts := strings.SplitN(strings.TrimPrefix(strings.TrimSpace(version), "v"), ".", 3)
-	if len(parts) < 2 {
-		return false
-	}
-	major, err1 := strconv.Atoi(parts[0])
-	minor, err2 := strconv.Atoi(parts[1])
-	return err1 == nil && err2 == nil && (major > 5 || major == 5 && minor >= 2)
 }
 
 func testTMDB(ctx context.Context, c integrations.Conn) (string, error) {

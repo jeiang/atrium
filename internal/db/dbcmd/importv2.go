@@ -15,6 +15,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/inference"
@@ -244,17 +245,34 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source str
 			}
 			lines = append(lines, line)
 		}
+		settingLines, err := settings.ImportV2(ctx, tx, src)
+		if err != nil {
+			return err
+		}
+		lines = append(lines, settingLines...)
+		qbit, err := sourceQbit(ctx, src)
+		if err != nil {
+			return err
+		}
+		connLines, err := connections.ImportV2(ctx, tx, qbit, d.Encrypted(), now)
+		if err != nil {
+			return err
+		}
+		lines = append(lines, connLines...)
+		if qbit.Key != "" {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM secrets WHERE name = 'media_qbittorrent_api_key'"); err != nil {
+				return err
+			}
+		}
+		if qbit.Health != nil {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM integration_health WHERE name = 'qbittorrent'"); err != nil {
+				return err
+			}
+		}
 		return im.checkForeignKeys()
 	})
 	if err != nil {
 		return nil, err
-	}
-	unknown, err := unknownSettings(ctx, src)
-	if err != nil {
-		return nil, err
-	}
-	for _, name := range unknown {
-		lines = append(lines, fmt.Sprintf("setting not known to v3: %s (carried as-is)", name))
 	}
 	return lines, nil
 }
@@ -327,6 +345,51 @@ func refuseInFlight(ctx context.Context, src *sql.DB, now float64) error {
 			"stop v2 and resolve them first, then import again", strings.Join(parts, ", "))
 	}
 	return nil
+}
+
+func sourceQbit(ctx context.Context, src *sql.DB) (connections.ImportQbit, error) {
+	var q connections.ImportQbit
+	rows, err := src.QueryContext(ctx, "SELECT key, value FROM settings WHERE key IN ('media_qbittorrent_url', 'qbittorrent_ca_file', 'qbittorrent_proxy')")
+	if err != nil {
+		return q, err
+	}
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			_ = rows.Close()
+			return q, err
+		}
+		switch key {
+		case "media_qbittorrent_url":
+			q.URL = value
+		case "qbittorrent_ca_file":
+			q.CAFile = value
+		case "qbittorrent_proxy":
+			q.Proxy = value
+		}
+	}
+	if err := rows.Close(); err != nil {
+		return q, err
+	}
+	err = src.QueryRowContext(ctx, "SELECT value, set_at, set_by FROM secrets WHERE name = 'media_qbittorrent_api_key'").
+		Scan(&q.Key, &q.SetAt, &q.SetBy)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return q, err
+	}
+	var state, reason string
+	var checked float64
+	var expires sql.NullFloat64
+	err = src.QueryRowContext(ctx, "SELECT state, reason, checked_at, expires_at FROM integration_health WHERE name = 'qbittorrent'").
+		Scan(&state, &reason, &checked, &expires)
+	if err == nil {
+		q.Health = &connections.ImportHealth{State: state, Reason: reason, CheckedAt: checked}
+		if expires.Valid {
+			q.Health.ExpiresAt = &expires.Float64
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return q, err
+	}
+	return q, nil
 }
 
 func sourceTables(ctx context.Context, src *sql.DB) ([]string, error) {
@@ -748,28 +811,6 @@ func refuseDestination(ctx context.Context, path string, key db.Key) error {
 
 func importLocation(ctx context.Context, src *sql.DB, env config.Env) (*time.Location, error) {
 	return inference.Location(ctx, src)
-}
-
-func unknownSettings(ctx context.Context, src *sql.DB) ([]string, error) {
-	rows, err := src.QueryContext(ctx, "SELECT key FROM settings ORDER BY key")
-	if err != nil {
-		return nil, err
-	}
-	keys, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
-		var key string
-		return key, r.Scan(&key)
-	})
-	if err != nil {
-		return nil, err
-	}
-	reg := settings.From(ctx)
-	var unknown []string
-	for _, key := range keys {
-		if _, ok := reg.Lookup(key); !ok {
-			unknown = append(unknown, key)
-		}
-	}
-	return unknown, nil
 }
 
 func tableColumns(ctx context.Context, q db.Querier, table string) ([]string, error) {

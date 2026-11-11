@@ -6,7 +6,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/integrations/transport"
+	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/weather"
 )

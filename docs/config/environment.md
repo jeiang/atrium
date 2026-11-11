@@ -303,7 +303,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MEDIA_MEDIA_FFMPEG_TIMEOUT_SECONDS` | `media.media_ffmpeg_timeout_seconds` |
 | `ATRIUM_MEDIA_MEDIA_LINK_TTL_SECONDS` | `media.media_link_ttl_seconds` |
 | `ATRIUM_MEDIA_MEDIA_MOVIES_URL` | `media.media_movies_url` |
-| `ATRIUM_MEDIA_MEDIA_QBITTORRENT_API_KEY` | `media.media_qbittorrent_api_key` |
 | `ATRIUM_MEDIA_MEDIA_QBITTORRENT_TIMEOUT_SECONDS` | `media.media_qbittorrent_timeout_seconds` |
 | `ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL` | `media.media_qbittorrent_url` |
 | `ATRIUM_MEDIA_MEDIA_ROOT` | `media.media_root` |
@@ -320,8 +319,6 @@ An environment variable pins its setting and wins over the configuration file an
 | `ATRIUM_MEDIA_MEDIA_TORRENT_UPLOAD_BYTES` | `media.media_torrent_upload_bytes` |
 | `ATRIUM_MEDIA_MEDIA_TV_URL` | `media.media_tv_url` |
 | `ATRIUM_MEDIA_MEDIA_VIDEO_EXTENSIONS` | `media.media_video_extensions` |
-| `ATRIUM_MEDIA_QBITTORRENT_CA_FILE` | `media.qbittorrent_ca_file` |
-| `ATRIUM_MEDIA_QBITTORRENT_PROXY` | `media.qbittorrent_proxy` |
 | `ATRIUM_MEDIA_TMDB_CA_FILE` | `media.tmdb_ca_file` |
 | `ATRIUM_MEDIA_TMDB_PROXY` | `media.tmdb_proxy` |
 | `ATRIUM_MEMORY_MEMORY_CONCURRENCY` | `memory.memory_concurrency` |

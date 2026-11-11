@@ -14,7 +14,7 @@ sections below cover the console work atrium cannot do for you.
 | Mail chat endpoint | `mail_chat` | Optional Bearer key | Chat and routing calls to an OpenAI-compatible endpoint | A hosted endpoint sends mail content off this host |
 | Mail embed endpoint | `mail_embed` | Optional Bearer key | Embeddings for mail search and routing | Same as the chat endpoint |
 | Notion | `notion` | Internal integration token or personal access token | Wiki read, update and insert; knowledge export | Share the pages with the integration; a personal token acts as the user and lasts at most a year |
-| qBittorrent | `qbittorrent` | API key | Media torrent and library operations | API keys need qBittorrent 5.2 or newer |
+| qBittorrent | `service/qbittorrent` | API key | Media torrent and library operations | A connection on `/settings/connections`; API keys need qBittorrent 5.2 or newer |
 | TMDB | `tmdb` | API read access token | Media metadata | Read-only; media pages show the attribution |
 | Open-Meteo | `open_meteo` | None | Weather forecasts and place lookup | Public API; no key. The configured coordinates are sent to Open-Meteo |
 | Ship24 | `ship24` | Bearer API key | Live package tracking | Free plan registers 10 shipments a month; polling, no webhooks |

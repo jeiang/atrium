@@ -106,7 +106,7 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		"runs: dropped 8",
 		"job_runs: dropped 2",
 		"schema_migrations: dropped 11",
-		"setting not known to v3: money_since",
+		"setting money_since: dropped",
 	} {
 		if !strings.Contains(got.stdout, want) {
 			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
@@ -407,5 +407,66 @@ func TestImportV2BillsMemoryAndRefusesOverBudgetAgentCalls(t *testing.T) {
 	}
 	if n := api.Remaining(); n != 1 {
 		t.Errorf("%d fake responses were consumed", 1-n)
+	}
+}
+
+func TestImportV2RefusesAnUnknownSettingWithItsName(t *testing.T) {
+	t.Parallel()
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	d, err := db.Connect(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('not_a_real_key', 'x')"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code == cli.ExitOK || !strings.Contains(got.stderr, "not_a_real_key") {
+		t.Fatalf("an unknown setting: exit %d stderr %q, want a refusal naming it", got.code, got.stderr)
+	}
+}
+
+func TestImportV2ResetsLiveMailToShadowAndAccountsEverySetting(t *testing.T) {
+	t.Parallel()
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	d, err := db.Connect(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('mail_mode', 'live')"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stderr %q", got.code, got.stderr)
+	}
+	for _, want := range []string{
+		"setting mail_mode: reset-for-cutover live -> shadow",
+		"setting cache_ttl_chat: carried",
+		"setting default_context_limit: carried",
+		"setting default_effort: carried",
+		"setting money_since: dropped",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+	dest, err := db.OpenSource(filepath.Join(dir, "atrium.db"), db.Key{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = dest.Close() }()
+	if value := importValue(t, dest, "SELECT value FROM settings WHERE key = 'mail_mode'"); value != "shadow" {
+		t.Fatalf("imported mail_mode = %q, want shadow", value)
 	}
 }

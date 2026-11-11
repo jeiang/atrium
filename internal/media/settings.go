@@ -2,6 +2,7 @@ package media
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/url"
 	"strconv"
@@ -9,8 +10,9 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
+	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -94,7 +96,6 @@ func init() {
 		adv(KeySubtitleExts, settings.String, defaultSubtitleExt, extensionsCheck),
 		between(KeyTorrentUploadCap, "1048576", 1024, 32<<20),
 		settings.Secret(settings.SecretOpts{Generated: true}, settings.Def{Key: KeyLinkKey, Module: module, Type: settings.String, Check: settings.NonEmpty}),
-		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyQbitAPIKey, Module: module, Type: settings.String}),
 		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyTMDBToken, Module: module, Type: settings.String}),
 	)
 }
@@ -181,15 +182,14 @@ type Tuning struct {
 type Settings struct {
 	Tuning
 	Root       string
-	QbitURL    string
-	QbitKey    string
+	QbitLease  *connections.Lease
+	QbitStore  *connections.Store
 	MoviesURL  string
 	TVURL      string
 	PublicURL  string
 	TMDBToken  string
 	TMDBURL    string
 	TMDBImages string
-	QbitHTTP   *http.Client
 	TMDBHTTP   *http.Client
 	EZTVHTTP   *http.Client
 }
@@ -237,7 +237,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		}
 		return set
 	}
-	out.Root, out.QbitURL = link(KeyRoot), link(KeyQbitURL)
+	out.Root = link(KeyRoot)
 	out.TMDBURL, out.TMDBImages = link(KeyTMDBURL), link(KeyTMDBImagesURL)
 	out.MoviesURL, out.TVURL = link(KeyMoviesURL), link(KeyTVURL)
 	out.Tuning = Tuning{
@@ -268,13 +268,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		return Settings{}, failure
 	}
 	store := secrets.NewIn(settings.From(ctx), nil, q, nil)
-	if out.QbitKey, failure = store.Value(ctx, KeyQbitAPIKey); failure != nil {
-		return Settings{}, failure
-	}
 	if out.TMDBToken, failure = store.Value(ctx, KeyTMDBToken); failure != nil {
-		return Settings{}, failure
-	}
-	if out.QbitHTTP, failure = transport.For(ctx, q, "qbittorrent", out.QbitTimeout); failure != nil {
 		return Settings{}, failure
 	}
 	if out.TMDBHTTP, failure = transport.For(ctx, q, "tmdb", out.TMDBTimeout); failure != nil {
@@ -283,6 +277,15 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 	if out.EZTVHTTP, failure = transport.For(ctx, q, "eztv", out.EZTVTimeout); failure != nil {
 		return Settings{}, failure
 	}
+	lease, err := connections.OpenRead(ctx, q, config.From(ctx).Host(), connections.ID(KindQbittorrent))
+	if err != nil {
+		var unknown connections.UnknownID
+		if !errors.As(err, &unknown) {
+			return Settings{}, err
+		}
+	}
+	out.QbitLease = lease
+	out.QbitStore = connections.DefaultFor(q)
 	return out, nil
 }
 
@@ -296,10 +299,14 @@ func (s Settings) NeedRoot() (string, error) {
 }
 
 func (s Settings) NeedQbit() (string, error) {
-	if s.QbitURL == "" {
-		return "", config.NotConfigured("media_qbittorrent_url is not set; pin it with ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL")
+	if s.QbitLease == nil {
+		return "", config.NotConfigured("the qBittorrent connection is not configured")
 	}
-	return s.QbitURL, nil
+	base, err := s.QbitLease.Endpoint("url")
+	if err != nil {
+		return "", config.NotConfigured("the qBittorrent connection has no URL")
+	}
+	return base, nil
 }
 
 func (s Settings) Qbit() (*Qbit, error) {
@@ -307,5 +314,19 @@ func (s Settings) Qbit() (*Qbit, error) {
 	if err != nil {
 		return nil, err
 	}
-	return NewQbit(base, s.QbitKey, s.QbitHTTP), nil
+	client, err := s.QbitLease.HTTP("url")
+	if err != nil {
+		return nil, err
+	}
+	token, _ := s.QbitLease.Credential("api_key")
+	q := NewQbit(base, token, client)
+	if s.QbitStore != nil {
+		lease, store := s.QbitLease, s.QbitStore
+		q.report = func(ctx context.Context, state connections.State, reason string) {
+			_ = store.Observe(context.WithoutCancel(ctx), lease.ID(), lease.Revision(), connections.Result{
+				Capability: "api", State: state, Reason: reason,
+			})
+		}
+	}
+	return q, nil
 }

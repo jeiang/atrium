@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"sync"
 	"testing"
@@ -52,7 +53,7 @@ func (f *fakeQbit) saw(path string) bool {
 	return false
 }
 
-func TestMediaCredentialsTestThroughIntegrationsAndAuthenticateEveryRequest(t *testing.T) {
+func TestMediaCredentialsTestThroughConnectionsAndAuthenticateEveryRequest(t *testing.T) {
 	t.Parallel()
 	qb := &fakeQbit{version: "v5.2.0"}
 	qbSrv := httptest.NewServer(http.HandlerFunc(qb.handler))
@@ -74,13 +75,12 @@ func TestMediaCredentialsTestThroughIntegrationsAndAuthenticateEveryRequest(t *t
 
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, settingEnv(media.KeyQbitURL), qbSrv.URL)
-	setEnv(t, settingEnv(media.KeyQbitAPIKey), "qbt_good")
 	setEnv(t, settingEnv(media.KeyTMDBToken), "tmdb_good")
 	s := &integrationSite{t: t, dir: dir}
 	s.start()
 
-	if code, body := s.post("/qbittorrent/test", nil); code != http.StatusOK || health(t, dir, "qbittorrent") != integrations.OK {
-		t.Fatalf("qBittorrent 5.2 with its key: %d %s, state %s", code, body, health(t, dir, "qbittorrent"))
+	if code, body := s.conn("/test", url.Values{"id": {"service/qbittorrent"}, "url": {qbSrv.URL}, "api_key": {"qbt_good"}}); code != http.StatusOK || connectionState(t, dir, "service/qbittorrent") != "ok" {
+		t.Fatalf("qBittorrent 5.2 with its key: %d %s, state %s", code, body, connectionState(t, dir, "service/qbittorrent"))
 	}
 	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/apps/media/downloads", nil); code != http.StatusOK || !qb.saw("/api/v2/torrents/info") {
 		t.Errorf("downloads page did not list torrents with the key: %d", code)
@@ -97,11 +97,11 @@ func TestMediaCredentialsTestThroughIntegrationsAndAuthenticateEveryRequest(t *t
 	tmdbMu.Unlock()
 
 	qb.set("v5.1.2")
-	if code, body := s.post("/qbittorrent/test", nil); code != http.StatusUnprocessableEntity || !strings.Contains(body, "has no API keys; upgrade to 5.2") {
+	if code, body := s.conn("/test", url.Values{"id": {"service/qbittorrent"}, "url": {qbSrv.URL}, "api_key": {"qbt_good"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "has no API keys; upgrade to 5.2") {
 		t.Errorf("an API key on qBittorrent 5.1 passed Test: %d", code)
 	}
-	if health(t, dir, "qbittorrent") != integrations.Failing {
-		t.Errorf("qBittorrent 5.1 with a key: state %s, want failing", health(t, dir, "qbittorrent"))
+	if connectionState(t, dir, "service/qbittorrent") != "ok" {
+		t.Errorf("a failed candidate replaced the working connection: state %s", connectionState(t, dir, "service/qbittorrent"))
 	}
 
 	setEnv(t, settingEnv(media.KeyTMDBToken), "tmdb_wrong")

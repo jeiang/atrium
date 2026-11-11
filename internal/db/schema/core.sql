@@ -11,8 +11,12 @@ CREATE TABLE IF NOT EXISTS mail_accounts (
     enabled INTEGER NOT NULL DEFAULT 1 CHECK (enabled IN (0, 1)),
     pinned INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1)),
     auth_method TEXT NOT NULL DEFAULT 'password' CHECK (auth_method IN ('password', 'xoauth2')),
-    created_at REAL NOT NULL
+    created_at REAL NOT NULL,
+    connection_id TEXT REFERENCES connections(id),
+    capability_prefix TEXT
 );
+CREATE UNIQUE INDEX IF NOT EXISTS mail_accounts_connection_capability
+  ON mail_accounts(connection_id,capability_prefix);
 CREATE TABLE IF NOT EXISTS mailboxes (
     id INTEGER PRIMARY KEY,
     account TEXT NOT NULL REFERENCES accounts(name),
