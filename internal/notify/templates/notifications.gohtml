@@ -24,8 +24,8 @@
   </div>
   {{end}}
 </section>
-{{if $d.Push.Devices}}<form id="push-test" method="post" action="/settings/notifications/push/test"><input type="hidden" name="csrf_token" value="{{$csrf}}"></form>{{end}}
-{{range $d.Push.Devices}}<form id="push-remove-{{.ID}}" method="post" action="/settings/notifications/push/{{.ID}}/remove"><input type="hidden" name="csrf_token" value="{{$csrf}}"></form>{{end}}
+{{if $d.Push.Devices}}<form id="push-test" hidden method="post" action="/settings/notifications/push/test"><input type="hidden" name="csrf_token" value="{{$csrf}}"></form>{{end}}
+{{range $d.Push.Devices}}<form id="push-remove-{{.ID}}" hidden method="post" action="/settings/notifications/push/{{.ID}}/remove"><input type="hidden" name="csrf_token" value="{{$csrf}}"></form>{{end}}
 <form method="post" action="/settings/notifications/push/subscriptions" data-push-form="subscribe" hidden>
   <input type="hidden" name="csrf_token" value="{{$csrf}}"><input type="hidden" name="endpoint"><input type="hidden" name="p256dh"><input type="hidden" name="auth">
 </form>
