@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 	"github.com/jeiang/atrium/internal/writes"
@@ -140,21 +141,17 @@ func getWrite(ctx context.Context, q db.Querier, id int64) (*ActivityEntry, erro
 }
 
 func settingsEntries(ctx context.Context, q db.Querier, limit int) ([]ActivityEntry, error) {
-	rows, err := q.QueryContext(ctx,
-		"SELECT id, ts, key, old_value, new_value, actor, source FROM settings_audit ORDER BY ts DESC, id DESC LIMIT ?", limit)
+	rows, err := audit.Recent(ctx, q, limit)
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (ActivityEntry, error) {
-		e := ActivityEntry{Source: sourceSettings, Category: categorySettings}
-		var key, actor, origin string
-		var old, next *string
-		if err := r.Scan(&e.ID, &e.TS, &key, &old, &next, &actor, &origin); err != nil {
-			return e, err
-		}
-		e.Settings = &SettingsActivity{Tool: key, Actor: actor, Origin: origin, Before: deref(old), After: deref(next)}
-		return e, nil
-	})
+	out := make([]ActivityEntry, 0, len(rows))
+	for _, row := range rows {
+		e := ActivityEntry{ID: row.ID, TS: row.TS, Source: sourceSettings, Category: categorySettings}
+		e.Settings = &SettingsActivity{Tool: row.Key, Actor: row.Actor, Origin: row.Source, Before: deref(row.Old), After: deref(row.New)}
+		out = append(out, e)
+	}
+	return out, nil
 }
 
 func deref(s *string) string {

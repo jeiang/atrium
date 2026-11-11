@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/scanutil"
+	"github.com/jeiang/atrium/internal/proposals"
 )
 
 var log = logx.Logger("atrium.backlog")
@@ -219,8 +220,7 @@ func Backlog(ctx context.Context, d *db.DB, ts float64) (Result, error) {
 }
 
 func Refresh(ctx context.Context, d *db.DB, ts float64) (Result, error) {
-	if _, err := d.Write.ExecContext(ctx, "UPDATE proposals SET status = 'dismissed', decided_ts = ? WHERE kind = ? AND status = 'pending'",
-		ts, Kind); err != nil {
+	if err := proposals.DismissKind(ctx, d.Write, Kind, ts); err != nil {
 		return Result{}, err
 	}
 	return Backlog(ctx, d, ts)

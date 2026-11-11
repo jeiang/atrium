@@ -94,7 +94,7 @@ func Run(ctx context.Context, q db.Querier, opts Options) (Result, error) {
 			lc = &built
 			contexts[m.Account] = lc
 		}
-		vector, err := storedVector(ctx, q, idx.MessageTable(), m.ID)
+		vector, err := embed.MessageVectorExists(ctx, q, idx, m.ID)
 		if err != nil {
 			return Result{}, err
 		}
@@ -188,13 +188,4 @@ func latestDecision(ctx context.Context, q db.Querier, id int64) (stored, error)
 		return stored{}, errors.New("replay: a decided message has no decision")
 	}
 	return s, err
-}
-
-func storedVector(ctx context.Context, q db.Querier, table string, id int64) (bool, error) {
-	var one int
-	err := q.QueryRowContext(ctx, "SELECT 1 FROM "+table+" WHERE rowid = ?", id).Scan(&one)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	return err == nil, err
 }

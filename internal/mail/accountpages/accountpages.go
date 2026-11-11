@@ -96,10 +96,11 @@ func (h handlers) accounts(ctx context.Context) ([]account, error) {
 		password, _ := config.From(ctx).Password(a.Name)
 		v := account{ID: a.Name, Label: a.Label, Preset: a.Preset, Login: a.Login, Enabled: a.Enabled, Pinned: a.Pinned,
 			PasswordSet: password != "", AuthMethod: string(a.AuthMethod), State: integrations.Untested}
-		err := h.d.DB.Read.QueryRowContext(ctx, "SELECT state, reason FROM integration_health WHERE name = ?", healthName(a.Name)).Scan(&v.State, &v.Reason)
-		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		state, reason, err := integrations.Health(ctx, h.d.DB.Read, healthName(a.Name))
+		if err != nil {
 			return nil, err
 		}
+		v.State, v.Reason = state, reason
 		out = append(out, v)
 	}
 	return out, nil
@@ -281,9 +282,7 @@ func (h handlers) save(ctx context.Context, a config.AccountSpec, password strin
 		return err
 	}
 	err := h.d.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, "INSERT INTO mail_accounts (id, label, preset, login, enabled, auth_method, created_at) VALUES (?, ?, ?, ?, ?, ?, ?) "+
-			"ON CONFLICT(id) DO UPDATE SET label = excluded.label, login = excluded.login, enabled = excluded.enabled, auth_method = excluded.auth_method",
-			a.Name, a.Label, a.Preset, a.Login, a.Enabled, a.AuthMethod, stamp()); err != nil {
+		if err := config.SaveStoredAccount(ctx, tx, a, stamp()); err != nil {
 			return err
 		}
 		if setPassword {
@@ -336,14 +335,13 @@ func (h handlers) remove(w http.ResponseWriter, r *http.Request) {
 	ctx := h.ctx(r)
 	if err == nil {
 		err = h.d.DB.WithTx(ctx, func(tx *sql.Tx) error {
-			if _, err := tx.ExecContext(ctx, "DELETE FROM mail_accounts WHERE id = ?", id); err != nil {
+			if err := config.DeleteStoredAccount(ctx, tx, id); err != nil {
 				return err
 			}
 			if err := secrets.NewIn(settings.From(ctx), h.d.DB, tx, h.d.DB).Delete(ctx, config.PasswordKey(id)); err != nil {
 				return err
 			}
-			_, err := tx.ExecContext(ctx, "DELETE FROM integration_health WHERE name = ?", healthName(id))
-			return err
+			return integrations.Delete(ctx, tx, healthName(id))
 		})
 	}
 	if err == nil {

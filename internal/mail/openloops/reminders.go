@@ -137,7 +137,7 @@ func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, e
 		}
 		if created {
 			made++
-		} else if err := r.DB.Write.QueryRowContext(ctx, "SELECT id FROM proposals WHERE fingerprint = ?", fingerprint).Scan(&pid); err != nil {
+		} else if pid, err = proposals.IDByFingerprint(ctx, r.DB.Write, fingerprint); err != nil {
 			return made, err
 		}
 		if _, err := r.DB.Write.ExecContext(ctx, "UPDATE commitments SET proposal_id = ? WHERE id = ?", pid, c.id); err != nil {

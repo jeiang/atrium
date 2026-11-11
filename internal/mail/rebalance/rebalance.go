@@ -250,32 +250,16 @@ func unitVectors(ctx context.Context, q proposals.Querier, ids []int64) (map[int
 	}
 	found := map[int64][]float32{}
 	for _, chunk := range mailops.Chunks(ids, 500) {
-		args := make([]any, len(chunk))
-		for i, id := range chunk {
-			args[i] = id
-		}
-		rows, err := q.QueryContext(ctx, "SELECT rowid, embedding FROM "+idx.MessageTable()+" WHERE rowid IN (?"+strings.Repeat(",?", len(chunk)-1)+")", args...)
+		vectors, err := embed.MessageVectors(ctx, q, idx, chunk)
 		if err != nil {
 			return nil, err
 		}
-		for rows.Next() {
-			var id int64
-			var blob []byte
-			if err := rows.Scan(&id, &blob); err != nil {
-				_ = rows.Close()
-				return nil, err
-			}
+		for id, blob := range vectors {
 			v := make([]float32, len(blob)/4)
 			for i := range v {
 				v[i] = math.Float32frombits(binary.LittleEndian.Uint32(blob[4*i:]))
 			}
 			found[id] = v
-		}
-		if err := rows.Close(); err != nil {
-			return nil, err
-		}
-		if err := rows.Err(); err != nil {
-			return nil, err
 		}
 	}
 	return found, nil
