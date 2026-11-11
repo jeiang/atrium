@@ -44,13 +44,14 @@ func TestPrivateProjectSummariesStayOutOfOtherReaders(t *testing.T) {
 		"INSERT INTO threads (id, kind, title, effort, created_at, updated_at, project_id, marks) VALUES " +
 			"(2, 'chat', 'Vault notes', 'low', 0, 0, 1, 0), (3, 'chat', 'Studio notes', 'low', 0, 0, 2, 0), " +
 			"(4, 'chat', 'Loose notes', 'low', 0, 0, NULL, 0), (5, 'chat', 'Vault sibling', 'low', 0, 0, 1, 2), " +
-			"(6, 'chat', 'Vault ghost', 'low', 0, 0, 1, 0)",
+			"(6, 'chat', 'Vault ghost', 'low', 0, 0, 1, 0), (7, 'chat', 'Vault orphan', 'low', 0, 0, 99, 0)",
 		"UPDATE threads SET deleted_at = 1 WHERE id = 6",
 		"INSERT INTO memory_nodes (thread_id, level, idx, text, bytes, state, src_from_seq, src_to_seq, created_at) VALUES " +
 			"(3, 1, 0, 'the vault combination is 1111', 28, 'summary', 20, 21, 0), " +
 			"(4, 1, 0, 'the vault combination is 2222', 28, 'summary', 30, 31, 0), " +
 			"(5, 1, 0, 'the vault spare key is 5150', 26, 'summary', 40, 41, 0), " +
-			"(6, 1, 0, 'the vault ghost is 6666', 24, 'summary', 50, 51, 0)",
+			"(6, 1, 0, 'the vault ghost is 6666', 24, 'summary', 50, 51, 0), " +
+			"(7, 1, 0, 'the vault orphan is 7777', 24, 'summary', 60, 61, 0)",
 	}
 	for _, stmt := range setup {
 		if _, err := d.Write.Exec(stmt); err != nil {
@@ -72,12 +73,12 @@ func TestPrivateProjectSummariesStayOutOfOtherReaders(t *testing.T) {
 	if !slices.Contains(ids, int64(3)) || !slices.Contains(ids, int64(4)) {
 		t.Errorf("outside reader hits = %v, want the studio and loose threads", ids)
 	}
-	for _, hidden := range []int64{2, 5, 6} {
+	for _, hidden := range []int64{2, 5, 6, 7} {
 		if slices.Contains(ids, hidden) {
 			t.Errorf("outside reader saw thread %d: %s", hidden, raw)
 		}
 	}
-	for _, leak := range []string{"8842", "5150", "6666", "Vault notes", "Vault sibling", "Vault ghost"} {
+	for _, leak := range []string{"8842", "5150", "6666", "7777", "Vault notes", "Vault sibling", "Vault ghost", "Vault orphan"} {
 		if strings.Contains(raw, leak) {
 			t.Errorf("outside reader leaked %q: %s", leak, raw)
 		}
@@ -96,8 +97,8 @@ func TestPrivateProjectSummariesStayOutOfOtherReaders(t *testing.T) {
 	if !slices.Contains(ids, int64(5)) {
 		t.Errorf("same-project reader hits = %v, want the sibling thread: %s", ids, raw)
 	}
-	if slices.Contains(ids, int64(6)) {
-		t.Errorf("same-project reader saw a deleted thread: %s", raw)
+	if slices.Contains(ids, int64(6)) || slices.Contains(ids, int64(7)) {
+		t.Errorf("same-project reader saw a deleted or dangling thread: %s", raw)
 	}
 	if !strings.Contains(raw, "5150") {
 		t.Errorf("same-project reader misses its project's summary: %s", raw)
