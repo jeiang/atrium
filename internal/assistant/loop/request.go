@@ -27,6 +27,7 @@ import (
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/timex"
+	"github.com/jeiang/atrium/internal/tokens"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -135,7 +136,7 @@ func (r *Runner) request(ctx context.Context, q db.Querier, thread threads.Threa
 		},
 		cc:          cc,
 		sig:         sig,
-		fixedTokens: actx.EstimateValue(fixed),
+		fixedTokens: tokens.EstimateValue(fixed),
 	}, nil
 }
 
@@ -346,7 +347,7 @@ type anchor struct {
 }
 
 func messageTokens(m actx.Message) (int64, error) {
-	shown, err := actx.EstimateContent(m.Content)
+	shown, err := tokens.EstimateContent(m.Content)
 	if err != nil {
 		return 0, err
 	}

@@ -150,6 +150,7 @@ func (p *pages) palette(w http.ResponseWriter, r *http.Request) {
 	if q == "" || (err == nil && match != "") {
 		found, err = threads.ListThreads(r.Context(), p.deps.DB.Read, threads.ListOpts{Match: match, Limit: paletteThreads + 1})
 		check(err)
+		check(fillThreadCosts(r.Context(), p.deps.DB.Read, found))
 	}
 	if ref != 0 {
 		found = slices.DeleteFunc(found, func(t threads.Listed) bool { return t.ID == ref })

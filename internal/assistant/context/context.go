@@ -4,16 +4,16 @@ import (
 	gocontext "context"
 	"encoding/json"
 	"fmt"
-	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/textx"
+	"github.com/jeiang/atrium/internal/tokens"
 )
 
 func Supersede(ctx gocontext.Context, q db.Querier, threadID, fromSeq int64) error {
@@ -26,10 +26,7 @@ func Supersede(ctx gocontext.Context, q db.Querier, threadID, fromSeq int64) err
 	return err
 }
 
-const (
-	CharsPerToken = 4
-	StubNote      = "Result stored; call recall(result_id, offset, limit) to read it in pages."
-)
+const StubNote = "Result stored; call recall(result_id, offset, limit) to read it in pages."
 
 const (
 	Compaction       = block.Compaction
@@ -59,20 +56,6 @@ var (
 	valueJSON   = jsonx.Opts{NoEnsureASCII: true}
 )
 
-func EstimateTokens(text string) int64 {
-	return (int64(utf8.RuneCountInString(text)) + CharsPerToken - 1) / CharsPerToken
-}
-
-func EstimateValue(v any) int64 { return EstimateTokens(jsonx.Dumps(v, valueJSON)) }
-
-func EstimateContent(content []json.RawMessage) (int64, error) {
-	values, err := decodeAll(content)
-	if err != nil {
-		return 0, err
-	}
-	return EstimateValue(values), nil
-}
-
 func serialize(value any) string {
 	if s, ok := value.(string); ok {
 		return s
@@ -98,18 +81,18 @@ func ReadTuning(ctx gocontext.Context, q db.Querier) (Tuning, error) {
 
 func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool string, value any, now float64, t Tuning) (string, *int64, error) {
 	body := serialize(value)
-	if tool == recallTool || EstimateTokens(body) <= int64(t.StubTokens) {
+	if tool == recallTool || tokens.Estimate(body) <= int64(t.StubTokens) {
 		return body, nil, nil
 	}
-	tokens := EstimateTokens(body)
-	resultID, err := journal.StoreResult(ctx, q, runID, callID, tool, body, tokens, now)
+	n := tokens.Estimate(body)
+	resultID, err := journal.StoreResult(ctx, q, runID, callID, tool, body, n, now)
 	if err != nil {
 		return "", nil, err
 	}
 	stub := map[string]any{
 		"result_id": resultID,
 		"tool":      tool,
-		"tokens":    tokens,
+		"tokens":    n,
 		"preview":   textx.Clip(body, t.PreviewChars),
 		"note":      StubNote,
 	}
@@ -117,10 +100,10 @@ func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool strin
 }
 
 func HistoryTokens(u anthropic.Usage) int64 {
-	t := usage.TokensOf(u)
+	t := inference.TokensOf(u)
 	for _, it := range u.Iterations {
 		if it.Type == anthropic.IterationFallbackMessage {
-			primary := usage.PrimaryTokens(u)
+			primary := inference.PrimaryTokens(u)
 			return primary.Prompt() + it.OutputTokens
 		}
 	}

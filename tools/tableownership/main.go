@@ -100,7 +100,7 @@ var owners = map[string]string{
 	"threads":              "assistant",
 	"tool_calls":           "assistant",
 	"tool_results":         "assistant",
-	"usage":                "assistant",
+	"usage":                "inference",
 	"watch_dismissed":      "mail",
 	"wiki_pages":           "notion",
 	"write_resolutions":    "writes",

@@ -7,9 +7,9 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/inference"
 )
 
 func systemText(t *testing.T, r anthropictest.Request) string {
@@ -83,7 +83,7 @@ func runError(t *testing.T, dir, where string, args ...any) string {
 func TestSubagentSpendCountsTowardTheParentRunCap(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, settingEnv(assistant.KeyDefaultModel), pricing.HaikuID)
-	setEnv(t, settingEnv(budget.RunCapKey(pricing.HaikuID)), "0.05")
+	setEnv(t, settingEnv(inference.RunCapKey(pricing.HaikuID)), "0.05")
 	over := anthropictest.Usage{Input: 1000, Output: 120_000}
 
 	start := warm(t, api)

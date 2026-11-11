@@ -10,9 +10,9 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/tool"
@@ -294,7 +294,7 @@ func status(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 	}
 	spend := 0.0
 	if threadID != 0 {
-		if spend, err = usage.ThreadMonthToDate(ctx, tc.DB.Read, threadID, tc.Now(), loc); err != nil {
+		if spend, err = inference.ThreadMonthToDate(ctx, tc.DB.Read, threadID, tc.Now(), loc); err != nil {
 			return nil, err
 		}
 	}

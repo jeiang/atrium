@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -11,10 +12,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
@@ -444,5 +448,90 @@ func TestImportV2MapsAgentWritesToEffects(t *testing.T) {
 	}
 	if n := importCount(t, q, "SELECT COUNT(*) FROM effects WHERE id = ? AND undone_by IS NOT NULL", effectOf(105)); n != 1 {
 		t.Errorf("agent_writes 105 undone_by %d, want set", n)
+	}
+}
+
+func TestImportV2BillsMemoryAndRefusesOverBudgetAgentCalls(t *testing.T) {
+	t.Parallel()
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	loc, err := time.LoadLocation("America/Port_of_Spain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	month := inference.MonthStart(clock, loc)
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO usage (id, ts, request_id, source, provider, thread_id, run_id, kind, job_name, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, reasoning_tokens, searches, tool_calls, wall_ms, tier, cost_usd, partial, unpriced, clear_edits, cleared_tokens, compaction) VALUES
+		(101, %[1]f, 'mem-1', 'loop', 'anthropic', 1, NULL, 'memory', NULL, 'claude-haiku-5-5', 'low', '[]', 10, 0, 0, 0, 5, 0, 0, 0, 10, '<=100K', 0.5, 0, 0, 0, 0, 0),
+		(102, %[1]f, 'sub-1', 'claude_subscription', 'anthropic', 1, NULL, 'chat', NULL, 'claude-haiku-5-5', 'low', '[]', 10, 0, 0, 0, 5, 0, 0, 0, 10, '<=100K', 1000, 0, 0, 0, 0, 0),
+		(103, %[1]f, 'part-1', 'loop', 'anthropic', 1, NULL, 'chat', NULL, 'claude-haiku-5-5', 'low', '[]', 10, 0, 0, 0, 5, 0, 0, 0, 10, '<=100K', 0.25, 1, 1, 0, 0, 0),
+		(104, %[2]f, 'prev-1', 'loop', 'anthropic', 1, NULL, 'chat', NULL, 'claude-haiku-5-5', 'low', '[]', 10, 0, 0, 0, 5, 0, 0, 0, 10, '<=100K', 5, 0, 0, 0, 0, 0),
+		(105, %[3]f, 'bound-1', 'loop', 'anthropic', 1, NULL, 'chat', NULL, 'claude-haiku-5-5', 'low', '[]', 10, 0, 0, 0, 5, 0, 0, 0, 10, '<=100K', 0.1, 0, 0, 0, 0, 0)`,
+		clock-3600, month-3600, month+3600))
+	dest := filepath.Join(dir, "atrium.db")
+	if got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source); got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	q, err := db.Connect(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM usage"); n != 26 {
+		t.Errorf("usage rows %d, want 26", n)
+	}
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM usage WHERE state = 'settled'"); n != 26 {
+		t.Errorf("%d rows are not settled", 26-n)
+	}
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM usage WHERE run_id IS NOT NULL"); n != 0 {
+		t.Errorf("%d usage rows kept a run link", n)
+	}
+	if got := importValue(t, q.Read, "SELECT budget_class FROM usage WHERE id = 101"); got != "unattended" {
+		t.Errorf("memory budget class %q", got)
+	}
+	if got := importValue(t, q.Read, "SELECT budget_class FROM usage WHERE id = 102"); got != "subscription" {
+		t.Errorf("subscription budget class %q", got)
+	}
+	if got := importValue(t, q.Read, "SELECT budget_class FROM usage WHERE id = 103"); got != "interactive" {
+		t.Errorf("partial budget class %q", got)
+	}
+	if n := importCount(t, q.Read, "SELECT accounted_nusd FROM usage WHERE id = 101"); n != 500000000 {
+		t.Errorf("memory accounted nusd %d", n)
+	}
+	if n := importCount(t, q.Read, "SELECT partial FROM usage WHERE id = 103"); n != 1 {
+		t.Errorf("partial flag %d", n)
+	}
+	if n := importCount(t, q.Read, "SELECT unpriced FROM usage WHERE id = 103"); n != 1 {
+		t.Errorf("unpriced flag %d", n)
+	}
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM usage WHERE request_id = 'prev-1'"); n != 0 {
+		t.Error("the previous month's usage row was carried")
+	}
+	status, err := inference.StatusAt(settings.With(context.Background(), settings.New()), q.Read, clock, loc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var expected float64
+	if err := q.Read.QueryRowContext(context.Background(), "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE budget_class <> 'subscription'").Scan(&expected); err != nil {
+		t.Fatal(err)
+	}
+	if status.CommittedUSD < expected-0.001 || status.CommittedUSD > expected+0.001 {
+		t.Errorf("committed %.6f, want about %.6f", status.CommittedUSD, expected)
+	}
+	if status.CommittedUSD >= 1000 {
+		t.Error("subscription spend entered the monthly budget")
+	}
+	if _, err := q.Write.ExecContext(context.Background(), "INSERT OR REPLACE INTO settings (key, value) VALUES ('monthly_budget_usd', '1')"); err != nil {
+		t.Fatal(err)
+	}
+	api := anthropictest.New(t, anthropictest.Reply("end_turn", anthropictest.Text("should not be sent")))
+	setEnv(t, anthropic.BaseURLEnv, api.URL)
+	ran := runImportApp(t, importTestApp(t, dir, clock), "agent", "run", "--text", "hello")
+	if ran.code == cli.ExitOK || !strings.Contains(ran.stdout+ran.stderr, "monthly budget") {
+		t.Fatalf("over-budget agent run: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
+	}
+	if n := api.Remaining(); n != 1 {
+		t.Errorf("%d fake responses were consumed", 1-n)
 	}
 }

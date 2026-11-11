@@ -12,7 +12,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/runner"
@@ -21,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
@@ -174,7 +174,7 @@ func (p *pages) failure(w http.ResponseWriter, r *http.Request, title, descripti
 }
 
 func (p *pages) refused(w http.ResponseWriter, r *http.Request, err error) bool {
-	var exceeded budget.BudgetExceeded
+	var exceeded inference.BudgetExceeded
 	var active service.RunActive
 	var redo service.NothingToRedo
 	var unknown service.UnknownThread

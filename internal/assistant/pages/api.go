@@ -6,12 +6,12 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/textsearch"
 	"github.com/jeiang/atrium/internal/web"
@@ -168,7 +168,7 @@ func itemOut(item *service.Item) apiItem {
 }
 
 func (p *pages) apiRefused(w http.ResponseWriter, err error) bool {
-	var exceeded budget.BudgetExceeded
+	var exceeded inference.BudgetExceeded
 	var active service.RunActive
 	var redo service.NothingToRedo
 	var unknown service.UnknownThread
@@ -232,6 +232,7 @@ func (p *pages) apiThreads(w http.ResponseWriter, r *http.Request) {
 	}
 	found, err := threads.ListThreads(r.Context(), p.deps.DB.Read, opts)
 	check(err)
+	check(fillThreadCosts(r.Context(), p.deps.DB.Read, found))
 	out := web.List[apiListedThread]{Items: []apiListedThread{}}
 	if len(found) > limit {
 		found = found[:limit]

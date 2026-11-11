@@ -60,3 +60,16 @@ func IDByKindRole(ctx context.Context, q db.Querier, kind Kind, role string) (in
 	}
 	return id, err
 }
+
+func JobName(ctx context.Context, q db.Querier, threadID int64) (string, error) {
+	var name *string
+	err := q.QueryRowContext(ctx,
+		"SELECT j.name FROM threads t LEFT JOIN jobs j ON j.id = t.job_id WHERE t.id = ?", threadID).Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil || name == nil {
+		return "", err
+	}
+	return *name, nil
+}

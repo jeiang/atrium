@@ -76,7 +76,7 @@ func schedulerCommand(cfgEnv config.Env, tools registry.Source, enabled func(mod
 
 func runScheduler(env *cli.Env, cfgEnv config.Env, tools registry.Source, enabled func(module string) bool, jobs []map[string]worker.Callable) error {
 	ctx := env.Ctx
-	svc, closeApp, err := bootstrap(ctx, cfgEnv, tools)
+	svc, closeApp, err := bootstrap(ctx, cfgEnv, tools, nil)
 	if err != nil {
 		return err
 	}

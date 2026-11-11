@@ -17,8 +17,8 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/mail/drafts"
@@ -459,7 +459,7 @@ type Meter struct {
 
 func MeterOf(ctx context.Context, q db.Querier, thread threads.Thread) (Meter, error) {
 	limit := threads.ContextLimitOf(thread)
-	tokens, err := usage.PromptTokens(ctx, q, thread.ID)
+	tokens, err := inference.PromptTokens(ctx, q, thread.ID)
 	if err != nil {
 		return Meter{}, err
 	}
@@ -471,11 +471,11 @@ func MeterOf(ctx context.Context, q db.Querier, thread threads.Thread) (Meter, e
 }
 
 func CostOfThread(ctx context.Context, q db.Querier, threadID int64) (float64, error) {
-	var cost float64
-	err := q.QueryRowContext(ctx,
-		"SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE thread_id = ? OR thread_id IN (SELECT id FROM threads WHERE parent_thread_id = ?)",
-		threadID, threadID).Scan(&cost)
-	return cost, err
+	children, err := threads.Children(ctx, q, threadID)
+	if err != nil {
+		return 0, err
+	}
+	return inference.SpendOnThreads(ctx, q, append([]int64{threadID}, children...), 0)
 }
 
 func DraftsOf(ctx context.Context, q db.Querier, threadID int64) ([]map[string]any, error) {
@@ -605,8 +605,8 @@ func RunDict(ctx context.Context, q db.Querier, runID int64) (map[string]any, er
 	for i, c := range calls {
 		list[i] = c
 	}
-	var cost any
-	if err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE run_id = ?", runID).Scan(&cost); err != nil {
+	cost, err := inference.RunCost(ctx, q, runID)
+	if err != nil {
 		return nil, err
 	}
 	delete(run[0], "skills_json")

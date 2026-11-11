@@ -7,13 +7,16 @@
     <span class="text-xs text-muted-foreground">Spent this month</span>
     <span class="text-2xl font-semibold tabular-nums">${{printf "%.2f" $b.SpentUSD}}</span>
     <span class="text-xs text-muted-foreground">{{$s.Calls}} API calls</span>
-    <span class="text-xs text-muted-foreground">{{$d.Memory.Calls}} memory summaries · ${{printf "%.2f" $d.Memory.Cost}} excluded from the budget</span>
+    <span class="text-xs text-muted-foreground">{{$d.Memory.Calls}} memory summaries · ${{printf "%.2f" $d.Memory.Cost}} included in the budget</span>
     {{if $d.Subscription.Calls}}<span class="text-xs text-muted-foreground">{{$d.Subscription.Calls}} subscription requests · ${{printf "%.2f" $d.Subscription.Cost}} uncapped</span>{{end}}
   </div>
   <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
     <span class="text-xs text-muted-foreground">Budget remaining</span>
     <span class="text-2xl font-semibold tabular-nums">${{printf "%.2f" $b.RemainingUSD}}</span>
-    <span class="text-xs text-muted-foreground" title="Unattended runs pause at 80%, chat at 100%">{{printf "%.0f%%" (mul $b.Share 100)}} of ${{printf "%.0f" $b.BudgetUSD}} used</span>
+    <span class="text-xs text-muted-foreground" title="Chat pauses at the interactive ceiling; scheduled runs pause at the unattended share">{{printf "%.0f%%" (mul $b.Share 100)}} of ${{printf "%.0f" $b.BudgetUSD}} used{{if $b.CarryInUSD}} · ${{printf "%.2f" $b.CarryInUSD}} carried in{{end}}</span>
+    <span class="text-xs text-muted-foreground">${{printf "%.2f" $b.CommittedUSD}} committed · ${{printf "%.2f" $b.ReservedUSD}} reserved · ${{printf "%.2f" $b.UnknownUSD}} unknown · ${{printf "%.2f" $b.ExpiredUSD}} expired estimate</span>
+    {{$chat := fdiv $b.InteractiveCeilingUSD $b.BudgetUSD}}{{$sched := fdiv $b.UnattendedCeilingUSD $b.BudgetUSD}}
+    <span class="text-xs text-muted-foreground">Chat pauses at ${{printf "%.2f" $b.InteractiveCeilingUSD}} ({{printf "%.0f%%" (mul $chat 100)}}); scheduled runs at ${{printf "%.2f" $b.UnattendedCeilingUSD}} ({{printf "%.0f%%" (mul $sched 100)}})</span>
   </div>
   <div class="flex flex-col gap-1 rounded-lg border bg-card p-4">
     <span class="text-xs text-muted-foreground">Cache read share</span>

@@ -249,9 +249,10 @@ func TestDreamingStopsAtItsCaps(t *testing.T) {
 	if _, err := d.Write.Exec("INSERT INTO threads (kind, title, effort, model, context_limit, created_at, updated_at) VALUES ('nightly', 'old dreaming', 'high', 'claude-haiku-5-5', 90000, 1, 1)"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Write.Exec("INSERT INTO usage (ts, request_id, source, provider, thread_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, reasoning_tokens, searches, tier, cost_usd) "+
-		"SELECT ?, 'r1', 'assistant', 'anthropic', id, 'nightly', 'claude-haiku-5-5', 'high', '[]', 0,0,0,0,0,0,0,'standard', 0.01 FROM threads WHERE kind = 'nightly' LIMIT 1",
-		float64(time.Now().Unix())); err != nil {
+	now := float64(time.Now().Unix())
+	if _, err := d.Write.Exec("INSERT INTO usage (attempt_key, ts, month_start, expires_at, settled_at, state, budget_class, reservation_nusd, accounted_nusd, request_id, source, provider, thread_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, reasoning_tokens, searches, tier, cost_usd) "+
+		"SELECT lower(hex(randomblob(16))), ?, ?, ?, ?, 'settled', 'unattended', 0, 10000000, 'r1', 'assistant', 'anthropic', id, 'nightly', 'claude-haiku-5-5', 'high', '[]', 0,0,0,0,0,0,0,'standard', 0.01 FROM threads WHERE kind = 'nightly' LIMIT 1",
+		now, now, now, now); err != nil {
 		t.Fatal(err)
 	}
 	requests = len(api.Requests())
@@ -312,9 +313,10 @@ func TestDreamingMonthlyCapRaisesAttention(t *testing.T) {
 	if _, err := d.Write.Exec("INSERT INTO threads (kind, title, effort, model, context_limit, created_at, updated_at) VALUES ('nightly', 'old dreaming', 'high', 'claude-haiku-5-5', 90000, 1, 1)"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Write.Exec("INSERT INTO usage (ts, request_id, source, provider, thread_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, reasoning_tokens, searches, tier, cost_usd) "+
-		"SELECT ?, 'r1', 'assistant', 'anthropic', id, 'nightly', 'claude-haiku-5-5', 'high', '[]', 0,0,0,0,0,0,0,'standard', 0.01 FROM threads WHERE kind = 'nightly' LIMIT 1",
-		float64(time.Now().Unix())); err != nil {
+	now := float64(time.Now().Unix())
+	if _, err := d.Write.Exec("INSERT INTO usage (attempt_key, ts, month_start, expires_at, settled_at, state, budget_class, reservation_nusd, accounted_nusd, request_id, source, provider, thread_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, reasoning_tokens, searches, tier, cost_usd) "+
+		"SELECT lower(hex(randomblob(16))), ?, ?, ?, ?, 'settled', 'unattended', 0, 10000000, 'r1', 'assistant', 'anthropic', id, 'nightly', 'claude-haiku-5-5', 'high', '[]', 0,0,0,0,0,0,0,'standard', 0.01 FROM threads WHERE kind = 'nightly' LIMIT 1",
+		now, now, now, now); err != nil {
 		t.Fatal(err)
 	}
 	ctx := config.With(settings.With(context.Background(), f.settings), f.state)

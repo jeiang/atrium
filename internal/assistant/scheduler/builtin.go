@@ -36,6 +36,14 @@ const (
 	CallableRun
 )
 
+type Spend uint8
+
+const (
+	AlwaysSpends Spend = iota
+	ModelFree
+	ConditionalSpends
+)
+
 type Builtin struct {
 	Name    string
 	Setting string
@@ -43,6 +51,7 @@ type Builtin struct {
 	Prompt  string
 	Kind    string
 	Run     RunKind
+	Spend   Spend
 }
 
 const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untrusted + " Gather, then write the review as your reply, with these " +
@@ -62,18 +71,18 @@ const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untruste
 	"of the most important items."
 
 var Builtins = []Builtin{
-	{NightlyName, KeyNightlySchedule, "daily 02:30", "Nightly: gather the last day and write knowledge records (one model run).", JobNightly, CallableRun},
-	{WeeklyReviewName, KeyWeeklyReview, "weekly sun 18:00", weeklyReviewPrompt, JobBuiltin, PromptRun},
-	{DailyNudgesName, KeyDailyNudges, "daily 08:00", "Daily: send the attention digest (no model run).", JobBuiltin, CallableRun},
-	{OpsSamplerName, KeyOpsSamplerSchedule, "*/15 * * * *", "Every 15 minutes: sample host metrics and firing alerts into ops samples (no model run).", JobBuiltin, CallableRun},
-	{CalendarCandidatesName, KeyCalendarCands, "0 * * * *", "Hourly: if event candidates are queued, draft calendar event proposals from them (no model run when the queue is empty).", JobBuiltin, CallableRun},
-	{MediaChannelsName, KeyMediaChannels, "*/30 * * * *", "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run).", JobBuiltin, CallableRun},
-	{MediaSweepName, KeyMediaSweep, "*/10 * * * *", "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run).", JobBuiltin, CallableRun},
-	{MediaThumbnailsName, KeyMediaThumbnails, "daily 04:00", "Daily: generate missing episode thumbnails for the media library (no model run).", JobBuiltin, CallableRun},
-	{TaskRemindersName, KeyTaskReminders, "*/5 * * * *", "Every 5 minutes: send due task reminders (no model run).", JobBuiltin, CallableRun},
-	{MemoryWorkName, KeyMemoryWork, "*/2 * * * *", "Every 2 minutes: summarize pending memory nodes (no model run when the queue is empty).", JobBuiltin, CallableRun},
-	{PackageTrackingName, KeyPackageTracking, "0 * * * *", "Hourly: refresh active Ship24 package trackers (no model run).", JobBuiltin, CallableRun},
-	{KnowledgeExportName, KeyKnowledgeExport, "daily 03:30", "Daily: project the knowledge base into the configured export targets (no model run).", JobBuiltin, CallableRun},
+	{NightlyName, KeyNightlySchedule, "daily 02:30", "Nightly: gather the last day and write knowledge records (one model run).", JobNightly, CallableRun, AlwaysSpends},
+	{WeeklyReviewName, KeyWeeklyReview, "weekly sun 18:00", weeklyReviewPrompt, JobBuiltin, PromptRun, AlwaysSpends},
+	{DailyNudgesName, KeyDailyNudges, "daily 08:00", "Daily: send the attention digest (no model run).", JobBuiltin, CallableRun, ModelFree},
+	{OpsSamplerName, KeyOpsSamplerSchedule, "*/15 * * * *", "Every 15 minutes: sample host metrics and firing alerts into ops samples (no model run).", JobBuiltin, CallableRun, ModelFree},
+	{CalendarCandidatesName, KeyCalendarCands, "0 * * * *", "Hourly: if event candidates are queued, draft calendar event proposals from them (no model run when the queue is empty).", JobBuiltin, CallableRun, ConditionalSpends},
+	{MediaChannelsName, KeyMediaChannels, "*/30 * * * *", "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run).", JobBuiltin, CallableRun, ModelFree},
+	{MediaSweepName, KeyMediaSweep, "*/10 * * * *", "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run).", JobBuiltin, CallableRun, ModelFree},
+	{MediaThumbnailsName, KeyMediaThumbnails, "daily 04:00", "Daily: generate missing episode thumbnails for the media library (no model run).", JobBuiltin, CallableRun, ModelFree},
+	{TaskRemindersName, KeyTaskReminders, "*/5 * * * *", "Every 5 minutes: send due task reminders (no model run).", JobBuiltin, CallableRun, ModelFree},
+	{MemoryWorkName, KeyMemoryWork, "*/2 * * * *", "Every 2 minutes: summarize pending memory nodes (no model run when the queue is empty).", JobBuiltin, CallableRun, ConditionalSpends},
+	{PackageTrackingName, KeyPackageTracking, "0 * * * *", "Hourly: refresh active Ship24 package trackers (no model run).", JobBuiltin, CallableRun, ModelFree},
+	{KnowledgeExportName, KeyKnowledgeExport, "daily 03:30", "Daily: project the knowledge base into the configured export targets (no model run).", JobBuiltin, CallableRun, ModelFree},
 }
 
 var builtinsByName = func() map[string]Builtin {
@@ -87,6 +96,13 @@ var builtinsByName = func() map[string]Builtin {
 func BuiltinFor(name string) (Builtin, bool) {
 	b, ok := builtinsByName[name]
 	return b, ok
+}
+
+func SpendPolicy(job Job) Spend {
+	if spec, ok := BuiltinFor(job.Name); ok {
+		return spec.Spend
+	}
+	return AlwaysSpends
 }
 
 func builtinSchedule(ctx context.Context, q db.Querier, name string) (string, bool, error) {

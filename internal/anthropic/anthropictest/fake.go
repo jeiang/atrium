@@ -29,6 +29,10 @@ type Response struct {
 	Status            int               `json:"-"`
 	ErrorBody         json.RawMessage   `json:"-"`
 	Header            http.Header       `json:"-"`
+
+	StartUsage          json.RawMessage `json:"-"`
+	InterruptAfterStart bool            `json:"-"`
+	Stall               bool            `json:"-"`
 }
 
 type Request struct {
@@ -55,6 +59,7 @@ type Server struct {
 	RejectKey        string
 	FileDeleteStatus int
 	Models           []string
+	Disconnect       atomic.Bool
 
 	mu       sync.Mutex
 	script   []Response
@@ -129,7 +134,7 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
 	switch {
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/messages":
-		s.messages(w, Request{r.Method, r.URL.Path, r.URL.RawQuery, r.Header.Clone(), body})
+		s.messages(w, r, Request{r.Method, r.URL.Path, r.URL.RawQuery, r.Header.Clone(), body})
 	case r.Method == http.MethodGet && r.URL.Path == "/v1/models" && s.RejectKey != "" && r.Header.Get("X-Api-Key") == s.RejectKey:
 		fail(w, http.StatusUnauthorized, ErrorBody("authentication_error", "invalid x-api-key"))
 	case r.Method == http.MethodGet && r.URL.Path == "/v1/models":
@@ -157,9 +162,13 @@ func (s *Server) deleteFile(w http.ResponseWriter, id string) {
 	writeJSON(w, map[string]string{"id": id, "type": "file_deleted"})
 }
 
-func (s *Server) messages(w http.ResponseWriter, req Request) {
+func (s *Server) messages(w http.ResponseWriter, r *http.Request, req Request) {
 	if s.OnRequest != nil {
 		s.OnRequest(req)
+	}
+	if s.Disconnect.Load() {
+		s.hijackClose(w)
+		return
 	}
 	var head struct {
 		Model  string `json:"model"`
@@ -187,12 +196,21 @@ func (s *Server) messages(w http.ResponseWriter, req Request) {
 		}
 		fail(w, resp.Status, resp.ErrorBody)
 	case head.Stream:
-		stream(w, id, head.Model, resp)
+		s.stream(w, r, id, head.Model, resp)
 	case resp.ErrorBody != nil:
 		fail(w, http.StatusInternalServerError, resp.ErrorBody)
 	default:
 		writeJSON(w, message(id, head.Model, resp, resp.Content))
 	}
+}
+
+func (s *Server) hijackClose(w http.ResponseWriter) {
+	conn, _, err := w.(http.Hijacker).Hijack()
+	if err != nil {
+		s.t.Errorf("anthropictest: hijack: %v", err)
+		return
+	}
+	_ = conn.Close()
 }
 
 func fail(w http.ResponseWriter, status int, body json.RawMessage) {
@@ -243,15 +261,24 @@ func (s sse) send(event string, data any) {
 	}
 }
 
-func stream(w http.ResponseWriter, id, model string, resp Response) {
+func (s *Server) stream(w http.ResponseWriter, r *http.Request, id, model string, resp Response) {
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.WriteHeader(http.StatusOK)
 	flusher, _ := w.(http.Flusher)
 	out := sse{w, flusher}
+	usage := resp.Usage
+	if len(resp.StartUsage) > 0 {
+		usage = resp.StartUsage
+	}
 	start := message(id, model, resp, nil)
 	delete(start, "context_management")
 	start["stop_reason"] = nil
+	start["usage"] = orNull(usage)
 	out.send("message_start", map[string]any{"type": "message_start", "message": start})
+	if resp.InterruptAfterStart {
+		s.hijackClose(w)
+		return
+	}
 	out.send("ping", map[string]string{"type": "ping"})
 	if resp.ErrorBody != nil {
 		_, _ = fmt.Fprintf(w, "event: error\ndata: %s\n\n", resp.ErrorBody)
@@ -268,6 +295,10 @@ func stream(w http.ResponseWriter, id, model string, resp Response) {
 			out.send("content_block_delta", map[string]any{"type": "content_block_delta", "index": i, "delta": d})
 		}
 		out.send("content_block_stop", map[string]any{"type": "content_block_stop", "index": i})
+	}
+	if resp.Stall {
+		<-r.Context().Done()
+		return
 	}
 	delta := map[string]any{
 		"type":  "message_delta",

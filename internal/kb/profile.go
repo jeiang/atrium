@@ -6,8 +6,8 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/tokens"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -29,7 +29,7 @@ func ProfileEntries(ctx context.Context, q db.Querier, budget int64) ([]ProfileR
 	if err != nil {
 		return nil, err
 	}
-	total := actx.EstimateTokens(ProfileHeader)
+	total := tokens.Estimate(ProfileHeader)
 	out := make([]ProfileRecord, 0, len(found))
 	for _, rec := range found {
 		entry := ProfileRecord{Record: rec}
@@ -39,7 +39,7 @@ func ProfileEntries(ctx context.Context, q db.Querier, budget int64) ([]ProfileR
 		case rec.Marks&(tool.Untrusted|tool.PII|tool.Messages) != 0:
 			entry.Reason = "marked"
 		default:
-			entry.Tokens = actx.EstimateTokens("- " + rec.Title + ": " + rec.Body)
+			entry.Tokens = tokens.Estimate("- " + rec.Title + ": " + rec.Body)
 			if total+entry.Tokens > budget {
 				entry.Reason = "over budget"
 			} else {
