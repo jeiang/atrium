@@ -30,7 +30,15 @@ func Resolve(ctx context.Context, q db.Querier, account string) (config.AuthMeth
 	if spec.Preset != config.Gmail || spec.AuthMethod != config.AuthXOAUTH2 {
 		return config.AuthPassword, nil, nil
 	}
-	lease, err := connections.OpenRead(ctx, q, config.From(ctx).Host(), connections.GoogleID)
+	var (
+		lease *connections.Lease
+		err   error
+	)
+	if store := connections.DefaultFor(q); store != nil {
+		lease, err = store.Open(ctx, connections.GoogleID)
+	} else {
+		lease, err = connections.OpenRead(ctx, q, config.From(ctx).Host(), connections.GoogleID)
+	}
 	if err != nil {
 		var unknown connections.UnknownID
 		if errors.As(err, &unknown) {

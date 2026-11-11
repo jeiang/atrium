@@ -36,7 +36,6 @@ const (
 	googleCalendarScope = "https://www.googleapis.com/auth/calendar.events"
 	googleGmailScope    = "https://mail.google.com/"
 	googleStateTTL      = 10 * time.Minute
-	googleExpiryWindow  = 14 * 24 * time.Hour
 )
 
 type googleGrant struct {
@@ -187,10 +186,6 @@ func (l *Lease) googleToken(ctx context.Context, capability string) (string, err
 		l.observeGoogle(ctx, capability, err)
 		return "", err
 	}
-	if time.Until(access.expiry) < googleExpiryWindow {
-		_ = l.Observe(ctx, Result{Capability: capability, State: Expiring,
-			Reason: "access token expires " + access.expiry.Format(time.DateOnly), ExpiresAt: &access.expiry})
-	}
 	return access.token, nil
 }
 
@@ -299,6 +294,7 @@ func testGoogle(ctx context.Context, lease *Lease, caps []Capability) ([]Result,
 			results = append(results, Result{Capability: cap.Name, State: Failing, Reason: "unknown Google capability"})
 			continue
 		}
+		lease.InvalidateToken(grant.Name)
 		token, err := lease.Token(ctx, grant.Name)
 		if err != nil {
 			state := Failing

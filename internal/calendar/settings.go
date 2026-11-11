@@ -2,7 +2,6 @@ package calendar
 
 import (
 	"context"
-	"errors"
 	"strconv"
 	"strings"
 
@@ -103,12 +102,16 @@ func LoadSettings(ctx context.Context, q db.Querier) (Settings, error) {
 }
 
 func openConnection(ctx context.Context, q db.Querier, id connections.ID) *connections.Lease {
-	lease, err := connections.OpenRead(ctx, q, config.From(ctx).Host(), id)
+	var (
+		lease *connections.Lease
+		err   error
+	)
+	if store := connections.DefaultFor(q); store != nil {
+		lease, err = store.Open(ctx, id)
+	} else {
+		lease, err = connections.OpenRead(ctx, q, config.From(ctx).Host(), id)
+	}
 	if err != nil {
-		var unknown connections.UnknownID
-		if errors.As(err, &unknown) {
-			return nil
-		}
 		return nil
 	}
 	return lease
