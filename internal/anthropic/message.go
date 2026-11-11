@@ -74,3 +74,16 @@ func decodeMessage(raw string) (*Message, error) {
 	}
 	return &m, nil
 }
+
+func usageOfRaw(raw string) Usage {
+	if raw == "" {
+		return Usage{}
+	}
+	var m struct {
+		Usage Usage `json:"usage"`
+	}
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return Usage{}
+	}
+	return m.Usage
+}
