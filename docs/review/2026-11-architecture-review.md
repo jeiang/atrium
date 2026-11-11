@@ -635,11 +635,13 @@ Shape:
 11. **Memory spend.** It counts toward the monthly budget, in the one inference ledger (F9).
 12. **App sign-in.** The public-client OIDC defect is fixed when the app needs it, not before (F4).
 
+13. **API schema.** The OpenAPI document is generated from the Go operation types, committed, and CI fails on drift. The Swift client is generated from it. The run stream gets its own written contract (F1).
+14. **Local chat model.** Dropped. Mail routing's last stage, flags, scans, open loops, watches, the invitation judge and the ops condenser move to Haiku; the operator accepts that mail text goes to Anthropic. The classifier call has no tools and a fixed output schema. The inference ledger comes first (F9), or the monthly budget pause stops mail triage. The chat endpoint, its settings and `atrium-llm` go away.
+15. **No separate mail binary.** Embeddings serve knowledge, Notion and mail alike and are reached over an HTTP endpoint, so they run wherever the endpoint is.
+
 Recommended, not yet confirmed by the operator:
 
-- **API schema.** Generate the OpenAPI document from the Go operation types, commit it, and fail CI on drift. The Swift client is generated from it. The run stream gets its own written contract.
-- **Local chat model.** Dropping it moves mail routing's last stage, flags, scans, open loops, watches, the invitation judge and the ops condenser to Haiku. Mail text then goes to Anthropic, which the operator accepts. It frees 9 GB of memory on artemis and removes the chat endpoint and its settings. It needs the inference ledger first (F9), or the monthly budget pause stops mail triage. The classifier call must have no tools and a fixed output schema.
-- **Host placement.** No separate mail binary. Embeddings serve knowledge, Notion and mail alike and are already reached over an HTTP endpoint, so atrium can move and keep the embedding server on artemis. Two constraints: media filing needs the same filesystem as qBittorrent, and artemis pauses its model units while gaming.
+- **Media agent on artemis.** If atrium moves to a server, the work that needs the media filesystem stays on artemis as a second command of the same binary: filing by hardlink, the library scan, thumbnails and serving signed file links. It holds no atrium database. The main process keeps channels, the poll, the tools, the pages, settings and the effect ledger, and reaches the agent as a connection with test and health (F6). Filing must be safe to repeat, because a call across hosts can end unknown (F3). qBittorrent is reached over the network like any other connection. The alternative is to leave atrium on artemis and add nothing.
 
 ## Not checked
 
