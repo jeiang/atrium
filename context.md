@@ -86,11 +86,14 @@ behavior-parity target.
   them from the prompt cache and write only the new tail. A chat or cron
   operator message may also carry a knowledge block: eligible records
   (unmarked, unpinned, live, private only inside its project)
-  matched by exact title or alias, full-text search and one embedding,
-  within `kb_retrieval_tokens` (default 1,500; 0 disables) and
-  `kb_retrieval_distance` (default 0.35). The block is stored with the
-  message and expanded when the request is built, so it replays byte for
-  byte and adds nothing to the tools, system prompt or history prefix;
+  matched by exact title or alias, full-text search and one embedding
+  bounded by a two-second window, within `kb_retrieval_tokens` (default
+  1,500; 0 disables) and `kb_retrieval_distance` (default 0.35). A timed-out
+  or unavailable embedding leaves the exact and lexical matches; `kb_search`
+  reports `semantic` false and the skipped step is logged. The block is
+  stored with the message and expanded when the request is built, so it
+  replays byte for byte and adds nothing to the tools, system prompt or
+  history prefix;
   retrieval adds no marks. Client- and
   server-side transcript compaction and their settings are gone; the chat
   meter and the attachment check measure against the thread's context

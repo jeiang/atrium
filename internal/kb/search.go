@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/textsearch"
 )
 
@@ -20,6 +21,12 @@ const (
 	semanticLimit = 50
 	exactMinChars = 3
 )
+
+var log = logx.Logger("knowledge/search")
+
+func semanticSkipped(ctx context.Context, operation, reason string) {
+	log.WarnContext(ctx, "semantic search skipped", "operation", operation, logx.Reason, reason)
+}
 
 type SearchFilter struct {
 	Query     string
@@ -210,9 +217,31 @@ func Search(ctx context.Context, q db.Querier, f SearchFilter) (Result, error) {
 	semantic := false
 	if f.Embed != nil {
 		idx, ierr := embed.Active(ctx, q)
-		if ierr == nil {
-			vectors, verr := f.Embed(ctx, []string{embed.QueryText(query)})
-			if verr == nil && len(vectors) > 0 {
+		if err := ctx.Err(); err != nil {
+			return Result{}, err
+		}
+		if ierr != nil {
+			semanticSkipped(ctx, "kb_search", "no_index")
+		} else {
+			embedCtx, cancel := context.WithTimeout(ctx, RetrievalWindow)
+			vectors, verr := f.Embed(embedCtx, []string{embed.QueryText(query)})
+			expired := errors.Is(embedCtx.Err(), context.DeadlineExceeded)
+			cancel()
+			if err := ctx.Err(); err != nil {
+				return Result{}, err
+			}
+			switch {
+			case expired:
+				semanticSkipped(ctx, "kb_search", "timeout")
+			case verr != nil:
+				var unavailable *httpx.ServiceUnavailable
+				if !errors.As(verr, &unavailable) && !errors.Is(verr, httpx.ErrPayload) && !errors.Is(verr, httpx.ErrMissing) {
+					return Result{}, verr
+				}
+				semanticSkipped(ctx, "kb_search", "unavailable")
+			case len(vectors) == 0 || len(vectors[0]) == 0:
+				semanticSkipped(ctx, "kb_search", "no_vector")
+			default:
 				near, kerr := knn(ctx, q, idx, embed.Serialize(vectors[0]), semanticLimit)
 				if kerr != nil {
 					return Result{}, kerr
@@ -227,11 +256,6 @@ func Search(ctx context.Context, q db.Querier, f SearchFilter) (Result, error) {
 					}
 				}
 				semantic = true
-			} else if verr != nil {
-				var unavailable *httpx.ServiceUnavailable
-				if !errors.As(verr, &unavailable) && !errors.Is(verr, httpx.ErrPayload) && !errors.Is(verr, httpx.ErrMissing) {
-					return Result{}, verr
-				}
 			}
 		}
 	}
