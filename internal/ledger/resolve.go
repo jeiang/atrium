@@ -90,6 +90,11 @@ func (s *Store) Resolve(ctx context.Context, id int64, r Resolution, who Resolve
 				return err
 			}
 		}
+		if hook, ok := s.resolveHook(e.Operation); ok {
+			if err := hook(ctx, tx, e, r); err != nil {
+				return err
+			}
+		}
 		switch e.Direction {
 		case "forward":
 			switch effective {

@@ -98,11 +98,14 @@ type Undoer struct {
 	Finalize func(context.Context, *sql.Tx, json.RawMessage, Result) error
 }
 
+type ResolveHook func(context.Context, *sql.Tx, Effect, Resolution) error
+
 type Store struct {
 	DB      *db.DB
 	now     func() float64
 	mu      sync.RWMutex
 	undoers map[string]Undoer
+	resolves map[string]ResolveHook
 }
 
 type Conflict struct{ Resource string }
@@ -127,7 +130,7 @@ func NewStore(d *db.DB, now func() float64) *Store {
 	if now == nil {
 		now = func() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 	}
-	return &Store{DB: d, now: now, undoers: map[string]Undoer{}}
+	return &Store{DB: d, now: now, undoers: map[string]Undoer{}, resolves: map[string]ResolveHook{}}
 }
 
 func (s *Store) Now() float64 { return s.now() }
@@ -149,6 +152,26 @@ func (s *Store) undoer(name string) (Undoer, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	fn, ok := s.undoers[name]
+	return fn, ok
+}
+
+func (s *Store) RegisterResolve(operation string, fn ResolveHook) error {
+	if strings.TrimSpace(operation) == "" {
+		return errors.New("ledger: resolve registration without an operation")
+	}
+	if fn == nil {
+		return errors.New("ledger: resolve registration without a hook")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.resolves[operation] = fn
+	return nil
+}
+
+func (s *Store) resolveHook(operation string) (ResolveHook, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	fn, ok := s.resolves[operation]
 	return fn, ok
 }
 

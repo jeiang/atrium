@@ -156,9 +156,6 @@ func write(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := os.MkdirAll(dir, 0o777); err != nil {
-		return nil, err
-	}
 	path := filepath.Join(dir, name)
 	prior, priorErr := os.ReadFile(path)
 	if priorErr != nil && !errors.Is(priorErr, os.ErrNotExist) {
@@ -171,7 +168,19 @@ func write(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 		}
 		before = string(prior)
 	}
-	undo := map[string]any{"op": UndoOp, "path": path, "before": before, "sha": hash([]byte(content))}
+	var parents []string
+	if priorErr != nil {
+		for parent := dir; ; parent = filepath.Dir(parent) {
+			if _, statErr := os.Stat(parent); statErr == nil {
+				break
+			}
+			parents = append(parents, parent)
+			if filepath.Dir(parent) == parent {
+				break
+			}
+		}
+	}
+	undo := map[string]any{"op": UndoOp, "path": path, "before": before, "sha": hash([]byte(content)), "parents": parents}
 	ticket, err := tc.Ledger.Begin(ctx, ledger.New{
 		Origin: "agent", Operation: writeName, OperationKey: writeName + ":" + ledger.NewKey(),
 		Target: name, ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
@@ -180,8 +189,8 @@ func write(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := os.WriteFile(path, []byte(content), 0o666); err != nil {
-		_ = tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: ledger.Unknown, Target: name, Error: err.Error()}, nil)
+	if err := writeAtomic(dir, path, []byte(content)); err != nil {
+		_ = tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: ledger.Failed, Target: name, Error: err.Error()}, nil)
 		return nil, err
 	}
 	if err := tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
@@ -190,6 +199,41 @@ func write(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 		return nil, err
 	}
 	return "wrote " + name, nil
+}
+
+func writeAtomic(dir, path string, content []byte) error {
+	if err := os.MkdirAll(dir, 0o777); err != nil {
+		return err
+	}
+	tmp, err := os.CreateTemp(dir, ".atrium-*.tmp")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	remove := func() { _ = os.Remove(name) }
+	if _, err := tmp.Write(content); err != nil {
+		_ = tmp.Close()
+		remove()
+		return err
+	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		remove()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		remove()
+		return err
+	}
+	if err := os.Chmod(name, 0o666); err != nil {
+		remove()
+		return err
+	}
+	if err := os.Rename(name, path); err != nil {
+		remove()
+		return err
+	}
+	return nil
 }
 
 func jsonOf(v any) json.RawMessage {
@@ -213,9 +257,10 @@ func RegisterLedgerUndoer(s *ledger.Store) error {
 		},
 		External: func(ctx context.Context, payload json.RawMessage) (ledger.Result, error) {
 			var p struct {
-				Path   string  `json:"path"`
-				Before *string `json:"before"`
-				SHA    string  `json:"sha"`
+				Path    string   `json:"path"`
+				Before  *string  `json:"before"`
+				SHA     string   `json:"sha"`
+				Parents []string `json:"parents"`
 			}
 			if err := json.Unmarshal(payload, &p); err != nil {
 				return ledger.Result{}, ledger.Refused("file_restore payload is invalid")
@@ -234,9 +279,14 @@ func RegisterLedgerUndoer(s *ledger.Store) error {
 				if err := os.Remove(p.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
 					return ledger.Result{}, err
 				}
+				for _, parent := range p.Parents {
+					if err := os.Remove(parent); err != nil {
+						break
+					}
+				}
 				return ledger.Result{State: ledger.Done, After: jsonOf("removed")}, nil
 			}
-			if err := os.WriteFile(p.Path, []byte(*p.Before), 0o666); err != nil {
+			if err := writeAtomic(filepath.Dir(p.Path), p.Path, []byte(*p.Before)); err != nil {
 				return ledger.Result{}, err
 			}
 			return ledger.Result{State: ledger.Done, After: jsonOf("restored")}, nil
