@@ -306,10 +306,14 @@ behavior-parity target.
   messages, files, plans and queue, agent profile, skills, operator-edited
   subagents, jobs, agent events, tasks, proposals and their actions, agent
   writes, media channels, the seen list and media state, and the current
-  calendar month's usage rows. Rebuilt: `message_fts`, `thread_fts` and
-  `kb_fts`. Not carried: run history (`runs`, `run_events`, `tool_calls`,
-  `tool_results`, `context_ledger`, `context_projections`, `job_runs`),
-  memory (rebuilt), Notion and wiki state (re-synced), knowledge and Notion
+  calendar month's usage rows. A service credential whose owner has a
+  connection record (qBittorrent, Anthropic, Grafana, Notion) is written to
+  that connection's credential store and its source `secrets` row is
+  dropped; the connection keeps the source `set_at`/`set_by`. Rebuilt:
+  `message_fts`, `thread_fts` and `kb_fts`. Not carried: run history
+  (`runs`, `run_events`, `tool_calls`, `tool_results`, `context_ledger`,
+  `context_projections`, `job_runs`), memory (rebuilt), Notion and wiki
+  state (re-synced), knowledge and Notion
   vectors (rebuilt), notifications, auth sessions and login links, OAuth
   handshakes, action links, the settings audit, the mail event log, ops
   data, endpoint probes, integration health, nightly observations,
