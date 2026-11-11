@@ -155,6 +155,7 @@ func (s *Service) Reserve(ctx context.Context, r Request) (*Attempt, error) {
 	expires := now + UnknownExpiry.Seconds()
 	deadline := now + RequestTimeout.Seconds()
 	var id int64
+	var refused error
 	err = s.db.WithTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, "UPDATE usage SET expires_at = expires_at WHERE id = -1"); err != nil {
 			return err
@@ -165,7 +166,8 @@ func (s *Service) Reserve(ctx context.Context, r Request) (*Attempt, error) {
 			return err
 		}
 		if err := s.admit(ctx, tx, r, p, now, month); err != nil {
-			return err
+			refused = err
+			return nil
 		}
 		res, err := tx.ExecContext(ctx,
 			"INSERT INTO usage (attempt_key, ts, month_start, expires_at, state, budget_class, reservation_nusd, accounted_nusd, "+
@@ -182,6 +184,9 @@ func (s *Service) Reserve(ctx context.Context, r Request) (*Attempt, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+	if refused != nil {
+		return nil, refused
 	}
 	return &Attempt{
 		id: id, key: r.AttemptKey, params: r.Params, class: classOf(r), model: p.model, kind: kindOf(r),
