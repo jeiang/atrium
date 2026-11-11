@@ -540,3 +540,47 @@ func TestTrackingIdentityBlocksASecondPackageRow(t *testing.T) {
 		t.Fatalf("Ship24 created %d trackers, want 1", creates)
 	}
 }
+
+func TestShip24ProbeDropsTheBearerOutsideTheBasePathOnRedirect(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	var mu sync.Mutex
+	seen := map[string]string{}
+	target := "/public/v1/moved"
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		seen[r.URL.Path] = r.Header.Get("Authorization")
+		next := target
+		mu.Unlock()
+		switch r.URL.Path {
+		case "/public/v1/trackers":
+			http.Redirect(w, r, next, http.StatusTemporaryRedirect)
+		case next:
+			w.WriteHeader(http.StatusOK)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
+	if ran := runApp(t, "connections", "test", "service/ship24"); ran.code != cli.ExitOK {
+		t.Fatalf("probe inside the base path: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
+	}
+	mu.Lock()
+	inside := seen["/public/v1/moved"]
+	mu.Unlock()
+	if inside != "Bearer good" {
+		t.Fatalf("a redirect inside the base path carried %q", inside)
+	}
+	mu.Lock()
+	target = "/other-service"
+	mu.Unlock()
+	if ran := runApp(t, "connections", "test", "service/ship24"); ran.code != cli.ExitOK {
+		t.Fatalf("probe outside the base path: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
+	}
+	mu.Lock()
+	outside := seen["/other-service"]
+	mu.Unlock()
+	if outside != "" {
+		t.Fatalf("a redirect outside the base path carried %q", outside)
+	}
+}

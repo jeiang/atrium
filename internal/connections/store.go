@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"slices"
 	"strings"
 	"sync"
@@ -691,17 +692,27 @@ func (l *Lease) Client(name string, timeout time.Duration) (*http.Client, error)
 	return client, nil
 }
 
-func guardOrigin(client *http.Client, u *url.URL) {
-	origin := u.Scheme + "://" + u.Host
+func guardOrigin(client *http.Client, base *url.URL) {
+	origin := base.Scheme + "://" + base.Host
+	prefix := base.Path
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return errors.New("stopped after 10 redirects")
 		}
-		if req.URL.Scheme+"://"+req.URL.Host != origin {
+		if req.URL.Scheme+"://"+req.URL.Host != origin || !withinPath(prefix, req.URL.Path) {
 			req.Header.Del("Authorization")
 		}
 		return nil
 	}
+}
+
+func withinPath(base, target string) bool {
+	base = path.Clean(base)
+	if base == "/" || base == "." {
+		return true
+	}
+	target = path.Clean(target)
+	return target == base || strings.HasPrefix(target, base+"/")
 }
 
 // DB returns the writable database behind a lease opened by a store; a
