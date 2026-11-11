@@ -394,12 +394,17 @@ behavior-parity target.
   their existing ledgers until their cutover.
 - Mail writes use the shared gate. Shadow mode records decisions without
   automatic mailbox writes; live automatic writes also depend on pause,
-  go-live eligibility, verification, caps, and action ledgers.
+  go-live eligibility, verification, caps, and the effect ledger.
+- Automatic mail actions, mail proposal actions and draft sends record an
+  effect before the IMAP or SMTP call. An unknown outcome stays blocked until
+  the operator resolves it and is never retried automatically; an action the
+  operator has undone is not applied again; moves use COPY, STORE Deleted and
+  UID EXPUNGE.
 - The assistant creates mail folders and moves messages with direct,
-  undoable writes. Each records a held `agent_writes` intent before the IMAP
-  call; shadow mode records the intent without a mailbox write, pause and the
-  write cap apply, protected folders are refused, and undo moves messages
-  back or deletes a folder only while it is empty.
+  undoable writes through the effect ledger; shadow mode records the effect
+  without a mailbox write, pause and the write cap apply, protected folders
+  are refused, and undo moves messages back or deletes a folder only while it
+  is empty.
 - Calendar writes record an intent in `agent_writes` before the external
   call. A write whose outcome is unknown stays blocked; further writes to the
   same calendar are refused until the operator resolves it with
