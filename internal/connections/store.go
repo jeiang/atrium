@@ -177,6 +177,11 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 	if s.d == nil {
 		return errors.New("connections: host reconciliation needs a writable database")
 	}
+	if accountSync != nil && accountSync.Validate != nil {
+		if err := accountSync.Validate(ctx, s.host); err != nil {
+			return err
+		}
+	}
 	declared := map[string]bool{}
 	for _, id := range sortedKeys(s.host.Connections) {
 		declared[id] = true
@@ -212,13 +217,18 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 				return err
 			}
 		}
+		if accountSync != nil && accountSync.Reconcile != nil {
+			if err := accountSync.Reconcile(ctx, tx, s.host); err != nil {
+				return err
+			}
+		}
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	if accountReconciler != nil {
-		return accountReconciler(ctx, s)
+	if accountSync != nil && accountSync.Reload != nil {
+		return accountSync.Reload(ctx, s)
 	}
 	return nil
 }

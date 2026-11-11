@@ -62,7 +62,11 @@ func Password(lease *connections.Lease, account string) (string, error) {
 }
 
 func init() {
-	connections.SetAccountReconciler(reconcileAccounts)
+	connections.SetAccountSync(&connections.AccountSync{
+		Validate:  validateHostAccounts,
+		Reconcile: reconcileAccounts,
+		Reload:    reloadAccounts,
+	})
 	config.RegisterHostAccounts(HostAccounts)
 }
 
@@ -116,39 +120,42 @@ func HostAccounts(host config.Host) ([]config.AccountSpec, map[string]string, er
 	return list, passwords, nil
 }
 
-func reconcileAccounts(ctx context.Context, store *connections.Store) error {
-	d := store.DB()
-	if d == nil {
-		return nil
-	}
-	list, _, err := HostAccounts(config.From(ctx).Host())
+func validateHostAccounts(_ context.Context, host config.Host) error {
+	_, _, err := HostAccounts(host)
+	return err
+}
+
+func reconcileAccounts(ctx context.Context, tx *sql.Tx, host config.Host) error {
+	list, _, err := HostAccounts(host)
 	if err != nil {
 		return err
 	}
 	keep := make(map[string]bool, len(list))
-	err = d.WithTx(ctx, func(tx *sql.Tx) error {
-		for _, a := range list {
-			keep[a.Name] = true
-			if err := config.SavePinnedAccount(ctx, tx, a, string(ID(a.Name)), stamp()); err != nil {
-				return err
-			}
-		}
-		pinned, err := config.PinnedAccounts(ctx, tx)
-		if err != nil {
+	for _, a := range list {
+		keep[a.Name] = true
+		if err := config.SavePinnedAccount(ctx, tx, a, string(ID(a.Name)), stamp()); err != nil {
 			return err
 		}
-		for _, id := range pinned {
-			if keep[id] {
-				continue
-			}
-			if err := config.DeleteStoredAccount(ctx, tx, id); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
+	}
+	pinned, err := config.PinnedAccounts(ctx, tx)
 	if err != nil {
 		return err
+	}
+	for _, id := range pinned {
+		if keep[id] {
+			continue
+		}
+		if err := config.DeleteStoredAccount(ctx, tx, id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func reloadAccounts(ctx context.Context, store *connections.Store) error {
+	d := store.DB()
+	if d == nil {
+		return nil
 	}
 	return config.From(ctx).LoadStoredAccounts(ctx, d.Read)
 }

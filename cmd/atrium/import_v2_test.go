@@ -2124,3 +2124,76 @@ capabilities = ["discovery", "client_auth"]
 	}
 	return path
 }
+func importHostConfigMail(t *testing.T, dir, passwordFile, login string) string {
+	t.Helper()
+	base, err := os.ReadFile(importHostConfig(t, dir, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(base) + mailConnection("icloud", "icloud", login, passwordFile, true)
+	path := filepath.Join(dir, "host.toml")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestImportV2RefusesAnEmptyHostCredentialWithoutLosingTheDatabasePassword(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	const appPassword = "imported-app-pass"
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_password_icloud', %q, 1762000800, 'fixture')", appPassword))
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	dest := filepath.Join(dir, "atrium.db")
+	d := mustConnect(t, dest)
+	defer func() { _ = d.Close() }()
+	if got := importValue(t, d.Read, "SELECT source FROM connection_credentials WHERE connection_id = 'mail/icloud' AND slot = 'mail/icloud/password'"); got != "database" {
+		t.Fatalf("the imported credential source is %q", got)
+	}
+
+	empty := filepath.Join(dir, "empty.password")
+	if err := os.WriteFile(empty, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	host := importHostConfigMail(t, dir, empty, "operator@icloud.invalid")
+
+	booted := runImportApp(t, importTestAppHost(t, dir, clock, host), "connections", "list")
+	if booted.code == cli.ExitOK || !strings.Contains(booted.stderr, "is empty") {
+		t.Fatalf("boot with an empty host credential: exit %d stdout %q stderr %q", booted.code, booted.stdout, booted.stderr)
+	}
+	if strings.Contains(booted.stdout+booted.stderr, appPassword) {
+		t.Error("the failed boot printed the database password")
+	}
+
+	var credSource, value string
+	if err := d.Read.QueryRow("SELECT source, value FROM connection_credentials WHERE connection_id = 'mail/icloud' AND slot = 'mail/icloud/password'").Scan(&credSource, &value); err != nil {
+		t.Fatal(err)
+	}
+	if credSource != "database" || value != appPassword {
+		t.Errorf("the failed boot changed the credential to source %q value %q", credSource, value)
+	}
+	if got := importValue(t, d.Read, "SELECT config_source FROM connections WHERE id = 'mail/icloud'"); got != "operator" {
+		t.Errorf("the failed boot changed the connection source to %q", got)
+	}
+	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM mail_accounts WHERE id = 'icloud' AND enabled = 1"); n != 1 {
+		t.Errorf("%d enabled icloud accounts after the failed boot", n)
+	}
+
+	var opened int
+	t.Cleanup(imapclient.UseDialer(func(context.Context, config.AccountSpec, string) (mail.Conn, error) {
+		opened++
+		return nil, fmt.Errorf("unexpected mail dial")
+	}))
+	synced := runImportApp(t, importTestAppHost(t, dir, clock, host), "sync", "--account", "icloud")
+	if synced.code == cli.ExitOK {
+		t.Fatalf("sync after the failed boot: exit %d stdout %q stderr %q", synced.code, synced.stdout, synced.stderr)
+	}
+	if opened != 0 {
+		t.Errorf("sync opened %d mail connections with an empty host credential", opened)
+	}
+}

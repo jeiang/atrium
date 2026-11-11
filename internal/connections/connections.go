@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 
 	"time"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 )
 
@@ -107,11 +109,17 @@ func (r *Registry) Kinds() []Kind {
 
 var defaults sync.Map
 
-var accountReconciler func(context.Context, *Store) error
+type AccountSync struct {
+	Validate  func(context.Context, config.Host) error
+	Reconcile func(context.Context, *sql.Tx, config.Host) error
+	Reload    func(context.Context, *Store) error
+}
 
-// SetAccountReconciler registers the owner that materializes account rows from
-// host mail connections once the connection rows exist.
-func SetAccountReconciler(f func(context.Context, *Store) error) { accountReconciler = f }
+var accountSync *AccountSync
+
+// SetAccountSync registers the owner that validates host account inputs before
+// the connection transaction and materializes account rows inside it.
+func SetAccountSync(s *AccountSync) { accountSync = s }
 
 func SetDefault(q db.Querier, s *Store) { defaults.Store(q, s) }
 
