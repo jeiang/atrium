@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	kbexport "github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/serverops"
 )
 
@@ -70,6 +71,29 @@ func TestConnectionOwnedURLRowCannotRedirectTheSampler(t *testing.T) {
 	runOpsSampler(t, f, d, samplesExist(t, d))
 	if len(fake.seen()) == 0 {
 		t.Errorf("the sampler used the connection-owned URL row instead of the host connection")
+	}
+}
+
+func TestHostDeclaredModuleFlagWinsAndIsReadOnly(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, "true"))
+	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
+		t.Fatalf("settings list: exit %d stderr %q", ran.code, ran.stderr)
+	}
+	path := filepath.Join(dir, "atrium.db")
+	seedSetting(t, mustConnect(t, path), module.FlagKey(module.Mail), "false")
+
+	if got := pinRowOf(t, runSettings(t, "get", module.FlagKey(module.Mail))); got.Value != "true" || got.PinSource != "env ATRIUM_CORE_MAIL_ENABLED" {
+		t.Errorf("a database row overrode the host module flag: %+v", got)
+	}
+	got := runSettings(t, "set", module.FlagKey(module.Mail), "false")
+	if got.code != cli.ExitError || !strings.Contains(got.stderr, "pinned by env ATRIUM_CORE_MAIL_ENABLED") {
+		t.Errorf("setting a host-declared flag: exit %d stderr %q", got.code, got.stderr)
+	}
+	if value, ok := storedSetting(t, path, module.FlagKey(module.Mail)); !ok || value != "false" {
+		t.Errorf("a refused flag write changed the row: %q %v", value, ok)
+	}
+	if status, _, _ := fetch(t, http.DefaultClient, http.MethodGet, startServeIn(t, dir)+"/triage", nil); status != http.StatusOK {
+		t.Errorf("GET /triage = %d, want the host-declared flag to enable mail", status)
 	}
 }
 
