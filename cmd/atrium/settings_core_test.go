@@ -29,8 +29,8 @@ func TestCoreSettingsRejectBadValuesAndDriveTheWebLayer(t *testing.T) {
 		}
 	}
 	for _, key := range []string{"body_cap_bytes", "web_page_size", "http_timeout_seconds"} {
-		if got := runSettings(t, "set", key, "1"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "unknown key") {
-			t.Errorf("set %s: exit %d stderr %q, want an unknown-key refusal", key, got.code, got.stderr)
+		if got := runSettings(t, "set", key, "1"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "compiled constant") {
+			t.Errorf("set %s: exit %d stderr %q, want a compiled-constant refusal", key, got.code, got.stderr)
 		}
 	}
 	if got := runSettings(t, "set", "tz", "America/Barbados"); got.code != cli.ExitOK {

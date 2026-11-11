@@ -180,10 +180,7 @@ func TestConnectionsTestUsesTheEmbedCAAndAPassingTestReleasesTheMailHold(t *test
 	tlsEmbed := httptest.NewTLSServer(embed.Config.Handler)
 	t.Cleanup(tlsEmbed.Close)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
-	unsetEnv(t, settingEnv(endpoint.KeyChatURL))
-	if got := runSettings(t, "set", endpoint.KeyChatURL, chat.URL+"/v1"); got.code != cli.ExitOK {
-		t.Fatalf("set chat URL: %d %q", got.code, got.stderr)
-	}
+	setEnv(t, settingEnv(endpoint.KeyChatURL), chat.URL+"/v1")
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, tlsEmbed.URL+"/v1", "embeddinggemma", ""))
 	if untrusted := runApp(t, "connections", "test", "service/embedding"); untrusted.code != cli.ExitError || !strings.Contains(untrusted.stdout+untrusted.stderr, "certificate") {
 		t.Fatalf("test without the embed CA: %d %q", untrusted.code, untrusted.stdout+untrusted.stderr)
