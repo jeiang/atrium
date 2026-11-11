@@ -276,27 +276,11 @@ behavior-parity target.
   recording the retired key id in `db_key_history`; it refuses unless it can
   take exclusive access, so the atrium units and timers using the database must be stopped), writes encrypted
   DB-only backups through the SQLite backup API, runs SQL from standard
-  input, and checks integrity with FTS5 and vec0 counts. The v2 schema is
-  the baseline in `internal/db/schema/` (migration 1, frozen since v2
-  shipped to artemis on 2026-11-08) plus additive migrations in
-  `internal/db/migrate.go`; migration 2 adds `threads.tainted_at`,
-  migration 3 the package tracker columns and `package_events`,
-  migration 4 `push_subscriptions`, migration 5 the taint kinds
-  `threads.taint_private` and `threads.taint_web` (threads tainted before
-  it get both), and migration 6 `threads.marks`, a bitmask (untrusted 1,
-  pii 2, messages 4, personal 8) backfilled from the taint columns
-  (`taint_web` → untrusted, `taint_private` → pii, messages and personal),
-  migration 7 the knowledge store: `kb_records`, its FTS5 table and
-  triggers, `projects.private` and one `embed_kb_<generation>` vec0 table per
-  existing embedding generation, migration 8 `export_pages`, the
-  record-to-page mapping of the knowledge export, migration 9
-  `ops_samples`, the server-ops sampler's typed samples (14-day retention),
-  and migration 10 `ops_findings`, the worker's findings; migration 10 also
-  deletes the ops rows the sampler and worker once wrote to `kb_records`.
-  Migration 11 adds `memory_state` and copies the memory backfill
-  timestamp into it from the `backfill_done` settings row, which is no
-  longer a setting.
-  `taint_private` and `taint_web` are dormant after migration 6: no longer
+  input, and checks integrity with FTS5 and vec0 counts. The v3 baseline is
+  the schema in `internal/db/schema/`, created by migration 1 as a single
+  step. The schema files are edited directly until the freeze in phase 11;
+  every later change is an additive migration in `internal/db/migrate.go`.
+  `taint_private` and `taint_web` are dormant: no longer
   read or written, and kept because dropping them would rewrite the table.
   `atrium db import-v1` is the only path from a v1
   database: it copies the learned rules, corrections, routing decisions and

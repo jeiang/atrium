@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -23,6 +24,16 @@ import (
 type opsGrafanaRequest struct {
 	Method string
 	Path   string
+}
+
+func runIn(t *testing.T, dir string, args ...string) (int, string, string) {
+	t.Helper()
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	cmd := cliExitProcessArgs(t, args)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	return exitCode(cmd.Run()), stdout.String(), stderr.String()
 }
 
 type fakeOpsGrafana struct {
@@ -150,47 +161,6 @@ func samplesExist(t *testing.T, d *db.DB) func() bool {
 
 const serveropsJobName = "ops-sampler"
 
-func TestSchemaVersionEightMigratesToOpsSamples(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "atrium.db")
-	if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
-		t.Fatalf("settings list: exit %d %s", code, stderr)
-	}
-	d := mustConnect(t, path)
-	if _, err := d.Write.Exec("DROP TABLE ops_samples"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.Write.Exec("DELETE FROM schema_migrations WHERE version = 9"); err != nil {
-		t.Fatal(err)
-	}
-	_ = d.Close()
-	if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
-		t.Fatalf("settings list after removing migration 9: exit %d %s", code, stderr)
-	}
-	d = mustConnect(t, path)
-	var n int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'ops_samples'").Scan(&n); err != nil || n != 1 {
-		t.Errorf("ops_samples after migration = %d, %v, want one table", n, err)
-	}
-	var version int
-	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version != 11 {
-		t.Errorf("schema version = %d, %v, want %d", version, err, db.LatestSchemaVersion())
-	}
-	_ = d.Close()
-	fresh := t.TempDir()
-	if code, _, stderr := runIn(t, fresh, "settings", "list"); code != cli.ExitOK {
-		t.Fatalf("settings list on a fresh database: exit %d %s", code, stderr)
-	}
-	migrated, created := schemaDump(t, path), schemaDump(t, filepath.Join(fresh, "atrium.db"))
-	if !slices.Equal(migrated, created) {
-		for _, line := range migrated {
-			if !slices.Contains(created, line) {
-				t.Errorf("only in the migrated schema: %s", line)
-			}
-		}
-	}
-}
-
 func TestOpsSamplerWritesSamplesAndNoKnowledge(t *testing.T) {
 	fake := &fakeOpsGrafana{alerts: []map[string]any{
 		{"state": "firing", "labels": map[string]any{"alertname": "HighCPU", "instance": "node-a:9100"}},
@@ -308,102 +278,4 @@ func TestOpsSamplerNeverWritesToGrafana(t *testing.T) {
 	}
 }
 
-func TestSchemaVersionNineDatabaseDropsOpsRecords(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "atrium.db")
-	if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
-		t.Fatalf("settings list: exit %d %s", code, stderr)
-	}
-	d := mustConnect(t, path)
-	if _, err := d.Write.Exec("DROP TABLE ops_findings"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.Write.Exec("DELETE FROM schema_migrations WHERE version = 10"); err != nil {
-		t.Fatal(err)
-	}
-	now := float64(time.Now().Unix())
-	res, err := d.Write.Exec("INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, origin, pinned, embedded, created_at, updated_at) "+
-		"VALUES ('Host node-a is down', '[]', 'up is down', 'ops', NULL, 0, 1, 'worker', 'finding:node-a:up', 0, 0, ?, ?)", now, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	findingID, _ := res.LastInsertId()
-	res, err = d.Write.Exec("INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, origin, pinned, embedded, created_at, updated_at) "+
-		"VALUES ('node-a up', '[]', 'up at 10:00', 'ops', NULL, 0, 0, 'worker', 'ops:node-a:up', 0, 0, ?, ?)", now, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	factID, _ := res.LastInsertId()
-	res, err = d.Write.Exec("INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, pinned, embedded, created_at, updated_at) "+
-		"VALUES ('Boiler code', '[]', '4417', 'work', NULL, 0, 0, 'operator', 0, 0, ?, ?)", now, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	keepID, _ := res.LastInsertId()
-	blob := make([]byte, 768*4)
-	for _, id := range []int64{findingID, factID, keepID} {
-		if _, err := d.Write.Exec("INSERT INTO embed_kb_0 (rowid, embedding) VALUES (?, ?)", id, blob); err != nil {
-			t.Fatal(err)
-		}
-	}
-	if _, err := d.Write.Exec("INSERT INTO export_pages (target, record_id, remote_id, hash, updated_at) VALUES ('notion', ?, 'page', 'hash', ?)", findingID, now); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.Write.Exec("INSERT INTO agent_writes (ts, tool, target, after_json, undo_json) VALUES (?, 'ops_finding', ?, '{}', '{}')", now, "kb:"+fmt.Sprint(findingID)); err != nil {
-		t.Fatal(err)
-	}
-	_ = d.Close()
-	if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
-		t.Fatalf("settings list after migration: exit %d %s", code, stderr)
-	}
-	d = mustConnect(t, path)
-	defer func() { _ = d.Close() }()
-	var opsRows int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_records WHERE scope = 'ops'").Scan(&opsRows); err != nil || opsRows != 0 {
-		t.Errorf("ops knowledge rows = %d, %v, want none", opsRows, err)
-	}
-	var kept int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_records WHERE id = ?", keepID).Scan(&kept); err != nil || kept != 1 {
-		t.Errorf("work record after migration = %d, %v, want one", kept, err)
-	}
-	for _, id := range []int64{findingID, factID} {
-		var fts, emb, pages int
-		if err := d.Read.QueryRow("SELECT COUNT(*) FROM kb_fts WHERE rowid = ?", id).Scan(&fts); err != nil || fts != 0 {
-			t.Errorf("fts rows for %d = %d, %v", id, fts, err)
-		}
-		if err := d.Read.QueryRow("SELECT COUNT(*) FROM embed_kb_0 WHERE rowid = ?", id).Scan(&emb); err != nil || emb != 0 {
-			t.Errorf("embedding rows for %d = %d, %v", id, emb, err)
-		}
-		if err := d.Read.QueryRow("SELECT COUNT(*) FROM export_pages WHERE record_id = ?", id).Scan(&pages); err != nil || pages != 0 {
-			t.Errorf("export pages for %d = %d, %v", id, pages, err)
-		}
-	}
-	var purged int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM agent_writes WHERE target = ? AND undo_json = '{\"purged\":true}'", "kb:"+fmt.Sprint(findingID)).Scan(&purged); err != nil || purged != 1 {
-		t.Errorf("agent writes purged = %d, %v, want one", purged, err)
-	}
-	var findings int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'ops_findings'").Scan(&findings); err != nil || findings != 1 {
-		t.Errorf("ops_findings after migration = %d, %v, want one table", findings, err)
-	}
-	var version int
-	if err := d.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() || version != 11 {
-		t.Errorf("schema version = %d, %v, want %d", version, err, db.LatestSchemaVersion())
-	}
-	_ = d.Close()
-	if code, stdout, stderr := runIn(t, dir, "db", "check"); code != cli.ExitOK || !strings.Contains(stdout, "integrity_check: ok") {
-		t.Fatalf("db check: exit %d stdout %q stderr %q", code, stdout, stderr)
-	}
-	fresh := t.TempDir()
-	if code, _, stderr := runIn(t, fresh, "settings", "list"); code != cli.ExitOK {
-		t.Fatalf("settings list on a fresh database: exit %d %s", code, stderr)
-	}
-	migrated, created := schemaDump(t, path), schemaDump(t, filepath.Join(fresh, "atrium.db"))
-	if !slices.Equal(migrated, created) {
-		for _, line := range migrated {
-			if !slices.Contains(created, line) {
-				t.Errorf("only in the migrated schema: %s", line)
-			}
-		}
-	}
-}
+
