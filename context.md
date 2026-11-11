@@ -284,11 +284,8 @@ behavior-parity target.
   a message naming `atrium db import-v2`.
   `taint_private` and `taint_web` are dormant: no longer
   read or written, and kept because dropping them would rewrite the table.
-  `atrium db import-v1` is the only path from a v1
-  database: it copies the learned rules, corrections, routing decisions and
-  the unsent message history their derivation reads into a fresh v2
-  database; mail, threads, drafts, proposals, media, Notion, calendar and
-  settings are rebuilt by re-sync or re-entry. Every settings write and secret change appends
+  v1 data reaches v3 through v2: the v2 binary imports it, and v3 imports
+  the v2 database with `atrium db import-v2`. Every settings write and secret change appends
   a row to the append-only `settings_audit` table (old and new value, or
   only `changed` for secrets; actor and source), listed read-only in
   `/activity`. Known secret values are scrubbed from log output and

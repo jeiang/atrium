@@ -112,6 +112,5 @@ The module defines these units: `atrium-web`, `atrium-watch`, `atrium-agent-sche
 ## Upgrading
 
 - Update the flake input that pins this repository and run `nixos-rebuild switch`. The units run pending migrations when they open the database; a binary refuses a database that records a newer schema, so a downgrade needs a backup taken before the upgrade.
-- From v1: stop the atrium units and timers, take a backup with the v1 binary, update the module to v2, create a fresh v2 database with the same database key, and run `atrium-run db import-v1 <path-to-v1-db>`. The import carries only the learned-rule data; mail re-syncs and the other records are re-entered or rebuilt. v2 refuses a v1 backup archive with a message pointing at `atrium db import-v1`.
 - The old `stateDir/vdirsyncer/` directory is not read; the calendar and contacts mirrors under `stateDir/mirrors/` re-sync from the providers.
 - A database key must be kept outside the host state; an archive made under a key restores only with that key, and archives made before a `db rekey` need the old key.

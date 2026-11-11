@@ -10,9 +10,6 @@ verify:
 tools-docs:
   {{dev}} go run ./cmd/toolsdocs
 
-world-fixture:
-  {{dev}} go run ./tools/worldgen testdata/golden/atrium.db testdata/golden
-
 e2e pattern pkg="./cmd/atrium":
   {{dev}} go test -count=1 -run "{{pattern}}" {{pkg}}
 
