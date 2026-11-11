@@ -1005,24 +1005,31 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, results []Res
 		failedTest = revision
 	}
 	var previous State
-	if err := s.d.Read.QueryRowContext(ctx, "SELECT state FROM connections WHERE id = ? AND revision = ?", id, revision).Scan(&previous); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return s.Get(ctx, id)
+	updated := false
+	if err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
+		if err := tx.QueryRowContext(ctx, "SELECT state FROM connections WHERE id = ? AND revision = ?", id, revision).Scan(&previous); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			return err
 		}
+		res, err := tx.ExecContext(ctx,
+			"UPDATE connections SET state = ?, reason = ?, checked_at = ?, last_ok_at = COALESCE(?, last_ok_at), reauth_at = COALESCE(?, reauth_at), results_json = ?, updated_at = ?, "+
+				"failed_test_revision = CASE WHEN ? THEN ? ELSE failed_test_revision END WHERE id = ? AND revision = ?",
+			state, reason, now, lastOK, reauthAt, string(raw), now, boolInt(tested), failedTest, id, revision)
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		updated = n > 0
+		return nil
+	}); err != nil {
 		return View{}, err
 	}
-	res, err := s.d.Write.ExecContext(ctx,
-		"UPDATE connections SET state = ?, reason = ?, checked_at = ?, last_ok_at = COALESCE(?, last_ok_at), reauth_at = COALESCE(?, reauth_at), results_json = ?, updated_at = ?, "+
-			"failed_test_revision = CASE WHEN ? THEN ? ELSE failed_test_revision END WHERE id = ? AND revision = ?",
-		state, reason, now, lastOK, reauthAt, string(raw), now, boolInt(tested), failedTest, id, revision)
-	if err != nil {
-		return View{}, err
-	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return View{}, err
-	}
-	if n == 0 {
+	if !updated {
 		return s.Get(ctx, id)
 	}
 	s.announce(ctx, id, previous, state, reason)
@@ -1208,47 +1215,65 @@ func (s *Store) Disconnect(ctx context.Context, id ID) error {
 
 func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Result) error {
 	var (
-		currentRevision int64
-		resultsJSON     string
-		previous        State
+		previous State
+		state    State
+		reason   string
+		updated  bool
 	)
-	if err := s.d.Read.QueryRowContext(ctx, "SELECT revision, results_json, state FROM connections WHERE id = ?", id).
-		Scan(&currentRevision, &resultsJSON, &previous); err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return UnknownID(id)
+	err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
+		var (
+			currentRevision int64
+			resultsJSON     string
+		)
+		if err := tx.QueryRowContext(ctx, "SELECT revision, results_json, state FROM connections WHERE id = ?", id).
+			Scan(&currentRevision, &resultsJSON, &previous); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return UnknownID(id)
+			}
+			return err
 		}
-		return err
-	}
-	if currentRevision != revision {
-		return &Conflict{ID: id, Revision: revision}
-	}
-	var results []Result
-	if resultsJSON != "" {
-		_ = json.Unmarshal([]byte(resultsJSON), &results)
-	}
-	replaced := false
-	for i := range results {
-		if results[i].Capability == result.Capability {
-			results[i] = result
-			replaced = true
+		if currentRevision != revision {
+			return &Conflict{ID: id, Revision: revision}
 		}
-	}
-	if !replaced {
-		results = append(results, result)
-	}
-	state, reason := aggregate(results, nil)
-	raw, err := json.Marshal(results)
+		var results []Result
+		if resultsJSON != "" {
+			_ = json.Unmarshal([]byte(resultsJSON), &results)
+		}
+		replaced := false
+		for i := range results {
+			if results[i].Capability == result.Capability {
+				results[i] = result
+				replaced = true
+			}
+		}
+		if !replaced {
+			results = append(results, result)
+		}
+		state, reason = aggregate(results, nil)
+		raw, err := json.Marshal(results)
+		if err != nil {
+			return err
+		}
+		now := s.stamp()
+		res, err := tx.ExecContext(ctx,
+			"UPDATE connections SET state = ?, reason = ?, checked_at = ?, results_json = ?, updated_at = ? WHERE id = ? AND revision = ?",
+			state, reason, now, string(raw), now, id, revision)
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		updated = n > 0
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	now := s.stamp()
-	_, err = s.d.Write.ExecContext(ctx,
-		"UPDATE connections SET state = ?, reason = ?, checked_at = ?, results_json = ?, updated_at = ? WHERE id = ? AND revision = ?",
-		state, reason, now, string(raw), now, id, revision)
-	if err != nil {
-		return err
+	if updated {
+		s.announce(ctx, id, previous, state, reason)
 	}
-	s.announce(ctx, id, previous, state, reason)
 	return nil
 }
 
