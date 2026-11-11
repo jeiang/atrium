@@ -93,7 +93,6 @@ func watch(d *web.Deps) {
 		log.Warn("connection health check failed", logx.Err, err.Error())
 		return
 	}
-	checked := map[connections.ID]time.Time{}
 	if err := store.CheckStale(ctx); err != nil && ctx.Err() == nil {
 		log.Warn("connection health check failed", logx.Err, err.Error())
 	}
@@ -108,27 +107,26 @@ func watch(d *web.Deps) {
 				log.Warn("connection health check failed", logx.Err, err.Error())
 			}
 		case failed := <-connections.Failed():
-			if time.Since(checked[failed.ID]) < recheckAfter || !working(ctx, d, failed.ID) {
+			if !recheckable(ctx, store, failed.ID) {
 				continue
 			}
-			view, err := store.Test(ctx, failed.ID)
-			if err != nil {
-				if ctx.Err() == nil {
-					log.Warn("connection health check failed", logx.Integration, string(failed.ID), logx.Err, err.Error())
-				}
-				continue
-			}
-			if view.State == connections.OK {
-				checked[failed.ID] = time.Now()
+			if _, err := store.CheckOne(ctx, failed.ID); err != nil && ctx.Err() == nil {
+				log.Warn("connection health check failed", logx.Integration, string(failed.ID), logx.Err, err.Error())
 			}
 		}
 	}
 }
 
-func working(ctx context.Context, d *web.Deps, id connections.ID) bool {
-	var state string
-	err := d.DB.Read.QueryRowContext(ctx, "SELECT state FROM connections WHERE id = ?", id).Scan(&state)
-	return err != nil || state != string(connections.Failing) && state != string(connections.NeedsReauth)
+func recheckable(ctx context.Context, store *connections.Store, id connections.ID) bool {
+	view, err := store.Get(ctx, id)
+	if err != nil {
+		return false
+	}
+	switch view.State {
+	case connections.Failing, connections.NeedsReauth, connections.Disabled, connections.Unconfigured:
+		return false
+	}
+	return view.CheckedAt == nil || time.Since(*view.CheckedAt) >= recheckAfter
 }
 
 type handlers struct{ d *web.Deps }

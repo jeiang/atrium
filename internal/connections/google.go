@@ -388,7 +388,7 @@ func (s *Store) EnsureGoogle(ctx context.Context) error {
 	for _, g := range googleGrantList {
 		caps = append(caps, Capability{Name: g.Name, Enabled: true, Config: json.RawMessage("{}")})
 	}
-	return s.Ensure(ctx, GoogleID, KindGoogle, "Google", caps)
+	return s.Ensure(ctx, GoogleID, KindGoogle, "Google", nil, caps)
 }
 
 // GoogleGrantSlot returns the credential slot holding a capability's refresh

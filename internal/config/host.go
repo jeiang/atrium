@@ -403,17 +403,22 @@ func (h *Host) deriveHostConnections() {
 			"proxy":   h.Values["grafana_proxy"],
 		}, []string{"viewer"}, true)
 	}
-	h.deriveService("service/weather", "Open-Meteo", map[string]string{
-		"url":           h.Values["weather_open_meteo_url"],
-		"geocoding_url": h.Values["weather_geocoding_url"],
-	}, map[string]string{
-		"ca_file": h.Values["open_meteo_ca_file"],
-		"proxy":   h.Values["open_meteo_proxy"],
-	}, []string{"forecast", "geocoding"}, true)
-	h.deriveService("service/webfetch", "Web fetch", map[string]string{
-		"url": "https://example.com/",
-	}, nil, []string{"egress"}, false)
-	if _, ok := h.Connections["service/tmdb"]; !ok {
+	weather := h.explicit("weather_open_meteo_url", "weather_geocoding_url", "open_meteo_ca_file", "open_meteo_proxy")
+	if _, declared := h.Connections["service/weather"]; declared || weather {
+		h.deriveService("service/weather", "Open-Meteo", map[string]string{
+			"url":           h.Values["weather_open_meteo_url"],
+			"geocoding_url": h.Values["weather_geocoding_url"],
+		}, map[string]string{
+			"ca_file": h.Values["open_meteo_ca_file"],
+			"proxy":   h.Values["open_meteo_proxy"],
+		}, []string{"forecast", "geocoding"}, weather)
+	}
+	if _, declared := h.Connections["service/webfetch"]; declared {
+		h.deriveService("service/webfetch", "Web fetch", map[string]string{
+			"url": "https://example.com/",
+		}, nil, []string{"egress"}, false)
+	}
+	if _, declared := h.Connections["service/tmdb"]; !declared && h.explicit("media_tmdb_url", "media_tmdb_images_url", "tmdb_ca_file", "tmdb_proxy") {
 		h.deriveService("service/tmdb", "TMDB", map[string]string{
 			"url":        h.Values["media_tmdb_url"],
 			"images_url": h.Values["media_tmdb_images_url"],
@@ -422,18 +427,20 @@ func (h *Host) deriveHostConnections() {
 			"proxy":   h.Values["tmdb_proxy"],
 		}, []string{"api", "images"}, false)
 	}
-	if _, ok := h.Connections["service/eztv"]; !ok {
+	if _, declared := h.Connections["service/eztv"]; !declared && h.explicit("media_eztv_url") {
 		h.deriveService("service/eztv", "EZTV", map[string]string{
 			"url": h.Values["media_eztv_url"],
 		}, nil, []string{"indexer"}, false)
 	}
-	h.deriveService("service/embedding", "Embedding", map[string]string{
-		"url":   h.Values["mail_embed_url"],
-		"model": h.Values["mail_embed_model"],
-	}, map[string]string{
-		"ca_file": h.Values["mail_embed_ca_file"],
-		"proxy":   h.Values["mail_embed_proxy"],
-	}, []string{"embeddings"}, false)
+	if _, declared := h.Connections["service/embedding"]; declared || h.explicit("mail_embed_url", "mail_embed_model", "mail_embed_ca_file", "mail_embed_proxy") {
+		h.deriveService("service/embedding", "Embedding", map[string]string{
+			"url":   h.Values["mail_embed_url"],
+			"model": h.Values["mail_embed_model"],
+		}, map[string]string{
+			"ca_file": h.Values["mail_embed_ca_file"],
+			"proxy":   h.Values["mail_embed_proxy"],
+		}, []string{"embeddings"}, false)
+	}
 	h.deriveService("service/ship24", "Ship24", map[string]string{
 		"url": h.Values["mail_ship24_url"],
 	}, map[string]string{
@@ -456,6 +463,15 @@ func (h *Host) deriveHostConnections() {
 			"subject": h.Values["webpush_subject"],
 		}, map[string]string{"ca_file": ca}, []string{"delivery"}, false)
 	}
+}
+
+func (h *Host) explicit(keys ...string) bool {
+	for _, key := range keys {
+		if h.Sources[key] != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *Host) deriveService(id, label string, config, transport map[string]string, capabilities []string, override bool) {

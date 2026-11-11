@@ -181,12 +181,12 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		"job_runs: dropped 2",
 		"schema_migrations: dropped 11",
 		"setting money_since: dropped",
-		"connection service/anthropic: created from host settings",
+		"connection service/anthropic: created from operator settings",
 		"connection service/anthropic: credential api_key carried",
-		"connection service/weather: created from host settings",
-		"connection service/webfetch: created from host settings",
-		"connection service/tmdb: created from host settings",
-		"connection service/eztv: created from host settings",
+		"connection service/weather: created from operator settings",
+		"connection service/webfetch: created from operator settings",
+		"connection service/tmdb: created from operator settings",
+		"connection service/eztv: created from operator settings",
 		"connection service/webpush: created from operator settings",
 		`oidc client secret: no source secret; set connections."service/oidc".credential_files.client_secret in the host configuration`,
 	} {
@@ -557,15 +557,15 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 	}
 	for _, want := range []string{
 		"connection service/anthropic: credential api_key carried",
-		"connection service/grafana: created from host settings",
+		"connection service/grafana: created from operator settings",
 		"connection service/grafana: credential viewer_token carried",
-		"connection service/notion: created from host settings",
+		"connection service/notion: created from operator settings",
 		"connection service/notion: credential token carried",
-		"connection service/tmdb: created from host settings",
+		"connection service/tmdb: created from operator settings",
 		"connection service/tmdb: credential read_token carried",
-		"connection service/eztv: created from host settings",
-		"connection service/weather: created from host settings",
-		"connection service/webfetch: created from host settings",
+		"connection service/eztv: created from operator settings",
+		"connection service/weather: created from operator settings",
+		"connection service/webfetch: created from operator settings",
 	} {
 		if !strings.Contains(got.stdout, want) {
 			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
@@ -782,7 +782,7 @@ func TestImportV2CarriesTheEmbeddingConnectionAndItsKey(t *testing.T) {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 	for _, want := range []string{
-		"connection service/embedding: created from host settings",
+		"connection service/embedding: created from operator settings",
 		"connection service/embedding: credential bearer carried",
 		"the embed probe moved to connection service/embedding",
 		"setting mail_embed_batch: drop-tuning -> internal/endpoint/tuning.go:TuningMailEmbedBatch; source value 1 differs from the compiled default 16",
@@ -878,7 +878,7 @@ func TestImportV2CarriesTheShip24ConnectionAndPollsWithTheCompiledWindow(t *test
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 	for _, want := range []string{
-		"connection service/ship24: created from host settings",
+		"connection service/ship24: created from operator settings",
 		"connection service/ship24: credential api_key carried",
 		"setting mail_ship24_poll_days: drop-tuning -> internal/mail/tracking/tuning.go:TuningMailShip24PollDays; source value 1 differs from the compiled default 30",
 	} {

@@ -93,13 +93,19 @@ func (s *Store) Open(ctx context.Context, id ID) (*Lease, error) {
 }
 
 // Ensure materializes an operator-owned built-in connection without touching a
-// host-owned record or an existing operator configuration.
-func (s *Store) Ensure(ctx context.Context, id ID, kind Kind, label string, caps []Capability) error {
+// host-owned record or an existing operator configuration. A host-owned record
+// the host no longer declares is adopted, because the built-in needs no host
+// declaration.
+func (s *Store) Ensure(ctx context.Context, id ID, kind Kind, label string, config map[string]string, caps []Capability) error {
 	if s.d == nil {
 		return errors.New("connections: built-in materialization needs a writable database")
 	}
 	if _, ok := s.reg.Lookup(kind); !ok {
 		return UnknownKind(kind)
+	}
+	configJSON, err := json.Marshal(compact(config))
+	if err != nil {
+		return err
 	}
 	now := s.stamp()
 	return s.d.WithTx(ctx, func(tx *sql.Tx) error {
@@ -109,14 +115,22 @@ func (s *Store) Ensure(ctx context.Context, id ID, kind Kind, label string, caps
 		case errors.Is(err, sql.ErrNoRows):
 			if _, err := tx.ExecContext(ctx,
 				"INSERT INTO connections (id, kind, label, config_source, config_json, transport_json, revision, enabled, state, created_at, updated_at) "+
-					"VALUES (?, ?, ?, 'operator', '{}', '{}', 1, 1, 'untested', ?, ?)",
-				id, kind, labelOr(label, string(id)), now, now); err != nil {
+					"VALUES (?, ?, ?, 'operator', ?, '{}', 1, 1, 'untested', ?, ?)",
+				id, kind, labelOr(label, string(id)), string(configJSON), now, now); err != nil {
 				return err
 			}
 		case err != nil:
 			return err
 		case source == SourceHost:
-			return nil
+			if _, declared := s.host.Connections[string(id)]; declared {
+				return nil
+			}
+			if _, err := tx.ExecContext(ctx,
+				"UPDATE connections SET config_source = 'operator', enabled = 1, state = 'untested', reason = '', "+
+					"checked_at = NULL, last_ok_at = NULL, results_json = '{}', revision = revision + 1, updated_at = ? WHERE id = ?",
+				now, id); err != nil {
+				return err
+			}
 		}
 		for _, c := range caps {
 			config := c.Config
@@ -278,8 +292,9 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 	case err != nil:
 		return err
 	default:
-		hostOwns := currentSource == SourceHost
-		changed := currentTransport != string(transportJSON) || hostOwns && currentConfig != string(configJSON)
+		takeover := currentSource == SourceOperator
+		hostOwns := currentSource == SourceHost || takeover
+		changed := takeover || currentTransport != string(transportJSON) || hostOwns && currentConfig != string(configJSON)
 		revision := currentRevision
 		if changed {
 			revision++
@@ -296,7 +311,7 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 			return err
 		}
 		if hostOwns && changed {
-			if _, err := tx.ExecContext(ctx, "UPDATE connections SET config_json = ? WHERE id = ?", string(configJSON), id); err != nil {
+			if _, err := tx.ExecContext(ctx, "UPDATE connections SET config_json = ?, config_source = 'host' WHERE id = ?", string(configJSON), id); err != nil {
 				return err
 			}
 		}

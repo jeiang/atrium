@@ -81,6 +81,12 @@ func (s *Store) checkWhere(ctx context.Context, keep func(View) bool) error {
 	return nil
 }
 
+// CheckOne re-verifies one connection, using its silent check when the
+// definition has one.
+func (s *Store) CheckOne(ctx context.Context, id ID) (View, error) {
+	return s.check(ctx, id)
+}
+
 func (s *Store) check(ctx context.Context, id ID) (View, error) {
 	lease, err := s.openLease(ctx, s.q, id, true)
 	if err != nil {
@@ -132,6 +138,8 @@ func (r reporter) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	return resp, err
 }
+
+func (r reporter) Unwrap() http.RoundTripper { return r.next }
 
 func (r reporter) CloseIdleConnections() {
 	if c, ok := r.next.(interface{ CloseIdleConnections() }); ok {

@@ -91,7 +91,7 @@ func importService(ctx context.Context, tx *sql.Tx, s ImportService, encrypted b
 	}
 	source := s.Source
 	if source == "" {
-		source = SourceHost
+		source = SourceOperator
 	}
 	enabled, state := 1, "untested"
 	if s.Enabled != nil && !*s.Enabled {
@@ -103,8 +103,8 @@ func importService(ctx context.Context, tx *sql.Tx, s ImportService, encrypted b
 			"ON CONFLICT(id) DO UPDATE SET label = excluded.label, config_json = excluded.config_json, transport_json = excluded.transport_json, "+
 			"revision = connections.revision + 1, enabled = excluded.enabled, state = excluded.state, reason = '', checked_at = NULL, last_ok_at = NULL, "+
 			"expires_at = NULL, reauth_at = NULL, results_json = '{}', updated_at = excluded.updated_at "+
-			"WHERE connections.config_source = 'host'",
-		s.ID, kind, s.Label, source, string(configJSON), string(transportJSON), enabled, state, now, now); err != nil {
+			"WHERE connections.config_source = 'host' OR ?",
+		s.ID, kind, s.Label, source, string(configJSON), string(transportJSON), enabled, state, now, now, boolInt(builtinIDs[s.ID])); err != nil {
 		return nil, err
 	}
 	lines := []string{"connection " + s.ID + ": created from " + source + " settings"}

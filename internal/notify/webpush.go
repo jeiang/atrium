@@ -145,7 +145,7 @@ func pushConnection(ctx context.Context, d *db.DB) (*connections.Lease, error) {
 		return nil, err
 	}
 	id := connections.ID(KindWebPush)
-	if err := store.Ensure(ctx, id, KindWebPush, "Web push", []connections.Capability{{Name: "delivery", Enabled: true}}); err != nil {
+	if err := store.Ensure(ctx, id, KindWebPush, "Web push", nil, []connections.Capability{{Name: "delivery", Enabled: true}}); err != nil {
 		return nil, err
 	}
 	if _, err := store.EnsureCredential(ctx, id, "vapid_private", generateVAPID); err != nil {
@@ -483,6 +483,11 @@ func pushClient(lease *connections.Lease) (*http.Client, error) {
 		return nil, err
 	}
 	t, ok := client.Transport.(*http.Transport)
+	if !ok {
+		if wrapped, is := client.Transport.(interface{ Unwrap() http.RoundTripper }); is {
+			t, ok = wrapped.Unwrap().(*http.Transport)
+		}
+	}
 	if !ok {
 		return nil, fmt.Errorf("web push: unexpected transport %T", client.Transport)
 	}
