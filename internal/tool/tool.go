@@ -67,7 +67,6 @@ type Tool struct {
 	Annotated   bool
 	Contexts    Kinds
 	Server      bool
-	Parallel    bool
 	Approval    *Approval
 }
 

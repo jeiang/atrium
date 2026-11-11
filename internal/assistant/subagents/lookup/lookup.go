@@ -20,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/subagents"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -84,7 +83,6 @@ func (l *Lookup) Tool() tool.Tool {
 		Channel:     tool.ChannelNone,
 		Marks:       tool.AllMarks,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
-		Parallel:    true,
 	}
 }
 
@@ -199,7 +197,7 @@ func (l *Lookup) handle(ctx context.Context, tc *tool.Context, args tool.Args) (
 	if err != nil {
 		return nil, err
 	}
-	project, err := parentProject(ctx, tc.DB.Read, tc.ThreadID)
+	project, err := threads.ReadAuthority(ctx, tc.DB.Read, tc.ThreadID)
 	if err != nil {
 		return nil, err
 	}
@@ -223,7 +221,8 @@ func (l *Lookup) handle(ctx context.Context, tc *tool.Context, args tool.Args) (
 		var err error
 		child, err = threads.Create(ctx, tx, now(), threads.Spec{
 			Kind: threads.Subagent, Title: &title, ParentID: &tc.ThreadID, ParentRunID: &tc.RunID,
-			ProjectID: project, Role: new(Name), Model: pricing.DefaultModel, Effort: pricing.Medium,
+			ProjectID: project.ProjectID, Role: new(Name), Model: pricing.DefaultModel, Effort: pricing.Medium,
+			Marks: project.Effective(),
 		})
 		return err
 	}); err != nil {
@@ -296,14 +295,6 @@ func (l *Lookup) runChild(ctx context.Context, tc *tool.Context, child int64, te
 		return tool.Error(fmt.Sprintf("lookup not started: %s", exceeded))
 	}
 	return err
-}
-
-func parentProject(ctx context.Context, q db.Querier, threadID int64) (*int64, error) {
-	var project *int64
-	if err := q.QueryRowContext(ctx, "SELECT project_id FROM threads WHERE id = ?", threadID).Scan(&project); err != nil {
-		return nil, err
-	}
-	return project, nil
 }
 
 func reportMarks(fields []report.Field, answer map[string]any, child tool.Marks) tool.Marks {

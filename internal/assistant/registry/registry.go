@@ -117,12 +117,12 @@ func (s Set) Has(name string) bool {
 		slices.ContainsFunc(s.Server, func(t tool.Tool) bool { return t.Name == name })
 }
 
-func (r *Registry) Admit(ctx context.Context, kind tool.Kind, role *string, webSearch bool, marks threads.Marks, allow Allow, q db.Querier) (Set, error) {
+func (r *Registry) candidates(ctx context.Context, kind tool.Kind, role *string, webSearch bool, marks threads.Marks, allow Allow, q db.Querier) ([]tool.Tool, Situation, Table, error) {
 	found, err := r.For(kind)
 	if err != nil {
-		return Set{}, err
+		return nil, Clean, Table{}, err
 	}
-	var candidates []tool.Tool
+	var out []tool.Tool
 	privateTools := false
 	for _, t := range found {
 		if !allow.Has(t.Name) {
@@ -136,16 +136,24 @@ func (r *Registry) Admit(ctx context.Context, kind tool.Kind, role *string, webS
 		}
 		enabled, err := r.enabled(ctx, q, t.Name)
 		if err != nil {
-			return Set{}, err
+			return nil, Clean, Table{}, err
 		}
 		if !enabled {
 			continue
 		}
 		privateTools = privateTools || t.Marks.Kinds() != 0
-		candidates = append(candidates, t)
+		out = append(out, t)
 	}
 	situation := Classify(marks.Set, PromptCarriesKnowledge(kind), privateTools)
 	table, err := r.loadTable(ctx, q)
+	if err != nil {
+		return nil, Clean, Table{}, err
+	}
+	return out, situation, table, nil
+}
+
+func (r *Registry) Admit(ctx context.Context, kind tool.Kind, role *string, webSearch bool, marks threads.Marks, allow Allow, q db.Querier) (Set, error) {
+	candidates, situation, table, err := r.candidates(ctx, kind, role, webSearch, marks, allow, q)
 	if err != nil {
 		return Set{}, err
 	}
@@ -178,12 +186,55 @@ func (r *Registry) Admit(ctx context.Context, kind tool.Kind, role *string, webS
 			}
 			t = bound
 		}
-		if t.ChannelOf != nil || (decision == Ask && !hasCard(t)) {
-			t = Gate(t, table, situation, kind)
-		}
 		set.Dispatch = append(set.Dispatch, t)
 	}
 	return set, nil
+}
+
+func (r *Registry) Authorize(ctx context.Context, q db.Querier, kind tool.Kind, role *string, webSearch bool, marks threads.Marks, allow Allow, name string, args tool.Args) (tool.Tool, Decision, error) {
+	candidates, situation, table, err := r.candidates(ctx, kind, role, webSearch, marks, allow, q)
+	if err != nil {
+		return tool.Tool{}, Denied, err
+	}
+	var found *tool.Tool
+	for i := range candidates {
+		if candidates[i].Name == name {
+			found = &candidates[i]
+			break
+		}
+	}
+	if found == nil || found.Server {
+		return tool.Tool{}, Denied, nil
+	}
+	t := *found
+	channel := t.Channel
+	if t.ChannelOf != nil {
+		channel = t.ChannelOf(args)
+	}
+	decision := table.Decide(channel, situation, kind)
+	switch {
+	case decision == Ask && hasCard(t):
+		decision = Allowed
+	case decision == Ask && kind != tool.Chat:
+		decision = Denied
+	}
+	if decision == Denied {
+		return t, Denied, nil
+	}
+	if b, ok := r.binders[t.Name]; ok && q != nil {
+		bound, keep, err := b(ctx, q, t)
+		if err != nil {
+			return tool.Tool{}, Denied, err
+		}
+		if !keep {
+			return tool.Tool{}, Denied, nil
+		}
+		if bound.Name != t.Name || bound.Effect != t.Effect || bound.Channel != t.Channel || !slices.Equal(bound.Contexts, t.Contexts) {
+			return tool.Tool{}, Denied, InvalidError(fmt.Sprintf("binder for %s changed its name, effect, channel or run kinds", t.Name))
+		}
+		t = bound
+	}
+	return t, decision, nil
 }
 
 func (r *Registry) SubagentPool() ([]tool.Tool, error) {
