@@ -660,24 +660,29 @@ Research on alternatives to embeddings (sources in the session report, not re-ve
 Delivery, settled on 2026-11-11:
 
 20. **Branch and cutover.** v3 is built on a long-lived branch and replaces v2 in one cutover. v2 stays live and frozen for the whole build, with no exception for live defects.
-21. **Database.** v3 has a new baseline schema and an importer from v2, as v2 had from v1. The importer carries: the mail learned data (rules, corrections, routing decisions, the action ledger with its undo state, write resolutions), settings and stored credentials, knowledge records, chat threads with projects and messages, media channels and the seen list, tasks, review items, mail drafts, calendar events the assistant made, and the current month's spend. Rebuilt: the mail message cache, the Notion copy, embeddings, search indexes, sessions, run internals and memory summaries. Not carried: audit history, notifications, old run and tool-call records; they remain in the v2 backup.
+21. **Database.** v3 has a new baseline schema and an importer from v2, as v2 had from v1. The importer carries: the mail learned data (rules, corrections, routing decisions, the action ledger with its undo state, write resolutions), settings and stored credentials, knowledge records, chat threads with projects and messages, media channels and the seen list, tasks, review items, mail drafts, calendar events the assistant made, and the current month's spend. The mail message rows are carried too, with their ids: corrections, decisions and the ledger reference `messages(id)`, and the routing vote reads the message features (`internal/db/schema/core.sql:28-129`). Rebuilt: the Notion copy, embeddings, search indexes, sessions, run internals and memory summaries. Not carried: audit history, notifications, old run and tool-call records; they remain in the v2 backup.
 22. **Code.** The existing code is reshaped on the branch, package by package. Working behavior is moved, not rewritten.
 23. **Scope.** The plan ends when the server is ready for an app: the API reaches all 22 areas, the stream contract, the rate limiter and token revocation exist, and the Swift client generates. The iOS app is a separate plan.
 24. **Mail safety net.** Before any mail code moves: end-to-end tests for routing, gate refusals, unknown outcomes and undo, and a replay of the learned rules on a database copy.
 25. **Rehearsal.** A trial import on a copy of the live database plus the test suite. No side-by-side run.
 26. **Cutover.** The build is unattended. The cutover deploy waits for the operator. v3 starts mail in shadow mode until the operator turns it live. Rollback after cutover restores the v2 database and loses later writes.
-27. **Embedding fallback.** Chat retrieval answers from full-text search when the embedding call is slow or down. Vectors are not truncated.
+27. **Embedding fallback.** Chat retrieval answers from full-text search when the embedding call is slow or down. Checked on 2026-11-11: chat send already does this after a 2 s window, silently (`internal/kb/retrieve.go:22,275-293`); the `kb_search` tool has no such window (`internal/kb/search.go:217-239`). v3 gives the tool the same window and logs a skipped vector step. Vectors are not truncated.
 28. **Plan artifact.** One plan document beside this review, then one GitHub issue per phase after the operator approves it.
+
+## Checked on 2026-11-11
+
+Read-only lookups on artemis and alda, made for the plan.
+
+- **The two live errors are already fixed in the deployed revision.** The `FOREIGN KEY constraint failed` on `POST /chat/{id}/messages` came from every send taking the edit path, whose memory rebuild deleted a node that a queued job referenced; fixed by `df2fd992` and `1f898e9d`. The `weekly-review` failure was a repeat-guard stop after the model saw its prompt only as a clipped memory line; fixed by `d9332912`. The next weekly run, on 2026-11-15, is its first proof.
+- **Haiku cost of the local model's work: under $1 a month.** 2.6 days of v2: 76 calls a day, 34,400 prompt and 1,600 completion tokens a day, $0.13 for 30 days at the catalog price (`internal/assistant/pricing/pricing.go:63-66`). Flags and the invitation judge are 54 of the calls; 18 are endpoint probes that disappear. The split by use is matched from timestamps, because nothing records local calls by use.
+- **The mesh hop is 61 ms of each request,** 18% of a fresh first byte (median 330 ms) and about 29% on a reused connection (median 210 ms). The application answers in under 0.3 ms on the loopback. The rest is the path from the client through Cloudflare to the edge.
+- **Tool usage is recorded** (`tool_calls`, a span and a counter). In 2.5 days, 19 of 65 registered tools were called. The window is too short to remove any tool on this evidence.
+- **Host.** The environment file holds one key, `ANTHROPIC_API_KEY`; other secrets arrive as systemd credentials. The firewall trusts the mesh interface, and the mesh policy admits the edge to port 8480.
 
 ## Not checked
 
+- The OIDC provider's client configuration, and the live bind addresses of the local model servers.
 - No test, build or browser run. Design-system findings come from templates and CSS, not rendered pages.
 - Authenticated timings through the public path, and the stream through Caddy and Cloudflare.
-- How much of the 205 to 355 ms public round trip is the NetBird hop from the edge host to artemis.
-- The contents of the host environment file, the firewall on artemis, the OIDC provider's client configuration.
-- The cause of two `FOREIGN KEY constraint failed` errors on `POST /chat/{id}/messages` and of the failed `weekly-review` job seen in the last 24 hours.
-- Whether any tool is unused in practice; there was no usage data.
-- Whether chat retrieval degrades cleanly when the embedding endpoint is down.
 - Embedding speed on artemis, the latency of any hosted embedding API, and recall after truncating or quantizing EmbeddingGemma vectors.
-- The cost of moving the local chat model's work to Haiku. The volume is low (139 s of GPU work in 61 hours); no estimate was made.
 - The reach-gauge figure was checked in a browser in both themes and both states. The anatomy skill's line-end check and 4x close-ups did not run, because they need a local Chrome.
