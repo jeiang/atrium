@@ -192,7 +192,7 @@ func TestConnectionsTestUsesTheEmbedCAAndAPassingTestReleasesTheMailHold(t *test
 		t.Fatalf("enabling mail with a failing probe: %d %q", refused.code, refused.stderr)
 	}
 
-	s := &integrationSite{t: t, dir: dir}
+	s := &connectionSite{t: t, dir: dir}
 	s.start()
 	if code, body := s.conn("/test", url.Values{"id": {"service/embedding"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "no embedding") {
 		t.Fatalf("Test of an embedder that returns no vector: %d %s", code, body)
@@ -213,7 +213,7 @@ func TestConnectionsTestReusesTheStoredEmbeddingBearerWhenTheInputIsBlank(t *tes
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
 	requireCipher(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, embed.URL+"/v1", "embeddinggemma", ""))
-	s := &integrationSite{t: t, dir: dir}
+	s := &connectionSite{t: t, dir: dir}
 	s.start()
 	if code, body := s.conn("/test", url.Values{"id": {"service/embedding"}, "credential.bearer": {"sk-embed-stored"}}); code != http.StatusOK {
 		t.Fatalf("storing the embedding bearer: %d %.300s", code, body)

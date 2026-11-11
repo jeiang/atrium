@@ -55,7 +55,7 @@ func TestConnectionHealthNotifiesOncePerTransitionAndDisconnectKeepsData(t *test
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, srv.URL, "http://anthropic.invalid"))
 	setEnv(t, settingEnv(grafanatools.KeyURL), srv.URL)
-	s := &integrationSite{t: t, dir: dir}
+	s := &connectionSite{t: t, dir: dir}
 	s.start()
 
 	if code, body := s.conn("/test", url.Values{"id": {"service/grafana"}, "api_key": {"glsa_good"}}); code != http.StatusOK {
@@ -112,5 +112,41 @@ func TestConnectionHealthNotifiesOncePerTransitionAndDisconnectKeepsData(t *test
 	}
 	if after := connectionNotices(t, dir, "Grafana"); after != before || after == 0 {
 		t.Fatalf("notifications after disconnect: %d, want the %d rows kept", after, before)
+	}
+}
+
+func TestOpsMetricsReportAConnectionStateBeforeAndAfterAFailingTest(t *testing.T) {
+	requireCipher(t)
+	srv, status := grafanaHealthServer(t)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, srv.URL, "http://anthropic.invalid"))
+	setEnv(t, settingEnv(grafanatools.KeyURL), srv.URL)
+	ops := opsAddr(t)
+	s := &connectionSite{t: t, dir: dir}
+	s.start()
+	if code, body := s.conn("/test", url.Values{"id": {"service/grafana"}, "api_key": {"glsa_good"}}); code != http.StatusOK {
+		t.Fatalf("grafana test: %d %s", code, body)
+	}
+	scrape := func() string {
+		code, body, _ := fetch(t, http.DefaultClient, http.MethodGet, ops+"/metrics", nil)
+		if code != http.StatusOK {
+			t.Fatalf("GET /metrics = %d", code)
+		}
+		return body
+	}
+	if body := scrape(); !strings.Contains(body, `atrium_integration_state{integration="service/grafana",state="ok"} 1`) {
+		t.Fatalf("metrics before a failing test:\n%s", body)
+	}
+	s.stop()
+	status.Store(http.StatusInternalServerError)
+	if got := runApp(t, "connections", "test", "service/grafana"); got.code != cli.ExitError {
+		t.Fatalf("failing test: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	s.start()
+	defer s.stop()
+	if body := scrape(); !strings.Contains(body, `atrium_integration_state{integration="service/grafana",state="failing"} 1`) {
+		t.Fatalf("metrics after a failing test:\n%s", body)
 	}
 }

@@ -68,7 +68,6 @@ type Frame struct {
 	Paused            bool
 	PendingCount      int
 	NotifyFailing     []string
-	IntegrationAlerts []string
 	Page              string
 	Toast             *Toast
 	Auth              AuthView

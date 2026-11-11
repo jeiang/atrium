@@ -21,7 +21,6 @@ import (
 	"github.com/jeiang/atrium/internal/db/dbcmd"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/kb/kbcmd"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/ledger/ledgercmd"
@@ -74,9 +73,6 @@ func (m Module) Register(mc module.Context) module.Registration {
 			}},
 			{Start: startOps},
 			{Module: startEmbed},
-			{Module: integrations.Module, Templates: integrations.Templates(), Nav: []web.NavItem{
-				{Label: "Connections", URL: "/settings/integrations", Page: "integrations", Settings: true, Order: 30},
-			}},
 			{Module: actionlinkpages.Module, Templates: actionlinkpages.Templates()},
 			{Nav: []web.NavItem{
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Auth: true, Order: 50},

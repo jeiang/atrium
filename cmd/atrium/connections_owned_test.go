@@ -89,7 +89,7 @@ func TestImportedConnectionsStayOperatorOwnedAcrossBoots(t *testing.T) {
 	}
 	_ = d.Close()
 
-	s := &integrationSite{t: t, dir: dir}
+	s := &connectionSite{t: t, dir: dir}
 	s.start()
 	s.stop()
 	s.start()
@@ -160,7 +160,7 @@ func TestAUIAAddedMailAccountStaysOperatorOwnedAcrossBoots(t *testing.T) {
 	t.Setenv("ATRIUM_SMTP_ADDR", ln.Addr().String())
 	t.Setenv("ATRIUM_SMTP_CA", ca)
 
-	s := &integrationSite{t: t, dir: dir}
+	s := &connectionSite{t: t, dir: dir}
 	s.start()
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
@@ -214,7 +214,7 @@ capabilities = ["api"]
 `)
 	setEnv(t, "ATRIUM_HOST_CONFIG", host)
 
-	s := &integrationSite{t: t, dir: dir}
+	s := &connectionSite{t: t, dir: dir}
 	s.start()
 	if source, _, _, _ := connectionRow(t, dir, "service/notion"); source != "host" {
 		t.Fatalf("the declared connection is %s, not host", source)

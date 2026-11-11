@@ -57,7 +57,7 @@ func Page() web.Page {
 		Module:    Module,
 		Templates: Templates(),
 		Nav: []tpl.NavItem{{
-			Section: "settings", Label: "Connections", URL: path, Page: "connections", Settings: true, Order: 5,
+			Label: "Connections", URL: path, Page: "connections", Settings: true, Order: 30,
 		}},
 	}
 }

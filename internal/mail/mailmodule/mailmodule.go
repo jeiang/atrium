@@ -2,8 +2,6 @@ package mailmodule
 
 import (
 	"context"
-	"errors"
-	"fmt"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
@@ -12,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/endpoint"
-	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/accountpages"
 	"github.com/jeiang/atrium/internal/mail/mailcmd"
@@ -23,36 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
-
-func init() {
-	integrations.Register(integrations.Integration{
-		Name: endpoint.Integration(endpoint.EndpointChat), Label: "Mail chat endpoint", Module: module.Mail,
-		URLKey: endpoint.KeyChatURL, SecretKey: endpoint.KeyChatKey,
-		Help:   "OpenAI-compatible base URL ending in /v1; the Bearer key is optional.",
-		Fields: []integrations.Field{{Key: endpoint.KeyChatModel, Label: "Model"}},
-		Test:   probeTest(endpoint.EndpointChat),
-	})
-}
-
-func probeTest(kind string) func(context.Context, integrations.Conn) (string, error) {
-	return func(ctx context.Context, c integrations.Conn) (string, error) {
-		res, err := mail.ProbeCandidate(ctx, c.DB, kind, c.URL, c.Secret, c.HTTP, mail.WallClock())
-		if err != nil {
-			return "", err
-		}
-		if !res.OK {
-			return "", errors.New(res.Reason)
-		}
-		detail := fmt.Sprintf("%d models listed", len(res.Models))
-		if res.Dimension > 0 {
-			detail += fmt.Sprintf(", %d dimensions", res.Dimension)
-		}
-		if res.Hosted {
-			detail += "; hosted endpoint: mail content leaves this host"
-		}
-		return detail, nil
-	}
-}
 
 type Module struct {
 	Clients func(config.Config) mail.OpenFunc

@@ -30,7 +30,11 @@ const (
 )
 
 func init() {
-	settings.MustRegister(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyChatKey, Module: "mail", Type: settings.String}))
+	settings.MustRegister(
+		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyChatKey, Module: "mail", Type: settings.String}),
+		settings.Deploy(settings.Def{Key: transport.CAKey(Integration(EndpointChat)), Module: "mail", Type: settings.String}),
+		settings.Deploy(settings.Def{Key: transport.ProxyKey(Integration(EndpointChat)), Module: "mail", Type: settings.String}),
+	)
 }
 
 type Querier interface {
@@ -184,7 +188,7 @@ func WithEndpoints(ctx context.Context, q Querier, endpoints []Endpoint) (contex
 		if e.Kind != EndpointChat {
 			continue
 		}
-		client, err := transport.For(ctx, readOnly{q}, Integration(e.Kind), config.From(ctx).HTTPTimeout(config.OS))
+		client, err := transport.Configured(ctx, readOnly{q}, Integration(e.Kind), config.From(ctx).HTTPTimeout(config.OS))
 		if err != nil {
 			return ctx, err
 		}

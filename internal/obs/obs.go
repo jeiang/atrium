@@ -53,8 +53,6 @@ const (
 	MailFlagChangesCount = "mail.flag_changes"
 	MailMailboxes        = "mail.mailboxes"
 	MailboxRole          = "mailbox.role"
-	IntegrationName      = "integration.name"
-	IntegrationState     = "integration.state"
 	NotifyChannel        = "notify.channel"
 	NotifyBackend        = "notify.backend"
 	NotifyDelivered      = "notify.delivered"
@@ -78,7 +76,7 @@ var allowed = map[string]struct{}{
 	GenAICacheCreation: {}, GenAIStopReason: {}, LLMWallMS: {}, LLMCostUSD: {}, LLMPartial: {},
 	LLMCacheHitRatio: {}, ToolName: {}, ToolEffect: {}, ToolOK: {}, ToolDurationMS: {}, ErrorType: {},
 	MailAccount: {}, MailNewCount: {}, MailGoneCount: {}, MailFlagChangesCount: {}, MailMailboxes: {}, MailboxRole: {},
-	IntegrationName: {}, IntegrationState: {}, NotifyChannel: {}, NotifyBackend: {}, NotifyDelivered: {},
+	NotifyChannel: {}, NotifyBackend: {}, NotifyDelivered: {},
 	EmbedModel: {}, EmbedBatchSize: {}, EmbedDimensions: {}, EmbedOK: {}, DBOperation: {},
 	JobName: {}, JobStatus: {},
 }

@@ -176,7 +176,7 @@ func TestConnectionsHTTPTestAndSavePreservesThePriorConfigOnFailure(t *testing.T
 		t.Fatal(err)
 	}
 	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfig(t, dir, srv.URL, ca, ""))
-	s := &integrationSite{t: t, dir: dir}
+	s := &connectionSite{t: t, dir: dir}
 	s.start()
 
 	if code, body := s.conn("/test", url.Values{"id": {"service/qbittorrent"}, "api_key": {"qbt_good"}}); code != http.StatusOK {
@@ -244,7 +244,7 @@ func TestConnectionsRefuseToStoreACredentialInAPlaintextDatabase(t *testing.T) {
 		t.Fatal(err)
 	}
 	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfig(t, dir, srv.URL, ca, ""))
-	s := &integrationSite{t: t, dir: dir}
+	s := &connectionSite{t: t, dir: dir}
 	s.start()
 	if code, body := s.conn("/test", url.Values{"id": {"service/qbittorrent"}, "api_key": {"qbt_good"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "encrypted database") {
 		t.Fatalf("a credential save into a plaintext database: %d %.300s", code, body)

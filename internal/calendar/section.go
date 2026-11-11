@@ -1,11 +1,11 @@
 package calendar
 
-import "github.com/jeiang/atrium/internal/integrations"
+import "github.com/jeiang/atrium/internal/settingspage"
 
 func init() {
-	integrations.RegisterSection(integrations.Section{
+	settingspage.RegisterSection(settingspage.Section{
 		Name: "calendar", Title: "Calendar", Module: "calendar",
-		Fields: []integrations.Field{
+		Fields: []settingspage.Field{
 			{Key: AccountKey, Label: "Account"},
 			{Key: AppleIDKey, Label: "Apple ID"},
 			{Key: ICloudCalendarKey, Label: "Calendar"},

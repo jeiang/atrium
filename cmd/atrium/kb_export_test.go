@@ -487,8 +487,8 @@ func TestNotionExportRefusedSaveKeepsForm(t *testing.T) {
 		t.Run(fmt.Sprintf("htmx=%t", hx), func(t *testing.T) {
 			dir, _, d := exportFixture(t, &exportNotion{})
 			w := asstBrowse(t, startServeIn(t, dir))
-			const action = "/settings/integrations/sections/export_notion"
-			status, body, _ := w.get("/settings/integrations", false)
+			const action = "/settings/sections/export_notion"
+			status, body, _ := w.get("/settings/export", false)
 			if status != http.StatusOK {
 				t.Fatalf("GET integrations = %d", status)
 			}
@@ -584,8 +584,8 @@ func TestNotionExportRefusedSaveKeepsForm(t *testing.T) {
 func TestObsidianExportRefusedSaveKeepsForm(t *testing.T) {
 	dir, _, _ := obsidianFixture(t)
 	w := asstBrowse(t, startServeIn(t, dir))
-	const action = "/settings/integrations/sections/export_obsidian"
-	status, body, _ := w.get("/settings/integrations", false)
+	const action = "/settings/sections/export_obsidian"
+	status, body, _ := w.get("/settings/export", false)
 	if status != http.StatusOK {
 		t.Fatalf("GET integrations = %d", status)
 	}
@@ -627,7 +627,7 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar}
-	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/integrations", nil)
+	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/export", nil)
 	if status != http.StatusOK {
 		t.Fatalf("GET integrations = %d", status)
 	}
@@ -649,7 +649,7 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 		"export_notion_parent":  {""},
 		"export_notion_kinds":   {"pii", "messages", "personal"},
 	}
-	status, body, _ = fetch(t, client, http.MethodPost, base+"/settings/integrations/sections/export_notion", form)
+	status, body, _ = fetch(t, client, http.MethodPost, base+"/settings/sections/export_notion", form)
 	if status != http.StatusUnprocessableEntity || !strings.Contains(body, "set a parent page") {
 		t.Fatalf("enabling without a destination = %d: %.300s", status, body)
 	}
@@ -657,7 +657,7 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 		t.Errorf("the refused save stored the export as enabled")
 	}
 	form.Set("export_notion_parent", "https://www.notion.so/Team/Page-0123456789abcdef0123456789abcdef?pvs=4")
-	status, body, _ = fetch(t, client, http.MethodPost, base+"/settings/integrations/sections/export_notion", form)
+	status, body, _ = fetch(t, client, http.MethodPost, base+"/settings/sections/export_notion", form)
 	if status != http.StatusOK {
 		t.Fatalf("POST export section = %d: %.300s", status, body)
 	}
@@ -672,7 +672,7 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 	if fake.byTitle("Diary") != nil {
 		t.Errorf("private record exported to a destination that was not named")
 	}
-	status, body, _ = fetch(t, client, http.MethodGet, base+"/settings/integrations", nil)
+	status, body, _ = fetch(t, client, http.MethodGet, base+"/settings/export", nil)
 	if status != http.StatusOK {
 		t.Fatalf("GET integrations = %d", status)
 	}
@@ -680,7 +680,7 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 		t.Errorf("the private switch does not name the destination")
 	}
 	form.Set("export_notion_private_to", normalized)
-	if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/integrations/sections/export_notion", form); status != http.StatusOK {
+	if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/sections/export_notion", form); status != http.StatusOK {
 		t.Fatalf("POST export section = %d: %.300s", status, body)
 	}
 	if got := settingValue(t, d, kbexport.NotionPrivateKey); got != normalized {
@@ -699,7 +699,7 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 	}
 	form.Set("export_notion_parent", "fedcba9876543210fedcba9876543210")
 	form.Set("export_notion_private_to", "")
-	if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/integrations/sections/export_notion", form); status != http.StatusOK {
+	if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/sections/export_notion", form); status != http.StatusOK {
 		t.Fatalf("POST export section = %d: %.300s", status, body)
 	}
 	if got := settingValue(t, d, kbexport.NotionPrivateKey); got != "" {
@@ -903,7 +903,7 @@ func TestKnowledgeExportsToAnObsidianFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar}
-	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/integrations", nil); status != http.StatusOK {
+	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/export", nil); status != http.StatusOK {
 		t.Fatalf("GET integrations = %d", status)
 	}
 	form := url.Values{
@@ -911,10 +911,10 @@ func TestKnowledgeExportsToAnObsidianFolder(t *testing.T) {
 		"export_obsidian_kinds":      {"messages", "personal"},
 		"export_obsidian_private_to": {vault},
 	}
-	if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/integrations/sections/export_obsidian", form); status != http.StatusOK {
+	if status, body, _ := fetch(t, client, http.MethodPost, base+"/settings/sections/export_obsidian", form); status != http.StatusOK {
 		t.Fatalf("POST export section = %d: %.300s", status, body)
 	}
-	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/integrations", nil)
+	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/export", nil)
 	if status != http.StatusOK {
 		t.Fatalf("GET integrations = %d", status)
 	}

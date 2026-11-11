@@ -62,6 +62,7 @@ type tablePlan struct {
 	table  string
 	action importAction
 	why    string
+	note   string
 	where  string
 	args   []any
 	null   []string
@@ -200,22 +201,7 @@ var importTables = []tablePlan{
 		}
 		return n, nil
 	}},
-	{table: "integration_health", action: carry, run: func(im *importer) (int64, error) {
-		n, err := im.copy("integration_health", "name = ?", []any{"mail_chat"}, nil, nil, nil, false)
-		if err != nil {
-			return n, err
-		}
-		if n > 0 {
-			var accounts int
-			if err := im.tx.QueryRowContext(im.ctx, "SELECT COUNT(*) FROM mail_accounts WHERE id = 'chat'").Scan(&accounts); err != nil {
-				return n, err
-			}
-			if accounts > 0 {
-				im.notes = append(im.notes, "ambiguous-health mail_chat: the name is both the local chat endpoint and a mail account; kept as local-chat legacy, the account is untested")
-			}
-		}
-		return n, nil
-	}},
+	{table: "integration_health", action: drop, why: "connection health lives in the connections table; chat health lives in endpoint_probes", note: "drop-unknown-health mail_chat: the local chat endpoint keeps its probe in endpoint_probes"},
 	{table: "ops_samples", action: drop, why: "ops samples are not carried"},
 	{table: "ops_findings", action: drop, why: "ops findings are not carried"},
 	{table: "nightly_observations", action: drop, why: "nightly observations are not carried"},
@@ -310,6 +296,9 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source str
 				line += " (" + plan.why + ")"
 			}
 			lines = append(lines, line)
+			if plan.note != "" && n > 0 {
+				im.notes = append(im.notes, plan.note)
+			}
 			for _, note := range im.notes {
 				lines = append(lines, plan.table+": "+note)
 			}
@@ -349,11 +338,6 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source str
 		}
 		for _, name := range sourced.Secrets {
 			if _, err := tx.ExecContext(ctx, "DELETE FROM secrets WHERE name = ?", name); err != nil {
-				return err
-			}
-		}
-		if sourced.Qbit.Health != nil {
-			if _, err := tx.ExecContext(ctx, "DELETE FROM integration_health WHERE name = 'qbittorrent'"); err != nil {
 				return err
 			}
 		}

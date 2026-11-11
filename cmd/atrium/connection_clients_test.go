@@ -29,7 +29,7 @@ func TestIntegrationClientsUseTheConnectionTransportAndAFailedRequestChecksAtOnc
 
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, settingEnv(media.KeyQbitURL), srv.URL)
-	s := &integrationSite{t: t, dir: dir}
+	s := &connectionSite{t: t, dir: dir}
 	s.start()
 	if state := connectionState(t, dir, "service/qbittorrent"); state == "" {
 		t.Fatal("no qBittorrent connection was materialized from the host")

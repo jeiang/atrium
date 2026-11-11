@@ -25,7 +25,7 @@ sections below cover the console work atrium cannot do for you.
 ## Google
 
 Google Calendar and Gmail use a Web-application OAuth client that each
-instance registers itself. The wizard on the Integrations page stores the
+instance registers itself. The wizard on the Connections page stores the
 client ID and secret, performs one consent per capability, and keeps the
 refresh token as a secret that can be pinned with its `*_file` variable.
 
@@ -49,7 +49,7 @@ XOAUTH2; a personal account may use an app password instead.
   Gmail over IMAP and SMTP uses the `https://mail.google.com/` scope and
   needs no Gmail API.
 4. Create credentials of type **Web application** and add the redirect URI
-  `https://<atrium-host>/settings/integrations/google/callback`.
+  `https://<atrium-host>/settings/connections/google/callback`.
 5. Paste the client ID and secret into the Google wizard, then connect
   Calendar and Gmail separately.
 
@@ -83,7 +83,7 @@ SMTP, CalDAV and CardDAV is an app-specific password:
 
 Mail accounts come from `mailAccounts`; calendar and contacts reuse an iCloud
 mail account for their CalDAV and CardDAV login. The Calendar section on the
-Integrations page edits `calendar_account`, `icloud_apple_id`, `icloud_calendar`,
+Calendar settings page (`/settings/calendar`) edits `calendar_account`, `icloud_apple_id`, `icloud_calendar`,
 `default_event_minutes`, `work_hours` and `work_days`.
 
 ## Notion
@@ -110,7 +110,7 @@ Notion settings page (`/settings/notion`) edits `wiki_root`,
 
 The knowledge base is projected into Notion by the `knowledge-export` job; the
 wiki pages above are not touched. The **Export knowledge to Notion** section on
-the Integrations page sets the export: paste the parent
+the Export settings page (`/settings/export`) sets the export: paste the parent
 page's URL or id (`export_notion_parent`, stored as the normalized page id),
 choose what to include (`export_notion_kinds`) and turn on Include private
 records to store the same destination in `export_notion_private_to`. The
@@ -173,7 +173,7 @@ file servers are retired.
 
 Weather forecasts and place lookup need no credential. Set the location
 (`weather_latitude`, `weather_longitude` and optionally
-`weather_location_name`) on the Open-Meteo record on the Integrations page;
+`weather_location_name`) on the Open-Meteo record on the Connections page;
 the `weather` tool reads it, or geocodes a place named in the call. Latitude
 must be between -90 and 90 and longitude between -180 and 180, and a value
 pinned from the host is shown read-only. The tool fetches only
@@ -184,7 +184,7 @@ beyond the coordinates.
 
 Ship24 supplies live package tracking for packages the operator registers
 with the `track_package` tool. Create an API key in the Ship24 dashboard and
-paste it on the Integrations page, or pin `mail_ship24_api_key` from the
+paste it on the Connections page, or pin `mail_ship24_api_key` from the
 host. The free plan registers 10 shipments a month; the
 `mail_ship24_monthly_quota` setting (default 10) refuses further
 registrations once the month's count is exhausted. Atrium polls the active

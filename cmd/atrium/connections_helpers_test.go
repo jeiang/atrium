@@ -9,8 +9,6 @@ import (
 	"slices"
 	"testing"
 	"time"
-
-	"github.com/jeiang/atrium/internal/integrations"
 )
 
 func highPriority(t *testing.T, push *fakePush, browser pushBrowser) []string {
@@ -37,7 +35,7 @@ func unsetEnv(t *testing.T, names ...string) {
 	}
 }
 
-type integrationSite struct {
+type connectionSite struct {
 	t      *testing.T
 	dir    string
 	base   string
@@ -45,33 +43,23 @@ type integrationSite struct {
 	stop   func()
 }
 
-func (s *integrationSite) start() {
+func (s *connectionSite) start() {
 	s.t.Helper()
 	s.base, _, s.stop = startServeStoppable(s.t, s.dir)
 	jar, _ := cookiejar.New(nil)
 	s.client = &http.Client{Jar: jar}
 }
 
-func (s *integrationSite) page() string {
+func (s *connectionSite) page() string {
 	s.t.Helper()
-	code, body, _ := fetch(s.t, s.client, http.MethodGet, s.base+"/settings/integrations", nil)
+	code, body, _ := fetch(s.t, s.client, http.MethodGet, s.base+"/settings/connections", nil)
 	if code != http.StatusOK {
-		s.t.Fatalf("integrations page: %d", code)
+		s.t.Fatalf("connections page: %d", code)
 	}
 	return body
 }
 
-func (s *integrationSite) post(path string, form url.Values) (int, string) {
-	s.t.Helper()
-	s.page()
-	if form == nil {
-		form = url.Values{}
-	}
-	code, body, _ := fetch(s.t, s.client, http.MethodPost, s.base+"/settings/integrations"+path, form)
-	return code, body
-}
-
-func (s *integrationSite) conn(path string, form url.Values) (int, string) {
+func (s *connectionSite) conn(path string, form url.Values) (int, string) {
 	s.t.Helper()
 	s.page()
 	if form == nil {
@@ -87,16 +75,6 @@ func connectionState(t *testing.T, dir, id string) string {
 	var state string
 	if err := d.Read.QueryRow("SELECT state FROM connections WHERE id = ?", id).Scan(&state); err != nil {
 		return ""
-	}
-	return state
-}
-
-func health(t *testing.T, dir, name string) string {
-	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	var state string
-	if err := d.Read.QueryRow("SELECT state FROM integration_health WHERE name = ?", name).Scan(&state); err != nil {
-		return integrations.Untested
 	}
 	return state
 }

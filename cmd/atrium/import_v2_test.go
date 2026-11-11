@@ -994,7 +994,7 @@ func TestImportV2KeepsEmbedAndChatAccountsFromClaimingTheEndpointHealth(t *testi
 	}
 	for _, want := range []string{
 		"ambiguous-health mail_embed: the name is both the embedding endpoint and a mail account; the account is untested",
-		"ambiguous-health mail_chat: the name is both the local chat endpoint and a mail account; kept as local-chat legacy, the account is untested",
+		"drop-unknown-health mail_chat: the local chat endpoint keeps its probe in endpoint_probes",
 	} {
 		if !strings.Contains(got.stdout, want) {
 			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
@@ -1013,8 +1013,8 @@ func TestImportV2KeepsEmbedAndChatAccountsFromClaimingTheEndpointHealth(t *testi
 	if results := importValue(t, q.Read, "SELECT results_json FROM connections WHERE id = 'service/embedding'"); !strings.Contains(results, `"ambiguous":"mail_embed"`) {
 		t.Errorf("the ambiguous embed health was not recorded: %s", results)
 	}
-	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM integration_health WHERE name = 'mail_chat'"); n != 1 {
-		t.Errorf("%d mail_chat health rows carried, want the local-chat legacy row", n)
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'integration_health'"); n != 0 {
+		t.Error("the destination still has an integration_health table")
 	}
 	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM endpoint_probes WHERE kind = 'embed'"); n != 0 {
 		t.Error("the embed probe stayed in the endpoint_probes table")
