@@ -58,7 +58,7 @@ type conflict struct {
 	marks  int64
 }
 
-func Run(ctx context.Context, svc *service.Service, nowFn func() float64, sources []attention.Source) (bool, error) {
+func Run(ctx context.Context, svc *service.Service, nowFn func() float64, jobRunID int64, sources []attention.Source) (bool, error) {
 	now := nowFn()
 	loc, err := config.From(ctx).Location(svc.Env)
 	if err != nil {
@@ -100,9 +100,13 @@ func Run(ctx context.Context, svc *service.Service, nowFn func() float64, source
 		for i, line := range push {
 			body[i] = "- " + line.Text
 		}
+		occurrence := "digest:" + day.Format("2006-01-02")
+		if jobRunID != 0 {
+			occurrence = fmt.Sprintf("digest:%d", jobRunID)
+		}
 		if _, err := notify.Send(ctx, svc.DB, notify.Message{
 			Channel: notify.Assistant, Title: "Morning digest", Body: strings.Join(body, "\n"),
-			Now: func() float64 { return now }, Occurrence: "digest:" + day.Format("2006-01-02"),
+			Now: func() float64 { return now }, Occurrence: occurrence,
 		}); err != nil {
 			return false, err
 		}
