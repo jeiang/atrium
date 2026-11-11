@@ -514,7 +514,15 @@ func (s *Store) credentials(ctx context.Context, q db.Querier, id ID, withValues
 	return out, rows.Err()
 }
 
+type DisabledConnection struct{ ID ID }
+
+func (e DisabledConnection) Error() string { return "connections: " + string(e.ID) + " is disabled" }
+
 func (s *Store) open(ctx context.Context, q db.Querier, id ID) (*Lease, error) {
+	return s.openLease(ctx, q, id, false)
+}
+
+func (s *Store) openLease(ctx context.Context, q db.Querier, id ID, allowDisabled bool) (*Lease, error) {
 	var (
 		v          View
 		configJSON string
@@ -537,6 +545,9 @@ func (s *Store) open(ctx context.Context, q db.Querier, id ID) (*Lease, error) {
 	}
 	if err != nil {
 		return nil, err
+	}
+	if enabled == 0 && !allowDisabled {
+		return nil, DisabledConnection{ID: id}
 	}
 	var opts transportOptions
 	if err := json.Unmarshal([]byte(transport), &opts); err != nil {
@@ -831,7 +842,7 @@ func (l *Lease) Observe(ctx context.Context, result Result) error {
 func (l *Lease) Close() { l.closed = true }
 
 func (s *Store) Test(ctx context.Context, id ID) (View, error) {
-	lease, err := s.open(ctx, s.q, id)
+	lease, err := s.openLease(ctx, s.q, id, true)
 	if err != nil {
 		return View{}, err
 	}

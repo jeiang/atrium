@@ -2197,3 +2197,92 @@ func TestImportV2RefusesAnEmptyHostCredentialWithoutLosingTheDatabasePassword(t 
 		t.Errorf("sync opened %d mail connections with an empty host credential", opened)
 	}
 }
+func TestImportV2KeepsHostPinningAndRefusesARemovedAccount(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	hostPass := filepath.Join(dir, "host-icloud.password")
+	if err := os.WriteFile(hostPass, []byte("host-pass\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	host := importHostConfigMail(t, dir, hostPass, "operator@icloud.invalid")
+
+	got := runImportApp(t, importTestAppHost(t, dir, clock, host), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	dest := filepath.Join(dir, "atrium.db")
+	d := mustConnect(t, dest)
+	defer func() { _ = d.Close() }()
+	if got := importValue(t, d.Read, "SELECT pinned FROM mail_accounts WHERE id = 'icloud'"); got != "1" {
+		t.Fatalf("the imported host account pin is %q", got)
+	}
+	if got := importValue(t, d.Read, "SELECT config_source FROM connections WHERE id = 'mail/icloud'"); got != "host" {
+		t.Fatalf("the imported host connection source is %q", got)
+	}
+
+	removed := importHostConfig(t, dir, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9")
+	var opened int
+	t.Cleanup(imapclient.UseDialer(func(context.Context, config.AccountSpec, string) (mail.Conn, error) {
+		opened++
+		return nil, fmt.Errorf("unexpected mail dial")
+	}))
+	synced := runImportApp(t, importTestAppHost(t, dir, clock, removed), "sync", "--account", "icloud")
+	if synced.code == cli.ExitOK {
+		t.Fatalf("sync of an account removed from the host file: exit %d stdout %q stderr %q", synced.code, synced.stdout, synced.stderr)
+	}
+	if opened != 0 {
+		t.Errorf("sync opened %d connections for an account removed from the host file", opened)
+	}
+	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM mail_accounts WHERE id = 'icloud'"); n != 0 {
+		t.Errorf("%d icloud account rows survived the host removal", n)
+	}
+	if got := importValue(t, d.Read, "SELECT enabled FROM connections WHERE id = 'mail/icloud'"); got != "0" {
+		t.Errorf("the removed host connection is enabled %q", got)
+	}
+
+	smtpCA := smtpCert(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	smtp := &smtpFake{}
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go smtp.handle(c)
+		}
+	}()
+	t.Setenv("ATRIUM_SMTP_ADDR", ln.Addr().String())
+	t.Setenv("ATRIUM_SMTP_CA", smtpCA)
+
+	res, err := d.Write.Exec("INSERT INTO drafts (account, to_addrs, subject, body, created_at, updated_at) VALUES ('icloud', 'to@x.test', 'Removed', 'body', 0, 0)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, _ := res.LastInsertId()
+	var revision int64
+	if err := d.Read.QueryRow("SELECT revision FROM drafts WHERE id = ?", id).Scan(&revision); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	setEnv(t, "ATRIUM_HOST_CONFIG", removed)
+	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	base := startServeIn(t, dir)
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	code, body, _ := fetch(t, client, http.MethodPost, base+"/drafts/"+strconv.FormatInt(id, 10)+"/send", url.Values{"revision": {strconv.FormatInt(revision, 10)}})
+	if code == http.StatusOK {
+		t.Fatalf("draft send for an account removed from the host file: %d %.300s", code, body)
+	}
+	smtp.mu.Lock()
+	attempts := len(smtp.passwords) + len(smtp.tokens)
+	smtp.mu.Unlock()
+	if attempts != 0 {
+		t.Errorf("the SMTP fake saw %d authentication attempts for a removed account", attempts)
+	}
+}

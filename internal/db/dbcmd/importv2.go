@@ -334,10 +334,15 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source str
 		}
 		lines = append(lines, connLines...)
 		lines = append(lines, sourced.Notes...)
+		host := config.From(ctx).Host()
 		for _, id := range sourced.MailIDs {
+			pinned := 0
+			if c, ok := host.Connection(id); ok && c.Kind == "mail" {
+				pinned = 1
+			}
 			if _, err := tx.ExecContext(ctx,
-				"UPDATE mail_accounts SET connection_id = ?, capability_prefix = ?, pinned = 0 WHERE id = ?",
-				id, id, strings.TrimPrefix(id, "mail/")); err != nil {
+				"UPDATE mail_accounts SET connection_id = ?, capability_prefix = ?, pinned = ? WHERE id = ?",
+				id, id, pinned, strings.TrimPrefix(id, "mail/")); err != nil {
 				return err
 			}
 			lines = append(lines, "mail_accounts: linked "+id)
