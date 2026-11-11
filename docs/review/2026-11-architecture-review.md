@@ -640,10 +640,18 @@ Shape:
 15. **No separate mail binary.** Embeddings serve knowledge, Notion and mail alike and are reached over an HTTP endpoint, so they run wherever the endpoint is.
 16. **Host.** atrium moves off artemis to a server, for uptime and for latency. The embedding server moves with it: retrieval embeds every chat message on the send path, so an embedding endpoint left on artemis keeps both problems.
 
-Recommended, not yet confirmed by the operator:
+17. **Media agent on artemis.** The work that needs the media filesystem stays on artemis as a second command of the same binary: filing by hardlink, the library scan, thumbnails and serving library files. It holds no atrium database. The main process keeps channels, the poll, the tools, the pages, settings and the effect ledger, and reaches the agent as a connection with test and health (F6). Filing must be safe to repeat, because a call across hosts can end unknown (F3). The agent also serves the library over the VPN, which replaces the two per-library file servers in the host configuration; qBittorrent is then the only other service media needs.
+18. **Public media links stay.** The signing key stays in the main process. It checks the signature and expiry, then streams the file from the agent over the mesh. The mesh is WireGuard, so plain HTTP between the two is acceptable; the agent accepts those requests only from the main process's peer. Consequences: video bytes pass through the server and count against its transfer; range requests must pass through unbuffered; a stream holds a connection in the one `serve` process for its length.
 
-- **Media agent on artemis.** The work that needs the media filesystem stays on artemis as a second command of the same binary: filing by hardlink, the library scan and thumbnails. It holds no atrium database. The main process keeps channels, the poll, the tools, the pages, settings and the effect ledger, and reaches the agent as a connection with test and health (F6). Filing must be safe to repeat, because a call across hosts can end unknown (F3). qBittorrent is reached over the network like any other connection.
-- **Media file links.** There are two kinds today. VPN links point straight at the two library file servers on artemis (`media/links.go:192-205`, `cornn-flaek/modules/media.nix`) and need no change. Public signed links are served by atrium itself (`media/links.go:180-190`, `media/pages/file.go`); after the move atrium no longer has the files. Either the agent serves them, which needs the signing key on artemis and a public route to it, or public links are dropped and file links work over the VPN only. Dropping them is the smaller change.
+Open, needs the operator:
+
+- **Where atrium runs, and how it embeds.** The model today is EmbeddingGemma 2 (`ggml-org/embeddinggemma-2-GGUF`, Q8, 310 MB, 768 dimensions) on llama.cpp. Measured on ricklent on 2026-11-11 with one thread: a chat query of 18 tokens takes 132 ms (median of 15), a 1,500-character document of 320 tokens takes 1.97 s (median of 8), a batch of 16 documents takes 31 s, and the server holds 475 MB. ricklent has one virtual CPU and 2 GB of memory, of which about 1 GB was free before the test, and it also runs the NetBird proxy replica, DNS, game ingress and the qBittorrent tunnel exit. Every embedding blocks its only core. ricklent as it is cannot hold atrium and a local embedding model. The choices:
+  1. A server with at least two cores and 4 GB, and EmbeddingGemma 2 kept. The stored vectors stay valid, and no new vendor sees mail text.
+  2. A hosted embedding API such as `voyage-4-lite` at $0.02 per million tokens. No model server at all and a full re-index for under $1, but a third vendor, a network call on the chat send path with no published latency, and no retrieval when it is down.
+  3. A smaller English model such as `gte-modernbert-base` (149M parameters). About half the compute, a full re-index, and still a model server.
+- **Edge path.** The Caddy edge is on alda and ricklent is in Atlanta. If atrium on ricklent is still entered through alda, a mesh hop remains. The latency gain needs atrium's hostname to terminate on the host that runs it.
+
+Research result on alternatives to embeddings (sources in the session report, not re-verified here): keep dense vectors as one side of the existing hybrid with full-text search and rank fusion. Lexical match carries entity-heavy queries, and hybrids beat either side alone. Graph memory systems show no gain over a plain hybrid for factual recall. Putting the whole knowledge base in the prompt costs more than the budget. Cheap gains: truncate vectors to 512 dimensions (68.41 against 68.46 on English MTEB), and let chat retrieval answer from the lexical side when the embedding call misses a deadline.
 
 ## Not checked
 
@@ -653,6 +661,7 @@ Recommended, not yet confirmed by the operator:
 - The contents of the host environment file, the firewall on artemis, the OIDC provider's client configuration.
 - The cause of two `FOREIGN KEY constraint failed` errors on `POST /chat/{id}/messages` and of the failed `weekly-review` job seen in the last 24 hours.
 - Whether any tool is unused in practice; there was no usage data.
-- Whether chat retrieval degrades cleanly when the embedding endpoint is down, and whether the embedding model is fast enough on a CPU.
+- Whether chat retrieval degrades cleanly when the embedding endpoint is down.
+- Embedding speed on any server other than ricklent, the latency of any hosted embedding API, and recall after truncating or quantizing EmbeddingGemma vectors.
 - The cost of moving the local chat model's work to Haiku. The volume is low (139 s of GPU work in 61 hours); no estimate was made.
 - The reach-gauge figure was checked in a browser in both themes and both states. The anatomy skill's line-end check and 4x close-ups did not run, because they need a local Chrome.
