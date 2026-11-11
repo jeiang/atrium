@@ -638,15 +638,18 @@ Shape:
 13. **API schema.** The OpenAPI document is generated from the Go operation types, committed, and CI fails on drift. The Swift client is generated from it. The run stream gets its own written contract (F1).
 14. **Local chat model.** Dropped. Mail routing's last stage, flags, scans, open loops, watches, the invitation judge and the ops condenser move to Haiku; the operator accepts that mail text goes to Anthropic. The classifier call has no tools and a fixed output schema. The inference ledger comes first (F9), or the monthly budget pause stops mail triage. The chat endpoint, its settings and `atrium-llm` go away.
 15. **No separate mail binary.** Embeddings serve knowledge, Notion and mail alike and are reached over an HTTP endpoint, so they run wherever the endpoint is.
+16. **Host.** atrium moves off artemis to a server, for uptime and for latency. The embedding server moves with it: retrieval embeds every chat message on the send path, so an embedding endpoint left on artemis keeps both problems.
 
 Recommended, not yet confirmed by the operator:
 
-- **Media agent on artemis.** If atrium moves to a server, the work that needs the media filesystem stays on artemis as a second command of the same binary: filing by hardlink, the library scan, thumbnails and serving signed file links. It holds no atrium database. The main process keeps channels, the poll, the tools, the pages, settings and the effect ledger, and reaches the agent as a connection with test and health (F6). Filing must be safe to repeat, because a call across hosts can end unknown (F3). qBittorrent is reached over the network like any other connection. The alternative is to leave atrium on artemis and add nothing.
+- **Media agent on artemis.** The work that needs the media filesystem stays on artemis as a second command of the same binary: filing by hardlink, the library scan and thumbnails. It holds no atrium database. The main process keeps channels, the poll, the tools, the pages, settings and the effect ledger, and reaches the agent as a connection with test and health (F6). Filing must be safe to repeat, because a call across hosts can end unknown (F3). qBittorrent is reached over the network like any other connection.
+- **Media file links.** There are two kinds today. VPN links point straight at the two library file servers on artemis (`media/links.go:192-205`, `cornn-flaek/modules/media.nix`) and need no change. Public signed links are served by atrium itself (`media/links.go:180-190`, `media/pages/file.go`); after the move atrium no longer has the files. Either the agent serves them, which needs the signing key on artemis and a public route to it, or public links are dropped and file links work over the VPN only. Dropping them is the smaller change.
 
 ## Not checked
 
 - No test, build or browser run. Design-system findings come from templates and CSS, not rendered pages.
 - Authenticated timings through the public path, and the stream through Caddy and Cloudflare.
+- How much of the 205 to 355 ms public round trip is the NetBird hop from the edge host to artemis. The move removes only that part; measure it before the move is planned around latency.
 - The contents of the host environment file, the firewall on artemis, the OIDC provider's client configuration.
 - The cause of two `FOREIGN KEY constraint failed` errors on `POST /chat/{id}/messages` and of the failed `weekly-review` job seen in the last 24 hours.
 - Whether any tool is unused in practice; there was no usage data.
