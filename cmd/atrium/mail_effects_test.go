@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -169,5 +170,37 @@ func TestMailProposalMoveWithUnknownCopyBlocksReapprovalUntilResolved(t *testing
 	}
 	if n := len(m.fake.Boxes["INBOX"].Box.Messages); n != 0 {
 		t.Fatalf("the inbox holds %d messages after the move, want 0", n)
+	}
+}
+
+func TestMailGmailRelabelInterruptedRemoveKeepsTheCompletedAdd(t *testing.T) {
+	fake := mailtest.NewFakeClient()
+	fake.Gmail = true
+	all := fake.AddBox("[Gmail]/All Mail", mailtest.NewBox(9), `\All`)
+	fake.AddBox("[Gmail]/Trash", mailtest.NewBox(10), `\Trash`)
+	m := mailEffectsFixture(t, "live", "gmail", fake)
+	m.ruleFor(t, "work", "Bills", "statements@bank.test")
+	m.run(t, "sync")
+	h, x := mailtest.RawWith("Bank statement", "statements@bank.test", "gmail-partial", "Your statement is ready.")
+	uid := all.Add(h, x, []string{`\Seen`}, []string{`\Inbox`})
+	m.fake.FailWrite = func(w mailtest.FakeWrite) error {
+		if w.Verb == "STORE" && len(w.Args) > 0 && w.Args[0] == "-X-GM-LABELS" {
+			return errors.New("connection reset by peer")
+		}
+		return nil
+	}
+	if ran := runApp(t, "sync"); ran.code == cli.ExitOK {
+		t.Fatalf("a sync whose relabel was interrupted exited 0")
+	}
+	if state := m.scalar(t, "SELECT state FROM effects WHERE origin = 'mail_auto' AND operation = 'file'"); state != "partial" {
+		t.Fatalf("the interrupted relabel is %s, want partial", state)
+	}
+	after := m.scalar(t, "SELECT after_json FROM effects WHERE origin = 'mail_auto' AND operation = 'file'")
+	if !strings.Contains(after, `"add":["Bills"]`) || !strings.Contains(after, `"remove":[]`) {
+		t.Fatalf("the partial relabel recorded %s, want the completed add and an empty remove", after)
+	}
+	labels := fake.Boxes["[Gmail]/All Mail"].Box.Messages[uid].Labels
+	if !slices.Contains(labels, "Bills") || !slices.Contains(labels, `\Inbox`) {
+		t.Fatalf("the message labels after the interrupted remove = %v, want Bills and \\Inbox", labels)
 	}
 }
