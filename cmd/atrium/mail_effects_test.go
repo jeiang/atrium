@@ -260,3 +260,41 @@ func TestMailAutomaticPartialMoveUndoesOnlyTheCopiedMessages(t *testing.T) {
 		t.Fatalf("the third message's move is %s, want skipped", state)
 	}
 }
+
+func TestMailProposalMoveCreatesAMissingFolderAsItsOwnEffect(t *testing.T) {
+	fake := mailtest.NewFakeClient()
+	inbox := fake.AddBox("INBOX", mailtest.NewBox(1))
+	h, x := mailtest.RawWith("Bank statement", "statements@bank.test", "create-folder", "Your statement is ready.")
+	inbox.Add(h, x, []string{`\Seen`}, nil)
+	m := mailEffectsFixture(t, "live", "icloud", fake)
+	m.ruleFor(t, "work", "Archive", "statements@bank.test")
+	m.run(t, "sync")
+	m.run(t, "live", "rebaseline")
+	m.run(t, "live", "backlog")
+	proposal := m.scalar(t, "SELECT CAST(id AS TEXT) FROM proposals WHERE kind = 'inbox_backlog' AND status = 'pending' ORDER BY id DESC LIMIT 1")
+	if proposal == "<nil>" {
+		t.Fatalf("no pending inbox_backlog proposal")
+	}
+	m.run(t, "proposals", "approve", proposal)
+	if state := m.scalar(t, "SELECT state FROM effects WHERE origin = 'proposal' AND operation = 'create_folder'"); state != "done" {
+		t.Fatalf("the folder creation is %s, want done", state)
+	}
+	undo := m.scalar(t, "SELECT undo_json FROM effects WHERE origin = 'proposal' AND operation = 'create_folder'")
+	if !strings.Contains(undo, `"op":"delete_folder"`) {
+		t.Fatalf("the folder creation's undo is %s, want a delete_folder", undo)
+	}
+	if state := m.scalar(t, "SELECT state FROM effects WHERE origin = 'proposal' AND operation = 'move'"); state != "done" {
+		t.Fatalf("the move is %s, want done", state)
+	}
+	var created, subscribed bool
+	for _, w := range fake.Writes {
+		created = created || w.Verb == "CREATE"
+		subscribed = subscribed || w.Verb == "SUBSCRIBE"
+	}
+	if !created || !subscribed {
+		t.Fatalf("the folder setup wrote %v, want CREATE and SUBSCRIBE", m.verbs())
+	}
+	if n := len(fake.Boxes["Archive"].Box.Messages); n != 1 {
+		t.Fatalf("the new folder holds %d messages, want 1", n)
+	}
+}
