@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -215,6 +216,7 @@ func candidate(a config.AccountSpec, password string) connections.Candidate {
 		"preset":      a.Preset,
 		"login":       a.Login,
 		"auth_method": string(a.AuthMethod),
+		"enabled":     strconv.FormatBool(a.Enabled),
 	})
 	c := connections.Candidate{
 		Label:  a.Label,
@@ -277,25 +279,19 @@ func (h handlers) add(w http.ResponseWriter, r *http.Request) {
 			err = refusal(a.Name + " is already an account id")
 		}
 	}
-	created := false
 	if err == nil {
-		created, err = h.ensure(ctx, a)
-	}
-	if err == nil {
-		err = h.save(ctx, a)
+		_, err = h.ensure(ctx, a)
 	}
 	if err == nil {
 		_, err = h.store(ctx).TestAndSave(ctx, mailconn.ID(a.Name), candidate(a, password))
 	}
 	if err == nil {
-		err = config.From(ctx).LoadStoredAccounts(ctx, h.d.DB.Read)
+		err = h.save(ctx, a)
 	}
 	if err != nil {
-		if created {
-			h.drop(ctx, a)
-			_ = config.DeleteStoredAccount(ctx, h.d.DB.Write, a.Name)
-			_ = config.From(ctx).LoadStoredAccounts(ctx, h.d.DB.Read)
-		}
+		_ = config.DeleteStoredAccount(ctx, h.d.DB.Write, a.Name)
+		h.drop(ctx, a)
+		_ = config.From(ctx).LoadStoredAccounts(ctx, h.d.DB.Read)
 		h.fail(w, r, "new", kept, err)
 		return
 	}
