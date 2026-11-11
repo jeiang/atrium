@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -434,4 +435,71 @@ func TestMailLiveUndoRestoresTheMessageAndAnUnknownUndoStaysBlocked(t *testing.T
 			t.Fatalf("after the operator resolution the action is %s, want undone", state)
 		}
 	})
+}
+
+func TestMailUnknownForwardOutcomeIsNotRetried(t *testing.T) {
+	m := mailSafetyFixture(t, "live")
+	uid := m.add("INBOX", "Bank statement", "statements@bank.test", "target", "Your statement is ready.")
+	m.run(t, "sync")
+	id := m.messageID(t, "Bank statement")
+	m.run(t, "live", "rebaseline")
+	m.exec(t, "INSERT INTO corrections (message_id, account, folder, ts, source) VALUES (?, 'icloud', 'Bills', ?, 'operator')",
+		id, mail.WallClock()+60)
+	m.fake.Boxes["INBOX"].Box.SetFlags(uid, []string{`\Seen`}, nil)
+
+	copies := 0
+	m.fake.FailWrite = func(w mailtest.FakeWrite) error {
+		if w.Verb == "COPY" {
+			copies++
+			return &mail.WriteInterrupted{Command: "UID COPY", Err: errors.New("connection reset by peer")}
+		}
+		return nil
+	}
+	if ran := runApp(t, "sync"); ran.code == cli.ExitOK {
+		t.Fatalf("a pass whose only move had an unknown outcome exited 0")
+	}
+
+	action := m.scalar(t, "SELECT CAST(id AS TEXT) FROM auto_actions WHERE kind = 'correct'")
+	if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state == "applied" {
+		t.Fatalf("a move whose copy was dropped is recorded as applied")
+	}
+	if recorded := m.scalar(t, "SELECT CAST(error IS NOT NULL AS TEXT) FROM auto_actions WHERE id = ?", action); recorded != "1" {
+		t.Fatalf("the blocked move recorded no error text")
+	}
+	if copies != 1 {
+		t.Fatalf("the unknown move made %d copy attempts, want 1", copies)
+	}
+	if n := len(m.fake.Boxes["INBOX"].Box.Messages); n != 1 {
+		t.Fatalf("the inbox holds %d messages after the dropped copy, want 1", n)
+	}
+	if n := len(m.fake.Boxes["Bills"].Box.Messages); n != 0 {
+		t.Fatalf("the destination holds %d messages, want 0", n)
+	}
+	attempts := len(m.fake.Writes)
+
+	m.fake.FailWrite = nil
+	m.run(t, "sync")
+	if got := len(m.fake.Writes); got != attempts {
+		t.Fatalf("the next pass made %d writes, want the blocked move left alone", got-attempts)
+	}
+	if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state == "applied" {
+		t.Fatalf("the next pass applied the blocked move")
+	}
+
+	base, _, _ := startServeApp(t, m.app, &lockedBuffer{})
+	client := mrvClient(t)
+	if code, _, _ := mrvDo(t, client, "GET", base+"/triage", nil); code != 200 {
+		t.Fatalf("GET /triage = %d", code)
+	}
+	code, body, _ := mrvDo(t, client, "POST", base+"/messages/"+m.scalar(t, "SELECT CAST(id AS TEXT) FROM messages WHERE id = ?", id)+"/correct",
+		url.Values{"dest": {"Bills"}, "context": {"row"}}, "HX-Request", "true")
+	if code != 200 {
+		t.Fatalf("the correction pass = %d: %.400s", code, body)
+	}
+	if got := len(m.fake.Writes); got != attempts {
+		t.Fatalf("the correction pass made %d writes, want the blocked move left alone", got-attempts)
+	}
+	if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state == "applied" {
+		t.Fatalf("the correction pass applied the blocked move")
+	}
 }
