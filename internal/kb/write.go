@@ -9,7 +9,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/projects"
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/tool"
@@ -81,8 +83,7 @@ func stateMap(r Record) map[string]any {
 }
 
 func threadProject(ctx context.Context, q db.Querier, threadID int64) (*int64, error) {
-	var project *int64
-	err := q.QueryRowContext(ctx, "SELECT project_id FROM threads WHERE id = ? AND deleted_at IS NULL", threadID).Scan(&project)
+	project, err := threads.ProjectOf(ctx, q, threadID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, tool.Error("this thread is gone")
 	}
@@ -90,12 +91,11 @@ func threadProject(ctx context.Context, q db.Querier, threadID int64) (*int64, e
 }
 
 func threadMarks(ctx context.Context, q db.Querier, threadID int64) (tool.Marks, error) {
-	var marks int64
-	err := q.QueryRowContext(ctx, "SELECT marks FROM threads WHERE id = ?", threadID).Scan(&marks)
+	marks, err := threads.MarksOfID(ctx, q, threadID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, tool.Error("this thread is gone")
 	}
-	return tool.Marks(marks), err
+	return marks, err
 }
 
 func sourceOf(ctx context.Context, q db.Querier, w Writer, in WriteInput, project *int64) (threadID int64, seq, runID *int64, err error) {
@@ -114,14 +114,11 @@ func sourceOf(ctx context.Context, q db.Querier, w Writer, in WriteInput, projec
 		run := w.RunID
 		return in.Source.ThreadID, in.Source.Seq, &run, nil
 	}
-	var first sql.NullInt64
-	if err := q.QueryRowContext(ctx, "SELECT MIN(seq) FROM thread_messages WHERE thread_id = ? AND run_id = ?",
-		w.ThreadID, w.RunID).Scan(&first); err != nil {
+	first, err := journal.MinSeq(ctx, q, w.ThreadID, w.RunID)
+	if err != nil {
 		return 0, nil, nil, err
 	}
-	if first.Valid {
-		seq = &first.Int64
-	}
+	seq = first
 	run := w.RunID
 	return w.ThreadID, seq, &run, nil
 }

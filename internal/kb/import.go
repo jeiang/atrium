@@ -127,44 +127,21 @@ func observationItems(ctx context.Context, q db.Querier) ([]importItem, error) {
 	return out, nil
 }
 
-type notionRow struct {
-	id, parent, title, markdown, aliases string
-	private                              int64
-}
-
 func notionItems(ctx context.Context, q db.Querier) ([]importItem, bool, error) {
 	wiki, err := notion.LoadWiki(ctx, q)
 	if err != nil {
 		return nil, false, err
 	}
-	rows, err := q.QueryContext(ctx,
-		"SELECT p.id, p.parent_id, p.title, p.markdown, p.private, COALESCE(w.aliases, '[]') "+
-			"FROM notion_pages p LEFT JOIN wiki_pages w ON w.page_id = p.id WHERE p.in_trash = 0 AND p.markdown != ''")
-	if err != nil {
-		return nil, false, err
-	}
-	pages, err := db.Collect(rows, func(r *sql.Rows) (notionRow, error) {
-		var p notionRow
-		err := r.Scan(&p.id, &p.parent, &p.title, &p.markdown, &p.private, &p.aliases)
-		return p, err
-	})
+	pages, err := notion.ImportPages(ctx, q)
 	if err != nil {
 		return nil, false, err
 	}
 	children := map[string][]string{}
 	listed := map[string]bool{}
 	for _, p := range pages {
-		children[p.parent] = append(children[p.parent], p.id)
+		children[p.Parent] = append(children[p.Parent], p.ID)
 	}
-	rows, err = q.QueryContext(ctx, "SELECT page_id FROM wiki_pages")
-	if err != nil {
-		return nil, false, err
-	}
-	ids, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
-		var id string
-		err := r.Scan(&id)
-		return id, err
-	})
+	ids, err := notion.WikiPageIDs(ctx, q)
 	if err != nil {
 		return nil, false, err
 	}
@@ -185,12 +162,12 @@ func notionItems(ctx context.Context, q db.Querier) ([]importItem, bool, error) 
 	out := []importItem{}
 	privatePages := 0
 	for _, p := range pages {
-		if !under[p.id] && !listed[p.id] {
+		if !under[p.ID] && !listed[p.ID] {
 			continue
 		}
-		body, _, sources, err := notion.SplitFooter(p.markdown)
+		body, _, sources, err := notion.SplitFooter(p.Markdown)
 		if err != nil {
-			return nil, false, fmt.Errorf("notion page %s: %w", p.id, err)
+			return nil, false, fmt.Errorf("notion page %s: %w", p.ID, err)
 		}
 		if strings.TrimSpace(body) == "" {
 			continue
@@ -199,17 +176,17 @@ func notionItems(ctx context.Context, q db.Querier) ([]importItem, bool, error) 
 			body += "\n\nSources: " + strings.Join(sources, ", ")
 		}
 		aliases := []string{}
-		_ = json.Unmarshal([]byte(p.aliases), &aliases)
-		title := p.title
+		_ = json.Unmarshal([]byte(p.Aliases), &aliases)
+		title := p.Title
 		if strings.TrimSpace(title) == "" {
 			title = "Untitled"
 		}
-		if p.private != 0 {
+		if p.Private != 0 {
 			privatePages++
 		}
 		out = append(out, importItem{
-			Origin: "notion:" + p.id, NotionID: notionid.Normalize(p.id), Title: title, Aliases: aliases, Body: body,
-			Scope: ScopePersonal, Private: p.private != 0, Marks: tool.Untrusted,
+			Origin: "notion:" + p.ID, NotionID: notionid.Normalize(p.ID), Title: title, Aliases: aliases, Body: body,
+			Scope: ScopePersonal, Private: p.Private != 0, Marks: tool.Untrusted,
 		})
 	}
 	uniform := len(out) > 0 && privatePages == len(out)
@@ -222,22 +199,13 @@ func notionItems(ctx context.Context, q db.Querier) ([]importItem, bool, error) 
 }
 
 func notionTitles(ctx context.Context, q db.Querier) (map[string]string, error) {
-	rows, err := q.QueryContext(ctx, "SELECT id, title FROM notion_pages WHERE title != ''")
-	if err != nil {
-		return nil, err
-	}
-	type page struct{ id, title string }
-	pages, err := db.Collect(rows, func(r *sql.Rows) (page, error) {
-		var p page
-		err := r.Scan(&p.id, &p.title)
-		return p, err
-	})
+	pages, err := notion.Titles(ctx, q)
 	if err != nil {
 		return nil, err
 	}
 	titles := make(map[string]string, len(pages))
-	for _, p := range pages {
-		titles[notionid.Normalize(p.id)] = p.title
+	for id, title := range pages {
+		titles[notionid.Normalize(id)] = title
 	}
 	return titles, nil
 }

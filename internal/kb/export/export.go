@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
@@ -115,7 +116,7 @@ func runNotion(ctx context.Context, d *db.DB, env config.Env, now float64) (Resu
 
 func threadTitles(ctx context.Context, q db.Querier, records []kb.ExportRecord) (map[int64]string, error) {
 	out := make(map[int64]string)
-	var ids []any
+	var ids []int64
 	seen := make(map[int64]bool, len(records))
 	for _, rec := range records {
 		if rec.SourceThreadID == nil || seen[*rec.SourceThreadID] {
@@ -127,21 +128,14 @@ func threadTitles(ctx context.Context, q db.Querier, records []kb.ExportRecord) 
 	if len(ids) == 0 {
 		return out, nil
 	}
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",")
-	rows, err := q.QueryContext(ctx, "SELECT id, title FROM threads WHERE id IN ("+placeholders+")", ids...)
+	titles, err := threads.Titles(ctx, q, ids)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var id int64
-		var title string
-		if err := rows.Scan(&id, &title); err != nil {
-			return nil, err
-		}
+	for id, title := range titles {
 		out[id] = title
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func indexEntries(records []kb.ExportRecord, loc *time.Location) []render.Entry {

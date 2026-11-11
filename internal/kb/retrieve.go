@@ -9,6 +9,7 @@ import (
 	"time"
 
 	actx "github.com/jeiang/atrium/internal/assistant/context"
+	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/textsearch"
@@ -53,15 +54,7 @@ func eligibleWhere(alias string, project int64, now float64) (string, []any) {
 }
 
 func citedIDs(ctx context.Context, q db.Querier, threadID int64) (map[int64]bool, error) {
-	rows, err := q.QueryContext(ctx, "SELECT content_json FROM thread_messages WHERE thread_id = ?", threadID)
-	if err != nil {
-		return nil, err
-	}
-	contents, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
-		var content string
-		err := r.Scan(&content)
-		return content, err
-	})
+	contents, err := journal.ContentJSON(ctx, q, threadID)
 	if err != nil {
 		return nil, err
 	}
@@ -149,8 +142,8 @@ type vectorHit struct {
 }
 
 func vectorHits(ctx context.Context, q db.Querier, idx embed.Index, vector []float64, project int64, now float64) ([]vectorHit, error) {
-	var total int
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+idx.KBTable()).Scan(&total); err != nil {
+	total, err := embed.KBCount(ctx, q, idx)
+	if err != nil {
 		return nil, err
 	}
 	if total == 0 {
@@ -158,17 +151,16 @@ func vectorHits(ctx context.Context, q db.Querier, idx embed.Index, vector []flo
 	}
 	blob := embed.Serialize(vector)
 	k := min(RetrievalTop, total, embed.KNNMax)
-	rows, err := q.QueryContext(ctx, "SELECT rowid, distance FROM "+idx.KBTable()+" WHERE embedding MATCH ? AND k = ? ORDER BY distance", blob, k)
+	found, err := embed.KBHits(ctx, q, idx, blob, k)
 	if err != nil {
 		return nil, err
 	}
-	near, err := db.Collect(rows, func(r *sql.Rows) (vectorHit, error) {
-		var h vectorHit
-		err := r.Scan(&h.id, &h.distance)
-		return h, err
-	})
-	if err != nil || len(near) == 0 {
-		return near, err
+	near := make([]vectorHit, len(found))
+	for i, h := range found {
+		near[i] = vectorHit{id: h.ID, distance: h.Distance}
+	}
+	if len(near) == 0 {
+		return near, nil
 	}
 	ids := make([]int64, len(near))
 	for i, h := range near {
@@ -180,7 +172,7 @@ func vectorHits(ctx context.Context, q db.Querier, idx embed.Index, vector []flo
 	}
 	where, args := eligibleWhere("r", project, now)
 	args = append(args, string(raw))
-	rows, err = q.QueryContext(ctx, "SELECT r.id"+fromClause()+" WHERE "+where+" AND r.id IN (SELECT value FROM json_each(?))", args...)
+	rows, err := q.QueryContext(ctx, "SELECT r.id"+fromClause()+" WHERE "+where+" AND r.id IN (SELECT value FROM json_each(?))", args...)
 	if err != nil {
 		return nil, err
 	}
