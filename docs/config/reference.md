@@ -61,6 +61,12 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `media_root` | string | none | `ATRIUM_MEDIA_MEDIA_ROOT` |
 | `media_tv_url` | string | none | `ATRIUM_MEDIA_MEDIA_TV_URL` |
 
+### web
+
+| Key | Type | Default | Environment variable |
+| --- | --- | --- | --- |
+| `trusted_proxy_cidrs` | string | none | `ATRIUM_WEB_TRUSTED_PROXY_CIDRS` |
+
 ## Operator settings
 
 Operator settings are stored in the database and edited in the application. They are not host configuration and are not set from the environment. A cut-over key is refused with its destination.

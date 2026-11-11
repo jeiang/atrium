@@ -1,0 +1,204 @@
+package main
+
+import (
+	"net/http"
+	"net/url"
+	"path/filepath"
+	"regexp"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jeiang/atrium/internal/cli"
+)
+
+var tokenHashShape = regexp.MustCompile(`^[0-9a-f]{64}$`)
+
+func tokenRows(t *testing.T, out string) [][]string {
+	t.Helper()
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) == 0 || !strings.HasPrefix(lines[0], "ID\t") {
+		t.Fatalf("token list has no header:\n%s", out)
+	}
+	var rows [][]string
+	for _, line := range lines[1:] {
+		rows = append(rows, strings.Split(line, "\t"))
+	}
+	return rows
+}
+
+func tokenRow(t *testing.T, out, name string) []string {
+	t.Helper()
+	for _, row := range tokenRows(t, out) {
+		if len(row) > 1 && row[1] == name {
+			return row
+		}
+	}
+	t.Fatalf("no token named %q in:\n%s", name, out)
+	return nil
+}
+
+func TestAuthTokensIssueListAndRevokeThroughTheCLI(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+
+	first := runApp(t, "auth", "token", "issue", "--name", "phone")
+	if first.code != cli.ExitOK {
+		t.Fatalf("issue: exit %d stdout %q stderr %q", first.code, first.stdout, first.stderr)
+	}
+	secret := strings.TrimSpace(first.stdout)
+	if len(secret) != 47 || !strings.HasPrefix(secret, "atr_") {
+		t.Fatalf("issue printed %q, not an atr_ secret", first.stdout)
+	}
+	if strings.Contains(first.stderr, secret) {
+		t.Fatalf("the secret leaked to stderr: %q", first.stderr)
+	}
+	if !strings.Contains(first.stderr, "issued token 1 (local)") {
+		t.Fatalf("issue metadata: %q", first.stderr)
+	}
+
+	expiry := time.Now().Add(24 * time.Hour).UTC().Format(time.RFC3339)
+	second := runApp(t, "auth", "token", "issue", "--name", "laptop", "--expires-at", expiry)
+	if second.code != cli.ExitOK {
+		t.Fatalf("issue with expiry: exit %d stdout %q stderr %q", second.code, second.stdout, second.stderr)
+	}
+
+	for _, bad := range [][]string{
+		{"auth", "token", "issue"},
+		{"auth", "token", "issue", "--name", " "},
+		{"auth", "token", "issue", "--name", strings.Repeat("x", 101)},
+		{"auth", "token", "issue", "--name", "old", "--expires-at", time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)},
+		{"auth", "token", "issue", "--name", "bad", "--expires-at", "tomorrow"},
+	} {
+		if got := runApp(t, bad...); got.code != cli.ExitUsage {
+			t.Errorf("%v: exit %d, want usage %d (stdout %q stderr %q)", bad, got.code, cli.ExitUsage, got.stdout, got.stderr)
+		}
+	}
+
+	listed := runApp(t, "auth", "token", "list")
+	if listed.code != cli.ExitOK {
+		t.Fatalf("list: exit %d stderr %q", listed.code, listed.stderr)
+	}
+	if strings.Contains(listed.stdout, secret) || strings.Contains(listed.stdout, strings.TrimSpace(second.stdout)) {
+		t.Fatalf("the list exposes a secret:\n%s", listed.stdout)
+	}
+	phone := tokenRow(t, listed.stdout, "phone")
+	if len(phone) != 7 || phone[0] != "1" || phone[2] != "local" || phone[3] == "" || phone[4] != "-" || phone[5] != "-" || phone[6] != "-" {
+		t.Fatalf("phone row: %v", phone)
+	}
+	laptop := tokenRow(t, listed.stdout, "laptop")
+	if laptop[4] == "-" {
+		t.Fatalf("the expiring token has no expiry: %v", laptop)
+	}
+
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	var hash string
+	if err := d.Read.QueryRow("SELECT token_hash FROM auth_bearers WHERE id = 1").Scan(&hash); err != nil {
+		t.Fatal(err)
+	}
+	if !tokenHashShape.MatchString(hash) || hash == secret {
+		t.Fatalf("stored token hash %q is not a SHA-256 hex digest", hash)
+	}
+	var plain int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM auth_bearers WHERE token_hash = ?", secret).Scan(&plain); err != nil || plain != 0 {
+		t.Fatalf("the database stores the plaintext secret: %d, %v", plain, err)
+	}
+
+	if revoked := runApp(t, "auth", "token", "revoke", "1"); revoked.code != cli.ExitOK || !strings.Contains(revoked.stdout, "revoked 1") {
+		t.Fatalf("revoke: exit %d stdout %q stderr %q", revoked.code, revoked.stdout, revoked.stderr)
+	}
+	if again := runApp(t, "auth", "token", "revoke", "1"); again.code != cli.ExitOK {
+		t.Fatalf("revoking a revoked token is not idempotent: exit %d stderr %q", again.code, again.stderr)
+	}
+	if missing := runApp(t, "auth", "token", "revoke", "999"); missing.code != cli.ExitError {
+		t.Fatalf("revoking an unknown id: exit %d, want %d", missing.code, cli.ExitError)
+	}
+	if bad := runApp(t, "auth", "token", "revoke", "x"); bad.code != cli.ExitUsage {
+		t.Fatalf("revoking a non-numeric id: exit %d, want usage", bad.code)
+	}
+	phone = tokenRow(t, runApp(t, "auth", "token", "list").stdout, "phone")
+	if phone[6] == "-" {
+		t.Fatalf("the revoked token has no revocation time: %v", phone)
+	}
+
+	var audits, leaked int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM settings_audit WHERE key IN ('auth_token.issue', 'auth_token.revoke')").Scan(&audits); err != nil {
+		t.Fatal(err)
+	}
+	if audits < 3 {
+		t.Fatalf("issuance and revocation left %d audit rows, want at least 3", audits)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM settings_audit WHERE new_value LIKE '%atr_%' OR old_value LIKE '%atr_%'").Scan(&leaked); err != nil {
+		t.Fatal(err)
+	}
+	if leaked != 0 {
+		t.Fatalf("%d audit rows hold a token secret", leaked)
+	}
+}
+
+func TestAuthTokensThroughTheSettingsPage(t *testing.T) {
+	s := newAPISite(t)
+	browser := oidcBrowser(t, s.base, s.idp, "owner")
+
+	code, body, _ := fetch(t, browser, http.MethodGet, s.base+"/settings/auth", nil)
+	if code != http.StatusOK || !strings.Contains(body, "API tokens") || !strings.Contains(body, "No tokens.") {
+		t.Fatalf("settings page: %d %.400s", code, body)
+	}
+
+	code, body, header := fetch(t, browser, http.MethodPost, s.base+"/settings/auth/tokens", url.Values{"name": {"laptop"}})
+	if code != http.StatusOK || header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("issue: %d %v %.400s", code, header, body)
+	}
+	secret := regexp.MustCompile(`atr_[A-Za-z0-9_-]{43}`).FindString(body)
+	if secret == "" {
+		t.Fatalf("the issue response does not show the secret once: %.400s", body)
+	}
+
+	code, body, _ = fetch(t, browser, http.MethodGet, s.base+"/settings/auth", nil)
+	if code != http.StatusOK || !strings.Contains(body, "laptop") {
+		t.Fatalf("the list does not show the issued token: %d %.400s", code, body)
+	}
+	if strings.Contains(body, secret) {
+		t.Fatalf("the list exposes the secret")
+	}
+	match := regexp.MustCompile(`/settings/auth/tokens/(\d+)/revoke`).FindStringSubmatch(body)
+	if match == nil {
+		t.Fatalf("the list has no revoke form: %.400s", body)
+	}
+	id := match[1]
+
+	if me := s.do(http.MethodGet, "/api/v1/me", secret, nil); me.status != http.StatusOK {
+		t.Fatalf("a token issued in the UI cannot read the API: %d %s", me.status, me.body)
+	}
+
+	if code, body, _ := fetch(t, browser, http.MethodPost, s.base+"/settings/auth/tokens", url.Values{"name": {" "}}); code != http.StatusOK || !strings.Contains(body, "name") {
+		t.Fatalf("a blank name was not refused: %d %.300s", code, body)
+	}
+	if code, body, _ := fetch(t, browser, http.MethodPost, s.base+"/settings/auth/tokens", url.Values{"name": {"x"}, "expires_at": {"tomorrow"}}); code != http.StatusOK || !strings.Contains(body, "RFC 3339") {
+		t.Fatalf("a bad expiry was not refused: %d %.300s", code, body)
+	}
+
+	req, err := http.NewRequest(http.MethodPost, s.base+"/settings/auth/tokens", strings.NewReader("name=csrf"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for _, c := range browser.Jar.Cookies(req.URL) {
+		req.AddCookie(c)
+	}
+	resp, err := browser.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusForbidden {
+		t.Fatalf("a token POST without a CSRF token: %d", resp.StatusCode)
+	}
+
+	if code, body, _ := fetch(t, browser, http.MethodPost, s.base+"/settings/auth/tokens/"+id+"/revoke", url.Values{}); code != http.StatusOK {
+		t.Fatalf("revoke: %d %.300s", code, body)
+	}
+	if refused := s.do(http.MethodGet, "/api/v1/me", secret, nil); refused.status != http.StatusUnauthorized || refused.code() != "invalid_token" {
+		t.Fatalf("a token revoked in the UI was admitted: %d %s", refused.status, refused.body)
+	}
+}

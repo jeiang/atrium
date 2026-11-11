@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
+	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
@@ -79,7 +80,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 			}},
 			{Module: actionlinkpages.Module, Templates: actionlinkpages.Templates()},
 			{Nav: []web.NavItem{
-				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Auth: true, Order: 50},
+				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}},
 		},
 		Settings: []settings.Group{
@@ -96,6 +97,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 				return toolset.Ledger(d, mc.Env, m.Clients(cfg), m.Now)
 			}}),
 			settingscmd.Command(mc.Env, m.Guard),
+			bearer.Command(mc.Env),
 			secretscmd.Command(mc.Env),
 			dbcmd.Command(mc.Env, m.Now),
 			kbcmd.Command(mc.Env),

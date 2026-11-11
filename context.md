@@ -641,14 +641,24 @@ behavior-parity target.
   without authentication on a non-loopback address. Public media file access requires an expiring signed
   link and still checks Host. The link signing key is a generated secret held in
   the database (pinnable by the deployment); a legacy `media-link.key` file is
-  moved into it on first use.
-- The Sign-in settings tab shows the OIDC connection and activates a configuration only after a Test sign-in in a separate state showed the tested account would be admitted.
-- `/api/v1` is a JSON API for a native client, available only in listeners
-  with oidc mode and only when `oidc_api_client_id` names the client. It
-  accepts nothing but a bearer access token from the configured issuer
-  (RFC 9068 `at+jwt`, audience and `client_id` equal to that client, expiry
+  moved into it on first use. In-process token buckets, owned by each server
+  instance, bound public requests: 10 sign-in requests a minute per client
+  address, 120 API requests a minute per address and 60 a minute per bearer
+  token. A refusal is `429` with `Retry-After` and `no-store` and changes
+  nothing. The client address is the socket peer, unless the peer is in the
+  host's `web.trusted_proxy_cidrs` list, in which case exactly one valid
+  `CF-Connecting-IP` names it; other forwarded headers are ignored.
+- The Sign-in settings tab shows the OIDC connection and session settings, and issues, lists and revokes API bearer tokens.
+- `/api/v1` is a JSON API for a native client, available in every listener.
+  It accepts nothing but a bearer token: a locally issued `atr_` token, or,
+  when `oidc_api_client_id` names the client, an RFC 9068 access token from
+  the configured issuer (audience and `client_id` equal to that client, expiry
   with 60 s skew); session cookies and proxy headers grant nothing there.
-  Groups come from the token or the userinfo endpoint and decide admission
+  Both formats pass one persisted revocation and usage gate, and a token is
+  stored only as its SHA-256 hash; an OIDC access token enrolls on its first
+  successful validation. `atrium auth token issue|list|revoke` and Settings ›
+  Sign-in issue, list and revoke tokens, with the secret shown once. Groups
+  come from the token or the userinfo endpoint and decide admission
   exactly as for web sessions. Implemented endpoints: `/me`,
   thread list, create and transcript, send, stop and answer, the run event
   stream (SSE), the inbox, `/pending` (pending and blocked
@@ -683,7 +693,7 @@ behavior-parity target.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.
 - **Telemetry:** OpenTelemetry traces to VictoriaTraces, Prometheus metrics, and a `trace_id` in logs.
 - **Integrations:** weather (Open-Meteo, later WeatherKit) and package tracking (Ship24 free tier for flagged packages).
-- **An iOS app** through the `/api/v1` JSON API. Chat, the run stream, the inbox, approvals, undo entries and drafts are implemented; attachments, push device registration (APNs) and API rate limiting are deferred.
+- **An iOS app** through the `/api/v1` JSON API. Chat, the run stream, the inbox, approvals, undo entries and drafts are implemented; attachments and push device registration (APNs) are deferred.
 - **Birthdays** have no page; the agent keeps access.
 - **Open loops** cover only mail addressed to the owner that needs a reply.
 

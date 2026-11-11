@@ -72,6 +72,7 @@
       contacts.contacts_dir = "${mirrorDir}/contacts";
     }
     // lib.optionalAttrs (cfg.observability.tracesEndpoint != null) {core.otel_traces_endpoint = cfg.observability.tracesEndpoint;}
+    // lib.optionalAttrs (cfg.web.trustedProxyCidrs != []) {web.trusted_proxy_cidrs = lib.concatStringsSep "," cfg.web.trustedProxyCidrs;}
     // lib.optionalAttrs (cfg.knowledgeExport.obsidianDirectory != null) {export.export_obsidian_dir = cfg.knowledgeExport.obsidianDirectory;}
     // lib.optionalAttrs (cfg.mailAccounts != {}) {mail.mail_accounts_file = "${accountsFile}";}
     // lib.optionalAttrs (cfg.connections != {}) {connections = renderedConnections;}
@@ -612,6 +613,13 @@ in {
         type = types.nullOr types.str;
         default = null;
         description = "The one Host header the public listener accepts (ATRIUM_PUBLIC_HOST). Required unless web.auth = \"local\".";
+      };
+
+      trustedProxyCidrs = mkOption {
+        type = types.listOf types.str;
+        default = [];
+        example = ["127.0.0.1/32"];
+        description = "Socket peer addresses or CIDRs allowed to name the client in CF-Connecting-IP, rendered as host.web.trusted_proxy_cidrs. Empty keys every request by its socket address.";
       };
 
       local = {

@@ -15,6 +15,7 @@ var owners = map[string]string{
 	"agent_events":            "calendar",
 	"agent_profile":           "kb",
 	"attention_snoozes":       "attention",
+	"auth_bearers":            "auth",
 	"auth_logins":             "auth",
 	"auth_sessions":           "auth",
 	"commitments":             "mail",

@@ -417,6 +417,7 @@ var importManifest = []ImportEntry{
 	{Module: "web", Key: "chat_thread_limit", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/config/tuning.go:TuningChatThreadLimit", Default: "50", Type: Int, Choices: nil, Cutover: false},
 	{Module: "web", Key: "preview_bytes", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/config/tuning.go:TuningPreviewBytes", Default: "200000", Type: Int, Choices: nil, Cutover: false},
 	{Module: "web", Key: "snooze_choices", Class: ImportOperator, Action: ImportCarry, Target: "settings.snooze_choices", Default: "1,3,7,14", Type: String, Choices: nil, Cutover: false},
+	{Module: "web", Key: "trusted_proxy_cidrs", Class: ImportHost, Action: ImportDropHost, Target: "host.web.trusted_proxy_cidrs", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "web", Key: "web_page_size", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/config/tuning.go:TuningWebPageSize", Default: "50", Type: Int, Choices: nil, Cutover: false},
 	{Module: "web", Key: "web_run_history", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/config/tuning.go:TuningWebRunHistory", Default: "30", Type: Int, Choices: nil, Cutover: false},
 	{Module: "web_search", Key: "search_web_dynamic_filtering", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/assistant/registry/tuning.go:TuningSearchWebDynamicFiltering", Default: "false", Type: Bool, Choices: nil, Cutover: false},

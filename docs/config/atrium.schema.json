@@ -345,6 +345,19 @@
         }
       },
       "type": "object"
+    },
+    "web": {
+      "additionalProperties": false,
+      "properties": {
+        "trusted_proxy_cidrs": {
+          "type": "string"
+        },
+        "trusted_proxy_cidrs_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
     }
   },
   "title": "atrium host configuration",
@@ -725,6 +738,7 @@
     "web.chat_thread_limit": "tuning",
     "web.preview_bytes": "tuning",
     "web.snooze_choices": "operator",
+    "web.trusted_proxy_cidrs": "host",
     "web.web_page_size": "tuning",
     "web.web_run_history": "tuning",
     "web_search.search_web_dynamic_filtering": "tuning",
