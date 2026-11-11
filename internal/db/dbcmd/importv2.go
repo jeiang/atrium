@@ -49,6 +49,7 @@ type tablePlan struct {
 	where  string
 	args   []any
 	null   []string
+	skip   []string
 	set    map[string]any
 	ignore bool
 	run    func(*importer) (int64, error)
@@ -58,7 +59,7 @@ var importTables = []tablePlan{
 	{table: "accounts", action: carry},
 	{table: "mail_accounts", action: carry, ignore: true, why: "the accounts file wins on a conflict"},
 	{table: "mailboxes", action: carry},
-	{table: "messages", action: carry},
+	{table: "messages", action: carry, skip: []string{"embedded"}},
 	{table: "message_fts", action: rebuild, run: func(im *importer) (int64, error) {
 		return im.copyFTS("message_fts", []string{"subject", "sender", "body"})
 	}},
@@ -87,7 +88,7 @@ var importTables = []tablePlan{
 	{table: "push_subscriptions", action: carry, why: "operator device registrations; the VAPID key is carried in secrets"},
 	{table: "attention_snoozes", action: carry, why: "operator snoozes keyed by carried item ids"},
 	{table: "projects", action: carry},
-	{table: "kb_records", action: carry, null: []string{"source_run_id"}, set: map[string]any{"embedded": 0}},
+	{table: "kb_records", action: carry, null: []string{"source_run_id"}, skip: []string{"embedded"}},
 	{table: "kb_fts", action: rebuild, why: "repopulated by the kb_records triggers", run: func(im *importer) (int64, error) {
 		return im.countRows("kb_fts")
 	}},
@@ -424,11 +425,11 @@ func (im *importer) apply(plan tablePlan) (int64, error) {
 	if plan.run != nil {
 		return plan.run(im)
 	}
-	return im.copy(plan.table, plan.where, plan.args, plan.null, plan.set, plan.ignore)
+	return im.copy(plan.table, plan.where, plan.args, plan.null, plan.skip, plan.set, plan.ignore)
 }
 
-func (im *importer) copy(table, where string, args []any, null []string, set map[string]any, ignore bool) (int64, error) {
-	columns, err := tableColumns(im.ctx, im.src, table)
+func (im *importer) copy(table, where string, args []any, null, skip []string, set map[string]any, ignore bool) (int64, error) {
+	source, err := tableColumns(im.ctx, im.src, table)
 	if err != nil {
 		return 0, err
 	}
@@ -436,10 +437,15 @@ func (im *importer) copy(table, where string, args []any, null []string, set map
 	if err != nil {
 		return 0, err
 	}
-	for _, column := range columns {
+	columns := make([]string, 0, len(source))
+	for _, column := range source {
+		if slices.Contains(skip, column) {
+			continue
+		}
 		if !slices.Contains(dest, column) {
 			return 0, fmt.Errorf("the destination %s table has no %s column; update the importer for this schema change", table, column)
 		}
+		columns = append(columns, column)
 	}
 	query := "SELECT " + quoteList(columns) + " FROM " + quoteName(table)
 	if where != "" {
@@ -514,7 +520,7 @@ func (im *importer) copyFTS(table string, columns []string) (int64, error) {
 }
 
 func (im *importer) carryThreads() (int64, error) {
-	n, err := im.copy("threads", "", nil, []string{"parent_thread_id", "parent_run_id"}, nil, false)
+	n, err := im.copy("threads", "", nil, []string{"parent_thread_id", "parent_run_id"}, nil, nil, false)
 	if err != nil {
 		return n, err
 	}
@@ -605,8 +611,7 @@ func (im *importer) carryIndex() (int64, error) {
 	if err := rows.Err(); err != nil {
 		return n, err
 	}
-	if _, err := im.tx.ExecContext(im.ctx,
-		"UPDATE messages SET embedded = 0 WHERE embedded != 0 AND id NOT IN (SELECT rowid FROM "+quoteName(table)+")"); err != nil {
+	if err := im.carryMessageHashes(table); err != nil {
 		return n, err
 	}
 	im.vectors = n
@@ -662,6 +667,41 @@ func (im *importer) carryUsage() (int64, error) {
 		n++
 	}
 	return n, rows.Err()
+}
+
+func (im *importer) carryMessageHashes(table string) error {
+	ctx, err := embed.WithModels(im.ctx, im.tx)
+	if err != nil {
+		return err
+	}
+	rows, err := im.tx.QueryContext(im.ctx,
+		"SELECT m.id, m.subject, m.from_name, m.from_addr, f.body FROM messages m JOIN message_fts f ON f.rowid = m.id "+
+			"WHERE m.id IN (SELECT rowid FROM "+quoteName(table)+")")
+	if err != nil {
+		return err
+	}
+	type carried struct {
+		id   int64
+		hash string
+	}
+	list, err := db.Collect(rows, func(r *sql.Rows) (carried, error) {
+		var c carried
+		var subject, name, addr, body sql.NullString
+		if err := r.Scan(&c.id, &subject, &name, &addr, &body); err != nil {
+			return carried{}, err
+		}
+		c.hash = embed.Hash(embed.DocumentText(ctx, subject.String, name.String, addr.String, body.String))
+		return c, nil
+	})
+	if err != nil {
+		return err
+	}
+	for _, c := range list {
+		if _, err := im.tx.ExecContext(im.ctx, "UPDATE messages SET embedded_hash = ? WHERE id = ?", c.hash, c.id); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (im *importer) countSource(table string) (int64, error) {

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/binary"
 	"encoding/json"
@@ -32,6 +33,7 @@ type fakeEmbedder struct {
 	allow      int
 	texts      map[string]int
 	queryModel string
+	gate       func(ctx context.Context, texts []string)
 }
 
 func newFakeEmbedder(t *testing.T) *fakeEmbedder {
@@ -59,6 +61,9 @@ func newFakeEmbedder(t *testing.T) *fakeEmbedder {
 				case <-time.After(10 * time.Millisecond):
 				}
 			}
+		}
+		if f.gate != nil {
+			f.gate(r.Context(), req.Input)
 		}
 		f.mu.Lock()
 		f.texts[req.Model] += len(req.Input)

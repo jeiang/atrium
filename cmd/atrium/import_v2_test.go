@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
@@ -165,8 +166,11 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 	if n := importCount(t, q, "SELECT length(value) FROM secrets WHERE name = 'anthropic_api_key'"); n != 14 {
 		t.Errorf("secret length %d", n)
 	}
-	if n := importCount(t, q, "SELECT COUNT(*) FROM kb_records WHERE embedded != 0"); n != 0 {
-		t.Errorf("%d knowledge records kept embedded=1", n)
+	if n := importCount(t, q, "SELECT COUNT(*) FROM kb_records WHERE embedded_hash IS NOT NULL"); n != 0 {
+		t.Errorf("%d knowledge records kept an embedded hash", n)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM messages WHERE id IN (SELECT rowid FROM embed_message_0) AND embedded_hash IS NULL"); n != 0 {
+		t.Errorf("%d carried message vectors have no embedded hash", n)
 	}
 	if got := importValue(t, q, "SELECT name FROM media_channels WHERE id = 1"); got != "Lanterns" {
 		t.Errorf("media channel 1 %q", got)
@@ -206,6 +210,36 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 	}
 	if replay.stdout != string(baseline) {
 		t.Errorf("the imported copy replays differently from the v2 baseline:\ngot:\n%s\nwant:\n%s", replay.stdout, baseline)
+	}
+
+	w, err := db.Connect(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = w.Close() }()
+	sent := 0
+	fill := func(ctx context.Context, url string, texts []string) ([][]float64, error) {
+		sent += len(texts)
+		out := make([][]float64, len(texts))
+		for i := range out {
+			out[i] = make([]float64, config.EmbedDim)
+			out[i][0] = 1
+		}
+		return out, nil
+	}
+	embedded, err := embed.Pending(context.Background(), w, "http://embed.invalid", fill)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if embedded != 10 || sent != 10 {
+		t.Errorf("the first fill after import embedded %d messages and sent %d texts, want the 10 without carried vectors", embedded, sent)
+	}
+	embedded, err = embed.Pending(context.Background(), w, "http://embed.invalid", fill)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if embedded != 0 || sent != 10 {
+		t.Errorf("the second fill after import embedded %d messages and sent %d texts in total", embedded, sent)
 	}
 
 	t.Run("a second import is refused and changes nothing", func(t *testing.T) {
@@ -286,8 +320,8 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 			t.Fatal(err)
 		}
 		defer func() { _ = dest.Close() }()
-		if n := importCount(t, dest, "SELECT COUNT(*) FROM kb_records WHERE embedded != 0"); n != 0 {
-			t.Errorf("%d knowledge records kept embedded=1", n)
+		if n := importCount(t, dest, "SELECT COUNT(*) FROM kb_records WHERE embedded_hash IS NOT NULL"); n != 0 {
+			t.Errorf("%d knowledge records kept an embedded hash", n)
 		}
 	})
 

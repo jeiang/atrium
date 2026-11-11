@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
 	kbembedding "github.com/jeiang/atrium/internal/kb/embedding"
@@ -108,15 +109,6 @@ func (b *Build) Swap(ctx context.Context) (bool, error) {
 		if err != nil {
 			return err
 		}
-		if err := mailembedding.MarkIn(ctx, tx, b.MessageTable()); err != nil {
-			return err
-		}
-		if err := notionembedding.MarkIn(ctx, tx, b.NotionTable()); err != nil {
-			return err
-		}
-		if err := kbembedding.MarkIn(ctx, tx, b.KBTable()); err != nil {
-			return err
-		}
 		if err := drop(ctx, tx, old); err != nil {
 			return err
 		}
@@ -134,7 +126,18 @@ func (b *Build) Discard(ctx context.Context) error {
 	if err := b.building(); err != nil {
 		return err
 	}
-	return b.d.WithTx(ctx, func(tx *sql.Tx) error { return drop(ctx, tx, b.Index) })
+	return b.d.WithTx(ctx, func(tx *sql.Tx) error {
+		if err := mailembedding.ClearIn(ctx, tx, b.MessageTable()); err != nil {
+			return err
+		}
+		if err := notionembedding.ClearIn(ctx, tx, b.NotionTable()); err != nil {
+			return err
+		}
+		if err := kbembedding.ClearIn(ctx, tx, b.KBTable()); err != nil {
+			return err
+		}
+		return drop(ctx, tx, b.Index)
+	})
 }
 
 func (i Index) Adopt(ctx context.Context, d *db.DB, url, model string) error {
@@ -164,6 +167,30 @@ func DeleteKB(ctx context.Context, q execer, id int64) error {
 			continue
 		}
 		if _, err := q.ExecContext(ctx, "DELETE FROM "+i.KBTable()+" WHERE rowid = ?", id); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func DeleteMessages(ctx context.Context, q execer, ids []int64) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	marks := "(?" + strings.TrimSuffix(strings.Repeat(",?", len(ids)-1), ",") + ")"
+	for _, state := range []string{StateActive, StateBuilding} {
+		i, ok, err := lookup(ctx, q, state)
+		if err != nil {
+			return err
+		}
+		if !ok {
+			continue
+		}
+		if _, err := q.ExecContext(ctx, "DELETE FROM "+i.MessageTable()+" WHERE rowid IN "+marks, args...); err != nil {
 			return err
 		}
 	}
