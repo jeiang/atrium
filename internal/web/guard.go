@@ -7,7 +7,9 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
+	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/auth/oidc"
@@ -136,6 +138,15 @@ func healthProbe(r *http.Request) bool {
 	return r.Method == http.MethodGet && r.URL.EscapedPath() == healthPath
 }
 
+func loopbackPeer(remoteAddr string) bool {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return false
+	}
+	addr, err := netip.ParseAddr(host)
+	return err == nil && addr.Unmap().IsLoopback()
+}
+
 func setSecurityHeaders(h http.Header) {
 	h.Set("Content-Security-Policy", csp)
 	h.Set("X-Content-Type-Options", "nosniff")
@@ -144,6 +155,10 @@ func setSecurityHeaders(h http.Header) {
 
 func (g *Guard) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if g.auth.Local() && !loopbackPeer(r.RemoteAddr) {
+			deny(w, http.StatusForbidden, "Forbidden")
+			return
+		}
 		if healthProbe(r) {
 			setSecurityHeaders(w.Header())
 			next.ServeHTTP(w, r)
@@ -180,7 +195,6 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			token = newToken()
 		}
 		if err == nil {
-			who.NoAuth = who.Source == SourceLocal && g.auth.Open
 			r = r.WithContext(context.WithValue(r.Context(), identityKey{}, who))
 		}
 		if isUnsafe(r.Method) && !strings.HasPrefix(r.URL.Path, "/actions/") {

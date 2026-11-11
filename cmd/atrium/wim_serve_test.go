@@ -19,8 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 )
 
-const wimBanner = "Authentication is disabled"
-
 func wimServeIn(t *testing.T, dir string, args ...string) (string, func()) {
 	t.Helper()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
@@ -70,8 +68,11 @@ func TestWimServeRefusesUnsafeAuthConfigurations(t *testing.T) {
 		{[]string{"--auth", "oidc"}, "oidc mode needs --allowed-host or ATRIUM_PUBLIC_HOST"},
 		{[]string{"--auth", "local", "--auth", "oidc", "--allowed-host", "x"}, "local cannot combine"},
 		{[]string{"--auth", "basic"}, "basic"},
-		{[]string{"--host", "0.0.0.0", "--auth", "local"}, "Authentication is recommended because this instance holds API keys and mailbox access"},
-		{[]string{"--host", "0.0.0.0", "--auth", "local", "--force-disable-auth"}, "--force-disable-auth on a non-loopback address needs --allowed-host"},
+		{[]string{"--host", "0.0.0.0", "--auth", "local"}, "local auth mode needs a numeric loopback --host"},
+		{[]string{"--host", "::", "--auth", "local"}, "local auth mode needs a numeric loopback --host"},
+		{[]string{"--host", "localhost", "--auth", "local"}, "local auth mode needs a numeric loopback --host"},
+		{[]string{"--host", "192.0.2.10", "--auth", "local"}, "local auth mode needs a numeric loopback --host"},
+		{[]string{"--host", "127.0.0.1", "--auth", "local", "--force-disable-auth"}, "unknown arguments: --force-disable-auth"},
 	} {
 		var out, errs bytes.Buffer
 		code := newTestApp(t, nil).Run(context.Background(), append([]string{"serve", "--port", "1"}, c.args...), &out, &errs)
@@ -81,22 +82,55 @@ func TestWimServeRefusesUnsafeAuthConfigurations(t *testing.T) {
 	}
 }
 
-func TestWimForceDisableAuthServesOnlyWithTheBanner(t *testing.T) {
+func TestWimLocalAuthServesLoopbackIPv4AndIPv6(t *testing.T) {
 	t.Parallel()
-	local, _ := wimServeIn(t, t.TempDir(), "--auth", "local")
-	if status, body, _ := wimGet(t, local+"/settings/mail"); status != http.StatusOK || strings.Contains(body, wimBanner) {
-		t.Fatalf("loopback local mode: %d banner %v", status, strings.Contains(body, wimBanner))
-	}
-	forced, _ := wimServeIn(t, t.TempDir(), "--host", "127.0.0.1", "--auth", "proxy", "--force-disable-auth")
-	if status, body, _ := wimGet(t, forced+"/settings/mail"); status != http.StatusOK || !strings.Contains(body, wimBanner) {
-		t.Fatalf("forced open proxy mode: %d banner %v", status, strings.Contains(body, wimBanner))
-	}
-	wide, _ := wimServeIn(t, t.TempDir(), "--host", "0.0.0.0", "--auth", "local", "--force-disable-auth", "--allowed-host", "127.0.0.1")
-	if status, body, _ := wimGet(t, wide+"/settings/mail", "Host", "127.0.0.1"); status != http.StatusOK || !strings.Contains(body, wimBanner) {
-		t.Fatalf("forced open on all interfaces: %d banner %v", status, strings.Contains(body, wimBanner))
-	}
-	if status, _, _ := wimGet(t, wide+"/settings/mail", "Host", "evil.example"); status != http.StatusBadRequest {
-		t.Fatalf("forced open on all interfaces accepted a foreign Host: %d", status)
+	for _, host := range []string{"127.0.0.1", "::1"} {
+		base, _ := wimServeIn(t, t.TempDir(), "--host", host, "--auth", "local")
+		status, body, _ := wimGet(t, base+"/settings/mail")
+		if status != http.StatusOK || !strings.Contains(body, "Mail") || strings.Contains(body, "Authentication is disabled") {
+			t.Fatalf("%s local mode: %d", host, status)
+		}
+		if status, _, _ := wimGet(t, base+"/settings/mail", "Host", "evil.example"); status != http.StatusBadRequest {
+			t.Fatalf("%s local mode accepted a foreign Host: %d", host, status)
+		}
+		status, _, _ = wimGet(t, base+"/settings/mail", "X-Forwarded-For", "203.0.113.9", "X-Real-IP", "203.0.113.9", "CF-Connecting-IP", "203.0.113.9")
+		if status != http.StatusOK {
+			t.Fatalf("%s local mode with forwarded addresses: %d", host, status)
+		}
+
+		jar, _ := cookiejar.New(nil)
+		client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		req, _ := http.NewRequest(http.MethodGet, base+"/settings/mail", nil)
+		if resp, err := client.Do(req); err != nil {
+			t.Fatal(err)
+		} else {
+			_ = resp.Body.Close()
+		}
+		u, _ := url.Parse(base)
+		post := func(token string) int {
+			t.Helper()
+			req, _ := http.NewRequest(http.MethodPost, base+"/settings/mail/accounts/nosuch/test", strings.NewReader(url.Values{"csrf_token": {token}}.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req.Header.Set("Origin", base)
+			resp, err := client.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			_ = resp.Body.Close()
+			return resp.StatusCode
+		}
+		if code := post(""); code != http.StatusForbidden {
+			t.Errorf("%s local mode without a CSRF token: %d", host, code)
+		}
+		token := ""
+		for _, c := range jar.Cookies(u) {
+			if c.Name == "atrium_csrf" {
+				token = c.Value
+			}
+		}
+		if code := post(token); code != http.StatusNotFound {
+			t.Errorf("%s local mode with a CSRF token: %d", host, code)
+		}
 	}
 }
 

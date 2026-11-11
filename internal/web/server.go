@@ -144,9 +144,6 @@ func New(o Options) (*Server, error) {
 			return nil, err
 		}
 	}
-	if auth.Open && !auth.Local() {
-		return nil, errors.New("open authentication requires local mode")
-	}
 	if o.Env == nil {
 		o.Env = config.OS
 	}

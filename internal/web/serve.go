@@ -109,9 +109,8 @@ func ServeCommand(boot Boot, pages ...Page) *cli.Command {
 			port := args.Int("port", 0, cli.Opt{Required: true})
 			modes := args.Repeated("auth", cli.Opt{Choices: authModes[:], Help: "authentication mode; repeatable (proxy and oidc combine; default proxy)"})
 			hosts := args.Repeated("allowed-host", cli.Opt{Help: "accepted Host header; repeatable (proxy mode requires one, or ATRIUM_PUBLIC_HOST)"})
-			force := args.Bool("force-disable-auth", cli.Opt{Help: "start without authentication when none is configured"})
 			return func(env *cli.Env) int {
-				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, forceDisableAuth: *force, pages: pages, env: env.Env, boot: boot})
+				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, pages: pages, env: env.Env, boot: boot})
 			}
 		},
 	}
@@ -127,8 +126,6 @@ type serveArgs struct {
 	settings *settings.Registry
 	state    *config.State
 	boot     Boot
-
-	forceDisableAuth bool
 }
 
 func publicHosts(given []string, env config.Env) []string {

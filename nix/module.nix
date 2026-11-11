@@ -268,10 +268,9 @@
     host,
     port,
     auth,
-    force ? false,
     environment ? {},
   }: let
-    needsHost = auth != "local" || (force && cfg.web.allowedHost != null);
+    needsHost = auth != "local";
   in {
     inherit description;
     environment = appEnvironment // environment // lib.optionalAttrs needsHost {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;};
@@ -279,7 +278,7 @@
     serviceConfig =
       mediaWriter
       // {
-        ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} ${authArgs auth}" + lib.optionalString needsHost " --allowed-host ${cfg.web.allowedHost}" + lib.optionalString force " --force-disable-auth";
+        ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} ${authArgs auth}" + lib.optionalString needsHost " --allowed-host ${cfg.web.allowedHost}";
         Type = "notify";
         WatchdogSec = "1min";
         TimeoutStartSec = writeTimeout;
@@ -333,7 +332,6 @@
         description = "atrium web UI";
         inherit (cfg.web) host auth;
         inherit (cfg) port;
-        force = cfg.web.forceDisableAuth;
       };
 
       atrium-sync = {
@@ -607,19 +605,13 @@ in {
       auth = mkOption {
         type = types.enum ["proxy" "oidc" "proxy+oidc" "local"];
         default = "proxy";
-        description = "Auth modes of the public listener, rendered as one --auth flag per mode: proxy trusts Remote-Groups from the reverse proxy and needs allowedHost; oidc accepts OIDC sessions only and needs allowedHost; proxy+oidc accepts both; local trusts every request.";
+        description = "Auth modes of the public listener, rendered as one --auth flag per mode: proxy trusts Remote-Groups from the reverse proxy and needs allowedHost; oidc accepts OIDC sessions only and needs allowedHost; proxy+oidc accepts both; local trusts every request and needs a numeric loopback web.host.";
       };
 
       allowedHost = mkOption {
         type = types.nullOr types.str;
         default = null;
         description = "The one Host header the public listener accepts (ATRIUM_PUBLIC_HOST). Required unless web.auth = \"local\".";
-      };
-
-      forceDisableAuth = mkOption {
-        type = types.bool;
-        default = false;
-        description = "Pass --force-disable-auth to the public listener so it starts without authentication on a non-loopback web.host with web.auth = \"local\". Set allowedHost as well, otherwise only loopback Host headers are accepted.";
       };
 
       local = {
@@ -771,12 +763,8 @@ in {
         message = "services.atrium.web.allowedHost is required with web.auth = \"proxy\", \"oidc\" or \"proxy+oidc\"";
       }
       {
-        assertion = cfg.web.auth != "local" || cfg.web.forceDisableAuth || lib.hasPrefix "127." cfg.web.host || builtins.elem cfg.web.host ["localhost" "::1" "[::1]"];
-        message = "services.atrium.web.auth = \"local\" needs a loopback services.atrium.web.host, or services.atrium.web.forceDisableAuth = true";
-      }
-      {
-        assertion = !cfg.web.forceDisableAuth || cfg.web.allowedHost != null || lib.hasPrefix "127." cfg.web.host || builtins.elem cfg.web.host ["localhost" "::1" "[::1]"];
-        message = "services.atrium.web.forceDisableAuth on a non-loopback services.atrium.web.host needs services.atrium.web.allowedHost";
+        assertion = cfg.web.auth != "local" || lib.hasPrefix "127." cfg.web.host || builtins.elem cfg.web.host ["::1" "[::1]"];
+        message = "services.atrium.web.auth = \"local\" needs a numeric loopback services.atrium.web.host such as 127.0.0.1 or ::1";
       }
     ];
 

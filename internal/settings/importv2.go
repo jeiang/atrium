@@ -165,7 +165,7 @@ var importManifest = []ImportEntry{
 	{Module: "auth", Key: "oidc_scopes", Class: ImportHost, Action: ImportDropHost, Target: "host.auth.oidc_scopes", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "auth", Key: "oidc_session_idle_days", Class: ImportOperator, Action: ImportCarry, Target: "settings.oidc_session_idle_days", Default: "7", Type: Int, Choices: nil, Cutover: false},
 	{Module: "auth", Key: "oidc_session_max_days", Class: ImportOperator, Action: ImportCarry, Target: "settings.oidc_session_max_days", Default: "30", Type: Int, Choices: nil, Cutover: false},
-	{Module: "auth", Key: "oidc_wizard_key", Class: ImportOperator, Action: ImportDrop, Target: "generated credential", Default: "", Type: String, Choices: nil, Cutover: false},
+	{Module: "auth", Key: "oidc_wizard_key", Class: ImportOperator, Action: ImportDrop, Target: "retired", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "calendar", Key: "calendar_account", Class: ImportOperator, Action: ImportCarry, Target: "settings.calendar_account", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "calendar", Key: "calendar_dir", Class: ImportHost, Action: ImportDropHost, Target: "host.calendar.calendar_dir", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "calendar", Key: "candidate_draft_limit", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/calendar/tuning.go:TuningCandidateDraftLimit", Default: "10", Type: Int, Choices: nil, Cutover: false},

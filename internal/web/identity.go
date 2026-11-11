@@ -36,7 +36,6 @@ type Identity struct {
 	Subject string
 	Email   string
 	Name    string
-	NoAuth  bool
 }
 
 type identityKey struct{}

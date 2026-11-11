@@ -7,15 +7,11 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 )
 
-const (
-	ActionLinkKey = "action_link_key"
-	OidcWizardKey = "oidc_wizard_key"
-)
+const ActionLinkKey = "action_link_key"
 
 func init() {
 	settings.MustRegister(
 		settings.Secret(settings.SecretOpts{Generated: true}, settings.Def{Key: ActionLinkKey, Module: "action_links", Type: settings.String, Check: settings.NonEmpty}),
-		settings.Secret(settings.SecretOpts{Generated: true}, settings.Def{Key: OidcWizardKey, Module: "auth", Type: settings.String, Check: settings.NonEmpty}),
 	)
 }
 

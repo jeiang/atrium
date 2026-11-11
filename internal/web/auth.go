@@ -16,13 +16,11 @@ const (
 
 type Policy struct {
 	Mode Mode
-	Open bool
 }
 
-func (p Policy) Local() bool    { return p.Mode == ModeLocal }
-func (p Policy) Proxy() bool    { return p.Mode == ModeProxy || p.Mode == ModeProxyOIDC }
-func (p Policy) OIDC() bool     { return p.Mode == ModeOIDC || p.Mode == ModeProxyOIDC }
-func (p Policy) Enforced() bool { return !p.Open }
+func (p Policy) Local() bool { return p.Mode == ModeLocal }
+func (p Policy) Proxy() bool { return p.Mode == ModeProxy || p.Mode == ModeProxyOIDC }
+func (p Policy) OIDC() bool  { return p.Mode == ModeOIDC || p.Mode == ModeProxyOIDC }
 
 func parseAuth(modes []string) (Policy, error) {
 	if len(modes) == 0 {
