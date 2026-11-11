@@ -77,6 +77,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 		mailCmds.ReindexCommand(),
 		mailCmds.LiveCommand(),
 		mailCmds.EndpointsCommand(),
+		mailCmds.ReplayCommand(),
 	}
 	cmds = append(cmds, mailCmds.ScanCommands()...)
 	cmds = append(cmds, mailCmds.RefreshCommands()...)
@@ -112,6 +113,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 			"live resume":     {Always: true},
 			"live status":     {Always: true},
 			"endpoints probe": {Always: true},
+			"replay":          {Always: true},
 		},
 		Tools: func(r *registry.Registry) error {
 			mailtools.RegisterProposalKinds()
