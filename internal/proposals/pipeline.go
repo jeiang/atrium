@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -352,7 +351,7 @@ func pendingEffects(effects []ledger.Effect) ([]ledger.Effect, map[int64]bool) {
 		}
 	}
 	var todo []ledger.Effect
-	for _, e := range slices.Backward(effects) {
+	for _, e := range effects {
 		if e.Direction != "forward" || (e.State != ledger.Done && e.State != ledger.Partial) {
 			continue
 		}

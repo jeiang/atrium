@@ -9,7 +9,8 @@
     "dest": "Family",
     "subject": "Family news 11",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 8,
@@ -21,7 +22,8 @@
     "dest": "Work",
     "subject": "Weekly status 14",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 7,
@@ -33,6 +35,7 @@
     "dest": "Bills",
     "subject": "Water statement October",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   }
 ]

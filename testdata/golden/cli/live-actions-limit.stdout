@@ -9,7 +9,8 @@
     "dest": "Bills",
     "subject": "Your Shop A receipt #2002",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 9,
@@ -21,6 +22,7 @@
     "dest": "Family",
     "subject": "Family news 11",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   }
 ]

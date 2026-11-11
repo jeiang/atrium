@@ -9,7 +9,8 @@
     "dest": "Bills",
     "subject": "Your Shop A receipt #2002",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 9,
@@ -21,7 +22,8 @@
     "dest": "Family",
     "subject": "Family news 11",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 8,
@@ -33,7 +35,8 @@
     "dest": "Work",
     "subject": "Weekly status 14",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 7,
@@ -45,7 +48,8 @@
     "dest": "Bills",
     "subject": "Water statement October",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 6,
@@ -57,7 +61,8 @@
     "dest": "Receipts",
     "subject": "Your Shop A receipt #2002",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 5,
@@ -69,7 +74,8 @@
     "dest": "Bills",
     "subject": "Power bill reminder",
     "error": null,
-    "undoable": false
+    "undoable": false,
+    "effective_outcome": "done"
   },
   {
     "id": 4,
@@ -81,7 +87,8 @@
     "dest": null,
     "subject": "Call me this weekend",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 3,
@@ -93,7 +100,8 @@
     "dest": "Deleted Messages",
     "subject": "Big promo",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 2,
@@ -105,7 +113,8 @@
     "dest": null,
     "subject": "Dinner on Saturday",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 1,
@@ -117,6 +126,7 @@
     "dest": null,
     "subject": "Question about the trip",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   }
 ]

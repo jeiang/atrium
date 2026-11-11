@@ -168,7 +168,7 @@ func marshal(v any) json.RawMessage {
 		return nil
 	}
 	b, err := json.Marshal(v)
-	if err != nil {
+	if err != nil || string(b) == "null" {
 		return nil
 	}
 	return b
