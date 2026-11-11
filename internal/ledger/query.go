@@ -144,8 +144,10 @@ func scanEffect(sc scanner) (Effect, error) {
 		e.EffectiveOutcome = string(e.State)
 	}
 	e.Blocked = e.State.Blocking() && e.Resolution == nil
+	undoableState := e.State == Done || e.State == Partial ||
+		(e.State == Unknown && e.Resolution != nil && (e.Resolution.EffectiveOutcome == "done" || e.Resolution.EffectiveOutcome == "partial"))
 	e.Undoable = e.Direction == "forward" && e.UndoneBy == nil && activeUndo == 0 &&
-		(e.State == Done || e.State == Partial) && len(e.Undo) > 0 &&
+		undoableState && len(e.Undo) > 0 &&
 		(e.Resolution == nil || e.Resolution.EffectiveOutcome != "failed")
 	return e, nil
 }
@@ -409,7 +411,8 @@ func TargetsLike(ctx context.Context, q db.Querier, like, excludeOperation strin
 
 const (
 	effectBlockedExpr  = "e.state IN ('intent','unknown','partial') AND r.id IS NULL"
-	effectUndoableExpr = "e.direction = 'forward' AND e.state IN ('done','partial') AND e.undo_json IS NOT NULL " +
+	effectUndoableExpr = "e.direction = 'forward' AND (e.state IN ('done','partial') OR " +
+		"(e.state = 'unknown' AND r.effective_outcome IN ('done','partial'))) AND e.undo_json IS NOT NULL " +
 		"AND e.undone_by IS NULL AND (r.id IS NULL OR r.effective_outcome <> 'failed') " +
 		"AND NOT EXISTS (SELECT 1 FROM effects u WHERE u.undo_of = e.id AND u.state IN ('intent','unknown','partial','done') " +
 		"AND NOT EXISTS (SELECT 1 FROM effect_resolutions ur WHERE ur.effect_id = u.id AND ur.effective_outcome = 'failed'))"

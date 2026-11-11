@@ -20,6 +20,7 @@ import (
 const (
 	RenewSeconds = 30
 	StuckSeconds = 4 * RenewSeconds
+	renewEvery   = time.Second
 )
 
 type Resource struct {
@@ -110,6 +111,9 @@ type Store struct {
 	mu       sync.RWMutex
 	undoers  map[string]Undoer
 	resolves map[string]ResolveHook
+	liveMu   sync.Mutex
+	live     map[int64]Ticket
+	stop     chan struct{}
 }
 
 type Conflict struct{ Resource string }
@@ -230,7 +234,9 @@ func (s *Store) BeginTx(ctx context.Context, tx *sql.Tx, n New, admit Mutation) 
 	if err := claim(ctx, tx, id, n.Resources); err != nil {
 		return Ticket{}, err
 	}
-	return Ticket{ID: id, Token: token}, nil
+	ticket := Ticket{ID: id, Token: token}
+	s.track(ticket)
+	return ticket, nil
 }
 
 func (s *Store) Heartbeat(ctx context.Context, t Ticket) error {
@@ -283,7 +289,76 @@ func (s *Store) KeepAlive(ctx context.Context, tickets []Ticket) func() {
 	return stop
 }
 
+func (s *Store) track(t Ticket) {
+	if t.ID == 0 {
+		return
+	}
+	s.liveMu.Lock()
+	defer s.liveMu.Unlock()
+	if s.live == nil {
+		s.live = map[int64]Ticket{}
+	}
+	s.live[t.ID] = t
+	if s.stop == nil {
+		s.stop = make(chan struct{})
+		go s.renewLoop(s.stop)
+	}
+}
+
+func (s *Store) untrack(id int64) {
+	s.liveMu.Lock()
+	defer s.liveMu.Unlock()
+	if s.live == nil {
+		return
+	}
+	delete(s.live, id)
+	if len(s.live) == 0 && s.stop != nil {
+		close(s.stop)
+		s.stop = nil
+	}
+}
+
+func (s *Store) renewLoop(stop chan struct{}) {
+	ticker := time.NewTicker(renewEvery)
+	defer ticker.Stop()
+	last, lastReal := s.now(), time.Now()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			now, real := s.now(), time.Now()
+			if now-last < RenewSeconds && real.Sub(lastReal) < RenewSeconds*time.Second {
+				continue
+			}
+			last, lastReal = now, real
+			s.renewLive()
+		}
+	}
+}
+
+func (s *Store) renewLive() {
+	s.liveMu.Lock()
+	tickets := make([]Ticket, 0, len(s.live))
+	for _, t := range s.live {
+		tickets = append(tickets, t)
+	}
+	s.liveMu.Unlock()
+	for _, t := range tickets {
+		err := s.Heartbeat(context.Background(), t)
+		var settled *SettledMeanwhile
+		if errors.As(err, &settled) {
+			s.untrack(t.ID)
+			continue
+		}
+		if err != nil {
+			logx.Logger("atrium.ledger").Warn(fmt.Sprintf("could not renew the lease on effect %d", t.ID), logx.Err, err.Error())
+		}
+	}
+}
+
 func (s *Store) Settle(ctx context.Context, t Ticket, r Result, local Mutation) error {
+	defer s.untrack(t.ID)
 	ctx = context.WithoutCancel(ctx)
 	if !r.State.Final() {
 		return fmt.Errorf("ledger: effect %d cannot settle as %q", t.ID, r.State)
