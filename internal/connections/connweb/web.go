@@ -121,7 +121,18 @@ func (h handlers) test(w http.ResponseWriter, r *http.Request) {
 		Capabilities: capabilitiesOf(current),
 	}
 	if url := web.FormString(form, "url", ""); url != "" {
-		raw, err := json.Marshal(map[string]string{"url": url})
+		cfg := map[string]string{}
+		if len(current.Config) > 0 {
+			if err := json.Unmarshal(current.Config, &cfg); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		if cfg == nil {
+			cfg = map[string]string{}
+		}
+		cfg["url"] = url
+		raw, err := json.Marshal(cfg)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return

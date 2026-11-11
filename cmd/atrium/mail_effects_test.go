@@ -214,13 +214,11 @@ func TestMailAutomaticPartialMoveUndoesOnlyTheCopiedMessages(t *testing.T) {
 	inbox := fake.AddBox("INBOX", mailtest.NewBox(1))
 	fake.AddBox("Bills", mailtest.NewBox(3))
 	m := mailEffectsFixture(t, "live", "icloud", fake)
-	old := mail.TuningMailopsBatch
-	mail.TuningMailopsBatch = 2
-	t.Cleanup(func() { mail.TuningMailopsBatch = old })
+	setEnv(t, settingEnv(mail.KeyWriteCap), strconv.Itoa(mail.TuningMailopsBatch+1))
 	m.ruleFor(t, "work", "Bills", "statements@bank.test")
 	m.run(t, "sync")
 	var uids []uint32
-	for i := 1; i <= 3; i++ {
+	for i := 1; i <= mail.TuningMailopsBatch+1; i++ {
 		h, x := mailtest.RawWith("Statement "+strconv.Itoa(i), "statements@bank.test", "partial-"+strconv.Itoa(i), "Your statement is ready.")
 		uids = append(uids, inbox.Add(h, x, []string{`\Seen`}, nil))
 	}
@@ -233,17 +231,17 @@ func TestMailAutomaticPartialMoveUndoesOnlyTheCopiedMessages(t *testing.T) {
 	if ran := runApp(t, "sync"); ran.code == cli.ExitOK {
 		t.Fatalf("a sync whose move was refused after the copy exited 0")
 	}
-	if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto' AND operation = 'file' AND state = 'partial'"); n != 2 {
-		t.Fatalf("%d partial moves, want 2", n)
+	if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto' AND operation = 'file' AND state = 'partial'"); n != mail.TuningMailopsBatch {
+		t.Fatalf("%d partial moves, want %d", n, mail.TuningMailopsBatch)
 	}
 	if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto' AND operation = 'file' AND state = 'skipped'"); n != 1 {
 		t.Fatalf("%d skipped moves, want 1", n)
 	}
-	if n := len(fake.Boxes["Bills"].Box.Messages); n != 2 {
-		t.Fatalf("the destination holds %d messages after the refused store, want 2", n)
+	if n := len(fake.Boxes["Bills"].Box.Messages); n != mail.TuningMailopsBatch {
+		t.Fatalf("the destination holds %d messages after the refused store, want %d", n, mail.TuningMailopsBatch)
 	}
-	if n := len(fake.Boxes["INBOX"].Box.Messages); n != 3 {
-		t.Fatalf("the inbox holds %d messages after the refused store, want 3", n)
+	if n := len(fake.Boxes["INBOX"].Box.Messages); n != mail.TuningMailopsBatch+1 {
+		t.Fatalf("the inbox holds %d messages after the refused store, want %d", n, mail.TuningMailopsBatch+1)
 	}
 	m.fake.FailWrite = nil
 	for _, id := range m.effectIDs(t, "SELECT group_concat(CAST(id AS TEXT), ',') FROM "+
@@ -253,16 +251,17 @@ func TestMailAutomaticPartialMoveUndoesOnlyTheCopiedMessages(t *testing.T) {
 	if n := len(fake.Boxes["Bills"].Box.Messages); n != 0 {
 		t.Fatalf("the destination holds %d messages after the undos, want 0", n)
 	}
-	if _, ok := fake.Boxes["INBOX"].Box.Messages[uids[2]]; !ok {
-		t.Fatalf("the third message was moved although its move was never attempted")
+	untouched := uids[mail.TuningMailopsBatch]
+	if _, ok := fake.Boxes["INBOX"].Box.Messages[untouched]; !ok {
+		t.Fatalf("the last message was moved although its move was never attempted")
 	}
 	for _, w := range fake.Writes {
-		if w.Verb == "COPY" && slices.Contains(w.UIDs, uids[2]) {
-			t.Fatalf("a copy included the untouched third message: %v", w)
+		if w.Verb == "COPY" && slices.Contains(w.UIDs, untouched) {
+			t.Fatalf("a copy included the untouched last message: %v", w)
 		}
 	}
-	if state := m.scalar(t, "SELECT state FROM effects WHERE origin = 'mail_auto' AND operation = 'file' AND message_id = ?", m.messageID(t, "Statement 3")); state != "skipped" {
-		t.Fatalf("the third message's move is %s, want skipped", state)
+	if state := m.scalar(t, "SELECT state FROM effects WHERE origin = 'mail_auto' AND operation = 'file' AND message_id = ?", m.messageID(t, "Statement "+strconv.Itoa(mail.TuningMailopsBatch+1))); state != "skipped" {
+		t.Fatalf("the last message's move is %s, want skipped", state)
 	}
 }
 
