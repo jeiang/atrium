@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/journal"
@@ -225,19 +224,15 @@ func Write(ctx context.Context, store *ledger.Store, w Writer, in WriteInput) (R
 			}
 			next.Marks = rec.Marks | marks
 			next.UpdatedAt = w.Now
-			if next.Title != rec.Title || next.Body != rec.Body || strings.Join(next.Aliases, "\x00") != strings.Join(rec.Aliases, "\x00") {
-				next.Embedded = false
-			}
 			aliases, err := aliasesJSON(next.Aliases)
 			if err != nil {
 				return ledger.Result{}, err
 			}
 			if _, err := tx.ExecContext(ctx,
-				"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, marks = ?, embedded = ?, updated_at = ? WHERE id = ?",
-				next.Title, aliases, next.Body, next.Scope, int64(next.Marks), b2i(next.Embedded), next.UpdatedAt, next.ID); err != nil {
+				"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, marks = ?, updated_at = ? WHERE id = ?",
+				next.Title, aliases, next.Body, next.Scope, int64(next.Marks), next.UpdatedAt, next.ID); err != nil {
 				return ledger.Result{}, err
 			}
-			next.Embedded = b2i(next.Embedded) != 0
 			out = next
 			return writeResult(next, beforeOf(*rec)), nil
 		}
@@ -268,7 +263,7 @@ func Write(ctx context.Context, store *ledger.Store, w Writer, in WriteInput) (R
 		}
 		res, err := tx.ExecContext(ctx,
 			"INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, source_thread_id, source_seq, "+
-				"source_run_id, pinned, embedded, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, 0, ?, ?)",
+				"source_run_id, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, ?, ?)",
 			in.Title, aliases, in.Body, scope, project, int64(marks), writer, sourceThread, sourceSeq, sourceRun, w.Now, w.Now)
 		if err != nil {
 			return ledger.Result{}, err
@@ -307,7 +302,7 @@ func Retract(ctx context.Context, store *ledger.Store, w Writer, id int64, reaso
 			return ledger.Result{}, err
 		}
 		now := w.Now
-		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded = 0, updated_at = ? WHERE id = ?",
+		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?",
 			now, now, id); err != nil {
 			return ledger.Result{}, err
 		}
@@ -315,7 +310,7 @@ func Retract(ctx context.Context, store *ledger.Store, w Writer, id int64, reaso
 			return ledger.Result{}, err
 		}
 		next := *rec
-		next.RetractedAt, next.Embedded, next.UpdatedAt = &now, false, now
+		next.RetractedAt, next.UpdatedAt = &now, now
 		out = next
 		r := writeResult(next, beforeOf(*rec))
 		r.After = jsonOf(map[string]any{"retracted_at": now, "reason": reason})
@@ -351,7 +346,7 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 	}
 	now := float64(time.Now().UnixNano()) / 1e9
 	if u.Before == nil {
-		if _, err := q.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded = 0, updated_at = ? WHERE id = ?", now, now, u.ID); err != nil {
+		if _, err := q.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?", now, now, u.ID); err != nil {
 			return nil, err
 		}
 		if err := embed.DeleteKB(ctx, q, u.ID); err != nil {
@@ -365,7 +360,7 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 	}
 	if _, err := q.ExecContext(ctx,
 		"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, marks = ?, pinned = ?, confirmed_at = ?, "+
-			"retracted_at = ?, embedded = 0, updated_at = ? WHERE id = ?",
+			"retracted_at = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?",
 		u.Before.Title, aliases, u.Before.Body, u.Before.Scope, u.Before.Marks, b2i(u.Before.Pinned), u.Before.ConfirmedAt,
 		u.Before.RetractedAt, now, u.ID); err != nil {
 		return nil, err

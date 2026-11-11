@@ -302,8 +302,8 @@ func importOne(ctx context.Context, tx *sql.Tx, item importItem, rec *existingRe
 	}
 	if rec == nil {
 		res, err := tx.ExecContext(ctx,
-			"INSERT INTO kb_records (title, aliases, body, scope, private, marks, writer, origin, pinned, confirmed_at, retracted_at, embedded, created_at, updated_at) "+
-				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
+			"INSERT INTO kb_records (title, aliases, body, scope, private, marks, writer, origin, pinned, confirmed_at, retracted_at, created_at, updated_at) "+
+				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			item.Title, aliases, item.Body, item.Scope, b2i(item.Private), int64(item.Marks), WriterImport, item.Origin,
 			b2i(item.Pinned), confirmed, retracted, now, now)
 		if err != nil {
@@ -314,7 +314,7 @@ func importOne(ctx context.Context, tx *sql.Tx, item importItem, rec *existingRe
 	}
 	_, err = tx.ExecContext(ctx,
 		"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, private = ?, marks = ?, pinned = ?, confirmed_at = ?, "+
-			"retracted_at = ?, embedded = 0, updated_at = ? WHERE id = ?",
+			"retracted_at = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?",
 		item.Title, aliases, item.Body, item.Scope, b2i(item.Private), int64(item.Marks), b2i(item.Pinned), confirmed,
 		retracted, now, rec.id)
 	return "updated", rec.id, err
@@ -481,7 +481,7 @@ func Import(ctx context.Context, d *db.DB, dryRun bool, now float64) (ImportStat
 				continue
 			}
 			if _, err := tx.ExecContext(ctx,
-				"UPDATE kb_records SET body = ?, embedded = 0, updated_at = ? WHERE id = ?", body, now, id); err != nil {
+				"UPDATE kb_records SET body = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?", body, now, id); err != nil {
 				return err
 			}
 		}
