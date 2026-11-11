@@ -4,18 +4,17 @@ import (
 	"encoding/pem"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/integrations"
-	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/media"
 )
 
-func TestIntegrationClientsUseTheRecordTransportAndAFailedRequestChecksAtOnce(t *testing.T) {
+func TestIntegrationClientsUseTheConnectionTransportAndAFailedRequestChecksAtOnce(t *testing.T) {
 	t.Parallel()
 	qb := &fakeQbit{version: "v5.2.0"}
 	var broken atomic.Bool
@@ -30,32 +29,33 @@ func TestIntegrationClientsUseTheRecordTransportAndAFailedRequestChecksAtOnce(t 
 
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, settingEnv(media.KeyQbitURL), srv.URL)
-	setEnv(t, settingEnv(media.KeyQbitAPIKey), "qbt_good")
 	s := &integrationSite{t: t, dir: dir}
 	s.start()
-	waitFor(t, func() bool { return health(t, dir, "qbittorrent") == integrations.Failing })
+	if state := connectionState(t, dir, "service/qbittorrent"); state == "" {
+		t.Fatal("no qBittorrent connection was materialized from the host")
+	}
 	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/apps/media/downloads", nil); code == http.StatusOK && qb.saw("/api/v2/torrents/info") {
 		t.Fatal("the downloads page reached a server with an untrusted certificate")
 	}
+	waitFor(t, func() bool { return connectionState(t, dir, "service/qbittorrent") == "failing" })
 
 	ca := filepath.Join(dir, "qbittorrent-ca.pem")
 	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got := runSettings(t, "set", transport.CAKey("qbittorrent"), ca); got.code != 0 {
-		t.Fatalf("set CA: %d %q", got.code, got.stderr)
+	setEnv(t, "ATRIUM_MEDIA_QBITTORRENT_CA_FILE", ca)
+	s.start()
+	if code, body := s.conn("/test", url.Values{"id": {"service/qbittorrent"}, "api_key": {"qbt_good"}}); code != http.StatusOK {
+		t.Fatalf("qBittorrent Test with its CA: %d %s", code, body)
 	}
 	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/apps/media/downloads", nil); code != http.StatusOK || !qb.saw("/api/v2/torrents/info") {
 		t.Fatalf("downloads page with the qBittorrent CA: %d", code)
 	}
-	if code, body := s.post("/qbittorrent/test", nil); code != http.StatusOK || health(t, dir, "qbittorrent") != integrations.OK {
-		t.Fatalf("qBittorrent Test with its CA: %d %s", code, body)
+	if got := runApp(t, "connections", "test", "service/qbittorrent"); got.code != 0 || !strings.Contains(got.stdout, "ok") {
+		t.Fatalf("connections test: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 
 	broken.Store(true)
 	_, _, _ = fetch(t, s.client, http.MethodGet, s.base+"/apps/media/downloads", nil)
-	waitFor(t, func() bool { return health(t, dir, "qbittorrent") == integrations.Failing })
-	if !strings.Contains(s.page(), "data-integration-alerts") {
-		t.Error("no admin banner after a failed qBittorrent request")
-	}
+	waitFor(t, func() bool { return connectionState(t, dir, "service/qbittorrent") == "failing" })
 }

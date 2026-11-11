@@ -22,12 +22,21 @@
     name = lib.concatStringsSep "." (builtins.tail parts);
   };
 
+  classes = schema."x-atrium-classes" or {};
+  destinations = schema."x-atrium-destinations" or {};
+  cutover = schema."x-atrium-cutover" or [];
+  secretKeys = schema."x-atrium-secret" or [];
+
   secretPins = lib.foldl' lib.recursiveUpdate {} (lib.mapAttrsToList (key: _: let
     k = splitKey key;
   in {${k.table}."${k.name}_file" = "\${CREDENTIALS_DIRECTORY}/${key}";})
   cfg.secretFiles);
+  legacyConfigFile = toml.generate "atrium.toml" secretPins;
 
   accountCredential = id: "mail-account-${id}";
+  connectionCredential = id: slot: "connection-${lib.replaceStrings ["/" "."] ["-" "-"] id}-${lib.replaceStrings ["/" "."] ["-" "-"] slot}";
+  hostCredential = module: key: "host-${module}-${key}";
+
   accountsFile = toml.generate "mail-accounts.toml" {
     account =
       lib.mapAttrsToList (id: account: {
@@ -42,26 +51,142 @@
       cfg.mailAccounts;
   };
 
-  settings = lib.recursiveUpdate (lib.optionalAttrs (cfg.mailAccounts != {}) {mail.mail_accounts_file = "${accountsFile}";}) (lib.recursiveUpdate cfg.settings secretPins);
-  configFile = toml.generate "atrium.toml" settings;
+  renderedConnections =
+    lib.mapAttrs (id: c: {
+      inherit (c) kind label config transport capabilities;
+      credential_files = lib.mapAttrs (slot: _: "\${CREDENTIALS_DIRECTORY}/${connectionCredential id slot}") c.credentialFiles;
+    })
+    cfg.connections;
 
-  unknownSettings = lib.concatLists (lib.mapAttrsToList (table: keys:
-    if !(schema.properties ? ${table}) || !builtins.isAttrs keys
-    then [table]
-    else map (key: "${table}.${key}") (builtins.filter (key: !(schema.properties.${table}.properties ? ${key})) (builtins.attrNames keys)))
-  settings);
+  hostValues = lib.mapAttrs (module: table:
+    lib.mapAttrs (key: value:
+      if lib.hasSuffix "_file" key
+      then "\${CREDENTIALS_DIRECTORY}/${hostCredential module (lib.removeSuffix "_file" key)}"
+      else value)
+    table)
+  cfg.host;
+
+  renderedHost = lib.recursiveUpdate hostValues (
+    {
+      calendar.calendar_dir = "${mirrorDir}/calendars";
+      contacts.contacts_dir = "${mirrorDir}/contacts";
+    }
+    // lib.optionalAttrs (cfg.observability.tracesEndpoint != null) {core.otel_traces_endpoint = cfg.observability.tracesEndpoint;}
+    // lib.optionalAttrs (cfg.knowledgeExport.obsidianDirectory != null) {export.export_obsidian_dir = cfg.knowledgeExport.obsidianDirectory;}
+    // lib.optionalAttrs (cfg.mailAccounts != {}) {mail.mail_accounts_file = "${accountsFile}";}
+    // lib.optionalAttrs (cfg.connections != {}) {connections = renderedConnections;}
+  );
+  hostConfigFile = toml.generate "atrium-host.toml" renderedHost;
 
   credentials =
     lib.mapAttrsToList (key: path: "${key}:${path}") cfg.secretFiles
-    ++ lib.mapAttrsToList (id: account: "${accountCredential id}:${account.passwordFile}") cfg.mailAccounts;
-  mediaRoot = cfg.settings.media.media_root or null;
+    ++ lib.concatLists (lib.mapAttrsToList (module: table:
+      lib.mapAttrsToList (key: path: "${hostCredential module (lib.removeSuffix "_file" key)}:${path}")
+      (lib.filterAttrs (key: _: lib.hasSuffix "_file" key) table))
+    cfg.host)
+    ++ lib.concatLists (lib.mapAttrsToList (id: c:
+      lib.mapAttrsToList (slot: path: "${connectionCredential id slot}:${path}") c.credentialFiles)
+    cfg.connections)
+    ++ lib.mapAttrsToList (id: account: "${accountCredential id}:${account.passwordFile}") cfg.mailAccounts
+    ++ lib.optional (cfg.database.keyFile != null) "db-key:${cfg.database.keyFile}";
+
+  mediaRoot = cfg.host.media.media_root or null;
   obsidianDir = cfg.knowledgeExport.obsidianDirectory;
 
-  appEnvironment = {
-    ATRIUM_DB = "${cfg.stateDir}/atrium.db";
-    ATRIUM_CACHE_DIR = "${cacheDir}/messages";
-    ATRIUM_CONFIG = "${configFile}";
-  };
+  appEnvironment =
+    {
+      ATRIUM_DB = "${cfg.stateDir}/atrium.db";
+      ATRIUM_CACHE_DIR = "${cacheDir}/messages";
+      ATRIUM_HOST_CONFIG = "${hostConfigFile}";
+    }
+    // lib.optionalAttrs (cfg.secretFiles != {}) {ATRIUM_CONFIG = "${legacyConfigFile}";}
+    // lib.optionalAttrs (cfg.initialTimezone != null) {ATRIUM_INITIAL_TZ = cfg.initialTimezone;}
+    // lib.optionalAttrs (cfg.database.keyFile != null) {ATRIUM_DB_KEY_FILE = "\${CREDENTIALS_DIRECTORY}/db-key";};
+
+  hostValueError = module: key: value: let
+    props =
+      if schema.properties ? ${module}
+      then schema.properties.${module}.properties
+      else {};
+    isFile = lib.hasSuffix "_file" key;
+    base =
+      if isFile
+      then lib.removeSuffix "_file" key
+      else key;
+    dotted = "${module}.${base}";
+    prop = props.${key} or null;
+    destination = destinations.${dotted} or null;
+    typeOk =
+      prop
+      == null
+      || (let
+        t = prop.type;
+      in
+        if t == "string"
+        then builtins.isString value
+        else if builtins.isList t
+        then
+          (builtins.elem "integer" t && builtins.isInt value)
+          || (builtins.elem "number" t && (builtins.isInt value || builtins.isFloat value))
+          || (builtins.elem "boolean" t && builtins.isBool value)
+          || (builtins.elem "string" t && builtins.isString value)
+        else true);
+    enumOk = prop == null || !(prop ? enum) || builtins.elem (toString value) prop.enum;
+  in
+    if module == "connections"
+    then "connections are declared in services.atrium.connections, not in host"
+    else if !(schema.properties ? ${module})
+    then
+      (
+        if destination != null
+        then "${dotted} is ${destination}"
+        else "unknown module ${module}"
+      )
+    else if prop == null
+    then
+      (
+        if destination != null
+        then "${dotted} is ${destination}"
+        else "unknown key ${dotted}"
+      )
+    else if !typeOk
+    then "${dotted} has the wrong type"
+    else if !enumOk
+    then "${dotted} must be one of ${lib.concatStringsSep ", " prop.enum}"
+    else null;
+
+  hostErrors = lib.flatten (lib.mapAttrsToList (module: table:
+    lib.mapAttrsToList (key: value: let
+      error = hostValueError module key value;
+    in
+      lib.optional (error != null) "services.atrium.host: ${error}")
+    table)
+  cfg.host);
+
+  secretFileErrors = lib.flatten (lib.mapAttrsToList (key: _: let
+    parts = lib.splitString "." key;
+    module = builtins.head parts;
+    name = lib.concatStringsSep "." (builtins.tail parts);
+    class = classes.${key} or null;
+    destination = destinations.${key} or null;
+  in
+    if builtins.length parts != 2
+    then ["services.atrium.secretFiles keys are <module>.<key>"]
+    else if key == "db.key"
+    then ["services.atrium.secretFiles.\"db.key\" is the database key; use services.atrium.database.keyFile"]
+    else if class == "host"
+    then ["services.atrium.secretFiles.\"${key}\" is host configuration; use services.atrium.host.${module}.${name}_file"]
+    else if builtins.elem key cutover
+    then ["services.atrium.secretFiles.\"${key}\" is cut over; use ${destination}"]
+    else if !(builtins.elem key secretKeys)
+    then ["services.atrium.secretFiles.\"${key}\" is not a secret setting"]
+    else [])
+  cfg.secretFiles);
+
+  connectionErrors = lib.flatten (lib.mapAttrsToList (id: c:
+    lib.optional (id == "") "services.atrium.connections has an empty id"
+    ++ lib.optional (c.kind == "") "services.atrium.connections.\"${id}\" needs a kind")
+  cfg.connections);
 
   runPropertyNames = ["User" "Group" "StateDirectory" "StateDirectoryMode" "UMask" "EnvironmentFile" "LoadCredential"];
   runProperties = lib.concatMap (name: let
@@ -349,18 +474,57 @@ in {
       description = "Port of the public listener.";
     };
 
-    settings = mkOption {
+    host = mkOption {
       inherit (toml) type;
       default = {};
-      example = lib.literalExpression ''{ core.public_url = "https://atrium.example.org"; mail.mail_mode = "live"; }'';
-      description = "Application settings, one table per module, rendered to the TOML file named by ATRIUM_CONFIG. Every key set here is pinned. Keys unknown to ${reference} fail evaluation.";
+      example = lib.literalExpression ''{ core.public_url = "https://atrium.example.org"; mail.mail_chat_url = "http://127.0.0.1:8187/v1"; }'';
+      description = "Host configuration, one table per module, rendered to the file named by ATRIUM_HOST_CONFIG. Only host keys from ${reference} are accepted; operator and tuning keys fail evaluation with their destination. Host values are read-only in the application.";
     };
 
-    secretFiles = mkOption {
-      type = types.attrsOf types.str;
+    connections = mkOption {
+      type = types.attrsOf (types.submodule ({name, ...}: {
+        options = {
+          kind = mkOption {
+            type = types.str;
+            description = "Connection kind, such as service/qbittorrent or service/notion.";
+          };
+          label = mkOption {
+            type = types.str;
+            default = name;
+            description = "Display label.";
+          };
+          config = mkOption {
+            type = types.attrsOf types.str;
+            default = {};
+            description = "Public fixed connection configuration, such as url or client_id.";
+          };
+          transport = mkOption {
+            type = types.attrsOf types.str;
+            default = {};
+            description = "Host-owned transport fields, such as ca_file or proxy.";
+          };
+          capabilities = mkOption {
+            type = types.listOf types.str;
+            default = [];
+            description = "Enabled capability names.";
+          };
+          credentialFiles = mkOption {
+            type = types.attrsOf types.str;
+            default = {};
+            description = "Credential slot to host file; each file is delivered through LoadCredential and never stored in the Nix store.";
+          };
+        };
+      }));
       default = {};
-      example = {"anthropic.anthropic_api_key" = "/run/secrets/anthropic-api-key";};
-      description = "Secret settings as <module>.<key> = host file. Each file is delivered to every unit and atrium-run through systemd LoadCredential and pinned as <key>_file, so the file can stay readable by root only.";
+      example = {
+        "service/qbittorrent" = {
+          kind = "service/qbittorrent";
+          config.url = "http://127.0.0.1:8081";
+          capabilities = ["api"];
+          credentialFiles.api_key = "/run/secrets/qbittorrent-api-key";
+        };
+      };
+      description = "Host-owned connections. Each declaration generates a [connections.<id>] table and its LoadCredential bindings; secret values never enter the store. A connection kind must be one the application registers.";
     };
 
     mailAccounts = mkOption {
@@ -399,6 +563,25 @@ in {
         };
       };
       description = "Mail accounts by id, rendered to the file named by mail.mail_accounts_file. The id keys the account's cached mail; keep it stable.";
+    };
+
+    secretFiles = mkOption {
+      type = types.attrsOf types.str;
+      default = {};
+      example = {"action_links.action_link_key" = "/run/secrets/action-link-key";};
+      description = "Secret settings as <module>.<key> = host file, delivered to every unit and atrium-run through systemd LoadCredential and pinned as <key>_file. Connection credentials belong in connections.<id>.credentialFiles and host secret inputs in host.<module>.<key>_file.";
+    };
+
+    database.keyFile = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      description = "Host file holding the database key; delivered as the db-key credential and ATRIUM_DB_KEY_FILE.";
+    };
+
+    initialTimezone = mkOption {
+      type = types.nullOr types.str;
+      default = config.time.timeZone;
+      description = "Time zone stored as the operator tz value when a fresh database has none; a stored or imported value wins.";
     };
 
     environmentFiles = mkOption {
@@ -458,12 +641,12 @@ in {
       obsidianDirectory = mkOption {
         type = types.nullOr types.str;
         default = null;
-        description = "Folder that receives the generated Obsidian vault; the scheduler unit writes it and the operator syncs it. Pins export.export_obsidian_dir.";
+        description = "Folder that receives the generated Obsidian vault; the scheduler unit writes it and the operator syncs it. The one source for export.export_obsidian_dir and its ReadWritePaths grant.";
       };
     };
 
     media = {
-      enable = mkEnableOption "the Media section: filing, EZTV channels and the library; needs settings.media.media_root";
+      enable = mkEnableOption "the Media section: filing, EZTV channels and the library; needs host.media.media_root";
 
       group = mkOption {
         type = types.str;
@@ -540,42 +723,44 @@ in {
       description = "Every systemd service and timer the module defines.";
     };
 
-    renderedSettings = mkOption {
+    renderedHost = mkOption {
       type = types.attrs;
       internal = true;
       readOnly = true;
-      default = settings;
-      description = "The settings written to the TOML configuration, secret pins included.";
+      default = renderedHost;
+      description = "The host configuration written to the file named by ATRIUM_HOST_CONFIG, derived values and connection tables included.";
+    };
+
+    renderedPins = mkOption {
+      type = types.attrs;
+      internal = true;
+      readOnly = true;
+      default = secretPins;
+      description = "Legacy secret pins written to the file named by ATRIUM_CONFIG.";
     };
   };
 
   config = mkIf cfg.enable {
-    services.atrium.settings = lib.mkMerge [
-      {
-        core.tz = lib.mkIf (config.time.timeZone != null) (lib.mkDefault config.time.timeZone);
-        calendar.calendar_dir = lib.mkDefault "${mirrorDir}/calendars";
-        contacts.contacts_dir = lib.mkDefault "${mirrorDir}/contacts";
-      }
-      (lib.optionalAttrs (cfg.observability.tracesEndpoint != null) {
-        core.otel_traces_endpoint = cfg.observability.tracesEndpoint;
-      })
-      (lib.optionalAttrs (obsidianDir != null) {
-        export.export_obsidian_dir = obsidianDir;
-      })
-    ];
-
     assertions = [
       {
-        assertion = unknownSettings == [];
-        message = "services.atrium.settings: unknown keys ${lib.concatStringsSep ", " unknownSettings}; see ${reference}";
+        assertion = hostErrors == [];
+        message = lib.concatStringsSep "; " hostErrors;
       }
       {
-        assertion = builtins.all (key: builtins.length (lib.splitString "." key) == 2) (builtins.attrNames cfg.secretFiles);
-        message = "services.atrium.secretFiles keys are <module>.<key>";
+        assertion = secretFileErrors == [];
+        message = lib.concatStringsSep "; " secretFileErrors;
+      }
+      {
+        assertion = connectionErrors == [];
+        message = lib.concatStringsSep "; " connectionErrors;
       }
       {
         assertion = !cfg.media.enable || mediaRoot != null;
-        message = "services.atrium.media.enable needs services.atrium.settings.media.media_root";
+        message = "services.atrium.media.enable needs services.atrium.host.media.media_root";
+      }
+      {
+        assertion = cfg.database.keyFile == null || lib.hasPrefix "/" cfg.database.keyFile;
+        message = "services.atrium.database.keyFile must be an absolute path";
       }
       {
         assertion = obsidianDir == null || lib.hasPrefix "/" obsidianDir;

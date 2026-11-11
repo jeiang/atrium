@@ -14,10 +14,17 @@ type State struct {
 	accounts  []AccountSpec
 	passwords map[string]string
 	settings  *settings.Registry
+	host      Host
 }
 
 func NewState(reg *settings.Registry) *State {
 	return &State{settings: reg}
+}
+
+func (s *State) Host() Host {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.host
 }
 
 type stateKey struct{}
@@ -70,18 +77,30 @@ func Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 
 func (s *State) Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 	reg := s.settings
+	host, err := LoadHost(env, HostFile(env))
+	if err != nil {
+		return err
+	}
 	if reg.PinSource() == nil {
 		pins, err := LoadPins(env, reg)
 		if err != nil {
 			return err
 		}
-		reg.SetPins(pins)
+		reg.SetPins(CombinePins(host, pins))
 	}
+	s.mu.Lock()
+	s.host = host
+	s.mu.Unlock()
 	if err := db.Migrate(ctx, d, cfg.DBPath); err != nil {
 		return err
 	}
 	if err := settings.NewStore(reg, d, d).Load(ctx); err != nil {
 		return err
+	}
+	if initial := stripped(env, InitialTZEnv); initial != "" {
+		if _, err := reg.Seed(ctx, d.Write, KeyTZ, initial); err != nil {
+			return err
+		}
 	}
 	c, err := loadCore(ctx, d.Read)
 	if err != nil {

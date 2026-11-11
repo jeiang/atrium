@@ -430,11 +430,7 @@ func (p *pages) knowledgeConfirmAll(w http.ResponseWriter, r *http.Request) {
 func (p *pages) knowledgeProfilePage(w http.ResponseWriter, r *http.Request, status int, problem *string) {
 	block, err := kb.ProfileBlock(r.Context(), p.deps.DB.Read)
 	check(err)
-	read := assistant.Read(r.Context(), p.deps.DB.Read)
-	budget := int64(read.Int(assistant.KeyKBProfileTokens))
-	if err := read.Err(); err != nil {
-		check(err)
-	}
+	budget := int64(assistant.TuningAgentKbProfileTokens)
 	entries, err := kb.ProfileEntries(r.Context(), p.deps.DB.Read, budget)
 	check(err)
 	rows := make([]knowledgeProfileEntry, len(entries))

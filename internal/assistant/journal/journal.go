@@ -46,10 +46,8 @@ const (
 
 func LeaseSeconds(ctx context.Context, q db.Querier) (float64, error) { return leaseSeconds(ctx, q) }
 
-func leaseSeconds(ctx context.Context, q db.Querier) (float64, error) {
-	r := assistant.Read(ctx, q)
-	n := r.Int(assistant.KeyJournalLeaseSeconds)
-	return float64(n), r.Err()
+func leaseSeconds(_ context.Context, _ db.Querier) (float64, error) {
+	return assistant.TuningAgentJournalLeaseSeconds, nil
 }
 
 func NewOwner() string {

@@ -17,7 +17,7 @@ import (
 )
 
 var (
-	writeBound = tool.NewBound(assistant.KeyKBWriteChars, "")
+	writeBound = tool.NewCeiling(assistant.TuningAgentKbWriteChars, 200, assistant.TuningAgentKbWriteChars)
 	scopeEnum  = []string{kb.ScopeWork, kb.ScopePersonal}
 )
 

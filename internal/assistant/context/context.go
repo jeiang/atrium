@@ -69,14 +69,12 @@ type Tuning struct {
 	ManifestResults int
 }
 
-func ReadTuning(ctx gocontext.Context, q db.Querier) (Tuning, error) {
-	r := assistant.Read(ctx, q)
-	t := Tuning{
-		StubTokens:      r.Int(assistant.KeyStubTokens),
-		PreviewChars:    r.Int(assistant.KeyPreviewChars),
-		ManifestResults: r.Int(assistant.KeyManifestResults),
-	}
-	return t, r.Err()
+func ReadTuning(_ gocontext.Context, _ db.Querier) (Tuning, error) {
+	return Tuning{
+		StubTokens:      assistant.TuningAgentStubTokens,
+		PreviewChars:    assistant.TuningAgentPreviewChars,
+		ManifestResults: assistant.TuningAgentManifestResults,
+	}, nil
 }
 
 func Ingest(ctx gocontext.Context, q db.Querier, runID, callID int64, tool string, value any, now float64, t Tuning) (string, *int64, error) {

@@ -46,7 +46,7 @@ func Ledger(d *db.DB, env config.Env, open mail.OpenFunc, now func() float64) *l
 		func(s *ledger.Store) error { return calendartools.RegisterLedgerUndoers(s, env) },
 		func(s *ledger.Store) error { return mediatools.RegisterLedgerUndoer(s, env) },
 		func(s *ledger.Store) error { return mailtools.RegisterLedgerUndoer(s, open) },
-		func(s *ledger.Store) error { return export.RegisterLedgerResolves(s, env) },
+		func(s *ledger.Store) error { return export.RegisterLedgerResolves(s) },
 		export.RegisterLedgerObsidian,
 	}
 	for _, register := range registers {

@@ -9,7 +9,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb/render"
 	"github.com/jeiang/atrium/internal/ledger"
@@ -253,7 +252,7 @@ func recordOf(target string) (int64, bool) {
 	return id, err == nil
 }
 
-func RegisterLedgerResolves(s *ledger.Store, env config.Env) error {
+func RegisterLedgerResolves(s *ledger.Store) error {
 	if err := s.RegisterResolve(opCreate, func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
 		if r.Outcome != "applied" && r.Outcome != "partial" {
 			return nil
@@ -298,10 +297,11 @@ func RegisterLedgerResolves(s *ledger.Store, env config.Env) error {
 			if err := json.Unmarshal(raw, &u); err != nil || u.PageID == "" {
 				return ledger.Result{}, ledger.Refused("notion_trash without a page id")
 			}
-			client, err := notion.NewClient(ctx, s.DB.Read, env)
+			client, err := notion.NewClient(ctx, s.DB.Read)
 			if err != nil {
 				return ledger.Result{}, err
 			}
+			defer client.Close()
 			if err := client.SetTrash(ctx, u.PageID, true); err != nil {
 				var refused *notion.Error
 				if errors.As(err, &refused) && refused.Status >= 400 && refused.Status < 500 {

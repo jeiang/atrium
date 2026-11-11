@@ -14,7 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/kb"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 const (
@@ -52,26 +51,8 @@ type nodeSpec struct {
 	resultIDs []int64
 }
 
-func NodeBytes(ctx context.Context, q db.Querier) (int, error) {
-	found, err := settings.From(ctx).Resolve(ctx, q, NodeBytesKey)
-	if err != nil {
-		return 0, err
-	}
-	n, err := found.Int()
-	if err != nil {
-		return 0, err
-	}
-	if n < 1 {
-		n = 512
-	}
-	return int(n), nil
-}
-
 func Rebuild(ctx context.Context, q db.Querier, threadID int64, now float64) error {
-	limit, err := NodeBytes(ctx, q)
-	if err != nil {
-		return err
-	}
+	limit := TuningMemoryNodeBytes
 	messages, err := journal.MessagesOf(ctx, q, threadID)
 	if err != nil {
 		return err

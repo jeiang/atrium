@@ -108,10 +108,11 @@ func runNotion(ctx context.Context, d *db.DB, env config.Env, now float64) (Resu
 		entries = append(entries, pageEntry{recordID: rec.ID, page: render.RecordPage(rec.Record, src)})
 	}
 	entries = append(entries, pageEntry{recordID: 0, page: render.Index(indexEntries(records, loc))})
-	client, err := notion.NewClient(ctx, d.Read, env)
+	client, err := notion.NewClient(ctx, d.Read)
 	if err != nil {
 		return out, err
 	}
+	defer client.Close()
 	store := ledger.NewStore(d, func() float64 { return now })
 	return syncNotion(ctx, store, now, client, parent, entries)
 }

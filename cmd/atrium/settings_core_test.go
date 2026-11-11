@@ -18,16 +18,17 @@ func TestCoreSettingsRejectBadValuesAndDriveTheWebLayer(t *testing.T) {
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 
-	for _, tc := range []struct{ key, value string }{
-		{"tz", "Mars/Olympus"},
-		{"body_cap_bytes", "0"},
-		{"web_page_size", "9"},
-		{"snooze_choices", "1,x"},
-		{"public_url", "ftp://atrium.test"},
-		{"http_timeout_seconds", "3601"},
+	for _, tc := range []struct{ key, value, want string }{
+		{"tz", "Mars/Olympus", "must be an IANA time zone"},
+		{"body_cap_bytes", "0", "must be between"},
+		{"web_page_size", "9", "must be between"},
+		{"snooze_choices", "1,x", "must be comma-separated"},
+		{"media_qbittorrent_url", "http://127.0.0.1:8081", "is host configuration and is not editable here"},
+		{"http_timeout_seconds", "3601", "must be between"},
 	} {
-		if got := runSettings(t, "set", tc.key, tc.value); got.code != cli.ExitError || got.stdout != "" {
-			t.Errorf("set %s %s: exit %d stdout %q, want a refusal", tc.key, tc.value, got.code, got.stdout)
+		got := runSettings(t, "set", tc.key, tc.value)
+		if got.code != cli.ExitError || got.stdout != "" || !strings.Contains(got.stderr, tc.want) {
+			t.Errorf("set %s %s: exit %d stdout %q stderr %q, want %q", tc.key, tc.value, got.code, got.stdout, got.stderr, tc.want)
 		}
 	}
 	if got := runSettings(t, "set", "tz", "America/Barbados"); got.code != cli.ExitOK {
@@ -65,5 +66,27 @@ func TestCoreSettingsRejectBadValuesAndDriveTheWebLayer(t *testing.T) {
 	}
 	if status := post("short"); status == http.StatusRequestEntityTooLarge {
 		t.Errorf("POST below body_cap_bytes = %d, want it past the size check", status)
+	}
+}
+
+func TestInitialTimezoneSeedsAFreshDatabaseAndStaysEditable(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	setEnv(t, "ATRIUM_INITIAL_TZ", "Europe/Berlin")
+
+	row := runSettings(t, "get", "tz").row(t)
+	if row.Value == nil || *row.Value != "Europe/Berlin" || row.Source == nil || *row.Source != "db" {
+		t.Fatalf("seeded tz = %+v, want Europe/Berlin from the database", row)
+	}
+	if got := runSettings(t, "set", "tz", "America/Barbados"); got.code != cli.ExitOK {
+		t.Fatalf("set tz: exit %d %q", got.code, got.stderr)
+	}
+	setEnv(t, "ATRIUM_INITIAL_TZ", "Asia/Tokyo")
+	row = runSettings(t, "get", "tz").row(t)
+	if row.Value == nil || *row.Value != "America/Barbados" || row.Source == nil || *row.Source != "db" {
+		t.Errorf("existing tz = %+v, want America/Barbados to win over a new seed", row)
 	}
 }

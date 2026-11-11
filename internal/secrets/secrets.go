@@ -8,7 +8,6 @@ import (
 )
 
 const (
-	AnthropicAPIKey  = "anthropic_api_key"
 	ActionLinkKey    = "action_link_key"
 	OIDCClientSecret = "oidc_client_secret"
 
@@ -19,7 +18,6 @@ const (
 
 func init() {
 	settings.MustRegister(
-		settings.Secret(settings.SecretOpts{Encrypted: true, Readable: true}, settings.Def{Key: AnthropicAPIKey, Module: "anthropic", Type: settings.String, EnvAlias: "ANTHROPIC_API_KEY"}),
 		settings.Secret(settings.SecretOpts{Encrypted: true, Readable: true}, settings.Def{Key: OIDCClientSecret, Module: "auth", Type: settings.String}),
 		settings.Secret(settings.SecretOpts{Generated: true}, settings.Def{Key: ActionLinkKey, Module: "action_links", Type: settings.String, Check: settings.NonEmpty}),
 		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: GoogleOAuthClientSecret, Module: "calendar", Type: settings.String, EnvAlias: "GOOGLE_OAUTH_CLIENT_SECRET"}),

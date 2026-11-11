@@ -28,79 +28,126 @@ func pinRowOf(t *testing.T, r settingsRun) pinRow {
 	return row
 }
 
-func TestConfigFilePinsBeatTheDatabaseAndRefuseWrites(t *testing.T) {
-	t.Parallel()
+func writeFile(t *testing.T, dir, name, body string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func hostSettings(t *testing.T) (string, string) {
+	t.Helper()
 	dir := t.TempDir()
 	db := filepath.Join(dir, "atrium.db")
 	setEnv(t, "ATRIUM_DB", db)
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	setEnv(t, "ATRIUM_CONFIG", "")
-	const key = "monthly_budget_usd"
+	setEnv(t, "ATRIUM_HOST_CONFIG", "")
+	setEnv(t, "ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL", "")
+	setEnv(t, "ATRIUM_MEDIA_MEDIA_ROOT", "")
+	return dir, db
+}
 
-	if r := runSettings(t, "set", key, "90"); r.code != cli.ExitOK {
-		t.Fatalf("set without config: %d %q", r.code, r.stderr)
-	}
+func TestHostConfigurationIsReadOnlyAndWinsOverTheDatabase(t *testing.T) {
+	t.Parallel()
+	dir, db := hostSettings(t)
+	const key = "public_url"
 
-	write := func(name, body string) string {
-		t.Helper()
-		path := filepath.Join(dir, name)
-		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		return path
-	}
-	config := write("atrium.toml", "[assistant]\nmonthly_budget_usd = 120\nmax_steps_chat = \"${PIN_TEST_STEPS}\"\n")
-	setEnv(t, "ATRIUM_CONFIG", config)
-	setEnv(t, "PIN_TEST_STEPS", "30")
+	host := writeFile(t, dir, "host.toml", "[core]\npublic_url = \"https://atrium.host.example\"\n[media]\nmedia_root = \"/srv/media\"\n")
+	setEnv(t, "ATRIUM_HOST_CONFIG", host)
 
 	got := pinRowOf(t, runSettings(t, "get", key))
-	if got.Value != "120" || got.Source != "pin" || got.PinSource != "config "+config+" assistant."+key {
-		t.Errorf("config pin: %+v", got)
+	if got.Value != "https://atrium.host.example" || got.Source != "pin" || !strings.Contains(got.PinSource, host) || !strings.Contains(got.PinSource, "core."+key) {
+		t.Errorf("host value: %+v", got)
 	}
-	if got := pinRowOf(t, runSettings(t, "get", "max_steps_chat")); got.Value != "30" || got.Source != "pin" {
-		t.Errorf("interpolated pin: %+v", got)
-	}
-
-	for _, verb := range [][]string{{"set", key, "50"}, {"unset", key}} {
+	for _, verb := range [][]string{{"set", key, "https://other.example"}, {"set", "media_root", "/other"}, {"unset", key}} {
 		r := runSettings(t, verb...)
-		if r.code != cli.ExitError || !strings.Contains(r.stderr, config) || !strings.Contains(r.stderr, "assistant."+key) {
+		if r.code != cli.ExitError || !strings.Contains(r.stderr, "pinned by host") {
 			t.Errorf("%s: exit %d stderr %q", verb[0], r.code, r.stderr)
 		}
 	}
-	if value, ok := storedSetting(t, db, key); !ok || value != "90" {
-		t.Errorf("stored value = %q, %v; want 90 untouched", value, ok)
+	if r := runSettings(t, "set", "media_qbittorrent_url", "http://127.0.0.1:8081"); r.code != cli.ExitError || !strings.Contains(r.stderr, "host configuration and is not editable here") {
+		t.Errorf("set a cut-over host key: exit %d stderr %q", r.code, r.stderr)
+	}
+	if _, ok := storedSetting(t, db, key); ok {
+		t.Error("a refused host write stored the value")
 	}
 
-	setEnv(t, "ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD", "200")
+	secret := writeFile(t, dir, "oidc-secret", "client-secret-value\n")
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "secret.toml", "[auth]\noidc_client_secret_file = \""+secret+"\"\n"))
+	if r := runApp(t, "secrets", "status"); r.code != cli.ExitOK || !strings.Contains(r.stdout, "oidc_client_secret: pinned") {
+		t.Errorf("host secret status: exit %d stdout %q stderr %q", r.code, r.stdout, r.stderr)
+	}
+
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "env.toml", "[core]\npublic_url = \"https://atrium.host.example\"\n"))
+	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", "https://atrium.env.example")
 	got = pinRowOf(t, runSettings(t, "get", key))
-	if got.Value != "200" || got.PinSource != "env ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD" {
-		t.Errorf("env pin over config: %+v", got)
+	if got.Value != "https://atrium.env.example" || got.PinSource != "env ATRIUM_CORE_PUBLIC_URL" {
+		t.Errorf("env override: %+v", got)
 	}
-	setEnv(t, "ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD", "")
+	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", "")
 
-	secret := write("budget", " 130\n")
-	setEnv(t, "ATRIUM_CONFIG", write("file.toml", "[assistant]\nmonthly_budget_usd_file = "+`"`+secret+`"`+"\n"))
-	if got := pinRowOf(t, runSettings(t, "get", key)); got.Value != "130" || got.Source != "pin" {
-		t.Errorf("file pin: %+v", got)
+	urlFile := writeFile(t, dir, "public-url", "https://atrium.file.example\n")
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "file.toml", "[core]\npublic_url_file = \""+urlFile+"\"\n"))
+	if got := pinRowOf(t, runSettings(t, "get", key)); got.Value != "https://atrium.file.example" || got.Source != "pin" {
+		t.Errorf("host file value: %+v", got)
 	}
 
-	for name, c := range map[string]struct{ body, names string }{
-		"unknown key":     {"[assistant]\nnope = 1\n", "assistant.nope"},
-		"unknown module":  {"[nowhere]\nx = 1\n", "nowhere"},
-		"undefined env":   {"[assistant]\nmax_steps_chat = \"${PIN_TEST_UNDEFINED}\"\n", "assistant.max_steps_chat"},
-		"missing file":    {"[assistant]\nmonthly_budget_usd_file = \"" + filepath.Join(dir, "absent") + "\"\n", "assistant.monthly_budget_usd_file"},
-		"invalid value":   {"[assistant]\nmonthly_budget_usd = -1\n", "assistant.monthly_budget_usd"},
-		"both file+value": {"[assistant]\nmonthly_budget_usd = 1\nmonthly_budget_usd_file = \"" + secret + "\"\n", "assistant.monthly_budget_usd"},
+	for name, c := range map[string]struct{ body, want string }{
+		"secret direct": {"[auth]\noidc_client_secret = \"x\"\n", "is a secret; set auth.oidc_client_secret_file"},
+		"operator key":  {"[assistant]\nmonthly_budget_usd = 1\n", "not host configuration; use the operator setting assistant.monthly_budget_usd"},
+		"tuning key":    {"[assistant]\nmax_steps_chat = 10\n", "compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsChat"},
+		"cutover host":  {"[media]\nmedia_qbittorrent_url = \"http://127.0.0.1:8081\"\n", "host configuration service/qbittorrent.config.url"},
+		"unknown key":   {"[core]\nnot_a_key = 1\n", "unknown host key \"core.not_a_key\""},
 	} {
-		setEnv(t, "ATRIUM_CONFIG", write("bad.toml", c.body))
+		setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "bad.toml", c.body))
 		r := runSettings(t, "get", key)
-		if r.code != cli.ExitError || !strings.Contains(r.stderr, c.names) || r.stdout != "" {
-			t.Errorf("%s: exit %d stdout %q stderr %q", name, r.code, r.stdout, r.stderr)
+		if r.code != cli.ExitError || !strings.Contains(r.stderr, c.want) {
+			t.Errorf("%s: exit %d stderr %q, want %q", name, r.code, r.stderr, c.want)
 		}
 	}
-	setEnv(t, "ATRIUM_CONFIG", write("bad.toml", "[assistant]\nmax_steps_chat = \"${PIN_TEST_UNDEFINED}\"\n"))
-	if r := runSettings(t, "get", key); !strings.Contains(r.stderr, "PIN_TEST_UNDEFINED") {
-		t.Errorf("stderr %q does not name the variable", r.stderr)
+
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "connection.toml", "[connections.\"service/qbittorrent\"]\nkind = \"service/qbittorrent\"\nconfig = { url = \"http://127.0.0.1:8081\" }\ncapabilities = [\"api\"]\n"))
+	if r := runApp(t, "connections", "list", "--json"); r.code != cli.ExitOK || !strings.Contains(r.stdout, "service/qbittorrent") {
+		t.Errorf("host connection: exit %d stdout %q stderr %q", r.code, r.stdout, r.stderr)
+	}
+}
+
+func TestCutoverOperatorAndTuningPinsAreRefused(t *testing.T) {
+	t.Parallel()
+	dir, _ := hostSettings(t)
+
+	for name, c := range map[string]struct {
+		env  map[string]string
+		file string
+		want string
+	}{
+		"credential env":  {env: map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_API_KEY": "qbt"}, want: "connection field service/qbittorrent credential api_key"},
+		"credential file": {file: "[media]\nmedia_qbittorrent_api_key = \"qbt\"\n", want: "connection field service/qbittorrent credential api_key"},
+		"tuning config":   {file: "[media]\nmedia_qbittorrent_timeout_seconds = 30\n", want: "compiled constant internal/media/tuning.go:TuningMediaQbittorrentTimeoutSeconds"},
+		"tuning env":      {env: map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_TIMEOUT_SECONDS": "30"}, want: "compiled constant internal/media/tuning.go:TuningMediaQbittorrentTimeoutSeconds"},
+	} {
+		for key, value := range c.env {
+			setEnv(t, key, value)
+		}
+		if c.file != "" {
+			setEnv(t, "ATRIUM_CONFIG", writeFile(t, dir, "cutover.toml", c.file))
+		}
+		r := runSettings(t, "get", "tz")
+		if r.code != cli.ExitError || !strings.Contains(r.stderr, "cut over") || !strings.Contains(r.stderr, c.want) {
+			t.Errorf("%s: exit %d stderr %q, want %q", name, r.code, r.stderr, c.want)
+		}
+		for key := range c.env {
+			setEnv(t, key, "")
+		}
+		setEnv(t, "ATRIUM_CONFIG", "")
+	}
+
+	setEnv(t, "ATRIUM_CONFIG", writeFile(t, dir, "staged.toml", "[assistant]\nmonthly_budget_usd = 120\n"))
+	if got := pinRowOf(t, runSettings(t, "get", "monthly_budget_usd")); got.Value != "120" || got.Source != "pin" {
+		t.Errorf("a non-cutover operator pin: %+v", got)
 	}
 }

@@ -55,11 +55,7 @@ type Worker struct {
 }
 
 func New(ctx context.Context, svc *service.Service, callables map[string]Callable, enabled func(string) bool) (*Worker, error) {
-	r := assistant.Read(ctx, svc.DB.Read)
-	tick := r.Int(scheduler.KeyTickSeconds)
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
+	tick := scheduler.TuningAgentSchedulerTickSeconds
 	return &Worker{Service: svc, Callables: callables, Interval: time.Duration(tick) * time.Second, Owner: journal.NewOwner(), Enabled: enabled}, nil
 }
 

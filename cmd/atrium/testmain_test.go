@@ -21,7 +21,6 @@ import (
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -53,6 +52,36 @@ var defaultAccountsFile = func() string {
 	body := fmt.Sprintf("[[account]]\nid = \"icloud\"\npreset = \"icloud\"\nlogin = \"operator@icloud.invalid\"\npassword_file = %q\n", secret)
 	if os.MkdirAll(dir, 0o700) != nil || os.WriteFile(secret, []byte("dummy-icloud-password\n"), 0o600) != nil || os.WriteFile(path, []byte(body), 0o600) != nil {
 		panic("cannot write the default mail accounts file")
+	}
+	return path
+}()
+
+var defaultHostConfig = func() string {
+	dir := filepath.Join(testRoot, "host")
+	if os.MkdirAll(dir, 0o700) != nil {
+		panic("cannot create the default host directory")
+	}
+	anthropicKey := filepath.Join(dir, "anthropic.key")
+	grafanaKey := filepath.Join(dir, "grafana.key")
+	if os.WriteFile(anthropicKey, []byte("dummy-anthropic-key\n"), 0o600) != nil ||
+		os.WriteFile(grafanaKey, []byte("dummy-grafana-token\n"), 0o600) != nil {
+		panic("cannot write the default host credentials")
+	}
+	body := fmt.Sprintf(`[connections."service/anthropic"]
+kind = "service/anthropic"
+label = "Anthropic"
+capabilities = ["models"]
+credential_files = { api_key = %q }
+
+[connections."service/grafana"]
+kind = "service/grafana"
+label = "Grafana"
+capabilities = ["viewer"]
+credential_files = { viewer_token = %q }
+`, anthropicKey, grafanaKey)
+	path := filepath.Join(dir, "host.toml")
+	if os.WriteFile(path, []byte(body), 0o600) != nil {
+		panic("cannot write the default host configuration")
 	}
 	return path
 }()
@@ -174,10 +203,8 @@ func requirementEnv(mediaRoot string) map[string]string {
 		settingEnv(calendar.AppleIDKey):        "operator@icloud.invalid",
 		settingEnv(contacts.DirKey):            mediaRoot + "-contacts",
 		settingEnv(config.KeyMailAccountsFile): defaultAccountsFile,
-		"ANTHROPIC_API_KEY":                    "dummy-anthropic-key",
-		settingEnv(notion.TokenKey):            "dummy-notion-token",
+		"ATRIUM_HOST_CONFIG":                   defaultHostConfig,
 		settingEnv(grafanatools.KeyURL):        "http://grafana.invalid",
-		settingEnv(grafanatools.KeyToken):      "dummy-grafana-token",
 	}
 }
 
@@ -198,7 +225,6 @@ func init() {
 			testEnv[name] = value
 		}
 	}
-	testEnv["ATRIUM_NOTION_BASE_URL"] = "http://127.0.0.1:9"
 }
 
 func quietLog(io.Writer) {}

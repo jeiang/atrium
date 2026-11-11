@@ -87,8 +87,12 @@ func validateOp(name string) func(json.RawMessage) error {
 	}
 }
 
-func qbitKey(set Settings, hash string) string {
-	return "qbit:" + strings.TrimRight(set.QbitURL, "/") + ":" + strings.ToLower(hash)
+func qbitKey(set Settings, hash string) (string, error) {
+	base, err := set.NeedQbit()
+	if err != nil {
+		return "", err
+	}
+	return "qbit:" + strings.TrimRight(base, "/") + ":" + strings.ToLower(hash), nil
 }
 
 func settleState(err error) ledger.State {
@@ -117,6 +121,10 @@ func (t Tuning) Add(ctx context.Context, store *ledger.Store, set Settings, req 
 	if err != nil {
 		return "", err
 	}
+	resource, err := qbitKey(set, hash)
+	if err != nil {
+		return "", err
+	}
 	key := req.OperationKey
 	if key == "" {
 		key = "media:add:" + ledger.NewKey()
@@ -131,7 +139,7 @@ func (t Tuning) Add(ctx context.Context, store *ledger.Store, set Settings, req 
 	ticket, err := store.Begin(ctx, ledger.New{
 		Origin: "media", Operation: operation, OperationKey: key, Target: hash,
 		Action: jsonOf(action), Undo: jsonOf(torrentUndo{Op: UndoTorrent, Hash: hash}),
-		Resources: []ledger.Resource{{Key: qbitKey(set, hash)}},
+		Resources: []ledger.Resource{{Key: resource}},
 	}, nil)
 	if err != nil {
 		return "", err
@@ -154,9 +162,13 @@ func (t Tuning) Add(ctx context.Context, store *ledger.Store, set Settings, req 
 }
 
 func (t Tuning) command(ctx context.Context, store *ledger.Store, set Settings, hash, operation string, action any, run func() error) error {
+	resource, err := qbitKey(set, hash)
+	if err != nil {
+		return err
+	}
 	ticket, err := store.Begin(ctx, ledger.New{
 		Origin: "media", Operation: operation, OperationKey: "media:" + operation + ":" + ledger.NewKey(),
-		Target: hash, Action: jsonOf(action), Resources: []ledger.Resource{{Key: qbitKey(set, hash)}},
+		Target: hash, Action: jsonOf(action), Resources: []ledger.Resource{{Key: resource}},
 	}, nil)
 	if err != nil {
 		return err

@@ -31,7 +31,7 @@ func slice(s string, offset, limit int64) string {
 	return s[start:end]
 }
 
-var recallLimitBound = tool.NewBound(assistant.KeyRecallMaxPageChars, assistant.KeyRecallPageChars)
+var recallLimitBound = tool.NewCeiling(assistant.TuningAgentRecallPageChars, 100, assistant.TuningAgentRecallMaxPageChars)
 
 func recall(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	resultID, _, err := tool.IntArg(args, "result_id", true)

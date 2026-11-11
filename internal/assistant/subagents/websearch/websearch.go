@@ -106,10 +106,10 @@ func (s *Search) handle(ctx context.Context, tc *tool.Context, args tool.Args) (
 	}
 	set := assistant.Read(ctx, tc.DB.Read)
 	maxCost := set.Float(KeyMaxCostUSD)
-	maxSteps := set.Int(KeyMaxSteps)
-	maxSearches := set.Int(KeyMaxSearches)
+	maxSteps := TuningSearchWebMaxSteps
+	maxSearches := TuningSearchWebMaxSearches
 	modelID := set.Text(KeyModel)
-	maxConcurrent := set.Int(assistant.KeySubagentMaxConcurrent)
+	maxConcurrent := assistant.TuningAgentSubagentMaxConcurrent
 	if err := set.Err(); err != nil {
 		return nil, err
 	}

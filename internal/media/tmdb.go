@@ -9,20 +9,16 @@ import (
 	"strings"
 )
 
-const (
-	defaultTMDBAPI    = "https://api.themoviedb.org/3"
-	defaultTMDBImages = "https://image.tmdb.org/t/p/w342"
-)
-
 type TmdbError string
 
 func (e TmdbError) Error() string { return string(e) }
 
 type TMDB struct {
-	token  string
-	http   *http.Client
-	api    string
-	images string
+	token     string
+	http      *http.Client
+	imageHTTP *http.Client
+	api       string
+	images    string
 }
 
 type TVResult struct {
@@ -37,17 +33,20 @@ type MovieResult struct {
 	Year       string
 }
 
-func NewTMDBAt(token string, client *http.Client, api, images string) *TMDB {
+func NewTMDBAt(token string, client, imageClient *http.Client, api, images string) *TMDB {
 	if token == "" {
 		return nil
 	}
 	if api == "" {
-		api = defaultTMDBAPI
+		api = DefaultTMDBAPI
 	}
 	if images == "" {
-		images = defaultTMDBImages
+		images = DefaultTMDBImages
 	}
-	return &TMDB{token: token, http: client, api: strings.TrimRight(api, "/"), images: strings.TrimRight(images, "/")}
+	if imageClient == nil {
+		imageClient = client
+	}
+	return &TMDB{token: token, http: client, imageHTTP: imageClient, api: strings.TrimRight(api, "/"), images: strings.TrimRight(images, "/")}
 }
 
 func (t *TMDB) get(ctx context.Context, path string, params ...param) (any, error) {
@@ -205,7 +204,7 @@ func (t *TMDB) Image(ctx context.Context, posterPath string) ([]byte, error) {
 	if err != nil {
 		return nil, TmdbError("TMDB images unreachable: invalid URL")
 	}
-	res, err := send(ctx, t.http, req)
+	res, err := send(ctx, t.imageHTTP, req)
 	if err != nil {
 		var failure *httpFailure
 		if errors.As(err, &failure) {
