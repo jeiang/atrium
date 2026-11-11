@@ -69,7 +69,7 @@ func TestKnowledgeEditDuringEmbeddingKeepsTheRecordPending(t *testing.T) {
 	first := make(chan string, 1)
 	second := make(chan string, 1)
 	release := make(chan struct{})
-	fake.gate = func(ctx context.Context, texts []string) {
+	fake.setGate(func(ctx context.Context, texts []string) {
 		if len(texts) == 1 && (texts[0] == "atrium probe" || strings.HasPrefix(texts[0], "task: search result")) {
 			return
 		}
@@ -87,7 +87,7 @@ func TestKnowledgeEditDuringEmbeddingKeepsTheRecordPending(t *testing.T) {
 		case <-release:
 		case <-ctx.Done():
 		}
-	}
+	})
 
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
@@ -141,7 +141,7 @@ func TestKnowledgeRetractDuringEmbeddingLeavesNoVector(t *testing.T) {
 	release := make(chan struct{})
 	var mu sync.Mutex
 	calls := 0
-	fake.gate = func(ctx context.Context, texts []string) {
+	fake.setGate(func(ctx context.Context, texts []string) {
 		if len(texts) == 1 && (texts[0] == "atrium probe" || strings.HasPrefix(texts[0], "task: search result")) {
 			return
 		}
@@ -159,7 +159,7 @@ func TestKnowledgeRetractDuringEmbeddingLeavesNoVector(t *testing.T) {
 		case <-release:
 		case <-ctx.Done():
 		}
-	}
+	})
 
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
@@ -235,7 +235,7 @@ func TestKnowledgeEditAfterEmbeddingRequeuesTheRecord(t *testing.T) {
 
 	sent := make(chan string, 1)
 	release := make(chan struct{})
-	fake.gate = func(ctx context.Context, texts []string) {
+	fake.setGate(func(ctx context.Context, texts []string) {
 		if len(texts) == 1 && (texts[0] == "atrium probe" || strings.HasPrefix(texts[0], "task: search result")) {
 			return
 		}
@@ -247,7 +247,7 @@ func TestKnowledgeEditAfterEmbeddingRequeuesTheRecord(t *testing.T) {
 		case <-release:
 		case <-ctx.Done():
 		}
-	}
+	})
 	_, _, stop = startServeStoppable(t, dir)
 	defer stop()
 	select {
