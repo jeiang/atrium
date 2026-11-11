@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"slices"
-	"strconv"
 	"time"
 
 	"go.opentelemetry.io/otel/trace"
@@ -26,7 +25,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/db/store"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/obs"
@@ -61,9 +59,10 @@ type Runner struct {
 }
 
 type Options struct {
-	Now    func() float64
-	Embed  func(ctx context.Context, texts []string) ([][]float64, error)
-	Limits journal.Limits
+	Now       func() float64
+	Embed     func(ctx context.Context, texts []string) ([][]float64, error)
+	Limits    journal.Limits
+	Inference *inference.Service
 }
 
 type state struct {
@@ -81,7 +80,7 @@ type state struct {
 	env          config.Env
 	steps        int
 	stepIndex    int
-	maxCost      float64
+	inference    *inference.Service
 	ttl          string
 	jobName      string
 
@@ -331,10 +330,6 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if err != nil {
 		return nil, err
 	}
-	maxCost, err := inference.RunCap(ctx, d.Read, model.ID)
-	if err != nil {
-		return nil, err
-	}
 	contextLimit := min(threads.ContextLimitOf(*thread), model.ContextWindow)
 	extra := deref(o.Limits.SystemExtra) + memoryPrompt
 	urls, err := threads.AllowedURLs(ctx, d.Read, thread.ID)
@@ -360,7 +355,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	}
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, contextLimit: contextLimit,
-		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, maxCost: maxCost, ttl: ttl, jobName: jobName,
+		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, inference: o.Inference, ttl: ttl, jobName: jobName,
 		x: &dispatcher{d: d, tc: tc, now: now, tuning: tuning, withdrawn: map[string]struct{}{}},
 		admission: admission{
 			allow: allow, model: model.ID, cc: prompts.PrefixCacheControl(kind, ttl), extra: extra,
@@ -377,9 +372,6 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 		s.steps = int(*o.Limits.MaxSteps)
 	}
 	s.toolChoice, s.invalid = forcedToolChoice(o.Limits.ToolChoice, model, set)
-	if o.Limits.MaxCostUSD != nil {
-		s.maxCost = *o.Limits.MaxCostUSD
-	}
 	return s, nil
 }
 
@@ -484,27 +476,57 @@ const memoryPrompt = "\n\nMemory view: the first user message opens with this th
 	"the messages after it are verbatim. Each memory line carries a message range and a zoom id; call zoom(id, n) to open " +
 	"a summary's two children, or zoom(id, 1) to read one message's source, when the summary is not enough."
 
-func (s *state) stream(ctx context.Context, messages []json.RawMessage) (*anthropic.Message, int64, error) {
-	params := s.req.params
-	params.Messages = messages
-	params.ToolChoice, s.toolChoice = s.toolChoice, nil
-	ledgerCtx := context.WithoutCancel(ctx)
-	started := time.Now()
-	response, err := s.client.Stream(ctx, params, func(ev anthropic.Event) error { return s.writer.Observe(ledgerCtx, ev) })
-	wall := time.Since(started).Milliseconds()
-	if err != nil {
-		return response, wall, err
+func (s *state) dispatch(ctx context.Context, params anthropic.Params, unattended bool) (inference.Outcome, inference.Receipt, error) {
+	class := inference.Interactive
+	if unattended {
+		class = inference.Unattended
 	}
-	return response, wall, s.writer.Flush(context.WithoutCancel(ctx))
+	attempt, err := s.inference.Reserve(ctx, inference.Request{
+		AttemptKey: inference.NewAttemptKey(fmt.Sprintf("loop:%d:%d", s.run.ID, s.stepIndex)),
+		RunID:      s.run.ID,
+		ThreadID:   s.thread.ID,
+		Kind:       string(s.kind),
+		JobName:    s.jobName,
+		Effort:     s.run.Effort,
+		Class:      class,
+		CacheTTL:   s.ttl,
+		Params:     params,
+	})
+	if err != nil {
+		return inference.Outcome{}, inference.Receipt{}, err
+	}
+	ledgerCtx := context.WithoutCancel(ctx)
+	outcome := attempt.Stream(ctx, s.client, func(ev anthropic.Event) error { return s.writer.Observe(ledgerCtx, ev) })
+	receipt, err := s.inference.Settle(context.WithoutCancel(ctx), attempt, inference.Settlement{
+		Outcome: outcome, ToolCalls: toolUseCount(outcome.Message), Compaction: compactionOf(outcome.Message),
+	})
+	if err != nil {
+		return outcome, inference.Receipt{}, err
+	}
+	return outcome, receipt, nil
 }
 
-func (s *state) recordUsage(ctx context.Context, response *anthropic.Message, toolCalls, wall int64, partial bool) (float64, error) {
-	entry := inference.Entry{
-		TS: s.now(), RequestID: response.ID, ThreadID: s.thread.ID, RunID: s.run.ID, Kind: string(s.kind), JobName: s.jobName,
-		Model: s.run.Model, Effort: s.run.Effort, ToolCalls: toolCalls, WallMS: wall, Partial: partial,
-		Compaction: int64(store.Bit(response.StopReason == block.Compaction)),
+func toolUseCount(msg *anthropic.Message) int64 {
+	if msg == nil {
+		return 0
 	}
-	return inference.Record(context.WithoutCancel(ctx), s.d, entry, response.Usage)
+	var n int64
+	for _, raw := range msg.Content {
+		var block struct {
+			Type string `json:"type"`
+		}
+		if json.Unmarshal(raw, &block) == nil && block.Type == "tool_use" {
+			n++
+		}
+	}
+	return n
+}
+
+func compactionOf(msg *anthropic.Message) int64 {
+	if msg == nil || msg.StopReason != block.Compaction {
+		return 0
+	}
+	return 1
 }
 
 func (s *state) settlePending(ctx context.Context) error {
@@ -575,9 +597,6 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if err := s.readmit(ctx); err != nil {
 		return false, nil, err
 	}
-	if _, err := inference.Check(ctx, s.d.Read, s.now(), loc, unattended); err != nil {
-		return false, nil, err
-	}
 	if err := s.renew(ctx); err != nil {
 		return false, nil, err
 	}
@@ -592,13 +611,6 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		last = nil
 		s.callsKey, s.repeats = "", 0
 	}
-	spent, err := runTreeCost(ctx, s.d.Read, s.run.ID)
-	if err != nil {
-		return false, nil, err
-	}
-	if spent >= s.maxCost {
-		return false, nil, RunLimit(fmt.Sprintf("run cost ceiling reached ($%s of $%s)", strconv.FormatFloat(spent, 'f', 2, 64), strconv.FormatFloat(s.maxCost, 'f', 2, 64)))
-	}
 	h, err := s.history(ctx)
 	if err != nil {
 		return false, nil, err
@@ -611,33 +623,37 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if err != nil {
 		return false, nil, err
 	}
-	span.SetAttributes(obs.Float(obs.RunCostUSD, spent), obs.Int64(obs.ContextSize, size))
+	span.SetAttributes(obs.Int64(obs.ContextSize, size))
 	if size > s.contextLimit {
 		return false, nil, RunLimit(fmt.Sprintf("next request would be about %d tokens, over the %d limit", size, s.contextLimit))
-	}
-	if err := s.reserve(ctx, size); err != nil {
-		return false, nil, err
 	}
 	messages, err := s.req.buildMessages(ctx, s.d.Read, files.ScopeOf(s.thread.ID, s.thread.ProjectID), active)
 	if err != nil {
 		return false, nil, err
 	}
+	params := s.req.params
+	params.Messages = messages
+	params.ToolChoice, s.toolChoice = s.toolChoice, nil
 	reqCtx, reqSpan := obs.Start(ctx, "gen_ai.request", trace.WithAttributes(
 		obs.String(obs.GenAIRequestModel, s.run.Model),
 		obs.String(obs.RunKind, string(s.kind)),
 	))
-	response, wall, err := s.stream(reqCtx, messages)
+	outcome, receipt, err := s.dispatch(reqCtx, params, unattended)
+	response := outcome.Message
+	genAIAttrs(reqSpan, response, outcome.WallMS, receipt.ActualUSD, outcome.Err != nil)
 	if err != nil {
-		if response != nil && response.ID != "" {
-			cost, rerr := s.recordUsage(ctx, response, 0, wall, true)
-			genAIAttrs(reqSpan, response, wall, cost, true)
-			if rerr != nil {
-				obs.Fail(reqSpan, "usage")
-				reqSpan.End()
-				return false, nil, rerr
-			}
-		}
-		obs.Fail(reqSpan, spanError(err))
+		obs.Fail(reqSpan, "usage")
+		reqSpan.End()
+		return false, nil, err
+	}
+	if outcome.Err != nil {
+		obs.Fail(reqSpan, spanError(outcome.Err))
+		reqSpan.End()
+		return false, nil, outcome.Err
+	}
+	span.SetAttributes(obs.Float(obs.RunCostUSD, receipt.ActualUSD))
+	if err := s.writer.Flush(context.WithoutCancel(ctx)); err != nil {
+		obs.Fail(reqSpan, "progress")
 		reqSpan.End()
 		return false, nil, err
 	}
@@ -655,15 +671,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		reqSpan.End()
 		return false, nil, err
 	}
-	cost, err := s.recordUsage(ctx, response, int64(len(uses)), wall, false)
-	genAIAttrs(reqSpan, response, wall, cost, false)
-	if err != nil {
-		obs.Fail(reqSpan, "usage")
-	}
 	reqSpan.End()
-	if err != nil {
-		return false, nil, err
-	}
 	if err := s.renew(ctx); err != nil {
 		return false, nil, err
 	}
@@ -703,83 +711,6 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	}
 	done, err = journal.FinishUnlessQueued(ctx, s.d, s.run.ID, s.thread.ID, journal.Done, s.now())
 	return done, next, err
-}
-
-func (s *state) reserve(ctx context.Context, size int64) error {
-	cold, err := inference.ColdRequestUSD(s.run.Model, size, s.ttl)
-	if err != nil {
-		return err
-	}
-	return s.reserveUSD(ctx, cold, fmt.Sprintf("the next request is about %d tokens, up to $%s to write to the cache cold", size, strconv.FormatFloat(cold, 'f', 2, 64)))
-}
-
-func (s *state) reserveUSD(ctx context.Context, next float64, what string) error {
-	spent, err := runTreeCost(ctx, s.d.Read, s.run.ID)
-	if err != nil {
-		return err
-	}
-	if spent+next > s.maxCost {
-		return RunLimit(fmt.Sprintf("run cost cap: %s, with $%s of $%s already spent; raise %s to continue",
-			what, strconv.FormatFloat(spent, 'f', 2, 64), strconv.FormatFloat(s.maxCost, 'f', 2, 64), inference.RunCapKey(s.run.Model)))
-	}
-	for parentID := s.run.ParentRunID; parentID != nil; {
-		parent, err := journal.GetRun(ctx, s.d.Read, *parentID)
-		if err != nil {
-			return err
-		}
-		if parent == nil {
-			return fmt.Errorf("loop: run %d: no parent run %d", s.run.ID, *parentID)
-		}
-		limit, err := runCapOf(ctx, s.d.Read, *parent)
-		if err != nil {
-			return err
-		}
-		spent, err := runTreeCost(ctx, s.d.Read, parent.ID)
-		if err != nil {
-			return err
-		}
-		if spent+next > limit {
-			return RunLimit(fmt.Sprintf("parent run cost cap: %s, with $%s of $%s already spent by run %d and its subagents; raise %s to continue",
-				what, strconv.FormatFloat(spent, 'f', 2, 64), strconv.FormatFloat(limit, 'f', 2, 64), parent.ID, inference.RunCapKey(parent.Model)))
-		}
-		parentID = parent.ParentRunID
-	}
-	tree, err := threads.ThreadTree(ctx, s.d.Read, s.thread.ID)
-	if err != nil {
-		return err
-	}
-	threadSpent, limit, own, err := inference.ThreadCap(ctx, s.d.Read, inference.ThreadScope{RootID: tree.RootID, CapUSD: tree.CapUSD, IDs: tree.IDs})
-	if err != nil {
-		return err
-	}
-	if threadSpent+next > limit {
-		remedy := "raise " + inference.ThreadCapKey + " to continue"
-		if own {
-			remedy = "this is the cost cap chosen when the thread was created; start a new thread to continue"
-		}
-		return RunLimit(fmt.Sprintf("thread cost cap: %s, with $%s of $%s already spent in this thread and its subagents; %s",
-			what, strconv.FormatFloat(threadSpent, 'f', 2, 64), strconv.FormatFloat(limit, 'f', 2, 64), remedy))
-	}
-	return nil
-}
-
-func runTreeCost(ctx context.Context, q db.Querier, runID int64) (float64, error) {
-	ids, err := journal.RunDescendants(ctx, q, runID)
-	if err != nil {
-		return 0, err
-	}
-	return inference.SpendOnRuns(ctx, q, ids)
-}
-
-func runCapOf(ctx context.Context, q db.Querier, run journal.Run) (float64, error) {
-	limits, err := journal.LimitsOf(ctx, q, run.ID)
-	if err != nil {
-		return 0, err
-	}
-	if limits.MaxCostUSD != nil {
-		return *limits.MaxCostUSD, nil
-	}
-	return inference.RunCap(ctx, q, run.Model)
 }
 
 func (s *state) answer(ctx context.Context, uses []ToolUse) error {

@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"sync"
@@ -394,11 +393,9 @@ func TestAsstUsageLedgerPricesFallbacksFlagsUnpricedModelsAndKeepsPartialRows(t 
 	}
 }
 
-var asstColdTokens = regexp.MustCompile(`about (\d+) tokens`)
-
 func TestAsstRunCostCapAndSpendLimitStopRunsBeforeMoreIsSpent(t *testing.T) {
 	t.Parallel()
-	_, api, _ := moduleFixture(t, flagsExcept("", ""))
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	asstSet(t, "default_model", pricing.OpusID)
 	asstSet(t, "max_run_cost_usd_opus_5_5", "0.0001")
@@ -408,24 +405,25 @@ func TestAsstRunCostCapAndSpendLimitStopRunsBeforeMoreIsSpent(t *testing.T) {
 	if refused.State != "failed" || !strings.Contains(refused.err(), "run cost cap") || !strings.Contains(refused.err(), "max_run_cost_usd_opus_5_5") || len(api.Requests()) != sent {
 		t.Fatalf("run over the cap: %+v %q, %d requests sent", refused, refused.err(), len(api.Requests())-sent)
 	}
-	found := asstColdTokens.FindStringSubmatch(refused.err())
-	if found == nil {
-		t.Fatalf("no token count in %q", refused.err())
+	asstSet(t, "max_run_cost_usd_opus_5_5", "10")
+	asstSet(t, "cache_ttl_chat", "5m")
+	api.Push(asstReply("measured"))
+	measured, _ := asstRun(t, "--text", "hi")
+	if measured.State != "done" {
+		t.Fatalf("measuring run: %+v %q", measured, measured.err())
 	}
-	tokens, err := strconv.ParseFloat(found[1], 64)
-	if err != nil {
+	var reservationN int64
+	if err := asstDB(t, dir).Read.QueryRow("SELECT reservation_nusd FROM usage WHERE run_id = ?", measured.ID).Scan(&reservationN); err != nil {
 		t.Fatal(err)
 	}
-	fiveMinutes, oneHour := tokens*5/1e6, tokens*8/1e6
-	asstSet(t, "max_run_cost_usd_opus_5_5", strconv.FormatFloat((fiveMinutes+oneHour)/2, 'f', -1, 64))
-
-	asstSet(t, "cache_ttl_chat", "5m")
+	reservation := float64(reservationN) / inference.NanoUSD
+	asstSet(t, "max_run_cost_usd_opus_5_5", strconv.FormatFloat(reservation+1e-6, 'f', -1, 64))
 	api.Push(asstReply("sent"))
-	if ran, _ := asstRun(t, "--text", "hi"); ran.State != "done" || len(api.Requests()) != sent+1 {
+	if ran, _ := asstRun(t, "--text", "hi"); ran.State != "done" || len(api.Requests()) != sent+2 {
 		t.Fatalf("5m run under the cap: %+v %q, %d requests", ran, ran.err(), len(api.Requests())-sent)
 	}
 	asstSet(t, "cache_ttl_chat", "1h")
-	if held, _ := asstRun(t, "--text", "hi"); held.State != "failed" || !strings.Contains(held.err(), "run cost cap") || len(api.Requests()) != sent+1 {
+	if held, _ := asstRun(t, "--text", "hi"); held.State != "failed" || !strings.Contains(held.err(), "run cost cap") || len(api.Requests()) != sent+2 {
 		t.Fatalf("1h run: %+v %q, want the dearer 1h write to hit the cap before sending", held, held.err())
 	}
 

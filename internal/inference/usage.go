@@ -3,10 +3,8 @@ package inference
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"math"
-	"strconv"
 	"strings"
 	"time"
 
@@ -15,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/numx"
-	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/timex"
 )
@@ -32,27 +29,6 @@ const (
 
 	NanoUSD = 1_000_000_000
 )
-
-type MissingRequestID struct{}
-
-func (MissingRequestID) Error() string { return "usage: the request has no id" }
-
-type Entry struct {
-	TS         float64
-	RequestID  string
-	Source     string
-	Provider   string
-	ThreadID   int64
-	RunID      int64
-	Kind       string
-	JobName    string
-	Model      string
-	Effort     string
-	ToolCalls  int64
-	WallMS     int64
-	Partial    bool
-	Compaction int64
-}
 
 type Iteration struct {
 	Type         string  `json:"type"`
@@ -176,58 +152,6 @@ func classFor(source, kind string) Class {
 	default:
 		return Interactive
 	}
-}
-
-func Record(ctx context.Context, d *db.DB, e Entry, u anthropic.Usage) (float64, error) {
-	if e.RequestID == "" {
-		return 0, MissingRequestID{}
-	}
-	if e.Source == "" {
-		e.Source = SourceLoop
-	}
-	if e.Provider == "" {
-		e.Provider = ProviderAnthropic
-	}
-	loc, err := Location(ctx, d.Read)
-	if err != nil {
-		return 0, err
-	}
-	p := priceUsage(e.Model, u)
-	raw, err := json.Marshal(p.iterations)
-	if err != nil {
-		return 0, err
-	}
-	_, err = d.Write.ExecContext(ctx,
-		"INSERT INTO usage (attempt_key, ts, month_start, expires_at, settled_at, state, budget_class, reservation_nusd, "+
-			"accounted_nusd, request_id, source, provider, thread_id, run_id, kind, job_name, model, effort, iterations, "+
-			"input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, reasoning_tokens, searches, tool_calls, "+
-			"wall_ms, tier, cost_usd, partial, unpriced, compaction) "+
-			"VALUES (?, ?, ?, ?, ?, 'settled', ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) "+
-			"ON CONFLICT DO NOTHING",
-		"record:"+e.RequestID, e.TS, MonthStart(e.TS, loc), e.TS, e.TS, classFor(e.Source, e.Kind), nanoUSD(p.cost),
-		e.RequestID, e.Source, e.Provider, nullable(e.ThreadID), nullable(e.RunID), e.Kind, nullableText(e.JobName), e.Model, e.Effort,
-		string(raw), p.tokens.Input, p.tokens.CacheWrite5m, p.tokens.CacheWrite1h, p.tokens.CacheRead, p.tokens.Output,
-		p.reasoning, p.searches, e.ToolCalls, e.WallMS, p.tier, p.cost, e.Partial, p.unpriced, e.Compaction)
-	if err != nil {
-		return 0, err
-	}
-	kind := e.Kind
-	if kind == "" {
-		kind = "unknown"
-	}
-	model := e.Model
-	if model == "" {
-		model = "unknown"
-	}
-	obs.LLMRequests.Add(1, model, kind, strconv.FormatBool(e.Partial))
-	obs.LLMDuration.Observe(float64(e.WallMS)/1000, model, kind)
-	obs.LLMTokens.Add(float64(p.tokens.Input), model, kind, "input")
-	obs.LLMTokens.Add(float64(p.tokens.CacheWrite5m+p.tokens.CacheWrite1h), model, kind, "cache_write")
-	obs.LLMTokens.Add(float64(p.tokens.CacheRead), model, kind, "cache_read")
-	obs.LLMTokens.Add(float64(p.tokens.Output), model, kind, "output")
-	obs.LLMTokens.Add(float64(p.reasoning), model, kind, "reasoning")
-	obs.LLMCost.Add(p.cost, model, kind)
-	return p.cost, nil
 }
 
 func nullable(id int64) *int64 {
