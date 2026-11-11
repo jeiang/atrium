@@ -200,7 +200,7 @@ func TestConnectionsTestUsesTheEmbedCAAndAPassingTestReleasesTheMailHold(t *test
 	embed.mu.Lock()
 	embed.dim = config.EmbedDim
 	embed.mu.Unlock()
-	if code, body := s.conn("/test", url.Values{"id": {"service/embedding"}}); code != http.StatusSeeOther || connectionState(t, dir, "service/embedding") != "ok" {
+	if code, body := s.conn("/test", url.Values{"id": {"service/embedding"}}); code != http.StatusOK || connectionState(t, dir, "service/embedding") != "ok" {
 		t.Fatalf("Test of the stored embed endpoint: %d %s", code, body)
 	}
 	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {

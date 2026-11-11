@@ -41,10 +41,6 @@ func (s *service) open(e *cli.Env) (*db.DB, *Store, int) {
 		_ = d.Close()
 		return nil, nil, cli.Fail(e, err)
 	}
-	if err := store.ReconcileHost(e.Ctx); err != nil {
-		_ = d.Close()
-		return nil, nil, cli.Fail(e, err)
-	}
 	return d, store, cli.ExitOK
 }
 

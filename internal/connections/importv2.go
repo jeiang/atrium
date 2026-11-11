@@ -94,11 +94,18 @@ func importService(ctx context.Context, tx *sql.Tx, s ImportService, encrypted b
 	}
 	if _, err := tx.ExecContext(ctx,
 		"INSERT INTO connections (id, kind, label, config_source, config_json, transport_json, revision, enabled, state, created_at, updated_at) "+
-			"VALUES (?, ?, ?, ?, ?, ?, 1, 1, 'untested', ?, ?)",
+			"VALUES (?, ?, ?, ?, ?, ?, 1, 1, 'untested', ?, ?) "+
+			"ON CONFLICT(id) DO UPDATE SET label = excluded.label, config_json = excluded.config_json, transport_json = excluded.transport_json, "+
+			"revision = connections.revision + 1, enabled = 1, state = 'untested', reason = '', checked_at = NULL, last_ok_at = NULL, "+
+			"expires_at = NULL, reauth_at = NULL, results_json = '{}', updated_at = excluded.updated_at "+
+			"WHERE connections.config_source = 'host'",
 		s.ID, kind, s.Label, source, string(configJSON), string(transportJSON), now, now); err != nil {
 		return nil, err
 	}
 	lines := []string{"connection " + s.ID + ": created from " + source + " settings"}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM connection_capabilities WHERE connection_id = ?", s.ID); err != nil {
+		return nil, err
+	}
 	for _, name := range s.Capabilities {
 		if _, err := tx.ExecContext(ctx,
 			"INSERT INTO connection_capabilities (connection_id, name, enabled, config_json) VALUES (?, ?, 1, '{}')", s.ID, name); err != nil {
@@ -112,10 +119,17 @@ func importService(ctx context.Context, tx *sql.Tx, s ImportService, encrypted b
 		if !encrypted {
 			return nil, fmt.Errorf("db import-v2: the source %s credential %s cannot be stored in a plaintext destination; encrypt the destination first", s.ID, c.Slot)
 		}
-		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO connection_credentials (connection_id, slot, source, value, set_at, set_by) VALUES (?, ?, 'database', ?, ?, ?)",
-			s.ID, c.Slot, c.Value, c.SetAt, c.SetBy); err != nil {
+		res, err := tx.ExecContext(ctx,
+			"INSERT INTO connection_credentials (connection_id, slot, source, value, set_at, set_by) VALUES (?, ?, 'database', ?, ?, ?) "+
+				"ON CONFLICT(connection_id,slot) DO NOTHING",
+			s.ID, c.Slot, c.Value, c.SetAt, c.SetBy)
+		if err != nil {
 			return nil, err
+		}
+		if n, err := res.RowsAffected(); err != nil {
+			return nil, err
+		} else if n == 0 {
+			continue
 		}
 		lines = append(lines, "connection "+s.ID+": credential "+c.Slot+" carried")
 	}

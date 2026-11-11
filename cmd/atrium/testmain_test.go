@@ -63,16 +63,8 @@ config = { subject = "mailto:ops@example.test" }
 capabilities = ["delivery"]
 `
 
-const defaultEmbeddingConnection = `
-[connections."service/embedding"]
-kind = "service/embedding"
-label = "Embedding"
-config = { url = "http://embed.invalid/v1", model = "embeddinggemma" }
-capabilities = ["embeddings"]
-`
-
 func hostConfigBody(webpush string) string {
-	return hostConfigBodyWith(defaultEmbeddingConnection, webpush)
+	return hostConfigBodyWith("", webpush)
 }
 
 func hostConfigBodyWith(embedding, webpush string) string {
@@ -284,6 +276,7 @@ func requirementEnv(mediaRoot string) map[string]string {
 		settingEnv(contacts.DirKey):            mediaRoot + "-contacts",
 		settingEnv(config.KeyMailAccountsFile): defaultAccountsFile,
 		"ATRIUM_HOST_CONFIG":                   defaultHostConfig,
+		"ATRIUM_MAIL_MAIL_EMBED_URL":           "http://embed.invalid/v1",
 		settingEnv(grafanatools.KeyURL):        "http://grafana.invalid",
 	}
 }

@@ -58,7 +58,7 @@ These options are removed; setting one now fails evaluation as an unknown option
 - `id` → `uid`, `user` and `group`
 - `settings` → `host` for host keys; operator preferences are set in the application
 - `mode` → the operator `mail_mode` setting (a fresh import starts in `shadow`)
-- `chatUrl`, `embedUrl` → `host.mail.mail_chat_url`, `host.mail.mail_embed_url`
+- `chatUrl` → `host.mail.mail_chat_url`; `embedUrl` → `connections."service/embedding"`
 - `publicUrl` → `host.core.public_url`
 - `timeZone` → `initialTimezone`; the operator `tz` value is editable after bootstrap
 - `icloudAppleId` → the Settings page

@@ -15,7 +15,7 @@ type ImportProbe struct {
 	ProbedAt    float64
 }
 
-func ImportV2(values map[string]string, probe *ImportProbe, health *connections.ImportHealth, ambiguous bool, keyPresent bool) (connections.ImportService, []string) {
+func ImportV2(values map[string]string, probe *ImportProbe, health *connections.ImportHealth, ambiguous bool, key connections.ImportCredential) (connections.ImportService, []string) {
 	service := connections.ImportService{
 		ID:           EmbeddingID,
 		Kind:         KindEmbedding,
@@ -24,11 +24,9 @@ func ImportV2(values map[string]string, probe *ImportProbe, health *connections.
 		Config:       map[string]string{"url": values["mail_embed_url"], "model": values["mail_embed_model"]},
 		Transport:    map[string]string{"ca_file": values["mail_embed_ca_file"], "proxy": values["mail_embed_proxy"]},
 		Capabilities: []string{"embeddings"},
+		Credentials:  []connections.ImportCredential{key},
 	}
 	var notes []string
-	if keyPresent {
-		notes = append(notes, "service/embedding: unresolved HOST credential bearer; export the source mail_embed_key to a file and set connections.\"service/embedding\".credential_files.bearer")
-	}
 	var probeState connections.State
 	if probe != nil {
 		probeState = connections.Failing

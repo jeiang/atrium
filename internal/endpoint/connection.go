@@ -97,15 +97,6 @@ func testEmbedding(ctx context.Context, lease *connections.Lease, _ []connection
 	}
 	models := e.Models(ctx)
 	reason, dim, status := e.ProbeWithStatus(ctx)
-	result := connections.Result{Capability: "embeddings"}
-	if reason != "" {
-		result.State = connections.Failing
-		if status == http.StatusUnauthorized || status == http.StatusForbidden {
-			result.State = connections.NeedsReauth
-		}
-		result.Reason = reason
-		return []connections.Result{result}, nil
-	}
 	data, err := json.Marshal(map[string]any{
 		"dimension":   dim,
 		"models":      models,
@@ -115,6 +106,15 @@ func testEmbedding(ctx context.Context, lease *connections.Lease, _ []connection
 	})
 	if err != nil {
 		return nil, err
+	}
+	result := connections.Result{Capability: "embeddings", Data: data}
+	if reason != "" {
+		result.State = connections.Failing
+		if status == http.StatusUnauthorized || status == http.StatusForbidden {
+			result.State = connections.NeedsReauth
+		}
+		result.Reason = reason
+		return []connections.Result{result}, nil
 	}
 	detail := fmt.Sprintf("%d models listed, %d dimensions", len(models), dim)
 	if Hosted(e.Base) {

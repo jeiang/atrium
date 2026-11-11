@@ -52,6 +52,7 @@ func newApp(env config.Env, reg *settings.Registry, st *config.State, mods []mod
 }
 
 func newAppWith(env config.Env, reg *settings.Registry, st *config.State, mods []module.Module, clients func(config.Config) mail.OpenFunc, now func() float64, setup func(io.Writer)) *cli.App {
+	st.SetConnectionReconciler(connections.Reconcile)
 	set := newSet(env, reg, st, mods, clients, now)
 	app := cli.New("atrium", setup)
 	app.Version = version

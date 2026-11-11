@@ -236,26 +236,28 @@ behavior-parity target.
   default $0.30 per night, and `dreaming_monthly_usd`, default $3 per
   calendar month). A server fallback is shown in the thread
   and its tokens are recorded as a separate usage row priced at the model
-  that served them. Mail classification and embeddings
-  use separately configured OpenAI-compatible endpoints, local or hosted,
-  each with an optional Bearer key, CA bundle and proxy; the endpoint package
-  carries the resolved chat and embed model, body-character, batch and
-  dimension settings through the request context. `atrium endpoints probe`
-  and the Integrations Test record whether each works, and mail is
+  that served them. Mail classification uses the chat endpoint and
+  embeddings use the `service/embedding` connection; both are
+  OpenAI-compatible, local or hosted, with a CA bundle and proxy, and the
+  chat endpoint takes an optional Bearer key while the embedding connection
+  takes a host-file bearer. The endpoint package carries the resolved chat
+  and embed model, compiled body-character and batch constants and the
+  dimension through the request context. `atrium endpoints probe` and each
+  connection's Test record whether they work, and mail is
   held in needs-settings while the current endpoint's probe fails. Connected content sent to a hosted model leaves
   the host; privacy does not mean that inference is necessarily local.
   The embedding index records its embedder and dimension; changing the
   embedder re-embeds in the background under `atrium serve` and swaps the
   index when complete. The rebuild loop runs for every install, so a
   Notion-only install keeps its index fresh, and Notion document embeddings
-  use the same `mail_embed_body_chars` limit as mail. Knowledge records are
+  use the same compiled body limit as mail. Knowledge records are
   embedded into the same generation-numbered index (title, aliases and body,
   same limit); the core loop drains pending records when an embed endpoint is
   set, and a retracted record leaves the index. Each embedded row stores the
   hash of the text that was sent, so an edit re-queues it, a write-back whose
   row changed, was retracted or was deleted in flight is discarded, and a
   retraction or deletion removes the vector in the same transaction.
-- Ship24 (API key) is a connection record on the Integrations settings; qBittorrent (API key), TMDB (read token), EZTV (no credential) and Notion (token) are connection records on the `/settings/connections`
+- Ship24 (API key), the embedding endpoint (host-file bearer), qBittorrent (API key), TMDB (read token), EZTV (no credential) and Notion (token) are connection records on the `/settings/connections`
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-connection CA bundle and proxy. Certificate verification
   cannot be turned off. Open-Meteo is a keyless connection record for the

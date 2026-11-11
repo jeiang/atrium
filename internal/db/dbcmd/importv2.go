@@ -24,8 +24,8 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/endpoint"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/notify"
@@ -592,7 +592,7 @@ func sourceConnections(ctx context.Context, src *sql.DB, accounts map[string]boo
 	} else if ok {
 		embedHealth = &connections.ImportHealth{State: state, Reason: reason, CheckedAt: checked, ExpiresAt: expires}
 	}
-	embedding, embedNotes := endpoint.ImportV2(values, probe, embedHealth, accounts["embed"], embedKey.Value != "")
+	embedding, embedNotes := endpoint.ImportV2(values, probe, embedHealth, accounts["embed"], embedKey)
 	out.Services = append(out.Services, embedding)
 	out.Notes = append(out.Notes, embedNotes...)
 	if embedKey.Value != "" {
