@@ -271,7 +271,10 @@ func undoDelete(store *ledger.Store, env config.Env) ledger.Undoer {
 			}
 			return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"deleted": uid})}, nil
 		},
-		Finalize: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage, _ ledger.Result) error {
+		Finalize: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage, result ledger.Result) error {
+			if result.State != ledger.Done {
+				return nil
+			}
 			var u deleteUndo
 			if err := json.Unmarshal(raw, &u); err != nil {
 				return err

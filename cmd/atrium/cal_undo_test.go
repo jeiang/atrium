@@ -201,3 +201,43 @@ func TestCalendarDeleteUndoRecreatesTheEventAndRecordsIt(t *testing.T) {
 		t.Fatalf("the refused second undo changed the events: %v", srv.Objects())
 	}
 }
+
+func TestCalendarCreateUndoKeepsTheEventTrackedWhenTheDeleteFails(t *testing.T) {
+	dir, srv := davFixture(t)
+	created := proposalID(t, toolResult(t, "calendar_create", map[string]any{
+		"calendar": "icloud", "title": "Dentist", "start": "2026-11-10T12:00:00", "end": "2026-11-10T13:00:00",
+	}))
+	if got := runApp(t, "proposals", "approve", created); got.code != cli.ExitOK {
+		t.Fatalf("approve create: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	var uid string
+	if err := d.Read.QueryRow("SELECT uid FROM agent_events WHERE deleted_ts IS NULL").Scan(&uid); err != nil {
+		t.Fatal(err)
+	}
+	var effectID int64
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'calendar_event' AND direction = 'forward'").Scan(&effectID); err != nil {
+		t.Fatal(err)
+	}
+	srv.FailDeletes = 1
+	if got := runApp(t, "effects", "undo", strconv.FormatInt(effectID, 10)); got.code != cli.ExitOK {
+		t.Fatalf("effects undo: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	if len(srv.Objects()) != 1 {
+		t.Fatalf("the failed delete removed the event: %v", srv.Objects())
+	}
+	var deleted *float64
+	if err := d.Read.QueryRow("SELECT deleted_ts FROM agent_events WHERE uid = ?", uid).Scan(&deleted); err != nil {
+		t.Fatal(err)
+	}
+	if deleted != nil {
+		t.Fatalf("the failed delete marked the surviving event deleted at %v", *deleted)
+	}
+	var state string
+	if err := d.Read.QueryRow("SELECT state FROM effects WHERE direction = 'undo' AND undo_of = ?", effectID).Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if state != string(ledger.Unknown) {
+		t.Fatalf("undo state = %q, want unknown", state)
+	}
+}
