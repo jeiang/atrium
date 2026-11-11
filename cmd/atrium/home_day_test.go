@@ -47,11 +47,11 @@ func TestKnowledgeSelectedRecordsConfirmTogetherAndHomeShowsReceipts(t *testing.
 		t.Error("an empty selection confirmed a record")
 	}
 
-	if _, err := d.Write.Exec("INSERT INTO agent_writes (ts, tool, target, state, before_json, after_json, undo_json) VALUES (?, 'task_add', 'task:1', 'ok', '{}', '{}', '{}')", float64(time.Now().Unix())); err != nil {
+	if _, err := d.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, target, action_json, before_json, after_json, undo_json, state, settled_at) VALUES (?, ?, 'home-day-task', 'agent', 'task_add', 'home-day-task', 'forward', 'task:1', '{}', '{}', '{}', '{}', 'done', ?)", float64(time.Now().Unix()), float64(time.Now().Unix()), float64(time.Now().Unix())); err != nil {
 		t.Fatal(err)
 	}
 	code, body, _ = w.get("/activity/recent", true)
-	if code != http.StatusOK || !strings.Contains(body, "Added a task") || !strings.Contains(body, `hx-post="/activity/write/`) {
+	if code != http.StatusOK || !strings.Contains(body, "Added a task") || !strings.Contains(body, `hx-post="/activity/effect/`) {
 		t.Errorf("recent receipts = %d: %.400s", code, body)
 	}
 	code, body, _ = w.get("/chat", false)

@@ -127,7 +127,11 @@ behavior-parity target.
   tools, and the old `notion_link`/`notion_edit` proposals stay readable.
 - Notifications are recorded in an in-app inbox first and pushed best
   effort through Web Push on one of three channels (assistant, media,
-  system). Each channel's content setting sends the full text (`auto`,
+  system). The inbox insert is one local effect keyed by the source
+  occurrence (proposal, reminder, package transition, digest day, channel
+  poll), so repeating an occurrence adds no second row; producers mark the
+  occurrence in the same transaction and a push failure only records the
+  transport error. Each channel's content setting sends the full text (`auto`,
   `full`) or only the title `atrium` (`title`). ntfy is removed; the
   `ntfy_channels` table stays and only its `content` column is read.
 - Web Push devices subscribe from the Notifications settings page. The VAPID
@@ -191,13 +195,19 @@ behavior-parity target.
   on each usage row, and a model outside the catalog fails closed. The API key is
   a write-only secret setting (the `ANTHROPIC_API_KEY` variable pins it). The
   monthly budget defaults to $150 with scheduled runs paused at 80% and chat at
-  100%; each model has its own run cost cap, checked against the next request
-  written cold at the thread's cache lifetime, as is a $10 thread cost cap
-  over all runs of a thread and its subagent threads, lowered by the cost cap
-  chosen in the composer when the thread was created. A run's spend includes
-  its subagent runs, and every subagent request is also checked against each
-  parent run's cap. An Anthropic spend-cap 429
-  stops the run as a budget stop. The
+  95%; the last 5% is reserved for classification. Every paid model call,
+  memory summaries included, reserves its full cold prompt plus the request's
+  maximum output tokens and maximum web searches before dispatch, and an
+  attempt whose outcome is unknown stays reserved and expires to an estimated
+  charge after 24 hours. Reservations from the previous month carry into the
+  new month until they settle or expire. When the budget is exhausted,
+  scheduled jobs that need no model call still run. Each model has its own run
+  cost cap, checked against the next request written cold at the thread's
+  cache lifetime, as is a $10 thread cost cap over all runs of a thread and
+  its subagent threads, lowered by the cost cap chosen in the composer when
+  the thread was created. A run's spend includes its subagent runs, and every
+  subagent request is also checked against each parent run's cap. An
+  Anthropic spend-cap 429 stops the run as a budget stop. The
   catalog also records whether a model accepts a forced `tool_choice`
   (`any` or a named tool): only Haiku does, and the loop sends the request
   to Sonnet and Opus without it. The loop ends a run with a clear thread
@@ -225,7 +235,10 @@ behavior-parity target.
   use the same `mail_embed_body_chars` limit as mail. Knowledge records are
   embedded into the same generation-numbered index (title, aliases and body,
   same limit); the core loop drains pending records when an embed endpoint is
-  set, and a retracted record leaves the index.
+  set, and a retracted record leaves the index. Each embedded row stores the
+  hash of the text that was sent, so an edit re-queues it, a write-back whose
+  row changed, was retracted or was deleted in flight is discarded, and a
+  retraction or deletion removes the vector in the same transaction.
 - TMDB (read token) and Ship24 (API key) are connection records on the Integrations settings; qBittorrent (API key) and Notion (token) are connection records on the `/settings/connections`
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-connection CA bundle and proxy. Certificate verification
@@ -302,7 +315,7 @@ behavior-parity target.
   kept), settings, secrets (the row is readable only with the same
   database key, since the database encrypts it), notification channels,
   push subscriptions and attention snoozes, knowledge records (their
-  `embedded` flag reset so vectors rebuild), projects, threads with their
+  `embedded_hash` cleared so vectors rebuild), projects, threads with their
   messages, files, plans and queue, agent profile, skills, operator-edited
   subagents, jobs, agent events, tasks, proposals and their actions, agent
   writes, media channels, the seen list and media state, and the current
@@ -375,6 +388,12 @@ behavior-parity target.
 
 ## Current authority boundaries
 
+- The effect ledger (`internal/ledger`) owns the `effects`, `effect_resources`,
+  `effect_claims`, `effect_resolutions` and `effect_import_refs` tables. Task
+  writes (`task_add`, `task_update`, `task_done`) record one effect atomically
+  with the task and undo through a second effect row; `atrium effects
+  list|show|resolve|undo` inspects and settles them. The other writers keep
+  their existing ledgers until their cutover.
 - Mail writes use the shared gate. Shadow mode records decisions without
   automatic mailbox writes; live automatic writes also depend on pause,
   go-live eligibility, verification, caps, and action ledgers.

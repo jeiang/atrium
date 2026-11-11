@@ -3,14 +3,15 @@ package kb
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 type Refused string
@@ -33,16 +34,24 @@ func validScope(scope string) bool {
 
 func stateOf(r Record) map[string]any { return stateMap(r) }
 
-func recordWrite(ctx context.Context, tx *sql.Tx, reg *writes.Registry, toolName string, rec Record, before *beforeState, now float64) (int64, error) {
-	w := writes.New{TS: now, Tool: toolName, Target: "kb:" + fmt.Sprint(rec.ID), After: stateOf(rec)}
+func jsonOf(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return b
+}
+
+func writeResult(rec Record, before *beforeState) ledger.Result {
+	r := ledger.Result{State: ledger.Done, Target: "kb:" + fmt.Sprint(rec.ID), After: jsonOf(stateOf(rec))}
 	if before != nil {
-		w.Before = stateOf(Record{
+		r.Before = jsonOf(stateOf(Record{
 			Title: before.Title, Aliases: before.Aliases, Body: before.Body, Scope: before.Scope,
 			Marks: tool.Marks(before.Marks), Pinned: before.Pinned, ConfirmedAt: before.ConfirmedAt, RetractedAt: before.RetractedAt,
-		})
+		}))
 	}
-	w.Undo = undoPayload{Op: UndoOp, ID: rec.ID, Before: before, Applied: rec.UpdatedAt}
-	return writes.Record(ctx, tx, reg, w)
+	r.Undo = jsonOf(undoPayload{Op: UndoOp, ID: rec.ID, Before: before, Applied: rec.UpdatedAt})
+	return r
 }
 
 func checkPin(ctx context.Context, q db.Querier, id int64) error {
@@ -74,56 +83,62 @@ func load(ctx context.Context, q db.Querier, id int64) (Record, error) {
 	return *rec, nil
 }
 
-func OperatorEdit(ctx context.Context, d *db.DB, reg *writes.Registry, id int64, in EditInput, now float64) (Record, int64, error) {
+func editChanges(rec Record, in EditInput) bool {
+	return rec.Title != in.Title || rec.Body != in.Body || rec.Scope != in.Scope ||
+		rec.Private != in.Private || rec.Marks != in.Marks || rec.Pinned != in.Pinned ||
+		fmt.Sprint(rec.Aliases) != fmt.Sprint(normalizeAliases(in.Aliases))
+}
+
+func OperatorEdit(ctx context.Context, store *ledger.Store, id int64, in EditInput, now float64) (Record, int64, error) {
 	if !validScope(in.Scope) {
 		return Record{}, 0, Refused("scope must be work or personal")
 	}
+	current, err := load(ctx, store.DB.Read, id)
+	if err != nil {
+		return Record{}, 0, err
+	}
+	if !editChanges(current, in) {
+		return current, 0, nil
+	}
 	var out Record
-	var writeID int64
-	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+	effect, err := store.ApplyLocal(ctx, ledger.New{
+		Origin: "local", Operation: "kb_edit", OperationKey: "kb_edit:" + ledger.NewKey(), Target: "kb:" + fmt.Sprint(id),
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		rec, err := load(ctx, tx, id)
 		if err != nil {
-			return err
+			return ledger.Result{}, err
+		}
+		if !editChanges(rec, in) {
+			out = rec
+			return ledger.Result{State: ledger.Skipped}, nil
 		}
 		aliases, err := aliasesJSON(in.Aliases)
 		if err != nil {
-			return err
-		}
-		changed := rec.Title != in.Title || rec.Body != in.Body || rec.Scope != in.Scope ||
-			rec.Private != in.Private || rec.Marks != in.Marks || rec.Pinned != in.Pinned ||
-			fmt.Sprint(rec.Aliases) != fmt.Sprint(normalizeAliases(in.Aliases))
-		if !changed {
-			out = rec
-			return nil
-		}
-		embedded := rec.Embedded
-		if rec.Title != in.Title || rec.Body != in.Body || fmt.Sprint(rec.Aliases) != fmt.Sprint(normalizeAliases(in.Aliases)) {
-			embedded = false
+			return ledger.Result{}, err
 		}
 		if _, err := tx.ExecContext(ctx,
-			"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, private = ?, marks = ?, pinned = ?, embedded = ?, updated_at = ? WHERE id = ?",
-			in.Title, aliases, in.Body, in.Scope, b2i(in.Private), int64(in.Marks), b2i(in.Pinned), b2i(embedded), now, id); err != nil {
-			return err
+			"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, private = ?, marks = ?, pinned = ?, updated_at = ? WHERE id = ?",
+			in.Title, aliases, in.Body, in.Scope, b2i(in.Private), int64(in.Marks), b2i(in.Pinned), now, id); err != nil {
+			return ledger.Result{}, err
 		}
 		if in.Pinned && !rec.Pinned {
 			if err := checkPin(ctx, tx, id); err != nil {
-				return err
+				return ledger.Result{}, err
 			}
 		}
 		next := rec
 		next.Title, next.Body, next.Scope, next.Private, next.Marks, next.Pinned = in.Title, in.Body, in.Scope, in.Private, in.Marks, in.Pinned
-		next.Aliases, next.Embedded, next.UpdatedAt = normalizeAliases(in.Aliases), embedded, now
+		next.Aliases, next.UpdatedAt = normalizeAliases(in.Aliases), now
 		out = next
-		writeID, err = recordWrite(ctx, tx, reg, "kb_edit", next, beforeOf(rec), now)
-		return err
+		return writeResult(next, beforeOf(rec)), nil
 	})
 	if err != nil {
 		return Record{}, 0, err
 	}
-	return out, writeID, nil
+	return out, effect.ID, nil
 }
 
-func OperatorCreate(ctx context.Context, d *db.DB, reg *writes.Registry, in EditInput, now float64) (Record, int64, error) {
+func OperatorCreate(ctx context.Context, store *ledger.Store, in EditInput, now float64) (Record, int64, error) {
 	if in.Title == "" || in.Body == "" {
 		return Record{}, 0, Refused("title and body are required")
 	}
@@ -131,137 +146,161 @@ func OperatorCreate(ctx context.Context, d *db.DB, reg *writes.Registry, in Edit
 		return Record{}, 0, Refused("scope must be work or personal")
 	}
 	var out Record
-	var writeID int64
-	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+	effect, err := store.ApplyLocal(ctx, ledger.New{
+		Origin: "local", Operation: "kb_write", OperationKey: "kb_write:" + ledger.NewKey(), Target: "kb:new",
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		aliases, err := aliasesJSON(in.Aliases)
 		if err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		confirmed := any(nil)
 		if in.Pinned {
 			confirmed = now
 		}
 		res, err := tx.ExecContext(ctx,
-			"INSERT INTO kb_records (title, aliases, body, scope, private, marks, writer, pinned, confirmed_at, embedded, created_at, updated_at) "+
-				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
+			"INSERT INTO kb_records (title, aliases, body, scope, private, marks, writer, pinned, confirmed_at, created_at, updated_at) "+
+				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			in.Title, aliases, in.Body, in.Scope, b2i(in.Private), int64(in.Marks), WriterOperator, b2i(in.Pinned), confirmed, now, now)
 		if err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		id, err := res.LastInsertId()
 		if err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		rec, err := load(ctx, tx, id)
 		if err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		if in.Pinned {
 			if err := checkPin(ctx, tx, id); err != nil {
-				return err
+				return ledger.Result{}, err
 			}
 		}
 		out = rec
-		writeID, err = recordWrite(ctx, tx, reg, "kb_write", rec, nil, now)
-		return err
+		return writeResult(rec, nil), nil
 	})
 	if err != nil {
 		return Record{}, 0, err
 	}
-	return out, writeID, nil
+	return out, effect.ID, nil
 }
 
-func Confirm(ctx context.Context, d *db.DB, reg *writes.Registry, id int64, now float64) (Record, int64, error) {
+func Confirm(ctx context.Context, store *ledger.Store, id int64, now float64) (Record, int64, error) {
+	current, err := load(ctx, store.DB.Read, id)
+	if err != nil {
+		return Record{}, 0, err
+	}
+	if current.Retracted() {
+		return Record{}, 0, Refused(fmt.Sprintf("%s is retracted", Cite(id)))
+	}
+	if current.Confirmed() {
+		return current, 0, nil
+	}
 	var out Record
-	var writeID int64
-	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+	effect, err := store.ApplyLocal(ctx, ledger.New{
+		Origin: "local", Operation: "kb_confirm", OperationKey: "kb_confirm:" + ledger.NewKey(), Target: "kb:" + fmt.Sprint(id),
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		rec, err := load(ctx, tx, id)
 		if err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		if rec.Retracted() {
-			return Refused(fmt.Sprintf("%s is retracted", Cite(id)))
+			return ledger.Result{}, Refused(fmt.Sprintf("%s is retracted", Cite(id)))
 		}
 		if rec.Confirmed() {
 			out = rec
-			return nil
+			return ledger.Result{State: ledger.Skipped}, nil
 		}
 		marks := rec.Marks &^ tool.Untrusted
 		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET confirmed_at = ?, marks = ?, updated_at = ? WHERE id = ?",
 			now, int64(marks), now, id); err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		next := rec
 		next.ConfirmedAt, next.Marks, next.UpdatedAt = &now, marks, now
 		out = next
-		writeID, err = recordWrite(ctx, tx, reg, "kb_confirm", next, beforeOf(rec), now)
-		return err
+		return writeResult(next, beforeOf(rec)), nil
 	})
 	if err != nil {
 		return Record{}, 0, err
 	}
-	return out, writeID, nil
+	return out, effect.ID, nil
 }
 
-func OperatorRetract(ctx context.Context, d *db.DB, reg *writes.Registry, id int64, now float64) (Record, int64, error) {
+func OperatorRetract(ctx context.Context, store *ledger.Store, id int64, now float64) (Record, int64, error) {
+	current, err := load(ctx, store.DB.Read, id)
+	if err != nil {
+		return Record{}, 0, err
+	}
+	if current.Retracted() {
+		return current, 0, nil
+	}
 	var out Record
-	var writeID int64
-	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+	effect, err := store.ApplyLocal(ctx, ledger.New{
+		Origin: "local", Operation: "kb_retract", OperationKey: "kb_retract:" + ledger.NewKey(), Target: "kb:" + fmt.Sprint(id),
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		rec, err := load(ctx, tx, id)
 		if err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		if rec.Retracted() {
 			out = rec
-			return nil
+			return ledger.Result{State: ledger.Skipped}, nil
 		}
-		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded = 0, updated_at = ? WHERE id = ?", now, now, id); err != nil {
-			return err
+		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?", now, now, id); err != nil {
+			return ledger.Result{}, err
 		}
 		if err := embed.DeleteKB(ctx, tx, id); err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		next := rec
-		next.RetractedAt, next.Embedded, next.UpdatedAt = &now, false, now
+		next.RetractedAt, next.UpdatedAt = &now, now
 		out = next
-		writeID, err = recordWrite(ctx, tx, reg, "kb_retract", next, beforeOf(rec), now)
-		return err
+		return writeResult(next, beforeOf(rec)), nil
 	})
 	if err != nil {
 		return Record{}, 0, err
 	}
-	return out, writeID, nil
+	return out, effect.ID, nil
 }
 
-func Restore(ctx context.Context, d *db.DB, reg *writes.Registry, id int64, now float64) (Record, int64, error) {
+func Restore(ctx context.Context, store *ledger.Store, id int64, now float64) (Record, int64, error) {
+	current, err := load(ctx, store.DB.Read, id)
+	if err != nil {
+		return Record{}, 0, err
+	}
+	if !current.Retracted() {
+		return current, 0, nil
+	}
 	var out Record
-	var writeID int64
-	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+	effect, err := store.ApplyLocal(ctx, ledger.New{
+		Origin: "local", Operation: "kb_restore", OperationKey: "kb_restore:" + ledger.NewKey(), Target: "kb:" + fmt.Sprint(id),
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		rec, err := load(ctx, tx, id)
 		if err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		if !rec.Retracted() {
 			out = rec
-			return nil
+			return ledger.Result{State: ledger.Skipped}, nil
 		}
-		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = NULL, embedded = 0, updated_at = ? WHERE id = ?", now, id); err != nil {
-			return err
+		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = NULL, embedded_hash = NULL, updated_at = ? WHERE id = ?", now, id); err != nil {
+			return ledger.Result{}, err
 		}
 		next := rec
-		next.RetractedAt, next.Embedded, next.UpdatedAt = nil, false, now
+		next.RetractedAt, next.UpdatedAt = nil, now
 		out = next
-		writeID, err = recordWrite(ctx, tx, reg, "kb_restore", next, beforeOf(rec), now)
-		return err
+		return writeResult(next, beforeOf(rec)), nil
 	})
 	if err != nil {
 		return Record{}, 0, err
 	}
-	return out, writeID, nil
+	return out, effect.ID, nil
 }
 
-func RunRetract(ctx context.Context, d *db.DB, reg *writes.Registry, runID int64, now float64) ([]Record, error) {
-	rows, err := d.Read.QueryContext(ctx, "SELECT id FROM kb_records WHERE source_run_id = ? AND retracted_at IS NULL ORDER BY id", runID)
+func RunRetract(ctx context.Context, store *ledger.Store, runID int64, now float64) ([]Record, error) {
+	rows, err := store.DB.Read.QueryContext(ctx, "SELECT id FROM kb_records WHERE source_run_id = ? AND retracted_at IS NULL ORDER BY id", runID)
 	if err != nil {
 		return nil, err
 	}
@@ -275,7 +314,7 @@ func RunRetract(ctx context.Context, d *db.DB, reg *writes.Registry, runID int64
 	}
 	out := make([]Record, 0, len(ids))
 	for _, id := range ids {
-		rec, _, err := OperatorRetract(ctx, d, reg, id, now)
+		rec, _, err := OperatorRetract(ctx, store, id, now)
 		if err != nil {
 			return out, err
 		}
@@ -284,27 +323,29 @@ func RunRetract(ctx context.Context, d *db.DB, reg *writes.Registry, runID int64
 	return out, nil
 }
 
-func Purge(ctx context.Context, d *db.DB, id int64, now float64) error {
-	return d.WithTx(ctx, func(tx *sql.Tx) error {
+func Purge(ctx context.Context, store *ledger.Store, id int64, now float64) error {
+	_, err := store.ApplyLocal(ctx, ledger.New{
+		Origin: "local", Operation: "kb_purge", OperationKey: "kb_purge:" + ledger.NewKey(), Target: "kb:" + fmt.Sprint(id),
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		rec, err := Get(ctx, tx, id)
 		if err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		if rec == nil {
-			return Refused(fmt.Sprintf("%s is unknown", Cite(id)))
+			return ledger.Result{}, Refused(fmt.Sprintf("%s is unknown", Cite(id)))
 		}
 		if err := embed.DeleteKB(ctx, tx, id); err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		if _, err := tx.ExecContext(ctx, "DELETE FROM kb_records WHERE id = ?", id); err != nil {
-			return err
+			return ledger.Result{}, err
 		}
-		if err := writes.PurgeTarget(ctx, tx, "kb:"+fmt.Sprint(id)); err != nil {
-			return err
+		if err := ledger.PurgeTarget(ctx, tx, "kb:"+fmt.Sprint(id)); err != nil {
+			return ledger.Result{}, err
 		}
-		_, err = writes.Record(ctx, tx, nil, writes.New{TS: now, Tool: "kb_purge", Target: "kb:" + fmt.Sprint(id)})
-		return err
+		return ledger.Result{State: ledger.Done, Target: "kb:" + fmt.Sprint(id)}, nil
 	})
+	return err
 }
 
 func ErrUnknown(err error) bool {

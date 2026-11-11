@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/anthropicconn"
 	"github.com/jeiang/atrium/internal/assistant/memory"
+	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
@@ -118,8 +119,13 @@ func workCommand(cfgEnv config.Env) *cli.Command {
 				if err != nil {
 					return cli.Fail(env, err)
 				}
+				now := assistant.Now()
+				svc, err := service.NewInference(env.Ctx, d, func() float64 { return now })
+				if err != nil {
+					return cli.Fail(env, err)
+				}
 				n, err := memory.Work(env.Ctx, d, int64(*thread), memory.WorkOptions{
-					Now: assistant.Now(), Client: client, Model: model, Effort: effort,
+					Now: now, Client: client, Inference: svc, Model: model, Effort: effort,
 				})
 				if err != nil {
 					return cli.Fail(env, err)
@@ -213,7 +219,11 @@ func backfillCommand(cfgEnv config.Env) *cli.Command {
 					id := int64(*thread)
 					target = &id
 				}
-				n, err := memory.Backfill(audit.With(env.Ctx, "operator", audit.CLI), d, target, client, model, effort, now)
+				svc, err := service.NewInference(env.Ctx, d, func() float64 { return now })
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				n, err := memory.Backfill(audit.With(env.Ctx, "operator", audit.CLI), d, target, client, svc, model, effort, now)
 				if err != nil {
 					return cli.Fail(env, err)
 				}

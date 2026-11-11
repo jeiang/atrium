@@ -10,7 +10,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
-	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -180,19 +179,6 @@ func RunCap(ctx context.Context, q db.Querier, model string) (float64, error) {
 		return 0, err
 	}
 	return found.Float()
-}
-
-func ColdRequestUSD(model string, tokens int64, ttl string) (float64, error) {
-	var write pricing.Tokens
-	switch ttl {
-	case prompts.TTL5m:
-		write = pricing.Tokens{CacheWrite5m: tokens}
-	case prompts.TTL1h:
-		write = pricing.Tokens{CacheWrite1h: tokens}
-	default:
-		return 0, fmt.Errorf("budget: unknown cache TTL %q", ttl)
-	}
-	return pricing.CostUSD(model, write, 0)
 }
 
 const SpendCapText = "Anthropic spend limit reached: the organization's API usage cap refused the request. Raise the cap or wait for it to reset in the Anthropic console."

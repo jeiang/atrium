@@ -2,10 +2,13 @@ package inference
 
 import (
 	"context"
+	"crypto/rand"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -15,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tokens"
 )
@@ -114,11 +118,20 @@ type Attempt struct {
 	params      anthropic.Params
 	class       Class
 	model       string
+	kind        string
 	reservation int64
 	expiresAt   float64
 	deadline    float64
 	now         func() float64
 	consumed    atomic.Bool
+}
+
+func NewAttemptKey(prefix string) string {
+	var suffix [8]byte
+	if _, err := rand.Read(suffix[:]); err != nil {
+		panic(fmt.Sprintf("inference: attempt key: %v", err))
+	}
+	return prefix + ":" + hex.EncodeToString(suffix[:])
 }
 
 type prepared struct {
@@ -142,6 +155,7 @@ func (s *Service) Reserve(ctx context.Context, r Request) (*Attempt, error) {
 	expires := now + UnknownExpiry.Seconds()
 	deadline := now + RequestTimeout.Seconds()
 	var id int64
+	var refused error
 	err = s.db.WithTx(ctx, func(tx *sql.Tx) error {
 		if _, err := tx.ExecContext(ctx, "UPDATE usage SET expires_at = expires_at WHERE id = -1"); err != nil {
 			return err
@@ -152,7 +166,8 @@ func (s *Service) Reserve(ctx context.Context, r Request) (*Attempt, error) {
 			return err
 		}
 		if err := s.admit(ctx, tx, r, p, now, month); err != nil {
-			return err
+			refused = err
+			return nil
 		}
 		res, err := tx.ExecContext(ctx,
 			"INSERT INTO usage (attempt_key, ts, month_start, expires_at, state, budget_class, reservation_nusd, accounted_nusd, "+
@@ -170,8 +185,11 @@ func (s *Service) Reserve(ctx context.Context, r Request) (*Attempt, error) {
 	if err != nil {
 		return nil, err
 	}
+	if refused != nil {
+		return nil, refused
+	}
 	return &Attempt{
-		id: id, key: r.AttemptKey, params: r.Params, class: classOf(r), model: p.model,
+		id: id, key: r.AttemptKey, params: r.Params, class: classOf(r), model: p.model, kind: kindOf(r),
 		reservation: p.reservation, expiresAt: expires, deadline: deadline, now: s.now,
 	}, nil
 }
@@ -385,12 +403,24 @@ func estimatePrompt(p anthropic.Params) (int64, error) {
 	total := tokens.EstimateValue(fixed)
 	for _, raw := range p.Messages {
 		var message struct {
-			Content []json.RawMessage `json:"content"`
+			Content json.RawMessage `json:"content"`
 		}
 		if err := json.Unmarshal(raw, &message); err != nil {
 			return 0, err
 		}
-		n, err := tokens.EstimateContent(message.Content)
+		if len(message.Content) == 0 {
+			continue
+		}
+		var text string
+		if json.Unmarshal(message.Content, &text) == nil {
+			total += tokens.Estimate(text)
+			continue
+		}
+		var blocks []json.RawMessage
+		if err := json.Unmarshal(message.Content, &blocks); err != nil {
+			return 0, err
+		}
+		n, err := tokens.EstimateContent(blocks)
 		if err != nil {
 			return 0, err
 		}
@@ -469,8 +499,7 @@ func (a *Attempt) Stream(ctx context.Context, c *anthropic.Client, observe func(
 	ctx, cancel := context.WithTimeout(ctx, time.Duration((a.deadline-now)*float64(time.Second)))
 	defer cancel()
 	started := time.Now()
-	msg, err := c.Stream(ctx, a.params, observe)
-	return outcomeOf(msg, err, time.Since(started).Milliseconds())
+	return outcomeOf(c.Stream(ctx, a.params, observe), time.Since(started).Milliseconds())
 }
 
 func (a *Attempt) Create(ctx context.Context, c *anthropic.Client) Outcome {
@@ -484,31 +513,21 @@ func (a *Attempt) Create(ctx context.Context, c *anthropic.Client) Outcome {
 	ctx, cancel := context.WithTimeout(ctx, time.Duration((a.deadline-now)*float64(time.Second)))
 	defer cancel()
 	started := time.Now()
-	msg, err := c.Create(ctx, a.params)
-	return outcomeOf(msg, err, time.Since(started).Milliseconds())
+	return outcomeOf(c.Create(ctx, a.params), time.Since(started).Milliseconds())
 }
 
-func outcomeOf(msg *anthropic.Message, err error, wall int64) Outcome {
-	o := Outcome{Message: msg, WallMS: wall, Err: err}
-	if err != nil {
-		if transport, ok := anthropic.OutcomeOf(err); ok {
-			o.Message = transport.Message
-			o.Started = transport.Started
-			o.Complete = transport.Complete
-			o.DefinitelyUnsent = transport.DefinitelyUnsent
-			o.DefinitelyRejected = transport.DefinitelyRejected
-			o.Err = transport.Err
-			o.usage = transport.Usage
-			o.known = true
-		}
-		return o
+func outcomeOf(transport anthropic.Outcome, wall int64) Outcome {
+	return Outcome{
+		Message:            transport.Message,
+		Started:            transport.Started,
+		Complete:           transport.Complete,
+		DefinitelyUnsent:   transport.DefinitelyUnsent,
+		DefinitelyRejected: transport.DefinitelyRejected,
+		WallMS:             wall,
+		Err:                transport.Err,
+		usage:              transport.Usage,
+		known:              true,
 	}
-	o.Complete = true
-	if msg != nil {
-		o.usage = msg.Usage
-		o.known = true
-	}
-	return o
 }
 
 func (s *Service) Settle(ctx context.Context, a *Attempt, st Settlement) (Receipt, error) {
@@ -565,6 +584,7 @@ func (s *Service) settle(ctx context.Context, a *Attempt, st Settlement, partial
 		accounted = nanoUSD(p.cost)
 	}
 	var receipt Receipt
+	recorded := false
 	err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
 		var state string
 		var existingRequest sql.NullString
@@ -606,9 +626,30 @@ func (s *Service) settle(ctx context.Context, a *Attempt, st Settlement, partial
 			return err
 		}
 		receipt = Receipt{ID: a.id, State: "settled", ActualUSD: p.cost, CommittedUSD: usdOf(accounted), Unpriced: p.unpriced}
+		recorded = true
 		return nil
 	})
+	if err == nil && recorded && actual {
+		emitUsage(a.model, a.kind, partial, o.WallMS, p)
+	}
 	return receipt, err
+}
+
+func emitUsage(model, kind string, partial bool, wallMS int64, p priced) {
+	if kind == "" {
+		kind = "unknown"
+	}
+	if model == "" {
+		model = "unknown"
+	}
+	obs.LLMRequests.Add(1, model, kind, strconv.FormatBool(partial))
+	obs.LLMDuration.Observe(float64(wallMS)/1000, model, kind)
+	obs.LLMTokens.Add(float64(p.tokens.Input), model, kind, "input")
+	obs.LLMTokens.Add(float64(p.tokens.CacheWrite5m+p.tokens.CacheWrite1h), model, kind, "cache_write")
+	obs.LLMTokens.Add(float64(p.tokens.CacheRead), model, kind, "cache_read")
+	obs.LLMTokens.Add(float64(p.tokens.Output), model, kind, "output")
+	obs.LLMTokens.Add(float64(p.reasoning), model, kind, "reasoning")
+	obs.LLMCost.Add(p.cost, model, kind)
 }
 
 func (s *Service) markUnknown(ctx context.Context, a *Attempt, o Outcome) (Receipt, error) {

@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/media"
 )
 
@@ -22,13 +23,17 @@ const (
 func classifyError(err error) (string, errorKind, bool) {
 	var missing config.NotConfigured
 	var qbitErr media.QbitError
+	var qbitStatus *media.QbitStatusError
 	var planErr media.PlanError
 	var channelErr media.ChannelError
 	var eztvErr media.EztvError
 	var tmdbErr media.TmdbError
 	var gone media.NotFound
+	var conflict *ledger.Conflict
 	switch {
-	case errors.As(err, &missing), errors.As(err, &qbitErr):
+	case errors.As(err, &conflict):
+		return "an earlier change to this torrent is unresolved", backendError, true
+	case errors.As(err, &missing), errors.As(err, &qbitErr), errors.As(err, &qbitStatus):
 		return err.Error(), backendError, true
 	case errors.As(err, &planErr):
 		return err.Error(), planError, true

@@ -105,6 +105,10 @@ func (m *modelLog) Requests() []anthropictest.Request {
 }
 
 func moduleFixture(t *testing.T, flags map[string]string) (dir string, api *modelLog, f *fixture) {
+	return moduleFixtureAt(t, flags, nil)
+}
+
+func moduleFixtureAt(t *testing.T, flags map[string]string, now func() float64) (dir string, api *modelLog, f *fixture) {
 	t.Helper()
 	dir = t.TempDir()
 	api = &modelLog{Server: anthropictest.New(t, anthropictest.Reply("end_turn", anthropictest.Text("hi")))}
@@ -131,7 +135,7 @@ func moduleFixture(t *testing.T, flags map[string]string) (dir string, api *mode
 	reg := settings.New()
 	st := config.NewState(reg)
 	f = &fixture{t: t, dir: dir, env: env, settings: reg, state: st}
-	f.app = newAppWith(f.lookup, reg, st, nil, imapclient.Opener, nil, quietLog)
+	f.app = newAppWith(f.lookup, reg, st, nil, imapclient.Opener, now, quietLog)
 	fixturesByTest.Store(t, f)
 	fixturesByTest.Store(testKey(t), f)
 	return dir, api, f

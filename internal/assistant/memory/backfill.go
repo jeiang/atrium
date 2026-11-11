@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 )
 
 type Estimate struct {
@@ -49,7 +50,7 @@ func EstimateBackfill(ctx context.Context, q db.Querier) (Estimate, error) {
 
 // Backfill builds and drains the memory tree for one thread or every thread.
 // It is idempotent: existing nodes are kept and only pending nodes are queued.
-func Backfill(ctx context.Context, d *db.DB, threadID *int64, client *anthropic.Client, model, effort string, now float64) (int, error) {
+func Backfill(ctx context.Context, d *db.DB, threadID *int64, client *anthropic.Client, svc *inference.Service, model, effort string, now float64) (int, error) {
 	threads, err := backfillThreads(ctx, d.Read, threadID)
 	if err != nil {
 		return 0, err
@@ -74,7 +75,7 @@ func Backfill(ctx context.Context, d *db.DB, threadID *int64, client *anthropic.
 			if !queued {
 				break
 			}
-			n, err := Work(ctx, d, id, WorkOptions{Now: now, Client: client, Model: model, Effort: effort})
+			n, err := Work(ctx, d, id, WorkOptions{Now: now, Client: client, Inference: svc, Model: model, Effort: effort})
 			if err != nil {
 				return done, err
 			}

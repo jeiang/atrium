@@ -89,5 +89,9 @@ func newSet(env config.Env, reg *settings.Registry, st *config.State, mods []mod
 
 func budgetStatus(ctx context.Context, q db.Querier, now float64, loc *time.Location) (notify.Budget, error) {
 	st, err := inference.StatusAt(ctx, q, now, loc)
-	return notify.Budget{SpentUSD: st.SpentUSD, BudgetUSD: st.BudgetUSD, Share: st.Share}, err
+	return notify.Budget{
+		SpentUSD: st.SpentUSD, BudgetUSD: st.BudgetUSD, Share: st.Share,
+		CommittedUSD: st.CommittedUSD, ReservedUSD: st.ReservedUSD, UnknownUSD: st.UnknownUSD,
+		ExpiredUSD: st.ExpiredUSD, InteractiveCeilingUSD: st.InteractiveCeilingUSD,
+	}, err
 }

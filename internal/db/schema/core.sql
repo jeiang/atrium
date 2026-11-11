@@ -72,7 +72,7 @@ CREATE TABLE IF NOT EXISTS messages (
     k_order INTEGER NOT NULL DEFAULT 0,
     k_vcode INTEGER NOT NULL DEFAULT 0,
     k_otp6 INTEGER NOT NULL DEFAULT 0,
-    embedded INTEGER NOT NULL DEFAULT 0,
+    embedded_hash TEXT,
     first_seen REAL NOT NULL,
     gone_at REAL,
     UNIQUE (account, mailbox_id, uidvalidity, uid)
@@ -136,8 +136,8 @@ CREATE VIEW IF NOT EXISTS filed_messages AS SELECT m.id, m.account, m.mailbox_id
     m.labels, CASE WHEN c.folder IS NULL THEN m.in_inbox ELSE 0 END AS in_inbox, m.sent, m.location,
     COALESCE(c.folder, m.folder) AS folder, m.category, m.from_addr, m.from_domain, m.from_name, m.to_addrs,
     m.reply_to, m.rpath_domain, m.list_id, m.precedence, m.subject, m.subject_tmpl, m.msgid_domain, m.in_reply_to,
-    m.refs, m.dkim_d, m.esp, m.att_types, m.att_names, m.k_order, m.k_vcode, m.k_otp6, m.embedded, m.first_seen,
-    m.gone_at
+    m.refs, m.dkim_d, m.esp, m.att_types, m.att_names, m.k_order, m.k_vcode, m.k_otp6, m.embedded_hash IS NOT NULL AS embedded,
+    m.first_seen, m.gone_at
 FROM messages m LEFT JOIN corrections c ON c.message_id = m.id
 WHERE m.gone_at IS NULL AND m.sent = 0
 AND COALESCE(c.folder, m.folder) IS NOT NULL AND COALESCE(c.folder, m.folder) != ''

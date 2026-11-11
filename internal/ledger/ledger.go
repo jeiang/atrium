@@ -3,6 +3,8 @@ package ledger
 type State string
 
 const (
+	Intent      State = "intent"
+	Done        State = "done"
 	Held        State = "held"
 	Applied     State = "applied"
 	OK          State = "ok"
@@ -33,6 +35,12 @@ func (s State) UndoBlocked() bool { return s == UndoUnknown || s == UndoPartial 
 func (s State) Settled() bool { return s == Settled || s == UndoSettled || s == Undone }
 
 func (s State) Terminal() bool { return !s.Held() }
+
+func (s State) Final() bool {
+	return s == Done || s == Failed || s == Skipped || s == Partial || s == Unknown
+}
+
+func (s State) Blocking() bool { return s == Intent || s == Unknown || s == Partial }
 
 func BlockedSQL(alias string) string {
 	return alias + ".state IN ('unknown', 'partial', 'undo_unknown', 'undo_partial')"

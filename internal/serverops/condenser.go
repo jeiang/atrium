@@ -142,7 +142,7 @@ func condense(ctx context.Context, e worker.Env, threadID int64, now float64, lo
 			}
 		}
 		for _, f := range valid {
-			if _, err := writeFindingTx(ctx, tx, findingUndoers, Finding{
+			if _, err := WriteFindingTx(ctx, e.Service.Runner.Ledger, tx, Finding{
 				Fact: f.Fact, Severity: f.Severity, Title: f.Title, Body: f.Body,
 				Marks: marks, ThreadID: threadID, Tool: "ops_condenser", Now: now,
 			}); err != nil {

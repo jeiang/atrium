@@ -19,11 +19,11 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 var log = logx.Logger("atrium.tracking")
@@ -355,12 +355,17 @@ type Target struct {
 }
 
 type Result struct {
-	PackageID  int64   `json:"package_id"`
-	TrackerID  string  `json:"tracker_id"`
-	Status     string  `json:"status"`
-	StatusText string  `json:"status_text"`
-	Events     []Event `json:"events"`
-	WriteID    int64   `json:"write_id,omitempty"`
+	PackageID  int64     `json:"package_id"`
+	TrackerID  string    `json:"tracker_id"`
+	Status     string    `json:"status"`
+	StatusText string    `json:"status_text"`
+	Events     []Event   `json:"events"`
+	WriteID    int64     `json:"write_id,omitempty"`
+	Tracking   *Tracking `json:"-"`
+}
+
+func Identity(carrier, number string) string {
+	return "tracking:" + courierCode(carrier) + ":" + strings.ToUpper(strings.TrimSpace(number))
 }
 
 func Resolve(ctx context.Context, d *db.DB, env config.Env, now float64, packageID int64, number, carrier string) (Target, Settings, error) {
@@ -386,18 +391,7 @@ func Resolve(ctx context.Context, d *db.DB, env config.Env, now float64, package
 			Scan(&t.ID, &t.TrackingNumber, &t.Carrier, &t.Status, &t.StatusText, &t.Aggregator, &t.TrackerID, &t.LastEvent,
 				&t.LastEventHash, &t.NotifiedStatus, &t.LastEventTS, &t.LastSyncTS, &t.TrackerRegisteredTS)
 		if errors.Is(err, sql.ErrNoRows) {
-			res, ierr := d.Write.ExecContext(ctx,
-				"INSERT INTO packages (carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
-					"source_message_id, last_message_id, updated_ts, first_seen) VALUES (?, ?, '', '', '', ?, '', 0, 0, ?, ?)",
-				carrier, number, ordered, now, now)
-			if ierr != nil {
-				return Target{}, Settings{}, ierr
-			}
-			id, ierr := res.LastInsertId()
-			if ierr != nil {
-				return Target{}, Settings{}, ierr
-			}
-			t = Target{ID: id, TrackingNumber: number, Carrier: carrier, Status: ordered}
+			t = Target{TrackingNumber: number, Carrier: carrier, Status: ordered}
 			err = nil
 		}
 	default:
@@ -414,15 +408,15 @@ func Resolve(ctx context.Context, d *db.DB, env config.Env, now float64, package
 		return Target{}, Settings{}, err
 	}
 	var blocked int
-	blocked, err = writes.BlockedCount(ctx, d.Read, "track_package", fmt.Sprintf("package:%d", t.ID))
+	blocked, err = ledger.BlockedCount(ctx, d.Read, "track_package", Identity(t.Carrier, t.TrackingNumber))
 	if err != nil {
 		return Target{}, Settings{}, err
 	}
 	if blocked > 0 {
-		return Target{}, Settings{}, Error("the previous track_package for this package has an unknown outcome; resolve it with 'atrium writes resolve <id>' before retrying")
+		return Target{}, Settings{}, Error("the previous track_package for this package has an unknown outcome; resolve it with `atrium effects list --blocked` before retrying")
 	}
 	var used int
-	used, err = writes.CountSince(ctx, d.Read, "track_package", monthStart)
+	used, err = ledger.CountSince(ctx, d.Read, "track_package", monthStart)
 	if err != nil {
 		return Target{}, Settings{}, err
 	}
@@ -432,6 +426,20 @@ func Resolve(ctx context.Context, d *db.DB, env config.Env, now float64, package
 			used, s.Quota, KeyMonthlyQuota))
 	}
 	return t, s, nil
+}
+
+func Admit(ctx context.Context, tx *sql.Tx, t Target, now float64) (int64, error) {
+	if t.ID != 0 {
+		return t.ID, nil
+	}
+	res, err := tx.ExecContext(ctx,
+		"INSERT INTO packages (carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
+			"source_message_id, last_message_id, updated_ts, first_seen) VALUES (?, ?, '', '', '', ?, '', 0, 0, ?, ?)",
+		t.Carrier, t.TrackingNumber, ordered, now, now)
+	if err != nil {
+		return 0, err
+	}
+	return res.LastInsertId()
 }
 
 func monthStart(ctx context.Context, q db.Querier, env config.Env, now float64) (float64, error) {
@@ -464,17 +472,39 @@ func Register(ctx context.Context, d *db.DB, now float64, t Target, s Settings) 
 	if err != nil {
 		return Result{}, err
 	}
+	out := Result{PackageID: t.ID, TrackerID: tracker.TrackerID, Status: t.Status, StatusText: t.StatusText}
 	tracking, terr := client.Results(ctx, tracker.TrackerID)
 	if terr != nil {
-		if err := saveRegistration(ctx, d, now, t.ID, tracker.TrackerID); err != nil {
-			return Result{}, err
+		return out, nil
+	}
+	out.Status = advance(t.Status, statusOf(tracking))
+	out.StatusText = textOf(tracking)
+	out.Events = tracking.Events
+	out.Tracking = &tracking
+	return out, nil
+}
+
+func SaveRegistration(ctx context.Context, tx *sql.Tx, now float64, id int64, trackerID string, tracking *Tracking) error {
+	if tracking != nil {
+		for _, e := range tracking.Events {
+			if _, err := tx.ExecContext(ctx,
+				"INSERT OR IGNORE INTO package_events (package_id, tracker_id, event_key, event_ts, status, status_code, status_milestone, description, location, created_ts) "+
+					"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+				id, trackerID, eventKey(e), eventTime(e, now), e.Status, e.StatusCode, e.StatusMilestone, descriptionOf(e), e.Location, now); err != nil {
+				return err
+			}
 		}
-		return Result{PackageID: t.ID, TrackerID: tracker.TrackerID, Status: t.Status, StatusText: t.StatusText}, nil
 	}
-	if _, err := save(ctx, d, now, t.ID, tracker.TrackerID, tracking, false, nil); err != nil {
-		return Result{}, err
+	sets := []string{"aggregator = 'ship24'", "tracker_id = ?", "last_sync_ts = ?",
+		"tracker_registered_ts = CASE WHEN tracker_registered_ts = 0 THEN ? ELSE tracker_registered_ts END"}
+	args := []any{trackerID, now, now}
+	if tracking != nil && (statusOf(*tracking) != "" || len(tracking.Events) > 0) {
+		latest := latestEvent(*tracking)
+		sets = append(sets, "status = ?", "status_text = ?", "last_event = ?", "last_event_ts = ?", "last_event_hash = ?")
+		args = append(args, statusOf(*tracking), textOf(*tracking), textOf(*tracking), eventTime(latest, now), eventKey(latest))
 	}
-	return Result{PackageID: t.ID, TrackerID: tracker.TrackerID, Status: advance(t.Status, statusOf(tracking)), StatusText: textOf(tracking), Events: tracking.Events}, nil
+	_, err := tx.ExecContext(ctx, "UPDATE packages SET "+strings.Join(sets, ", ")+" WHERE id = ?", append(args, id)...)
+	return err
 }
 
 func Refresh(ctx context.Context, d *db.DB, now float64, t Target, s Settings, env config.Env) (Result, bool, error) {
@@ -585,6 +615,7 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 	key := eventKey(latest)
 	hasData := next != "" || len(tracking.Events) > 0
 	notified := false
+	enabled := notify.Enabled(ctx)
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
 		for _, e := range tracking.Events {
 			if _, err := tx.ExecContext(ctx,
@@ -610,7 +641,7 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 			nextNotified = advanced
 			notified = true
 		}
-		if nextNotified != notifiedStatus {
+		if nextNotified != notifiedStatus && (!notify || !enabled) {
 			sets = append(sets, "notified_status = ?")
 			args = append(args, nextNotified)
 		}
@@ -620,7 +651,7 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 	if err != nil {
 		return false, err
 	}
-	if notified && notify.Enabled(ctx) {
+	if notified && enabled {
 		title := "Package delivered"
 		if advanced == exception {
 			title = "Package exception"
@@ -629,21 +660,18 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 		if body == "" {
 			body = "Status " + advanced
 		}
-		if _, err := notify.Send(ctx, d.Write, notify.Message{
+		if _, err := notify.Send(ctx, d, notify.Message{
 			Title: title, Body: body, Channel: notify.Assistant, Now: func() float64 { return now },
+			Occurrence: fmt.Sprintf("package:%d:%s:%g", id, advanced, now),
+			Mark: func(ctx context.Context, tx *sql.Tx) error {
+				_, err := tx.ExecContext(ctx, "UPDATE packages SET notified_status = ? WHERE id = ?", advanced, id)
+				return err
+			},
 		}); err != nil {
 			log.Warn("package notification failed", logx.Err, err.Error())
 		}
 	}
 	return notified, nil
-}
-
-func saveRegistration(ctx context.Context, d *db.DB, now float64, id int64, trackerID string) error {
-	_, err := d.Write.ExecContext(ctx,
-		"UPDATE packages SET aggregator = 'ship24', tracker_id = ?, last_sync_ts = ?, "+
-			"tracker_registered_ts = CASE WHEN tracker_registered_ts = 0 THEN ? ELSE tracker_registered_ts END WHERE id = ?",
-		trackerID, now, now, id)
-	return err
 }
 
 func advance(previous, next string) string {
@@ -757,7 +785,7 @@ type Undo struct {
 	Before    Target `json:"before"`
 }
 
-func Untrack(ctx context.Context, q db.Querier, u Undo) (any, error) {
+func Unsubscribe(ctx context.Context, q db.Querier, u Undo) (any, error) {
 	s, err := Load(ctx, q)
 	if err != nil {
 		return nil, err
@@ -776,17 +804,19 @@ func Untrack(ctx context.Context, q db.Querier, u Undo) (any, error) {
 	if err := client.Unsubscribe(ctx, u.TrackerID); err != nil {
 		return nil, err
 	}
+	return map[string]any{"untracked": u.TrackerID}, nil
+}
+
+func Restore(ctx context.Context, q db.Querier, u Undo) error {
 	if _, err := q.ExecContext(ctx, "DELETE FROM package_events WHERE package_id = ?", u.PackageID); err != nil {
-		return nil, err
+		return err
 	}
-	if _, err := q.ExecContext(ctx,
+	_, err := q.ExecContext(ctx,
 		"UPDATE packages SET status = ?, status_text = ?, aggregator = ?, tracker_id = ?, last_event = ?, last_event_ts = ?, "+
 			"last_event_hash = ?, last_sync_ts = ?, notified_status = ? WHERE id = ?",
 		u.Before.Status, u.Before.StatusText, u.Before.Aggregator, u.Before.TrackerID, u.Before.LastEvent, u.Before.LastEventTS,
-		u.Before.LastEventHash, u.Before.LastSyncTS, u.Before.NotifiedStatus, u.PackageID); err != nil {
-		return nil, err
-	}
-	return map[string]any{"untracked": u.TrackerID}, nil
+		u.Before.LastEventHash, u.Before.LastSyncTS, u.Before.NotifiedStatus, u.PackageID)
+	return err
 }
 
 func Events(ctx context.Context, q db.Querier, packageID int64) ([]Event, error) {

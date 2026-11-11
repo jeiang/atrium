@@ -99,7 +99,7 @@ func TestKnowledgeWrittenInAMarkedThreadMarksItsReader(t *testing.T) {
 	}
 	var writeID int64
 	var toolName, target, undo string
-	if err := d.Read.QueryRow("SELECT id, tool, target, undo_json FROM agent_writes ORDER BY id DESC LIMIT 1").
+	if err := d.Read.QueryRow("SELECT id, operation, target, undo_json FROM effects WHERE direction = 'forward' ORDER BY id DESC LIMIT 1").
 		Scan(&writeID, &toolName, &target, &undo); err != nil {
 		t.Fatalf("write row: %v", err)
 	}
@@ -171,10 +171,10 @@ func TestKnowledgeWrittenInAMarkedThreadMarksItsReader(t *testing.T) {
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
 	if code, page, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); code != http.StatusOK ||
-		!strings.Contains(page, fmt.Sprintf("/activity/write/%d/undo", writeID)) {
+		!strings.Contains(page, fmt.Sprintf("/activity/effect/%d/undo", writeID)) {
 		t.Fatalf("activity = %d, want an undo for write %d: %.400s", code, writeID, page)
 	}
-	if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/activity/write/%d/undo", base, writeID), url.Values{}); code != http.StatusOK {
+	if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/activity/effect/%d/undo", base, writeID), url.Values{}); code != http.StatusOK {
 		t.Fatalf("undo %d = %d %.400s", writeID, code, body)
 	}
 	var retracted *float64

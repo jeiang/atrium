@@ -38,19 +38,61 @@ type mnpTorrent struct {
 }
 
 type mnpQbit struct {
-	mu     sync.Mutex
-	order  []string
-	items  map[string]*mnpTorrent
-	added  []url.Values
-	writes []string
+	mu      sync.Mutex
+	order   []string
+	items   map[string]*mnpTorrent
+	added   []url.Values
+	writes  []string
+	deleted []string
+	drop    map[string]bool
 }
 
 func mnpNewQbit(t *testing.T) (*mnpQbit, string) {
 	t.Helper()
-	f := &mnpQbit{items: map[string]*mnpTorrent{}}
+	f := &mnpQbit{items: map[string]*mnpTorrent{}, drop: map[string]bool{}}
 	srv := httptest.NewServer(http.HandlerFunc(f.handle))
 	t.Cleanup(srv.Close)
 	return f, srv.URL
+}
+
+func (f *mnpQbit) dropOnce(path string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.drop[path] = true
+}
+
+func (f *mnpQbit) shouldDrop(path string) bool {
+	if f.drop[path] {
+		delete(f.drop, path)
+		return true
+	}
+	return false
+}
+
+func (f *mnpQbit) count(what string) int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	switch what {
+	case "add":
+		return len(f.added)
+	case "delete":
+		return len(f.deleted)
+	}
+	n := 0
+	for _, w := range f.writes {
+		if strings.HasPrefix(w, what) {
+			n++
+		}
+	}
+	return n
+}
+
+func mnpDropConn(w http.ResponseWriter) {
+	if hijacker, ok := w.(http.Hijacker); ok {
+		if conn, _, err := hijacker.Hijack(); err == nil {
+			_ = conn.Close()
+		}
+	}
 }
 
 func (f *mnpQbit) put(tor mnpTorrent) {
@@ -109,6 +151,10 @@ func (f *mnpQbit) handle(w http.ResponseWriter, r *http.Request) {
 	q := r.URL.Query()
 	switch path {
 	case "app/version":
+		if f.shouldDrop(path) {
+			mnpDropConn(w)
+			return
+		}
 		_, _ = io.WriteString(w, "v5.2.0")
 		return
 	case "torrents/info":
@@ -127,12 +173,20 @@ func (f *mnpQbit) handle(w http.ResponseWriter, r *http.Request) {
 			rows = append(rows, map[string]any{"hash": t.hash, "name": t.name, "tags": strings.Join(t.tags, ", "), "state": t.state,
 				"content_path": t.content, "progress": t.progress, "size": 100, "dlspeed": 0, "upspeed": 0, "eta": 0})
 		}
+		if f.shouldDrop(path) {
+			mnpDropConn(w)
+			return
+		}
 		_ = json.NewEncoder(w).Encode(rows)
 		return
 	case "torrents/files":
 		t, ok := f.items[q.Get("hash")]
 		if !ok {
 			http.NotFound(w, r)
+			return
+		}
+		if f.shouldDrop(path) {
+			mnpDropConn(w)
 			return
 		}
 		_ = json.NewEncoder(w).Encode(t.files)
@@ -145,6 +199,7 @@ func (f *mnpQbit) handle(w http.ResponseWriter, r *http.Request) {
 	}
 	form := r.Form
 	f.writes = append(f.writes, path+" "+form.Get("hashes")+form.Get("hash"))
+	drop := f.shouldDrop(path)
 	switch path {
 	case "torrents/add":
 		f.added = append(f.added, form)
@@ -153,6 +208,10 @@ func (f *mnpQbit) handle(w http.ResponseWriter, r *http.Request) {
 				f.order = append(f.order, hash)
 				f.items[hash] = &mnpTorrent{hash: hash, name: "magnet " + hash[:8], state: "metaDL", tags: mnpTags(form.Get("tags"))}
 			}
+		}
+		if drop {
+			mnpDropConn(w)
+			return
 		}
 		_, _ = io.WriteString(w, `{"success_count":1}`)
 	case "torrents/addTags", "torrents/removeTags":
@@ -181,8 +240,20 @@ func (f *mnpQbit) handle(w http.ResponseWriter, r *http.Request) {
 				t.state = "downloading"
 			}
 		}
+	case "torrents/delete":
+		for _, h := range strings.Split(form.Get("hashes"), "|") {
+			if _, ok := f.items[h]; ok {
+				f.deleted = append(f.deleted, h)
+				delete(f.items, h)
+				f.order = slices.DeleteFunc(f.order, func(existing string) bool { return existing == h })
+			}
+		}
 	default:
 		http.NotFound(w, r)
+		return
+	}
+	if drop {
+		mnpDropConn(w)
 	}
 }
 

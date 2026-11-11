@@ -4,17 +4,18 @@ import (
 	"context"
 	"crypto/x509"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"net"
 	"regexp"
 	"strings"
-	"time"
 	"unicode"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/store"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -49,18 +50,22 @@ type Message struct {
 	Title, Body string
 	ThreadID    int64
 	RunID       int64
+	ProposalID  int64
 	ThreadLink  *string
 	Now         func() float64
 	Channel     string
 	Click       string
 	Priority    int
 	Actions     []Action
+	Occurrence  string
+	Mark        func(context.Context, *sql.Tx) error
 }
 
 type Sent struct {
 	ID        int64
 	Delivered bool
 	Error     string
+	Duplicate bool
 }
 
 func Plain(text string, limit int) string {
@@ -178,12 +183,12 @@ func errorClass(err error) string {
 	return "read failed"
 }
 
-func Send(ctx context.Context, q db.Querier, m Message) (Sent, error) {
-	titleChars, err := whole(ctx, q, KeyTitleChars)
+func Send(ctx context.Context, d *db.DB, m Message) (Sent, error) {
+	titleChars, err := whole(ctx, d.Read, KeyTitleChars)
 	if err != nil {
 		return Sent{}, err
 	}
-	bodyChars, err := whole(ctx, q, KeyBodyChars)
+	bodyChars, err := whole(ctx, d.Read, KeyBodyChars)
 	if err != nil {
 		return Sent{}, err
 	}
@@ -201,7 +206,7 @@ func Send(ctx context.Context, q db.Querier, m Message) (Sent, error) {
 	}
 	now := m.Now
 	if now == nil {
-		now = func() float64 { return float64(time.Now().UnixNano()) / 1e9 }
+		now = stamp
 	}
 	channel := m.Channel
 	if channel == "" {
@@ -210,23 +215,66 @@ func Send(ctx context.Context, q db.Querier, m Message) (Sent, error) {
 	if !known(channel) {
 		return Sent{}, ChannelError("unknown channel " + channel)
 	}
-	res, err := q.ExecContext(ctx, "INSERT INTO notifications (ts, title, body, thread_id, run_id, thread_link, channel, click, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		now(), title, body, nullID(m.ThreadID), nullID(m.RunID), linkValue, nullable(m.Channel), nullable(m.Click), nullID(int64(m.Priority)))
+	occurrence := strings.TrimSpace(m.Occurrence)
+	if occurrence == "" {
+		occurrence = "notify:" + ledger.NewKey()
+	}
+	target := "notify:" + occurrence
+	action, err := json.Marshal(map[string]any{
+		"title": title, "body": body, "channel": channel, "click": m.Click, "priority": m.Priority,
+	})
 	if err != nil {
 		return Sent{}, err
 	}
-	id, err := res.LastInsertId()
+	var id int64
+	_, err = ledger.NewStore(d, now).ApplyLocal(ctx, ledger.New{
+		Origin: "notify", Operation: "notify_inbox", OperationKey: occurrence, Target: target,
+		ProposalID: idPtr(m.ProposalID), ThreadID: idPtr(m.ThreadID), RunID: idPtr(m.RunID),
+		Action:    action,
+		Resources: []ledger.Resource{{Key: target, RetainOnDone: true}},
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
+		res, err := tx.ExecContext(ctx, "INSERT INTO notifications (ts, title, body, thread_id, run_id, thread_link, channel, click, priority) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			now(), title, body, nullID(m.ThreadID), nullID(m.RunID), linkValue, nullable(m.Channel), nullable(m.Click), nullID(int64(m.Priority)))
+		if err != nil {
+			return ledger.Result{}, err
+		}
+		id, err = res.LastInsertId()
+		if err != nil {
+			return ledger.Result{}, err
+		}
+		if m.Mark != nil {
+			if err := m.Mark(ctx, tx); err != nil {
+				return ledger.Result{}, err
+			}
+		}
+		after, err := json.Marshal(map[string]any{"notification_id": id, "channel": channel})
+		if err != nil {
+			return ledger.Result{}, err
+		}
+		return ledger.Result{State: ledger.Done, Target: target, After: after}, nil
+	})
+	if err != nil {
+		var conflict *ledger.Conflict
+		if errors.As(err, &conflict) {
+			return Sent{Duplicate: true}, nil
+		}
+		return Sent{}, err
+	}
+	delivered, failure, err := deliver(ctx, d.Write, delivery{channel: channel, title: title, body: body, click: m.Click, priority: m.Priority, actions: m.Actions}, link)
 	if err != nil {
 		return Sent{}, err
 	}
-	delivered, failure, err := deliver(ctx, q, delivery{channel: channel, title: title, body: body, click: m.Click, priority: m.Priority, actions: m.Actions}, link)
-	if err != nil {
-		return Sent{}, err
-	}
-	if _, err := q.ExecContext(ctx, "UPDATE notifications SET delivered = ?, error = ? WHERE id = ?", delivered, nullable(failure), id); err != nil {
+	if _, err := d.Write.ExecContext(ctx, "UPDATE notifications SET delivered = ?, error = ? WHERE id = ?", delivered, nullable(failure), id); err != nil {
 		return Sent{}, err
 	}
 	return Sent{ID: id, Delivered: delivered, Error: failure}, nil
+}
+
+func idPtr(id int64) *int64 {
+	if id == 0 {
+		return nil
+	}
+	return &id
 }
 
 func nullID(id int64) any {

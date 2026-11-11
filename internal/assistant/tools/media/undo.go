@@ -2,20 +2,14 @@ package mediatools
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
-	"errors"
 
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
-
-type torrentUndo struct {
-	Op   string `json:"op"`
-	Hash string `json:"hash"`
-}
 
 type channelDeleteUndo struct {
 	Op string `json:"op"`
@@ -52,65 +46,80 @@ func (c channelUndo) channel() media.Channel {
 	}
 }
 
-func undoTorrent(env config.Env) writes.Undoer {
-	return func(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
-		var u torrentUndo
-		if err := json.Unmarshal(raw, &u); err != nil {
-			return nil, writes.UndoError("media undo payload is invalid")
+func jsonOf(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return b
+}
+
+func validateOp(name string) func(json.RawMessage) error {
+	return func(raw json.RawMessage) error {
+		var head struct {
+			Op string `json:"op"`
 		}
-		hash := u.Hash
-		settings, err := media.Load(ctx, q, env)
-		if err != nil {
-			return nil, err
+		if err := json.Unmarshal(raw, &head); err != nil {
+			return ledger.Refused("media undo payload is invalid")
 		}
-		qb, err := settings.Qbit()
-		if err != nil {
-			return nil, writes.UndoError(err.Error())
+		if head.Op != name {
+			return ledger.Refused("media undo payload names " + head.Op)
 		}
-		found, err := qb.Torrent(ctx, hash)
-		if err == nil {
-			switch {
-			case found == nil:
-				return nil, writes.UndoError("the torrent is no longer in qBittorrent")
-			case found.HasTag(media.TagFiled):
-				return nil, writes.UndoError("the torrent was already filed into the library")
-			}
-			err = qb.Delete(ctx, hash, true)
-		}
-		var failure media.QbitError
-		if errors.As(err, &failure) {
-			return nil, writes.UndoError(string(failure))
-		}
-		if err != nil {
-			return nil, err
-		}
-		return map[string]any{"deleted": hash}, nil
+		return nil
 	}
 }
 
 func channelFailed(err error) error {
-	return tool.Domain[media.ChannelError, writes.UndoError](err)
+	return tool.Domain[media.ChannelError, ledger.Refused](err)
 }
 
-func undoChannelDelete(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
+func undoChannelDelete(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (any, error) {
 	var u channelDeleteUndo
 	if err := json.Unmarshal(raw, &u); err != nil {
-		return nil, writes.UndoError("media undo payload is invalid")
+		return nil, ledger.Refused("media undo payload is invalid")
 	}
 	id := u.ID
-	if _, err := media.DeleteChannel(ctx, q, id); err != nil {
+	if _, err := media.DeleteChannel(ctx, tx, id); err != nil {
 		return nil, channelFailed(err)
 	}
 	return map[string]any{"removed": id}, nil
 }
 
-func undoChannelRestore(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
+func undoChannelRestore(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (any, error) {
 	var u channelRestoreUndo
 	if err := json.Unmarshal(raw, &u); err != nil {
-		return nil, writes.UndoError("media undo payload is invalid")
+		return nil, ledger.Refused("media undo payload is invalid")
 	}
-	if _, err := media.RestoreChannel(ctx, q, u.Row.channel()); err != nil {
+	if _, err := media.RestoreChannel(ctx, tx, u.Row.channel()); err != nil {
 		return nil, channelFailed(err)
 	}
 	return map[string]any{"restored": u.Row.ID}, nil
+}
+
+func RegisterLedgerUndoer(s *ledger.Store, env config.Env) error {
+	if err := media.RegisterLedgerUndoer(s, env); err != nil {
+		return err
+	}
+	if err := s.RegisterUndo(UndoChannelDelete, ledger.Undoer{
+		Validate: validateOp(UndoChannelDelete),
+		Local: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (ledger.Result, error) {
+			value, err := undoChannelDelete(ctx, tx, raw)
+			if err != nil {
+				return ledger.Result{}, err
+			}
+			return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
+		},
+	}); err != nil {
+		return err
+	}
+	return s.RegisterUndo(UndoChannelRestore, ledger.Undoer{
+		Validate: validateOp(UndoChannelRestore),
+		Local: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (ledger.Result, error) {
+			value, err := undoChannelRestore(ctx, tx, raw)
+			if err != nil {
+				return ledger.Result{}, err
+			}
+			return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
+		},
+	})
 }

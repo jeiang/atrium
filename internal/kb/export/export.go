@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/kb/render"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notionid"
@@ -112,7 +113,8 @@ func runNotion(ctx context.Context, d *db.DB, env config.Env, now float64) (Resu
 		return out, err
 	}
 	defer client.Close()
-	return syncNotion(ctx, d, now, client, parent, entries)
+	store := ledger.NewStore(d, func() float64 { return now })
+	return syncNotion(ctx, store, now, client, parent, entries)
 }
 
 func threadTitles(ctx context.Context, q db.Querier, records []kb.ExportRecord) (map[int64]string, error) {

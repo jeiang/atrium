@@ -8,7 +8,8 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/writes"
+	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail"
 )
 
 type Args map[string]any
@@ -77,12 +78,14 @@ type Context struct {
 	Kind        Kind
 	ThreadID    int64
 	RunID       int64
+	ProposalID  *int64
 	AllowedURLs map[string]struct{}
 	Embed       func(ctx context.Context, texts []string) ([][]float64, error)
 	Now         func() float64
 	Client      *anthropic.Client
 	Progress    *progress.Writer
-	Undoers     *writes.Registry
+	Ledger      *ledger.Store
+	MailOpen    mail.OpenFunc
 	Sources     []int64
 }
 

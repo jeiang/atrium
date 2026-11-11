@@ -22,11 +22,11 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/store"
 	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/textx"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 type Kind string
@@ -432,24 +432,30 @@ func MarksOf(ctx context.Context, q db.Querier, targets []string) (tool.Marks, e
 	if len(targets) == 0 {
 		return 0, nil
 	}
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(targets)), ",")
-	args := make([]any, len(targets))
-	for i, target := range targets {
-		args[i] = target
-	}
-	rows, err := q.QueryContext(ctx,
-		"SELECT DISTINCT t.marks FROM "+writes.FromClause("w")+" JOIN threads t ON t.id = w.thread_id "+
-			"WHERE w.target IN ("+placeholders+") AND w.state = 'ok' AND w.undone_at IS NULL", args...)
+	effectThreads, err := ledger.ThreadsForTargets(ctx, q, targets)
 	if err != nil {
 		return 0, err
 	}
-	sets, err := db.Collect(rows, func(r *sql.Rows) (int64, error) {
-		var set int64
-		err := r.Scan(&set)
-		return set, err
-	})
-	if err != nil {
-		return 0, err
+	var sets []int64
+	if len(effectThreads) > 0 {
+		effectArgs := make([]any, len(effectThreads))
+		for i, id := range effectThreads {
+			effectArgs[i] = id
+		}
+		effectRows, err := q.QueryContext(ctx,
+			"SELECT marks FROM threads WHERE id IN ("+strings.TrimSuffix(strings.Repeat("?,", len(effectThreads)), ",")+")", effectArgs...)
+		if err != nil {
+			return 0, err
+		}
+		effectSets, err := db.Collect(effectRows, func(r *sql.Rows) (int64, error) {
+			var set int64
+			err := r.Scan(&set)
+			return set, err
+		})
+		if err != nil {
+			return 0, err
+		}
+		sets = append(sets, effectSets...)
 	}
 	var marks tool.Marks
 	for _, set := range sets {

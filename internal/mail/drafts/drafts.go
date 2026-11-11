@@ -87,6 +87,7 @@ type Store struct {
 	Cfg   config.Config
 	Open  mail.OpenFunc
 	MsgID func(domain string) string
+	Tx    db.Querier
 	Now   func() float64
 }
 
@@ -95,6 +96,20 @@ func (s *Store) now() float64 {
 		return s.Now()
 	}
 	return float64(time.Now().UnixNano()) / 1e9
+}
+
+func (s *Store) read() db.Querier {
+	if s.Tx != nil {
+		return s.Tx
+	}
+	return s.DB.Read
+}
+
+func (s *Store) write() db.Querier {
+	if s.Tx != nil {
+		return s.Tx
+	}
+	return s.DB.Write
 }
 
 const columns = "id, thread_id, account, to_addrs, cc_addrs, subject, body, in_reply_to_message_id, in_reply_to, refs, " +
@@ -136,7 +151,7 @@ func scanRow(sc scanner) (Row, error) {
 }
 
 func (s *Store) queryRows(ctx context.Context, query string, args ...any) ([]Row, error) {
-	rows, err := s.DB.Read.QueryContext(ctx, query, args...)
+	rows, err := s.read().QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -153,7 +168,7 @@ func (s *Store) queryRows(ctx context.Context, query string, args ...any) ([]Row
 }
 
 func (s *Store) Get(ctx context.Context, id int64) (*Row, error) {
-	r, err := scanRow(s.DB.Read.QueryRowContext(ctx, "SELECT "+columns+" FROM drafts WHERE id = ?", id))
+	r, err := scanRow(s.read().QueryRowContext(ctx, "SELECT "+columns+" FROM drafts WHERE id = ?", id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
@@ -164,7 +179,7 @@ func (s *Store) Get(ctx context.Context, id int64) (*Row, error) {
 }
 
 func (s *Store) ForMessage(ctx context.Context, messageID int64) (*Row, error) {
-	r, err := scanRow(s.DB.Read.QueryRowContext(ctx,
+	r, err := scanRow(s.read().QueryRowContext(ctx,
 		"SELECT d.id, d.thread_id, d.account, d.to_addrs, d.cc_addrs, d.subject, d.body, d.in_reply_to_message_id, "+
 			"d.in_reply_to, d.refs, d.status, d.revision, d.created_at, d.updated_at, d.sent_at, d.smtp_result, d.sent_msgid "+
 			"FROM drafts d JOIN messages m ON m.msgid = d.sent_msgid AND m.account = d.account WHERE m.id = ? AND d.sent_msgid != '' AND d.thread_id IS NOT NULL",
@@ -303,7 +318,7 @@ func rawFile(cacheDir, rawPath string) string {
 func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error) {
 	var account, fromAddr, fromName string
 	var msgid, toAddrs, rawPath sql.NullString
-	err := s.DB.Read.QueryRowContext(ctx,
+	err := s.read().QueryRowContext(ctx,
 		"SELECT account, from_addr, from_name, msgid, to_addrs, raw_path FROM messages WHERE id = ?", messageID,
 	).Scan(&account, &fromAddr, &fromName, &msgid, &toAddrs, &rawPath)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -364,7 +379,7 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 }
 
 func (s *Store) limits(ctx context.Context) (maxBody, maxSubject int, err error) {
-	r := endpoint.Read(ctx, s.DB.Read)
+	r := endpoint.Read(ctx, s.read())
 	maxBody = r.Int(mail.KeyDraftsMaxBody)
 	maxSubject = r.Int(mail.KeyDraftsMaxSubject)
 	return maxBody, maxSubject, r.Err()
@@ -407,7 +422,7 @@ func (s *Store) Create(ctx context.Context, threadID *int64, account string, to,
 		replyID = id
 	}
 	ts := s.now()
-	res, err := s.DB.Write.ExecContext(ctx,
+	res, err := s.write().ExecContext(ctx,
 		"INSERT INTO drafts (thread_id, account, to_addrs, cc_addrs, subject, body, in_reply_to_message_id, "+
 			"in_reply_to, refs, status, revision, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		threadID, account, toAddrs, ccAddrs, subject, text, replyID, r.inReplyTo, r.refs, string(Draft), 1, ts, ts)
@@ -541,7 +556,7 @@ func (s *Store) Update(ctx context.Context, id int64, changes map[string]any) (*
 	set("updated_at", s.now())
 	sets = append(sets, "revision = revision + 1")
 	args = append(args, id, string(Draft))
-	res, err := s.DB.Write.ExecContext(ctx, "UPDATE drafts SET "+strings.Join(sets, ", ")+" WHERE id = ? AND status = ?", args...)
+	res, err := s.write().ExecContext(ctx, "UPDATE drafts SET "+strings.Join(sets, ", ")+" WHERE id = ? AND status = ?", args...)
 	if err != nil {
 		return nil, err
 	}
@@ -583,7 +598,7 @@ func (s *Store) transition(ctx context.Context, id int64, from, to Status, apply
 }
 
 func (s *Store) exec(ctx context.Context, query string, args ...any) (int64, error) {
-	res, err := s.DB.Write.ExecContext(ctx, query, args...)
+	res, err := s.write().ExecContext(ctx, query, args...)
 	if err != nil {
 		return 0, err
 	}

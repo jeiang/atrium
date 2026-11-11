@@ -35,20 +35,6 @@ type Outcome struct {
 	Err                error
 }
 
-type OutcomeError struct{ Outcome Outcome }
-
-func (e *OutcomeError) Error() string { return e.Outcome.Err.Error() }
-
-func (e *OutcomeError) Unwrap() error { return e.Outcome.Err }
-
-func OutcomeOf(err error) (Outcome, bool) {
-	var oe *OutcomeError
-	if errors.As(err, &oe) {
-		return oe.Outcome, true
-	}
-	return Outcome{}, false
-}
-
 type Option func(*settings)
 
 type settings struct {
@@ -103,32 +89,32 @@ func (p Params) sdkParams() sdk.BetaMessageNewParams {
 	return sdk.BetaMessageNewParams{Betas: betas}
 }
 
-func (c *Client) Create(ctx context.Context, p Params) (*Message, error) {
+func (c *Client) Create(ctx context.Context, p Params) Outcome {
 	body, err := p.body()
 	if err != nil {
-		return nil, failed(Outcome{DefinitelyUnsent: true, Err: err})
+		return Outcome{DefinitelyUnsent: true, Err: err}
 	}
-	res, err := c.sdk.Beta.Messages.New(ctx, p.sdkParams(), option.WithRequestBody("application/json", body))
+	res, err := c.sdk.Beta.Messages.New(ctx, p.sdkParams(), option.WithRequestBody("application/json", body), option.WithMaxRetries(0))
 	if err != nil {
 		classified := classify(err)
-		return nil, failed(Outcome{DefinitelyRejected: rejected(classified), Err: classified})
+		return Outcome{DefinitelyRejected: rejected(classified), Err: classified}
 	}
 	raw := res.RawJSON()
 	msg, err := decodeMessage(raw)
 	if err == nil {
-		return msg, nil
+		return Outcome{Message: msg, Usage: msg.Usage, Started: true, Complete: true}
 	}
 	known := usageOfRaw(raw)
 	partial := &Message{ID: res.ID, Model: string(res.Model), Usage: known}
-	return partial, failed(Outcome{Message: partial, Usage: known, Started: true, Complete: true, Err: err})
+	return Outcome{Message: partial, Usage: known, Started: true, Complete: true, Err: err}
 }
 
-func (c *Client) Stream(ctx context.Context, p Params, observe func(Event) error) (*Message, error) {
+func (c *Client) Stream(ctx context.Context, p Params, observe func(Event) error) Outcome {
 	body, err := p.body()
 	if err != nil {
-		return nil, failed(Outcome{DefinitelyUnsent: true, Err: err})
+		return Outcome{DefinitelyUnsent: true, Err: err}
 	}
-	stream := c.sdk.Beta.Messages.NewStreaming(ctx, p.sdkParams(), option.WithRequestBody("application/json", body))
+	stream := c.sdk.Beta.Messages.NewStreaming(ctx, p.sdkParams(), option.WithRequestBody("application/json", body), option.WithMaxRetries(0))
 	defer func() { _ = stream.Close() }()
 	var acc sdk.BetaMessage
 	var known Usage
@@ -167,21 +153,18 @@ func (c *Client) Stream(ctx context.Context, p Params, observe func(Event) error
 	if err != nil {
 		return failedStream(&acc, known, started, stopped, err)
 	}
-	return msg, nil
+	return Outcome{Message: msg, Usage: msg.Usage, Started: true, Complete: true}
 }
 
-func failed(o Outcome) error { return &OutcomeError{Outcome: o} }
-
-func failedStream(acc *sdk.BetaMessage, known Usage, started, stopped bool, err error) (*Message, error) {
-	msg := knownMessage(acc, known)
-	return msg, &OutcomeError{Outcome: Outcome{
-		Message:            msg,
+func failedStream(acc *sdk.BetaMessage, known Usage, started, stopped bool, err error) Outcome {
+	return Outcome{
+		Message:            knownMessage(acc, known),
 		Usage:              known,
 		Started:            started,
 		Complete:           stopped,
 		DefinitelyRejected: !started && rejected(err),
 		Err:                err,
-	}}
+	}
 }
 
 func knownMessage(acc *sdk.BetaMessage, known Usage) *Message {

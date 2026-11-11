@@ -32,7 +32,7 @@ func Callables() map[string]worker.Callable {
 				}
 				for _, threadID := range found {
 					if _, err := memory.Work(ctx, e.Service.DB, threadID, memory.WorkOptions{
-						Now: e.Now(), Client: client, Model: model, Effort: effort,
+						Now: e.Now(), Client: client, Inference: e.Service.Inference, Model: model, Effort: effort,
 					}); err != nil {
 						return worker.Result{}, err
 					}

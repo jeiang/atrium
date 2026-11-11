@@ -2,12 +2,13 @@ package mailtools
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const notSent = "Draft saved only. Nothing is sent: the operator reviews and sends it from the Drafts page."
@@ -88,18 +89,28 @@ func draftEmailCreate(ctx context.Context, tc *tool.Context, args tool.Args) (an
 	if err != nil {
 		return nil, err
 	}
-	id, err := store(tc).Create(ctx, &tc.ThreadID, account, to, cc, subject, body, reply)
+	var id int64
+	effect, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
+		Origin: "agent", Operation: "draft_email_create", OperationKey: "draft_email_create:" + ledger.NewKey(),
+		Target: "draft:new", ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
+		st := store(tc)
+		st.Tx = tx
+		var err error
+		if id, err = st.Create(ctx, &tc.ThreadID, account, to, cc, subject, body, reply); err != nil {
+			return ledger.Result{}, draftFailed(err)
+		}
+		return ledger.Result{
+			State:  ledger.Done,
+			Target: fmt.Sprintf("draft:%d", id),
+			After:  jsonOf(map[string]any{"draft_id": id, "status": drafts.Draft}),
+			Undo:   jsonOf(draftDeleteUndo{Op: "draft_delete", ID: id}),
+		}, nil
+	})
 	if err != nil {
-		return nil, draftFailed(err)
-	}
-	if _, err := writes.Record(ctx, tc.DB.Write, tc.Undoers, writes.New{
-		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "draft_email_create", Target: fmt.Sprintf("draft:%d", id),
-		After: map[string]any{"draft_id": id, "status": drafts.Draft},
-		Undo:  draftDeleteUndo{Op: "draft_delete", ID: id},
-	}); err != nil {
 		return nil, err
 	}
-	return map[string]any{"draft_id": id, "status": drafts.Draft, "note": notSent}, nil
+	return map[string]any{"draft_id": id, "status": drafts.Draft, "effect_id": effect.ID, "note": notSent}, nil
 }
 
 func draftEmailUpdate(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -123,28 +134,38 @@ func draftEmailUpdate(ctx context.Context, tc *tool.Context, args tool.Args) (an
 		}
 		changes[key] = v
 	}
-	store := store(tc)
-	previous, err := store.Get(ctx, id)
-	if err != nil {
-		return nil, draftFailed(err)
-	}
-	row, err := store.Update(ctx, id, changes)
-	if err != nil {
-		return nil, draftFailed(err)
-	}
-	if previous != nil {
-		if _, err := writes.Record(ctx, tc.DB.Write, tc.Undoers, writes.New{
-			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "draft_email_update", Target: fmt.Sprintf("draft:%d", row.ID),
-			Before: map[string]any{"subject": previous.Subject, "body": previous.Body},
-			After:  map[string]any{"subject": row.Subject, "body": row.Body},
-			Undo: draftRestoreUndo{
+	var row *drafts.Row
+	effect, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
+		Origin: "agent", Operation: "draft_email_update", OperationKey: "draft_email_update:" + ledger.NewKey(),
+		Target: fmt.Sprintf("draft:%d", id), ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
+		st := store(tc)
+		st.Tx = tx
+		previous, err := st.Get(ctx, id)
+		if err != nil {
+			return ledger.Result{}, draftFailed(err)
+		}
+		row, err = st.Update(ctx, id, changes)
+		if err != nil {
+			return ledger.Result{}, draftFailed(err)
+		}
+		if previous == nil {
+			return ledger.Result{State: ledger.Done, Target: fmt.Sprintf("draft:%d", row.ID), After: jsonOf(map[string]any{"subject": row.Subject, "body": row.Body})}, nil
+		}
+		return ledger.Result{
+			State:  ledger.Done,
+			Target: fmt.Sprintf("draft:%d", row.ID),
+			Before: jsonOf(map[string]any{"subject": previous.Subject, "body": previous.Body}),
+			After:  jsonOf(map[string]any{"subject": row.Subject, "body": row.Body}),
+			Undo: jsonOf(draftRestoreUndo{
 				Op: "draft_restore", ID: row.ID, Account: previous.Account, To: previous.ToAddrs, Cc: previous.CcAddrs,
 				Subject: previous.Subject, Body: previous.Body, InReplyToMessageID: previous.InReplyToMessageID,
 				InReplyTo: previous.InReplyTo, Refs: previous.Refs,
-			},
-		}); err != nil {
-			return nil, err
-		}
+			}),
+		}, nil
+	})
+	if err != nil {
+		return nil, err
 	}
-	return map[string]any{"draft_id": row.ID, "status": row.Status, "note": notSent}, nil
+	return map[string]any{"draft_id": row.ID, "status": row.Status, "effect_id": effect.ID, "note": notSent}, nil
 }

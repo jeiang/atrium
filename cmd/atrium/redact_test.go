@@ -39,10 +39,10 @@ func TestStoredSecretsAreRedactedFromLogsAndAgentWrites(t *testing.T) {
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
 	var after string
-	if err := d.Read.QueryRow("SELECT after_json FROM agent_writes WHERE tool = 'kb_write'").Scan(&after); err != nil {
+	if err := d.Read.QueryRow("SELECT after_json FROM effects WHERE operation = 'kb_write' AND direction = 'forward'").Scan(&after); err != nil {
 		t.Fatal(err)
 	}
 	if strings.Contains(after, secret) || !strings.Contains(after, logx.Redacted) {
-		t.Errorf("agent_writes snapshot = %q, want the secret replaced by %s", after, logx.Redacted)
+		t.Errorf("effect snapshot = %q, want the secret replaced by %s", after, logx.Redacted)
 	}
 }

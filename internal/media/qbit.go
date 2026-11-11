@@ -62,6 +62,38 @@ type QbitError string
 
 func (e QbitError) Error() string { return string(e) }
 
+type QbitStatusError struct {
+	Path   string
+	Status int
+}
+
+func (e *QbitStatusError) Error() string {
+	return fmt.Sprintf("qBittorrent: %s: %d", e.Path, e.Status)
+}
+
+type QbitRejected string
+
+func (e QbitRejected) Error() string { return string(e) }
+
+func IsQbit(err error) bool {
+	var failure QbitError
+	var rejected QbitRejected
+	var status *QbitStatusError
+	return errors.As(err, &failure) || errors.As(err, &rejected) || errors.As(err, &status)
+}
+
+func QbitDefinite(err error) bool {
+	var rejected QbitRejected
+	if errors.As(err, &rejected) {
+		return true
+	}
+	var status *QbitStatusError
+	if errors.As(err, &status) {
+		return status.Status >= 400 && status.Status < 500
+	}
+	return false
+}
+
 type Torrent struct {
 	Hash        string  `json:"hash"`
 	Name        string  `json:"name"`
@@ -336,7 +368,7 @@ func (q *Qbit) do(ctx context.Context, method, path string, params []param, body
 			state = connections.NeedsReauth
 		}
 		q.observe(ctx, state, fmt.Sprintf("qBittorrent answered %d", res.status))
-		return nil, QbitError(fmt.Sprintf("qBittorrent: %s: %d", path, res.status))
+		return nil, &QbitStatusError{Path: path, Status: res.status}
 	}
 	return res.body, nil
 }
@@ -358,7 +390,7 @@ func checkAdd(body []byte) error {
 		if text == "" {
 			text = "no reply"
 		}
-		return QbitError("qBittorrent did not accept the torrent: " + text)
+		return QbitRejected("qBittorrent did not accept the torrent: " + text)
 	}
 	return nil
 }

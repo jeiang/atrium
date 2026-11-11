@@ -123,7 +123,13 @@ func TestDreamingSignalsFollowTheirThreadMarks(t *testing.T) {
 	if _, err := d.Write.Exec("INSERT INTO runs (thread_id, kind, model, effort, state, error, started_at, ended_at) VALUES (?, 'chat', 'claude-haiku-5-5', 'low', 'failed', 'secret page 4417', ?, ?)", marked, now-60, now-30); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Write.Exec("INSERT INTO agent_writes (ts, thread_id, tool, target, state, before_json, after_json, undo_json, undone_at) VALUES (?, ?, 'task_add', 'task:secret', 'ok', '{}', '{}', '{}', ?)", now-60, marked, now-30); err != nil {
+	if _, err := d.Write.Exec("INSERT INTO effects (id, created_at, lease_at, token, origin, operation, operation_key, direction, thread_id, target, action_json, before_json, after_json, undo_json, state, settled_at) VALUES (9101, ?, ?, 'dream-9101', 'agent', 'task_add', 'dream-9101', 'forward', ?, 'task:secret', '{}', '{}', '{}', '{}', 'done', ?)", now-60, now-60, marked, now-60); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO effects (id, created_at, lease_at, token, origin, operation, operation_key, direction, undo_of, thread_id, target, action_json, state, settled_at) VALUES (9102, ?, ?, 'dream-9102', 'agent', 'task_delete', 'dream-9101', 'undo', 9101, ?, 'task:secret', '{}', 'done', ?)", now-60, now-60, marked, now-60); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("UPDATE effects SET undone_by = 9102 WHERE id = 9101"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.Write.Exec("INSERT INTO proposals (kind, status, created_ts, decided_ts, title, payload, fingerprint) VALUES ('permission', 'dismissed', ?, ?, 'dismissed secret 4417', ?, 'fp-secret')", now-60, now-30, fmt.Sprintf(`{"thread_id": %d}`, marked)); err != nil {
@@ -200,7 +206,13 @@ func TestDreamingSignalsSkipPrivateProjects(t *testing.T) {
 	if _, err := d.Write.Exec("INSERT INTO runs (thread_id, kind, model, effort, state, error, started_at, ended_at) VALUES (?, 'chat', 'claude-haiku-5-5', 'low', 'failed', 'private error 8899', ?, ?)", private, now-60, now-30); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Write.Exec("INSERT INTO agent_writes (ts, thread_id, tool, target, state, before_json, after_json, undo_json, undone_at) VALUES (?, ?, 'task_add', 'task:private-8899', 'ok', '{}', '{}', '{}', ?)", now-60, private, now-30); err != nil {
+	if _, err := d.Write.Exec("INSERT INTO effects (id, created_at, lease_at, token, origin, operation, operation_key, direction, thread_id, target, action_json, before_json, after_json, undo_json, state, settled_at) VALUES (9201, ?, ?, 'dream-9201', 'agent', 'task_add', 'dream-9201', 'forward', ?, 'task:private-8899', '{}', '{}', '{}', '{}', 'done', ?)", now-60, now-60, private, now-60); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO effects (id, created_at, lease_at, token, origin, operation, operation_key, direction, undo_of, thread_id, target, action_json, state, settled_at) VALUES (9202, ?, ?, 'dream-9202', 'agent', 'task_delete', 'dream-9201', 'undo', 9201, ?, 'task:private-8899', '{}', 'done', ?)", now-60, now-60, private, now-60); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("UPDATE effects SET undone_by = 9202 WHERE id = 9201"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.Write.Exec("INSERT INTO proposals (kind, status, created_ts, decided_ts, title, payload, fingerprint) VALUES ('permission', 'dismissed', ?, ?, 'private proposal 8899', ?, 'fp-private')", now-60, now-30, fmt.Sprintf(`{"thread_id": %d}`, private)); err != nil {

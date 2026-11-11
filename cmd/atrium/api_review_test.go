@@ -132,18 +132,18 @@ func TestAPIApprovesUndoesAndSendsThroughTheSameGates(t *testing.T) {
 		t.Fatalf("pending after approve and deny: %s", after.body)
 	}
 
-	var taskID, writeID, taskThread int64
+	var taskID, effectID, taskThread int64
 	if err := d.Read.QueryRow("SELECT id FROM tasks WHERE title = 'Call the dentist'").Scan(&taskID); err != nil {
 		t.Fatal(err)
 	}
-	if err := d.Read.QueryRow("SELECT id, thread_id FROM agent_writes WHERE tool = 'task_add'").Scan(&writeID, &taskThread); err != nil {
+	if err := d.Read.QueryRow("SELECT id, thread_id FROM effects WHERE operation = 'task_add' AND direction = 'forward'").Scan(&effectID, &taskThread); err != nil {
 		t.Fatal(err)
 	}
-	entryID := "write:" + strconv.FormatInt(writeID, 10)
-	feed := s.do(http.MethodGet, "/api/v1/undo?thread_id="+strconv.FormatInt(taskThread, 10), owner, nil)
+	entryID := strconv.FormatInt(effectID, 10)
+	feed := s.do(http.MethodGet, "/api/v1/effects?thread_id="+strconv.FormatInt(taskThread, 10), owner, nil)
 	items, _ := feed.json["items"].([]any)
-	if feed.status != http.StatusOK || len(items) != 1 || items[0].(map[string]any)["id"] != entryID || items[0].(map[string]any)["undoable"] != true {
-		t.Fatalf("undo feed for the task thread: %d %s", feed.status, feed.body)
+	if feed.status != http.StatusOK || len(items) != 1 || number(t, items[0].(map[string]any)["id"]) != effectID || items[0].(map[string]any)["undoable"] != true {
+		t.Fatalf("effects for the task thread: %d %s", feed.status, feed.body)
 	}
 	all := s.do(http.MethodGet, "/api/v1/undo?limit=1", owner, nil)
 	if next, _ := all.json["next_cursor"].(string); next == "" {
@@ -152,8 +152,8 @@ func TestAPIApprovesUndoesAndSendsThroughTheSameGates(t *testing.T) {
 		len(rest.json["items"].([]any)) != 1 || rest.json["items"].([]any)[0].(map[string]any)["id"] == all.json["items"].([]any)[0].(map[string]any)["id"] {
 		t.Fatalf("undo feed page 2: %s", rest.body)
 	}
-	undone := s.do(http.MethodPost, "/api/v1/undo/"+entryID, owner, nil)
-	entry, _ := undone.json["entry"].(map[string]any)
+	undone := s.do(http.MethodPost, "/api/v1/effects/"+entryID+"/undo", owner, nil)
+	entry, _ := undone.json["effect"].(map[string]any)
 	if undone.status != http.StatusOK || undone.json["undone"] != true || entry["undoable"] != false || entry["undone_at"] == nil {
 		t.Fatalf("undo: %d %s", undone.status, undone.body)
 	}
@@ -161,8 +161,8 @@ func TestAPIApprovesUndoesAndSendsThroughTheSameGates(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM tasks WHERE id = ?", taskID).Scan(&left); err != nil || left != 0 {
 		t.Fatalf("task_add undo left %d tasks, %v", left, err)
 	}
-	expectAPI(t, s.do(http.MethodPost, "/api/v1/undo/"+entryID, owner, nil), http.StatusConflict, "not_undone")
-	expectAPI(t, s.do(http.MethodPost, "/api/v1/undo/write:999999", owner, nil), http.StatusNotFound, "not_found")
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/effects/"+entryID+"/undo", owner, nil), http.StatusConflict, "not_undone")
+	expectAPI(t, s.do(http.MethodGet, "/api/v1/effects/999999", owner, nil), http.StatusNotFound, "not_found")
 
 	draftPath := "/api/v1/drafts/" + strconv.FormatInt(number(t, draft["id"]), 10)
 	reviewed := number(t, draft["revision"])

@@ -8,9 +8,9 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/tasks"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -128,23 +128,30 @@ func add(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if spec.Title == "" {
 		return nil, tool.Error("title is required")
 	}
-	var id, writeID int64
-	err = tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
+	if tc.Ledger == nil {
+		return nil, tool.Error("the effect ledger is not configured")
+	}
+	var id int64
+	effect, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
+		Origin: "agent", Operation: "task_add", OperationKey: "task_add:" + ledger.NewKey(),
+		Target: "task:new", ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+		Action: mustJSON(map[string]any{"title": spec.Title, "due": spec.Due, "remind_at": spec.RemindAt}),
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		var err error
 		if id, err = tasks.Add(ctx, tx, tc.Now(), spec); err != nil {
-			return err
+			return ledger.Result{}, err
 		}
-		writeID, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
-			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "task_add", Target: "task:" + tasks.IDString(id),
-			After: map[string]any{"title": spec.Title, "due": spec.Due, "remind_at": spec.RemindAt},
-			Undo:  undoDelete{Op: UndoDelete, ID: id},
-		})
-		return err
+		return ledger.Result{
+			State:  ledger.Done,
+			Target: "task:" + tasks.IDString(id),
+			After:  mustJSON(map[string]any{"title": spec.Title, "due": spec.Due, "remind_at": spec.RemindAt}),
+			Undo:   mustJSON(undoDelete{Op: UndoDelete, ID: id}),
+		}, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"task_id": id, "write_id": writeID}, nil
+	return map[string]any{"task_id": id, "effect_id": effect.ID}, nil
 }
 
 func update(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -156,14 +163,19 @@ func update(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if err != nil {
 		return nil, err
 	}
-	var writeID int64
-	err = tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
+	if tc.Ledger == nil {
+		return nil, tool.Error("the effect ledger is not configured")
+	}
+	effect, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
+		Origin: "agent", Operation: "task_update", OperationKey: "task_update:" + ledger.NewKey(),
+		Target: "task:" + tasks.IDString(id), ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		previous, err := tasks.Get(ctx, tx, id)
 		if err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		if previous == nil {
-			return tool.Error("unknown task")
+			return ledger.Result{}, tool.Error("unknown task")
 		}
 		if spec.Title == "" {
 			spec.Title = previous.Title
@@ -181,19 +193,19 @@ func update(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 			spec.Priority = previous.Priority
 		}
 		if _, err := tasks.Update(ctx, tx, tc.Now(), id, spec); err != nil {
-			return err
+			return ledger.Result{}, err
 		}
-		writeID, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
-			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "task_update", Target: "task:" + tasks.IDString(id),
-			Before: map[string]any{"task": previous}, After: map[string]any{"title": spec.Title},
-			Undo: undoRestore{Op: UndoRestore, Task: *previous},
-		})
-		return err
+		return ledger.Result{
+			State:  ledger.Done,
+			Before: mustJSON(map[string]any{"task": previous}),
+			After:  mustJSON(map[string]any{"title": spec.Title}),
+			Undo:   mustJSON(undoRestore{Op: UndoRestore, Task: *previous}),
+		}, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"task_id": id, "write_id": writeID}, nil
+	return map[string]any{"task_id": id, "effect_id": effect.ID}, nil
 }
 
 func done(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
@@ -201,29 +213,34 @@ func done(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	if err != nil || !ok {
 		return nil, tool.Error("id is required")
 	}
-	var writeID int64
-	err = tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
+	if tc.Ledger == nil {
+		return nil, tool.Error("the effect ledger is not configured")
+	}
+	effect, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
+		Origin: "agent", Operation: "task_done", OperationKey: "task_done:" + ledger.NewKey(),
+		Target: "task:" + tasks.IDString(id), ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		previous, err := tasks.Get(ctx, tx, id)
 		if err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		if previous == nil {
-			return tool.Error("unknown task")
+			return ledger.Result{}, tool.Error("unknown task")
 		}
 		if _, err := tasks.Done(ctx, tx, tc.Now(), id); err != nil {
-			return err
+			return ledger.Result{}, err
 		}
-		writeID, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
-			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "task_done", Target: "task:" + tasks.IDString(id),
-			Before: map[string]any{"status": previous.Status}, After: map[string]any{"status": tasks.StatusDone},
-			Undo: undoRestore{Op: UndoRestore, Task: *previous},
-		})
-		return err
+		return ledger.Result{
+			State:  ledger.Done,
+			Before: mustJSON(map[string]any{"status": previous.Status}),
+			After:  mustJSON(map[string]any{"status": tasks.StatusDone}),
+			Undo:   mustJSON(undoRestore{Op: UndoRestore, Task: *previous}),
+		}, nil
 	})
 	if err != nil {
 		return nil, err
 	}
-	return map[string]any{"task_id": id, "status": tasks.StatusDone, "write_id": writeID}, nil
+	return map[string]any{"task_id": id, "status": tasks.StatusDone, "effect_id": effect.ID}, nil
 }
 
 type undoDelete struct {
@@ -241,13 +258,13 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 		Op string `json:"op"`
 	}
 	if err := json.Unmarshal(payload, &head); err != nil {
-		return nil, writes.UndoError("task undo payload is invalid")
+		return nil, ledger.Refused("task undo payload is invalid")
 	}
 	switch head.Op {
 	case UndoDelete:
 		var u undoDelete
 		if err := json.Unmarshal(payload, &u); err != nil {
-			return nil, writes.UndoError("task undo payload is invalid")
+			return nil, ledger.Refused("task undo payload is invalid")
 		}
 		if _, err := tasks.Delete(ctx, q, u.ID); err != nil {
 			return nil, err
@@ -256,17 +273,53 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 	case UndoRestore:
 		var u undoRestore
 		if err := json.Unmarshal(payload, &u); err != nil {
-			return nil, writes.UndoError("task undo payload is invalid")
+			return nil, ledger.Refused("task undo payload is invalid")
 		}
 		if _, err := tasks.Restore(ctx, q, u.Task); err != nil {
 			return nil, err
 		}
 		return map[string]any{"restored": u.Task.ID}, nil
 	}
-	return nil, writes.UndoError(fmt.Sprintf("unknown task undo %q", head.Op))
+	return nil, ledger.Refused(fmt.Sprintf("unknown task undo %q", head.Op))
 }
 
-func RegisterUndoer(r *writes.Registry) {
-	r.Register(UndoDelete, undo)
-	r.Register(UndoRestore, undo)
+func RegisterLedgerUndoers(s *ledger.Store) error {
+	for _, name := range []string{UndoDelete, UndoRestore} {
+		if err := s.RegisterUndo(name, ledger.Undoer{
+			Validate: validateLedgerUndo(name),
+			Local: func(ctx context.Context, tx *sql.Tx, payload json.RawMessage) (ledger.Result, error) {
+				value, err := undo(ctx, tx, payload)
+				if err != nil {
+					return ledger.Result{}, err
+				}
+				return ledger.Result{State: ledger.Done, After: mustJSON(value)}, nil
+			},
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func validateLedgerUndo(name string) func(json.RawMessage) error {
+	return func(payload json.RawMessage) error {
+		var head struct {
+			Op string `json:"op"`
+		}
+		if err := json.Unmarshal(payload, &head); err != nil {
+			return ledger.Refused("task undo payload is invalid")
+		}
+		if head.Op != name {
+			return ledger.Refused("task undo payload names " + head.Op)
+		}
+		return nil
+	}
+}
+
+func mustJSON(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return b
 }

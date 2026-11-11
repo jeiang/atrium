@@ -27,7 +27,7 @@ func NotifyCreated(ctx context.Context, d *db.DB, p *proposals.Proposal) {
 	title, body := Text(p.Kind, p.ID)
 	msg := notify.Message{
 		Channel: notify.Assistant, Title: title, Body: body, Click: fmt.Sprintf("/proposals/%d", p.ID),
-		Now: func() float64 { return now },
+		Now: func() float64 { return now }, Occurrence: fmt.Sprintf("proposal:%d", p.ID),
 	}
 	if allowed {
 		approve, dismiss, err := MintPair(ctx, d.Write, p.ID, p.Fingerprint, now)
@@ -39,7 +39,7 @@ func NotifyCreated(ctx context.Context, d *db.DB, p *proposals.Proposal) {
 			{Action: "view", Label: "Dismiss", URL: "/actions/" + dismiss, Method: "POST"},
 		}
 	}
-	_, _ = notify.Send(ctx, d.Write, msg)
+	_, _ = notify.Send(ctx, d, msg)
 }
 
 func Text(kind string, proposalID int64) (string, string) {

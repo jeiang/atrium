@@ -200,6 +200,14 @@ func refusal(status int, raw []byte) *Error {
 }
 
 func (c *Client) do(ctx context.Context, method, path string, body, out any) error {
+	return c.request(ctx, method, path, body, out, true)
+}
+
+func (c *Client) mutate(ctx context.Context, method, path string, body, out any) error {
+	return c.request(ctx, method, path, body, out, false)
+}
+
+func (c *Client) request(ctx context.Context, method, path string, body, out any, retry bool) error {
 	target := c.BaseURL + path
 	var data []byte
 	if body != nil {
@@ -223,7 +231,7 @@ func (c *Client) do(ctx context.Context, method, path string, body, out any) err
 			}
 			return json.Unmarshal(raw, out)
 		}
-		if retryable(status) && attempt < c.API.MaxRetries {
+		if retry && retryable(status) && attempt < c.API.MaxRetries {
 			if err := sleep(ctx, c.retryDelay(status, headers, attempt)); err != nil {
 				return err
 			}
@@ -317,31 +325,31 @@ func (c *Client) PageMarkdown(ctx context.Context, pageID string) (Markdown, err
 }
 
 func (c *Client) UpdateMarkdown(ctx context.Context, pageID string, payload any) error {
-	return c.do(ctx, http.MethodPatch, "/v1/pages/"+pageID+"/markdown", payload, nil)
+	return c.mutate(ctx, http.MethodPatch, "/v1/pages/"+pageID+"/markdown", payload, nil)
 }
 
 func (c *Client) MovePage(ctx context.Context, pageID string, parent any) error {
-	return c.do(ctx, http.MethodPost, "/v1/pages/"+pageID+"/move", map[string]any{"parent": parent}, nil)
+	return c.mutate(ctx, http.MethodPost, "/v1/pages/"+pageID+"/move", map[string]any{"parent": parent}, nil)
 }
 
 func (c *Client) CreatePage(ctx context.Context, body any) (RemotePage, error) {
 	var page RemotePage
-	err := c.do(ctx, http.MethodPost, "/v1/pages", body, &page)
+	err := c.mutate(ctx, http.MethodPost, "/v1/pages", body, &page)
 	return page, err
 }
 
 func (c *Client) SetTitle(ctx context.Context, pageID, title string) error {
-	return c.do(ctx, http.MethodPatch, "/v1/pages/"+pageID, map[string]any{
+	return c.mutate(ctx, http.MethodPatch, "/v1/pages/"+pageID, map[string]any{
 		"properties": map[string]any{"title": map[string]any{"title": richText(title)}},
 	}, nil)
 }
 
 func (c *Client) SetTrash(ctx context.Context, pageID string, inTrash bool) error {
-	return c.do(ctx, http.MethodPatch, "/v1/pages/"+pageID, map[string]any{"in_trash": inTrash}, nil)
+	return c.mutate(ctx, http.MethodPatch, "/v1/pages/"+pageID, map[string]any{"in_trash": inTrash}, nil)
 }
 
 func (c *Client) AppendChildren(ctx context.Context, blockID string, children any) error {
-	return c.do(ctx, http.MethodPatch, "/v1/blocks/"+blockID+"/children", map[string]any{"children": children}, nil)
+	return c.mutate(ctx, http.MethodPatch, "/v1/blocks/"+blockID+"/children", map[string]any{"children": children}, nil)
 }
 
 func (c *Client) BlockChildren(ctx context.Context, blockID string, fn func(Block) error) error {

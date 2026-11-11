@@ -2,6 +2,11 @@ package export
 
 import (
 	"context"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/kb/render"
+	"github.com/jeiang/atrium/internal/ledger"
 )
 
 const TargetObsidian = "obsidian"
@@ -61,11 +67,19 @@ func runObsidian(ctx context.Context, d *db.DB, env config.Env, now float64) (Re
 		})
 	}
 	entries = append(entries, pageEntry{recordID: 0, page: render.Index(indexEntries(records, loc)), path: "index.md"})
-	return syncObsidian(ctx, d, now, dir, entries)
+	store := ledger.NewStore(d, func() float64 { return now })
+	if err := RegisterLedgerObsidian(store); err != nil {
+		return Result{}, err
+	}
+	return syncObsidian(ctx, store, now, dir, entries)
 }
 
-func syncObsidian(ctx context.Context, d *db.DB, now float64, dir string, entries []pageEntry) (Result, error) {
+func syncObsidian(ctx context.Context, store *ledger.Store, now float64, dir string, entries []pageEntry) (Result, error) {
 	var out Result
+	d := store.DB
+	if err := blockedPrefix(ctx, d.Read, "obsidian:"); err != nil {
+		return out, err
+	}
 	stored, err := loadPages(ctx, d.Read, TargetObsidian)
 	if err != nil {
 		return out, err
@@ -78,16 +92,24 @@ func syncObsidian(ctx context.Context, d *db.DB, now float64, dir string, entrie
 			out.Skipped++
 			continue
 		}
-		if err := writeFile(dir, entry.path, []byte(entry.front+entry.page.Markdown)); err != nil {
+		full, err := within(dir, entry.path)
+		if err != nil {
+			return out, err
+		}
+		content := []byte(entry.front + entry.page.Markdown)
+		if err := writeStep(ctx, store, entry.recordID, now, full, entry.path, content, func(ctx context.Context, tx *sql.Tx) error {
+			return savePage(ctx, tx, TargetObsidian, entry.recordID, entry.path, entry.page.Hash, now)
+		}); err != nil {
 			return out, err
 		}
 		if found && prior.remoteID != entry.path {
-			if err := removeFile(dir, prior.remoteID); err != nil {
+			oldFull, err := within(dir, prior.remoteID)
+			if err != nil {
 				return out, err
 			}
-		}
-		if err := savePage(ctx, d.Write, TargetObsidian, entry.recordID, entry.path, entry.page.Hash, now); err != nil {
-			return out, err
+			if err := removeStep(ctx, store, entry.recordID, now, oldFull, prior.remoteID, prior.hash, nil); err != nil {
+				return out, err
+			}
 		}
 		if found {
 			out.Updated++
@@ -99,15 +121,109 @@ func syncObsidian(ctx context.Context, d *db.DB, now float64, dir string, entrie
 		if current[recordID] {
 			continue
 		}
-		if err := removeFile(dir, prior.remoteID); err != nil {
+		full, err := within(dir, prior.remoteID)
+		if err != nil {
 			return out, err
 		}
-		if err := deletePage(ctx, d.Write, TargetObsidian, recordID); err != nil {
+		if err := removeStep(ctx, store, recordID, now, full, prior.remoteID, prior.hash, func(ctx context.Context, tx *sql.Tx) error {
+			return deletePage(ctx, tx, TargetObsidian, recordID)
+		}); err != nil {
 			return out, err
 		}
 		out.Removed++
 	}
 	return out, nil
+}
+
+type fileUndo struct {
+	Op      string   `json:"op"`
+	Path    string   `json:"path"`
+	Before  *string  `json:"before"`
+	SHA     string   `json:"sha"`
+	Missing bool     `json:"missing,omitempty"`
+	Parents []string `json:"parents,omitempty"`
+}
+
+const UndoObsidianRestore = "obsidian_restore"
+
+func fileSnapshot(full string) (*string, []string, error) {
+	prior, err := os.ReadFile(full)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return nil, nil, err
+	}
+	var before *string
+	if err == nil {
+		text := string(prior)
+		before = &text
+	}
+	var parents []string
+	if err != nil {
+		for parent := filepath.Dir(full); ; parent = filepath.Dir(parent) {
+			if _, statErr := os.Stat(parent); statErr == nil {
+				break
+			}
+			parents = append(parents, parent)
+			if filepath.Dir(parent) == parent {
+				break
+			}
+		}
+	}
+	return before, parents, nil
+}
+
+func writeStep(ctx context.Context, store *ledger.Store, recordID int64, now float64, full, rel string, content []byte, done ledger.Mutation) error {
+	before, parents, err := fileSnapshot(full)
+	if err != nil {
+		return err
+	}
+	target := "obsidian:" + rel
+	undo := fileUndo{Op: UndoObsidianRestore, Path: full, Before: before, SHA: hashOf(content), Parents: parents}
+	ticket, err := store.Begin(ctx, ledger.New{
+		Origin: "export", Operation: "obsidian_write", OperationKey: "export:obsidian:" + cite(recordID) + ":" + rel + ":" + hashOf(content),
+		Target: target, Before: jsonOf(before), Undo: jsonOf(undo),
+		Resources: []ledger.Resource{{Key: "file:" + full}},
+	}, nil)
+	if err != nil {
+		return err
+	}
+	if err := writePath(full, content); err != nil {
+		_ = store.Settle(ctx, ticket, ledger.Result{State: ledger.Failed, Target: target, Error: err.Error()}, nil)
+		return err
+	}
+	return store.Settle(ctx, ticket, ledger.Result{State: ledger.Done, Target: target, After: jsonOf(map[string]any{"hash": hashOf(content), "path": rel})}, done)
+}
+
+func removeStep(ctx context.Context, store *ledger.Store, recordID int64, now float64, full, rel, priorHash string, done ledger.Mutation) error {
+	before, parents, err := fileSnapshot(full)
+	if err != nil {
+		return err
+	}
+	target := "obsidian:" + rel
+	ticket, err := store.Begin(ctx, ledger.New{
+		Origin: "export", Operation: "obsidian_remove", OperationKey: "export:obsidian:" + cite(recordID) + ":" + rel + ":remove",
+		Target: target, Before: jsonOf(before),
+		Undo:      jsonOf(fileUndo{Op: UndoObsidianRestore, Path: full, Before: before, Missing: true, Parents: parents}),
+		Resources: []ledger.Resource{{Key: "file:" + full}},
+	}, nil)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(full); err != nil && !errors.Is(err, os.ErrNotExist) {
+		_ = store.Settle(ctx, ticket, ledger.Result{State: ledger.Failed, Target: target, Error: err.Error()}, nil)
+		return err
+	}
+	if before == nil {
+		if err := store.Settle(ctx, ticket, ledger.Result{State: ledger.Skipped, Target: target}, done); err != nil {
+			return err
+		}
+		return nil
+	}
+	return store.Settle(ctx, ticket, ledger.Result{State: ledger.Done, Target: target, After: jsonOf(map[string]any{"removed": rel, "hash": priorHash})}, done)
+}
+
+func hashOf(data []byte) string {
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:])
 }
 
 func within(dir, rel string) (string, error) {
@@ -119,11 +235,7 @@ func within(dir, rel string) (string, error) {
 	return full, nil
 }
 
-func writeFile(dir, rel string, content []byte) error {
-	full, err := within(dir, rel)
-	if err != nil {
-		return err
-	}
+func writePath(full string, content []byte) error {
 	parent := filepath.Dir(full)
 	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return err
@@ -159,15 +271,52 @@ func writeFile(dir, rel string, content []byte) error {
 	return nil
 }
 
-func removeFile(dir, rel string) error {
-	full, err := within(dir, rel)
-	if err != nil {
+func restoreFile(u fileUndo) error {
+	current, err := os.ReadFile(u.Path)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}
-	if err := os.Remove(full); err != nil && !os.IsNotExist(err) {
-		return err
+	if u.Missing {
+		if err == nil {
+			return ledger.Refused("the path was recreated since the removal; not restoring")
+		}
+	} else if u.SHA != "" && hashOf(current) != u.SHA {
+		return ledger.Refused("the exported file changed since the write; not restoring")
 	}
-	return nil
+	if u.Before == nil {
+		if err := os.Remove(u.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			return err
+		}
+		for _, parent := range u.Parents {
+			if err := os.Remove(parent); err != nil {
+				break
+			}
+		}
+		return nil
+	}
+	return writePath(u.Path, []byte(*u.Before))
+}
+
+func RegisterLedgerObsidian(s *ledger.Store) error {
+	return s.RegisterUndo(UndoObsidianRestore, ledger.Undoer{
+		Validate: func(raw json.RawMessage) error {
+			var u fileUndo
+			if err := json.Unmarshal(raw, &u); err != nil || u.Path == "" {
+				return ledger.Refused("obsidian_restore without a path")
+			}
+			return nil
+		},
+		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
+			var u fileUndo
+			if err := json.Unmarshal(raw, &u); err != nil || u.Path == "" {
+				return ledger.Result{}, ledger.Refused("obsidian_restore without a path")
+			}
+			if err := restoreFile(u); err != nil {
+				return ledger.Result{}, err
+			}
+			return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"restored": u.Path})}, nil
+		},
+	})
 }
 
 func slug(title string) string {

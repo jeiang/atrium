@@ -9,10 +9,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -94,7 +94,7 @@ func notionData(ctx context.Context, q db.Querier) (any, error) {
 	if err := q.QueryRowContext(ctx, "SELECT COALESCE(MAX(updated_at), 0) FROM export_pages WHERE target = ?", TargetNotion).Scan(&last); err != nil {
 		return nil, err
 	}
-	blocked, err := writes.UnknownTarget(ctx, q, targetPrefix)
+	blocked, err := ledger.BlockedTarget(ctx, q, targetPrefix)
 	if err != nil {
 		return nil, err
 	}

@@ -78,8 +78,14 @@ func TestInferenceTransportRecordsNoUsageWhenTheProviderRejectsTheRequest(t *tes
 	if v.State != "failed" || !strings.Contains(v.err(), "max_tokens") {
 		t.Fatalf("rejected run: %+v %q", v, v.err())
 	}
-	if n := asstCount(t, d, "SELECT COUNT(*) FROM usage WHERE run_id = ?", v.ID); n != 0 {
-		t.Errorf("%d usage rows for the rejected run, want none", n)
+	var state string
+	var accounted int64
+	var errText *string
+	if err := d.Read.QueryRow("SELECT state, accounted_nusd, error FROM usage WHERE run_id = ?", v.ID).Scan(&state, &accounted, &errText); err != nil {
+		t.Fatal(err)
+	}
+	if state != "settled" || accounted != 0 || errText == nil || !strings.Contains(*errText, "max_tokens") {
+		t.Errorf("rejected row state %q accounted %d error %v, want a zero settled row", state, accounted, errText)
 	}
 	if got := len(api.Requests()) - sent; got != 1 {
 		t.Errorf("%d requests sent, want 1", got)
@@ -98,8 +104,13 @@ func TestInferenceTransportRecordsNoUsageWhenTheConnectionNeverAnswers(t *testin
 	if v.State != "failed" || !strings.Contains(v.err(), anthropic.ConnectionMessage) {
 		t.Fatalf("disconnected run: %+v %q", v, v.err())
 	}
-	if n := asstCount(t, d, "SELECT COUNT(*) FROM usage WHERE run_id = ?", v.ID); n != 0 {
-		t.Errorf("%d usage rows for the disconnected run, want none", n)
+	var state string
+	var reservation, accounted int64
+	if err := d.Read.QueryRow("SELECT state, reservation_nusd, accounted_nusd FROM usage WHERE run_id = ?", v.ID).Scan(&state, &reservation, &accounted); err != nil {
+		t.Fatal(err)
+	}
+	if state != "unknown" || reservation <= 0 || accounted != 0 {
+		t.Errorf("disconnected row state %q reservation %d accounted %d, want an unknown reservation", state, reservation, accounted)
 	}
 	if got := len(api.Requests()) - sent; got < 1 {
 		t.Errorf("%d requests reached the server, want at least 1", got)

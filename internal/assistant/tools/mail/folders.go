@@ -2,6 +2,7 @@ package mailtools
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,14 +13,12 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/executors"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -69,7 +68,7 @@ func folderTools() []tool.Tool {
 }
 
 func openMail(tc *tool.Context) mail.OpenFunc {
-	return imapclient.Opener(tc.Cfg)
+	return tc.MailOpen
 }
 
 func mailWriteRefused(err error) error {
@@ -141,27 +140,36 @@ func mailFolderCreate(ctx context.Context, tc *tool.Context, args tool.Args) (an
 		return nil, err
 	}
 	if mode != config.Live {
-		id, err := writes.Record(ctx, tc.DB.Write, tc.Undoers, writes.New{
-			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "mail_folder_create", Target: target,
-			After: map[string]any{"account": account, "imap_name": imapName, "shadow": true},
+		effect, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
+			Origin: "agent", Operation: "mail_folder_create", OperationKey: "mail_folder_create:" + ledger.NewKey(),
+			Target: target, ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+		}, func(_ context.Context, _ *sql.Tx) (ledger.Result, error) {
+			return ledger.Result{State: ledger.Skipped, Target: target, After: jsonOf(map[string]any{"account": account, "imap_name": imapName, "shadow": true})}, nil
 		})
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"created": false, "shadow": true, "folder": name, "write_id": id,
+		return map[string]any{"created": false, "shadow": true, "folder": name, "effect_id": effect.ID,
 			"note": "shadow mode: recorded the intent; no mailbox write was made"}, nil
 	}
 	if mailWritesPaused(tc) {
 		return nil, tool.Error("mail writes are paused; resume with 'atrium live resume' and retry")
 	}
-	intent, err := writes.Begin(ctx, tc.DB.Write, writes.New{
-		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "mail_folder_create", Target: target,
-	})
+	open := openMail(tc)
+	if open == nil {
+		return nil, tool.NotConfigured("the mail opener is not configured")
+	}
+	ticket, err := tc.Ledger.Begin(ctx, ledger.New{
+		Origin: "agent", Operation: "mail_folder_create", OperationKey: "mail_folder_create:" + ledger.NewKey(),
+		Target: target, ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+		Undo:      jsonOf(map[string]any{"op": UndoFolderDelete, "account": account, "imap_name": imapName}),
+		Resources: []ledger.Resource{{Key: "mail_folder:" + account + ":" + imapName}},
+	}, nil)
 	if err != nil {
 		return nil, err
 	}
 	created := false
-	err = mailops.Session(ctx, openMail(tc), tc.DB.Read, account, func(client mail.Client) error {
+	err = mailops.Session(ctx, open, tc.DB.Read, account, func(client mail.Client) error {
 		existing, protected, err := resolveFolder(ctx, client, name)
 		if err != nil {
 			return err
@@ -191,23 +199,23 @@ func mailFolderCreate(ctx context.Context, tc *tool.Context, args tool.Args) (an
 		return mailops.Error("the folder is not visible after creation")
 	})
 	if err != nil {
+		state := ledger.Failed
 		if mailops.OutcomeUnknown(err) {
-			_ = writes.SettleUnknown(context.WithoutCancel(ctx), tc.DB.Write, intent, writes.New{Target: target}, err.Error())
-		} else {
-			_ = writes.Discard(context.WithoutCancel(ctx), tc.DB.Write, intent)
+			state = ledger.Unknown
 		}
+		_ = tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: state, Target: target, Error: err.Error()}, nil)
 		return nil, mailWriteRefused(err)
 	}
 	if !created {
-		_ = writes.Discard(context.WithoutCancel(ctx), tc.DB.Write, intent)
+		_ = tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: ledger.Skipped, Target: target}, nil)
 		return map[string]any{"created": false, "folder": name,
 			"note": "the folder already exists; nothing was changed"}, nil
 	}
-	err = writes.Settle(context.WithoutCancel(ctx), tc.DB.Write, tc.Undoers, intent, writes.New{
-		Target: target,
-		After:  map[string]any{"account": account, "imap_name": imapName},
-		Undo:   map[string]any{"op": UndoFolderDelete, "account": account, "imap_name": imapName},
-	})
+	err = tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
+		State: ledger.Done, Target: target,
+		After: jsonOf(map[string]any{"account": account, "imap_name": imapName}),
+		Undo:  jsonOf(map[string]any{"op": UndoFolderDelete, "account": account, "imap_name": imapName}),
+	}, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -243,19 +251,25 @@ func mailMove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 		return nil, err
 	}
 	if mode != config.Live {
-		id, err := writes.Record(ctx, tc.DB.Write, tc.Undoers, writes.New{
-			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "mail_move",
-			Target: account + ":" + folder,
-			After:  map[string]any{"account": account, "folder": folder, "message_ids": ids, "shadow": true},
+		target := account + ":" + folder
+		effect, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
+			Origin: "agent", Operation: "mail_move", OperationKey: "mail_move:" + ledger.NewKey(),
+			Target: target, ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+		}, func(_ context.Context, _ *sql.Tx) (ledger.Result, error) {
+			return ledger.Result{State: ledger.Skipped, Target: target, After: jsonOf(map[string]any{"account": account, "folder": folder, "message_ids": ids, "shadow": true})}, nil
 		})
 		if err != nil {
 			return nil, err
 		}
-		return map[string]any{"moved": 0, "shadow": true, "folder": folder, "write_id": id,
+		return map[string]any{"moved": 0, "shadow": true, "folder": folder, "effect_id": effect.ID,
 			"note": "shadow mode: recorded the intent; no mailbox write was made"}, nil
 	}
 	if mailWritesPaused(tc) {
 		return nil, tool.Error("mail writes are paused; resume with 'atrium live resume' and retry")
+	}
+	open := openMail(tc)
+	if open == nil {
+		return nil, tool.NotConfigured("the mail opener is not configured")
 	}
 	snaps, err := mailops.Snapshots(ctx, tc.DB.Read, ids)
 	if err != nil {
@@ -266,7 +280,7 @@ func mailMove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	}
 	moved := 0
 	var skipped []mailops.Skip
-	err = mailops.Session(ctx, openMail(tc), tc.DB.Read, account, func(client mail.Client) error {
+	err = mailops.Session(ctx, open, tc.DB.Read, account, func(client mail.Client) error {
 		imapName, protected, err := resolveFolder(ctx, client, folder)
 		if err != nil {
 			return err
@@ -375,20 +389,18 @@ func moveGroupTool(ctx context.Context, tc *tool.Context, client mail.Client, ac
 	}
 	chunks := mailops.Chunks(uids, size)
 	target := account + ":" + g.IMAPName + "->" + destIMAP
-	begin := func() (int64, error) {
-		return writes.Begin(ctx, tc.DB.Write, writes.New{
-			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "mail_move", Target: target,
-		})
+	begin := func() (ledger.Ticket, error) {
+		return tc.Ledger.Begin(ctx, ledger.New{
+			Origin: "agent", Operation: "mail_move", OperationKey: "mail_move:" + ledger.NewKey(),
+			Target: target, ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+			Resources: []ledger.Resource{{Key: "mail_move:" + target}},
+		}, nil)
 	}
-	intent, err := begin()
+	ticket, err := begin()
 	if err != nil {
 		return 0, err
 	}
-	defer func() {
-		if intent != 0 {
-			_ = writes.Discard(context.WithoutCancel(ctx), tc.DB.Write, intent)
-		}
-	}()
+	held := true
 	next := 0
 	err = mailops.MoveUIDs(ctx, client, g.IMAPName, destIMAP, g.UIDValidity, uids, size, func(batch []uint32, copied *mail.CopyUID) error {
 		entries := make([]any, len(batch))
@@ -400,78 +412,32 @@ func moveGroupTool(ctx context.Context, tc *tool.Context, client mail.Client, ac
 			"dest_uidvalidity": validityOrNil(copied), "items": entries}
 		undo := map[string]any{"op": UndoMoveBack, "account": account, "src_imap": g.IMAPName,
 			"dest_imap": destIMAP, "dest_uidvalidity": validityOrNil(copied), "items": entries}
-		if serr := writes.Settle(context.WithoutCancel(ctx), tc.DB.Write, tc.Undoers, intent, writes.New{
-			Target: target, After: after, Undo: undo,
-		}); serr != nil {
+		if serr := tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
+			State: ledger.Done, Target: target, After: jsonOf(after), Undo: jsonOf(undo),
+		}, nil); serr != nil {
 			return serr
 		}
-		intent = 0
+		held = false
 		moved += len(batch)
 		if next++; next < len(chunks) {
-			held, herr := begin()
+			nextTicket, herr := begin()
 			if herr != nil {
 				return herr
 			}
-			intent = held
+			ticket = nextTicket
+			held = true
 		}
 		return nil
 	})
 	if err != nil {
-		if intent != 0 {
+		if held {
+			state := ledger.Failed
 			if mailops.OutcomeUnknown(err) {
-				_ = writes.SettleUnknown(context.WithoutCancel(ctx), tc.DB.Write, intent, writes.New{Target: target}, err.Error())
-			} else {
-				_ = writes.Discard(context.WithoutCancel(ctx), tc.DB.Write, intent)
+				state = ledger.Unknown
 			}
-			intent = 0
+			_ = tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: state, Target: target, Error: err.Error()}, nil)
 		}
 		return moved, err
 	}
 	return moved, nil
-}
-
-func undoFolderDelete(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
-	ctx = safety.ApprovedWrites(ctx, "undo")
-	var plan struct {
-		Account  string `json:"account"`
-		IMAPName string `json:"imap_name"`
-	}
-	if err := json.Unmarshal(raw, &plan); err != nil {
-		return nil, writes.UndoError("folder undo payload is invalid")
-	}
-	if plan.Account == "" || plan.IMAPName == "" {
-		return nil, writes.UndoError("folder undo payload is missing the account or folder")
-	}
-	deleted := false
-	err := mailops.Session(ctx, imapclient.Opener(config.Config{}), q, plan.Account, func(client mail.Client) error {
-		boxes, err := client.ListMailboxes(ctx)
-		if err != nil {
-			return err
-		}
-		found := false
-		for _, info := range boxes {
-			if info.IMAPName == plan.IMAPName {
-				found = true
-				break
-			}
-		}
-		if !found {
-			return nil
-		}
-		deleted, err = mailops.DeleteFolderIfEmpty(ctx, client, plan.IMAPName)
-		return err
-	})
-	if err != nil {
-		return nil, err
-	}
-	return map[string]any{"deleted": deleted, "folder": plan.IMAPName}, nil
-}
-
-func undoMailMoveBack(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
-	ctx = safety.ApprovedWrites(ctx, "undo")
-	var plan live.MoveBack
-	if err := json.Unmarshal(raw, &plan); err != nil {
-		return nil, writes.UndoError("move undo payload is invalid")
-	}
-	return live.UndoMoveBack(ctx, imapclient.Opener(config.Config{}), q, plan)
 }

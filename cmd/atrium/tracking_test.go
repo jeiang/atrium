@@ -232,7 +232,7 @@ func TestTrackPackageRegistersAndRespectsTheQuota(t *testing.T) {
 		t.Fatalf("Ship24 created %d trackers, want 1", creates)
 	}
 	var undo string
-	if err := d.Read.QueryRow("SELECT undo_json FROM agent_writes WHERE tool = 'track_package' ORDER BY id DESC LIMIT 1").Scan(&undo); err != nil {
+	if err := d.Read.QueryRow("SELECT undo_json FROM effects WHERE operation = 'track_package' AND direction = 'forward' ORDER BY id DESC LIMIT 1").Scan(&undo); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(undo, "package_untrack") {
@@ -363,13 +363,9 @@ func TestTrackPackageUnknownOutcomeStaysBlocked(t *testing.T) {
 	if ran := runApp(t, "proposals", "approve", first); ran.code == cli.ExitOK || !strings.Contains(ran.stdout+ran.stderr, "outcome is unknown") {
 		t.Fatalf("the unknown outcome was not reported: %d %s %s", ran.code, ran.stdout, ran.stderr)
 	}
-	var action string
-	if err := d.Read.QueryRow("SELECT state FROM proposal_actions WHERE proposal_id = ? ORDER BY id DESC LIMIT 1", first).Scan(&action); err != nil || action != "unknown" {
-		t.Fatalf("proposal action = %q, %v; want unknown", action, err)
-	}
 	var state string
 	var undo sql.NullString
-	if err := d.Read.QueryRow("SELECT state, undo_json FROM agent_writes WHERE tool = 'track_package' ORDER BY id DESC LIMIT 1").Scan(&state, &undo); err != nil {
+	if err := d.Read.QueryRow("SELECT state, undo_json FROM effects WHERE operation = 'track_package' AND direction = 'forward' ORDER BY id DESC LIMIT 1").Scan(&state, &undo); err != nil {
 		t.Fatal(err)
 	}
 	if state != "unknown" || undo.Valid {
@@ -383,7 +379,7 @@ func TestTrackPackageUnknownOutcomeStaysBlocked(t *testing.T) {
 		t.Fatalf("the retry reached Ship24 (%d creates); want 1", creates)
 	}
 	var writes int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM agent_writes WHERE tool = 'track_package'").Scan(&writes); err != nil || writes != 1 {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE operation = 'track_package' AND direction = 'forward'").Scan(&writes); err != nil || writes != 1 {
 		t.Fatalf("track_package writes = %d, %v; want 1 (no Discard)", writes, err)
 	}
 }
@@ -412,7 +408,7 @@ func TestTrackPackageQuotaSurvivesUndo(t *testing.T) {
 		t.Fatalf("approve tracking: %d %s", ran.code, ran.stderr)
 	}
 	var writeID int64
-	if err := d.Read.QueryRow("SELECT id FROM agent_writes WHERE tool = 'track_package' ORDER BY id DESC LIMIT 1").Scan(&writeID); err != nil {
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'track_package' AND direction = 'forward' ORDER BY id DESC LIMIT 1").Scan(&writeID); err != nil {
 		t.Fatal(err)
 	}
 	base := startServeIn(t, dir)
@@ -424,7 +420,7 @@ func TestTrackPackageQuotaSurvivesUndo(t *testing.T) {
 	if code, _, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); code != http.StatusOK {
 		t.Fatalf("activity page: %d", code)
 	}
-	if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/activity/write/%d/undo", base, writeID), url.Values{}); code != http.StatusSeeOther && code != http.StatusOK {
+	if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/activity/effect/%d/undo", base, writeID), url.Values{}); code != http.StatusSeeOther && code != http.StatusOK {
 		t.Fatalf("undo package tracker: %d %s", code, body)
 	}
 	var tracker string
@@ -492,7 +488,7 @@ func TestUndoPackageUntrackRefusesWithoutAKey(t *testing.T) {
 		t.Fatalf("approve tracking: %d %s", ran.code, ran.stderr)
 	}
 	var writeID int64
-	if err := d.Read.QueryRow("SELECT id FROM agent_writes WHERE tool = 'track_package' ORDER BY id DESC LIMIT 1").Scan(&writeID); err != nil {
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'track_package' AND direction = 'forward' ORDER BY id DESC LIMIT 1").Scan(&writeID); err != nil {
 		t.Fatal(err)
 	}
 	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "")
@@ -505,12 +501,12 @@ func TestUndoPackageUntrackRefusesWithoutAKey(t *testing.T) {
 	if code, _, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); code != http.StatusOK {
 		t.Fatalf("activity page: %d", code)
 	}
-	if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/activity/write/%d/undo", base, writeID), url.Values{}); code != http.StatusConflict {
+	if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/activity/effect/%d/undo", base, writeID), url.Values{}); code != http.StatusConflict {
 		t.Fatalf("undo without a key: %d %s; want 409", code, body)
 	}
-	var undone sql.NullFloat64
+	var undone sql.NullInt64
 	var tracker string
-	if err := d.Read.QueryRow("SELECT undone_at FROM agent_writes WHERE id = ?", writeID).Scan(&undone); err != nil {
+	if err := d.Read.QueryRow("SELECT undone_by FROM effects WHERE id = ?", writeID).Scan(&undone); err != nil {
 		t.Fatal(err)
 	}
 	if undone.Valid {
@@ -521,5 +517,44 @@ func TestUndoPackageUntrackRefusesWithoutAKey(t *testing.T) {
 	}
 	if fake.unsubscribeCount() != 0 {
 		t.Fatalf("Ship24 unsubscribes = %d, want 0", fake.unsubscribeCount())
+	}
+}
+
+func TestTrackingIdentityBlocksASecondPackageRow(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	fake := &fakeShip24{milestone: "in_transit", failCreate: http.StatusInternalServerError}
+	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
+	t.Cleanup(srv.Close)
+	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
+	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
+	setEnv(t, settingEnv(tracking.KeyMonthlyQuota), "10")
+	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	for i := 1; i <= 2; i++ {
+		if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
+			"source_message_id, last_message_id, updated_ts, first_seen) VALUES (?, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)", i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first := requestTracking(t, api, d, "i1", 1, "track one")
+	if ran := runApp(t, "proposals", "approve", first); ran.code == cli.ExitOK || !strings.Contains(ran.stdout+ran.stderr, "outcome is unknown") {
+		t.Fatalf("the unknown outcome was not reported: %d %s %s", ran.code, ran.stdout, ran.stderr)
+	}
+	var target string
+	if err := d.Read.QueryRow("SELECT target FROM effects WHERE operation = 'track_package' AND state = 'unknown' ORDER BY id DESC LIMIT 1").Scan(&target); err != nil {
+		t.Fatal(err)
+	}
+	if target != "tracking:ups:1Z999AA10123456784" {
+		t.Fatalf("effect target = %q, want the normalized tracking identity", target)
+	}
+	second := requestTracking(t, api, d, "i2", 2, "track two")
+	if ran := runApp(t, "proposals", "approve", second); ran.code == cli.ExitOK || !strings.Contains(ran.stdout+ran.stderr, "unknown outcome") {
+		t.Fatalf("a second package row bypassed the blocker: %d %s %s", ran.code, ran.stdout, ran.stderr)
+	}
+	if creates, _ := fake.counts(); creates != 1 {
+		t.Fatalf("Ship24 created %d trackers, want 1", creates)
 	}
 }

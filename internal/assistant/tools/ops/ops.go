@@ -13,9 +13,9 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const samplesSchema = `{"type": "object", "properties": {` +
@@ -125,7 +125,7 @@ func finding(ctx context.Context, tc *tool.Context, args tool.Args) (any, error)
 		return nil, err
 	}
 	now := tc.Now()
-	id, err := serverops.WriteFinding(ctx, tc.DB, tc.Undoers, serverops.Finding{
+	id, err := serverops.WriteFinding(ctx, tc.Ledger, serverops.Finding{
 		Fact: fact, Severity: severity, Title: title, Body: body, Marks: marks,
 		ThreadID: tc.ThreadID, RunID: tc.RunID, Tool: "ops_finding", Now: now,
 	})
@@ -319,7 +319,7 @@ func liveFindings(ctx context.Context, q db.Querier) ([]any, error) {
 	return out, nil
 }
 
-func RegisterUndoer(r *writes.Registry) { serverops.RegisterUndoer(r) }
+func RegisterLedgerUndoer(s *ledger.Store) error { return serverops.RegisterLedgerUndoer(s) }
 
 func Tools() []tool.Tool {
 	return []tool.Tool{
