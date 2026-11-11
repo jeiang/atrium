@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -131,6 +132,59 @@ func TestWimLocalAuthServesLoopbackIPv4AndIPv6(t *testing.T) {
 		if code := post(token); code != http.StatusNotFound {
 			t.Errorf("%s local mode with a CSRF token: %d", host, code)
 		}
+	}
+}
+
+func TestWimLocalModeRefusesANonLoopbackPeer(t *testing.T) {
+	t.Parallel()
+	base, _ := wimServeIn(t, t.TempDir(), "--auth", "local")
+	for _, source := range nonLoopbackIPv4s() {
+		transport := &http.Transport{DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			d := net.Dialer{LocalAddr: &net.TCPAddr{IP: source}}
+			return d.DialContext(ctx, network, addr)
+		}}
+		req, _ := http.NewRequest(http.MethodGet, base+"/settings/mail", nil)
+		req.Header.Set("X-Forwarded-For", "127.0.0.1")
+		req.Header.Set("X-Real-IP", "127.0.0.1")
+		req.Header.Set("CF-Connecting-IP", "127.0.0.1")
+		resp, err := (&http.Client{Transport: transport}).Do(req)
+		if err != nil {
+			continue
+		}
+		body, _ := io.ReadAll(resp.Body)
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusForbidden {
+			t.Fatalf("non-loopback peer %s with forwarded localhost headers: %d %.200q", source, resp.StatusCode, body)
+		}
+		return
+	}
+	t.Skip("cannot connect from a non-loopback source")
+}
+
+func nonLoopbackIPv4s() []net.IP {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return nil
+	}
+	var ips []net.IP
+	for _, a := range addrs {
+		ipnet, ok := a.(*net.IPNet)
+		if !ok || ipnet.IP.IsLoopback() {
+			continue
+		}
+		if ip := ipnet.IP.To4(); ip != nil {
+			ips = append(ips, ip)
+		}
+	}
+	return ips
+}
+
+func TestWimOIDCModeIgnoresLoopbackProxyHeaders(t *testing.T) {
+	t.Parallel()
+	base, _ := wimServeIn(t, t.TempDir(), "--auth", "oidc", "--allowed-host", "127.0.0.1")
+	status, _, header := wimGet(t, base+"/settings/mail", "Remote-Groups", "atrium_access", "Remote-User", "root", "X-Forwarded-For", "127.0.0.1")
+	if status != http.StatusSeeOther || !strings.HasPrefix(header.Get("Location"), "/login") {
+		t.Fatalf("oidc mode admitted a loopback proxy request: %d %q", status, header.Get("Location"))
 	}
 }
 
