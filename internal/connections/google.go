@@ -187,7 +187,7 @@ func (l *Lease) googleToken(ctx context.Context, capability string) (string, err
 		l.observeGoogle(ctx, capability, err)
 		return "", err
 	}
-	if access.expiry.Sub(time.Now()) < googleExpiryWindow {
+	if time.Until(access.expiry) < googleExpiryWindow {
 		_ = l.Observe(ctx, Result{Capability: capability, State: Expiring,
 			Reason: "access token expires " + access.expiry.Format(time.DateOnly), ExpiresAt: &access.expiry})
 	}
@@ -344,13 +344,13 @@ func testGoogleCalendar(ctx context.Context, lease *Lease, token string) Result 
 	}
 	defer func() { _ = resp.Body.Close() }()
 	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, 1<<20))
-	switch {
-	case resp.StatusCode == http.StatusOK:
+	switch resp.StatusCode {
+	case http.StatusOK:
 		data, _ := json.Marshal(map[string]any{"max_results": 1})
 		return Result{Capability: GoogleCalendar, State: OK, Reason: "calendar read works", Data: data, ExpiresAt: lease.googleExpiry(GoogleCalendar)}
-	case resp.StatusCode == http.StatusUnauthorized:
+	case http.StatusUnauthorized:
 		return Result{Capability: GoogleCalendar, State: NeedsReauth, Reason: "Google refused the access token"}
-	case resp.StatusCode == http.StatusForbidden:
+	case http.StatusForbidden:
 		return Result{Capability: GoogleCalendar, State: Failing, Reason: "Google refused the calendar scope"}
 	default:
 		return Result{Capability: GoogleCalendar, State: Failing, Reason: fmt.Sprintf("calendar endpoint answered %d", resp.StatusCode)}
@@ -367,15 +367,15 @@ func (s *Store) EnsureGoogle(ctx context.Context) error {
 }
 
 type googlePage struct {
-	ClientID        string         `json:"client_id"`
-	ClientSecretSet bool           `json:"client_secret_set"`
-	Redirect        string         `json:"redirect"`
-	Capabilities    []googleGrant  `json:"capabilities"`
-	Selected        string         `json:"selected"`
-	Health          string         `json:"health"`
-	Reason          string         `json:"reason"`
-	Error           string         `json:"error"`
-	Paste           string         `json:"paste"`
+	ClientID        string        `json:"client_id"`
+	ClientSecretSet bool          `json:"client_secret_set"`
+	Redirect        string        `json:"redirect"`
+	Capabilities    []googleGrant `json:"capabilities"`
+	Selected        string        `json:"selected"`
+	Health          string        `json:"health"`
+	Reason          string        `json:"reason"`
+	Error           string        `json:"error"`
+	Paste           string        `json:"paste"`
 }
 
 func googleRedirect(r *http.Request) string {
@@ -592,7 +592,7 @@ func (h handlers) completeGoogle(ctx context.Context, s *Store, state, code, aut
 	token, err := conf.Exchange(exchange, code, oauth2.VerifierOption(verifier))
 	if err != nil || token.RefreshToken == "" {
 		if err == nil {
-			err = errors.New("Google returned no refresh token; revoke the app's access and retry")
+			err = errors.New("Google returned no refresh token; revoke the app's access and retry") //nolint:staticcheck // the CLI contract keeps this wording
 		}
 		return googleGrant{}, err
 	}

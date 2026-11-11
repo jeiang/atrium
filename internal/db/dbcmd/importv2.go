@@ -543,10 +543,7 @@ func sourceGoogle(ctx context.Context, src *sql.DB) (connections.ImportService, 
 	} else if ok {
 		service.Health = &connections.ImportHealth{State: state, Reason: reason, CheckedAt: checked, ExpiresAt: expires}
 	}
-	var secrets []string
-	for _, name := range []string{"google_oauth_client_secret", "google_calendar_refresh_token", "google_gmail_refresh_token"} {
-		secrets = append(secrets, name)
-	}
+	secrets := []string{"google_oauth_client_secret", "google_calendar_refresh_token", "google_gmail_refresh_token"}
 	return service, secrets, nil
 }
 
