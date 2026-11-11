@@ -136,6 +136,29 @@ func TestAuthTokensIssueListAndRevokeThroughTheCLI(t *testing.T) {
 	}
 }
 
+func TestAuthTokensPersistFarFutureExpiry(t *testing.T) {
+	moduleFixture(t, flagsExcept("", ""))
+	const expiry = "2300-01-01T00:00:00Z"
+	issued := runApp(t, "auth", "token", "issue", "--name", "long-lived", "--expires-at", expiry)
+	if issued.code != cli.ExitOK {
+		t.Fatalf("issue: exit %d stderr %q", issued.code, issued.stderr)
+	}
+	secret := strings.TrimSpace(issued.stdout)
+	base, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, "--auth", "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := &apiSite{t: t, base: base}
+	if me := s.do(http.MethodGet, "/api/v1/me", secret, nil); me.status != http.StatusOK {
+		t.Fatalf("a long-lived token cannot read the API: %d %s", me.status, me.body)
+	}
+	stop()
+	row := tokenRow(t, runApp(t, "auth", "token", "list").stdout, "long-lived")
+	if row[4] != expiry {
+		t.Fatalf("the long-lived expiry is listed as %q, want %q", row[4], expiry)
+	}
+}
+
 func TestAuthTokensThroughTheSettingsPage(t *testing.T) {
 	s := newAPISite(t)
 	browser := oidcBrowser(t, s.base, s.idp, "owner")

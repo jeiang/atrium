@@ -10,6 +10,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/jeiang/atrium/internal/auth/oidc"
 )
 
 const (
@@ -22,8 +24,6 @@ const (
 	limitAPITokenBurst   = 60
 	limitSignInRate      = 10.0 / 60
 	limitSignInBurst     = 10
-
-	limitTokenChars = 4096
 )
 
 const (
@@ -182,7 +182,7 @@ func tokenKey(token string) string {
 }
 
 func boundedToken(token string) bool {
-	if len(token) > limitTokenChars {
+	if len(token) > oidc.MaxTokenBytes {
 		return false
 	}
 	for i := range len(token) {

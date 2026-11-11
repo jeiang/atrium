@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/auth/oidc/oidctest"
 	"github.com/jeiang/atrium/internal/cli"
 )
 
@@ -251,6 +252,26 @@ func TestAuthRateLimitsAPIAddressAndTokenBuckets(t *testing.T) {
 	time.Sleep(time.Duration(retry)*time.Second + 100*time.Millisecond)
 	if status, _, body := call.get("/api/v1/me", a, second); status != http.StatusOK {
 		t.Fatalf("a request after Retry-After: %d %.200s", status, body)
+	}
+}
+
+func TestAuthRateLimitChargesLongBearerTokens(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	s := startAPISite(t, dir, api, "--trusted-proxy", "127.0.0.1/32")
+	token := s.token("owner", oidctest.AccessOptions{Mutate: func(claims map[string]any) {
+		claims["pad"] = strings.Repeat("p", 5000)
+	}})
+	if len(token) <= 4096 {
+		t.Fatalf("the signed token is %d bytes, want more than 4096", len(token))
+	}
+	call := newRateCall(t, s.base)
+	const a, b = "198.51.100.60", "198.51.100.61"
+	allowed, _, body := rateUntilRefused(t, call, "/api/v1/me", a, token, http.StatusOK, 70)
+	if allowed < 60 {
+		t.Fatalf("the token bucket allowed %d requests, want at least 60: %.200s", allowed, body)
+	}
+	if status, _, body := call.get("/api/v1/me", b, token); status != http.StatusTooManyRequests {
+		t.Fatalf("the same long token from another source: %d %.200s", status, body)
 	}
 }
 
