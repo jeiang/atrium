@@ -805,7 +805,7 @@ func (l *Lease) newClient(timeout time.Duration, follow bool, base *url.URL) (*h
 	if follow && base != nil {
 		guardOrigin(client, base)
 	}
-	return client, nil
+	return l.reporting(client), nil
 }
 
 // Transport returns a client for a connection whose destinations are not a
@@ -910,6 +910,13 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, results []Res
 	if state == NeedsReauth {
 		reauthAt = now
 	}
+	var previous State
+	if err := s.d.Read.QueryRowContext(ctx, "SELECT state FROM connections WHERE id = ? AND revision = ?", id, revision).Scan(&previous); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return s.Get(ctx, id)
+		}
+		return View{}, err
+	}
 	res, err := s.d.Write.ExecContext(ctx,
 		"UPDATE connections SET state = ?, reason = ?, checked_at = ?, last_ok_at = COALESCE(?, last_ok_at), reauth_at = COALESCE(?, reauth_at), results_json = ?, updated_at = ? "+
 			"WHERE id = ? AND revision = ?",
@@ -924,6 +931,7 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, results []Res
 	if n == 0 {
 		return s.Get(ctx, id)
 	}
+	s.announce(ctx, id, previous, state, reason)
 	return s.Get(ctx, id)
 }
 
@@ -1020,9 +1028,10 @@ func (s *Store) save(ctx context.Context, id ID, current View, cand Candidate, r
 		return err
 	}
 	now := s.stamp()
-	return s.d.WithTx(ctx, func(tx *sql.Tx) error {
+	var previous State
+	err = s.d.WithTx(ctx, func(tx *sql.Tx) error {
 		var revision int64
-		if err := tx.QueryRowContext(ctx, "SELECT revision FROM connections WHERE id = ?", id).Scan(&revision); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT revision, state FROM connections WHERE id = ?", id).Scan(&revision, &previous); err != nil {
 			return err
 		}
 		if revision != current.revisionValue() {
@@ -1071,6 +1080,11 @@ func (s *Store) save(ctx context.Context, id ID, current View, cand Candidate, r
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	s.announce(ctx, id, previous, state, reason)
+	return nil
 }
 
 func (s *Store) Disconnect(ctx context.Context, id ID) error {
@@ -1102,9 +1116,10 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 	var (
 		currentRevision int64
 		resultsJSON     string
+		previous        State
 	)
-	if err := s.d.Read.QueryRowContext(ctx, "SELECT revision, results_json FROM connections WHERE id = ?", id).
-		Scan(&currentRevision, &resultsJSON); err != nil {
+	if err := s.d.Read.QueryRowContext(ctx, "SELECT revision, results_json, state FROM connections WHERE id = ?", id).
+		Scan(&currentRevision, &resultsJSON, &previous); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return UnknownID(id)
 		}
@@ -1136,7 +1151,11 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 	_, err = s.d.Write.ExecContext(ctx,
 		"UPDATE connections SET state = ?, reason = ?, checked_at = ?, results_json = ?, updated_at = ? WHERE id = ? AND revision = ?",
 		state, reason, now, string(raw), now, id, revision)
-	return err
+	if err != nil {
+		return err
+	}
+	s.announce(ctx, id, previous, state, reason)
+	return nil
 }
 
 func (s *Store) candidateLease(ctx context.Context, current View, cand Candidate) (*Lease, error) {

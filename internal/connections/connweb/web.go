@@ -8,10 +8,12 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/connections"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -29,6 +31,13 @@ func Templates() fs.FS {
 }
 
 const path = "/settings/connections"
+
+const (
+	checkEvery   = 24 * time.Hour
+	recheckAfter = 5 * time.Minute
+)
+
+var log = logx.Logger("atrium.connections.web")
 
 const googlePath = path + "/google"
 
@@ -64,6 +73,62 @@ func Module(r chi.Router, d *web.Deps) {
 	d.Authenticated(http.MethodGet, googlePath+"/callback", h.googleCallback)
 	d.Authenticated(http.MethodPost, googlePath+"/paste", h.googlePaste)
 	d.Authenticated(http.MethodPost, googlePath+"/test", h.googleTest)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		watch(d)
+	}()
+	d.OnClose(func() { <-done })
+}
+
+func watch(d *web.Deps) {
+	ctx, cancel := context.WithCancel(d.Ctx)
+	defer cancel()
+	go func() {
+		<-d.Stopping
+		cancel()
+	}()
+	store, err := connections.New(d.DB, d.State.Host(), connections.DefaultRegistry())
+	if err != nil {
+		log.Warn("connection health check failed", logx.Err, err.Error())
+		return
+	}
+	checked := map[connections.ID]time.Time{}
+	if err := store.CheckStale(ctx); err != nil && ctx.Err() == nil {
+		log.Warn("connection health check failed", logx.Err, err.Error())
+	}
+	t := time.NewTicker(checkEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if err := store.CheckAll(ctx); err != nil && ctx.Err() == nil {
+				log.Warn("connection health check failed", logx.Err, err.Error())
+			}
+		case failed := <-connections.Failed():
+			if time.Since(checked[failed.ID]) < recheckAfter || !working(ctx, d, failed.ID) {
+				continue
+			}
+			view, err := store.Test(ctx, failed.ID)
+			if err != nil {
+				if ctx.Err() == nil {
+					log.Warn("connection health check failed", logx.Integration, string(failed.ID), logx.Err, err.Error())
+				}
+				continue
+			}
+			if view.State == connections.OK {
+				checked[failed.ID] = time.Now()
+			}
+		}
+	}
+}
+
+func working(ctx context.Context, d *web.Deps, id connections.ID) bool {
+	var state string
+	err := d.DB.Read.QueryRowContext(ctx, "SELECT state FROM connections WHERE id = ?", id).Scan(&state)
+	return err != nil || state != string(connections.Failing) && state != string(connections.NeedsReauth)
 }
 
 type handlers struct{ d *web.Deps }

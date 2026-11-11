@@ -65,6 +65,9 @@ type Definition struct {
 	Kind     Kind
 	Validate func(Candidate) error
 	Test     func(context.Context, *Lease, []Capability) ([]Result, error)
+	// Silent replaces Test during a periodic health pass when the explicit
+	// test has a visible side effect, such as a diagnostic push.
+	Silent func(context.Context, *Lease, []Capability) ([]Result, error)
 }
 
 type Registry struct {

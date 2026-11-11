@@ -17,7 +17,33 @@ func init() {
 		Kind:     KindWebPush,
 		Validate: validatePushConnection,
 		Test:     testPushConnection,
+		Silent:   silentPushConnection,
 	})
+}
+
+func silentPushConnection(ctx context.Context, lease *connections.Lease, _ []connections.Capability) ([]connections.Result, error) {
+	subject := strings.TrimSpace(connectionConfig(lease)["subject"])
+	if subject == "" {
+		return []connections.Result{{Capability: "delivery", State: connections.Unconfigured, Reason: "no subject is set"}}, nil
+	}
+	if err := subjectCheck(subject); err != nil {
+		return []connections.Result{{Capability: "delivery", State: connections.Failing, Reason: err.Error()}}, nil
+	}
+	if _, err := vapidKeys(lease); err != nil {
+		return []connections.Result{{Capability: "delivery", State: connections.Failing, Reason: err.Error()}}, nil
+	}
+	d := lease.DB()
+	if d == nil {
+		return nil, errors.New("web push health needs a writable database")
+	}
+	var devices int
+	if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM push_subscriptions").Scan(&devices); err != nil {
+		return nil, err
+	}
+	if devices == 0 {
+		return []connections.Result{{Capability: "delivery", State: connections.Unconfigured, Reason: "no push subscriptions"}}, nil
+	}
+	return []connections.Result{{Capability: "delivery", State: connections.OK, Reason: "the VAPID key and subject are valid"}}, nil
 }
 
 func validatePushConnection(c connections.Candidate) error {
