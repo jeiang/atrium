@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
-	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/testutil/llmstub"
 )
 
@@ -542,7 +541,6 @@ func TestMailUndoneActionsDoNotRunAgain(t *testing.T) {
 			t.Fatal(err)
 		}
 		setEnv(t, settingEnv(contacts.DirKey), contactsDir)
-		setEnv(t, flagEnv(module.Contacts), "true")
 		uid := m.add("INBOX", "Question about your account", from, "target", "Can you confirm the transfer?")
 		m.run(t, "sync")
 		action := m.scalar(t, "SELECT CAST(id AS TEXT) FROM effects WHERE origin = 'mail_auto' AND operation = 'flag'")
