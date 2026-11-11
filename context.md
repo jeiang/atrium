@@ -276,33 +276,55 @@ behavior-parity target.
   recording the retired key id in `db_key_history`; it refuses unless it can
   take exclusive access, so the atrium units and timers using the database must be stopped), writes encrypted
   DB-only backups through the SQLite backup API, runs SQL from standard
-  input, and checks integrity with FTS5 and vec0 counts. The v2 schema is
-  the baseline in `internal/db/schema/` (migration 1, frozen since v2
-  shipped to artemis on 2026-11-08) plus additive migrations in
-  `internal/db/migrate.go`; migration 2 adds `threads.tainted_at`,
-  migration 3 the package tracker columns and `package_events`,
-  migration 4 `push_subscriptions`, migration 5 the taint kinds
-  `threads.taint_private` and `threads.taint_web` (threads tainted before
-  it get both), and migration 6 `threads.marks`, a bitmask (untrusted 1,
-  pii 2, messages 4, personal 8) backfilled from the taint columns
-  (`taint_web` → untrusted, `taint_private` → pii, messages and personal),
-  migration 7 the knowledge store: `kb_records`, its FTS5 table and
-  triggers, `projects.private` and one `embed_kb_<generation>` vec0 table per
-  existing embedding generation, migration 8 `export_pages`, the
-  record-to-page mapping of the knowledge export, migration 9
-  `ops_samples`, the server-ops sampler's typed samples (14-day retention),
-  and migration 10 `ops_findings`, the worker's findings; migration 10 also
-  deletes the ops rows the sampler and worker once wrote to `kb_records`.
-  Migration 11 adds `memory_state` and copies the memory backfill
-  timestamp into it from the `backfill_done` settings row, which is no
-  longer a setting.
-  `taint_private` and `taint_web` are dormant after migration 6: no longer
+  input, and checks integrity with FTS5 and vec0 counts. The v3 baseline is
+  the schema in `internal/db/schema/`, created by migration 1 as a single
+  step. The schema files are edited directly until the freeze in phase 11;
+  every later change is an additive migration in `internal/db/migrate.go`.
+  A database with tables but no v3 marker is refused before any write with
+  a message naming `atrium db import-v2`. `atrium db import-v2 <path>`
+  copies a v2 database at schema version 11 into the configured database,
+  which must be a fresh v3 database (created through the normal boot path
+  when absent); the source is opened read-only and never written. It
+  refuses a source that already has the v3 marker, is not at version 11,
+  has an embedding index rebuild in progress, or has a mail or agent write
+  in flight (`auto_actions` or `agent_writes` held, a `proposal_actions`
+  hold with a live lease, a `drafts` send); it refuses a destination that
+  already holds rows in an imported table. Everything is copied in one
+  transaction with foreign keys enforced and `PRAGMA foreign_key_check` at
+  the end, so a failed copy leaves the destination without imported rows.
+  Carried with
+  their ids: mail accounts, mailboxes, messages and the learned mail data
+  (rules, corrections, decisions, flag decisions, the action ledger with
+  its undo state, write resolutions, live state and baseline, snoozes,
+  drafts, scans, commitments, open loops and overrides, packages and their
+  events, watch dismissals, rebalance and event candidates), the active
+  generation's message vectors and index row (URL, model and dimension
+  kept), settings, secrets (the row is readable only with the same
+  database key, since the database encrypts it), notification channels,
+  push subscriptions and attention snoozes, knowledge records (their
+  `embedded` flag reset so vectors rebuild), projects, threads with their
+  messages, files, plans and queue, agent profile, skills, operator-edited
+  subagents, jobs, agent events, tasks, proposals and their actions, agent
+  writes, media channels, the seen list and media state, and the current
+  calendar month's usage rows. Rebuilt: `message_fts`, `thread_fts` and
+  `kb_fts`. Not carried: run history (`runs`, `run_events`, `tool_calls`,
+  `tool_results`, `context_ledger`, `context_projections`, `job_runs`),
+  memory (rebuilt), Notion and wiki state (re-synced), knowledge and Notion
+  vectors (rebuilt), notifications, auth sessions and login links, OAuth
+  handshakes, action links, the settings audit, the mail event log, ops
+  data, endpoint probes, integration health, nightly observations,
+  `db_key_history` (old backups are read with the old key),
+  `module_migrations` and the source's `schema_migrations`. References to
+  uncarried rows are nulled (`thread_messages.run_id`, `usage.run_id`,
+  `agent_writes.run_id`, `threads.parent_run_id`, `jobs.last_run_id`,
+  `kb_records.source_run_id`, `thread_files.run_id`, `thread_plans.run_id`,
+  `thread_queue.run_id`). The importer prints one line per table with its
+  carried, rebuilt or dropped row count and names any settings key it
+  carries that v3 does not know. v1 data reaches v3 through v2: the v2
+  binary imports it first.
+  `taint_private` and `taint_web` are dormant: no longer
   read or written, and kept because dropping them would rewrite the table.
-  `atrium db import-v1` is the only path from a v1
-  database: it copies the learned rules, corrections, routing decisions and
-  the unsent message history their derivation reads into a fresh v2
-  database; mail, threads, drafts, proposals, media, Notion, calendar and
-  settings are rebuilt by re-sync or re-entry. Every settings write and secret change appends
+  Every settings write and secret change appends
   a row to the append-only `settings_audit` table (old and new value, or
   only `changed` for secrets; actor and source), listed read-only in
   `/activity`. Known secret values are scrubbed from log output and
@@ -312,10 +334,7 @@ behavior-parity target.
   action touches no mailbox and appends actor, source, outcome and the prior
   error to the append-only `write_resolutions` table.
 - Modules are toggled at runtime. The built-in modules are always compiled
-  in; a build can add external compile-time modules that register through
-  the public `sdk` package (`withModules` in the Nix package), each with its
-  own `<name>_enabled` flag and migrations recorded in `module_migrations`.
-  Core (settings, secrets,
+  in. Core (settings, secrets,
   `db`, `serve`, the About, review and activity pages) is always on; mail,
   calendar, contacts, Notion, media, assistant, notifications and Grafana each
   have a `<name>_enabled` setting. A module is on only when its flag is true

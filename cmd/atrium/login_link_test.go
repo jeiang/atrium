@@ -356,17 +356,14 @@ func TestLoginLinkFirstRunSetupThenOIDCSignIn(t *testing.T) {
 	linkExpect(t, user.get("/settings/auth"), http.StatusOK, "Active")
 }
 
-func TestLoginLinkMigratesAGoldenDatabaseCopy(t *testing.T) {
+func TestLoginLinkWorksOnAGoldenDatabaseCopy(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	setEnv(t, "ATRIUM_DB", path)
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", "https://atrium.example")
-	var imported, importErrs bytes.Buffer
-	if code := defaultApp(t).Run(context.Background(), []string{"db", "import-v1", filepath.Join(golden.Dir(), "atrium.db")}, &imported, &importErrs); code != cli.ExitOK {
-		t.Fatalf("import-v1 on a golden copy: %d %s", code, importErrs.String())
-	}
+	copyFile(t, filepath.Join(golden.Dir(), "world.db"), path)
 
 	counts := func(d *db.DB) map[string]int {
 		out := map[string]int{}

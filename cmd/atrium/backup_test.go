@@ -21,7 +21,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	dbkey "github.com/jeiang/atrium/internal/db/key"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/testutil/golden"
 )
 
 func backupEnv(t *testing.T, dir string) {
@@ -386,7 +385,7 @@ func TestBackupRestoreEncryptedDatabase(t *testing.T) {
 	}
 }
 
-func TestBackupRestorePlaintextMigratesOlderArchiveAndRefusesNewer(t *testing.T) {
+func TestBackupRestorePlaintextAndRefusesNewer(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	backupEnv(t, dir)
@@ -394,15 +393,17 @@ func TestBackupRestorePlaintextMigratesOlderArchiveAndRefusesNewer(t *testing.T)
 	if err := os.MkdirAll(filepath.Dir(live), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	copyFile(t, filepath.Join(golden.Dir(), "atrium.db"), live)
-	writeStateFiles(t, filepath.Dir(live), map[string]string{"files/threads/9/a.txt": "plain file"})
 	env := []string{"ATRIUM_DB=" + live}
+	if got := runProcess(t, "settings set tz UTC", env...); got.code != cli.ExitOK {
+		t.Fatalf("create database: exit %d stderr %q", got.code, got.stderr)
+	}
+	writeStateFiles(t, filepath.Dir(live), map[string]string{"files/threads/9/a.txt": "plain file"})
 	archive := filepath.Join(dir, "plain.backup")
 	if got := runProcess(t, "backup "+archive, env...); got.code != cli.ExitOK || !strings.Contains(got.stdout, "plaintext") {
 		t.Fatalf("backup exited %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
 	}
-	if !bytes.Contains(archiveEntries(t, archive)["header.json"], []byte(`"schema":0`)) {
-		t.Fatalf("the golden Phase A database should archive at schema 0: %s", archiveEntries(t, archive)["header.json"])
+	if !bytes.Contains(archiveEntries(t, archive)["header.json"], []byte(`"schema":1`)) {
+		t.Fatalf("the v3 database should archive at schema 1: %s", archiveEntries(t, archive)["header.json"])
 	}
 	if keyed := runProcess(t, "restore --verify "+archive, "ATRIUM_DB="+live, "ATRIUM_DB_KEY="+rightKeyHex); keyed.code != cli.ExitError || !strings.Contains(keyed.stderr, string(backup.ErrPlaintextKeyed)) {
 		t.Errorf("verify of a plaintext archive with a key configured exited %d, stderr %q", keyed.code, keyed.stderr)
@@ -410,7 +411,7 @@ func TestBackupRestorePlaintextMigratesOlderArchiveAndRefusesNewer(t *testing.T)
 	fresh := filepath.Join(dir, "fresh", "atrium.db")
 	freshEnv := []string{"ATRIUM_DB=" + fresh}
 	verify := runProcess(t, "restore --verify "+archive, freshEnv...)
-	if verify.code != cli.ExitOK || !strings.Contains(verify.stdout, "migrated to") || !strings.Contains(verify.stdout, "encryption: plaintext") {
+	if verify.code != cli.ExitOK || !strings.Contains(verify.stdout, "verified; nothing was written") || !strings.Contains(verify.stdout, "encryption: plaintext") {
 		t.Fatalf("verify exited %d, stdout %q, stderr %q", verify.code, verify.stdout, verify.stderr)
 	}
 	if _, err := os.Stat(filepath.Dir(fresh)); err == nil {

@@ -32,7 +32,6 @@ import (
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
-	"github.com/jeiang/atrium/sdk"
 )
 
 var version = "dev"
@@ -40,7 +39,7 @@ var version = "dev"
 func main() {
 	ctx, stop := cli.SignalContext(context.Background())
 	reg := settings.New()
-	code := newApp(config.OS, reg, config.NewState(reg), sdk.Modules()).Run(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	code := newApp(config.OS, reg, config.NewState(reg), nil).Run(ctx, os.Args[1:], os.Stdout, os.Stderr)
 	stop()
 	os.Exit(code)
 }

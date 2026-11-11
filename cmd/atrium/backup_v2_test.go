@@ -88,7 +88,7 @@ func TestRestoreRefusesV1Archive(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := runProcess(t, "restore --verify "+archive, env...)
-	if got.code == cli.ExitOK || !strings.Contains(got.stderr, "v1 archive") || !strings.Contains(got.stderr, "import-v1") {
+	if got.code == cli.ExitOK || !strings.Contains(got.stderr, "v1 archive") {
 		t.Fatalf("restore of a v1 archive: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 }

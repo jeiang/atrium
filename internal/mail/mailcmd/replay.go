@@ -46,6 +46,9 @@ func (o Options) replay(env *cli.Env, account string, limit int) int {
 		return cli.Fail(env, openError(cfg.DBPath, err))
 	}
 	defer func() { _ = q.Close() }()
+	if err := db.RequireV3(env.Ctx, q); err != nil {
+		return cli.Fail(env, err)
+	}
 	state := config.From(env.Ctx)
 	if err := state.LoadStoredAccounts(env.Ctx, q); err != nil {
 		return cli.Fail(env, err)

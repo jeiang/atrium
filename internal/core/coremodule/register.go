@@ -88,7 +88,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 			settingscmd.Command(mc.Env, m.Guard),
 			loginlink.Command(),
 			secretscmd.Command(mc.Env),
-			dbcmd.Command(mc.Env),
+			dbcmd.Command(mc.Env, m.Now),
 			kbcmd.Command(mc.Env),
 			backup.BackupCommand(),
 			backup.RestoreCommand(),

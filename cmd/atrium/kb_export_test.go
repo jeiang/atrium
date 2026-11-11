@@ -275,57 +275,6 @@ func runExport(t *testing.T, f *fixture, d *db.DB) {
 	}
 }
 
-func TestSchemaVersionSevenDatabaseMigratesToExportPages(t *testing.T) {
-	dir := t.TempDir()
-	path := filepath.Join(dir, "atrium.db")
-	if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
-		t.Fatalf("settings list: exit %d %s", code, stderr)
-	}
-	d := mustConnect(t, path)
-	for _, stmt := range []string{
-		"DROP TABLE export_pages",
-		"DELETE FROM schema_migrations WHERE version = 8",
-	} {
-		if _, err := d.Write.Exec(stmt); err != nil {
-			t.Fatal(err)
-		}
-	}
-	_ = d.Close()
-	if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
-		t.Fatalf("settings list on a version 7 database: exit %d %s", code, stderr)
-	}
-	check := mustConnect(t, path)
-	var version int
-	if err := check.Read.QueryRow("SELECT MAX(version) FROM schema_migrations").Scan(&version); err != nil || version != db.LatestSchemaVersion() {
-		t.Errorf("schema version = %d, %v; want %d", version, err, db.LatestSchemaVersion())
-	}
-	var pages int
-	if err := check.Read.QueryRow("SELECT COUNT(*) FROM export_pages").Scan(&pages); err != nil || pages != 0 {
-		t.Errorf("export_pages after migration = %d, %v; want an empty table", pages, err)
-	}
-	_ = check.Close()
-	if code, stdout, stderr := runIn(t, dir, "db", "check"); code != cli.ExitOK || !strings.Contains(stdout, "integrity_check: ok") {
-		t.Fatalf("db check: exit %d stdout %q stderr %q", code, stdout, stderr)
-	}
-	fresh := t.TempDir()
-	if code, _, stderr := runIn(t, fresh, "settings", "list"); code != cli.ExitOK {
-		t.Fatalf("settings list on a fresh database: exit %d %s", code, stderr)
-	}
-	migrated, created := schemaDump(t, path), schemaDump(t, filepath.Join(fresh, "atrium.db"))
-	if !slices.Equal(migrated, created) {
-		for _, line := range migrated {
-			if !slices.Contains(created, line) {
-				t.Errorf("only in the migrated schema: %s", line)
-			}
-		}
-		for _, line := range created {
-			if !slices.Contains(migrated, line) {
-				t.Errorf("only in the fresh schema: %s", line)
-			}
-		}
-	}
-}
-
 func TestKnowledgeExportsToNotionWithProvenance(t *testing.T) {
 	fake := &exportNotion{}
 	_, f, d := exportFixture(t, fake)
