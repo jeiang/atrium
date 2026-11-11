@@ -261,8 +261,9 @@ func TestPrivateProjectKnowledgeStaysInItsProject(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--thread", strconv.FormatInt(inside, 10), "--text", "remember the boiler code"); ran.code != cli.ExitOK {
 		t.Fatalf("kb_write in the project: %d %s", ran.code, ran.stderr)
 	}
+	var recordID int64
 	var recordProject *int64
-	if err := d.Read.QueryRow("SELECT project_id FROM kb_records").Scan(&recordProject); err != nil || recordProject == nil || *recordProject != projectID {
+	if err := d.Read.QueryRow("SELECT id, project_id FROM kb_records").Scan(&recordID, &recordProject); err != nil || recordProject == nil || *recordProject != projectID {
 		t.Fatalf("record project = %v, %v; want %d", recordProject, err, projectID)
 	}
 
@@ -289,5 +290,53 @@ func TestPrivateProjectKnowledgeStaysInItsProject(t *testing.T) {
 	var stored int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM thread_messages WHERE thread_id = ?", outside).Scan(&stored); err != nil || stored != before {
 		t.Errorf("refused reference stored %d messages (%v), want the %d already there", stored, err, before)
+	}
+
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("g1", "kb_get", map[string]any{"ids": []any{recordID}})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("nothing")))
+	if ran := runApp(t, "agent", "run", "--text", "get the boiler code"); ran.code != cli.ExitOK {
+		t.Fatalf("outside get: %d %s", ran.code, ran.stderr)
+	}
+	if results := kbResults(t, d, latestThread(t, dir), "g1"); len(results) != 0 {
+		t.Errorf("outside kb_get returned %d records, want none", len(results))
+	}
+
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("g2", "kb_get", map[string]any{"ids": []any{recordID}})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("got it")))
+	if ran := runApp(t, "agent", "run", "--thread", strconv.FormatInt(inside, 10), "--text", "get the boiler code"); ran.code != cli.ExitOK {
+		t.Fatalf("inside get: %d %s", ran.code, ran.stderr)
+	}
+	results := kbResults(t, d, inside, "g2")
+	if len(results) != 1 {
+		t.Fatalf("inside kb_get returned %d records, want one", len(results))
+	}
+	if got, _ := results[0].(map[string]any); got["body"] != "The boiler code is 4417." {
+		t.Errorf("inside kb_get body = %v", got["body"])
+	}
+
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("r1", "kb_retract", map[string]any{"id": recordID, "reason": "stale"})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("cannot")))
+	if ran := runApp(t, "agent", "run", "--text", "retract the boiler code"); ran.code != cli.ExitOK {
+		t.Fatalf("outside retract: %d %s", ran.code, ran.stderr)
+	}
+	var refusal string
+	if err := d.Read.QueryRow("SELECT COALESCE(error, '') FROM tool_calls WHERE name = 'kb_retract' ORDER BY id DESC LIMIT 1").Scan(&refusal); err != nil {
+		t.Fatalf("outside retract call: %v", err)
+	}
+	if !strings.Contains(refusal, "belongs to another project") {
+		t.Errorf("outside retract = %q, want a project refusal", refusal)
+	}
+	var retracted sql.NullFloat64
+	if err := d.Read.QueryRow("SELECT retracted_at FROM kb_records WHERE id = ?", recordID).Scan(&retracted); err != nil || retracted.Valid {
+		t.Fatalf("outside retract changed the record: %v %v", retracted, err)
+	}
+
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("r2", "kb_retract", map[string]any{"id": recordID, "reason": "stale"})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("retracted")))
+	if ran := runApp(t, "agent", "run", "--thread", strconv.FormatInt(inside, 10), "--text", "retract the boiler code"); ran.code != cli.ExitOK {
+		t.Fatalf("inside retract: %d %s", ran.code, ran.stderr)
+	}
+	if err := d.Read.QueryRow("SELECT retracted_at FROM kb_records WHERE id = ?", recordID).Scan(&retracted); err != nil || !retracted.Valid {
+		t.Fatalf("inside retract left the record live: %v %v", retracted, err)
 	}
 }

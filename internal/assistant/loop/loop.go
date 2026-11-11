@@ -57,7 +57,7 @@ type Runner struct {
 	Registry *registry.Registry
 	Ledger   *ledger.Store
 	MailOpen mail.OpenFunc
-	Profile  func(ctx context.Context, q db.Querier) (string, error)
+	Profile  func(ctx context.Context, q db.Querier, projectID int64) (string, error)
 }
 
 type Options struct {
