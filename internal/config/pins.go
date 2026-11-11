@@ -47,7 +47,7 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 	}
 	for _, d := range defs {
 		entry, known := settings.ImportEntryFor(d.Key)
-		if known && entry.Class == settings.ImportHost && !(d.Module == "db" && d.Key == "key") {
+		if known && entry.Class == settings.ImportHost && (d.Module != "db" || d.Key != "key") {
 			continue
 		}
 		if known && entry.Runtime {

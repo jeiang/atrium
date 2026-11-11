@@ -28,17 +28,17 @@ func validateConnection(c connections.Candidate) error {
 	var cfg map[string]string
 	if len(c.Config) > 0 {
 		if err := json.Unmarshal(c.Config, &cfg); err != nil {
-			return fmt.Errorf("Notion config: %w", err)
+			return fmt.Errorf("notion config: %w", err)
 		}
 	}
 	for key, value := range cfg {
 		switch key {
 		case "api":
 			if err := httpURL(value); err != nil {
-				return fmt.Errorf("Notion api %w", err)
+				return fmt.Errorf("notion api %w", err)
 			}
 		default:
-			return fmt.Errorf("Notion config has no %s field", key)
+			return fmt.Errorf("notion config has no %s field", key)
 		}
 	}
 	return nil
