@@ -458,3 +458,38 @@ S: {t} NO STORE refused
 		t.Fatalf("the partial move dropped the copied evidence: %s", after)
 	}
 }
+
+func TestMailFolderCreateRecordsAPartialWhenSubscribeFails(t *testing.T) {
+	fx := newFolderFixture(t, "live")
+	script := folderLogin + folderList("") + folderList("") +
+		`C: {t} CREATE "News"
+S: {t} OK CREATE completed
+C: {t} SUBSCRIBE "News"
+S: {t} NO SUBSCRIBE refused
+` + folderClose
+	server, ca := imapscript.ServeTLS(t, imapscript.MustParse(t, script))
+	t.Setenv("ATRIUM_IMAP_ADDR", server.Addr())
+	t.Setenv("ATRIUM_IMAP_CA", ca)
+
+	fx.api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "mail_folder_create", map[string]any{"account": "icloud", "name": "News"})))
+	fx.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
+	if ran := runApp(t, "agent", "run", "--text", "create a news folder"); ran.code != cli.ExitOK {
+		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
+	}
+	d, err := db.Connect(filepath.Join(fx.dir, "atrium.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	var state, undo string
+	if err := d.Read.QueryRow("SELECT state, undo_json FROM effects WHERE direction = 'forward' AND operation = 'mail_folder_create' ORDER BY id DESC LIMIT 1").
+		Scan(&state, &undo); err != nil {
+		t.Fatal(err)
+	}
+	if state != "partial" {
+		t.Fatalf("folder create state = %q, want partial; undo=%s", state, undo)
+	}
+	if !strings.Contains(undo, `"op":"mail_folder_delete"`) || !strings.Contains(undo, `"imap_name":"News"`) {
+		t.Fatalf("the created folder has no delete inverse: %s", undo)
+	}
+}

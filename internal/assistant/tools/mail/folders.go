@@ -199,6 +199,15 @@ func mailFolderCreate(ctx context.Context, tc *tool.Context, args tool.Args) (an
 		return mailops.Error("the folder is not visible after creation")
 	})
 	if err != nil {
+		if created && !mailops.OutcomeUnknown(err) {
+			_ = tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
+				State: ledger.Partial, Target: target,
+				After: jsonOf(map[string]any{"account": account, "imap_name": imapName}),
+				Undo:  jsonOf(map[string]any{"op": UndoFolderDelete, "account": account, "imap_name": imapName}),
+				Error: err.Error(),
+			}, nil)
+			return nil, mailWriteRefused(err)
+		}
 		state := ledger.Failed
 		if mailops.OutcomeUnknown(err) {
 			state = ledger.Unknown
