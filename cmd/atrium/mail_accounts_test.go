@@ -169,5 +169,3 @@ func insertMailAccount(t *testing.T, d *db.DB, id, preset, login, method string)
 		}
 	}
 }
-
-
