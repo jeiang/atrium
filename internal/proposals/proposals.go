@@ -7,6 +7,7 @@ import (
 	"errors"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/proposals/actions"
 )
 
@@ -79,13 +80,30 @@ func (r *Registry) Known(name string) bool {
 type Querier = db.Querier
 
 func Known(ctx context.Context, q Querier, fingerprint string) (bool, error) {
+	var id int64
 	var status string
-	var unresolved bool
-	err := q.QueryRowContext(ctx, "SELECT status, "+actions.Unresolved("a")+" FROM proposals WHERE fingerprint = ?", fingerprint).Scan(&status, &unresolved)
+	err := q.QueryRowContext(ctx, "SELECT id, status FROM proposals WHERE fingerprint = ?", fingerprint).Scan(&id, &status)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
-	return err == nil && (status != Failed || unresolved), err
+	if err != nil {
+		return false, err
+	}
+	if status != Failed {
+		return true, nil
+	}
+	blocked, err := ledger.ProposalBlocked(ctx, q, id)
+	if err != nil {
+		return false, err
+	}
+	if blocked {
+		return true, nil
+	}
+	var unresolved bool
+	if err := q.QueryRowContext(ctx, "SELECT "+actions.Unresolved("a")+" FROM proposals WHERE id = ?", id).Scan(&unresolved); err != nil {
+		return false, err
+	}
+	return unresolved, nil
 }
 
 var OnCreate func(ctx context.Context, d *db.DB, p *Proposal)

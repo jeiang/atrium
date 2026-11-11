@@ -204,7 +204,7 @@ func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	outcome, err := s.pipeline.Undo(detached(r), id)
+	outcome, err := s.pipeline.Undo(detached(r), id, proposals.Resolver{Actor: "operator", Source: "ui"})
 	var refused proposals.ProposalError
 	if errors.As(err, &refused) {
 		s.card(w, r, id, toast("error", "Not undone", err.Error()))

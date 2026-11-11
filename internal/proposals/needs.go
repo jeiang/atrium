@@ -6,7 +6,6 @@ import (
 	"errors"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/ledger"
 )
 
 func DismissKind(ctx context.Context, q db.Querier, kind string, ts float64) error {
@@ -21,13 +20,19 @@ func IDByFingerprint(ctx context.Context, q db.Querier, fingerprint string) (int
 }
 
 func NeedsCount(ctx context.Context, q db.Querier) (int, error) {
-	var n int
-	err := q.QueryRowContext(ctx,
-		"SELECT (SELECT COUNT(*) FROM proposals WHERE status = 'pending') + "+
-			"(SELECT COUNT(*) FROM proposals p WHERE p.status <> 'pending' AND EXISTS "+
-			"(SELECT 1 FROM proposal_actions a WHERE a.proposal_id = p.id AND "+ledger.BlockedSQL("a")+"))").Scan(&n)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, nil
+	var pending int
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM proposals WHERE status = 'pending'").Scan(&pending); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, err
 	}
-	return n, err
+	ids, err := blockedIDs(ctx, q)
+	if err != nil || len(ids) == 0 {
+		return pending, err
+	}
+	var blocked int
+	err = q.QueryRowContext(ctx, "SELECT COUNT(*) FROM proposals WHERE status <> 'pending' AND id IN ("+
+		placeholders(len(ids))+")", int64Args(ids)...).Scan(&blocked)
+	return pending + blocked, err
 }

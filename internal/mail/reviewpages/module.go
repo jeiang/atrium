@@ -79,20 +79,20 @@ func Module(o Options) web.Module {
 		now := wallClock
 		registry := proposals.NewRegistry()
 		syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: now}
-		handlers.Register(registry, handlers.Deps{DB: d.DB, Open: open, Syncer: syncer, Now: now, Env: d.Env, Resume: func(ctx context.Context, runID int64) error {
+		effects := ledger.NewStore(d.DB, now)
+		if o.Ledger != nil {
+			effects = o.Ledger(d.DB, d.Cfg)
+		}
+		handlers.Register(registry, handlers.Deps{DB: d.DB, Ledger: effects, Open: open, Syncer: syncer, Now: now, Env: d.Env, Resume: func(ctx context.Context, runID int64) error {
 			if d.ResumeRun == nil {
 				return proposals.ProposalError("the assistant module is not running")
 			}
 			return d.ResumeRun(ctx, runID)
 		}})
-		effects := ledger.NewStore(d.DB, now)
-		if o.Ledger != nil {
-			effects = o.Ledger(d.DB, d.Cfg)
-		}
 		s := &service{
 			deps:     d,
 			now:      now,
-			pipeline: &proposals.Pipeline{DB: d.DB, Registry: registry, Now: now, Enabled: o.Enabled},
+			pipeline: &proposals.Pipeline{DB: d.DB, Ledger: effects, Registry: registry, Now: now, Enabled: o.Enabled},
 			live:     &live.Live{DB: d.DB, Cfg: d.Cfg, Registry: registry, Now: now},
 			open:     open,
 			ledger:   effects,

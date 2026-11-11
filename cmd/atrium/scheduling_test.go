@@ -272,7 +272,7 @@ func TestCalendarUnknownWriteStaysBlocked(t *testing.T) {
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
 	var state string
-	if err := d.Read.QueryRow("SELECT state FROM proposal_actions WHERE proposal_id = ? ORDER BY id DESC LIMIT 1", update).Scan(&state); err != nil {
+	if err := d.Read.QueryRow("SELECT state FROM effects WHERE proposal_id = ? AND direction = 'forward' ORDER BY id DESC LIMIT 1", update).Scan(&state); err != nil {
 		t.Fatal(err)
 	}
 	if state != "unknown" {
@@ -296,7 +296,8 @@ func TestCalendarCreateUnknownWriteBlocksUntilResolved(t *testing.T) {
 	unknown := func() int {
 		t.Helper()
 		var n int
-		if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposal_actions WHERE proposal_id = ? AND state = 'unknown'", id).Scan(&n); err != nil {
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects e WHERE e.proposal_id = ? AND e.direction = 'forward' "+
+			"AND e.state IN ('intent','unknown','partial') AND NOT EXISTS (SELECT 1 FROM effect_resolutions r WHERE r.effect_id = e.id)", id).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		return n
@@ -310,7 +311,7 @@ func TestCalendarCreateUnknownWriteBlocksUntilResolved(t *testing.T) {
 	if srv.PutAttempts != 1 {
 		t.Fatalf("the refused approve reached the remote: %d attempts", srv.PutAttempts)
 	}
-	if got := runApp(t, "proposals", "resolve", id); got.code != cli.ExitOK {
+	if got := runApp(t, "proposals", "resolve", id, "--outcome", "applied"); got.code != cli.ExitOK {
 		t.Fatalf("proposals resolve: %d %q %q", got.code, got.stdout, got.stderr)
 	}
 	if unknown() != 0 {

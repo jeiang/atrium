@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/executors"
 	"github.com/jeiang/atrium/internal/mail/openloops"
@@ -20,6 +21,7 @@ import (
 
 type Deps struct {
 	DB     *db.DB
+	Ledger *ledger.Store
 	Open   mail.OpenFunc
 	Syncer *mailsync.Syncer
 	Now    func() float64
@@ -28,10 +30,21 @@ type Deps struct {
 }
 
 func Register(r *proposals.Registry, deps Deps) {
+	if deps.Ledger == nil {
+		deps.Ledger = ledger.NewStore(deps.DB, deps.Now)
+	}
 	executors.Register(r, &executors.Executors{DB: deps.DB, Open: deps.Open, Now: deps.Now}, deps.Syncer, module.Mail)
-	calendar.Register(r, &calendar.Proposals{DB: deps.DB, Now: deps.Now, Env: deps.Env}, module.Calendar)
-	openloops.Register(r, &openloops.Reminders{DB: deps.DB, Now: deps.Now}, module.Mail)
-	(&approval.Executor{DB: deps.DB, Env: deps.Env, Now: deps.Now, MailOpen: deps.Open, Ledger: toolset.Ledger(deps.DB, deps.Env, deps.Open, deps.Now), Tools: toolset.Approvals()}).Register(r)
+	cal := &calendar.Proposals{DB: deps.DB, Ledger: deps.Ledger, Now: deps.Now, Env: deps.Env}
+	calendar.Register(r, cal, module.Calendar)
+	if err := calendar.RegisterLedgerUndoer(deps.Ledger, cal); err != nil {
+		panic(err)
+	}
+	reminders := &openloops.Reminders{DB: deps.DB, Ledger: deps.Ledger, Now: deps.Now}
+	openloops.Register(r, reminders, module.Mail)
+	if err := openloops.RegisterLedgerUndoer(deps.Ledger); err != nil {
+		panic(err)
+	}
+	(&approval.Executor{DB: deps.DB, Env: deps.Env, Now: deps.Now, MailOpen: deps.Open, Ledger: deps.Ledger, Tools: toolset.Approvals()}).Register(r)
 	if deps.Resume != nil {
 		registerPermission(r, deps.Resume)
 	}

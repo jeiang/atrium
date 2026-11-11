@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func (s *Store) Resolve(ctx context.Context, id int64, r Resolution, who Resolver, local Mutation) (Effect, error) {
@@ -118,6 +120,25 @@ func (s *Store) Resolve(ctx context.Context, id int64, r Resolution, who Resolve
 		return Effect{}, err
 	}
 	return s.Get(context.WithoutCancel(ctx), id)
+}
+
+func AuditProposal(ctx context.Context, x db.Querier, ts float64, who Resolver, proposalID int64, outcome string) error {
+	if strings.TrimSpace(who.Actor) == "" {
+		return Refused("a resolution needs an actor")
+	}
+	switch who.Source {
+	case "cli", "ui", "phone", "import":
+	default:
+		return Refused("a resolution source must be cli, ui, phone or import")
+	}
+	if strings.TrimSpace(outcome) == "" {
+		return Refused("an approval audit needs an outcome")
+	}
+	_, err := x.ExecContext(context.WithoutCancel(ctx),
+		"INSERT INTO effect_resolutions (effect_id, proposal_id, ts, actor, source, outcome, effective_outcome, "+
+			"prior_state, prior_error, evidence_json, legacy_json) VALUES (NULL, ?, ?, ?, ?, ?, NULL, NULL, '', NULL, NULL)",
+		proposalID, ts, who.Actor, who.Source, outcome)
+	return err
 }
 
 func (s *Store) SetUndo(ctx context.Context, tx *sql.Tx, id int64, undo json.RawMessage) error {

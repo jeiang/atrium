@@ -36,8 +36,9 @@ type apiApproval struct {
 	AppliedAt   *float64 `json:"applied_at"`
 	UndoneAt    *float64 `json:"undone_at"`
 	Undoable    bool     `json:"undoable"`
-	Blocked     bool     `json:"blocked"`
-	BlockedUndo bool     `json:"blocked_undo"`
+	Blocked       bool     `json:"blocked"`
+	BlockedEffect bool     `json:"blocked_effect"`
+	BlockedUndo   bool     `json:"blocked_undo"`
 	Args        []Arg    `json:"args"`
 	Preview     any      `json:"preview"`
 	Result      any      `json:"result"`
@@ -127,7 +128,7 @@ func (s *service) approvalOf(p *proposals.Proposal) apiApproval {
 	out := apiApproval{
 		ID: p.ID, Kind: p.Kind, KindLabel: kind.Label, Module: kind.Module, Approval: kind.Approval, Status: p.Status,
 		Account: p.Account, Title: p.Title, ThreadID: thread, RunID: run, CreatedAt: p.CreatedTS, DecidedAt: p.DecidedTS,
-		AppliedAt: p.AppliedTS, UndoneAt: p.UndoneTS, Undoable: p.Undoable, Blocked: p.Blocked, BlockedUndo: p.BlockedUndo,
+		AppliedAt: p.AppliedTS, UndoneAt: p.UndoneTS, Undoable: p.Undoable, Blocked: p.Blocked, BlockedEffect: p.BlockedEffect, BlockedUndo: p.BlockedUndo,
 		Args: []Arg{}, Preview: plainJSON(p.Preview), Result: plainJSON(p.Result),
 	}
 	if kind.Approval {
@@ -477,7 +478,7 @@ func (s *service) apiUndo(w http.ResponseWriter, r *http.Request) {
 			web.APIError(w, http.StatusNotFound, "not_found", "Unknown undo entry.")
 			return
 		}
-		outcome, err := s.pipeline.Undo(ctx, id)
+		outcome, err := s.pipeline.Undo(ctx, id, proposals.Resolver{Actor: "operator", Source: "ui"})
 		var refused proposals.ProposalError
 		if errors.As(err, &refused) {
 			web.APIError(w, http.StatusConflict, "not_undone", err.Error())
