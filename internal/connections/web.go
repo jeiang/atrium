@@ -158,7 +158,7 @@ func (h handlers) disconnect(w http.ResponseWriter, r *http.Request) {
 func capabilitiesOf(v View) []Capability {
 	out := make([]Capability, 0, len(v.Capabilities))
 	for _, c := range v.Capabilities {
-		out = append(out, Capability{Name: c.Name, Enabled: c.Enabled, Config: c.Config})
+		out = append(out, Capability(c))
 	}
 	return out
 }

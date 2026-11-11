@@ -410,7 +410,7 @@ func (s *Store) open(ctx context.Context, q db.Querier, id ID) (*Lease, error) {
 	}
 	enabledCaps := make([]Capability, 0, len(caps))
 	for _, c := range caps {
-		enabledCaps = append(enabledCaps, Capability{Name: c.Name, Enabled: c.Enabled, Config: c.Config})
+		enabledCaps = append(enabledCaps, Capability(c))
 	}
 	if s.d != nil {
 		if changed := s.rotate(id, creds); changed {
