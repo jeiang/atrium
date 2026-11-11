@@ -26,13 +26,40 @@ type ImportReport struct {
 	MissingIdentity     []string `json:"missing_identity,omitempty"`
 }
 
+func (r ImportReport) Notes() []string {
+	var out []string
+	if r.SyntheticUndo > 0 {
+		out = append(out, fmt.Sprintf("synthetic undos %d", r.SyntheticUndo))
+	}
+	if r.SyntheticResolution > 0 {
+		out = append(out, fmt.Sprintf("synthetic resolutions %d", r.SyntheticResolution))
+	}
+	if r.OrphanAudits > 0 {
+		out = append(out, fmt.Sprintf("orphan audits %d", r.OrphanAudits))
+	}
+	if r.DuplicateHolders > 0 {
+		out = append(out, fmt.Sprintf("duplicate holders %d", r.DuplicateHolders))
+	}
+	for _, key := range r.Conservative {
+		out = append(out, "conservative claim "+key)
+	}
+	for _, item := range r.MissingIdentity {
+		out = append(out, "identity missing: "+item)
+	}
+	for _, item := range r.Duplicates {
+		out = append(out, "possible duplicate: "+item)
+	}
+	return out
+}
+
 type LegacyImporter struct {
-	ctx  context.Context
-	dst  db.Querier
-	now  float64
-	rep  ImportReport
-	used map[int64]bool
-	res  map[int64]bool
+	ctx      context.Context
+	dst      db.Querier
+	now      float64
+	rep      ImportReport
+	used     map[int64]bool
+	res      map[int64]bool
+	claimKey func(tool, target string) (string, bool)
 
 	auto      map[int64]int64
 	autoUndo  map[int64]int64
@@ -116,11 +143,12 @@ func (im *LegacyImporter) loadUsed() error {
 	return nil
 }
 
-func ImportLegacy(ctx context.Context, dst db.Querier, auto []LegacyAutoAction, agent []LegacyAgentWrite, proposal []LegacyProposalAction, resolutions []LegacyResolution, now float64) (ImportReport, error) {
+func ImportLegacy(ctx context.Context, dst db.Querier, auto []LegacyAutoAction, agent []LegacyAgentWrite, proposal []LegacyProposalAction, resolutions []LegacyResolution, now float64, claimKey func(tool, target string) (string, bool)) (ImportReport, error) {
 	im, err := NewLegacyImporter(ctx, dst, now)
 	if err != nil {
 		return ImportReport{}, err
 	}
+	im.claimKey = claimKey
 	for _, step := range []func() error{
 		func() error { return im.AutoActions(auto) },
 		func() error { return im.AgentWrites(agent) },
@@ -370,7 +398,13 @@ func (im *LegacyImporter) agentWrite(a LegacyAgentWrite) error {
 		}
 	}
 	if state == Unknown && a.State != "resolved" {
-		im.claims = append(im.claims, claimSpec{key: "legacy_agent/" + a.Target, effect: id, missing: true})
+		key, missing := "legacy_agent/"+a.Target, true
+		if im.claimKey != nil {
+			if mapped, ok := im.claimKey(a.Tool, a.Target); ok {
+				key, missing = mapped, false
+			}
+		}
+		im.claims = append(im.claims, claimSpec{key: key, effect: id, missing: missing})
 	}
 	return nil
 }

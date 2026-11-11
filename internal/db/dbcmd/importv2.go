@@ -75,6 +75,7 @@ var importTables = []tablePlan{
 		if err != nil {
 			return 0, err
 		}
+		im.notes = append(im.notes, report.Notes()...)
 		return report.Auto, nil
 	}},
 	{table: "write_resolutions", action: drop, why: "each row is converted into an effect resolution with the write it resolves"},
@@ -123,6 +124,7 @@ var importTables = []tablePlan{
 		if err != nil {
 			return 0, err
 		}
+		im.notes = append(im.notes, report.Notes()...)
 		return report.Proposal, nil
 	}},
 	{table: "agent_writes", action: convert, run: func(im *importer) (int64, error) {
@@ -130,6 +132,7 @@ var importTables = []tablePlan{
 		if err != nil {
 			return 0, err
 		}
+		im.notes = append(im.notes, report.Notes()...)
 		return report.Agent, nil
 	}},
 	{table: "media_channels", action: carry},
@@ -193,6 +196,7 @@ type importer struct {
 	now     float64
 	loc     *time.Location
 	vectors int64
+	notes   []string
 }
 
 func (s *service) importV2(a *cli.Args) cli.Handler {
@@ -265,6 +269,10 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source str
 				line += " (" + plan.why + ")"
 			}
 			lines = append(lines, line)
+			for _, note := range im.notes {
+				lines = append(lines, plan.table+": "+note)
+			}
+			im.notes = nil
 		}
 		return im.checkForeignKeys()
 	})

@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail/tracking"
 )
 
 func ConvertLegacyAutoActions(ctx context.Context, src, dst db.Querier, now float64) (ledger.ImportReport, error) {
@@ -18,7 +21,7 @@ func ConvertLegacyAutoActions(ctx context.Context, src, dst db.Querier, now floa
 	if err != nil {
 		return ledger.ImportReport{}, err
 	}
-	return ledger.ImportLegacy(ctx, dst, auto, nil, nil, resolutions, now)
+	return ledger.ImportLegacy(ctx, dst, auto, nil, nil, resolutions, now, nil)
 }
 
 func ConvertLegacyAgentWrites(ctx context.Context, src, dst db.Querier, now float64) (ledger.ImportReport, error) {
@@ -30,7 +33,8 @@ func ConvertLegacyAgentWrites(ctx context.Context, src, dst db.Querier, now floa
 	if err != nil {
 		return ledger.ImportReport{}, err
 	}
-	return ledger.ImportLegacy(ctx, dst, nil, agent, nil, resolutions, now)
+	claim := func(tool, target string) (string, bool) { return legacyAgentClaim(ctx, dst, tool, target) }
+	return ledger.ImportLegacy(ctx, dst, nil, agent, nil, resolutions, now, claim)
 }
 
 func ConvertLegacyProposals(ctx context.Context, src, dst db.Querier, now float64) (ledger.ImportReport, error) {
@@ -42,7 +46,46 @@ func ConvertLegacyProposals(ctx context.Context, src, dst db.Querier, now float6
 	if err != nil {
 		return ledger.ImportReport{}, err
 	}
-	return ledger.ImportLegacy(ctx, dst, nil, nil, proposal, resolutions, now)
+	return ledger.ImportLegacy(ctx, dst, nil, nil, proposal, resolutions, now, nil)
+}
+
+func legacyAgentClaim(ctx context.Context, q db.Querier, tool, target string) (string, bool) {
+	switch tool {
+	case "track_package":
+		raw, ok := strings.CutPrefix(target, "package:")
+		if !ok {
+			return "", false
+		}
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			return "", false
+		}
+		var carrier, number string
+		if err := q.QueryRowContext(ctx, "SELECT carrier, tracking_number FROM packages WHERE id = ?", id).Scan(&carrier, &number); err != nil {
+			return "", false
+		}
+		if number == "" {
+			return "", false
+		}
+		return tracking.Identity(carrier, number), true
+	case "media_add_magnet":
+		var url string
+		if err := q.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = 'media_qbittorrent_url'").Scan(&url); err != nil {
+			return "", false
+		}
+		url = strings.TrimRight(strings.TrimSpace(url), "/")
+		if url == "" {
+			return "", false
+		}
+		return "qbit:" + url + ":" + strings.ToLower(target), true
+	case "mail_move":
+		return "mail_move:" + target, true
+	case "mail_folder_create":
+		return "mail_folder:" + target, true
+	case "calendar_create", "calendar_delete", "calendar_update", "calendar_rsvp":
+		return "calendar:" + target, true
+	}
+	return "", false
 }
 
 func readLegacyAuto(ctx context.Context, q db.Querier) ([]ledger.LegacyAutoAction, error) {

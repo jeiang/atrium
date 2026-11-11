@@ -511,6 +511,11 @@ func TestImportV2MapsAgentWritesToEffects(t *testing.T) {
 	if !strings.Contains(got.stdout, "agent_writes: converted 12") {
 		t.Errorf("the report lacks the agent conversion count:\n%s", got.stdout)
 	}
+	for _, want := range []string{"agent_writes: synthetic undos 2", "agent_writes: synthetic resolutions 1"} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
 
 	q, err := db.OpenSource(dest, db.Key{})
 	if err != nil {
@@ -799,5 +804,78 @@ func TestImportV2ResolvingAnImportedUndoClearsTheCorrection(t *testing.T) {
 	}
 	if undone := importValue(t, q, "SELECT CAST(undone_by IS NOT NULL AS TEXT) FROM effects WHERE id = ?", forward); undone != "1" {
 		t.Fatalf("the forward after the resolution is %s, want undone", undone)
+	}
+}
+
+func TestImportV2MapsUnresolvedAgentClaimsToWriterKeys(t *testing.T) {
+	t.Parallel()
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	d, err := db.Connect(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES ('media_qbittorrent_url', 'http://qb.local:8080/')"); err != nil {
+		t.Fatal(err)
+	}
+	const hash = "ABCDEF0123456789ABCDEF0123456789ABCDEF01"
+	for _, row := range []struct {
+		id     int64
+		tool   string
+		target string
+		state  string
+	}{
+		{201, "track_package", "package:1", "held"},
+		{202, "media_add_magnet", hash, "unknown"},
+		{203, "mail_move", "icloud:INBOX->Bills", "held"},
+		{204, "mail_folder_create", "icloud:Archive", "held"},
+		{205, "calendar_delete", "icloud:event-1", "unknown"},
+		{206, "task_add", "task:9", "unknown"},
+	} {
+		if _, err := d.Write.Exec(
+			"INSERT INTO agent_writes (id, ts, tool, target, state) VALUES (?, ?, ?, ?, ?)",
+			row.id, clock, row.tool, row.target, row.state); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+	dest := filepath.Join(dir, "atrium.db")
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if !strings.Contains(got.stdout, "agent_writes: conservative claim legacy_agent/task:9") {
+		t.Errorf("the report does not name the fallback claim:\n%s", got.stdout)
+	}
+	q, err := db.OpenSource(dest, db.Key{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	for _, tc := range []struct {
+		id  int64
+		key string
+	}{
+		{201, "tracking:ups:1Z999AA10123456784"},
+		{202, "qbit:http://qb.local:8080:" + strings.ToLower(hash)},
+		{203, "mail_move:icloud:INBOX->Bills"},
+		{204, "mail_folder:icloud:Archive"},
+		{205, "calendar:icloud:event-1"},
+		{206, "legacy_agent/task:9"},
+	} {
+		var effect int64
+		if err := q.QueryRow("SELECT effect_id FROM effect_import_refs WHERE source_table = 'agent_writes' AND source_id = ? AND role = 'forward'", tc.id).Scan(&effect); err != nil {
+			t.Fatalf("agent_writes %d has no effect: %v", tc.id, err)
+		}
+		var key string
+		if err := q.QueryRow("SELECT resource FROM effect_resources WHERE effect_id = ? AND holding = 1", effect).Scan(&key); err != nil {
+			t.Fatalf("agent_writes %d has no claim: %v", tc.id, err)
+		}
+		if key != tc.key {
+			t.Errorf("agent_writes %d claim = %q, want %q", tc.id, key, tc.key)
+		}
 	}
 }
