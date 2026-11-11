@@ -28,6 +28,7 @@ func ImportV2(values map[string]string, probe *ImportProbe, health *connections.
 	}
 	var notes []string
 	var probeState connections.State
+	probeCarried := false
 	if probe != nil {
 		probeState = connections.Failing
 		if probe.OK {
@@ -43,6 +44,7 @@ func ImportV2(values map[string]string, probe *ImportProbe, health *connections.
 		if err == nil {
 			service.Results = append(service.Results, connections.Result{Capability: "embeddings", State: probeState, Reason: probe.Reason, Data: data})
 			service.Health = &connections.ImportHealth{State: string(probeState), Reason: probe.Reason, CheckedAt: probe.ProbedAt}
+			probeCarried = true
 		}
 	}
 	if health == nil {
@@ -58,13 +60,28 @@ func ImportV2(values map[string]string, probe *ImportProbe, health *connections.
 		notes = append(notes, "ambiguous-health mail_embed: the name is both the embedding endpoint and a mail account; the account is untested")
 		return service, notes
 	}
-	data, _ := json.Marshal(map[string]any{"legacy": true, "checked_at": health.CheckedAt})
-	service.Results = append(service.Results, connections.Result{Capability: "embeddings", State: healthState, Reason: health.Reason, Data: data})
 	switch {
 	case healthState == connections.Failing || healthState == connections.NeedsReauth || healthState == connections.Expiring:
 		service.Health = &connections.ImportHealth{State: health.State, Reason: health.Reason, CheckedAt: health.CheckedAt, ExpiresAt: health.ExpiresAt}
 	case probe == nil:
 		service.Health = &connections.ImportHealth{State: health.State, Reason: health.Reason, CheckedAt: health.CheckedAt, ExpiresAt: health.ExpiresAt}
 	}
+	if probeCarried {
+		if data, err := json.Marshal(map[string]any{
+			"dimension":   probe.Dimension,
+			"models":      probe.Models,
+			"fingerprint": probe.Fingerprint,
+			"probed_at":   probe.ProbedAt,
+			"legacy":      true,
+			"checked_at":  health.CheckedAt,
+		}); err == nil {
+			service.Results[len(service.Results)-1] = connections.Result{
+				Capability: "embeddings", State: connections.State(service.Health.State), Reason: service.Health.Reason, Data: data,
+			}
+		}
+		return service, notes
+	}
+	data, _ := json.Marshal(map[string]any{"legacy": true, "checked_at": health.CheckedAt})
+	service.Results = append(service.Results, connections.Result{Capability: "embeddings", State: healthState, Reason: health.Reason, Data: data})
 	return service, notes
 }

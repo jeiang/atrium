@@ -2343,3 +2343,48 @@ S: {t} OK
 		t.Error("sync printed the mail password")
 	}
 }
+func TestImportV2KeepsTheEmbeddingFingerprintWithLegacyHealth(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	embed := newFakeOpenAI(t)
+	const key = "sk-embed-health-0123456789"
+	url := embed.URL + "/v1"
+	matching := endpoint.New(endpoint.EndpointEmbed, url, "embeddinggemma", key).Fingerprint()
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
+		('mail_embed_url', %[1]q),
+		('mail_embed_model', 'embeddinggemma')`, url))
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_embed_key', %q, 1762000800, 'fixture')", key))
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO endpoint_probes (kind, fingerprint, ok, reason, dimension, models, probed_at) VALUES ('embed', %q, 0, 'the endpoint refused the key', 0, '[]', 1762000800)", matching))
+	editImportSource(t, source, "INSERT INTO integration_health (name, state, reason, checked_at, expires_at) VALUES ('mail_embed', 'ok', 'the legacy check passed', 1762000800, NULL)")
+	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", url)
+	setEnv(t, flagEnv(module.Mail), "")
+
+	if got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source); got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	dest := filepath.Join(dir, "atrium.db")
+	q, err := db.Connect(dest, db.WithKey(importKey(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	if state := importValue(t, q.Read, "SELECT state FROM connections WHERE id = 'service/embedding'"); state != "failing" {
+		t.Fatalf("the imported embedding state is %q, want the carried failure", state)
+	}
+	results := importValue(t, q.Read, "SELECT results_json FROM connections WHERE id = 'service/embedding'")
+	if n := strings.Count(results, `"capability":"embeddings"`); n != 1 {
+		t.Errorf("%d embeddings results were imported: %s", n, results)
+	}
+	if !strings.Contains(results, matching) {
+		t.Errorf("the imported embeddings result lost the fingerprint: %s", results)
+	}
+
+	if off := runImportApp(t, importTestApp(t, dir, clock), "settings", "set", module.FlagKey(module.Mail), "false"); off.code != cli.ExitOK {
+		t.Fatalf("disabling mail: exit %d %q", off.code, off.stderr)
+	}
+	on := runImportApp(t, importTestApp(t, dir, clock), "settings", "set", module.FlagKey(module.Mail), "true")
+	if on.code != cli.ExitError || !strings.Contains(on.stderr, "embed endpoint probe failed") {
+		t.Fatalf("enabling mail with a matching failed probe and legacy health: exit %d stdout %q stderr %q", on.code, on.stdout, on.stderr)
+	}
+}
