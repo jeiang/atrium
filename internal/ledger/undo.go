@@ -232,7 +232,7 @@ func (s *Store) reserveUndoTx(ctx context.Context, tx *sql.Tx, id int64, payload
 		}
 	}
 	ticket := Ticket{ID: undoID, Token: token}
-	s.track(ticket)
+	s.track(ctx, ticket)
 	return ticket, nil
 }
 

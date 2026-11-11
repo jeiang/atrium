@@ -112,8 +112,13 @@ type Store struct {
 	undoers  map[string]Undoer
 	resolves map[string]ResolveHook
 	liveMu   sync.Mutex
-	live     map[int64]Ticket
+	live     map[int64]liveTicket
 	stop     chan struct{}
+}
+
+type liveTicket struct {
+	ticket  Ticket
+	stopCtx func() bool
 }
 
 type Conflict struct{ Resource string }
@@ -238,7 +243,7 @@ func (s *Store) BeginTx(ctx context.Context, tx *sql.Tx, n New, admit Mutation) 
 		return Ticket{}, err
 	}
 	ticket := Ticket{ID: id, Token: token}
-	s.track(ticket)
+	s.track(ctx, ticket)
 	return ticket, nil
 }
 
@@ -292,16 +297,16 @@ func (s *Store) KeepAlive(ctx context.Context, tickets []Ticket) func() {
 	return stop
 }
 
-func (s *Store) track(t Ticket) {
+func (s *Store) track(ctx context.Context, t Ticket) {
 	if t.ID == 0 {
 		return
 	}
 	s.liveMu.Lock()
 	defer s.liveMu.Unlock()
 	if s.live == nil {
-		s.live = map[int64]Ticket{}
+		s.live = map[int64]liveTicket{}
 	}
-	s.live[t.ID] = t
+	s.live[t.ID] = liveTicket{ticket: t, stopCtx: context.AfterFunc(ctx, func() { s.untrack(t.ID) })}
 	if s.stop == nil {
 		s.stop = make(chan struct{})
 		go s.renewLoop(s.stop)
@@ -310,14 +315,20 @@ func (s *Store) track(t Ticket) {
 
 func (s *Store) untrack(id int64) {
 	s.liveMu.Lock()
-	defer s.liveMu.Unlock()
 	if s.live == nil {
+		s.liveMu.Unlock()
 		return
 	}
+	entry, ok := s.live[id]
 	delete(s.live, id)
-	if len(s.live) == 0 && s.stop != nil {
+	empty := len(s.live) == 0
+	if empty && s.stop != nil {
 		close(s.stop)
 		s.stop = nil
+	}
+	s.liveMu.Unlock()
+	if ok {
+		entry.stopCtx()
 	}
 }
 
@@ -344,7 +355,7 @@ func (s *Store) renewLive() {
 	s.liveMu.Lock()
 	tickets := make([]Ticket, 0, len(s.live))
 	for _, t := range s.live {
-		tickets = append(tickets, t)
+		tickets = append(tickets, t.ticket)
 	}
 	s.liveMu.Unlock()
 	for _, t := range tickets {
