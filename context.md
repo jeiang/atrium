@@ -127,7 +127,11 @@ behavior-parity target.
   tools, and the old `notion_link`/`notion_edit` proposals stay readable.
 - Notifications are recorded in an in-app inbox first and pushed best
   effort through Web Push on one of three channels (assistant, media,
-  system). Each channel's content setting sends the full text (`auto`,
+  system). The inbox insert is one local effect keyed by the source
+  occurrence (proposal, reminder, package transition, digest day, channel
+  poll), so repeating an occurrence adds no second row; producers mark the
+  occurrence in the same transaction and a push failure only records the
+  transport error. Each channel's content setting sends the full text (`auto`,
   `full`) or only the title `atrium` (`title`). ntfy is removed; the
   `ntfy_channels` table stays and only its `content` column is read.
 - Web Push devices subscribe from the Notifications settings page. The VAPID
