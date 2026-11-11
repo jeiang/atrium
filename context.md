@@ -633,7 +633,7 @@ behavior-parity target.
   (RFC 9068 `at+jwt`, audience and `client_id` equal to that client, expiry
   with 60 s skew); session cookies and proxy headers grant nothing there.
   Groups come from the token or the userinfo endpoint and decide admission
-exactly as for web sessions. Implemented endpoints: `/me`,
+  exactly as for web sessions. Implemented endpoints: `/me`,
   thread list, create and transcript, send, stop and answer, the run event
   stream (SSE), the inbox, `/pending` (pending and blocked
   approvals, open and unknown drafts), approve, deny and resolve, the `/undo`
