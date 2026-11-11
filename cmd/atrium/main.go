@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
+	"github.com/jeiang/atrium/internal/connections/connweb"
 	"github.com/jeiang/atrium/internal/contacts/contactsmodule"
 	"github.com/jeiang/atrium/internal/core/coremodule"
 	"github.com/jeiang/atrium/internal/db"
@@ -59,7 +60,7 @@ func newAppWith(env config.Env, reg *settings.Registry, st *config.State, mods [
 	app.State = st
 	app.SetupContext = func(ctx context.Context) context.Context { return module.WithSet(ctx, set) }
 	app.Bootstrap = bootstrap(env, reg)
-	pages := append(set.Pages(), connections.Page())
+	pages := append(set.Pages(), connweb.Page())
 	app.Add(append(append(set.Commands(), connections.Command(env)), web.ServeCommand(set, pages...))...)
 	return app
 }
