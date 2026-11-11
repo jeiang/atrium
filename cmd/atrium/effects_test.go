@@ -452,3 +452,60 @@ func TestAcceptedPartialEffectReleasesItsClaims(t *testing.T) {
 		t.Fatalf("file content = %q, want the new write", content)
 	}
 }
+
+func TestEffectsCLIUsesTheProposalUndoers(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	now := float64(time.Now().Unix())
+	res, err := d.Write.Exec("INSERT INTO tasks (title, remind_at, created_ts, updated_ts) VALUES ('Call the plumber', ?, ?, ?)", now+3600, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := func(token, target, undo string) int64 {
+		t.Helper()
+		res, err := d.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, target, action_json, undo_json, state, settled_at) "+
+			"VALUES (?, ?, ?, 'local', 'seed', ?, 'forward', ?, '{}', ?, 'done', ?)", now, now, token, token, target, undo, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	reminder := seed("seed-reminder", "reminder:"+strconv.FormatInt(taskID, 10), `{"op":"reminder_cancel","id":`+strconv.FormatInt(taskID, 10)+`}`)
+	calendar := seed("seed-calendar", "calendar:icloud:event-1", `{"op":"calendar_restore","calendar":"icloud","uid":"event-1","ics":"BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n"}`)
+	for _, id := range []int64{reminder, calendar} {
+		shown := runApp(t, "effects", "show", strconv.FormatInt(id, 10))
+		if shown.code != cli.ExitOK {
+			t.Fatalf("effects show %d: %d %s", id, shown.code, shown.stderr)
+		}
+		var effect ledger.Effect
+		if err := json.Unmarshal([]byte(shown.stdout), &effect); err != nil {
+			t.Fatalf("effects show %d output %q: %v", id, shown.stdout, err)
+		}
+		if !effect.Undoable {
+			t.Fatalf("effect %d is not undoable through the effects CLI", id)
+		}
+	}
+	undone := runApp(t, "effects", "undo", strconv.FormatInt(reminder, 10))
+	if undone.code != cli.ExitOK {
+		t.Fatalf("undo the reminder: %d %s", undone.code, undone.stderr)
+	}
+	var left int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM tasks WHERE id = ?", taskID).Scan(&left); err != nil {
+		t.Fatal(err)
+	}
+	if left != 0 {
+		t.Fatal("the effects CLI did not cancel the reminder task")
+	}
+}

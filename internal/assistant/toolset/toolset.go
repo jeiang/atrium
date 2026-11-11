@@ -23,6 +23,7 @@ import (
 	taskstools "github.com/jeiang/atrium/internal/assistant/tools/tasks"
 	weathertools "github.com/jeiang/atrium/internal/assistant/tools/weather"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
+	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/config"
 	contactstools "github.com/jeiang/atrium/internal/contacts/contactsmodule"
 	"github.com/jeiang/atrium/internal/db"
@@ -31,6 +32,7 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/live"
+	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
@@ -48,6 +50,10 @@ func Ledger(d *db.DB, env config.Env, open mail.OpenFunc, now func() float64) *l
 		func(s *ledger.Store) error { return mediatools.RegisterLedgerUndoer(s, env) },
 		func(s *ledger.Store) error { return mailtools.RegisterLedgerUndoer(s, open) },
 		func(s *ledger.Store) error { return live.RegisterLedgerUndoers(s, open, d.Read) },
+		func(s *ledger.Store) error {
+			return calendar.RegisterLedgerUndoer(s, &calendar.Proposals{DB: d, Ledger: s, Now: now, Env: env})
+		},
+		openloops.RegisterLedgerUndoer,
 		func(s *ledger.Store) error { return export.RegisterLedgerResolves(s, env) },
 		export.RegisterLedgerObsidian,
 	}
