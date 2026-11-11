@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -114,8 +114,8 @@ var importTables = []tablePlan{
 	{table: "media_channels", action: carry},
 	{table: "media_seen", action: carry},
 	{table: "media_state", action: carry},
-	{table: "usage", action: carry, null: []string{"run_id"}, run: func(im *importer) (int64, error) {
-		return im.copy("usage", "ts >= ?", []any{usage.MonthStart(im.now, im.loc)}, []string{"run_id"}, nil, nil, false)
+	{table: "usage", action: carry, run: func(im *importer) (int64, error) {
+		return im.carryUsage()
 	}},
 	{table: "embed_index", action: rebuild, why: "the active index row and its message vectors are carried", run: func(im *importer) (int64, error) {
 		return im.carryIndex()
@@ -618,6 +618,57 @@ func (im *importer) carryIndex() (int64, error) {
 	return n, nil
 }
 
+func (im *importer) carryUsage() (int64, error) {
+	var future int64
+	if err := im.src.QueryRowContext(im.ctx, "SELECT COUNT(*) FROM usage WHERE ts > ?", im.now).Scan(&future); err != nil {
+		return 0, err
+	}
+	if future > 0 {
+		return 0, fmt.Errorf("%d usage rows are dated after the import instant; stop v2 and import again once they are in the past", future)
+	}
+	month := inference.MonthStart(im.now, im.loc)
+	next := inference.NextMonthStart(im.now, im.loc)
+	rows, err := im.src.QueryContext(im.ctx,
+		"SELECT id, ts, request_id, source, provider, thread_id, kind, job_name, model, effort, iterations, input_tokens, "+
+			"cache_write_5m, cache_write_1h, cache_read, output_tokens, reasoning_tokens, searches, tool_calls, wall_ms, tier, "+
+			"cost_usd, partial, unpriced, clear_edits, cleared_tokens, compaction FROM usage WHERE ts >= ? AND ts < ? ORDER BY id",
+		month, next)
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = rows.Close() }()
+	var n int64
+	for rows.Next() {
+		var e inference.ImportedEntry
+		var threadID sql.NullInt64
+		var jobName sql.NullString
+		var partial, unpriced int64
+		if err := rows.Scan(&e.ID, &e.TS, &e.RequestID, &e.Source, &e.Provider, &threadID, &e.Kind, &jobName, &e.Model, &e.Effort,
+			&e.Iterations, &e.InputTokens, &e.CacheWrite5m, &e.CacheWrite1h, &e.CacheRead, &e.OutputTokens, &e.ReasoningTokens,
+			&e.Searches, &e.ToolCalls, &e.WallMS, &e.Tier, &e.CostUSD, &partial, &unpriced, &e.ClearEdits, &e.ClearedTokens,
+			&e.Compaction); err != nil {
+			return n, err
+		}
+		if e.TS > im.now {
+			return n, fmt.Errorf("usage row %d is dated after the import instant", e.ID)
+		}
+		if threadID.Valid {
+			e.ThreadID = threadID.Int64
+		}
+		if jobName.Valid {
+			e.JobName = jobName.String
+		}
+		e.Partial = partial != 0
+		e.Unpriced = unpriced != 0
+		e.MonthStart = month
+		if err := inference.ImportSettled(im.ctx, im.tx, e); err != nil {
+			return n, fmt.Errorf("usage row %d: %w", e.ID, err)
+		}
+		n++
+	}
+	return n, rows.Err()
+}
+
 func (im *importer) carryMessageHashes(table string) error {
 	ctx, err := embed.WithModels(im.ctx, im.tx)
 	if err != nil {
@@ -742,25 +793,7 @@ func refuseDestination(ctx context.Context, path string, key db.Key) error {
 }
 
 func importLocation(ctx context.Context, src *sql.DB, env config.Env) (*time.Location, error) {
-	reg := settings.From(ctx)
-	if value, _, ok := reg.Pin(config.KeyTZ); ok {
-		return config.Zone(value)
-	}
-	if def, ok := reg.Lookup(config.KeyTZ); ok {
-		if value, ok := env(config.EnvName(def)); ok && strings.TrimSpace(value) != "" {
-			return config.Zone(strings.TrimSpace(value))
-		}
-	}
-	var value string
-	err := src.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = ?", config.KeyTZ).Scan(&value)
-	switch {
-	case err == nil:
-		return config.Zone(strings.TrimSpace(value))
-	case errors.Is(err, sql.ErrNoRows):
-		return config.Zone(config.Timezone)
-	default:
-		return nil, err
-	}
+	return inference.Location(ctx, src)
 }
 
 func unknownSettings(ctx context.Context, src *sql.DB) ([]string, error) {

@@ -104,8 +104,8 @@ settings the operator edits in the UI or pins from the host.
   boundary unless a task explicitly redesigns its authorization.
 - Enforce tool permissions, run-kind restrictions, and spending limits in
   code, not prompts.
-- Models outside the static catalog fail closed, and every Anthropic request
-  is checked against the run cost cap before it is sent.
+- Every paid model call is admitted through `internal/inference` before
+  dispatch; models outside the static catalog fail closed.
 - Treat mail, files, pages, and tool results as untrusted data. They must not
   grant URL access or widen tool permissions. Arbitrary web fetches use the
   shared allowlist and SSRF protections on every redirect.

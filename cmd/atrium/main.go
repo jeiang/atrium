@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/assistantmodule"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/tools/grafana/grafanamodule"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
@@ -17,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/contacts/contactsmodule"
 	"github.com/jeiang/atrium/internal/core/coremodule"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	kbcallables "github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
@@ -73,7 +73,7 @@ func newSet(env config.Env, reg *settings.Registry, st *config.State, mods []mod
 		calendarmodule.Module{},
 		notionmodule.Module{Env: env},
 		mediamodule.Module{Now: now},
-		assistantmodule.Module{Callables: []map[string]worker.Callable{calendarcmd.Callables(), mediacmd.Callables(), mailcmd.Callables(), kbcallables.Callables(), serverops.Callables()}},
+		assistantmodule.Module{Now: now, Callables: []map[string]worker.Callable{calendarcmd.Callables(), mediacmd.Callables(), mailcmd.Callables(), kbcallables.Callables(), serverops.Callables()}},
 		notifymodule.Module{Budget: budgetStatus},
 		grafanamodule.Module{},
 	}, mods...)
@@ -85,6 +85,10 @@ func newSet(env config.Env, reg *settings.Registry, st *config.State, mods []mod
 }
 
 func budgetStatus(ctx context.Context, q db.Querier, now float64, loc *time.Location) (notify.Budget, error) {
-	st, err := budget.StatusAt(ctx, q, now, loc)
-	return notify.Budget{SpentUSD: st.SpentUSD, BudgetUSD: st.BudgetUSD, Share: st.Share}, err
+	st, err := inference.StatusAt(ctx, q, now, loc)
+	return notify.Budget{
+		SpentUSD: st.SpentUSD, BudgetUSD: st.BudgetUSD, Share: st.Share,
+		CommittedUSD: st.CommittedUSD, ReservedUSD: st.ReservedUSD, UnknownUSD: st.UnknownUSD,
+		ExpiredUSD: st.ExpiredUSD, InteractiveCeilingUSD: st.InteractiveCeilingUSD,
+	}, err
 }

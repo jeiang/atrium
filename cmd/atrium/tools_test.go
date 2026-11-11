@@ -10,6 +10,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/inference"
 )
 
 func TestDisabledToolIsNotOffered(t *testing.T) {
@@ -157,7 +158,7 @@ func TestFileToolsReadSearchAndTraversal(t *testing.T) {
 	}
 }
 
-func TestMemorySpendDoesNotPauseChat(t *testing.T) {
+func TestMemorySpendCountsTowardTheMonthlyBudget(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
@@ -170,26 +171,40 @@ func TestMemorySpendDoesNotPauseChat(t *testing.T) {
 		t.Fatal(err)
 	}
 	now := float64(time.Now().Unix())
-	insert := "INSERT INTO usage (ts, request_id, source, provider, thread_id, run_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) VALUES (?, lower(hex(randomblob(16))), 'loop', 'anthropic', 1, 1, ?, 'm', 'low', '[]', 0, 0, 0, 0, 0, 0, 'low', ?)"
-	if _, err := d.Write.Exec(insert, now, "chat", 1.0); err != nil {
+	loc, err := time.LoadLocation("America/Port_of_Spain")
+	if err != nil {
 		t.Fatal(err)
 	}
+	month := inference.MonthStart(now, loc)
+	insert := "INSERT INTO usage (attempt_key, ts, month_start, expires_at, settled_at, state, budget_class, reservation_nusd, accounted_nusd, request_id, source, provider, thread_id, run_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, 'settled', ?, 0, ?, lower(hex(randomblob(16))), 'loop', 'anthropic', 1, 1, ?, 'm', 'low', '[]', 0, 0, 0, 0, 0, 0, 'low', ?)"
+	seed := func(kind, class string, usd float64) {
+		t.Helper()
+		if _, err := d.Write.Exec(insert, now, month, now, now, class, int64(usd*1e9), kind, usd); err != nil {
+			t.Fatal(err)
+		}
+	}
+	seed("chat", "interactive", 1.0)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
 	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "hi"); !strings.Contains(ran.stdout+ran.stderr, "monthly budget") {
 		t.Fatalf("chat did not pause at the threshold: code=%d stdout=%s stderr=%s", ran.code, ran.stdout, ran.stderr)
 	}
-	if _, err := d.Write.Exec(insert, now, "memory", 100.0); err != nil {
-		t.Fatal(err)
-	}
+	seed("memory", "unattended", 100.0)
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
 	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "hi"); !strings.Contains(ran.stdout+ran.stderr, "monthly budget") {
 		t.Fatalf("a memory row changed the pause decision: code=%d stdout=%s stderr=%s", ran.code, ran.stdout, ran.stderr)
 	}
-	if _, err := d.Write.Exec("UPDATE usage SET cost_usd = 0.5 WHERE kind = 'chat'"); err != nil {
+	if _, err := d.Write.Exec("UPDATE usage SET cost_usd = 0.5, accounted_nusd = 500000000 WHERE kind = 'chat'"); err != nil {
+		t.Fatal(err)
+	}
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "hi"); !strings.Contains(ran.stdout+ran.stderr, "monthly budget") {
+		t.Fatalf("memory spend did not count toward the budget: code=%d stdout=%s stderr=%s", ran.code, ran.stdout, ran.stderr)
+	}
+	if _, err := d.Write.Exec("DELETE FROM usage WHERE kind = 'memory'"); err != nil {
 		t.Fatal(err)
 	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
 	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "hi"); ran.code != cli.ExitOK {
-		t.Fatalf("chat stayed paused with a large memory row: %d %s", ran.code, ran.stderr)
+		t.Fatalf("chat stayed paused without the memory row: %d %s", ran.code, ran.stderr)
 	}
 }

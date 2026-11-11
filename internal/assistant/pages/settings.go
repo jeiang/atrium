@@ -7,12 +7,11 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
@@ -34,12 +33,12 @@ type AssistantData struct {
 }
 
 type UsageData struct {
-	Budget       budget.Status     `json:"budget"`
-	Summary      usage.Summary     `json:"summary"`
-	Memory       usage.Summary     `json:"memory"`
-	Subscription usage.Summary     `json:"subscription"`
-	ByKind       []usage.KindRow   `json:"by_kind"`
-	ByThread     []usage.ThreadRow `json:"by_thread"`
+	Budget       inference.Status      `json:"budget"`
+	Summary      inference.Summary     `json:"summary"`
+	Memory       inference.Summary     `json:"memory"`
+	Subscription inference.Summary     `json:"subscription"`
+	ByKind       []inference.KindRow   `json:"by_kind"`
+	ByThread     []inference.ThreadRow `json:"by_thread"`
 }
 
 type PermissionRow struct {
@@ -146,17 +145,31 @@ func (p *pages) usagePage(w http.ResponseWriter, r *http.Request) {
 	loc, err := config.From(ctx).Location(p.deps.Env)
 	check(err)
 	now := p.now()
-	statusAt, err := budget.StatusAt(ctx, p.deps.DB.Read, now, loc)
+	statusAt, err := inference.StatusAt(ctx, p.deps.DB.Read, now, loc)
 	check(err)
-	summary, err := usage.MonthSummary(ctx, p.deps.DB.Read, now, loc)
+	summary, err := inference.MonthSummary(ctx, p.deps.DB.Read, now, loc)
 	check(err)
-	byKind, err := usage.ByKind(ctx, p.deps.DB.Read, now, loc)
+	byKind, err := inference.ByKind(ctx, p.deps.DB.Read, now, loc)
 	check(err)
-	byThread, err := usage.ByThread(ctx, p.deps.DB.Read, now, loc, usage.DefaultThreadLimit)
+	byThread, err := inference.ByThread(ctx, p.deps.DB.Read, now, loc, inference.DefaultThreadLimit)
 	check(err)
-	memory, err := usage.MemorySummary(ctx, p.deps.DB.Read, now, loc)
+	ids := make([]int64, len(byThread))
+	for i := range byThread {
+		ids[i] = byThread[i].ThreadID
+	}
+	titles, err := threads.Titles(ctx, p.deps.DB.Read, ids)
 	check(err)
-	subscription, err := usage.SubscriptionSummary(ctx, p.deps.DB.Read, now, loc)
+	kinds, err := threads.KindsOf(ctx, p.deps.DB.Read, ids)
+	check(err)
+	for i := range byThread {
+		if title, ok := titles[byThread[i].ThreadID]; ok {
+			byThread[i].Title = &title
+		}
+		byThread[i].Kind = string(kinds[byThread[i].ThreadID])
+	}
+	memory, err := inference.MemorySummary(ctx, p.deps.DB.Read, now, loc)
+	check(err)
+	subscription, err := inference.SubscriptionSummary(ctx, p.deps.DB.Read, now, loc)
 	check(err)
 	p.settings(w, r, http.StatusOK, "usage.gohtml", UsageData{Budget: statusAt, Summary: summary, Memory: memory, Subscription: subscription, ByKind: byKind, ByThread: byThread}, nil)
 }

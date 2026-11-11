@@ -34,9 +34,14 @@ func PauseChanged(ctx context.Context, d *db.DB, env config.Env, paused bool) er
 }
 
 type Budget struct {
-	SpentUSD  float64
-	BudgetUSD float64
-	Share     float64
+	SpentUSD              float64
+	BudgetUSD             float64
+	Share                 float64
+	CommittedUSD          float64
+	ReservedUSD           float64
+	UnknownUSD            float64
+	ExpiredUSD            float64
+	InteractiveCeilingUSD float64
 }
 
 type BudgetStatus func(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Budget, error)
@@ -67,7 +72,11 @@ func noticeBudget(ctx context.Context, d *db.DB, env config.Env, now float64, bu
 		if n > 0 {
 			continue
 		}
-		body := fmt.Sprintf("$%s of $%s spent this month.", strconv.FormatFloat(status.SpentUSD, 'f', 2, 64), strconv.FormatFloat(status.BudgetUSD, 'f', 2, 64))
+		body := fmt.Sprintf("$%s of $%s spent this month; $%s committed, $%s reserved, $%s unknown, $%s expired estimate. Chat pauses at $%s.",
+			strconv.FormatFloat(status.SpentUSD, 'f', 2, 64), strconv.FormatFloat(status.BudgetUSD, 'f', 2, 64),
+			strconv.FormatFloat(status.CommittedUSD, 'f', 2, 64), strconv.FormatFloat(status.ReservedUSD, 'f', 2, 64),
+			strconv.FormatFloat(status.UnknownUSD, 'f', 2, 64), strconv.FormatFloat(status.ExpiredUSD, 'f', 2, 64),
+			strconv.FormatFloat(status.InteractiveCeilingUSD, 'f', 2, 64))
 		if _, err := Send(ctx, d.Write, Message{Channel: System, Title: title, Body: body, Now: func() float64 { return now }}); err != nil {
 			return err
 		}

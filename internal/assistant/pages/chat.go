@@ -134,6 +134,7 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string) 
 	check(err)
 	found, err := threads.ListThreads(r.Context(), p.deps.DB.Read, threads.ListOpts{Match: match, Limit: limit, Archived: view == archived})
 	check(err)
+	check(fillThreadCosts(r.Context(), p.deps.DB.Read, found))
 	if found == nil {
 		found = []threads.Listed{}
 	}

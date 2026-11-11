@@ -5,10 +5,10 @@ import (
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 )
 
 type source struct {
@@ -76,7 +76,7 @@ func budgetItem(ctx context.Context, q db.Querier, now float64, env config.Env) 
 	if err != nil {
 		return nil, err
 	}
-	spend, err := usage.ThreadMonthToDate(ctx, q, threadID, now, loc)
+	spend, err := inference.ThreadMonthToDate(ctx, q, threadID, now, loc)
 	if err != nil {
 		return nil, err
 	}

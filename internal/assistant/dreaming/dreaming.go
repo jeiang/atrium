@@ -12,12 +12,12 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/timex"
@@ -76,7 +76,7 @@ func Run(ctx context.Context, svc *service.Service, now func() float64, jobID, j
 		return nil, err
 	}
 	if spent >= monthlyCap {
-		return nil, budget.BudgetExceeded(fmt.Sprintf("dreaming: monthly cap reached ($%.2f of $%.2f)", spent, monthlyCap))
+		return nil, inference.BudgetExceeded{Text: fmt.Sprintf("dreaming: monthly cap reached ($%.2f of $%.2f)", spent, monthlyCap), Reason: inference.ReasonMonthly, Class: inference.Unattended}
 	}
 	tonight, err := nightlySpend(ctx, svc.DB.Read, stamp, loc)
 	if err != nil {
@@ -84,7 +84,7 @@ func Run(ctx context.Context, svc *service.Service, now func() float64, jobID, j
 	}
 	left := nightlyCap - tonight
 	if left <= 0 {
-		return nil, budget.BudgetExceeded(fmt.Sprintf("dreaming: nightly cap reached ($%.2f of $%.2f)", tonight, nightlyCap))
+		return nil, inference.BudgetExceeded{Text: fmt.Sprintf("dreaming: nightly cap reached ($%.2f of $%.2f)", tonight, nightlyCap), Reason: inference.ReasonMonthly, Class: inference.Unattended}
 	}
 	data, err := gather(ctx, svc.DB.Read, stamp, loc)
 	if err != nil {
@@ -210,19 +210,19 @@ func dayStart(ts float64, loc *time.Location) float64 {
 }
 
 func nightlySpend(ctx context.Context, q db.Querier, now float64, loc *time.Location) (float64, error) {
-	var cost float64
-	err := q.QueryRowContext(ctx,
-		"SELECT COALESCE(SUM(u.cost_usd), 0) FROM usage u JOIN threads t ON t.id = u.thread_id WHERE u.ts >= ? AND t.kind = ?",
-		dayStart(now, loc), threads.Nightly).Scan(&cost)
-	return cost, err
+	ids, err := threads.ByKind(ctx, q, threads.Nightly)
+	if err != nil {
+		return 0, err
+	}
+	return inference.SpendOnThreads(ctx, q, ids, dayStart(now, loc))
 }
 
 func monthlySpend(ctx context.Context, q db.Querier, now float64, loc *time.Location) (float64, error) {
-	var cost float64
-	err := q.QueryRowContext(ctx,
-		"SELECT COALESCE(SUM(u.cost_usd), 0) FROM usage u JOIN threads t ON t.id = u.thread_id WHERE u.ts >= ? AND t.kind = ?",
-		monthStart(now, loc), threads.Nightly).Scan(&cost)
-	return cost, err
+	ids, err := threads.ByKind(ctx, q, threads.Nightly)
+	if err != nil {
+		return 0, err
+	}
+	return inference.SpendOnThreads(ctx, q, ids, monthStart(now, loc))
 }
 
 func monthStart(ts float64, loc *time.Location) float64 {

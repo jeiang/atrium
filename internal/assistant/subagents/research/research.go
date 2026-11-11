@@ -13,7 +13,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/registry"
@@ -21,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/subagents"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/textx"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -236,7 +236,7 @@ func (r *Research) runChild(ctx context.Context, tc *tool.Context, child int64, 
 		ParentRunID: &parent,
 		Limits:      journal.Limits{MaxSteps: &steps, MaxCostUSD: &cost, SystemExtra: &extra, AllowedTools: agent.Tools},
 	})
-	var exceeded budget.BudgetExceeded
+	var exceeded inference.BudgetExceeded
 	if errors.As(err, &exceeded) {
 		return tool.Error(fmt.Sprintf("%s research not started: %s", role, exceeded))
 	}

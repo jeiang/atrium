@@ -5,8 +5,8 @@ import (
 	"database/sql"
 
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/accounts"
 	"github.com/jeiang/atrium/internal/settings"
@@ -31,7 +31,7 @@ var operatorData = []func(context.Context, db.Querier) (bool, error){
 	settings.SecretsHasRows,
 	accounts.ExistsAny,
 	threads.HasRows,
-	usage.HasRows,
+	inference.HasRows,
 }
 
 func (s *Set) unmet(ctx context.Context, p Probe, r Registration, states map[string]State) ([]Unmet, error) {

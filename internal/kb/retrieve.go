@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/textsearch"
+	"github.com/jeiang/atrium/internal/tokens"
 )
 
 const (
@@ -221,12 +222,12 @@ func matchedTerms(rec Record, terms []string) int {
 }
 
 func clipBody(body string, id int64) string {
-	if actx.EstimateTokens(body) <= RetrievalBody {
+	if tokens.Estimate(body) <= RetrievalBody {
 		return body
 	}
 	clipped := body
 	runes := []rune(body)
-	limit := int(RetrievalBody * actx.CharsPerToken)
+	limit := int(RetrievalBody * tokens.CharsPerToken)
 	if limit < len(runes) {
 		clipped = strings.TrimSpace(string(runes[:limit]))
 	}
@@ -317,11 +318,11 @@ func Retrieve(ctx context.Context, d *db.DB, o RetrieveOptions) (Retrieval, erro
 	for _, id := range order {
 		rec := byID[id]
 		body := clipBody(rec.Body, rec.ID)
-		tokens := actx.EstimateTokens(rec.Title + "\n" + body)
-		if total+tokens > o.Budget {
+		n := tokens.Estimate(rec.Title + "\n" + body)
+		if total+n > o.Budget {
 			continue
 		}
-		total += tokens
+		total += n
 		out.Records = append(out.Records, Retrieved{
 			ID: rec.ID, Title: rec.Title, Text: body,
 			Date: time.Unix(int64(rec.UpdatedAt), 0).UTC().Format("2006-01-02"), Confirmed: rec.Confirmed(),

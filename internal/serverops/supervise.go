@@ -16,9 +16,9 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -120,7 +120,7 @@ func Supervise(ctx context.Context, e worker.Env) error {
 		return condense(ctx, e, threadID, now, loc, changes, text, marks)
 	}
 	budget := set.Float(KeyWorkerMonthlyUSD)
-	spend, err := usage.ThreadMonthToDate(ctx, d.Read, threadID, now, loc)
+	spend, err := inference.ThreadMonthToDate(ctx, d.Read, threadID, now, loc)
 	if err != nil {
 		return err
 	}

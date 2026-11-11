@@ -191,13 +191,19 @@ behavior-parity target.
   on each usage row, and a model outside the catalog fails closed. The API key is
   a write-only secret setting (the `ANTHROPIC_API_KEY` variable pins it). The
   monthly budget defaults to $150 with scheduled runs paused at 80% and chat at
-  100%; each model has its own run cost cap, checked against the next request
-  written cold at the thread's cache lifetime, as is a $10 thread cost cap
-  over all runs of a thread and its subagent threads, lowered by the cost cap
-  chosen in the composer when the thread was created. A run's spend includes
-  its subagent runs, and every subagent request is also checked against each
-  parent run's cap. An Anthropic spend-cap 429
-  stops the run as a budget stop. The
+  95%; the last 5% is reserved for classification. Every paid model call,
+  memory summaries included, reserves its full cold prompt plus the request's
+  maximum output tokens and maximum web searches before dispatch, and an
+  attempt whose outcome is unknown stays reserved and expires to an estimated
+  charge after 24 hours. Reservations from the previous month carry into the
+  new month until they settle or expire. When the budget is exhausted,
+  scheduled jobs that need no model call still run. Each model has its own run
+  cost cap, checked against the next request written cold at the thread's
+  cache lifetime, as is a $10 thread cost cap over all runs of a thread and
+  its subagent threads, lowered by the cost cap chosen in the composer when
+  the thread was created. A run's spend includes its subagent runs, and every
+  subagent request is also checked against each parent run's cap. An
+  Anthropic spend-cap 429 stops the run as a budget stop. The
   catalog also records whether a model accepts a forced `tool_choice`
   (`any` or a named tool): only Haiku does, and the loop sends the request
   to Sonnet and Opus without it. The loop ends a run with a clear thread

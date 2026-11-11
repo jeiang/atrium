@@ -23,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/store"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/textx"
 )
@@ -337,11 +338,12 @@ func runCard(ctx context.Context, q db.Querier, t threads.Thread, run *journal.R
 			card.Current = &current
 		}
 	}
-	err := q.QueryRowContext(ctx,
-		"SELECT COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), COALESCE(SUM(cache_read),0), "+
-			"COALESCE(SUM(cache_write_5m + cache_write_1h),0), COALESCE(SUM(cost_usd),0) FROM usage WHERE run_id = ?", run.ID,
-	).Scan(&card.Input, &card.Output, &card.CacheRead, &card.CacheWrite, &card.Cost)
-	return card, err
+	totals, err := inference.TotalsOfRun(ctx, q, run.ID)
+	if err != nil {
+		return card, err
+	}
+	card.Input, card.Output, card.CacheRead, card.CacheWrite, card.Cost = totals.Input, totals.Output, totals.CacheRead, totals.CacheWrite, totals.Cost
+	return card, nil
 }
 
 func ChildCard(ctx context.Context, q db.Querier, t threads.Thread, now float64) (Card, error) {

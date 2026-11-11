@@ -7,7 +7,6 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"testing"
@@ -15,10 +14,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 )
 
 type runView struct {
@@ -37,8 +36,6 @@ func agentRun(t *testing.T, args ...string) runView {
 	return v
 }
 
-var nextRequest = regexp.MustCompile(`about (\d+) tokens`)
-
 func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
@@ -50,20 +47,11 @@ func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 	}
 	thread := strconv.FormatInt(first.ThreadID, 10)
 
-	setEnv(t, settingEnv(budget.ThreadCapKey), "0.000001")
+	setEnv(t, settingEnv(inference.ThreadCapKey), "0.000001")
 	sent := len(api.Requests())
 	refused := agentRun(t, "--thread", thread, "--text", "again")
 	if refused.State != "failed" || refused.Error == nil || !strings.Contains(*refused.Error, "thread cost cap") || len(api.Requests()) != sent {
 		t.Fatalf("run over the thread cap: %+v, %d requests sent", refused, len(api.Requests())-sent)
-	}
-	found := nextRequest.FindStringSubmatch(*refused.Error)
-	if found == nil {
-		t.Fatalf("no request size in %q", *refused.Error)
-	}
-	tokens, _ := strconv.ParseInt(found[1], 10, 64)
-	cold, err := budget.ColdRequestUSD(pricing.HaikuID, tokens, "5m")
-	if err != nil {
-		t.Fatal(err)
 	}
 	threadSpend := func() float64 {
 		t.Helper()
@@ -78,16 +66,29 @@ func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 		}
 		return spent
 	}
+	reservation := func() float64 {
+		t.Helper()
+		d, err := db.Connect(filepath.Join(dir, "atrium.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = d.Close() }()
+		var n int64
+		if err := d.Read.QueryRow("SELECT reservation_nusd FROM usage WHERE thread_id = ? ORDER BY id DESC LIMIT 1", first.ThreadID).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return float64(n) / inference.NanoUSD
+	}
 	spent := threadSpend()
-	setEnv(t, settingEnv(budget.ThreadCapKey), fmt.Sprintf("%.8f", spent+cold*1.5))
+	setEnv(t, settingEnv(inference.ThreadCapKey), fmt.Sprintf("%.8f", spent+reservation()*1.5))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("second")))
 	if ran := agentRun(t, "--thread", thread, "--text", "one"); ran.State != "done" {
 		t.Fatalf("run under the thread cap: %+v", ran)
 	}
-	setEnv(t, settingEnv(budget.ThreadCapKey), fmt.Sprintf("%.8f", cold+threadSpend()/2))
+	setEnv(t, settingEnv(inference.ThreadCapKey), fmt.Sprintf("%.8f", reservation()+threadSpend()/2))
 	sent = len(api.Requests())
 	if held := agentRun(t, "--thread", thread, "--text", "two"); held.State != "failed" || held.Error == nil ||
-		!strings.Contains(*held.Error, budget.ThreadCapKey) || len(api.Requests()) != sent {
+		!strings.Contains(*held.Error, inference.ThreadCapKey) || len(api.Requests()) != sent {
 		t.Errorf("run once earlier runs of the thread used the cap: %+v", held)
 	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("elsewhere")))

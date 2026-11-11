@@ -1,18 +1,19 @@
-package usage
+package inference
 
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
-	"strconv"
+	"math"
+	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/numx"
-	"github.com/jeiang/atrium/internal/obs"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/timex"
 )
 
@@ -25,27 +26,9 @@ const (
 	SourcePi           = "pi"
 
 	ProviderAnthropic = "anthropic"
+
+	NanoUSD = 1_000_000_000
 )
-
-type MissingRequestID struct{}
-
-func (MissingRequestID) Error() string { return "usage: the request has no id" }
-
-type Entry struct {
-	TS         float64
-	RequestID  string
-	Source     string
-	Provider   string
-	ThreadID   int64
-	RunID      int64
-	Kind       string
-	Model      string
-	Effort     string
-	ToolCalls  int64
-	WallMS     int64
-	Partial    bool
-	Compaction int64
-}
 
 type Iteration struct {
 	Type         string  `json:"type"`
@@ -58,6 +41,16 @@ type Iteration struct {
 	Tier         string  `json:"tier"`
 	CostUSD      float64 `json:"cost_usd"`
 	Unpriced     bool    `json:"unpriced,omitempty"`
+}
+
+type priced struct {
+	iterations []Iteration
+	tokens     pricing.Tokens
+	searches   int64
+	reasoning  int64
+	tier       string
+	cost       float64
+	unpriced   bool
 }
 
 func tokensOf(input, creation, read, output int64, split *anthropic.CacheCreation) pricing.Tokens {
@@ -111,17 +104,8 @@ func iterationsOf(model string, u anthropic.Usage) []Iteration {
 	return out
 }
 
-func Record(ctx context.Context, d *db.DB, e Entry, u anthropic.Usage) (float64, error) {
-	if e.RequestID == "" {
-		return 0, MissingRequestID{}
-	}
-	if e.Source == "" {
-		e.Source = SourceLoop
-	}
-	if e.Provider == "" {
-		e.Provider = ProviderAnthropic
-	}
-	iterations := iterationsOf(e.Model, u)
+func priceUsage(model string, u anthropic.Usage) priced {
+	iterations := iterationsOf(model, u)
 	var sum pricing.Tokens
 	var costs []float64
 	high, flat, unpriced := false, true, false
@@ -143,41 +127,31 @@ func Record(ctx context.Context, d *db.DB, e Entry, u anthropic.Usage) (float64,
 		tier = pricing.TierFlat
 	}
 	searches := SearchesOf(u)
-	cost := numx.Sum(costs) + float64(float64(searches)*pricing.SearchUSD)
-	raw, err := json.Marshal(iterations)
-	if err != nil {
-		return 0, err
+	return priced{
+		iterations: iterations,
+		tokens:     sum,
+		searches:   searches,
+		reasoning:  ReasoningOf(u),
+		tier:       tier,
+		cost:       numx.Sum(costs) + float64(float64(searches)*pricing.SearchUSD),
+		unpriced:   unpriced,
 	}
-	reasoning := ReasoningOf(u)
-	_, err = d.Write.ExecContext(ctx,
-		"INSERT INTO usage (ts, request_id, source, provider, thread_id, run_id, kind, job_name, model, effort, iterations, "+
-			"input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, reasoning_tokens, searches, tool_calls, wall_ms, "+
-			"tier, cost_usd, partial, unpriced, compaction) "+
-			"VALUES (?, ?, ?, ?, ?, ?, ?, (SELECT j.name FROM threads t JOIN jobs j ON j.id = t.job_id WHERE t.id = ?), ?, ?, ?, "+
-			"?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) ON CONFLICT(request_id) DO NOTHING",
-		e.TS, e.RequestID, e.Source, e.Provider, nullable(e.ThreadID), nullable(e.RunID), e.Kind, e.ThreadID, e.Model, e.Effort,
-		string(raw), sum.Input, sum.CacheWrite5m, sum.CacheWrite1h, sum.CacheRead, sum.Output, reasoning,
-		searches, e.ToolCalls, e.WallMS, tier, cost, e.Partial, unpriced, e.Compaction)
-	if err != nil {
-		return 0, err
+}
+
+func nanoUSD(usd float64) int64 { return int64(math.Ceil(usd * NanoUSD)) }
+
+func usdOf(n int64) float64 { return float64(n) / NanoUSD }
+
+func classFor(source, kind string) Class {
+	if source == SourceSubscription {
+		return ClassSubscription
 	}
-	kind := e.Kind
-	if kind == "" {
-		kind = "unknown"
+	switch kind {
+	case KindMemory, "cron", "nightly", "worker":
+		return Unattended
+	default:
+		return Interactive
 	}
-	model := e.Model
-	if model == "" {
-		model = "unknown"
-	}
-	obs.LLMRequests.Add(1, model, kind, strconv.FormatBool(e.Partial))
-	obs.LLMDuration.Observe(float64(e.WallMS)/1000, model, kind)
-	obs.LLMTokens.Add(float64(sum.Input), model, kind, "input")
-	obs.LLMTokens.Add(float64(sum.CacheWrite5m+sum.CacheWrite1h), model, kind, "cache_write")
-	obs.LLMTokens.Add(float64(sum.CacheRead), model, kind, "cache_read")
-	obs.LLMTokens.Add(float64(sum.Output), model, kind, "output")
-	obs.LLMTokens.Add(float64(reasoning), model, kind, "reasoning")
-	obs.LLMCost.Add(cost, model, kind)
-	return cost, nil
 }
 
 func nullable(id int64) *int64 {
@@ -187,6 +161,21 @@ func nullable(id int64) *int64 {
 	return &id
 }
 
+func nullableText(text string) *string {
+	if text == "" {
+		return nil
+	}
+	return &text
+}
+
+func Location(ctx context.Context, q db.Querier) (*time.Location, error) {
+	found, err := settings.From(ctx).Resolve(ctx, q, config.KeyTZ)
+	if err != nil {
+		return nil, err
+	}
+	return config.Zone(found.Value)
+}
+
 func MonthStart(now float64, loc *time.Location) float64 {
 	sec, us := timex.SplitTimestamp(now)
 	year, month, _ := time.Unix(sec, us*1000).In(loc).Date()
@@ -194,13 +183,21 @@ func MonthStart(now float64, loc *time.Location) float64 {
 	return float64(timex.WallToUnix(loc, wall))
 }
 
-const budgetSQL = "kind <> ? AND source <> ?"
+func NextMonthStart(now float64, loc *time.Location) float64 {
+	sec, us := timex.SplitTimestamp(now)
+	year, month, _ := time.Unix(sec, us*1000).In(loc).Date()
+	wall := time.Date(year, month+1, 1, 0, 0, 0, 0, time.UTC).Unix()
+	return float64(timex.WallToUnix(loc, wall))
+}
+
+const committedSQL = "CASE WHEN budget_class = 'subscription' THEN 0 " +
+	"WHEN state IN ('reserved','unknown') THEN reservation_nusd ELSE accounted_nusd END"
 
 func MonthToDate(ctx context.Context, q db.Querier, now float64, loc *time.Location) (float64, error) {
-	var cost float64
-	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE ts >= ? AND "+budgetSQL,
-		MonthStart(now, loc), KindMemory, SourceSubscription).Scan(&cost)
-	return cost, err
+	var n int64
+	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM("+committedSQL+"), 0) FROM usage WHERE month_start = ? AND budget_class <> ?",
+		MonthStart(now, loc), ClassSubscription).Scan(&n)
+	return usdOf(n), err
 }
 
 func ThreadMonthToDate(ctx context.Context, q db.Querier, threadID int64, now float64, loc *time.Location) (float64, error) {
@@ -227,12 +224,112 @@ func RunCost(ctx context.Context, q db.Querier, runID int64) (float64, error) {
 	return cost, err
 }
 
-func TreeCost(ctx context.Context, q db.Querier, runID int64) (float64, error) {
+func SpendOnRuns(ctx context.Context, q db.Querier, runIDs []int64) (float64, error) {
+	if len(runIDs) == 0 {
+		return 0, nil
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(runIDs)), ",")
+	args := make([]any, len(runIDs))
+	for i, id := range runIDs {
+		args[i] = id
+	}
 	var cost float64
-	err := q.QueryRowContext(ctx,
-		"WITH RECURSIVE tree(id) AS (SELECT ? UNION SELECT r.id FROM runs r JOIN tree ON r.parent_run_id = tree.id) "+
-			"SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE run_id IN (SELECT id FROM tree)", runID).Scan(&cost)
+	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE run_id IN ("+marks+")", args...).Scan(&cost)
 	return cost, err
+}
+
+func CommittedOnRuns(ctx context.Context, q db.Querier, runIDs []int64) (int64, error) {
+	if len(runIDs) == 0 {
+		return 0, nil
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(runIDs)), ",")
+	args := make([]any, len(runIDs))
+	for i, id := range runIDs {
+		args[i] = id
+	}
+	var n int64
+	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM("+committedSQL+"), 0) FROM usage WHERE run_id IN ("+marks+")", args...).Scan(&n)
+	return n, err
+}
+
+func RunTokens(ctx context.Context, q db.Querier, runID int64) (int64, error) {
+	var n int64
+	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(input_tokens + cache_write_5m + cache_write_1h + cache_read + output_tokens), 0) AS n "+
+		"FROM usage WHERE run_id = ?", runID).Scan(&n)
+	return n, err
+}
+
+type RunTotals struct {
+	Input      int64
+	Output     int64
+	CacheRead  int64
+	CacheWrite int64
+	Cost       float64
+}
+
+func TotalsOfRun(ctx context.Context, q db.Querier, runID int64) (RunTotals, error) {
+	var t RunTotals
+	err := q.QueryRowContext(ctx,
+		"SELECT COALESCE(SUM(input_tokens),0), COALESCE(SUM(output_tokens),0), COALESCE(SUM(cache_read),0), "+
+			"COALESCE(SUM(cache_write_5m + cache_write_1h),0), COALESCE(SUM(cost_usd),0) FROM usage WHERE run_id = ?", runID,
+	).Scan(&t.Input, &t.Output, &t.CacheRead, &t.CacheWrite, &t.Cost)
+	return t, err
+}
+
+func SpendOnThreads(ctx context.Context, q db.Querier, threadIDs []int64, since float64) (float64, error) {
+	if len(threadIDs) == 0 {
+		return 0, nil
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(threadIDs)), ",")
+	args := make([]any, 0, len(threadIDs)+1)
+	for _, id := range threadIDs {
+		args = append(args, id)
+	}
+	args = append(args, since)
+	var cost float64
+	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE thread_id IN ("+marks+") AND ts >= ?", args...).Scan(&cost)
+	return cost, err
+}
+
+func ThreadCosts(ctx context.Context, q db.Querier, threadIDs []int64) (map[int64]float64, error) {
+	out := make(map[int64]float64, len(threadIDs))
+	if len(threadIDs) == 0 {
+		return out, nil
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(threadIDs)), ",")
+	args := make([]any, len(threadIDs))
+	for i, id := range threadIDs {
+		args[i] = id
+	}
+	rows, err := q.QueryContext(ctx, "SELECT thread_id, COALESCE(SUM(cost_usd), 0) FROM usage WHERE thread_id IN ("+marks+") GROUP BY thread_id", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var id int64
+		var cost float64
+		if err := rows.Scan(&id, &cost); err != nil {
+			return nil, err
+		}
+		out[id] = cost
+	}
+	return out, rows.Err()
+}
+
+func ThreadWarmth(ctx context.Context, q db.Querier, threadID int64) (float64, int64, bool, error) {
+	var ts float64
+	var prompt int64
+	err := q.QueryRowContext(ctx,
+		"SELECT ts, input_tokens + cache_write_5m + cache_write_1h + cache_read FROM usage WHERE thread_id = ? ORDER BY ts DESC LIMIT 1",
+		threadID).Scan(&ts, &prompt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, 0, false, nil
+	}
+	if err != nil {
+		return 0, 0, false, err
+	}
+	return ts, prompt, true, nil
 }
 
 type Summary struct {
@@ -272,18 +369,18 @@ func scanSummary(row *sql.Row) (Summary, error) {
 }
 
 func MonthSummary(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Summary, error) {
-	return scanSummary(q.QueryRowContext(ctx, "SELECT "+summaryFields+" FROM usage WHERE ts >= ? AND "+budgetSQL,
-		pricing.TierHigh, MonthStart(now, loc), KindMemory, SourceSubscription))
+	return scanSummary(q.QueryRowContext(ctx, "SELECT "+summaryFields+" FROM usage WHERE month_start = ? AND budget_class <> ?",
+		pricing.TierHigh, MonthStart(now, loc), ClassSubscription))
 }
 
 func MemorySummary(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Summary, error) {
-	return scanSummary(q.QueryRowContext(ctx, "SELECT "+summaryFields+" FROM usage WHERE ts >= ? AND kind = ?",
+	return scanSummary(q.QueryRowContext(ctx, "SELECT "+summaryFields+" FROM usage WHERE month_start = ? AND kind = ?",
 		pricing.TierHigh, MonthStart(now, loc), KindMemory))
 }
 
 func SubscriptionSummary(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Summary, error) {
-	return scanSummary(q.QueryRowContext(ctx, "SELECT "+summaryFields+" FROM usage WHERE ts >= ? AND source = ?",
-		pricing.TierHigh, MonthStart(now, loc), SourceSubscription))
+	return scanSummary(q.QueryRowContext(ctx, "SELECT "+summaryFields+" FROM usage WHERE month_start = ? AND budget_class = ?",
+		pricing.TierHigh, MonthStart(now, loc), ClassSubscription))
 }
 
 type KindRow struct {
@@ -298,8 +395,8 @@ type KindRow struct {
 func ByKind(ctx context.Context, q db.Querier, now float64, loc *time.Location) ([]KindRow, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT kind, COUNT(*) AS calls, SUM(cost_usd) AS cost, SUM(searches) AS searches, SUM(tool_calls) AS tool_calls, "+
-			"SUM(wall_ms) AS wall_ms FROM usage WHERE ts >= ? AND source <> ? GROUP BY kind ORDER BY cost DESC",
-		MonthStart(now, loc), SourceSubscription)
+			"SUM(wall_ms) AS wall_ms FROM usage WHERE month_start = ? AND budget_class <> ? GROUP BY kind ORDER BY cost DESC",
+		MonthStart(now, loc), ClassSubscription)
 	if err != nil {
 		return nil, err
 	}
@@ -324,18 +421,18 @@ type ThreadRow struct {
 
 func ByThread(ctx context.Context, q db.Querier, now float64, loc *time.Location, limit int) ([]ThreadRow, error) {
 	rows, err := q.QueryContext(ctx,
-		"SELECT u.thread_id, t.title, t.kind, COUNT(*) AS calls, SUM(u.cost_usd) AS cost, "+
-			"SUM(u.input_tokens + u.cache_write_5m + u.cache_write_1h + u.cache_read) AS prompt_tokens, "+
-			"MAX(u.input_tokens + u.cache_write_5m + u.cache_write_1h + u.cache_read) AS max_prompt_tokens, "+
-			"SUM(u.output_tokens) AS output_tokens, SUM(u.reasoning_tokens) AS reasoning_tokens, SUM(u.searches) AS searches "+
-			"FROM usage u JOIN threads t ON t.id = u.thread_id WHERE u.ts >= ? AND u.source <> ? "+
-			"GROUP BY u.thread_id ORDER BY cost DESC LIMIT ?", MonthStart(now, loc), SourceSubscription, limit)
+		"SELECT thread_id, COUNT(*) AS calls, SUM(cost_usd) AS cost, "+
+			"SUM(input_tokens + cache_write_5m + cache_write_1h + cache_read) AS prompt_tokens, "+
+			"MAX(input_tokens + cache_write_5m + cache_write_1h + cache_read) AS max_prompt_tokens, "+
+			"SUM(output_tokens) AS output_tokens, SUM(reasoning_tokens) AS reasoning_tokens, SUM(searches) AS searches "+
+			"FROM usage WHERE month_start = ? AND budget_class <> ? AND thread_id IS NOT NULL "+
+			"GROUP BY thread_id ORDER BY cost DESC LIMIT ?", MonthStart(now, loc), ClassSubscription, limit)
 	if err != nil {
 		return nil, err
 	}
 	return db.Collect(rows, func(r *sql.Rows) (ThreadRow, error) {
 		var t ThreadRow
-		return t, r.Scan(&t.ThreadID, &t.Title, &t.Kind, &t.Calls, &t.Cost, &t.PromptTokens, &t.MaxPromptTokens, &t.OutputTokens, &t.ReasoningTokens, &t.Searches)
+		return t, r.Scan(&t.ThreadID, &t.Calls, &t.Cost, &t.PromptTokens, &t.MaxPromptTokens, &t.OutputTokens, &t.ReasoningTokens, &t.Searches)
 	})
 }
 
@@ -348,4 +445,13 @@ func PrimaryTokens(u anthropic.Usage) pricing.Tokens {
 		}
 	}
 	return TokensOf(u)
+}
+
+func HasRows(ctx context.Context, q db.Querier) (bool, error) {
+	var one int
+	err := q.QueryRowContext(ctx, "SELECT 1 FROM usage LIMIT 1").Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
 }

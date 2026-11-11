@@ -140,7 +140,7 @@ func TestMemoryWorkRefusesUnderTheRunCap(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT state, COALESCE(error, '') FROM memory_jobs WHERE thread_id = 1 ORDER BY id DESC LIMIT 1").Scan(&state, &errText); err != nil {
 		t.Fatal(err)
 	}
-	if state != "failed" || !strings.Contains(errText, "run cap") {
+	if state != "failed" || !strings.Contains(errText, "run cost cap") {
 		t.Errorf("job state %q error %q, want failed with a run cap error", state, errText)
 	}
 }
