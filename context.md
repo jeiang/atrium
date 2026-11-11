@@ -371,6 +371,12 @@ behavior-parity target.
 
 ## Current authority boundaries
 
+- The effect ledger (`internal/ledger`) owns the `effects`, `effect_resources`,
+  `effect_claims`, `effect_resolutions` and `effect_import_refs` tables. Task
+  writes (`task_add`, `task_update`, `task_done`) record one effect atomically
+  with the task and undo through a second effect row; `atrium effects
+  list|show|resolve|undo` inspects and settles them. The other writers keep
+  their existing ledgers until their cutover.
 - Mail writes use the shared gate. Shadow mode records decisions without
   automatic mailbox writes; live automatic writes also depend on pause,
   go-live eligibility, verification, caps, and action ledgers.

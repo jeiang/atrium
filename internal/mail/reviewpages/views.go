@@ -168,6 +168,7 @@ type WriteActivity struct {
 	State      string   `json:"state"`
 	Error      *string  `json:"error"`
 	Undoable   bool     `json:"undoable"`
+	Resolved   bool     `json:"resolved"`
 }
 
 type SettingsActivity struct {

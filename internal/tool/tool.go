@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/writes"
 )
 
@@ -83,6 +84,7 @@ type Context struct {
 	Client      *anthropic.Client
 	Progress    *progress.Writer
 	Undoers     *writes.Registry
+	Ledger      *ledger.Store
 	Sources     []int64
 }
 

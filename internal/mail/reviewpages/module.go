@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/actionlink"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
@@ -50,6 +51,7 @@ func RecoverDrafts(ctx context.Context, d *db.DB, cfg config.Config) error {
 
 type Options struct {
 	Writes  *writes.Registry
+	Ledger  func(*db.DB) *ledger.Store
 	Enabled func(context.Context, db.Querier, string) (bool, error)
 }
 
@@ -59,6 +61,7 @@ type service struct {
 	pipeline *proposals.Pipeline
 	live     *live.Live
 	writes   *writes.Registry
+	ledger   *ledger.Store
 	drafts   *drafts.Store
 	registry *proposals.Registry
 }
@@ -81,12 +84,17 @@ func Module(o Options) web.Module {
 		if undo == nil {
 			undo = writes.NewRegistry()
 		}
+		effects := ledger.NewStore(d.DB, now)
+		if o.Ledger != nil {
+			effects = o.Ledger(d.DB)
+		}
 		s := &service{
 			deps:     d,
 			now:      now,
 			pipeline: &proposals.Pipeline{DB: d.DB, Registry: registry, Now: now, Enabled: o.Enabled},
 			live:     &live.Live{DB: d.DB, Cfg: d.Cfg, Registry: registry, Now: now},
 			writes:   undo,
+			ledger:   effects,
 			drafts:   &drafts.Store{DB: d.DB, Cfg: d.Cfg, Open: open, Now: now},
 			registry: registry,
 		}
@@ -114,6 +122,8 @@ func Module(o Options) web.Module {
 		r.Post("/activity/mail/{action_id}/resolve", s.resolveMail)
 		r.Post("/activity/write/{write_id}/undo", s.undoWrite)
 		r.Post("/activity/write/{write_id}/resolve", s.resolveWrite)
+		r.Post("/activity/effect/{effect_id}/undo", s.undoEffect)
+		r.Post("/activity/effect/{effect_id}/resolve", s.resolveEffect)
 
 		r.Get("/drafts", s.draftsPage)
 		r.Get("/drafts/{draft_id}", s.draftPage)
