@@ -182,7 +182,9 @@ var importTables = []tablePlan{
 	{table: "auth_login_links", action: drop, why: "login links do not survive the import"},
 	{table: "oauth_states", action: drop, why: "transient OAuth handshakes do not survive the import"},
 	{table: "action_links", action: drop, why: "signed action links expire"},
-	{table: "settings_audit", action: carry, why: "historical audit is carried unchanged before the import's own sanitized entries"},
+	{table: "settings_audit", action: carry, why: "historical audit is carried unchanged before the import's own sanitized entries", run: func(im *importer) (int64, error) {
+		return im.carryAudit()
+	}},
 	{table: "job_runs", action: drop, why: "job history is not carried; the jobs are"},
 	{table: "events", action: drop, why: "the mail event log is not carried"},
 	{table: "pass_runs", action: drop, why: "ops pass history is not carried"},
@@ -1162,6 +1164,42 @@ func (im *importer) copyFTS(table string, columns []string) (int64, error) {
 			return n, err
 		}
 		if _, err := im.tx.ExecContext(im.ctx, insert, values...); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, rows.Err()
+}
+
+func (im *importer) carryAudit() (int64, error) {
+	var base int64
+	if err := im.tx.QueryRowContext(im.ctx, "SELECT COALESCE(MAX(id), 0) FROM settings_audit").Scan(&base); err != nil {
+		return 0, err
+	}
+	rows, err := im.src.QueryContext(im.ctx,
+		"SELECT id, ts, key, old_value, new_value, secret, actor, source FROM settings_audit ORDER BY id")
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = rows.Close() }()
+	var n int64
+	for rows.Next() {
+		var (
+			id     int64
+			ts     float64
+			key    string
+			old    sql.NullString
+			next   sql.NullString
+			secret int
+			actor  string
+			source string
+		)
+		if err := rows.Scan(&id, &ts, &key, &old, &next, &secret, &actor, &source); err != nil {
+			return n, err
+		}
+		if _, err := im.tx.ExecContext(im.ctx,
+			"INSERT INTO settings_audit (id, ts, key, old_value, new_value, secret, actor, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+			id+base, ts, key, old, next, secret, actor, source); err != nil {
 			return n, err
 		}
 		n++
