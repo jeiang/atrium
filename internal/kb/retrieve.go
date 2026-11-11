@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -264,11 +265,28 @@ func Retrieve(ctx context.Context, d *db.DB, o RetrieveOptions) (Retrieval, erro
 	var vec []int64
 	ftsOnly := true
 	if o.Embed != nil {
-		if idx, err := embed.Active(ctx, d.Read); err == nil {
+		idx, ierr := embed.Active(ctx, d.Read)
+		if err := ctx.Err(); err != nil {
+			return out, err
+		}
+		if ierr != nil {
+			semanticSkipped(ctx, "chat_retrieval", "no_index")
+		} else {
 			embedCtx, cancel := context.WithTimeout(ctx, RetrievalWindow)
 			vectors, verr := o.Embed(embedCtx, []string{embed.QueryText(text)})
+			expired := errors.Is(embedCtx.Err(), context.DeadlineExceeded)
 			cancel()
-			if verr == nil && len(vectors) > 0 {
+			if err := ctx.Err(); err != nil {
+				return out, err
+			}
+			switch {
+			case expired:
+				semanticSkipped(ctx, "chat_retrieval", "timeout")
+			case verr != nil:
+				semanticSkipped(ctx, "chat_retrieval", "unavailable")
+			case len(vectors) == 0 || len(vectors[0]) == 0:
+				semanticSkipped(ctx, "chat_retrieval", "no_vector")
+			default:
 				near, err := vectorHits(ctx, d.Read, idx, vectors[0], o.ProjectID, o.Now)
 				if err != nil {
 					return out, err
