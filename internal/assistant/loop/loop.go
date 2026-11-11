@@ -275,6 +275,9 @@ func optional(p *string) any {
 }
 
 func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, client *anthropic.Client, runID int64, o Options) (*state, error) {
+	if o.Inference == nil {
+		return nil, errors.New("loop: no inference service")
+	}
 	found, err := journal.GetRun(ctx, d.Read, runID)
 	if err != nil {
 		return nil, err
