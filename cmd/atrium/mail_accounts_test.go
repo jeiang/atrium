@@ -16,6 +16,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/settings"
 
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
@@ -177,8 +178,7 @@ func insertMailAccount(t *testing.T, d *db.DB, id, preset, login, method string)
 
 func TestAHostMailConnectionAndAnAccountAddedInTheUIBothSync(t *testing.T) {
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	requireCipher(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir, mailAccount{"home", "icloud", "me@icloud.test", "home-pass", false}))
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
@@ -258,5 +258,22 @@ func TestAHostMailConnectionAndAnAccountAddedInTheUIBothSync(t *testing.T) {
 	defer mu.Unlock()
 	if seen["me@icloud.test"] != "home-pass" || seen["me@work.test"] != "work-pass" {
 		t.Errorf("the dialer saw %v", seen)
+	}
+}
+
+func TestDisabledMailAccountTestReportsUnconfigured(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir, mailAccount{"off", "icloud", "off@icloud.test", "off-pass", true}))
+	tested := runApp(t, "connections", "test", "mail/off")
+	if tested.code != cli.ExitError || !strings.Contains(tested.stdout, "unconfigured") {
+		t.Fatalf("a disabled mail account test: exit %d stdout %q stderr %q", tested.code, tested.stdout, tested.stderr)
+	}
+	if got := connectionState(t, dir, "mail/off"); got != "unconfigured" {
+		t.Fatalf("state = %q", got)
+	}
+	s := &integrationSite{t: t, dir: dir}
+	s.start()
+	if code, body := s.conn("/test", url.Values{"id": {"mail/off"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "unconfigured") {
+		t.Fatalf("the page test of a disabled account: %d %.300s", code, body)
 	}
 }

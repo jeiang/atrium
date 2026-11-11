@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path"
 	"slices"
 	"strings"
 	"sync"
@@ -667,6 +668,16 @@ func (l *Lease) Endpoint(name string) (string, error) {
 }
 
 func (l *Lease) HTTP(name string) (*http.Client, error) {
+	return l.http(name, false)
+}
+
+// HTTPRead returns a client for a named endpoint whose requests are safe to
+// replay after a redirect.
+func (l *Lease) HTTPRead(name string) (*http.Client, error) {
+	return l.http(name, true)
+}
+
+func (l *Lease) http(name string, follow bool) (*http.Client, error) {
 	if l.closed {
 		return nil, errors.New("connections: the lease is closed")
 	}
@@ -677,24 +688,37 @@ func (l *Lease) HTTP(name string) (*http.Client, error) {
 	u, err := url.Parse(endpoint)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return nil, fmt.Errorf("connections: %s endpoint %q must be an http or https URL", l.id, endpoint)
+	}
+	key := name
+	if follow {
+		key += "\x00read"
 	}
 	l.shared.mu.Lock()
 	defer l.shared.mu.Unlock()
-	if client, ok := l.shared.clients[name]; ok {
+	if client, ok := l.shared.clients[key]; ok {
 		return client, nil
 	}
-	client, err := l.newClient(0)
+	client, err := l.newClient(0, follow, u)
 	if err != nil {
 		return nil, err
 	}
-	guardOrigin(client, u)
-	l.shared.clients[name] = client
+	l.shared.clients[key] = client
 	return client, nil
 }
 
-// Client returns a client for a named endpoint with an explicit timeout,
-// sharing the same transport and cross-origin redirect guard as HTTP.
+// Client returns a client for a named endpoint with an explicit timeout that
+// does not follow redirects.
 func (l *Lease) Client(name string, timeout time.Duration) (*http.Client, error) {
+	return l.client(name, timeout, false)
+}
+
+// ClientRead returns a client for a named endpoint with an explicit timeout
+// whose requests are safe to replay after a redirect.
+func (l *Lease) ClientRead(name string, timeout time.Duration) (*http.Client, error) {
+	return l.client(name, timeout, true)
+}
+
+func (l *Lease) client(name string, timeout time.Duration, follow bool) (*http.Client, error) {
 	if l.closed {
 		return nil, errors.New("connections: the lease is closed")
 	}
@@ -706,25 +730,30 @@ func (l *Lease) Client(name string, timeout time.Duration) (*http.Client, error)
 	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
 		return nil, fmt.Errorf("connections: %s endpoint %q must be an http or https URL", l.id, endpoint)
 	}
-	client, err := l.newClient(timeout)
-	if err != nil {
-		return nil, err
-	}
-	guardOrigin(client, u)
-	return client, nil
+	return l.newClient(timeout, follow, u)
 }
 
-func guardOrigin(client *http.Client, u *url.URL) {
-	origin := u.Scheme + "://" + u.Host
+func guardOrigin(client *http.Client, base *url.URL) {
+	origin := base.Scheme + "://" + base.Host
+	prefix := base.Path
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
 			return errors.New("stopped after 10 redirects")
 		}
-		if req.URL.Scheme+"://"+req.URL.Host != origin {
+		if req.URL.Scheme+"://"+req.URL.Host != origin || !withinPath(prefix, req.URL.Path) {
 			req.Header.Del("Authorization")
 		}
 		return nil
 	}
+}
+
+func withinPath(base, target string) bool {
+	base = path.Clean(base)
+	if base == "/" || base == "." {
+		return true
+	}
+	target = path.Clean(target)
+	return target == base || strings.HasPrefix(target, base+"/")
 }
 
 // DB returns the writable database behind a lease opened by a store; a
@@ -757,28 +786,35 @@ func (s *Store) Remove(ctx context.Context, id ID) error {
 	})
 }
 
-func (l *Lease) newClient(timeout time.Duration) (*http.Client, error) {
+func (l *Lease) newClient(timeout time.Duration, follow bool, base *url.URL) (*http.Client, error) {
 	if timeout <= 0 {
 		timeout = defaultTimeout
 		if l.options.Timeout > 0 {
 			timeout = time.Duration(l.options.Timeout) * time.Second
 		}
 	}
-	return transport.New(transport.Options{
+	client, err := transport.New(transport.Options{
 		Timeout:         timeout,
 		CAFile:          l.options.CAFile,
 		Proxy:           l.options.Proxy,
-		FollowRedirects: true,
+		FollowRedirects: follow,
 	})
+	if err != nil {
+		return nil, err
+	}
+	if follow && base != nil {
+		guardOrigin(client, base)
+	}
+	return client, nil
 }
 
 // Transport returns a client for a connection whose destinations are not a
-// single declared endpoint.
+// single declared endpoint. It does not follow redirects.
 func (l *Lease) Transport() (*http.Client, error) {
 	if l.closed {
 		return nil, errors.New("connections: the lease is closed")
 	}
-	return l.newClient(0)
+	return l.newClient(0, false, nil)
 }
 
 func (l *Lease) Credential(slot string) (string, error) {
@@ -922,6 +958,9 @@ func (s *Store) Save(ctx context.Context, id ID, cand Candidate) (View, error) {
 	if err := validateCandidate(def, merged, current); err != nil {
 		return View{}, err
 	}
+	if err := s.requireEncrypted(merged); err != nil {
+		return View{}, err
+	}
 	if err := s.save(ctx, id, current, merged, []Result{}, Untested, ""); err != nil {
 		return View{}, err
 	}
@@ -943,7 +982,13 @@ func (s *Store) TestAndSave(ctx context.Context, id ID, cand Candidate) (View, e
 	if err := validateCandidate(def, cand, current); err != nil {
 		return View{}, err
 	}
-	lease := s.candidateLease(current, cand)
+	if err := s.requireEncrypted(cand); err != nil {
+		return View{}, err
+	}
+	lease, err := s.candidateLease(ctx, current, cand)
+	if err != nil {
+		return View{}, err
+	}
 	results, err := def.Test(ctx, lease, lease.caps)
 	if err != nil {
 		return View{}, err
@@ -961,6 +1006,9 @@ func (s *Store) TestAndSave(ctx context.Context, id ID, cand Candidate) (View, e
 }
 
 func (s *Store) save(ctx context.Context, id ID, current View, cand Candidate, results []Result, state State, reason string) error {
+	if err := s.requireEncrypted(cand); err != nil {
+		return err
+	}
 	configJSON := current.Config
 	if current.ConfigSource == SourceOperator {
 		configJSON = cand.Config
@@ -1091,12 +1139,12 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 	return err
 }
 
-func (s *Store) candidateLease(current View, cand Candidate) *Lease {
+func (s *Store) candidateLease(ctx context.Context, current View, cand Candidate) (*Lease, error) {
 	caps := make([]Capability, 0, len(cand.Capabilities))
 	caps = append(caps, cand.Capabilities...)
-	creds := map[string]credential{}
-	for _, c := range current.Credentials {
-		creds[c.Slot] = credential{source: c.Source, fileRef: c.FileRef, expires: c.ExpiresAt}
+	creds, err := s.loadCredentials(ctx, s.q, current.ID)
+	if err != nil {
+		return nil, err
 	}
 	for _, c := range cand.Credentials {
 		if c.Value != "" {
@@ -1109,7 +1157,19 @@ func (s *Store) candidateLease(current View, cand Candidate) *Lease {
 	}
 	lease := &Lease{store: s, id: current.ID, kind: current.Kind, revision: current.revisionValue(), config: config, options: current.transport, caps: caps, creds: creds}
 	lease.shared = s.sharedFor(current.ID, current.revisionValue())
-	return lease
+	return lease, nil
+}
+
+func (s *Store) requireEncrypted(cand Candidate) error {
+	for _, c := range cand.Credentials {
+		if c.Value == "" {
+			continue
+		}
+		if s.d == nil || !s.d.Encrypted() {
+			return &EncryptedRequired{Slot: c.Slot}
+		}
+	}
+	return nil
 }
 
 func validateCandidate(def Definition, cand Candidate, current View) error {

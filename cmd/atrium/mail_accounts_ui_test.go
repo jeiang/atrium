@@ -12,6 +12,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/settings"
@@ -42,7 +43,12 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	h, x := mailtest.RawWith("Standup", "lead@work.test", "<work-1@work.test>", "Moved to 10.")
 	all.Add(h, x, nil, []string{`\Inbox`})
 	passwords := map[string]string{"me@icloud.test": "home-pass", "me@work.test": "work-pass"}
+	var seenMu sync.Mutex
+	lastPassword := ""
 	t.Cleanup(imapclient.UseDialer(func(_ context.Context, a config.AccountSpec, password string) (mail.Conn, error) {
+		seenMu.Lock()
+		lastPassword = password
+		seenMu.Unlock()
 		if passwords[a.Login] != password {
 			return nil, errors.New("AUTHENTICATIONFAILED Invalid credentials")
 		}
@@ -127,6 +133,20 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	}
 	if !strings.Contains(page(), `id="new-auth" name="auth_method"`) {
 		t.Error("the add form does not offer an auth method")
+	}
+	passwords["me@work2.test"] = "work-pass"
+	relogin := url.Values{"label": {"Work"}, "login": {"me@work2.test"}, "enabled": {"1"}, "auth_method": {"password"}}
+	if code, body := post("/accounts/work", relogin); code != http.StatusOK {
+		t.Fatalf("a login change with the stored password: %d %.300s", code, body)
+	}
+	if n := count("SELECT COUNT(*) FROM mail_accounts WHERE id = 'work' AND login = 'me@work2.test'"); n != 1 {
+		t.Fatal("the login change was not saved")
+	}
+	seenMu.Lock()
+	used := lastPassword
+	seenMu.Unlock()
+	if used != "work-pass" {
+		t.Fatalf("the candidate test used password %q", used)
 	}
 	update := url.Values{"label": {"Work"}, "login": {"me@work.test"}, "enabled": {"1"}, "auth_method": {"xoauth2"}}
 	if code, _ := post("/accounts/work", update); code != http.StatusUnprocessableEntity {

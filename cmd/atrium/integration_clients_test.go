@@ -15,7 +15,7 @@ import (
 )
 
 func TestIntegrationClientsUseTheConnectionTransportAndAFailedRequestChecksAtOnce(t *testing.T) {
-	t.Parallel()
+	requireCipher(t)
 	qb := &fakeQbit{version: "v5.2.0"}
 	var broken atomic.Bool
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {

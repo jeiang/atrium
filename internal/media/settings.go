@@ -187,11 +187,11 @@ func (s Settings) TMDB() *TMDB {
 		return nil
 	}
 	images, _ := s.TMDBLease.Endpoint("images_url")
-	apiHTTP, err := s.TMDBLease.HTTP("url")
+	apiHTTP, err := s.TMDBLease.HTTPRead("url")
 	if err != nil {
 		return nil
 	}
-	imageHTTP, err := s.TMDBLease.HTTP("images_url")
+	imageHTTP, err := s.TMDBLease.HTTPRead("images_url")
 	if err != nil {
 		return nil
 	}

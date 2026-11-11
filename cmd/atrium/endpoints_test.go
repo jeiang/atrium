@@ -207,3 +207,28 @@ func TestConnectionsTestUsesTheEmbedCAAndAPassingTestReleasesTheMailHold(t *test
 		t.Fatalf("enabling mail after a passing Test: %d %q", on.code, on.stderr)
 	}
 }
+
+func TestConnectionsTestReusesTheStoredEmbeddingBearerWhenTheInputIsBlank(t *testing.T) {
+	embed := newFakeOpenAI(t)
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	requireCipher(t)
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, embed.URL+"/v1", "embeddinggemma", ""))
+	s := &integrationSite{t: t, dir: dir}
+	s.start()
+	if code, body := s.conn("/test", url.Values{"id": {"service/embedding"}, "credential.bearer": {"sk-embed-stored"}}); code != http.StatusOK {
+		t.Fatalf("storing the embedding bearer: %d %.300s", code, body)
+	}
+	before := len(embed.seen("/v1/models"))
+	if code, body := s.conn("/test", url.Values{"id": {"service/embedding"}}); code != http.StatusOK {
+		t.Fatalf("re-testing with a blank bearer: %d %.300s", code, body)
+	}
+	seen := embed.seen("/v1/models")
+	if len(seen) <= before {
+		t.Fatal("the blank-bearer test did not probe the embedding endpoint")
+	}
+	for _, got := range seen[before:] {
+		if got != "Bearer sk-embed-stored" {
+			t.Fatalf("the blank-bearer test sent %q", got)
+		}
+	}
+}

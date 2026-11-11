@@ -120,7 +120,7 @@ func (s Settings) FetchReleases(ctx context.Context, imdb string) ([]Release, er
 	if err != nil {
 		return nil, config.NotConfigured("the EZTV connection has no URL")
 	}
-	client, err := s.EZTVLease.HTTP("url")
+	client, err := s.EZTVLease.HTTPRead("url")
 	if err != nil {
 		return nil, err
 	}
