@@ -186,6 +186,16 @@ func NewKey() string {
 }
 
 func (s *Store) Begin(ctx context.Context, n New, admit Mutation) (Ticket, error) {
+	var ticket Ticket
+	err := s.DB.WithTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		ticket, err = s.BeginTx(ctx, tx, n, admit)
+		return err
+	})
+	return ticket, err
+}
+
+func (s *Store) BeginTx(ctx context.Context, tx *sql.Tx, n New, admit Mutation) (Ticket, error) {
 	if err := ctx.Err(); err != nil {
 		return Ticket{}, err
 	}
@@ -200,28 +210,24 @@ func (s *Store) Begin(ctx context.Context, n New, admit Mutation) (Ticket, error
 		return Ticket{}, err
 	}
 	now := s.now()
-	var id int64
-	err = s.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		if admit != nil {
-			if err := admit(ctx, tx); err != nil {
-				return err
-			}
+	if admit != nil {
+		if err := admit(ctx, tx); err != nil {
+			return Ticket{}, err
 		}
-		res, err := tx.ExecContext(ctx, insertEffect,
-			now, now, token, n.Origin, n.Operation, n.OperationKey, "forward", nil,
-			n.ProposalID, n.ThreadID, n.RunID, n.Account, n.MessageID, n.Digest, n.DecisionID,
-			nullText(n.Src), nullText(n.Dest), n.Target, actionText(n.Action), scrubText(n.Before), nil, rawText(n.Undo),
-			string(Intent), nil, nil)
-		if err != nil {
-			return err
-		}
-		id, err = res.LastInsertId()
-		if err != nil {
-			return err
-		}
-		return claim(ctx, tx, id, n.Resources)
-	})
+	}
+	res, err := tx.ExecContext(ctx, insertEffect,
+		now, now, token, n.Origin, n.Operation, n.OperationKey, "forward", nil,
+		n.ProposalID, n.ThreadID, n.RunID, n.Account, n.MessageID, n.Digest, n.DecisionID,
+		nullText(n.Src), nullText(n.Dest), n.Target, actionText(n.Action), scrubText(n.Before), nil, rawText(n.Undo),
+		string(Intent), nil, nil)
 	if err != nil {
+		return Ticket{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return Ticket{}, err
+	}
+	if err := claim(ctx, tx, id, n.Resources); err != nil {
 		return Ticket{}, err
 	}
 	return Ticket{ID: id, Token: token}, nil

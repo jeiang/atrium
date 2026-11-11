@@ -15,6 +15,10 @@ func AutoKey(messageID int64, kind, dest string) string {
 	return fmt.Sprintf("auto/%d/%s/%s", messageID, kind, dest)
 }
 
+func MailResource(account, imapName string, validity, uid uint32) string {
+	return fmt.Sprintf("mail/%s/%s/%d/%d", account, imapName, validity, uid)
+}
+
 func digestKey(digest, kind string) string {
 	return digest + "\x00" + kind
 }
@@ -196,28 +200,4 @@ func AutoForMessages(ctx context.Context, q db.Querier, ids []int64, now float64
 		return nil, err
 	}
 	return out, nil
-}
-
-type AutoResolution struct {
-	ID        int64
-	EffectID  int64
-	TS        float64
-	Actor     string
-	Outcome   string
-	Operation string
-}
-
-func AutoResolutionsSince(ctx context.Context, q db.Querier, source string, limit int) ([]AutoResolution, error) {
-	rows, err := q.QueryContext(ctx,
-		"SELECT r.id, r.effect_id, r.ts, r.actor, r.outcome, e.operation FROM effect_resolutions r "+
-			"JOIN effects e ON e.id = r.effect_id WHERE r.source = ? AND e.origin = ? "+
-			"ORDER BY r.ts DESC, r.id DESC LIMIT ?", source, AutoOrigin, limit)
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (AutoResolution, error) {
-		var a AutoResolution
-		err := r.Scan(&a.ID, &a.EffectID, &a.TS, &a.Actor, &a.Outcome, &a.Operation)
-		return a, err
-	})
 }

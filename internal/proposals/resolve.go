@@ -2,14 +2,11 @@ package proposals
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"slices"
 
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -18,14 +15,6 @@ const (
 	OutcomeApplied    = "applied"
 	OutcomeNotApplied = "not-applied"
 	OutcomePartial    = "partial"
-	OutcomeSettled    = "settled"
-
-	ResolveProposalAction = "proposal_action"
-	ResolveAutoUndo       = "auto_undo"
-	ResolveAutoAction     = "auto_action"
-
-	SettledText    = "settled by operator after checking the mailbox"
-	NotAppliedText = "the operator checked: the write did not happen"
 
 	UnknownOutcomeText = "Outcome unknown"
 )
@@ -35,13 +24,6 @@ var Outcomes = []string{OutcomeApplied, OutcomeNotApplied, OutcomePartial, Outco
 type Resolver struct {
 	Actor  string
 	Source string
-}
-
-func RecordResolution(ctx context.Context, x Execer, who Resolver, ts float64, kind string, rowID int64, proposalID *int64, outcome, prior string) error {
-	if prior == "" {
-		prior = UnknownOutcomeText
-	}
-	return writes.RecordResolution(ctx, x, who.Actor, who.Source, ts, kind, rowID, proposalID, outcome, prior)
 }
 
 const ErrSettledMeanwhile = ProposalError("the write was settled by the operator while it ran; the recorded outcome stands")
@@ -103,72 +85,8 @@ func (p *Pipeline) Resolve(ctx context.Context, id int64, outcome string, who Re
 		}
 		out.Settled = append(out.Settled, e.ID)
 	}
-	legacy, err := p.resolveLegacy(ctx, id, outcome, who)
-	if err != nil {
-		return out, err
-	}
-	out.Settled = append(out.Settled, legacy...)
 	if len(out.Settled) == 0 {
 		return out, ProposalError(fmt.Sprintf("proposal %d has no blocked write", id))
 	}
 	return out, nil
-}
-
-func (p *Pipeline) resolveLegacy(ctx context.Context, id int64, outcome string, who Resolver) ([]int64, error) {
-	settled := []int64{}
-	err := p.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, "SELECT id, lease, kind, undo_of, state, error FROM proposal_actions "+
-			"WHERE proposal_id = ? AND state IN ('held', 'unknown', 'partial', 'undo_held', 'undo_unknown', 'undo_partial') ORDER BY id", id)
-		if err != nil {
-			return err
-		}
-		type held struct {
-			id     int64
-			lease  float64
-			kind   string
-			undoOf *int64
-			state  ledger.State
-			error  sql.NullString
-		}
-		blocked, err := db.Collect(rows, func(r *sql.Rows) (held, error) {
-			var h held
-			return h, r.Scan(&h.id, &h.lease, &h.kind, &h.undoOf, &h.state, &h.error)
-		})
-		if err != nil {
-			return err
-		}
-		if len(blocked) == 0 {
-			return nil
-		}
-		now := p.now()
-		for _, h := range blocked {
-			isUndo := h.kind == "undo"
-			switch {
-			case (h.state == ledger.Held || h.state == ledger.UndoHeld) && now-h.lease < StuckSeconds:
-				return ProposalError(fmt.Sprintf("action %d may still be running; wait until atrium is idle and try again", h.id))
-			case isUndo && outcome == "":
-				return ProposalError(fmt.Sprintf("action %d is a blocked undo; check the mailbox and say whether the message is %s or %s", h.id, OutcomeUndone, OutcomeNotUndone))
-			}
-		}
-		for _, h := range blocked {
-			recorded := OutcomeSettled
-			state := ledger.Settled
-			if h.kind == "undo" {
-				recorded = outcome
-				if outcome == OutcomeUndone {
-					state = ledger.OK
-				}
-			}
-			if _, err := tx.ExecContext(ctx, "UPDATE proposal_actions SET state = ?, error = CASE WHEN ? = 'ok' THEN NULL ELSE ? END WHERE id = ?",
-				state, state, SettledText, h.id); err != nil {
-				return err
-			}
-			if err := RecordResolution(ctx, tx, who, now, ResolveProposalAction, h.id, &id, recorded, h.error.String); err != nil {
-				return err
-			}
-			settled = append(settled, h.id)
-		}
-		return nil
-	})
-	return settled, err
 }

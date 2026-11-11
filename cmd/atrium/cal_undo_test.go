@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/settings"
@@ -41,29 +41,35 @@ func TestProposalUndoIsRefusedWhileAnUndoRunsOrAfterAPartialUndo(t *testing.T) {
 		if _, err := seed.Write.Exec("UPDATE proposals SET status = 'applied', decided_ts = ?, applied_ts = ? WHERE id = ?", now-60, now-50, id); err != nil {
 			t.Fatal(err)
 		}
-		write, err := proposals.RecordAction(ctx, seed.Write, id, "write", nil, map[string]any{"op": "move"},
-			map[string]any{"op": live.OpMoveBack}, ledger.OK, nil, now-40)
-		if err != nil {
-			t.Fatal(err)
+		forward := seedEffect(t, seed, seededEffect{
+			Origin: "proposal", Operation: "move", OperationKey: "proposal:" + strconv.FormatInt(id, 10) + ":move",
+			Direction: "forward", Target: "proposal:" + strconv.FormatInt(id, 10), ProposalID: &id,
+			Action: `{"op":"move"}`, Undo: `{"op":"move_back"}`, State: "done", CreatedAt: now - 40, LeaseAt: now - 40, Settled: true,
+		})
+		errorText := ""
+		if text != nil {
+			errorText = *text
 		}
-		if _, err := proposals.RecordAction(ctx, seed.Write, id, "undo", &write, map[string]any{"op": proposals.UndoOp, "of": write},
-			nil, undo, text, now); err != nil {
-			t.Fatal(err)
-		}
+		seedEffect(t, seed, seededEffect{
+			Origin: "proposal", Operation: "move_back", OperationKey: "proposal:" + strconv.FormatInt(id, 10) + ":move",
+			Direction: "undo", UndoOf: &forward, ProposalID: &id, Target: "proposal:" + strconv.FormatInt(id, 10),
+			Action: `{"op":"move_back"}`, State: string(undo), Error: errorText, CreatedAt: now, LeaseAt: now,
+			Settled: undo != ledger.Intent,
+		})
 		return id
 	}
 	partialText := mailops.PartialPrefix + "expunge failed"
-	running := applied("running", ledger.Held, nil)
-	partial := applied("partial", ledger.UndoPartial, &partialText)
+	running := applied("running", ledger.Intent, nil)
+	partial := applied("partial", ledger.Partial, &partialText)
 	if err := seed.Close(); err != nil {
 		t.Fatal(err)
 	}
 
 	id := func(n int64) string { return strconv.FormatInt(n, 10) }
-	if got := runApp(t, "proposals", "undo", id(running)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "in progress") {
+	if got := runApp(t, "proposals", "undo", id(running)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "undo in progress or unresolved") {
 		t.Fatalf("undo while an undo runs = %d %q %q, want a refusal", got.code, got.stdout, got.stderr)
 	}
-	if got := runApp(t, "proposals", "undo", id(partial)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "partial undo") {
+	if got := runApp(t, "proposals", "undo", id(partial)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "undo in progress or unresolved") {
 		t.Fatalf("undo after a partial undo = %d %q %q, want a refusal", got.code, got.stdout, got.stderr)
 	}
 
@@ -73,7 +79,7 @@ func TestProposalUndoIsRefusedWhileAnUndoRunsOrAfterAPartialUndo(t *testing.T) {
 		var undos int
 		var status string
 		var undone *float64
-		if err := check.Read.QueryRow("SELECT (SELECT COUNT(*) FROM proposal_actions WHERE proposal_id = p.id AND kind = 'undo'), status, undone_ts FROM proposals p WHERE id = ?", pid).
+		if err := check.Read.QueryRow("SELECT (SELECT COUNT(*) FROM effects e WHERE e.proposal_id = p.id AND e.direction = 'undo'), status, undone_ts FROM proposals p WHERE id = ?", pid).
 			Scan(&undos, &status, &undone); err != nil {
 			t.Fatal(err)
 		}
@@ -81,4 +87,56 @@ func TestProposalUndoIsRefusedWhileAnUndoRunsOrAfterAPartialUndo(t *testing.T) {
 			t.Errorf("proposal %d after a refused undo: %d undo rows, status %q, undone %v; want it untouched", pid, undos, status, undone)
 		}
 	}
+}
+
+type seededEffect struct {
+	Origin       string
+	Operation    string
+	OperationKey string
+	Direction    string
+	Target       string
+	Action       string
+	Undo         string
+	State        string
+	Error        string
+	ProposalID   *int64
+	UndoOf       *int64
+	CreatedAt    float64
+	LeaseAt      float64
+	Settled      bool
+}
+
+var seededTokens int
+
+func seedEffect(t *testing.T, d *db.DB, e seededEffect) int64 {
+	t.Helper()
+	action := e.Action
+	if action == "" {
+		action = "{}"
+	}
+	var undo any
+	if e.Undo != "" {
+		undo = e.Undo
+	}
+	var settled any
+	if e.Settled {
+		settled = e.LeaseAt
+	}
+	var errorText any
+	if e.Error != "" {
+		errorText = e.Error
+	}
+	seededTokens++
+	res, err := d.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, undo_of, "+
+		"proposal_id, target, action_json, undo_json, state, settled_at, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		e.CreatedAt, e.LeaseAt, fmt.Sprintf("seed-%d-%d", time.Now().UnixNano(), seededTokens), e.Origin, e.Operation,
+		e.OperationKey, e.Direction, e.UndoOf, e.ProposalID, e.Target, action, undo, e.State, settled, errorText)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return id
 }

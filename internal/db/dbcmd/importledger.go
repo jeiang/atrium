@@ -33,6 +33,18 @@ func ConvertLegacyAgentWrites(ctx context.Context, src, dst db.Querier, now floa
 	return ledger.ImportLegacy(ctx, dst, nil, agent, nil, resolutions, now)
 }
 
+func ConvertLegacyProposals(ctx context.Context, src, dst db.Querier, now float64) (ledger.ImportReport, error) {
+	proposal, err := readLegacyProposal(ctx, src)
+	if err != nil {
+		return ledger.ImportReport{}, err
+	}
+	resolutions, err := readLegacyProposalResolutions(ctx, src)
+	if err != nil {
+		return ledger.ImportReport{}, err
+	}
+	return ledger.ImportLegacy(ctx, dst, nil, nil, proposal, resolutions, now)
+}
+
 func readLegacyAuto(ctx context.Context, q db.Querier) ([]ledger.LegacyAutoAction, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT id, ts, account, message_id, digest, kind, src, dest, before, after, undo, decision_id, state, error, "+
@@ -123,6 +135,21 @@ func readLegacyAutoResolutions(ctx context.Context, q db.Querier) ([]ledger.Lega
 	rows, err := q.QueryContext(ctx,
 		"SELECT id, ts, actor, source, kind, row_id, proposal_id, outcome, prior_error FROM write_resolutions "+
 			"WHERE kind IN ('auto_action', 'auto_undo') ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (ledger.LegacyResolution, error) {
+		var l ledger.LegacyResolution
+		var proposalID sql.NullInt64
+		err := r.Scan(&l.ID, &l.TS, &l.Actor, &l.Source, &l.Kind, &l.RowID, &proposalID, &l.Outcome, &l.PriorError)
+		l.ProposalID = proposalID
+		return l, err
+	})
+}
+
+func readLegacyProposalResolutions(ctx context.Context, q db.Querier) ([]ledger.LegacyResolution, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT id, ts, actor, source, kind, row_id, proposal_id, outcome, prior_error FROM write_resolutions WHERE kind = 'proposal_action' ORDER BY id")
 	if err != nil {
 		return nil, err
 	}

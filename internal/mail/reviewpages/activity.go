@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -120,40 +119,15 @@ func timeline(ctx context.Context, q db.Querier, store *ledger.Store, liveSvc *l
 		}
 	}
 	if category == "" || category == categoryMail {
-		found, err := writes.ResolutionsSince(ctx, q, want)
+		found, err := ledger.ResolutionsSince(ctx, q, "phone", want)
 		if err != nil {
 			return nil, 0, err
 		}
 		phone := make([]ActivityEntry, 0, len(found))
 		for _, r := range found {
-			var e ActivityEntry
-			target := fmt.Sprintf("%s %d", r.Kind, r.RowID)
-			if r.ProposalID != nil {
-				target = fmt.Sprintf("proposal %d", *r.ProposalID)
-			}
-			e.ID, e.TS = r.ID, r.TS
-			e.Source, e.Category = "phone", categoryMail
-			e.Phone = &PhoneActivity{Actor: r.Actor, Kind: r.Kind, Status: r.Outcome, Target: target}
-			phone = append(phone, e)
-		}
-		autos, err := ledger.AutoResolutionsSince(ctx, q, "phone", want)
-		if err != nil {
-			return nil, 0, err
-		}
-		for _, r := range autos {
 			phone = append(phone, ActivityEntry{
 				ID: r.ID, TS: r.TS, Source: "phone", Category: categoryMail,
-				Phone: &PhoneActivity{Actor: r.Actor, Kind: r.Operation, Status: r.Outcome, Target: fmt.Sprintf("mail %d", r.EffectID)},
-			})
-		}
-		audits, err := ledger.ProposalAuditsSince(ctx, q, "phone", want)
-		if err != nil {
-			return nil, 0, err
-		}
-		for _, a := range audits {
-			phone = append(phone, ActivityEntry{
-				ID: a.ID, TS: a.TS, Source: "phone", Category: categoryMail,
-				Phone: &PhoneActivity{Actor: a.Actor, Kind: "proposal", Status: a.Outcome, Target: fmt.Sprintf("proposal %d", a.ProposalID)},
+				Phone: &PhoneActivity{Actor: r.Actor, Kind: phoneKind(r), Status: r.Outcome, Target: phoneTarget(r)},
 			})
 		}
 		entries = append(entries, phone...)
@@ -306,6 +280,25 @@ func (s *service) resolveMail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.undone(w, r, mailEntry(*found), notice)
+}
+
+func phoneKind(r ledger.ResolutionRow) string {
+	if r.EffectID == nil {
+		return "proposal"
+	}
+	return r.Operation
+}
+
+func phoneTarget(r ledger.ResolutionRow) string {
+	switch {
+	case r.EffectID == nil && r.ProposalID != nil:
+		return fmt.Sprintf("proposal %d", *r.ProposalID)
+	case r.EffectID != nil && r.Origin == ledger.AutoOrigin:
+		return fmt.Sprintf("mail %d", *r.EffectID)
+	case r.EffectID != nil:
+		return fmt.Sprintf("%s %d", r.Operation, *r.EffectID)
+	}
+	return ""
 }
 
 func effectEntry(e ledger.Effect) ActivityEntry {

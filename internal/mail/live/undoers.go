@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/corrections"
 	"github.com/jeiang/atrium/internal/mail/mailops"
-	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
@@ -60,23 +59,6 @@ type Unflag struct {
 	IMAPName    string   `json:"imap_name"`
 	UIDValidity uint32   `json:"uidvalidity"`
 	UIDs        []uint32 `json:"uids"`
-}
-
-func RegisterUndoers(r *proposals.Registry, open mail.OpenFunc, q db.Querier) {
-	r.Undoers[OpMoveBack] = plan(func(ctx context.Context, p MoveBack) (any, error) { return UndoMoveBack(ctx, open, q, p) })
-	r.Undoers[OpGmailLabels] = plan(func(ctx context.Context, p GmailLabels) (any, error) { return undoGmailLabels(ctx, open, q, p) })
-	r.Undoers[OpGmailUntrash] = plan(func(ctx context.Context, p GmailUntrash) (any, error) { return undoGmailUntrash(ctx, open, q, p) })
-	r.Undoers[OpUnflag] = plan(func(ctx context.Context, p Unflag) (any, error) { return undoUnflag(ctx, open, q, p) })
-}
-
-func plan[T any](fn func(context.Context, T) (any, error)) proposals.Undoer {
-	return func(ctx context.Context, raw json.RawMessage) (any, error) {
-		var p T
-		if err := json.Unmarshal(raw, &p); err != nil {
-			return nil, err
-		}
-		return fn(ctx, p)
-	}
 }
 
 func jsonOf(v any) json.RawMessage {

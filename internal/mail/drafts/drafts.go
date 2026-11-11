@@ -21,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mime"
@@ -83,12 +84,29 @@ type Row struct {
 }
 
 type Store struct {
-	DB    *db.DB
-	Cfg   config.Config
-	Open  mail.OpenFunc
-	MsgID func(domain string) string
-	Tx    db.Querier
-	Now   func() float64
+	DB     *db.DB
+	Cfg    config.Config
+	Ledger *ledger.Store
+	Open   mail.OpenFunc
+	MsgID  func(domain string) string
+	Tx     db.Querier
+	Now    func() float64
+}
+
+const (
+	SendOperation = "smtp_send"
+	AppendOperation = "sent_append"
+)
+
+func SendTarget(account string, id int64) string {
+	return fmt.Sprintf("mail:%s:draft:%d", account, id)
+}
+
+func (s *Store) ledgerStore() *ledger.Store {
+	if s.Ledger == nil {
+		panic("drafts: the effect ledger store is not configured")
+	}
+	return s.Ledger
 }
 
 func (s *Store) now() float64 {
@@ -579,15 +597,23 @@ func (u *updateSet) set(col string, v any) {
 }
 
 func (s *Store) transition(ctx context.Context, id int64, from, to Status, apply func(*updateSet)) error {
+	return transitionTx(ctx, s.write(), s.now(), id, from, to, apply)
+}
+
+func transitionTx(ctx context.Context, x db.Querier, now float64, id int64, from, to Status, apply func(*updateSet)) error {
 	u := &updateSet{}
 	u.set("status", string(to))
-	u.set("updated_at", s.now())
+	u.set("updated_at", now)
 	u.sets = append(u.sets, "revision = revision + 1")
 	if apply != nil {
 		apply(u)
 	}
 	args := append(u.args, id, string(from))
-	n, err := s.exec(ctx, "UPDATE drafts SET "+strings.Join(u.sets, ", ")+" WHERE id = ? AND status = ?", args...)
+	res, err := x.ExecContext(ctx, "UPDATE drafts SET "+strings.Join(u.sets, ", ")+" WHERE id = ? AND status = ?", args...)
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
 	if err != nil {
 		return err
 	}
@@ -621,18 +647,50 @@ func (s *Store) RecoverStuck(ctx context.Context) (int64, error) {
 		string(Unknown), "send interrupted; outcome unknown", s.now(), string(Sending), s.now()-SendingStaleSeconds)
 }
 
-func (s *Store) ResolveUnknown(ctx context.Context, id int64, status Status) error {
+func (s *Store) ResolveUnknown(ctx context.Context, id int64, status Status, who ledger.Resolver) error {
 	if status != Sent && status != Draft {
 		return Error("an unknown draft can only be marked sent or returned to draft")
 	}
 	note := "returned to draft by operator"
+	outcome := "not-applied"
 	if status == Sent {
 		note = "marked sent by operator"
+		outcome = "applied"
 	}
-	n, err := s.exec(ctx,
+	row, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if row == nil {
+		return Error("draft is not in the unknown state")
+	}
+	store := s.ledgerStore()
+	if _, err := store.Recover(ctx, s.now()-ledger.StuckSeconds); err != nil {
+		return err
+	}
+	effect, err := ledger.BlockedEffectID(ctx, s.read(), SendOperation, SendTarget(row.Account, id))
+	if err != nil {
+		return err
+	}
+	apply := func(ctx context.Context, tx *sql.Tx) error {
+		return resolveDraftTx(ctx, tx, s.now(), id, status, note)
+	}
+	if effect == 0 {
+		return s.DB.WithTx(ctx, func(tx *sql.Tx) error { return apply(ctx, tx) })
+	}
+	_, err = store.Resolve(ctx, effect, ledger.Resolution{Outcome: outcome}, who, apply)
+	return err
+}
+
+func resolveDraftTx(ctx context.Context, x db.Querier, now float64, id int64, status Status, note string) error {
+	res, err := x.ExecContext(ctx,
 		"UPDATE drafts SET status = ?, sent_at = CASE WHEN ? = ? THEN ? ELSE sent_at END, smtp_result = ?, updated_at = ?, revision = revision + 1 "+
 			"WHERE id = ? AND status = ?",
-		string(status), string(status), string(Sent), s.now(), note, s.now(), id, string(Unknown))
+		string(status), string(status), string(Sent), now, note, now, id, string(Unknown))
+	if err != nil {
+		return err
+	}
+	n, err := res.RowsAffected()
 	if err != nil {
 		return err
 	}

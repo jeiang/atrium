@@ -50,7 +50,7 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		return dbtest.AddMessage(t, seed, uid, "body", map[string]any{"subject": "m", "from_addr": "a@shop.test", "date_ts": now})
 	}
 	const heldText = "cancelled, write outcome unknown: write in flight"
-	blockedProposal := func(name, op, text string, ts float64) int64 {
+	blockedProposal := func(name, op, text string, ts float64, state string) int64 {
 		id, _, err := proposals.Create(ctx, seed, "deletion_rule", nil, name, map[string]any{}, map[string]any{}, name, now-5000)
 		if err != nil {
 			t.Fatal(err)
@@ -58,36 +58,23 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		if _, err := seed.Write.Exec("UPDATE proposals SET status = 'failed', decided_ts = ? WHERE id = ?", now-4000, id); err != nil {
 			t.Fatal(err)
 		}
-		kind := "write"
-		var of *int64
-		if op == proposals.UndoOp {
-			kind = "undo"
-			of = new(int64(1))
+		target := "proposal:" + strconv.FormatInt(id, 10)
+		direction, action, operation := "forward", `{"op":"`+op+`"}`, op
+		var undoOf *int64
+		if op == "undo" {
+			direction, action, operation = "undo", `{"op":"move_back"}`, "move_back"
+			forward := seedEffect(t, seed, seededEffect{
+				Origin: "proposal", Operation: "move", OperationKey: target + ":move", Direction: "forward",
+				Target: target, ProposalID: &id, Action: `{"op":"move"}`, Undo: `{"op":"move_back"}`,
+				State: "done", CreatedAt: ts - 10, LeaseAt: ts - 10, Settled: true,
+			})
+			undoOf = &forward
 		}
-		state := ledger.Failed
-		switch {
-		case text == heldText:
-			state = ledger.Held
-		case strings.Contains(text, mailops.UnknownPrefix):
-			state = ledger.Unknown
-		case strings.Contains(text, mailops.PartialPrefix):
-			state = ledger.Partial
-		}
-		if kind == "undo" {
-			switch state {
-			case ledger.Held:
-				state = ledger.UndoHeld
-			case ledger.Unknown:
-				state = ledger.UndoUnknown
-			case ledger.Partial:
-				state = ledger.UndoPartial
-			case ledger.Failed:
-				state = ledger.UndoFailed
-			}
-		}
-		if _, err := proposals.RecordAction(ctx, seed.Write, id, kind, of, map[string]any{"op": op, "of": int64(1)}, nil, state, &text, ts); err != nil {
-			t.Fatal(err)
-		}
+		seedEffect(t, seed, seededEffect{
+			Origin: "proposal", Operation: operation, OperationKey: target + ":" + op, Direction: direction,
+			UndoOf: undoOf, ProposalID: &id, Target: target, Action: action, State: state,
+			Error: text, CreatedAt: ts, LeaseAt: ts, Settled: state != "intent",
+		})
 		return id
 	}
 	autoAction := func(msg int64, kind, dest string, started float64) int64 {
@@ -118,11 +105,11 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 			t.Fatal(err)
 		}
 	}
-	viaCLI := blockedProposal("cli", "move", heldText, now-4000)
-	viaWeb := blockedProposal("web", "move", mailops.PartialPrefix+"expunge failed", now-4000)
-	recent := blockedProposal("recent", "move", heldText, now)
-	undoRecentProposal := blockedProposal("undorecent", proposals.UndoOp, heldText, now)
-	undoHeld := blockedProposal("undoheld", proposals.UndoOp, mailops.UnknownPrefix+": connection lost", now-4000)
+	viaCLI := blockedProposal("cli", "move", heldText, now-4000, "unknown")
+	viaWeb := blockedProposal("web", "move", mailops.PartialPrefix+"expunge failed", now-4000, "partial")
+	recent := blockedProposal("recent", "move", heldText, now, "intent")
+	undoRecentProposal := blockedProposal("undorecent", "undo", heldText, now, "intent")
+	undoHeld := blockedProposal("undoheld", "undo", mailops.UnknownPrefix+": connection lost", now-4000, "unknown")
 	undoCLI := autoAction(message(1), "file", "Bills", now-4000)
 	undoWeb := autoAction(message(2), "file", "Receipts", now-4000)
 	undoRecent := autoAction(message(3), "file", "Travel", now)
@@ -155,7 +142,7 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 	if got := runApp(t, "proposals", "resolve", "99999"); got.code == cli.ExitOK {
 		t.Fatalf("resolve of an unknown proposal exited %d", got.code)
 	}
-	if got := runApp(t, "proposals", "resolve", id(viaCLI)); got.code != cli.ExitOK {
+	if got := runApp(t, "proposals", "resolve", id(viaCLI), "--outcome", "applied"); got.code != cli.ExitOK {
 		t.Fatalf("proposals resolve = %d %q", got.code, got.stderr)
 	}
 	if got := runApp(t, "proposals", "resolve", id(viaCLI)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "no blocked write") {
@@ -197,8 +184,9 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 	}
 	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	if status, body, _ := fetch(t, client, "GET", base+"/review", nil); status != http.StatusOK || !strings.Contains(body, "/proposals/"+id(viaWeb)+"/resolve") ||
-		strings.Count(body, ">Mark checked<") != 1 || strings.Count(body, ">Messages are back<") != 1 || !strings.Contains(body, `role="group" aria-label="Record what you found in the mailbox"`) {
-		t.Fatalf("GET /review = %d, want Mark checked on the blocked write and Messages are back only on the blocked undo: %.400s", status, body)
+		!strings.Contains(body, ">It happened<") || !strings.Contains(body, ">Messages are back<") ||
+		strings.Contains(body, ">Mark checked<") || !strings.Contains(body, `role="group" aria-label="Record what you found in the mailbox"`) {
+		t.Fatalf("GET /review = %d, want explicit outcomes on the blocked write and the blocked undo: %.400s", status, body)
 	}
 	if got := runApp(t, "proposals", "resolve", id(undoHeld), "--outcome", "not-undone"); got.code != cli.ExitOK {
 		t.Fatalf("proposals resolve of a blocked undo = %d %q", got.code, got.stderr)
@@ -217,7 +205,7 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 	if status, _, _ := fetch(t, bare, "POST", base+"/activity/mail/"+id(undoWeb)+"/resolve", url.Values{"outcome": {"undone"}}); status != http.StatusForbidden {
 		t.Errorf("POST activity resolve without a CSRF token = %d, want 403", status)
 	}
-	if status, body, _ := fetch(t, client, "POST", base+"/proposals/"+id(viaWeb)+"/resolve", url.Values{}); status != http.StatusOK || !strings.Contains(body, "Marked as checked") {
+	if status, body, _ := fetch(t, client, "POST", base+"/proposals/"+id(viaWeb)+"/resolve", url.Values{"outcome": {"applied"}}); status != http.StatusOK || !strings.Contains(body, "Write recorded as done") {
 		t.Fatalf("POST proposal resolve = %d: %.400s", status, body)
 	}
 	if status, body, header := fetch(t, client, "POST", base+"/activity/mail/"+id(undoWeb)+"/resolve", url.Values{"outcome": {"undone"}}); status != http.StatusSeeOther || header.Get("Location") != "/activity" {
@@ -235,7 +223,8 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		t.Fatal(err)
 	}
 	defer func() { _ = check.Close() }()
-	rows, err := check.Read.Query("SELECT actor, source, kind, row_id, outcome, prior_error FROM write_resolutions ORDER BY id")
+	rows, err := check.Read.Query("SELECT r.actor, r.source, e.operation, r.outcome, r.prior_error FROM effect_resolutions r " +
+		"JOIN effects e ON e.id = r.effect_id WHERE e.proposal_id IS NOT NULL ORDER BY r.id")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -243,8 +232,7 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 	var got []string
 	for rows.Next() {
 		var actor, source, kind, outcome, prior string
-		var row int64
-		if err := rows.Scan(&actor, &source, &kind, &row, &outcome, &prior); err != nil {
+		if err := rows.Scan(&actor, &source, &kind, &outcome, &prior); err != nil {
 			t.Fatal(err)
 		}
 		got = append(got, strings.Join([]string{actor, source, kind, outcome}, "/"))
@@ -253,11 +241,10 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		}
 	}
 	want := []string{
-		"operator/cli/proposal_action/settled", "operator/cli/proposal_action/not-undone",
-		"operator/ui/proposal_action/settled",
+		"operator/cli/move/applied", "operator/cli/move_back/not-undone", "operator/ui/move/applied",
 	}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Errorf("write_resolutions = %v, want %v", got, want)
+		t.Errorf("effect_resolutions = %v, want %v", got, want)
 	}
 	var approval, approvalProposal int64
 	var approvalOutcome string
@@ -282,12 +269,13 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		t.Errorf("correction of an undone action = %d (%v), want it cleared", cleared, err)
 	}
 	var stillBlocked int
-	if err := check.Read.QueryRow("SELECT (SELECT COUNT(*) FROM effects WHERE undo_of = ? AND state = 'intent') + (SELECT COUNT(*) FROM proposal_actions WHERE proposal_id = ? AND state = 'undo_held')",
+	if err := check.Read.QueryRow("SELECT (SELECT COUNT(*) FROM effects WHERE undo_of = ? AND state = 'intent') + "+
+		"(SELECT COUNT(*) FROM effects WHERE proposal_id = ? AND direction = 'undo' AND state = 'intent')",
 		undoRecent, undoRecentProposal).Scan(&stillBlocked); err != nil || stillBlocked != 2 {
 		t.Errorf("undos still in flight = %d (%v), want both left untouched", stillBlocked, err)
 	}
-	if _, err := check.Write.Exec("DELETE FROM write_resolutions"); err == nil {
-		t.Error("write_resolutions accepted a delete, want append-only")
+	if _, err := check.Write.Exec("DELETE FROM effect_resolutions"); err == nil {
+		t.Error("effect_resolutions accepted a delete, want append-only")
 	}
 }
 
@@ -314,9 +302,11 @@ func TestBlockedProposalWithoutErrorTextShowsOutcomeUnknownAndResolves(t *testin
 	if _, err := seed.Write.Exec("UPDATE proposals SET status = 'failed', decided_ts = ? WHERE id = ?", now-4000, pid); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := proposals.RecordAction(ctx, seed.Write, pid, "write", nil, map[string]any{"op": "move"}, nil, ledger.Unknown, nil, now-4000); err != nil {
-		t.Fatal(err)
-	}
+	seedEffect(t, seed, seededEffect{
+		Origin: "proposal", Operation: "move", OperationKey: "proposal:" + strconv.FormatInt(pid, 10) + ":move",
+		Direction: "forward", Target: "proposal:" + strconv.FormatInt(pid, 10), ProposalID: &pid,
+		Action: `{"op":"move"}`, State: "unknown", CreatedAt: now - 4000, LeaseAt: now - 4000, Settled: true,
+	})
 	if err := seed.Close(); err != nil {
 		t.Fatal(err)
 	}
@@ -332,7 +322,7 @@ func TestBlockedProposalWithoutErrorTextShowsOutcomeUnknownAndResolves(t *testin
 		!strings.Contains(body, "/proposals/"+id+"/resolve") || !strings.Contains(body, "Outcome unknown") {
 		t.Fatalf("GET /review = %d, want the blocked proposal with Outcome unknown: %.600s", status, body)
 	}
-	if status, body, _ := fetch(t, client, http.MethodPost, base+"/proposals/"+id+"/resolve", url.Values{}); status != http.StatusOK || !strings.Contains(body, "Marked as checked") {
+	if status, body, _ := fetch(t, client, http.MethodPost, base+"/proposals/"+id+"/resolve", url.Values{"outcome": {"applied"}}); status != http.StatusOK || !strings.Contains(body, "Write recorded as done") {
 		t.Fatalf("POST resolve of a blocked write without error text = %d: %.600s", status, body)
 	}
 
@@ -341,11 +331,12 @@ func TestBlockedProposalWithoutErrorTextShowsOutcomeUnknownAndResolves(t *testin
 		t.Fatal(err)
 	}
 	defer func() { _ = check.Close() }()
-	var outcome, prior string
-	if err := check.Read.QueryRow("SELECT outcome, prior_error FROM write_resolutions WHERE proposal_id = ?", pid).Scan(&outcome, &prior); err != nil {
+	var outcome, effective, prior string
+	if err := check.Read.QueryRow("SELECT outcome, effective_outcome, prior_error FROM effect_resolutions WHERE proposal_id = ?", pid).
+		Scan(&outcome, &effective, &prior); err != nil {
 		t.Fatal(err)
 	}
-	if outcome != proposals.OutcomeSettled || prior != "Outcome unknown" {
-		t.Errorf("resolution = %q %q, want settled with Outcome unknown", outcome, prior)
+	if outcome != proposals.OutcomeApplied || effective != "done" || prior != "" {
+		t.Errorf("resolution = %q %q %q, want applied/done with no prior error", outcome, effective, prior)
 	}
 }

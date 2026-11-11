@@ -76,7 +76,6 @@ var owners = map[string]string{
 	"pass_run_alerts":      "notify",
 	"pass_runs":            "passrun",
 	"projects":             "assistant",
-	"proposal_actions":     "proposals",
 	"proposals":            "proposals",
 	"push_subscriptions":   "notify",
 	"rebalance_candidates": "mail",
@@ -102,7 +101,6 @@ var owners = map[string]string{
 	"usage":                "inference",
 	"watch_dismissed":      "mail",
 	"wiki_pages":           "notion",
-	"write_resolutions":    "writes",
 }
 
 var vectorPrefixes = []string{"embed_message_", "embed_notion_", "embed_kb_"}

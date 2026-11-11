@@ -536,27 +536,82 @@ func ProposalsWithActiveEffects(ctx context.Context, q db.Querier, leaseAfter fl
 	})
 }
 
-type ProposalAudit struct {
+type ResolutionRow struct {
 	ID         int64
 	TS         float64
 	Actor      string
 	Source     string
 	Outcome    string
-	ProposalID int64
+	Origin     string
+	Operation  string
+	Target     string
+	EffectID   *int64
+	ProposalID *int64
 }
 
-func ProposalAuditsSince(ctx context.Context, q db.Querier, source string, limit int) ([]ProposalAudit, error) {
+func ResolutionsSince(ctx context.Context, q db.Querier, source string, limit int) ([]ResolutionRow, error) {
 	rows, err := q.QueryContext(ctx,
-		"SELECT id, ts, actor, source, outcome, proposal_id FROM effect_resolutions "+
-			"WHERE effect_id IS NULL AND proposal_id IS NOT NULL AND source = ? ORDER BY ts DESC, id DESC LIMIT ?", source, limit)
+		"SELECT r.id, r.ts, r.actor, r.source, r.outcome, COALESCE(e.origin, ''), COALESCE(e.operation, ''), "+
+			"COALESCE(e.target, ''), r.effect_id, r.proposal_id FROM effect_resolutions r "+
+			"LEFT JOIN effects e ON e.id = r.effect_id WHERE r.source = ? ORDER BY r.ts DESC, r.id DESC LIMIT ?", source, limit)
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (ProposalAudit, error) {
-		var a ProposalAudit
-		err := r.Scan(&a.ID, &a.TS, &a.Actor, &a.Source, &a.Outcome, &a.ProposalID)
-		return a, err
+	return db.Collect(rows, func(r *sql.Rows) (ResolutionRow, error) {
+		var row ResolutionRow
+		var effectID, proposalID sql.NullInt64
+		if err := r.Scan(&row.ID, &row.TS, &row.Actor, &row.Source, &row.Outcome, &row.Origin, &row.Operation,
+			&row.Target, &effectID, &proposalID); err != nil {
+			return row, err
+		}
+		row.EffectID, row.ProposalID = intPtr(effectID), intPtr(proposalID)
+		return row, nil
 	})
+}
+
+func UnresolvedMailMessages(ctx context.Context, q db.Querier, account string) (map[int64]bool, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT DISTINCT m.id FROM effects e "+
+			"JOIN messages m ON m.account = ? "+
+			"JOIN mailboxes mb ON mb.id = m.mailbox_id "+
+			"WHERE e.direction = 'forward' AND e.state IN ('intent','unknown','partial') "+
+			"AND NOT EXISTS (SELECT 1 FROM effect_resolutions r WHERE r.effect_id = e.id AND r.effective_outcome IS NOT NULL) "+
+			"AND (e.message_id = m.id "+
+			"OR ((e.account IS NULL OR e.account = m.account) AND ("+
+			"EXISTS (SELECT 1 FROM json_each(e.action_json, '$.uids') u WHERE u.value = m.uid "+
+			"AND COALESCE(json_extract(e.action_json, '$.src_uidvalidity'), json_extract(e.action_json, '$.uidvalidity')) = m.uidvalidity "+
+			"AND COALESCE(json_extract(e.action_json, '$.src_imap'), json_extract(e.action_json, '$.imap_name')) = mb.imap_name) "+
+			"OR EXISTS (SELECT 1 FROM json_each(e.action_json, '$.copied') u WHERE u.key = CAST(m.uid AS TEXT) "+
+			"AND json_extract(e.action_json, '$.src_uidvalidity') = m.uidvalidity "+
+			"AND json_extract(e.action_json, '$.src_imap') = mb.imap_name))))", account)
+	if err != nil {
+		return nil, err
+	}
+	out := map[int64]bool{}
+	if _, err := db.Collect(rows, func(r *sql.Rows) (struct{}, error) {
+		var id int64
+		if err := r.Scan(&id); err != nil {
+			return struct{}{}, err
+		}
+		out[id] = true
+		return struct{}{}, nil
+	}); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func BlockedEffectID(ctx context.Context, q db.Querier, operation, target string) (int64, error) {
+	var id int64
+	err := q.QueryRowContext(ctx,
+		"SELECT e.id FROM effects e WHERE e.direction = 'forward' AND e.operation = ? AND e.target = ? "+
+			"AND e.state IN ('intent','unknown','partial') "+
+			"AND NOT EXISTS (SELECT 1 FROM effect_resolutions r WHERE r.effect_id = e.id AND r.effective_outcome IS NOT NULL) "+
+			"ORDER BY e.id DESC LIMIT 1", operation, target).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return id, err
 }
 
 func BlockedTarget(ctx context.Context, q db.Querier, prefix string) (int64, error) {

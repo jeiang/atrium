@@ -17,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/scanutil"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/proposals/actions"
 )
 
 var log = logx.Logger("atrium.backlog")
@@ -29,7 +28,7 @@ var candidates = "SELECT m.id, m.subject, m.from_name, m.from_addr, m.date_ts, m
 	"WHERE m.account = :account AND m.in_inbox = 1 AND m.seen = 1 AND m.flagged = 0 AND m.sent = 0 " +
 	"AND m.gone_at IS NULL AND d.action = 'file' AND d.dest IS NOT NULL " +
 	"AND m.id IN (SELECT message_id FROM live_baseline) " +
-	"AND " + live.NoNewCorrection + " AND NOT " + actions.MailUnresolved + " ORDER BY m.id"
+	"AND " + live.NoNewCorrection + " ORDER BY m.id"
 
 type Error string
 
@@ -63,6 +62,11 @@ func detect(ctx context.Context, q live.Querier, account string) (*detection, er
 		_ = rows.Close()
 		return nil, err
 	}
+	unresolved, err := ledger.UnresolvedMailMessages(ctx, q, account)
+	if err != nil {
+		_ = rows.Close()
+		return nil, err
+	}
 	var groups []*group
 	byDest := map[string]*group{}
 	var ids []string
@@ -72,6 +76,9 @@ func detect(ctx context.Context, q live.Querier, account string) (*detection, er
 		if err := rows.Scan(&m.ID, &m.Subject, &m.FromName, &m.FromAddr, &m.DateTS, &digest, &dest); err != nil {
 			_ = rows.Close()
 			return nil, err
+		}
+		if unresolved[m.ID] {
+			continue
 		}
 		if states.DigestBlocked(digest, live.File, live.Trash) ||
 			states.DigestFailures(digest, live.File, live.Trash) >= params.Attempts {

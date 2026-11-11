@@ -77,7 +77,7 @@ var importTables = []tablePlan{
 		}
 		return report.Auto, nil
 	}},
-	{table: "write_resolutions", action: carry, where: "kind = 'proposal_action'"},
+	{table: "write_resolutions", action: drop, why: "each row is converted into an effect resolution with the write it resolves"},
 	{table: "live_state", action: carry},
 	{table: "live_baseline", action: carry},
 	{table: "snoozes", action: carry},
@@ -118,7 +118,13 @@ var importTables = []tablePlan{
 	{table: "agent_events", action: carry},
 	{table: "tasks", action: carry},
 	{table: "proposals", action: carry},
-	{table: "proposal_actions", action: carry},
+	{table: "proposal_actions", action: convert, run: func(im *importer) (int64, error) {
+		report, err := ConvertLegacyProposals(im.ctx, im.src, im.tx, im.now)
+		if err != nil {
+			return 0, err
+		}
+		return report.Proposal, nil
+	}},
 	{table: "agent_writes", action: convert, run: func(im *importer) (int64, error) {
 		report, err := ConvertLegacyAgentWrites(im.ctx, im.src, im.tx, im.now)
 		if err != nil {

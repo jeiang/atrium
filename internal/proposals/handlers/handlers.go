@@ -33,7 +33,7 @@ func Register(r *proposals.Registry, deps Deps) {
 	if deps.Ledger == nil {
 		deps.Ledger = ledger.NewStore(deps.DB, deps.Now)
 	}
-	executors.Register(r, &executors.Executors{DB: deps.DB, Open: deps.Open, Now: deps.Now}, deps.Syncer, module.Mail)
+	executors.Register(r, &executors.Executors{DB: deps.DB, Ledger: deps.Ledger, Open: deps.Open, Now: deps.Now}, deps.Syncer, module.Mail)
 	cal := &calendar.Proposals{DB: deps.DB, Ledger: deps.Ledger, Now: deps.Now, Env: deps.Env}
 	calendar.Register(r, cal, module.Calendar)
 	if err := calendar.RegisterLedgerUndoer(deps.Ledger, cal); err != nil {

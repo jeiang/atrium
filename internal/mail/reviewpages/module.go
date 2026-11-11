@@ -96,7 +96,7 @@ func Module(o Options) web.Module {
 			live:     &live.Live{DB: d.DB, Cfg: d.Cfg, Store: effects, Open: open, Registry: registry, Now: now},
 			open:     open,
 			ledger:   effects,
-			drafts:   &drafts.Store{DB: d.DB, Cfg: d.Cfg, Open: open, Now: now},
+			drafts:   &drafts.Store{DB: d.DB, Cfg: d.Cfg, Ledger: effects, Open: open, Now: now},
 			registry: registry,
 		}
 
