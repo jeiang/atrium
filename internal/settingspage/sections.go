@@ -20,12 +20,12 @@ type Section struct {
 }
 
 type SectionView struct {
-	Module   string              `json:"module"`
-	Name     string              `json:"name"`
-	Title    string              `json:"title"`
-	Template string              `json:"template"`
+	Module   string               `json:"module"`
+	Name     string               `json:"name"`
+	Title    string               `json:"title"`
+	Template string               `json:"template"`
 	Fields   []settings.FieldView `json:"fields"`
-	Data     any                 `json:"data,omitempty"`
+	Data     any                  `json:"data,omitempty"`
 }
 
 var sections []Section

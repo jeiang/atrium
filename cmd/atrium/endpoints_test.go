@@ -209,9 +209,9 @@ func TestConnectionsTestUsesTheEmbedCAAndAPassingTestReleasesTheMailHold(t *test
 }
 
 func TestConnectionsTestReusesTheStoredEmbeddingBearerWhenTheInputIsBlank(t *testing.T) {
+	requireCipher(t)
 	embed := newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
-	requireCipher(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, embed.URL+"/v1", "embeddinggemma", ""))
 	s := &connectionSite{t: t, dir: dir}
 	s.start()

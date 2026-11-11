@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/settingspage"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settingspage"
 	"github.com/jeiang/atrium/internal/tool"
 )
 

@@ -2,11 +2,11 @@ package ops
 
 import (
 	"context"
-	"database/sql"
 	"time"
 
 	"github.com/jeiang/atrium/internal/actionlink/counts"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/mail"
@@ -54,15 +54,15 @@ func init() {
 		return out, nil
 	}))
 	Register(gauge("atrium_integration_state", "Current health state of each connection.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
-		rows, err := q.QueryContext(ctx, "SELECT id, state FROM connections ORDER BY id")
+		states, err := connections.HealthStates(ctx, q)
 		if err != nil {
 			return nil, err
 		}
-		return db.Collect(rows, func(r *sql.Rows) (Sample, error) {
-			var id, state string
-			err := r.Scan(&id, &state)
-			return Sample{Labels: [][2]string{{"integration", id}, {"state", state}}, Value: 1}, err
-		})
+		out := make([]Sample, 0, len(states))
+		for _, state := range states {
+			out = append(out, Sample{Labels: [][2]string{{"integration", state.ID}, {"state", string(state.State)}}, Value: 1})
+		}
+		return out, nil
 	}))
 	Register(gauge("atrium_action_links_outstanding", "Phone action links that are unused and unexpired.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
 		now := float64(time.Now().UnixNano()) / 1e9

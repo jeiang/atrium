@@ -63,30 +63,30 @@ type NavGroup struct {
 }
 
 type Frame struct {
-	CSRF              string
-	Mode              string
-	Paused            bool
-	PendingCount      int
-	NotifyFailing     []string
-	Page              string
-	Toast             *Toast
-	Auth              AuthView
-	Nav               []NavGroup
-	Settings          []NavItem
-	SettingsURL       string
-	SettingGroups     []settings.GroupView
-	SettingModule     *settings.ModuleView
-	Connections       any
-	Saved             string
-	BrandURL          string
-	Footer            []NavItem
-	Tabs              []NavItem
-	Pages             []NavItem
-	Path              string
-	Theme             string
-	Rail              bool
-	Threads           *SidebarThreads
-	Data              any
+	CSRF          string
+	Mode          string
+	Paused        bool
+	PendingCount  int
+	NotifyFailing []string
+	Page          string
+	Toast         *Toast
+	Auth          AuthView
+	Nav           []NavGroup
+	Settings      []NavItem
+	SettingsURL   string
+	SettingGroups []settings.GroupView
+	SettingModule *settings.ModuleView
+	Connections   any
+	Saved         string
+	BrandURL      string
+	Footer        []NavItem
+	Tabs          []NavItem
+	Pages         []NavItem
+	Path          string
+	Theme         string
+	Rail          bool
+	Threads       *SidebarThreads
+	Data          any
 }
 
 type SidebarThreads struct {

@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"database/sql"
 	"net/http"
 	"strings"
 	"sync"
@@ -106,6 +107,23 @@ func (s *Store) check(ctx context.Context, id ID) (View, error) {
 		return View{}, err
 	}
 	return s.record(ctx, id, lease.revision, results)
+}
+
+type HealthState struct {
+	ID    string
+	State State
+}
+
+func HealthStates(ctx context.Context, q db.Querier) ([]HealthState, error) {
+	rows, err := q.QueryContext(ctx, "SELECT id, state FROM connections ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (HealthState, error) {
+		var h HealthState
+		err := r.Scan(&h.ID, &h.State)
+		return h, err
+	})
 }
 
 type failure struct {
