@@ -121,7 +121,8 @@
     hostConfig = assert cfg.renderedHost.core.public_url == "https://atrium.example.org";
     assert cfg.renderedHost.connections."service/qbittorrent".config.url == "http://127.0.0.1:8081";
     assert cfg.renderedHost.connections."service/qbittorrent".credential_files.api_key == "\${CREDENTIALS_DIRECTORY}/connection-service-qbittorrent-api_key";
-    assert cfg.renderedHost.mail.mail_accounts_file != "";
+    assert cfg.renderedHost.connections."mail/icloud".config.preset == "icloud";
+    assert cfg.renderedHost.connections."mail/icloud".credential_files."mail/icloud/password" == "\${CREDENTIALS_DIRECTORY}/mail-account-icloud";
     assert cfg.renderedHost.connections."service/oidc".config.api_client_id == "api-client";
     assert cfg.renderedHost.connections."service/oidc".credential_files.client_secret == "\${CREDENTIALS_DIRECTORY}/connection-service-oidc-client_secret";
     assert cfg.initialTimezone != null; true;
