@@ -181,13 +181,13 @@ behavior-parity target.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs. Mail accounts are records with a stable
-  id and an iCloud or Gmail preset, read from the deploy-time
-  `mail_accounts_file` or added, tested and removed on the Mail settings
-  page (stored in the database, password only on an encrypted database). A
-  Gmail account can use an app password or XOAUTH2; XOAUTH2 uses the Google
-  OAuth wizard's Gmail refresh token, refreshes the access token once for
-  concurrent callers, reconnects or retries AUTH once after a rejected token,
-  and reports needs-reauth or expiring health.
+  id and an iCloud or Gmail preset, declared as `mail/<id>` connections by the
+  host (`services.atrium.mailAccounts`) or added, tested and removed on the
+  Mail settings page (stored in the database, password only on an encrypted
+  database). A Gmail account can use an app password or XOAUTH2; XOAUTH2 uses
+  the Google OAuth wizard's Gmail refresh token, refreshes the access token
+  once for concurrent callers, reconnects or retries AUTH once after a
+  rejected token, and reports needs-reauth or expiring health.
 - The assistant uses the Anthropic API. A static catalog in
   `internal/assistant/pricing` holds Haiku 5.5, Sonnet 5.5 and Opus 5.5 with
   their ids, context window, maximum output, effort levels, thinking modes

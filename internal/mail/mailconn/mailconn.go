@@ -129,34 +129,19 @@ func reconcileAccounts(ctx context.Context, store *connections.Store) error {
 	err = d.WithTx(ctx, func(tx *sql.Tx) error {
 		for _, a := range list {
 			keep[a.Name] = true
-			if _, err := tx.ExecContext(ctx,
-				"INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, auth_method, connection_id, capability_prefix, created_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?, ?) "+
-					"ON CONFLICT(id) DO UPDATE SET label = excluded.label, preset = excluded.preset, login = excluded.login, enabled = excluded.enabled, auth_method = excluded.auth_method, pinned = 1, connection_id = excluded.connection_id, capability_prefix = excluded.capability_prefix",
-				a.Name, a.Label, a.Preset, a.Login, a.Enabled, a.AuthMethod, string(ID(a.Name)), Prefix(a.Name), stamp()); err != nil {
+			if err := config.SavePinnedAccount(ctx, tx, a, string(ID(a.Name)), stamp()); err != nil {
 				return err
 			}
 		}
-		rows, err := tx.QueryContext(ctx, "SELECT id FROM mail_accounts WHERE pinned = 1")
+		pinned, err := config.PinnedAccounts(ctx, tx)
 		if err != nil {
-			return err
-		}
-		var pinned []string
-		for rows.Next() {
-			var id string
-			if err := rows.Scan(&id); err != nil {
-				_ = rows.Close()
-				return err
-			}
-			pinned = append(pinned, id)
-		}
-		if err := rows.Close(); err != nil {
 			return err
 		}
 		for _, id := range pinned {
 			if keep[id] {
 				continue
 			}
-			if _, err := tx.ExecContext(ctx, "DELETE FROM mail_accounts WHERE id = ?", id); err != nil {
+			if err := config.DeleteStoredAccount(ctx, tx, id); err != nil {
 				return err
 			}
 		}
