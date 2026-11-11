@@ -182,7 +182,9 @@ var importTables = []tablePlan{
 	{table: "auth_login_links", action: drop, why: "login links do not survive the import"},
 	{table: "oauth_states", action: drop, why: "transient OAuth handshakes do not survive the import"},
 	{table: "action_links", action: drop, why: "signed action links expire"},
-	{table: "settings_audit", action: drop, why: "the destination's audit starts fresh"},
+	{table: "settings_audit", action: carry, why: "historical audit is carried unchanged before the import's own sanitized entries", run: func(im *importer) (int64, error) {
+		return im.carryAudit()
+	}},
 	{table: "job_runs", action: drop, why: "job history is not carried; the jobs are"},
 	{table: "events", action: drop, why: "the mail event log is not carried"},
 	{table: "pass_runs", action: drop, why: "ops pass history is not carried"},
@@ -228,6 +230,8 @@ type importer struct {
 
 func (s *service) importV2(a *cli.Args) cli.Handler {
 	source := a.Arg("path", cli.Opt{Help: "path to the v2 database to import into this fresh v3 database"})
+	sourceConfig := a.String("source-config", "", cli.Opt{Metavar: "PATH", Help: "v2 configuration file holding pinned settings, as the v2 ATRIUM_CONFIG file did"})
+	sourceEnv := a.String("source-env", "", cli.Opt{Metavar: "PATH", Help: "file of v2 ATRIUM_* environment pins, one NAME=VALUE per line"})
 	return func(e *cli.Env) int {
 		cfg, err := config.Load(s.env)
 		if err != nil {
@@ -237,7 +241,7 @@ func (s *service) importV2(a *cli.Args) cli.Handler {
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		lines, err := importV2(e.Ctx, s.env, cfg, *source, key, s.clock())
+		lines, err := importV2(e.Ctx, s.env, cfg, *source, *sourceConfig, *sourceEnv, key, s.clock())
 		if err != nil {
 			return cli.Fail(e, err)
 		}
@@ -255,9 +259,13 @@ func (s *service) clock() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }
 
-func importV2(ctx context.Context, env config.Env, cfg config.Config, source string, key db.Key, now float64) ([]string, error) {
+func importV2(ctx context.Context, env config.Env, cfg config.Config, source, sourceConfig, sourceEnv string, key db.Key, now float64) ([]string, error) {
 	if sameFile(source, cfg.DBPath) {
 		return nil, errors.New("db import-v2: the source and the destination are the same file")
+	}
+	pins, err := readSourcePins(env, sourceConfig, sourceEnv)
+	if err != nil {
+		return nil, err
 	}
 	src, err := db.OpenSource(source, key)
 	if err != nil {
@@ -304,16 +312,19 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source str
 			}
 			im.notes = nil
 		}
-		settingLines, err := settings.ImportV2(ctx, tx, src)
+		settingLines, summary, err := settings.ImportV2(ctx, tx, src, pins.importPins())
 		if err != nil {
 			return err
 		}
 		lines = append(lines, settingLines...)
+		for _, name := range pins.unknown {
+			lines = append(lines, "pin "+name+": unknown-host-requirement")
+		}
 		accounts, err := importedAccountIDs(ctx, tx)
 		if err != nil {
 			return err
 		}
-		sourced, err := sourceConnections(ctx, src, accounts)
+		sourced, err := sourceConnections(ctx, src, accounts, pins)
 		if err != nil {
 			return err
 		}
@@ -336,11 +347,12 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source str
 			}
 			lines = append(lines, "mail_accounts: linked "+id)
 		}
-		for _, name := range sourced.Secrets {
-			if _, err := tx.ExecContext(ctx, "DELETE FROM secrets WHERE name = ?", name); err != nil {
-				return err
-			}
+		secretLines, err := im.accountSecrets(sourced.Secrets, pins)
+		if err != nil {
+			return err
 		}
+		lines = append(lines, secretLines...)
+		lines = append(lines, summary.Lines()...)
 		return im.checkForeignKeys()
 	})
 	if err != nil {
@@ -384,11 +396,134 @@ func inspectSource(ctx context.Context, src *sql.DB, now float64) ([]tablePlan, 
 	if err := refuseInFlight(ctx, src, now); err != nil {
 		return nil, err
 	}
+	if err := refuseUnknownSecrets(ctx, src); err != nil {
+		return nil, err
+	}
 	names, err := sourceTables(ctx, src)
 	if err != nil {
 		return nil, err
 	}
 	return planTables(names, active)
+}
+
+func refuseUnknownSecrets(ctx context.Context, src *sql.DB) error {
+	accounts, err := sourceAccountIDs(ctx, src)
+	if err != nil {
+		return err
+	}
+	rows, err := src.QueryContext(ctx, "SELECT name, value FROM secrets ORDER BY name")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var name, value string
+		if err := rows.Scan(&name, &value); err != nil {
+			return err
+		}
+		if value == "" || knownSourceSecret(name, accounts) {
+			continue
+		}
+		return fmt.Errorf("db import-v2: the source has a secret this build does not know: %s; nothing was imported", name)
+	}
+	return rows.Err()
+}
+
+func sourceAccountIDs(ctx context.Context, src *sql.DB) (map[string]bool, error) {
+	rows, err := src.QueryContext(ctx, "SELECT id FROM mail_accounts")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
+}
+
+func knownSourceSecret(name string, accounts map[string]bool) bool {
+	if settings.ImportSecretName(name) {
+		return true
+	}
+	id, ok := strings.CutPrefix(name, "mail_password_")
+	return ok && accounts[id]
+}
+
+func (im *importer) accountSecrets(consumed []string, pins *sourcePins) ([]string, error) {
+	accounts, err := sourceAccountIDs(im.ctx, im.src)
+	if err != nil {
+		return nil, err
+	}
+	moved := make(map[string]bool, len(consumed))
+	for _, name := range consumed {
+		moved[name] = true
+	}
+	rows, err := im.src.QueryContext(im.ctx, "SELECT name, value FROM secrets ORDER BY name")
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var lines []string
+	for rows.Next() {
+		var name, value string
+		if err := rows.Scan(&name, &value); err != nil {
+			return nil, err
+		}
+		if _, pinned := pins.m[name]; pinned {
+			if _, err := im.tx.ExecContext(im.ctx, "DELETE FROM secrets WHERE name = ?", name); err != nil {
+				return nil, err
+			}
+			target := "host credential"
+			if entry, ok := settings.ImportEntryFor(name); ok && entry.Target != "" {
+				target = entry.Target
+			}
+			lines = append(lines, "secret "+name+": drop-shadowed-row (the effective pin wins)")
+			lines = append(lines, "secret "+name+": credential-file-binding "+target)
+			continue
+		}
+		if moved[name] {
+			if _, err := im.tx.ExecContext(im.ctx, "DELETE FROM secrets WHERE name = ?", name); err != nil {
+				return nil, err
+			}
+			target := "its connection credential"
+			if entry, ok := settings.ImportEntryFor(name); ok {
+				target = entry.Target
+			} else if id, ok := strings.CutPrefix(name, "mail_password_"); ok {
+				target = "mail/" + id + "/password"
+			}
+			lines = append(lines, "secret "+name+": moved -> "+target)
+			continue
+		}
+		if value == "" {
+			if _, err := im.tx.ExecContext(im.ctx, "DELETE FROM secrets WHERE name = ?", name); err != nil {
+				return nil, err
+			}
+			lines = append(lines, "secret "+name+": dropped (empty)")
+			continue
+		}
+		if !knownSourceSecret(name, accounts) {
+			return nil, fmt.Errorf("db import-v2: the source has a secret this build does not know: %s; nothing was imported", name)
+		}
+		entry, ok := settings.ImportEntryFor(name)
+		if !ok || entry.Action == settings.ImportCarry {
+			continue
+		}
+		if _, err := im.tx.ExecContext(im.ctx, "DELETE FROM secrets WHERE name = ?", name); err != nil {
+			return nil, err
+		}
+		switch entry.Class {
+		case settings.ImportHost:
+			lines = append(lines, "secret "+name+": drop-host -> "+entry.Target+" (secret; value not printed)")
+		default:
+			lines = append(lines, "secret "+name+": dropped -> "+entry.Target+" (value not kept)")
+		}
+	}
+	return lines, rows.Err()
 }
 
 func refuseInFlight(ctx context.Context, src *sql.DB, now float64) error {
@@ -418,35 +553,20 @@ func refuseInFlight(ctx context.Context, src *sql.DB, now float64) error {
 	return nil
 }
 
-func sourceQbit(ctx context.Context, src *sql.DB) (connections.ImportQbit, error) {
+func sourceQbit(ctx context.Context, src *sql.DB, pins *sourcePins) (connections.ImportQbit, error) {
 	var q connections.ImportQbit
-	rows, err := src.QueryContext(ctx, "SELECT key, value FROM settings WHERE key IN ('media_qbittorrent_url', 'qbittorrent_ca_file', 'qbittorrent_proxy')")
+	values, err := sourceSettings(ctx, src, pins, []string{"media_qbittorrent_url", "qbittorrent_ca_file", "qbittorrent_proxy"})
 	if err != nil {
 		return q, err
 	}
-	for rows.Next() {
-		var key, value string
-		if err := rows.Scan(&key, &value); err != nil {
-			_ = rows.Close()
-			return q, err
-		}
-		switch key {
-		case "media_qbittorrent_url":
-			q.URL = value
-		case "qbittorrent_ca_file":
-			q.CAFile = value
-		case "qbittorrent_proxy":
-			q.Proxy = value
-		}
-	}
-	if err := rows.Close(); err != nil {
+	q.URL = values["media_qbittorrent_url"]
+	q.CAFile = values["qbittorrent_ca_file"]
+	q.Proxy = values["qbittorrent_proxy"]
+	key, err := sourceSecret(ctx, src, pins, "media_qbittorrent_api_key", "api_key")
+	if err != nil {
 		return q, err
 	}
-	err = src.QueryRowContext(ctx, "SELECT value, set_at, set_by FROM secrets WHERE name = 'media_qbittorrent_api_key'").
-		Scan(&q.Key, &q.SetAt, &q.SetBy)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
-		return q, err
-	}
+	q.Key, q.SetAt, q.SetBy = key.Value, key.SetAt, key.SetBy
 	var state, reason string
 	var checked float64
 	var expires sql.NullFloat64
@@ -491,9 +611,9 @@ func importedAccountIDs(ctx context.Context, q *sql.Tx) (map[string]bool, error)
 	return out, nil
 }
 
-func sourceConnections(ctx context.Context, src *sql.DB, accounts map[string]bool) (sourceConnectionsData, error) {
+func sourceConnections(ctx context.Context, src *sql.DB, accounts map[string]bool, pins *sourcePins) (sourceConnectionsData, error) {
 	var out sourceConnectionsData
-	qbit, err := sourceQbit(ctx, src)
+	qbit, err := sourceQbit(ctx, src, pins)
 	if err != nil {
 		return out, err
 	}
@@ -501,7 +621,7 @@ func sourceConnections(ctx context.Context, src *sql.DB, accounts map[string]boo
 	if qbit.Key != "" {
 		out.Secrets = append(out.Secrets, "media_qbittorrent_api_key")
 	}
-	values, err := sourceSettings(ctx, src, []string{
+	values, err := sourceSettings(ctx, src, pins, []string{
 		"anthropic_ca_file", "anthropic_proxy",
 		"grafana_url", "grafana_metrics_uid", "grafana_logs_uid", "grafana_logs_type", "grafana_logs_query", "grafana_ca_file", "grafana_proxy",
 		"notion_ca_file", "notion_proxy",
@@ -514,7 +634,7 @@ func sourceConnections(ctx context.Context, src *sql.DB, accounts map[string]boo
 	if err != nil {
 		return out, err
 	}
-	key, err := sourceSecret(ctx, src, "anthropic_api_key", "api_key")
+	key, err := sourceSecret(ctx, src, pins, "anthropic_api_key", "api_key")
 	if err != nil {
 		return out, err
 	}
@@ -523,7 +643,7 @@ func sourceConnections(ctx context.Context, src *sql.DB, accounts map[string]boo
 		out.Secrets = append(out.Secrets, "anthropic_api_key")
 	}
 	if values[grafanatools.KeyURL] != "" {
-		token, err := sourceSecret(ctx, src, "grafana_viewer_token", "viewer_token")
+		token, err := sourceSecret(ctx, src, pins, "grafana_viewer_token", "viewer_token")
 		if err != nil {
 			return out, err
 		}
@@ -533,7 +653,7 @@ func sourceConnections(ctx context.Context, src *sql.DB, accounts map[string]boo
 		}
 	}
 	out.Services = append(out.Services, weather.ImportV2(values), webfetch.ImportV2())
-	tmdbToken, err := sourceSecret(ctx, src, "media_tmdb_token", "read_token")
+	tmdbToken, err := sourceSecret(ctx, src, pins, "media_tmdb_token", "read_token")
 	if err != nil {
 		return out, err
 	}
@@ -541,7 +661,7 @@ func sourceConnections(ctx context.Context, src *sql.DB, accounts map[string]boo
 	if tmdbToken.Value != "" {
 		out.Secrets = append(out.Secrets, "media_tmdb_token")
 	}
-	token, err := sourceSecret(ctx, src, "notion_token", "token")
+	token, err := sourceSecret(ctx, src, pins, "notion_token", "token")
 	if err != nil {
 		return out, err
 	}
@@ -549,7 +669,7 @@ func sourceConnections(ctx context.Context, src *sql.DB, accounts map[string]boo
 	if token.Value != "" {
 		out.Secrets = append(out.Secrets, "notion_token")
 	}
-	vapid, err := sourceSecret(ctx, src, "webpush_vapid_private_key", "vapid_private")
+	vapid, err := sourceSecret(ctx, src, pins, "webpush_vapid_private_key", "vapid_private")
 	if err != nil {
 		return out, err
 	}
@@ -557,7 +677,7 @@ func sourceConnections(ctx context.Context, src *sql.DB, accounts map[string]boo
 	if vapid.Value != "" {
 		out.Secrets = append(out.Secrets, "webpush_vapid_private_key")
 	}
-	google, googleSecrets, err := sourceGoogle(ctx, src)
+	google, googleSecrets, err := sourceGoogle(ctx, src, pins)
 	if err != nil {
 		return out, err
 	}
@@ -565,13 +685,13 @@ func sourceConnections(ctx context.Context, src *sql.DB, accounts map[string]boo
 		out.Services = append(out.Services, google)
 		out.Secrets = append(out.Secrets, googleSecrets...)
 	}
-	iclouds, icloudNotes, err := sourceICloud(ctx, src)
+	iclouds, icloudNotes, err := sourceICloud(ctx, src, pins)
 	if err != nil {
 		return out, err
 	}
 	out.Services = append(out.Services, iclouds...)
 	out.Notes = append(out.Notes, icloudNotes...)
-	mails, mailSecrets, mailNotes, err := sourceMailAccounts(ctx, src)
+	mails, mailSecrets, mailNotes, err := sourceMailAccounts(ctx, src, pins)
 	if err != nil {
 		return out, err
 	}
@@ -581,12 +701,12 @@ func sourceConnections(ctx context.Context, src *sql.DB, accounts map[string]boo
 	for _, service := range mails {
 		out.MailIDs = append(out.MailIDs, service.ID)
 	}
-	oidcSecret, err := sourceSecret(ctx, src, "oidc_client_secret", "client_secret")
+	oidcSecret, err := sourceSecret(ctx, src, pins, "oidc_client_secret", "client_secret")
 	if err != nil {
 		return out, err
 	}
 	out.Notes = append(out.Notes, oidcconn.ImportV2(oidcSecret)...)
-	embedKey, err := sourceSecret(ctx, src, "mail_embed_key", "bearer")
+	embedKey, err := sourceSecret(ctx, src, pins, "mail_embed_key", "bearer")
 	if err != nil {
 		return out, err
 	}
@@ -606,7 +726,7 @@ func sourceConnections(ctx context.Context, src *sql.DB, accounts map[string]boo
 	if embedKey.Value != "" {
 		out.Secrets = append(out.Secrets, "mail_embed_key")
 	}
-	ship24Key, err := sourceSecret(ctx, src, "mail_ship24_api_key", "api_key")
+	ship24Key, err := sourceSecret(ctx, src, pins, "mail_ship24_api_key", "api_key")
 	if err != nil {
 		return out, err
 	}
@@ -646,21 +766,21 @@ func sourceProbe(ctx context.Context, src *sql.DB, kind string) (*endpoint.Impor
 	return &p, nil
 }
 
-func sourceGoogle(ctx context.Context, src *sql.DB) (connections.ImportService, []string, error) {
+func sourceGoogle(ctx context.Context, src *sql.DB, pins *sourcePins) (connections.ImportService, []string, error) {
 	var service connections.ImportService
-	values, err := sourceSettings(ctx, src, []string{"google_client_id"})
+	values, err := sourceSettings(ctx, src, pins, []string{"google_client_id"})
 	if err != nil {
 		return service, nil, err
 	}
-	secret, err := sourceSecret(ctx, src, "google_oauth_client_secret", "oauth/client_secret")
+	secret, err := sourceSecret(ctx, src, pins, "google_oauth_client_secret", "oauth/client_secret")
 	if err != nil {
 		return service, nil, err
 	}
-	calendarGrant, err := sourceSecret(ctx, src, "google_calendar_refresh_token", "oauth/calendar/refresh")
+	calendarGrant, err := sourceSecret(ctx, src, pins, "google_calendar_refresh_token", "oauth/calendar/refresh")
 	if err != nil {
 		return service, nil, err
 	}
-	gmailGrant, err := sourceSecret(ctx, src, "google_gmail_refresh_token", "oauth/gmail/refresh")
+	gmailGrant, err := sourceSecret(ctx, src, pins, "google_gmail_refresh_token", "oauth/gmail/refresh")
 	if err != nil {
 		return service, nil, err
 	}
@@ -708,8 +828,8 @@ func sourceHealth(ctx context.Context, src *sql.DB, name string) (string, string
 	return state, reason, checked, expiry, true, nil
 }
 
-func sourceICloud(ctx context.Context, src *sql.DB) ([]connections.ImportService, []string, error) {
-	values, err := sourceSettings(ctx, src, []string{"icloud_apple_id", "calendar_account"})
+func sourceICloud(ctx context.Context, src *sql.DB, pins *sourcePins) ([]connections.ImportService, []string, error) {
+	values, err := sourceSettings(ctx, src, pins, []string{"icloud_apple_id", "calendar_account"})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -756,7 +876,7 @@ func sourceICloud(ctx context.Context, src *sql.DB) ([]connections.ImportService
 	return services, notes, nil
 }
 
-func sourceMailAccounts(ctx context.Context, src *sql.DB) ([]connections.ImportService, []string, []string, error) {
+func sourceMailAccounts(ctx context.Context, src *sql.DB, pins *sourcePins) ([]connections.ImportService, []string, []string, error) {
 	rows, err := src.QueryContext(ctx, "SELECT id, label, preset, login, enabled, auth_method FROM mail_accounts ORDER BY id")
 	if err != nil {
 		return nil, nil, nil, err
@@ -796,7 +916,7 @@ func sourceMailAccounts(ctx context.Context, src *sql.DB) ([]connections.ImportS
 			Capabilities: []string{"imap", "smtp"},
 			Enabled:      &enabled,
 		}
-		password, err := sourceSecret(ctx, src, "mail_password_"+a.id, "mail/"+a.id+"/password")
+		password, err := sourceSecret(ctx, src, pins, "mail_password_"+a.id, "mail/"+a.id+"/password")
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -820,7 +940,7 @@ func sourceMailAccounts(ctx context.Context, src *sql.DB) ([]connections.ImportS
 	return services, secrets, notes, nil
 }
 
-func sourceSettings(ctx context.Context, src *sql.DB, keys []string) (map[string]string, error) {
+func sourceSettings(ctx context.Context, src *sql.DB, pins *sourcePins, keys []string) (map[string]string, error) {
 	args := make([]any, len(keys))
 	for i, key := range keys {
 		args[i] = key
@@ -838,11 +958,22 @@ func sourceSettings(ctx context.Context, src *sql.DB, keys []string) (map[string
 		}
 		values[key] = value
 	}
-	return values, rows.Err()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for _, key := range keys {
+		if pin, ok := pins.m[key]; ok && !settings.ImportSecretName(key) {
+			values[key] = pin.Value
+		}
+	}
+	return values, nil
 }
 
-func sourceSecret(ctx context.Context, src *sql.DB, name, slot string) (connections.ImportCredential, error) {
+func sourceSecret(ctx context.Context, src *sql.DB, pins *sourcePins, name, slot string) (connections.ImportCredential, error) {
 	c := connections.ImportCredential{Slot: slot}
+	if _, ok := pins.m[name]; ok {
+		return c, nil
+	}
 	err := src.QueryRowContext(ctx, "SELECT value, set_at, set_by FROM secrets WHERE name = ?", name).
 		Scan(&c.Value, &c.SetAt, &c.SetBy)
 	if err != nil && !errors.Is(err, sql.ErrNoRows) {
@@ -1033,6 +1164,42 @@ func (im *importer) copyFTS(table string, columns []string) (int64, error) {
 			return n, err
 		}
 		if _, err := im.tx.ExecContext(im.ctx, insert, values...); err != nil {
+			return n, err
+		}
+		n++
+	}
+	return n, rows.Err()
+}
+
+func (im *importer) carryAudit() (int64, error) {
+	var base int64
+	if err := im.tx.QueryRowContext(im.ctx, "SELECT COALESCE(MAX(id), 0) FROM settings_audit").Scan(&base); err != nil {
+		return 0, err
+	}
+	rows, err := im.src.QueryContext(im.ctx,
+		"SELECT id, ts, key, old_value, new_value, secret, actor, source FROM settings_audit ORDER BY id")
+	if err != nil {
+		return 0, err
+	}
+	defer func() { _ = rows.Close() }()
+	var n int64
+	for rows.Next() {
+		var (
+			id     int64
+			ts     float64
+			key    string
+			old    sql.NullString
+			next   sql.NullString
+			secret int
+			actor  string
+			source string
+		)
+		if err := rows.Scan(&id, &ts, &key, &old, &next, &secret, &actor, &source); err != nil {
+			return n, err
+		}
+		if _, err := im.tx.ExecContext(im.ctx,
+			"INSERT INTO settings_audit (id, ts, key, old_value, new_value, secret, actor, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+			id+base, ts, key, old, next, secret, actor, source); err != nil {
 			return n, err
 		}
 		n++
