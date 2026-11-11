@@ -126,7 +126,7 @@ func recheckable(ctx context.Context, store *connections.Store, id connections.I
 	case connections.Failing, connections.NeedsReauth, connections.Disabled, connections.Unconfigured:
 		return false
 	}
-	return view.CheckedAt == nil || time.Since(*view.CheckedAt) >= recheckAfter
+	return view.CheckedAt != nil && time.Since(*view.CheckedAt) >= recheckAfter
 }
 
 type handlers struct{ d *web.Deps }
