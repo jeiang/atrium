@@ -1,7 +1,7 @@
-{{define "title"}}Google · Integrations{{end}}
-{{define "heading"}}Settings · Integrations · Google{{end}}
+{{define "title"}}Google · Connections{{end}}
+{{define "heading"}}Settings · Connections · Google{{end}}
 {{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
-{{template "settings_nav" (dict "Tab" "integrations" "Settings" .Settings)}}
+{{template "settings_nav" (dict "Tab" "connections" "Settings" .Settings)}}
 <div class="flex flex-col gap-4">
   <section class="rounded-lg border bg-card p-4 text-sm">
     <h2 class="font-medium">1. Create the Google client</h2>
@@ -13,7 +13,7 @@
     </ol>
   </section>
 
-  <form method="post" action="/settings/integrations/google" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" autocomplete="off">
+  <form method="post" action="/settings/connections/google" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm" autocomplete="off">
     <input type="hidden" name="csrf_token" value="{{$csrf}}">
     <h2 class="font-medium">2. Client ID and secret</h2>
     <div class="grid gap-3 sm:grid-cols-2">
@@ -29,7 +29,7 @@
     <div><button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "check"}}Save</button></div>
   </form>
 
-  <form method="post" action="/settings/integrations/google/start" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm">
+  <form method="post" action="/settings/connections/google/start" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm">
     <input type="hidden" name="csrf_token" value="{{$csrf}}">
     <h2 class="font-medium">3. Consent</h2>
     <div role="group" class="field">
@@ -41,7 +41,7 @@
     <div><button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "external-link"}}Connect Google</button></div>
   </form>
 
-  <form method="post" action="/settings/integrations/google/paste" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm">
+  <form method="post" action="/settings/connections/google/paste" class="flex flex-col gap-3 rounded-lg border bg-card p-4 text-sm">
     <input type="hidden" name="csrf_token" value="{{$csrf}}">
     <h2 class="font-medium">Paste-back fallback</h2>
     <div role="group" class="field">
@@ -57,8 +57,7 @@
       <span class="badge" data-variant="{{if eq $d.Health "ok"}}secondary{{else if eq $d.Health "untested"}}outline{{else}}destructive{{end}}">{{replace "_" " " (or $d.Health "untested")}}</span>
       {{with $d.Reason}}<span class="text-xs text-muted-foreground">{{.}}</span>{{end}}
     </div>
-    {{template "module_hold" $d.Hold}}
-    <form method="post" action="/settings/integrations/google/test">
+    <form method="post" action="/settings/connections/google/test">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
       <button type="submit" class="btn" data-size="sm" data-variant="outline" title="Refresh tokens expire after 7 days while the consent screen is in Testing">{{icon "refresh-cw"}}Test refresh token</button>
     </form>

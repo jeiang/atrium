@@ -67,7 +67,7 @@ type AuthOptions struct {
 
 func Authorize(ctx context.Context, o AuthOptions) (string, error) {
 	if o.ClientID == "" || o.ClientSecret == "" {
-		return "", Error("ATRIUM_CALENDAR_GOOGLE_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are required")
+		return "", Error("the google/default connection needs a client ID and client secret")
 	}
 	if o.Timeout == 0 {
 		o.Timeout = AuthTimeout

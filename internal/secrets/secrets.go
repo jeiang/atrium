@@ -9,18 +9,11 @@ import (
 
 const (
 	ActionLinkKey = "action_link_key"
-
-	GoogleOAuthClientSecret    = "google_oauth_client_secret"
-	GoogleCalendarRefreshToken = "google_calendar_refresh_token"
-	GoogleGmailRefreshToken    = "google_gmail_refresh_token"
 )
 
 func init() {
 	settings.MustRegister(
 		settings.Secret(settings.SecretOpts{Generated: true}, settings.Def{Key: ActionLinkKey, Module: "action_links", Type: settings.String, Check: settings.NonEmpty}),
-		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: GoogleOAuthClientSecret, Module: "calendar", Type: settings.String, EnvAlias: "GOOGLE_OAUTH_CLIENT_SECRET"}),
-		settings.Secret(settings.SecretOpts{Encrypted: true, Readable: true}, settings.Def{Key: GoogleCalendarRefreshToken, Module: "calendar", Type: settings.String, EnvAlias: "GOOGLE_REFRESH_TOKEN"}),
-		settings.Secret(settings.SecretOpts{Encrypted: true, Readable: true}, settings.Def{Key: GoogleGmailRefreshToken, Module: "mail", Type: settings.String, EnvAlias: "GOOGLE_GMAIL_REFRESH_TOKEN"}),
 	)
 }
 

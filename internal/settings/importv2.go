@@ -429,6 +429,10 @@ var importManifest = []ImportEntry{
 }
 
 var runtimeCutover = []string{
+	"google_client_id",
+	"google_oauth_client_secret",
+	"google_calendar_refresh_token",
+	"google_gmail_refresh_token",
 	"anthropic_api_key",
 	"anthropic_ca_file",
 	"anthropic_proxy",

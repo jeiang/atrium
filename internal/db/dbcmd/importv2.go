@@ -17,6 +17,7 @@ import (
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/auth/oidcconn"
+	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
@@ -481,12 +482,147 @@ func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData,
 	if vapid.Value != "" {
 		out.Secrets = append(out.Secrets, "webpush_vapid_private_key")
 	}
+	google, googleSecrets, err := sourceGoogle(ctx, src)
+	if err != nil {
+		return out, err
+	}
+	if google.ID != "" {
+		out.Services = append(out.Services, google)
+		out.Secrets = append(out.Secrets, googleSecrets...)
+	}
+	iclouds, icloudNotes, err := sourceICloud(ctx, src)
+	if err != nil {
+		return out, err
+	}
+	out.Services = append(out.Services, iclouds...)
+	out.Notes = append(out.Notes, icloudNotes...)
 	oidcSecret, err := sourceSecret(ctx, src, "oidc_client_secret", "client_secret")
 	if err != nil {
 		return out, err
 	}
 	out.Notes = append(out.Notes, oidcconn.ImportV2(oidcSecret)...)
 	return out, nil
+}
+
+func sourceGoogle(ctx context.Context, src *sql.DB) (connections.ImportService, []string, error) {
+	var service connections.ImportService
+	values, err := sourceSettings(ctx, src, []string{"google_client_id"})
+	if err != nil {
+		return service, nil, err
+	}
+	secret, err := sourceSecret(ctx, src, "google_oauth_client_secret", "oauth/client_secret")
+	if err != nil {
+		return service, nil, err
+	}
+	calendarGrant, err := sourceSecret(ctx, src, "google_calendar_refresh_token", "oauth/calendar/refresh")
+	if err != nil {
+		return service, nil, err
+	}
+	gmailGrant, err := sourceSecret(ctx, src, "google_gmail_refresh_token", "oauth/gmail/refresh")
+	if err != nil {
+		return service, nil, err
+	}
+	if values["google_client_id"] == "" && secret.Value == "" && calendarGrant.Value == "" && gmailGrant.Value == "" {
+		return service, nil, nil
+	}
+	var capabilities []string
+	if calendarGrant.Value != "" {
+		capabilities = append(capabilities, "calendar")
+	}
+	if gmailGrant.Value != "" {
+		capabilities = append(capabilities, "gmail")
+	}
+	service = connections.ImportService{
+		ID: "google/default", Kind: "google", Label: "Google", Source: connections.SourceOperator,
+		Config:       map[string]string{"client_id": values["google_client_id"]},
+		Capabilities: capabilities,
+		Credentials:  []connections.ImportCredential{secret, calendarGrant, gmailGrant},
+	}
+	if state, reason, checked, expires, ok, err := sourceHealth(ctx, src, "google"); err != nil {
+		return service, nil, err
+	} else if ok {
+		service.Health = &connections.ImportHealth{State: state, Reason: reason, CheckedAt: checked, ExpiresAt: expires}
+	}
+	var secrets []string
+	for _, name := range []string{"google_oauth_client_secret", "google_calendar_refresh_token", "google_gmail_refresh_token"} {
+		secrets = append(secrets, name)
+	}
+	return service, secrets, nil
+}
+
+func sourceHealth(ctx context.Context, src *sql.DB, name string) (string, string, float64, *float64, bool, error) {
+	var state, reason string
+	var checked float64
+	var expires sql.NullFloat64
+	err := src.QueryRowContext(ctx, "SELECT state, reason, checked_at, expires_at FROM integration_health WHERE name = ?", name).
+		Scan(&state, &reason, &checked, &expires)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", "", 0, nil, false, nil
+	}
+	if err != nil {
+		return "", "", 0, nil, false, err
+	}
+	var expiry *float64
+	if expires.Valid {
+		expiry = &expires.Float64
+	}
+	return state, reason, checked, expiry, true, nil
+}
+
+func sourceICloud(ctx context.Context, src *sql.DB) ([]connections.ImportService, []string, error) {
+	values, err := sourceSettings(ctx, src, []string{"icloud_apple_id", "calendar_account"})
+	if err != nil {
+		return nil, nil, err
+	}
+	rows, err := src.QueryContext(ctx, "SELECT id, login FROM mail_accounts WHERE preset = 'icloud' AND enabled = 1 ORDER BY id")
+	if err != nil {
+		return nil, nil, err
+	}
+	type account struct{ id, login string }
+	var accounts []account
+	for rows.Next() {
+		var a account
+		if err := rows.Scan(&a.id, &a.login); err != nil {
+			_ = rows.Close()
+			return nil, nil, err
+		}
+		accounts = append(accounts, a)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, nil, err
+	}
+	selected := strings.TrimSpace(values["calendar_account"])
+	if selected != "" {
+		var found []account
+		for _, a := range accounts {
+			if a.id == selected {
+				found = append(found, a)
+			}
+		}
+		accounts = found
+	}
+	if len(accounts) > 1 {
+		return nil, []string{"icloud: unresolved-selection; set calendar_account to one of the enabled iCloud accounts"}, nil
+	}
+	var services []connections.ImportService
+	var notes []string
+	for _, a := range accounts {
+		password, err := sourceSecret(ctx, src, "mail_password_"+a.id, "mail/"+a.id+"/password")
+		if err != nil {
+			return nil, nil, err
+		}
+		service := connections.ImportService{
+			ID: "icloud/" + a.id, Kind: string(calendar.KindICloud), Label: "iCloud " + a.id, Source: connections.SourceOperator,
+			Config:       map[string]string{"apple_id": values["icloud_apple_id"]},
+			Capabilities: []string{calendar.CapabilityCalDAV, calendar.CapabilityCardDAV},
+			Credentials:  []connections.ImportCredential{password},
+		}
+		if password.Value == "" {
+			notes = append(notes, "icloud/"+a.id+": unresolved-credential; the app password is not in the source database")
+		}
+		services = append(services, service)
+	}
+	return services, notes, nil
 }
 
 func sourceSettings(ctx context.Context, src *sql.DB, keys []string) (map[string]string, error) {

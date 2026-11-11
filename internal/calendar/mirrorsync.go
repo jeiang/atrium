@@ -2,7 +2,6 @@ package calendar
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/davmirror"
@@ -12,11 +11,10 @@ func icloudMirror(ctx context.Context, set Settings, endpoint, dir string, k dav
 	if dir == "" {
 		return davmirror.Stats{}, Error("the mirror directory is not set")
 	}
-	login, err := ICloudLogin(ctx, set)
+	client, err := davHTTP(ctx, set)
 	if err != nil {
 		return davmirror.Stats{}, err
 	}
-	client := davmirror.BasicClient(&http.Client{Timeout: remoteTimeout}, login.AppleID, login.Password)
 	collections, err := davmirror.Fetch(ctx, client, endpoint, k)
 	if err != nil {
 		return davmirror.Stats{}, err

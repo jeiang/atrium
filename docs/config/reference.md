@@ -140,20 +140,6 @@ Operator settings are stored in the database and edited in the application. They
 
 | Key | Type | Default | Class |
 | --- | --- | --- | --- |
-| `google_calendar_refresh_token` | string | none | secret |
-| `google_client_id` | string | none | ui |
-
-### mail
-
-| Key | Type | Default | Class |
-| --- | --- | --- | --- |
-| `google_gmail_refresh_token` | string | none | secret |
-
-### calendar
-
-| Key | Type | Default | Class |
-| --- | --- | --- | --- |
-| `google_oauth_client_secret` | string | none | secret |
 | `icloud_apple_id` | string | none | ui |
 | `icloud_calendar` | string | none | ui |
 

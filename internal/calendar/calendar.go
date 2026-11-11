@@ -12,10 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"golang.org/x/oauth2"
-	gcal "google.golang.org/api/calendar/v3"
 	"google.golang.org/api/googleapi"
-	"google.golang.org/api/option"
 )
 
 const (
@@ -114,24 +111,6 @@ func (a acceptJSON) RoundTrip(r *http.Request) (*http.Response, error) {
 		r.Header.Set("Accept", "application/json")
 	}
 	return a.base.RoundTrip(r)
-}
-
-func googleService(ctx context.Context, env config.Env, set Settings) (*gcal.Service, error) {
-	creds, err := googleCredentials(env, set)
-	if err != nil {
-		return nil, err
-	}
-	endpoints := EndpointsFrom(env)
-	source := oauth2.ReuseTokenSource(nil, &refresher{ctx: ctx, creds: creds, tokenURL: endpoints.Token})
-	client := &http.Client{
-		Timeout:   remoteTimeout,
-		Transport: &oauth2.Transport{Source: source, Base: acceptJSON{http.DefaultTransport}},
-	}
-	opts := []option.ClientOption{option.WithHTTPClient(client)}
-	if endpoints.GoogleAPI != "" {
-		opts = append(opts, option.WithEndpoint(endpoints.GoogleAPI))
-	}
-	return gcal.NewService(ctx, opts...)
 }
 
 func httpStatus(err error) int {
