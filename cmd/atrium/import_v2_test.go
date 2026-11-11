@@ -642,7 +642,7 @@ func TestImportV2MapsAgentWritesToEffects(t *testing.T) {
 		t.Errorf("the report lacks the agent conversion count:\n%s", got.stdout)
 	}
 
-	q, err := db.OpenSource(dest, db.Key{})
+	q, err := db.OpenSource(dest, importKey(t))
 	if err != nil {
 		t.Fatal(err)
 	}
