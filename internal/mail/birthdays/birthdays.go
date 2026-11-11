@@ -12,7 +12,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/timex"
@@ -29,10 +28,7 @@ func Date(year int, month time.Month, day int) time.Time {
 }
 
 func Limits(ctx context.Context, q db.Querier) (defaultDays, maxDays int, err error) {
-	r := endpoint.Read(ctx, q)
-	defaultDays = r.Int(mail.KeyBirthdaysDefaultDays)
-	maxDays = r.Int(mail.KeyBirthdaysMaxDays)
-	return defaultDays, maxDays, r.Err()
+	return mail.TuningBirthdaysDefaultDays, mail.TuningBirthdaysMaxDays, nil
 }
 
 func validDate(year, month, day int) (time.Time, bool) {

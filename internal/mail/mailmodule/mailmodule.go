@@ -25,21 +25,13 @@ import (
 )
 
 func init() {
-	for _, e := range []struct {
-		kind, label, url, key string
-		fields                []integrations.Field
-	}{
-		{endpoint.EndpointChat, "Mail chat endpoint", endpoint.KeyChatURL, endpoint.KeyChatKey,
-			[]integrations.Field{{Key: endpoint.KeyChatModel, Label: "Model"}}},
-		{endpoint.EndpointEmbed, "Mail embed endpoint", endpoint.KeyEmbedURL, endpoint.KeyEmbedKey, nil},
-	} {
-		integrations.Register(integrations.Integration{
-			Name: endpoint.Integration(e.kind), Label: e.label, Module: module.Mail, URLKey: e.url, SecretKey: e.key,
-			Help:   "OpenAI-compatible base URL ending in /v1; the Bearer key is optional.",
-			Fields: e.fields,
-			Test:   probeTest(e.kind),
-		})
-	}
+	integrations.Register(integrations.Integration{
+		Name: endpoint.Integration(endpoint.EndpointChat), Label: "Mail chat endpoint", Module: module.Mail,
+		URLKey: endpoint.KeyChatURL, SecretKey: endpoint.KeyChatKey,
+		Help:   "OpenAI-compatible base URL ending in /v1; the Bearer key is optional.",
+		Fields: []integrations.Field{{Key: endpoint.KeyChatModel, Label: "Model"}},
+		Test:   probeTest(endpoint.EndpointChat),
+	})
 }
 
 func probeTest(kind string) func(context.Context, integrations.Conn) (string, error) {
@@ -87,7 +79,9 @@ func (m Module) Register(mc module.Context) module.Registration {
 		Attention: []attention.Source{attentionsources.Drafts(), attentionsources.Loops(), attentionsources.Commitments(), attentionsources.Packages()},
 		Requires: []module.Requirement{
 			module.Setting(endpoint.KeyChatURL),
-			module.Setting(endpoint.KeyEmbedURL),
+			{Name: "service/embedding", Check: func(ctx context.Context, p module.Probe) (string, error) {
+				return endpoint.EmbeddingConfigured(ctx, p.Q)
+			}},
 			{Name: "endpoint probes", Check: func(ctx context.Context, p module.Probe) (string, error) {
 				return mail.ProbeFailures(ctx, p.Q)
 			}},

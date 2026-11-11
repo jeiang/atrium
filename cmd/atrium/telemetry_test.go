@@ -139,7 +139,7 @@ func TestTelemetryExportsSpansAndMetricsWithoutContent(t *testing.T) {
 		anthropictest.Reply("end_turn", anthropictest.Text("done")),
 	)
 	setEnv(t, anthropic.BaseURLEnv, api.URL)
-	setEnv(t, settingEnv("mail_embed_url"), embedder.URL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, embedder.URL+"/v1", "embeddinggemma", ""))
 	setEnv(t, settingEnv(observability.TracesEndpointKey), receiver.URL+"/insert/opentelemetry/v1/traces")
 
 	dbPath := filepath.Join(dir, "atrium.db")

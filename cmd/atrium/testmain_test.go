@@ -63,7 +63,19 @@ config = { subject = "mailto:ops@example.test" }
 capabilities = ["delivery"]
 `
 
+const defaultEmbeddingConnection = `
+[connections."service/embedding"]
+kind = "service/embedding"
+label = "Embedding"
+config = { url = "http://embed.invalid/v1", model = "embeddinggemma" }
+capabilities = ["embeddings"]
+`
+
 func hostConfigBody(webpush string) string {
+	return hostConfigBodyWith(defaultEmbeddingConnection, webpush)
+}
+
+func hostConfigBodyWith(embedding, webpush string) string {
 	dir := filepath.Join(testRoot, "host")
 	return fmt.Sprintf(`[connections."service/anthropic"]
 kind = "service/anthropic"
@@ -76,7 +88,66 @@ kind = "service/grafana"
 label = "Grafana"
 capabilities = ["viewer"]
 credential_files = { viewer_token = %q }
-%s`, filepath.Join(dir, "anthropic.key"), filepath.Join(dir, "grafana.key"), webpush)
+%s%s`, filepath.Join(dir, "anthropic.key"), filepath.Join(dir, "grafana.key"), embedding, webpush)
+}
+
+func hostConnectionConfig(t *testing.T, dir, name, table string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(hostConfigBody(defaultWebPushConnection)+table), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func embeddingHost(t *testing.T, dir, url, model, ca string) string {
+	t.Helper()
+	return embeddingHostWith(t, dir, url, model, ca, "")
+}
+
+func embeddingHostWith(t *testing.T, dir, url, model, ca, key string) string {
+	t.Helper()
+	table := fmt.Sprintf(`
+[connections."service/embedding"]
+kind = "service/embedding"
+label = "Embedding"
+config = { url = %q, model = %q }
+capabilities = ["embeddings"]
+`, url, model)
+	if ca != "" {
+		table += fmt.Sprintf("transport = { ca_file = %q }\n", ca)
+	}
+	if key != "" {
+		keyFile := filepath.Join(dir, "embedding.key")
+		if err := os.WriteFile(keyFile, []byte(key+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		table += fmt.Sprintf("credential_files = { bearer = %q }\n", keyFile)
+	}
+	path := filepath.Join(dir, "host-embedding.toml")
+	if err := os.WriteFile(path, []byte(hostConfigBodyWith(table, defaultWebPushConnection)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func ship24Host(t *testing.T, dir, url, key string) string {
+	t.Helper()
+	table := fmt.Sprintf(`
+[connections."service/ship24"]
+kind = "service/ship24"
+label = "Ship24"
+config = { url = %q }
+capabilities = ["api"]
+`, url)
+	if key != "" {
+		keyFile := filepath.Join(dir, "ship24.key")
+		if err := os.WriteFile(keyFile, []byte(key+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		table += fmt.Sprintf("credential_files = { api_key = %q }\n", keyFile)
+	}
+	return hostConnectionConfig(t, dir, "host-ship24.toml", table)
 }
 
 var defaultHostConfig = func() string {
@@ -207,7 +278,6 @@ func moduleEnv(dir string) map[string]string {
 func requirementEnv(mediaRoot string) map[string]string {
 	return map[string]string{
 		settingEnv(endpoint.KeyChatURL):        "http://chat.invalid/v1",
-		settingEnv(endpoint.KeyEmbedURL):       "http://embed.invalid/v1",
 		settingEnv(media.KeyRoot):              mediaRoot,
 		settingEnv(media.KeyQbitURL):           "http://qbittorrent.invalid",
 		settingEnv(calendar.AppleIDKey):        "operator@icloud.invalid",

@@ -16,7 +16,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/mail/rules"
@@ -261,12 +260,8 @@ func AccountExists(ctx context.Context, q Querier, name string) (bool, error) {
 }
 
 func Build(ctx context.Context, q Querier, env config.Env, since *string, at time.Time) (string, error) {
-	r := endpoint.Read(ctx, q)
-	topDests := r.Int(mail.KeyReportTopDests)
-	disagreeLines := r.Int(mail.KeyReportDisagreeLines)
-	if err := r.Err(); err != nil {
-		return "", err
-	}
+	topDests := mail.TuningReportTopDests
+	disagreeLines := mail.TuningReportDisagreementLines
 	start, err := ParseSince(ctx, env, since, at)
 	if err != nil {
 		return "", err

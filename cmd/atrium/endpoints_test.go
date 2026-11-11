@@ -15,9 +15,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/endpoint"
-	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/module"
 )
@@ -81,17 +79,28 @@ func (f *fakeOpenAI) chatCalls() (int, []map[string]any) {
 	return f.chats, append([]map[string]any(nil), f.chatBodies...)
 }
 
-func TestEndpointProbeGatesTheMailModuleAndSendsTheKeyOnlyToItsEndpoint(t *testing.T) {
+func (f *fakeOpenAI) authorizations() map[string][]string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	out := make(map[string][]string, len(f.auth))
+	for path, values := range f.auth {
+		out[path] = append([]string(nil), values...)
+	}
+	return out
+}
+
+func TestEndpointProbeGatesTheMailModuleAndSendsTheKeysOnlyToTheirEndpoints(t *testing.T) {
 	t.Parallel()
 	const chatKey = "sk-chat-endpoint-0123456789"
+	const embedKey = "sk-embed-endpoint-0123456789"
 	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)
-	moduleFixture(t, flagsExcept(module.Mail, ""))
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
 	setEnv(t, settingEnv(endpoint.KeyChatURL), chat.URL+"/v1")
-	setEnv(t, settingEnv(endpoint.KeyEmbedURL), embed.URL+"/v1")
 	setEnv(t, settingEnv(endpoint.KeyChatKey), chatKey)
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", embedKey))
 
 	ok := runApp(t, "endpoints", "probe")
-	if ok.code != cli.ExitOK || strings.Contains(ok.stdout+ok.stderr, chatKey) || strings.Contains(ok.stderr, "hosted") {
+	if ok.code != cli.ExitOK || strings.Contains(ok.stdout+ok.stderr, chatKey) || strings.Contains(ok.stdout+ok.stderr, embedKey) || strings.Contains(ok.stderr, "hosted") {
 		t.Fatalf("probe: %d stdout %q stderr %q", ok.code, ok.stdout, ok.stderr)
 	}
 	var results []mail.ProbeResult
@@ -105,8 +114,22 @@ func TestEndpointProbeGatesTheMailModuleAndSendsTheKeyOnlyToItsEndpoint(t *testi
 		}
 	}
 	for _, got := range embed.seen("/v1/embeddings") {
-		if got != "" {
-			t.Errorf("embed request Authorization %q, want none", got)
+		if got != "Bearer "+embedKey {
+			t.Errorf("embed request Authorization %q, want the embed bearer", got)
+		}
+	}
+	for path, values := range chat.authorizations() {
+		for _, got := range values {
+			if strings.Contains(got, embedKey) {
+				t.Errorf("chat %s received the embed bearer", path)
+			}
+		}
+	}
+	for path, values := range embed.authorizations() {
+		for _, got := range values {
+			if strings.Contains(got, chatKey) {
+				t.Errorf("embed %s received the chat key", path)
+			}
 		}
 	}
 	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
@@ -131,39 +154,39 @@ func TestEndpointProbeGatesTheMailModuleAndSendsTheKeyOnlyToItsEndpoint(t *testi
 		t.Errorf("rules export while mail needs settings: %d %q", export.code, export.stdout)
 	}
 
-	setEnv(t, settingEnv(endpoint.KeyEmbedURL), embed.URL+"/v2")
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v2", "embeddinggemma", "", embedKey))
+	if listed := runApp(t, "connections", "list"); listed.code != cli.ExitOK {
+		t.Fatalf("reconciling the changed host endpoint: %d %q", listed.code, listed.stderr)
+	}
 	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
 		t.Errorf("a changed endpoint is not held to the old failed probe: %d %q", on.code, on.stderr)
 	}
 }
 
-func TestEndpointFormTestUsesTheEndpointCAAndAPassingTestReleasesTheMailHold(t *testing.T) {
+func TestConnectionsTestUsesTheEmbedCAAndAPassingTestReleasesTheMailHold(t *testing.T) {
 	t.Parallel()
 	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)
 	tlsEmbed := httptest.NewTLSServer(embed.Config.Handler)
 	t.Cleanup(tlsEmbed.Close)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
-	unsetEnv(t, settingEnv(endpoint.KeyChatURL), settingEnv(endpoint.KeyEmbedURL))
-	for key, value := range map[string]string{endpoint.KeyChatURL: chat.URL + "/v1", endpoint.KeyEmbedURL: tlsEmbed.URL + "/v1"} {
-		if got := runSettings(t, "set", key, value); got.code != cli.ExitOK {
-			t.Fatalf("set %s: %d %q", key, got.code, got.stderr)
-		}
+	unsetEnv(t, settingEnv(endpoint.KeyChatURL))
+	if got := runSettings(t, "set", endpoint.KeyChatURL, chat.URL+"/v1"); got.code != cli.ExitOK {
+		t.Fatalf("set chat URL: %d %q", got.code, got.stderr)
 	}
-	if untrusted := runApp(t, "endpoints", "probe"); untrusted.code != cli.ExitError || !strings.Contains(untrusted.stdout, "certificate") {
-		t.Fatalf("probe without the embed CA: %d %q", untrusted.code, untrusted.stdout)
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, tlsEmbed.URL+"/v1", "embeddinggemma", ""))
+	if untrusted := runApp(t, "connections", "test", "service/embedding"); untrusted.code != cli.ExitError || !strings.Contains(untrusted.stdout+untrusted.stderr, "certificate") {
+		t.Fatalf("test without the embed CA: %d %q", untrusted.code, untrusted.stdout+untrusted.stderr)
 	}
 	ca := filepath.Join(dir, "embed-ca.pem")
 	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: tlsEmbed.Certificate().Raw}), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got := runSettings(t, "set", transport.CAKey(endpoint.Integration(endpoint.EndpointEmbed)), ca); got.code != cli.ExitOK {
-		t.Fatalf("set embed CA: %d %q", got.code, got.stderr)
-	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, tlsEmbed.URL+"/v1", "embeddinggemma", ca))
 	embed.mu.Lock()
 	embed.dim = 0
 	embed.mu.Unlock()
-	if failed := runApp(t, "endpoints", "probe"); failed.code != cli.ExitError || !strings.Contains(failed.stdout, "no embedding") {
-		t.Fatalf("probe with the CA and an embedder that returns no vector: %d %q", failed.code, failed.stdout)
+	if failed := runApp(t, "connections", "test", "service/embedding"); failed.code != cli.ExitError || !strings.Contains(failed.stdout, "no embedding") {
+		t.Fatalf("test with the CA and an embedder that returns no vector: %d %q", failed.code, failed.stdout)
 	}
 	if refused := runSettings(t, "set", module.FlagKey(module.Mail), "true"); refused.code != cli.ExitError || !strings.Contains(refused.stderr, "embed endpoint probe failed") {
 		t.Fatalf("enabling mail with a failing probe: %d %q", refused.code, refused.stderr)
@@ -171,13 +194,13 @@ func TestEndpointFormTestUsesTheEndpointCAAndAPassingTestReleasesTheMailHold(t *
 
 	s := &integrationSite{t: t, dir: dir}
 	s.start()
-	if code, body := s.post("/mail_embed/test", url.Values{"url": {embed.URL + "/v1"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "no embedding") {
+	if code, body := s.conn("/test", url.Values{"id": {"service/embedding"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "no embedding") {
 		t.Fatalf("Test of an embedder that returns no vector: %d %s", code, body)
 	}
 	embed.mu.Lock()
 	embed.dim = config.EmbedDim
 	embed.mu.Unlock()
-	if code, body := s.post("/mail_embed/test", nil); code != http.StatusOK || !strings.Contains(body, "768 dimensions") || health(t, dir, endpoint.Integration(endpoint.EndpointEmbed)) != integrations.OK {
+	if code, body := s.conn("/test", url.Values{"id": {"service/embedding"}}); code != http.StatusSeeOther || connectionState(t, dir, "service/embedding") != "ok" {
 		t.Fatalf("Test of the stored embed endpoint: %d %s", code, body)
 	}
 	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {

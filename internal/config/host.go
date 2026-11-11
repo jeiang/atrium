@@ -403,6 +403,19 @@ func (h *Host) deriveHostConnections() {
 			"url": h.Values["media_eztv_url"],
 		}, nil, []string{"indexer"}, false)
 	}
+	h.deriveService("service/embedding", "Embedding", map[string]string{
+		"url":   h.Values["mail_embed_url"],
+		"model": h.Values["mail_embed_model"],
+	}, map[string]string{
+		"ca_file": h.Values["mail_embed_ca_file"],
+		"proxy":   h.Values["mail_embed_proxy"],
+	}, []string{"embeddings"}, false)
+	h.deriveService("service/ship24", "Ship24", map[string]string{
+		"url": h.Values["mail_ship24_url"],
+	}, map[string]string{
+		"ca_file": h.Values["ship24_ca_file"],
+		"proxy":   h.Values["ship24_proxy"],
+	}, []string{"api"}, false)
 	h.deriveService("service/oidc", "Sign-in", map[string]string{
 		"preset":         h.Values["oidc_preset"],
 		"issuer":         h.Values["oidc_issuer"],

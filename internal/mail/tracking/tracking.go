@@ -17,12 +17,11 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/connections/transport"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -31,12 +30,7 @@ var log = logx.Logger("atrium.tracking")
 const Module = "mail"
 
 const (
-	KeyShip24URL           = "mail_ship24_url"
-	KeyShip24APIKey        = "mail_ship24_api_key"
 	KeyMonthlyQuota        = "mail_ship24_monthly_quota"
-	KeyTimeout             = "mail_ship24_timeout_seconds"
-	KeyPollLimit           = "mail_ship24_poll_limit"
-	KeyPollDays            = "mail_ship24_poll_days"
 	KeyDestinationCountry  = "mail_ship24_destination_country"
 	KeyDestinationPostcode = "mail_ship24_destination_postcode"
 	DefaultURL             = "https://api.ship24.com/public/v1"
@@ -54,23 +48,10 @@ func init() {
 		return settings.Value(settings.Advanced, settings.Def{Key: key, Module: Module, Type: kind, Default: def, Check: check})
 	}
 	settings.MustRegister(
-		adv(KeyShip24URL, settings.String, DefaultURL, httpURL),
-		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyShip24APIKey, Module: Module, Type: settings.String}),
 		adv(KeyMonthlyQuota, settings.Int, "10", settings.Between(1, 1000)),
-		adv(KeyTimeout, settings.Int, "15", settings.Between(1, 300)),
-		adv(KeyPollLimit, settings.Int, "40", settings.Between(1, 200)),
-		adv(KeyPollDays, settings.Int, "30", settings.Between(1, 365)),
 		settings.Shown("Destination country", adv(KeyDestinationCountry, settings.String, "", countryCheck)),
 		settings.Shown("Destination postcode", adv(KeyDestinationPostcode, settings.String, "", nil)),
 	)
-}
-
-func httpURL(value string) error {
-	u, err := url.Parse(strings.TrimSpace(value))
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return settings.Invalid("must be an http or https URL")
-	}
-	return nil
 }
 
 func countryCheck(value string) error {
@@ -148,6 +129,13 @@ type Settings struct {
 	Quota, Timeout      int
 	PollLimit, PollDays int
 	Country, Postcode   string
+	lease               *connections.Lease
+}
+
+func (s Settings) Close() {
+	if s.lease != nil {
+		s.lease.Close()
+	}
 }
 
 func Load(ctx context.Context, q db.Querier) (Settings, error) {
@@ -157,30 +145,48 @@ func Load(ctx context.Context, q db.Querier) (Settings, error) {
 	}
 	var s Settings
 	var err error
-	if s.URL, err = read(KeyShip24URL); err != nil {
+	s.Timeout, s.PollLimit, s.PollDays = TuningMailShip24TimeoutSeconds, TuningMailShip24PollLimit, TuningMailShip24PollDays
+	var lease *connections.Lease
+	if store := connections.DefaultFor(q); store != nil {
+		lease, err = store.Open(ctx, ConnectionID)
+	} else {
+		lease, err = connections.OpenRead(ctx, q, config.From(ctx).Host(), ConnectionID)
+	}
+	if err != nil {
+		var unknown connections.UnknownID
+		if errors.As(err, &unknown) {
+			return Settings{}, config.NotConfigured("the Ship24 connection is not configured")
+		}
 		return Settings{}, err
 	}
-	if s.Key, err = secrets.NewIn(settings.From(ctx), nil, q, nil).Value(ctx, KeyShip24APIKey); err != nil {
+	s.lease = lease
+	if s.URL, err = lease.Endpoint("url"); err != nil {
+		lease.Close()
+		return Settings{}, config.NotConfigured("the Ship24 connection has no URL")
+	}
+	if s.Key, err = lease.Credential("api_key"); err != nil {
+		var missing connections.MissingCredential
+		if !errors.As(err, &missing) {
+			lease.Close()
+			return Settings{}, err
+		}
+		s.Key = ""
+	}
+	quota, err := read(KeyMonthlyQuota)
+	if err != nil {
+		lease.Close()
 		return Settings{}, err
 	}
-	for _, item := range []struct {
-		key  string
-		into *int
-	}{
-		{KeyMonthlyQuota, &s.Quota}, {KeyTimeout, &s.Timeout}, {KeyPollLimit, &s.PollLimit}, {KeyPollDays, &s.PollDays},
-	} {
-		value, err := read(item.key)
-		if err != nil {
-			return Settings{}, err
-		}
-		if *item.into, err = strconv.Atoi(value); err != nil {
-			return Settings{}, err
-		}
+	if s.Quota, err = strconv.Atoi(quota); err != nil {
+		lease.Close()
+		return Settings{}, err
 	}
 	if s.Country, err = read(KeyDestinationCountry); err != nil {
+		lease.Close()
 		return Settings{}, err
 	}
 	if s.Postcode, err = read(KeyDestinationPostcode); err != nil {
+		lease.Close()
 		return Settings{}, err
 	}
 	return s, nil
@@ -453,9 +459,12 @@ func monthStart(ctx context.Context, q db.Querier, env config.Env, now float64) 
 
 func clientFor(ctx context.Context, q db.Querier, s Settings) (*Client, error) {
 	if s.Key == "" {
-		return nil, config.NotConfigured(KeyShip24APIKey + " is not set")
+		return nil, config.NotConfigured("the Ship24 connection has no API key")
 	}
-	hc, err := transport.For(ctx, q, "ship24", time.Duration(s.Timeout)*time.Second)
+	if s.lease == nil {
+		return nil, config.NotConfigured("the Ship24 connection is not configured")
+	}
+	hc, err := s.lease.Client("url", time.Duration(s.Timeout)*time.Second)
 	if err != nil {
 		return nil, err
 	}
@@ -538,6 +547,7 @@ func Poll(ctx context.Context, d *db.DB, env config.Env, now float64) (PollResul
 	if err != nil {
 		return PollResult{}, err
 	}
+	defer s.Close()
 	cutoff := now - float64(s.PollDays)*86400
 	rows, err := d.Read.QueryContext(ctx,
 		"SELECT id, tracking_number, carrier, status, status_text, aggregator, tracker_id, last_event, last_event_hash, "+
@@ -790,8 +800,9 @@ func Unsubscribe(ctx context.Context, q db.Querier, u Undo) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	defer s.Close()
 	if s.Key == "" {
-		return nil, config.NotConfigured(KeyShip24APIKey + " is not set; the Ship24 tracker is still subscribed")
+		return nil, config.NotConfigured("the Ship24 connection has no API key; the Ship24 tracker is still subscribed")
 	}
 	if u.TrackerID == "" {
 		return nil, Error("the tracker id is missing; the Ship24 tracker is still subscribed")

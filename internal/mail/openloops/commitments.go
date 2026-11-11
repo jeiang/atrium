@@ -132,13 +132,9 @@ func ScanCommitments(ctx context.Context, d *db.DB, cacheDir string, env config.
 	if judge == nil {
 		judge = JudgeCommitments
 	}
-	r := endpoint.Read(ctx, d.Read)
-	window := r.Int(mail.KeyLoopsCommitWindowDays)
-	perMail := r.Int(mail.KeyLoopsCommitsPerMail)
-	limit := r.Int(mail.KeyLoopsCommitScanLimit)
-	if err := r.Err(); err != nil {
-		return 0, err
-	}
+	window := mail.TuningOpenloopsCommitmentWindowDays
+	perMail := mail.TuningOpenloopsCommitmentsPerMessage
+	limit := mail.TuningOpenloopsCommitmentScanLimit
 	chatURL, err := endpoint.ChatURL(ctx, d.Read)
 	if err != nil {
 		return 0, err

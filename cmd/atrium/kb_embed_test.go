@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/endpoint"
 )
 
 const ledgerMarker = "the ledger code is 7712"
@@ -25,8 +24,7 @@ func kbEmbedFixture(t *testing.T) (string, *fakeEmbedder, *modelLog, *db.DB) {
 	t.Helper()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := newFakeEmbedder(t)
-	setEnv(t, settingEnv(endpoint.KeyEmbedURL), fake.URL+"/v1")
-	setEnv(t, settingEnv(endpoint.KeyEmbedModel), "embeddinggemma")
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, fake.URL+"/v1", "embeddinggemma", ""))
 	return dir, fake, api, mustConnect(t, filepath.Join(dir, "atrium.db"))
 }
 

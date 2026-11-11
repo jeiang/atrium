@@ -1010,11 +1010,7 @@ func (a *Applier) deletionDue(ctx context.Context, account string) (bool, error)
 	if err != nil {
 		return false, err
 	}
-	r := endpoint.Read(ctx, a.Live.DB.Read)
-	interval := r.Int(mail.KeyDeletionInterval)
-	if err := r.Err(); err != nil {
-		return false, err
-	}
+	interval := mail.TuningDeletionIntervalSeconds
 	return a.now()-ts >= float64(interval), nil
 }
 

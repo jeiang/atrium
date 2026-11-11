@@ -176,6 +176,16 @@ func TestMailRoutingRecordsEachStage(t *testing.T) {
 			filed: []filedMail{
 				{"Bills", "Statement 8", "bills@bank.test", "s8"},
 				{"Receipts", "Receipt 7", "shop@store.test", "s7"},
+				{"Bills", "Filed 1", "f1@filler1.test", "f1"},
+				{"Bills", "Filed 2", "f2@filler2.test", "f2"},
+				{"Bills", "Filed 3", "f3@filler3.test", "f3"},
+				{"Bills", "Filed 4", "f4@filler4.test", "f4"},
+				{"Bills", "Filed 5", "f5@filler5.test", "f5"},
+				{"Bills", "Filed 6", "f6@filler6.test", "f6"},
+				{"Bills", "Filed 7", "f7@filler7.test", "f7"},
+				{"Bills", "Filed 8", "f8@filler8.test", "f8"},
+				{"Bills", "Filed 9", "f9@filler9.test", "f9"},
+				{"Bills", "Filed 10", "f10@filler10.test", "f10"},
 			},
 			prepare: func(t *testing.T, m *mailSafety, id int64) {
 				m.embed(t, id, m.messageID(t, "Statement 8"), m.messageID(t, "Receipt 7"))
@@ -193,7 +203,6 @@ func TestMailRoutingRecordsEachStage(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.stage, func(t *testing.T) {
 			m := mailSafetyFixture(t, "shadow")
-			setEnv(t, settingEnv(mail.KeyFolderMinMessages), "1")
 			subject := c.subject
 			if subject == "" {
 				subject = "Bank statement"

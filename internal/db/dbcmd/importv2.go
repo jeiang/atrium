@@ -3,6 +3,7 @@ package dbcmd
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -24,6 +25,8 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/endpoint"
+	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/notion"
@@ -183,8 +186,36 @@ var importTables = []tablePlan{
 	{table: "events", action: drop, why: "the mail event log is not carried"},
 	{table: "pass_runs", action: drop, why: "ops pass history is not carried"},
 	{table: "pass_run_alerts", action: drop, why: "ops pass history is not carried"},
-	{table: "endpoint_probes", action: drop, why: "endpoints are re-probed"},
-	{table: "integration_health", action: drop, why: "integrations are re-probed"},
+	{table: "endpoint_probes", action: carry, run: func(im *importer) (int64, error) {
+		n, err := im.copy("endpoint_probes", "kind = ?", []any{"chat"}, nil, nil, nil, false)
+		if err != nil {
+			return n, err
+		}
+		var moved int64
+		if err := im.src.QueryRowContext(im.ctx, "SELECT COUNT(*) FROM endpoint_probes WHERE kind = 'embed'").Scan(&moved); err != nil {
+			return n, err
+		}
+		if moved > 0 {
+			im.notes = append(im.notes, "the embed probe moved to connection service/embedding")
+		}
+		return n, nil
+	}},
+	{table: "integration_health", action: carry, run: func(im *importer) (int64, error) {
+		n, err := im.copy("integration_health", "name = ?", []any{"mail_chat"}, nil, nil, nil, false)
+		if err != nil {
+			return n, err
+		}
+		if n > 0 {
+			var accounts int
+			if err := im.tx.QueryRowContext(im.ctx, "SELECT COUNT(*) FROM mail_accounts WHERE id = 'chat'").Scan(&accounts); err != nil {
+				return n, err
+			}
+			if accounts > 0 {
+				im.notes = append(im.notes, "ambiguous-health mail_chat: the name is both the local chat endpoint and a mail account; kept as local-chat legacy, the account is untested")
+			}
+		}
+		return n, nil
+	}},
 	{table: "ops_samples", action: drop, why: "ops samples are not carried"},
 	{table: "ops_findings", action: drop, why: "ops findings are not carried"},
 	{table: "nightly_observations", action: drop, why: "nightly observations are not carried"},
@@ -289,7 +320,11 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source str
 			return err
 		}
 		lines = append(lines, settingLines...)
-		sourced, err := sourceConnections(ctx, src)
+		accounts, err := importedAccountIDs(ctx, tx)
+		if err != nil {
+			return err
+		}
+		sourced, err := sourceConnections(ctx, src, accounts)
 		if err != nil {
 			return err
 		}
@@ -438,7 +473,27 @@ type sourceConnectionsData struct {
 	Notes    []string
 }
 
-func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData, error) {
+func importedAccountIDs(ctx context.Context, q *sql.Tx) (map[string]bool, error) {
+	rows, err := q.QueryContext(ctx, "SELECT id FROM mail_accounts")
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		out[id] = true
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func sourceConnections(ctx context.Context, src *sql.DB, accounts map[string]bool) (sourceConnectionsData, error) {
 	var out sourceConnectionsData
 	qbit, err := sourceQbit(ctx, src)
 	if err != nil {
@@ -455,6 +510,8 @@ func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData,
 		"weather_open_meteo_url", "weather_geocoding_url", "open_meteo_ca_file", "open_meteo_proxy",
 		"media_tmdb_url", "media_tmdb_images_url", "media_eztv_url", "tmdb_ca_file", "tmdb_proxy",
 		"webpush_subject", "webpush_ca_file",
+		"mail_embed_url", "mail_embed_model", "mail_embed_ca_file", "mail_embed_proxy",
+		"mail_ship24_url", "ship24_ca_file", "ship24_proxy",
 	})
 	if err != nil {
 		return out, err
@@ -521,7 +578,64 @@ func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData,
 		return out, err
 	}
 	out.Notes = append(out.Notes, oidcconn.ImportV2(oidcSecret)...)
+	embedKey, err := sourceSecret(ctx, src, "mail_embed_key", "bearer")
+	if err != nil {
+		return out, err
+	}
+	probe, err := sourceProbe(ctx, src, "embed")
+	if err != nil {
+		return out, err
+	}
+	var embedHealth *connections.ImportHealth
+	if state, reason, checked, expires, ok, err := sourceHealth(ctx, src, "mail_embed"); err != nil {
+		return out, err
+	} else if ok {
+		embedHealth = &connections.ImportHealth{State: state, Reason: reason, CheckedAt: checked, ExpiresAt: expires}
+	}
+	embedding, embedNotes := endpoint.ImportV2(values, probe, embedHealth, accounts["embed"], embedKey.Value != "")
+	out.Services = append(out.Services, embedding)
+	out.Notes = append(out.Notes, embedNotes...)
+	if embedKey.Value != "" {
+		out.Secrets = append(out.Secrets, "mail_embed_key")
+	}
+	ship24Key, err := sourceSecret(ctx, src, "mail_ship24_api_key", "api_key")
+	if err != nil {
+		return out, err
+	}
+	var ship24Health *connections.ImportHealth
+	if state, reason, checked, expires, ok, err := sourceHealth(ctx, src, "ship24"); err != nil {
+		return out, err
+	} else if ok {
+		ship24Health = &connections.ImportHealth{State: state, Reason: reason, CheckedAt: checked, ExpiresAt: expires}
+	}
+	out.Services = append(out.Services, tracking.ImportV2(values, ship24Key, ship24Health))
+	if ship24Key.Value != "" {
+		out.Secrets = append(out.Secrets, "mail_ship24_api_key")
+	}
 	return out, nil
+}
+
+func sourceProbe(ctx context.Context, src *sql.DB, kind string) (*endpoint.ImportProbe, error) {
+	var (
+		p         endpoint.ImportProbe
+		models    string
+		probed    float64
+		dimension sql.NullInt64
+	)
+	err := src.QueryRowContext(ctx, "SELECT fingerprint, ok, reason, dimension, models, probed_at FROM endpoint_probes WHERE kind = ?", kind).
+		Scan(&p.Fingerprint, &p.OK, &p.Reason, &dimension, &models, &probed)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	p.ProbedAt = probed
+	if dimension.Valid {
+		p.Dimension = int(dimension.Int64)
+	}
+	_ = json.Unmarshal([]byte(models), &p.Models)
+	return &p, nil
 }
 
 func sourceGoogle(ctx context.Context, src *sql.DB) (connections.ImportService, []string, error) {

@@ -351,6 +351,25 @@ func (s *Store) Get(ctx context.Context, id ID) (View, error) {
 	return v, nil
 }
 
+// ReadView reads one connection's stored state without a writable store.
+func ReadView(ctx context.Context, q db.Querier, id ID) (View, error) {
+	s := &Store{q: q}
+	row := q.QueryRowContext(ctx,
+		"SELECT id, kind, label, config_source, config_json, transport_json, revision, enabled, state, reason, checked_at, last_ok_at, expires_at, reauth_at, results_json "+
+			"FROM connections WHERE id = ?", id)
+	v, err := s.scanView(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return View{}, UnknownID(id)
+	}
+	if err != nil {
+		return View{}, err
+	}
+	if err := s.fill(ctx, &v); err != nil {
+		return View{}, err
+	}
+	return v, nil
+}
+
 type scanner interface {
 	Scan(dest ...any) error
 }
@@ -616,10 +635,38 @@ func (l *Lease) HTTP(name string) (*http.Client, error) {
 	if client, ok := l.shared.clients[name]; ok {
 		return client, nil
 	}
-	client, err := l.newClient()
+	client, err := l.newClient(0)
 	if err != nil {
 		return nil, err
 	}
+	guardOrigin(client, u)
+	l.shared.clients[name] = client
+	return client, nil
+}
+
+// Client returns a client for a named endpoint with an explicit timeout,
+// sharing the same transport and cross-origin redirect guard as HTTP.
+func (l *Lease) Client(name string, timeout time.Duration) (*http.Client, error) {
+	if l.closed {
+		return nil, errors.New("connections: the lease is closed")
+	}
+	endpoint, err := l.Endpoint(name)
+	if err != nil {
+		return nil, err
+	}
+	u, err := url.Parse(endpoint)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return nil, fmt.Errorf("connections: %s endpoint %q must be an http or https URL", l.id, endpoint)
+	}
+	client, err := l.newClient(timeout)
+	if err != nil {
+		return nil, err
+	}
+	guardOrigin(client, u)
+	return client, nil
+}
+
+func guardOrigin(client *http.Client, u *url.URL) {
 	origin := u.Scheme + "://" + u.Host
 	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 10 {
@@ -630,18 +677,18 @@ func (l *Lease) HTTP(name string) (*http.Client, error) {
 		}
 		return nil
 	}
-	l.shared.clients[name] = client
-	return client, nil
 }
 
 // DB returns the writable database behind a lease opened by a store; a
 // read-only lease has none.
 func (l *Lease) DB() *db.DB { return l.store.d }
 
-func (l *Lease) newClient() (*http.Client, error) {
-	timeout := defaultTimeout
-	if l.options.Timeout > 0 {
-		timeout = time.Duration(l.options.Timeout) * time.Second
+func (l *Lease) newClient(timeout time.Duration) (*http.Client, error) {
+	if timeout <= 0 {
+		timeout = defaultTimeout
+		if l.options.Timeout > 0 {
+			timeout = time.Duration(l.options.Timeout) * time.Second
+		}
 	}
 	return transport.New(transport.Options{
 		Timeout:         timeout,
@@ -657,7 +704,7 @@ func (l *Lease) Transport() (*http.Client, error) {
 	if l.closed {
 		return nil, errors.New("connections: the lease is closed")
 	}
-	return l.newClient()
+	return l.newClient(0)
 }
 
 func (l *Lease) Credential(slot string) (string, error) {

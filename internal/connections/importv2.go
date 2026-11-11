@@ -42,6 +42,7 @@ type ImportService struct {
 	Transport    map[string]string
 	Capabilities []string
 	Credentials  []ImportCredential
+	Results      []Result
 	Health       *ImportHealth
 }
 
@@ -117,6 +118,15 @@ func importService(ctx context.Context, tx *sql.Tx, s ImportService, encrypted b
 			return nil, err
 		}
 		lines = append(lines, "connection "+s.ID+": credential "+c.Slot+" carried")
+	}
+	if len(s.Results) > 0 {
+		raw, err := json.Marshal(s.Results)
+		if err != nil {
+			return nil, err
+		}
+		if _, err := tx.ExecContext(ctx, "UPDATE connections SET results_json = ? WHERE id = ?", string(raw), s.ID); err != nil {
+			return nil, err
+		}
 	}
 	if s.Health != nil {
 		var lastOK, reauth any

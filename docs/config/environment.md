@@ -29,14 +29,6 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `ATRIUM_MAIL_MAIL_CHAT_MODEL` | `mail.mail_chat_model` |
 | `ATRIUM_MAIL_MAIL_CHAT_PROXY` | `mail.mail_chat_proxy` |
 | `ATRIUM_MAIL_MAIL_CHAT_URL` | `mail.mail_chat_url` |
-| `ATRIUM_MAIL_MAIL_EMBED_CA_FILE` | `mail.mail_embed_ca_file` |
-| `ATRIUM_MAIL_MAIL_EMBED_KEY_FILE` | `mail.mail_embed_key` |
-| `ATRIUM_MAIL_MAIL_EMBED_MODEL` | `mail.mail_embed_model` |
-| `ATRIUM_MAIL_MAIL_EMBED_PROXY` | `mail.mail_embed_proxy` |
-| `ATRIUM_MAIL_MAIL_EMBED_URL` | `mail.mail_embed_url` |
-| `ATRIUM_MAIL_MAIL_SHIP24_URL` | `mail.mail_ship24_url` |
-| `ATRIUM_MAIL_SHIP24_CA_FILE` | `mail.ship24_ca_file` |
-| `ATRIUM_MAIL_SHIP24_PROXY` | `mail.ship24_proxy` |
 | `ATRIUM_MEDIA_MEDIA_MOVIES_URL` | `media.media_movies_url` |
 | `ATRIUM_MEDIA_MEDIA_ROOT` | `media.media_root` |
 | `ATRIUM_MEDIA_MEDIA_TV_URL` | `media.media_tv_url` |
