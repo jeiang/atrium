@@ -208,7 +208,7 @@ func (im *LegacyImporter) autoAction(a LegacyAutoAction) error {
 			created = a.UndoneTS.Float64
 		}
 		if err := im.insertEffect(effectRow{
-			id: undoID, createdAt: created, leaseAt: created, origin: "mail_auto", operation: "legacy_auto_undo",
+			id: undoID, createdAt: created, leaseAt: created, origin: "mail_auto", operation: LegacyAutoUndo,
 			operationKey: fmt.Sprintf("auto_action:%d", a.ID), target: target, direction: "undo", undoOf: &id,
 			account: a.Account, messageID: &a.MessageID, digest: a.Digest, src: a.Dest.String, dest: a.Src.String,
 			action: "{}", before: a.After.String, state: undoState, error: a.UndoneError.String, legacy: legacy,
@@ -228,7 +228,7 @@ func (im *LegacyImporter) autoAction(a LegacyAutoAction) error {
 			}
 		}
 	}
-	im.autoClaims(a, id, undoState, undo)
+	im.autoClaims(a, id, state, undoState, undo)
 	return nil
 }
 
@@ -264,16 +264,16 @@ func autoUndoState(state string) (State, bool) {
 	return "", false
 }
 
-func (im *LegacyImporter) autoClaims(a LegacyAutoAction, id int64, undoState State, undo bool) {
+func (im *LegacyImporter) autoClaims(a LegacyAutoAction, id int64, state, undoState State, undo bool) {
 	released := undo && undoState == Done
-	if a.State == "undo_settled" {
-		released = true
-	}
 	if released || a.State == "failed" || a.State == "skipped" {
 		return
 	}
 	key := AutoKey(a.MessageID, a.Kind, a.Dest.String)
 	im.claims = append(im.claims, claimSpec{key: key, effect: id, retain: true})
+	if state == Done || state == Partial {
+		return
+	}
 	if a.Src.Valid && a.Src.String != "" {
 		im.claims = append(im.claims, claimSpec{key: fmt.Sprintf("mail_folder/%s/%s", a.Account, a.Src.String), effect: id})
 	}

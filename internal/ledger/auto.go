@@ -11,6 +11,8 @@ import (
 
 const AutoOrigin = "mail_auto"
 
+const LegacyAutoUndo = "legacy_auto_undo"
+
 func AutoKey(messageID int64, kind, dest string) string {
 	return fmt.Sprintf("auto/%d/%s/%s", messageID, kind, dest)
 }
@@ -93,6 +95,27 @@ func AutoStatesFor(ctx context.Context, q db.Querier, account string) (AutoState
 			states.held[AutoKey(messageID.Int64, kind, dest)] = true
 		}
 		states.digestHeld[digestKey(digest, kind)] = true
+		return struct{}{}, nil
+	}); err != nil {
+		return states, err
+	}
+	rows, err = q.QueryContext(ctx,
+		"SELECT e.message_id, e.operation, COALESCE(e.dest, ''), e.digest FROM effects e "+
+			"WHERE e.origin = ? AND e.direction = 'forward' AND e.account = ? AND e.undone_by IS NOT NULL",
+		AutoOrigin, account)
+	if err != nil {
+		return states, err
+	}
+	if _, err := db.Collect(rows, func(r *sql.Rows) (struct{}, error) {
+		var messageID sql.NullInt64
+		var kind, dest, digest string
+		if err := r.Scan(&messageID, &kind, &dest, &digest); err != nil {
+			return struct{}{}, err
+		}
+		if messageID.Valid {
+			states.undone[AutoKey(messageID.Int64, kind, dest)] = true
+		}
+		states.digestUndone[digestKey(digest, kind)] = true
 		return struct{}{}, nil
 	}); err != nil {
 		return states, err

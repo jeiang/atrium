@@ -20,6 +20,8 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
@@ -634,5 +636,168 @@ func TestImportV2BillsMemoryAndRefusesOverBudgetAgentCalls(t *testing.T) {
 	}
 	if n := api.Remaining(); n != 1 {
 		t.Errorf("%d fake responses were consumed", 1-n)
+	}
+}
+
+func TestImportV2UndoesImportedAutomaticActions(t *testing.T) {
+	t.Parallel()
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	d, err := db.Connect(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	moveBack := func(uid uint32) string {
+		return fmt.Sprintf(`{"op":"move_back","account":"icloud","src_imap":"INBOX","dest_imap":"Bills",`+
+			`"dest_uidvalidity":3,"items":[{"id":0,"msgid":"","uid":%d,"dest_uid":%d}]}`, uid, uid)
+	}
+	for _, row := range []struct {
+		id     int64
+		msg    int64
+		state  string
+		uid    uint32
+		undone any
+	}{
+		{301, 160, "applied", 1, nil},
+		{302, 161, "applied", 2, nil},
+		{303, 162, "undo_settled", 3, "checked"},
+	} {
+		if _, err := d.Write.Exec(
+			"INSERT INTO auto_actions (id, ts, account, message_id, digest, kind, dest, undo, state, undone_error) "+
+				"VALUES (?, ?, 'icloud', ?, 'digest', 'file', 'Bills', ?, ?, ?)",
+			row.id, clock, row.msg, moveBack(row.uid), row.state, row.undone); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	fake := mailtest.NewFakeClient()
+	fake.AddBox("INBOX", mailtest.NewBox(1))
+	fake.AddBox("Bills", mailtest.NewBox(3))
+	for _, uid := range []uint32{1, 2, 3} {
+		h, x := mailtest.RawWith("Filed statement", "statements@bank.test", fmt.Sprintf("filed-%d", uid), "Filed.")
+		if got := fake.Boxes["Bills"].Box.Add(h, x, nil, nil); got != uid {
+			t.Fatalf("Bills uid %d, want %d", got, uid)
+		}
+	}
+
+	vars := varsFor(t).snapshot()
+	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
+	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
+	vars[settingEnv(config.KeyMailAccountsFile)] = defaultAccountsFile
+	delete(vars, "ATRIUM_DB_KEY")
+	delete(vars, "ATRIUM_DB_KEY_FILE")
+	reg := settings.New()
+	app := newAppWith(config.Map(vars), reg, config.NewState(reg), nil,
+		func(config.Config) mail.OpenFunc { return fake.Open }, nil, quietLog)
+
+	dest := filepath.Join(dir, "atrium.db")
+	if got := runImportApp(t, app, "db", "import-v2", source); got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+
+	q, err := db.OpenSource(dest, db.Key{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	effectOf := func(id int64) int64 {
+		t.Helper()
+		var effect int64
+		if err := q.QueryRow("SELECT effect_id FROM effect_import_refs WHERE source_table = 'auto_actions' AND source_id = ? AND role = 'forward'", id).Scan(&effect); err != nil {
+			t.Fatalf("auto_actions %d has no effect: %v", id, err)
+		}
+		return effect
+	}
+
+	for _, id := range []int64{301, 302} {
+		effect := effectOf(id)
+		if n := importCount(t, q, "SELECT COUNT(*) FROM effect_resources WHERE effect_id = ? AND holding = 1", effect); n != 1 {
+			t.Errorf("auto_actions %d holds %d resources, want only the automatic key", id, n)
+		}
+		if n := importCount(t, q, "SELECT COUNT(*) FROM effect_resources WHERE effect_id = ? AND resource = ?", effect,
+			ledger.AutoKey(160+id-301, "file", "Bills")); n != 1 {
+			t.Errorf("auto_actions %d does not hold its automatic key", id)
+		}
+	}
+	settled := effectOf(303)
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effect_resources WHERE effect_id = ? AND resource = ? AND holding = 1",
+		settled, ledger.AutoKey(162, "file", "Bills")); n != 1 {
+		t.Errorf("the undo_settled forward lost its automatic-success key")
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effect_resources WHERE effect_id = ? AND holding = 1", settled); n != 1 {
+		t.Errorf("auto_actions 303 holds %d resources, want only the automatic key", n)
+	}
+
+	for _, id := range []int64{301, 302} {
+		effect := effectOf(id)
+		if got := runImportApp(t, app, "live", "undo", strconv.FormatInt(effect, 10)); got.code != cli.ExitOK {
+			t.Fatalf("live undo of imported auto_actions %d: exit %d stdout %q stderr %q", id, got.code, got.stdout, got.stderr)
+		}
+		if undone := importValue(t, q, "SELECT CAST(undone_by IS NOT NULL AS TEXT) FROM effects WHERE id = ?", effect); undone != "1" {
+			t.Errorf("imported auto_actions %d after undo is %s, want undone", id, undone)
+		}
+	}
+	if n := len(fake.Boxes["INBOX"].Box.Messages); n != 2 {
+		t.Fatalf("INBOX holds %d messages after undoing imported history, want 2", n)
+	}
+	if n := len(fake.Boxes["Bills"].Box.Messages); n != 1 {
+		t.Fatalf("Bills holds %d messages after undoing imported history, want the untouched one", n)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effects WHERE direction = 'undo' AND state = 'done' AND undo_of IN (?, ?)",
+		effectOf(301), effectOf(302)); n != 2 {
+		t.Errorf("%d completed undos of the imported actions, want 2", n)
+	}
+}
+
+func TestImportV2ResolvingAnImportedUndoClearsTheCorrection(t *testing.T) {
+	t.Parallel()
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	d, err := db.Connect(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO corrections (message_id, account, folder, ts, source) VALUES (100, 'icloud', 'Bills', ?, 'operator')", clock); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec(
+		"INSERT INTO auto_actions (id, ts, account, message_id, digest, kind, dest, undo, state) "+
+			"VALUES (311, ?, 'icloud', 100, 'digest', 'correct', 'Bills', '{\"op\":\"move_back\"}', 'undo_unknown')", clock); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	app := importTestApp(t, dir, clock)
+	if got := runImportApp(t, app, "db", "import-v2", source); got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	dest := filepath.Join(dir, "atrium.db")
+	q, err := db.OpenSource(dest, db.Key{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	var forward int64
+	if err := q.QueryRow("SELECT effect_id FROM effect_import_refs WHERE source_table = 'auto_actions' AND source_id = 311 AND role = 'forward'").Scan(&forward); err != nil {
+		t.Fatalf("auto_actions 311 has no effect: %v", err)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM corrections WHERE message_id = 100"); n != 1 {
+		t.Fatalf("%d corrections after import, want the carried one", n)
+	}
+	if got := runImportApp(t, app, "live", "resolve", strconv.FormatInt(forward, 10), "--outcome", "undone"); got.code != cli.ExitOK {
+		t.Fatalf("live resolve: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM corrections WHERE message_id = 100"); n != 0 {
+		t.Fatalf("%d corrections after resolving the undo as undone, want the correction cleared", n)
+	}
+	if undone := importValue(t, q, "SELECT CAST(undone_by IS NOT NULL AS TEXT) FROM effects WHERE id = ?", forward); undone != "1" {
+		t.Fatalf("the forward after the resolution is %s, want undone", undone)
 	}
 }
