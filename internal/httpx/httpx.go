@@ -158,6 +158,9 @@ func reason(err error) string {
 	return err.Error()
 }
 
+// Reason describes a transport error without its URL.
+func Reason(err error) string { return reason(err) }
+
 func DecodeReplace(b []byte) string {
 	if utf8.Valid(b) {
 		return string(b)

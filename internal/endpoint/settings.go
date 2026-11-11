@@ -18,26 +18,19 @@ import (
 )
 
 const (
-	KeyChatURL        = "mail_chat_url"
-	KeyEmbedURL       = "mail_embed_url"
-	KeyChatModel      = "mail_chat_model"
-	KeyEmbedModel     = "mail_embed_model"
-	KeyLLMBodyChars   = "llm_body_chars"
-	KeyEmbedBodyChars = "mail_embed_body_chars"
-	KeyEmbedBatch     = "mail_embed_batch"
-	KeyChatMaxTokens  = "mail_chat_max_tokens"
-	KeyLLMTopSenders  = "llm_top_senders"
-	KeyChatKey        = "mail_chat_key"
-	KeyEmbedKey       = "mail_embed_key"
+	KeyChatURL       = "mail_chat_url"
+	KeyChatModel     = "mail_chat_model"
+	KeyChatMaxTokens = "mail_chat_max_tokens"
+	KeyChatKey       = "mail_chat_key"
+	KeyLLMBodyChars  = "llm_body_chars"
+	KeyLLMTopSenders = "llm_top_senders"
 
 	EndpointChat  = "chat"
 	EndpointEmbed = "embed"
 )
 
 func init() {
-	for _, key := range []string{KeyChatKey, KeyEmbedKey} {
-		settings.MustRegister(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: key, Module: "mail", Type: settings.String}))
-	}
+	settings.MustRegister(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyChatKey, Module: "mail", Type: settings.String}))
 }
 
 type Querier interface {
@@ -146,24 +139,27 @@ func New(kind, url, model, key string) Endpoint {
 
 func Endpoints(ctx context.Context, q Querier) ([]Endpoint, error) {
 	r := Read(ctx, q)
-	chat, embed := r.Text(KeyChatModel), r.Text(KeyEmbedModel)
+	chat := r.Text(KeyChatModel)
 	if r.Err() != nil {
 		return nil, r.Err()
 	}
 	store := secrets.NewIn(settings.From(ctx), nil, readOnly{q}, nil)
-	out := []Endpoint{New(EndpointChat, "", chat, ""), New(EndpointEmbed, "", embed, "")}
-	for i, pair := range [][2]string{{KeyChatURL, KeyChatKey}, {KeyEmbedURL, KeyEmbedKey}} {
-		u, err := urlOf(ctx, q, pair[0])
-		if err != nil {
-			return nil, err
-		}
-		key, err := store.Value(ctx, pair[1])
-		if err != nil {
-			return nil, err
-		}
-		out[i].URL, out[i].key = u, key
+	chatURL, err := urlOf(ctx, q, KeyChatURL)
+	if err != nil {
+		return nil, err
 	}
-	return out, nil
+	chatKey, err := store.Value(ctx, KeyChatKey)
+	if err != nil {
+		return nil, err
+	}
+	embed := New(EndpointEmbed, "", EmbedModel, "")
+	if e, err := OpenEmbedding(ctx, q); err == nil {
+		embed.URL, embed.Model, embed.key = e.Base, e.Model, e.Token
+		e.Close()
+	} else if !IsUnconfigured(err) {
+		return nil, err
+	}
+	return []Endpoint{New(EndpointChat, chatURL, chat, chatKey), embed}, nil
 }
 
 func (e Endpoint) Fingerprint() string {
@@ -185,6 +181,9 @@ func Integration(kind string) string { return "mail_" + kind }
 func WithEndpoints(ctx context.Context, q Querier, endpoints []Endpoint) (context.Context, error) {
 	out := ctx
 	for _, e := range endpoints {
+		if e.Kind != EndpointChat {
+			continue
+		}
 		client, err := transport.For(ctx, readOnly{q}, Integration(e.Kind), config.From(ctx).HTTPTimeout(config.OS))
 		if err != nil {
 			return ctx, err
@@ -202,7 +201,15 @@ func EmbedURL(ctx context.Context, q Querier, activeURL string) (string, error) 
 	if activeURL != "" {
 		return activeURL, nil
 	}
-	return urlOf(ctx, q, KeyEmbedURL)
+	e, err := OpenEmbedding(ctx, q)
+	if err != nil {
+		if IsUnconfigured(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	defer e.Close()
+	return e.Base, nil
 }
 
 func urlOf(ctx context.Context, q Querier, key string) (string, error) {
@@ -219,23 +226,33 @@ func WithModels(ctx context.Context, q Querier, active Active) (context.Context,
 	r := Read(ctx, q)
 	s := Settings{
 		ChatModel:      r.Text(KeyChatModel),
-		EmbedModel:     r.Text(KeyEmbedModel),
-		LLMBodyChars:   r.Int(KeyLLMBodyChars),
-		EmbedBodyChars: r.Int(KeyEmbedBodyChars),
-		Batch:          r.Int(KeyEmbedBatch),
-		MaxTokens:      r.Int(KeyChatMaxTokens),
-		TopSenders:     r.Int(KeyLLMTopSenders),
+		EmbedModel:     EmbedModel,
+		LLMBodyChars:   TuningLlmBodyChars,
+		EmbedBodyChars: TuningMailEmbedBodyChars,
+		Batch:          TuningMailEmbedBatch,
+		MaxTokens:      TuningMailChatMaxTokens,
+		TopSenders:     TuningLlmTopSenders,
 	}
 	if r.Err() != nil {
 		return ctx, r.Err()
 	}
 	s.Dim = active.Dim
+	if e, err := OpenEmbedding(ctx, q); err == nil {
+		s.EmbedModel = e.Model
+		ctx = WithEmbedding(ctx, e)
+	} else if !IsUnconfigured(err) {
+		return ctx, err
+	}
 	if active.URL != "" {
 		s.EmbedModel = active.Model
 	}
-	endpoints, err := Endpoints(ctx, q)
+	chatURL, err := urlOf(ctx, q, KeyChatURL)
 	if err != nil {
 		return ctx, err
 	}
-	return WithEndpoints(With(ctx, s), q, endpoints)
+	chatKey, err := secrets.NewIn(settings.From(ctx), nil, readOnly{q}, nil).Value(ctx, KeyChatKey)
+	if err != nil {
+		return ctx, err
+	}
+	return WithEndpoints(With(ctx, s), q, []Endpoint{New(EndpointChat, chatURL, s.ChatModel, chatKey)})
 }

@@ -13,7 +13,6 @@ import (
 	"regexp"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"golang.org/x/text/cases"
@@ -914,9 +913,7 @@ type Thresholds struct {
 }
 
 func ReadThresholds(ctx context.Context, q Querier) (Thresholds, error) {
-	r := endpoint.Read(ctx, q)
-	t := Thresholds{MinN: r.Int(mail.KeyRuleMinN), MinPurity: r.Float(mail.KeyRuleMinPurity)}
-	return t, r.Err()
+	return Thresholds{MinN: mail.TuningRuleMinN, MinPurity: mail.TuningRuleMinPurity}, nil
 }
 
 func PickPure(counts map[string]int, t Thresholds) (Picked, bool) {

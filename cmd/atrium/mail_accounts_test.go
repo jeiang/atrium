@@ -37,7 +37,7 @@ func accountsFile(t *testing.T, dir string, accounts ...mailAccount) string {
 func accountsFileWith(t *testing.T, dir, anthropicKey string, accounts ...mailAccount) string {
 	t.Helper()
 	var b strings.Builder
-	b.WriteString(hostConfigBodyWith(defaultWebPushConnection, anthropicKey))
+	b.WriteString(hostConfigBodyWith("", defaultWebPushConnection, anthropicKey))
 	for _, a := range accounts {
 		secret := filepath.Join(dir, a.id+".password")
 		if err := os.WriteFile(secret, []byte(a.password+"\n"), 0o600); err != nil {

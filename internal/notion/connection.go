@@ -9,9 +9,7 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
-	"github.com/jeiang/atrium/internal/db"
 )
 
 const KindNotion connections.Kind = "service/notion"
@@ -86,12 +84,4 @@ func testConnection(ctx context.Context, lease *connections.Lease, _ []connectio
 		return nil, err
 	}
 	return []connections.Result{{Capability: "api", State: connections.OK, Reason: reason, Data: data}}, nil
-}
-
-func reconcileConnections(ctx context.Context, d *db.DB) error {
-	store, err := connections.New(d, config.From(ctx).Host(), connections.DefaultRegistry())
-	if err != nil {
-		return err
-	}
-	return store.ReconcileHost(ctx)
 }

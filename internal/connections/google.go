@@ -2,7 +2,6 @@ package connections
 
 import (
 	"context"
-	"crypto/rand"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -14,16 +13,9 @@ import (
 	"sync"
 	"time"
 
-	"golang.org/x/oauth2"
-
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/settings/audit"
-	"github.com/jeiang/atrium/internal/web"
-	"github.com/jeiang/atrium/internal/web/tpl"
 )
-
-const googlePath = path + "/google"
 
 const (
 	GoogleID       ID   = "google/default"
@@ -35,10 +27,10 @@ const (
 const (
 	googleCalendarScope = "https://www.googleapis.com/auth/calendar.events"
 	googleGmailScope    = "https://mail.google.com/"
-	googleStateTTL      = 10 * time.Minute
+	GoogleStateTTL      = 10 * time.Minute
 )
 
-type googleGrant struct {
+type GoogleGrant struct {
 	Name   string `json:"name"`
 	Label  string `json:"label"`
 	Scope  string `json:"scope"`
@@ -46,18 +38,55 @@ type googleGrant struct {
 	Shared string `json:"shared"`
 }
 
-var googleGrants = []googleGrant{
+var googleGrantList = []GoogleGrant{
 	{Name: GoogleCalendar, Label: "Calendar", Scope: googleCalendarScope, Slot: "oauth/calendar/refresh"},
 	{Name: GoogleGmail, Label: "Gmail", Scope: googleGmailScope, Slot: "oauth/gmail/refresh"},
 }
 
-func googleGrantFor(name string) (googleGrant, bool) {
-	for _, g := range googleGrants {
+func GoogleGrantFor(name string) (GoogleGrant, bool) {
+	for _, g := range googleGrantList {
 		if g.Name == name {
 			return g, true
 		}
 	}
-	return googleGrant{}, false
+	return GoogleGrant{}, false
+}
+
+func GoogleGrants() []GoogleGrant {
+	out := make([]GoogleGrant, len(googleGrantList))
+	copy(out, googleGrantList)
+	return out
+}
+
+type OAuthState struct {
+	Verifier   string
+	Capability string
+	Redirect   string
+	Created    time.Time
+}
+
+var ErrUnknownConsent = errors.New("this consent link is unknown or already used; start again")
+
+func (s *Store) SaveOAuthState(ctx context.Context, state, verifier, capability, redirect string) error {
+	_, err := s.d.Write.ExecContext(ctx, "INSERT INTO oauth_states (state, verifier, capability, redirect_uri, created_ts) VALUES (?, ?, ?, ?, ?)",
+		state, verifier, capability, redirect, s.stamp())
+	return err
+}
+
+func (s *Store) ConsumeOAuthState(ctx context.Context, state string) (OAuthState, error) {
+	var out OAuthState
+	var created float64
+	err := s.d.Read.QueryRowContext(ctx, "SELECT verifier, capability, redirect_uri, created_ts FROM oauth_states WHERE state = ?", state).
+		Scan(&out.Verifier, &out.Capability, &out.Redirect, &created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return OAuthState{}, ErrUnknownConsent
+	}
+	if err != nil {
+		return OAuthState{}, err
+	}
+	_, _ = s.d.Write.ExecContext(ctx, "DELETE FROM oauth_states WHERE state = ?", state)
+	out.Created = time.Unix(int64(created), 0)
+	return out, nil
 }
 
 func init() {
@@ -84,14 +113,14 @@ func validateGoogle(c Candidate) error {
 		}
 	}
 	for _, cap := range c.Capabilities {
-		if _, ok := googleGrantFor(cap.Name); !ok {
+		if _, ok := GoogleGrantFor(cap.Name); !ok {
 			return fmt.Errorf("google has no %s capability", cap.Name)
 		}
 	}
 	return nil
 }
 
-func googleConfig(lease *Lease) (clientID, authURL, tokenURL, apiURL string, err error) {
+func GoogleConfig(lease *Lease) (clientID, authURL, tokenURL, apiURL string, err error) {
 	var cfg map[string]string
 	if err := json.Unmarshal(lease.Config(), &cfg); err != nil {
 		return "", "", "", "", fmt.Errorf("connections: %s config: %w", lease.ID(), err)
@@ -139,7 +168,7 @@ func (l *Lease) googleTokens() *googleTokens {
 }
 
 func (l *Lease) googleToken(ctx context.Context, capability string) (string, error) {
-	grant, ok := googleGrantFor(capability)
+	grant, ok := GoogleGrantFor(capability)
 	if !ok {
 		return "", fmt.Errorf("google has no %s capability", capability)
 	}
@@ -202,8 +231,8 @@ type googleRejected struct{ reason string }
 
 func (e *googleRejected) Error() string { return e.reason }
 
-func (l *Lease) refreshGoogle(ctx context.Context, grant googleGrant) (*googleAccess, error) {
-	clientID, _, tokenURL, _, err := googleConfig(l)
+func (l *Lease) refreshGoogle(ctx context.Context, grant GoogleGrant) (*googleAccess, error) {
+	clientID, _, tokenURL, _, err := GoogleConfig(l)
 	if err != nil {
 		return nil, err
 	}
@@ -289,7 +318,7 @@ func testGoogle(ctx context.Context, lease *Lease, caps []Capability) ([]Result,
 		if !cap.Enabled {
 			continue
 		}
-		grant, ok := googleGrantFor(cap.Name)
+		grant, ok := GoogleGrantFor(cap.Name)
 		if !ok {
 			results = append(results, Result{Capability: cap.Name, State: Failing, Reason: "unknown Google capability"})
 			continue
@@ -319,7 +348,7 @@ func testGoogle(ctx context.Context, lease *Lease, caps []Capability) ([]Result,
 }
 
 func testGoogleCalendar(ctx context.Context, lease *Lease, token string) Result {
-	_, _, _, apiURL, err := googleConfig(lease)
+	_, _, _, apiURL, err := GoogleConfig(lease)
 	if err != nil {
 		return Result{Capability: GoogleCalendar, State: Failing, Reason: err.Error()}
 	}
@@ -355,287 +384,17 @@ func testGoogleCalendar(ctx context.Context, lease *Lease, token string) Result 
 
 // EnsureGoogle materializes the single Google connection and its two grants.
 func (s *Store) EnsureGoogle(ctx context.Context) error {
-	caps := make([]Capability, 0, len(googleGrants))
-	for _, g := range googleGrants {
+	caps := make([]Capability, 0, len(googleGrantList))
+	for _, g := range googleGrantList {
 		caps = append(caps, Capability{Name: g.Name, Enabled: true, Config: json.RawMessage("{}")})
 	}
 	return s.Ensure(ctx, GoogleID, KindGoogle, "Google", caps)
 }
 
-type googlePage struct {
-	ClientID        string        `json:"client_id"`
-	ClientSecretSet bool          `json:"client_secret_set"`
-	Redirect        string        `json:"redirect"`
-	Capabilities    []googleGrant `json:"capabilities"`
-	Selected        string        `json:"selected"`
-	Health          string        `json:"health"`
-	Reason          string        `json:"reason"`
-	Error           string        `json:"error"`
-	Paste           string        `json:"paste"`
-}
-
-func googleRedirect(r *http.Request) string {
-	scheme := "https"
-	if r.TLS == nil && strings.HasPrefix(r.Host, "127.0.0.1") {
-		scheme = "http"
-	}
-	return scheme + "://" + r.Host + googlePath + "/callback"
-}
-
-func (h handlers) googlePage(r *http.Request) googlePage {
-	ctx := r.Context()
-	s, err := h.store(ctx)
-	if err != nil {
-		panic(err)
-	}
-	if err := s.EnsureGoogle(ctx); err != nil {
-		panic(err)
-	}
-	view, err := s.Get(ctx, GoogleID)
-	if err != nil {
-		panic(err)
-	}
-	var cfg map[string]string
-	_ = json.Unmarshal(view.Config, &cfg)
-	page := googlePage{
-		ClientID: cfg["client_id"], Redirect: googleRedirect(r), Capabilities: googleGrants,
-		Selected: GoogleCalendar, Health: string(view.State), Reason: view.Reason,
-	}
-	for _, cred := range view.Credentials {
-		if cred.Slot == "oauth/client_secret" && cred.Present {
-			page.ClientSecretSet = true
-		}
-	}
-	return page
-}
-
-func (h handlers) googleRender(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, data googlePage) {
-	f, err := h.d.Render.Frame(r, "settings", data)
-	if err != nil {
-		panic(err)
-	}
-	f.Toast = toast
-	if err := h.d.Render.Page(w, r, status, "google.gohtml", f); err != nil {
-		panic(err)
-	}
-}
-
-func (h handlers) google(w http.ResponseWriter, r *http.Request) {
-	h.googleRender(w, r, http.StatusOK, nil, h.googlePage(r))
-}
-
-func (h handlers) googleSave(w http.ResponseWriter, r *http.Request) {
-	form := web.FormValues(r)
-	clientID := web.FormString(form, "client_id", "")
-	clientSecret := web.FormString(form, "client_secret", "")
-	ctx := audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
-	s, err := h.store(ctx)
-	if err != nil {
-		h.googleRender(w, r, http.StatusInternalServerError, &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()}, h.googlePage(r))
-		return
-	}
-	if err := s.EnsureGoogle(ctx); err != nil {
-		h.googleRender(w, r, http.StatusInternalServerError, &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()}, h.googlePage(r))
-		return
-	}
-	cand := Candidate{}
-	if clientID != "" {
-		raw, err := json.Marshal(map[string]string{"client_id": clientID})
-		if err != nil {
-			panic(err)
-		}
-		cand.Config = raw
-	}
-	if clientSecret != "" {
-		cand.Credentials = append(cand.Credentials, CredentialInput{Slot: "oauth/client_secret", Value: clientSecret})
-	}
-	if _, err := s.Save(ctx, GoogleID, cand); err != nil {
-		page := h.googlePage(r)
-		page.Error = err.Error()
-		h.googleRender(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()}, page)
-		return
-	}
-	http.Redirect(w, r, googlePath+"?saved=1", http.StatusSeeOther)
-}
-
-func (h handlers) googleStart(w http.ResponseWriter, r *http.Request) {
-	form := web.FormValues(r)
-	grant, ok := googleGrantFor(web.FormString(form, "capability", GoogleCalendar))
-	if !ok {
-		h.googleRender(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not started", Description: "unknown capability"}, h.googlePage(r))
-		return
-	}
-	page := h.googlePage(r)
-	if page.ClientID == "" || !page.ClientSecretSet {
-		page.Error = "Save the client ID and client secret first."
-		h.googleRender(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not started", Description: page.Error}, page)
-		return
-	}
-	authURL, err := h.startGoogle(r.Context(), grant, page.Redirect)
-	if err != nil {
-		panic(err)
-	}
-	http.Redirect(w, r, authURL, http.StatusSeeOther)
-}
-
-func (h handlers) startGoogle(ctx context.Context, grant googleGrant, redirect string) (string, error) {
-	state, verifier := googleToken(24), googleToken(64)
-	if _, err := h.d.DB.Write.ExecContext(ctx, "INSERT INTO oauth_states (state, verifier, capability, redirect_uri, created_ts) VALUES (?, ?, ?, ?, ?)",
-		state, verifier, grant.Name, redirect, float64(time.Now().UnixNano())/1e9); err != nil {
-		return "", err
-	}
-	conf, err := h.googleOAuth(ctx, redirect, grant.Scope)
-	if err != nil {
-		return "", err
-	}
-	return conf.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.S256ChallengeOption(verifier),
-		oauth2.SetAuthURLParam("prompt", "consent")), nil
-}
-
-func (h handlers) googleOAuth(ctx context.Context, redirect string, scopes ...string) (*oauth2.Config, error) {
-	s, err := h.store(ctx)
-	if err != nil {
-		return nil, err
-	}
-	lease, err := s.Open(ctx, GoogleID)
-	if err != nil {
-		return nil, err
-	}
-	defer lease.Close()
-	clientID, authURL, tokenURL, _, err := googleConfig(lease)
-	if err != nil {
-		return nil, err
-	}
-	secret, err := lease.Credential("oauth/client_secret")
-	if err != nil {
-		return nil, err
-	}
-	return &oauth2.Config{
-		ClientID: clientID, ClientSecret: secret, RedirectURL: redirect, Scopes: scopes,
-		Endpoint: oauth2.Endpoint{AuthURL: authURL, TokenURL: tokenURL, AuthStyle: oauth2.AuthStyleInParams},
-	}, nil
-}
-
-func (h handlers) googleCallback(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query()
-	h.googleComplete(w, r, query.Get("state"), query.Get("code"), query.Get("error"))
-}
-
-func (h handlers) googlePaste(w http.ResponseWriter, r *http.Request) {
-	pasted := web.FormString(web.FormValues(r), "paste", "")
-	parsed, err := url.Parse(strings.TrimSpace(pasted))
-	if err != nil || parsed.Query().Get("code") == "" {
-		page := h.googlePage(r)
-		page.Error = "Paste the full URL you were redirected to, including the code."
-		h.googleRender(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not connected", Description: page.Error}, page)
-		return
-	}
-	h.googleComplete(w, r, parsed.Query().Get("state"), parsed.Query().Get("code"), parsed.Query().Get("error"))
-}
-
-func (h handlers) googleComplete(w http.ResponseWriter, r *http.Request, state, code, authErr string) {
-	page := h.googlePage(r)
-	ctx := audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
-	s, err := h.store(ctx)
-	if err != nil {
-		panic(err)
-	}
-	grant, err := h.completeGoogle(ctx, s, state, code, authErr)
-	if err != nil {
-		page.Error = err.Error()
-		h.googleRender(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not connected", Description: page.Error}, page)
-		return
-	}
-	http.Redirect(w, r, googlePath+"?connected="+grant.Name, http.StatusSeeOther)
-}
-
-func (h handlers) completeGoogle(ctx context.Context, s *Store, state, code, authErr string) (googleGrant, error) {
-	var verifier, capabilityName, redirect string
-	var created float64
-	err := h.d.DB.Read.QueryRowContext(ctx, "SELECT verifier, capability, redirect_uri, created_ts FROM oauth_states WHERE state = ?", state).
-		Scan(&verifier, &capabilityName, &redirect, &created)
-	if errors.Is(err, sql.ErrNoRows) {
-		return googleGrant{}, errors.New("this consent link is unknown or already used; start again")
-	}
-	if err != nil {
-		return googleGrant{}, err
-	}
-	_, _ = h.d.DB.Write.ExecContext(ctx, "DELETE FROM oauth_states WHERE state = ?", state)
-	if authErr != "" {
-		return googleGrant{}, errors.New("Google returned an error: " + authErr)
-	}
-	if time.Since(time.Unix(int64(created), 0)) > googleStateTTL {
-		return googleGrant{}, errors.New("the consent link expired; start again")
-	}
-	grant, ok := googleGrantFor(capabilityName)
-	if !ok {
-		return googleGrant{}, errors.New("the consent link names an unknown capability")
-	}
-	conf, err := h.googleOAuth(ctx, redirect, grant.Scope)
-	if err != nil {
-		return googleGrant{}, err
-	}
-	lease, err := s.Open(ctx, GoogleID)
-	if err != nil {
-		return googleGrant{}, err
-	}
-	client, err := lease.Transport()
-	lease.Close()
-	if err != nil {
-		return googleGrant{}, err
-	}
-	exchange := context.WithValue(ctx, oauth2.HTTPClient, client)
-	token, err := conf.Exchange(exchange, code, oauth2.VerifierOption(verifier))
-	if err != nil || token.RefreshToken == "" {
-		if err == nil {
-			err = errors.New("Google returned no refresh token; revoke the app's access and retry") //nolint:staticcheck // the CLI contract keeps this wording
-		}
-		return googleGrant{}, err
-	}
-	if _, err := s.Save(ctx, GoogleID, Candidate{Credentials: []CredentialInput{{Slot: grant.Slot, Value: token.RefreshToken}}}); err != nil {
-		return googleGrant{}, err
-	}
-	return grant, nil
-}
-
-func (h handlers) googleTest(w http.ResponseWriter, r *http.Request) {
-	ctx := audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
-	s, err := h.store(ctx)
-	if err != nil {
-		panic(err)
-	}
-	view, err := s.Test(ctx, GoogleID)
-	if err != nil {
-		page := h.googlePage(r)
-		page.Error = err.Error()
-		h.googleRender(w, r, http.StatusBadRequest, &tpl.Toast{Category: "error", Title: "Not tested", Description: err.Error()}, page)
-		return
-	}
-	if view.State != OK && view.State != Expiring {
-		page := h.googlePage(r)
-		page.Error = view.Reason
-		h.googleRender(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not verified", Description: view.Reason}, page)
-		return
-	}
-	h.googleRender(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: "Connected", Description: "The refresh token works."}, h.googlePage(r))
-}
-
-func googleToken(n int) string {
-	const alphabet = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	b := make([]byte, n)
-	if _, err := rand.Read(b); err != nil {
-		panic(err)
-	}
-	for i := range b {
-		b[i] = alphabet[int(b[i])%len(alphabet)]
-	}
-	return string(b)
-}
-
 // GoogleGrantSlot returns the credential slot holding a capability's refresh
 // grant.
 func GoogleGrantSlot(capability string) (string, bool) {
-	grant, ok := googleGrantFor(capability)
+	grant, ok := GoogleGrantFor(capability)
 	return grant.Slot, ok
 }
 

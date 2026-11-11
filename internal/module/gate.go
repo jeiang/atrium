@@ -9,7 +9,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/sdnotify"
@@ -218,16 +217,6 @@ func (s *Set) Open(ctx context.Context) (*db.DB, config.Config, error) {
 		_ = d.Close()
 		return nil, config.Config{}, err
 	}
-	store, err := connections.New(d, config.From(ctx).Host(), connections.DefaultRegistry())
-	if err != nil {
-		_ = d.Close()
-		return nil, config.Config{}, err
-	}
-	if err := store.ReconcileHost(ctx); err != nil {
-		_ = d.Close()
-		return nil, config.Config{}, err
-	}
-	connections.SetDefault(d.Read, store)
 	return d, cfg, nil
 }
 

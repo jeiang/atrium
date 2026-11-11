@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 )
 
@@ -150,33 +149,23 @@ func requestTracking(t *testing.T, api *modelLog, d *db.DB, useID string, packag
 	return id
 }
 
-func TestShip24IntegrationTestRecordsOkAndRefusesA401(t *testing.T) {
+func TestShip24ConnectionTestRecordsOkAndRefusesA401(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
-	s := &integrationSite{t: t, dir: dir}
-	s.start()
-	if code, body := s.post("/ship24/test", url.Values{"url": {srv.URL + "/public/v1"}}); code != http.StatusOK {
-		t.Fatalf("Ship24 Test: %d %s", code, body)
-	}
-	if health(t, dir, "ship24") != integrations.OK {
-		t.Fatalf("Ship24 health = %s, want ok", health(t, dir, "ship24"))
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
+	if ran := runApp(t, "connections", "test", "service/ship24"); ran.code != cli.ExitOK || connectionState(t, dir, "service/ship24") != "ok" {
+		t.Fatalf("Ship24 Test: %d %s %s", ran.code, ran.stdout, ran.stderr)
 	}
 	fake.setRefuse(true)
-	if code, body := s.post("/ship24/test", nil); code != http.StatusUnprocessableEntity || !strings.Contains(body, "test failed (needs_reauth)") {
-		t.Fatalf("refused Ship24 Test: %d %s", code, body)
-	}
-	if health(t, dir, "ship24") != integrations.NeedsReauth {
-		t.Fatalf("health after the refused Test = %s, want needs_reauth", health(t, dir, "ship24"))
+	if ran := runApp(t, "connections", "test", "service/ship24"); ran.code != cli.ExitError ||
+		!strings.Contains(ran.stdout+ran.stderr, "needs_reauth") || connectionState(t, dir, "service/ship24") != "needs_reauth" {
+		t.Fatalf("refused Ship24 Test: %d %s %s", ran.code, ran.stdout, ran.stderr)
 	}
 	fake.setRefuse(false)
-	if code, body := s.post("/ship24/test", nil); code != http.StatusOK {
-		t.Fatalf("Ship24 Test after recovery: %d %s", code, body)
-	}
-	if health(t, dir, "ship24") != integrations.OK {
-		t.Fatalf("health after recovery = %s, want ok", health(t, dir, "ship24"))
+	if ran := runApp(t, "connections", "test", "service/ship24"); ran.code != cli.ExitOK || connectionState(t, dir, "service/ship24") != "ok" {
+		t.Fatalf("Ship24 Test after recovery: %d %s %s", ran.code, ran.stdout, ran.stderr)
 	}
 }
 
@@ -185,8 +174,7 @@ func TestTrackPackageRegistersAndRespectsTheQuota(t *testing.T) {
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
 	setEnv(t, settingEnv(tracking.KeyMonthlyQuota), "1")
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
@@ -245,8 +233,7 @@ func TestPackagePollingUpdatesStatusAndNotifiesOnceOnDelivered(t *testing.T) {
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
 	if warm := runApp(t, "settings", "list"); warm.code != cli.ExitOK {
 		t.Fatalf("warm command: %d %s", warm.code, warm.stderr)
 	}
@@ -347,8 +334,7 @@ func TestTrackPackageUnknownOutcomeStaysBlocked(t *testing.T) {
 	fake := &fakeShip24{milestone: "in_transit", failCreate: http.StatusInternalServerError}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
 	setEnv(t, settingEnv(tracking.KeyMonthlyQuota), "10")
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
@@ -389,8 +375,7 @@ func TestTrackPackageQuotaSurvivesUndo(t *testing.T) {
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
 	setEnv(t, settingEnv(tracking.KeyMonthlyQuota), "1")
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
@@ -443,8 +428,7 @@ func TestPackagePollWithoutAKeyDoesNothing(t *testing.T) {
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", ""))
 	if warm := runApp(t, "settings", "list"); warm.code != cli.ExitOK {
 		t.Fatalf("warm command: %d %s", warm.code, warm.stderr)
 	}
@@ -473,8 +457,7 @@ func TestUndoPackageUntrackRefusesWithoutAKey(t *testing.T) {
 	fake := &fakeShip24{milestone: "in_transit"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
@@ -491,7 +474,7 @@ func TestUndoPackageUntrackRefusesWithoutAKey(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'track_package' AND direction = 'forward' ORDER BY id DESC LIMIT 1").Scan(&writeID); err != nil {
 		t.Fatal(err)
 	}
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", ""))
 	base := startServeIn(t, dir)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -525,8 +508,7 @@ func TestTrackingIdentityBlocksASecondPackageRow(t *testing.T) {
 	fake := &fakeShip24{milestone: "in_transit", failCreate: http.StatusInternalServerError}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
 	setEnv(t, settingEnv(tracking.KeyMonthlyQuota), "10")
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)

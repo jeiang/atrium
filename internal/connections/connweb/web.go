@@ -1,4 +1,4 @@
-package connections
+package connweb
 
 import (
 	"context"
@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -29,12 +30,14 @@ func Templates() fs.FS {
 
 const path = "/settings/connections"
 
+const googlePath = path + "/google"
+
 type pageData struct {
-	Connections []View `json:"connections"`
-	Error       string `json:"error"`
+	Connections []connections.View `json:"connections"`
+	Error       string             `json:"error"`
 }
 
-func (p pageData) URL(v View) string {
+func (p pageData) URL(v connections.View) string {
 	var m map[string]string
 	_ = json.Unmarshal(v.Config, &m)
 	return m["url"]
@@ -65,15 +68,8 @@ func Module(r chi.Router, d *web.Deps) {
 
 type handlers struct{ d *web.Deps }
 
-func (h handlers) store(ctx context.Context) (*Store, error) {
-	s, err := New(h.d.DB, h.d.State.Host(), DefaultRegistry())
-	if err != nil {
-		return nil, err
-	}
-	if err := s.ReconcileHost(ctx); err != nil {
-		return nil, err
-	}
-	return s, nil
+func (h handlers) store(context.Context) (*connections.Store, error) {
+	return connections.New(h.d.DB, h.d.State.Host(), connections.DefaultRegistry())
 }
 
 func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, data pageData, toast *tpl.Toast) {
@@ -93,7 +89,7 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, dat
 	}
 }
 
-func (h handlers) list(ctx context.Context) ([]View, error) {
+func (h handlers) list(ctx context.Context) ([]connections.View, error) {
 	s, err := h.store(ctx)
 	if err != nil {
 		return nil, err
@@ -107,7 +103,7 @@ func (h handlers) index(w http.ResponseWriter, r *http.Request) {
 
 func (h handlers) test(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	id := ID(web.FormString(form, "id", ""))
+	id := connections.ID(web.FormString(form, "id", ""))
 	ctx := audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
 	s, err := h.store(ctx)
 	if err != nil {
@@ -119,7 +115,7 @@ func (h handlers) test(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	cand := Candidate{
+	cand := connections.Candidate{
 		Label:        web.FormString(form, "label", current.Label),
 		Config:       current.Config,
 		Capabilities: capabilitiesOf(current),
@@ -137,13 +133,13 @@ func (h handlers) test(w http.ResponseWriter, r *http.Request) {
 		if !ok || slot == "" || len(values) == 0 || values[0] == "" {
 			continue
 		}
-		cand.Credentials = append(cand.Credentials, CredentialInput{Slot: slot, Value: values[0]})
+		cand.Credentials = append(cand.Credentials, connections.CredentialInput{Slot: slot, Value: values[0]})
 	}
 	if key := web.FormString(form, "api_key", ""); key != "" {
-		cand.Credentials = append(cand.Credentials, CredentialInput{Slot: "api_key", Value: key})
+		cand.Credentials = append(cand.Credentials, connections.CredentialInput{Slot: "api_key", Value: key})
 	}
 	if _, err := s.TestAndSave(ctx, id, cand); err != nil {
-		var failed *TestFailed
+		var failed *connections.TestFailed
 		if errors.As(err, &failed) {
 			h.render(w, r, http.StatusUnprocessableEntity, pageData{Error: err.Error()}, &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()})
 			return
@@ -155,7 +151,7 @@ func (h handlers) test(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h handlers) disconnect(w http.ResponseWriter, r *http.Request) {
-	id := ID(web.FormString(web.FormValues(r), "id", ""))
+	id := connections.ID(web.FormString(web.FormValues(r), "id", ""))
 	ctx := audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
 	s, err := h.store(ctx)
 	if err != nil {
@@ -169,10 +165,10 @@ func (h handlers) disconnect(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, path, http.StatusSeeOther)
 }
 
-func capabilitiesOf(v View) []Capability {
-	out := make([]Capability, 0, len(v.Capabilities))
+func capabilitiesOf(v connections.View) []connections.Capability {
+	out := make([]connections.Capability, 0, len(v.Capabilities))
 	for _, c := range v.Capabilities {
-		out = append(out, Capability(c))
+		out = append(out, connections.Capability(c))
 	}
 	return out
 }

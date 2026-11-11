@@ -16,7 +16,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
@@ -41,12 +40,7 @@ func newBackoff() *retryBackoff {
 }
 
 func (b *retryBackoff) refresh(ctx context.Context, q db.Querier) error {
-	r := endpoint.Read(ctx, q)
-	start, ceiling := r.Int(mail.KeyBackoffStartSeconds), r.Int(mail.KeyBackoffMaxSeconds)
-	if err := r.Err(); err != nil {
-		return err
-	}
-	b.start, b.ceiling = start, ceiling
+	b.start, b.ceiling = mail.TuningMailBackoffStartSeconds, mail.TuningMailBackoffMaxSeconds
 	return nil
 }
 
@@ -148,9 +142,7 @@ func (w *Watcher) connect(ctx context.Context) (*Pass, func(), error) {
 }
 
 func settleFor(ctx context.Context, q db.Querier) (time.Duration, error) {
-	r := endpoint.Read(ctx, q)
-	seconds := r.Int(mail.KeyIdleSettleSeconds)
-	return time.Duration(seconds) * time.Second, r.Err()
+	return time.Duration(mail.TuningMailIdleSettleSeconds) * time.Second, nil
 }
 
 func (w *Watcher) sleep(ctx context.Context, d time.Duration) {

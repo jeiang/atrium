@@ -8,7 +8,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
@@ -35,15 +34,11 @@ type params struct {
 }
 
 func readParams(ctx context.Context, q db.Querier) (params, error) {
-	r := endpoint.Read(ctx, q)
 	p := params{
-		minGroup:         r.Int(mail.KeyDeletionsMinGroup),
-		minDeletedShare:  r.Float(mail.KeyDeletionsMinShare),
-		otpMinShare:      r.Float(mail.KeyDeletionsOTPMinShare),
-		otpOlderThanDays: r.Int(mail.KeyDeletionsOTPOlderDays),
-	}
-	if err := r.Err(); err != nil {
-		return params{}, err
+		minGroup:         mail.TuningDeletionsMinGroup,
+		minDeletedShare:  mail.TuningDeletionsMinDeletedShare,
+		otpMinShare:      mail.TuningDeletionsOtpMinShare,
+		otpOlderThanDays: mail.TuningDeletionsOtpOlderThanDays,
 	}
 	var err error
 	p.limits, err = scanutil.ReadLimits(ctx, q)

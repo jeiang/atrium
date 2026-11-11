@@ -78,7 +78,7 @@ func (r *Reminders) Propose(ctx context.Context, now float64, tz string) (int, e
 	}
 	set := endpoint.Read(ctx, r.DB.Read)
 	ahead := set.Int(mail.KeyLoopsRemindAheadDays)
-	overdue := set.Int(mail.KeyLoopsRemindOverdueDays)
+	overdue := mail.TuningOpenloopsRemindOverdueDays
 	hour := set.Int(mail.KeyLoopsRemindHour)
 	if err := set.Err(); err != nil {
 		return 0, err

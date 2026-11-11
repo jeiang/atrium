@@ -17,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
@@ -47,25 +46,21 @@ type params struct {
 }
 
 func readParams(ctx context.Context, q db.Querier) (params, error) {
-	r := endpoint.Read(ctx, q)
 	p := params{
-		minFolder:          r.Int(mail.KeyRebalanceMinFolder),
-		minGroup:           r.Int(mail.KeyRebalanceMinGroup),
-		minShare:           r.Float(mail.KeyRebalanceMinShare),
-		mergeMinGroup:      r.Int(mail.KeyRebalanceMergeMinGroup),
-		mergeMinOthers:     r.Int(mail.KeyRebalanceMergeMinOther),
-		mergeMinShare:      r.Float(mail.KeyRebalanceMergeMinShare),
-		runsRequired:       r.Int(mail.KeyRebalanceRunsRequired),
-		runGapSeconds:      r.Int(mail.KeyRebalanceRunGapSeconds),
-		clusterKs:          r.Ints(mail.KeyRebalanceClusterKs),
-		clusterIterations:  r.Int(mail.KeyRebalanceClusterIters),
-		clusterMargin:      r.Float(mail.KeyRebalanceClusterMargin),
-		clusterMinEmbedded: r.Float(mail.KeyRebalanceClusterMinEmb),
-		topTerms:           r.Int(mail.KeyRebalanceTopTerms),
-		nameMax:            r.Int(mail.KeyRebalanceNameMaxChars),
-	}
-	if err := r.Err(); err != nil {
-		return params{}, err
+		minFolder:          mail.TuningRebalanceMinFolder,
+		minGroup:           mail.TuningRebalanceMinGroup,
+		minShare:           mail.TuningRebalanceMinShare,
+		mergeMinGroup:      mail.TuningRebalanceMergeMinGroup,
+		mergeMinOthers:     mail.TuningRebalanceMergeMinOthers,
+		mergeMinShare:      mail.TuningRebalanceMergeMinShare,
+		runsRequired:       mail.TuningRebalanceRunsRequired,
+		runGapSeconds:      mail.TuningRebalanceRunGapSeconds,
+		clusterKs:          mail.RebalanceClusterKs(),
+		clusterIterations:  mail.TuningRebalanceClusterIterations,
+		clusterMargin:      mail.TuningRebalanceClusterMargin,
+		clusterMinEmbedded: mail.TuningRebalanceClusterMinEmbedded,
+		topTerms:           mail.TuningRebalanceTopTerms,
+		nameMax:            mail.TuningRebalanceNameMaxChars,
 	}
 	var err error
 	p.limits, err = scanutil.ReadLimits(ctx, q)

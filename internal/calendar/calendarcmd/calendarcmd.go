@@ -23,9 +23,6 @@ func Command(env config.Env, tools registry.Source) *cli.Command {
 func syncCommand(env config.Env) *cli.Command {
 	return davmirror.SyncCommand("mirror the iCloud calendars into the calendar directory (read-only)", passrun.CalDAV,
 		func(ctx context.Context, d *db.DB) (davmirror.Stats, error) {
-			if err := reconcile(ctx, d); err != nil {
-				return davmirror.Stats{}, err
-			}
 			set, err := calendar.LoadSettings(ctx, d.Read)
 			if err != nil {
 				return davmirror.Stats{}, err
@@ -50,9 +47,6 @@ func googleAuth(env config.Env) *cli.Command {
 				}
 				defer func() { _ = d.Close() }()
 				if err := config.Boot(e.Ctx, env, d, cfg); err != nil {
-					return cli.Fail(e, err)
-				}
-				if err := reconcile(e.Ctx, d); err != nil {
 					return cli.Fail(e, err)
 				}
 				set, err := calendar.LoadSettings(e.Ctx, d.Read)
@@ -84,12 +78,4 @@ func googleAuth(env config.Env) *cli.Command {
 			}
 		},
 	}
-}
-
-func reconcile(ctx context.Context, d *db.DB) error {
-	store, err := connections.New(d, config.From(ctx).Host(), connections.DefaultRegistry())
-	if err != nil {
-		return err
-	}
-	return store.ReconcileHost(ctx)
 }

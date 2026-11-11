@@ -148,9 +148,7 @@ func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, pa
 	}
 	seedNotionVectors(t, path)
 	seedPendingMessage(t, path)
-	setEnv(t, settingEnv(endpoint.KeyEmbedURL), fake.URL+"/v1")
-	setEnv(t, settingEnv(endpoint.KeyEmbedModel), model)
-	setEnv(t, settingEnv(endpoint.KeyEmbedBatch), "40")
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, fake.URL+"/v1", model, ""))
 	return dir, path
 }
 
@@ -218,7 +216,7 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 		t.Fatalf("search with an unchanged embedder: %q, was %q (model %q)", after, before, fake.lastQueryModel())
 	}
 
-	setEnv(t, settingEnv(endpoint.KeyEmbedModel), bigModel)
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, fake.URL+"/v1", bigModel, ""))
 	fake.release(1)
 	base, _, stop = startServeStoppable(t, dir)
 	var first, total int
@@ -259,7 +257,7 @@ func TestChangingTheEmbedderReembedsInTheBackgroundAndSwapsWhenComplete(t *testi
 	if rows != total || generations != 1 || oldTables != 0 {
 		t.Fatalf("after the swap: %d vectors for %d documents, %d index rows, %d old tables", rows, total, generations, oldTables)
 	}
-	if sent := fake.embedded(bigModel); sent > total+40+8 {
+	if sent := fake.embedded(bigModel); sent > total+endpoint.TuningMailEmbedBatch+8 {
 		t.Errorf("the restart re-embedded finished rows: %d texts sent for %d documents", sent, total)
 	}
 	if after := search(); after == "" || fake.lastQueryModel() != bigModel {

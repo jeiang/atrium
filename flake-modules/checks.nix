@@ -31,10 +31,7 @@
       host = {
         core.public_url = "https://atrium.example.org";
         core.ops_listen = "127.0.0.1:9180";
-        mail = {
-          mail_chat_url = "http://127.0.0.1:8187/v1";
-          mail_embed_url = "http://127.0.0.1:8188/v1";
-        };
+        mail.mail_chat_url = "http://127.0.0.1:8187/v1";
         media.media_root = "/var/lib/media";
       };
       connections = {
@@ -60,6 +57,14 @@
           config.api = "https://api.notion.com";
           capabilities = ["api"];
           credentialFiles.token = "/run/secrets/notion-token";
+        };
+        "service/embedding" = {
+          kind = "service/embedding";
+          config = {
+            url = "http://127.0.0.1:8188/v1";
+            model = "embeddinggemma";
+          };
+          capabilities = ["embeddings"];
         };
       };
       mailAccounts.icloud = {

@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -35,11 +36,13 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/golden"
@@ -92,7 +95,7 @@ kind = "service/notion"
 label = "Notion"
 config = { api = %q }
 capabilities = ["api"]
-`, anthropicURL, grafanaURL, notionURL) + mailConnection("icloud", "icloud", "operator@icloud.invalid", defaultMailPassword, true)
+`, anthropicURL, grafanaURL, notionURL)
 	path := filepath.Join(dir, "host.toml")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
@@ -756,6 +759,268 @@ func TestImportV2CarriesTheWebPushConnectionAndUsesItsVAPIDKey(t *testing.T) {
 	checkVAPID(t, sent.header, public, push.URL)
 	if payload := browser.decrypt(t, sent.body); payload["title"] != "atrium test" {
 		t.Errorf("diagnostic payload %v", payload)
+	}
+}
+
+func TestImportV2CarriesTheEmbeddingConnectionAndItsKey(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	embed, chat := newFakeOpenAI(t), newFakeOpenAI(t)
+	const key = "sk-embed-imported-0123456789"
+	url := embed.URL + "/v1"
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
+		('mail_embed_url', %[1]q),
+		('mail_embed_model', 'embeddinggemma'),
+		('mail_embed_batch', '1')`, url))
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_embed_key', %q, 1762000800, 'fixture')", key))
+	editImportSource(t, source, "INSERT INTO endpoint_probes (kind, fingerprint, ok, reason, dimension, models, probed_at) VALUES ('embed', 'stale0000000000', 0, 'the old endpoint refused the key', 0, '[]', 1762000800)")
+	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", url)
+	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", chat.URL+"/v1")
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	for _, want := range []string{
+		"connection service/embedding: created from host settings",
+		"connection service/embedding: credential bearer carried",
+		"the embed probe moved to connection service/embedding",
+		"setting mail_embed_batch: drop-tuning -> internal/endpoint/tuning.go:TuningMailEmbedBatch; source value 1 differs from the compiled default 16",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+	if strings.Contains(got.stdout+got.stderr, key) {
+		t.Error("the import printed the embedding key")
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	q, err := db.Connect(dest, db.WithKey(importKey(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	if stored := importValue(t, q.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'service/embedding' AND slot = 'bearer'"); stored != key {
+		t.Errorf("the imported embedding key is %q", stored)
+	}
+	if config := importValue(t, q.Read, "SELECT config_json FROM connections WHERE id = 'service/embedding'"); !strings.Contains(config, url) || !strings.Contains(config, "embeddinggemma") {
+		t.Errorf("the embedding config is %s", config)
+	}
+	if results := importValue(t, q.Read, "SELECT results_json FROM connections WHERE id = 'service/embedding'"); !strings.Contains(results, "stale0000000000") || !strings.Contains(results, `"legacy":true`) {
+		t.Errorf("the imported embed probe is %s", results)
+	}
+
+	tested := runImportApp(t, importTestApp(t, dir, clock), "connections", "test", "service/embedding")
+	if tested.code != cli.ExitOK || !strings.Contains(tested.stdout, "service/embedding\tok") {
+		t.Fatalf("connections test service/embedding: exit %d stdout %q stderr %q", tested.code, tested.stdout, tested.stderr)
+	}
+	embedAuths := embed.authorizations()
+	if len(embedAuths["/v1/embeddings"]) == 0 {
+		t.Fatal("the embedding fake saw no request")
+	}
+	for path, values := range embedAuths {
+		for _, value := range values {
+			if value != "Bearer "+key {
+				t.Errorf("embedding %s used %q, want the imported bearer", path, value)
+			}
+		}
+	}
+
+	probed := runImportApp(t, importTestApp(t, dir, clock), "endpoints", "probe")
+	if probed.code != cli.ExitOK {
+		t.Fatalf("endpoints probe: exit %d stdout %q stderr %q", probed.code, probed.stdout, probed.stderr)
+	}
+	for path, values := range chat.authorizations() {
+		for _, value := range values {
+			if strings.Contains(value, key) {
+				t.Errorf("chat %s received the embedding bearer", path)
+			}
+		}
+	}
+}
+
+func TestImportV2CarriesTheShip24ConnectionAndPollsWithTheCompiledWindow(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	const key = "ship24-imported"
+	var mu sync.Mutex
+	var auths []string
+	ship24 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		auths = append(auths, r.Header.Get("Authorization"))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if r.Header.Get("Authorization") != "Bearer "+key {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/trackers/trk_1/results" {
+			_, _ = io.WriteString(w, `{"data":{"trackings":[{"tracker":{"trackerId":"trk_1","trackingNumber":"1Z999AA10123456784"},"shipment":{"statusMilestone":"in_transit","statusCode":"x"},"events":[]}]}}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(ship24.Close)
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
+		('mail_ship24_url', %[1]q),
+		('mail_ship24_poll_days', '1'),
+		('mail_ship24_poll_limit', '1')`, ship24.URL))
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_ship24_api_key', %q, 1762000800, 'fixture')", key))
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO packages (id, carrier, tracking_number, status, status_text, source_message_id, last_message_id, updated_ts, first_seen, dismissed, aggregator, tracker_id, tracker_registered_ts, last_sync_ts, last_event_hash, last_event, last_event_ts, notified_status)
+		VALUES (3, 'ups', '1Z999AA10123456784', 'in_transit', 'In transit', 0, 0, %f, %f, 0, 'ship24', 'trk_1', %f, %f, '', '', 0, '')`,
+		clock-10*86400, clock-20*86400, clock-20*86400, clock-10*86400))
+	setEnv(t, "ATRIUM_MAIL_MAIL_SHIP24_URL", ship24.URL)
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	for _, want := range []string{
+		"connection service/ship24: created from host settings",
+		"connection service/ship24: credential api_key carried",
+		"setting mail_ship24_poll_days: drop-tuning -> internal/mail/tracking/tuning.go:TuningMailShip24PollDays; source value 1 differs from the compiled default 30",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+	if strings.Contains(got.stdout+got.stderr, key) {
+		t.Error("the import printed the Ship24 key")
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	q, err := db.Connect(dest, db.WithKey(importKey(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	if stored := importValue(t, q.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'service/ship24' AND slot = 'api_key'"); stored != key {
+		t.Errorf("the imported Ship24 key is %q", stored)
+	}
+
+	polled := runImportApp(t, importTestApp(t, dir, clock), "packages", "poll")
+	if polled.code != cli.ExitOK || !strings.Contains(polled.stdout, `"checked": 1`) {
+		t.Fatalf("packages poll: exit %d stdout %q stderr %q", polled.code, polled.stdout, polled.stderr)
+	}
+	mu.Lock()
+	seen := append([]string(nil), auths...)
+	mu.Unlock()
+	if len(seen) == 0 {
+		t.Fatal("the tracking poll never reached the Ship24 fake")
+	}
+	for _, value := range seen {
+		if value != "Bearer "+key {
+			t.Errorf("Ship24 request used %q", value)
+		}
+	}
+}
+
+func TestImportV2HoldsMailOnlyForAMatchingEmbeddingFingerprint(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	embed := newFakeOpenAI(t)
+	const key = "sk-embed-fingerprint-0123456789"
+	url := embed.URL + "/v1"
+	matching := endpoint.New(endpoint.EndpointEmbed, url, "embeddinggemma", key).Fingerprint()
+	for _, tc := range []struct {
+		name        string
+		fingerprint string
+		refused     bool
+	}{
+		{"matching", matching, true},
+		{"stale", "0000000000000000", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			source := copyV2Fixture(t, dir)
+			editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
+				('mail_embed_url', %[1]q),
+				('mail_embed_model', 'embeddinggemma')`, url))
+			editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_embed_key', %q, 1762000800, 'fixture')", key))
+			editImportSource(t, source, fmt.Sprintf("INSERT INTO endpoint_probes (kind, fingerprint, ok, reason, dimension, models, probed_at) VALUES ('embed', %q, 0, 'the endpoint refused the key', 0, '[]', 1762000800)", tc.fingerprint))
+			setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", url)
+			setEnv(t, flagEnv(module.Mail), "")
+
+			if got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source); got.code != cli.ExitOK {
+				t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+			}
+			dest := filepath.Join(dir, "atrium.db")
+			q, err := db.Connect(dest, db.WithKey(importKey(t)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = q.Close() }()
+			if state := importValue(t, q.Read, "SELECT state FROM connections WHERE id = 'service/embedding'"); state != "failing" {
+				t.Fatalf("the imported embedding state is %q, want the carried failure", state)
+			}
+
+			if off := runImportApp(t, importTestApp(t, dir, clock), "settings", "set", module.FlagKey(module.Mail), "false"); off.code != cli.ExitOK {
+				t.Fatalf("disabling mail: exit %d %q", off.code, off.stderr)
+			}
+			on := runImportApp(t, importTestApp(t, dir, clock), "settings", "set", module.FlagKey(module.Mail), "true")
+			if tc.refused {
+				if on.code != cli.ExitError || !strings.Contains(on.stderr, "embed endpoint probe failed") {
+					t.Fatalf("enabling mail with a matching failure: exit %d %q", on.code, on.stderr)
+				}
+				return
+			}
+			if on.code != cli.ExitOK {
+				t.Fatalf("enabling mail with a stale failure: exit %d %q", on.code, on.stderr)
+			}
+		})
+	}
+}
+
+func TestImportV2KeepsEmbedAndChatAccountsFromClaimingTheEndpointHealth(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	embed := newFakeOpenAI(t)
+	url := embed.URL + "/v1"
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
+		('mail_embed_url', %[1]q),
+		('mail_embed_model', 'embeddinggemma')`, url))
+	editImportSource(t, source, `INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, auth_method, created_at) VALUES
+		('embed', 'Embed', 'gmail', 'embed@example.test', 1, 0, 'password', 1762000800),
+		('chat', 'Chat', 'gmail', 'chat@example.test', 1, 0, 'password', 1762000800)`)
+	editImportSource(t, source, "INSERT INTO integration_health (name, state, reason, checked_at, expires_at) VALUES ('mail_embed', 'failing', 'the embed endpoint refused', 1762000800, NULL)")
+	editImportSource(t, source, "INSERT INTO integration_health (name, state, reason, checked_at, expires_at) VALUES ('mail_chat', 'failing', 'the chat endpoint refused', 1762000800, NULL)")
+	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", url)
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	for _, want := range []string{
+		"ambiguous-health mail_embed: the name is both the embedding endpoint and a mail account; the account is untested",
+		"ambiguous-health mail_chat: the name is both the local chat endpoint and a mail account; kept as local-chat legacy, the account is untested",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	q, err := db.Connect(dest, db.WithKey(importKey(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	if state := importValue(t, q.Read, "SELECT state FROM connections WHERE id = 'service/embedding'"); state != "untested" {
+		t.Errorf("the embedding connection state is %q, want untested", state)
+	}
+	if results := importValue(t, q.Read, "SELECT results_json FROM connections WHERE id = 'service/embedding'"); !strings.Contains(results, `"ambiguous":"mail_embed"`) {
+		t.Errorf("the ambiguous embed health was not recorded: %s", results)
+	}
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM integration_health WHERE name = 'mail_chat'"); n != 1 {
+		t.Errorf("%d mail_chat health rows carried, want the local-chat legacy row", n)
+	}
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM endpoint_probes WHERE kind = 'embed'"); n != 0 {
+		t.Error("the embed probe stayed in the endpoint_probes table")
+	}
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM mail_accounts WHERE id IN ('embed', 'chat')"); n != 2 {
+		t.Errorf("%d colliding accounts carried, want both", n)
 	}
 }
 

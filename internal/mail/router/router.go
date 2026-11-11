@@ -59,13 +59,9 @@ type Tuning struct {
 }
 
 func ReadTuning(ctx context.Context, q Querier, account string) (Tuning, error) {
-	r := endpoint.Read(ctx, q)
 	t := Tuning{
-		KNNK: r.Int(mail.KeyKNNK), KNNMinShare: r.Float(mail.KeyKNNMinShare), KNNMax: r.Int(mail.KeyKNNMax),
-		LLMNeighbors: r.Int(mail.KeyLLMNeighbors), FolderMin: r.Int(mail.KeyFolderMinMessages),
-	}
-	if err := r.Err(); err != nil {
-		return Tuning{}, err
+		KNNK: mail.TuningKnnK, KNNMinShare: mail.TuningKnnMinShare, KNNMax: mail.TuningKnnMax,
+		LLMNeighbors: mail.TuningLlmNeighbors, FolderMin: mail.TuningFolderMinMessages,
 	}
 	var err error
 	if t.Learned, err = rules.ReadThresholds(ctx, q); err != nil {

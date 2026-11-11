@@ -65,7 +65,7 @@ func TestLoopsRefreshSkipsBulkAndOtherRecipients(t *testing.T) {
 		return true
 	})
 	setEnv(t, settingEnv(endpoint.KeyChatURL), srv.URL+"/v1")
-	setEnv(t, settingEnv(endpoint.KeyEmbedURL), srv.URL+"/v1")
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, srv.URL+"/v1", "embeddinggemma", ""))
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
 		t.Fatalf("initialize database: %d %s", ran.code, ran.stderr)
 	}

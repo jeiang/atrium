@@ -59,6 +59,7 @@ func trackPackage(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 	if err != nil {
 		return nil, trackingFailed(err)
 	}
+	defer settings.Close()
 	if country != "" {
 		settings.Country = country
 	}
