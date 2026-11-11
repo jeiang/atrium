@@ -72,6 +72,9 @@ func testConnection(ctx context.Context, lease *connections.Lease, caps []connec
 		if err != nil {
 			return []connections.Result{{Capability: mailconn.CapabilityIMAP, State: connections.NeedsReauth, Reason: err.Error()}}, nil
 		}
+		if resolved != config.AuthXOAUTH2 || shared == nil {
+			return []connections.Result{{Capability: mailconn.CapabilityIMAP, State: connections.NeedsReauth, Reason: "the account has no XOAUTH2 grant"}}, nil
+		}
 		method, source = resolved, shared
 		defer source.Close()
 	}
