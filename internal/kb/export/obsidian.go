@@ -186,7 +186,7 @@ func writeStep(ctx context.Context, store *ledger.Store, recordID int64, now flo
 	target := "obsidian:" + rel
 	undo := fileUndo{Op: UndoObsidianRestore, Path: full, Before: before, SHA: hashOf(content), Parents: parents}
 	ticket, err := store.Begin(ctx, ledger.New{
-		Origin: "export", Operation: "obsidian_write", OperationKey: "export:obsidian:" + cite(recordID) + ":" + rel + ":" + hashOf(content),
+		Origin: "export", Operation: "obsidian_write", OperationKey: "export:obsidian:" + cite(recordID) + ":" + rel + ":" + hashOf(content) + ":" + ledger.NewKey(),
 		Target: target, Before: jsonOf(before), Undo: jsonOf(undo),
 		Resources: []ledger.Resource{{Key: "file:" + full}},
 	}, nil)

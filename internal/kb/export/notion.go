@@ -149,13 +149,13 @@ func syncNotion(ctx context.Context, store *ledger.Store, now float64, client *n
 				return out, err
 			}
 			if !applied {
-				if err := runStep(ctx, store, step(target, opTitle, key+":title", map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID}), entry.page.Hash, func() (map[string]any, error) {
+				if err := runStep(ctx, store, step(target, opTitle, key+":title:"+ledger.NewKey(), map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID}), entry.page.Hash, func() (map[string]any, error) {
 					return map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID}, client.SetTitle(ctx, prior.remoteID, entry.page.Title)
 				}, nil); err != nil {
 					return out, err
 				}
 			}
-			if err := runStep(ctx, store, step(target, opContent, key+":content", map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID}), entry.page.Hash, func() (map[string]any, error) {
+			if err := runStep(ctx, store, step(target, opContent, key+":content:"+ledger.NewKey(), map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID}), entry.page.Hash, func() (map[string]any, error) {
 				return map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID}, client.UpdateMarkdown(ctx, prior.remoteID, notion.ReplaceContent(entry.page.Markdown))
 			}, func(ctx context.Context, tx *sql.Tx) error {
 				return savePage(ctx, tx, TargetNotion, entry.recordID, prior.remoteID, entry.page.Hash, now)
