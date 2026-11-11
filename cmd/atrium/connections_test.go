@@ -17,16 +17,32 @@ import (
 )
 
 type qbitGate struct {
-	mu     sync.Mutex
-	status int
-	hold   chan struct{}
-	token  string
+	mu      sync.Mutex
+	status  int
+	hold    chan struct{}
+	started chan struct{}
+	token   string
+}
+
+func (g *qbitGate) signal() {
+	g.mu.Lock()
+	started := g.started
+	g.mu.Unlock()
+	if started == nil {
+		return
+	}
+	select {
+	case <-started:
+	default:
+		close(started)
+	}
 }
 
 func (g *qbitGate) handler(w http.ResponseWriter, r *http.Request) {
 	g.mu.Lock()
 	status, hold, token := g.status, g.hold, g.token
 	g.mu.Unlock()
+	g.signal()
 	if hold != nil {
 		<-hold
 	}
@@ -174,7 +190,7 @@ func TestConnectionsHTTPTestAndSavePreservesThePriorConfigOnFailure(t *testing.T
 
 func TestConnectionsStaleTestCannotOverwriteARotation(t *testing.T) {
 	t.Parallel()
-	gate := &qbitGate{hold: make(chan struct{})}
+	gate := &qbitGate{hold: make(chan struct{}), started: make(chan struct{})}
 	srv := httptest.NewServer(http.HandlerFunc(gate.handler))
 	t.Cleanup(srv.Close)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
@@ -185,12 +201,7 @@ func TestConnectionsStaleTestCannotOverwriteARotation(t *testing.T) {
 
 	done := make(chan appRun, 1)
 	go func() { done <- runApp(t, "connections", "test", "service/qbittorrent") }()
-	waitFor(t, func() bool {
-		d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-		var n int
-		_ = d.Read.QueryRow("SELECT COUNT(*) FROM connections WHERE id = 'service/qbittorrent'").Scan(&n)
-		return n == 1
-	})
+	<-gate.started
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
 	if _, err := d.Write.Exec("UPDATE connections SET revision = revision + 1 WHERE id = 'service/qbittorrent'"); err != nil {
 		t.Fatal(err)
