@@ -628,12 +628,16 @@ behavior-parity target.
   the database (pinnable by the deployment); a legacy `media-link.key` file is
   moved into it on first use.
 - The Sign-in settings tab shows the OIDC connection and activates a configuration only after a Test sign-in in a separate state showed the tested account would be admitted.
-- `/api/v1` is a JSON API for a native client, available only in listeners
-  with oidc mode and only when `oidc_api_client_id` names the client. It
-  accepts nothing but a bearer access token from the configured issuer
-  (RFC 9068 `at+jwt`, audience and `client_id` equal to that client, expiry
+- `/api/v1` is a JSON API for a native client, available in every listener.
+  It accepts nothing but a bearer token: a locally issued `atr_` token, or,
+  when `oidc_api_client_id` names the client, an RFC 9068 access token from
+  the configured issuer (audience and `client_id` equal to that client, expiry
   with 60 s skew); session cookies and proxy headers grant nothing there.
-  Groups come from the token or the userinfo endpoint and decide admission
+  Both formats pass one persisted revocation and usage gate, and a token is
+  stored only as its SHA-256 hash; an OIDC access token enrolls on its first
+  successful validation. `atrium auth token issue|list|revoke` and Settings ›
+  Sign-in issue, list and revoke tokens, with the secret shown once. Groups
+  come from the token or the userinfo endpoint and decide admission
   exactly as for web sessions. Implemented endpoints: `/me`,
   thread list, create and transcript, send, stop and answer, the run event
   stream (SSE), the inbox, `/pending` (pending and blocked
