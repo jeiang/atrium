@@ -2388,3 +2388,131 @@ func TestImportV2KeepsTheEmbeddingFingerprintWithLegacyHealth(t *testing.T) {
 		t.Fatalf("enabling mail with a matching failed probe and legacy health: exit %d stdout %q stderr %q", on.code, on.stdout, on.stderr)
 	}
 }
+func importDeploymentHost(t *testing.T, dir, passwordFile, login string) (string, string, string) {
+	t.Helper()
+	anthropicKey := filepath.Join(dir, "host-anthropic.key")
+	grafanaKey := filepath.Join(dir, "host-grafana.key")
+	if err := os.WriteFile(anthropicKey, []byte("host-anthropic-key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(grafanaKey, []byte("host-grafana-token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`[connections."service/anthropic"]
+kind = "service/anthropic"
+label = "Anthropic"
+config = { url = "http://127.0.0.1:9" }
+capabilities = ["models"]
+credential_files = { api_key = %q }
+
+[connections."service/grafana"]
+kind = "service/grafana"
+label = "Grafana"
+config = { url = "http://127.0.0.1:9" }
+capabilities = ["viewer"]
+credential_files = { viewer_token = %q }
+
+[connections."service/notion"]
+kind = "service/notion"
+label = "Notion"
+config = { api = "http://127.0.0.1:9" }
+capabilities = ["api"]
+`, anthropicKey, grafanaKey) + mailConnection("icloud", "icloud", login, passwordFile, true)
+	path := filepath.Join(dir, "host.toml")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path, anthropicKey, grafanaKey
+}
+
+func TestImportV2IntoADeploymentThatDeclaresTheSameMailAccountAndServices(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	const importedPass = "imported-app-pass"
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_password_icloud', %q, 1762000800, 'fixture')", importedPass))
+	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('notion_token', 'ntn-imported-token', 1762000800, 'fixture')")
+
+	hostPass := filepath.Join(dir, "host-icloud.password")
+	if err := os.WriteFile(hostPass, []byte("host-pass\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	host, anthropicKey, grafanaKey := importDeploymentHost(t, dir, hostPass, "host@icloud.invalid")
+
+	got := runImportApp(t, importTestAppHost(t, dir, clock, host), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if strings.Contains(got.stdout+got.stderr, importedPass) || strings.Contains(got.stdout+got.stderr, "host-pass") {
+		t.Error("the import printed a mail password")
+	}
+	booted := runImportApp(t, importTestAppHost(t, dir, clock, host), "connections", "list")
+	if booted.code != cli.ExitOK {
+		t.Fatalf("boot after import: exit %d stdout %q stderr %q", booted.code, booted.stdout, booted.stderr)
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	d := mustConnect(t, dest)
+	defer func() { _ = d.Close() }()
+	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM mail_accounts WHERE id = 'icloud'"); n != 1 {
+		t.Errorf("%d icloud account rows after import into a declaring host", n)
+	}
+	if got := importValue(t, d.Read, "SELECT login FROM mail_accounts WHERE id = 'icloud'"); got != "host@icloud.invalid" {
+		t.Errorf("the account login is %q, want the host file's", got)
+	}
+	if got := importValue(t, d.Read, "SELECT pinned FROM mail_accounts WHERE id = 'icloud'"); got != "1" {
+		t.Errorf("the host account pin is %q", got)
+	}
+	if got := importValue(t, d.Read, "SELECT enabled FROM mail_accounts WHERE id = 'icloud'"); got != "1" {
+		t.Errorf("the host account is enabled %q", got)
+	}
+	if got := importValue(t, d.Read, "SELECT config_source FROM connections WHERE id = 'mail/icloud'"); got != "host" {
+		t.Errorf("the mail connection source is %q", got)
+	}
+	if got := importValue(t, d.Read, "SELECT enabled FROM connections WHERE id = 'mail/icloud'"); got != "1" {
+		t.Errorf("the mail connection is enabled %q", got)
+	}
+	if got := importValue(t, d.Read, "SELECT state FROM connections WHERE id = 'mail/icloud'"); got == "disabled" {
+		t.Errorf("the mail connection state is %q", got)
+	}
+	if got := importValue(t, d.Read, "SELECT config_json FROM connections WHERE id = 'mail/icloud'"); !strings.Contains(got, "host@icloud.invalid") {
+		t.Errorf("the mail connection config is %s, want the host file's login", got)
+	}
+	for _, tc := range []struct{ id, slot, source, value, file string }{
+		{"mail/icloud", "mail/icloud/password", "host_file", "", hostPass},
+		{"service/anthropic", "api_key", "host_file", "", anthropicKey},
+		{"service/grafana", "viewer_token", "host_file", "", grafanaKey},
+		{"service/notion", "token", "database", "ntn-imported-token", ""},
+	} {
+		var source, value, fileRef sql.NullString
+		if err := d.Read.QueryRow("SELECT source, value, file_ref FROM connection_credentials WHERE connection_id = ? AND slot = ?", tc.id, tc.slot).Scan(&source, &value, &fileRef); err != nil {
+			t.Errorf("%s credential %s: %v", tc.id, tc.slot, err)
+			continue
+		}
+		if source.String != tc.source || value.String != tc.value || fileRef.String != tc.file {
+			t.Errorf("%s credential %s = source %q value %q file %q", tc.id, tc.slot, source.String, value.String, fileRef.String)
+		}
+	}
+
+	script := imapscript.MustParse(t, `
+S: {icloud.greeting}
+C: {t} LOGIN "host@icloud.invalid" "host-pass"
+S: {t} OK [CAPABILITY {icloud.authcaps}] User logged in
+C: {t} LIST "" "*"
+S: * LIST (\Noselect) "/" "/"
+S: {t} OK LIST completed
+C: {t} LOGOUT
+S: * BYE
+S: {t} OK
+`)
+	server, ca := imapscript.ServeTLS(t, script)
+	t.Setenv("ATRIUM_IMAP_ADDR", server.Addr())
+	t.Setenv("ATRIUM_IMAP_CA", ca)
+	synced := runImportApp(t, importTestAppHost(t, dir, clock, host), "sync", "--account", "icloud")
+	if synced.code != cli.ExitOK {
+		t.Fatalf("sync with the host file's password: exit %d stdout %q stderr %q", synced.code, synced.stdout, synced.stderr)
+	}
+	if strings.Contains(synced.stdout+synced.stderr, "host-pass") {
+		t.Error("sync printed the mail password")
+	}
+}
