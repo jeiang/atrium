@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/cli"
@@ -72,7 +73,7 @@ func candidatesCommand(env config.Env, tools registry.Source, now func() float64
 				if err := config.Boot(e.Ctx, env, d, cfg); err != nil {
 					return cli.Fail(e, err)
 				}
-				r, err := runner.New(tools)
+				r, err := runner.New(tools, toolset.Ledger(d, now))
 				if err != nil {
 					return cli.Fail(e, err)
 				}

@@ -69,6 +69,7 @@ type Executor struct {
 	Env     config.Env
 	Now     func() float64
 	Undoers *writes.Registry
+	Ledger  *ledger.Store
 	Tools   []tool.Tool
 }
 
@@ -109,7 +110,7 @@ func (e *Executor) execute(t tool.Tool) proposals.Executor {
 		}
 		tc := &tool.Context{
 			DB: e.DB, Env: e.Env, Kind: payload.RunKind, ThreadID: payload.ThreadID, RunID: payload.RunID,
-			AllowedURLs: map[string]struct{}{}, Now: e.now, Undoers: e.Undoers,
+			AllowedURLs: map[string]struct{}{}, Now: e.now, Undoers: e.Undoers, Ledger: e.Ledger,
 		}
 		value, err := t.Approval.Apply(ctx, tc, args)
 		if err != nil {

@@ -59,7 +59,7 @@ const (
 
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
-		run, err := runner.New(o.Tools)
+		run, err := runner.New(o.Tools, toolset.Ledger(d.DB, assistant.Now))
 		if err != nil {
 			panic(err)
 		}

@@ -31,7 +31,7 @@ func Register(r *proposals.Registry, deps Deps) {
 	executors.Register(r, &executors.Executors{DB: deps.DB, Open: deps.Open, Now: deps.Now}, deps.Syncer, module.Mail)
 	calendar.Register(r, &calendar.Proposals{DB: deps.DB, Now: deps.Now, Env: deps.Env}, module.Calendar)
 	openloops.Register(r, &openloops.Reminders{DB: deps.DB, Now: deps.Now}, module.Mail)
-	(&approval.Executor{DB: deps.DB, Env: deps.Env, Now: deps.Now, Undoers: toolset.Undoers(deps.Env), Tools: toolset.Approvals()}).Register(r)
+	(&approval.Executor{DB: deps.DB, Env: deps.Env, Now: deps.Now, Undoers: toolset.Undoers(deps.Env), Ledger: toolset.Ledger(deps.DB, deps.Now), Tools: toolset.Approvals()}).Register(r)
 	if deps.Resume != nil {
 		registerPermission(r, deps.Resume)
 	}

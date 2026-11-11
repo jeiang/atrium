@@ -25,7 +25,9 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/config"
 	contactstools "github.com/jeiang/atrium/internal/contacts/contactsmodule"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
@@ -43,6 +45,14 @@ func Undoers(env config.Env) *writes.Registry {
 	taskstools.RegisterUndoer(r)
 	opstools.RegisterUndoer(r)
 	return r
+}
+
+func Ledger(d *db.DB, now func() float64) *ledger.Store {
+	s := ledger.NewStore(d, now)
+	if err := taskstools.RegisterLedgerUndoers(s); err != nil {
+		panic(err)
+	}
+	return s
 }
 
 func Approvals() []tool.Tool {

@@ -24,6 +24,8 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/kb/kbcmd"
+	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/ledger/ledgercmd"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	mailpages "github.com/jeiang/atrium/internal/mail/pages"
@@ -63,7 +65,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},
 			}},
 			{Module: mailpages.PauseModule},
-			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(mc.Env), Enabled: enabled}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Recover: reviewpages.RecoverDrafts, Nav: []web.NavItem{
+			{Module: reviewpages.Module(reviewpages.Options{Writes: toolset.Undoers(mc.Env), Ledger: func(d *db.DB) *ledger.Store { return toolset.Ledger(d, m.Now) }, Enabled: enabled}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Recover: reviewpages.RecoverDrafts, Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
 				{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20},
 				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
@@ -84,6 +86,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 		},
 		Commands: []*cli.Command{
 			writescmd.Command(mc.Env),
+			ledgercmd.Command(ledgercmd.Options{Env: mc.Env, Now: m.Now, Store: func(d *db.DB) *ledger.Store { return toolset.Ledger(d, m.Now) }}),
 			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled}),
 			settingscmd.Command(mc.Env, m.Guard),
 			loginlink.Command(),

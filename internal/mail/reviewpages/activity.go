@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/settings/audit"
@@ -161,7 +162,7 @@ func deref(s *string) string {
 	return *s
 }
 
-func timeline(ctx context.Context, q db.Querier, category string, limit, offset int, now float64) ([]ActivityEntry, int, error) {
+func timeline(ctx context.Context, q db.Querier, store *ledger.Store, category string, limit, offset int, now float64) ([]ActivityEntry, int, error) {
 	want := offset + limit + 1
 	var entries []ActivityEntry
 	if category == "" || category == categoryMail {
@@ -231,6 +232,22 @@ func timeline(ctx context.Context, q db.Querier, category string, limit, offset 
 			written = append(written, entry)
 		}
 		entries = append(entries, written...)
+		if store != nil {
+			effects, err := store.List(ctx, ledger.Filter{Origin: "agent", Limit: want})
+			if err != nil {
+				return nil, 0, err
+			}
+			for _, effect := range effects {
+				if effect.Direction != "forward" {
+					continue
+				}
+				entry := effectEntry(effect)
+				if category != "" && entry.Category != category {
+					continue
+				}
+				entries = append(entries, entry)
+			}
+		}
 	}
 	slices.SortStableFunc(entries, func(a, b ActivityEntry) int {
 		switch {
@@ -278,7 +295,7 @@ func (s *service) activityPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	offset = max(offset, 0)
-	entries, next, err := timeline(r.Context(), s.deps.DB.Read, category, pageSize, int(offset), s.now())
+	entries, next, err := timeline(r.Context(), s.deps.DB.Read, s.ledger, category, pageSize, int(offset), s.now())
 	check(err)
 	data := activityPage{Entries: entries, Category: category, Categories: categories, NextOffset: next, Offset: int(offset)}
 	if web.IsPartial(r) && offset != 0 {
@@ -393,6 +410,97 @@ func (s *service) resolveWrite(w http.ResponseWriter, r *http.Request) {
 	found, err := getWrite(ctx, s.deps.DB.Write, id)
 	check(err)
 	s.undone(w, r, *found, notice)
+}
+
+func effectEntry(e ledger.Effect) ActivityEntry {
+	before, _ := snippet(rawTextPtr(e.Before))
+	after, _ := snippet(rawTextPtr(e.After))
+	var errorText *string
+	if e.Error != "" {
+		errorText = &e.Error
+	}
+	return ActivityEntry{
+		Source: "effect", ID: e.ID, Category: writeCategory(e.Operation), TS: e.CreatedAt,
+		Write: &WriteActivity{
+			Tool: e.Operation, Target: e.Target, ThreadID: e.ThreadID, UndoneAt: e.UndoneAt,
+			Before: before, After: after, State: string(e.State), Error: errorText, Undoable: e.Undoable,
+			Resolved: e.Resolution != nil,
+		},
+	}
+}
+
+func rawTextPtr(raw json.RawMessage) *string {
+	if len(raw) == 0 {
+		return nil
+	}
+	text := string(raw)
+	return &text
+}
+
+func (s *service) undoEffect(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "effect_id")
+	if !ok {
+		return
+	}
+	ctx := detached(r)
+	var missing *ledger.NotFound
+	if _, err := s.ledger.Get(ctx, id); errors.As(err, &missing) {
+		s.fail(w, r, http.StatusNotFound, "unknown effect")
+		return
+	} else if err != nil {
+		panic(err)
+	}
+	var notice *tpl.Toast
+	_, err := s.ledger.Undo(ctx, id, ledger.Resolver{Actor: "operator", Source: "ui"})
+	var refused ledger.Refused
+	var conflict *ledger.Conflict
+	var settled *ledger.SettledMeanwhile
+	switch {
+	case errors.As(err, &refused) || errors.As(err, &conflict) || errors.As(err, &settled):
+		if !web.IsPartial(r) {
+			s.fail(w, r, http.StatusConflict, err.Error())
+			return
+		}
+		notice = toast("error", "Not undone", err.Error())
+	case err != nil:
+		panic(err)
+	default:
+		notice = toast("success", "Undone")
+	}
+	found, err := s.ledger.Get(ctx, id)
+	check(err)
+	s.undone(w, r, effectEntry(found), notice)
+}
+
+func (s *service) resolveEffect(w http.ResponseWriter, r *http.Request) {
+	id, ok := pathID(w, r, "effect_id")
+	if !ok {
+		return
+	}
+	ctx := detached(r)
+	outcome, _ := web.Value(web.FormValues(r), "outcome")
+	var notice *tpl.Toast
+	_, err := s.ledger.Resolve(ctx, id, ledger.Resolution{Outcome: outcome}, ledger.Resolver{Actor: "operator", Source: "ui"}, nil)
+	var refused ledger.Refused
+	var missing *ledger.NotFound
+	switch {
+	case errors.As(err, &missing):
+		s.fail(w, r, http.StatusNotFound, "unknown effect")
+		return
+	case errors.As(err, &refused):
+		if !web.IsPartial(r) {
+			s.fail(w, r, http.StatusConflict, err.Error())
+			return
+		}
+		notice = toast("error", "Not settled", err.Error())
+	case err != nil:
+		panic(err)
+	default:
+		notice = resolvedToast(outcome)
+	}
+	found, err := s.ledger.Get(ctx, id)
+	check(err)
+	s.undone(w, r, effectEntry(found), notice)
 }
 
 func writeUndoDetail(err error) string {

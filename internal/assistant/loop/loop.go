@@ -29,6 +29,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/store"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/tool"
@@ -58,6 +59,7 @@ func (e LeaseLost) Error() string { return string(e) }
 type Runner struct {
 	Registry *registry.Registry
 	Undoers  *writes.Registry
+	Ledger   *ledger.Store
 	Profile  func(ctx context.Context, q db.Querier) (string, error)
 }
 
@@ -352,7 +354,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	writer := progress.NewWriter(d.Write, runID, now)
 	tc := &tool.Context{
 		DB: d, Cfg: cfg, Env: env, Kind: kind, ThreadID: thread.ID, RunID: runID, AllowedURLs: allowed,
-		Embed: o.Embed, Now: now, Client: client, Progress: writer, Undoers: r.Undoers, Sources: o.Limits.Sources,
+		Embed: o.Embed, Now: now, Client: client, Progress: writer, Undoers: r.Undoers, Ledger: r.Ledger, Sources: o.Limits.Sources,
 	}
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, contextLimit: contextLimit,

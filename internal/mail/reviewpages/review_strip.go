@@ -47,7 +47,7 @@ func (s *service) needsStrip(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) recentActivity(w http.ResponseWriter, r *http.Request) {
-	entries, _, err := timeline(r.Context(), s.deps.DB.Read, "", pageSize, 0, s.now())
+	entries, _, err := timeline(r.Context(), s.deps.DB.Read, s.ledger, "", pageSize, 0, s.now())
 	check(err)
 	kept := make([]ActivityEntry, 0, recentItems)
 	for _, e := range entries {
