@@ -241,3 +241,67 @@ func TestCalendarCreateUndoKeepsTheEventTrackedWhenTheDeleteFails(t *testing.T) 
 		t.Fatalf("undo state = %q, want unknown", state)
 	}
 }
+
+func TestProposalsResolveRefusesAMixedDirectionOutcomeWithoutCommitting(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "atrium.db")
+	setEnv(t, "ATRIUM_DB", path)
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	ctx := settings.With(context.Background(), settings.New())
+	seed, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Migrate(ctx, seed, path); err != nil {
+		t.Fatal(err)
+	}
+	now := float64(time.Now().UnixNano()) / 1e9
+	id, _, err := proposals.Create(ctx, seed, "deletion_rule", nil, "mixed", map[string]any{}, map[string]any{}, "mixed", now-100)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := seed.Write.Exec("UPDATE proposals SET status = 'applied', decided_ts = ?, applied_ts = ? WHERE id = ?", now-60, now-50, id); err != nil {
+		t.Fatal(err)
+	}
+	forward := seedEffect(t, seed, seededEffect{
+		Origin: "proposal", Operation: "move", OperationKey: "proposal:" + strconv.FormatInt(id, 10) + ":move",
+		Direction: "forward", Target: "proposal:" + strconv.FormatInt(id, 10), ProposalID: &id,
+		Action: `{"op":"move"}`, Undo: `{"op":"move_back"}`, State: "unknown", CreatedAt: now - 40, LeaseAt: now - 40, Settled: true,
+	})
+	seedEffect(t, seed, seededEffect{
+		Origin: "proposal", Operation: "move_back", OperationKey: "proposal:" + strconv.FormatInt(id, 10) + ":move",
+		Direction: "undo", UndoOf: &forward, ProposalID: &id, Target: "proposal:" + strconv.FormatInt(id, 10),
+		Action: `{"op":"move_back"}`, State: "unknown", CreatedAt: now, LeaseAt: now, Settled: true,
+	})
+	if err := seed.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	for _, outcome := range []string{"applied", "undone"} {
+		got := runApp(t, "proposals", "resolve", strconv.FormatInt(id, 10), "--outcome", outcome)
+		if got.code == cli.ExitOK {
+			t.Fatalf("resolve --outcome %s exited 0: %q", outcome, got.stdout)
+		}
+		if !strings.Contains(got.stderr, "does not apply") {
+			t.Fatalf("resolve --outcome %s = %q, want a direction refusal", outcome, got.stderr)
+		}
+	}
+	check := mustConnect(t, path)
+	defer func() { _ = check.Close() }()
+	var states int
+	if err := check.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE proposal_id = ? AND state = 'unknown'", id).Scan(&states); err != nil {
+		t.Fatal(err)
+	}
+	if states != 2 {
+		t.Fatalf("%d effects are still unknown, want 2: a refused resolve committed part of the proposal", states)
+	}
+	var resolutions int
+	if err := check.Read.QueryRow("SELECT COUNT(*) FROM effect_resolutions WHERE effect_id IN (SELECT id FROM effects WHERE proposal_id = ?)", id).Scan(&resolutions); err != nil {
+		t.Fatal(err)
+	}
+	if resolutions != 0 {
+		t.Fatalf("%d resolutions were recorded by a refused resolve", resolutions)
+	}
+}

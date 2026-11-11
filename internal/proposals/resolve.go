@@ -43,6 +43,13 @@ func refusal(err error) error {
 	return err
 }
 
+func outcomeFits(direction, outcome string) bool {
+	if direction == "undo" {
+		return outcome == OutcomeUndone || outcome == OutcomeNotUndone || outcome == OutcomePartial
+	}
+	return outcome == OutcomeApplied || outcome == OutcomeNotApplied || outcome == OutcomePartial
+}
+
 func (p *Pipeline) Resolve(ctx context.Context, id int64, outcome string, who Resolver) (Resolved, error) {
 	if outcome != "" && !slices.Contains(Outcomes, outcome) {
 		return Resolved{}, ProposalError("outcome must be one of applied, not-applied, partial, undone, not-undone")
@@ -79,6 +86,11 @@ func (p *Pipeline) Resolve(ctx context.Context, id int64, outcome string, who Re
 			}
 			return Resolved{}, ProposalError(fmt.Sprintf("effect %d is blocked; say whether it was %s, %s or %s", e.ID, OutcomeApplied, OutcomeNotApplied, OutcomePartial))
 		}
+		if !outcomeFits(e.Direction, outcome) {
+			return Resolved{}, ProposalError(fmt.Sprintf("effect %d is a blocked %s; %q does not apply to it, so nothing was resolved", e.ID, e.Direction, outcome))
+		}
+	}
+	for _, e := range blocked {
 		if _, err := p.Ledger.Resolve(ctx, e.ID, ledger.Resolution{Outcome: outcome},
 			ledger.Resolver{Actor: who.Actor, Source: who.Source}, nil); err != nil {
 			return out, refusal(err)
