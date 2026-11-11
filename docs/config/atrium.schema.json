@@ -2,6 +2,153 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
+    "app_keys": {
+      "additionalProperties": false,
+      "properties": {
+        "action_link_key_file": {
+          "type": "string"
+        },
+        "link_key_file": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "assistant": {
+      "additionalProperties": false,
+      "properties": {
+        "anthropic_ca_file": {
+          "type": "string"
+        },
+        "anthropic_proxy": {
+          "type": "string"
+        },
+        "anthropic_proxy_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "open_meteo_ca_file": {
+          "type": "string"
+        },
+        "open_meteo_proxy": {
+          "type": "string"
+        },
+        "open_meteo_proxy_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "weather_geocoding_url": {
+          "default": "https://geocoding-api.open-meteo.com/v1/search",
+          "type": "string"
+        },
+        "weather_geocoding_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "weather_open_meteo_url": {
+          "default": "https://api.open-meteo.com/v1/forecast",
+          "type": "string"
+        },
+        "weather_open_meteo_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "auth": {
+      "additionalProperties": false,
+      "properties": {
+        "oidc_access_domains": {
+          "type": "string"
+        },
+        "oidc_access_domains_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_access_emails": {
+          "type": "string"
+        },
+        "oidc_access_emails_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_access_groups": {
+          "default": "atrium_access,atrium_admin",
+          "type": "string"
+        },
+        "oidc_access_groups_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_api_client_id": {
+          "type": "string"
+        },
+        "oidc_api_client_id_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_client_id": {
+          "type": "string"
+        },
+        "oidc_client_id_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_groups_claim": {
+          "type": "string"
+        },
+        "oidc_groups_claim_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_issuer": {
+          "type": "string"
+        },
+        "oidc_issuer_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_preset": {
+          "default": "generic",
+          "enum": [
+            "generic",
+            "pocket_id",
+            "authelia",
+            "authentik",
+            "keycloak",
+            "google",
+            "entra"
+          ],
+          "type": "string"
+        },
+        "oidc_preset_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "oidc_scopes": {
+          "type": "string"
+        },
+        "oidc_scopes_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "calendar": {
+      "additionalProperties": false,
+      "properties": {
+        "calendar_dir": {
+          "type": "string"
+        },
+        "calendar_dir_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "connections": {
       "additionalProperties": {
         "additionalProperties": false,
@@ -41,6 +188,19 @@
           "kind"
         ],
         "type": "object"
+      },
+      "type": "object"
+    },
+    "contacts": {
+      "additionalProperties": false,
+      "properties": {
+        "contacts_dir": {
+          "type": "string"
+        },
+        "contacts_dir_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
       },
       "type": "object"
     },
@@ -154,6 +314,13 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "otel_traces_endpoint": {
+          "type": "string"
+        },
+        "otel_traces_endpoint_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "public_url": {
           "type": "string"
         },
@@ -164,9 +331,72 @@
       },
       "type": "object"
     },
+    "export": {
+      "additionalProperties": false,
+      "properties": {
+        "export_obsidian_dir": {
+          "type": "string"
+        },
+        "export_obsidian_dir_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
     "grafana": {
       "additionalProperties": false,
       "properties": {
+        "grafana_ca_file": {
+          "type": "string"
+        },
+        "grafana_logs_query": {
+          "type": "string"
+        },
+        "grafana_logs_query_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "grafana_logs_type": {
+          "default": "loki",
+          "enum": [
+            "loki",
+            "victorialogs"
+          ],
+          "type": "string"
+        },
+        "grafana_logs_type_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "grafana_logs_uid": {
+          "type": "string"
+        },
+        "grafana_logs_uid_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "grafana_metrics_uid": {
+          "type": "string"
+        },
+        "grafana_metrics_uid_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "grafana_proxy": {
+          "type": "string"
+        },
+        "grafana_proxy_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "grafana_url": {
+          "type": "string"
+        },
+        "grafana_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "ops_hosts": {
           "type": "string"
         },
@@ -228,11 +458,10 @@
     "mail": {
       "additionalProperties": false,
       "properties": {
-        "mail_chat_ca_file": {
+        "mail_accounts_file": {
           "type": "string"
         },
-        "mail_chat_ca_file_file": {
-          "description": "path of a file holding the value",
+        "mail_chat_ca_file": {
           "type": "string"
         },
         "mail_chat_key_file": {
@@ -260,6 +489,49 @@
         "mail_chat_url_file": {
           "description": "path of a file holding the value",
           "type": "string"
+        },
+        "mail_embed_ca_file": {
+          "type": "string"
+        },
+        "mail_embed_model": {
+          "default": "embeddinggemma",
+          "type": "string"
+        },
+        "mail_embed_model_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_embed_proxy": {
+          "type": "string"
+        },
+        "mail_embed_proxy_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_embed_url": {
+          "type": "string"
+        },
+        "mail_embed_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "mail_ship24_url": {
+          "default": "https://api.ship24.com/public/v1",
+          "type": "string"
+        },
+        "mail_ship24_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "ship24_ca_file": {
+          "type": "string"
+        },
+        "ship24_proxy": {
+          "type": "string"
+        },
+        "ship24_proxy_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
         }
       },
       "type": "object"
@@ -267,10 +539,25 @@
     "media": {
       "additionalProperties": false,
       "properties": {
+        "media_eztv_url": {
+          "default": "https://eztvx.to/api/get-torrents",
+          "type": "string"
+        },
+        "media_eztv_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "media_movies_url": {
           "type": "string"
         },
         "media_movies_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_qbittorrent_url": {
+          "type": "string"
+        },
+        "media_qbittorrent_url_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -281,10 +568,71 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
+        "media_tmdb_images_url": {
+          "default": "https://image.tmdb.org/t/p/w342",
+          "type": "string"
+        },
+        "media_tmdb_images_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "media_tmdb_url": {
+          "default": "https://api.themoviedb.org/3",
+          "type": "string"
+        },
+        "media_tmdb_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
         "media_tv_url": {
           "type": "string"
         },
         "media_tv_url_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "qbittorrent_ca_file": {
+          "type": "string"
+        },
+        "qbittorrent_proxy": {
+          "type": "string"
+        },
+        "qbittorrent_proxy_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        },
+        "tmdb_ca_file": {
+          "type": "string"
+        },
+        "tmdb_proxy": {
+          "type": "string"
+        },
+        "tmdb_proxy_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "notify": {
+      "additionalProperties": false,
+      "properties": {
+        "webpush_ca_file": {
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "notion": {
+      "additionalProperties": false,
+      "properties": {
+        "notion_ca_file": {
+          "type": "string"
+        },
+        "notion_proxy": {
+          "type": "string"
+        },
+        "notion_proxy_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
@@ -300,6 +648,13 @@
         "trusted_proxy_cidrs_file": {
           "description": "path of a file holding the value",
           "type": "string"
+        },
+        "web_trusted_proxy_cidrs": {
+          "type": "string"
+        },
+        "web_trusted_proxy_cidrs_file": {
+          "description": "path of a file holding the value",
+          "type": "string"
         }
       },
       "type": "object"
@@ -312,6 +667,8 @@
     "action_links.phone_actions_enabled": "operator",
     "action_links.phone_actions_kinds": "operator",
     "anthropic.anthropic_api_key": "operator",
+    "app_keys.action_link_key_file": "host",
+    "app_keys.link_key_file": "host",
     "assistant.agent_effort_cron": "operator",
     "assistant.agent_effort_nightly": "operator",
     "assistant.agent_effort_subagent": "operator",
@@ -448,15 +805,15 @@
     "calendar.work_hours": "operator",
     "contacts.contacts_dir": "host",
     "contacts.contacts_max_results": "tuning",
-    "core.assistant_enabled": "host",
-    "core.calendar_enabled": "host",
-    "core.contacts_enabled": "host",
-    "core.grafana_enabled": "host",
+    "core.assistant_enabled": "operator",
+    "core.calendar_enabled": "operator",
+    "core.contacts_enabled": "operator",
+    "core.grafana_enabled": "operator",
     "core.http_timeout_seconds": "tuning",
-    "core.mail_enabled": "host",
-    "core.media_enabled": "host",
-    "core.notifications_enabled": "host",
-    "core.notion_enabled": "host",
+    "core.mail_enabled": "operator",
+    "core.media_enabled": "operator",
+    "core.notifications_enabled": "operator",
+    "core.notion_enabled": "operator",
     "core.ops_listen": "host",
     "core.ops_pprof": "host",
     "core.otel_traces_endpoint": "host",
@@ -686,6 +1043,7 @@
     "web.trusted_proxy_cidrs": "host",
     "web.web_page_size": "tuning",
     "web.web_run_history": "tuning",
+    "web.web_trusted_proxy_cidrs": "host",
     "web_search.search_web_dynamic_filtering": "tuning",
     "web_search.search_web_max_cost_usd": "operator",
     "web_search.search_web_max_searches": "tuning",
@@ -1073,7 +1431,15 @@
     "calendar.work_hours": "the operator setting calendar.work_hours stored in the database",
     "contacts.contacts_dir": "services.atrium.stateDir",
     "contacts.contacts_max_results": "the compiled constant internal/contacts/tuning.go:TuningContactsMaxResults",
+    "core.assistant_enabled": "the operator setting core.assistant_enabled stored in the database",
+    "core.calendar_enabled": "the operator setting core.calendar_enabled stored in the database",
+    "core.contacts_enabled": "the operator setting core.contacts_enabled stored in the database",
+    "core.grafana_enabled": "the operator setting core.grafana_enabled stored in the database",
     "core.http_timeout_seconds": "the compiled constant internal/config/tuning.go:TuningHttpTimeoutSeconds",
+    "core.mail_enabled": "the operator setting core.mail_enabled stored in the database",
+    "core.media_enabled": "the operator setting core.media_enabled stored in the database",
+    "core.notifications_enabled": "the operator setting core.notifications_enabled stored in the database",
+    "core.notion_enabled": "the operator setting core.notion_enabled stored in the database",
     "core.otel_traces_endpoint": "services.atrium.observability.tracesEndpoint",
     "core.pass_run_retention_days": "the compiled constant internal/passrun/tuning.go:TuningPassRunRetentionDays",
     "core.tz": "the operator setting core.tz stored in the database",

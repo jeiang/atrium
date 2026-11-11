@@ -89,9 +89,8 @@
     hostKeyRefused = assert refusedWith "unknown key core.not_a_key" {host.core.not_a_key = true;}; true;
     operatorKeyRefused = assert refusedWith "operator setting assistant.monthly_budget_usd" {host.assistant.monthly_budget_usd = 1;}; true;
     tuningKeyRefused = assert refusedWith "compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsChat" {host.assistant.max_steps_chat = 1;}; true;
-    cutoverHostRefused = assert refusedWith "host configuration service/qbittorrent.config.url" {host.media.media_qbittorrent_url = "http://127.0.0.1:8081";}; true;
+    cutoverHostRefused = assert refusedWith "host configuration service/embedding host credential bearer" {host.mail.mail_embed_key = "/run/x";}; true;
     databaseKeyRefused = assert refusedWith "services.atrium.database.keyFile" {host.db.key_file = "/run/x";}; true;
-    obsidianRefused = assert refusedWith "services.atrium.knowledgeExport.obsidianDirectory" {host.export.export_obsidian_dir = "/var/lib/x";}; true;
     secretRefused = assert refusedWith "services.atrium.database.keyFile" {secretFiles."db.key" = "/run/x";}; assert refusedWith "connection field service/qbittorrent credential api_key" {secretFiles."media.media_qbittorrent_api_key" = "/run/x";}; assert refusedWith "connection field service/notion credential token" {secretFiles."notion.notion_token" = "/run/x";}; assert refusedWith "host configuration" {secretFiles."auth.oidc_client_secret" = "/run/x";}; assert refusedWith "is not a secret setting" {secretFiles."assistant.monthly_budget_usd" = "/run/x";}; true;
     connectionRefused = assert refusedWith "needs a kind" {connections."service/x" = {kind = "";};}; true;
     cfg = nixos.config.services.atrium;
@@ -146,7 +145,7 @@
           touch $out
         '';
 
-        module = assert exampleEvaluates && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && obsidianRefused && secretRefused && connectionRefused && credentialsMatch && backupAbsentByDefault && notifyOnLongRunning && vaultExport && hostConfig;
+        module = assert exampleEvaluates && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && connectionRefused && credentialsMatch && backupAbsentByDefault && notifyOnLongRunning && vaultExport && hostConfig;
           pkgs.linkFarm "atrium-units" (map (name: {
               inherit name;
               path = unit name;
