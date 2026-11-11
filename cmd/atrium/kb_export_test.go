@@ -1115,3 +1115,168 @@ func TestInterruptedObsidianWriteBlocksTheExport(t *testing.T) {
 		t.Fatalf("the export did not resume after the write was resolved: %v", err)
 	}
 }
+
+func TestObsidianRenameKeepsTheMappingUntilTheOldFileIsRemoved(t *testing.T) {
+	_, f, d := obsidianFixture(t)
+	vault := t.TempDir()
+	obsidianEnable(t, vault)
+	id := exportRecord(t, d, "Dentist", "body", "personal", "chat", 0, 0, 0, 0, 0)
+	runExport(t, f, d)
+	oldRel := "personal/dentist-K" + fmt.Sprint(id) + ".md"
+	oldPath := filepath.Join(vault, oldRel)
+	if _, err := os.Stat(oldPath); err != nil {
+		t.Fatalf("first export: %v", err)
+	}
+	if _, err := d.Write.Exec("UPDATE kb_records SET title = 'Dentist appointment', scope = 'work', updated_at = 300 WHERE id = ?", id); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Dir(oldPath), 0o555); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(filepath.Dir(oldPath), 0o755) })
+	runExport(t, f, d)
+	newRel := "work/dentist-appointment-K" + fmt.Sprint(id) + ".md"
+	if _, err := os.Stat(filepath.Join(vault, newRel)); err != nil {
+		t.Fatalf("the renamed file: %v", err)
+	}
+	var remote string
+	if err := d.Read.QueryRow("SELECT remote_id FROM export_pages WHERE target = 'obsidian' AND record_id = ?", id).Scan(&remote); err != nil {
+		t.Fatal(err)
+	}
+	if remote != oldRel {
+		t.Fatalf("the mapping moved to %q while the old file could not be removed", remote)
+	}
+	if err := os.Chmod(filepath.Dir(oldPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	runExport(t, f, d)
+	if _, err := os.Stat(oldPath); !os.IsNotExist(err) {
+		t.Fatalf("the old file survived the rename: %v", err)
+	}
+	if err := d.Read.QueryRow("SELECT remote_id FROM export_pages WHERE target = 'obsidian' AND record_id = ?", id).Scan(&remote); err != nil {
+		t.Fatal(err)
+	}
+	if remote != newRel {
+		t.Fatalf("mapping remote id = %q, want %q", remote, newRel)
+	}
+}
+
+func TestUndoingAnObsidianExportRemovesItsMapping(t *testing.T) {
+	_, f, d := obsidianFixture(t)
+	vault := t.TempDir()
+	obsidianEnable(t, vault)
+	id := exportRecord(t, d, "Dentist", "body", "personal", "chat", 0, 0, 0, 0, 0)
+	runExport(t, f, d)
+	rel := "personal/dentist-K" + fmt.Sprint(id) + ".md"
+	path := filepath.Join(vault, rel)
+	var effectID int64
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'obsidian_write' AND direction = 'forward' AND target = ? ORDER BY id DESC LIMIT 1",
+		"obsidian:"+rel).Scan(&effectID); err != nil {
+		t.Fatal(err)
+	}
+	if got := runApp(t, "effects", "undo", fmt.Sprint(effectID)); got.code != cli.ExitOK {
+		t.Fatalf("effects undo: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("the undo left the exported file: %v", err)
+	}
+	var mapped int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM export_pages WHERE target = 'obsidian' AND record_id = ?", id).Scan(&mapped); err != nil {
+		t.Fatal(err)
+	}
+	if mapped != 0 {
+		t.Fatalf("%d mapping rows survived the undo, want 0", mapped)
+	}
+	runExport(t, f, d)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("the export did not re-create the undone file: %v", err)
+	}
+}
+
+func TestUndoingANotionCreateRemovesItsMapping(t *testing.T) {
+	fake := &exportNotion{dropCreate: true}
+	_, f, d := exportFixture(t, fake)
+	exportEnable(t, "messages,personal")
+	id := exportRecord(t, d, "Dentist", "body", "personal", "chat", 0, 0, 0, 0, 0)
+	runExport(t, f, d)
+	var effectID int64
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'kb_export_create' AND state = 'unknown' ORDER BY id DESC LIMIT 1").
+		Scan(&effectID); err != nil {
+		t.Fatalf("unknown create: %v", err)
+	}
+	pageID := fake.first()
+	if pageID == "" {
+		t.Fatal("the dropped create reached the fake")
+	}
+	undo := fmt.Sprintf(`{"op":"notion_trash","page_id":%q}`, pageID)
+	if _, err := d.Write.Exec("UPDATE effects SET state = 'done', settled_at = lease_at, undo_json = ? WHERE id = ?", undo, effectID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO export_pages (target, record_id, remote_id, hash, updated_at) VALUES ('notion', ?, ?, 'h', 0)", id, pageID); err != nil {
+		t.Fatal(err)
+	}
+	if got := runApp(t, "effects", "undo", fmt.Sprint(effectID)); got.code != cli.ExitOK {
+		t.Fatalf("effects undo: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	var trashed bool
+	for _, page := range fake.created() {
+		if page.title == "Dentist" {
+			trashed = page.trashed
+		}
+	}
+	if !trashed {
+		t.Fatal("the undo did not trash the created page")
+	}
+	var mapped int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM export_pages WHERE target = 'notion' AND record_id = ?", id).Scan(&mapped); err != nil {
+		t.Fatal(err)
+	}
+	if mapped != 0 {
+		t.Fatalf("%d mapping rows survived the undo, want 0", mapped)
+	}
+	runExport(t, f, d)
+	created := fake.created()
+	dentists := 0
+	for _, page := range created {
+		if page.title == "Dentist" {
+			dentists++
+		}
+	}
+	if dentists != 2 {
+		t.Fatalf("%d Dentist pages after the undo, want the export to re-create it", dentists)
+	}
+}
+
+func TestNotionTitleStepConsultsOnlyTheNewestTitleEffect(t *testing.T) {
+	fake := &exportNotion{}
+	_, f, d := exportFixture(t, fake)
+	exportEnable(t, "messages,personal")
+	id := exportRecord(t, d, "A", "a", "personal", "chat", 0, 0, 0, 0, 0)
+	runExport(t, f, d)
+	for _, step := range []struct{ title, body string }{{"B", "b"}, {"C", "c"}} {
+		if _, err := d.Write.Exec("UPDATE kb_records SET title = ?, body = ?, updated_at = updated_at + 100 WHERE id = ?", step.title, step.body, id); err != nil {
+			t.Fatal(err)
+		}
+		fake.failMarkdown = http.StatusUnprocessableEntity
+		runExport(t, f, d)
+	}
+	if _, err := d.Write.Exec("UPDATE kb_records SET title = 'B', body = 'b', updated_at = updated_at + 100 WHERE id = ?", id); err != nil {
+		t.Fatal(err)
+	}
+	runExport(t, f, d)
+	var page *exportPage
+	for _, candidate := range fake.created() {
+		if candidate.title == "B" || candidate.title == "C" {
+			page = candidate
+		}
+	}
+	if page == nil {
+		t.Fatalf("no record page after the export: %v", fake.created())
+	}
+	if page.title != "B" {
+		t.Fatalf("the page title is %q after reverting to B, want B", page.title)
+	}
+	if !strings.Contains(page.markdown, "b") {
+		t.Fatalf("the page body is %q, want b", page.markdown)
+	}
+}

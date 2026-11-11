@@ -86,7 +86,7 @@ func (s *service) dlAdd(r *http.Request, set media.Settings, magnet, name string
 		return "", err
 	}
 	if tags != "" {
-		if _, err := set.SelectFiles(ctx, s.effects, set, nil); err != nil {
+		if _, err := set.SelectFiles(ctx, s.effects, set, media.Scope{}, nil); err != nil {
 			return "", err
 		}
 	}

@@ -199,6 +199,15 @@ func mailFolderCreate(ctx context.Context, tc *tool.Context, args tool.Args) (an
 		return mailops.Error("the folder is not visible after creation")
 	})
 	if err != nil {
+		if created && !mailops.OutcomeUnknown(err) {
+			_ = tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
+				State: ledger.Partial, Target: target,
+				After: jsonOf(map[string]any{"account": account, "imap_name": imapName}),
+				Undo:  jsonOf(map[string]any{"op": UndoFolderDelete, "account": account, "imap_name": imapName}),
+				Error: err.Error(),
+			}, nil)
+			return nil, mailWriteRefused(err)
+		}
 		state := ledger.Failed
 		if mailops.OutcomeUnknown(err) {
 			state = ledger.Unknown
@@ -431,6 +440,27 @@ func moveGroupTool(ctx context.Context, tc *tool.Context, client mail.Client, ac
 	})
 	if err != nil {
 		if held {
+			partial, confirmed := errors.AsType[*mailops.PartialMove](err)
+			if confirmed && !partial.Unconfirmed && partial.Copied != nil {
+				batch := make([]uint32, 0, len(partial.Copied.Mapping))
+				for uid := range partial.Copied.Mapping {
+					batch = append(batch, uid)
+				}
+				slices.Sort(batch)
+				entries := make([]any, len(batch))
+				for i, uid := range batch {
+					entries[i] = map[string]any{"id": byUID[uid].ID, "msgid": byUID[uid].MsgID, "uid": uid, "dest_uid": uidOrNil(partial.Copied, uid)}
+				}
+				after := map[string]any{"op": "move", "account": account, "src_imap": g.IMAPName,
+					"src_uidvalidity": g.UIDValidity, "dest_imap": destIMAP,
+					"dest_uidvalidity": validityOrNil(partial.Copied), "items": entries}
+				undo := map[string]any{"op": UndoMoveBack, "account": account, "src_imap": g.IMAPName,
+					"dest_imap": destIMAP, "dest_uidvalidity": validityOrNil(partial.Copied), "items": entries}
+				_ = tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
+					State: ledger.Partial, Target: target, After: jsonOf(after), Undo: jsonOf(undo), Error: partial.Error(),
+				}, nil)
+				return moved, err
+			}
 			state := ledger.Failed
 			if mailops.OutcomeUnknown(err) {
 				state = ledger.Unknown

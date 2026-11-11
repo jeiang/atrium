@@ -400,7 +400,7 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 				result.Errors = append(result.Errors, "notify: "+sent.Error)
 			}
 		}
-		if _, err := settings.SelectFiles(ctx, store, settings, nil); err != nil {
+		if _, err := settings.SelectFiles(ctx, store, settings, Scope{}, nil); err != nil {
 			return result, err
 		}
 	}
