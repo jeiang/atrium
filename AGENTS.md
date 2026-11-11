@@ -115,15 +115,12 @@ settings the operator edits in the UI or pins from the host.
   there. Within v1, responses change only additively.
 - Media writes touch only torrents tagged media. Preserve library group
   permissions and expiring signed file links; public links still check Host.
-- The v2 baseline schema files in `internal/db/schema/` are frozen: v2
-  shipped to artemis on 2026-11-08, and they are migration 1 exactly as
-  artemis applied it. Never edit them. Every schema change is a new additive
-  migration in `internal/db/migrate.go` with an e2e that migrates a database
-  from the previous version and compares it with a fresh one. Row
+- The files in `internal/db/schema/` are the v3 baseline under construction
+  and are edited directly until the freeze in phase 11. Every schema change
+  updates `atrium db import-v2` and its end-to-end test in the same pull
+  request. After the freeze every change is an additive migration. Row
   rewrites require explicit approval and validation on a database copy.
-  Refuse unknown future schema versions before writes. `atrium db import-v1`
-  is the only path from v1 data: it copies the learned-rule data into a
-  fresh v2 database; everything else is rebuilt.
+  Refuse unknown future schema versions before writes.
 - A binary downgrade can require restoring the pre-migration database,
   losing later writes. Do not imply that changing the binary reverses data.
 - Unit names, environment variable names, and `atrium-run` are host-facing
