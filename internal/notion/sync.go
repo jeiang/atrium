@@ -153,6 +153,9 @@ func dropIndex(ctx context.Context, q db.Querier, rid int64) error {
 	if _, err := q.ExecContext(ctx, "DELETE FROM notion_fts WHERE rowid = ?", rid); err != nil {
 		return err
 	}
+	if _, err := q.ExecContext(ctx, "UPDATE notion_pages SET embedded_hash = NULL WHERE rid = ?", rid); err != nil {
+		return err
+	}
 	return embed.DeleteNotion(ctx, q, rid)
 }
 
@@ -215,7 +218,6 @@ func upsertPage(ctx context.Context, q db.Querier, client *Client, sensitivity S
 		{name: "sensitivity", value: sens},
 		{name: "private", value: b2i(sensitivity.IsPrivate(sens))},
 		{name: "links", value: string(linksJSON)},
-		{name: "embedded", value: 0},
 		{name: "synced_at", value: now},
 	}
 	if !found {
@@ -361,9 +363,14 @@ func resolvePaths(ctx context.Context, q db.Querier, sensitivity Sensitivity) er
 		}
 		if path != c.path || private != int64(c.private) {
 			if _, err := q.ExecContext(ctx,
-				"UPDATE notion_pages SET path = ?, private = ?, embedded = CASE WHEN private != ? THEN 0 ELSE embedded END WHERE rid = ?",
+				"UPDATE notion_pages SET path = ?, private = ?, embedded_hash = CASE WHEN private != ? THEN NULL ELSE embedded_hash END WHERE rid = ?",
 				c.path, c.private, c.private, rid); err != nil {
 				return err
+			}
+			if private != int64(c.private) {
+				if err := embed.DeleteNotion(ctx, q, rid); err != nil {
+					return err
+				}
 			}
 		}
 		indexed := true
@@ -477,7 +484,7 @@ func Sync(ctx context.Context, d *db.DB, client *Client, embedTexts embed.TextsF
 		if seen[p.id] {
 			continue
 		}
-		if _, err := d.Write.ExecContext(ctx, "UPDATE notion_pages SET in_trash = 1, embedded = 1 WHERE rid = ?", p.rid); err != nil {
+		if _, err := d.Write.ExecContext(ctx, "UPDATE notion_pages SET in_trash = 1, embedded_hash = NULL WHERE rid = ?", p.rid); err != nil {
 			return stats, err
 		}
 		if err := dropIndex(ctx, d.Write, p.rid); err != nil {
@@ -512,7 +519,7 @@ func Totals(ctx context.Context, q db.Querier) (Counts, error) {
 	var c Counts
 	err := q.QueryRowContext(ctx,
 		"SELECT COUNT(*), COALESCE(SUM(in_trash = 0), 0), COALESCE(SUM(private = 1 AND in_trash = 0), 0), "+
-			"COALESCE(SUM(embedded = 1 AND in_trash = 0), 0) FROM notion_pages").Scan(&c.Pages, &c.Live, &c.Private, &c.Embedded)
+			"COALESCE(SUM(embedded_hash IS NOT NULL AND in_trash = 0), 0) FROM notion_pages").Scan(&c.Pages, &c.Live, &c.Private, &c.Embedded)
 	if err != nil {
 		return c, err
 	}

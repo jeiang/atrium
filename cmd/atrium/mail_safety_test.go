@@ -115,7 +115,7 @@ func (m *mailSafety) embed(t *testing.T, ids ...int64) {
 	blob := embed.Serialize(vector)
 	for _, id := range ids {
 		m.exec(t, "INSERT INTO embed_message_0 (rowid, account, embedding) VALUES (?, 'icloud', ?)", id, blob)
-		m.exec(t, "UPDATE messages SET embedded = 1 WHERE id = ?", id)
+		m.exec(t, "UPDATE messages SET embedded_hash = 'test' WHERE id = ?", id)
 	}
 }
 
@@ -182,7 +182,7 @@ func TestMailRoutingRecordsEachStage(t *testing.T) {
 		{
 			stage: "fallback",
 			prepare: func(t *testing.T, m *mailSafety, id int64) {
-				m.exec(t, "UPDATE messages SET embedded = 1 WHERE id = ?", id)
+				m.exec(t, "UPDATE messages SET embedded_hash = 'test' WHERE id = ?", id)
 			},
 			dest: "Misc",
 		},

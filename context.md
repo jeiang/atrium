@@ -225,7 +225,10 @@ behavior-parity target.
   use the same `mail_embed_body_chars` limit as mail. Knowledge records are
   embedded into the same generation-numbered index (title, aliases and body,
   same limit); the core loop drains pending records when an embed endpoint is
-  set, and a retracted record leaves the index.
+  set, and a retracted record leaves the index. Each embedded row stores the
+  hash of the text that was sent, so an edit re-queues it, a write-back whose
+  row changed, was retracted or was deleted in flight is discarded, and a
+  retraction or deletion removes the vector in the same transaction.
 - qBittorrent (API key), TMDB (read token) and Ship24 (API key) are connection records on the Integrations settings
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-integration CA bundle and proxy. Certificate verification
@@ -302,7 +305,7 @@ behavior-parity target.
   kept), settings, secrets (the row is readable only with the same
   database key, since the database encrypts it), notification channels,
   push subscriptions and attention snoozes, knowledge records (their
-  `embedded` flag reset so vectors rebuild), projects, threads with their
+  `embedded_hash` cleared so vectors rebuild), projects, threads with their
   messages, files, plans and queue, agent profile, skills, operator-edited
   subagents, jobs, agent events, tasks, proposals and their actions, agent
   writes, media channels, the seen list and media state, and the current

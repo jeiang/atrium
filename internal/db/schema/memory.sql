@@ -68,13 +68,12 @@ CREATE TABLE IF NOT EXISTS kb_records (
     confirmed_at REAL,
     retracted_at REAL,
     expires_at REAL,
-    embedded INTEGER NOT NULL DEFAULT 0,
+    embedded_hash TEXT,
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS kb_records_run ON kb_records (source_run_id) WHERE source_run_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS kb_records_project ON kb_records (project_id) WHERE project_id IS NOT NULL;
-CREATE INDEX IF NOT EXISTS kb_records_pending ON kb_records (embedded) WHERE embedded = 0;
 CREATE VIRTUAL TABLE IF NOT EXISTS kb_fts USING fts5(title, aliases, body);
 CREATE TRIGGER IF NOT EXISTS kb_fts_insert AFTER INSERT ON kb_records BEGIN
     INSERT INTO kb_fts (rowid, title, aliases, body) VALUES (new.id, new.title, new.aliases, new.body);

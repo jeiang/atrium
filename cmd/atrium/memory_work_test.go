@@ -144,3 +144,41 @@ func TestMemoryWorkRefusesUnderTheRunCap(t *testing.T) {
 		t.Errorf("job state %q error %q, want failed with a run cap error", state, errText)
 	}
 }
+
+func TestMemoryWorkSummarizesPastTheClipPoint(t *testing.T) {
+	_, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	needle := "the hidden decision is to move the launch to Friday"
+	long := strings.Repeat("filler ", 200) + needle
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("noted")))
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", long); ran.code != cli.ExitOK {
+		t.Fatalf("long run: %d %s", ran.code, ran.stderr)
+	}
+	if ran := runApp(t, "memory", "view", "1"); ran.code != cli.ExitOK {
+		t.Fatalf("memory view: %d %s", ran.code, ran.stderr)
+	}
+	for range 30 {
+		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("summary")))
+	}
+	for range 5 {
+		ran := runApp(t, "memory", "work", "1")
+		if ran.code != cli.ExitOK {
+			t.Fatalf("memory work: %d %s", ran.code, ran.stderr)
+		}
+		if strings.Contains(ran.stdout, ": 0 nodes") {
+			break
+		}
+	}
+	found := false
+	for _, request := range api.Requests() {
+		body := string(request.Body)
+		if strings.Contains(body, "Node source:") && strings.Contains(body, needle) {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("the summarizer did not receive the content past the clip point")
+	}
+}
