@@ -12,11 +12,15 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/netip"
 	"os"
+	"net/url"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -34,10 +38,12 @@ import (
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/golden"
+	"github.com/jeiang/atrium/internal/testutil/imapscript"
 )
 
 func v2Fixture(t *testing.T) string {
@@ -64,7 +70,7 @@ func importTestAppHost(t *testing.T, dir string, now float64, host string) *cli.
 	vars["ATRIUM_HOST_CONFIG"] = host
 	reg := settings.New()
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
-	return newAppWith(config.Map(vars), reg, config.NewState(reg), nil, nil, func() float64 { return now }, quietLog)
+	return newAppWith(config.Map(vars), reg, config.NewState(reg), nil, imapclient.Opener, func() float64 { return now }, quietLog)
 }
 
 func importHostConfig(t *testing.T, dir, anthropicURL, grafanaURL, notionURL string) string {
@@ -1398,5 +1404,122 @@ func TestImportV2CarriesTheGoogleGrantsAndTheConnectionTestsWithThem(t *testing.
 	}
 	if state := importValue(t, d.Read, "SELECT state FROM connections WHERE id = 'google/default'"); state != "ok" {
 		t.Errorf("google/default state = %q, want ok", state)
+	}
+}
+
+func TestImportV2CarriesTheMailPasswordIntoTheConnectionAndSyncsWithIt(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	const appPassword = "imported-app-pass"
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_password_icloud', %q, 1762000800, 'fixture')", appPassword))
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if strings.Contains(got.stdout+got.stderr, appPassword) {
+		t.Error("the import printed the mail password")
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	d := mustConnect(t, dest)
+	defer func() { _ = d.Close() }()
+	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM secrets WHERE name = 'mail_password_icloud'"); n != 0 {
+		t.Errorf("%d mail password secrets stayed in the secrets table", n)
+	}
+	if got := importValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'mail/icloud' AND slot = 'mail/icloud/password'"); got != appPassword {
+		t.Errorf("the imported mail credential is %q", got)
+	}
+
+	script := imapscript.MustParse(t, `
+S: {icloud.greeting}
+C: {t} LOGIN "operator@icloud.invalid" "`+appPassword+`"
+S: {t} OK [CAPABILITY {icloud.authcaps}] User logged in
+C: {t} LIST "" "*"
+S: * LIST (\Noselect) "/" "/"
+S: {t} OK LIST completed
+C: {t} LOGOUT
+S: * BYE
+S: {t} OK
+`)
+	server, ca := imapscript.ServeTLS(t, script)
+	t.Setenv("ATRIUM_IMAP_ADDR", server.Addr())
+	t.Setenv("ATRIUM_IMAP_CA", ca)
+
+	synced := runImportApp(t, importTestApp(t, dir, clock), "sync", "--account", "icloud")
+	if synced.code != cli.ExitOK {
+		t.Fatalf("sync with the imported password: exit %d stdout %q stderr %q", synced.code, synced.stdout, synced.stderr)
+	}
+	if strings.Contains(synced.stdout+synced.stderr, appPassword) {
+		t.Error("sync printed the mail password")
+	}
+
+	smtpCA := smtpCert(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	smtp := &smtpFake{}
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go smtp.handle(c)
+		}
+	}()
+	t.Setenv("ATRIUM_SMTP_ADDR", ln.Addr().String())
+	t.Setenv("ATRIUM_SMTP_CA", smtpCA)
+
+	res, err := d.Write.Exec("INSERT INTO drafts (account, to_addrs, subject, body, created_at, updated_at) VALUES ('icloud', 'to@x.test', 'Imported', 'body', 0, 0)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, _ := res.LastInsertId()
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	base := startServeIn(t, dir)
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	code, body, _ := fetch(t, client, http.MethodGet, base+"/drafts", nil)
+	if code != http.StatusOK {
+		t.Fatalf("drafts page: %d", code)
+	}
+	m := regexp.MustCompile(`name="revision" value="([0-9]+)"`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatal("the draft page has no revision")
+	}
+	code, body, _ = fetch(t, client, http.MethodPost, base+"/drafts/"+strconv.FormatInt(id, 10)+"/send", url.Values{"revision": {m[1]}})
+	if code != http.StatusOK {
+		t.Fatalf("send: %d %.300s", code, body)
+	}
+	if strings.Contains(body, appPassword) {
+		t.Error("the send response printed the mail password")
+	}
+	smtp.mu.Lock()
+	auth := append([]string(nil), smtp.passwords...)
+	smtp.mu.Unlock()
+	if len(auth) == 0 {
+		t.Fatal("the draft send never authenticated to the SMTP fake")
+	}
+	authenticated := false
+	for _, line := range auth {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		raw, err := base64.RawStdEncoding.DecodeString(fields[len(fields)-1])
+		if err == nil && strings.Contains(string(raw), appPassword) {
+			authenticated = true
+		}
+	}
+	if !authenticated {
+		t.Errorf("the SMTP fake saw %v, not the imported password", auth)
+	}
+	if got := importValue(t, d.Read, "SELECT status FROM drafts WHERE id = ?", id); got != "sent" {
+		t.Errorf("draft status %q", got)
 	}
 }
