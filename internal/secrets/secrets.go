@@ -28,7 +28,7 @@ func init() {
 }
 
 func FileKey(ctx context.Context, key string) ([]byte, bool, error) {
-	path := strings.TrimSpace(config.From(ctx).HostValue(key))
+	path := strings.TrimSpace(config.HostValueFrom(ctx, key))
 	if path == "" {
 		return nil, false, nil
 	}

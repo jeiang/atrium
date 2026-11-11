@@ -73,7 +73,7 @@ func (r *Reader) Host(key string) string {
 	if r.err != nil {
 		return ""
 	}
-	return config.From(r.ctx).HostValue(key)
+	return config.HostValueFrom(r.ctx, key)
 }
 
 func (r *Reader) Int(key string) int {

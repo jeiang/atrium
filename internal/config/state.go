@@ -60,6 +60,13 @@ func With(ctx context.Context, s *State) context.Context {
 	return context.WithValue(ctx, stateKey{}, s)
 }
 
+func HostValueFrom(ctx context.Context, key string) string {
+	if s, ok := ctx.Value(stateKey{}).(*State); ok && s != nil {
+		return s.HostValue(key)
+	}
+	return ""
+}
+
 func From(ctx context.Context) *State {
 	s, _ := ctx.Value(stateKey{}).(*State)
 	if s == nil {
