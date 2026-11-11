@@ -154,10 +154,7 @@ var importManifest = []ImportEntry{
 	{Module: "assistant", Key: "weather_timeout_seconds", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/weather/tuning.go:TuningWeatherTimeoutSeconds", Default: "15", Type: Int, Choices: nil, Cutover: false},
 	{Module: "auth", Key: "oidc_access_domains", Class: ImportHost, Action: ImportDropHost, Target: "host.auth.oidc_access_domains", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "auth", Key: "oidc_access_emails", Class: ImportHost, Action: ImportDropHost, Target: "host.auth.oidc_access_emails", Default: "", Type: String, Choices: nil, Cutover: false},
-	{Module: "auth", Key: "oidc_access_group", Class: ImportHost, Action: ImportDropHost, Target: "host.auth.oidc_access_group", Default: "atrium_access", Type: String, Choices: nil, Cutover: false},
-	{Module: "auth", Key: "oidc_admin_domains", Class: ImportHost, Action: ImportDropHost, Target: "host.auth.oidc_admin_domains", Default: "", Type: String, Choices: nil, Cutover: false},
-	{Module: "auth", Key: "oidc_admin_emails", Class: ImportHost, Action: ImportDropHost, Target: "host.auth.oidc_admin_emails", Default: "", Type: String, Choices: nil, Cutover: false},
-	{Module: "auth", Key: "oidc_admin_group", Class: ImportHost, Action: ImportDropHost, Target: "host.auth.oidc_admin_group", Default: "atrium_admin", Type: String, Choices: nil, Cutover: false},
+	{Module: "auth", Key: "oidc_access_groups", Class: ImportHost, Action: ImportDropHost, Target: "host.auth.oidc_access_groups", Default: "atrium_access,atrium_admin", Type: String, Choices: nil, Cutover: false},
 	{Module: "auth", Key: "oidc_api_client_id", Class: ImportHost, Action: ImportDropHost, Target: "host.auth.oidc_api_client_id", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "auth", Key: "oidc_client_id", Class: ImportHost, Action: ImportDropHost, Target: "host.auth.oidc_client_id", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "auth", Key: "oidc_client_secret", Class: ImportHost, Action: ImportRename, Target: "service/oidc host credential client_secret", Default: "", Type: String, Choices: nil, Cutover: false},
@@ -168,6 +165,7 @@ var importManifest = []ImportEntry{
 	{Module: "auth", Key: "oidc_scopes", Class: ImportHost, Action: ImportDropHost, Target: "host.auth.oidc_scopes", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "auth", Key: "oidc_session_idle_days", Class: ImportOperator, Action: ImportCarry, Target: "settings.oidc_session_idle_days", Default: "7", Type: Int, Choices: nil, Cutover: false},
 	{Module: "auth", Key: "oidc_session_max_days", Class: ImportOperator, Action: ImportCarry, Target: "settings.oidc_session_max_days", Default: "30", Type: Int, Choices: nil, Cutover: false},
+	{Module: "auth", Key: "oidc_wizard_key", Class: ImportOperator, Action: ImportDrop, Target: "generated credential", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "calendar", Key: "calendar_account", Class: ImportOperator, Action: ImportCarry, Target: "settings.calendar_account", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "calendar", Key: "calendar_dir", Class: ImportHost, Action: ImportDropHost, Target: "host.calendar.calendar_dir", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "calendar", Key: "candidate_draft_limit", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/calendar/tuning.go:TuningCandidateDraftLimit", Default: "10", Type: Int, Choices: nil, Cutover: false},
@@ -547,12 +545,9 @@ var runtimeCutover = []string{
 	"oidc_api_client_id",
 	"oidc_scopes",
 	"oidc_groups_claim",
-	"oidc_access_group",
-	"oidc_admin_group",
+	"oidc_access_groups",
 	"oidc_access_emails",
-	"oidc_admin_emails",
 	"oidc_access_domains",
-	"oidc_admin_domains",
 	"oidc_client_secret",
 	"oidc_recheck_minutes",
 }
@@ -578,7 +573,19 @@ func Manifest() []ImportEntry {
 }
 
 var retiredImport = map[string]ImportEntry{
-	"money_since": {Key: "money_since", Class: ImportOperator, Action: ImportDrop, Target: "retired"},
+	"money_since":        {Key: "money_since", Class: ImportOperator, Action: ImportDrop, Target: "retired"},
+	"oidc_access_group":  {Key: "oidc_access_group", Module: "auth", Class: ImportOperator, Action: ImportDrop, Target: "host.auth.oidc_access_groups"},
+	"oidc_admin_group":   {Key: "oidc_admin_group", Module: "auth", Class: ImportOperator, Action: ImportDrop, Target: "host.auth.oidc_access_groups"},
+	"oidc_admin_emails":  {Key: "oidc_admin_emails", Module: "auth", Class: ImportOperator, Action: ImportDrop, Target: "host.auth.oidc_access_emails"},
+	"oidc_admin_domains": {Key: "oidc_admin_domains", Module: "auth", Class: ImportOperator, Action: ImportDrop, Target: "host.auth.oidc_access_domains"},
+}
+
+func RemovedHostKey(key string) (string, bool) {
+	entry, ok := retiredImport[key]
+	if !ok || entry.Module != "auth" {
+		return "", false
+	}
+	return entry.Target, true
 }
 
 func ImportEntryFor(key string) (ImportEntry, bool) {

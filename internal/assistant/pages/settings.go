@@ -79,15 +79,15 @@ func (p *pages) permissionsSave(w http.ResponseWriter, r *http.Request) {
 }
 
 func (p *pages) settingsRoutes(r chi.Router) {
-	p.deps.Admin(http.MethodGet, "/settings", func(w http.ResponseWriter, r *http.Request) { redirect(w, r, "/settings/assistant") })
-	p.deps.Admin(http.MethodGet, "/settings/assistant", p.assistantSettings)
-	p.deps.Admin(http.MethodPost, "/settings/assistant", p.assistantSave)
-	p.deps.Admin(http.MethodGet, "/settings/permissions", func(w http.ResponseWriter, r *http.Request) { redirect(w, r, "/settings/assistant") })
+	p.deps.Authenticated(http.MethodGet, "/settings", func(w http.ResponseWriter, r *http.Request) { redirect(w, r, "/settings/assistant") })
+	p.deps.Authenticated(http.MethodGet, "/settings/assistant", p.assistantSettings)
+	p.deps.Authenticated(http.MethodPost, "/settings/assistant", p.assistantSave)
+	p.deps.Authenticated(http.MethodGet, "/settings/permissions", func(w http.ResponseWriter, r *http.Request) { redirect(w, r, "/settings/assistant") })
 	p.deps.SettingsAt("/settings/assistant", func(w http.ResponseWriter, r *http.Request, status int, mutate func(*tpl.Frame)) {
 		p.assistantPage(w, r, status, AssistantData{}, mutate)
 	})
-	p.deps.Admin(http.MethodPost, "/settings/permissions", p.permissionsSave)
-	p.deps.Admin(http.MethodGet, "/settings/usage", p.usagePage)
+	p.deps.Authenticated(http.MethodPost, "/settings/permissions", p.permissionsSave)
+	p.deps.Authenticated(http.MethodGet, "/settings/usage", p.usagePage)
 }
 
 func (p *pages) settings(w http.ResponseWriter, r *http.Request, status int, name string, data any, toast *tpl.Toast) {

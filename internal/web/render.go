@@ -63,7 +63,7 @@ func NewRenderer(extra tpl.Config, nav ...tpl.NavItem) (*Renderer, error) {
 func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, error) {
 	auth := tpl.AuthView{Settings: rd.oidcOn.Load()}
 	if who, ok := IdentityOf(r.Context()); ok {
-		auth.Admin, auth.SignOut, auth.NoAuth = who.Admin, who.Source == SourceOIDC, who.NoAuth
+		auth.SignOut, auth.NoAuth = who.Source == SourceOIDC, who.NoAuth
 	}
 	nav := rd.navFor(page)
 	f := &tpl.Frame{
@@ -233,16 +233,13 @@ func write(w http.ResponseWriter, status int, b *bytes.Buffer) error {
 }
 
 func (rd *Renderer) ErrorPage(w http.ResponseWriter, r *http.Request, status int, problem string) {
-	view := tpl.ErrorView{Status: status, Problem: problem, Path: r.URL.Path, AdminOnly: adminOnly(r.Context())}
+	view := tpl.ErrorView{Status: status, Problem: problem, Path: r.URL.Path}
 	f, err := rd.Frame(r, "", view)
 	if err == nil && !IsPartial(r) {
 		err = rd.Page(w, r, status, "error.gohtml", f)
 	} else if err == nil {
-		switch {
-		case status == http.StatusUnprocessableEntity:
+		if status == http.StatusUnprocessableEntity {
 			f.Toast = &tpl.Toast{Category: "error", Title: "Filter not understood", Description: problem}
-		case view.AdminOnly:
-			f.Toast = &tpl.Toast{Category: "error", Title: "Admins only"}
 		}
 		err = rd.Fragment(w, r, status, "_error.gohtml", f)
 	}

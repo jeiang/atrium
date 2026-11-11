@@ -70,9 +70,6 @@ func Module(r chi.Router, d *web.Deps) {
 	d.OnClose(func() { <-done })
 	h := handlers{d}
 	d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
-		if !f.Auth.Admin {
-			return nil
-		}
 		rows, err := d.DB.Read.QueryContext(ctx, "SELECT name || ' ' || replace(state, '_', ' ') FROM integration_health WHERE state <> 'ok' ORDER BY name")
 		if err != nil {
 			return err
@@ -88,11 +85,11 @@ func Module(r chi.Router, d *web.Deps) {
 		return rows.Err()
 	})
 	d.OnFrame(h.connections)
-	d.Admin(http.MethodGet, path, h.index)
-	d.Admin(http.MethodPost, path+"/{name}/test", h.test)
-	d.Admin(http.MethodPost, path+"/{name}/settings", h.saveSettings)
-	d.Admin(http.MethodPost, path+"/sections/{name}", h.saveSection)
-	d.Admin(http.MethodPost, path+"/{name}/disconnect", h.disconnect)
+	d.Authenticated(http.MethodGet, path, h.index)
+	d.Authenticated(http.MethodPost, path+"/{name}/test", h.test)
+	d.Authenticated(http.MethodPost, path+"/{name}/settings", h.saveSettings)
+	d.Authenticated(http.MethodPost, path+"/sections/{name}", h.saveSection)
+	d.Authenticated(http.MethodPost, path+"/{name}/disconnect", h.disconnect)
 }
 
 func watch(d *web.Deps) {

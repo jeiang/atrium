@@ -51,8 +51,8 @@ type handlers struct{ d *web.Deps }
 
 func Module(r chi.Router, d *web.Deps) {
 	h := handlers{d}
-	d.Admin(http.MethodPost, page, h.save)
-	d.Admin(http.MethodPost, page+"/revoke", h.revoke)
+	d.Authenticated(http.MethodPost, page, h.save)
+	d.Authenticated(http.MethodPost, page+"/revoke", h.revoke)
 }
 
 func (h handlers) ctx(r *http.Request) context.Context {

@@ -105,14 +105,14 @@ func Page(groups []Group, generic []Generic, control Control) web.Page {
 		})
 		for _, g := range generic {
 			data := pageData{Title: title(g.Module), Tab: g.Tab}
-			d.Admin(http.MethodGet, g.URL, func(w http.ResponseWriter, r *http.Request) {
+			d.Authenticated(http.MethodGet, g.URL, func(w http.ResponseWriter, r *http.Request) {
 				h.render(w, r, http.StatusOK, data, nil)
 			})
 			d.SettingsAt(g.URL, func(w http.ResponseWriter, r *http.Request, status int, mutate func(*tpl.Frame)) {
 				h.render(w, r, status, data, mutate)
 			})
 		}
-		d.Admin(http.MethodPost, "/settings/groups/{module}/{name}", h.save)
+		d.Authenticated(http.MethodPost, "/settings/groups/{module}/{name}", h.save)
 	}}
 }
 

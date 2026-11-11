@@ -70,22 +70,19 @@ func serve(d *web.Deps, phone Section, budget BudgetStatus) {
 	d.OnClose(func() { <-done })
 	h := handlers{d, phone}
 	d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
-		if !f.Auth.Admin {
-			return nil
-		}
 		labels, err := failingDevices(ctx, d.DB.Read)
 		f.NotifyFailing = labels
 		return err
 	})
-	d.Admin(http.MethodGet, page, h.index)
-	d.Admin(http.MethodPost, page+"/channels/{name}/content", h.content)
-	d.Admin(http.MethodPost, page+"/push/subscriptions", h.subscribe)
-	d.Admin(http.MethodPost, page+"/push/unsubscribe", h.unsubscribe)
-	d.Admin(http.MethodPost, page+"/push/test", h.pushTest)
-	d.Admin(http.MethodPost, page+"/push/{id}/remove", h.removeDevice)
-	d.Admin(http.MethodGet, inboxPage, h.inbox)
-	d.Admin(http.MethodPost, inboxPage+"/{id}/resend", h.resend)
-	d.APIAdmin(http.MethodGet, "/inbox", h.apiInbox)
+	d.Authenticated(http.MethodGet, page, h.index)
+	d.Authenticated(http.MethodPost, page+"/channels/{name}/content", h.content)
+	d.Authenticated(http.MethodPost, page+"/push/subscriptions", h.subscribe)
+	d.Authenticated(http.MethodPost, page+"/push/unsubscribe", h.unsubscribe)
+	d.Authenticated(http.MethodPost, page+"/push/test", h.pushTest)
+	d.Authenticated(http.MethodPost, page+"/push/{id}/remove", h.removeDevice)
+	d.Authenticated(http.MethodGet, inboxPage, h.inbox)
+	d.Authenticated(http.MethodPost, inboxPage+"/{id}/resend", h.resend)
+	d.API(http.MethodGet, "/inbox", h.apiInbox)
 }
 
 func (h handlers) ctx(r *http.Request) context.Context {

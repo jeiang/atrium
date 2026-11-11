@@ -1597,3 +1597,143 @@ func TestImportV2CarriesTheGoogleGrantsAndTheConnectionTestsWithThem(t *testing.
 		t.Errorf("google/default state = %q, want ok", state)
 	}
 }
+
+func TestImportV2UnionsOIDCSelectorsAndDropsLoginState(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+
+	seed, err := db.Connect(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, value := range map[string]string{
+		"oidc_access_group":   "team_access",
+		"oidc_admin_group":    "team_admin",
+		"oidc_access_emails":  "a@example.com, B@Example.com",
+		"oidc_admin_emails":   "b@example.com",
+		"oidc_access_domains": "example.com",
+		"oidc_admin_domains":  "admin.example.com",
+	} {
+		if _, err := seed.Write.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, statement := range []string{
+		"INSERT INTO auth_sessions (token_hash, subject, admin, created_at, last_seen_at, idle_expires_at, absolute_expires_at, rechecked_at, origin) VALUES ('h', 's', 1, 1, 1, 2, 2, 1, 'link')",
+		"INSERT INTO auth_logins (state_hash, binding_hash, nonce, verifier, return_to, created_at) VALUES ('s', 'b', 'n', 'v', '/', 1)",
+		"INSERT INTO auth_login_links (nonce_hash, issued_at, expires_at) VALUES ('n', 1, 2)",
+	} {
+		if _, err := seed.Write.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = seed.Close()
+	before := fileDigest(t, source)
+
+	host := importAuthHostConfig(t, dir)
+	got := runImportApp(t, importTestAppHost(t, dir, clock, host), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if after := fileDigest(t, source); after != before {
+		t.Errorf("the import changed the source: %s -> %s", before, after)
+	}
+	for _, want := range []string{
+		"auth_sessions: dropped 1",
+		"auth_logins: dropped 1",
+		"auth_login_links: dropped 1",
+		"setting oidc_access_group: dropped -> host.auth.oidc_access_groups",
+		"setting oidc_admin_group: dropped -> host.auth.oidc_access_groups",
+		"setting oidc_admin_emails: dropped -> host.auth.oidc_access_emails",
+		"setting oidc_admin_domains: dropped -> host.auth.oidc_access_domains",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+	if strings.Contains(got.stdout, "does not know") {
+		t.Fatalf("the import refused a removed selector:\n%s", got.stdout)
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	q, err := db.OpenSource(dest, importKey(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	for _, table := range []string{"auth_sessions", "auth_logins"} {
+		if n := importCount(t, q, "SELECT COUNT(*) FROM "+table); n != 0 {
+			t.Errorf("%s kept %d login rows", table, n)
+		}
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'auth_login_links'"); n != 0 {
+		t.Errorf("the destination still has an auth_login_links table")
+	}
+
+	listed := runImportApp(t, importTestAppHost(t, dir, clock, host), "connections", "list", "--json")
+	if listed.code != cli.ExitOK {
+		t.Fatalf("connections list: exit %d stdout %q stderr %q", listed.code, listed.stdout, listed.stderr)
+	}
+	var views []struct {
+		ID     string            `json:"id"`
+		Config map[string]string `json:"config"`
+	}
+	if err := json.Unmarshal([]byte(listed.stdout), &views); err != nil {
+		t.Fatalf("connections JSON: %v\n%s", err, listed.stdout)
+	}
+	var oidc map[string]string
+	for _, view := range views {
+		if view.ID == "service/oidc" {
+			oidc = view.Config
+		}
+	}
+	if oidc == nil {
+		t.Fatalf("no service/oidc connection in %s", listed.stdout)
+	}
+	for key, want := range map[string]string{
+		"access_groups":  "team_access,team_admin",
+		"access_emails":  "a@example.com, B@Example.com",
+		"access_domains": "example.com,admin.example.com",
+	} {
+		if oidc[key] != want {
+			t.Errorf("service/oidc %s = %q, want %q", key, oidc[key], want)
+		}
+	}
+}
+
+func TestImportV2RefusesAPinnedRemovedSelector(t *testing.T) {
+	dir := t.TempDir()
+	base, err := os.ReadFile(importHostConfig(t, dir, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := filepath.Join(dir, "removed.toml")
+	if err := os.WriteFile(host, append(base, []byte("\n[auth]\noidc_admin_group = \"atrium_admin\"\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := runImportApp(t, importTestAppHost(t, dir, 1, host), "connections", "list")
+	if got.code == cli.ExitOK || !strings.Contains(got.stderr, "use host.auth.oidc_access_groups") {
+		t.Fatalf("removed selector: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+}
+
+func importAuthHostConfig(t *testing.T, dir string) string {
+	t.Helper()
+	base, err := os.ReadFile(importHostConfig(t, dir, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(base) + `
+[connections."service/oidc"]
+kind = "service/oidc"
+label = "Sign-in"
+config = { access_groups = "team_access,team_admin", access_emails = "a@example.com, B@Example.com", access_domains = "example.com,admin.example.com" }
+capabilities = ["discovery", "client_auth"]
+`
+	path := filepath.Join(dir, "auth-host.toml")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}

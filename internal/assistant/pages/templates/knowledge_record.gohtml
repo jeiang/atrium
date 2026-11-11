@@ -51,10 +51,8 @@
         <button type="submit" class="btn" data-size="sm" data-variant="outline">{{icon "undo-2"}}Restore</button>
       </form>
       {{end}}
-      {{if .Auth.Admin}}
       <button type="button" class="btn" data-size="sm" data-variant="destructive"
               hx-get="/library/knowledge/{{$r.ID}}/purge" hx-target="#kb-purge" hx-swap="innerHTML">{{icon "trash-2"}}Purge</button>
-      {{end}}
     </section>
     <div id="kb-retract-result" aria-live="polite" class="empty:hidden"></div>
 

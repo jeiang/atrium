@@ -175,7 +175,6 @@ type Session struct {
 	Subject string
 	Email   string
 	Name    string
-	Admin   bool
 }
 
 type Grant struct {
@@ -236,8 +235,7 @@ func (s *Service) Complete(ctx context.Context, state, code, binding string) (Gr
 	if err != nil {
 		return Grant{}, err
 	}
-	access, admin := cfg.decide(id)
-	if !access {
+	if !cfg.decide(id) {
 		log.Warn("sign-in refused: no access", "sub", id.Subject, "groups_present", id.HasGroups)
 		return Grant{}, ErrDenied
 	}
@@ -260,10 +258,10 @@ func (s *Service) Complete(ctx context.Context, state, code, binding string) (Gr
 		absolute := now + cfg.Max.Seconds()
 		idle := min(now+cfg.Idle.Seconds(), absolute)
 		return insertSession(ctx, tx, sessionInsert{
-			tokenHash: digest(token), subject: id.Subject, email: id.Email, name: id.Name, admin: admin,
+			tokenHash: digest(token), subject: id.Subject, email: id.Email, name: id.Name,
 			now: now, idle: idle, absolute: absolute, rechecked: now,
 			accessToken: sl.seal(reply.AccessToken), accessExpires: accessExpires,
-			refreshToken: sl.seal(reply.RefreshToken), verified: id.EmailVerified, hosted: id.Hosted, origin: originOIDC,
+			refreshToken: sl.seal(reply.RefreshToken), verified: id.EmailVerified, hosted: id.Hosted,
 		})
 	})
 	if err != nil {

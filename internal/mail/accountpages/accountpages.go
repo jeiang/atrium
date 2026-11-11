@@ -75,15 +75,15 @@ func healthName(id string) string { return "mail_" + id }
 
 func Module(r chi.Router, d *web.Deps) {
 	h := handlers{d}
-	d.Admin(http.MethodGet, "/settings/mail", h.index)
+	d.Authenticated(http.MethodGet, "/settings/mail", h.index)
 	d.SettingsAt("/settings/mail", func(w http.ResponseWriter, r *http.Request, status int, mutate func(*tpl.Frame)) {
 		h.renderWith(w, r, status, page{}, mutate)
 	})
-	d.Admin(http.MethodPost, "/settings/mail/accounts", h.add)
-	d.Admin(http.MethodPost, "/settings/mail/accounts/{id}", h.update)
-	d.Admin(http.MethodPost, "/settings/mail/accounts/{id}/test", h.test)
-	d.Admin(http.MethodPost, "/settings/mail/accounts/{id}/remove", h.remove)
-	d.Admin(http.MethodPost, "/settings/mail/settings", h.saveSettings)
+	d.Authenticated(http.MethodPost, "/settings/mail/accounts", h.add)
+	d.Authenticated(http.MethodPost, "/settings/mail/accounts/{id}", h.update)
+	d.Authenticated(http.MethodPost, "/settings/mail/accounts/{id}/test", h.test)
+	d.Authenticated(http.MethodPost, "/settings/mail/accounts/{id}/remove", h.remove)
+	d.Authenticated(http.MethodPost, "/settings/mail/settings", h.saveSettings)
 }
 
 func (h handlers) ctx(r *http.Request) context.Context {

@@ -109,7 +109,7 @@ func TestKnowledgeTabConfirmRetractAndPurge(t *testing.T) {
 	}
 }
 
-func TestKnowledgePurgeIsAdministratorOnly(t *testing.T) {
+func TestKnowledgePurgeRunsForTheOperator(t *testing.T) {
 	s := wimOIDCSite(t)
 	s.exec("INSERT INTO kb_records (title, body, scope, writer, created_at, updated_at) VALUES ('Old note', 'secret text', 'personal', 'operator', 1, 1)")
 	var id int64
@@ -118,19 +118,18 @@ func TestKnowledgePurgeIsAdministratorOnly(t *testing.T) {
 	}
 	s.exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, target, action_json, before_json, after_json, undo_json, state, settled_at) VALUES (1, 1, 'legacy-test', 'local', 'kb_write', 'legacy-test', 'forward', ?, '{}', '{\"body\":\"secret text\"}', '{\"body\":\"secret text\"}', '{\"op\":\"kb_restore\"}', 'done', 1)", "kb:"+strconv.FormatInt(id, 10))
 
-	member := s.browser()
-	member.mustSignIn("member")
-	wimExpect(t, member.post(fmt.Sprintf("/library/knowledge/%d/purge", id), nil), http.StatusForbidden)
+	anon := s.browser()
+	wimExpect(t, anon.post(fmt.Sprintf("/library/knowledge/%d/purge", id), nil), http.StatusSeeOther)
 	if n := s.count("SELECT COUNT(*) FROM kb_records WHERE id = ?", id); n != 1 {
-		t.Fatalf("member purge removed the record")
+		t.Fatalf("an anonymous purge removed the record")
 	}
 
-	admin := s.browser()
-	admin.mustSignIn("admin")
-	wimExpect(t, admin.get(fmt.Sprintf("/library/knowledge/%d", id)), http.StatusOK, "Old note")
-	reply := admin.post(fmt.Sprintf("/library/knowledge/%d/purge", id), nil)
+	operator := s.browser()
+	operator.mustSignIn("member")
+	wimExpect(t, operator.get(fmt.Sprintf("/library/knowledge/%d", id)), http.StatusOK, "Old note")
+	reply := operator.post(fmt.Sprintf("/library/knowledge/%d/purge", id), nil)
 	if reply.status != http.StatusSeeOther {
-		t.Fatalf("admin purge = %d: %.300s", reply.status, reply.body)
+		t.Fatalf("operator purge = %d: %.300s", reply.status, reply.body)
 	}
 	if n := s.count("SELECT COUNT(*) FROM kb_records WHERE id = ?", id); n != 0 {
 		t.Fatal("purge left the record")
@@ -141,7 +140,7 @@ func TestKnowledgePurgeIsAdministratorOnly(t *testing.T) {
 	if n := s.count("SELECT COUNT(*) FROM effects WHERE operation = 'kb_purge' AND target = ?", "kb:"+strconv.FormatInt(id, 10)); n != 1 {
 		t.Fatalf("purge rows = %d, want one contentless kb_purge row", n)
 	}
-	activity := admin.get("/activity")
+	activity := operator.get("/activity")
 	if strings.Contains(activity.body, "secret text") {
 		t.Error("activity still shows the purged text")
 	}

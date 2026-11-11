@@ -151,8 +151,8 @@ func (p *pages) knowledgeRoutes(r chi.Router) {
 	r.Post("/library/knowledge/{record_id}/confirm", p.knowledgeConfirm)
 	r.Post("/library/knowledge/{record_id}/retract", p.knowledgeRetract)
 	r.Post("/library/knowledge/{record_id}/restore", p.knowledgeRestore)
-	p.deps.Admin(http.MethodGet, "/library/knowledge/{record_id}/purge", p.knowledgePurgeDialog)
-	p.deps.Admin(http.MethodPost, "/library/knowledge/{record_id}/purge", p.knowledgePurge)
+	p.deps.Authenticated(http.MethodGet, "/library/knowledge/{record_id}/purge", p.knowledgePurgeDialog)
+	p.deps.Authenticated(http.MethodPost, "/library/knowledge/{record_id}/purge", p.knowledgePurge)
 }
 
 func knowledgeFilter(q url.Values) (query, scope, state string) {

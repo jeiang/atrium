@@ -62,7 +62,6 @@ type Guard struct {
 	bodyCap  func(context.Context) (int, error)
 	sessions *oidc.Service
 	errPage  ErrorPage
-	admin    func(context.Context) (string, error)
 	secure   func(*http.Request) bool
 	classify func(*http.Request) access
 	idem     *idemCache
@@ -183,17 +182,6 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 		if err == nil {
 			who.NoAuth = who.Source == SourceLocal && g.auth.Open
 			r = r.WithContext(context.WithValue(r.Context(), identityKey{}, who))
-			if !who.Admin && class == accessAdmin {
-				setSecurityHeaders(w.Header())
-				g.issueCSRF(w, r, token, fresh)
-				r = r.WithContext(context.WithValue(context.WithValue(r.Context(), csrfKey{}, token), adminOnlyKey{}, true))
-				if g.errPage != nil {
-					g.errPage(w, r, http.StatusForbidden, "Admins only.")
-				} else {
-					deny(w, http.StatusForbidden, "Forbidden: administrator access required")
-				}
-				return
-			}
 		}
 		if isUnsafe(r.Method) && !strings.HasPrefix(r.URL.Path, "/actions/") {
 			limit := defaultBodyCap
@@ -240,13 +228,6 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 	})
 }
 
-func (g *Guard) adminGroup(ctx context.Context) (string, error) {
-	if g.admin == nil {
-		return oidc.DefaultAdminGroup, nil
-	}
-	return g.admin(ctx)
-}
-
 func (g *Guard) issueCSRF(w http.ResponseWriter, r *http.Request, token string, fresh bool) {
 	if !fresh {
 		return
@@ -256,11 +237,4 @@ func (g *Guard) issueCSRF(w http.ResponseWriter, r *http.Request, token string, 
 		cookie += "; Secure"
 	}
 	w.Header().Add("Set-Cookie", cookie)
-}
-
-type adminOnlyKey struct{}
-
-func adminOnly(ctx context.Context) bool {
-	v, _ := ctx.Value(adminOnlyKey{}).(bool)
-	return v
 }
