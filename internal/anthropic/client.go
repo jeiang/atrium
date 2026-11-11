@@ -2,6 +2,7 @@ package anthropic
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -97,7 +98,7 @@ func (c *Client) Create(ctx context.Context, p Params) Outcome {
 	res, err := c.sdk.Beta.Messages.New(ctx, p.sdkParams(), option.WithRequestBody("application/json", body), option.WithMaxRetries(0))
 	if err != nil {
 		classified := classify(err)
-		return Outcome{DefinitelyRejected: rejected(classified), Err: classified}
+		return Outcome{DefinitelyUnsent: unsent(classified), DefinitelyRejected: rejected(classified), Err: classified}
 	}
 	raw := res.RawJSON()
 	msg, err := decodeMessage(raw)
@@ -162,26 +163,57 @@ func failedStream(acc *sdk.BetaMessage, known Usage, started, stopped bool, err 
 		Usage:              known,
 		Started:            started,
 		Complete:           stopped,
+		DefinitelyUnsent:   !started && unsent(err),
 		DefinitelyRejected: !started && rejected(err),
 		Err:                err,
 	}
 }
 
 func knownMessage(acc *sdk.BetaMessage, known Usage) *Message {
-	if msg, err := decodeMessage(acc.RawJSON()); err == nil {
+	msg, err := decodeMessage(acc.RawJSON())
+	if err == nil && len(msg.Content) > 0 {
 		return msg
 	}
-	if acc.ID == "" {
+	if acc.ID == "" && len(acc.Content) == 0 {
 		return nil
 	}
-	return &Message{ID: acc.ID, Model: string(acc.Model), Usage: known}
+	out := &Message{ID: acc.ID, Model: string(acc.Model), Usage: known, Content: accumulated(acc)}
+	if err == nil {
+		out.ID, out.Model, out.StopReason, out.ContextManagement = msg.ID, msg.Model, msg.StopReason, msg.ContextManagement
+	}
+	return out
+}
+
+func accumulated(acc *sdk.BetaMessage) []json.RawMessage {
+	out := make([]json.RawMessage, 0, len(acc.Content))
+	for i := range acc.Content {
+		block := &acc.Content[i]
+		switch block.Type {
+		case "text":
+			raw, _ := json.Marshal(map[string]string{"type": "text", "text": block.Text})
+			out = append(out, raw)
+		case "thinking":
+			raw, _ := json.Marshal(map[string]string{"type": "thinking", "thinking": block.Thinking, "signature": block.Signature})
+			out = append(out, raw)
+		default:
+			if raw := block.RawJSON(); raw != "" {
+				out = append(out, json.RawMessage(raw))
+			}
+		}
+	}
+	return out
 }
 
 func usageOf(acc *sdk.BetaMessage) Usage { return usageOfRaw(acc.RawJSON()) }
 
 func rejected(err error) bool {
 	var api *APIError
-	return errors.As(err, &api) && api.StatusCode >= 400 && api.StatusCode < 500
+	return errors.As(err, &api) && api.StatusCode >= 400
+}
+
+func unsent(err error) bool {
+	var api *APIError
+	return errors.As(err, &api) && api.Unsent()
 }
 
 func (c *Client) ModelIDs(ctx context.Context) ([]string, error) {

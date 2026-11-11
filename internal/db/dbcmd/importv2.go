@@ -850,7 +850,7 @@ func (im *importer) carryUsage() (int64, error) {
 		}
 		e.Partial = partial != 0
 		e.Unpriced = unpriced != 0
-		e.MonthStart = month
+		e.Month = inference.MonthKey(im.now, im.loc)
 		if err := inference.ImportSettled(im.ctx, im.tx, e); err != nil {
 			return n, fmt.Errorf("usage row %d: %w", e.ID, err)
 		}

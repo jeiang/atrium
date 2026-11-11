@@ -186,7 +186,19 @@ func runJob(ctx context.Context, d *db.DB, threadID int64, job Job, o WorkOption
 			if ferr := finishRun(ctx, d, runID, &msg); ferr != nil {
 				return false, ferr
 			}
-			return false, finishJob(ctx, d, job.ID, JobFail, &msg)
+			if exceeded.Reason == inference.ReasonRun {
+				return false, finishJob(ctx, d, job.ID, JobFail, &msg)
+			}
+			if exceeded.Reason == inference.ReasonMonthly {
+				_, uerr := d.Write.ExecContext(ctx,
+					"UPDATE memory_jobs SET state = ?, next_at = ?, lease_until = NULL, error = ? WHERE id = ?",
+					Queued, exceeded.NextMonth, msg, job.ID)
+				return false, uerr
+			}
+			_, uerr := d.Write.ExecContext(ctx,
+				"UPDATE memory_jobs SET state = ?, attempts = attempts + 1, next_at = ?, lease_until = NULL, error = ? WHERE id = ?",
+				Queued, o.Now+backoffSeconds, msg, job.ID)
+			return false, uerr
 		}
 		return false, err
 	}
