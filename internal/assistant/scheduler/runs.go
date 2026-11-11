@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
@@ -58,11 +57,7 @@ func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Locati
 	var skipped []Skipped
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
 		claims, skipped = nil, nil
-		r := assistant.Read(ctx, tx)
-		lease, grace := r.Int(KeyLeaseSeconds), r.Int(KeyMissedGrace)
-		if err := r.Err(); err != nil {
-			return err
-		}
+		lease, grace := TuningAgentSchedulerLeaseSeconds, TuningAgentSchedulerMissedGraceSeconds
 		rows, err := tx.QueryContext(ctx, "SELECT "+jobColumns+" FROM jobs WHERE state = ? AND next_due IS NOT NULL "+
 			"AND next_due <= ? AND (lease_until IS NULL OR lease_until < ?) ORDER BY next_due, id", StateActive, now, now)
 		if err != nil {
@@ -229,11 +224,7 @@ func SettleResumed(ctx context.Context, d *db.DB, now float64) error {
 	if err != nil {
 		return err
 	}
-	r := assistant.Read(ctx, d.Read)
-	grace := r.Int(KeyMissedGrace)
-	if err := r.Err(); err != nil {
-		return err
-	}
+	grace := TuningAgentSchedulerMissedGraceSeconds
 	for _, s := range found {
 		tokens, err := RunTokens(ctx, d.Read, s.run)
 		if err != nil {

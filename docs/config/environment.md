@@ -6,12 +6,6 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 
 | Variable | Host key |
 | --- | --- |
-| `ATRIUM_ASSISTANT_ANTHROPIC_CA_FILE` | `assistant.anthropic_ca_file` |
-| `ATRIUM_ASSISTANT_ANTHROPIC_PROXY` | `assistant.anthropic_proxy` |
-| `ATRIUM_ASSISTANT_OPEN_METEO_CA_FILE` | `assistant.open_meteo_ca_file` |
-| `ATRIUM_ASSISTANT_OPEN_METEO_PROXY` | `assistant.open_meteo_proxy` |
-| `ATRIUM_ASSISTANT_WEATHER_GEOCODING_URL` | `assistant.weather_geocoding_url` |
-| `ATRIUM_ASSISTANT_WEATHER_OPEN_METEO_URL` | `assistant.weather_open_meteo_url` |
 | `ATRIUM_AUTH_OIDC_ACCESS_DOMAINS` | `auth.oidc_access_domains` |
 | `ATRIUM_AUTH_OIDC_ACCESS_EMAILS` | `auth.oidc_access_emails` |
 | `ATRIUM_AUTH_OIDC_ACCESS_GROUP` | `auth.oidc_access_group` |
@@ -36,13 +30,6 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `ATRIUM_CORE_OPS_LISTEN` | `core.ops_listen` |
 | `ATRIUM_CORE_OPS_PPROF` | `core.ops_pprof` |
 | `ATRIUM_CORE_PUBLIC_URL` | `core.public_url` |
-| `ATRIUM_GRAFANA_GRAFANA_CA_FILE` | `grafana.grafana_ca_file` |
-| `ATRIUM_GRAFANA_GRAFANA_LOGS_QUERY` | `grafana.grafana_logs_query` |
-| `ATRIUM_GRAFANA_GRAFANA_LOGS_TYPE` | `grafana.grafana_logs_type` |
-| `ATRIUM_GRAFANA_GRAFANA_LOGS_UID` | `grafana.grafana_logs_uid` |
-| `ATRIUM_GRAFANA_GRAFANA_METRICS_UID` | `grafana.grafana_metrics_uid` |
-| `ATRIUM_GRAFANA_GRAFANA_PROXY` | `grafana.grafana_proxy` |
-| `ATRIUM_GRAFANA_GRAFANA_URL` | `grafana.grafana_url` |
 | `ATRIUM_GRAFANA_OPS_HOSTS` | `grafana.ops_hosts` |
 | `ATRIUM_GRAFANA_OPS_LABEL_SELECTOR` | `grafana.ops_label_selector` |
 | `ATRIUM_GRAFANA_OPS_QUERY_CPU` | `grafana.ops_query_cpu` |

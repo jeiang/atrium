@@ -27,16 +27,10 @@ func cacheTTL(ctx context.Context, q db.Querier) (string, error) {
 	return found.Value, err
 }
 
-func readWebSearchMaxUses(ctx context.Context, q db.Querier) (int, error) {
-	r := assistant.Read(ctx, q)
-	n := r.Int(assistant.KeyWebSearchMaxUses)
-	return n, r.Err()
+func readWebSearchMaxUses(_ context.Context, _ db.Querier) (int, error) {
+	return assistant.TuningAgentWebSearchMaxUses, nil
 }
 
-func readWebSearchDynamicFiltering(ctx context.Context, q db.Querier) (bool, error) {
-	found, err := settings.From(ctx).Resolve(ctx, q, registry.DynamicFilteringKey)
-	if err != nil {
-		return false, err
-	}
-	return found.Value == "true", nil
+func readWebSearchDynamicFiltering(_ context.Context, _ db.Querier) (bool, error) {
+	return registry.TuningSearchWebDynamicFiltering, nil
 }

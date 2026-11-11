@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"strings"
-	"time"
 
-	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/weather"
 )
@@ -46,20 +44,15 @@ func handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if err != nil {
 		return nil, err
 	}
-	days, err := tool.BoundedInt(args, "days", int64(found.ForecastDays), 16, 1)
+	days, err := tool.BoundedInt(args, "days", weather.TuningWeatherForecastDays, 16, 1)
 	if err != nil {
 		return nil, err
 	}
-	hours, err := tool.BoundedInt(args, "hours", int64(found.HourlyHours), 48, 1)
+	hours, err := tool.BoundedInt(args, "hours", weather.TuningWeatherHourlyHours, 48, 1)
 	if err != nil {
 		return nil, err
 	}
-	client, err := transport.For(ctx, tc.DB.Read, "open_meteo", time.Duration(found.Timeout)*time.Second)
-	if err != nil {
-		return nil, tool.Error("weather is unreachable: " + err.Error())
-	}
-	defer client.CloseIdleConnections()
-	provider := weather.NewOpenMeteo(client, found.ForecastURL, found.GeocodingURL)
+	provider := weather.NewOpenMeteo(found.HTTP, found.ForecastURL, found.GeocodingURL)
 	location := weather.Location{Name: found.LocationName, Latitude: found.Latitude, Longitude: found.Longitude}
 	switch {
 	case place != "":

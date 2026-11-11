@@ -2,56 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
-    "assistant": {
-      "additionalProperties": false,
-      "properties": {
-        "anthropic_ca_file": {
-          "type": "string"
-        },
-        "anthropic_ca_file_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "anthropic_proxy": {
-          "type": "string"
-        },
-        "anthropic_proxy_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "open_meteo_ca_file": {
-          "type": "string"
-        },
-        "open_meteo_ca_file_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "open_meteo_proxy": {
-          "type": "string"
-        },
-        "open_meteo_proxy_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "weather_geocoding_url": {
-          "default": "https://geocoding-api.open-meteo.com/v1/search",
-          "type": "string"
-        },
-        "weather_geocoding_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "weather_open_meteo_url": {
-          "default": "https://api.open-meteo.com/v1/forecast",
-          "type": "string"
-        },
-        "weather_open_meteo_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
     "auth": {
       "additionalProperties": false,
       "properties": {
@@ -323,60 +273,6 @@
     "grafana": {
       "additionalProperties": false,
       "properties": {
-        "grafana_ca_file": {
-          "type": "string"
-        },
-        "grafana_ca_file_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "grafana_logs_query": {
-          "type": "string"
-        },
-        "grafana_logs_query_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "grafana_logs_type": {
-          "default": "loki",
-          "enum": [
-            "loki",
-            "victorialogs"
-          ],
-          "type": "string"
-        },
-        "grafana_logs_type_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "grafana_logs_uid": {
-          "type": "string"
-        },
-        "grafana_logs_uid_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "grafana_metrics_uid": {
-          "type": "string"
-        },
-        "grafana_metrics_uid_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "grafana_proxy": {
-          "type": "string"
-        },
-        "grafana_proxy_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "grafana_url": {
-          "type": "string"
-        },
-        "grafana_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "ops_hosts": {
           "type": "string"
         },
@@ -1017,11 +913,89 @@
     "web_search.search_web_model": "operator"
   },
   "x-atrium-cutover": [
+    "anthropic.anthropic_api_key",
+    "assistant.agent_file_cap_bytes",
+    "assistant.agent_file_name_chars",
+    "assistant.agent_grafana_cell_chars",
+    "assistant.agent_grafana_max_alerts",
+    "assistant.agent_grafana_max_dashboards",
+    "assistant.agent_grafana_max_log_rows",
+    "assistant.agent_grafana_max_metric_rows",
+    "assistant.agent_grafana_max_series",
+    "assistant.agent_grafana_timeout_seconds",
+    "assistant.agent_journal_lease_seconds",
+    "assistant.agent_kb_profile_tokens",
+    "assistant.agent_kb_retrieval_distance",
+    "assistant.agent_kb_retrieval_tokens",
+    "assistant.agent_kb_write_chars",
+    "assistant.agent_mail_body_chars",
+    "assistant.agent_mail_max_loops_limit",
+    "assistant.agent_mail_max_results",
+    "assistant.agent_mail_snippet_chars",
+    "assistant.agent_manifest_results",
+    "assistant.agent_media_torrent_limit",
+    "assistant.agent_message_cap_bytes",
+    "assistant.agent_nightly_max_threads",
+    "assistant.agent_nightly_thread_chars",
+    "assistant.agent_nightly_total_chars",
+    "assistant.agent_preview_chars",
+    "assistant.agent_project_instruction_chars",
+    "assistant.agent_project_name_chars",
+    "assistant.agent_recall_max_page_chars",
+    "assistant.agent_recall_page_chars",
+    "assistant.agent_ref_tokens",
+    "assistant.agent_schedule_max_active_jobs",
+    "assistant.agent_scheduler_lease_seconds",
+    "assistant.agent_scheduler_missed_grace_seconds",
+    "assistant.agent_scheduler_tick_seconds",
+    "assistant.agent_stub_tokens",
+    "assistant.agent_subagent_context_ids",
+    "assistant.agent_subagent_description_chars",
+    "assistant.agent_subagent_digest_chars",
+    "assistant.agent_subagent_max_concurrent",
+    "assistant.agent_subagent_max_steps",
+    "assistant.agent_subagent_prompt_chars",
+    "assistant.agent_subagent_task_chars",
+    "assistant.agent_web_search_max_uses",
+    "assistant.agent_webfetch_max_bytes",
+    "assistant.agent_webfetch_max_redirects",
+    "assistant.agent_webfetch_page_text_chars",
+    "assistant.agent_webfetch_text_default",
+    "assistant.agent_webfetch_timeout_seconds",
+    "assistant.agent_webfetch_user_agent",
+    "assistant.agent_workspace_plan_item_chars",
+    "assistant.agent_workspace_plan_items",
+    "assistant.anthropic_ca_file",
+    "assistant.anthropic_proxy",
+    "assistant.doom_loop_threshold",
+    "assistant.max_steps_chat",
+    "assistant.max_steps_cron",
+    "assistant.max_steps_nightly",
+    "assistant.max_steps_worker",
+    "assistant.open_meteo_ca_file",
+    "assistant.open_meteo_proxy",
+    "assistant.ops_condenser_max_tokens",
+    "assistant.weather_forecast_days",
+    "assistant.weather_geocoding_url",
+    "assistant.weather_hourly_hours",
+    "assistant.weather_open_meteo_url",
+    "assistant.weather_timeout_seconds",
+    "grafana.grafana_ca_file",
+    "grafana.grafana_logs_query",
+    "grafana.grafana_logs_type",
+    "grafana.grafana_logs_uid",
+    "grafana.grafana_metrics_uid",
+    "grafana.grafana_proxy",
+    "grafana.grafana_url",
+    "grafana.grafana_viewer_token",
     "media.media_qbittorrent_api_key",
     "media.media_qbittorrent_timeout_seconds",
     "media.media_qbittorrent_url",
     "media.qbittorrent_ca_file",
-    "media.qbittorrent_proxy"
+    "media.qbittorrent_proxy",
+    "web_search.search_web_dynamic_filtering",
+    "web_search.search_web_max_searches",
+    "web_search.search_web_max_steps"
   ],
   "x-atrium-derived": {
     "calendar.calendar_dir": "services.atrium.stateDir",
@@ -1104,6 +1078,8 @@
     "assistant.agent_webfetch_user_agent": "the compiled constant internal/assistant/tuning.go:TuningAgentWebfetchUserAgent",
     "assistant.agent_workspace_plan_item_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentWorkspacePlanItemChars",
     "assistant.agent_workspace_plan_items": "the compiled constant internal/assistant/tuning.go:TuningAgentWorkspacePlanItems",
+    "assistant.anthropic_ca_file": "host configuration service/anthropic.transport.ca_file",
+    "assistant.anthropic_proxy": "host configuration service/anthropic.transport.proxy",
     "assistant.budget_chat_share": "the operator setting assistant.budget_chat_share stored in the database",
     "assistant.budget_unattended_share": "the operator setting assistant.budget_unattended_share stored in the database",
     "assistant.cache_ttl_chat": "the operator setting assistant.cache_ttl_chat stored in the database",
@@ -1122,6 +1098,8 @@
     "assistant.max_steps_nightly": "the compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsNightly",
     "assistant.max_steps_worker": "the compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsWorker",
     "assistant.monthly_budget_usd": "the operator setting assistant.monthly_budget_usd stored in the database",
+    "assistant.open_meteo_ca_file": "host configuration service/weather.transport.ca_file",
+    "assistant.open_meteo_proxy": "host configuration service/weather.transport.proxy",
     "assistant.ops_condenser": "the operator setting assistant.ops_condenser stored in the database",
     "assistant.ops_condenser_max_tokens": "the compiled constant internal/serverops/tuning.go:TuningOpsCondenserMaxTokens",
     "assistant.ops_condenser_model": "the operator setting assistant.ops_condenser_model stored in the database",
@@ -1131,10 +1109,12 @@
     "assistant.prompt_system": "the operator setting assistant.prompt_system stored in the database",
     "assistant.thread_cost_cap_usd": "the operator setting assistant.thread_cost_cap_usd stored in the database",
     "assistant.weather_forecast_days": "the compiled constant internal/weather/tuning.go:TuningWeatherForecastDays",
+    "assistant.weather_geocoding_url": "host configuration service/weather.config.geocoding_url",
     "assistant.weather_hourly_hours": "the compiled constant internal/weather/tuning.go:TuningWeatherHourlyHours",
     "assistant.weather_latitude": "the operator setting assistant.weather_latitude stored in the database",
     "assistant.weather_location_name": "the operator setting assistant.weather_location_name stored in the database",
     "assistant.weather_longitude": "the operator setting assistant.weather_longitude stored in the database",
+    "assistant.weather_open_meteo_url": "host configuration service/weather.config.forecast_url",
     "assistant.weather_timeout_seconds": "the compiled constant internal/weather/tuning.go:TuningWeatherTimeoutSeconds",
     "auth.oidc_recheck_minutes": "the compiled constant internal/auth/oidc/tuning.go:TuningOidcRecheckMinutes",
     "auth.oidc_session_idle_days": "the operator setting auth.oidc_session_idle_days stored in the database",
@@ -1167,6 +1147,13 @@
     "export.export_obsidian_dir": "services.atrium.knowledgeExport.obsidianDirectory",
     "export.export_obsidian_kinds": "the operator setting export.export_obsidian_kinds stored in the database",
     "export.export_obsidian_private_to": "the operator setting export.export_obsidian_private_to stored in the database",
+    "grafana.grafana_ca_file": "host configuration service/grafana.transport.ca_file",
+    "grafana.grafana_logs_query": "host configuration host.grafana.grafana_logs_query",
+    "grafana.grafana_logs_type": "host configuration host.grafana.grafana_logs_type",
+    "grafana.grafana_logs_uid": "host configuration host.grafana.grafana_logs_uid",
+    "grafana.grafana_metrics_uid": "host configuration host.grafana.grafana_metrics_uid",
+    "grafana.grafana_proxy": "host configuration service/grafana.transport.proxy",
+    "grafana.grafana_url": "host configuration service/grafana.config.url",
     "grafana.grafana_viewer_token": "the connection field service/grafana credential viewer_token",
     "mail.birthdays_default_days": "the compiled constant internal/mail/tuning.go:TuningBirthdaysDefaultDays",
     "mail.birthdays_max_days": "the compiled constant internal/mail/tuning.go:TuningBirthdaysMaxDays",
@@ -1351,12 +1338,10 @@
   },
   "x-atrium-secret": [
     "action_links.action_link_key",
-    "anthropic.anthropic_api_key",
     "auth.oidc_client_secret",
     "calendar.google_calendar_refresh_token",
     "calendar.google_oauth_client_secret",
     "db.key",
-    "grafana.grafana_viewer_token",
     "mail.google_gmail_refresh_token",
     "mail.mail_chat_key",
     "mail.mail_embed_key",

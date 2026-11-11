@@ -271,10 +271,10 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 		{module.Calendar, "iCloud CalDAV login or Google Calendar credentials"},
 		{module.Notion, "notion_token is not set"},
 		{module.Media, "media_root is not set"},
-		{module.Assistant, "anthropic_api_key is not set"},
+		{module.Assistant, "the Anthropic connection has no API key"},
 		{module.Notifications, "webpush_subject is not set"},
 		{module.Contacts, "contacts_dir is not set"},
-		{module.Grafana, "grafana_url and grafana_viewer_token"},
+		{module.Grafana, "the Grafana connection is not configured"},
 		{module.Grafana, "needs assistant"},
 	} {
 		got := runSettings(t, "set", module.FlagKey(tc.module), "true")

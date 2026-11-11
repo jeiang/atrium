@@ -118,8 +118,22 @@ func TestConnectionsCLIListAndTestUseTheHostTransportAndNeverStoreTheFileValue(t
 	if err := json.Unmarshal([]byte(listed.stdout), &views); err != nil {
 		t.Fatalf("connections list JSON: %v\n%s", err, listed.stdout)
 	}
-	if len(views) != 1 || views[0].ID != "service/qbittorrent" || len(views[0].Credentials) != 1 ||
-		views[0].Credentials[0].Source != "host_file" || !views[0].Credentials[0].Present {
+	var qbit *struct {
+		ID          string `json:"id"`
+		State       string `json:"state"`
+		Credentials []struct {
+			Slot    string `json:"slot"`
+			Source  string `json:"source"`
+			Present bool   `json:"present"`
+		} `json:"credentials"`
+	}
+	for i := range views {
+		if views[i].ID == "service/qbittorrent" {
+			qbit = &views[i]
+		}
+	}
+	if qbit == nil || len(qbit.Credentials) != 1 ||
+		qbit.Credentials[0].Source != "host_file" || !qbit.Credentials[0].Present {
 		t.Fatalf("connections list = %+v", views)
 	}
 	if strings.Contains(listed.stdout, "qbt_file_secret") {

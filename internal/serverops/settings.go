@@ -21,7 +21,6 @@ const (
 	KeyWorkerMaxRunUSD  = "ops_worker_max_run_usd"
 	KeyCondenser        = "ops_condenser"
 	KeyCondenserModel   = "ops_condenser_model"
-	KeyCondenserTokens  = "ops_condenser_max_tokens"
 )
 
 const (
@@ -184,10 +183,6 @@ func init() {
 		}),
 		settings.Value(settings.Advanced, settings.Def{
 			Key: KeyCondenserModel, Module: "assistant", Type: settings.String,
-		}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyCondenserTokens, Module: "assistant", Type: settings.Int, Default: "2000",
-			Check: settings.Between(64, 8192),
 		}),
 	)
 }

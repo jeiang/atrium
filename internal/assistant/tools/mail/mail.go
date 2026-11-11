@@ -19,8 +19,8 @@ import (
 )
 
 var (
-	mailLimitBound = tool.NewBound(assistant.KeyMailMaxResults, "")
-	mailBodyBound  = tool.NewBound(assistant.KeyMailBodyChars, "")
+	mailLimitBound = tool.NewCeiling(assistant.TuningAgentMailMaxResults, 1, assistant.TuningAgentMailMaxResults)
+	mailBodyBound  = tool.NewCeiling(assistant.TuningAgentMailBodyChars, 100, assistant.TuningAgentMailBodyChars)
 )
 
 var mailKinds = tool.AllKinds
@@ -114,11 +114,7 @@ func mailSearch(ctx context.Context, tc *tool.Context, args tool.Args) (any, err
 	if err != nil {
 		return nil, err
 	}
-	r := assistant.Read(ctx, tc.DB.Read)
-	snippetChars := r.Int(assistant.KeyMailSnippetChars)
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
+	snippetChars := assistant.TuningAgentMailSnippetChars
 	limit, err := mailLimitBound.Clamp(ctx, tc.DB.Read, args, "limit")
 	if err != nil {
 		return nil, err

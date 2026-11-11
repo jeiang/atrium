@@ -41,11 +41,7 @@ type PlanItem struct {
 }
 
 func CleanPlan(ctx context.Context, q db.Querier, items any) ([]PlanItem, error) {
-	r := assistant.Read(ctx, q)
-	maxItems, maxChars := r.Int(assistant.KeyPlanItems), r.Int(assistant.KeyPlanItemChars)
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
+	maxItems, maxChars := assistant.TuningAgentWorkspacePlanItems, assistant.TuningAgentWorkspacePlanItemChars
 	list, ok := items.([]any)
 	if !ok || len(list) > maxItems {
 		return nil, PlanError(fmt.Sprintf("items must be a list of at most %d steps", maxItems))

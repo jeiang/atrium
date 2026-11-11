@@ -306,27 +306,93 @@ func validateHostValue(d settings.HostDef, value string) error {
 }
 
 func (h *Host) deriveHostConnections() {
-	if _, ok := h.Connections["service/qbittorrent"]; ok {
-		return
+	if _, ok := h.Connections["service/qbittorrent"]; !ok {
+		if url := h.Values["media_qbittorrent_url"]; url != "" {
+			c := HostConnection{
+				Kind:         "service/qbittorrent",
+				Label:        "qBittorrent",
+				Config:       map[string]string{"url": url},
+				Transport:    map[string]string{},
+				Capabilities: []string{"api"},
+			}
+			if v := h.Values["qbittorrent_ca_file"]; v != "" {
+				c.Transport["ca_file"] = v
+			}
+			if v := h.Values["qbittorrent_proxy"]; v != "" {
+				c.Transport["proxy"] = v
+			}
+			h.Connections["service/qbittorrent"] = c
+		}
 	}
-	url := h.Values["media_qbittorrent_url"]
-	if url == "" {
-		return
+	h.deriveService("service/anthropic", "Anthropic", map[string]string{
+		"url": "https://api.anthropic.com",
+	}, map[string]string{
+		"ca_file": h.Values["anthropic_ca_file"],
+		"proxy":   h.Values["anthropic_proxy"],
+	}, []string{"models"}, false)
+	if h.Values["grafana_url"] != "" {
+		h.deriveService("service/grafana", "Grafana", map[string]string{
+			"url":         h.Values["grafana_url"],
+			"metrics_uid": h.Values["grafana_metrics_uid"],
+			"logs_uid":    h.Values["grafana_logs_uid"],
+			"logs_type":   h.Values["grafana_logs_type"],
+			"logs_query":  h.Values["grafana_logs_query"],
+		}, map[string]string{
+			"ca_file": h.Values["grafana_ca_file"],
+			"proxy":   h.Values["grafana_proxy"],
+		}, []string{"viewer"}, true)
 	}
-	c := HostConnection{
-		Kind:         "service/qbittorrent",
-		Label:        "qBittorrent",
-		Config:       map[string]string{"url": url},
-		Transport:    map[string]string{},
-		Capabilities: []string{"api"},
+	h.deriveService("service/weather", "Open-Meteo", map[string]string{
+		"url":           h.Values["weather_open_meteo_url"],
+		"geocoding_url": h.Values["weather_geocoding_url"],
+	}, map[string]string{
+		"ca_file": h.Values["open_meteo_ca_file"],
+		"proxy":   h.Values["open_meteo_proxy"],
+	}, []string{"forecast", "geocoding"}, true)
+	h.deriveService("service/webfetch", "Web fetch", map[string]string{
+		"url": "https://example.com/",
+	}, nil, []string{"egress"}, false)
+}
+
+func (h *Host) deriveService(id, label string, config, transport map[string]string, capabilities []string, override bool) {
+	c, ok := h.Connections[id]
+	if !ok {
+		c = HostConnection{Kind: id, Label: label}
 	}
-	if v := h.Values["qbittorrent_ca_file"]; v != "" {
-		c.Transport["ca_file"] = v
+	if c.Kind == "" {
+		c.Kind = id
 	}
-	if v := h.Values["qbittorrent_proxy"]; v != "" {
-		c.Transport["proxy"] = v
+	if c.Label == "" {
+		c.Label = label
 	}
-	h.Connections["service/qbittorrent"] = c
+	if c.Config == nil {
+		c.Config = map[string]string{}
+	}
+	if c.Transport == nil {
+		c.Transport = map[string]string{}
+	}
+	for key, value := range config {
+		if value == "" {
+			continue
+		}
+		if _, set := c.Config[key]; set && !override {
+			continue
+		}
+		c.Config[key] = value
+	}
+	for key, value := range transport {
+		if value == "" {
+			continue
+		}
+		if _, set := c.Transport[key]; set && !override {
+			continue
+		}
+		c.Transport[key] = value
+	}
+	if len(c.Capabilities) == 0 {
+		c.Capabilities = capabilities
+	}
+	h.Connections[id] = c
 }
 
 type combinedPins struct {

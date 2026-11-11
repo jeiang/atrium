@@ -9,57 +9,32 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
-const DoomLoopThresholdKey = "doom_loop_threshold"
-
-var maxStepsKeys = map[tool.Kind]string{
-	tool.Chat:    "max_steps_chat",
-	tool.Cron:    "max_steps_cron",
-	tool.Nightly: "max_steps_nightly",
-	tool.Worker:  "max_steps_worker",
-}
-
-func init() {
-	defs := []settings.Def{settings.Value(settings.Advanced, settings.Def{
-		Key: DoomLoopThresholdKey, Module: "assistant", Type: settings.Int, Default: "3",
-		Check: settings.Between(2, 20)})}
-	for _, kind := range []tool.Kind{tool.Chat, tool.Cron, tool.Nightly, tool.Worker} {
-		defaultSteps := "24"
-		if kind == tool.Worker {
-			defaultSteps = "8"
-		}
-		defs = append(defs, settings.Value(settings.Advanced, settings.Def{
-			Key: maxStepsKeys[kind], Module: "assistant", Type: settings.Int, Default: defaultSteps,
-			Check: settings.Between(1, 200)}))
-	}
-	settings.MustRegister(defs...)
-}
-
 func maxStepsKey(kind tool.Kind) string {
 	if kind == tool.Sub {
-		return assistant.KeySubagentMaxSteps
+		return "agent_subagent_max_steps"
 	}
-	return maxStepsKeys[kind]
+	return "max_steps_" + string(kind)
 }
 
-func maxSteps(ctx context.Context, q db.Querier, kind tool.Kind) (int, error) {
-	return intSetting(ctx, q, maxStepsKey(kind))
-}
-
-func doomLoopThreshold(ctx context.Context, q db.Querier) (int, error) {
-	return intSetting(ctx, q, DoomLoopThresholdKey)
-}
-
-func intSetting(ctx context.Context, q db.Querier, key string) (int, error) {
-	found, err := settings.From(ctx).Resolve(ctx, q, key)
-	if err != nil {
-		return 0, err
+func maxSteps(_ context.Context, _ db.Querier, kind tool.Kind) (int, error) {
+	switch kind {
+	case tool.Sub:
+		return assistant.TuningAgentSubagentMaxSteps, nil
+	case tool.Worker:
+		return TuningMaxStepsWorker, nil
+	case tool.Cron:
+		return TuningMaxStepsCron, nil
+	case tool.Nightly:
+		return TuningMaxStepsNightly, nil
 	}
-	n, err := found.Int()
-	return int(n), err
+	return TuningMaxStepsChat, nil
+}
+
+func doomLoopThreshold(_ context.Context, _ db.Querier) (int, error) {
+	return TuningDoomLoopThreshold, nil
 }
 
 func forcedToolChoice(choice *string, model pricing.Model, set registry.Set) (*anthropic.ToolChoice, error) {

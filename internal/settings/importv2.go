@@ -428,6 +428,98 @@ var importManifest = []ImportEntry{
 	{Module: "web_search", Key: "search_web_model", Class: ImportOperator, Action: ImportCarry, Target: "settings.search_web_model", Default: "claude-haiku-5-5", Type: Enum, Choices: []string{"claude-haiku-5-5", "claude-sonnet-5-5", "claude-opus-5-5"}, Cutover: false},
 }
 
+var runtimeCutover = []string{
+	"anthropic_api_key",
+	"anthropic_ca_file",
+	"anthropic_proxy",
+	"grafana_viewer_token",
+	"grafana_url",
+	"grafana_ca_file",
+	"grafana_proxy",
+	"grafana_logs_query",
+	"grafana_logs_type",
+	"grafana_logs_uid",
+	"grafana_metrics_uid",
+	"open_meteo_ca_file",
+	"open_meteo_proxy",
+	"weather_forecast_days",
+	"weather_geocoding_url",
+	"weather_hourly_hours",
+	"weather_open_meteo_url",
+	"weather_timeout_seconds",
+	"ops_condenser_max_tokens",
+	"doom_loop_threshold",
+	"max_steps_chat",
+	"max_steps_cron",
+	"max_steps_nightly",
+	"max_steps_worker",
+	"agent_file_cap_bytes",
+	"agent_file_name_chars",
+	"agent_grafana_cell_chars",
+	"agent_grafana_max_alerts",
+	"agent_grafana_max_dashboards",
+	"agent_grafana_max_log_rows",
+	"agent_grafana_max_metric_rows",
+	"agent_grafana_max_series",
+	"agent_grafana_timeout_seconds",
+	"agent_journal_lease_seconds",
+	"agent_kb_profile_tokens",
+	"agent_kb_retrieval_distance",
+	"agent_kb_retrieval_tokens",
+	"agent_kb_write_chars",
+	"agent_mail_body_chars",
+	"agent_mail_max_loops_limit",
+	"agent_mail_max_results",
+	"agent_mail_snippet_chars",
+	"agent_manifest_results",
+	"agent_media_torrent_limit",
+	"agent_message_cap_bytes",
+	"agent_nightly_max_threads",
+	"agent_nightly_thread_chars",
+	"agent_nightly_total_chars",
+	"agent_preview_chars",
+	"agent_project_instruction_chars",
+	"agent_project_name_chars",
+	"agent_recall_max_page_chars",
+	"agent_recall_page_chars",
+	"agent_ref_tokens",
+	"agent_schedule_max_active_jobs",
+	"agent_scheduler_lease_seconds",
+	"agent_scheduler_missed_grace_seconds",
+	"agent_scheduler_tick_seconds",
+	"agent_stub_tokens",
+	"agent_subagent_context_ids",
+	"agent_subagent_description_chars",
+	"agent_subagent_digest_chars",
+	"agent_subagent_max_concurrent",
+	"agent_subagent_max_steps",
+	"agent_subagent_prompt_chars",
+	"agent_subagent_task_chars",
+	"agent_web_search_max_uses",
+	"agent_webfetch_max_bytes",
+	"agent_webfetch_max_redirects",
+	"agent_webfetch_page_text_chars",
+	"agent_webfetch_text_default",
+	"agent_webfetch_timeout_seconds",
+	"agent_webfetch_user_agent",
+	"agent_workspace_plan_item_chars",
+	"agent_workspace_plan_items",
+	"search_web_dynamic_filtering",
+	"search_web_max_searches",
+	"search_web_max_steps",
+}
+
+func init() {
+	for _, key := range runtimeCutover {
+		for i := range importManifest {
+			if importManifest[i].Key == key {
+				importManifest[i].Runtime = true
+				break
+			}
+		}
+	}
+}
+
 func Manifest() []ImportEntry {
 	out := make([]ImportEntry, len(importManifest))
 	for i, e := range importManifest {

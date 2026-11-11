@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
@@ -133,7 +134,7 @@ func Supervise(ctx context.Context, e worker.Env) error {
 		}
 	}
 	maxCost := set.Float(KeyWorkerMaxRunUSD)
-	steps := int64(set.Int("max_steps_worker"))
+	steps := int64(loop.TuningMaxStepsWorker)
 	extra := prompts.Worker
 	if _, err := e.Service.StartRun(ctx, threadID, text, service.Start{Kind: threads.Worker, Limits: journal.Limits{
 		MaxSteps: &steps, MaxCostUSD: &maxCost, SystemExtra: &extra,

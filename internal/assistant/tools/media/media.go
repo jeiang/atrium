@@ -193,11 +193,7 @@ func mediaDownloads(ctx context.Context, tc *tool.Context, _ tool.Args) (any, er
 			return nil, err
 		}
 	}
-	r := assistant.Read(ctx, tc.DB.Read)
-	torrentLimit := r.Int(assistant.KeyMediaTorrentLimit)
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
+	torrentLimit := assistant.TuningAgentMediaTorrentLimit
 	shown := []any{}
 	for _, t := range torrents[:min(torrentLimit, len(torrents))] {
 		shown = append(shown, torrentDict(t))

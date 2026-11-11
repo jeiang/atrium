@@ -19,7 +19,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/timex"
@@ -38,18 +37,16 @@ type Limits struct {
 	CellChars  int
 }
 
-func ReadLimits(ctx context.Context, q db.Querier) (Limits, error) {
-	r := assistant.Read(ctx, q)
-	lim := Limits{
-		Timeout:    time.Duration(r.Int(assistant.KeyGrafanaTimeout)) * time.Second,
-		Series:     r.Int(assistant.KeyGrafanaSeries),
-		MetricRows: r.Int(assistant.KeyGrafanaMetricRows),
-		LogRows:    r.Int(assistant.KeyGrafanaLogRows),
-		Alerts:     r.Int(assistant.KeyGrafanaAlerts),
-		Dashboards: r.Int(assistant.KeyGrafanaDashboards),
-		CellChars:  r.Int(assistant.KeyGrafanaCellChars),
-	}
-	return lim, r.Err()
+func ReadLimits(_ context.Context, _ db.Querier) (Limits, error) {
+	return Limits{
+		Timeout:    time.Duration(assistant.TuningAgentGrafanaTimeoutSeconds) * time.Second,
+		Series:     assistant.TuningAgentGrafanaMaxSeries,
+		MetricRows: assistant.TuningAgentGrafanaMaxMetricRows,
+		LogRows:    assistant.TuningAgentGrafanaMaxLogRows,
+		Alerts:     assistant.TuningAgentGrafanaMaxAlerts,
+		Dashboards: assistant.TuningAgentGrafanaMaxDashboards,
+		CellChars:  assistant.TuningAgentGrafanaCellChars,
+	}, nil
 }
 
 var (
@@ -138,14 +135,7 @@ func Query(ctx context.Context, q db.Querier, lim Limits, method, path, rawQuery
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	client, err := transport.For(ctx, q, "grafana", lim.Timeout)
-	var invalid transport.Error
-	if errors.As(err, &invalid) {
-		return nil, tool.Error("grafana unreachable: " + invalid.Error())
-	}
-	if err != nil {
-		return nil, err
-	}
+	client := access.HTTP
 	defer client.CloseIdleConnections()
 	resp, err := client.Do(req)
 	if err != nil {

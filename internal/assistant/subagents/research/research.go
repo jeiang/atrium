@@ -123,11 +123,7 @@ func (r *Research) handle(ctx context.Context, tc *tool.Context, args tool.Args)
 	if err != nil {
 		return nil, err
 	}
-	set := assistant.Read(ctx, tc.DB.Read)
-	maxTask, maxIDs := set.Int(assistant.KeySubagentTaskChars), set.Int(assistant.KeySubagentContextIDs)
-	if err := set.Err(); err != nil {
-		return nil, err
-	}
+	maxTask, maxIDs := assistant.TuningAgentSubagentTaskChars, assistant.TuningAgentSubagentContextIDs
 	if utf8.RuneCountInString(task) > maxTask {
 		return nil, tool.Error(fmt.Sprintf("task is longer than %d characters", maxTask))
 	}
@@ -158,11 +154,7 @@ func (r *Research) handle(ctx context.Context, tc *tool.Context, args tool.Args)
 	if now == nil {
 		now = assistant.Now
 	}
-	limits := assistant.Read(ctx, tc.DB.Read)
-	maxConcurrent := limits.Int(assistant.KeySubagentMaxConcurrent)
-	if err := limits.Err(); err != nil {
-		return nil, err
-	}
+	maxConcurrent := assistant.TuningAgentSubagentMaxConcurrent
 	if err := subagents.Slots.Acquire(ctx, maxConcurrent); err != nil {
 		return nil, err
 	}
@@ -218,7 +210,7 @@ func (r *Research) handle(ctx context.Context, tc *tool.Context, args tool.Args)
 
 func (r *Research) runChild(ctx context.Context, tc *tool.Context, child int64, text, role string, agent subagents.Agent) error {
 	set := assistant.Read(ctx, tc.DB.Read)
-	maxSteps, maxCost := set.Int(assistant.KeySubagentMaxSteps), set.Float(assistant.KeySubagentMaxCostUSD)
+	maxSteps, maxCost := assistant.TuningAgentSubagentMaxSteps, set.Float(assistant.KeySubagentMaxCostUSD)
 	if err := set.Err(); err != nil {
 		return err
 	}

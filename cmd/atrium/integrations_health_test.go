@@ -30,7 +30,7 @@ func TestIntegrationTestSavesOnlyWorkingConfigAndHealthNotifiesOncePerChange(t *
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	setEnv(t, settingEnv(grafanatools.KeyURL), "")
-	unsetEnv(t, settingEnv(grafanatools.KeyToken))
+	unsetEnv(t, "ATRIUM_GRAFANA_GRAFANA_VIEWER_TOKEN")
 	setEnv(t, settingEnv(media.KeyQbitURL), "")
 	push, browser := pushRig(t, dir)
 	if got := runApp(t, "settings", "list"); got.code != 0 {
@@ -122,7 +122,7 @@ func grafanaSite(t *testing.T, flag string) (*integrationSite, string, string) {
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	setEnv(t, settingEnv(grafanatools.KeyURL), "")
-	unsetEnv(t, settingEnv(grafanatools.KeyToken))
+	unsetEnv(t, "ATRIUM_GRAFANA_GRAFANA_VIEWER_TOKEN")
 	s := &integrationSite{t: t, dir: dir}
 	s.start()
 	return s, srv.URL, filepath.Join(dir, "atrium.db")
