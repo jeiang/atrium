@@ -13,6 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/anthropicconn"
+	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
+	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
@@ -20,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/weather"
 )
 
 const v2Version = 11
@@ -250,21 +254,21 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source str
 			return err
 		}
 		lines = append(lines, settingLines...)
-		qbit, err := sourceQbit(ctx, src)
+		sourced, err := sourceConnections(ctx, src)
 		if err != nil {
 			return err
 		}
-		connLines, err := connections.ImportV2(ctx, tx, qbit, d.Encrypted(), now)
+		connLines, err := connections.ImportV2(ctx, tx, sourced.Qbit, sourced.Services, d.Encrypted(), now)
 		if err != nil {
 			return err
 		}
 		lines = append(lines, connLines...)
-		if qbit.Key != "" {
-			if _, err := tx.ExecContext(ctx, "DELETE FROM secrets WHERE name = 'media_qbittorrent_api_key'"); err != nil {
+		for _, name := range sourced.Secrets {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM secrets WHERE name = ?", name); err != nil {
 				return err
 			}
 		}
-		if qbit.Health != nil {
+		if sourced.Qbit.Health != nil {
 			if _, err := tx.ExecContext(ctx, "DELETE FROM integration_health WHERE name = 'qbittorrent'"); err != nil {
 				return err
 			}
@@ -390,6 +394,83 @@ func sourceQbit(ctx context.Context, src *sql.DB) (connections.ImportQbit, error
 		return q, err
 	}
 	return q, nil
+}
+
+type sourceConnectionsData struct {
+	Qbit     connections.ImportQbit
+	Services []connections.ImportService
+	Secrets  []string
+}
+
+func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData, error) {
+	var out sourceConnectionsData
+	qbit, err := sourceQbit(ctx, src)
+	if err != nil {
+		return out, err
+	}
+	out.Qbit = qbit
+	if qbit.Key != "" {
+		out.Secrets = append(out.Secrets, "media_qbittorrent_api_key")
+	}
+	values, err := sourceSettings(ctx, src, []string{
+		"anthropic_ca_file", "anthropic_proxy",
+		"grafana_url", "grafana_metrics_uid", "grafana_logs_uid", "grafana_logs_type", "grafana_logs_query", "grafana_ca_file", "grafana_proxy",
+		"weather_open_meteo_url", "weather_geocoding_url", "open_meteo_ca_file", "open_meteo_proxy",
+	})
+	if err != nil {
+		return out, err
+	}
+	key, err := sourceSecret(ctx, src, "anthropic_api_key", "api_key")
+	if err != nil {
+		return out, err
+	}
+	out.Services = append(out.Services, anthropicconn.ImportV2(values, key))
+	if key.Value != "" {
+		out.Secrets = append(out.Secrets, "anthropic_api_key")
+	}
+	if values[grafanatools.KeyURL] != "" {
+		token, err := sourceSecret(ctx, src, "grafana_viewer_token", "viewer_token")
+		if err != nil {
+			return out, err
+		}
+		out.Services = append(out.Services, grafanatools.ImportV2(values, token))
+		if token.Value != "" {
+			out.Secrets = append(out.Secrets, "grafana_viewer_token")
+		}
+	}
+	out.Services = append(out.Services, weather.ImportV2(values), webfetch.ImportV2())
+	return out, nil
+}
+
+func sourceSettings(ctx context.Context, src *sql.DB, keys []string) (map[string]string, error) {
+	args := make([]any, len(keys))
+	for i, key := range keys {
+		args[i] = key
+	}
+	rows, err := src.QueryContext(ctx, "SELECT key, value FROM settings WHERE key IN ("+placeholders(len(keys))+")", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	values := map[string]string{}
+	for rows.Next() {
+		var key, value string
+		if err := rows.Scan(&key, &value); err != nil {
+			return nil, err
+		}
+		values[key] = value
+	}
+	return values, rows.Err()
+}
+
+func sourceSecret(ctx context.Context, src *sql.DB, name, slot string) (connections.ImportCredential, error) {
+	c := connections.ImportCredential{Slot: slot}
+	err := src.QueryRowContext(ctx, "SELECT value, set_at, set_by FROM secrets WHERE name = ?", name).
+		Scan(&c.Value, &c.SetAt, &c.SetBy)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return c, err
+	}
+	return c, nil
 }
 
 func sourceTables(ctx context.Context, src *sql.DB) ([]string, error) {

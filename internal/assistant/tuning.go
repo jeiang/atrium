@@ -55,10 +55,10 @@ const (
 
 	TuningAgentWebSearchMaxUses = 5
 
-	TuningAgentWebfetchMaxBytes        = 2 << 20
-	TuningAgentWebfetchTimeoutSeconds  = 10
-	TuningAgentWebfetchMaxRedirects    = 5
-	TuningAgentWebfetchPageChars       = 60000
-	TuningAgentWebfetchTextDefault     = 12000
-	TuningAgentWebfetchUserAgent       = "atrium-webfetch/1"
+	TuningAgentWebfetchMaxBytes       = 2 << 20
+	TuningAgentWebfetchTimeoutSeconds = 10
+	TuningAgentWebfetchMaxRedirects   = 5
+	TuningAgentWebfetchPageChars      = 60000
+	TuningAgentWebfetchTextDefault    = 12000
+	TuningAgentWebfetchUserAgent      = "atrium-webfetch/1"
 )

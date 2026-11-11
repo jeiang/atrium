@@ -33,16 +33,16 @@ func init() {
 func validateConnection(c connections.Candidate) error {
 	var cfg connectionConfig
 	if err := json.Unmarshal(c.Config, &cfg); err != nil {
-		return fmt.Errorf("Grafana config: %w", err)
+		return fmt.Errorf("grafana config: %w", err)
 	}
 	if strings.TrimSpace(cfg.URL) == "" {
-		return fmt.Errorf("Grafana needs a URL")
+		return fmt.Errorf("grafana needs a URL")
 	}
 	if err := httpURL(cfg.URL); err != nil {
 		return err
 	}
 	if cfg.LogsType != "" && cfg.LogsType != Loki && cfg.LogsType != VictoriaLogs {
-		return fmt.Errorf("Grafana logs type must be %s or %s", Loki, VictoriaLogs)
+		return fmt.Errorf("grafana logs type must be %s or %s", Loki, VictoriaLogs)
 	}
 	return nil
 }
@@ -100,7 +100,7 @@ func testConnection(ctx context.Context, lease *connections.Lease, _ []connectio
 	if err != nil {
 		return nil, err
 	}
-	return []connections.Result{{Capability: "viewer", State: connections.OK, Data: data}}, nil
+	return []connections.Result{{Capability: "viewer", State: connections.OK, Reason: "signed in as " + user.Login, Data: data}}, nil
 }
 
 func grafanaToken(lease *connections.Lease) (string, error) {

@@ -31,10 +31,10 @@ func init() {
 func validate(c connections.Candidate) error {
 	var cfg connectionConfig
 	if err := json.Unmarshal(c.Config, &cfg); err != nil {
-		return fmt.Errorf("Anthropic config: %w", err)
+		return fmt.Errorf("anthropic config: %w", err)
 	}
 	if strings.TrimSpace(cfg.URL) == "" {
-		return fmt.Errorf("Anthropic needs a URL")
+		return fmt.Errorf("anthropic needs a URL")
 	}
 	return httpURL(cfg.URL)
 }
@@ -66,7 +66,7 @@ func test(ctx context.Context, lease *connections.Lease, _ []connections.Capabil
 	if err != nil {
 		return nil, err
 	}
-	return []connections.Result{{Capability: "models", State: connections.OK, Data: data}}, nil
+	return []connections.Result{{Capability: "models", State: connections.OK, Reason: "models available", Data: data}}, nil
 }
 
 func Env(env config.Env, lease *connections.Lease) config.Env {

@@ -1,3 +1,5 @@
+//go:build !modernc
+
 package main
 
 import (
@@ -5,14 +7,18 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -28,14 +34,50 @@ func v2Fixture(t *testing.T) string {
 
 func importTestApp(t *testing.T, dir string, now float64) *cli.App {
 	t.Helper()
+	return importTestAppWithHost(t, dir, now, "http://127.0.0.1:9", "http://127.0.0.1:9")
+}
+
+func importTestAppWithHost(t *testing.T, dir string, now float64, anthropicURL, grafanaURL string) *cli.App {
+	t.Helper()
 	vars := varsFor(t).snapshot()
 	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
+	vars["ATRIUM_DB_KEY"] = rightKeyHex
+	vars["ATRIUM_HOST_CONFIG"] = importHostConfig(t, dir, anthropicURL, grafanaURL)
 	vars[settingEnv(config.KeyMailAccountsFile)] = defaultAccountsFile
-	delete(vars, "ATRIUM_DB_KEY")
-	delete(vars, "ATRIUM_DB_KEY_FILE")
 	reg := settings.New()
+	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	return newAppWith(config.Map(vars), reg, config.NewState(reg), nil, nil, func() float64 { return now }, quietLog)
+}
+
+func importHostConfig(t *testing.T, dir, anthropicURL, grafanaURL string) string {
+	t.Helper()
+	body := fmt.Sprintf(`[connections."service/anthropic"]
+kind = "service/anthropic"
+label = "Anthropic"
+config = { url = %q }
+capabilities = ["models"]
+
+[connections."service/grafana"]
+kind = "service/grafana"
+label = "Grafana"
+config = { url = %q }
+capabilities = ["viewer"]
+`, anthropicURL, grafanaURL)
+	path := filepath.Join(dir, "host.toml")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func importKey(t *testing.T) db.Key {
+	t.Helper()
+	key, err := db.ParseKey(rightKeyHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return key
 }
 
 func runImportApp(t *testing.T, app *cli.App, args ...string) appRun {
@@ -80,7 +122,6 @@ func copyV2Fixture(t *testing.T, dir string) string {
 }
 
 func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
-	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -107,13 +148,17 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		"job_runs: dropped 2",
 		"schema_migrations: dropped 11",
 		"setting money_since: dropped",
+		"connection service/anthropic: created from host settings",
+		"connection service/anthropic: credential api_key carried",
+		"connection service/weather: created from host settings",
+		"connection service/webfetch: created from host settings",
 	} {
 		if !strings.Contains(got.stdout, want) {
 			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
 		}
 	}
 
-	q, err := db.OpenSource(dest, db.Key{})
+	q, err := db.OpenSource(dest, importKey(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -162,8 +207,11 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 	if got := importValue(t, q, "SELECT value FROM settings WHERE key = 'default_effort'"); got != "medium" {
 		t.Errorf("default_effort %q", got)
 	}
-	if n := importCount(t, q, "SELECT length(value) FROM secrets WHERE name = 'anthropic_api_key'"); n != 14 {
-		t.Errorf("secret length %d", n)
+	if n := importCount(t, q, "SELECT COUNT(*) FROM secrets WHERE name = 'anthropic_api_key'"); n != 0 {
+		t.Errorf("the Anthropic key stayed in the secrets table")
+	}
+	if got := importValue(t, q, "SELECT value FROM connection_credentials WHERE connection_id = 'service/anthropic' AND slot = 'api_key'"); got != "sk-ant-fixture" {
+		t.Errorf("the imported Anthropic credential is %q", got)
 	}
 	if n := importCount(t, q, "SELECT COUNT(*) FROM kb_records WHERE embedded != 0"); n != 0 {
 		t.Errorf("%d knowledge records kept embedded=1", n)
@@ -281,7 +329,7 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		if got.code != cli.ExitOK {
 			t.Fatalf("import: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 		}
-		dest, err := db.OpenSource(filepath.Join(target, "atrium.db"), db.Key{})
+		dest, err := db.OpenSource(filepath.Join(target, "atrium.db"), importKey(t))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -300,7 +348,7 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		if got.code != cli.ExitOK {
 			t.Fatalf("import: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 		}
-		dest, err := db.OpenSource(filepath.Join(target, "atrium.db"), db.Key{})
+		dest, err := db.OpenSource(filepath.Join(target, "atrium.db"), importKey(t))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -314,9 +362,126 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 	})
 }
 
+func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+
+	api := anthropictest.New(t)
+	api.Push(
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("g1", "grafana_datasources", nil)),
+		anthropictest.Reply("end_turn", anthropictest.Text("listed")),
+	)
+	var mu sync.Mutex
+	var apiKeys []string
+	var authorizations []string
+	api.OnRequest = func(request anthropictest.Request) {
+		mu.Lock()
+		apiKeys = append(apiKeys, request.Header.Get("X-Api-Key"))
+		mu.Unlock()
+	}
+	grafana := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		authorizations = append(authorizations, r.Header.Get("Authorization"))
+		mu.Unlock()
+		if r.URL.Path != "/api/datasources" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(`[{"uid":"prom","name":"Imported datasource","type":"prometheus"}]`))
+	}))
+	t.Cleanup(grafana.Close)
+
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
+		('grafana_url', %[1]q),
+		('grafana_metrics_uid', 'prom'),
+		('weather_open_meteo_url', 'http://weather.invalid/forecast'),
+		('weather_geocoding_url', 'http://weather.invalid/search')`, grafana.URL))
+	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('grafana_viewer_token', 'glsa-imported-token', 1762000800, 'fixture')")
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	for _, want := range []string{
+		"connection service/anthropic: credential api_key carried",
+		"connection service/grafana: created from host settings",
+		"connection service/grafana: credential viewer_token carried",
+		"connection service/weather: created from host settings",
+		"connection service/webfetch: created from host settings",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+	if strings.Contains(got.stdout+got.stderr, "sk-ant-fixture") || strings.Contains(got.stdout+got.stderr, "glsa-imported-token") {
+		t.Error("the import printed a credential")
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	q, err := db.OpenSource(dest, importKey(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	if n := importCount(t, q, "SELECT COUNT(*) FROM secrets WHERE name IN ('anthropic_api_key', 'grafana_viewer_token')"); n != 0 {
+		t.Errorf("%d migrated credentials stayed in the secrets table", n)
+	}
+	for _, tc := range []struct{ id, slot, want string }{
+		{"service/anthropic", "api_key", "sk-ant-fixture"},
+		{"service/grafana", "viewer_token", "glsa-imported-token"},
+	} {
+		if got := importValue(t, q, "SELECT value FROM connection_credentials WHERE connection_id = ? AND slot = ?", tc.id, tc.slot); got != tc.want {
+			t.Errorf("%s credential %s = %q", tc.id, tc.slot, got)
+		}
+		if got := importValue(t, q, "SELECT set_by FROM connection_credentials WHERE connection_id = ? AND slot = ?", tc.id, tc.slot); got != "fixture" {
+			t.Errorf("%s credential %s set_by = %q", tc.id, tc.slot, got)
+		}
+	}
+	if got := importValue(t, q, "SELECT config_json FROM connections WHERE id = 'service/grafana'"); !strings.Contains(got, grafana.URL) || !strings.Contains(got, `"metrics_uid":"prom"`) {
+		t.Errorf("the Grafana config was not carried: %s", got)
+	}
+	if got := importValue(t, q, "SELECT config_json FROM connections WHERE id = 'service/weather'"); !strings.Contains(got, "http://weather.invalid/forecast") || !strings.Contains(got, "http://weather.invalid/search") {
+		t.Errorf("the weather config was not carried: %s", got)
+	}
+	if got := importValue(t, q, "SELECT config_json FROM connections WHERE id = 'service/webfetch'"); !strings.Contains(got, "https://example.com/") {
+		t.Errorf("the web fetch probe was not carried: %s", got)
+	}
+
+	setEnv(t, anthropic.BaseURLEnv, api.URL)
+	setEnv(t, settingEnv(grafanatools.KeyURL), grafana.URL)
+	ran := runImportApp(t, importTestAppWithHost(t, dir, clock, api.URL, grafana.URL), "agent", "run", "--text", "list the datasources")
+	if ran.code != cli.ExitOK {
+		t.Fatalf("agent run: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
+	}
+	mu.Lock()
+	keys := append([]string(nil), apiKeys...)
+	seen := append([]string(nil), authorizations...)
+	mu.Unlock()
+	if len(keys) == 0 {
+		t.Fatalf("the agent run never reached the Anthropic fake: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
+	}
+	for _, key := range keys {
+		if key != "sk-ant-fixture" {
+			t.Errorf("Anthropic request used key %q", key)
+		}
+	}
+	if len(seen) == 0 {
+		t.Fatal("the Grafana tool never reached the fake")
+	}
+	for _, authorization := range seen {
+		if authorization != "Bearer glsa-imported-token" {
+			t.Errorf("Grafana request used %q", authorization)
+		}
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM thread_messages WHERE run_id = (SELECT MAX(id) FROM runs) AND content_json LIKE '%Imported datasource%'"); n == 0 {
+		t.Error("the Grafana tool result did not reach the thread")
+	}
+}
+
 func editImportSource(t *testing.T, path, statement string) {
 	t.Helper()
-	d, err := db.Connect(path)
+	d, err := db.Connect(path, db.WithKey(db.Key{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -327,7 +492,6 @@ func editImportSource(t *testing.T, path, statement string) {
 }
 
 func TestImportV2BillsMemoryAndRefusesOverBudgetAgentCalls(t *testing.T) {
-	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	loc, err := time.LoadLocation("America/Port_of_Spain")
 	if err != nil {
@@ -347,7 +511,7 @@ func TestImportV2BillsMemoryAndRefusesOverBudgetAgentCalls(t *testing.T) {
 	if got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source); got.code != cli.ExitOK {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
-	q, err := db.Connect(dest)
+	q, err := db.Connect(dest, db.WithKey(importKey(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -411,11 +575,10 @@ func TestImportV2BillsMemoryAndRefusesOverBudgetAgentCalls(t *testing.T) {
 }
 
 func TestImportV2RefusesAnUnknownSettingWithItsName(t *testing.T) {
-	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
-	d, err := db.Connect(source)
+	d, err := db.Connect(source, db.WithKey(db.Key{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -432,11 +595,10 @@ func TestImportV2RefusesAnUnknownSettingWithItsName(t *testing.T) {
 }
 
 func TestImportV2ResetsLiveMailToShadowAndAccountsEverySetting(t *testing.T) {
-	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
-	d, err := db.Connect(source)
+	d, err := db.Connect(source, db.WithKey(db.Key{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -461,7 +623,7 @@ func TestImportV2ResetsLiveMailToShadowAndAccountsEverySetting(t *testing.T) {
 			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
 		}
 	}
-	dest, err := db.OpenSource(filepath.Join(dir, "atrium.db"), db.Key{})
+	dest, err := db.OpenSource(filepath.Join(dir, "atrium.db"), importKey(t))
 	if err != nil {
 		t.Fatal(err)
 	}

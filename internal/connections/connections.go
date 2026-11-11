@@ -225,7 +225,7 @@ func aggregate(results []Result, enabled []Capability) (State, string) {
 	rank := map[State]int{NeedsReauth: 5, Failing: 4, Expiring: 3, Untested: 2, OK: 1}
 	state, reason := OK, ""
 	for _, r := range results {
-		if rank[r.State] > rank[state] {
+		if rank[r.State] >= rank[state] {
 			state, reason = r.State, r.Reason
 		}
 	}
