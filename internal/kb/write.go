@@ -301,6 +301,13 @@ func Retract(ctx context.Context, store *ledger.Store, w Writer, id int64, reaso
 		if err := refused(*rec, "retracted"); err != nil {
 			return ledger.Result{}, err
 		}
+		project, err := threadProject(ctx, tx, w.ThreadID)
+		if err != nil {
+			return ledger.Result{}, err
+		}
+		if projectOf(rec.ProjectID) != projectOf(project) {
+			return ledger.Result{}, tool.Error(fmt.Sprintf("%s belongs to another project", Cite(id)))
+		}
 		now := w.Now
 		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?",
 			now, now, id); err != nil {
