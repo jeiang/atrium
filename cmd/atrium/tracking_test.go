@@ -519,3 +519,42 @@ func TestUndoPackageUntrackRefusesWithoutAKey(t *testing.T) {
 		t.Fatalf("Ship24 unsubscribes = %d, want 0", fake.unsubscribeCount())
 	}
 }
+
+func TestTrackingIdentityBlocksASecondPackageRow(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	fake := &fakeShip24{milestone: "in_transit", failCreate: http.StatusInternalServerError}
+	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
+	t.Cleanup(srv.Close)
+	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
+	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
+	setEnv(t, settingEnv(tracking.KeyMonthlyQuota), "10")
+	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	for i := 1; i <= 2; i++ {
+		if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
+			"source_message_id, last_message_id, updated_ts, first_seen) VALUES (?, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)", i); err != nil {
+			t.Fatal(err)
+		}
+	}
+	first := requestTracking(t, api, d, "i1", 1, "track one")
+	if ran := runApp(t, "proposals", "approve", first); ran.code == cli.ExitOK || !strings.Contains(ran.stdout+ran.stderr, "outcome is unknown") {
+		t.Fatalf("the unknown outcome was not reported: %d %s %s", ran.code, ran.stdout, ran.stderr)
+	}
+	var target string
+	if err := d.Read.QueryRow("SELECT target FROM effects WHERE operation = 'track_package' AND state = 'unknown' ORDER BY id DESC LIMIT 1").Scan(&target); err != nil {
+		t.Fatal(err)
+	}
+	if target != "tracking:ups:1Z999AA10123456784" {
+		t.Fatalf("effect target = %q, want the normalized tracking identity", target)
+	}
+	second := requestTracking(t, api, d, "i2", 2, "track two")
+	if ran := runApp(t, "proposals", "approve", second); ran.code == cli.ExitOK || !strings.Contains(ran.stdout+ran.stderr, "unknown outcome") {
+		t.Fatalf("a second package row bypassed the blocker: %d %s %s", ran.code, ran.stdout, ran.stderr)
+	}
+	if creates, _ := fake.counts(); creates != 1 {
+		t.Fatalf("Ship24 created %d trackers, want 1", creates)
+	}
+}

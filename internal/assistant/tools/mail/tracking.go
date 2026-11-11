@@ -2,6 +2,7 @@ package mailtools
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -71,12 +72,19 @@ func trackPackage(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 		}
 		return result, nil
 	}
-	targetName := fmt.Sprintf("package:%d", target.ID)
+	identity := tracking.Identity(target.Carrier, target.TrackingNumber)
 	ticket, err := tc.Ledger.Begin(ctx, ledger.New{
-		Origin: "tracking", Operation: "track_package", OperationKey: "track_package:" + ledger.NewKey(),
-		Target: targetName, ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
-		Resources: []ledger.Resource{{Key: "package:" + fmt.Sprint(target.ID)}},
-	}, nil)
+		Origin: "tracking", Operation: "track_package", OperationKey: "track_package:" + identity,
+		Target: identity, ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+		Resources: []ledger.Resource{{Key: identity}},
+	}, func(ctx context.Context, tx *sql.Tx) error {
+		id, err := tracking.Admit(ctx, tx, target, tc.Now())
+		if err != nil {
+			return err
+		}
+		target.ID = id
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +95,7 @@ func trackPackage(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 		if tracking.OutcomeUnknown(err) {
 			state = ledger.Unknown
 		}
-		_ = tc.Ledger.Settle(settleCtx, ticket, ledger.Result{State: state, Target: targetName, Error: err.Error()}, nil)
+		_ = tc.Ledger.Settle(settleCtx, ticket, ledger.Result{State: state, Target: identity, Error: err.Error()}, nil)
 		if state == ledger.Unknown {
 			return nil, tool.Error("the Ship24 registration outcome is unknown: " + err.Error() +
 				"; the write is blocked until the operator resolves it with `atrium effects resolve " + fmt.Sprint(ticket.ID) + " --outcome applied`")
@@ -96,10 +104,12 @@ func trackPackage(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 	}
 	undo := tracking.Undo{Op: tracking.UndoUntrack, PackageID: target.ID, TrackerID: result.TrackerID, Before: target}
 	if err := tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
-		State: ledger.Done, Target: targetName,
+		State: ledger.Done, Target: identity,
 		After: jsonOf(map[string]any{"tracker_id": result.TrackerID, "status": result.Status}),
 		Undo:  jsonOf(undo),
-	}, nil); err != nil {
+	}, func(ctx context.Context, tx *sql.Tx) error {
+		return tracking.SaveRegistration(ctx, tx, tc.Now(), target.ID, result.TrackerID, result.Tracking)
+	}); err != nil {
 		return nil, err
 	}
 	result.WriteID = ticket.ID
