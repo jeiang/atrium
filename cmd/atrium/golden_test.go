@@ -144,6 +144,7 @@ type fixture struct {
 	settings *settings.Registry
 	state    *config.State
 	base     string
+	fakes    map[string]*mailtest.FakeClient
 }
 
 func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin string) *fixture {
@@ -211,7 +212,7 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	app := newAppWith(env, reg, st, nil, clients, func() float64 { return data.world.Clock }, quietLog)
 	app.Stdin = strings.NewReader(stdin)
 	copyFile(t, filepath.Join(golden.Dir(), "world.db"), filepath.Join(dir, "atrium.db"))
-	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: reg, state: st}
+	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: reg, state: st, fakes: fakes}
 	fixturesByTest.Store(t, f)
 	fixturesByTest.Store(testKey(t), f)
 	seedNotionVectors(t, filepath.Join(f.dir, "atrium.db"))

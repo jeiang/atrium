@@ -1216,6 +1216,202 @@ func TestImportV2MapsAgentWritesToEffects(t *testing.T) {
 	}
 }
 
+func TestImportV2MapsProposalStatesToEffects(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	d, err := db.Connect(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	proposal := func(id int64, status string, decided, applied, undone any) {
+		t.Helper()
+		if _, err := d.Write.Exec(
+			"INSERT INTO proposals (id, kind, account, status, created_ts, decided_ts, applied_ts, undone_ts, recovered, title, payload, preview, result, fingerprint) "+
+				"VALUES (?, 'inbox_backlog', NULL, ?, ?, ?, ?, ?, 0, ?, '{}', '{}', NULL, ?)",
+			id, status, clock-1000, decided, applied, undone, fmt.Sprintf("proposal %d", id), fmt.Sprintf("fp-%d", id)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write := func(id, proposalID int64, state, errText string) {
+		t.Helper()
+		if _, err := d.Write.Exec(
+			"INSERT INTO proposal_actions (id, proposal_id, ts, lease, kind, undo_of, action, undo, state, error) "+
+				"VALUES (?, ?, ?, ?, 'write', NULL, '{\"op\":\"move\"}', '{\"op\":\"move_back\"}', ?, ?)",
+			id, proposalID, clock-1000, clock-1000, state, errText); err != nil {
+			t.Fatal(err)
+		}
+	}
+	undo := func(id, proposalID, undoOf int64, state, errText string) {
+		t.Helper()
+		if _, err := d.Write.Exec(
+			"INSERT INTO proposal_actions (id, proposal_id, ts, lease, kind, undo_of, action, undo, state, error) "+
+				"VALUES (?, ?, ?, ?, 'undo', ?, '{\"op\":\"move_back\"}', NULL, ?, ?)",
+			id, proposalID, clock-1000, clock-1000, undoOf, state, errText); err != nil {
+			t.Fatal(err)
+		}
+	}
+	proposal(21, "pending", nil, nil, nil)
+	proposal(22, "applied", clock-900, clock-800, nil)
+	write(221, 22, "ok", "")
+	proposal(23, "applied", clock-900, clock-800, nil)
+	write(231, 23, "ok", "")
+	write(232, 23, "failed", "refused")
+	proposal(24, "failed", clock-900, nil, nil)
+	write(241, 24, "failed", "refused")
+	proposal(25, "applied", clock-900, clock-800, clock-500)
+	write(251, 25, "ok", "")
+	undo(252, 25, 251, "ok", "")
+	proposal(26, "applied", clock-900, clock-800, nil)
+	write(261, 26, "ok", "")
+	undo(262, 26, 261, "failed", "refused")
+	proposal(27, "failed", clock-900, nil, nil)
+	write(271, 27, "held", "connection lost")
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if !strings.Contains(got.stdout, "proposal_actions: converted 15") {
+		t.Errorf("the report lacks the proposal conversion count:\n%s", got.stdout)
+	}
+
+	q, err := db.OpenSource(dest, importKey(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+
+	effectOf := func(actionID int64, role string) int64 {
+		t.Helper()
+		var effect int64
+		if err := q.QueryRow("SELECT effect_id FROM effect_import_refs WHERE source_table = 'proposal_actions' AND source_id = ? AND role = ?", actionID, role).Scan(&effect); err != nil {
+			t.Fatalf("proposal_actions %d (%s) has no effect: %v", actionID, role, err)
+		}
+		return effect
+	}
+	for _, tc := range []struct {
+		action    int64
+		role      string
+		direction string
+		state     string
+	}{
+		{221, "forward", "forward", "done"},
+		{231, "forward", "forward", "done"},
+		{232, "forward", "forward", "failed"},
+		{241, "forward", "forward", "failed"},
+		{251, "forward", "forward", "done"},
+		{252, "undo", "undo", "done"},
+		{261, "forward", "forward", "done"},
+		{262, "undo", "undo", "failed"},
+		{271, "forward", "forward", "unknown"},
+	} {
+		var direction, state string
+		if err := q.QueryRow("SELECT direction, state FROM effects WHERE id = ?", effectOf(tc.action, tc.role)).Scan(&direction, &state); err != nil {
+			t.Fatal(err)
+		}
+		if direction != tc.direction || state != tc.state {
+			t.Errorf("proposal_actions %d = %s/%s, want %s/%s", tc.action, direction, state, tc.direction, tc.state)
+		}
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effects WHERE id = ? AND undo_of = ?", effectOf(252, "undo"), effectOf(251, "forward")); n != 1 {
+		t.Errorf("the completed undo does not point at its forward row")
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effects WHERE id = ? AND undone_by = ?", effectOf(251, "forward"), effectOf(252, "undo")); n != 1 {
+		t.Errorf("the undone forward row does not point at its completed undo")
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effects WHERE id = ? AND undone_by IS NULL", effectOf(261, "forward")); n != 1 {
+		t.Errorf("the forward row of a failed undo was marked undone")
+	}
+	if got := importValue(t, q, "SELECT error FROM effects WHERE id = ?", effectOf(271, "forward")); got != "connection lost" {
+		t.Errorf("the blocked write error is %q", got)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effect_claims WHERE resource = 'proposal/27/move'"); n != 1 {
+		t.Errorf("the blocked write claim = %d, want one", n)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effect_resources WHERE effect_id = ? AND resource = 'proposal/27/move' AND holding = 1", effectOf(271, "forward")); n != 1 {
+		t.Errorf("the blocked write does not hold its resource")
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effects WHERE proposal_id = 21"); n != 0 {
+		t.Errorf("the pending proposal produced %d effects", n)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effect_resolutions WHERE effect_id IN (SELECT effect_id FROM effect_import_refs WHERE source_table = 'proposal_actions')"); n != 0 {
+		t.Errorf("the import invented %d resolutions for settled proposal work", n)
+	}
+	for _, tc := range []struct {
+		id     int64
+		status string
+		undone bool
+	}{
+		{21, "pending", false},
+		{22, "applied", false},
+		{23, "applied", false},
+		{24, "failed", false},
+		{25, "applied", true},
+		{26, "applied", false},
+		{27, "failed", false},
+	} {
+		if got := importValue(t, q, "SELECT status FROM proposals WHERE id = ?", tc.id); got != tc.status {
+			t.Errorf("proposal %d status %q, want %q", tc.id, got, tc.status)
+		}
+		if undone := !importNull(t, q, "SELECT undone_ts FROM proposals WHERE id = ?", tc.id); undone != tc.undone {
+			t.Errorf("proposal %d undone = %v, want %v", tc.id, undone, tc.undone)
+		}
+	}
+
+	listed := runImportApp(t, importTestApp(t, dir, clock), "proposals", "list")
+	if listed.code != cli.ExitOK {
+		t.Fatalf("proposals list: exit %d stdout %q stderr %q", listed.code, listed.stdout, listed.stderr)
+	}
+	var rows []struct {
+		ID       int64 `json:"id"`
+		Undoable bool  `json:"undoable"`
+	}
+	if err := json.Unmarshal([]byte(listed.stdout), &rows); err != nil {
+		t.Fatalf("proposals list output %q: %v", listed.stdout, err)
+	}
+	undoable := map[int64]bool{}
+	for _, row := range rows {
+		undoable[row.ID] = row.Undoable
+	}
+	for _, tc := range []struct {
+		id   int64
+		want bool
+	}{
+		{21, false},
+		{22, true},
+		{23, true},
+		{24, false},
+		{25, false},
+		{26, true},
+		{27, false},
+	} {
+		if got, ok := undoable[tc.id]; !ok || got != tc.want {
+			t.Errorf("proposals list %d undoable = %v (present %v), want %v", tc.id, got, ok, tc.want)
+		}
+	}
+
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	base := startServeIn(t, dir)
+	status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/review", nil)
+	if status != http.StatusOK {
+		t.Fatalf("GET /review = %d", status)
+	}
+	if !strings.Contains(body, "/proposals/27/resolve") || !strings.Contains(body, "connection lost") {
+		t.Errorf("the review page does not offer to resolve the blocked proposal with its error: %.400s", body)
+	}
+	for _, id := range []int64{21, 22, 23, 24, 25, 26} {
+		if strings.Contains(body, fmt.Sprintf("/proposals/%d/resolve", id)) {
+			t.Errorf("the review page treats proposal %d as blocked", id)
+		}
+	}
+}
+
 func TestImportV2BillsMemoryAndRefusesOverBudgetAgentCalls(t *testing.T) {
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	loc, err := time.LoadLocation("America/Port_of_Spain")
@@ -1745,6 +1941,7 @@ S: {t} OK
 	}
 	id, _ := res.LastInsertId()
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	setEnv(t, "ATRIUM_HOST_CONFIG", importHostConfig(t, dir, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9"))
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	base := startServeIn(t, dir)
 	jar, _ := cookiejar.New(nil)
@@ -1787,4 +1984,143 @@ S: {t} OK
 	if got := importValue(t, d.Read, "SELECT status FROM drafts WHERE id = ?", id); got != "sent" {
 		t.Errorf("draft status %q", got)
 	}
+}
+func TestImportV2UnionsOIDCSelectorsAndDropsLoginState(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+
+	seed, err := db.Connect(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for key, value := range map[string]string{
+		"oidc_access_group":   "team_access",
+		"oidc_admin_group":    "team_admin",
+		"oidc_access_emails":  "a@example.com, B@Example.com",
+		"oidc_admin_emails":   "b@example.com",
+		"oidc_access_domains": "example.com",
+		"oidc_admin_domains":  "admin.example.com",
+	} {
+		if _, err := seed.Write.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, statement := range []string{
+		"INSERT INTO auth_sessions (token_hash, subject, admin, created_at, last_seen_at, idle_expires_at, absolute_expires_at, rechecked_at, origin) VALUES ('h', 's', 1, 1, 1, 2, 2, 1, 'link')",
+		"INSERT INTO auth_logins (state_hash, binding_hash, nonce, verifier, return_to, created_at) VALUES ('s', 'b', 'n', 'v', '/', 1)",
+		"INSERT INTO auth_login_links (nonce_hash, issued_at, expires_at) VALUES ('n', 1, 2)",
+	} {
+		if _, err := seed.Write.Exec(statement); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = seed.Close()
+	before := fileDigest(t, source)
+
+	host := importAuthHostConfig(t, dir)
+	got := runImportApp(t, importTestAppHost(t, dir, clock, host), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if after := fileDigest(t, source); after != before {
+		t.Errorf("the import changed the source: %s -> %s", before, after)
+	}
+	for _, want := range []string{
+		"auth_sessions: dropped 1",
+		"auth_logins: dropped 1",
+		"auth_login_links: dropped 1",
+		"setting oidc_access_group: dropped -> host.auth.oidc_access_groups",
+		"setting oidc_admin_group: dropped -> host.auth.oidc_access_groups",
+		"setting oidc_admin_emails: dropped -> host.auth.oidc_access_emails",
+		"setting oidc_admin_domains: dropped -> host.auth.oidc_access_domains",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+	if strings.Contains(got.stdout, "does not know") {
+		t.Fatalf("the import refused a removed selector:\n%s", got.stdout)
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	q, err := db.OpenSource(dest, importKey(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	for _, table := range []string{"auth_sessions", "auth_logins"} {
+		if n := importCount(t, q, "SELECT COUNT(*) FROM "+table); n != 0 {
+			t.Errorf("%s kept %d login rows", table, n)
+		}
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'auth_login_links'"); n != 0 {
+		t.Errorf("the destination still has an auth_login_links table")
+	}
+
+	listed := runImportApp(t, importTestAppHost(t, dir, clock, host), "connections", "list", "--json")
+	if listed.code != cli.ExitOK {
+		t.Fatalf("connections list: exit %d stdout %q stderr %q", listed.code, listed.stdout, listed.stderr)
+	}
+	var views []struct {
+		ID     string            `json:"id"`
+		Config map[string]string `json:"config"`
+	}
+	if err := json.Unmarshal([]byte(listed.stdout), &views); err != nil {
+		t.Fatalf("connections JSON: %v\n%s", err, listed.stdout)
+	}
+	var oidc map[string]string
+	for _, view := range views {
+		if view.ID == "service/oidc" {
+			oidc = view.Config
+		}
+	}
+	if oidc == nil {
+		t.Fatalf("no service/oidc connection in %s", listed.stdout)
+	}
+	for key, want := range map[string]string{
+		"access_groups":  "team_access,team_admin",
+		"access_emails":  "a@example.com, B@Example.com",
+		"access_domains": "example.com,admin.example.com",
+	} {
+		if oidc[key] != want {
+			t.Errorf("service/oidc %s = %q, want %q", key, oidc[key], want)
+		}
+	}
+}
+
+func TestImportV2RefusesAPinnedRemovedSelector(t *testing.T) {
+	dir := t.TempDir()
+	base, err := os.ReadFile(importHostConfig(t, dir, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := filepath.Join(dir, "removed.toml")
+	if err := os.WriteFile(host, append(base, []byte("\n[auth]\noidc_admin_group = \"atrium_admin\"\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := runImportApp(t, importTestAppHost(t, dir, 1, host), "connections", "list")
+	if got.code == cli.ExitOK || !strings.Contains(got.stderr, "use host.auth.oidc_access_groups") {
+		t.Fatalf("removed selector: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+}
+
+func importAuthHostConfig(t *testing.T, dir string) string {
+	t.Helper()
+	base, err := os.ReadFile(importHostConfig(t, dir, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(base) + `
+[connections."service/oidc"]
+kind = "service/oidc"
+label = "Sign-in"
+config = { access_groups = "team_access,team_admin", access_emails = "a@example.com, B@Example.com", access_domains = "example.com,admin.example.com" }
+capabilities = ["discovery", "client_auth"]
+`
+	path := filepath.Join(dir, "auth-host.toml")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }

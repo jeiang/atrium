@@ -20,7 +20,6 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
-	"github.com/jeiang/atrium/internal/auth/loginlink"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -39,7 +38,6 @@ type access uint8
 const (
 	accessDefault access = iota
 	accessPublic
-	accessAdmin
 )
 
 type routeRule struct {
@@ -89,8 +87,8 @@ func (d *Deps) Public(method, pattern string, h http.HandlerFunc) {
 	d.route(method, pattern, accessPublic, h)
 }
 
-func (d *Deps) Admin(method, pattern string, h http.HandlerFunc) {
-	d.route(method, pattern, accessAdmin, h)
+func (d *Deps) Authenticated(method, pattern string, h http.HandlerFunc) {
+	d.route(method, pattern, accessDefault, h)
 }
 
 func (d *Deps) route(method, pattern string, class access, h http.HandlerFunc) {
@@ -123,7 +121,6 @@ type Server struct {
 	state    *config.State
 	auth     Policy
 	oidc     *oidc.Service
-	links    *loginlink.Service
 	render   *Renderer
 	secure   func(*http.Request) bool
 	handler  http.Handler
@@ -167,9 +164,6 @@ func New(o Options) (*Server, error) {
 	}
 	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, settings: o.Settings, state: o.State}
 	s.mux.Use(instrument)
-	if o.DB != nil {
-		s.links = loginlink.New(o.DB)
-	}
 	if s.errPage == nil && o.Render != nil {
 		s.errPage = o.Render.ErrorPage
 	}
@@ -230,12 +224,6 @@ func New(o Options) (*Server, error) {
 	guard.sessions = o.OIDC
 	guard.errPage = s.errPage
 	if o.DB != nil {
-		guard.admin = func(ctx context.Context) (string, error) {
-			if o.OIDC == nil {
-				return oidc.DefaultAdminGroup, nil
-			}
-			return o.OIDC.AdminGroup(ctx)
-		}
 		guard.bodyCap = func(ctx context.Context) (int, error) {
 			return config.From(ctx).Limit(ctx, o.DB.Read, config.KeyBodyCap)
 		}

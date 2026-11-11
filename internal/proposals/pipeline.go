@@ -352,13 +352,10 @@ func pendingEffects(effects []ledger.Effect) ([]ledger.Effect, map[int64]bool) {
 	}
 	var todo []ledger.Effect
 	for _, e := range effects {
-		if e.Direction != "forward" || (e.State != ledger.Done && e.State != ledger.Partial) {
+		if e.Direction != "forward" || !e.Succeeded() {
 			continue
 		}
 		if e.UndoneBy != nil || len(e.Undo) == 0 {
-			continue
-		}
-		if e.Resolution != nil && e.Resolution.EffectiveOutcome == "failed" {
 			continue
 		}
 		todo = append(todo, e)
@@ -658,13 +655,25 @@ func (p *Pipeline) Undo(ctx context.Context, id int64, who Resolver) (UndoResult
 	}
 	out := UndoResult{Outcomes: []map[string]any{}}
 	settle := context.WithoutCancel(ctx)
+	complete := true
 	for _, e := range todo {
 		if err := ctx.Err(); err != nil {
 			return out, err
 		}
-		if _, err := p.Ledger.Undo(ctx, e.ID, ledger.Resolver{Actor: who.Actor, Source: who.Source}); err != nil {
+		undo, err := p.Ledger.Undo(ctx, e.ID, ledger.Resolver{Actor: who.Actor, Source: who.Source})
+		if err != nil {
 			out.Outcomes = append(out.Outcomes, map[string]any{"action": e.ID, "ok": false, "error": err.Error()})
-			continue
+			complete = false
+			break
+		}
+		if undo.EffectiveOutcome != string(ledger.Done) {
+			text := undo.Error
+			if text == "" {
+				text = "the undo settled as " + string(undo.State)
+			}
+			out.Outcomes = append(out.Outcomes, map[string]any{"action": e.ID, "ok": false, "error": text, "state": string(undo.State)})
+			complete = false
+			break
 		}
 		out.Outcomes = append(out.Outcomes, map[string]any{"action": e.ID, "ok": true})
 	}
@@ -672,12 +681,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64, who Resolver) (UndoResult
 		return out, err
 	}
 	out.SyncError = p.sync(ctx, prop)
-	out.Undone = true
-	for _, o := range out.Outcomes {
-		if ok, _ := o["ok"]; ok == false {
-			out.Undone = false
-		}
-	}
+	out.Undone = complete
 	if out.Undone {
 		if _, err := p.DB.Write.ExecContext(settle, "UPDATE proposals SET undone_ts = ? WHERE id = ?", p.now(), id); err != nil {
 			return out, err

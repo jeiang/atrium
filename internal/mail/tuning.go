@@ -34,7 +34,6 @@ const (
 	TuningMailSearchRrfK                 = 60
 	TuningMailSearchSnippetChars         = 220
 	TuningMailSearchSnippetTokens        = 24
-	TuningMailopsBatch                   = 100
 	TuningOpenloopsCommitmentScanLimit   = 20
 	TuningOpenloopsCommitmentWindowDays  = 14
 	TuningOpenloopsCommitmentsPerMessage = 5
@@ -68,6 +67,8 @@ const (
 	TuningWatchesStalePackageDays        = 60
 	TuningWriteAttempts                  = 3
 )
+
+var TuningMailopsBatch = 100
 
 func RebalanceClusterKs() []int {
 	out, _ := endpoint.SplitInts(TuningRebalanceClusterKs)

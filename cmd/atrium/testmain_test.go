@@ -287,14 +287,14 @@ func moduleEnv(dir string) map[string]string {
 
 func requirementEnv(mediaRoot string) map[string]string {
 	return map[string]string{
-		settingEnv(endpoint.KeyChatURL):  "http://chat.invalid/v1",
-		settingEnv(media.KeyRoot):        mediaRoot,
-		settingEnv(media.KeyQbitURL):     "http://qbittorrent.invalid",
-		settingEnv(calendar.AppleIDKey):  "operator@icloud.invalid",
-		settingEnv(contacts.DirKey):      mediaRoot + "-contacts",
-		"ATRIUM_HOST_CONFIG":             defaultHostConfig,
-		"ATRIUM_MAIL_MAIL_EMBED_URL":     "http://embed.invalid/v1",
-		settingEnv(grafanatools.KeyURL):  "http://grafana.invalid",
+		settingEnv(endpoint.KeyChatURL): "http://chat.invalid/v1",
+		settingEnv(media.KeyRoot):       mediaRoot,
+		settingEnv(media.KeyQbitURL):    "http://qbittorrent.invalid",
+		settingEnv(calendar.AppleIDKey): "operator@icloud.invalid",
+		settingEnv(contacts.DirKey):     mediaRoot + "-contacts",
+		"ATRIUM_HOST_CONFIG":            defaultHostConfig,
+		"ATRIUM_MAIL_MAIL_EMBED_URL":    "http://embed.invalid/v1",
+		settingEnv(grafanatools.KeyURL): "http://grafana.invalid",
 	}
 }
 

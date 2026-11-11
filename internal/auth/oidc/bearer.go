@@ -83,8 +83,7 @@ func (s *Service) AuthenticateBearer(ctx context.Context, raw string) (Session, 
 	if err != nil {
 		return Session{}, err
 	}
-	access, admin := cfg.decide(id)
-	if !access {
+	if !cfg.decide(id) {
 		return Session{}, ErrDenied
 	}
 	timings, err := s.timing(ctx)
@@ -96,7 +95,7 @@ func (s *Service) AuthenticateBearer(ctx context.Context, raw string) (Session, 
 	if limit := now.Add(timings.recheck); limit.Before(until) {
 		until = limit
 	}
-	session := Session{Subject: id.Subject, Email: id.Email, Name: id.Name, Admin: admin}
+	session := Session{Subject: id.Subject, Email: id.Email, Name: id.Name}
 	s.storeBearer(key, bearerEntry{session: session, until: until}, now)
 	return session, nil
 }

@@ -42,7 +42,7 @@ func withIdentity(ctx context.Context, who Identity) context.Context {
 func me(w http.ResponseWriter, r *http.Request) {
 	who, _ := IdentityOf(r.Context())
 	JSON(w, http.StatusOK, map[string]any{
-		"subject": who.Subject, "email": who.Email, "name": who.Name, "admin": who.Admin, "api_version": 1,
+		"subject": who.Subject, "email": who.Email, "name": who.Name, "api_version": 1,
 	})
 }
 
@@ -159,10 +159,6 @@ func (d *Deps) API(method, pattern string, h http.HandlerFunc) {
 	d.route(method, APIPrefix+pattern, accessDefault, h)
 }
 
-func (d *Deps) APIAdmin(method, pattern string, h http.HandlerFunc) {
-	d.route(method, APIPrefix+pattern, accessAdmin, h)
-}
-
 func bearerToken(r *http.Request) (string, bool) {
 	scheme, token, found := strings.Cut(r.Header.Get("Authorization"), " ")
 	token = strings.TrimSpace(token)
@@ -201,11 +197,7 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		APIError(w, http.StatusServiceUnavailable, "auth_unavailable", "Sign-in is unavailable.")
 		return
 	}
-	who := Identity{Source: SourceBearer, Subject: s.Subject, Email: s.Email, Name: s.Name, Admin: s.Admin}
-	if !who.Admin && g.classify != nil && g.classify(r) == accessAdmin {
-		APIError(w, http.StatusForbidden, "admin_required", "Administrator access is required.")
-		return
-	}
+	who := Identity{Source: SourceBearer, Subject: s.Subject, Email: s.Email, Name: s.Name}
 	if isUnsafe(r.Method) {
 		if !sameOrigin(r) {
 			APIError(w, http.StatusForbidden, "cross_origin", "Cross-origin requests are refused.")

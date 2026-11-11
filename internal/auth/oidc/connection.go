@@ -21,12 +21,9 @@ const (
 	cfgAPIClientID   = "api_client_id"
 	cfgScopes        = "scopes"
 	cfgGroupsClaim   = "groups_claim"
-	cfgAccessGroup   = "access_group"
-	cfgAdminGroup    = "admin_group"
+	cfgAccessGroups  = "access_groups"
 	cfgAccessEmails  = "access_emails"
-	cfgAdminEmails   = "admin_emails"
 	cfgAccessDomains = "access_domains"
-	cfgAdminDomains  = "admin_domains"
 	cfgClientSecret  = "client_secret"
 )
 
@@ -86,12 +83,9 @@ type connectionValues struct {
 	APIClientID   string
 	Scopes        string
 	GroupsClaim   string
-	AccessGroup   string
-	AdminGroup    string
+	AccessGroups  string
 	AccessEmails  string
-	AdminEmails   string
 	AccessDomains string
-	AdminDomains  string
 }
 
 func ParseConnectionConfig(raw json.RawMessage) (connectionValues, error) {
@@ -117,18 +111,18 @@ func ParseConnectionConfig(raw json.RawMessage) (connectionValues, error) {
 			v.Scopes = value
 		case cfgGroupsClaim:
 			v.GroupsClaim = value
-		case cfgAccessGroup:
-			v.AccessGroup = value
-		case cfgAdminGroup:
-			v.AdminGroup = value
+		case cfgAccessGroups:
+			v.AccessGroups = value
 		case cfgAccessEmails:
 			v.AccessEmails = value
-		case cfgAdminEmails:
-			v.AdminEmails = value
 		case cfgAccessDomains:
 			v.AccessDomains = value
-		case cfgAdminDomains:
-			v.AdminDomains = value
+		case "access_group", "admin_group":
+			return connectionValues{}, fmt.Errorf("oidc config field %s was removed; use %s", key, cfgAccessGroups)
+		case "admin_emails":
+			return connectionValues{}, fmt.Errorf("oidc config field %s was removed; use %s", key, cfgAccessEmails)
+		case "admin_domains":
+			return connectionValues{}, fmt.Errorf("oidc config field %s was removed; use %s", key, cfgAccessDomains)
 		default:
 			return connectionValues{}, fmt.Errorf("oidc config has no %s field", key)
 		}

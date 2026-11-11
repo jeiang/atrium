@@ -197,6 +197,7 @@ Operator settings are stored in the database and edited in the application. They
 | --- | --- | --- | --- |
 | `oidc_session_idle_days` | int | `7` | ui |
 | `oidc_session_max_days` | int | `30` | ui |
+| `oidc_wizard_key` | string | none | secret |
 
 ### mail
 

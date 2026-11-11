@@ -109,17 +109,15 @@ type SidebarThread struct {
 }
 
 type AuthView struct {
-	Admin    bool
 	SignOut  bool
 	NoAuth   bool
 	Settings bool
 }
 
 type ErrorView struct {
-	Status    int    `json:"status"`
-	Problem   string `json:"problem"`
-	Path      string `json:"path"`
-	AdminOnly bool   `json:"admin_only"`
+	Status  int    `json:"status"`
+	Problem string `json:"problem"`
+	Path    string `json:"path"`
 }
 
 type Engine struct {

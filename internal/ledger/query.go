@@ -227,6 +227,10 @@ func ListEffects(ctx context.Context, q db.Querier, f Filter, now float64) ([]Ef
 		where = append(where, "e.operation = ?")
 		args = append(args, f.Operation)
 	}
+	if f.OperationKey != "" {
+		where = append(where, "e.operation_key = ?")
+		args = append(args, f.OperationKey)
+	}
 	if f.Direction != "" {
 		where = append(where, "e.direction = ?")
 		args = append(args, f.Direction)
@@ -283,19 +287,22 @@ func ListEffects(ctx context.Context, q db.Querier, f Filter, now float64) ([]Ef
 	if f.BlockedOnly {
 		where = append(where, "e.state IN ('intent','unknown','partial') AND r.id IS NULL")
 	}
-	limit := f.Limit
-	if limit <= 0 {
-		limit = 50
+	query := effectSelect + " WHERE " + strings.Join(where, " AND ") + " ORDER BY e.id DESC"
+	if !f.All {
+		limit := f.Limit
+		if limit <= 0 {
+			limit = 50
+		}
+		if limit > 500 {
+			limit = 500
+		}
+		offset := f.Offset
+		if offset < 0 {
+			offset = 0
+		}
+		query += " LIMIT ? OFFSET ?"
+		args = append(args, limit, offset)
 	}
-	if limit > 500 {
-		limit = 500
-	}
-	offset := f.Offset
-	if offset < 0 {
-		offset = 0
-	}
-	query := effectSelect + " WHERE " + strings.Join(where, " AND ") + " ORDER BY e.id DESC LIMIT ? OFFSET ?"
-	args = append(args, limit, offset)
 	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
@@ -337,7 +344,24 @@ func (s *Store) Blocked(ctx context.Context, resources []string) ([]Effect, erro
 }
 
 func (s *Store) ProposalEffects(ctx context.Context, id int64) ([]Effect, error) {
-	return s.List(ctx, Filter{ProposalID: &id, Limit: 500})
+	return s.List(ctx, Filter{ProposalID: &id, All: true})
+}
+
+func effectiveOutcomeSQL(alias string) string {
+	return "COALESCE((SELECT r.effective_outcome FROM effect_resolutions r WHERE r.effect_id = " + alias + ".id ORDER BY r.id DESC LIMIT 1), " +
+		"CASE WHEN " + alias + ".state IN ('done','partial') THEN " + alias + ".state END)"
+}
+
+func (e Effect) Succeeded() bool {
+	return e.EffectiveOutcome == string(Done) || e.EffectiveOutcome == string(Partial)
+}
+
+func CountEffectiveDone(ctx context.Context, q db.Querier, target string) (int, error) {
+	var n int
+	err := q.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM effects e WHERE e.direction = 'forward' AND e.target = ? AND "+
+			effectiveOutcomeSQL("e")+" IN ('done','partial')", target).Scan(&n)
+	return n, err
 }
 
 func ThreadsForTargets(ctx context.Context, q db.Querier, targets []string) ([]int64, error) {
@@ -515,9 +539,8 @@ func ProposalBlocked(ctx context.Context, q db.Querier, id int64) (bool, error) 
 func ProposalHasCompletedWork(ctx context.Context, q db.Querier, id int64) (bool, error) {
 	var found bool
 	err := q.QueryRowContext(ctx,
-		"SELECT EXISTS (SELECT 1 FROM effects e"+effectResolutionJoin+
-			" WHERE e.proposal_id = ? AND e.direction = 'forward' AND e.state IN ('done','partial') "+
-			"AND e.undone_by IS NULL AND (r.id IS NULL OR r.effective_outcome <> 'failed'))", id).Scan(&found)
+		"SELECT EXISTS (SELECT 1 FROM effects e WHERE e.proposal_id = ? AND e.direction = 'forward' AND "+
+			effectiveOutcomeSQL("e")+" IN ('done','partial') AND e.undone_by IS NULL)", id).Scan(&found)
 	return found, err
 }
 

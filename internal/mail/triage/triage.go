@@ -156,7 +156,7 @@ func enrich(ctx context.Context, q report.Querier, rows []Row) error {
 	for _, row := range rows {
 		ids = append(ids, row.MessageID)
 	}
-	effects, err := ledger.AutoForMessages(ctx, q, ids, 0)
+	effects, err := ledger.AutoForMessages(ctx, q, ids, mail.WallClock())
 	if err != nil {
 		return err
 	}

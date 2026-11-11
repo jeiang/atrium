@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/cookiejar"
@@ -149,11 +148,8 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		t.Fatalf("second resolve = %d %q, want a refusal", got.code, got.stderr)
 	}
 	approved := runApp(t, "proposals", "approve", id(viaCLI))
-	var after struct {
-		Status string `json:"status"`
-	}
-	if approved.code != cli.ExitError || json.Unmarshal([]byte(approved.stdout), &after) != nil || after.Status != proposals.Failed {
-		t.Fatalf("approve after resolve = %d %q %q, want the retry to run and fail on its own", approved.code, approved.stdout, approved.stderr)
+	if approved.code == cli.ExitOK || !strings.Contains(approved.stderr, "already has a completed write") {
+		t.Fatalf("approve after resolve = %d %q %q, want the completed-work refusal", approved.code, approved.stdout, approved.stderr)
 	}
 	if strings.Contains(approved.stdout+approved.stderr, "resolve it in the mailbox") {
 		t.Fatalf("approve after resolve still refused as unresolved: %q", approved.stdout)
@@ -246,16 +242,13 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("effect_resolutions = %v, want %v", got, want)
 	}
-	var approval, approvalProposal int64
-	var approvalOutcome string
-	var approvalEffective *string
-	if err := check.Read.QueryRow("SELECT COUNT(*), MAX(proposal_id), MAX(outcome), MAX(effective_outcome) FROM effect_resolutions "+
-		"WHERE effect_id IS NULL AND proposal_id = ? AND outcome = 'approved'", viaCLI).
-		Scan(&approval, &approvalProposal, &approvalOutcome, &approvalEffective); err != nil {
+	var approval int
+	if err := check.Read.QueryRow("SELECT COUNT(*) FROM effect_resolutions "+
+		"WHERE effect_id IS NULL AND proposal_id = ? AND outcome = 'approved'", viaCLI).Scan(&approval); err != nil {
 		t.Fatal(err)
 	}
-	if approval != 1 || approvalProposal != viaCLI || approvalOutcome != "approved" || approvalEffective != nil {
-		t.Errorf("approval audit = %d rows for proposal %d outcome %q effective %v, want one proposal-only audit", approval, approvalProposal, approvalOutcome, approvalEffective)
+	if approval != 0 {
+		t.Errorf("approval audits = %d for the refused reapproval, want none", approval)
 	}
 	var undone int
 	if err := check.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto' AND direction = 'forward' AND undone_by IS NOT NULL").Scan(&undone); err != nil || undone != 3 {

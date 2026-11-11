@@ -50,7 +50,7 @@ behavior-parity target.
   (`/library/knowledge`): the operator's records with search, scope and
   state filters, checkboxes on unconfirmed rows with Confirm selected, a
   record page with confirm, edit, retract, restore and
-  administrator-only purge, and a profile view that renders the system
+  purge, and a profile view that renders the system
   prompt's profile block and each pinned record's place in it. Projects
   have no pages of their own beyond create and edit, and a
   project can be marked private so its knowledge and threads stay inside
@@ -144,7 +144,7 @@ behavior-parity target.
   URL path and, for phone actions, the action links; it is encrypted per
   RFC 8291 and sent only over HTTPS to public addresses. A 404 or 410
   deletes the subscription; other failures are counted per device, and a
-  device with three consecutive failures raises an admin banner.
+  device with three consecutive failures raises a banner.
 - The attention query covers the enabled queues: proposals, drafts, open
   loops, commitments, event candidates, thread plans, packages, tasks and
   unanswered `ask_operator` questions, listed until the operator answers.
@@ -317,12 +317,12 @@ behavior-parity target.
   which must be a fresh v3 database (created through the normal boot path
   when absent); the source is opened read-only and never written. It
   refuses a source that already has the v3 marker, is not at version 11,
-  has an embedding index rebuild in progress, or has a mail or agent write
-  in flight (`auto_actions` or `agent_writes` held, a `proposal_actions`
-  hold with a live lease, a `drafts` send); it refuses a destination that
-  already holds rows in an imported table. Everything is copied in one
-  transaction with foreign keys enforced and `PRAGMA foreign_key_check` at
-  the end, so a failed copy leaves the destination without imported rows.
+  has an embedding index rebuild in progress, or has a v2 mail or agent
+  write in flight (a held row with no error, a proposal action with a live
+  lease, or a `drafts` send); it refuses a destination that already holds
+  rows in an imported table. Everything is copied in one transaction with
+  foreign keys enforced and `PRAGMA foreign_key_check` at the end, so a
+  failed copy leaves the destination without imported rows.
   Carried with
   their ids: mail accounts, mailboxes, messages and the learned mail data
   (rules, corrections, decisions, flag decisions, live state and baseline,
@@ -334,25 +334,26 @@ behavior-parity target.
   push subscriptions and attention snoozes, knowledge records (their
   `embedded_hash` cleared so vectors rebuild), projects, threads with their
   messages, files, plans and queue, agent profile, skills, operator-edited
-  subagents, jobs, agent events, tasks, proposals and their actions, media
+  subagents, jobs, agent events, tasks, proposals, media
   channels, the seen list and media state, and the current calendar month's
   usage rows. Converted into effect-ledger rows with their old identity
-  preserved: `auto_actions` and the `write_resolutions` rows that settle
-  them, and `agent_writes` with its resolutions. A service credential whose
-  owner has a connection record (qBittorrent, TMDB, EZTV, Anthropic, Grafana,
-  Notion) is written to that connection's credential store and its source
-  `secrets` row is dropped; the connection keeps the source `set_at`/`set_by`.
+  preserved: v2 automatic actions and the resolutions that settle them, v2
+  agent writes with their resolutions, and v2 proposal actions. A service
+  credential whose owner has a connection record (qBittorrent, TMDB, EZTV,
+  Anthropic, Grafana, Notion) is written to that connection's credential
+  store and its source `secrets` row is dropped; the connection keeps the
+  source `set_at`/`set_by`.
   Rebuilt: `message_fts`, `thread_fts` and `kb_fts`. Not carried: run history
   (`runs`, `run_events`, `tool_calls`, `tool_results`, `context_ledger`,
   `context_projections`, `job_runs`), memory (rebuilt), Notion and wiki
   state (re-synced), knowledge and Notion
-  vectors (rebuilt), notifications, auth sessions and login links, OAuth
+  vectors (rebuilt), notifications, auth sessions, pending sign-ins and login links, OAuth
   handshakes, action links, the settings audit, the mail event log, ops
   data, endpoint probes, integration health, nightly observations,
   `db_key_history` (old backups are read with the old key),
   `module_migrations` and the source's `schema_migrations`. References to
   uncarried rows are nulled (`thread_messages.run_id`, `usage.run_id`,
-  `agent_writes.run_id`, `threads.parent_run_id`, `jobs.last_run_id`,
+  the imported effect's run id, `threads.parent_run_id`, `jobs.last_run_id`,
   `kb_records.source_run_id`, `thread_files.run_id`, `thread_plans.run_id`,
   `thread_queue.run_id`). The importer prints one line per table with its
   carried, rebuilt or dropped row count and one line per setting with its
@@ -411,11 +412,14 @@ behavior-parity target.
 ## Current authority boundaries
 
 - The effect ledger (`internal/ledger`) owns the `effects`, `effect_resources`,
-  `effect_claims`, `effect_resolutions` and `effect_import_refs` tables. Task
-  writes (`task_add`, `task_update`, `task_done`) record one effect atomically
-  with the task and undo through a second effect row; `atrium effects
-  list|show|resolve|undo` inspects and settles them. The other writers keep
-  their existing ledgers until their cutover.
+  `effect_claims`, `effect_resolutions` and `effect_import_refs` tables and
+  every external write. A write records an intent before the external call; a
+  running write renews its lease every 30 seconds and recovery marks an
+  attempt unknown after 120 seconds without renewal. An unknown outcome
+  blocks the target until the operator resolves it and is never retried. An
+  undo is its own effect row. `atrium effects list|show|resolve|undo` inspects
+  and settles effects; `atrium writes` and `atrium live` are domain-filtered
+  views of the same rows.
 - Mail writes use the shared gate. Shadow mode records decisions without
   automatic mailbox writes; live automatic writes also depend on pause,
   go-live eligibility, verification, caps, and the effect ledger.
@@ -423,26 +427,28 @@ behavior-parity target.
   effect before the IMAP or SMTP call. An unknown outcome stays blocked until
   the operator resolves it and is never retried automatically; an action the
   operator has undone is not applied again; moves use COPY, STORE Deleted and
-  UID EXPUNGE.
+  UID EXPUNGE. A due snooze in shadow mode records a skipped effect and stays
+  pending. Proposal undo reverses completed effects newest first and stops at
+  the first reversal that does not complete.
 - The assistant creates mail folders and moves messages with direct,
   undoable writes through the effect ledger; shadow mode records the effect
   without a mailbox write, pause and the write cap apply, protected folders
   are refused, and undo moves messages back or deletes a folder only while it
   is empty.
-- Calendar writes record an intent in `agent_writes` before the external
-  call. A write whose outcome is unknown stays blocked; further writes to the
-  same calendar are refused until the operator resolves it with
-  `atrium writes resolve <id>` or the Activity page.
+- Calendar writes record an effect in the ledger before the external call. A
+  write whose outcome is unknown stays blocked; further writes to the same
+  calendar are refused until the operator resolves it with `atrium writes
+  resolve <id>` or the Activity page.
 - The knowledge export is export-only: a built-in job renders live,
   non-expired records into the Notion page named by
   `export_notion_parent` and overwrites the pages it created; a target with no
   destination is skipped. The Notion controls are a standalone section on the
   Integrations page, the Obsidian folder has its own section, and the parent
   page accepts a pasted page URL or id stored as the normalized id. Each
-  external write records an `agent_writes` intent first; an unknown outcome
-  blocks the target until `atrium writes resolve <id>`. Pages the export did
-  not create are never touched, and edits made in Notion are overwritten on
-  the next run.
+  external write records an effect first; Notion mutations are not retried,
+  and an unknown outcome blocks the target until `atrium writes resolve
+  <id>`. Pages the export did not create are never touched, and edits made in
+  Notion are overwritten on the next run.
 - The assistant can prepare mail drafts but cannot send them. Sending is
   currently an operator action. Delegated sending is a product goal, not
   permission granted by the existing tools.
@@ -521,11 +527,11 @@ behavior-parity target.
   thread `untrusted`; `research` declares all four marks and returns
   `untrusted` plus the child thread's marks. `weather`, the media reads,
   `plan` declares none. `task_list` and `schedule_list` declare all four as their
-  bound and return the marks of the threads that wrote the listed rows
-  through `agent_writes`; they mark nothing when those threads were
-  clean. A cron thread starts with the marks of the thread that wrote its
-  schedule unless the operator wrote the prompt. `kb_write` and
-  `kb_retract` are `write_undo`, so a marked thread is not offered them.
+  bound and return the marks of the threads that wrote the listed rows;
+  they mark nothing when those threads were clean. A cron thread starts with
+  the marks of the thread that wrote its schedule unless the operator wrote
+  the prompt. `kb_write` and `kb_retract` are `write_undo`, so a marked
+  thread is not offered them.
 - Tools declare a channel: `none`, own accounts, notify, people or
   internet. Admission classifies the thread into one of six situations:
   nothing marked; kinds without untrusted text; `pii` without untrusted
@@ -613,29 +619,25 @@ behavior-parity target.
   message carries `id="m<seq>"` and a Reference action that copies
   `@thread/12/m<seq>`.
 - The public web service accepts an authenticating reverse proxy
-  (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Local requests are
-  administrators; a proxy request or OIDC session is an administrator only
-  with the admin group, and administrator-only routes answer 403 otherwise. A
-  separate local mode provides loopback access. `atrium serve` refuses to start
+  (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Every
+  admitted proxy request or OIDC session is the one operator with full
+  authority; no role distinguishes them. A separate local mode provides
+  loopback access. `atrium serve` refuses to start
   with no authentication in force unless `--force-disable-auth` is given, which
   shows a persistent banner. Public media file access requires an expiring signed
   link and still checks Host. The link signing key is a generated secret held in
   the database (pinnable by the deployment); a legacy `media-link.key` file is
   moved into it on first use.
-- `atrium login-link` mints a single-use, short-lived administrator sign-in
-  link (HMAC-signed nonce, hashed at rest, audited) that works with no OIDC
-  configured. The Sign-in settings tab sets up OIDC from provider presets and
-  activates a configuration only after a Test sign-in in a separate state
-  showed the tested account would keep administrator access.
+- The Sign-in settings tab shows the OIDC connection and activates a configuration only after a Test sign-in in a separate state showed the tested account would be admitted.
 - `/api/v1` is a JSON API for a native client, available only in listeners
   with oidc mode and only when `oidc_api_client_id` names the client. It
   accepts nothing but a bearer access token from the configured issuer
   (RFC 9068 `at+jwt`, audience and `client_id` equal to that client, expiry
   with 60 s skew); session cookies and proxy headers grant nothing there.
-  Groups come from the token or the userinfo endpoint and map to access and
-  administrator exactly as for web sessions. Implemented endpoints: `/me`,
+  Groups come from the token or the userinfo endpoint and decide admission
+  exactly as for web sessions. Implemented endpoints: `/me`,
   thread list, create and transcript, send, stop and answer, the run event
-  stream (SSE), the administrator inbox, `/pending` (pending and blocked
+  stream (SSE), the inbox, `/pending` (pending and blocked
   approvals, open and unknown drafts), approve, deny and resolve, the `/undo`
   feed of direct writes and undoable approvals with undo, and draft get,
   edit, send, discard and resolve. Every write calls the same pipeline,
