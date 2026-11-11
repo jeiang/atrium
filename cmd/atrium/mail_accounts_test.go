@@ -178,8 +178,7 @@ func insertMailAccount(t *testing.T, d *db.DB, id, preset, login, method string)
 
 func TestAHostMailConnectionAndAnAccountAddedInTheUIBothSync(t *testing.T) {
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	requireCipher(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir, mailAccount{"home", "icloud", "me@icloud.test", "home-pass", false}))
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
