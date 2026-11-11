@@ -1730,7 +1730,7 @@ func TestImportV2MapsUnresolvedAgentClaimsToWriterKeys(t *testing.T) {
 	}
 }
 
-func TestImportV2RefusesAnUnknownSettingWithItsName(t *testing.T) {
+func TestImportV2DropsAnUnknownSettingWithoutItsValue(t *testing.T) {
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -1738,15 +1738,30 @@ func TestImportV2RefusesAnUnknownSettingWithItsName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('not_a_real_key', 'x')"); err != nil {
+	const unknown = "not-a-real-key-value"
+	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('not_a_real_key', ?)", unknown); err != nil {
 		t.Fatal(err)
 	}
 	if err := d.Close(); err != nil {
 		t.Fatal(err)
 	}
 	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
-	if got.code == cli.ExitOK || !strings.Contains(got.stderr, "not_a_real_key") {
-		t.Fatalf("an unknown setting: exit %d stderr %q, want a refusal naming it", got.code, got.stderr)
+	if got.code != cli.ExitOK {
+		t.Fatalf("an unknown setting: exit %d stderr %q", got.code, got.stderr)
+	}
+	if !strings.Contains(got.stdout, "setting not_a_real_key: drop-unknown") {
+		t.Fatalf("the report does not drop the unknown setting:\n%s", got.stdout)
+	}
+	if strings.Contains(got.stdout+got.stderr, unknown) {
+		t.Fatalf("the report printed the unknown value:\n%s", got.stdout)
+	}
+	dest, err := db.OpenSource(filepath.Join(dir, "atrium.db"), importKey(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = dest.Close() }()
+	if n := importCount(t, dest, "SELECT COUNT(*) FROM settings WHERE key = 'not_a_real_key'"); n != 0 {
+		t.Fatalf("%d unknown setting rows survived the import", n)
 	}
 }
 
