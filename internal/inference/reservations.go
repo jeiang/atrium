@@ -554,6 +554,9 @@ func (s *Service) settle(ctx context.Context, a *Attempt, st Settlement, partial
 		if !o.known && o.Message != nil {
 			usage = o.Message.Usage
 		}
+		if partial {
+			chargePartialOutput(&usage, o.Message)
+		}
 		p = priceUsage(a.model, usage)
 	}
 	var requestID any
@@ -650,6 +653,42 @@ func emitUsage(model, kind string, partial bool, wallMS int64, p priced) {
 	obs.LLMTokens.Add(float64(p.tokens.Output), model, kind, "output")
 	obs.LLMTokens.Add(float64(p.reasoning), model, kind, "reasoning")
 	obs.LLMCost.Add(p.cost, model, kind)
+}
+
+func chargePartialOutput(usage *anthropic.Usage, msg *anthropic.Message) {
+	received := receivedOutput(msg)
+	if received <= usage.OutputTokens {
+		return
+	}
+	if len(usage.Iterations) > 0 {
+		last := &usage.Iterations[len(usage.Iterations)-1]
+		last.OutputTokens += received - usage.OutputTokens
+	}
+	usage.OutputTokens = received
+}
+
+func receivedOutput(msg *anthropic.Message) int64 {
+	if msg == nil {
+		return 0
+	}
+	var total int64
+	for _, raw := range msg.Content {
+		var block struct {
+			Type     string `json:"type"`
+			Text     string `json:"text"`
+			Thinking string `json:"thinking"`
+		}
+		if json.Unmarshal(raw, &block) != nil {
+			continue
+		}
+		switch block.Type {
+		case "text":
+			total += tokens.Estimate(block.Text)
+		case "thinking":
+			total += tokens.Estimate(block.Thinking)
+		}
+	}
+	return total
 }
 
 func (s *Service) markUnknown(ctx context.Context, a *Attempt, o Outcome) (Receipt, error) {

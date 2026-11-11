@@ -202,7 +202,9 @@ behavior-parity target.
   memory summaries included, reserves its full cold prompt plus the request's
   maximum output tokens and maximum web searches before dispatch, and an
   attempt whose outcome is unknown stays reserved and expires to an estimated
-  charge after 24 hours. Each reservation records its calendar month
+  charge after 24 hours; a stream stopped mid-generation settles the output it
+  delivered, estimated from its text and thinking and never below the usage the
+  provider reported. Each reservation records its calendar month
   (`YYYY-MM`) in the time zone in use at that moment, and admission, the Usage
   page and the scheduler compare that key, so changing the time zone does not
   move committed spend out of the month. Reservations from the previous month

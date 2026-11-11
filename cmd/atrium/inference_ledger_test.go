@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"sync"
 	"testing"
@@ -221,5 +222,50 @@ func TestInferenceMonthSpendSurvivesATimezoneChange(t *testing.T) {
 	}
 	if got := len(api.Requests()) - sent; got != 0 {
 		t.Errorf("%d provider requests after the refusal", got)
+	}
+}
+
+func TestInferenceInterruptedStreamChargesTheOutputItReceived(t *testing.T) {
+	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	asstWarm(t)
+	d := asstDB(t, dir)
+
+	text := strings.Repeat("generated output ", 400)
+	api.Push(anthropictest.Response{
+		StopReason: "end_turn",
+		Usage:      anthropictest.Usage{Input: 700, Output: 900}.JSON(),
+		StartUsage: anthropictest.Usage{Input: 700}.JSON(),
+		Content:    append([]json.RawMessage{anthropictest.Text(text)}, anthropictest.WebSearch("s1", "atrium")...),
+		Stall:      true,
+	})
+	base := asstCount(t, d, "SELECT COUNT(*) FROM run_events WHERE kind = 'tool_start'")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan appRun, 1)
+	go func() { done <- runAppContext(t, f, ctx, "agent", "run", "--text", "go") }()
+	deadline := time.Now().Add(30 * time.Second)
+	for asstCount(t, d, "SELECT COUNT(*) FROM run_events WHERE kind = 'tool_start'") <= base {
+		if time.Now().After(deadline) {
+			t.Fatal("the stalled stream never delivered text")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the canceled run did not return")
+	}
+
+	state, partial, _, accounted, _, output, _, _ := ledgerRow(t, dir,
+		"SELECT state, partial, reservation_nusd, accounted_nusd, input_tokens, output_tokens, request_id, error FROM usage ORDER BY id DESC LIMIT 1")
+	if state != "settled" || partial != 1 {
+		t.Fatalf("interrupted row: state %q partial %d", state, partial)
+	}
+	if output < 1600 || output > 2000 {
+		t.Errorf("output tokens %d, want the received text estimated at about 1700", output)
+	}
+	if accounted <= 0 {
+		t.Errorf("accounted %d, want the received output charged", accounted)
 	}
 }
