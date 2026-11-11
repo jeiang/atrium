@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/notify"
 )
@@ -85,8 +84,7 @@ func notifyPushRig(t *testing.T, dir string) (*notifyPush, pushBrowser) {
 	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: push.Certificate().Raw}), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	setEnv(t, settingEnv(notify.KeyPushSubject), "mailto:ops@example.test")
-	setEnv(t, settingEnv(transport.CAKey(notify.PushTransport)), ca)
+	setEnv(t, "ATRIUM_HOST_CONFIG", webPushHostConfig(t, dir, ca, writeVAPIDKey(t, dir)))
 	allowLoopbackPush.Do(func() { notify.UsePushAddresses(func(a netip.Addr) bool { return a.IsLoopback() }) })
 	key, err := ecdh.P256().GenerateKey(rand.Reader)
 	if err != nil {

@@ -20,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -56,6 +55,30 @@ var defaultAccountsFile = func() string {
 	return path
 }()
 
+const defaultWebPushConnection = `
+[connections."service/webpush"]
+kind = "service/webpush"
+label = "Web push"
+config = { subject = "mailto:ops@example.test" }
+capabilities = ["delivery"]
+`
+
+func hostConfigBody(webpush string) string {
+	dir := filepath.Join(testRoot, "host")
+	return fmt.Sprintf(`[connections."service/anthropic"]
+kind = "service/anthropic"
+label = "Anthropic"
+capabilities = ["models"]
+credential_files = { api_key = %q }
+
+[connections."service/grafana"]
+kind = "service/grafana"
+label = "Grafana"
+capabilities = ["viewer"]
+credential_files = { viewer_token = %q }
+%s`, filepath.Join(dir, "anthropic.key"), filepath.Join(dir, "grafana.key"), webpush)
+}
+
 var defaultHostConfig = func() string {
 	dir := filepath.Join(testRoot, "host")
 	if os.MkdirAll(dir, 0o700) != nil {
@@ -67,20 +90,8 @@ var defaultHostConfig = func() string {
 		os.WriteFile(grafanaKey, []byte("dummy-grafana-token\n"), 0o600) != nil {
 		panic("cannot write the default host credentials")
 	}
-	body := fmt.Sprintf(`[connections."service/anthropic"]
-kind = "service/anthropic"
-label = "Anthropic"
-capabilities = ["models"]
-credential_files = { api_key = %q }
-
-[connections."service/grafana"]
-kind = "service/grafana"
-label = "Grafana"
-capabilities = ["viewer"]
-credential_files = { viewer_token = %q }
-`, anthropicKey, grafanaKey)
 	path := filepath.Join(dir, "host.toml")
-	if os.WriteFile(path, []byte(body), 0o600) != nil {
+	if os.WriteFile(path, []byte(hostConfigBody(defaultWebPushConnection)), 0o600) != nil {
 		panic("cannot write the default host configuration")
 	}
 	return path
@@ -199,7 +210,6 @@ func requirementEnv(mediaRoot string) map[string]string {
 		settingEnv(endpoint.KeyEmbedURL):       "http://embed.invalid/v1",
 		settingEnv(media.KeyRoot):              mediaRoot,
 		settingEnv(media.KeyQbitURL):           "http://qbittorrent.invalid",
-		settingEnv(notify.KeyPushSubject):      "mailto:ops@example.invalid",
 		settingEnv(calendar.AppleIDKey):        "operator@icloud.invalid",
 		settingEnv(contacts.DirKey):            mediaRoot + "-contacts",
 		settingEnv(config.KeyMailAccountsFile): defaultAccountsFile,

@@ -70,21 +70,16 @@ type timing struct{ idle, recheck time.Duration }
 
 func (s *Service) timing(ctx context.Context) (timing, error) {
 	var t timing
-	for _, field := range []struct {
-		key  string
-		unit time.Duration
-		into *time.Duration
-	}{{KeyIdleDays, 24 * time.Hour, &t.idle}, {KeyRecheckMinutes, time.Minute, &t.recheck}} {
-		found, err := settings.From(ctx).Resolve(ctx, s.d.Read, field.key)
-		if err != nil {
-			return t, err
-		}
-		n, err := found.Int()
-		if err != nil {
-			return t, err
-		}
-		*field.into = time.Duration(n) * field.unit
+	found, err := settings.From(ctx).Resolve(ctx, s.d.Read, KeyIdleDays)
+	if err != nil {
+		return t, err
 	}
+	n, err := found.Int()
+	if err != nil {
+		return t, err
+	}
+	t.idle = time.Duration(n) * 24 * time.Hour
+	t.recheck = TuningOidcRecheckMinutes * time.Minute
 	return t, nil
 }
 
@@ -198,7 +193,7 @@ func (s *Service) recheck(ctx context.Context, hash string, seen row, t timing) 
 	if now < r.rechecked+t.recheck.Seconds() {
 		return r, nil
 	}
-	cfg, err := load(ctx, s.d.Read, s.env, s.d.Encrypted())
+	cfg, err := s.load(ctx)
 	if err != nil {
 		var config *ConfigError
 		if errors.As(err, &config) {

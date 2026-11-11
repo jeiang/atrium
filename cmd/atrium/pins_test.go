@@ -77,9 +77,9 @@ func TestHostConfigurationIsReadOnlyAndWinsOverTheDatabase(t *testing.T) {
 	}
 
 	secret := writeFile(t, dir, "oidc-secret", "client-secret-value\n")
-	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "secret.toml", "[auth]\noidc_client_secret_file = \""+secret+"\"\n"))
-	if r := runApp(t, "secrets", "status"); r.code != cli.ExitOK || !strings.Contains(r.stdout, "oidc_client_secret: pinned") {
-		t.Errorf("host secret status: exit %d stdout %q stderr %q", r.code, r.stdout, r.stderr)
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "secret.toml", "[connections.\"service/oidc\"]\nkind = \"service/oidc\"\nconfig = { issuer = \"https://idp.example.org\" }\ncapabilities = [\"discovery\"]\ncredential_files = { client_secret = \""+secret+"\" }\n"))
+	if r := runApp(t, "connections", "list", "--json"); r.code != cli.ExitOK || !strings.Contains(r.stdout, `"slot": "client_secret"`) || !strings.Contains(r.stdout, `"source": "host_file"`) {
+		t.Errorf("host connection credential: exit %d stdout %q stderr %q", r.code, r.stdout, r.stderr)
 	}
 
 	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "env.toml", "[core]\npublic_url = \"https://atrium.host.example\"\n"))
@@ -97,7 +97,7 @@ func TestHostConfigurationIsReadOnlyAndWinsOverTheDatabase(t *testing.T) {
 	}
 
 	for name, c := range map[string]struct{ body, want string }{
-		"secret direct": {"[auth]\noidc_client_secret = \"x\"\n", "is a secret; set auth.oidc_client_secret_file"},
+		"secret direct": {"[auth]\noidc_client_secret = \"x\"\n", "is a host bootstrap input; use the dedicated option"},
 		"operator key":  {"[assistant]\nmonthly_budget_usd = 1\n", "not host configuration; use the operator setting assistant.monthly_budget_usd"},
 		"tuning key":    {"[assistant]\nmax_steps_chat = 10\n", "compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsChat"},
 		"cutover host":  {"[media]\nmedia_qbittorrent_url = \"http://127.0.0.1:8081\"\n", "host configuration service/qbittorrent.config.url"},

@@ -2,6 +2,7 @@ package oidc
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -10,8 +11,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -51,41 +50,28 @@ func list(value string) []string {
 	return out
 }
 
-var valueKeys = append([]string{KeyPreset}, append(wizardKeys, KeyIdleDays, KeyMaxDays, KeyRecheckMinutes)...)
-
-type values map[string]string
-
-func resolved(ctx context.Context, q db.Querier) (values, []string, error) {
-	out := values{}
-	for _, key := range valueKeys {
-		found, err := settings.From(ctx).Resolve(ctx, q, key)
-		if err != nil {
-			return nil, nil, err
-		}
-		out[key] = strings.TrimSpace(found.Value)
-	}
-	return out, nil, nil
-}
-
-func load(ctx context.Context, q db.Querier, env config.Env, encrypted bool) (Config, error) {
-	vals, problems, err := resolved(ctx, q)
+func (s *Service) load(ctx context.Context) (Config, error) {
+	conn, err := s.open(ctx)
 	if err != nil {
 		return Config{}, err
 	}
-	secret, err := secrets.Credential(ctx, q, secrets.OIDCClientSecret)
-	if err != nil {
-		var empty settings.EmptyValue
-		if !errors.As(err, &empty) {
-			return Config{}, err
-		}
-		problems = append(problems, err.Error())
-	}
-	return assemble(ctx, vals, strings.TrimSpace(secret), env, encrypted, problems)
+	defer conn.Close()
+	return s.assemble(ctx, conn)
 }
 
-func assemble(ctx context.Context, get values, secret string, env config.Env, encrypted bool, problems []string) (Config, error) {
+func (s *Service) assemble(ctx context.Context, conn Connection) (Config, error) {
+	vals, err := ParseConnectionConfig(rawConfig(conn.Values()))
+	if err != nil {
+		return Config{}, err
+	}
+	var problems []string
 	days := func(key string, unit time.Duration, low, high int64) time.Duration {
-		n, err := strconv.ParseInt(strings.TrimSpace(get[key]), 10, 64)
+		found, err := settings.From(ctx).Resolve(ctx, s.d.Read, key)
+		if err != nil {
+			problems = append(problems, err.Error())
+			return 0
+		}
+		n, err := found.Int()
 		switch {
 		case err != nil:
 			problems = append(problems, key+" is not a number")
@@ -94,23 +80,30 @@ func assemble(ctx context.Context, get values, secret string, env config.Env, en
 		}
 		return time.Duration(n) * unit
 	}
-	name := get[KeyPreset]
+	name := vals.Preset
 	preset, ok := presetNamed(name)
 	if !ok {
 		problems = append(problems, "unknown preset "+strconv.Quote(name))
 	}
+	secret, err := conn.Credential(cfgClientSecret)
+	if err != nil {
+		if !errors.Is(err, ErrNoCredential) {
+			return Config{}, err
+		}
+		secret = ""
+	}
 	c := Config{
 		Preset:        preset,
-		Issuer:        get[KeyIssuer],
-		ClientID:      get[KeyClientID],
-		Scopes:        list(get[KeyScopes]),
-		GroupsClaim:   get[KeyGroupsClaim],
-		AccessGroup:   get[KeyAccessGroup],
-		AdminGroup:    get[KeyAdminGroup],
-		AccessEmails:  list(strings.ToLower(get[KeyAccessEmails])),
-		AdminEmails:   list(strings.ToLower(get[KeyAdminEmails])),
-		AccessDomains: list(strings.ToLower(get[KeyAccessDomains])),
-		AdminDomains:  list(strings.ToLower(get[KeyAdminDomains])),
+		Issuer:        strings.TrimSpace(vals.Issuer),
+		ClientID:      strings.TrimSpace(vals.ClientID),
+		Scopes:        list(vals.Scopes),
+		GroupsClaim:   strings.TrimSpace(vals.GroupsClaim),
+		AccessGroup:   strings.TrimSpace(vals.AccessGroup),
+		AdminGroup:    strings.TrimSpace(vals.AdminGroup),
+		AccessEmails:  list(strings.ToLower(vals.AccessEmails)),
+		AdminEmails:   list(strings.ToLower(vals.AdminEmails)),
+		AccessDomains: list(strings.ToLower(vals.AccessDomains)),
+		AdminDomains:  list(strings.ToLower(vals.AdminDomains)),
 		Idle:          days(KeyIdleDays, 24*time.Hour, 1, 365),
 		Max:           days(KeyMaxDays, 24*time.Hour, 1, 365),
 	}
@@ -124,7 +117,7 @@ func assemble(ctx context.Context, get values, secret string, env config.Env, en
 		c.GroupsClaim = preset.GroupsClaim
 	}
 	c.ClientSecret = secret
-	public := config.From(ctx).PublicURL(env)
+	public := config.From(ctx).PublicURL(s.env)
 	switch {
 	case c.Issuer == "":
 		problems = append(problems, KeyIssuer+" is not set")
@@ -145,7 +138,7 @@ func assemble(ctx context.Context, get values, secret string, env config.Env, en
 	if !slices.Contains(c.Scopes, "openid") {
 		problems = append(problems, KeyScopes+" must include openid")
 	}
-	if c.GroupsClaim != "" && c.ClientSecret == "" && !encrypted {
+	if c.GroupsClaim != "" && c.ClientSecret == "" && !s.d.Encrypted() {
 		problems = append(problems, "group re-checks keep refresh tokens, which needs a client secret or an encrypted database")
 	}
 	if len(problems) > 0 {
@@ -154,13 +147,26 @@ func assemble(ctx context.Context, get values, secret string, env config.Env, en
 	return c, nil
 }
 
-func AdminGroup(ctx context.Context, q db.Querier) (string, error) {
-	found, err := settings.From(ctx).Resolve(ctx, q, KeyAdminGroup)
+func (s *Service) AdminGroup(ctx context.Context) (string, error) {
+	conn, err := s.open(ctx)
 	if err != nil {
-		return "", err
-	}
-	if strings.TrimSpace(found.Value) == "" {
 		return DefaultAdminGroup, nil
 	}
-	return strings.TrimSpace(found.Value), nil
+	defer conn.Close()
+	vals, err := ParseConnectionConfig(rawConfig(conn.Values()))
+	if err != nil {
+		return DefaultAdminGroup, nil
+	}
+	if group := strings.TrimSpace(vals.AdminGroup); group != "" {
+		return group, nil
+	}
+	return DefaultAdminGroup, nil
+}
+
+func rawConfig(values map[string]string) json.RawMessage {
+	raw, err := json.Marshal(values)
+	if err != nil {
+		return nil
+	}
+	return raw
 }

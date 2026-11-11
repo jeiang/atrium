@@ -275,7 +275,6 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 		{module.Calendar, "iCloud CalDAV login or Google Calendar credentials"},
 		{module.Media, "media_root is not set"},
 		{module.Assistant, "the Anthropic connection is not configured"},
-		{module.Notifications, "webpush_subject is not set"},
 		{module.Contacts, "contacts_dir is not set"},
 		{module.Grafana, "the Grafana connection is not configured"},
 		{module.Grafana, "needs assistant"},

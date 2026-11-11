@@ -8,14 +8,12 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/auth/oidc/oidctest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -116,7 +114,6 @@ func linkEnv(t *testing.T) string {
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	setEnv(t, "ATRIUM_MODE", "shadow")
 	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", linkPublic)
-	setEnv(t, settingEnv(secrets.OIDCClientSecret), "s3cret-for-the-test")
 	return path
 }
 
@@ -199,10 +196,10 @@ func TestLoginLinkOpensAnAdminSessionOnceWithNoOIDCConfigured(t *testing.T) {
 	}
 	redeemed := b.post("/login/link", url.Values{"token": {token}})
 	linkExpect(t, redeemed, http.StatusSeeOther)
-	if redeemed.header.Get("Location") != "/settings/auth" || b.sessionToken() == "" || site.sessions() != 1 {
+	if redeemed.header.Get("Location") != "/chat" || b.sessionToken() == "" || site.sessions() != 1 {
 		t.Fatalf("redeem: location %q sessions %d", redeemed.header.Get("Location"), site.sessions())
 	}
-	linkExpect(t, b.get("/settings/auth"), http.StatusOK, "Not set up", "Test sign-in")
+	linkExpect(t, b.get("/settings/auth"), http.StatusOK, "oidc is not configured")
 
 	again := site.browser()
 	linkExpect(t, again.post("/login/link", url.Values{"token": {token}}), http.StatusGone, "This link was already used.", "atrium login-link")
@@ -309,51 +306,6 @@ func TestLoginLinkRefusesBadLifetimesAndMissingPublicURL(t *testing.T) {
 	if code := defaultApp(t).Run(context.Background(), []string{"login-link"}, &out, &errs); code != cli.ExitError || out.Len() != 0 || !strings.Contains(errs.String(), "public") {
 		t.Fatalf("no public URL: %d %q %q", code, out.String(), errs.String())
 	}
-}
-
-func TestLoginLinkFirstRunSetupThenOIDCSignIn(t *testing.T) {
-	t.Parallel()
-	site := newLinkSite(t)
-	owner := site.browser()
-	linkExpect(t, owner.post("/login/link", url.Values{"token": {fragmentOf(t, site.link(t))}}), http.StatusSeeOther)
-	before := owner.sessionToken()
-
-	anon := site.browser()
-	linkExpect(t, anon.get("/login"), http.StatusOK, "Sign-in is not set up.")
-
-	form := url.Values{
-		"preset": {"pocket_id"}, "oidc_issuer": {site.idp.Issuer()}, "oidc_client_id": {site.idp.ClientID()},
-		"oidc_access_group": {"atrium_access"}, "oidc_admin_group": {"atrium_admin"}, "oidc_groups_claim": {"groups"}, "oidc_scopes": {"openid profile email groups"},
-	}
-	providerTab := func(user string) linkReply {
-		site.idp.Approve(user)
-		start := owner.post("/settings/auth/test", form)
-		linkExpect(t, start, http.StatusOK)
-		authz := owner.get(strings.TrimPrefix(start.header.Get("Refresh"), "0; url="))
-		return owner.get(authz.header.Get("Location"))
-	}
-	linkExpect(t, providerTab("guest"), http.StatusForbidden, "This account is not in `atrium_admin`.")
-	linkExpect(t, anon.get("/login"), http.StatusOK, "Sign-in is not set up.")
-
-	linkExpect(t, providerTab("owner"), http.StatusOK, "Test passed")
-	status := owner.get("/settings/auth/test/status")
-	linkExpect(t, status, http.StatusOK, "Activate")
-	fingerprint := regexp.MustCompile(`name="fingerprint" value="([0-9a-f]+)"`).FindStringSubmatch(status.body)[1]
-	linkExpect(t, owner.post("/settings/auth/activate", url.Values{"fingerprint": {fingerprint}}), http.StatusOK, "Active", "Pocket ID")
-
-	if owner.sessionToken() != before {
-		t.Fatal("activation replaced the link session")
-	}
-	linkExpect(t, owner.get("/settings/auth"), http.StatusOK, "Active")
-
-	user := site.browser()
-	linkExpect(t, user.get("/login"), http.StatusOK, "Sign in with Pocket ID")
-	site.idp.Approve("owner")
-	begin := user.post("/login", url.Values{"next": {"/settings/auth"}})
-	linkExpect(t, begin, http.StatusSeeOther)
-	authz := user.get(begin.header.Get("Location"))
-	linkExpect(t, user.get(authz.header.Get("Location")), http.StatusSeeOther)
-	linkExpect(t, user.get("/settings/auth"), http.StatusOK, "Active")
 }
 
 func TestLoginLinkWorksOnAGoldenDatabaseCopy(t *testing.T) {
