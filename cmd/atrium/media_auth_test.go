@@ -87,7 +87,7 @@ func (f *fakeTMDB) snapshot() (queries, tokens []string) {
 }
 
 func TestMediaCredentialsTestThroughConnectionsAndAuthenticateEveryRequest(t *testing.T) {
-	t.Parallel()
+	requireCipher(t)
 	qb := &fakeQbit{version: "v5.2.0"}
 	qbSrv := httptest.NewServer(http.HandlerFunc(qb.handler))
 	t.Cleanup(qbSrv.Close)

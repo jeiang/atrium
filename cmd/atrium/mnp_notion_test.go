@@ -210,6 +210,7 @@ func (f *notionAccess) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestNotionConnectionTestSavesOnlyASharedToken(t *testing.T) {
+	requireCipher(t)
 	fake := &notionAccess{}
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)

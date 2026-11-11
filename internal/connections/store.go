@@ -899,6 +899,9 @@ func (s *Store) Save(ctx context.Context, id ID, cand Candidate) (View, error) {
 	if err := validateCandidate(def, merged, current); err != nil {
 		return View{}, err
 	}
+	if err := s.requireEncrypted(merged); err != nil {
+		return View{}, err
+	}
 	if err := s.save(ctx, id, current, merged, []Result{}, Untested, ""); err != nil {
 		return View{}, err
 	}
@@ -920,6 +923,9 @@ func (s *Store) TestAndSave(ctx context.Context, id ID, cand Candidate) (View, e
 	if err := validateCandidate(def, cand, current); err != nil {
 		return View{}, err
 	}
+	if err := s.requireEncrypted(cand); err != nil {
+		return View{}, err
+	}
 	lease := s.candidateLease(current, cand)
 	results, err := def.Test(ctx, lease, lease.caps)
 	if err != nil {
@@ -938,6 +944,9 @@ func (s *Store) TestAndSave(ctx context.Context, id ID, cand Candidate) (View, e
 }
 
 func (s *Store) save(ctx context.Context, id ID, current View, cand Candidate, results []Result, state State, reason string) error {
+	if err := s.requireEncrypted(cand); err != nil {
+		return err
+	}
 	configJSON := current.Config
 	if current.ConfigSource == SourceOperator {
 		configJSON = cand.Config
@@ -1087,6 +1096,18 @@ func (s *Store) candidateLease(current View, cand Candidate) *Lease {
 	lease := &Lease{store: s, id: current.ID, kind: current.Kind, revision: current.revisionValue(), config: config, options: current.transport, caps: caps, creds: creds}
 	lease.shared = s.sharedFor(current.ID, current.revisionValue())
 	return lease
+}
+
+func (s *Store) requireEncrypted(cand Candidate) error {
+	for _, c := range cand.Credentials {
+		if c.Value == "" {
+			continue
+		}
+		if s.d == nil || !s.d.Encrypted() {
+			return &EncryptedRequired{Slot: c.Slot}
+		}
+	}
+	return nil
 }
 
 func validateCandidate(def Definition, cand Candidate, current View) error {

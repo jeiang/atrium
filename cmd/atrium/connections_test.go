@@ -166,7 +166,7 @@ func TestConnectionsCLIListAndTestUseTheHostTransportAndNeverStoreTheFileValue(t
 }
 
 func TestConnectionsHTTPTestAndSavePreservesThePriorConfigOnFailure(t *testing.T) {
-	t.Parallel()
+	requireCipher(t)
 	gate := &qbitGate{}
 	srv := httptest.NewTLSServer(http.HandlerFunc(gate.handler))
 	t.Cleanup(srv.Close)
@@ -231,5 +231,30 @@ func TestConnectionsStaleTestCannotOverwriteARotation(t *testing.T) {
 	}
 	if state == "ok" {
 		t.Fatal("a stale successful test overwrote a newer revision")
+	}
+}
+
+func TestConnectionsRefuseToStoreACredentialInAPlaintextDatabase(t *testing.T) {
+	gate := &qbitGate{}
+	srv := httptest.NewTLSServer(http.HandlerFunc(gate.handler))
+	t.Cleanup(srv.Close)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	ca := filepath.Join(dir, "qbittorrent-ca.pem")
+	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfig(t, dir, srv.URL, ca, ""))
+	s := &integrationSite{t: t, dir: dir}
+	s.start()
+	if code, body := s.conn("/test", url.Values{"id": {"service/qbittorrent"}, "api_key": {"qbt_good"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "encrypted database") {
+		t.Fatalf("a credential save into a plaintext database: %d %.300s", code, body)
+	}
+	var n int
+	if err := mustConnect(t, filepath.Join(dir, "atrium.db")).Read.QueryRow(
+		"SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/qbittorrent' AND slot = 'api_key'").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != 0 {
+		t.Fatalf("the plaintext database stored %d credentials", n)
 	}
 }
