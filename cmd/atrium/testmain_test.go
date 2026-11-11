@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -256,6 +259,17 @@ func init() {
 }
 
 func quietLog(io.Writer) {}
+
+var errExternalDNS = errors.New("external DNS is disabled in tests")
+
+func guardExternalHosts() {
+	net.DefaultResolver = &net.Resolver{
+		PreferGo: true,
+		Dial: func(context.Context, string, string) (net.Conn, error) {
+			return nil, errExternalDNS
+		},
+	}
+}
 
 func newTestApp(t *testing.T, mods []module.Module) *cli.App {
 	reg := settings.New()
