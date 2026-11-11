@@ -58,7 +58,11 @@ func SMTPHost(lease *connections.Lease, spec config.AccountSpec) string {
 }
 
 func Password(lease *connections.Lease, account string) (string, error) {
-	return lease.Credential(PasswordSlot(account))
+	value, err := lease.Credential(PasswordSlot(account))
+	if err != nil {
+		return "", err
+	}
+	return config.NormalizePassword(value), nil
 }
 
 func init() {
