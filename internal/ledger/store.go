@@ -77,6 +77,7 @@ type Filter struct {
 	Origin           string
 	Origins          []string
 	Operation        string
+	OperationKey     string
 	Direction        string
 	OperationLike    []string
 	OperationNotLike []string
@@ -90,6 +91,7 @@ type Filter struct {
 	Since            float64
 	Limit            int
 	Offset           int
+	All              bool
 	BlockedOnly      bool
 }
 
@@ -552,8 +554,8 @@ func admitOperationKey(ctx context.Context, tx *sql.Tx, key string) error {
 	var prior int64
 	if err := tx.QueryRowContext(ctx,
 		"SELECT COUNT(*) FROM effects e WHERE e.direction = 'forward' AND e.operation_key = ? AND e.undone_by IS NULL "+
-			"AND (e.state IN ('intent','done') OR (e.state IN ('unknown','partial') AND COALESCE("+
-			"(SELECT r.effective_outcome FROM effect_resolutions r WHERE r.effect_id = e.id ORDER BY r.id DESC LIMIT 1), '') <> 'failed'))",
+			"AND (e.state = 'intent' OR "+effectiveOutcomeSQL("e")+" IN ('done','partial') "+
+			"OR (e.state IN ('unknown','partial') AND "+effectiveOutcomeSQL("e")+" IS NULL))",
 		key).Scan(&prior); err != nil {
 		return err
 	}
