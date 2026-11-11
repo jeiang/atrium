@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -202,5 +203,60 @@ func TestMailGmailRelabelInterruptedRemoveKeepsTheCompletedAdd(t *testing.T) {
 	labels := fake.Boxes["[Gmail]/All Mail"].Box.Messages[uid].Labels
 	if !slices.Contains(labels, "Bills") || !slices.Contains(labels, `\Inbox`) {
 		t.Fatalf("the message labels after the interrupted remove = %v, want Bills and \\Inbox", labels)
+	}
+}
+
+func TestMailAutomaticPartialMoveUndoesOnlyTheCopiedMessages(t *testing.T) {
+	fake := mailtest.NewFakeClient()
+	inbox := fake.AddBox("INBOX", mailtest.NewBox(1))
+	fake.AddBox("Bills", mailtest.NewBox(3))
+	m := mailEffectsFixture(t, "live", "icloud", fake)
+	setEnv(t, settingEnv(mail.KeyMailopsBatch), "2")
+	m.ruleFor(t, "work", "Bills", "statements@bank.test")
+	m.run(t, "sync")
+	var uids []uint32
+	for i := 1; i <= 3; i++ {
+		h, x := mailtest.RawWith("Statement "+strconv.Itoa(i), "statements@bank.test", "partial-"+strconv.Itoa(i), "Your statement is ready.")
+		uids = append(uids, inbox.Add(h, x, []string{`\Seen`}, nil))
+	}
+	m.fake.FailWrite = func(w mailtest.FakeWrite) error {
+		if w.Verb == "STORE" && len(w.Args) > 1 && w.Args[1] == `\Deleted` {
+			return errors.New("store refused")
+		}
+		return nil
+	}
+	if ran := runApp(t, "sync"); ran.code == cli.ExitOK {
+		t.Fatalf("a sync whose move was refused after the copy exited 0")
+	}
+	if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto' AND operation = 'file' AND state = 'partial'"); n != 2 {
+		t.Fatalf("%d partial moves, want 2", n)
+	}
+	if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto' AND operation = 'file' AND state = 'skipped'"); n != 1 {
+		t.Fatalf("%d skipped moves, want 1", n)
+	}
+	if n := len(fake.Boxes["Bills"].Box.Messages); n != 2 {
+		t.Fatalf("the destination holds %d messages after the refused store, want 2", n)
+	}
+	if n := len(fake.Boxes["INBOX"].Box.Messages); n != 3 {
+		t.Fatalf("the inbox holds %d messages after the refused store, want 3", n)
+	}
+	m.fake.FailWrite = nil
+	for _, id := range m.effectIDs(t, "SELECT group_concat(CAST(id AS TEXT), ',') FROM "+
+		"(SELECT id FROM effects WHERE origin = 'mail_auto' AND operation = 'file' AND state = 'partial' ORDER BY id)") {
+		m.run(t, "live", "undo", id)
+	}
+	if n := len(fake.Boxes["Bills"].Box.Messages); n != 0 {
+		t.Fatalf("the destination holds %d messages after the undos, want 0", n)
+	}
+	if _, ok := fake.Boxes["INBOX"].Box.Messages[uids[2]]; !ok {
+		t.Fatalf("the third message was moved although its move was never attempted")
+	}
+	for _, w := range fake.Writes {
+		if w.Verb == "COPY" && slices.Contains(w.UIDs, uids[2]) {
+			t.Fatalf("a copy included the untouched third message: %v", w)
+		}
+	}
+	if state := m.scalar(t, "SELECT state FROM effects WHERE origin = 'mail_auto' AND operation = 'file' AND message_id = ?", m.messageID(t, "Statement 3")); state != "skipped" {
+		t.Fatalf("the third message's move is %s, want skipped", state)
 	}
 }
