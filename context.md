@@ -549,7 +549,14 @@ behavior-parity target.
   tool in a permission gate: the call creates a `permission` proposal and
   parks the run; approving resumes the run and performs the call once,
   dismissing resumes it with a denial result, and the handler never runs
-  while the request is pending or after it is dismissed. Cron, nightly
+  while the request is pending or after it is dismissed. Settlement reuses
+  the recorded result of every call that already completed in the parked
+  response and authorizes only the unfinished calls, so a resume continues
+  at the parked call. An approval card's apply re-authorizes the
+  originating thread against the current tool settings, permission table
+  and marks at execution time, whichever entry point approved it (web
+  card, phone link or `atrium proposals approve`); a disabled tool or a
+  tightened table fails the proposal instead of applying it. Cron, nightly
   and subagent runs never park: an ask without a card is a deny there. A
   tool that leaves the allow set is withdrawn from dispatch; the request
   keeps its tools array so the run's thinking stays valid, and only a

@@ -666,7 +666,7 @@ func (s *Service) Answer(ctx context.Context, threadID int64, text string) error
 	if _, err := journal.AppendMessage(ctx, s.DB, threadID, &q.RunID, journal.User, []json.RawMessage{raw}, s.now(), nil); err != nil {
 		return err
 	}
-	if err := journal.FinishToolCall(ctx, s.DB.Write, q.CallID, journal.OK, s.now(), nil, nil); err != nil {
+	if err := journal.FinishToolCall(ctx, s.DB.Write, q.CallID, journal.OK, s.now(), nil, nil, &text); err != nil {
 		return err
 	}
 	return s.StartResume(ctx, q.RunID)

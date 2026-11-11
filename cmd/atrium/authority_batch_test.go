@@ -505,6 +505,63 @@ func TestUnattendedRunsAndSubagentsCannotParkOrEscape(t *testing.T) {
 	})
 }
 
+func TestParkedBatchKeepsCompletedResultsAndDoesNotReplayThem(t *testing.T) {
+	srv, pages := webPages(t)
+	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	warm(t, api)
+	thread := latestThread(t, dir)
+	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
+		t.Fatalf("GET /chat = %d", status)
+	}
+	start := len(api.Requests())
+	api.Push(
+		anthropictest.Reply("tool_use",
+			anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"}),
+			anthropictest.ToolUse("f2", "web_fetch", map[string]any{"url": srv.URL + "/b"})),
+		anthropictest.Reply("end_turn", anthropictest.Text("read both")),
+	)
+	text := "read " + srv.URL + "/a then " + srv.URL + "/b"
+	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {text}}); status >= http.StatusBadRequest {
+		t.Fatalf("POST message = %d: %s", status, body)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	proposal, _ := waitParkedPermission(t, d, thread)
+	if hits := pages.seen(); !slices.Equal(hits, []string{"/a"}) {
+		t.Fatalf("page fetches before approval = %v, want /a only", hits)
+	}
+	if n := permissionProposals(t, dir); n != 1 {
+		t.Fatalf("%d permission proposals before approval, want 1", n)
+	}
+	if code, body := hxFetch(t, client, http.MethodPost, base+fmt.Sprintf("/proposals/%d/approve", proposal), url.Values{"all": {"1"}}); code != http.StatusOK {
+		t.Fatalf("approve = %d\n%s", code, body)
+	}
+	waitRunState(t, d, thread, "done")
+	if hits := pages.seen(); !slices.Equal(hits, []string{"/a", "/b"}) {
+		t.Fatalf("page fetches after approval = %v, want /a then /b once", hits)
+	}
+	if n := permissionProposals(t, dir); n != 1 {
+		t.Errorf("%d permission proposals after approval, want 1: the completed call was replayed", n)
+	}
+	requests := api.Requests()[start:]
+	if len(requests) != 2 {
+		t.Fatalf("%d model requests, want 2", len(requests))
+	}
+	kept := toolResultFor(t, requests[1], "f1")
+	if kept["is_error"] == true || !strings.Contains(fmt.Sprint(kept["content"]), `"result_id"`) {
+		t.Errorf("the completed fetch returned %v, want its earlier stored result", kept)
+	}
+	approved := toolResultFor(t, requests[1], "f2")
+	if approved["is_error"] == true || !strings.Contains(fmt.Sprint(approved["content"]), pageBText) {
+		t.Errorf("the approved fetch returned %v, want page B", approved)
+	}
+}
+
 func TestCLIApprovalReauthorizesTheCurrentPermissions(t *testing.T) {
 	qb, qbURL := mnpNewQbit(t)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))

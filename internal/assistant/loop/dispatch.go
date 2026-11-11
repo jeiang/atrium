@@ -231,7 +231,7 @@ func (x *dispatcher) call(ctx context.Context, t *tool.Tool, args tool.Args) (va
 func (x *dispatcher) finish(ctx context.Context, callID int64, use ToolUse, errText *string, value any) (json.RawMessage, error) {
 	ledgerCtx := context.WithoutCancel(ctx)
 	if errText != nil {
-		if err := journal.FinishToolCall(ledgerCtx, x.d.Write, callID, journal.Error, x.now(), errText, nil); err != nil {
+		if err := journal.FinishToolCall(ledgerCtx, x.d.Write, callID, journal.Error, x.now(), errText, nil, nil); err != nil {
 			return nil, err
 		}
 		if err := x.tc.Progress.Event(ctx, progress.ToolDone, map[string]any{"id": use.ID, "ok": false, "preview": progress.PreviewOf(*errText)}); err != nil {
@@ -243,7 +243,7 @@ func (x *dispatcher) finish(ctx context.Context, callID int64, use ToolUse, errT
 	if err != nil {
 		return nil, err
 	}
-	if err := journal.FinishToolCall(ledgerCtx, x.d.Write, callID, journal.OK, x.now(), nil, resultID); err != nil {
+	if err := journal.FinishToolCall(ledgerCtx, x.d.Write, callID, journal.OK, x.now(), nil, resultID, &content); err != nil {
 		return nil, err
 	}
 	if err := x.tc.Progress.Event(ctx, progress.ToolDone, map[string]any{"id": use.ID, "ok": true, "preview": progress.PreviewOf(content)}); err != nil {
@@ -345,6 +345,9 @@ func (x *dispatcher) settle(ctx context.Context, use ToolUse, call *journal.Tool
 	if call == nil {
 		return x.execute(ctx, use)
 	}
+	if call.State == journal.OK && call.Result != nil {
+		return toolResult(use.ID, *call.Result, false), nil
+	}
 	replay := call.ReplayClass == journal.Safe
 	if !replay && call.State == journal.Started {
 		permitted, err := x.permitted(ctx, use, call.RunID)
@@ -355,7 +358,7 @@ func (x *dispatcher) settle(ctx context.Context, use ToolUse, call *journal.Tool
 	}
 	if replay {
 		if _, err := x.d.Write.ExecContext(ctx,
-			"UPDATE tool_calls SET state = ?, error = NULL, result_id = NULL, finished_at = NULL, started_at = ? WHERE id = ?",
+			"UPDATE tool_calls SET state = ?, error = NULL, result_id = NULL, result = NULL, finished_at = NULL, started_at = ? WHERE id = ?",
 			journal.Started, x.now(), call.ID); err != nil {
 			return nil, err
 		}
@@ -378,7 +381,7 @@ func (x *dispatcher) settle(ctx context.Context, use ToolUse, call *journal.Tool
 	case journal.OK:
 		return toolResult(use.ID, CompletedUncaptured, true), nil
 	}
-	if err := journal.FinishToolCall(ctx, x.d.Write, call.ID, journal.Unknown, x.now(), new(Verify), nil); err != nil {
+	if err := journal.FinishToolCall(ctx, x.d.Write, call.ID, journal.Unknown, x.now(), new(Verify), nil, nil); err != nil {
 		return nil, err
 	}
 	return toolResult(use.ID, Verify, true), nil
