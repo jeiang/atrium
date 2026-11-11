@@ -340,8 +340,10 @@ behavior-parity target.
   `agent_writes.run_id`, `threads.parent_run_id`, `jobs.last_run_id`,
   `kb_records.source_run_id`, `thread_files.run_id`, `thread_plans.run_id`,
   `thread_queue.run_id`). The importer prints one line per table with its
-  carried, rebuilt or dropped row count and names any settings key it
-  carries that v3 does not know. v1 data reaches v3 through v2: the v2
+  carried, rebuilt or dropped row count and one line per setting with its
+  action (carried, dropped, renamed, moved to a host key or a tuning
+  constant, or reset for cutover); a setting this build does not know
+  refuses the import and is named. v1 data reaches v3 through v2: the v2
   binary imports it first.
   `taint_private` and `taint_web` are dormant: no longer
   read or written, and kept because dropping them would rewrite the table.
