@@ -174,8 +174,11 @@ func RegisterLedgerUndoers(s *ledger.Store, open mail.OpenFunc, q db.Querier) er
 		}); err != nil {
 			return err
 		}
+		if err := s.RegisterResolve(u.name, resolveCorrection); err != nil {
+			return err
+		}
 	}
-	return s.RegisterResolve(OpMoveBack, resolveCorrection)
+	return s.RegisterResolve(ledger.LegacyAutoUndo, resolveCorrection)
 }
 
 type moveBackResult struct {

@@ -31,7 +31,9 @@ func (s *Store) Undo(ctx context.Context, id int64, who Resolver) (Effect, error
 	if err != nil {
 		return Effect{}, err
 	}
+	stop := s.KeepAlive(ctx, []Ticket{ticket})
 	result, err := fn.External(ctx, payload)
+	stop()
 	settleCtx := context.WithoutCancel(ctx)
 	if err != nil {
 		var refused Refused

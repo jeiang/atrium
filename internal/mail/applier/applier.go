@@ -331,7 +331,7 @@ func (a *Applier) moveGroup(ctx context.Context, client mail.Client, account str
 	size := batchSize(ctx)
 	failing, rest := remaining[:min(size, len(remaining))], remaining[min(size, len(remaining)):]
 	if partial, ok := errors.AsType[*mailops.PartialMove](err); ok {
-		unknown := partial.Unconfirmed || mailops.OutcomeUnknown(err)
+		unknown := mailops.OutcomeUnknown(err)
 		for _, uid := range failing {
 			e := by[uid]
 			validity, destUID := copied(partial.Copied, uid)
@@ -780,16 +780,23 @@ func (a *Applier) execute(ctx context.Context, client mail.Client, account strin
 			moves.add(boxKey(item.IMAPName, item.UIDValidity, destIMAP), box(a.moveGroup, destIMAP), e)
 		}
 	}
-	for _, g := range slices.Concat(moves.order, labels.order, trashes.order, flagging.order) {
+	ordered := slices.Concat(moves.order, labels.order, trashes.order, flagging.order)
+	open := []ledger.Ticket{}
+	for _, g := range ordered {
+		for _, e := range g.entries {
+			open = append(open, e.ticket)
+		}
+	}
+	stop := a.Live.KeepAlive(ctx, open)
+	defer stop()
+	for _, g := range ordered {
+		a.Live.Renew(ctx, open)
 		runErr := g.run(ctx, client, account, g, out)
 		if runErr == nil {
 			continue
 		}
 		log.Error(account+": group failed unexpectedly", logx.Err, runErr.Error())
 		var settled *ledger.SettledMeanwhile
-		if errors.As(runErr, &settled) {
-			continue
-		}
 		_, refused := errors.AsType[safety.WriteRefused](runErr)
 		text := runErr.Error()
 		for _, e := range g.entries {

@@ -250,6 +250,39 @@ func (s *Store) Heartbeat(ctx context.Context, t Ticket) error {
 	return nil
 }
 
+func (s *Store) Renew(ctx context.Context, tickets []Ticket) {
+	for _, t := range tickets {
+		err := s.Heartbeat(ctx, t)
+		var settled *SettledMeanwhile
+		if err != nil && !errors.As(err, &settled) {
+			logx.Logger("atrium.ledger").Warn(fmt.Sprintf("could not renew the lease on effect %d", t.ID), logx.Err, err.Error())
+		}
+	}
+}
+
+func (s *Store) KeepAlive(ctx context.Context, tickets []Ticket) func() {
+	if len(tickets) == 0 {
+		return func() {}
+	}
+	done := make(chan struct{})
+	var once sync.Once
+	stop := func() { once.Do(func() { close(done) }) }
+	ctx = context.WithoutCancel(ctx)
+	go func() {
+		ticker := time.NewTicker(RenewSeconds * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				s.Renew(ctx, tickets)
+			}
+		}
+	}()
+	return stop
+}
+
 func (s *Store) Settle(ctx context.Context, t Ticket, r Result, local Mutation) error {
 	ctx = context.WithoutCancel(ctx)
 	if !r.State.Final() {

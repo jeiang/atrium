@@ -244,6 +244,14 @@ func (l *Live) Recover(ctx context.Context) (int64, error) {
 	return n, err
 }
 
+func (l *Live) KeepAlive(ctx context.Context, tickets []ledger.Ticket) func() {
+	return l.store().KeepAlive(ctx, tickets)
+}
+
+func (l *Live) Renew(ctx context.Context, tickets []ledger.Ticket) {
+	l.store().Renew(ctx, tickets)
+}
+
 type Action struct {
 	ID               int64                    `json:"id"`
 	TS               float64                  `json:"ts"`

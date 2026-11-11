@@ -70,7 +70,7 @@ const UnknownPrefix = "cancelled, write outcome unknown"
 
 func OutcomeUnknown(err error) bool {
 	if partial, ok := errors.AsType[*PartialMove](err); ok {
-		return partial.Unconfirmed
+		return partial.Unconfirmed || OutcomeUnknown(partial.Err)
 	}
 	_, ok := errors.AsType[*mail.WriteInterrupted](err)
 	return ok
@@ -87,7 +87,7 @@ func (e *PartialMove) Error() string {
 
 func (e *PartialMove) Unwrap() error { return e.Err }
 
-func (e *PartialMove) OutcomeUnknown() bool { return e.Unconfirmed }
+func (e *PartialMove) OutcomeUnknown() bool { return e.Unconfirmed || OutcomeUnknown(e.Err) }
 
 func (e *PartialMove) Partial() bool { return true }
 
