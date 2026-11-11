@@ -15,8 +15,15 @@ import (
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
-func Command(cfgEnv config.Env) *cli.Command {
-	return &cli.Command{Name: "memory", Commands: []*cli.Command{treeCommand(cfgEnv), workCommand(cfgEnv), viewCommand(cfgEnv), backfillCommand(cfgEnv)}}
+func Command(cfgEnv config.Env, now func() float64) *cli.Command {
+	return &cli.Command{Name: "memory", Commands: []*cli.Command{treeCommand(cfgEnv), workCommand(cfgEnv, now), viewCommand(cfgEnv), backfillCommand(cfgEnv, now)}}
+}
+
+func liveClock(now func() float64) func() float64 {
+	if now == nil {
+		return assistant.Now
+	}
+	return now
 }
 
 func open(env *cli.Env, cfgEnv config.Env) (*db.DB, error) {
@@ -76,7 +83,7 @@ func rootsOf(nodes []memory.Node) []memory.Node {
 	return roots
 }
 
-func workCommand(cfgEnv config.Env) *cli.Command {
+func workCommand(cfgEnv config.Env, now func() float64) *cli.Command {
 	return &cli.Command{
 		Name: "work",
 		Help: "Drain one batch of pending memory summaries",
@@ -104,10 +111,11 @@ func workCommand(cfgEnv config.Env) *cli.Command {
 				if err != nil {
 					return cli.Fail(env, err)
 				}
-				now := assistant.Now()
-				svc := service.NewInference(d, func() float64 { return now })
+				clock := liveClock(now)
+				at := clock()
+				svc := service.NewInference(d, clock)
 				n, err := memory.Work(env.Ctx, d, int64(*thread), memory.WorkOptions{
-					Now: now, Client: client, Inference: svc, Model: model, Effort: effort,
+					Now: at, Client: client, Inference: svc, Model: model, Effort: effort,
 				})
 				if err != nil {
 					return cli.Fail(env, err)
@@ -153,7 +161,7 @@ func viewCommand(cfgEnv config.Env) *cli.Command {
 	}
 }
 
-func backfillCommand(cfgEnv config.Env) *cli.Command {
+func backfillCommand(cfgEnv config.Env, now func() float64) *cli.Command {
 	return &cli.Command{
 		Name: "backfill",
 		Help: "Build and summarize the memory trees of existing threads",
@@ -166,7 +174,8 @@ func backfillCommand(cfgEnv config.Env) *cli.Command {
 					return cli.Fail(env, err)
 				}
 				defer func() { _ = d.Close() }()
-				now := assistant.Now()
+				clock := liveClock(now)
+				at := clock()
 				if *estimate {
 					e, err := memory.EstimateBackfill(env.Ctx, d.Read)
 					if err != nil {
@@ -205,8 +214,8 @@ func backfillCommand(cfgEnv config.Env) *cli.Command {
 					id := int64(*thread)
 					target = &id
 				}
-				svc := service.NewInference(d, func() float64 { return now })
-				n, err := memory.Backfill(audit.With(env.Ctx, "operator", audit.CLI), d, target, client, svc, model, effort, now)
+				svc := service.NewInference(d, clock)
+				n, err := memory.Backfill(audit.With(env.Ctx, "operator", audit.CLI), d, target, client, svc, model, effort, at)
 				if err != nil {
 					return cli.Fail(env, err)
 				}
