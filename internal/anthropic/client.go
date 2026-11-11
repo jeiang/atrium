@@ -98,7 +98,7 @@ func (c *Client) Create(ctx context.Context, p Params) Outcome {
 	res, err := c.sdk.Beta.Messages.New(ctx, p.sdkParams(), option.WithRequestBody("application/json", body), option.WithMaxRetries(0))
 	if err != nil {
 		classified := classify(err)
-		return Outcome{DefinitelyRejected: rejected(classified), Err: classified}
+		return Outcome{DefinitelyUnsent: unsent(classified), DefinitelyRejected: rejected(classified), Err: classified}
 	}
 	raw := res.RawJSON()
 	msg, err := decodeMessage(raw)
@@ -163,6 +163,7 @@ func failedStream(acc *sdk.BetaMessage, known Usage, started, stopped bool, err 
 		Usage:              known,
 		Started:            started,
 		Complete:           stopped,
+		DefinitelyUnsent:   !started && unsent(err),
 		DefinitelyRejected: !started && rejected(err),
 		Err:                err,
 	}
@@ -207,7 +208,12 @@ func usageOf(acc *sdk.BetaMessage) Usage { return usageOfRaw(acc.RawJSON()) }
 
 func rejected(err error) bool {
 	var api *APIError
-	return errors.As(err, &api) && api.StatusCode >= 400 && api.StatusCode < 500
+	return errors.As(err, &api) && api.StatusCode >= 400
+}
+
+func unsent(err error) bool {
+	var api *APIError
+	return errors.As(err, &api) && api.Unsent()
 }
 
 func (c *Client) ModelIDs(ctx context.Context) ([]string, error) {
