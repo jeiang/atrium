@@ -58,8 +58,11 @@ func validateConnection(c connections.Candidate) error {
 
 func testConnection(ctx context.Context, lease *connections.Lease, caps []connections.Capability) ([]connections.Result, error) {
 	account := mailconn.Account(lease.ID())
-	spec, ok := config.From(ctx).Account(account)
-	if !ok || !spec.Enabled {
+	spec, err := candidateSpec(account, mailconn.Settings(lease))
+	if err != nil {
+		return []connections.Result{{Capability: mailconn.CapabilityIMAP, State: connections.Failing, Reason: err.Error()}}, nil
+	}
+	if !spec.Enabled {
 		return []connections.Result{{Capability: mailconn.CapabilityIMAP, State: connections.Unconfigured, Reason: "no enabled mail account " + account}}, nil
 	}
 	method := spec.AuthMethod
@@ -98,6 +101,26 @@ func testConnection(ctx context.Context, lease *connections.Lease, caps []connec
 		return []connections.Result{{Capability: mailconn.CapabilityIMAP, State: connections.Unconfigured, Reason: "no mail capability is enabled"}}, nil
 	}
 	return results, nil
+}
+
+func candidateSpec(account string, cfg map[string]string) (config.AccountSpec, error) {
+	enabled := true
+	if value, ok := cfg["enabled"]; ok {
+		enabled = value != "false"
+	}
+	spec, err := config.NewAccount(account, "", cfg["preset"], cfg["login"], enabled)
+	if err != nil {
+		return spec, err
+	}
+	if method := strings.TrimSpace(cfg["auth_method"]); method != "" {
+		if spec.AuthMethod, err = config.ParseAuthMethod(method); err != nil {
+			return spec, err
+		}
+	}
+	if !config.AuthAllowed(spec.Preset, spec.AuthMethod) {
+		return spec, errors.New("XOAUTH2 is Gmail-only")
+	}
+	return spec, nil
 }
 
 func testIMAP(ctx context.Context, lease *connections.Lease, spec config.AccountSpec, method config.AuthMethod, password string, source *gmailauth.Source) connections.Result {
