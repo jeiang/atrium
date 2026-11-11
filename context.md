@@ -200,7 +200,10 @@ behavior-parity target.
   monthly budget defaults to $150 with scheduled runs paused at 80% and chat at
   95%; the last 5% is reserved for classification. Every paid model call,
   memory summaries included, reserves its full cold prompt plus the request's
-  maximum output tokens and maximum web searches before dispatch, and an
+  maximum output tokens and maximum web searches before dispatch. The prompt
+  estimate counts text at its character rate and each attachment at the token
+  estimate stored with it, not at the size of the base64 copy inlined into the
+  request, so a large PDF or image does not reserve its encoded size. An
   attempt whose outcome is unknown stays reserved and expires to an estimated
   charge after 24 hours; a stream stopped mid-generation settles the output it
   delivered, estimated from its text and thinking and never below the usage the

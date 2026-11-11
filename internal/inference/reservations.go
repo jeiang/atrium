@@ -50,6 +50,8 @@ type Request struct {
 	Class      Class
 	CacheTTL   string
 	Params     anthropic.Params
+
+	EstimatedPromptTokens int64
 }
 
 type RunScope struct {
@@ -339,9 +341,12 @@ func prepare(r Request) (prepared, error) {
 			return prepared{}, errors.New("inference: classification may not use tools")
 		}
 	}
-	prompt, err := estimatePrompt(r.Params)
-	if err != nil {
-		return prepared{}, err
+	prompt := r.EstimatedPromptTokens
+	if prompt <= 0 {
+		prompt, err = estimatePrompt(r.Params)
+		if err != nil {
+			return prepared{}, err
+		}
 	}
 	reservation, err := reservationNUSD(model.ID, prompt, r.Params.MaxTokens, searches, cacheTTLOf(r))
 	if err != nil {

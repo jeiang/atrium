@@ -269,3 +269,38 @@ func TestInferenceInterruptedStreamChargesTheOutputItReceived(t *testing.T) {
 		t.Errorf("accounted %d, want the received output charged", accounted)
 	}
 }
+func TestInferenceLargePDFIsEstimatedFromItsStoredTokens(t *testing.T) {
+	_, api, d, w := asstServe(t)
+
+	pdf := make([]byte, 0, 6<<20)
+	pdf = append(pdf, "%PDF-1.7\n"...)
+	for range 5 {
+		pdf = append(pdf, "1 0 obj << /Type /Page >> endobj\n"...)
+	}
+	for len(pdf) < 6<<20 {
+		pdf = append(pdf, '%')
+	}
+
+	before := len(api.Requests())
+	api.Push(asstReply("read"))
+	thread := w.startFiles(map[string]string{"text": "read this", "model": "claude-opus-5-5"},
+		[]asstFile{{"big.pdf", "application/pdf", pdf}})
+	if state := asstSettleThread(t, d, thread); state != "done" {
+		t.Fatalf("large PDF run %s", state)
+	}
+	if got := len(api.Requests()) - before; got != 1 {
+		t.Fatalf("%d provider requests, want 1", got)
+	}
+	var prompt, reservation int64
+	if err := d.Read.QueryRow("SELECT estimated_prompt_tokens, reservation_nusd FROM usage WHERE thread_id = ? ORDER BY id DESC LIMIT 1", thread).
+		Scan(&prompt, &reservation); err != nil {
+		t.Fatal(err)
+	}
+	if prompt <= 0 || prompt > 100_000 {
+		t.Errorf("estimated prompt %d, want the stored attachment estimate rather than the base64 size", prompt)
+	}
+	if reservation <= 0 || reservation >= int64(10*inference.NanoUSD) {
+		t.Errorf("reservation %d, want a positive value below the $10 Opus run cap", reservation)
+	}
+}
+
