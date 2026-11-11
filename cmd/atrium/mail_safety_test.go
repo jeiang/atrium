@@ -40,7 +40,7 @@ func mailSafetyFixture(t *testing.T, mode string) *mailSafety {
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
 	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", "http://127.0.0.1:1/v1")
 	setEnv(t, settingEnv(mail.KeyMode), mode)
-	setEnv(t, settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir, mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir, mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
 	return &mailSafety{dir: dir, app: f.app, api: api, fake: fake, path: filepath.Join(dir, "atrium.db")}
 }
 

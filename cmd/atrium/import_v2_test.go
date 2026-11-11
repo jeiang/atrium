@@ -62,7 +62,7 @@ func importTestAppHost(t *testing.T, dir string, now float64, host string) *cli.
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_DB_KEY"] = rightKeyHex
 	vars["ATRIUM_HOST_CONFIG"] = host
-	vars[settingEnv(config.KeyMailAccountsFile)] = defaultAccountsFile
+	vars["ATRIUM_HOST_CONFIG"] = defaultHostConfig
 	reg := settings.New()
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	return newAppWith(config.Map(vars), reg, config.NewState(reg), nil, nil, func() float64 { return now }, quietLog)
@@ -1078,7 +1078,7 @@ func TestImportV2UndoesImportedAutomaticActions(t *testing.T) {
 	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_DB_KEY"] = rightKeyHex
-	vars[settingEnv(config.KeyMailAccountsFile)] = defaultAccountsFile
+	vars["ATRIUM_HOST_CONFIG"] = defaultHostConfig
 	delete(vars, "ATRIUM_DB_KEY_FILE")
 	reg := settings.New()
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })

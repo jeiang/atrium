@@ -191,7 +191,7 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 			accounts[i] = mailAccount{a.id, a.preset, a.id, "unset", true}
 		}
 	}
-	vars[settingEnv(config.KeyMailAccountsFile)] = accountsFile(t, dir, accounts...)
+	vars["ATRIUM_HOST_CONFIG"] = accountsFile(t, dir, accounts...)
 	for _, name := range []string{"ATRIUM_TZ", "ATRIUM_PUBLIC_URL", "ICLOUD_APPLE_ID", "ICLOUD_MAIL_USERNAME", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD"} {
 		delete(vars, name)
 	}

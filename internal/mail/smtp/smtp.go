@@ -33,7 +33,7 @@ func SenderAddress(preset, user string) string {
 	return user
 }
 
-func Send(ctx context.Context, creds Credentials, account string, msg *Message, recipients []string) (Refusals, error) {
+func Send(ctx context.Context, host string, creds Credentials, account string, msg *Message, recipients []string) (Refusals, error) {
 	user, password, ok := creds(ctx, account)
 	if !ok {
 		return nil, &Failure{Kind: "Config", Msg: account + " is not configured: no enabled account with a login and password"}
@@ -41,7 +41,7 @@ func Send(ctx context.Context, creds Credentials, account string, msg *Message, 
 	if len(recipients) == 0 {
 		return nil, &Failure{Kind: "NoRecipients", Msg: "no recipients"}
 	}
-	refused, err := send(ctx, defaultFactory(), account, user, password, msg, recipients, nil, nil)
+	refused, err := send(ctx, defaultFactory(), host, account, user, password, msg, recipients, nil, nil)
 	var unknown *OutcomeUnknown
 	if errors.As(err, &unknown) {
 		return nil, unknown
@@ -50,6 +50,46 @@ func Send(ctx context.Context, creds Credentials, account string, msg *Message, 
 		return nil, err
 	}
 	return refused, nil
+}
+
+// Probe connects, negotiates TLS and authenticates, then quits. It never
+// opens an envelope or sends data.
+func Probe(ctx context.Context, host, user, password string, token func(context.Context) (string, error), invalidate func()) error {
+	host, port, err := smtpEndpoint(host)
+	if err != nil {
+		return err
+	}
+	server, err := defaultFactory()(ctx, host, port, Timeout)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = server.Quit() }()
+	if err := server.StartTLS(); err != nil {
+		return err
+	}
+	if token != nil {
+		auth, ok := server.(XOAUTH2Session)
+		if !ok {
+			return &Failure{Kind: "Config", Msg: "this SMTP transport cannot use XOAUTH2"}
+		}
+		return auth.LoginXOAUTH2(ctx, user, token, invalidate)
+	}
+	return server.Login(user, password)
+}
+
+func smtpEndpoint(host string) (string, int, error) {
+	if addr, ok := config.OS("ATRIUM_SMTP_ADDR"); ok && addr != "" {
+		h, p, err := net.SplitHostPort(addr)
+		if err != nil {
+			return "", 0, err
+		}
+		n, err := strconv.Atoi(p)
+		if err != nil {
+			return "", 0, err
+		}
+		return h, n, nil
+	}
+	return host, Port, nil
 }
 
 func defaultFactory() Factory {
@@ -65,20 +105,12 @@ func defaultFactory() Factory {
 	return d.Dial
 }
 
-func send(ctx context.Context, factory Factory, account, user, password string, msg *Message, recipients []string,
+func send(ctx context.Context, factory Factory, host, account, user, password string, msg *Message, recipients []string,
 	token func(context.Context) (string, error), invalidate func()) (refused Refusals, err error) {
 	spec, _ := config.From(ctx).Account(account)
-	host, port := spec.SMTPHost(), Port
-	if addr, ok := config.OS("ATRIUM_SMTP_ADDR"); ok && addr != "" {
-		h, p, splitErr := net.SplitHostPort(addr)
-		if splitErr != nil {
-			return nil, splitErr
-		}
-		n, convErr := strconv.Atoi(p)
-		if convErr != nil {
-			return nil, convErr
-		}
-		host, port = h, n
+	host, port, err := smtpEndpoint(host)
+	if err != nil {
+		return nil, err
 	}
 	server, err := factory(ctx, host, port, Timeout)
 	if err != nil {

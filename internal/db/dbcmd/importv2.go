@@ -70,7 +70,7 @@ type tablePlan struct {
 
 var importTables = []tablePlan{
 	{table: "accounts", action: carry},
-	{table: "mail_accounts", action: carry, ignore: true, why: "the accounts file wins on a conflict"},
+	{table: "mail_accounts", action: carry, ignore: true, why: "a host-declared account keeps its identity; the import supplies its credential"},
 	{table: "mailboxes", action: carry},
 	{table: "messages", action: carry, skip: []string{"embedded"}},
 	{table: "message_fts", action: rebuild, run: func(im *importer) (int64, error) {
@@ -299,6 +299,14 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source str
 		}
 		lines = append(lines, connLines...)
 		lines = append(lines, sourced.Notes...)
+		for _, id := range sourced.MailIDs {
+			if _, err := tx.ExecContext(ctx,
+				"UPDATE mail_accounts SET connection_id = ?, capability_prefix = ?, pinned = 0 WHERE id = ?",
+				id, id, strings.TrimPrefix(id, "mail/")); err != nil {
+				return err
+			}
+			lines = append(lines, "mail_accounts: linked "+id)
+		}
 		for _, name := range sourced.Secrets {
 			if _, err := tx.ExecContext(ctx, "DELETE FROM secrets WHERE name = ?", name); err != nil {
 				return err
@@ -436,6 +444,7 @@ type sourceConnectionsData struct {
 	Services []connections.ImportService
 	Secrets  []string
 	Notes    []string
+	MailIDs  []string
 }
 
 func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData, error) {
@@ -516,6 +525,16 @@ func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData,
 	}
 	out.Services = append(out.Services, iclouds...)
 	out.Notes = append(out.Notes, icloudNotes...)
+	mails, mailSecrets, mailNotes, err := sourceMailAccounts(ctx, src)
+	if err != nil {
+		return out, err
+	}
+	out.Services = append(out.Services, mails...)
+	out.Secrets = append(out.Secrets, mailSecrets...)
+	out.Notes = append(out.Notes, mailNotes...)
+	for _, service := range mails {
+		out.MailIDs = append(out.MailIDs, service.ID)
+	}
 	oidcSecret, err := sourceSecret(ctx, src, "oidc_client_secret", "client_secret")
 	if err != nil {
 		return out, err
@@ -624,22 +643,80 @@ func sourceICloud(ctx context.Context, src *sql.DB) ([]connections.ImportService
 	var services []connections.ImportService
 	var notes []string
 	for _, a := range accounts {
-		password, err := sourceSecret(ctx, src, "mail_password_"+a.id, "mail/"+a.id+"/password")
-		if err != nil {
-			return nil, nil, err
-		}
 		service := connections.ImportService{
 			ID: "icloud/" + a.id, Kind: string(calendar.KindICloud), Label: "iCloud " + a.id, Source: connections.SourceOperator,
 			Config:       map[string]string{"apple_id": values["icloud_apple_id"]},
 			Capabilities: []string{calendar.CapabilityCalDAV, calendar.CapabilityCardDAV},
-			Credentials:  []connections.ImportCredential{password},
-		}
-		if password.Value == "" {
-			notes = append(notes, "icloud/"+a.id+": unresolved-credential; the app password is not in the source database")
 		}
 		services = append(services, service)
 	}
 	return services, notes, nil
+}
+
+func sourceMailAccounts(ctx context.Context, src *sql.DB) ([]connections.ImportService, []string, []string, error) {
+	rows, err := src.QueryContext(ctx, "SELECT id, label, preset, login, enabled, auth_method FROM mail_accounts ORDER BY id")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	type account struct {
+		id, label, preset, login, method string
+		enabled                          bool
+	}
+	var accounts []account
+	for rows.Next() {
+		var a account
+		if err := rows.Scan(&a.id, &a.label, &a.preset, &a.login, &a.enabled, &a.method); err != nil {
+			_ = rows.Close()
+			return nil, nil, nil, err
+		}
+		accounts = append(accounts, a)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, nil, nil, err
+	}
+	var (
+		services []connections.ImportService
+		secrets  []string
+		notes    []string
+	)
+	for _, a := range accounts {
+		if a.id == "chat" || a.id == "embed" {
+			notes = append(notes, "mail/"+a.id+": ambiguous-health; the account id collides with a local endpoint name")
+		}
+		enabled := a.enabled
+		service := connections.ImportService{
+			ID: "mail/" + a.id, Kind: "mail", Label: a.label, Source: connections.SourceOperator,
+			Config: map[string]string{
+				"preset": a.preset, "login": a.login, "auth_method": a.method,
+				"enabled": fmt.Sprintf("%t", a.enabled),
+			},
+			Capabilities: []string{"imap", "smtp"},
+			Enabled:      &enabled,
+		}
+		if a.method == "password" {
+			password, err := sourceSecret(ctx, src, "mail_password_"+a.id, "mail/"+a.id+"/password")
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			if password.Value != "" {
+				service.Credentials = []connections.ImportCredential{password}
+				secrets = append(secrets, "mail_password_"+a.id)
+			} else {
+				notes = append(notes, "mail/"+a.id+": unresolved-credential; the app password is not in the source database")
+			}
+		}
+		if a.id != "chat" && a.id != "embed" {
+			state, reason, checked, expires, ok, err := sourceHealth(ctx, src, "mail_"+a.id)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			if ok {
+				service.Health = &connections.ImportHealth{State: state, Reason: reason, CheckedAt: checked, ExpiresAt: expires}
+			}
+		}
+		services = append(services, service)
+	}
+	return services, secrets, notes, nil
 }
 
 func sourceSettings(ctx context.Context, src *sql.DB, keys []string) (map[string]string, error) {

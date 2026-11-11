@@ -178,7 +178,7 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 	for _, id := range sortedKeys(s.host.Connections) {
 		declared[id] = true
 	}
-	return s.d.WithTx(ctx, func(tx *sql.Tx) error {
+	err := s.d.WithTx(ctx, func(tx *sql.Tx) error {
 		for _, id := range sortedKeys(s.host.Connections) {
 			if err := s.reconcileOne(ctx, tx, ID(id), s.host.Connections[id]); err != nil {
 				return err
@@ -211,6 +211,13 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 		}
 		return nil
 	})
+	if err != nil {
+		return err
+	}
+	if accountReconciler != nil {
+		return accountReconciler(ctx, s)
+	}
+	return nil
 }
 
 func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.HostConnection) error {
@@ -637,6 +644,32 @@ func (l *Lease) HTTP(name string) (*http.Client, error) {
 // DB returns the writable database behind a lease opened by a store; a
 // read-only lease has none.
 func (l *Lease) DB() *db.DB { return l.store.d }
+
+// DB returns the database a store was opened on.
+func (s *Store) DB() *db.DB { return s.d }
+
+// Remove deletes an operator-owned connection and its capabilities and
+// credentials. A host-owned connection is disabled instead, because the host
+// configuration still declares it.
+func (s *Store) Remove(ctx context.Context, id ID) error {
+	if !audit.HasActor(ctx) {
+		return audit.ErrNoActor
+	}
+	current, err := s.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if current.ConfigSource == SourceHost {
+		return errors.New("connections: " + string(id) + " is declared by the host; remove it there")
+	}
+	return s.d.WithTx(ctx, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, "DELETE FROM connections WHERE id = ?", id); err != nil {
+			return err
+		}
+		old := string(current.Config)
+		return audit.Record(ctx, tx, audit.Entry{Key: "connection." + string(id), Old: &old})
+	})
+}
 
 func (l *Lease) newClient() (*http.Client, error) {
 	timeout := defaultTimeout

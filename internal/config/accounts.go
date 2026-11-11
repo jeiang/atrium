@@ -1,7 +1,6 @@
 package config
 
 import (
-	"bytes"
 	"context"
 	"database/sql"
 	"errors"
@@ -13,25 +12,19 @@ import (
 	"strings"
 	"time"
 
-	"github.com/BurntSushi/toml"
-
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail/accounts"
-	"github.com/jeiang/atrium/internal/secrets"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
-const KeyMailAccountsFile = "mail_accounts_file"
-
 type AccountSpec struct {
-	Name       string
-	Label      string
-	Preset     string
-	Login      string
-	Enabled    bool
-	Pinned     bool
-	AuthMethod AuthMethod
+	Name             string
+	Label            string
+	Preset           string
+	Login            string
+	Enabled          bool
+	Pinned           bool
+	AuthMethod       AuthMethod
+	ConnectionID     string
+	CapabilityPrefix string
 }
 
 func (a AccountSpec) Host() string { return presets[a.Preset].host }
@@ -62,10 +55,12 @@ var presets = map[string]preset{
 
 var accountID = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
 
-func init() {
-	settings.MustRegister(settings.Deploy(settings.Def{
-		Key: KeyMailAccountsFile, Module: "mail", Type: settings.String}))
-}
+// HostAccounts derives the accounts declared by host mail connections. The
+// mail owner registers it; a process without the mail owner has no host
+// accounts.
+var hostAccounts func(Host) ([]AccountSpec, map[string]string, error)
+
+func RegisterHostAccounts(f func(Host) ([]AccountSpec, map[string]string, error)) { hostAccounts = f }
 
 func (s *State) Accounts() []AccountSpec {
 	s.mu.RLock()
@@ -85,7 +80,7 @@ func (s *State) Account(name string) (AccountSpec, bool) {
 func ExistingAccounts(ctx context.Context, q db.Querier) ([]AccountSpec, error) {
 	var out []AccountSpec
 	for _, spec := range From(ctx).Accounts() {
-		found, err := accounts.Exists(ctx, q, spec.Name)
+		found, err := exists(ctx, q, spec.Name)
 		if err != nil {
 			return nil, err
 		}
@@ -95,6 +90,15 @@ func ExistingAccounts(ctx context.Context, q db.Querier) ([]AccountSpec, error) 
 		out = append(out, spec)
 	}
 	return out, nil
+}
+
+func exists(ctx context.Context, q db.Querier, name string) (bool, error) {
+	var one int
+	err := q.QueryRowContext(ctx, "SELECT 1 FROM accounts WHERE name = ?", name).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil
+	}
+	return err == nil, err
 }
 
 func (s *State) Preset(account string) string {
@@ -121,16 +125,6 @@ func (s *State) UseAccounts(list []AccountSpec, passwords map[string]string) (re
 	}
 }
 
-func PasswordKey(id string) string { return "mail_password_" + id }
-
-func (s *State) RegisterPassword(id string) error {
-	if _, ok := s.settings.Lookup(PasswordKey(id)); ok {
-		return nil
-	}
-	return s.settings.Register(settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{
-		Key: PasswordKey(id), Module: "mail", Type: settings.String}))
-}
-
 func NormalizePassword(value string) string { return strings.Join(strings.Fields(value), "") }
 
 func (s *State) LoadStoredAccounts(ctx context.Context, q db.Querier) error {
@@ -148,7 +142,13 @@ func (s *State) LoadStoredAccounts(ctx context.Context, q db.Querier) error {
 }
 
 func (s *State) loadAccountsFromDB(ctx context.Context, q db.Querier, filePasswords map[string]string) ([]AccountSpec, map[string]string, error) {
-	rows, err := q.QueryContext(ctx, "SELECT id, label, preset, login, enabled, pinned, auth_method FROM mail_accounts ORDER BY created_at, id")
+	rows, err := q.QueryContext(ctx,
+		"SELECT a.id, a.label, a.preset, a.login, a.enabled, a.pinned, a.auth_method, a.connection_id, a.capability_prefix, "+
+			"c.source, c.value, c.file_ref "+
+			"FROM mail_accounts a "+
+			"LEFT JOIN connection_credentials c ON c.connection_id = COALESCE(NULLIF(a.connection_id, ''), 'mail/' || a.id) "+
+			"AND c.slot = COALESCE(NULLIF(a.capability_prefix, ''), 'mail/' || a.id) || '/password' "+
+			"ORDER BY a.created_at, a.id")
 	if err != nil {
 		return nil, nil, err
 	}
@@ -156,10 +156,14 @@ func (s *State) loadAccountsFromDB(ctx context.Context, q db.Querier, filePasswo
 		id, label, preset, login string
 		enabled, pinned          bool
 		method                   string
+		connection, prefix       sql.NullString
+		source                   sql.NullString
+		value, fileRef           sql.NullString
 	}
 	stored, err := db.Collect(rows, func(r *sql.Rows) (row, error) {
 		var x row
-		err := r.Scan(&x.id, &x.label, &x.preset, &x.login, &x.enabled, &x.pinned, &x.method)
+		err := r.Scan(&x.id, &x.label, &x.preset, &x.login, &x.enabled, &x.pinned, &x.method, &x.connection, &x.prefix,
+			&x.source, &x.value, &x.fileRef)
 		return x, err
 	})
 	if err != nil {
@@ -169,13 +173,18 @@ func (s *State) loadAccountsFromDB(ctx context.Context, q db.Querier, filePasswo
 	passwords := make(map[string]string, len(stored))
 	for _, x := range stored {
 		password := filePasswords[x.id]
-		if !x.pinned {
-			if err := s.RegisterPassword(x.id); err != nil {
-				return nil, nil, err
+		switch x.source.String {
+		case "database":
+			if x.value.String != "" {
+				password = x.value.String
 			}
-			password, err = secrets.NewIn(s.settings, nil, q, nil).Value(ctx, PasswordKey(x.id))
+		case "host_file":
+			raw, err := os.ReadFile(x.fileRef.String)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, fmt.Errorf("config: mail account %q credential: %w", x.id, err)
+			}
+			if value := NormalizePassword(string(raw)); value != "" {
+				password = value
 			}
 		}
 		if password != "" {
@@ -189,6 +198,14 @@ func (s *State) loadAccountsFromDB(ctx context.Context, q db.Querier, filePasswo
 			return nil, nil, fmt.Errorf("config: stored mail account %q: %w", x.id, err)
 		}
 		a.Pinned = x.pinned
+		a.ConnectionID = x.connection.String
+		if a.ConnectionID == "" {
+			a.ConnectionID = "mail/" + x.id
+		}
+		a.CapabilityPrefix = x.prefix.String
+		if a.CapabilityPrefix == "" {
+			a.CapabilityPrefix = "mail/" + x.id
+		}
 		accounts = append(accounts, a)
 	}
 	return accounts, passwords, nil
@@ -200,9 +217,11 @@ func reconcileAccounts(ctx context.Context, d *db.DB, files []AccountSpec) error
 		for _, a := range files {
 			keep[a.Name] = true
 			if _, err := tx.ExecContext(ctx,
-				"INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, auth_method, created_at) VALUES (?, ?, ?, ?, ?, 1, ?, ?) "+
-					"ON CONFLICT(id) DO UPDATE SET label = excluded.label, preset = excluded.preset, login = excluded.login, enabled = excluded.enabled, auth_method = excluded.auth_method, pinned = 1",
-				a.Name, a.Label, a.Preset, a.Login, a.Enabled, a.AuthMethod, stamp()); err != nil {
+				"INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, auth_method, connection_id, capability_prefix, created_at) "+
+					"VALUES (?, ?, ?, ?, ?, 1, ?, (SELECT id FROM connections WHERE id = ?), ?, ?) "+
+					"ON CONFLICT(id) DO UPDATE SET label = excluded.label, preset = excluded.preset, login = excluded.login, enabled = excluded.enabled, auth_method = excluded.auth_method, pinned = 1, "+
+					"connection_id = COALESCE(excluded.connection_id, mail_accounts.connection_id), capability_prefix = excluded.capability_prefix",
+				a.Name, a.Label, a.Preset, a.Login, a.Enabled, a.AuthMethod, "mail/"+a.Name, "mail/"+a.Name, stamp()); err != nil {
 				return err
 			}
 		}
@@ -241,72 +260,6 @@ func NewAccount(name, label, presetName, login string, enabled bool) (AccountSpe
 		label = name
 	}
 	return AccountSpec{Name: name, Label: label, Preset: presetName, Login: strings.TrimSpace(login), Enabled: enabled, AuthMethod: AuthPassword}, nil
-}
-
-type accountEntry struct {
-	ID           string `toml:"id"`
-	Label        string `toml:"label"`
-	Preset       string `toml:"preset"`
-	Login        string `toml:"login"`
-	PasswordFile string `toml:"password_file"`
-	Enabled      *bool  `toml:"enabled"`
-}
-
-func loadAccounts(env Env, reg *settings.Registry) ([]AccountSpec, map[string]string, error) {
-	path, ok := pinned(reg, env, KeyMailAccountsFile)
-	if !ok {
-		return nil, nil, nil
-	}
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, nil, fmt.Errorf("config: %s: %w", KeyMailAccountsFile, err)
-	}
-	var doc struct {
-		Account []accountEntry `toml:"account"`
-	}
-	meta, err := toml.NewDecoder(bytes.NewReader(raw)).Decode(&doc)
-	if err != nil {
-		return nil, nil, fmt.Errorf("config: %s: %w", path, err)
-	}
-	if extra := meta.Undecoded(); len(extra) > 0 {
-		return nil, nil, fmt.Errorf("config: %s: unknown key %q", path, extra[0].String())
-	}
-	var list []AccountSpec
-	passwords := map[string]string{}
-	for i, e := range doc.Account {
-		where := fmt.Sprintf("%s: account %d", path, i+1)
-		if e.ID != "" {
-			where = fmt.Sprintf("%s: account %q", path, e.ID)
-		}
-		for _, a := range list {
-			if a.Name == e.ID {
-				return nil, nil, fmt.Errorf("config: %s: duplicate id", where)
-			}
-		}
-		if strings.TrimSpace(e.Login) == "" || e.PasswordFile == "" {
-			return nil, nil, fmt.Errorf("config: %s: login and password_file are required", where)
-		}
-		passwordFile, err := scalar(env, where+" password_file", e.PasswordFile)
-		if err != nil {
-			return nil, nil, err
-		}
-		password, err := os.ReadFile(passwordFile)
-		if err != nil {
-			return nil, nil, fmt.Errorf("config: %s: %w", where, err)
-		}
-		value := NormalizePassword(string(password))
-		if value == "" {
-			return nil, nil, fmt.Errorf("config: %s: %s is empty", where, passwordFile)
-		}
-		a, err := NewAccount(e.ID, e.Label, e.Preset, e.Login, e.Enabled == nil || *e.Enabled)
-		if err != nil {
-			return nil, nil, fmt.Errorf("config: %s: %w", where, err)
-		}
-		logx.AddSecret(value)
-		passwords[a.Name] = value
-		list = append(list, a)
-	}
-	return list, passwords, nil
 }
 
 func stamp() float64 { return float64(time.Now().UnixNano()) / 1e9 }

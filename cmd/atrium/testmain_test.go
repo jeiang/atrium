@@ -44,16 +44,25 @@ var testRoot = func() string {
 	return dir
 }()
 
-var defaultAccountsFile = func() string {
+var defaultMailPassword = func() string {
 	dir := filepath.Join(testRoot, "accounts")
 	secret := filepath.Join(dir, "icloud.password")
-	path := filepath.Join(dir, "accounts.toml")
-	body := fmt.Sprintf("[[account]]\nid = \"icloud\"\npreset = \"icloud\"\nlogin = \"operator@icloud.invalid\"\npassword_file = %q\n", secret)
-	if os.MkdirAll(dir, 0o700) != nil || os.WriteFile(secret, []byte("dummy-icloud-password\n"), 0o600) != nil || os.WriteFile(path, []byte(body), 0o600) != nil {
-		panic("cannot write the default mail accounts file")
+	if os.MkdirAll(dir, 0o700) != nil || os.WriteFile(secret, []byte("dummy-icloud-password\n"), 0o600) != nil {
+		panic("cannot write the default mail password")
 	}
-	return path
+	return secret
 }()
+
+func mailConnection(id, preset, login, passwordFile string, enabled bool) string {
+	return fmt.Sprintf(`
+[connections."mail/%s"]
+kind = "mail"
+label = %q
+config = { preset = %q, login = %q, auth_method = "password", enabled = %q }
+capabilities = ["imap", "smtp"]
+credential_files = { "mail/%s/password" = %q }
+`, id, id, preset, login, fmt.Sprintf("%t", enabled), id, passwordFile)
+}
 
 const defaultWebPushConnection = `
 [connections."service/webpush"]
@@ -91,7 +100,8 @@ var defaultHostConfig = func() string {
 		panic("cannot write the default host credentials")
 	}
 	path := filepath.Join(dir, "host.toml")
-	if os.WriteFile(path, []byte(hostConfigBody(defaultWebPushConnection)), 0o600) != nil {
+	body := hostConfigBody(defaultWebPushConnection) + mailConnection("icloud", "icloud", "operator@icloud.invalid", defaultMailPassword, true)
+	if os.WriteFile(path, []byte(body), 0o600) != nil {
 		panic("cannot write the default host configuration")
 	}
 	return path
@@ -212,7 +222,6 @@ func requirementEnv(mediaRoot string) map[string]string {
 		settingEnv(media.KeyQbitURL):           "http://qbittorrent.invalid",
 		settingEnv(calendar.AppleIDKey):        "operator@icloud.invalid",
 		settingEnv(contacts.DirKey):            mediaRoot + "-contacts",
-		settingEnv(config.KeyMailAccountsFile): defaultAccountsFile,
 		"ATRIUM_HOST_CONFIG":                   defaultHostConfig,
 		settingEnv(grafanatools.KeyURL):        "http://grafana.invalid",
 	}

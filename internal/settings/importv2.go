@@ -242,7 +242,7 @@ var importManifest = []ImportEntry{
 	{Module: "mail", Key: "llm_body_chars", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/endpoint/tuning.go:TuningLlmBodyChars", Default: "1500", Type: Int, Choices: nil, Cutover: false},
 	{Module: "mail", Key: "llm_neighbors", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/mail/tuning.go:TuningLlmNeighbors", Default: "10", Type: Int, Choices: nil, Cutover: false},
 	{Module: "mail", Key: "llm_top_senders", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/endpoint/tuning.go:TuningLlmTopSenders", Default: "3", Type: Int, Choices: nil, Cutover: false},
-	{Module: "mail", Key: "mail_accounts_file", Class: ImportHost, Action: ImportDropHost, Target: "host.mail.mail_accounts_file", Default: "", Type: String, Choices: nil, Cutover: false},
+	{Module: "mail", Key: "mail_accounts_file", Class: ImportHost, Action: ImportDropHost, Target: "connections mail/<id>", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "mail", Key: "mail_backoff_max_seconds", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/mail/tuning.go:TuningMailBackoffMaxSeconds", Default: "300", Type: Int, Choices: nil, Cutover: false},
 	{Module: "mail", Key: "mail_backoff_start_seconds", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/mail/tuning.go:TuningMailBackoffStartSeconds", Default: "5", Type: Int, Choices: nil, Cutover: false},
 	{Module: "mail", Key: "mail_body_cap_bytes", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/mail/tuning.go:TuningMailBodyCapBytes", Default: "65536", Type: Int, Choices: nil, Cutover: false},

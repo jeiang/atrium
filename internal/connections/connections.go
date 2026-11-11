@@ -107,6 +107,12 @@ func (r *Registry) Kinds() []Kind {
 
 var defaults sync.Map
 
+var accountReconciler func(context.Context, *Store) error
+
+// SetAccountReconciler registers the owner that materializes account rows from
+// host mail connections once the connection rows exist.
+func SetAccountReconciler(f func(context.Context, *Store) error) { accountReconciler = f }
+
 func SetDefault(q db.Querier, s *Store) { defaults.Store(q, s) }
 
 func DefaultFor(q db.Querier) *Store {

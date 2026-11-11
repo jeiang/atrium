@@ -106,9 +106,14 @@ func (s *State) Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	files, filePasswords, err := loadAccounts(env, reg)
-	if err != nil {
-		return err
+	var (
+		files         []AccountSpec
+		filePasswords map[string]string
+	)
+	if hostAccounts != nil {
+		if files, filePasswords, err = hostAccounts(host); err != nil {
+			return err
+		}
 	}
 	if err := reconcileAccounts(ctx, d, files); err != nil {
 		return err
