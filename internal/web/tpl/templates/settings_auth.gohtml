@@ -2,17 +2,16 @@
 {{define "heading"}}Settings · Sign-in{{end}}
 {{define "content"}}{{$d := .Data}}
 {{template "settings_nav" (dict "Tab" "auth" "Settings" .Settings)}}
-<div class="flex max-w-xl flex-col gap-6">
-  {{template "_oidc_state.gohtml" .}}
-  <hr role="separator">
-  <div role="group" class="field">
+<section class="set-group" data-signin>
+  <h2>{{template "_oidc_state.gohtml" .}}</h2>
+  <div role="group" class="set-row">
     <label for="oidc-preset">Provider</label>
-    <select id="oidc-preset" name="preset" hx-get="/settings/auth/preset" hx-target="#oidc-setup" hx-swap="innerHTML" hx-include="this"{{if $d.PresetPinned}} disabled{{end}}>
+    <select id="oidc-preset" name="preset" class="select" hx-get="/settings/auth/preset" hx-target="#oidc-setup" hx-swap="innerHTML" hx-include="this"{{if $d.PresetPinned}} disabled{{end}}>
       {{range $d.Presets}}<option value="{{.Name}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}
     </select>
   </div>
-  <div id="oidc-setup" class="flex flex-col gap-6">{{template "_oidc_setup.gohtml" .}}</div>
-  {{template "_oidc_test.gohtml" .}}
-</div>
+  <div id="oidc-setup" class="flex flex-col border-t">{{template "_oidc_setup.gohtml" .}}</div>
+  <div class="px-4 empty:hidden has-[#oidc-test:empty]:hidden pb-3">{{template "_oidc_test.gohtml" .}}</div>
+</section>
 {{template "settings_groups" .}}
 {{end}}

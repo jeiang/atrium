@@ -47,23 +47,23 @@
 <section class="flex flex-col gap-2" aria-labelledby="by-thread">
   <h2 id="by-thread" class="text-sm font-medium">By thread</h2>
   {{if $d.ByThread}}
-  <table class="w-full text-sm">
-    <thead><tr class="text-left text-xs text-muted-foreground"><th class="py-1">Thread</th><th class="py-1">Kind</th><th class="py-1 text-right">Calls</th><th class="py-1 text-right" title="Summed over every call in the thread">Prompt tokens (all calls)</th><th class="py-1 text-right" title="Largest single request; over 100K bills at 5x">Largest request</th><th class="py-1 text-right">Output</th><th class="py-1 text-right">Reasoning</th><th class="py-1 text-right">Cost</th></tr></thead>
+  <div class="overflow-x-auto"><table class="w-full text-sm">
+    <thead><tr class="text-left text-xs text-muted-foreground"><th class="py-1">Thread</th><th class="py-1 ps-4">Kind</th><th class="py-1 ps-4 text-right">Calls</th><th class="py-1 ps-4 text-right" title="Summed over every call in the thread">Prompt</th><th class="py-1 ps-4 text-right" title="Largest single request; over 100K bills at 5x">Largest</th><th class="py-1 ps-4 text-right">Output</th><th class="py-1 ps-4 text-right">Reasoning</th><th class="py-1 ps-4 text-right">Cost</th></tr></thead>
     <tbody>
       {{range $d.ByThread}}
       <tr class="border-t">
-        <td class="py-1"><a class="underline underline-offset-4" href="/chat/{{.ThreadID}}">{{or (str .Title) "Untitled thread"}}</a></td>
-        <td class="py-1">{{.Kind}}</td>
-        <td class="py-1 text-right tabular-nums">{{.Calls}}</td>
-        <td class="py-1 text-right tabular-nums">{{.PromptTokens}}</td>
-        <td class="py-1 text-right tabular-nums">{{.MaxPromptTokens}}</td>
-        <td class="py-1 text-right tabular-nums">{{.OutputTokens}}</td>
-        <td class="py-1 text-right tabular-nums">{{.ReasoningTokens}}</td>
-        <td class="py-1 text-right tabular-nums">${{printf "%.3f" .Cost}}</td>
+        <td class="max-w-64 truncate py-1"><a class="underline underline-offset-4" href="/chat/{{.ThreadID}}">{{or (str .Title) "Untitled thread"}}</a></td>
+        <td class="py-1 ps-4">{{.Kind}}</td>
+        <td class="py-1 ps-4 text-right tabular-nums">{{.Calls}}</td>
+        <td class="py-1 ps-4 text-right tabular-nums">{{.PromptTokens}}</td>
+        <td class="py-1 ps-4 text-right tabular-nums">{{.MaxPromptTokens}}</td>
+        <td class="py-1 ps-4 text-right tabular-nums">{{.OutputTokens}}</td>
+        <td class="py-1 ps-4 text-right tabular-nums">{{.ReasoningTokens}}</td>
+        <td class="py-1 ps-4 text-right tabular-nums">${{printf "%.3f" .Cost}}</td>
       </tr>
       {{end}}
     </tbody>
-  </table>
+  </table></div>
   {{end}}
 </section>
 {{end}}
