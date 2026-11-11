@@ -13,13 +13,9 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
-	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/corrections"
-	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/safety"
@@ -36,17 +32,11 @@ const (
 
 	GoliveKey   = "golive_ts"
 	DeletionKey = "deletion_pass_ts"
-	Interrupted = "interrupted before completion"
 
 	UndoHeldText = "cancelled, write outcome unknown: write in flight"
 )
 
 var Kinds = [...]string{File, Flag, Trash, Correct, SnoozeReturn}
-
-const NotBlocked = "NOT EXISTS (SELECT 1 FROM auto_actions a WHERE a.account = m.account AND a.digest = m.digest " +
-	"AND a.kind IN ('file', 'trash') AND a.state IN ('applied', 'held', 'interrupted', 'unknown')) " +
-	"AND (SELECT COUNT(*) FROM auto_actions a WHERE a.account = m.account AND a.digest = m.digest " +
-	"AND a.kind IN ('file', 'trash') AND a.state = 'failed') < :attempts"
 
 const NoNewCorrection = "NOT EXISTS (SELECT 1 FROM corrections c WHERE c.message_id = m.id AND c.ts >= :golive)"
 
@@ -104,6 +94,8 @@ func QueryParams(ctx context.Context, q Querier, account string) (Params, error)
 type Live struct {
 	DB       *db.DB
 	Cfg      config.Config
+	Store    *ledger.Store
+	Open     mail.OpenFunc
 	Registry *proposals.Registry
 	Now      func() float64
 }
@@ -113,6 +105,13 @@ func (l *Live) now() float64 {
 		return l.Now()
 	}
 	return mail.WallClock()
+}
+
+func (l *Live) store() *ledger.Store {
+	if l.Store == nil {
+		panic("live: the effect ledger store is not configured")
+	}
+	return l.Store
 }
 
 func (l *Live) TakeBaseline(ctx context.Context) error {
@@ -150,7 +149,21 @@ func (l *Live) Rebaseline(ctx context.Context) (int64, error) {
 	return n, err
 }
 
-func nullJSON(v any) any {
+type Target struct {
+	MessageID   int64
+	IMAPName    string
+	UIDValidity uint32
+	UID         uint32
+}
+
+func text(v *string) string {
+	if v == nil {
+		return ""
+	}
+	return *v
+}
+
+func marshal(v any) json.RawMessage {
 	if v == nil {
 		return nil
 	}
@@ -158,118 +171,73 @@ func nullJSON(v any) any {
 	if err != nil {
 		return nil
 	}
-	return string(b)
+	return b
 }
 
-func (l *Live) Begin(ctx context.Context, account string, messageID int64, digest, kind string, src, dest *string,
-	before any, decisionID *int64) (id int64, ok bool, err error) {
-	res, err := l.DB.Write.ExecContext(ctx, "INSERT INTO auto_actions (ts, account, message_id, digest, kind, src, dest, before, decision_id, state) "+
-		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", l.now(), account, messageID, digest, kind, jsonx.Nullable(src), jsonx.Nullable(dest),
-		nullJSON(before), jsonx.Nullable(decisionID), ledger.Held)
-	if db.IsConstraint(err) {
-		return 0, false, nil
+func (l *Live) Begin(ctx context.Context, account string, t Target, digest, kind string, src, dest *string,
+	before any, decisionID *int64) (ledger.Ticket, bool, error) {
+	key := ledger.AutoKey(t.MessageID, kind, text(dest))
+	messageID := t.MessageID
+	ticket, err := l.store().Begin(ctx, ledger.New{
+		Origin: ledger.AutoOrigin, Operation: kind, OperationKey: key,
+		Target:    fmt.Sprintf("mail:%s:%d", account, t.MessageID),
+		MessageID: &messageID, Account: account, Digest: digest, DecisionID: decisionID,
+		Src: text(src), Dest: text(dest), Action: json.RawMessage(`{}`), Before: marshal(before),
+		Resources: []ledger.Resource{{Key: key, RetainOnDone: true}},
+	}, nil)
+	var conflict *ledger.Conflict
+	if errors.As(err, &conflict) {
+		return ledger.Ticket{}, false, nil
 	}
 	if err != nil {
-		return 0, false, err
+		return ledger.Ticket{}, false, err
 	}
-	id, err = res.LastInsertId()
-	return id, err == nil, err
+	return ticket, true, nil
 }
 
-func (l *Live) Finish(ctx context.Context, id int64, after, undo any, note *string) error {
-	_, err := l.DB.Write.ExecContext(ctx, "UPDATE auto_actions SET state = ?, error = ?, after = ?, undo = ? WHERE id = ?",
-		ledger.Applied, jsonx.Nullable(note), nullJSON(after), nullJSON(undo), id)
-	return err
-}
-
-func (l *Live) Fail(ctx context.Context, id int64, msg string) error {
-	_, err := l.DB.Write.ExecContext(ctx, "UPDATE auto_actions SET state = ?, error = ? WHERE id = ?", ledger.Failed, msg, id)
-	return err
-}
-
-func (l *Live) Unknown(ctx context.Context, id int64, msg string) error {
-	_, err := l.DB.Write.ExecContext(ctx, "UPDATE auto_actions SET state = ?, error = ? WHERE id = ?", ledger.Unknown, msg, id)
-	return err
-}
-
-func (l *Live) Partial(ctx context.Context, id int64, msg string, after, undo any) error {
-	_, err := l.DB.Write.ExecContext(ctx, "UPDATE auto_actions SET state = ?, error = ?, after = ?, undo = ? WHERE id = ?",
-		ledger.Partial, msg, nullJSON(after), nullJSON(undo), id)
-	return err
-}
-
-func (l *Live) AbsorbLabelUndo(ctx context.Context, messageID int64, kind string) (add, remove []string, err error) {
-	add, remove = []string{}, []string{}
-	const where = " WHERE message_id = ? AND kind = ? AND state IN ('failed', 'partial') AND undo IS NOT NULL AND undone_ts IS NULL"
-	rows, err := l.DB.Write.QueryContext(ctx, "SELECT undo FROM auto_actions"+where+" ORDER BY id", messageID, kind)
-	if err != nil {
-		return nil, nil, err
+func (l *Live) Finish(ctx context.Context, t ledger.Ticket, after, undo any, note *string) error {
+	r := ledger.Result{State: ledger.Done, After: marshal(after), Undo: marshal(undo)}
+	if note != nil {
+		r.Error = *note
 	}
-	merge := func(into []string, from []string) []string {
-		for _, label := range from {
-			if !containsString(into, label) {
-				into = append(into, label)
-			}
-		}
-		return into
-	}
-	for rows.Next() {
-		var raw string
-		var plan struct{ Add, Remove []string }
-		if err := rows.Scan(&raw); err != nil {
-			_ = rows.Close()
-			return nil, nil, err
-		}
-		if err := json.Unmarshal([]byte(raw), &plan); err != nil {
-			_ = rows.Close()
-			return nil, nil, err
-		}
-		add, remove = merge(add, plan.Add), merge(remove, plan.Remove)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, err
-	}
-	_, err = l.DB.Write.ExecContext(ctx, "UPDATE auto_actions SET undo = NULL"+where, messageID, kind)
-	return add, remove, err
+	return l.store().Settle(ctx, t, r, nil)
 }
 
-func containsString(list []string, s string) bool {
-	for _, v := range list {
-		if v == s {
-			return true
-		}
-	}
-	return false
+func (l *Live) Fail(ctx context.Context, t ledger.Ticket, msg string) error {
+	return l.store().Settle(ctx, t, ledger.Result{State: ledger.Failed, Error: msg}, nil)
 }
 
-func (l *Live) Hold(ctx context.Context, id int64, msg string, after any) error {
-	_, err := l.DB.Write.ExecContext(ctx, "UPDATE auto_actions SET error = ?, after = ? WHERE id = ? AND state = 'held'",
-		msg, nullJSON(after), id)
-	return err
+func (l *Live) Unknown(ctx context.Context, t ledger.Ticket, msg string, after, undo any) error {
+	return l.store().Settle(ctx, t, ledger.Result{State: ledger.Unknown, Error: msg, After: marshal(after), Undo: marshal(undo)}, nil)
 }
 
-func (l *Live) Discard(ctx context.Context, id int64) error {
-	_, err := l.DB.Write.ExecContext(ctx, "DELETE FROM auto_actions WHERE id = ? AND state = 'held' AND error IS NULL", id)
-	return err
+func (l *Live) Partial(ctx context.Context, t ledger.Ticket, msg string, after, undo any) error {
+	return l.store().Settle(ctx, t, ledger.Result{State: ledger.Partial, Error: msg, After: marshal(after), Undo: marshal(undo)}, nil)
+}
+
+func (l *Live) Hold(ctx context.Context, t ledger.Ticket, msg string, after any) error {
+	return l.store().Settle(ctx, t, ledger.Result{State: ledger.Unknown, Error: msg, After: marshal(after)}, nil)
+}
+
+func (l *Live) Discard(ctx context.Context, t ledger.Ticket, reason string) error {
+	return l.store().Settle(ctx, t, ledger.Result{State: ledger.Skipped, Error: "skipped: " + reason}, nil)
 }
 
 func (l *Live) Skip(ctx context.Context, account string, messageID int64, digest, kind string, src, dest *string,
 	reason string, decisionID *int64) error {
-	_, err := l.DB.Write.ExecContext(ctx, "INSERT INTO auto_actions (ts, account, message_id, digest, kind, src, dest, decision_id, state, error) "+
-		"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", l.now(), account, messageID, digest, kind, jsonx.Nullable(src), jsonx.Nullable(dest),
-		jsonx.Nullable(decisionID), ledger.Skipped, "skipped: "+reason)
+	_, err := l.store().ApplyLocal(ctx, ledger.New{
+		Origin: ledger.AutoOrigin, Operation: kind, OperationKey: ledger.AutoKey(messageID, kind, text(dest)),
+		Target:    fmt.Sprintf("mail:%s:%d", account, messageID),
+		MessageID: &messageID, Account: account, Digest: digest, DecisionID: decisionID,
+		Src: text(src), Dest: text(dest), Action: json.RawMessage(`{}`),
+	}, func(context.Context, *sql.Tx) (ledger.Result, error) {
+		return ledger.Result{State: ledger.Skipped, Error: "skipped: " + reason}, nil
+	})
 	return err
 }
 
 func (l *Live) Recover(ctx context.Context) (int64, error) {
-	res, err := l.DB.Write.ExecContext(ctx, "UPDATE auto_actions SET state = ?, error = ? WHERE state = 'held' AND error IS NULL", ledger.Interrupted, Interrupted)
-	if err != nil {
-		return 0, err
-	}
-	n, err := res.RowsAffected()
+	n, err := l.store().Recover(ctx, l.now()-ledger.StuckSeconds)
 	if n > 0 {
 		log.Warn(fmt.Sprintf("%d automatic action(s) were interrupted and will not be retried", n))
 	}
@@ -277,86 +245,153 @@ func (l *Live) Recover(ctx context.Context) (int64, error) {
 }
 
 type Action struct {
-	ID            int64        `json:"id"`
-	TS            float64      `json:"ts"`
-	Account       string       `json:"account"`
-	MessageID     int64        `json:"message_id"`
-	Digest        string       `json:"digest"`
-	Kind          string       `json:"kind"`
-	Src           *string      `json:"src"`
-	Dest          *string      `json:"dest"`
-	Before        *string      `json:"before"`
-	After         *string      `json:"after"`
-	Undo          *string      `json:"undo"`
-	DecisionID    *int64       `json:"decision_id"`
-	State         ledger.State `json:"state"`
-	Error         *string      `json:"error"`
-	UndoneTS      *float64     `json:"undone_ts"`
-	UndoneError   *string      `json:"undone_error"`
-	UndoStartedAt *float64     `json:"undo_started_at"`
-	Subject       *string      `json:"subject"`
-	FromAddr      *string      `json:"from_addr"`
-	FromName      *string      `json:"from_name"`
-	Status        string       `json:"status"`
-	Undoable      bool         `json:"undoable"`
+	ID               int64                    `json:"id"`
+	TS               float64                  `json:"ts"`
+	Account          string                   `json:"account"`
+	MessageID        int64                    `json:"message_id"`
+	Digest           string                   `json:"digest"`
+	Kind             string                   `json:"kind"`
+	Src              *string                  `json:"src"`
+	Dest             *string                  `json:"dest"`
+	Before           *string                  `json:"before"`
+	After            *string                  `json:"after"`
+	Undo             *string                  `json:"undo"`
+	DecisionID       *int64                   `json:"decision_id"`
+	State            ledger.State             `json:"state"`
+	Error            *string                  `json:"error"`
+	UndoneTS         *float64                 `json:"undone_ts"`
+	UndoneError      *string                  `json:"undone_error"`
+	UndoStartedAt    *float64                 `json:"undo_started_at"`
+	Subject          *string                  `json:"subject"`
+	FromAddr         *string                  `json:"from_addr"`
+	FromName         *string                  `json:"from_name"`
+	Status           string                   `json:"status"`
+	Undoable         bool                     `json:"undoable"`
+	Blocked          bool                     `json:"blocked"`
+	UndoBlocked      bool                     `json:"undo_blocked"`
+	Undone           bool                     `json:"undone"`
+	Resolved         bool                     `json:"resolved"`
+	EffectiveOutcome string                   `json:"effective_outcome,omitempty"`
+	Resolution       *ledger.ResolutionRecord `json:"resolution,omitempty"`
 }
 
-const actionColumns = "SELECT a.id, a.ts, a.account, a.message_id, a.digest, a.kind, a.src, a.dest, a.before, a.after, a.undo, " +
-	"a.decision_id, a.state, a.error, a.undone_ts, a.undone_error, a.undo_started_at, m.subject, m.from_addr, m.from_name FROM auto_actions a " +
-	"LEFT JOIN messages m ON m.id = a.message_id"
-
-type scanner interface{ Scan(dest ...any) error }
-
-func scanAction(s scanner) (Action, error) {
-	var a Action
-	err := s.Scan(&a.ID, &a.TS, &a.Account, &a.MessageID, &a.Digest, &a.Kind, &a.Src, &a.Dest, &a.Before, &a.After, &a.Undo,
-		&a.DecisionID, &a.State, &a.Error, &a.UndoneTS, &a.UndoneError, &a.UndoStartedAt, &a.Subject, &a.FromAddr, &a.FromName)
-	a.Status = string(a.State)
-	a.Undoable = (a.State == ledger.Applied || a.State == ledger.UndoFailed || a.State == ledger.UndoSettled) && a.Undo != nil
-	return a, err
-}
-
-func Get(ctx context.Context, q Querier, id int64) (*Action, error) {
-	a, err := scanAction(q.QueryRowContext(ctx, actionColumns+" WHERE a.id = ?", id))
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
+func textPtr(v string) *string {
+	if v == "" {
+		return nil
 	}
+	return &v
+}
+
+func rawPtr(v json.RawMessage) *string {
+	if len(v) == 0 {
+		return nil
+	}
+	s := string(v)
+	return &s
+}
+
+func actionOf(e ledger.Effect) Action {
+	a := Action{
+		ID: e.ID, TS: e.CreatedAt, Account: e.Account, Digest: e.Digest, Kind: e.Operation,
+		Src: textPtr(e.Src), Dest: textPtr(e.Dest), Before: rawPtr(e.Before), After: rawPtr(e.After), Undo: rawPtr(e.Undo),
+		DecisionID: e.DecisionID, State: e.State, Error: textPtr(e.Error), UndoneTS: e.UndoneAt,
+		UndoneError: textPtr(e.UndoError), Status: string(e.State), Undoable: e.Undoable,
+		Blocked: e.Blocked, UndoBlocked: e.UndoBlocked, Undone: e.UndoneBy != nil,
+		Resolved: e.Resolution != nil, EffectiveOutcome: e.EffectiveOutcome, Resolution: e.Resolution,
+	}
+	if e.MessageID != nil {
+		a.MessageID = *e.MessageID
+	}
+	if e.UndoState == ledger.Intent {
+		lease := e.UndoLeaseAt
+		a.UndoStartedAt = &lease
+	}
+	return a
+}
+
+type messageMeta struct {
+	subject  *string
+	fromAddr *string
+	fromName *string
+}
+
+func messageMetaFor(ctx context.Context, q Querier, ids []int64) (map[int64]messageMeta, error) {
+	out := map[int64]messageMeta{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	rows, err := q.QueryContext(ctx, "SELECT id, subject, from_addr, from_name FROM messages WHERE id IN (?"+
+		strings.Repeat(",?", len(ids)-1)+")", args...)
 	if err != nil {
 		return nil, err
+	}
+	if _, err := db.Collect(rows, func(r *sql.Rows) (struct{}, error) {
+		var id int64
+		var m messageMeta
+		if err := r.Scan(&id, &m.subject, &m.fromAddr, &m.fromName); err != nil {
+			return struct{}{}, err
+		}
+		out[id] = m
+		return struct{}{}, nil
+	}); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (l *Live) Get(ctx context.Context, id int64) (*Action, error) {
+	e, err := l.store().Get(ctx, id)
+	if err != nil {
+		var missing *ledger.NotFound
+		if errors.As(err, &missing) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	a := actionOf(e)
+	if a.MessageID != 0 {
+		meta, err := messageMetaFor(ctx, l.DB.Read, []int64{a.MessageID})
+		if err != nil {
+			return nil, err
+		}
+		if m, ok := meta[a.MessageID]; ok {
+			a.Subject, a.FromAddr, a.FromName = m.subject, m.fromAddr, m.fromName
+		}
 	}
 	return &a, nil
 }
 
-func filters(prefix, account, kind string) (string, []any) {
-	var clauses []string
-	var args []any
-	if account != "" {
-		clauses = append(clauses, prefix+"account = ?")
-		args = append(args, account)
-	}
-	if kind != "" {
-		clauses = append(clauses, prefix+"kind = ?")
-		args = append(args, kind)
-	}
-	if len(clauses) == 0 {
-		return "", nil
-	}
-	return " WHERE " + strings.Join(clauses, " AND "), args
-}
-
 const DefaultLimit = 100
 
-func List(ctx context.Context, q Querier, account, kind string, limit, offset int) ([]Action, error) {
-	where, args := filters("a.", account, kind)
-	rows, err := q.QueryContext(ctx, actionColumns+where+" ORDER BY a.id DESC LIMIT ? OFFSET ?", append(args, limit, offset)...)
+func (l *Live) List(ctx context.Context, account, kind string, limit, offset int) ([]Action, error) {
+	effects, err := l.store().List(ctx, ledger.Filter{
+		Origin: ledger.AutoOrigin, Account: account, Operation: kind, Direction: "forward", Limit: limit, Offset: offset,
+	})
 	if err != nil {
 		return nil, err
 	}
-	out, err := db.Collect(rows, func(r *sql.Rows) (Action, error) { return scanAction(r) })
-	if out == nil && err == nil {
-		out = []Action{}
+	ids := make([]int64, 0, len(effects))
+	for _, e := range effects {
+		if e.MessageID != nil {
+			ids = append(ids, *e.MessageID)
+		}
 	}
-	return out, err
+	meta, err := messageMetaFor(ctx, l.DB.Read, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]Action, len(effects))
+	for i, e := range effects {
+		out[i] = actionOf(e)
+		if m, ok := meta[out[i].MessageID]; ok {
+			out[i].Subject, out[i].FromAddr, out[i].FromName = m.subject, m.fromAddr, m.fromName
+		}
+	}
+	return out, nil
 }
 
 type UndoResult struct {
@@ -366,95 +401,44 @@ type UndoResult struct {
 	SyncError *string `json:"sync_error"`
 }
 
+func undoError(err error, id int64) error {
+	var refused ledger.Refused
+	var missing *ledger.NotFound
+	var settled *ledger.SettledMeanwhile
+	switch {
+	case errors.As(err, &refused), errors.As(err, &settled):
+		return UndoError(err.Error())
+	case errors.As(err, &missing):
+		return UndoError(fmt.Sprintf("unknown action %d", id))
+	}
+	return err
+}
+
 func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
-	var account, kind string
-	var messageID int64
-	var state ledger.State
-	var dest, plan *string
-	var undoneError *string
-	err := l.DB.Write.QueryRowContext(ctx, "SELECT account, kind, message_id, state, dest, undo, undone_error FROM auto_actions WHERE id = ?", id).
-		Scan(&account, &kind, &messageID, &state, &dest, &plan, &undoneError)
-	if errors.Is(err, sql.ErrNoRows) {
-		return UndoResult{}, UndoError(fmt.Sprintf("unknown action %d", id))
-	}
+	forward, err := l.store().Get(ctx, id)
 	if err != nil {
-		return UndoResult{}, err
+		return UndoResult{}, undoError(err, id)
 	}
-	if (state != ledger.Applied && state != ledger.UndoFailed && state != ledger.UndoSettled && !state.UndoBlocked() && state != ledger.UndoHeld) || plan == nil {
+	if forward.UndoBlocked {
+		return UndoResult{}, UndoError(fmt.Sprintf("action %d has an undo in progress or a partial undo; resolve it in the mailbox before undoing again", id))
+	}
+	if forward.UndoneBy != nil || (forward.State != ledger.Done && forward.State != ledger.Partial) || len(forward.Undo) == 0 {
 		return UndoResult{}, UndoError(fmt.Sprintf("action %d cannot be undone", id))
 	}
-	if state.UndoBlocked() || state == ledger.UndoHeld {
-		return UndoResult{}, UndoError(fmt.Sprintf("action %d has an undo in progress or a partial undo; resolve it in the mailbox before undoing again", id))
-	}
-	var parsed any
-	if err := json.Unmarshal([]byte(*plan), &parsed); err != nil {
-		return UndoResult{}, err
-	}
-	fields, _ := parsed.(map[string]any)
-	op, found := fields["op"]
-	if !found {
-		return UndoResult{}, fmt.Errorf("%w: 'op'", httpx.ErrMissing)
-	}
-	name, _ := op.(string)
-	var undoer proposals.Undoer
-	if l.Registry != nil {
-		undoer = l.Registry.Undoers[name]
-	}
-	if _, isString := op.(string); !isString || undoer == nil {
-		return UndoResult{}, UndoError("no undo handler for " + fmt.Sprint(op))
-	}
-	settle := context.WithoutCancel(ctx)
-	held, err := l.DB.Write.ExecContext(settle, "UPDATE auto_actions SET state = ?, undone_error = ?, undo_started_at = ? WHERE id = ? AND state IN ('applied', 'undo_failed', 'undo_settled')",
-		ledger.UndoHeld, UndoHeldText, l.now(), id)
+	undo, err := l.store().Undo(ctx, id, ledger.Resolver{Actor: "operator", Source: "cli"})
 	if err != nil {
-		return UndoResult{}, err
+		return UndoResult{}, undoError(err, id)
 	}
-	if n, err := held.RowsAffected(); err != nil {
-		return UndoResult{}, err
-	} else if n == 0 {
-		return UndoResult{}, UndoError(fmt.Sprintf("action %d has an undo in progress or a partial undo; resolve it in the mailbox before undoing again", id))
-	}
-	detail, err := func() (any, error) {
-		defer proposals.KeepAlive(l.DB.Write, l.now, "UPDATE auto_actions SET undo_started_at = ? WHERE id = ? AND state = 'undo_held'", id)()
-		return undoer(safety.ApprovedWrites(ctx, fmt.Sprintf("undo-%d", id)), json.RawMessage(*plan))
-	}()
-	if err != nil {
-		text := err.Error()
-		state := ledger.UndoFailed
-		if mailops.OutcomeUnknown(err) {
-			state = ledger.UndoUnknown
-		} else if _, partial := errors.AsType[*mailops.PartialMove](err); partial {
-			state = ledger.UndoPartial
-		}
-		if uerr := l.settleHeld(settle, id, "UPDATE auto_actions SET state = ?, undone_error = ? WHERE id = ? AND state = 'undo_held'", state, text, id); uerr != nil {
-			return UndoResult{}, uerr
-		}
-		if ctx.Err() != nil {
-			return UndoResult{}, err
+	if undo.State != ledger.Done {
+		text := undo.Error
+		if text == "" {
+			text = "the undo did not complete"
 		}
 		return UndoResult{}, UndoError(text)
 	}
-	err = l.DB.WithTx(settle, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(settle, "UPDATE auto_actions SET state = ?, undone_ts = ?, undone_error = NULL WHERE id = ? AND state = 'undo_held'", ledger.Undone, l.now(), id)
-		if err != nil {
-			return err
-		}
-		if n, err := res.RowsAffected(); err != nil {
-			return err
-		} else if n == 0 {
-			return errSettledMeanwhile(id)
-		}
-		if kind == Correct {
-			_, err = corrections.Clear(settle, tx, messageID, dest)
-		}
-		return err
-	})
-	if err != nil {
-		return UndoResult{}, err
-	}
-	out := UndoResult{ID: id, Undone: true, Detail: detail}
+	out := UndoResult{ID: id, Undone: true, Detail: json.RawMessage(undo.After)}
 	if l.Registry != nil && l.Registry.Sync != nil {
-		if err := l.Registry.Sync(ctx, account); err != nil {
+		if err := l.Registry.Sync(ctx, forward.Account); err != nil {
 			log.Error(fmt.Sprintf("post-undo sync failed for action %d", id), logx.Err, err.Error())
 			text := err.Error()
 			out.SyncError = &text
@@ -476,31 +460,8 @@ type Status struct {
 }
 
 func (l *Live) Status(ctx context.Context) (Status, error) {
-	counts := map[string]map[string]int64{}
-	rows, err := l.DB.Read.QueryContext(ctx, "SELECT kind, state, COUNT(*) AS n FROM auto_actions GROUP BY 1, 2")
+	counts, err := ledger.AutoCounts(ctx, l.DB.Read)
 	if err != nil {
-		return Status{}, err
-	}
-	for rows.Next() {
-		var kind string
-		var state ledger.State
-		var n int64
-		if err := rows.Scan(&kind, &state, &n); err != nil {
-			_ = rows.Close()
-			return Status{}, err
-		}
-		label := string(state)
-		byState := counts[kind]
-		if byState == nil {
-			byState = map[string]int64{}
-			counts[kind] = byState
-		}
-		byState[label] += n
-	}
-	if err := rows.Close(); err != nil {
-		return Status{}, err
-	}
-	if err := rows.Err(); err != nil {
 		return Status{}, err
 	}
 	golive, err := GetState(ctx, l.DB.Read, GoliveKey)
@@ -516,21 +477,4 @@ func (l *Live) Status(ctx context.Context) (Status, error) {
 		return Status{}, err
 	}
 	return Status{Mode: mode, Paused: l.Paused(), GoliveTS: golive, Baseline: baseline, Actions: counts}, nil
-}
-
-func errSettledMeanwhile(id int64) error {
-	return UndoError(fmt.Sprintf("action %d was settled by the operator while its undo ran; the recorded outcome stands", id))
-}
-
-func (l *Live) settleHeld(ctx context.Context, id int64, query string, args ...any) error {
-	res, err := l.DB.Write.ExecContext(ctx, query, args...)
-	if err != nil {
-		return err
-	}
-	if n, err := res.RowsAffected(); err != nil {
-		return err
-	} else if n == 0 {
-		return errSettledMeanwhile(id)
-	}
-	return nil
 }

@@ -93,7 +93,7 @@ func Module(o Options) web.Module {
 			deps:     d,
 			now:      now,
 			pipeline: &proposals.Pipeline{DB: d.DB, Ledger: effects, Registry: registry, Now: now, Enabled: o.Enabled},
-			live:     &live.Live{DB: d.DB, Cfg: d.Cfg, Registry: registry, Now: now},
+			live:     &live.Live{DB: d.DB, Cfg: d.Cfg, Store: effects, Open: open, Registry: registry, Now: now},
 			open:     open,
 			ledger:   effects,
 			drafts:   &drafts.Store{DB: d.DB, Cfg: d.Cfg, Open: open, Now: now},

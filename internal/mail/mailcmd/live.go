@@ -115,14 +115,15 @@ func liveDeletions(x *exec) error {
 }
 
 func listActions(x *exec, limit int, kind string) error {
-	actions, err := live.List(x.Ctx, x.DB.Read, "", kind, limit, 0)
+	actions, err := x.Live.List(x.Ctx, "", kind, limit, 0)
 	if err != nil {
 		return err
 	}
 	out := make([]actionJSON, len(actions))
 	for i, a := range actions {
 		out[i] = actionJSON{ID: a.ID, TS: a.TS, Account: a.Account, Kind: a.Kind, Status: a.Status,
-			Src: nullable(a.Src), Dest: nullable(a.Dest), Subject: nullable(a.Subject), Error: nullable(a.Error), Undoable: a.Undoable}
+			Src: nullable(a.Src), Dest: nullable(a.Dest), Subject: nullable(a.Subject), Error: nullable(a.Error), Undoable: a.Undoable,
+			Blocked: a.Blocked, UndoBlocked: a.UndoBlocked, Resolved: a.Resolved, EffectiveOutcome: a.EffectiveOutcome}
 	}
 	x.JSON(out)
 	return nil
@@ -198,16 +199,20 @@ type deletionResult struct {
 }
 
 type actionJSON struct {
-	ID       int64   `json:"id"`
-	TS       float64 `json:"ts"`
-	Account  string  `json:"account"`
-	Kind     string  `json:"kind"`
-	Status   string  `json:"status"`
-	Src      any     `json:"src"`
-	Dest     any     `json:"dest"`
-	Subject  any     `json:"subject"`
-	Error    any     `json:"error"`
-	Undoable bool    `json:"undoable"`
+	ID               int64   `json:"id"`
+	TS               float64 `json:"ts"`
+	Account          string  `json:"account"`
+	Kind             string  `json:"kind"`
+	Status           string  `json:"status"`
+	Src              any     `json:"src"`
+	Dest             any     `json:"dest"`
+	Subject          any     `json:"subject"`
+	Error            any     `json:"error"`
+	Undoable         bool    `json:"undoable"`
+	Blocked          bool    `json:"blocked,omitempty"`
+	UndoBlocked      bool    `json:"undo_blocked,omitempty"`
+	Resolved         bool    `json:"resolved,omitempty"`
+	EffectiveOutcome string  `json:"effective_outcome,omitempty"`
 }
 
 type undoJSON struct {

@@ -307,19 +307,20 @@ behavior-parity target.
   the end, so a failed copy leaves the destination without imported rows.
   Carried with
   their ids: mail accounts, mailboxes, messages and the learned mail data
-  (rules, corrections, decisions, flag decisions, the action ledger with
-  its undo state, write resolutions, live state and baseline, snoozes,
-  drafts, scans, commitments, open loops and overrides, packages and their
-  events, watch dismissals, rebalance and event candidates), the active
+  (rules, corrections, decisions, flag decisions, live state and baseline,
+  snoozes, drafts, scans, commitments, open loops and overrides, packages
+  and their events, watch dismissals, rebalance and event candidates), the active
   generation's message vectors and index row (URL, model and dimension
   kept), settings, secrets (the row is readable only with the same
   database key, since the database encrypts it), notification channels,
   push subscriptions and attention snoozes, knowledge records (their
   `embedded_hash` cleared so vectors rebuild), projects, threads with their
   messages, files, plans and queue, agent profile, skills, operator-edited
-  subagents, jobs, agent events, tasks, proposals and their actions, agent
-  writes, media channels, the seen list and media state, and the current
-  calendar month's usage rows. Rebuilt: `message_fts`, `thread_fts` and
+  subagents, jobs, agent events, tasks, proposals and their actions, media
+  channels, the seen list and media state, and the current calendar month's
+  usage rows. Converted into effect-ledger rows with their old identity
+  preserved: `auto_actions` and the `write_resolutions` rows that settle
+  them, and `agent_writes` with its resolutions. Rebuilt: `message_fts`, `thread_fts` and
   `kb_fts`. Not carried: run history (`runs`, `run_events`, `tool_calls`,
   `tool_results`, `context_ledger`, `context_projections`, `job_runs`),
   memory (rebuilt), Notion and wiki state (re-synced), knowledge and Notion
@@ -341,11 +342,12 @@ behavior-parity target.
   a row to the append-only `settings_audit` table (old and new value, or
   only `changed` for secrets; actor and source), listed read-only in
   `/activity`. Known secret values are scrubbed from log output and
-  `agent_writes` snapshots. An operator can settle a blocked unknown, partial
+  effect snapshots. An operator can settle a blocked unknown, partial
   or in-flight mail write or undo after checking the mailbox
   (`atrium proposals resolve`, `atrium live resolve`, or the web buttons); the
   action touches no mailbox and appends actor, source, outcome and the prior
-  error to the append-only `write_resolutions` table.
+  error to the append-only `effect_resolutions` table (proposal approvals and
+  the remaining proposal-action resolutions use the same audit table).
 - Modules are toggled at runtime. The built-in modules are always compiled
   in. Core (settings, secrets,
   `db`, `serve`, the About, review and activity pages) is always on; mail,

@@ -71,17 +71,56 @@ type claimSpec struct {
 	missing bool
 }
 
-func NewLegacyImporter(ctx context.Context, dst db.Querier, now float64) *LegacyImporter {
-	return &LegacyImporter{
+func NewLegacyImporter(ctx context.Context, dst db.Querier, now float64) (*LegacyImporter, error) {
+	im := &LegacyImporter{
 		ctx: ctx, dst: dst, now: now,
 		used: map[int64]bool{}, res: map[int64]bool{},
 		auto: map[int64]int64{}, autoUndo: map[int64]int64{}, agent: map[int64]int64{}, agentUndo: map[int64]int64{},
 		proposal: map[int64]int64{}, direction: map[int64]string{},
 	}
+	if err := im.loadUsed(); err != nil {
+		return nil, err
+	}
+	return im, nil
+}
+
+func (im *LegacyImporter) loadUsed() error {
+	rows, err := im.dst.QueryContext(im.ctx, "SELECT id FROM effects")
+	if err != nil {
+		return err
+	}
+	if _, err := db.Collect(rows, func(r *sql.Rows) (struct{}, error) {
+		var id int64
+		if err := r.Scan(&id); err != nil {
+			return struct{}{}, err
+		}
+		im.used[id] = true
+		return struct{}{}, nil
+	}); err != nil {
+		return err
+	}
+	rows, err = im.dst.QueryContext(im.ctx, "SELECT id FROM effect_resolutions")
+	if err != nil {
+		return err
+	}
+	if _, err := db.Collect(rows, func(r *sql.Rows) (struct{}, error) {
+		var id int64
+		if err := r.Scan(&id); err != nil {
+			return struct{}{}, err
+		}
+		im.res[id] = true
+		return struct{}{}, nil
+	}); err != nil {
+		return err
+	}
+	return nil
 }
 
 func ImportLegacy(ctx context.Context, dst db.Querier, auto []LegacyAutoAction, agent []LegacyAgentWrite, proposal []LegacyProposalAction, resolutions []LegacyResolution, now float64) (ImportReport, error) {
-	im := NewLegacyImporter(ctx, dst, now)
+	im, err := NewLegacyImporter(ctx, dst, now)
+	if err != nil {
+		return ImportReport{}, err
+	}
 	for _, step := range []func() error{
 		func() error { return im.AutoActions(auto) },
 		func() error { return im.AgentWrites(agent) },
@@ -233,7 +272,7 @@ func (im *LegacyImporter) autoClaims(a LegacyAutoAction, id int64, undoState Sta
 	if released || a.State == "failed" || a.State == "skipped" {
 		return
 	}
-	key := fmt.Sprintf("auto/%d/%s/%s", a.MessageID, a.Kind, a.Dest.String)
+	key := AutoKey(a.MessageID, a.Kind, a.Dest.String)
 	im.claims = append(im.claims, claimSpec{key: key, effect: id, retain: true})
 	if a.Src.Valid && a.Src.String != "" {
 		im.claims = append(im.claims, claimSpec{key: fmt.Sprintf("mail_folder/%s/%s", a.Account, a.Src.String), effect: id})

@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -90,12 +91,26 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		return id
 	}
 	autoAction := func(msg int64, kind, dest string, started float64) int64 {
-		res, err := seed.Write.Exec("INSERT INTO auto_actions (ts, account, message_id, kind, dest, undo, state, undone_error, undo_started_at) VALUES (?, 'icloud', ?, ?, ?, ?, 'undo_held', ?, ?)",
-			now-5000, msg, kind, dest, `{"op":"move_back"}`, heldText, started)
+		key := ledger.AutoKey(msg, kind, dest)
+		target := fmt.Sprintf("mail:icloud:%d", msg)
+		res, err := seed.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, account, message_id, target, action_json, src, dest, undo_json, state, settled_at) "+
+			"VALUES (?, ?, ?, 'mail_auto', ?, ?, 'forward', 'icloud', ?, ?, '{}', 'INBOX', ?, ?, 'done', ?)",
+			now-5000, now-5000, fmt.Sprintf("fwd-%d-%s", msg, kind), kind, key, msg, target, dest, `{"op":"move_back"}`, now-5000)
 		if err != nil {
 			t.Fatal(err)
 		}
 		id, _ := res.LastInsertId()
+		if _, err := seed.Write.Exec("INSERT OR IGNORE INTO effect_claims (resource) VALUES (?)", key); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := seed.Write.Exec("INSERT INTO effect_resources (effect_id, resource, holding, retain_on_done) VALUES (?, ?, 1, 1)", id, key); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := seed.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, undo_of, account, message_id, target, action_json, src, dest, state, error) "+
+			"VALUES (?, ?, ?, 'mail_auto', 'move_back', ?, 'undo', ?, 'icloud', ?, ?, '{}', 'INBOX', ?, 'intent', ?)",
+			started, started, fmt.Sprintf("undo-%d", id), key, id, msg, target, dest, heldText); err != nil {
+			t.Fatal(err)
+		}
 		return id
 	}
 	correction := func(msg int64) {
@@ -238,9 +253,8 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		}
 	}
 	want := []string{
-		"operator/cli/proposal_action/settled", "operator/cli/auto_undo/undone",
-		"operator/cli/auto_undo/undone", "operator/cli/auto_undo/not-undone", "operator/cli/proposal_action/not-undone",
-		"operator/ui/proposal_action/settled", "operator/ui/auto_undo/undone",
+		"operator/cli/proposal_action/settled", "operator/cli/proposal_action/not-undone",
+		"operator/ui/proposal_action/settled",
 	}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("write_resolutions = %v, want %v", got, want)
@@ -257,7 +271,7 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		t.Errorf("approval audit = %d rows for proposal %d outcome %q effective %v, want one proposal-only audit", approval, approvalProposal, approvalOutcome, approvalEffective)
 	}
 	var undone int
-	if err := check.Read.QueryRow("SELECT COUNT(*) FROM auto_actions WHERE undone_ts IS NOT NULL AND undone_error IS NULL").Scan(&undone); err != nil || undone != 3 {
+	if err := check.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto' AND direction = 'forward' AND undone_by IS NOT NULL").Scan(&undone); err != nil || undone != 3 {
 		t.Errorf("auto actions marked undone = %d (%v), want 3", undone, err)
 	}
 	var kept, cleared int
@@ -268,7 +282,7 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		t.Errorf("correction of an undone action = %d (%v), want it cleared", cleared, err)
 	}
 	var stillBlocked int
-	if err := check.Read.QueryRow("SELECT (SELECT COUNT(*) FROM auto_actions WHERE id = ? AND state = 'undo_held') + (SELECT COUNT(*) FROM proposal_actions WHERE proposal_id = ? AND state = 'undo_held')",
+	if err := check.Read.QueryRow("SELECT (SELECT COUNT(*) FROM effects WHERE undo_of = ? AND state = 'intent') + (SELECT COUNT(*) FROM proposal_actions WHERE proposal_id = ? AND state = 'undo_held')",
 		undoRecent, undoRecentProposal).Scan(&stillBlocked); err != nil || stillBlocked != 2 {
 		t.Errorf("undos still in flight = %d (%v), want both left untouched", stillBlocked, err)
 	}

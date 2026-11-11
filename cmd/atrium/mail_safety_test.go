@@ -267,7 +267,7 @@ func TestMailGateRefusalsWriteNothing(t *testing.T) {
 		if got := m.verbs(); len(got) != 0 {
 			t.Fatalf("shadow mode wrote to IMAP: %v", got)
 		}
-		if n := m.count(t, "SELECT COUNT(*) FROM auto_actions"); n != 0 {
+		if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto'"); n != 0 {
 			t.Fatalf("shadow mode recorded %d automatic actions", n)
 		}
 	})
@@ -287,7 +287,7 @@ func TestMailGateRefusalsWriteNothing(t *testing.T) {
 		if got := m.verbs(); len(got) != 0 {
 			t.Fatalf("a paused pass wrote to IMAP: %v", got)
 		}
-		if n := m.count(t, "SELECT COUNT(*) FROM auto_actions"); n != 0 {
+		if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto'"); n != 0 {
 			t.Fatalf("a paused pass recorded %d automatic actions", n)
 		}
 
@@ -296,7 +296,7 @@ func TestMailGateRefusalsWriteNothing(t *testing.T) {
 		if got := m.verbs(); len(got) != 3 || got[0] != "COPY" || got[1] != "STORE" || got[2] != "EXPUNGE" {
 			t.Fatalf("after resume the write log = %v, want COPY, STORE, EXPUNGE", got)
 		}
-		if state := m.scalar(t, "SELECT state FROM auto_actions WHERE kind = 'correct'"); state != "applied" {
+		if state := m.scalar(t, "SELECT state FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'"); state != "done" {
 			t.Fatalf("correction state after resume = %s", state)
 		}
 	})
@@ -312,7 +312,7 @@ func TestMailGateRefusalsWriteNothing(t *testing.T) {
 		m.fake.Boxes["INBOX"].Box.SetFlags(uid, []string{`\Seen`}, nil)
 		m.run(t, "sync")
 
-		if state := m.scalar(t, "SELECT state FROM auto_actions WHERE kind = 'correct'"); state != "skipped" {
+		if state := m.scalar(t, "SELECT state FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'"); state != "skipped" {
 			t.Fatalf("a correction into a protected folder recorded %s, want skipped", state)
 		}
 		if got := m.verbs(); len(got) != 0 {
@@ -343,10 +343,10 @@ func TestMailGateRefusalsWriteNothing(t *testing.T) {
 		if n := m.copies(); n != 1 {
 			t.Fatalf("with a cap of one the pass made %d copies, want 1", n)
 		}
-		if n := m.count(t, "SELECT COUNT(*) FROM auto_actions WHERE state = 'applied'"); n != 1 {
+		if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto' AND state = 'done'"); n != 1 {
 			t.Fatalf("with a cap of one %d actions applied, want 1", n)
 		}
-		if n := m.count(t, "SELECT COUNT(*) FROM auto_actions WHERE message_id = ?", secondID); n != 0 {
+		if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto' AND message_id = ?", secondID); n != 0 {
 			t.Fatalf("the deferred message has %d automatic actions", n)
 		}
 
@@ -355,7 +355,7 @@ func TestMailGateRefusalsWriteNothing(t *testing.T) {
 		if n := m.copies(); n != 2 {
 			t.Fatalf("after raising the cap the pass made %d copies, want 2", n)
 		}
-		if n := m.count(t, "SELECT COUNT(*) FROM auto_actions WHERE kind = 'correct' AND state = 'applied'"); n != 2 {
+		if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto' AND operation = 'correct' AND state = 'done'"); n != 2 {
 			t.Fatalf("%d corrections applied after raising the cap, want 2", n)
 		}
 	})
@@ -374,9 +374,9 @@ func TestMailLiveUndoRestoresTheMessageAndAnUnknownUndoStaysBlocked(t *testing.T
 			id, mail.WallClock()+60)
 		m.fake.Boxes["INBOX"].Box.SetFlags(uid, []string{`\Seen`}, nil)
 		m.run(t, "sync")
-		action := m.scalar(t, "SELECT CAST(id AS TEXT) FROM auto_actions WHERE kind = 'correct'")
-		if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state != "applied" {
-			t.Fatalf("forward correction state = %s, want applied", state)
+		action := m.scalar(t, "SELECT CAST(id AS TEXT) FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'")
+		if state := m.scalar(t, "SELECT state FROM effects WHERE id = ?", action); state != "done" {
+			t.Fatalf("forward correction state = %s, want done", state)
 		}
 		if got := m.verbs(); len(got) != 3 || got[0] != "COPY" || got[1] != "STORE" || got[2] != "EXPUNGE" {
 			t.Fatalf("the forward move wrote %v, want COPY, STORE, EXPUNGE and never MOVE", got)
@@ -393,8 +393,8 @@ func TestMailLiveUndoRestoresTheMessageAndAnUnknownUndoStaysBlocked(t *testing.T
 	t.Run("undo", func(t *testing.T) {
 		m, action := prepare(t)
 		m.run(t, "live", "undo", action)
-		if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state != "undone" {
-			t.Fatalf("the action after undo is %s, want undone", state)
+		if undone := m.scalar(t, "SELECT CAST(undone_by IS NOT NULL AS TEXT) FROM effects WHERE id = ?", action); undone != "1" {
+			t.Fatalf("the action after undo is %s, want undone", undone)
 		}
 		if n := len(m.fake.Boxes["INBOX"].Box.Messages); n != 1 {
 			t.Fatalf("the inbox holds %d messages after the undo, want 1", n)
@@ -421,8 +421,8 @@ func TestMailLiveUndoRestoresTheMessageAndAnUnknownUndoStaysBlocked(t *testing.T
 		if ran := runApp(t, "live", "undo", action); ran.code == cli.ExitOK {
 			t.Fatalf("an undo with a dropped connection exited %d", ran.code)
 		}
-		if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state != "undo_unknown" {
-			t.Fatalf("the undo after a dropped connection is %s, want undo_unknown", state)
+		if state := m.scalar(t, "SELECT state FROM effects WHERE undo_of = ? ORDER BY id DESC LIMIT 1", action); state != "unknown" {
+			t.Fatalf("the undo after a dropped connection is %s, want unknown", state)
 		}
 		if ran := runApp(t, "live", "undo", action); ran.code == cli.ExitOK {
 			t.Fatalf("a second undo of a blocked undo exited %d", ran.code)
@@ -431,8 +431,8 @@ func TestMailLiveUndoRestoresTheMessageAndAnUnknownUndoStaysBlocked(t *testing.T
 			t.Fatalf("the destination holds %d messages, want the blocked undo left alone", n)
 		}
 		m.run(t, "live", "resolve", action, "--outcome", "undone")
-		if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state != "undone" {
-			t.Fatalf("after the operator resolution the action is %s, want undone", state)
+		if undone := m.scalar(t, "SELECT CAST(undone_by IS NOT NULL AS TEXT) FROM effects WHERE id = ?", action); undone != "1" {
+			t.Fatalf("after the operator resolution the action is %s, want undone", undone)
 		}
 	})
 }
@@ -459,11 +459,11 @@ func TestMailUnknownForwardOutcomeIsNotRetried(t *testing.T) {
 		t.Fatalf("a pass whose only move had an unknown outcome exited 0")
 	}
 
-	action := m.scalar(t, "SELECT CAST(id AS TEXT) FROM auto_actions WHERE kind = 'correct'")
-	if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state == "applied" {
-		t.Fatalf("a move whose copy was dropped is recorded as applied")
+	action := m.scalar(t, "SELECT CAST(id AS TEXT) FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'")
+	if state := m.scalar(t, "SELECT state FROM effects WHERE id = ?", action); state != "unknown" {
+		t.Fatalf("a move whose copy was dropped is recorded as %s, want unknown", state)
 	}
-	if recorded := m.scalar(t, "SELECT CAST(error IS NOT NULL AS TEXT) FROM auto_actions WHERE id = ?", action); recorded != "1" {
+	if recorded := m.scalar(t, "SELECT CAST(error IS NOT NULL AS TEXT) FROM effects WHERE id = ?", action); recorded != "1" {
 		t.Fatalf("the blocked move recorded no error text")
 	}
 	if copies != 1 {
@@ -482,8 +482,8 @@ func TestMailUnknownForwardOutcomeIsNotRetried(t *testing.T) {
 	if got := len(m.fake.Writes); got != attempts {
 		t.Fatalf("the next pass made %d writes, want the blocked move left alone", got-attempts)
 	}
-	if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state == "applied" {
-		t.Fatalf("the next pass applied the blocked move")
+	if state := m.scalar(t, "SELECT state FROM effects WHERE id = ?", action); state != "unknown" {
+		t.Fatalf("the next pass changed the blocked move to %s", state)
 	}
 
 	base, _, _ := startServeApp(t, m.app, &lockedBuffer{})
@@ -499,7 +499,26 @@ func TestMailUnknownForwardOutcomeIsNotRetried(t *testing.T) {
 	if got := len(m.fake.Writes); got != attempts {
 		t.Fatalf("the correction pass made %d writes, want the blocked move left alone", got-attempts)
 	}
-	if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state == "applied" {
-		t.Fatalf("the correction pass applied the blocked move")
+	if state := m.scalar(t, "SELECT state FROM effects WHERE id = ?", action); state != "unknown" {
+		t.Fatalf("the correction pass changed the blocked move to %s", state)
+	}
+
+	m.run(t, "live", "resolve", action, "--outcome", "not-applied")
+	if state := m.scalar(t, "SELECT state FROM effects WHERE id = ?", action); state != "unknown" {
+		t.Fatalf("the resolution rewrote the original outcome to %s", state)
+	}
+	if recorded := m.scalar(t, "SELECT effective_outcome FROM effect_resolutions WHERE effect_id = ? ORDER BY id DESC LIMIT 1", action); recorded != "failed" {
+		t.Fatalf("the resolution recorded %s, want failed", recorded)
+	}
+	before := len(m.fake.Writes)
+	m.run(t, "sync")
+	if got := len(m.fake.Writes) - before; got != 3 {
+		t.Fatalf("the pass after the resolution made %d writes, want COPY, STORE, EXPUNGE", got)
+	}
+	if state := m.scalar(t, "SELECT state FROM effects WHERE origin = 'mail_auto' AND operation = 'correct' ORDER BY id DESC LIMIT 1"); state != "done" {
+		t.Fatalf("the pass after the resolution left the action %s, want done", state)
+	}
+	if n := len(m.fake.Boxes["Bills"].Box.Messages); n != 1 {
+		t.Fatalf("the destination holds %d messages after the resolution, want 1", n)
 	}
 }

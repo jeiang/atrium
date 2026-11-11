@@ -30,6 +30,7 @@ import (
 	"github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
@@ -46,6 +47,7 @@ func Ledger(d *db.DB, env config.Env, open mail.OpenFunc, now func() float64) *l
 		func(s *ledger.Store) error { return calendartools.RegisterLedgerUndoers(s, env) },
 		func(s *ledger.Store) error { return mediatools.RegisterLedgerUndoer(s, env) },
 		func(s *ledger.Store) error { return mailtools.RegisterLedgerUndoer(s, open) },
+		func(s *ledger.Store) error { return live.RegisterLedgerUndoers(s, open, d.Read) },
 		func(s *ledger.Store) error { return export.RegisterLedgerResolves(s, env) },
 		export.RegisterLedgerObsidian,
 	}

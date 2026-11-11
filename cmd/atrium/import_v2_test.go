@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
@@ -104,6 +105,7 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		"embed_index: rebuilt 1",
 		"embed_message_0: carried 148",
 		"usage: carried 22",
+		"auto_actions: converted 10",
 		"subagents: carried 1",
 		"runs: dropped 8",
 		"job_runs: dropped 2",
@@ -152,11 +154,22 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 	if got := importValue(t, q, "SELECT stage FROM decisions WHERE id = 1"); got != "knn" {
 		t.Errorf("decision 1 stage %q", got)
 	}
-	if got := importValue(t, q, "SELECT state FROM auto_actions WHERE id = 5"); got != "undone" {
+	autoEffect := func(id int64) int64 {
+		t.Helper()
+		var effect int64
+		if err := q.QueryRow("SELECT effect_id FROM effect_import_refs WHERE source_table = 'auto_actions' AND source_id = ? AND role = 'forward'", id).Scan(&effect); err != nil {
+			t.Fatalf("auto_actions %d has no effect: %v", id, err)
+		}
+		return effect
+	}
+	if got := importValue(t, q, "SELECT state FROM effects WHERE id = ?", autoEffect(5)); got != "done" {
 		t.Errorf("auto action 5 state %q", got)
 	}
-	if got := importValue(t, q, "SELECT undo FROM auto_actions WHERE id = 5"); !strings.Contains(got, "move_back") {
+	if got := importValue(t, q, "SELECT undo_json FROM effects WHERE id = ?", autoEffect(5)); !strings.Contains(got, "move_back") {
 		t.Errorf("auto action 5 undo data %q", got)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effects WHERE id = ? AND undone_by IS NOT NULL", autoEffect(5)); n != 1 {
+		t.Errorf("auto action 5 undone_by %d, want set", n)
 	}
 	if got := importValue(t, q, "SELECT dest FROM rules WHERE id = 'club-news'"); got != "Newsletters" {
 		t.Errorf("rule club-news dest %q", got)
@@ -359,6 +372,94 @@ func editImportSource(t *testing.T, path, statement string) {
 	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec(statement); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestImportV2MapsAutoActionsToEffects(t *testing.T) {
+	t.Parallel()
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	d, err := db.Connect(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, row := range []struct {
+		id     int64
+		msg    int64
+		kind   string
+		dest   any
+		state  string
+		error  any
+		undone any
+		start  any
+	}{
+		{201, 150, "file", "Archive", "held", "connection lost", nil, nil},
+		{202, 151, "correct", "Receipts", "partial", "copied but not expunged", nil, nil},
+		{203, 152, "file", "Travel", "undo_held", nil, "write in flight", clock - 200},
+		{204, 153, "file", "Work", "undo_settled", nil, "checked", clock - 300},
+		{205, 154, "flag", nil, "failed", "refused", nil, nil},
+		{206, 155, "trash", "Deleted Messages", "skipped", "protected mailbox", nil, nil},
+	} {
+		if _, err := d.Write.Exec(
+			"INSERT INTO auto_actions (id, ts, account, message_id, digest, kind, dest, undo, state, error, undone_error, undo_started_at) "+
+				"VALUES (?, ?, 'icloud', ?, ?, ?, ?, '{\"op\":\"move_back\"}', ?, ?, ?, ?)",
+			row.id, clock, row.msg, "digest", row.kind, row.dest, row.state, row.error, row.undone, row.start); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if !strings.Contains(got.stdout, "auto_actions: converted 16") {
+		t.Errorf("the report lacks the auto conversion count:\n%s", got.stdout)
+	}
+
+	q, err := db.OpenSource(dest, db.Key{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+
+	effectOf := func(id int64) int64 {
+		t.Helper()
+		var effect int64
+		if err := q.QueryRow("SELECT effect_id FROM effect_import_refs WHERE source_table = 'auto_actions' AND source_id = ? AND role = 'forward'", id).Scan(&effect); err != nil {
+			t.Fatalf("auto_actions %d has no effect: %v", id, err)
+		}
+		return effect
+	}
+	for _, tc := range []struct {
+		id    int64
+		state string
+	}{
+		{201, "unknown"},
+		{202, "partial"},
+		{203, "done"},
+		{204, "done"},
+		{205, "failed"},
+		{206, "skipped"},
+	} {
+		if got := importValue(t, q, "SELECT state FROM effects WHERE id = ?", effectOf(tc.id)); got != tc.state {
+			t.Errorf("auto_actions %d state %q, want %q", tc.id, got, tc.state)
+		}
+	}
+	for _, id := range []int64{203, 204} {
+		if n := importCount(t, q, "SELECT COUNT(*) FROM effects WHERE undo_of = ? AND state = 'unknown'", effectOf(id)); n != 1 {
+			t.Errorf("auto_actions %d synthetic undo %d, want one unknown undo", id, n)
+		}
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effect_resolutions WHERE effect_id = (SELECT id FROM effects WHERE undo_of = ?) AND effective_outcome = 'failed'", effectOf(204)); n != 1 {
+		t.Errorf("auto_actions 204 resolution %d, want one historical not-undone", n)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effect_claims WHERE resource = ?", ledger.AutoKey(150, "file", "Archive")); n != 1 {
+		t.Errorf("auto_actions 201 claim %d, want one", n)
 	}
 }
 

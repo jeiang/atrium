@@ -98,7 +98,9 @@ func (a *Applier) ApplySnoozes(ctx context.Context, account string) (Outcome, er
 		}
 		auto := safety.AutomaticWrites(ctx, pause)
 		before := map[string]any{"imap_name": s.IMAPName, "uidvalidity": s.UIDValidity, "uid": s.UID}
-		id, ok, err := a.Live.Begin(auto, account, s.MessageID, digest, live.SnoozeReturn, &s.IMAPName, &inbox, before, nil)
+		ticket, ok, err := a.Live.Begin(auto, account, live.Target{
+			MessageID: s.MessageID, IMAPName: s.IMAPName, UIDValidity: s.UIDValidity, UID: s.UID,
+		}, digest, live.SnoozeReturn, &s.IMAPName, &inbox, before, nil)
 		if err != nil {
 			return out, err
 		}
@@ -115,10 +117,10 @@ func (a *Applier) ApplySnoozes(ctx context.Context, account string) (Outcome, er
 		if err != nil {
 			var interrupted *mail.WriteInterrupted
 			if errors.As(err, &interrupted) {
-				if uerr := a.Live.Unknown(ctx, id, err.Error()); uerr != nil {
+				if uerr := a.Live.Unknown(ctx, ticket, err.Error(), nil, nil); uerr != nil {
 					return out, uerr
 				}
-			} else if ferr := a.Live.Fail(ctx, id, err.Error()); ferr != nil {
+			} else if ferr := a.Live.Fail(ctx, ticket, err.Error()); ferr != nil {
 				return out, ferr
 			}
 			if ferr := a.finishSnooze(ctx, s.ID, "failed", err.Error()); ferr != nil {
@@ -128,7 +130,7 @@ func (a *Applier) ApplySnoozes(ctx context.Context, account string) (Outcome, er
 			continue
 		}
 		after := map[string]any{"imap_name": config.Inbox, "labels": []string{mailops.InboxLabel}}
-		if err := a.Live.Finish(ctx, id, after, nil, nil); err != nil {
+		if err := a.Live.Finish(ctx, ticket, after, nil, nil); err != nil {
 			return out, err
 		}
 		if err := a.finishSnooze(ctx, s.ID, "returned", ""); err != nil {

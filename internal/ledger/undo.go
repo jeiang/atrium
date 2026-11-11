@@ -47,6 +47,17 @@ func (s *Store) Undo(ctx context.Context, id int64, who Resolver) (Effect, error
 			return fn.Finalize(ctx, tx, payload, result)
 		}
 	}
+	if fn.After != nil {
+		before, after := finalize, fn.After
+		finalize = func(ctx context.Context, tx *sql.Tx) error {
+			if before != nil {
+				if err := before(ctx, tx); err != nil {
+					return err
+				}
+			}
+			return after(ctx, tx, forward, result)
+		}
+	}
 	if err := s.Settle(settleCtx, ticket, result, finalize); err != nil {
 		return Effect{}, err
 	}
@@ -119,6 +130,15 @@ func (s *Store) undoLocal(ctx context.Context, id int64, fn Undoer, payload json
 			return err
 		} else if n == 0 {
 			return &SettledMeanwhile{ID: undoID}
+		}
+		if fn.After != nil {
+			forward, err := scanEffect(tx.QueryRowContext(ctx, effectSelect+" WHERE e.id = ?", id))
+			if err != nil {
+				return err
+			}
+			if err := fn.After(ctx, tx, forward, result); err != nil {
+				return err
+			}
 		}
 		return s.afterTransition(ctx, tx, undoID, "undo", result.State)
 	})

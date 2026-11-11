@@ -76,9 +76,11 @@ type Filter struct {
 	Origin           string
 	Origins          []string
 	Operation        string
+	Direction        string
 	OperationLike    []string
 	OperationNotLike []string
 	Target           string
+	Account          string
 	ProposalID       *int64
 	ThreadID         *int64
 	RunID            *int64
@@ -86,6 +88,7 @@ type Filter struct {
 	BeforeTS         float64
 	Since            float64
 	Limit            int
+	Offset           int
 	BlockedOnly      bool
 }
 
@@ -96,6 +99,7 @@ type Undoer struct {
 	External func(context.Context, json.RawMessage) (Result, error)
 	Local    func(context.Context, *sql.Tx, json.RawMessage) (Result, error)
 	Finalize func(context.Context, *sql.Tx, json.RawMessage, Result) error
+	After    func(context.Context, *sql.Tx, Effect, Result) error
 }
 
 type ResolveHook func(context.Context, *sql.Tx, Effect, Resolution) error

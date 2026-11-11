@@ -107,16 +107,16 @@ func deref(s *string) string {
 	return *s
 }
 
-func timeline(ctx context.Context, q db.Querier, store *ledger.Store, category string, limit, offset int, now float64) ([]ActivityEntry, int, error) {
+func timeline(ctx context.Context, q db.Querier, store *ledger.Store, liveSvc *live.Live, category string, limit, offset int) ([]ActivityEntry, int, error) {
 	want := offset + limit + 1
 	var entries []ActivityEntry
 	if category == "" || category == categoryMail {
-		actions, err := live.List(ctx, q, "", "", want, 0)
+		actions, err := liveSvc.List(ctx, "", "", want, 0)
 		if err != nil {
 			return nil, 0, err
 		}
 		for _, a := range actions {
-			entries = append(entries, mailEntry(a, now))
+			entries = append(entries, mailEntry(a))
 		}
 	}
 	if category == "" || category == categoryMail {
@@ -135,6 +135,16 @@ func timeline(ctx context.Context, q db.Querier, store *ledger.Store, category s
 			e.Source, e.Category = "phone", categoryMail
 			e.Phone = &PhoneActivity{Actor: r.Actor, Kind: r.Kind, Status: r.Outcome, Target: target}
 			phone = append(phone, e)
+		}
+		autos, err := ledger.AutoResolutionsSince(ctx, q, "phone", want)
+		if err != nil {
+			return nil, 0, err
+		}
+		for _, r := range autos {
+			phone = append(phone, ActivityEntry{
+				ID: r.ID, TS: r.TS, Source: "phone", Category: categoryMail,
+				Phone: &PhoneActivity{Actor: r.Actor, Kind: r.Operation, Status: r.Outcome, Target: fmt.Sprintf("mail %d", r.EffectID)},
+			})
 		}
 		audits, err := ledger.ProposalAuditsSince(ctx, q, "phone", want)
 		if err != nil {
@@ -213,7 +223,7 @@ func (s *service) activityPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	offset = max(offset, 0)
-	entries, next, err := timeline(r.Context(), s.deps.DB.Read, s.ledger, category, pageSize, int(offset), s.now())
+	entries, next, err := timeline(r.Context(), s.deps.DB.Read, s.ledger, s.live, category, pageSize, int(offset))
 	check(err)
 	data := activityPage{Entries: entries, Category: category, Categories: categories, NextOffset: next, Offset: int(offset)}
 	if web.IsPartial(r) && offset != 0 {
@@ -241,7 +251,7 @@ func (s *service) undoMail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	known, err := live.Get(ctx, s.deps.DB.Read, id)
+	known, err := s.live.Get(ctx, id)
 	check(err)
 	if known == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown action")
@@ -262,9 +272,9 @@ func (s *service) undoMail(w http.ResponseWriter, r *http.Request) {
 	default:
 		notice = toast("success", "Undone")
 	}
-	found, err := live.Get(ctx, s.deps.DB.Read, id)
+	found, err := s.live.Get(ctx, id)
 	check(err)
-	s.undone(w, r, mailEntry(*found, s.now()), notice)
+	s.undone(w, r, mailEntry(*found), notice)
 }
 
 func (s *service) resolveMail(w http.ResponseWriter, r *http.Request) {
@@ -289,13 +299,13 @@ func (s *service) resolveMail(w http.ResponseWriter, r *http.Request) {
 	default:
 		notice = resolvedToast(outcome)
 	}
-	found, err := live.Get(ctx, s.deps.DB.Read, id)
+	found, err := s.live.Get(ctx, id)
 	check(err)
 	if found == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown action")
 		return
 	}
-	s.undone(w, r, mailEntry(*found, s.now()), notice)
+	s.undone(w, r, mailEntry(*found), notice)
 }
 
 func effectEntry(e ledger.Effect) ActivityEntry {

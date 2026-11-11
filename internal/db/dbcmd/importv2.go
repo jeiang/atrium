@@ -70,8 +70,14 @@ var importTables = []tablePlan{
 	{table: "corrections", action: carry},
 	{table: "decisions", action: carry},
 	{table: "flag_decisions", action: carry},
-	{table: "auto_actions", action: carry},
-	{table: "write_resolutions", action: carry, where: "kind <> 'agent_write'"},
+	{table: "auto_actions", action: convert, run: func(im *importer) (int64, error) {
+		report, err := ConvertLegacyAutoActions(im.ctx, im.src, im.tx, im.now)
+		if err != nil {
+			return 0, err
+		}
+		return report.Auto, nil
+	}},
+	{table: "write_resolutions", action: carry, where: "kind = 'proposal_action'"},
 	{table: "live_state", action: carry},
 	{table: "live_baseline", action: carry},
 	{table: "snoozes", action: carry},

@@ -59,6 +59,12 @@ type Effect struct {
 	EffectiveOutcome string            `json:"effective_outcome,omitempty"`
 	Blocked          bool              `json:"blocked"`
 	Undoable         bool              `json:"undoable"`
+	UndoID           *int64            `json:"undo_id,omitempty"`
+	UndoState        State             `json:"undo_state,omitempty"`
+	UndoLeaseAt      float64           `json:"undo_lease_at,omitempty"`
+	UndoError        string            `json:"undo_error,omitempty"`
+	UndoResolved     bool              `json:"undo_resolved,omitempty"`
+	UndoBlocked      bool              `json:"undo_blocked"`
 }
 
 const effectSelect = "SELECT e.id, e.created_at, e.settled_at, e.lease_at, e.token, e.origin, e.operation, e.operation_key, " +
@@ -68,7 +74,13 @@ const effectSelect = "SELECT e.id, e.created_at, e.settled_at, e.lease_at, e.tok
 	"r.evidence_json, r.legacy_json, " +
 	"(SELECT settled_at FROM effects u WHERE u.id = e.undone_by), " +
 	"(SELECT COUNT(*) FROM effects u WHERE u.undo_of = e.id AND u.state IN ('intent','unknown','partial','done') " +
-	"AND NOT EXISTS (SELECT 1 FROM effect_resolutions ur WHERE ur.effect_id = u.id AND ur.effective_outcome = 'failed')) " +
+	"AND NOT EXISTS (SELECT 1 FROM effect_resolutions ur WHERE ur.effect_id = u.id AND ur.effective_outcome = 'failed')), " +
+	"(SELECT u.id FROM effects u WHERE u.undo_of = e.id ORDER BY u.id DESC LIMIT 1), " +
+	"(SELECT u.state FROM effects u WHERE u.undo_of = e.id ORDER BY u.id DESC LIMIT 1), " +
+	"(SELECT u.lease_at FROM effects u WHERE u.undo_of = e.id ORDER BY u.id DESC LIMIT 1), " +
+	"(SELECT u.error FROM effects u WHERE u.undo_of = e.id ORDER BY u.id DESC LIMIT 1), " +
+	"(SELECT COUNT(*) FROM effect_resolutions ur WHERE ur.effect_id = " +
+	"(SELECT u.id FROM effects u WHERE u.undo_of = e.id ORDER BY u.id DESC LIMIT 1) AND ur.effective_outcome IS NOT NULL) " +
 	"FROM effects e LEFT JOIN effect_resolutions r ON r.id = " +
 	"(SELECT MAX(id) FROM effect_resolutions WHERE effect_id = e.id)"
 
@@ -83,12 +95,15 @@ func scanEffect(sc scanner) (Effect, error) {
 	var rID, rEffectID, rProposalID sql.NullInt64
 	var rTS sql.NullFloat64
 	var rActor, rSource, rOutcome, rEffective, rPriorState, rPriorError, rEvidence, rLegacy sql.NullString
-	var activeUndo int64
+	var undoID sql.NullInt64
+	var undoState, undoError sql.NullString
+	var undoLease sql.NullFloat64
+	var activeUndo, undoResolved int64
 	err := sc.Scan(&e.ID, &e.CreatedAt, &settledAt, &e.LeaseAt, &e.Token, &e.Origin, &e.Operation, &e.OperationKey,
 		&e.Direction, &undoOf, &proposalID, &threadID, &runID, &account, &messageID, &digest, &decisionID,
 		&src, &dest, &e.Target, &action, &before, &after, &undo, &e.State, &errorText, &undoneBy, &legacy,
 		&rID, &rEffectID, &rProposalID, &rTS, &rActor, &rSource, &rOutcome, &rEffective, &rPriorState, &rPriorError,
-		&rEvidence, &rLegacy, &undoneAt, &activeUndo)
+		&rEvidence, &rLegacy, &undoneAt, &activeUndo, &undoID, &undoState, &undoLease, &undoError, &undoResolved)
 	if err != nil {
 		return e, err
 	}
@@ -111,6 +126,11 @@ func scanEffect(sc scanner) (Effect, error) {
 	e.After = raw(after)
 	e.Undo = raw(undo)
 	e.Legacy = raw(legacy)
+	e.UndoID = intPtr(undoID)
+	e.UndoState = State(undoState.String)
+	e.UndoLeaseAt = undoLease.Float64
+	e.UndoError = undoError.String
+	e.UndoResolved = undoResolved != 0
 	if rID.Valid {
 		e.Resolution = &ResolutionRecord{
 			ID: rID.Int64, EffectID: intPtr(rEffectID), ProposalID: intPtr(rProposalID), TS: rTS.Float64,
@@ -130,6 +150,16 @@ func scanEffect(sc scanner) (Effect, error) {
 	return e, nil
 }
 
+func undoBlocked(e Effect, now float64) bool {
+	switch e.UndoState {
+	case Unknown, Partial:
+		return !e.UndoResolved
+	case Intent:
+		return now-e.UndoLeaseAt >= StuckSeconds
+	}
+	return false
+}
+
 func (s *Store) decorateUndoable(e *Effect) {
 	if !e.Undoable {
 		return
@@ -147,10 +177,7 @@ func (s *Store) decorateUndoable(e *Effect) {
 }
 
 func (s *Store) Get(ctx context.Context, id int64) (Effect, error) {
-	e, err := scanEffect(s.DB.Read.QueryRowContext(ctx, effectSelect+" WHERE e.id = ?", id))
-	if errors.Is(err, sql.ErrNoRows) {
-		return Effect{}, &NotFound{ID: id}
-	}
+	e, err := GetEffect(ctx, s.DB.Read, id, s.now())
 	if err != nil {
 		return Effect{}, err
 	}
@@ -158,7 +185,30 @@ func (s *Store) Get(ctx context.Context, id int64) (Effect, error) {
 	return e, nil
 }
 
+func GetEffect(ctx context.Context, q db.Querier, id int64, now float64) (Effect, error) {
+	e, err := scanEffect(q.QueryRowContext(ctx, effectSelect+" WHERE e.id = ?", id))
+	if errors.Is(err, sql.ErrNoRows) {
+		return Effect{}, &NotFound{ID: id}
+	}
+	if err != nil {
+		return Effect{}, err
+	}
+	e.UndoBlocked = undoBlocked(e, now)
+	return e, nil
+}
+
 func (s *Store) List(ctx context.Context, f Filter) ([]Effect, error) {
+	out, err := ListEffects(ctx, s.DB.Read, f, s.now())
+	if err != nil {
+		return nil, err
+	}
+	for i := range out {
+		s.decorateUndoable(&out[i])
+	}
+	return out, nil
+}
+
+func ListEffects(ctx context.Context, q db.Querier, f Filter, now float64) ([]Effect, error) {
 	where := []string{"1 = 1"}
 	var args []any
 	if f.Origin != "" {
@@ -175,6 +225,10 @@ func (s *Store) List(ctx context.Context, f Filter) ([]Effect, error) {
 		where = append(where, "e.operation = ?")
 		args = append(args, f.Operation)
 	}
+	if f.Direction != "" {
+		where = append(where, "e.direction = ?")
+		args = append(args, f.Direction)
+	}
 	if len(f.OperationLike) > 0 {
 		likes := make([]string, len(f.OperationLike))
 		for i, pattern := range f.OperationLike {
@@ -190,6 +244,10 @@ func (s *Store) List(ctx context.Context, f Filter) ([]Effect, error) {
 	if f.Target != "" {
 		where = append(where, "e.target = ?")
 		args = append(args, f.Target)
+	}
+	if f.Account != "" {
+		where = append(where, "e.account = ?")
+		args = append(args, f.Account)
 	}
 	if f.Since > 0 {
 		where = append(where, "e.created_at >= ?")
@@ -230,9 +288,13 @@ func (s *Store) List(ctx context.Context, f Filter) ([]Effect, error) {
 	if limit > 500 {
 		limit = 500
 	}
-	query := effectSelect + " WHERE " + strings.Join(where, " AND ") + " ORDER BY e.id DESC LIMIT ?"
-	args = append(args, limit)
-	rows, err := s.DB.Read.QueryContext(ctx, query, args...)
+	offset := f.Offset
+	if offset < 0 {
+		offset = 0
+	}
+	query := effectSelect + " WHERE " + strings.Join(where, " AND ") + " ORDER BY e.id DESC LIMIT ? OFFSET ?"
+	args = append(args, limit, offset)
+	rows, err := q.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -241,7 +303,7 @@ func (s *Store) List(ctx context.Context, f Filter) ([]Effect, error) {
 		return nil, err
 	}
 	for i := range out {
-		s.decorateUndoable(&out[i])
+		out[i].UndoBlocked = undoBlocked(out[i], now)
 	}
 	return out, nil
 }
@@ -266,6 +328,7 @@ func (s *Store) Blocked(ctx context.Context, resources []string) ([]Effect, erro
 		return nil, err
 	}
 	for i := range out {
+		out[i].UndoBlocked = undoBlocked(out[i], s.now())
 		s.decorateUndoable(&out[i])
 	}
 	return out, nil
@@ -604,4 +667,15 @@ func raw(v sql.NullString) json.RawMessage {
 		return nil
 	}
 	return json.RawMessage(v.String)
+}
+
+func ForwardOf(ctx context.Context, q db.Querier, undoID int64) (Effect, error) {
+	var forwardID int64
+	if err := q.QueryRowContext(ctx, "SELECT undo_of FROM effects WHERE id = ?", undoID).Scan(&forwardID); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return Effect{}, &NotFound{ID: undoID}
+		}
+		return Effect{}, err
+	}
+	return GetEffect(ctx, q, forwardID, 0)
 }

@@ -17,6 +17,7 @@
         <span class="max-w-full truncate font-medium text-foreground">{{place .Dest}}</span>
         {{end}}
         {{template "action_badge" .}}
+        {{if .Resolved}}<span class="badge" data-variant="outline">Resolved{{with .EffectiveOutcome}} as {{.}}{{end}}</span>{{end}}
         {{if .Error}}<span class="truncate" title="{{str .Error}}">{{str .Error}}</span>{{end}}
       </div>
     </div>

@@ -18,7 +18,6 @@ var owners = map[string]string{
 	"auth_login_links":     "auth",
 	"auth_logins":          "auth",
 	"auth_sessions":        "auth",
-	"auto_actions":         "mail",
 	"commitments":          "mail",
 	"context_ledger":       "assistant",
 	"context_projections":  "assistant",

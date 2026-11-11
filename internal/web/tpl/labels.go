@@ -104,6 +104,8 @@ var labelSets = map[string][]pair{
 
 var badgeSets = map[string]map[string]Badge{
 	"action": {
+		"intent":       {"outline", "Running"},
+		"done":         {"secondary", "Applied"},
 		"held":         {"outline", "Held"},
 		"applied":      {"secondary", "Applied"},
 		"failed":       {"destructive", "Failed"},
