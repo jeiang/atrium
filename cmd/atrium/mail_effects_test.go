@@ -1,7 +1,10 @@
 package main
 
 import (
+	"errors"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
@@ -93,4 +96,78 @@ func TestMailSnoozeReturnAndSettlementShareOneTransaction(t *testing.T) {
 			t.Fatalf("the inbox holds %d messages after the return, want 1", n)
 		}
 	})
+}
+
+func (m *mailSafety) ruleFor(t *testing.T, account, dest, from string) {
+	t.Helper()
+	path := filepath.Join(m.dir, "rules.json")
+	body := `{"rules":[{"id":"bank","account":"` + account + `","action":"file","dest":"` + dest + `",` +
+		`"when":[{"field":"from_addr","op":"eq","value":"` + from + `"}]}]}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m.run(t, "rules", "import", path)
+}
+
+func (m *mailSafety) effectIDs(t *testing.T, query string, args ...any) []string {
+	t.Helper()
+	joined := m.scalar(t, query, args...)
+	if joined == "<nil>" || joined == "" {
+		return nil
+	}
+	return strings.Split(joined, ",")
+}
+
+func TestMailProposalMoveWithUnknownCopyBlocksReapprovalUntilResolved(t *testing.T) {
+	fake := mailtest.NewFakeClient()
+	inbox := fake.AddBox("INBOX", mailtest.NewBox(1))
+	fake.AddBox("Bills", mailtest.NewBox(3))
+	h, x := mailtest.RawWith("Bank statement", "statements@bank.test", "unknown-copy", "Your statement is ready.")
+	inbox.Add(h, x, []string{`\Seen`}, nil)
+	m := mailEffectsFixture(t, "live", "icloud", fake)
+	m.ruleFor(t, "work", "Bills", "statements@bank.test")
+	m.run(t, "sync")
+	m.run(t, "live", "rebaseline")
+	m.run(t, "live", "backlog")
+	proposal := m.scalar(t, "SELECT CAST(id AS TEXT) FROM proposals WHERE kind = 'inbox_backlog' AND status = 'pending' ORDER BY id DESC LIMIT 1")
+	if proposal == "<nil>" {
+		t.Fatalf("no pending inbox_backlog proposal")
+	}
+
+	m.fake.FailWrite = func(w mailtest.FakeWrite) error {
+		if w.Verb == "COPY" {
+			return &mail.WriteInterrupted{Command: "UID COPY", Err: errors.New("connection reset by peer")}
+		}
+		return nil
+	}
+	if ran := runApp(t, "proposals", "approve", proposal); ran.code == cli.ExitOK {
+		t.Fatalf("approving a move whose copy was interrupted exited 0")
+	}
+	if state := m.scalar(t, "SELECT state FROM effects WHERE origin = 'proposal' AND operation = 'move'"); state != "unknown" {
+		t.Fatalf("the interrupted proposal move is %s, want unknown", state)
+	}
+	if status := m.scalar(t, "SELECT status FROM proposals WHERE id = ?", proposal); status != "failed" {
+		t.Fatalf("the proposal after an unknown move is %s, want failed", status)
+	}
+	if ran := runApp(t, "proposals", "approve", proposal); ran.code == cli.ExitOK || !strings.Contains(ran.stderr, "unresolved write") {
+		t.Fatalf("re-approval with an unresolved write = %d %q", ran.code, ran.stderr)
+	}
+	before := m.copies()
+	m.run(t, "sync")
+	if after := m.copies(); after != before {
+		t.Fatalf("a sync after an unknown move made %d copies, want none", after-before)
+	}
+	m.run(t, "proposals", "resolve", proposal, "--outcome", "not-applied")
+	if effective := m.scalar(t, "SELECT effective_outcome FROM effect_resolutions WHERE effect_id = "+
+		"(SELECT id FROM effects WHERE origin = 'proposal' AND operation = 'move') ORDER BY id DESC LIMIT 1"); effective != "failed" {
+		t.Fatalf("the resolved move's effective outcome is %s, want failed", effective)
+	}
+	m.fake.FailWrite = nil
+	m.run(t, "proposals", "approve", proposal)
+	if n := len(m.fake.Boxes["Bills"].Box.Messages); n != 1 {
+		t.Fatalf("the destination holds %d messages after re-approval, want 1", n)
+	}
+	if n := len(m.fake.Boxes["INBOX"].Box.Messages); n != 0 {
+		t.Fatalf("the inbox holds %d messages after the move, want 0", n)
+	}
 }
