@@ -113,7 +113,7 @@ func runNotion(ctx context.Context, d *db.DB, env config.Env, now float64) (Resu
 		return out, err
 	}
 	defer client.Close()
-	store := ledger.NewStore(d, func() float64 { return now })
+	store := ledger.NewStore(d, nil)
 	return syncNotion(ctx, store, now, client, parent, entries)
 }
 
