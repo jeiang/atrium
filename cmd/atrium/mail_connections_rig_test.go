@@ -115,8 +115,7 @@ func strictIMAPRig(t *testing.T, creds map[string]string, fakes map[string]*mail
 func keyedMailFixture(t *testing.T) string {
 	t.Helper()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	requireCipher(t)
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
 	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
