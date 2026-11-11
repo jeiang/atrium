@@ -41,6 +41,8 @@ type exportNotion struct {
 	failCreate   int
 	failMarkdown int
 	dropCreate   bool
+	dropMarkdown bool
+	dropTitle    bool
 }
 
 func (f *exportNotion) created() []*exportPage {
@@ -166,6 +168,15 @@ func (f *exportNotion) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			_ = json.NewDecoder(r.Body).Decode(&body)
 			page.markdown = body.Replace.NewStr
+			if f.dropMarkdown {
+				f.dropMarkdown = false
+				if hijacker, ok := w.(http.Hijacker); ok {
+					if conn, _, err := hijacker.Hijack(); err == nil {
+						_ = conn.Close()
+						return
+					}
+				}
+			}
 			reply(http.StatusOK, map[string]any{"object": "page_markdown", "id": id, "markdown": page.markdown, "truncated": false})
 			return
 		}
@@ -188,6 +199,15 @@ func (f *exportNotion) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			}
 			if title := exportTitle(body.Properties.Title); title != "" {
 				page.title = title
+				if f.dropTitle {
+					f.dropTitle = false
+					if hijacker, ok := w.(http.Hijacker); ok {
+						if conn, _, err := hijacker.Hijack(); err == nil {
+							_ = conn.Close()
+							return
+						}
+					}
+				}
 			}
 		}
 		reply(http.StatusOK, map[string]any{"object": "page", "id": id, "url": "https://notion.invalid/" + id, "in_trash": page.trashed,
