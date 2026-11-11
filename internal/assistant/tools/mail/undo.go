@@ -113,6 +113,16 @@ func RegisterLedgerUndoer(s *ledger.Store, open mail.OpenFunc) error {
 			}
 			return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
 		},
+		Finalize: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage, result ledger.Result) error {
+			if result.State != ledger.Done {
+				return nil
+			}
+			var u tracking.Undo
+			if err := json.Unmarshal(raw, &u); err != nil {
+				return ledger.Refused("package undo payload is invalid")
+			}
+			return tracking.Restore(ctx, tx, u)
+		},
 	})
 }
 
@@ -215,7 +225,7 @@ func undoPackageUntrack(ctx context.Context, store *ledger.Store, raw json.RawMe
 	if err := json.Unmarshal(raw, &u); err != nil || u.Op != tracking.UndoUntrack || u.PackageID == 0 {
 		return nil, ledger.Refused("package undo payload is invalid")
 	}
-	result, err := tracking.Untrack(ctx, store.DB.Write, u)
+	result, err := tracking.Unsubscribe(ctx, store.DB.Write, u)
 	if err != nil {
 		var missing config.NotConfigured
 		if errors.As(err, &missing) {

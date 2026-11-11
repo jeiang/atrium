@@ -779,7 +779,7 @@ type Undo struct {
 	Before    Target `json:"before"`
 }
 
-func Untrack(ctx context.Context, q db.Querier, u Undo) (any, error) {
+func Unsubscribe(ctx context.Context, q db.Querier, u Undo) (any, error) {
 	s, err := Load(ctx, q)
 	if err != nil {
 		return nil, err
@@ -798,17 +798,19 @@ func Untrack(ctx context.Context, q db.Querier, u Undo) (any, error) {
 	if err := client.Unsubscribe(ctx, u.TrackerID); err != nil {
 		return nil, err
 	}
+	return map[string]any{"untracked": u.TrackerID}, nil
+}
+
+func Restore(ctx context.Context, q db.Querier, u Undo) error {
 	if _, err := q.ExecContext(ctx, "DELETE FROM package_events WHERE package_id = ?", u.PackageID); err != nil {
-		return nil, err
+		return err
 	}
-	if _, err := q.ExecContext(ctx,
+	_, err := q.ExecContext(ctx,
 		"UPDATE packages SET status = ?, status_text = ?, aggregator = ?, tracker_id = ?, last_event = ?, last_event_ts = ?, "+
 			"last_event_hash = ?, last_sync_ts = ?, notified_status = ? WHERE id = ?",
 		u.Before.Status, u.Before.StatusText, u.Before.Aggregator, u.Before.TrackerID, u.Before.LastEvent, u.Before.LastEventTS,
-		u.Before.LastEventHash, u.Before.LastSyncTS, u.Before.NotifiedStatus, u.PackageID); err != nil {
-		return nil, err
-	}
-	return map[string]any{"untracked": u.TrackerID}, nil
+		u.Before.LastEventHash, u.Before.LastSyncTS, u.Before.NotifiedStatus, u.PackageID)
+	return err
 }
 
 func Events(ctx context.Context, q db.Querier, packageID int64) ([]Event, error) {
