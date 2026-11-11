@@ -277,5 +277,3 @@ func TestOpsSamplerNeverWritesToGrafana(t *testing.T) {
 		t.Errorf("the sampler sent %s %s", request.Method, request.Path)
 	}
 }
-
-
