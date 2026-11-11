@@ -94,7 +94,7 @@ func TestGoogleOAuthWizardStoresPerCapabilityRefreshTokensAndReportsHealth(t *te
 	base, logs, stop := startServeStoppable(t, dir)
 	t.Cleanup(stop)
 	jar, _ := cookiejar.New(nil)
-	s := &integrationSite{t: t, dir: dir, base: base, client: &http.Client{Jar: jar}, stop: stop}
+	s := &connectionSite{t: t, dir: dir, base: base, client: &http.Client{Jar: jar}, stop: stop}
 
 	if code, body, _ := fetch(t, s.client, http.MethodGet, s.base+"/settings/connections/google", nil); code != http.StatusOK ||
 		!strings.Contains(body, "Create the Google client") {

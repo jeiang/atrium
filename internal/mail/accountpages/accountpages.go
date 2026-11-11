@@ -244,7 +244,7 @@ func (h handlers) ensure(ctx context.Context, a config.AccountSpec) (created boo
 	if !errors.As(err, new(connections.UnknownID)) {
 		return false, err
 	}
-	return true, store.Ensure(ctx, mailconn.ID(a.Name), mailconn.Kind, a.Label, candidate(a, "").Capabilities)
+	return true, store.Ensure(ctx, mailconn.ID(a.Name), mailconn.Kind, a.Label, nil, candidate(a, "").Capabilities)
 }
 
 func (h handlers) drop(ctx context.Context, a config.AccountSpec) {

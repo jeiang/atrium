@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"net/url"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -54,6 +55,13 @@ type pageData struct {
 	Tab   string `json:"tab"`
 }
 
+type connectionsView struct {
+	Sections   []SectionView `json:"sections"`
+	Saved      string        `json:"-"`
+	Error      string        `json:"error"`
+	FieldError string        `json:"field_error"`
+}
+
 type handlers struct {
 	d       *web.Deps
 	groups  []Group
@@ -70,6 +78,7 @@ func Page(groups []Group, generic []Generic, control Control) web.Page {
 	if err != nil {
 		panic(err)
 	}
+	generic = withSections(groups, generic)
 	nav := make([]tpl.NavItem, len(generic))
 	for i, g := range generic {
 		nav[i] = tpl.NavItem{Label: title(g.Module), URL: g.URL, Page: g.Tab, Settings: true, Order: 45}
@@ -101,7 +110,17 @@ func Page(groups []Group, generic []Generic, control Control) web.Page {
 				views[i].Saved = views[i].Module+"."+views[i].Name == f.Saved
 			}
 			f.SettingGroups = views
-			return err
+			if err != nil {
+				return err
+			}
+			sections, err := h.sections(ctx, f.Path, f.Saved)
+			if err != nil {
+				return err
+			}
+			if len(sections.Sections) > 0 {
+				f.Connections = sections
+			}
+			return nil
 		})
 		for _, g := range generic {
 			data := pageData{Title: title(g.Module), Tab: g.Tab}
@@ -113,7 +132,27 @@ func Page(groups []Group, generic []Generic, control Control) web.Page {
 			})
 		}
 		d.Authenticated(http.MethodPost, "/settings/groups/{module}/{name}", h.save)
+		d.Authenticated(http.MethodPost, "/settings/sections/{name}", h.saveSection)
 	}}
+}
+
+func withSections(groups []Group, generic []Generic) []Generic {
+	seen := map[string]bool{}
+	for _, g := range groups {
+		seen[g.URL] = true
+	}
+	for _, g := range generic {
+		seen[g.URL] = true
+	}
+	for _, section := range AllSections() {
+		url := "/settings/" + section.Module
+		if seen[url] {
+			continue
+		}
+		seen[url] = true
+		generic = append(generic, Generic{Module: section.Module, URL: url, Tab: "module:" + section.Module})
+	}
+	return generic
 }
 
 func (h handlers) views(ctx context.Context, q db.Querier, url string) ([]settings.GroupView, error) {
@@ -206,4 +245,108 @@ func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Location", group.URL+"?saved="+module+"."+name)
 	w.WriteHeader(http.StatusSeeOther)
+}
+
+func (h handlers) sections(ctx context.Context, path, saved string) (connectionsView, error) {
+	owner, ok := strings.CutPrefix(path, "/settings/")
+	if !ok || strings.Contains(owner, "/") {
+		return connectionsView{}, nil
+	}
+	all, err := LoadSections(ctx, h.d.DB.Read)
+	if err != nil {
+		return connectionsView{}, err
+	}
+	var view connectionsView
+	for _, s := range all {
+		if s.Module == owner {
+			view.Sections = append(view.Sections, s)
+		}
+	}
+	if name, ok := strings.CutPrefix(saved, "connection."); ok {
+		view.Saved = name
+	}
+	return view, nil
+}
+
+func fieldValues(fields []settings.Field, form url.Values) map[string]string {
+	values := make(map[string]string, len(fields))
+	for _, f := range fields {
+		if !f.Multi {
+			if value, ok := web.Value(form, f.Key); ok {
+				values[f.Key] = value
+			}
+			continue
+		}
+		picked := make([]string, 0, len(f.Choices))
+		for _, value := range form[f.Key] {
+			if value != "" && value != "none" {
+				picked = append(picked, value)
+			}
+		}
+		if len(picked) == 0 {
+			picked = append(picked, "none")
+		}
+		values[f.Key] = strings.Join(picked, ",")
+	}
+	return values
+}
+
+func (h handlers) saveSection(w http.ResponseWriter, r *http.Request) {
+	name := chi.URLParam(r, "name")
+	s, ok := SectionNamed(name)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	form := web.FormValues(r)
+	values := fieldValues(s.Fields, form)
+	ctx := audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
+	err := SaveSection(ctx, h.d.DB, name, values)
+	if err != nil {
+		var unknown UnknownSection
+		var invalid settings.Invalid
+		var pinned *settings.PinnedError
+		var host settings.HostOwned
+		var scope *settings.NotEditable
+		var encryption settings.EncryptionRequired
+		var empty settings.EmptyValue
+		var field settings.FieldInvalid
+		switch {
+		case errors.As(err, &unknown):
+			http.NotFound(w, r)
+		case errors.As(err, &invalid), errors.As(err, &pinned), errors.As(err, &host), errors.As(err, &scope),
+			errors.As(err, &encryption), errors.As(err, &empty), errors.As(err, &field):
+			view, loadErr := h.sections(ctx, "/settings/"+s.Module, "")
+			if loadErr != nil {
+				panic(loadErr)
+			}
+			view.Error = err.Error()
+			if errors.As(err, &field) {
+				view.FieldError = field.Key
+			}
+			for i := range view.Sections {
+				if view.Sections[i].Name == name {
+					settings.EchoFields(ctx, view.Sections[i].Fields, values)
+				}
+			}
+			shown := func(f *tpl.Frame) { f.Connections = view }
+			if !h.d.SettingsPage(w, r, http.StatusUnprocessableEntity, "/settings/"+s.Module, shown) {
+				h.render(w, r, http.StatusUnprocessableEntity, pageData{Title: title(s.Module), Tab: "module:" + s.Module}, shown)
+			}
+		default:
+			panic(err)
+		}
+		return
+	}
+	view, err := h.sections(ctx, "/settings/"+s.Module, "connection."+name)
+	if err != nil {
+		panic(err)
+	}
+	shown := func(f *tpl.Frame) {
+		f.Connections = view
+		f.Toast = &tpl.Toast{Category: "success", Title: "Saved"}
+	}
+	if !h.d.SettingsPage(w, r, http.StatusOK, "/settings/"+s.Module, shown) {
+		h.render(w, r, http.StatusOK, pageData{Title: title(s.Module), Tab: "module:" + s.Module}, shown)
+	}
 }

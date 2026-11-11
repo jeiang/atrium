@@ -145,7 +145,7 @@ func TestMnpNotionPageMarkdownIsSanitized(t *testing.T) {
 func TestNotionSettingsAndExportRemainReachable(t *testing.T) {
 	b, _ := mnpNotionSite(t, &mnpNotion{parents: map[string]string{}}, "")
 	b.want(http.MethodGet, "/settings/notion", nil, http.StatusOK, "wiki_root", "sensitivity_property", "notion_private_value", "wiki_log_title")
-	b.want(http.MethodGet, "/settings/integrations", nil, http.StatusOK, "Export knowledge to Notion", "export_notion_parent")
+	b.want(http.MethodGet, "/settings/export", nil, http.StatusOK, "Export knowledge to Notion", "export_notion_parent")
 }
 
 func notionHostConfig(t *testing.T, dir, api, token string) string {
@@ -216,7 +216,7 @@ func TestNotionConnectionTestSavesOnlyASharedToken(t *testing.T) {
 	t.Cleanup(srv.Close)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", notionHostConfig(t, dir, srv.URL, ""))
-	s := &integrationSite{t: t, dir: dir}
+	s := &connectionSite{t: t, dir: dir}
 	s.start()
 
 	stored := func() bool {

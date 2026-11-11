@@ -7,6 +7,8 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+
+	"github.com/jeiang/atrium/internal/connections"
 )
 
 type TmdbError string
@@ -19,6 +21,7 @@ type TMDB struct {
 	imageHTTP *http.Client
 	api       string
 	images    string
+	report    func(ctx context.Context, state connections.State, reason string)
 }
 
 type TVResult struct {
@@ -63,6 +66,7 @@ func (t *TMDB) get(ctx context.Context, path string, params ...param) (any, erro
 	if err != nil {
 		var failure *httpFailure
 		if errors.As(err, &failure) {
+			t.observe(ctx, connections.Failing, "TMDB unreachable: "+failure.class)
 			return nil, TmdbError("TMDB unreachable: " + failure.class)
 		}
 		return nil, err
@@ -71,9 +75,13 @@ func (t *TMDB) get(ctx context.Context, path string, params ...param) (any, erro
 		return nil, nil
 	}
 	if res.status == http.StatusUnauthorized {
+		t.observe(ctx, connections.NeedsReauth, "TMDB refused the read token")
 		return nil, TmdbError("TMDB refused the read token (401)")
 	}
 	if res.status != http.StatusOK {
+		if res.status >= http.StatusInternalServerError {
+			t.observe(ctx, connections.Failing, "TMDB answered "+strconv.Itoa(res.status))
+		}
 		return nil, TmdbError("TMDB: " + strconv.Itoa(res.status))
 	}
 	var parsed any
@@ -81,6 +89,12 @@ func (t *TMDB) get(ctx context.Context, path string, params ...param) (any, erro
 		return nil, TmdbError("TMDB: not JSON")
 	}
 	return parsed, nil
+}
+
+func (t *TMDB) observe(ctx context.Context, state connections.State, reason string) {
+	if t.report != nil {
+		t.report(ctx, state, reason)
+	}
 }
 
 func (t *TMDB) getDict(ctx context.Context, path string, params ...param) (map[string]any, error) {
@@ -208,11 +222,15 @@ func (t *TMDB) Image(ctx context.Context, posterPath string) ([]byte, error) {
 	if err != nil {
 		var failure *httpFailure
 		if errors.As(err, &failure) {
+			t.observe(ctx, connections.Failing, "TMDB images unreachable: "+failure.class)
 			return nil, TmdbError("TMDB images unreachable: " + failure.class)
 		}
 		return nil, err
 	}
 	if res.status != http.StatusOK {
+		if res.status >= http.StatusInternalServerError {
+			t.observe(ctx, connections.Failing, "TMDB images answered "+strconv.Itoa(res.status))
+		}
 		return nil, TmdbError("TMDB images: " + strconv.Itoa(res.status))
 	}
 	return res.body, nil

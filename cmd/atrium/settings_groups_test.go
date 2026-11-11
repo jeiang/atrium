@@ -68,7 +68,7 @@ func TestModuleWithASectionGetsAPageAndKeepsRefusalsThere(t *testing.T) {
 			t.Errorf("/settings/calendar does not render %s", want)
 		}
 	}
-	const action = "/settings/integrations/sections/calendar"
+	const action = "/settings/sections/calendar"
 	status, body, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"default_event_minutes": {"45"}, "back": {"/settings/calendar"}})
 	if status != http.StatusOK || !strings.Contains(body, "<title>Calendar · Settings") || !strings.Contains(body, "data-saved") || !strings.Contains(body, `value="45"`) {
 		t.Errorf("saving from the module page = %d, back on the page %v, saved %v", status, strings.Contains(body, "<title>Calendar · Settings"), strings.Contains(body, "data-saved"))
@@ -80,16 +80,41 @@ func TestModuleWithASectionGetsAPageAndKeepsRefusalsThere(t *testing.T) {
 	if row := runSettings(t, "get", "default_event_minutes").row(t); row.Value == nil || *row.Value != "45" {
 		t.Errorf("default_event_minutes = %+v, want 45", row)
 	}
-	for _, c := range []struct {
-		action, back, title string
-		form                url.Values
-	}{
-		{"/settings/integrations/mail_chat/test", "/settings/mail", "<title>Mail · Settings", url.Values{"url": {"http://127.0.0.1:1/v1"}}},
-	} {
-		c.form.Set("back", c.back)
-		status, body, _ := fetch(t, client, http.MethodPost, base+c.action, c.form)
-		if status != http.StatusUnprocessableEntity || !strings.Contains(body, c.title) || !strings.Contains(body, `role="alert"`) {
-			t.Errorf("a refusal from %s = %d, on its page %v: %.200s", c.back, status, strings.Contains(body, c.title), body)
+}
+
+func TestMediaLibraryGroupEditsTheLinkTTL(t *testing.T) {
+	t.Parallel()
+	base := startSettingsServe(t, nil)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar}
+	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/media", nil)
+	if status != http.StatusOK {
+		t.Fatalf("GET /settings/media = %d", status)
+	}
+	for _, want := range []string{`data-group="media.library"`, `name="media_link_ttl_seconds"`} {
+		if !strings.Contains(body, want) {
+			t.Errorf("/settings/media does not render %s", want)
 		}
+	}
+	const action = "/settings/groups/media/library"
+	status, body, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"media_link_ttl_seconds": {"7200"}})
+	if status != http.StatusOK || !strings.Contains(body, "data-saved") {
+		t.Fatalf("POST %s = %d, saved marker %v", action, status, strings.Contains(body, "data-saved"))
+	}
+	if row := runSettings(t, "get", "media_link_ttl_seconds").row(t); row.Value == nil || *row.Value != "7200" {
+		t.Errorf("media_link_ttl_seconds = %+v, want 7200", row)
+	}
+	status, body, _ = fetch(t, client, http.MethodPost, base+action, url.Values{"media_link_ttl_seconds": {"30"}})
+	if status != http.StatusUnprocessableEntity || !strings.Contains(body, "must be between") {
+		t.Errorf("POST an invalid TTL = %d: %.300s", status, body)
+	}
+	if ran := runSettings(t, "set", "media_link_ttl_seconds", "3600"); ran.code != 0 {
+		t.Fatalf("settings set media_link_ttl_seconds: %d %s", ran.code, ran.stderr)
+	}
+	if row := runSettings(t, "get", "media_link_ttl_seconds").row(t); row.Value == nil || *row.Value != "3600" {
+		t.Errorf("media_link_ttl_seconds after settings set = %+v, want 3600", row)
 	}
 }

@@ -7,12 +7,12 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/integrations"
 )
 
 func init() {
-	integrations.SetNotifier(func(ctx context.Context, d *db.DB, env config.Env, title, body string) error {
+	connections.SetNotifier(func(ctx context.Context, d *db.DB, title, body string) error {
 		if !Enabled(ctx) {
 			return nil
 		}

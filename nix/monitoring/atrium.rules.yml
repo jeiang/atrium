@@ -69,7 +69,7 @@ groups:
         annotations:
           summary: "atrium queue {{ $labels.queue }} has held more than 100 items for 30 minutes."
       - alert: AtriumIntegrationUnhealthy
-        expr: atrium_integration_state{state!="ok"} == 1
+        expr: atrium_integration_state{state=~"failing|needs_reauth|expiring"} == 1
         for: 15m
         labels:
           severity: warning

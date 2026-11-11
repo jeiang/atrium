@@ -20,13 +20,6 @@ CREATE TABLE IF NOT EXISTS endpoint_probes (
     models TEXT NOT NULL DEFAULT '[]',
     probed_at REAL NOT NULL
 );
-CREATE TABLE IF NOT EXISTS integration_health (
-    name TEXT PRIMARY KEY,
-    state TEXT NOT NULL CHECK (state IN ('ok', 'failing', 'expiring', 'needs_reauth')),
-    reason TEXT NOT NULL DEFAULT '',
-    checked_at REAL NOT NULL,
-    expires_at REAL
-);
 CREATE TABLE IF NOT EXISTS ops_samples (
     id INTEGER PRIMARY KEY,
     ts REAL NOT NULL,

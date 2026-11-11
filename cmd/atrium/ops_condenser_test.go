@@ -19,7 +19,7 @@ func condenserFixture(t *testing.T, fake *fakeOpsGrafana, chat *fakeOpenAI) (str
 	t.Cleanup(srv.Close)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, settingEnv(grafanatools.KeyURL), srv.URL)
-	setEnv(t, settingEnv(grafanatools.KeyMetricsUID), "metrics")
+	setEnv(t, hostEnv("grafana", grafanatools.KeyMetricsUID), "metrics")
 	setEnv(t, settingEnv(serverops.KeyHosts), "node-a")
 	setEnv(t, settingEnv(endpoint.KeyChatURL), chat.URL+"/v1")
 	setEnv(t, settingEnv(endpoint.KeyChatModel), "qwen")

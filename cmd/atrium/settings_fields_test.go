@@ -39,17 +39,16 @@ func TestSettingsFieldsSaveFromTheirTabs(t *testing.T) {
 	}
 	client := &http.Client{Jar: jar}
 	cases := []settingsFieldCase{
-		{"/settings/integrations", "/settings/integrations/mail_chat/settings", "mail_chat_model", "qwen2"},
 		{"/settings/notion", "/settings/groups/notion/wiki", "wiki_root", "0123456789abcdef0123456789abcdef"},
 		{"/settings/notion", "/settings/groups/notion/wiki", "sensitivity_property", "sensitivity_level"},
 		{"/settings/notion", "/settings/groups/notion/wiki", "notion_private_value", "confidential"},
 		{"/settings/notion", "/settings/groups/notion/wiki", "wiki_log_title", "Wiki Log 2"},
-		{"/settings/integrations", "/settings/integrations/sections/calendar", "calendar_account", "home"},
-		{"/settings/integrations", "/settings/integrations/sections/calendar", "icloud_apple_id", "operator@icloud.invalid"},
-		{"/settings/integrations", "/settings/integrations/sections/calendar", "icloud_calendar", "Home"},
-		{"/settings/integrations", "/settings/integrations/sections/calendar", "default_event_minutes", "30"},
-		{"/settings/integrations", "/settings/integrations/sections/calendar", "work_hours", "08:00-18:00"},
-		{"/settings/integrations", "/settings/integrations/sections/calendar", "work_days", "mon,tue,wed,thu,fri"},
+		{"/settings/calendar", "/settings/sections/calendar", "calendar_account", "home"},
+		{"/settings/calendar", "/settings/sections/calendar", "icloud_apple_id", "operator@icloud.invalid"},
+		{"/settings/calendar", "/settings/sections/calendar", "icloud_calendar", "Home"},
+		{"/settings/calendar", "/settings/sections/calendar", "default_event_minutes", "30"},
+		{"/settings/calendar", "/settings/sections/calendar", "work_hours", "08:00-18:00"},
+		{"/settings/calendar", "/settings/sections/calendar", "work_days", "mon,tue,wed,thu,fri"},
 		{"/settings/mail", "/settings/mail/settings", "uncertain_dest", "Later"},
 		{"/settings/mail", "/settings/mail/settings", "openloops_remind_hour", "8"},
 		{"/settings/assistant", "/settings/groups/assistant/spending", "monthly_budget_usd", "200"},
@@ -90,16 +89,16 @@ func TestSettingsFieldsRefuseInvalidValues(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar}
-	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/integrations", nil); status != http.StatusOK {
-		t.Fatalf("GET /settings/integrations = %d", status)
+	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/calendar", nil); status != http.StatusOK {
+		t.Fatalf("GET /settings/calendar = %d", status)
 	}
 	for _, c := range []struct {
 		action, key, value, want string
 	}{
-		{"/settings/integrations/sections/calendar", "default_event_minutes", "0", "must be between 5 and 1440"},
+		{"/settings/sections/calendar", "default_event_minutes", "0", "must be between 5 and 1440"},
 		{"/settings/groups/assistant/spending", "monthly_budget_usd", "0", "must be greater than 0"},
-		{"/settings/integrations/sections/calendar", "work_hours", "9-5", "must be HH:MM-HH:MM"},
-		{"/settings/integrations/sections/calendar", "work_days", "funday", "must be day names"},
+		{"/settings/sections/calendar", "work_hours", "9-5", "must be HH:MM-HH:MM"},
+		{"/settings/sections/calendar", "work_days", "funday", "must be day names"},
 		{"/settings/groups/notion/wiki", "wiki_root", "nope", "must be a Notion page id"},
 	} {
 		status, body, _ := fetch(t, client, http.MethodPost, base+c.action, url.Values{c.key: {c.value}})

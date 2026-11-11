@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/media/mediacmd"
 	"github.com/jeiang/atrium/internal/media/pages"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -32,6 +33,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Section: "apps", Label: "Library", URL: "/apps/media/library", Icon: "film", Page: "media_library", Order: 30},
 			},
 		}},
+		Settings: []settings.Group{{Name: "library", Title: "Library", Keys: []string{media.KeyLinkTTL}}},
 		Commands: []*cli.Command{mediacmd.Command(mc.Env, m.Now)},
 		Tools: func(r *registry.Registry) error {
 			return r.Add(mediatools.Tools()...)

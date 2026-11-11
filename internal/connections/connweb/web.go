@@ -8,10 +8,12 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/connections"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -29,6 +31,13 @@ func Templates() fs.FS {
 }
 
 const path = "/settings/connections"
+
+const (
+	checkEvery   = 24 * time.Hour
+	recheckAfter = 5 * time.Minute
+)
+
+var log = logx.Logger("atrium.connections.web")
 
 const googlePath = path + "/google"
 
@@ -48,7 +57,7 @@ func Page() web.Page {
 		Module:    Module,
 		Templates: Templates(),
 		Nav: []tpl.NavItem{{
-			Section: "settings", Label: "Connections", URL: path, Page: "connections", Settings: true, Order: 5,
+			Label: "Connections", URL: path, Page: "connections", Settings: true, Order: 30,
 		}},
 	}
 }
@@ -64,6 +73,60 @@ func Module(r chi.Router, d *web.Deps) {
 	d.Authenticated(http.MethodGet, googlePath+"/callback", h.googleCallback)
 	d.Authenticated(http.MethodPost, googlePath+"/paste", h.googlePaste)
 	d.Authenticated(http.MethodPost, googlePath+"/test", h.googleTest)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		watch(d)
+	}()
+	d.OnClose(func() { <-done })
+}
+
+func watch(d *web.Deps) {
+	ctx, cancel := context.WithCancel(d.Ctx)
+	defer cancel()
+	go func() {
+		<-d.Stopping
+		cancel()
+	}()
+	store, err := connections.New(d.DB, d.State.Host(), connections.DefaultRegistry())
+	if err != nil {
+		log.Warn("connection health check failed", logx.Err, err.Error())
+		return
+	}
+	if err := store.CheckStale(ctx); err != nil && ctx.Err() == nil {
+		log.Warn("connection health check failed", logx.Err, err.Error())
+	}
+	t := time.NewTicker(checkEvery)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			if err := store.CheckAll(ctx); err != nil && ctx.Err() == nil {
+				log.Warn("connection health check failed", logx.Err, err.Error())
+			}
+		case failed := <-connections.Failed():
+			if !recheckable(ctx, store, failed.ID) {
+				continue
+			}
+			if _, err := store.CheckOne(ctx, failed.ID); err != nil && ctx.Err() == nil {
+				log.Warn("connection health check failed", logx.Integration, string(failed.ID), logx.Err, err.Error())
+			}
+		}
+	}
+}
+
+func recheckable(ctx context.Context, store *connections.Store, id connections.ID) bool {
+	view, err := store.Get(ctx, id)
+	if err != nil {
+		return false
+	}
+	switch view.State {
+	case connections.Failing, connections.NeedsReauth, connections.Disabled, connections.Unconfigured:
+		return false
+	}
+	return view.CheckedAt != nil && time.Since(*view.CheckedAt) >= recheckAfter
 }
 
 type handlers struct{ d *web.Deps }

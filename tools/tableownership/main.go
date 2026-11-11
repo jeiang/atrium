@@ -42,7 +42,6 @@ var owners = map[string]string{
 	"events":                  "mail",
 	"export_pages":            "kb",
 	"flag_decisions":          "mail",
-	"integration_health":      "integrations",
 	"job_runs":                "assistant",
 	"jobs":                    "assistant",
 	"kb_fts":                  "kb",

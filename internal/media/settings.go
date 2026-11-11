@@ -109,6 +109,7 @@ type Settings struct {
 	QbitLease *connections.Lease
 	QbitStore *connections.Store
 	TMDBLease *connections.Lease
+	TMDBStore *connections.Store
 	EZTVLease *connections.Lease
 	MoviesURL string
 	TVURL     string
@@ -164,6 +165,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		return Settings{}, failure
 	}
 	out.QbitStore = connections.DefaultFor(q)
+	out.TMDBStore = out.QbitStore
 	return out, nil
 }
 
@@ -195,7 +197,16 @@ func (s Settings) TMDB() *TMDB {
 	if err != nil {
 		return nil
 	}
-	return NewTMDBAt(token, apiHTTP, imageHTTP, api, images)
+	tmdb := NewTMDBAt(token, apiHTTP, imageHTTP, api, images)
+	if s.TMDBStore != nil && tmdb != nil {
+		lease, store := s.TMDBLease, s.TMDBStore
+		tmdb.report = func(ctx context.Context, state connections.State, reason string) {
+			_ = store.Observe(context.WithoutCancel(ctx), lease.ID(), lease.Revision(), connections.Result{
+				Capability: "api", State: state, Reason: reason,
+			})
+		}
+	}
+	return tmdb
 }
 
 func (s Settings) NeedRoot() (string, error) {

@@ -114,7 +114,7 @@ func TestMediaCredentialsTestThroughConnectionsAndAuthenticateEveryRequest(t *te
 
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, settingEnv(media.KeyQbitURL), qbSrv.URL)
-	s := &integrationSite{t: t, dir: dir}
+	s := &connectionSite{t: t, dir: dir}
 	s.start()
 
 	if code, body := s.conn("/test", url.Values{"id": {"service/qbittorrent"}, "url": {qbSrv.URL}, "api_key": {"qbt_good"}}); code != http.StatusOK || connectionState(t, dir, "service/qbittorrent") != "ok" {

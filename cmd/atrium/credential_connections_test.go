@@ -64,7 +64,7 @@ func TestConnectionTestsSaveOnlyWorkingCredentialsAndNeverRenderThem(t *testing.
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, grafana.URL, api.URL))
 	setEnv(t, settingEnv(grafanatools.KeyURL), grafana.URL)
-	s := &integrationSite{t: t, dir: dir}
+	s := &connectionSite{t: t, dir: dir}
 	s.start()
 
 	stored := func(id, slot string) bool {

@@ -91,7 +91,7 @@ func importService(ctx context.Context, tx *sql.Tx, s ImportService, encrypted b
 	}
 	source := s.Source
 	if source == "" {
-		source = SourceHost
+		source = SourceOperator
 	}
 	enabled, state := 1, "untested"
 	if s.Enabled != nil && !*s.Enabled {
@@ -102,9 +102,9 @@ func importService(ctx context.Context, tx *sql.Tx, s ImportService, encrypted b
 			"VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?) "+
 			"ON CONFLICT(id) DO UPDATE SET label = excluded.label, config_json = excluded.config_json, transport_json = excluded.transport_json, "+
 			"revision = connections.revision + 1, enabled = excluded.enabled, state = excluded.state, reason = '', checked_at = NULL, last_ok_at = NULL, "+
-			"expires_at = NULL, reauth_at = NULL, results_json = '{}', updated_at = excluded.updated_at "+
-			"WHERE connections.config_source = 'host'",
-		s.ID, kind, s.Label, source, string(configJSON), string(transportJSON), enabled, state, now, now); err != nil {
+			"expires_at = NULL, reauth_at = NULL, failed_test_revision = NULL, results_json = '{}', updated_at = excluded.updated_at "+
+			"WHERE connections.config_source = 'host' OR ?",
+		s.ID, kind, s.Label, source, string(configJSON), string(transportJSON), enabled, state, now, now, boolInt(builtinIDs[s.ID])); err != nil {
 		return nil, err
 	}
 	lines := []string{"connection " + s.ID + ": created from " + source + " settings"}
@@ -156,8 +156,9 @@ func importService(ctx context.Context, tx *sql.Tx, s ImportService, encrypted b
 			reauth = s.Health.CheckedAt
 		}
 		if _, err := tx.ExecContext(ctx,
-			"UPDATE connections SET state = ?, reason = ?, checked_at = ?, last_ok_at = ?, expires_at = ?, reauth_at = ? WHERE id = ?",
-			s.Health.State, s.Health.Reason, s.Health.CheckedAt, lastOK, s.Health.ExpiresAt, reauth, s.ID); err != nil {
+			"UPDATE connections SET state = ?, reason = ?, checked_at = ?, last_ok_at = ?, expires_at = ?, reauth_at = ?, "+
+				"failed_test_revision = CASE WHEN ? IN ('failing','needs_reauth') THEN revision ELSE NULL END WHERE id = ?",
+			s.Health.State, s.Health.Reason, s.Health.CheckedAt, lastOK, s.Health.ExpiresAt, reauth, s.Health.State, s.ID); err != nil {
 			return nil, err
 		}
 		lines = append(lines, fmt.Sprintf("connection %s: legacy health carried as %s", s.ID, s.Health.State))

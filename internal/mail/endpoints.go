@@ -220,14 +220,18 @@ func embeddingFailure(ctx context.Context, q db.Querier, e endpoint.Endpoint) (s
 		}
 		return "", err
 	}
-	if view.State != "failing" && view.State != "needs_reauth" {
+	if !view.TestFailed {
 		return "", nil
 	}
 	fingerprint := resultFingerprint(view.Data)
 	if fingerprint == "" || fingerprint != e.Fingerprint() {
 		return "", nil
 	}
-	return "embed endpoint probe failed: " + view.Reason, nil
+	reason := view.Reason
+	if view.State != "failing" && view.State != "needs_reauth" {
+		reason = "the explicit Test failed"
+	}
+	return "embed endpoint probe failed: " + reason, nil
 }
 
 func resultFingerprint(data json.RawMessage) string {

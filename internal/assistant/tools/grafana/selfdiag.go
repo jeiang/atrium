@@ -3,11 +3,11 @@ package grafanatools
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strconv"
 
-	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -33,15 +33,6 @@ var selfMetrics = []struct{ ref, expr string }{
 	{"lock_timeouts_1h", `increase(atrium_db_exclusive_timeouts_total[1h])`},
 }
 
-func init() {
-	settings.MustRegister(
-		settings.Value(settings.UI, settings.Def{Key: KeyMetricsUID, Module: "grafana", Type: settings.String}),
-		settings.Value(settings.UI, settings.Def{Key: KeyLogsUID, Module: "grafana", Type: settings.String}),
-		settings.Value(settings.UI, settings.Def{Key: KeyLogsType, Module: "grafana", Type: settings.Enum, Choices: []string{Loki, VictoriaLogs}, Default: Loki}),
-		settings.Value(settings.Advanced, settings.Def{Key: KeyLogsQuery, Module: "grafana", Type: settings.String}),
-	)
-}
-
 func selfDiagnose(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	scope, ok, err := tool.TextArg(args, "scope", false)
 	if err != nil {
@@ -61,10 +52,17 @@ func selfDiagnose(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 	if err != nil {
 		return nil, err
 	}
-	r := assistant.Read(ctx, tc.DB.Read)
-	metricsUID, logsUID, logsType, logsQuery := r.Text(KeyMetricsUID), r.Text(KeyLogsUID), r.Text(KeyLogsType), r.Text(KeyLogsQuery)
-	if err := r.Err(); err != nil {
+	access, err := Load(ctx, tc.DB.Read)
+	if err != nil {
+		var missing config.NotConfigured
+		if errors.As(err, &missing) {
+			return nil, tool.NotConfigured(err.Error())
+		}
 		return nil, err
+	}
+	metricsUID, logsUID, logsType, logsQuery := access.MetricsUID, access.LogsUID, access.LogsType, access.LogsQuery
+	if logsType == "" {
+		logsType = Loki
 	}
 	from := "now-" + strconv.FormatInt(minutes, 10) + "m"
 	out := map[string]any{"untrusted": true}

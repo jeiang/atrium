@@ -85,7 +85,6 @@
 
       docsgen = goCheck "docsgen" [] ''
         go run -tags modernc ./cmd/toolsdocs check
-        go run -tags modernc ./cmd/integrationsdocs
       '';
 
       ownership = goCheck "ownership" [] ''

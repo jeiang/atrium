@@ -15,9 +15,9 @@ func TestModulesSettingsPageIsGone(t *testing.T) {
 	base := startServe(t)
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
-	code, body, _ := fetch(t, client, http.MethodGet, base+"/settings/integrations", nil)
+	code, body, _ := fetch(t, client, http.MethodGet, base+"/settings/export", nil)
 	if code != http.StatusOK || strings.Contains(body, `href="/settings/modules"`) {
-		t.Fatalf("integrations page: %d, or it still links the modules page", code)
+		t.Fatalf("export page: %d, or it still links the modules page", code)
 	}
 	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/modules", nil); code != http.StatusNotFound {
 		t.Errorf("GET /settings/modules = %d, want 404", code)

@@ -8,10 +8,10 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settingspage"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -56,9 +56,9 @@ func init() {
 		settings.Value(settings.UI, settings.Def{
 			Key: ObsidianPrivateKey, Module: "export", Type: settings.String, Check: dirPath}),
 	)
-	integrations.RegisterSection(integrations.Section{
+	settingspage.RegisterSection(settingspage.Section{
 		Name: NotionSection, Title: "Export knowledge to Notion", Module: "export", Template: "export_notion_settings",
-		Fields: []integrations.Field{
+		Fields: []settingspage.Field{
 			{Key: NotionEnabledKey, Label: "Enabled", Bool: true},
 			{Key: NotionParentKey, Label: "Parent page"},
 			{Key: NotionKindsKey, Label: "Include", Multi: true, Choices: kindNames, ChoiceLabels: kindLabels},
@@ -67,9 +67,9 @@ func init() {
 		Validate: validateNotion,
 		Data:     notionData,
 	})
-	integrations.RegisterSection(integrations.Section{
+	settingspage.RegisterSection(settingspage.Section{
 		Name: ObsidianSection, Title: "Obsidian export", Module: "export", Template: "export_obsidian_settings",
-		Fields: []integrations.Field{
+		Fields: []settingspage.Field{
 			{Key: ObsidianDirKey, Label: "Folder"},
 			{Key: ObsidianKindsKey, Label: "Include", Multi: true, Choices: kindNames, ChoiceLabels: kindLabels},
 			{Key: ObsidianPrivateKey, Label: "Include private records"},

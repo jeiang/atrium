@@ -20,7 +20,6 @@ func ImportV2(values map[string]string, probe *ImportProbe, health *connections.
 		ID:           EmbeddingID,
 		Kind:         KindEmbedding,
 		Label:        "Embedding",
-		Source:       connections.SourceHost,
 		Config:       map[string]string{"url": values["mail_embed_url"], "model": values["mail_embed_model"]},
 		Transport:    map[string]string{"ca_file": values["mail_embed_ca_file"], "proxy": values["mail_embed_proxy"]},
 		Capabilities: []string{"embeddings"},

@@ -65,6 +65,9 @@ type Definition struct {
 	Kind     Kind
 	Validate func(Candidate) error
 	Test     func(context.Context, *Lease, []Capability) ([]Result, error)
+	// Silent replaces Test during a periodic health pass when the explicit
+	// test has a visible side effect, such as a diagnostic push.
+	Silent func(context.Context, *Lease, []Capability) ([]Result, error)
 }
 
 type Registry struct {
@@ -176,8 +179,13 @@ type View struct {
 	ReauthAt     *time.Time       `json:"reauth_at,omitempty"`
 	Results      []Result         `json:"results"`
 
-	revision  int64
-	transport transportOptions
+	revision           int64
+	failedTestRevision int64
+	transport          transportOptions
+}
+
+func (v View) TestFailed() bool {
+	return v.failedTestRevision != 0 && v.failedTestRevision == v.revision
 }
 
 func (v View) Configured() bool {
@@ -214,6 +222,17 @@ type TestFailed struct {
 
 func (e *TestFailed) Error() string {
 	return fmt.Sprintf("test failed (%s): %s", e.View.State, e.View.Reason)
+}
+
+// CredentialEndpointChanged refuses a host declaration that would send a
+// retained database credential to a different endpoint.
+type CredentialEndpointChanged struct {
+	ID    ID
+	Field string
+}
+
+func (e *CredentialEndpointChanged) Error() string {
+	return fmt.Sprintf("connections: %s is declared with a different %s endpoint while it holds a stored credential; declare a credential file for it, or disconnect the stored credential first", e.ID, e.Field)
 }
 
 type EncryptedRequired struct{ Slot string }

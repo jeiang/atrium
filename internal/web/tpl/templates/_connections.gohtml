@@ -1,56 +1,12 @@
-{{define "integration_card"}}{{$v := .View}}{{$r := .Record}}{{$name := $r.Name}}{{$csrf := .CSRF}}{{$back := .Back}}{{with $r}}
-<section class="set-group" data-integration="{{$r.Name}}" data-state="{{$r.State}}">
-  <form method="post" action="/settings/integrations/{{$r.Name}}/test" autocomplete="off">
-    <input type="hidden" name="csrf_token" value="{{$csrf}}">{{with $back}}<input type="hidden" name="back" value="{{.}}">{{end}}
-    <h2>
-      <span{{with .Help}} title="{{.}}"{{end}}>{{.Label}}</span>
-      <span class="badge" data-variant="{{if eq .State "ok"}}secondary{{else if eq .State "untested"}}outline{{else}}destructive{{end}}">{{replace "_" " " .State}}</span>
-      {{if eq $v.Saved .Name}}<span class="text-xs font-normal text-ink-3" role="status" data-saved>Saved</span>{{end}}
-      {{with .CheckedAt}}<span class="ms-auto font-mono text-xs font-normal text-ink-3">{{ts .}}</span>{{end}}
-    </h2>
-    {{if and (eq $v.Failed .Name) $v.Error}}<p class="px-4 py-2 text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{$v.Error}}</p>{{end}}
-    {{with .Reason}}<p class="px-4 pt-2 text-xs text-ink-3">{{.}}</p>{{end}}
-    {{if eq $v.HoldFor .Name}}<div class="px-4 pt-2">{{template "module_hold" $v.Hold}}</div>{{end}}
-    {{if .URLKey}}
-    <div role="group" class="set-row">
-      <label for="url-{{$r.Name}}">URL</label>
-      {{if .URLPinned}}<code id="url-{{$r.Name}}" class="set-pinned" data-pinned>{{icon "lock"}}{{.URL}}</code>{{else}}<input id="url-{{$r.Name}}" name="url" type="url" class="input" value="{{.URL}}"{{with .Help}} title="{{.}}"{{end}}>{{end}}
-    </div>
-    {{end}}
-    {{if .SecretKey}}
-    <div role="group" class="set-row">
-      <label for="secret-{{$r.Name}}">Credential</label>
-      {{if .SecretPinned}}<span id="secret-{{$r.Name}}" class="set-pinned" data-pinned>{{icon "lock"}}set by deployment</span>{{else}}<input id="secret-{{$r.Name}}" name="secret" type="password" class="input" autocomplete="new-password" placeholder="{{if .SecretSet}}set; type to replace{{end}}"{{with .Help}} title="{{.}}"{{end}}>{{end}}
-    </div>
-    {{end}}
-    <footer>
-      {{if and (not .URLPinned) (not .SecretPinned) (or .URL .SecretSet)}}<button type="submit" class="btn text-danger" data-size="sm" data-variant="ghost" formaction="/settings/integrations/{{$r.Name}}/disconnect" formnovalidate data-confirm-submit="Disconnect {{.Label}}? Its {{.Module}} module needs settings again; its data stays.">Disconnect</button>{{end}}
-      <button type="submit" class="btn" data-size="sm" data-variant="outline">{{if and .URLPinned (or .SecretPinned (not .SecretKey))}}Test{{else if and .SecretPinned (not .URLKey)}}Test{{else}}Test and save{{end}}</button>
-    </footer>
-  </form>
-  {{if .Fields}}
-  {{template "settings_fields" (dict "Fields" .Fields "Action" (printf "/settings/integrations/%s/settings" .Name) "CSRF" $csrf "Back" $back)}}
-  {{end}}
-  {{range $v.Sections}}{{if eq .Integration $name}}
-  <div class="flex flex-col border-t" data-section="{{.Name}}">
-    {{template "integration_section" (dict "Section" . "CSRF" $csrf "Failed" $v.Failed "Error" $v.Error "FieldError" $v.FieldError "Back" $back)}}
-  </div>
-  {{end}}{{end}}
-</section>
-{{end}}{{end}}
-
-{{define "settings_connections"}}{{$csrf := .CSRF}}{{$back := .Path}}{{with .Connections}}{{$v := .}}{{range .Records}}{{template "integration_card" (dict "View" $v "Record" . "CSRF" $csrf "Back" $back)}}{{end}}
-{{range .Sections}}{{if not .Integration}}
+{{define "settings_connections"}}{{$csrf := .CSRF}}{{$back := .Path}}{{with .Connections}}{{$v := .}}{{range .Sections}}
 <section class="set-group" data-section="{{.Name}}">
-  {{template "integration_section" (dict "Section" . "CSRF" $csrf "Failed" $v.Failed "Error" $v.Error "FieldError" $v.FieldError "Back" $back "Saved" $v.Saved)}}
+  {{template "integration_section" (dict "Section" . "CSRF" $csrf "Error" $v.Error "FieldError" $v.FieldError "Back" $back "Saved" $v.Saved)}}
 </section>
-{{end}}{{end}}{{end}}{{end}}
+{{end}}{{end}}{{end}}
 
 {{define "integration_section"}}{{$s := .Section}}
-{{if and (eq .Failed $s.Name) .Error (not .FieldError)}}<p class="px-4 py-2 text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.Error}}</p>{{end}}
+{{if and .Error (not .FieldError)}}<p class="px-4 py-2 text-sm text-destructive" role="alert" tabindex="-1" autofocus>{{.Error}}</p>{{end}}
 <h2><span>{{$s.Title}}</span>{{if eq (opt . "Saved" "") $s.Name}}<span class="text-xs font-normal text-ink-3" role="status" data-saved>Saved</span>{{end}}</h2>
-{{if $s.Template}}{{partial $s.Template (dict "Section" $s "Fields" $s.Fields "Action" (printf "/settings/integrations/sections/%s" $s.Name) "CSRF" .CSRF "Error" .Error "FieldError" .FieldError "Back" (opt . "Back" ""))}}
-{{else}}{{template "settings_fields" (dict "Fields" $s.Fields "Action" (printf "/settings/integrations/sections/%s" $s.Name) "CSRF" .CSRF "Back" (opt . "Back" ""))}}{{end}}
+{{if $s.Template}}{{partial $s.Template (dict "Section" $s "Fields" $s.Fields "Action" (printf "/settings/sections/%s" $s.Name) "CSRF" .CSRF "Error" .Error "FieldError" .FieldError "Back" (opt . "Back" ""))}}
+{{else}}{{template "settings_fields" (dict "Fields" $s.Fields "Action" (printf "/settings/sections/%s" $s.Name) "CSRF" .CSRF "Back" (opt . "Back" ""))}}{{end}}
 {{end}}
-
-{{define "module_hold"}}{{if eq .Result "enabled"}}<p class="text-xs text-muted-foreground" role="status" data-module-hold="enabled">{{.Module}} module turned on; restart the atrium units to start it.</p>{{else if eq .Result "pinned"}}<p class="text-xs text-warning" role="status" data-module-hold="pinned">{{.Module}} module stays off: pinned by {{.Detail}}.</p>{{else if eq .Result "needs-settings"}}<p class="text-xs text-warning" role="status" data-module-hold="needs-settings">{{.Module}} module stays off: {{.Detail}}.</p>{{end}}{{end}}

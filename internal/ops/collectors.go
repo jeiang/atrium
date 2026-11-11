@@ -6,9 +6,9 @@ import (
 
 	"github.com/jeiang/atrium/internal/actionlink/counts"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/openloops"
@@ -53,14 +53,14 @@ func init() {
 		}
 		return out, nil
 	}))
-	Register(gauge("atrium_integration_state", "Current health state of each configured integration.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
-		states, err := integrations.HealthStates(ctx, q)
+	Register(gauge("atrium_integration_state", "Current health state of each connection.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
+		states, err := connections.HealthStates(ctx, q)
 		if err != nil {
 			return nil, err
 		}
 		out := make([]Sample, 0, len(states))
 		for _, state := range states {
-			out = append(out, Sample{Labels: [][2]string{{"integration", state.Name}, {"state", state.State}}, Value: 1})
+			out = append(out, Sample{Labels: [][2]string{{"integration", state.ID}, {"state", string(state.State)}}, Value: 1})
 		}
 		return out, nil
 	}))
