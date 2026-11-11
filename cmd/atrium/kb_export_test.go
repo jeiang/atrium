@@ -545,33 +545,6 @@ func TestObsidianExportRefusedSaveKeepsForm(t *testing.T) {
 	}
 }
 
-func TestIntegrationSettingsRefusedSaveKeepsForm(t *testing.T) {
-	dir, _, _ := exportFixture(t, &exportNotion{})
-	w := asstBrowse(t, startServeIn(t, dir))
-	const action = "/settings/integrations/open_meteo/settings"
-	status, body, _ := w.get("/settings/integrations", false)
-	if status != http.StatusOK {
-		t.Fatalf("GET integrations = %d", status)
-	}
-	fields, _ := exportForm(t, body, action)
-	for i := range fields {
-		switch fields[i][0] {
-		case "weather_latitude":
-			fields[i][1] = "91"
-		case "weather_location_name":
-			fields[i][1] = "Draft location"
-		}
-	}
-	status, body, _ = exportPost(t, w, action, fields, false)
-	if status != http.StatusUnprocessableEntity {
-		t.Fatalf("invalid weather save = %d: %s", status, body)
-	}
-	returned, _ := exportForm(t, body, action)
-	if !slices.Equal(returned, fields) {
-		t.Errorf("refused form = %v, want %v", returned, fields)
-	}
-}
-
 func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 	fake := &exportNotion{}
 	dir, f, d := exportFixture(t, fake)

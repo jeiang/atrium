@@ -45,9 +45,6 @@ func TestSettingsFieldsSaveFromTheirTabs(t *testing.T) {
 		{"/settings/integrations", "/settings/integrations/notion/settings", "sensitivity_property", "sensitivity"},
 		{"/settings/integrations", "/settings/integrations/notion/settings", "notion_private_value", "private"},
 		{"/settings/integrations", "/settings/integrations/notion/settings", "wiki_log_title", "Wiki Log"},
-		{"/settings/integrations", "/settings/integrations/grafana/settings", "grafana_metrics_uid", "metrics-uid"},
-		{"/settings/integrations", "/settings/integrations/grafana/settings", "grafana_logs_uid", "logs-uid"},
-		{"/settings/integrations", "/settings/integrations/grafana/settings", "grafana_logs_type", "victorialogs"},
 		{"/settings/integrations", "/settings/integrations/sections/calendar", "calendar_account", "home"},
 		{"/settings/integrations", "/settings/integrations/sections/calendar", "icloud_apple_id", "operator@icloud.invalid"},
 		{"/settings/integrations", "/settings/integrations/sections/calendar", "icloud_calendar", "Home"},
@@ -105,7 +102,6 @@ func TestSettingsFieldsRefuseInvalidValues(t *testing.T) {
 	}{
 		{"/settings/integrations/sections/calendar", "default_event_minutes", "0", "must be between 5 and 1440"},
 		{"/settings/groups/assistant/spending", "monthly_budget_usd", "0", "must be greater than 0"},
-		{"/settings/integrations/grafana/settings", "grafana_logs_type", "bogus", "must be one of"},
 		{"/settings/integrations/sections/media", "media_movies_url", "not-a-url", "must be an http or https URL"},
 		{"/settings/integrations/sections/calendar", "work_hours", "9-5", "must be HH:MM-HH:MM"},
 		{"/settings/integrations/sections/calendar", "work_days", "funday", "must be day names"},

@@ -271,7 +271,7 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 		{module.Calendar, "iCloud CalDAV login or Google Calendar credentials"},
 		{module.Notion, "notion_token is not set"},
 		{module.Media, "media_root is not set"},
-		{module.Assistant, "the Anthropic connection has no API key"},
+		{module.Assistant, "the Anthropic connection is not configured"},
 		{module.Notifications, "webpush_subject is not set"},
 		{module.Contacts, "contacts_dir is not set"},
 		{module.Grafana, "the Grafana connection is not configured"},
@@ -287,6 +287,9 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 	}
 	for name, value := range requirementEnv(filepath.Join(dir, "media")) {
 		setEnv(t, name, value)
+	}
+	if got := runApp(t, "connections", "list"); got.code != cli.ExitOK {
+		t.Fatalf("connections list: exit %d %q", got.code, got.stderr)
 	}
 	for _, name := range []string{module.Mail, module.Notifications} {
 		if got := runSettings(t, "set", module.FlagKey(name), "true"); got.code != cli.ExitOK || got.row(t).Value == nil || *got.row(t).Value != "true" {

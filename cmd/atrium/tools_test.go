@@ -95,8 +95,8 @@ func TestWebSearchAllowedCallers(t *testing.T) {
 		t.Fatalf("%d model requests, want 5", len(requests))
 	}
 	assertServerCallers(t, requests[1], "direct")
-	if got := runSettings(t, "set", "search_web_dynamic_filtering", "true"); got.code != cli.ExitError || !strings.Contains(got.stderr, "compiled constant") {
-		t.Errorf("set search_web_dynamic_filtering: exit %d stderr %q, want a compiled-constant refusal", got.code, got.stderr)
+	if got := runSettings(t, "set", "search_web_dynamic_filtering", "true"); got.code != cli.ExitUsage || !strings.Contains(got.stderr, "unknown key") {
+		t.Errorf("set search_web_dynamic_filtering: exit %d stderr %q, want the key refused as a compiled constant", got.code, got.stderr)
 	}
 }
 

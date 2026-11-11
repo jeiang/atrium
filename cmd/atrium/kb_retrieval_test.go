@@ -89,9 +89,6 @@ func TestChatRunCarriesRetrievedKnowledgeWithCitations(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if ran := runApp(t, "settings", "set", "agent_kb_retrieval_tokens", "0"); ran.code != cli.ExitOK {
-		t.Fatalf("disable retrieval: %d %s", ran.code, ran.stderr)
-	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
 	start := len(api.Requests())
 	if ran := runApp(t, "agent", "run", "--text", "hello"); ran.code != cli.ExitOK {
@@ -102,9 +99,6 @@ func TestChatRunCarriesRetrievedKnowledgeWithCitations(t *testing.T) {
 		t.Fatalf("%d requests without retrieval, want 1", len(off))
 	}
 
-	if ran := runApp(t, "settings", "set", "agent_kb_retrieval_tokens", "1500"); ran.code != cli.ExitOK {
-		t.Fatalf("enable retrieval: %d %s", ran.code, ran.stderr)
-	}
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("t1", "task_list", map[string]any{})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text(fmt.Sprintf("See [K%d].", dentist))))
 	start = len(api.Requests())

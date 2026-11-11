@@ -207,8 +207,8 @@ func TestAsstRunsStopAtTheStepCapAndTheDoomLoopThreshold(t *testing.T) {
 		t.Errorf("repeated call at the compiled threshold: %+v %q", v, v.err())
 	}
 	for _, key := range []string{"max_steps_cron", "max_steps_chat", "doom_loop_threshold"} {
-		if got := runSettings(t, "set", key, "2"); got.code != cli.ExitError || !strings.Contains(got.stderr, "compiled constant") {
-			t.Errorf("set %s: exit %d stderr %q, want a compiled-constant refusal", key, got.code, got.stderr)
+		if got := runSettings(t, "set", key, "2"); got.code != cli.ExitUsage || !strings.Contains(got.stderr, "unknown key") {
+			t.Errorf("set %s: exit %d stderr %q, want the key refused as a compiled constant", key, got.code, got.stderr)
 		}
 	}
 	if n := api.Remaining(); n != 0 {
