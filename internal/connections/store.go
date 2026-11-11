@@ -286,7 +286,7 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 		takeover := currentSource == SourceOperator
 		hostOwns := currentSource == SourceHost || takeover
 		changed := takeover || currentTransport != string(transportJSON) || hostOwns && currentConfig != string(configJSON)
-		if changed {
+		if takeover {
 			if err := s.refuseCredentialMove(ctx, tx, id, currentConfig, string(configJSON), hc.CredentialFiles); err != nil {
 				return err
 			}
