@@ -55,6 +55,7 @@ check-quick:
     echo "$unformatted" >&2
     exit 1
   fi
+  go run ./tools/tableownership
   nix eval --raw ".#checks.$(nix eval --impure --raw --expr builtins.currentSystem).module.drvPath" >/dev/null
 
 # Build one x86_64-linux check on artemis; flake sources are git-tracked files only, so git add new files first

@@ -88,6 +88,10 @@
         go run -tags modernc ./cmd/integrationsdocs
       '';
 
+      ownership = goCheck "ownership" [] ''
+        go run ./tools/tableownership
+      '';
+
       go-test = goCheck "test" [] (testTags "libsqlite3,sqlite_fts5");
 
       go-test-modernc = goCheck "test-modernc" [] (testTags "modernc");
