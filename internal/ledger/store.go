@@ -101,10 +101,10 @@ type Undoer struct {
 type ResolveHook func(context.Context, *sql.Tx, Effect, Resolution) error
 
 type Store struct {
-	DB      *db.DB
-	now     func() float64
-	mu      sync.RWMutex
-	undoers map[string]Undoer
+	DB       *db.DB
+	now      func() float64
+	mu       sync.RWMutex
+	undoers  map[string]Undoer
 	resolves map[string]ResolveHook
 }
 

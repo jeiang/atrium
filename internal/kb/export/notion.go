@@ -281,9 +281,7 @@ func RegisterLedgerResolves(s *ledger.Store, env config.Env) error {
 		if err := savePage(ctx, tx, TargetNotion, recordID, ev.PageID, ev.Hash, s.Now()); err != nil {
 			return err
 		}
-		_, err := tx.ExecContext(ctx, "UPDATE effects SET undo_json = ? WHERE id = ?",
-			string(jsonOf(trashUndo{Op: UndoNotionTrash, PageID: ev.PageID})), e.ID)
-		return err
+		return s.SetUndo(ctx, tx, e.ID, jsonOf(trashUndo{Op: UndoNotionTrash, PageID: ev.PageID}))
 	}); err != nil {
 		return err
 	}
