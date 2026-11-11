@@ -208,7 +208,7 @@ func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err == nil {
-		err = set.SetPriority(ctx, s.effects, set, hash, []int{int(index)}, priority)
+		err = set.SetPriority(ctx, s.effects, set, media.Scope{}, hash, []int{int(index)}, priority)
 	}
 	if err != nil {
 		text, kind := mustClassify(err)

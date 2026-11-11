@@ -55,12 +55,19 @@ type fileUndo struct {
 	Step fileStep `json:"step"`
 }
 
+type Scope struct {
+	ProposalID *int64
+	ThreadID   *int64
+	RunID      *int64
+}
+
 type AddRequest struct {
 	Magnet       string
 	Data         []byte
 	Name         string
 	Tags         string
 	OperationKey string
+	Scope        Scope
 	Done         ledger.Mutation
 }
 
@@ -130,6 +137,7 @@ func (t Tuning) Add(ctx context.Context, store *ledger.Store, set Settings, req 
 	}
 	ticket, err := store.Begin(ctx, ledger.New{
 		Origin: "media", Operation: operation, OperationKey: key, Target: hash,
+		ProposalID: req.Scope.ProposalID, ThreadID: req.Scope.ThreadID, RunID: req.Scope.RunID,
 		Action: jsonOf(action), Undo: jsonOf(torrentUndo{Op: UndoTorrent, Hash: hash}),
 		Resources: []ledger.Resource{{Key: qbitKey(set, hash)}},
 	}, nil)
@@ -153,9 +161,10 @@ func (t Tuning) Add(ctx context.Context, store *ledger.Store, set Settings, req 
 	return hash, nil
 }
 
-func (t Tuning) command(ctx context.Context, store *ledger.Store, set Settings, hash, operation string, action any, run func() error) error {
+func (t Tuning) command(ctx context.Context, store *ledger.Store, set Settings, scope Scope, hash, operation string, action any, run func() error) error {
 	ticket, err := store.Begin(ctx, ledger.New{
 		Origin: "media", Operation: operation, OperationKey: "media:" + operation + ":" + ledger.NewKey(),
+		ProposalID: scope.ProposalID, ThreadID: scope.ThreadID, RunID: scope.RunID,
 		Target: hash, Action: jsonOf(action), Resources: []ledger.Resource{{Key: qbitKey(set, hash)}},
 	}, nil)
 	if err != nil {
@@ -168,17 +177,17 @@ func (t Tuning) command(ctx context.Context, store *ledger.Store, set Settings, 
 	return store.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: ledger.Done, Target: hash, After: jsonOf(action)}, nil)
 }
 
-func (t Tuning) SetPriority(ctx context.Context, store *ledger.Store, set Settings, hash string, ids []int, priority int) error {
+func (t Tuning) SetPriority(ctx context.Context, store *ledger.Store, set Settings, scope Scope, hash string, ids []int, priority int) error {
 	qb, err := set.Qbit()
 	if err != nil {
 		return err
 	}
-	return t.command(ctx, store, set, hash, OpPriority, map[string]any{"hash": hash, "ids": ids, "priority": priority}, func() error {
+	return t.command(ctx, store, set, scope, hash, OpPriority, map[string]any{"hash": hash, "ids": ids, "priority": priority}, func() error {
 		return qb.SetPriority(ctx, hash, ids, priority)
 	})
 }
 
-func (t Tuning) Tag(ctx context.Context, store *ledger.Store, set Settings, hash, tag string, add bool) error {
+func (t Tuning) Tag(ctx context.Context, store *ledger.Store, set Settings, scope Scope, hash, tag string, add bool) error {
 	qb, err := set.Qbit()
 	if err != nil {
 		return err
@@ -188,7 +197,7 @@ func (t Tuning) Tag(ctx context.Context, store *ledger.Store, set Settings, hash
 	if add {
 		operation = OpTagAdd
 	}
-	return t.command(ctx, store, set, hash, operation, action, func() error {
+	return t.command(ctx, store, set, scope, hash, operation, action, func() error {
 		if add {
 			return qb.AddTags(ctx, hash, tag)
 		}
@@ -196,22 +205,22 @@ func (t Tuning) Tag(ctx context.Context, store *ledger.Store, set Settings, hash
 	})
 }
 
-func (t Tuning) Start(ctx context.Context, store *ledger.Store, set Settings, hash string) error {
+func (t Tuning) Start(ctx context.Context, store *ledger.Store, set Settings, scope Scope, hash string) error {
 	qb, err := set.Qbit()
 	if err != nil {
 		return err
 	}
-	return t.command(ctx, store, set, hash, OpStart, map[string]any{"hash": hash}, func() error {
+	return t.command(ctx, store, set, scope, hash, OpStart, map[string]any{"hash": hash}, func() error {
 		return qb.Start(ctx, hash)
 	})
 }
 
-func (t Tuning) Delete(ctx context.Context, store *ledger.Store, set Settings, hash string, files bool) error {
+func (t Tuning) Delete(ctx context.Context, store *ledger.Store, set Settings, scope Scope, hash string, files bool) error {
 	qb, err := set.Qbit()
 	if err != nil {
 		return err
 	}
-	return t.command(ctx, store, set, hash, OpDelete, map[string]any{"hash": hash, "files": files}, func() error {
+	return t.command(ctx, store, set, scope, hash, OpDelete, map[string]any{"hash": hash, "files": files}, func() error {
 		return qb.Delete(ctx, hash, files)
 	})
 }
