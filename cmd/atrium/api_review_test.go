@@ -19,7 +19,7 @@ func reviewSMTP(t *testing.T, dir string) *smtpFake {
 	tokenSrv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(tokenSrv.Close)
 	t.Setenv("ATRIUM_GOOGLE_TOKEN_URL", tokenSrv.URL)
-	googleHostConfig(t, dir)
+	googleHostConfigWith(t, dir, mailConnection("icloud", "icloud", "operator@icloud.invalid", defaultMailPassword, true))
 	ca := smtpCert(t)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

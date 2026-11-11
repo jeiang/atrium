@@ -287,12 +287,15 @@ func (h handlers) add(w http.ResponseWriter, r *http.Request) {
 	if err == nil {
 		_, err = h.store(ctx).TestAndSave(ctx, mailconn.ID(a.Name), candidate(a, password))
 	}
+	if err == nil {
+		err = config.From(ctx).LoadStoredAccounts(ctx, h.d.DB.Read)
+	}
 	if err != nil {
 		if created {
 			h.drop(ctx, a)
+			_ = config.DeleteStoredAccount(ctx, h.d.DB.Write, a.Name)
+			_ = config.From(ctx).LoadStoredAccounts(ctx, h.d.DB.Read)
 		}
-		_ = config.DeleteStoredAccount(ctx, h.d.DB.Write, a.Name)
-		_ = config.From(ctx).LoadStoredAccounts(ctx, h.d.DB.Read)
 		h.fail(w, r, "new", kept, err)
 		return
 	}

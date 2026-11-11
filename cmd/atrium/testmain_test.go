@@ -73,19 +73,28 @@ capabilities = ["delivery"]
 `
 
 func hostConfigBody(webpush string) string {
+	return hostConfigBodyWith(webpush, filepath.Join(testRoot, "host", "anthropic.key"))
+}
+
+func hostConfigBodyWith(webpush, anthropicKey string) string {
 	dir := filepath.Join(testRoot, "host")
-	return fmt.Sprintf(`[connections."service/anthropic"]
+	anthropic := ""
+	if anthropicKey != "" {
+		anthropic = fmt.Sprintf(`[connections."service/anthropic"]
 kind = "service/anthropic"
 label = "Anthropic"
 capabilities = ["models"]
 credential_files = { api_key = %q }
 
-[connections."service/grafana"]
+`, anthropicKey)
+	}
+	return anthropic + fmt.Sprintf(`[connections."service/grafana"]
 kind = "service/grafana"
 label = "Grafana"
+config = { url = "http://grafana.invalid" }
 capabilities = ["viewer"]
 credential_files = { viewer_token = %q }
-%s`, filepath.Join(dir, "anthropic.key"), filepath.Join(dir, "grafana.key"), webpush)
+%s`, filepath.Join(dir, "grafana.key"), webpush)
 }
 
 var defaultHostConfig = func() string {

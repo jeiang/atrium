@@ -62,7 +62,6 @@ func importTestAppHost(t *testing.T, dir string, now float64, host string) *cli.
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_DB_KEY"] = rightKeyHex
 	vars["ATRIUM_HOST_CONFIG"] = host
-	vars["ATRIUM_HOST_CONFIG"] = defaultHostConfig
 	reg := settings.New()
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	return newAppWith(config.Map(vars), reg, config.NewState(reg), nil, nil, func() float64 { return now }, quietLog)
@@ -87,7 +86,7 @@ kind = "service/notion"
 label = "Notion"
 config = { api = %q }
 capabilities = ["api"]
-`, anthropicURL, grafanaURL, notionURL)
+`, anthropicURL, grafanaURL, notionURL) + mailConnection("icloud", "icloud", "operator@icloud.invalid", defaultMailPassword, true)
 	path := filepath.Join(dir, "host.toml")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)

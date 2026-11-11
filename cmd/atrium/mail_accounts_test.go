@@ -26,8 +26,13 @@ type mailAccount struct {
 
 func accountsFile(t *testing.T, dir string, accounts ...mailAccount) string {
 	t.Helper()
+	return accountsFileWith(t, dir, filepath.Join(testRoot, "host", "anthropic.key"), accounts...)
+}
+
+func accountsFileWith(t *testing.T, dir, anthropicKey string, accounts ...mailAccount) string {
+	t.Helper()
 	var b strings.Builder
-	b.WriteString(hostConfigBody(defaultWebPushConnection))
+	b.WriteString(hostConfigBodyWith(defaultWebPushConnection, anthropicKey))
 	for _, a := range accounts {
 		secret := filepath.Join(dir, a.id+".password")
 		if err := os.WriteFile(secret, []byte(a.password+"\n"), 0o600); err != nil {

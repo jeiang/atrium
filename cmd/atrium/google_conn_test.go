@@ -12,6 +12,11 @@ import (
 // encrypted database.
 func googleHostConfig(t *testing.T, dir string) {
 	t.Helper()
+	googleHostConfigWith(t, dir, "")
+}
+
+func googleHostConfigWith(t *testing.T, dir, extra string) {
+	t.Helper()
 	files := filepath.Join(dir, "google")
 	if err := os.MkdirAll(files, 0o700); err != nil {
 		t.Fatal(err)
@@ -31,7 +36,7 @@ label = "Google"
 config = { client_id = "client-id" }
 capabilities = ["gmail"]
 credential_files = { "oauth/client_secret" = %q, "oauth/gmail/refresh" = %q }
-`, secret, refresh)
+%s`, secret, refresh, extra)
 	path := filepath.Join(dir, "host.toml")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
