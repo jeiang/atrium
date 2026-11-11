@@ -22,7 +22,7 @@ const (
 	UndoTorrent        = "media_torrent_delete"
 	UndoChannelDelete  = "media_channel_delete"
 	UndoChannelRestore = "media_channel_restore"
-	searchLimitCeiling = 500
+	searchLimitCeiling = media.TuningMediaSearchLimit
 )
 
 var (
@@ -44,7 +44,7 @@ func Tools() []tool.Tool {
 		},
 		{
 			Name:        "media_library_search",
-			Description: "Search the media library (movies and TV episodes) by words in the title or file name; returns paths and VPN URLs. The limit is capped by media_search_limit.",
+			Description: "Search the media library (movies and TV episodes) by words in the title or file name; returns paths and VPN URLs. The limit is capped at 50.",
 			InputSchema: json.RawMessage(fmt.Sprintf(`{"type": "object", "properties": {"query": {"type": "string"}, "limit": %s}, "required": ["query"], "additionalProperties": false}`, searchBound.Schema())),
 			Handler:     mediaLibrarySearch,
 			Effect:      tool.Read,
@@ -219,7 +219,7 @@ func mediaLibrarySearch(ctx context.Context, tc *tool.Context, args tool.Args) (
 	if err != nil {
 		return nil, err
 	}
-	limit, err := tool.BoundedInt(args, "limit", searchBound.Default, min(int64(settings.SearchLimit), searchBound.Max), searchBound.Min)
+	limit, err := tool.BoundedInt(args, "limit", searchBound.Default, searchBound.Max, searchBound.Min)
 	if err != nil {
 		return nil, err
 	}

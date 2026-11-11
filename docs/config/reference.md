@@ -75,14 +75,9 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 
 | Key | Type | Default | Environment variable |
 | --- | --- | --- | --- |
-| `media_eztv_url` | string | `https://eztvx.to/api/get-torrents` | `ATRIUM_MEDIA_MEDIA_EZTV_URL` |
 | `media_movies_url` | string | none | `ATRIUM_MEDIA_MEDIA_MOVIES_URL` |
 | `media_root` | string | none | `ATRIUM_MEDIA_MEDIA_ROOT` |
-| `media_tmdb_images_url` | string | `https://image.tmdb.org/t/p/w342` | `ATRIUM_MEDIA_MEDIA_TMDB_IMAGES_URL` |
-| `media_tmdb_url` | string | `https://api.themoviedb.org/3` | `ATRIUM_MEDIA_MEDIA_TMDB_URL` |
 | `media_tv_url` | string | none | `ATRIUM_MEDIA_MEDIA_TV_URL` |
-| `tmdb_ca_file` | string | none | `ATRIUM_MEDIA_TMDB_CA_FILE` |
-| `tmdb_proxy` | string | none | `ATRIUM_MEDIA_TMDB_PROXY` |
 
 ### notify
 
@@ -214,8 +209,7 @@ Operator settings are stored in the database and edited in the application. They
 
 | Key | Type | Default | Class |
 | --- | --- | --- | --- |
-| `media_link_ttl_seconds` | int | `43200` | advanced |
-| `media_tmdb_token` | string | none | secret |
+| `media_link_ttl_seconds` | int | `43200` | ui |
 
 ### memory
 

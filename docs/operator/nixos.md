@@ -20,7 +20,7 @@ The module has a small set of typed deployment options. Host configuration goes 
 | `secretFiles` | attribute set of string | `{}` | Secret settings as `"<module>.<key>" = "<host file>"`, delivered through systemd `LoadCredential` and pinned as `<key>_file`. Connection credentials belong in `connections.<id>.credentialFiles`; host secret inputs belong in `host.<module>.<key>_file`; the database key belongs in `database.keyFile`. |
 | `database.keyFile` | null or string | `null` | Host file holding the database key, delivered as the `db-key` credential and `ATRIUM_DB_KEY_FILE`. |
 | `initialTimezone` | null or string | `time.timeZone` | Time zone stored as the operator `tz` value when a fresh database has none. A stored or imported value wins, and the operator can change it afterwards. |
-| `environmentFiles` | list of string | `[]` | `EnvironmentFile=` paths read by every unit and by `atrium-run`; no application credential needs one. The TMDB read token and the Grafana token are connection credentials until their owners are cut over; the Notion token is already a connection credential in `connections."service/notion".credentialFiles.token`. Calendar and contacts sign in with an iCloud entry of `connections`. |
+| `environmentFiles` | list of string | `[]` | `EnvironmentFile=` paths read by every unit and by `atrium-run`; no application credential needs one. The TMDB read token is a connection credential in `connections."service/tmdb".credentialFiles.read_token`; the Grafana token is a connection credential until its owner is cut over; the Notion token is a connection credential in `connections."service/notion".credentialFiles.token`. Calendar and contacts sign in with an iCloud entry of `connections`. |
 | `modelServerUnits` | list of string | `[]` | Units serving the mail chat and embed endpoints. The application units start after them and want them. |
 
 The module writes `calendar.calendar_dir` and `contacts.contacts_dir` as the mirror directories under `stateDir`, `core.otel_traces_endpoint` from `observability.tracesEndpoint`, `export.export_obsidian_dir` from `knowledgeExport.obsidianDirectory`, and `mail.mail_accounts_file` from the `mail/<id>` connections. It does not pin an operator setting.
@@ -64,7 +64,7 @@ These options are removed; setting one now fails evaluation as an unknown option
 - `extraEnvironment` → `host` and `secretFiles`
 - `web.port` → `port`
 - `web.oidc.enable` → `web.auth = "proxy+oidc"` (or `"oidc"` for OIDC only)
-- `media.root`, `media.qbittorrentUrl`, `media.moviesUrl`, `media.tvUrl` → `host.media.*`; qBittorrent is `connections."service/qbittorrent"`
+- `media.root`, `media.moviesUrl`, `media.tvUrl` → `host.media.*`; qBittorrent, TMDB and EZTV are `connections."service/{qbittorrent,tmdb,eztv}"`
 - `grafanaUrl` → `host.grafana.grafana_url`
 - `mailAccounts` → `connections."mail/<id>".account`
 - `secretFiles."db.key"` → `database.keyFile`

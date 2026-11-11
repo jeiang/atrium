@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"regexp"
+
+	"github.com/jeiang/atrium/internal/config"
 )
 
 var (
@@ -111,12 +113,23 @@ func orEmpty(v any) string {
 }
 
 func (s Settings) FetchReleases(ctx context.Context, imdb string) ([]Release, error) {
-	target := s.EZTVURL + "?" + encodeParams([]param{{"imdb_id", imdb}, {"limit", strconv.Itoa(s.EZTVLimit)}})
+	if s.EZTVLease == nil {
+		return nil, config.NotConfigured("the EZTV connection is not configured")
+	}
+	base, err := s.EZTVLease.Endpoint("url")
+	if err != nil {
+		return nil, config.NotConfigured("the EZTV connection has no URL")
+	}
+	client, err := s.EZTVLease.HTTP("url")
+	if err != nil {
+		return nil, err
+	}
+	target := base + "?" + encodeParams([]param{{"imdb_id", imdb}, {"limit", strconv.Itoa(s.EZTVLimit)}})
 	req, err := http.NewRequest(http.MethodGet, target, nil)
 	if err != nil {
 		return nil, EztvError("EZTV unreachable: invalid URL")
 	}
-	res, err := send(ctx, s.EZTVHTTP, req)
+	res, err := send(ctx, client, req)
 	if err != nil {
 		var failure *httpFailure
 		if errors.As(err, &failure) {

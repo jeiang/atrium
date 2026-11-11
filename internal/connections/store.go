@@ -83,6 +83,10 @@ func OpenRead(ctx context.Context, q db.Querier, host config.Host, id ID) (*Leas
 	return s.open(ctx, q, id)
 }
 
+func (s *Store) Open(ctx context.Context, id ID) (*Lease, error) {
+	return s.open(ctx, s.q, id)
+}
+
 func (s *Store) ReconcileHost(ctx context.Context) error {
 	if s.d == nil {
 		return errors.New("connections: host reconciliation needs a writable database")

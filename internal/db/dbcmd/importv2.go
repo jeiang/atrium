@@ -22,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/weather"
@@ -427,6 +428,7 @@ func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData,
 		"grafana_url", "grafana_metrics_uid", "grafana_logs_uid", "grafana_logs_type", "grafana_logs_query", "grafana_ca_file", "grafana_proxy",
 		"notion_ca_file", "notion_proxy",
 		"weather_open_meteo_url", "weather_geocoding_url", "open_meteo_ca_file", "open_meteo_proxy",
+		"media_tmdb_url", "media_tmdb_images_url", "media_eztv_url", "tmdb_ca_file", "tmdb_proxy",
 	})
 	if err != nil {
 		return out, err
@@ -450,6 +452,14 @@ func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData,
 		}
 	}
 	out.Services = append(out.Services, weather.ImportV2(values), webfetch.ImportV2())
+	tmdbToken, err := sourceSecret(ctx, src, "media_tmdb_token", "read_token")
+	if err != nil {
+		return out, err
+	}
+	out.Services = append(out.Services, media.ImportV2(values, tmdbToken)...)
+	if tmdbToken.Value != "" {
+		out.Secrets = append(out.Secrets, "media_tmdb_token")
+	}
 	token, err := sourceSecret(ctx, src, "notion_token", "token")
 	if err != nil {
 		return out, err

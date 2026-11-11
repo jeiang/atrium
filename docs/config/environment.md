@@ -50,14 +50,9 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `ATRIUM_MAIL_MAIL_SHIP24_URL` | `mail.mail_ship24_url` |
 | `ATRIUM_MAIL_SHIP24_CA_FILE` | `mail.ship24_ca_file` |
 | `ATRIUM_MAIL_SHIP24_PROXY` | `mail.ship24_proxy` |
-| `ATRIUM_MEDIA_MEDIA_EZTV_URL` | `media.media_eztv_url` |
 | `ATRIUM_MEDIA_MEDIA_MOVIES_URL` | `media.media_movies_url` |
 | `ATRIUM_MEDIA_MEDIA_ROOT` | `media.media_root` |
-| `ATRIUM_MEDIA_MEDIA_TMDB_IMAGES_URL` | `media.media_tmdb_images_url` |
-| `ATRIUM_MEDIA_MEDIA_TMDB_URL` | `media.media_tmdb_url` |
 | `ATRIUM_MEDIA_MEDIA_TV_URL` | `media.media_tv_url` |
-| `ATRIUM_MEDIA_TMDB_CA_FILE` | `media.tmdb_ca_file` |
-| `ATRIUM_MEDIA_TMDB_PROXY` | `media.tmdb_proxy` |
 | `ATRIUM_NOTIFY_WEBPUSH_CA_FILE` | `notify.webpush_ca_file` |
 
 ## Bootstrap

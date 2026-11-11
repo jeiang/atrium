@@ -51,8 +51,6 @@ func TestSettingsFieldsSaveFromTheirTabs(t *testing.T) {
 		{"/settings/integrations", "/settings/integrations/sections/calendar", "default_event_minutes", "30"},
 		{"/settings/integrations", "/settings/integrations/sections/calendar", "work_hours", "08:00-18:00"},
 		{"/settings/integrations", "/settings/integrations/sections/calendar", "work_days", "mon,tue,wed,thu,fri"},
-		{"/settings/integrations", "/settings/integrations/sections/media", "media_movies_url", "https://media.invalid/movies"},
-		{"/settings/integrations", "/settings/integrations/sections/media", "media_tv_url", "https://media.invalid/tv"},
 		{"/settings/mail", "/settings/mail/settings", "uncertain_dest", "Later"},
 		{"/settings/mail", "/settings/mail/settings", "openloops_remind_hour", "8"},
 		{"/settings/notifications", "/settings/notifications/push/subject", "webpush_subject", "mailto:ops@example.invalid"},
@@ -102,7 +100,6 @@ func TestSettingsFieldsRefuseInvalidValues(t *testing.T) {
 	}{
 		{"/settings/integrations/sections/calendar", "default_event_minutes", "0", "must be between 5 and 1440"},
 		{"/settings/groups/assistant/spending", "monthly_budget_usd", "0", "must be greater than 0"},
-		{"/settings/integrations/sections/media", "media_movies_url", "not-a-url", "must be an http or https URL"},
 		{"/settings/integrations/sections/calendar", "work_hours", "9-5", "must be HH:MM-HH:MM"},
 		{"/settings/integrations/sections/calendar", "work_days", "funday", "must be day names"},
 		{"/settings/groups/notion/wiki", "wiki_root", "nope", "must be a Notion page id"},

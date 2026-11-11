@@ -161,6 +161,8 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		"connection service/anthropic: credential api_key carried",
 		"connection service/weather: created from host settings",
 		"connection service/webfetch: created from host settings",
+		"connection service/tmdb: created from host settings",
+		"connection service/eztv: created from host settings",
 	} {
 		if !strings.Contains(got.stdout, want) {
 			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
@@ -470,6 +472,35 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 	}))
 	t.Cleanup(notionFake.Close)
 
+	var tmdbMu sync.Mutex
+	var tmdbTokens []string
+	tmdbFake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tmdbMu.Lock()
+		tmdbTokens = append(tmdbTokens, r.Header.Get("Authorization"))
+		tmdbMu.Unlock()
+		if r.Header.Get("Authorization") != "Bearer tmdb-imported-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/3/configuration":
+			_, _ = w.Write([]byte(`{}`))
+		case "/3/search/tv":
+			_, _ = w.Write([]byte(`{"results":[{"id":42,"name":"Lanterns","first_air_date":"2026-01-01","poster_path":"/lanterns.jpg"}]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(tmdbFake.Close)
+	tmdbImages := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("image"))
+	}))
+	t.Cleanup(tmdbImages.Close)
+	eztvFake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"torrents":[]}`))
+	}))
+	t.Cleanup(eztvFake.Close)
+
 	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
 		('grafana_url', %[1]q),
 		('grafana_metrics_uid', 'prom'),
@@ -477,6 +508,11 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 		('weather_geocoding_url', 'http://weather.invalid/search')`, grafana.URL))
 	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('grafana_viewer_token', 'glsa-imported-token', 1762000800, 'fixture')")
 	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('notion_token', 'ntn-imported-token', 1762000800, 'fixture')")
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
+		('media_tmdb_url', %[1]q),
+		('media_tmdb_images_url', %[2]q),
+		('media_eztv_url', %[3]q)`, tmdbFake.URL+"/3", tmdbImages.URL, eztvFake.URL))
+	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('media_tmdb_token', 'tmdb-imported-token', 1762000800, 'fixture')")
 
 	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
 	if got.code != cli.ExitOK {
@@ -488,6 +524,9 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 		"connection service/grafana: credential viewer_token carried",
 		"connection service/notion: created from host settings",
 		"connection service/notion: credential token carried",
+		"connection service/tmdb: created from host settings",
+		"connection service/tmdb: credential read_token carried",
+		"connection service/eztv: created from host settings",
 		"connection service/weather: created from host settings",
 		"connection service/webfetch: created from host settings",
 	} {
@@ -495,7 +534,7 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
 		}
 	}
-	if strings.Contains(got.stdout+got.stderr, "sk-ant-fixture") || strings.Contains(got.stdout+got.stderr, "glsa-imported-token") || strings.Contains(got.stdout+got.stderr, "ntn-imported-token") {
+	if strings.Contains(got.stdout+got.stderr, "sk-ant-fixture") || strings.Contains(got.stdout+got.stderr, "glsa-imported-token") || strings.Contains(got.stdout+got.stderr, "ntn-imported-token") || strings.Contains(got.stdout+got.stderr, "tmdb-imported-token") {
 		t.Error("the import printed a credential")
 	}
 
@@ -505,13 +544,14 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = q.Close() }()
-	if n := importCount(t, q, "SELECT COUNT(*) FROM secrets WHERE name IN ('anthropic_api_key', 'grafana_viewer_token', 'notion_token')"); n != 0 {
+	if n := importCount(t, q, "SELECT COUNT(*) FROM secrets WHERE name IN ('anthropic_api_key', 'grafana_viewer_token', 'notion_token', 'media_tmdb_token')"); n != 0 {
 		t.Errorf("%d migrated credentials stayed in the secrets table", n)
 	}
 	for _, tc := range []struct{ id, slot, want string }{
 		{"service/anthropic", "api_key", "sk-ant-fixture"},
 		{"service/grafana", "viewer_token", "glsa-imported-token"},
 		{"service/notion", "token", "ntn-imported-token"},
+		{"service/tmdb", "read_token", "tmdb-imported-token"},
 	} {
 		if got := importValue(t, q, "SELECT value FROM connection_credentials WHERE connection_id = ? AND slot = ?", tc.id, tc.slot); got != tc.want {
 			t.Errorf("%s credential %s = %q", tc.id, tc.slot, got)
@@ -531,6 +571,12 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 	}
 	if got := importValue(t, q, "SELECT config_json FROM connections WHERE id = 'service/webfetch'"); !strings.Contains(got, "https://example.com/") {
 		t.Errorf("the web fetch probe was not carried: %s", got)
+	}
+	if got := importValue(t, q, "SELECT config_json FROM connections WHERE id = 'service/tmdb'"); !strings.Contains(got, tmdbFake.URL+"/3") || !strings.Contains(got, tmdbImages.URL) {
+		t.Errorf("the TMDB config was not carried: %s", got)
+	}
+	if got := importValue(t, q, "SELECT config_json FROM connections WHERE id = 'service/eztv'"); !strings.Contains(got, eztvFake.URL) {
+		t.Errorf("the EZTV config was not carried: %s", got)
 	}
 
 	setEnv(t, anthropic.BaseURLEnv, api.URL)
@@ -580,6 +626,42 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 	}
 	if n := importCount(t, q, "SELECT COUNT(*) FROM notion_pages WHERE id = ? AND in_trash = 0", notionPage); n != 1 {
 		t.Errorf("notion sync stored %d pages for the imported connection", n)
+	}
+
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	host := fmt.Sprintf(`[connections."service/tmdb"]
+kind = "service/tmdb"
+label = "TMDB"
+config = { url = %q, images_url = %q }
+capabilities = ["api", "images"]
+
+[connections."service/eztv"]
+kind = "service/eztv"
+label = "EZTV"
+config = { url = %q }
+capabilities = ["indexer"]
+`, tmdbFake.URL+"/3", tmdbImages.URL, eztvFake.URL)
+	hostPath := filepath.Join(dir, "media-host.toml")
+	if err := os.WriteFile(hostPath, []byte(host), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", hostPath)
+	base := startServeIn(t, dir)
+	code, body, _ := fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns", nil)
+	if code != http.StatusOK || !strings.Contains(body, "Lanterns") {
+		t.Fatalf("channels search after import: %d %.300s", code, body)
+	}
+	tmdbMu.Lock()
+	imported := append([]string(nil), tmdbTokens...)
+	tmdbMu.Unlock()
+	if len(imported) == 0 {
+		t.Fatal("the channels page never reached the TMDB fake")
+	}
+	for _, token := range imported {
+		if token != "Bearer tmdb-imported-token" {
+			t.Errorf("TMDB request used %q", token)
+		}
 	}
 }
 

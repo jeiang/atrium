@@ -15,12 +15,12 @@ sections below cover the console work atrium cannot do for you.
 | Mail embed endpoint | `mail_embed` | Optional Bearer key | Embeddings for mail search and routing | Same as the chat endpoint |
 | Notion | `service/notion` | Internal integration token or personal access token | Wiki read, update and insert; knowledge export | A connection on `/settings/connections`; share the pages with the integration; a personal token acts as the user and lasts at most a year |
 | qBittorrent | `service/qbittorrent` | API key | Media torrent and library operations | A connection on `/settings/connections`; API keys need qBittorrent 5.2 or newer |
-| TMDB | `tmdb` | API read access token | Media metadata | Read-only; media pages show the attribution |
+| TMDB | `service/tmdb` | API read access token | Media metadata | A connection on `/settings/connections`; read-only; media pages show the attribution |
 | Open-Meteo | `open_meteo` | None | Weather forecasts and place lookup | Public API; no key. The configured coordinates are sent to Open-Meteo |
 | Ship24 | `ship24` | Bearer API key | Live package tracking | Free plan registers 10 shipments a month; polling, no webhooks |
 | Google Calendar and Gmail | — | OAuth web client | Calendar events and Gmail over IMAP and SMTP | See [Google](#google) |
 | iCloud | — | App-specific password | IMAP, SMTP, CalDAV and CardDAV | See [iCloud](#icloud) |
-| EZTV | — | None | Media channel episode lists | Public API; only torrents tagged media are written |
+| EZTV | `service/eztv` | None | Media channel episode lists | A connection on `/settings/connections`; public API; only torrents tagged media are written |
 
 ## Google
 
@@ -160,10 +160,14 @@ no API keys.
 
 ## TMDB
 
-Create an API read access token in your TMDB account settings and paste it.
-Every request carries it as a Bearer token, never as a query parameter.
-Media pages that show TMDB data carry the attribution. The Media libraries
-section on the Integrations page edits `media_movies_url` and `media_tv_url`.
+Create an API read access token in your TMDB account settings and save it on
+the `/settings/connections` TMDB record. Every request carries it as a Bearer
+token, never as a query parameter, and it is never sent to the image host.
+Test reads `/configuration` and then checks the image host without the token.
+The API and image URLs come from `connections."service/tmdb".config` in the
+host configuration. Media pages that show TMDB data carry the attribution.
+`media_movies_url` and `media_tv_url` remain host settings until the media
+file servers are retired.
 
 ## Open-Meteo
 
@@ -190,7 +194,9 @@ route.
 ## EZTV
 
 EZTV's public API supplies the media channel episode lists. It needs no
-credential. Media writes touch only torrents tagged media.
+credential. Test fetches one bounded indexer response (`limit=1`) and checks
+its shape without adding a torrent. Media writes touch only torrents tagged
+media.
 
 ## OIDC presets
 

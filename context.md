@@ -239,7 +239,7 @@ behavior-parity target.
   hash of the text that was sent, so an edit re-queues it, a write-back whose
   row changed, was retracted or was deleted in flight is discarded, and a
   retraction or deletion removes the vector in the same transaction.
-- TMDB (read token) and Ship24 (API key) are connection records on the Integrations settings; qBittorrent (API key) and Notion (token) are connection records on the `/settings/connections`
+- Ship24 (API key) is a connection record on the Integrations settings; qBittorrent (API key), TMDB (read token), EZTV (no credential) and Notion (token) are connection records on the `/settings/connections`
   page, with Test before save, recorded health, a daily check, disconnect,
   and a per-connection CA bundle and proxy. Certificate verification
   cannot be turned off. Open-Meteo is a keyless connection record for the
@@ -320,7 +320,7 @@ behavior-parity target.
   subagents, jobs, agent events, tasks, proposals and their actions, agent
   writes, media channels, the seen list and media state, and the current
   calendar month's usage rows. A service credential whose owner has a
-  connection record (qBittorrent, Anthropic, Grafana, Notion) is written to
+  connection record (qBittorrent, TMDB, EZTV, Anthropic, Grafana, Notion) is written to
   that connection's credential store and its source `secrets` row is
   dropped; the connection keeps the source `set_at`/`set_by`. Rebuilt:
   `message_fts`, `thread_fts` and `kb_fts`. Not carried: run history

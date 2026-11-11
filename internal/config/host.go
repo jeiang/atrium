@@ -352,6 +352,20 @@ func (h *Host) deriveHostConnections() {
 	h.deriveService("service/webfetch", "Web fetch", map[string]string{
 		"url": "https://example.com/",
 	}, nil, []string{"egress"}, false)
+	if _, ok := h.Connections["service/tmdb"]; !ok {
+		h.deriveService("service/tmdb", "TMDB", map[string]string{
+			"url":        h.Values["media_tmdb_url"],
+			"images_url": h.Values["media_tmdb_images_url"],
+		}, map[string]string{
+			"ca_file": h.Values["tmdb_ca_file"],
+			"proxy":   h.Values["tmdb_proxy"],
+		}, []string{"api", "images"}, false)
+	}
+	if _, ok := h.Connections["service/eztv"]; !ok {
+		h.deriveService("service/eztv", "EZTV", map[string]string{
+			"url": h.Values["media_eztv_url"],
+		}, nil, []string{"indexer"}, false)
+	}
 }
 
 func (h *Host) deriveService(id, label string, config, transport map[string]string, capabilities []string, override bool) {
