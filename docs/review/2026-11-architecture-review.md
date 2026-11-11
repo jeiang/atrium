@@ -424,7 +424,7 @@ Kept, because the system still needs them:
 - Doom-loop and step caps, and per-model cost caps.
 - One-use, expiring, HMAC-signed phone links, and the exclusion of permission requests from them.
 - A loopback emergency path.
-- Additive migrations for mail data. Whether v3 starts from a new baseline with an import, as v2 did from v1, is for the breakdown session; the v2 baseline stays frozen while v2 is deployed.
+- The v2 baseline, frozen while v2 is deployed. v3 starts from a new baseline with an importer (decision 21).
 
 ## Target shape
 
@@ -475,6 +475,8 @@ flowchart TB
   domain --> runtime
   domain --> store
   domain --> inbox
+  agentm["Media agent<br/>second command, library files"]
+  conns --> agentm
 ```
 
 ## Mobile app readiness
@@ -653,17 +655,29 @@ Embedding measurements, 2026-11-11, with atrium's own prefixes: a chat query of 
 
 If the move is taken up again: zantark resized to 4 GB is the fit. It shares the private network with the Caddy edge on alda, so no mesh hop remains, and the stored vectors stay valid. ricklent has one core that every embedding blocks.
 
-Research on alternatives to embeddings (sources in the session report, not re-verified here): lexical match carries entity-heavy queries, and hybrids beat either side alone. Graph memory systems show no gain over a plain hybrid for factual recall. Putting the whole knowledge base in the prompt costs more than the budget. Two cheap gains remain open: truncate vectors to 512 dimensions (68.41 against 68.46 on English MTEB), and let chat retrieval answer from the lexical side when the embedding call misses a deadline.
+Research on alternatives to embeddings (sources in the session report, not re-verified here): lexical match carries entity-heavy queries, and hybrids beat either side alone. Graph memory systems show no gain over a plain hybrid for factual recall. Putting the whole knowledge base in the prompt costs more than the budget. Truncating vectors to 512 dimensions costs little on English MTEB (68.41 against 68.46).
+
+Delivery, settled on 2026-11-11:
+
+20. **Branch and cutover.** v3 is built on a long-lived branch and replaces v2 in one cutover. v2 stays live and frozen for the whole build, with no exception for live defects.
+21. **Database.** v3 has a new baseline schema and an importer from v2, as v2 had from v1. The importer carries: the mail learned data (rules, corrections, routing decisions, the action ledger with its undo state, write resolutions), settings and stored credentials, knowledge records, chat threads with projects and messages, media channels and the seen list, tasks, review items, mail drafts, calendar events the assistant made, and the current month's spend. Rebuilt: the mail message cache, the Notion copy, embeddings, search indexes, sessions, run internals and memory summaries. Not carried: audit history, notifications, old run and tool-call records; they remain in the v2 backup.
+22. **Code.** The existing code is reshaped on the branch, package by package. Working behavior is moved, not rewritten.
+23. **Scope.** The plan ends when the server is ready for an app: the API reaches all 22 areas, the stream contract, the rate limiter and token revocation exist, and the Swift client generates. The iOS app is a separate plan.
+24. **Mail safety net.** Before any mail code moves: end-to-end tests for routing, gate refusals, unknown outcomes and undo, and a replay of the learned rules on a database copy.
+25. **Rehearsal.** A trial import on a copy of the live database plus the test suite. No side-by-side run.
+26. **Cutover.** The build is unattended. The cutover deploy waits for the operator. v3 starts mail in shadow mode until the operator turns it live. Rollback after cutover restores the v2 database and loses later writes.
+27. **Embedding fallback.** Chat retrieval answers from full-text search when the embedding call is slow or down. Vectors are not truncated.
+28. **Plan artifact.** One plan document beside this review, then one GitHub issue per phase after the operator approves it.
 
 ## Not checked
 
 - No test, build or browser run. Design-system findings come from templates and CSS, not rendered pages.
 - Authenticated timings through the public path, and the stream through Caddy and Cloudflare.
-- How much of the 205 to 355 ms public round trip is the NetBird hop from the edge host to artemis. The move removes only that part; measure it before the move is planned around latency.
+- How much of the 205 to 355 ms public round trip is the NetBird hop from the edge host to artemis.
 - The contents of the host environment file, the firewall on artemis, the OIDC provider's client configuration.
 - The cause of two `FOREIGN KEY constraint failed` errors on `POST /chat/{id}/messages` and of the failed `weekly-review` job seen in the last 24 hours.
 - Whether any tool is unused in practice; there was no usage data.
 - Whether chat retrieval degrades cleanly when the embedding endpoint is down.
-- Embedding speed on any server other than ricklent, the latency of any hosted embedding API, and recall after truncating or quantizing EmbeddingGemma vectors.
+- Embedding speed on artemis, the latency of any hosted embedding API, and recall after truncating or quantizing EmbeddingGemma vectors.
 - The cost of moving the local chat model's work to Haiku. The volume is low (139 s of GPU work in 61 hours); no estimate was made.
 - The reach-gauge figure was checked in a browser in both themes and both states. The anatomy skill's line-end check and 4x close-ups did not run, because they need a local Chrome.
