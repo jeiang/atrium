@@ -48,7 +48,7 @@ func PauseModule(r chi.Router, d *web.Deps) {
 		return nil
 	})
 	r.Post("/live/pause", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, true) })
-	d.Admin(http.MethodPost, "/live/resume", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, false) })
+	d.Authenticated(http.MethodPost, "/live/resume", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, false) })
 }
 
 func Globals() map[string]any {

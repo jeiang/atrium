@@ -242,8 +242,8 @@ func TestWimOIDCSignInGrantsByGroupAndIgnoresForgedProxyHeaders(t *testing.T) {
 
 	member := s.browser()
 	member.mustSignIn("member")
-	wimExpect(t, member.get("/settings/auth"), http.StatusForbidden, "Admins only", `action="/logout"`)
-	wimExpect(t, member.get("/settings/auth", forged...), http.StatusForbidden)
+	wimExpect(t, member.get("/settings/auth"), http.StatusOK, "Sign-in", `action="/logout"`)
+	wimExpect(t, member.get("/settings/auth", forged...), http.StatusOK, "Sign-in")
 
 	outsider := s.browser()
 	wimExpect(t, outsider.signIn("outsider"), http.StatusForbidden, "This account does not have access.")
@@ -409,7 +409,7 @@ func TestWimOIDCSessionsEndOnRevocationExpiryAndSignOut(t *testing.T) {
 	}
 	s.idp.SetGroups("admin", "atrium_access")
 	s.exec(stale, "sub-admin")
-	wimExpect(t, b.get("/settings/auth"), http.StatusForbidden)
+	wimExpect(t, b.get("/settings/auth"), http.StatusOK)
 	s.idp.SetGroups("admin", "other")
 	s.exec(stale, "sub-admin")
 	gone := b.get("/settings/auth")

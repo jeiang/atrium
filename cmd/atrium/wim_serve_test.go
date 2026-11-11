@@ -112,7 +112,7 @@ func TestWimProxyAuthGatesPagesByForwardedGroups(t *testing.T) {
 		{"", http.StatusForbidden, ""},
 		{"other", http.StatusForbidden, ""},
 		{"atrium_admin", http.StatusForbidden, ""},
-		{access, http.StatusForbidden, "Admins only"},
+		{access, http.StatusOK, "Mail"},
 		{admin, http.StatusOK, "Mail"},
 	} {
 		status, body, _ := wimGet(t, base+"/settings/mail", "Remote-Groups", c.groups)
@@ -159,8 +159,8 @@ func TestWimProxyAuthGatesPagesByForwardedGroups(t *testing.T) {
 	} else {
 		_ = resp.Body.Close()
 	}
-	if code := post(access, base); code != http.StatusForbidden {
-		t.Errorf("member POST to an admin route: %d", code)
+	if code := post(access, base); code != http.StatusNotFound {
+		t.Errorf("member POST for an unknown account: %d", code)
 	}
 	if code := post(admin, "https://evil.example"); code != http.StatusForbidden {
 		t.Errorf("cross-origin admin POST: %d", code)

@@ -33,7 +33,6 @@ type Preset struct {
 const (
 	StepRedirect = "{redirect}"
 	StepAccess   = "{access}"
-	StepAdmin    = "{admin}"
 )
 
 const copyCredentials = "Copy the client ID and secret into the form below."
@@ -46,7 +45,7 @@ var presets = []Preset{
 			"Register a confidential client with your provider.",
 			"Set the redirect URI to " + StepRedirect + ".",
 			"Require PKCE with S256.",
-			"Emit the groups " + StepAccess + " and " + StepAdmin + " in the groups claim.",
+			"Emit the group " + StepAccess + " in the groups claim.",
 			copyCredentials,
 		},
 	},
@@ -57,7 +56,7 @@ var presets = []Preset{
 			"Open OIDC Clients and choose Add client.",
 			"Set the callback URL to " + StepRedirect + ".",
 			"Enable PKCE.",
-			"Allow the groups " + StepAccess + " and " + StepAdmin + ".",
+			"Allow the group " + StepAccess + ".",
 			copyCredentials,
 		},
 	},
@@ -69,7 +68,7 @@ var presets = []Preset{
 			"Set redirect_uris to " + StepRedirect + ".",
 			"Set pkce_challenge_method to S256.",
 			"Grant the scopes openid, profile, email and groups.",
-			"Put your users in the groups " + StepAccess + " and " + StepAdmin + ".",
+			"Put your users in the group " + StepAccess + ".",
 			copyCredentials,
 		},
 	},
@@ -80,7 +79,7 @@ var presets = []Preset{
 			"Create an OAuth2/OpenID provider and an application for it.",
 			"Set the redirect URI to " + StepRedirect + ".",
 			"Use the provider's OpenID configuration issuer, ending in a slash.",
-			"Put your users in the groups " + StepAccess + " and " + StepAdmin + ".",
+			"Put your users in the group " + StepAccess + ".",
 			copyCredentials,
 		},
 	},
@@ -92,7 +91,7 @@ var presets = []Preset{
 			"Set the valid redirect URI to " + StepRedirect + ".",
 			"Set Proof Key for Code Exchange to S256.",
 			"Add a Group Membership mapper with the token claim name groups.",
-			"Put your users in the groups " + StepAccess + " and " + StepAdmin + ".",
+			"Put your users in the group " + StepAccess + ".",
 			copyCredentials,
 		},
 	},
@@ -115,7 +114,7 @@ var presets = []Preset{
 			"Under Token configuration add the groups claim for group IDs.",
 			"Create a client secret under Certificates & secrets.",
 			copyCredentials,
-			"Enter the object IDs of your access and admin groups.",
+			"Enter the object ID of your access group.",
 		},
 	},
 }

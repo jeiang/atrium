@@ -691,19 +691,6 @@ document.addEventListener("htmx:afterSettle", (event) => {
   focusFallback(event.detail.target);
 });
 
-document.addEventListener("DOMContentLoaded", () => {
-  const form = document.querySelector("form[data-link-form]");
-  if (!form) return;
-  const token = location.hash.slice(1);
-  if (!token) {
-    form.hidden = true;
-    document.querySelector("[data-link-invalid]")?.removeAttribute("hidden");
-    return;
-  }
-  form.elements.token.value = token;
-  history.replaceState(null, "", location.pathname);
-});
-
 document.addEventListener("submit", (event) => {
   if (!event.target.matches("form[data-test-signin]")) return;
   const status = document.getElementById("oidc-test");

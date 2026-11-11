@@ -36,7 +36,6 @@ type Identity struct {
 	Subject string
 	Email   string
 	Name    string
-	Admin   bool
 	NoAuth  bool
 }
 
@@ -49,22 +48,17 @@ func IdentityOf(ctx context.Context) (Identity, bool) {
 
 func (g *Guard) identify(r *http.Request) (Identity, error) {
 	if g.auth.Local() {
-		return Identity{Source: SourceLocal, Admin: true}, nil
+		return Identity{Source: SourceLocal}, nil
 	}
 	if g.auth.Proxy() && hasGroup(r.Header.Get("Remote-Groups"), group) {
-		adminGroup, err := g.adminGroup(r.Context())
-		if err != nil {
-			log.Error("admin group lookup failed", logx.Err, err.Error())
-			return Identity{}, errUnavailable
-		}
-		return Identity{Source: SourceProxy, Admin: hasGroup(r.Header.Get("Remote-Groups"), adminGroup)}, nil
+		return Identity{Source: SourceProxy}, nil
 	}
 	if g.auth.OIDC() {
 		if token := cookieValue(r, sessionCookie, g.secure(r)); token != "" {
 			s, err := g.sessions.Authenticate(r.Context(), token)
 			switch {
 			case err == nil:
-				return Identity{Source: SourceOIDC, Subject: s.Subject, Email: s.Email, Name: s.Name, Admin: s.Admin}, nil
+				return Identity{Source: SourceOIDC, Subject: s.Subject, Email: s.Email, Name: s.Name}, nil
 			case errors.Is(err, oidc.ErrRevoked):
 				return Identity{}, errRevoked
 			case errors.Is(err, oidc.ErrNoSession):

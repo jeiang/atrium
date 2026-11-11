@@ -52,11 +52,32 @@ func (h Host) LogValue() string {
 
 func HostFile(env Env) string { return stripped(env, HostConfigEnv) }
 
+func refuseRemovedSelectors(env Env) error {
+	for _, key := range []string{"oidc_access_group", "oidc_admin_group", "oidc_admin_emails", "oidc_admin_domains"} {
+		replacement, removed := settings.RemovedHostKey(key)
+		if !removed {
+			continue
+		}
+		name := "ATRIUM_AUTH_" + strings.ToUpper(key)
+		want := "ATRIUM_AUTH_" + strings.ToUpper(strings.TrimPrefix(replacement, "host.auth."))
+		if _, ok := env(name); ok {
+			return fmt.Errorf("config: %s was removed; use %s", name, want)
+		}
+		if _, ok := env(name + "_FILE"); ok {
+			return fmt.Errorf("config: %s was removed; use %s", name+"_FILE", want+"_FILE")
+		}
+	}
+	return nil
+}
+
 func LoadHost(env Env, filename string) (Host, error) {
 	defs := settings.HostDefs()
 	h := Host{Values: map[string]string{}, Sources: map[string]string{}, Connections: map[string]HostConnection{}}
 	for _, d := range defs {
 		h.Values[d.Key] = d.Default
+	}
+	if err := refuseRemovedSelectors(env); err != nil {
+		return Host{}, err
 	}
 	if filename != "" {
 		if err := h.readFile(env, defs, filename); err != nil {
@@ -183,6 +204,9 @@ func hostKeyOf(keys map[string]settings.HostDef, name string) (d settings.HostDe
 }
 
 func hostKeyRefusal(path, module, name string) error {
+	if replacement, removed := settings.RemovedHostKey(name); removed {
+		return fmt.Errorf("config: %s: %s.%s was removed; use %s", path, module, name, replacement)
+	}
 	entry, ok := settings.ImportEntryFor(name)
 	if !ok || entry.Module != module {
 		return nil
@@ -410,12 +434,9 @@ func (h *Host) deriveHostConnections() {
 		"api_client_id":  h.Values["oidc_api_client_id"],
 		"scopes":         h.Values["oidc_scopes"],
 		"groups_claim":   h.Values["oidc_groups_claim"],
-		"access_group":   h.Values["oidc_access_group"],
-		"admin_group":    h.Values["oidc_admin_group"],
+		"access_groups":  h.Values["oidc_access_groups"],
 		"access_emails":  h.Values["oidc_access_emails"],
-		"admin_emails":   h.Values["oidc_admin_emails"],
 		"access_domains": h.Values["oidc_access_domains"],
-		"admin_domains":  h.Values["oidc_admin_domains"],
 	}, nil, []string{"discovery", "client_auth"}, false)
 	if ca := h.Values["webpush_ca_file"]; ca != "" {
 		h.deriveService("service/webpush", "Web push", map[string]string{

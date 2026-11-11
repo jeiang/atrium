@@ -23,12 +23,9 @@ type Config struct {
 	ClientSecret  string
 	Scopes        []string
 	GroupsClaim   string
-	AccessGroup   string
-	AdminGroup    string
+	AccessGroups  []string
 	AccessEmails  []string
-	AdminEmails   []string
 	AccessDomains []string
-	AdminDomains  []string
 	Idle          time.Duration
 	Max           time.Duration
 	RedirectURI   string
@@ -98,12 +95,9 @@ func (s *Service) assemble(ctx context.Context, conn Connection) (Config, error)
 		ClientID:      strings.TrimSpace(vals.ClientID),
 		Scopes:        list(vals.Scopes),
 		GroupsClaim:   strings.TrimSpace(vals.GroupsClaim),
-		AccessGroup:   strings.TrimSpace(vals.AccessGroup),
-		AdminGroup:    strings.TrimSpace(vals.AdminGroup),
+		AccessGroups:  list(vals.AccessGroups),
 		AccessEmails:  list(strings.ToLower(vals.AccessEmails)),
-		AdminEmails:   list(strings.ToLower(vals.AdminEmails)),
 		AccessDomains: list(strings.ToLower(vals.AccessDomains)),
-		AdminDomains:  list(strings.ToLower(vals.AdminDomains)),
 		Idle:          days(KeyIdleDays, 24*time.Hour, 1, 365),
 		Max:           days(KeyMaxDays, 24*time.Hour, 1, 365),
 	}
@@ -132,7 +126,7 @@ func (s *Service) assemble(ctx context.Context, conn Connection) (Config, error)
 	} else {
 		c.RedirectURI = public + CallbackPath
 	}
-	if c.GroupsClaim == "" && len(c.AccessEmails) == 0 && len(c.AdminEmails) == 0 && len(c.AccessDomains) == 0 && len(c.AdminDomains) == 0 {
+	if c.GroupsClaim == "" && len(c.AccessEmails) == 0 && len(c.AccessDomains) == 0 {
 		problems = append(problems, fmt.Sprintf("nothing grants access: set %s, %s or %s", KeyGroupsClaim, KeyAccessEmails, KeyAccessDomains))
 	}
 	if !slices.Contains(c.Scopes, "openid") {
@@ -145,22 +139,6 @@ func (s *Service) assemble(ctx context.Context, conn Connection) (Config, error)
 		return c, &ConfigError{Problems: problems}
 	}
 	return c, nil
-}
-
-func (s *Service) AdminGroup(ctx context.Context) (string, error) {
-	conn, err := s.open(ctx)
-	if err != nil {
-		return DefaultAdminGroup, nil
-	}
-	defer conn.Close()
-	vals, err := ParseConnectionConfig(rawConfig(conn.Values()))
-	if err != nil {
-		return DefaultAdminGroup, nil
-	}
-	if group := strings.TrimSpace(vals.AdminGroup); group != "" {
-		return group, nil
-	}
-	return DefaultAdminGroup, nil
 }
 
 func rawConfig(values map[string]string) json.RawMessage {

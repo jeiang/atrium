@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
-	"github.com/jeiang/atrium/internal/auth/loginlink"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
@@ -97,7 +96,6 @@ func (m Module) Register(mc module.Context) module.Registration {
 				return toolset.Ledger(d, mc.Env, m.Clients(cfg), m.Now)
 			}}),
 			settingscmd.Command(mc.Env, m.Guard),
-			loginlink.Command(),
 			secretscmd.Command(mc.Env),
 			dbcmd.Command(mc.Env, m.Now),
 			kbcmd.Command(mc.Env),

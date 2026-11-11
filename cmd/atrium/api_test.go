@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -18,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/auth/oidc/oidctest"
-	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 )
 
@@ -57,7 +57,14 @@ func startAPISite(t *testing.T, dir string, api *modelLog) *apiSite {
 	idp.AddUser(oidctest.User{Name: "owner", Email: "owner@example.com", Groups: []string{"atrium_access", "atrium_admin"}})
 	idp.AddUser(oidctest.User{Name: "guest", Email: "guest@example.com", Groups: []string{"atrium_access"}})
 	idp.AddUser(oidctest.User{Name: "stranger", Email: "stranger@example.com"})
-	setEnv(t, settingEnv(config.KeyPublicURL), "http://127.0.0.1")
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, port, _ := net.SplitHostPort(l.Addr().String())
+	_ = l.Close()
+	base := "http://127.0.0.1:" + port
+	setEnv(t, settingEnv(config.KeyPublicURL), base)
 	setEnv(t, "ATRIUM_HOST_CONFIG", oidcHostConfig(t, dir, oidcHost{
 		Issuer:      idp.Issuer(),
 		ClientID:    idp.ClientID(),
@@ -65,24 +72,26 @@ func startAPISite(t *testing.T, dir string, api *modelLog) *apiSite {
 		Secret:      "s3cret-for-the-test",
 		GroupsClaim: "groups",
 	}))
-	base, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, "--auth", "proxy", "--auth", "oidc", "--allowed-host", "127.0.0.1")
+	served, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, "--port", port, "--auth", "proxy", "--auth", "oidc", "--allowed-host", "127.0.0.1")
 	if err != nil {
 		t.Fatal(err)
+	}
+	if served != base {
+		t.Fatalf("serve listens on %s, want %s", served, base)
 	}
 	t.Cleanup(stop)
 	return &apiSite{t: t, base: base, dir: dir, idp: idp, api: api}
 }
 
 type oidcHost struct {
-	Issuer      string
-	ClientID    string
-	APIClientID string
-	Secret      string
-	GroupsClaim string
-	AccessGroup string
-	AdminGroup  string
-	Scopes      string
-	Preset      string
+	Issuer       string
+	ClientID     string
+	APIClientID  string
+	Secret       string
+	GroupsClaim  string
+	AccessGroups string
+	Scopes       string
+	Preset       string
 }
 
 func oidcHostConfig(t *testing.T, dir string, h oidcHost) string {
@@ -116,11 +125,8 @@ func oidcHostConfig(t *testing.T, dir string, h oidcHost) string {
 	if h.APIClientID != "" {
 		config = append(config, [2]string{"api_client_id", h.APIClientID})
 	}
-	if h.AccessGroup != "" {
-		config = append(config, [2]string{"access_group", h.AccessGroup})
-	}
-	if h.AdminGroup != "" {
-		config = append(config, [2]string{"admin_group", h.AdminGroup})
+	if h.AccessGroups != "" {
+		config = append(config, [2]string{"access_groups", h.AccessGroups})
 	}
 	var b strings.Builder
 	b.Write(existing)
@@ -249,15 +255,43 @@ func number(t *testing.T, v any) int64 {
 	return int64(f)
 }
 
+func oidcBrowser(t *testing.T, base string, idp *oidctest.Provider, user string) *http.Client {
+	t.Helper()
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	browser := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if code, body, _ := fetch(t, browser, http.MethodGet, base+"/login", nil); code != http.StatusOK {
+		t.Fatalf("login page: %d %s", code, body)
+	}
+	idp.Approve(user)
+	code, body, header := fetch(t, browser, http.MethodPost, base+"/login", url.Values{"next": {""}})
+	if code != http.StatusSeeOther {
+		t.Fatalf("POST /login: %d %s", code, body)
+	}
+	code, body, header = fetch(t, browser, http.MethodGet, header.Get("Location"), nil)
+	if code != http.StatusFound {
+		t.Fatalf("authorize: %d %s", code, body)
+	}
+	if code, body, _ = fetch(t, browser, http.MethodGet, header.Get("Location"), nil); code != http.StatusSeeOther {
+		t.Fatalf("callback: %d %s", code, body)
+	}
+	return browser
+}
+
 func TestAPIRefusesRequestsWithoutAValidBearer(t *testing.T) {
 	s := newAPISite(t)
 	owner := s.token("owner")
 
 	me := s.do(http.MethodGet, "/api/v1/me", owner, nil)
-	if me.status != http.StatusOK || me.json["subject"] != "sub-owner" || me.json["admin"] != true || me.header.Get("Cache-Control") != "no-store" {
+	if me.status != http.StatusOK || me.json["subject"] != "sub-owner" || me.header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("me: %d %s %v", me.status, me.body, me.header)
 	}
-	if guest := s.do(http.MethodGet, "/api/v1/me", s.token("guest"), nil); guest.status != http.StatusOK || guest.json["admin"] != false {
+	if _, ok := me.json["admin"]; ok {
+		t.Fatalf("me still reports an administrator field: %s", me.body)
+	}
+	if guest := s.do(http.MethodGet, "/api/v1/me", s.token("guest"), nil); guest.status != http.StatusOK || guest.json["subject"] != "sub-guest" {
 		t.Fatalf("guest me: %d %s", guest.status, guest.body)
 	}
 
@@ -297,21 +331,13 @@ func TestAPIRefusesRequestsWithoutAValidBearer(t *testing.T) {
 	}
 
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/me", s.token("stranger"), nil), http.StatusForbidden, "forbidden")
-	expectAPI(t, s.do(http.MethodGet, "/api/v1/inbox", s.token("guest"), nil), http.StatusForbidden, "admin_required")
+	if inbox := s.do(http.MethodGet, "/api/v1/inbox", s.token("guest"), nil); inbox.status != http.StatusOK {
+		t.Fatalf("an admitted member cannot read the inbox API: %d %s", inbox.status, inbox.body)
+	}
 
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/me", "", nil, "Remote-Groups", "atrium_access,atrium_admin", "Remote-User", "owner"), http.StatusUnauthorized, "unauthenticated")
 
-	link := runApp(t, "login-link")
-	if link.code != cli.ExitOK {
-		t.Fatalf("login-link: %d %s", link.code, link.stderr)
-	}
-	_, token, _ := strings.Cut(strings.TrimSpace(link.stdout), "#")
-	jar, _ := cookiejar.New(nil)
-	browser := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	fetch(t, browser, http.MethodGet, s.base+"/login/link", nil)
-	if code, body, _ := fetch(t, browser, http.MethodPost, s.base+"/login/link", url.Values{"token": {token}}); code != http.StatusSeeOther {
-		t.Fatalf("login link redeem: %d %s", code, body)
-	}
+	browser := oidcBrowser(t, s.base, s.idp, "owner")
 	if code, _, _ := fetch(t, browser, http.MethodGet, s.base+"/settings/auth", nil); code != http.StatusOK {
 		t.Fatalf("the web session does not work: %d", code)
 	}

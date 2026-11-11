@@ -50,7 +50,7 @@ behavior-parity target.
   (`/library/knowledge`): the operator's records with search, scope and
   state filters, checkboxes on unconfirmed rows with Confirm selected, a
   record page with confirm, edit, retract, restore and
-  administrator-only purge, and a profile view that renders the system
+  purge, and a profile view that renders the system
   prompt's profile block and each pinned record's place in it. Projects
   have no pages of their own beyond create and edit, and a
   project can be marked private so its knowledge and threads stay inside
@@ -144,7 +144,7 @@ behavior-parity target.
   URL path and, for phone actions, the action links; it is encrypted per
   RFC 8291 and sent only over HTTPS to public addresses. A 404 or 410
   deletes the subscription; other failures are counted per device, and a
-  device with three consecutive failures raises an admin banner.
+  device with three consecutive failures raises a banner.
 - The attention query covers the enabled queues: proposals, drafts, open
   loops, commitments, event candidates, thread plans, packages, tasks and
   unanswered `ask_operator` questions, listed until the operator answers.
@@ -343,7 +343,7 @@ behavior-parity target.
   (`runs`, `run_events`, `tool_calls`, `tool_results`, `context_ledger`,
   `context_projections`, `job_runs`), memory (rebuilt), Notion and wiki
   state (re-synced), knowledge and Notion
-  vectors (rebuilt), notifications, auth sessions and login links, OAuth
+  vectors (rebuilt), notifications, auth sessions, pending sign-ins and login links, OAuth
   handshakes, action links, the settings audit, the mail event log, ops
   data, endpoint probes, integration health, nightly observations,
   `db_key_history` (old backups are read with the old key),
@@ -602,29 +602,25 @@ behavior-parity target.
   message carries `id="m<seq>"` and a Reference action that copies
   `@thread/12/m<seq>`.
 - The public web service accepts an authenticating reverse proxy
-  (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Local requests are
-  administrators; a proxy request or OIDC session is an administrator only
-  with the admin group, and administrator-only routes answer 403 otherwise. A
-  separate local mode provides loopback access. `atrium serve` refuses to start
+  (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Every
+  admitted proxy request or OIDC session is the one operator with full
+  authority; no role distinguishes them. A separate local mode provides
+  loopback access. `atrium serve` refuses to start
   with no authentication in force unless `--force-disable-auth` is given, which
   shows a persistent banner. Public media file access requires an expiring signed
   link and still checks Host. The link signing key is a generated secret held in
   the database (pinnable by the deployment); a legacy `media-link.key` file is
   moved into it on first use.
-- `atrium login-link` mints a single-use, short-lived administrator sign-in
-  link (HMAC-signed nonce, hashed at rest, audited) that works with no OIDC
-  configured. The Sign-in settings tab sets up OIDC from provider presets and
-  activates a configuration only after a Test sign-in in a separate state
-  showed the tested account would keep administrator access.
+- The Sign-in settings tab shows the OIDC connection and activates a configuration only after a Test sign-in in a separate state showed the tested account would be admitted.
 - `/api/v1` is a JSON API for a native client, available only in listeners
   with oidc mode and only when `oidc_api_client_id` names the client. It
   accepts nothing but a bearer access token from the configured issuer
   (RFC 9068 `at+jwt`, audience and `client_id` equal to that client, expiry
   with 60 s skew); session cookies and proxy headers grant nothing there.
-  Groups come from the token or the userinfo endpoint and map to access and
-  administrator exactly as for web sessions. Implemented endpoints: `/me`,
+  Groups come from the token or the userinfo endpoint and decide admission
+exactly as for web sessions. Implemented endpoints: `/me`,
   thread list, create and transcript, send, stop and answer, the run event
-  stream (SSE), the administrator inbox, `/pending` (pending and blocked
+  stream (SSE), the inbox, `/pending` (pending and blocked
   approvals, open and unknown drafts), approve, deny and resolve, the `/undo`
   feed of direct writes and undoable approvals with undo, and draft get,
   edit, send, discard and resolve. Every write calls the same pipeline,

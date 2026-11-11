@@ -22,7 +22,6 @@ type row struct {
 	accessToken     string
 	emailVerified   bool
 	hosted          string
-	origin          string
 	accessExpires   sql.NullFloat64
 	refreshToken    string
 }
@@ -32,7 +31,6 @@ type sessionInsert struct {
 	subject       string
 	email         string
 	name          string
-	admin         bool
 	now           float64
 	idle          float64
 	absolute      float64
@@ -42,27 +40,25 @@ type sessionInsert struct {
 	refreshToken  string
 	verified      bool
 	hosted        string
-	origin        string
 }
 
 func insertSession(ctx context.Context, tx *sql.Tx, s sessionInsert) error {
-	_, err := tx.ExecContext(ctx, "INSERT INTO auth_sessions (token_hash, subject, email, name, admin, created_at, last_seen_at, idle_expires_at, absolute_expires_at, rechecked_at, access_token, access_expires_at, refresh_token, email_verified, hosted_domain, origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		s.tokenHash, s.subject, s.email, s.name, boolInt(s.admin), s.now, s.now, s.idle, s.absolute, s.rechecked, s.accessToken, s.accessExpires, s.refreshToken, boolInt(s.verified), s.hosted, s.origin)
+	_, err := tx.ExecContext(ctx, "INSERT INTO auth_sessions (token_hash, subject, email, name, created_at, last_seen_at, idle_expires_at, absolute_expires_at, rechecked_at, access_token, access_expires_at, refresh_token, email_verified, hosted_domain) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		s.tokenHash, s.subject, s.email, s.name, s.now, s.now, s.idle, s.absolute, s.rechecked, s.accessToken, s.accessExpires, s.refreshToken, boolInt(s.verified), s.hosted)
 	return err
 }
 
-const sessionColumns = "id, subject, email, name, admin, idle_expires_at, absolute_expires_at, last_seen_at, rechecked_at, access_token, access_expires_at, refresh_token, email_verified, hosted_domain, origin"
+const sessionColumns = "id, subject, email, name, idle_expires_at, absolute_expires_at, last_seen_at, rechecked_at, access_token, access_expires_at, refresh_token, email_verified, hosted_domain"
 
 func (s *Service) loadRow(ctx context.Context, hash string) (row, error) {
 	var r row
-	var admin, verified int
+	var verified int
 	err := s.d.Read.QueryRowContext(ctx, "SELECT "+sessionColumns+" FROM auth_sessions WHERE token_hash = ?", hash).
-		Scan(&r.id, &r.Subject, &r.Email, &r.Name, &admin, &r.idleExpires, &r.absoluteExpires, &r.lastSeen, &r.rechecked, &r.accessToken, &r.accessExpires, &r.refreshToken, &verified, &r.hosted, &r.origin)
+		Scan(&r.id, &r.Subject, &r.Email, &r.Name, &r.idleExpires, &r.absoluteExpires, &r.lastSeen, &r.rechecked, &r.accessToken, &r.accessExpires, &r.refreshToken, &verified, &r.hosted)
 	r.emailVerified = verified == 1
 	if errors.Is(err, sql.ErrNoRows) {
 		return r, ErrNoSession
 	}
-	r.Admin = admin == 1
 	return r, err
 }
 
@@ -100,7 +96,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 	if err != nil {
 		return Session{}, err
 	}
-	if r.origin != originLink && now >= r.rechecked+t.recheck.Seconds() {
+	if now >= r.rechecked+t.recheck.Seconds() {
 		if r, err = s.recheck(ctx, hash, r, t); err != nil {
 			return Session{}, err
 		}
@@ -223,7 +219,7 @@ func (s *Service) recheck(ctx context.Context, hash string, seen row, t timing) 
 	outcome, err := s.refresh(ctx, cfg, r)
 	switch {
 	case err == nil:
-		r.Email, r.Name, r.Admin = outcome.Email, outcome.Name, outcome.Admin
+		r.Email, r.Name = outcome.Email, outcome.Name
 		r.accessToken, r.refreshToken, r.accessExpires = outcome.accessToken, outcome.refreshToken, outcome.accessExpires
 		r.emailVerified, r.hosted = outcome.verified, outcome.hosted
 		if err := s.saveRecheck(ctx, sl, r, now); err != nil {
@@ -328,17 +324,16 @@ func (s *Service) refresh(ctx context.Context, cfg Config, r row) (recheckOutcom
 }
 
 func (s *Service) decideRecheck(cfg Config, id identity, out recheckOutcome) (recheckOutcome, error) {
-	granted, admin := cfg.decide(id)
-	if !granted {
+	if !cfg.decide(id) {
 		return out, ErrDenied
 	}
-	out.Email, out.Name, out.Admin = id.Email, id.Name, admin
+	out.Email, out.Name = id.Email, id.Name
 	out.verified, out.hosted = id.EmailVerified, id.Hosted
 	return out, nil
 }
 
 func (s *Service) saveRecheck(ctx context.Context, sl *sealer, r row, now float64) error {
-	_, err := s.d.Write.ExecContext(ctx, "UPDATE auth_sessions SET rechecked_at = ?, admin = ?, email = ?, name = ?, access_token = ?, access_expires_at = ?, refresh_token = ?, email_verified = ?, hosted_domain = ? WHERE id = ?",
-		now, boolInt(r.Admin), r.Email, r.Name, sl.seal(r.accessToken), r.accessExpires, sl.seal(r.refreshToken), boolInt(r.emailVerified), r.hosted, r.id)
+	_, err := s.d.Write.ExecContext(ctx, "UPDATE auth_sessions SET rechecked_at = ?, email = ?, name = ?, access_token = ?, access_expires_at = ?, refresh_token = ?, email_verified = ?, hosted_domain = ? WHERE id = ?",
+		now, r.Email, r.Name, sl.seal(r.accessToken), r.accessExpires, sl.seal(r.refreshToken), boolInt(r.emailVerified), r.hosted, r.id)
 	return err
 }
