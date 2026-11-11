@@ -1,25 +1,26 @@
 # Architecture review, November 2026
 
 Review of atrium at `836d4321` and of its deployment in `cornn-flaek` on
-artemis. Review only: no code changed. A separate session breaks the
-findings down and implements them.
+artemis. Review only: no code changed. This document is the input for the
+v3 breakdown session: the decision log says what to build toward, and
+"Decisions" at the end fixes the scope. It contains no steps.
 
 ## Method
 
 - 25 read-only review lanes, one per subsystem or question, each returning
   findings with `path:line` evidence. One lane measured the live system on
   artemis with read-only commands.
-- 77 of the high-impact claims went to a second set of agents whose task
-  was to refute them. Result: 61 confirmed, 15 narrowed, 1 refuted. Items
-  marked **V** below survived that pass; narrowed items carry the narrowed
-  statement. Items without **V** have one reader only.
+- 114 of the high-impact claims went to a second set of agents whose task
+  was to refute them. Result: 88 confirmed, 25 narrowed, 1 refuted and
+  dropped. Items marked **V** below survived that pass; narrowed items
+  carry the narrowed statement. Items without **V** have one reader only.
 - Nothing was built or run in the repository. Tests were read, not run.
 
 ## Answers to the eleven questions
 
 | # | Question | Verdict |
 |---|---|---|
-| 1 | Are the systems correct? | The safety design is sound; its implementation has gaps. 40+ verified defects, concentrated in three places: outcomes of external writes, permission checks that use stale state, and credentials read from the wrong source. |
+| 1 | Are the systems correct? | The safety design is sound; its implementation has gaps. 108 verified findings, concentrated in four places: outcomes of external writes, permission checks that use stale state, knowledge visibility and marks, and credentials read from the wrong source. |
 | 2 | Does the host setup make sense? | Mostly. Native OIDC behind Caddy, persistence and backup are right. Three problems: a second full `serve` process for loopback access, metrics scraped from one of seven processes, and operator preferences pinned in Nix. |
 | 3 | Is the system fragile? | Yes, at the seams. 142 of 294 recent `fix` commits land within 24 hours of a feature in the same area. A typical feature touches 17 files. Invariants live in conventions between packages. |
 | 4 | Are the systems consistent? | No. The same job is done several ways: four lifecycles for external writes, three Google OAuth implementations, two health tables, eight ways to declare route access, two code paths per action for HTML and API. |
@@ -151,6 +152,8 @@ rollback and audit live in the operation.
 - HTML and API map the same rows through separate mappers; the API transcript drops references, citations and digest cards (`assistant/pages/api.go:71-82`).
 - Branching a thread drops thinking, web search and cost cap (`service/branch.go:93-98`).
 - About 175 HTML routes against 20 API routes.
+- **V** Adding a torrent and watching a show are each implemented in the page and in the tool with different rules: the page accepts any magnet link and backfills by default, the tool requires a v1 hash and never backfills (`media/pages/add.go:37-92`, `assistant/tools/media/media.go:274-418`).
+- **V** The assistant has no tool to search for a show or preview releases; only the page can. `media_channel_add` needs an id and a pattern the model cannot see (`assistant/tools/media/media.go:38-85`).
 
 ### F2. The process owns the lifecycle; the web server is one listener
 
@@ -173,6 +176,11 @@ they spend money, how long they may run, what a failure means.
 - All units, including backup and loopback access, start after both model servers (`nix/module.nix:167-171`).
 - Three of 20 `atrium-sync` runs and four of 20 `atrium-dav-sync` runs ended as failed units for a transient upstream error.
 - API idempotency keys live in process memory and are lost on restart (`web/idempotency.go:39-47`).
+- One process removes the isolation the units give today, so the runtime must supply it: each service runs under a supervisor that restarts it with backoff, a panic in one service does not stop the listener, and shutdown drains. Drain means: stop taking jobs, let a running external write reach a recorded outcome, and mark what could not finish as unknown before exit. A deploy restarts everything at once; without drain every deploy creates unknown outcomes.
+- **V** The media sweep is recorded as successful while qBittorrent is down; the failure is neither returned nor logged (`media/organizer.go:371-379,414-418`, `media/mediacmd/mediacmd.go:79-80`).
+- **V** An event-candidate drafting run that fails leaves its messages queued with no attempt count, so each scheduled run sends them to the assistant again (`calendar/candidates/draft.go:52-66`).
+- **V** One unit runs `calendar sync` then `contacts sync`. With no iCloud account it fails every 15 minutes, and a calendar failure skips the contacts sync (`nix/module.nix:262-274`).
+- **V** `internal/cli` is both the argument parser and the application bootstrap: it installs settings and configuration and starts tracing (`cli/cli.go:210-233`).
 
 ### F3. One state machine for anything that changes the outside world
 
@@ -216,6 +224,12 @@ stateDiagram-v2
 - **V** The attention query omits blocked proposals and unknown drafts that Review counts (`attention/sources/proposals.go:18`, `mail/reviewpages/review.go:17-20`).
 - An approved tool call that ends unknown blocks in two ledgers; resolving one does not resolve the other (`assistant/approval/approval.go:107-139`).
 - Recovery text names the wrong service: every blocked proposal says "Check the mailbox", every unknown write says "Check the calendar" (`reviewpages/templates/_proposal.gohtml:251-255`).
+- **V** Calendar writes made through approval cards record only in `proposal_actions`; the guard that blocks a calendar after an unknown outcome reads only `agent_writes`. Create, update and reply are outside the guard, against `context.md:363-366` (`calendar/proposals.go:209-221,278-280`, `writes/writes.go:246-248`).
+- **V** A 409 on Google insert is treated as success. The event is tracked, and its undo would delete an event atrium did not create (`calendar/calendar.go:156`, `calendar/proposals.go:278-291`).
+- **V** iCloud delete returns success when it finds no event, and undo then reports the event deleted (`calendar/icloud.go:77-96`).
+- **V** `media_add_magnet` discards its write record when qBittorrent returns an error, including a read timeout after which the add may have happened; mail and calendar tools record that case as unknown (`assistant/tools/media/media.go:297-299`).
+- **V** Undoing an operator edit of a knowledge record does not restore `private` (`kb/write.go:51-60,383-386`).
+- **V** The mirror writer deletes every local collection absent from the server listing, so an empty listing empties the mirror (`davmirror/davmirror.go:73-89`).
 
 ### F4. Authority is checked where the effect happens, against current state
 
@@ -229,6 +243,13 @@ stateDiagram-v2
 - **V** With a public OIDC client on an encrypted database, the pending nonce and verifier are read back empty: sign-in fails and the nonce check is skipped (`auth/oidc/seal.go:23-87`). artemis uses a confidential client and is not affected.
 - **V** Proxy mode trusts `Remote-Groups` from any peer, and the module default is proxy mode on `0.0.0.0` (`web/identity.go:54-60`, `nix/module.nix:418-427`). artemis uses OIDC mode and is not affected.
 - **V** The phone-link mint cap of 20 an hour suppresses the notification itself (`actionlink/notify.go:32-36`).
+- **V** The system-prompt profile takes any pinned, confirmed record with no check of private scope, so a pinned record of a private project enters every thread. Nothing stops the operator from pinning one (`kb/profile.go:24`, `kb/operator.go:63-115`).
+- **V** A chat or scheduled thread outside a private project can retract, by id, an unconfirmed agent-written record of that project (`kb/write.go:174-185,308-322`).
+- **V** A knowledge record takes the marks of the thread that wrote it, not of its source. Any `kb_search` hit marks the thread, and the nightly prompt requires a search before writing, so the records of a nightly run carry marks unrelated to their sources. Threads marked only `personal` go to the marked group (`kb/write.go:197-231`, `assistant/tools/kb/kb.go:126-139`, `dreaming/dreaming.go:29,144-163`).
+- **V** Confirming a record clears only `untrusted`. Retrieval and the profile also exclude `pii` and `messages`, so a confirmed record from a thread that read mail stays out of the prompt until the operator clears the marks by hand. `context.md:121-123` says confirmation is enough (`kb/operator.go:193`, `kb/retrieve.go:50-51`).
+- **V** An operator edit of an agent-written record leaves the agent as writer, so the agent may later overwrite or retract the correction (`kb/operator.go:107-110`, `kb/write.go:176-181`).
+- **V** An operator's undo of their own knowledge edit becomes a "mistake" signal for dreaming and starts a paid marked run that cannot cite it (`dreaming/dreaming.go:340-353`).
+- The API has no rate limiter and no way to revoke a bearer token. Both are needed once the API is the public path for the app.
 
 ### F5. A module is one declaration, and everything else is derived from it
 
@@ -247,6 +268,9 @@ from the module's registration. Turning the module off removes all of them.
 - The settings `Module` field is a free string (`assistant`, `export`, `action_links`, `permissions`) that decides environment variable names and settings pages.
 - The public `sdk`, `withModules` and `module_migrations` have one user, a test fixture. The Nix module rejects settings of an external module.
 - `internal/tool` imports the assistant, Anthropic and writes packages (`tool/bound.go:8-10`, `tool/tool.go:7-11`).
+- **V** The settings generator and the integrations documenter each keep their own import list. The generator's output is the schema the NixOS module validates settings against, and no check ties its list to the shipped binary (`tools/settingsgen/registered.go:3-26`, `nix/module.nix:11,48-51`).
+- **V** The digest's "may be outdated" line matches an alias named `conflict` that no prompt or tool tells the model to write, so it never appears (`digest/digest.go:219-221`).
+- The event-candidates stage is a mail-pass stage that lives in `calendar` and reads the `messages` table. Media jobs, undo handlers and the tool's cap live in core and assistant packages.
 
 ### F6. A connection is one kind of record for every external system
 
@@ -263,6 +287,10 @@ connection with one token source.
 - Endpoints keep two health stores: `endpoint_probes` gates the module, `integration_health` drives the badge.
 - `httpx` finds an endpoint's key, CA and proxy by URL prefix in the request context; without it the request goes out with no key and no CA (`httpx/httpx.go:31-55`).
 - iCloud DAV has no record, no test, no health and no CA or proxy setting; contacts logs in through calendar code.
+- **V** A reply to an iCloud invitation finds the operator only as `mailto:` plus the `icloud_apple_id` setting. With the setting empty, or an invitation sent to an alias, the reply fails as "not an attendee" (`calendar/proposals_update.go:171-181`).
+- **V** Updating one occurrence of a recurring event changes the whole series on iCloud and one occurrence on Google (`calendar/proposals_update.go:102-145`, `calendar/google.go:75-103`).
+- **V** An iCloud calendar is identified by its path when read and by its display name when written, so the assistant cannot filter by the name it writes with (`calendar/mirror.go:62-72`, `calendar/icloud.go:46-50`).
+- **V** Each Google calendar operation builds a new token source and refreshes the token (`calendar/calendar.go:119-126`).
 
 ### F7. Three kinds of configuration, kept apart
 
@@ -278,6 +306,7 @@ choices live in the application. Tuning constants are code.
 - The fallback time zone is Port of Spain (`config/config.go:39`).
 - The permission table has 24 independent settings; 12 have the same default and cannot differ in effect.
 - Module flags cannot be set from the interface; the settings page shows Off with no action.
+- 23 advanced media settings are tuning constants.
 
 ### F8. Each table has one owner, and derived data records what it was derived from
 
@@ -291,6 +320,13 @@ choices live in the application. Tuning constants are code.
 - The rule "writes use `WithTx`, vector search uses KNN" is a convention on three raw handles.
 - Dormant schema still shapes code: `skills`, `runs.skills_json`, `ntfy_channels` reused for content mode, seeds that are deleted on every migrate.
 - `internal/kb` builds the assistant's prompt profile, reads thread internals and imports Notion.
+- **V** The knowledge visibility rule exists in five variants with different mark masks: 7 in retrieval and the profile, 14 in export, and no expiry check in the digest (`kb/kb.go:130-142,277-282`, `dreaming/dreaming.go:452-455`, `digest/digest.go:200`).
+- **V** `expires_at` is filtered on every knowledge read and written by no code path.
+- **V** iCloud reads come from a mirror refreshed every 15 minutes while writes go live, so `find_slot` can offer a slot that was just booked (`calendar/calendar.go:276-278`, `calendar/icloud.go:69-75`).
+- **V** A hand-written JSON encoder with 32 call sites can write `NaN` and panics on a marshal error; it and the argument parser carry behavior copied from Python, though `context.md` says v2 is not a port (`jsonx/jsonx.go:24-105,316`, `cli/cli.go:378`).
+- **V** Two functions named `FloatRepr` give different output for the same value. One formats stored timestamps, and that string is hashed into a proposal fingerprint (`numx/numx.go:44-45`, `jsonx/jsonx.go:242-262`, `mail/backlog/backlog.go:96-107`).
+- **V** Two clip helpers cut at a byte index and can split a character, in package status text and in text sent to the model (`mail/tracking/tracking.go:332-337`, `assistant/tools/memory/search.go:139-143`). Clipping exists as two shared functions and about 12 private ones.
+- Knowledge search is implemented three times: in `search.go`, again in `retrieve.go`, and as `LIKE` in `List`. The one-shot Notion import is still shipped.
 
 ### F9. One ledger for paid inference, with reservation
 
@@ -318,6 +354,10 @@ the cost, so the gaps are the round trips that need not happen.
 - A message the operator sends is not shown until the server answers.
 - `app.css` is 332 KB raw, 34 KB compressed.
 - The local model holds 9 GB of host memory for 139 s of GPU work in 61 hours.
+- **V** Each media page handler, including every poster and thumbnail request, reloads 28 settings and 2 secrets and builds three new HTTP transports, so no connection is reused (`media/settings.go:242-287`, `media/pages/module.go:39-45`).
+- **V** Thumbnails are generated by ffmpeg inside the web request under one process-wide lock, for up to about 240 s (`media/artwork.go:193-196,257-258`).
+- **V** A media torrent is not added stopped, and file selection straight after a magnet add finds no files yet, so selection waits for the ten-minute sweep (`media/qbit.go:394-404`, `media/organizer.go:448-451`).
+- Every agenda render parses every `.ics` file again (`calendar/mirror.go:42-84`).
 
 ### F11. The design system is an input to the build
 
@@ -332,6 +372,7 @@ constants. Primitives are adapted to the system in one place.
 - Approval cards say "Approve" where the system requires the name of the effect, and proposals and drafts are two different card structures.
 - Notifications, Google and module pages each use a different save pattern inside `SettingsGroup`.
 - No component covers media, mail rules, activity, usage, the command palette or the inbox.
+- The export is web only: 24 components as HTML and CSS, phone layouts for Home and Thread, a tab bar, 89 icons, two logos. A native app has no source for these parts: navigation (stacks, sheets, the split view on iPad), notification layouts with action buttons, widgets, the Live Activity, the share sheet, text sizes under Dynamic Type, the app icon and launch screen. The native app also needs every area in the line above, and the phone layout of Review, Knowledge, Settings, Integrations, Schedules, Tasks, Projects and Search, which the export shows only as desktop components or not at all.
 
 ### F12. Tests assert what the operator gets, through the same contract a client uses
 
@@ -340,6 +381,10 @@ constants. Primitives are adapted to the system in one place.
 - Some tests accept a result that proves nothing: dedup passes with zero proposals in both scans, restore runs over the source it was taken from (`scan_dedup_test.go:32`, `backup_driver_test.go:24`).
 - The golden suite injects in-memory mail clients, so the IMAP adapter is outside it (`golden_test.go:196-207`).
 - CI runs the full suite four times.
+- **V** CI builds 19 checks on each of two architectures, including those that do not depend on the architecture (`.github/workflows/ci.yml:47-56`). A second SQLite driver that cannot open the production database is kept for tests.
+- **V** The shipped binary is compiled with `-O2` and, on x86_64, `-mavx2`; the checks are not. The cgo environment is written in four places (`nix/go-package.nix:32`, `flake-modules/go-checks.nix:9-13`).
+- **V** The restore drill's plaintext case starts from the v1 fixture, a database shape v2 never writes (`flake-modules/restore-drill.nix:11,44-46`).
+- **V** `just changed` defaults to a base ref, `v2-develop`, that does not exist (`justfile:22`).
 
 ### F13. The product owns the first hour
 
@@ -364,6 +409,10 @@ Removed by the fixes above:
 - Retry on create in the Notion client (F3).
 - The two-second stream reset (F10).
 - `sandbox`, `skills_json`, the projection deletes, the `web` and `notion` seeds (F5, F8).
+- Login links, and `action_link_key` signing three unrelated things (F4).
+- The public `sdk`, `withModules` and `module_migrations` (F5).
+- Python-compatible JSON, number and argument handling (F8).
+- Treating a 409 on create as success, and a delete that finds nothing as deleted (F3).
 
 Kept, because the system still needs them:
 
@@ -375,7 +424,7 @@ Kept, because the system still needs them:
 - Doom-loop and step caps, and per-model cost caps.
 - One-use, expiring, HMAC-signed phone links, and the exclusion of permission requests from them.
 - A loopback emergency path.
-- The frozen baseline schema and its dormant tables.
+- Additive migrations for mail data. Whether v3 starts from a new baseline with an import, as v2 did from v1, is for the breakdown session; the v2 baseline stays frozen while v2 is deployed.
 
 ## Target shape
 
@@ -558,72 +607,39 @@ flowchart LR
   f1 --> f10["F10 fragments declare data"]
 ```
 
-## Second-pass lanes
-
-Three subsystems had thin coverage in the first pass and were reviewed
-again. These findings have one reader and were not sent for refutation.
-Each belongs under the fix named in brackets.
-
-### Knowledge store
-
-- [F4] The system-prompt profile takes any pinned, live record, including one in a private project, into every thread (`kb/profile.go:24`).
-- [F4] `kb_retract` has no project check, so a thread outside a private project can retract its records by id (`kb/write.go:308-322`).
-- [F4] A record takes the marks of the thread that wrote it, not of its source. The nightly prompt requires `kb_search` first, which marks the thread, so one hit on an imported record marks every record written that night (`kb/write.go:231`, `dreaming/dreaming.go:29,144-153`).
-- [F4] Confirming a record clears only `untrusted`; retrieval and the profile also exclude `pii` and `messages`, so a confirmed record from a thread that read mail never reaches the prompt (`kb/operator.go:193`, `kb/retrieve.go:51`).
-- [F8] The visibility rule is copied into each read path with different mark masks: 7 in retrieval and profile, 14 in export (`kb/kb.go:130,278`, `dreaming/dreaming.go:454`, `digest/digest.go:200`).
-- [F8] Search is implemented three times: exact, FTS and vector in `search.go`, again in `retrieve.go`, and `LIKE` in `List`.
-- [F3] The undo snapshot omits `private`, writer and project (`kb/write.go:51-60`).
-- [F4] An operator edit of an agent-written record keeps the agent as writer, so the agent may overwrite the correction (`kb/operator.go:111-116`).
-- [F5] The digest's "may be outdated" line depends on a `conflict` alias that nothing tells the model to write (`digest/digest.go:220`).
-- [F8] `expires_at` is filtered on every read and written nowhere. The one-shot Notion import is still shipped; two of its three sources have no writers.
-
-### Calendar and contacts
-
-- [F3] Calendar writes made through approval cards record in `proposal_actions`; the guard that blocks a calendar after an unknown outcome reads only `agent_writes`. Create, update and reply are outside the guard (`calendar/proposals.go:209-278`, `writes/writes.go:244-248`).
-- [F6] A reply to an iCloud invitation finds the operator as `mailto:` plus `icloud_apple_id`; with the setting empty every reply fails as "not an attendee" (`calendar/proposals_update.go:157-168`).
-- [F3] A 409 on Google insert is treated as success, and the event is then tracked for an undo that would delete an event atrium did not create (`calendar/calendar.go:156`).
-- [F6] Updating one occurrence of a recurring event moves the whole series on iCloud and one occurrence on Google (`calendar/proposals_update.go:107-140`, `calendar/google.go:75,103`).
-- [F6] An iCloud calendar is identified by path when read, by display name when written, and delete returns success when it finds nothing (`calendar/icloud.go:46-96`).
-- [F8] iCloud reads come from a mirror refreshed every 15 minutes while writes go live, so `find_slot` can offer a slot that was just booked.
-- [F10] Every Google call refreshes the token, and every agenda render reparses every `.ics` file (`calendar/calendar.go:118-134`, `calendar/mirror.go:42-84`).
-- [F5] The event-candidates stage is a mail-pass stage that lives in `calendar` and reads the `messages` table.
-- [F6] Contacts takes its iCloud login from calendar; one unit runs both syncs, so a Google-only instance has a failing unit every 15 minutes (`nix/module.nix:263-266`).
-
-### Media
-
-- [F3] `media_add_magnet` discards its write record on any qBittorrent error, including a timeout after which the add may have happened (`assistant/tools/media/media.go:297-304`).
-- [F1] Add torrent and watch show are implemented in the page and in the tool with different rules: the page accepts any magnet and backfills, the tool requires a v1 hash and never backfills.
-- [F10] `media.Load` runs about 29 settings queries and builds three HTTP transports on every request, every poster and every five-second poll (`media/settings.go:192-288`).
-- [F10] Thumbnails are generated by ffmpeg inside the web request under one mutex with a 120 s timeout (`media/artwork.go:257-258`).
-- [F5] Media jobs, undo handlers and the tool's cap live in core and assistant packages.
-- [F1] The assistant cannot search for a show or preview releases; only the page can. "Download a show" needs ids and a pattern the model cannot see.
-- [F7] 23 advanced media settings are tuning constants.
-- [F2] The sweep job reports success while qBittorrent is down (`media/organizer.go:371-418`).
-
-### Tooling and shared utilities
-
-- [F5] Three lists say which packages make up the application: `cmd/atrium/main.go`, `tools/settingsgen/registered.go` and `cmd/integrationsdocs/main.go`. The settings generator's output is the schema the NixOS module validates against, and nothing checks that its list matches the binary.
-- [F8] Shared utilities still carry behavior copied from the Python application: a hand-written JSON encoder with 32 call sites that writes `NaN`, Python truthiness, argparse prefix matching in `internal/cli` (`jsonx/jsonx.go:14-105,316`, `cli/cli.go:378,624-650`). `context.md` says v2 is not a port.
-- [F8] Text clipping exists as two shared functions and about 12 private ones with four behaviors; two cut inside a multi-byte character (`mail/tracking/tracking.go:332-337`, `assistant/tools/memory/search.go:139-143`).
-- [F8] Two functions named `FloatRepr` give different output, and one result is hashed into a proposal dedupe key (`numx/numx.go:43-45`, `mail/backlog/backlog.go:96`).
-- [F2] `internal/cli` is both the argument parser and the application bootstrap.
-- [F12] CI builds about 19 checks on each of two architectures, including the checks that do not depend on architecture, and keeps a second SQLite driver that cannot open the production database.
-- [F12] The cgo build flags are written in four places; the shipped binary adds `-O2 -mavx2` that test builds do not.
-- [F12] The restore drill's plaintext case starts from the v1 fixture.
-- Sound: the go-imap fork discipline, the sqlite-vec provenance check, and the test that cross-checks dashboard metric names against code.
-
 ## Decisions
 
-The operator settled these on 2026-11-10. They fix the scope of the fixes.
+The operator settled these on 2026-11-10 and 2026-11-11. They fix the scope
+of the work.
 
-1. **Processes.** One `atrium serve` owns the scheduler, the mail watch and the sync passes. The separate units, the timers and `atrium-web-local` go away; unit names are a host-facing contract, so the host configuration changes with it (F2).
-2. **Marked threads and knowledge writes.** The code is right: a marked thread may write unconfirmed records that carry its marks. `context.md:458` is the statement to correct (F4).
-3. **Administrator role.** Removed. One principal (F4).
-4. **Public `sdk`.** Deleted for now, with `withModules` and `module_migrations` (F5).
-5. **Tuning settings.** The tuning constants leave the settings registry and become code (F7).
-6. **Emergency access.** Loopback only. Login links are removed, which also ends the reuse of `action_link_key` for them (F4). With one process, loopback is a second listener of that process (F2).
-7. **App reach.** The app is a full replacement for the web interface, so the API must reach all 22 feature areas, settings and media included (F1).
-8. **Offline.** Not required. The app still needs bounded lists, durable command identity and a resumable stream for poor networks; a local store and a change feed for offline use are out of scope.
+Frame:
+
+- **This is v3.** The operator is the only consumer, so breaking changes are acceptable: unit names, environment variables, settings keys, the `/api/v1` shape and the database layout may change. Mail is the exception. Its learned rules, corrections, ledger and safety behavior need care; derived data such as embeddings may be rebuilt.
+- **Feature freeze** until the v3 work lands.
+- **Nothing is fixed ahead of v3.** The live defects wait. One operating rule follows: do not change the embedding endpoint or model on the current deployment, because that starts the rebuild that two `serve` processes can corrupt.
+- **Row rewrites are approved** where a fix needs them, with a trial on a database copy first.
+- **No compatibility test net is required** before the refactor, except for mail.
+
+Shape:
+
+1. **Processes.** One `atrium serve` owns the scheduler, the mail watch and the sync passes. The separate units, the timers and `atrium-web-local` go away, and the host configuration changes with it (F2). Supervision and drain are part of this (F2).
+2. **Web interface.** It stays server-rendered and calls the application services in-process. A check that every operation has an API route keeps the API complete (F1).
+3. **App reach.** The app is a full replacement for the web interface, so the API must reach all 22 feature areas, settings and media included (F1).
+4. **Offline.** Not required. The app still needs bounded lists, durable command identity and a resumable stream for poor networks; a local store and a change feed are out of scope.
+5. **Network path.** Cloudflare is the path for the browser and the app. The VPN is for emergency access only. The API is therefore public: it needs a rate limiter and a way to revoke a bearer token (F4).
+6. **Emergency access.** Loopback only, reached over the VPN. Login links are removed, which also ends the reuse of `action_link_key` for them (F4).
+7. **Administrator role.** Removed. One principal (F4).
+8. **Marked threads and knowledge writes.** The code is right: a marked thread may write unconfirmed records that carry its marks. `context.md:458` is the statement to correct (F4).
+9. **Public `sdk`.** Deleted for now, with `withModules` and `module_migrations` (F5).
+10. **Tuning settings.** The tuning constants leave the settings registry and become code (F7).
+11. **Memory spend.** It counts toward the monthly budget, in the one inference ledger (F9).
+12. **App sign-in.** The public-client OIDC defect is fixed when the app needs it, not before (F4).
+
+Recommended, not yet confirmed by the operator:
+
+- **API schema.** Generate the OpenAPI document from the Go operation types, commit it, and fail CI on drift. The Swift client is generated from it. The run stream gets its own written contract.
+- **Local chat model.** Dropping it moves mail routing's last stage, flags, scans, open loops, watches, the invitation judge and the ops condenser to Haiku. Mail text then goes to Anthropic, which the operator accepts. It frees 9 GB of memory on artemis and removes the chat endpoint and its settings. It needs the inference ledger first (F9), or the monthly budget pause stops mail triage. The classifier call must have no tools and a fixed output schema.
+- **Host placement.** No separate mail binary. Embeddings serve knowledge, Notion and mail alike and are already reached over an HTTP endpoint, so atrium can move and keep the embedding server on artemis. Two constraints: media filing needs the same filesystem as qBittorrent, and artemis pauses its model units while gaming.
 
 ## Not checked
 
@@ -632,4 +648,6 @@ The operator settled these on 2026-11-10. They fix the scope of the fixes.
 - The contents of the host environment file, the firewall on artemis, the OIDC provider's client configuration.
 - The cause of two `FOREIGN KEY constraint failed` errors on `POST /chat/{id}/messages` and of the failed `weekly-review` job seen in the last 24 hours.
 - Whether any tool is unused in practice; there was no usage data.
+- Whether chat retrieval degrades cleanly when the embedding endpoint is down, and whether the embedding model is fast enough on a CPU.
+- The cost of moving the local chat model's work to Haiku. The volume is low (139 s of GPU work in 61 hours); no estimate was made.
 - The reach-gauge figure was checked in a browser in both themes and both states. The anatomy skill's line-end check and 4x close-ups did not run, because they need a local Chrome.
