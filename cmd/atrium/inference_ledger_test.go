@@ -32,10 +32,6 @@ func TestInferenceConcurrentAdmissionSendsOneRequest(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	d := asstDB(t, dir)
-	loc, err := time.LoadLocation("America/Port_of_Spain")
-	if err != nil {
-		t.Fatal(err)
-	}
 	now := float64(time.Now().UnixMicro()) / 1e6
 	var reservationN int64
 	if err := d.Read.QueryRow("SELECT reservation_nusd FROM usage ORDER BY id DESC LIMIT 1").Scan(&reservationN); err != nil {
@@ -43,8 +39,8 @@ func TestInferenceConcurrentAdmissionSendsOneRequest(t *testing.T) {
 	}
 	reservation := float64(reservationN) / inference.NanoUSD
 	var committedN int64
-	if err := d.Read.QueryRow("SELECT COALESCE(SUM(accounted_nusd), 0) FROM usage WHERE month_start = ? AND budget_class <> 'subscription'",
-		inference.MonthStart(now, loc)).Scan(&committedN); err != nil {
+	if err := d.Read.QueryRow("SELECT COALESCE(SUM(accounted_nusd), 0) FROM usage WHERE month = ? AND budget_class <> 'subscription'",
+		asstMonth(t, now)).Scan(&committedN); err != nil {
 		t.Fatal(err)
 	}
 	ceiling := 150 * (1 - inference.ClassificationReserveShare)
@@ -205,5 +201,25 @@ func TestInferenceMemoryCallsAreAdmittedAndBilled(t *testing.T) {
 	}
 	if state2 != "failed" || !strings.Contains(errText, "monthly budget") {
 		t.Errorf("job state %q error %q, want a monthly budget refusal", state2, errText)
+	}
+}
+
+func TestInferenceMonthSpendSurvivesATimezoneChange(t *testing.T) {
+	now := float64(time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir, api, f := moduleFixtureAt(t, flagsExcept("", ""), func() float64 { return now })
+	asstWarm(t)
+	d := asstDB(t, dir)
+	asstSpendAt(t, d, inference.SourceLoop, 149.99, now)
+
+	f.unset("ATRIUM_CORE_TZ")
+	asstSet(t, "tz", "Europe/London")
+
+	sent := len(api.Requests())
+	ran := runApp(t, "agent", "run", "--text", "hello")
+	if ran.code != cli.ExitError || !strings.Contains(ran.stdout+ran.stderr, "monthly budget") {
+		t.Fatalf("run after the timezone change: exit %d stdout %q stderr %q, want a monthly budget refusal", ran.code, ran.stdout, ran.stderr)
+	}
+	if got := len(api.Requests()) - sent; got != 0 {
+		t.Errorf("%d provider requests after the refusal", got)
 	}
 }

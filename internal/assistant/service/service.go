@@ -72,17 +72,12 @@ var ErrClosed = errors.New("service: closed")
 
 func New(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, runner *loop.Runner) *Service {
 	s := &Service{DB: d, Cfg: cfg, Env: env, Runner: runner, base: ctx, mu: &sync.Mutex{}, wg: &sync.WaitGroup{}}
-	loc, _ := inference.Location(ctx, d.Read)
-	s.Inference = inference.New(d, func() float64 { return s.now() }, loc, scopes{})
+	s.Inference = inference.New(d, func() float64 { return s.now() }, scopes{})
 	return s
 }
 
-func NewInference(ctx context.Context, d *db.DB, now func() float64) (*inference.Service, error) {
-	loc, err := inference.Location(ctx, d.Read)
-	if err != nil {
-		return nil, err
-	}
-	return inference.New(d, now, loc, scopes{}), nil
+func NewInference(d *db.DB, now func() float64) *inference.Service {
+	return inference.New(d, now, scopes{})
 }
 
 func (s *Service) ResolveClient(ctx context.Context) (*anthropic.Client, error) {

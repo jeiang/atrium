@@ -105,10 +105,7 @@ func workCommand(cfgEnv config.Env) *cli.Command {
 					return cli.Fail(env, err)
 				}
 				now := assistant.Now()
-				svc, err := service.NewInference(env.Ctx, d, func() float64 { return now })
-				if err != nil {
-					return cli.Fail(env, err)
-				}
+				svc := service.NewInference(d, func() float64 { return now })
 				n, err := memory.Work(env.Ctx, d, int64(*thread), memory.WorkOptions{
 					Now: now, Client: client, Inference: svc, Model: model, Effort: effort,
 				})
@@ -208,10 +205,7 @@ func backfillCommand(cfgEnv config.Env) *cli.Command {
 					id := int64(*thread)
 					target = &id
 				}
-				svc, err := service.NewInference(env.Ctx, d, func() float64 { return now })
-				if err != nil {
-					return cli.Fail(env, err)
-				}
+				svc := service.NewInference(d, func() float64 { return now })
 				n, err := memory.Backfill(audit.With(env.Ctx, "operator", audit.CLI), d, target, client, svc, model, effort, now)
 				if err != nil {
 					return cli.Fail(env, err)

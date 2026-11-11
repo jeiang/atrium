@@ -121,23 +121,32 @@ func asstLastAssistant(t *testing.T, d *db.DB, thread int64) string {
 	return raw
 }
 
-func asstSpend(t *testing.T, d *db.DB, source string, usd float64) {
+func asstMonth(t *testing.T, now float64) string {
 	t.Helper()
-	now := float64(time.Now().UnixMicro()) / 1e6
 	loc, err := time.LoadLocation("America/Port_of_Spain")
 	if err != nil {
 		t.Fatal(err)
 	}
+	return inference.MonthKey(now, loc)
+}
+
+func asstSpend(t *testing.T, d *db.DB, source string, usd float64) {
+	t.Helper()
+	asstSpendAt(t, d, source, usd, float64(time.Now().UnixMicro())/1e6)
+}
+
+func asstSpendAt(t *testing.T, d *db.DB, source string, usd float64, now float64) {
+	t.Helper()
 	class := "interactive"
 	if source == inference.SourceSubscription {
 		class = "subscription"
 	}
-	asstExec(t, d, "INSERT INTO usage (attempt_key, ts, month_start, expires_at, settled_at, state, budget_class, reservation_nusd, accounted_nusd, "+
+	asstExec(t, d, "INSERT INTO usage (attempt_key, ts, month, expires_at, settled_at, state, budget_class, reservation_nusd, accounted_nusd, "+
 		"request_id, source, provider, thread_id, run_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, "+
 		"output_tokens, searches, tier, cost_usd) "+
 		"VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, 'settled', ?, 0, ?, lower(hex(randomblob(16))), ?, 'anthropic', 1, 1, 'chat', "+
 		"'claude-haiku-5-5', 'medium', '[]', 0, 0, 0, 0, 0, 0, '<=100K', ?)",
-		now, inference.MonthStart(now, loc), now, now, class, int64(math.Ceil(usd*1e9)), source, usd)
+		now, asstMonth(t, now), now, now, class, int64(math.Ceil(usd*1e9)), source, usd)
 }
 
 func TestAsstMonthlyBudgetPausesUnattendedRunsAt80AndChatAt100(t *testing.T) {

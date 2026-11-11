@@ -95,7 +95,7 @@ func StatusAt(ctx context.Context, q db.Querier, now float64, loc *time.Location
 	if err != nil {
 		return Status{}, err
 	}
-	month := MonthStart(now, loc)
+	month := MonthKey(now, loc)
 	var spent float64
 	var committed, reserved, unknown, expired, carry int64
 	err = q.QueryRowContext(ctx,
@@ -104,13 +104,13 @@ func StatusAt(ctx context.Context, q db.Querier, now float64, loc *time.Location
 			"COALESCE(SUM(CASE WHEN state = 'reserved' AND expires_at > ? THEN reservation_nusd ELSE 0 END), 0), "+
 			"COALESCE(SUM(CASE WHEN state = 'unknown' AND expires_at > ? THEN reservation_nusd ELSE 0 END), 0), "+
 			"COALESCE(SUM(CASE WHEN state = 'expired' OR (state IN ('reserved','unknown') AND expires_at <= ?) THEN reservation_nusd ELSE 0 END), 0) "+
-			"FROM usage WHERE month_start = ? AND budget_class <> ?",
+			"FROM usage WHERE month = ? AND budget_class <> ?",
 		now, now, now, month, ClassSubscription).Scan(&spent, &committed, &reserved, &unknown, &expired)
 	if err != nil {
 		return Status{}, err
 	}
 	err = q.QueryRowContext(ctx,
-		"SELECT COALESCE(SUM(reservation_nusd), 0) FROM usage WHERE month_start < ? AND state IN ('reserved','unknown') "+
+		"SELECT COALESCE(SUM(reservation_nusd), 0) FROM usage WHERE month < ? AND state IN ('reserved','unknown') "+
 			"AND expires_at > ? AND budget_class <> ?", month, now, ClassSubscription).Scan(&carry)
 	if err != nil {
 		return Status{}, err
