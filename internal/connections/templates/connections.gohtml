@@ -11,8 +11,8 @@
     <form method="post" action="{{$.Path}}/test">
       <input type="hidden" name="csrf_token" value="{{$csrf}}">
       <input type="hidden" name="id" value="{{.ID}}">
-      <label>URL <input name="url" value="{{$d.URL .}}"></label>
-      <label>API key <input name="api_key" type="password" autocomplete="off"></label>
+      {{with $d.URL .}}<label>URL <input name="url" value="{{.}}"></label>{{end}}
+      {{range .Credentials}}<label>{{.Slot}} <input name="credential.{{.Slot}}" type="password" autocomplete="off"></label>{{end}}
       <button type="submit">Test and save</button>
     </form>
     <form method="post" action="{{$.Path}}/disconnect">

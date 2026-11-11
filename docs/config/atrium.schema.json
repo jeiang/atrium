@@ -606,26 +606,6 @@
         }
       },
       "type": "object"
-    },
-    "notion": {
-      "additionalProperties": false,
-      "properties": {
-        "notion_ca_file": {
-          "type": "string"
-        },
-        "notion_ca_file_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_proxy": {
-          "type": "string"
-        },
-        "notion_proxy_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
     }
   },
   "title": "atrium host configuration",
@@ -1021,7 +1001,28 @@
     "media.media_qbittorrent_timeout_seconds",
     "media.media_qbittorrent_url",
     "media.qbittorrent_ca_file",
-    "media.qbittorrent_proxy"
+    "media.qbittorrent_proxy",
+    "memory.memory_concurrency",
+    "memory.memory_node_bytes",
+    "memory.memory_tail_messages",
+    "memory.memory_view_high",
+    "memory.memory_view_low",
+    "notion.notion_block_depth",
+    "notion.notion_branch_limit",
+    "notion.notion_ca_file",
+    "notion.notion_head_source_chars",
+    "notion.notion_label_chars",
+    "notion.notion_max_aliases",
+    "notion.notion_max_retries",
+    "notion.notion_max_sources",
+    "notion.notion_page_size",
+    "notion.notion_proxy",
+    "notion.notion_related_limit",
+    "notion.notion_retry_after_default_seconds",
+    "notion.notion_retry_after_max_seconds",
+    "notion.notion_snippet_chars",
+    "notion.notion_timeout_seconds",
+    "notion.notion_token"
   ],
   "x-atrium-derived": {
     "calendar.calendar_dir": "services.atrium.stateDir",
@@ -1297,6 +1298,7 @@
     "notify.webpush_vapid_private_key": "the connection field service/webpush credential vapid_private",
     "notion.notion_block_depth": "the compiled constant internal/notion/tuning.go:TuningNotionBlockDepth",
     "notion.notion_branch_limit": "the compiled constant internal/notion/tuning.go:TuningNotionBranchLimit",
+    "notion.notion_ca_file": "host configuration service/notion.transport.ca_file",
     "notion.notion_head_source_chars": "the compiled constant internal/notion/tuning.go:TuningNotionHeadSourceChars",
     "notion.notion_label_chars": "the compiled constant internal/notion/tuning.go:TuningNotionLabelChars",
     "notion.notion_max_aliases": "the compiled constant internal/notion/tuning.go:TuningNotionMaxAliases",
@@ -1304,6 +1306,7 @@
     "notion.notion_max_sources": "the compiled constant internal/notion/tuning.go:TuningNotionMaxSources",
     "notion.notion_page_size": "the compiled constant internal/notion/tuning.go:TuningNotionPageSize",
     "notion.notion_private_value": "the operator setting notion.notion_private_value stored in the database",
+    "notion.notion_proxy": "host configuration service/notion.transport.proxy",
     "notion.notion_related_limit": "the compiled constant internal/notion/tuning.go:TuningNotionRelatedLimit",
     "notion.notion_retry_after_default_seconds": "the compiled constant internal/notion/tuning.go:TuningNotionRetryAfterDefaultSeconds",
     "notion.notion_retry_after_max_seconds": "the compiled constant internal/notion/tuning.go:TuningNotionRetryAfterMaxSeconds",
@@ -1363,7 +1366,6 @@
     "mail.mail_ship24_api_key",
     "media.link_key",
     "media.media_tmdb_token",
-    "notify.webpush_vapid_private_key",
-    "notion.notion_token"
+    "notify.webpush_vapid_private_key"
   ]
 }

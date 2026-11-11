@@ -20,7 +20,7 @@ The module has a small set of typed deployment options. Host configuration goes 
 | `secretFiles` | attribute set of string | `{}` | Secret settings as `"<module>.<key>" = "<host file>"`, delivered through systemd `LoadCredential` and pinned as `<key>_file`. Connection credentials belong in `connections.<id>.credentialFiles`; host secret inputs belong in `host.<module>.<key>_file`; the database key belongs in `database.keyFile`. |
 | `database.keyFile` | null or string | `null` | Host file holding the database key, delivered as the `db-key` credential and `ATRIUM_DB_KEY_FILE`. |
 | `initialTimezone` | null or string | `time.timeZone` | Time zone stored as the operator `tz` value when a fresh database has none. A stored or imported value wins, and the operator can change it afterwards. |
-| `environmentFiles` | list of string | `[]` | `EnvironmentFile=` paths read by every unit and by `atrium-run`; no application credential needs one. The TMDB read token, the Notion token and the Grafana token are connection credentials until their owners are cut over. Calendar and contacts sign in with an iCloud entry of `connections`. |
+| `environmentFiles` | list of string | `[]` | `EnvironmentFile=` paths read by every unit and by `atrium-run`; no application credential needs one. The TMDB read token and the Grafana token are connection credentials until their owners are cut over; the Notion token is already a connection credential in `connections."service/notion".credentialFiles.token`. Calendar and contacts sign in with an iCloud entry of `connections`. |
 | `modelServerUnits` | list of string | `[]` | Units serving the mail chat and embed endpoints. The application units start after them and want them. |
 
 The module writes `calendar.calendar_dir` and `contacts.contacts_dir` as the mirror directories under `stateDir`, `core.otel_traces_endpoint` from `observability.tracesEndpoint`, `export.export_obsidian_dir` from `knowledgeExport.obsidianDirectory`, and `mail.mail_accounts_file` from the `mail/<id>` connections. It does not pin an operator setting.
@@ -37,6 +37,12 @@ services.atrium = {
     config.url = "http://127.0.0.1:8081";
     capabilities = ["api"];
     credentialFiles.api_key = config.sops.secrets.qbittorrent-api-key.path;
+  };
+  connections."service/notion" = {
+    kind = "service/notion";
+    config.api = "https://api.notion.com";
+    capabilities = ["api"];
+    credentialFiles.token = config.sops.secrets.notion-token.path;
   };
   secretFiles."action_links.action_link_key" = config.sops.secrets.action-link-key.path;
   database.keyFile = config.sops.secrets.db-key.path;

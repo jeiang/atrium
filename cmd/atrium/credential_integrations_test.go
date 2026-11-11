@@ -3,13 +3,11 @@
 package main
 
 import (
-	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
@@ -17,42 +15,10 @@ import (
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations"
-	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/secrets"
 )
 
-type fakeNotionAccess struct {
-	mu    sync.Mutex
-	pages int
-}
-
-func (f *fakeNotionAccess) handler(w http.ResponseWriter, r *http.Request) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	w.Header().Set("Content-Type", "application/json")
-	if r.Header.Get("Authorization") != "Bearer ntn_good" {
-		w.WriteHeader(http.StatusUnauthorized)
-		_, _ = w.Write([]byte(`{"object":"error","status":401,"code":"unauthorized","message":"API token is invalid."}`))
-		return
-	}
-	switch r.URL.Path {
-	case "/v1/users/me":
-		_, _ = w.Write([]byte(`{"object":"user","id":"bot","type":"bot"}`))
-	case "/v1/search":
-		results := make([]map[string]string, f.pages)
-		for i := range results {
-			results[i] = map[string]string{"object": "page", "id": "p"}
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"object": "list", "results": results, "has_more": false, "next_cursor": nil})
-	default:
-		w.WriteHeader(http.StatusNotFound)
-	}
-}
-
 func TestCredentialIntegrationsTestWithSpecificReasonsAndSaveOnlyWorkingSecrets(t *testing.T) {
-	notionFake := &fakeNotionAccess{}
-	notionSrv := httptest.NewServer(http.HandlerFunc(notionFake.handler))
-	t.Cleanup(notionSrv.Close)
 	grafana := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
 		switch {
@@ -73,12 +39,10 @@ func TestCredentialIntegrationsTestWithSpecificReasonsAndSaveOnlyWorkingSecrets(
 	gone.Close()
 
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, "ATRIUM_NOTION_BASE_URL", notionSrv.URL)
 	api.RejectKey = "sk-ant-bad"
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
-	unsetEnv(t, "ANTHROPIC_API_KEY", settingEnv(notion.TokenKey), settingEnv(grafanatools.KeyURL), settingEnv(grafanatools.KeyToken))
-	setEnv(t, "NOTION_TOKEN", "ntn_legacy")
+	unsetEnv(t, "ANTHROPIC_API_KEY", settingEnv(grafanatools.KeyURL), settingEnv(grafanatools.KeyToken))
 	s := &integrationSite{t: t, dir: dir}
 	s.start()
 
@@ -105,19 +69,6 @@ func TestCredentialIntegrationsTestWithSpecificReasonsAndSaveOnlyWorkingSecrets(
 		}
 	}
 
-	try("notion", url.Values{"secret": {"ntn_bad"}}, http.StatusUnprocessableEntity, integrations.NeedsReauth, "Notion refused the token")
-	try("notion", url.Values{"secret": {"ntn_good"}}, http.StatusUnprocessableEntity, integrations.Failing, "no pages shared with the integration")
-	if stored(notion.TokenKey) {
-		t.Error("a Notion token that failed Test was stored")
-	}
-	notionFake.mu.Lock()
-	notionFake.pages = 3
-	notionFake.mu.Unlock()
-	try("notion", url.Values{"secret": {"ntn_good"}}, http.StatusOK, integrations.OK, "3 pages shared")
-	if !stored(notion.TokenKey) {
-		t.Error("a working Notion token was not stored")
-	}
-
 	try("grafana", url.Values{"url": {grafana.URL}, "secret": {"glsa_bad"}}, http.StatusUnprocessableEntity, integrations.NeedsReauth, "Grafana refused the token")
 	try("grafana", url.Values{"url": {grafana.URL}, "secret": {"glsa_none"}}, http.StatusUnprocessableEntity, integrations.Failing, "sa-atrium may not search dashboards")
 	try("grafana", url.Values{"url": {gone.URL}, "secret": {"glsa_good"}}, http.StatusUnprocessableEntity, integrations.Failing, "connection refused")
@@ -139,7 +90,7 @@ func TestCredentialIntegrationsTestWithSpecificReasonsAndSaveOnlyWorkingSecrets(
 		t.Error("the working Anthropic key was not stored write-only")
 	}
 
-	if got := runApp(t, "settings", "get", notion.TokenKey); got.code != cli.ExitError || strings.Contains(got.stdout, "ntn_legacy") || !strings.Contains(got.stderr, "is a secret") {
+	if got := runApp(t, "settings", "get", secrets.AnthropicAPIKey); got.code != cli.ExitError || strings.Contains(got.stdout, "sk-ant-good") || !strings.Contains(got.stderr, "is a secret") {
 		t.Errorf("settings get of a secret: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 }

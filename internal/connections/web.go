@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 
@@ -124,6 +125,13 @@ func (h handlers) test(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		cand.Config = raw
+	}
+	for key, values := range form {
+		slot, ok := strings.CutPrefix(key, "credential.")
+		if !ok || slot == "" || len(values) == 0 || values[0] == "" {
+			continue
+		}
+		cand.Credentials = append(cand.Credentials, CredentialInput{Slot: slot, Value: values[0]})
 	}
 	if key := web.FormString(form, "api_key", ""); key != "" {
 		cand.Credentials = append(cand.Credentials, CredentialInput{Slot: "api_key", Value: key})

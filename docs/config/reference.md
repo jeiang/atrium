@@ -108,13 +108,6 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | --- | --- | --- | --- |
 | `webpush_ca_file` | string | none | `ATRIUM_NOTIFY_WEBPUSH_CA_FILE` |
 
-### notion
-
-| Key | Type | Default | Environment variable |
-| --- | --- | --- | --- |
-| `notion_ca_file` | string | none | `ATRIUM_NOTION_NOTION_CA_FILE` |
-| `notion_proxy` | string | none | `ATRIUM_NOTION_NOTION_PROXY` |
-
 ## Operator settings
 
 Operator settings are stored in the database and edited in the application. They are not host configuration and are not set from the environment. A cut-over key is refused with its destination.
@@ -290,7 +283,6 @@ Operator settings are stored in the database and edited in the application. They
 | Key | Type | Default | Class |
 | --- | --- | --- | --- |
 | `notion_private_value` | string | `private` | ui |
-| `notion_token` | string | none | secret |
 
 ### auth
 

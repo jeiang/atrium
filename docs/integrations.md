@@ -1,7 +1,7 @@
 # Integrations
 
-Every connection is configured on the Integrations settings page and tested
-there. A secret is stored write-only in an encrypted database; the host may
+Every connection is configured on the Integrations settings page or the
+Connections page (`/settings/connections`) and tested there. A secret is stored write-only in an encrypted database; the host may
 pin it instead through `secretFiles`. The matrix is the support summary; the
 sections below cover the console work atrium cannot do for you.
 
@@ -13,7 +13,7 @@ sections below cover the console work atrium cannot do for you.
 | Grafana | `grafana` | Service account token | Read-only dashboard and datasource queries | Viewer role is enough; optional token expiry |
 | Mail chat endpoint | `mail_chat` | Optional Bearer key | Chat and routing calls to an OpenAI-compatible endpoint | A hosted endpoint sends mail content off this host |
 | Mail embed endpoint | `mail_embed` | Optional Bearer key | Embeddings for mail search and routing | Same as the chat endpoint |
-| Notion | `notion` | Internal integration token or personal access token | Wiki read, update and insert; knowledge export | Share the pages with the integration; a personal token acts as the user and lasts at most a year |
+| Notion | `service/notion` | Internal integration token or personal access token | Wiki read, update and insert; knowledge export | A connection on `/settings/connections`; share the pages with the integration; a personal token acts as the user and lasts at most a year |
 | qBittorrent | `service/qbittorrent` | API key | Media torrent and library operations | A connection on `/settings/connections`; API keys need qBittorrent 5.2 or newer |
 | TMDB | `tmdb` | API read access token | Media metadata | Read-only; media pages show the attribution |
 | Open-Meteo | `open_meteo` | None | Weather forecasts and place lookup | Public API; no key. The configured coordinates are sent to Open-Meteo |
@@ -100,13 +100,17 @@ Atrium uses read, update and insert content, and no comments or users.
 
 Create the internal integration at
 [notion.so/my-integrations](https://www.notion.so/my-integrations), share the
-wiki pages with it, then paste its token. The Notion record on the
-Integrations page edits `wiki_root`, `sensitivity_property`,
-`notion_private_value` and `wiki_log_title`.
+wiki pages with it, then paste its token on the Notion connection on
+`/settings/connections`. The connection is `service/notion`: the host declares
+it under `connections."service/notion"` with `config.api` (default
+`https://api.notion.com`), optional `transport.ca_file` and `transport.proxy`,
+and the `token` credential slot, which may be a host credential file. The
+Notion settings page (`/settings/notion`) edits `wiki_root`,
+`sensitivity_property`, `notion_private_value` and `wiki_log_title`.
 
 The knowledge base is projected into Notion by the `knowledge-export` job; the
-wiki pages above are not touched. The **Export knowledge to Notion** group in
-the Notion record on the Integrations page sets the export: paste the parent
+wiki pages above are not touched. The **Export knowledge to Notion** section on
+the Integrations page sets the export: paste the parent
 page's URL or id (`export_notion_parent`, stored as the normalized page id),
 choose what to include (`export_notion_kinds`) and turn on Include private
 records to store the same destination in `export_notion_private_to`. The

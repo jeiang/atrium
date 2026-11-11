@@ -58,7 +58,6 @@ func init() {
 	)
 	integrations.RegisterSection(integrations.Section{
 		Name: NotionSection, Title: "Export knowledge to Notion", Module: "export", Template: "export_notion_settings",
-		Integration: "notion",
 		Fields: []integrations.Field{
 			{Key: NotionEnabledKey, Label: "Enabled", Bool: true},
 			{Key: NotionParentKey, Label: "Parent page"},

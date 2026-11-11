@@ -172,7 +172,7 @@ func exportFixture(t *testing.T, fake *exportNotion) (string, *fixture, *db.DB) 
 	fake.pages = map[string]*exportPage{}
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
-	setEnv(t, "ATRIUM_NOTION_BASE_URL", srv.URL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", notionHostConfig(t, dir, srv.URL, "ntn_export"))
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
 	}
@@ -366,6 +366,19 @@ func integrationCard(body, name string) string {
 	}
 	rest := body[start+len(marker):]
 	if end := strings.Index(rest, `data-integration="`); end >= 0 {
+		return rest[:end]
+	}
+	return rest
+}
+
+func sectionCard(body, name string) string {
+	marker := `data-section="` + name + `"`
+	start := strings.Index(body, marker)
+	if start < 0 {
+		return ""
+	}
+	rest := body[start+len(marker):]
+	if end := strings.Index(rest, `data-section="`); end >= 0 {
 		return rest[:end]
 	}
 	return rest
@@ -597,9 +610,9 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 	if strings.Contains(body, "Knowledge export") || strings.Contains(body, `data-section="export"`) {
 		t.Errorf("the standalone Knowledge export section is still rendered")
 	}
-	notion := integrationCard(body, "notion")
-	if !strings.Contains(notion, `data-section="export_notion"`) || !strings.Contains(notion, "Export knowledge to Notion") {
-		t.Errorf("the Notion card does not contain the export group")
+	notion := sectionCard(body, "export_notion")
+	if !strings.Contains(notion, "Export knowledge to Notion") {
+		t.Errorf("the Notion export section is missing")
 	}
 	if !strings.Contains(body, `data-section="export_obsidian"`) || !strings.Contains(body, "Obsidian export") {
 		t.Errorf("the Obsidian export section is missing")

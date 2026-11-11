@@ -226,9 +226,9 @@ behavior-parity target.
   embedded into the same generation-numbered index (title, aliases and body,
   same limit); the core loop drains pending records when an embed endpoint is
   set, and a retracted record leaves the index.
-- TMDB (read token) and Ship24 (API key) are connection records on the Integrations settings; qBittorrent (API key) is a connection record on `/settings/connections`
+- TMDB (read token) and Ship24 (API key) are connection records on the Integrations settings; qBittorrent (API key) and Notion (token) are connection records on the `/settings/connections`
   page, with Test before save, recorded health, a daily check, disconnect,
-  and a per-integration CA bundle and proxy. Certificate verification
+  and a per-connection CA bundle and proxy. Certificate verification
   cannot be turned off. Open-Meteo is a keyless connection record for the
   `weather` tool: current conditions and an hourly/daily forecast for the
   configured location or a named place, fetched over the shared transport.
@@ -386,7 +386,7 @@ behavior-parity target.
 - The knowledge export is export-only: a built-in job renders live,
   non-expired records into the Notion page named by
   `export_notion_parent` and overwrites the pages it created; a target with no
-  destination is skipped. The Notion controls sit in the Notion record on the
+  destination is skipped. The Notion controls are a standalone section on the
   Integrations page, the Obsidian folder has its own section, and the parent
   page accepts a pasted page URL or id stored as the normalized id. Each
   external write records an `agent_writes` intent first; an unknown outcome
@@ -611,7 +611,7 @@ behavior-parity target.
 - **The day is home.** Five navigation entries: today and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings. The home brief lists the morning digest lines and names the next event.
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
-- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its registration (`Settings` on the registration, a label on the setting) and that render and save through one shared path; an external module declares them through the `sdk` package and gets a page at `/settings/{module}`. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Media, Notion and Grafana each have a page with their connections and sections, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
+- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its registration (`Settings` on the registration, a label on the setting) and that render and save through one shared path; an external module declares them through the `sdk` package and gets a page at `/settings/{module}`. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Media and Grafana each have a page with their connections and sections, Notion has a page with its wiki settings, its connection is on `/settings/connections`, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -14,7 +15,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/connections/transport"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 )
 
@@ -47,42 +48,67 @@ type Client struct {
 	BaseURL string
 	HTTP    *http.Client
 	API     APILimits
+	lease   *connections.Lease
 	last    time.Time
 	paced   bool
 }
 
-func baseURL(env config.Env) string {
-	if env == nil {
-		env = config.OS
-	}
-	if u, ok := env("ATRIUM_NOTION_BASE_URL"); ok {
-		if u = strings.TrimRight(u, "/"); u != "" {
-			return u
+func NewClient(ctx context.Context, q db.Querier) (*Client, error) {
+	lease, err := connections.OpenRead(ctx, q, config.From(ctx).Host(), connections.ID(KindNotion))
+	if err != nil {
+		var unknown connections.UnknownID
+		if errors.As(err, &unknown) {
+			return nil, config.NotConfigured("the Notion connection is not configured")
 		}
+		return nil, err
 	}
-	return BaseURL
+	client, err := clientFor(lease)
+	if err != nil {
+		lease.Close()
+		return nil, err
+	}
+	return client, nil
 }
 
-func NewClient(ctx context.Context, q db.Querier, env config.Env) (*Client, error) {
-	token, err := Token(ctx, q)
+func clientFor(lease *connections.Lease) (*Client, error) {
+	token, err := lease.Credential("token")
+	if err != nil {
+		var missing connections.MissingCredential
+		if errors.As(err, &missing) {
+			return nil, config.NotConfigured("the Notion connection has no token")
+		}
+		return nil, err
+	}
+	base, err := lease.Endpoint("api")
+	if err != nil {
+		return nil, config.NotConfigured("the Notion connection has no API endpoint")
+	}
+	hc, err := lease.HTTP("api")
 	if err != nil {
 		return nil, err
 	}
-	return newCandidate(ctx, q, env, token, nil)
+	return &Client{token: token, BaseURL: strings.TrimRight(base, "/"), HTTP: hc, API: DefaultAPILimits(), lease: lease}, nil
 }
 
-func newCandidate(ctx context.Context, q db.Querier, env config.Env, token string, hc *http.Client) (*Client, error) {
-	limits, err := LoadAPI(ctx, q)
-	if err != nil {
-		return nil, err
+func (c *Client) Close() {
+	if c.lease != nil {
+		c.lease.Close()
 	}
-	if hc == nil {
-		hc, err = transport.For(ctx, q, "notion", limits.Timeout)
-		if err != nil {
-			return nil, err
-		}
+}
+
+func (c *Client) sharedPages(ctx context.Context) (int, bool, error) {
+	if err := c.do(ctx, http.MethodGet, "/v1/users/me", nil, nil); err != nil {
+		return 0, false, err
 	}
-	return &Client{token: token, BaseURL: baseURL(env), HTTP: hc, API: limits}, nil
+	var reply struct {
+		Results []json.RawMessage `json:"results"`
+		HasMore bool              `json:"has_more"`
+	}
+	body := map[string]any{"filter": map[string]any{"property": "object", "value": "page"}, pagedKeyPerPage: TuningNotionPageSize}
+	if err := c.do(ctx, http.MethodPost, "/v1/search", body, &reply); err != nil {
+		return 0, false, err
+	}
+	return len(reply.Results), reply.HasMore, nil
 }
 
 func sleep(ctx context.Context, seconds float64) error {
