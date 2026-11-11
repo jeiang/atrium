@@ -63,7 +63,7 @@ func testConnection(ctx context.Context, lease *connections.Lease, _ []connectio
 	if err != nil {
 		return []connections.Result{{Capability: "api", State: connections.NeedsReauth, Reason: "no Ship24 API key configured"}}, nil
 	}
-	hc, err := lease.Client("url", time.Duration(TuningMailShip24TimeoutSeconds)*time.Second)
+	hc, err := lease.ClientRead("url", time.Duration(TuningMailShip24TimeoutSeconds)*time.Second)
 	if err != nil {
 		return nil, err
 	}
