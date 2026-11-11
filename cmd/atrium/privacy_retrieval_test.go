@@ -63,7 +63,7 @@ func TestPrivateProjectSummariesStayOutOfOtherReaders(t *testing.T) {
 		t.Helper()
 		api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse(toolUseID, "search_threads", args)))
 		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
-		if ran := runApp(t, "agent", "run", "--thread", formatID(thread), "--text", "search the vault"); ran.code != cli.ExitOK {
+		if ran := runApp(t, "agent", "run", "--thread", strconv.FormatInt(thread, 10), "--text", "search the vault"); ran.code != cli.ExitOK {
 			t.Fatalf("thread %d run: %d %s", thread, ran.code, ran.stderr)
 		}
 	}
@@ -139,7 +139,7 @@ func TestPrivateProjectPinnedFactsStayOutOfOtherPrompts(t *testing.T) {
 		t.Helper()
 		before := len(api.Requests())
 		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("ok")))
-		if ran := runApp(t, "agent", "run", "--thread", formatID(thread), "--text", "hello"); ran.code != cli.ExitOK {
+		if ran := runApp(t, "agent", "run", "--thread", strconv.FormatInt(thread, 10), "--text", "hello"); ran.code != cli.ExitOK {
 			t.Fatalf("thread %d run: %d %s", thread, ran.code, ran.stderr)
 		}
 		requests := api.Requests()
@@ -190,5 +190,3 @@ func TestPrivateProjectPinnedFactsStayOutOfOtherPrompts(t *testing.T) {
 		}
 	}
 }
-
-func formatID(id int64) string { return strconv.FormatInt(id, 10) }
