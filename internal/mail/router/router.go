@@ -41,7 +41,10 @@ type LLMContext struct {
 	Catalog   string
 	Available bool
 	Down      bool
+	NoModel   bool
 }
+
+const ActionAsk = "ask"
 
 type Querier = db.Querier
 
@@ -292,6 +295,9 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 	if len(neighbors) > 0 && lc.Available {
 		if lc.Down {
 			return nil, nil
+		}
+		if lc.NoModel {
+			return &Decision{Stage: "llm", Action: ActionAsk}, nil
 		}
 		body, err := message.Body(ctx, q, m.ID)
 		if err != nil {
