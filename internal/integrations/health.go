@@ -11,7 +11,7 @@ import (
 func Health(ctx context.Context, q db.Querier, name string) (state, reason string, err error) {
 	err = q.QueryRowContext(ctx, "SELECT state, reason FROM integration_health WHERE name = ?", name).Scan(&state, &reason)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", "", nil
+		return Untested, "", nil
 	}
 	return state, reason, err
 }
