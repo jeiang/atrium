@@ -12,6 +12,7 @@ import (
 	"net/netip"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
 )
@@ -63,6 +64,7 @@ type Guard struct {
 	public   func(*http.Request) bool
 	bodyCap  func(context.Context) (int, error)
 	sessions *oidc.Service
+	bearers  *bearer.Service
 	errPage  ErrorPage
 	secure   func(*http.Request) bool
 	classify func(*http.Request) access

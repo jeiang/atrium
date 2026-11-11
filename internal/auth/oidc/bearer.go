@@ -100,6 +100,18 @@ func (s *Service) AuthenticateBearer(ctx context.Context, raw string) (Session, 
 	return session, nil
 }
 
+func EffectiveExpiry(raw string) (time.Time, bool) {
+	t, err := splitToken(raw)
+	if err != nil {
+		return time.Time{}, false
+	}
+	exp, ok := numeric(t.claims["exp"])
+	if !ok {
+		return time.Time{}, false
+	}
+	return exp.Add(clockLeeway), true
+}
+
 func (s *Service) cachedBearer(key string, now time.Time) (Session, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

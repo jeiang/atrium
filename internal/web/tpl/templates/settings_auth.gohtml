@@ -1,14 +1,39 @@
 {{define "title"}}Sign-in · Settings{{end}}
 {{define "heading"}}Settings · Sign-in{{end}}
-{{define "content"}}{{$d := .Data}}
+{{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
 {{template "settings_nav" (dict "Tab" "auth" "Settings" .Settings)}}
-<section class="set-group" data-signin data-active="{{$d.Active}}">
+{{if $d.Active}}<section class="set-group" data-signin data-active="true">
   <h2>Provider</h2>
   <div class="set-row"><span>Provider</span><span>{{$d.Provider}}</span></div>
   {{with $d.Issuer}}<div class="set-row"><span>Issuer</span><span class="font-mono text-xs">{{.}}</span></div>{{end}}
   {{with $d.ClientID}}<div class="set-row"><span>Client ID</span><span class="font-mono text-xs">{{.}}</span></div>{{end}}
   {{with $d.Redirect}}<div class="set-row"><span>Redirect URI</span><span class="font-mono text-xs">{{.}}</span></div>{{end}}
-  {{with $d.Reason}}<div class="set-row"><span role="alert">{{.}}</span></div>{{end}}
+</section>{{else}}{{with $d.Reason}}<section class="set-group" data-signin data-active="false">
+  <div class="set-row"><span role="alert">{{.}}</span></div>
+</section>{{end}}{{end}}
+<section class="set-group" data-tokens>
+  <h2>API tokens</h2>
+  {{with $d.Notice}}<p class="px-4 py-2 text-sm" role="status">{{.}}</p>{{end}}
+  {{with $d.Error}}<p class="px-4 py-2 text-sm text-destructive" role="alert">{{.}}</p>{{end}}
+  {{with $d.Secret}}<div class="set-row"><span>New token</span><span class="font-mono text-xs" data-secret>{{.}}</span></div>
+  <p class="px-4 py-2 text-sm text-ink-2">Copy it now; it cannot be shown again.</p>{{end}}
+  {{if $d.Tokens}}<table class="w-full text-sm">
+    <thead><tr><th>Name</th><th>Kind</th><th>Owner</th><th>Created</th><th>Expires</th><th>Last used</th><th>Revoked</th><th></th></tr></thead>
+    <tbody>{{range $d.Tokens}}<tr data-token="{{.ID}}">
+      <td>{{.Name}}</td><td>{{.Kind}}</td><td>{{.Owner}}</td>
+      <td>{{.Created}}</td><td>{{.Expires}}</td><td>{{.LastUsed}}</td><td>{{.Revoked}}</td>
+      <td>{{if .Active}}<form method="post" action="/settings/auth/tokens/{{.ID}}/revoke">
+        <input type="hidden" name="csrf_token" value="{{$csrf}}">
+        <button type="submit" class="btn" data-size="sm" data-variant="outline">Revoke</button>
+      </form>{{end}}</td>
+    </tr>{{end}}</tbody>
+  </table>{{else}}<div class="set-row"><span>No tokens.</span></div>{{end}}
+  <form method="post" action="/settings/auth/tokens">
+    <input type="hidden" name="csrf_token" value="{{$csrf}}">
+    <label>Name <input name="name" required maxlength="100" autocomplete="off"></label>
+    <label>Expires <input name="expires_at" placeholder="2026-01-02T15:04:05Z" autocomplete="off"></label>
+    <button type="submit" class="btn" data-size="sm">Issue</button>
+  </form>
 </section>
 {{template "settings_groups" .}}
 {{end}}

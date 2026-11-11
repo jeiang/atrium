@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/auth/oidc/oidctest"
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 )
 
@@ -358,25 +359,28 @@ func TestAPIRefusesRequestsWithoutAValidBearer(t *testing.T) {
 	s.idp.RevokeAll = false
 }
 
-func TestAPIIsUnavailableWithoutOIDC(t *testing.T) {
+func TestAPILocalTokensWorkWithoutOIDC(t *testing.T) {
 	moduleFixture(t, flagsExcept("", ""))
+	issued := runApp(t, "auth", "token", "issue", "--name", "phone")
+	if issued.code != cli.ExitOK {
+		t.Fatalf("auth token issue: exit %d stdout %q stderr %q", issued.code, issued.stdout, issued.stderr)
+	}
+	secret := strings.TrimSpace(issued.stdout)
+	if !strings.HasPrefix(secret, "atr_") {
+		t.Fatalf("issue printed %q, not a token secret", issued.stdout)
+	}
 	for _, auth := range [][]string{{"--auth", "local"}, {"--auth", "proxy", "--allowed-host", "127.0.0.1"}} {
 		base, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, auth...)
 		if err != nil {
 			t.Fatal(err)
 		}
-		req, _ := http.NewRequest(http.MethodGet, base+"/api/v1/me", nil)
-		req.Header.Set("Authorization", "Bearer a.b.c")
-		req.Header.Set("Remote-Groups", "atrium_access,atrium_admin")
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			t.Fatal(err)
+		s := &apiSite{t: t, base: base}
+		if me := s.do(http.MethodGet, "/api/v1/me", secret, nil); me.status != http.StatusOK || me.json["api_version"] != float64(1) {
+			t.Fatalf("%v: a local token cannot read the API: %d %s", auth, me.status, me.body)
 		}
-		data, _ := io.ReadAll(resp.Body)
-		_ = resp.Body.Close()
-		if resp.StatusCode != http.StatusNotFound || !strings.Contains(string(data), `"api_unavailable"`) {
-			t.Fatalf("%v: %d %s", auth, resp.StatusCode, data)
-		}
+		expectAPI(t, s.do(http.MethodGet, "/api/v1/me", "a.b.c", nil), http.StatusNotFound, "api_unavailable")
+		expectAPI(t, s.do(http.MethodGet, "/api/v1/me", "", nil), http.StatusUnauthorized, "unauthenticated")
+		expectAPI(t, s.do(http.MethodGet, "/api/v1/me", "atr_short", nil), http.StatusUnauthorized, "invalid_token")
 		stop()
 	}
 }

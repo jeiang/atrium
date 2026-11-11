@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
 )
@@ -169,23 +170,23 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	h := w.Header()
 	setSecurityHeaders(h)
 	h.Set("Cache-Control", "no-store")
-	if g.sessions == nil || !g.auth.OIDC() {
-		APIError(w, http.StatusNotFound, "api_unavailable", "The API needs OIDC sign-in.")
-		return
-	}
 	token, ok := bearerToken(r)
 	if !ok {
 		h.Set("WWW-Authenticate", realm)
 		APIError(w, http.StatusUnauthorized, "unauthenticated", "A bearer access token is required.")
 		return
 	}
-	s, err := g.sessions.AuthenticateBearer(r.Context(), token)
+	if g.bearers == nil {
+		APIError(w, http.StatusServiceUnavailable, "auth_unavailable", "Sign-in is unavailable.")
+		return
+	}
+	tok, err := g.bearers.Authenticate(r.Context(), token)
 	switch {
 	case err == nil:
 	case errors.Is(err, oidc.ErrAPIOff):
 		APIError(w, http.StatusNotFound, "api_unavailable", "The API is not configured.")
 		return
-	case errors.Is(err, oidc.ErrToken):
+	case errors.Is(err, bearer.ErrInvalid), errors.Is(err, bearer.ErrRevoked), errors.Is(err, bearer.ErrExpired), errors.Is(err, oidc.ErrToken):
 		h.Set("WWW-Authenticate", realm+`, error="invalid_token"`)
 		APIError(w, http.StatusUnauthorized, "invalid_token", "The access token was refused.")
 		return
@@ -197,7 +198,7 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		APIError(w, http.StatusServiceUnavailable, "auth_unavailable", "Sign-in is unavailable.")
 		return
 	}
-	who := Identity{Source: SourceBearer, Subject: s.Subject, Email: s.Email, Name: s.Name}
+	who := Identity{Source: SourceBearer, Subject: tok.Subject}
 	if isUnsafe(r.Method) {
 		if !sameOrigin(r) {
 			APIError(w, http.StatusForbidden, "cross_origin", "Cross-origin requests are refused.")
