@@ -59,8 +59,6 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `ATRIUM_MEDIA_TMDB_CA_FILE` | `media.tmdb_ca_file` |
 | `ATRIUM_MEDIA_TMDB_PROXY` | `media.tmdb_proxy` |
 | `ATRIUM_NOTIFY_WEBPUSH_CA_FILE` | `notify.webpush_ca_file` |
-| `ATRIUM_NOTION_NOTION_CA_FILE` | `notion.notion_ca_file` |
-| `ATRIUM_NOTION_NOTION_PROXY` | `notion.notion_proxy` |
 
 ## Bootstrap
 

@@ -54,10 +54,15 @@
             passwordFile = "/run/secrets/icloud-app-password";
           };
         };
+        "service/notion" = {
+          kind = "service/notion";
+          config.api = "https://api.notion.com";
+          capabilities = ["api"];
+          credentialFiles.token = "/run/secrets/notion-token";
+        };
       };
       secretFiles = {
         "action_links.action_link_key" = "/run/secrets/action-link-key";
-        "notion.notion_token" = "/run/secrets/notion-token";
       };
       database.keyFile = "/run/secrets/db-key";
       web.allowedHost = "atrium.example.org";
@@ -76,7 +81,7 @@
     cutoverHostRefused = assert refusedWith "host configuration service/qbittorrent.config.url" {host.media.media_qbittorrent_url = "http://127.0.0.1:8081";}; true;
     databaseKeyRefused = assert refusedWith "services.atrium.database.keyFile" {host.db.key_file = "/run/x";}; true;
     obsidianRefused = assert refusedWith "services.atrium.knowledgeExport.obsidianDirectory" {host.export.export_obsidian_dir = "/var/lib/x";}; true;
-    secretRefused = assert refusedWith "services.atrium.database.keyFile" {secretFiles."db.key" = "/run/x";}; assert refusedWith "connection field service/qbittorrent credential api_key" {secretFiles."media.media_qbittorrent_api_key" = "/run/x";}; assert refusedWith "host configuration" {secretFiles."auth.oidc_client_secret" = "/run/x";}; assert refusedWith "is not a secret setting" {secretFiles."assistant.monthly_budget_usd" = "/run/x";}; true;
+    secretRefused = assert refusedWith "services.atrium.database.keyFile" {secretFiles."db.key" = "/run/x";}; assert refusedWith "connection field service/qbittorrent credential api_key" {secretFiles."media.media_qbittorrent_api_key" = "/run/x";}; assert refusedWith "connection field service/notion credential token" {secretFiles."notion.notion_token" = "/run/x";}; assert refusedWith "host configuration" {secretFiles."auth.oidc_client_secret" = "/run/x";}; assert refusedWith "is not a secret setting" {secretFiles."assistant.monthly_budget_usd" = "/run/x";}; true;
     connectionRefused = assert refusedWith "needs a kind" {connections."service/x" = {kind = "";};};
     assert refusedWith "needs a mail/<id> connection id" {
       connections."service/x" = {
@@ -103,7 +108,7 @@
     appUnits = builtins.filter (lib.hasSuffix ".service") cfg.unitNames;
     credentialLines = [
       "LoadCredential=action_links.action_link_key:/run/secrets/action-link-key"
-      "LoadCredential=notion.notion_token:/run/secrets/notion-token"
+      "LoadCredential=connection-service-notion-token:/run/secrets/notion-token"
       "LoadCredential=db-key:/run/secrets/db-key"
       "LoadCredential=connection-service-qbittorrent-api_key:/run/secrets/qbittorrent-api-key"
       "LoadCredential=mail-account-icloud:/run/secrets/icloud-app-password"

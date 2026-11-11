@@ -21,7 +21,6 @@ import (
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -205,7 +204,6 @@ func requirementEnv(mediaRoot string) map[string]string {
 		settingEnv(contacts.DirKey):            mediaRoot + "-contacts",
 		settingEnv(config.KeyMailAccountsFile): defaultAccountsFile,
 		"ATRIUM_HOST_CONFIG":                   defaultHostConfig,
-		settingEnv(notion.TokenKey):            "dummy-notion-token",
 		settingEnv(grafanatools.KeyURL):        "http://grafana.invalid",
 	}
 }
@@ -227,7 +225,6 @@ func init() {
 			testEnv[name] = value
 		}
 	}
-	testEnv["ATRIUM_NOTION_BASE_URL"] = "http://127.0.0.1:9"
 }
 
 func quietLog(io.Writer) {}

@@ -269,7 +269,6 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 	for _, tc := range []struct{ module, reason string }{
 		{module.Mail, "mail_chat_url is not set"},
 		{module.Calendar, "iCloud CalDAV login or Google Calendar credentials"},
-		{module.Notion, "notion_token is not set"},
 		{module.Media, "media_root is not set"},
 		{module.Assistant, "the Anthropic connection is not configured"},
 		{module.Notifications, "webpush_subject is not set"},

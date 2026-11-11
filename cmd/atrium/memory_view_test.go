@@ -54,16 +54,6 @@ func TestMemoryViewReducesWithSummaries(t *testing.T) {
 			t.Errorf("tail line is not a raw leaf: %s", line)
 		}
 	}
-	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('view_high', '3000')"); err != nil {
-		t.Fatal(err)
-	}
-	third := runApp(t, "memory", "view", "1")
-	if third.code != cli.ExitOK {
-		t.Fatalf("third view: %d %s", third.code, third.stderr)
-	}
-	if strings.Join(strings.Split(strings.TrimSpace(third.stdout), "\n")[1:], "\n") != strings.Join(lines[1:], "\n") {
-		t.Errorf("lowering view_high changed the current batch:\n%s", third.stdout)
-	}
 	if _, err := d.Write.Exec("INSERT INTO thread_messages (thread_id, seq, role, content_json, created_at) VALUES (1, 700, 'user', ?, 0)", text); err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +61,7 @@ func TestMemoryViewReducesWithSummaries(t *testing.T) {
 	if fourth.code != cli.ExitOK {
 		t.Fatalf("fourth view: %d %s", fourth.code, fourth.stderr)
 	}
-	if strings.Join(strings.Split(strings.TrimSpace(fourth.stdout), "\n")[1:], "\n") == strings.Join(strings.Split(strings.TrimSpace(third.stdout), "\n")[1:], "\n") {
+	if strings.Join(strings.Split(strings.TrimSpace(fourth.stdout), "\n")[1:], "\n") == strings.Join(strings.Split(strings.TrimSpace(second.stdout), "\n")[1:], "\n") {
 		t.Errorf("a new message did not start a new batch: %s", fourth.stdout)
 	}
 }

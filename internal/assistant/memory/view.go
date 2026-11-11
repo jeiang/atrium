@@ -13,7 +13,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 type Line struct {
@@ -42,32 +41,21 @@ type storedView struct {
 	Lines        []Line
 }
 
-func ViewSettings(ctx context.Context, q db.Querier) (low, high, tail int, err error) {
-	resolve := func(key string) (int64, error) {
-		found, err := settings.From(ctx).Resolve(ctx, q, key)
-		if err != nil {
-			return 0, err
-		}
-		return found.Int()
+func bounds(ctx context.Context, q db.Querier, threadID int64) (low, high, tail int, ok bool, err error) {
+	low, high, tail = TuningMemoryViewLow, TuningMemoryViewHigh, TuningMemoryTailMessages
+	thread, err := threads.Get(ctx, q, threadID)
+	if err != nil || thread == nil {
+		return 0, 0, 0, false, err
 	}
-	l, err := resolve(ViewLowKey)
-	if err != nil {
-		return 0, 0, 0, err
+	if limit := threads.ContextLimitOf(*thread); limit > 0 && limit*4 < int64(high) {
+		high = int(limit * 4)
 	}
-	h, err := resolve(ViewHighKey)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	t, err := resolve(TailMessagesKey)
-	if err != nil {
-		return 0, 0, 0, err
-	}
-	return int(l), int(h), int(t), nil
+	return min(low, high), high, tail, true, nil
 }
 
 // Build returns the thread's stable view. A new batch is computed only when
 // the summary or message count changed; otherwise the persisted batch is
-// returned unchanged, so a settings change applies to the next batch.
+// returned unchanged.
 func Build(ctx context.Context, q db.Querier, threadID int64, now float64) (*View, error) {
 	low, high, tail, ok, err := bounds(ctx, q, threadID)
 	if err != nil || !ok {
@@ -117,21 +105,6 @@ func Older(ctx context.Context, q db.Querier, threadID, before int64) ([]Line, e
 	}
 	lines, _ := reduce(kept, low, high, tail)
 	return lines, nil
-}
-
-func bounds(ctx context.Context, q db.Querier, threadID int64) (low, high, tail int, ok bool, err error) {
-	low, high, tail, err = ViewSettings(ctx, q)
-	if err != nil {
-		return 0, 0, 0, false, err
-	}
-	thread, err := threads.Get(ctx, q, threadID)
-	if err != nil || thread == nil {
-		return 0, 0, 0, false, err
-	}
-	if limit := threads.ContextLimitOf(*thread); limit > 0 && limit*4 < int64(high) {
-		high = int(limit * 4)
-	}
-	return min(low, high), high, tail, true, nil
 }
 
 func reduce(nodes []Node, low, high, tail int) ([]Line, bool) {

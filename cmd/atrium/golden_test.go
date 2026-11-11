@@ -164,7 +164,6 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	vars["ATRIUM_MEDIA_ROOT"] = filepath.Join(dir, "media")
 	vars["ATRIUM_CHAT_URL"] = srv.URL + "/v1"
 	vars["ATRIUM_EMBED_URL"] = srv.URL + "/v1"
-	vars["ATRIUM_NOTION_BASE_URL"] = "http://127.0.0.1:9"
 	vars[calendar.CalDAVEnv] = caldavURL
 	for _, name := range moduleNames {
 		vars["ATRIUM_CORE_"+strings.ToUpper(name)+"_ENABLED"] = "true"
@@ -176,7 +175,7 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 		"ATRIUM_MODE": "ATRIUM_MAIL_MAIL_MODE", "ATRIUM_CHAT_URL": "ATRIUM_MAIL_MAIL_CHAT_URL", "ATRIUM_EMBED_URL": "ATRIUM_MAIL_MAIL_EMBED_URL",
 		"ATRIUM_MEDIA_ROOT": "ATRIUM_MEDIA_MEDIA_ROOT", "QBITTORRENT_URL": "ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL",
 		"ATRIUM_MEDIA_MOVIES_URL": "ATRIUM_MEDIA_MEDIA_MOVIES_URL", "ATRIUM_MEDIA_TV_URL": "ATRIUM_MEDIA_MEDIA_TV_URL",
-		"ATRIUM_CONTACTS_DIR": "ATRIUM_CONTACTS_CONTACTS_DIR", "NOTION_TOKEN": "ATRIUM_NOTION_NOTION_TOKEN",
+		"ATRIUM_CONTACTS_DIR": "ATRIUM_CONTACTS_CONTACTS_DIR",
 	} {
 		if v, ok := vars[phaseA]; ok {
 			vars[canonical] = v
