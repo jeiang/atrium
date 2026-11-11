@@ -285,7 +285,7 @@ func (s *Store) ApplyLocalTx(ctx context.Context, tx *sql.Tx, n New, apply func(
 	if err != nil {
 		return Effect{}, err
 	}
-	return s.Get(context.WithoutCancel(ctx), id)
+	return Effect{ID: id}, nil
 }
 
 func (s *Store) applyLocalTx(ctx context.Context, tx *sql.Tx, n New, apply func(context.Context, *sql.Tx) (Result, error)) (int64, error) {

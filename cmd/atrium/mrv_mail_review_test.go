@@ -471,9 +471,6 @@ func TestMrvDraftSendNeverResendsAnUncertainMailAndFilesTheSentCopy(t *testing.T
 		t.Fatalf("resolving a settled draft = %d: %.400s", code, body)
 	}
 
-	server, ca := imapscript.ServeTLS(t, imapscript.MustParse(t, mrvSentCopyScript))
-	t.Setenv("ATRIUM_IMAP_ADDR", server.Addr())
-	t.Setenv("ATRIUM_IMAP_CA", ca)
 	final := revision()
 	code, body, _ = mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {final}}, hx...)
 	if code != http.StatusOK || !strings.Contains(body, "copy filed in Sent") {

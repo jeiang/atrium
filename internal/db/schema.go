@@ -82,3 +82,10 @@ func seed(ctx context.Context, q Querier, now time.Time) error {
 	}
 	return nil
 }
+
+// EnsureSchema re-applies the baseline schema files. It is idempotent for
+// existing tables and adds tables introduced while the v3 baseline is edited
+// directly; it does not alter existing tables.
+func EnsureSchema(ctx context.Context, q Querier) error {
+	return initSchema(ctx, q)
+}

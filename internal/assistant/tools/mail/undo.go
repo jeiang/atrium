@@ -85,11 +85,7 @@ func RegisterLedgerUndoer(s *ledger.Store, open mail.OpenFunc) error {
 		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
 			value, err := undoFolderDelete(ctx, open, s, raw)
 			if err != nil {
-				var refused ledger.Refused
-				if errors.As(err, &refused) {
-					return ledger.Result{State: ledger.Failed, Error: refused.Error()}, nil
-				}
-				return ledger.Result{}, err
+				return ledger.Result{}, mailUndoFailure(err)
 			}
 			return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
 		},
@@ -101,11 +97,7 @@ func RegisterLedgerUndoer(s *ledger.Store, open mail.OpenFunc) error {
 		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
 			value, err := undoMailMoveBack(ctx, open, s, raw)
 			if err != nil {
-				var refused ledger.Refused
-				if errors.As(err, &refused) {
-					return ledger.Result{State: ledger.Failed, Error: refused.Error()}, nil
-				}
-				return ledger.Result{}, err
+				return ledger.Result{}, mailUndoFailure(err)
 			}
 			return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
 		},
@@ -117,15 +109,19 @@ func RegisterLedgerUndoer(s *ledger.Store, open mail.OpenFunc) error {
 		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
 			value, err := undoPackageUntrack(ctx, s, raw)
 			if err != nil {
-				var refused ledger.Refused
-				if errors.As(err, &refused) {
-					return ledger.Result{State: ledger.Failed, Error: refused.Error()}, nil
-				}
-				return ledger.Result{}, err
+				return ledger.Result{}, mailUndoFailure(err)
 			}
 			return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
 		},
 	})
+}
+
+func mailUndoFailure(err error) error {
+	var missing config.NotConfigured
+	if errors.As(err, &missing) {
+		return ledger.Refused(missing.Error())
+	}
+	return err
 }
 
 func undoDraftDelete(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {

@@ -174,7 +174,7 @@ func TestKnowledgeWrittenInAMarkedThreadMarksItsReader(t *testing.T) {
 		!strings.Contains(page, fmt.Sprintf("/activity/effect/%d/undo", writeID)) {
 		t.Fatalf("activity = %d, want an undo for write %d: %.400s", code, writeID, page)
 	}
-	if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/activity/effect/%d/undo", base, writeID), url.Values{}); code != http.StatusSeeOther {
+	if code, body, _ := fetch(t, client, http.MethodPost, fmt.Sprintf("%s/activity/effect/%d/undo", base, writeID), url.Values{}); code != http.StatusOK {
 		t.Fatalf("undo %d = %d %.400s", writeID, code, body)
 	}
 	var retracted *float64

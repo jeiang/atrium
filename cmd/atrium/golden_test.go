@@ -205,6 +205,17 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	app := newAppWith(env, reg, st, nil, clients, func() float64 { return data.world.Clock }, quietLog)
 	app.Stdin = strings.NewReader(stdin)
 	copyFile(t, filepath.Join(golden.Dir(), "world.db"), filepath.Join(dir, "atrium.db"))
+	world, err := db.Connect(filepath.Join(dir, "atrium.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := db.EnsureSchema(context.Background(), world.Write); err != nil {
+		_ = world.Close()
+		t.Fatal(err)
+	}
+	if err := world.Close(); err != nil {
+		t.Fatal(err)
+	}
 	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: reg, state: st}
 	fixturesByTest.Store(t, f)
 	fixturesByTest.Store(testKey(t), f)
