@@ -281,11 +281,49 @@ behavior-parity target.
   step. The schema files are edited directly until the freeze in phase 11;
   every later change is an additive migration in `internal/db/migrate.go`.
   A database with tables but no v3 marker is refused before any write with
-  a message naming `atrium db import-v2`.
+  a message naming `atrium db import-v2`. `atrium db import-v2 <path>`
+  copies a v2 database at schema version 11 into the configured database,
+  which must be a fresh v3 database (created through the normal boot path
+  when absent); the source is opened read-only and never written. It
+  refuses a source that already has the v3 marker, is not at version 11,
+  has an embedding index rebuild in progress, or has a mail or agent write
+  in flight (`auto_actions` or `agent_writes` held, a `proposal_actions`
+  hold with a live lease, a `drafts` send); it refuses a destination that
+  already holds rows in an imported table. Everything is copied in one
+  transaction with foreign keys enforced and `PRAGMA foreign_key_check` at
+  the end, so a failure leaves the destination unchanged. Carried with
+  their ids: mail accounts, mailboxes, messages and the learned mail data
+  (rules, corrections, decisions, flag decisions, the action ledger with
+  its undo state, write resolutions, live state and baseline, snoozes,
+  drafts, scans, commitments, open loops and overrides, packages and their
+  events, watch dismissals, rebalance and event candidates), the active
+  generation's message vectors and index row (URL, model and dimension
+  kept), settings, secrets (the row is readable only with the same
+  database key, since the database encrypts it), notification channels,
+  push subscriptions and attention snoozes, knowledge records (their
+  `embedded` flag reset so vectors rebuild), projects, threads with their
+  messages, files, plans and queue, agent profile, skills, operator-edited
+  subagents, jobs, agent events, tasks, proposals and their actions, agent
+  writes, media channels, the seen list and media state, and the current
+  calendar month's usage rows. Rebuilt: `message_fts`, `thread_fts` and
+  `kb_fts`. Not carried: run history (`runs`, `run_events`, `tool_calls`,
+  `tool_results`, `context_ledger`, `context_projections`, `job_runs`),
+  memory (rebuilt), Notion and wiki state (re-synced), knowledge and Notion
+  vectors (rebuilt), notifications, auth sessions and login links, OAuth
+  handshakes, action links, the settings audit, the mail event log, ops
+  data, endpoint probes, integration health, nightly observations,
+  `db_key_history` (old backups are read with the old key),
+  `module_migrations` and the source's `schema_migrations`. References to
+  uncarried rows are nulled (`thread_messages.run_id`, `usage.run_id`,
+  `agent_writes.run_id`, `threads.parent_run_id`, `jobs.last_run_id`,
+  `kb_records.source_run_id`, `thread_files.run_id`, `thread_plans.run_id`,
+  `thread_queue.run_id`). The importer prints one line per table with its
+  carried, rebuilt or dropped row count and names any settings key it
+  carries that v3 does not know. v1 data reaches v3 through v2: the v2
+  binary imports it first.
   `taint_private` and `taint_web` are dormant: no longer
   read or written, and kept because dropping them would rewrite the table.
-  v1 data reaches v3 through v2: the v2 binary imports it, and v3 imports
-  the v2 database with `atrium db import-v2`. Every settings write and secret change appends
+  Every settings write and secret change appends
   a row to the append-only `settings_audit` table (old and new value, or
   only `changed` for secrets; actor and source), listed read-only in
   `/activity`. Known secret values are scrubbed from log output and
