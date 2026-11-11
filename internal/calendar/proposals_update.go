@@ -348,7 +348,7 @@ func (p *Proposals) ExecuteUpdate(ctx context.Context, prop *proposals.Proposal,
 	if err != nil {
 		return nil, err
 	}
-	if err := p.guard(ctx, target); err != nil {
+	if err := p.guard(ctx, target, spec.UID); err != nil {
 		return nil, err
 	}
 	var plan func() (undoPlan, error)
@@ -364,15 +364,15 @@ func (p *Proposals) ExecuteUpdate(ctx context.Context, prop *proposals.Proposal,
 		return nil, err
 	}
 	action := actionPayload{Type: UpdateKind, Calendar: string(target), UID: spec.UID}
-	intent, err := p.begin(ctx, prop, action)
+	ticket, err := p.begin(ctx, prop, UpdateKind, target, spec.UID, action, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 	undo, err := plan()
 	if err != nil {
-		return nil, p.fail(ctx, intent, action, err)
+		return nil, p.fail(ctx, ticket, err)
 	}
-	return p.settleRecord(ctx, intent, UpdateKind, undo, "Changed the event on the "+string(target)+" calendar")
+	return p.settleRecord(ctx, ticket, action, undo, "Changed the event on the "+string(target)+" calendar")
 }
 
 func (p *Proposals) ExecuteRSVP(ctx context.Context, prop *proposals.Proposal, _ any) (any, error) {
@@ -392,7 +392,7 @@ func (p *Proposals) ExecuteRSVP(ctx context.Context, prop *proposals.Proposal, _
 	if err != nil {
 		return nil, err
 	}
-	if err := p.guard(ctx, target); err != nil {
+	if err := p.guard(ctx, target, info.UID); err != nil {
 		return nil, err
 	}
 	var plan func() (undoPlan, error)
@@ -406,15 +406,15 @@ func (p *Proposals) ExecuteRSVP(ctx context.Context, prop *proposals.Proposal, _
 		return nil, err
 	}
 	action := actionPayload{Type: RSVPKind, Calendar: string(target), UID: info.UID, Response: info.Response}
-	intent, err := p.begin(ctx, prop, action)
+	ticket, err := p.begin(ctx, prop, RSVPKind, target, info.UID, action, nil, nil)
 	if err != nil {
 		return nil, err
 	}
 	undo, err := plan()
 	if err != nil {
-		return nil, p.fail(ctx, intent, action, err)
+		return nil, p.fail(ctx, ticket, err)
 	}
-	return p.settleRecord(ctx, intent, RSVPKind, undo, "Replied "+info.Response)
+	return p.settleRecord(ctx, ticket, action, undo, "Replied "+info.Response)
 }
 
 func (p *Proposals) Restore(ctx context.Context, plan json.RawMessage) (any, error) {
@@ -430,7 +430,7 @@ func (p *Proposals) Restore(ctx context.Context, plan json.RawMessage) (any, err
 	if err != nil {
 		return nil, err
 	}
-	if err := p.guard(ctx, target); err != nil {
+	if err := p.guard(ctx, target, info.UID); err != nil {
 		return nil, err
 	}
 	switch target {

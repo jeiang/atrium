@@ -344,6 +344,158 @@ func TargetsLike(ctx context.Context, q db.Querier, like, excludeOperation strin
 	})
 }
 
+const (
+	effectBlockedExpr  = "e.state IN ('intent','unknown','partial') AND r.id IS NULL"
+	effectUndoableExpr = "e.direction = 'forward' AND e.state IN ('done','partial') AND e.undo_json IS NOT NULL " +
+		"AND e.undone_by IS NULL AND (r.id IS NULL OR r.effective_outcome <> 'failed') " +
+		"AND NOT EXISTS (SELECT 1 FROM effects u WHERE u.undo_of = e.id AND u.state IN ('intent','unknown','partial','done') " +
+		"AND NOT EXISTS (SELECT 1 FROM effect_resolutions ur WHERE ur.effect_id = u.id AND ur.effective_outcome = 'failed'))"
+	effectResolutionJoin = " LEFT JOIN effect_resolutions r ON r.id = " +
+		"(SELECT MAX(id) FROM effect_resolutions WHERE effect_id = e.id)"
+)
+
+type ProposalFlag struct {
+	Blocked      bool
+	BlockedError string
+	BlockedUndo  bool
+	Undoable     bool
+}
+
+func ProposalFlags(ctx context.Context, q db.Querier, ids []int64) (map[int64]ProposalFlag, error) {
+	out := map[int64]ProposalFlag{}
+	if len(ids) == 0 {
+		return out, nil
+	}
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	list := placeholders(len(ids))
+	rows, err := q.QueryContext(ctx,
+		"SELECT e.proposal_id, MAX(CASE WHEN "+effectBlockedExpr+" THEN 1 ELSE 0 END), "+
+			"MAX(CASE WHEN e.direction = 'undo' AND e.state IN ('unknown','partial') AND r.id IS NULL THEN 1 ELSE 0 END), "+
+			"MAX(CASE WHEN "+effectUndoableExpr+" THEN 1 ELSE 0 END) "+
+			"FROM effects e"+effectResolutionJoin+" WHERE e.proposal_id IN ("+list+") GROUP BY e.proposal_id", args...)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := db.Collect(rows, func(r *sql.Rows) (struct{}, error) {
+		var id int64
+		var blocked, blockedUndo, undoable int64
+		if err := r.Scan(&id, &blocked, &blockedUndo, &undoable); err != nil {
+			return struct{}{}, err
+		}
+		out[id] = ProposalFlag{Blocked: blocked != 0, BlockedUndo: blockedUndo != 0, Undoable: undoable != 0}
+		return struct{}{}, nil
+	}); err != nil {
+		return nil, err
+	}
+	blockedRows, err := q.QueryContext(ctx,
+		"SELECT e.proposal_id, COALESCE(e.error, '') FROM effects e"+effectResolutionJoin+
+			" WHERE e.proposal_id IN ("+list+") AND "+effectBlockedExpr+" ORDER BY e.id", args...)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := db.Collect(blockedRows, func(r *sql.Rows) (struct{}, error) {
+		var id int64
+		var text string
+		if err := r.Scan(&id, &text); err != nil {
+			return struct{}{}, err
+		}
+		flag := out[id]
+		flag.BlockedError = text
+		out[id] = flag
+		return struct{}{}, nil
+	}); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func BlockedProposalIDs(ctx context.Context, q db.Querier) ([]int64, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT DISTINCT e.proposal_id FROM effects e"+effectResolutionJoin+
+			" WHERE e.proposal_id IS NOT NULL AND "+effectBlockedExpr+" ORDER BY e.proposal_id")
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (int64, error) {
+		var id int64
+		return id, r.Scan(&id)
+	})
+}
+
+func UndoableProposalIDs(ctx context.Context, q db.Querier) ([]int64, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT DISTINCT e.proposal_id FROM effects e"+effectResolutionJoin+
+			" WHERE e.proposal_id IS NOT NULL AND "+effectUndoableExpr+" ORDER BY e.proposal_id")
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (int64, error) {
+		var id int64
+		return id, r.Scan(&id)
+	})
+}
+
+func ProposalBlocked(ctx context.Context, q db.Querier, id int64) (bool, error) {
+	var blocked bool
+	err := q.QueryRowContext(ctx,
+		"SELECT EXISTS (SELECT 1 FROM effects e"+effectResolutionJoin+
+			" WHERE e.proposal_id = ? AND "+effectBlockedExpr+")", id).Scan(&blocked)
+	return blocked, err
+}
+
+func ProposalsWithStaleIntent(ctx context.Context, q db.Querier, before float64) ([]int64, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT DISTINCT e.proposal_id FROM effects e WHERE e.proposal_id IS NOT NULL AND e.state = 'intent' AND e.lease_at < ? "+
+			"AND NOT EXISTS (SELECT 1 FROM effects f WHERE f.proposal_id = e.proposal_id AND f.lease_at >= ?) ORDER BY e.proposal_id",
+		before, before)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (int64, error) {
+		var id int64
+		return id, r.Scan(&id)
+	})
+}
+
+func ProposalsWithActiveEffects(ctx context.Context, q db.Querier, leaseAfter float64) ([]int64, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT DISTINCT proposal_id FROM effects WHERE proposal_id IS NOT NULL "+
+			"AND (state IN ('intent','unknown','partial') OR lease_at >= ?) ORDER BY proposal_id", leaseAfter)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (int64, error) {
+		var id int64
+		return id, r.Scan(&id)
+	})
+}
+
+type ProposalAudit struct {
+	ID         int64
+	TS         float64
+	Actor      string
+	Source     string
+	Outcome    string
+	ProposalID int64
+}
+
+func ProposalAuditsSince(ctx context.Context, q db.Querier, source string, limit int) ([]ProposalAudit, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT id, ts, actor, source, outcome, proposal_id FROM effect_resolutions "+
+			"WHERE effect_id IS NULL AND proposal_id IS NOT NULL AND source = ? ORDER BY ts DESC, id DESC LIMIT ?", source, limit)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (ProposalAudit, error) {
+		var a ProposalAudit
+		err := r.Scan(&a.ID, &a.TS, &a.Actor, &a.Source, &a.Outcome, &a.ProposalID)
+		return a, err
+	})
+}
+
 func BlockedTarget(ctx context.Context, q db.Querier, prefix string) (int64, error) {
 	var id int64
 	err := q.QueryRowContext(ctx,

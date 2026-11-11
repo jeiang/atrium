@@ -136,6 +136,16 @@ func timeline(ctx context.Context, q db.Querier, store *ledger.Store, category s
 			e.Phone = &PhoneActivity{Actor: r.Actor, Kind: r.Kind, Status: r.Outcome, Target: target}
 			phone = append(phone, e)
 		}
+		audits, err := ledger.ProposalAuditsSince(ctx, q, "phone", want)
+		if err != nil {
+			return nil, 0, err
+		}
+		for _, a := range audits {
+			phone = append(phone, ActivityEntry{
+				ID: a.ID, TS: a.TS, Source: "phone", Category: categoryMail,
+				Phone: &PhoneActivity{Actor: a.Actor, Kind: "proposal", Status: a.Outcome, Target: fmt.Sprintf("proposal %d", a.ProposalID)},
+			})
+		}
 		entries = append(entries, phone...)
 	}
 	if category == "" || category == categorySettings {

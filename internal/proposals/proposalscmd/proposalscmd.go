@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
@@ -39,6 +40,14 @@ type Options struct {
 	Now     func() float64
 	Env     config.Env
 	Enabled func(context.Context, db.Querier, string) (bool, error)
+	Store   func(*db.DB, config.Config) *ledger.Store
+}
+
+func (o Options) store(d *db.DB, cfg config.Config) *ledger.Store {
+	if o.Store != nil {
+		return o.Store(d, cfg)
+	}
+	return ledger.NewStore(d, o.now)
 }
 
 func (o Options) env() config.Env {
@@ -103,7 +112,7 @@ func (x *exec) JSON(value any) {
 	_, _ = fmt.Fprintln(x.Stdout, jsonx.Dumps(value, jsonx.Opts{Indent: 2}))
 }
 
-func (x *exec) Registry() *proposals.Registry {
+func (x *exec) registry(store *ledger.Store) *proposals.Registry {
 	registry := proposals.NewRegistry()
 	clients := x.opts.Clients
 	if clients == nil {
@@ -111,13 +120,17 @@ func (x *exec) Registry() *proposals.Registry {
 	}
 	open := clients(x.Cfg)
 	handlers.Register(registry, handlers.Deps{
-		DB: x.DB, Open: open, Syncer: &mailsync.Syncer{DB: x.DB, Cfg: x.Cfg, Now: x.opts.Now}, Now: x.opts.Now, Env: x.opts.env(),
+		DB: x.DB, Ledger: store, Open: open,
+		Syncer: &mailsync.Syncer{DB: x.DB, Cfg: x.Cfg, Now: x.opts.Now}, Now: x.opts.Now, Env: x.opts.env(),
 	})
 	return registry
 }
 
 func (x *exec) Pipeline() *proposals.Pipeline {
-	return &proposals.Pipeline{DB: x.DB, Registry: x.Registry(), Now: x.opts.Now, Enabled: x.opts.Enabled}
+	store := x.opts.store(x.DB, x.Cfg)
+	return &proposals.Pipeline{
+		DB: x.DB, Ledger: store, Registry: x.registry(store), Now: x.opts.Now, Enabled: x.opts.Enabled,
+	}
 }
 
 type body func(x *exec) error
@@ -229,7 +242,7 @@ func Command(o Options) *cli.Command {
 		}),
 		o.leaf("resolve", func(a *cli.Args) body {
 			id := a.IntArg("id", cli.Opt{})
-			outcome := a.String("outcome", "", cli.Opt{Choices: []string{proposals.OutcomeUndone, proposals.OutcomeNotUndone}, Help: "what the mailbox shows for a blocked undo"})
+			outcome := a.String("outcome", "", cli.Opt{Choices: proposals.Outcomes, Help: "what the operator found: applied, not-applied or partial for a write; undone or not-undone for an undo"})
 			return func(x *exec) error {
 				resolved, err := x.Pipeline().Resolve(x.Ctx, int64(*id), *outcome, operator)
 				var refused proposals.ProposalError
@@ -250,7 +263,7 @@ func Command(o Options) *cli.Command {
 		o.leaf("undo", func(a *cli.Args) body {
 			id := a.IntArg("id", cli.Opt{})
 			return func(x *exec) error {
-				result, err := x.Pipeline().Undo(x.Ctx, int64(*id))
+				result, err := x.Pipeline().Undo(x.Ctx, int64(*id), operator)
 				if err != nil {
 					return err
 				}

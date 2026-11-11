@@ -25,9 +25,10 @@ import (
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
 type Reminders struct {
-	DB  *db.DB
-	Now func() float64
-	Env config.Env
+	DB     *db.DB
+	Ledger *ledger.Store
+	Now    func() float64
+	Env    config.Env
 }
 
 func (r *Reminders) now() float64 {
@@ -202,35 +203,81 @@ func (r *Reminders) Execute(ctx context.Context, p *proposals.Proposal, _ any) (
 		return nil, err
 	}
 	current := r.now()
-	id, err := tasks.Add(ctx, r.DB.Write, current, tasks.Spec{
-		Title: text, RemindAt: &remindAt, SourceKind: "proposal", SourceID: strconv.FormatInt(p.ID, 10),
-	})
+	action, err := encode(map[string]any{"type": KindReminder})
 	if err != nil {
 		return nil, err
 	}
-	action := map[string]any{"type": KindReminder, "task_id": id}
-	undo := map[string]any{"op": UndoReminder, "id": id}
-	if _, err := proposals.RecordAction(ctx, r.DB.Write, p.ID, "write", nil, action, undo, ledger.OK, nil, r.now()); err != nil {
+	var id int64
+	_, err = r.Ledger.ApplyLocal(ctx, ledger.New{
+		Origin: "local", Operation: UndoReminder, OperationKey: UndoReminder + ":" + ledger.NewKey(),
+		Target: "reminder:" + strconv.FormatInt(p.ID, 10), ProposalID: &p.ID, Action: action,
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
+		var err error
+		id, err = tasks.Add(ctx, tx, current, tasks.Spec{
+			Title: text, RemindAt: &remindAt, SourceKind: "proposal", SourceID: strconv.FormatInt(p.ID, 10),
+		})
+		if err != nil {
+			return ledger.Result{}, err
+		}
+		after, err := encode(map[string]any{"type": KindReminder, "task_id": id})
+		if err != nil {
+			return ledger.Result{}, err
+		}
+		undo, err := encode(map[string]any{"op": UndoReminder, "id": id})
+		if err != nil {
+			return ledger.Result{}, err
+		}
+		return ledger.Result{State: ledger.Done, After: after, Undo: undo}, nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	return executeResult{Summary: "Reminder set for " + time.Unix(int64(remindAt), 0).UTC().Format("2006-01-02 15:04"), TaskID: id}, nil
 }
 
-func (r *Reminders) Undo(ctx context.Context, plan json.RawMessage) (any, error) {
-	var info struct {
-		ID int64 `json:"id"`
-	}
-	if err := json.Unmarshal(plan, &info); err != nil {
+func encode(v any) (json.RawMessage, error) {
+	b, err := json.Marshal(v)
+	if err != nil {
 		return nil, err
 	}
-	if _, err := tasks.Delete(ctx, r.DB.Write, info.ID); err != nil {
-		return nil, err
-	}
-	return map[string]any{"deleted": info.ID}, nil
+	return b, nil
+}
+
+func RegisterLedgerUndoer(s *ledger.Store) error {
+	return s.RegisterUndo(UndoReminder, ledger.Undoer{
+		Validate: func(raw json.RawMessage) error {
+			var info struct {
+				ID int64 `json:"id"`
+			}
+			if err := json.Unmarshal(raw, &info); err != nil || info.ID == 0 {
+				return ledger.Refused("reminder undo payload is invalid")
+			}
+			return nil
+		},
+		Local: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (ledger.Result, error) {
+			var info struct {
+				ID int64 `json:"id"`
+			}
+			if err := json.Unmarshal(raw, &info); err != nil {
+				return ledger.Result{}, ledger.Refused("reminder undo payload is invalid")
+			}
+			deleted, err := tasks.Delete(ctx, tx, info.ID)
+			if err != nil {
+				return ledger.Result{}, err
+			}
+			if !deleted {
+				return ledger.Result{State: ledger.Failed, Error: "the reminder task is already gone"}, nil
+			}
+			after, err := encode(map[string]any{"deleted": info.ID})
+			if err != nil {
+				return ledger.Result{}, err
+			}
+			return ledger.Result{State: ledger.Done, After: after}, nil
+		},
+	})
 }
 
 func Register(reg *proposals.Registry, r *Reminders, owner string) {
 	reg.Executors[KindReminder] = r.Execute
-	reg.Undoers[UndoReminder] = r.Undo
 	reg.AddKind(proposals.Kind{Name: KindReminder, Module: owner, Label: "Reminder", Icon: "scroll-text"})
 }
