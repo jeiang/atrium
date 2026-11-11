@@ -3,9 +3,6 @@ package main
 import (
 	"bytes"
 	"context"
-	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -123,25 +120,3 @@ func TestEmptyPinnedLinkKeyIsRefused(t *testing.T) {
 	}
 }
 
-func TestConnectionsRefuseCredentialsOnAPlaintextDatabase(t *testing.T) {
-	dir := t.TempDir()
-	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
-	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	base := startServeIn(t, dir)
-	jar, _ := cookiejar.New(nil)
-	client := &http.Client{Jar: jar}
-	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/connections/google", nil); code != http.StatusOK {
-		t.Fatalf("google page: %d", code)
-	}
-	const value = "secret-never-printed"
-	code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/connections/google",
-		url.Values{"client_id": {"client-id"}, "client_secret": {value}})
-	if code != http.StatusUnprocessableEntity || !strings.Contains(body, "encrypt the database first") || strings.Contains(body, value) {
-		t.Fatalf("google credential on plaintext: %d %s", code, body)
-	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	var rows int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'google/default'").Scan(&rows); err != nil || rows != 0 {
-		t.Errorf("credentials stored on plaintext = %d, %v", rows, err)
-	}
-}

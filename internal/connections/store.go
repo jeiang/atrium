@@ -839,11 +839,6 @@ func (s *Store) TestAndSave(ctx context.Context, id ID, cand Candidate) (View, e
 }
 
 func (s *Store) save(ctx context.Context, id ID, current View, cand Candidate, results []Result, state State, reason string) error {
-	for _, cred := range cand.Credentials {
-		if cred.Value != "" && !s.d.Encrypted() {
-			return &EncryptedRequired{Slot: cred.Slot}
-		}
-	}
 	configJSON := current.Config
 	if current.ConfigSource == SourceOperator {
 		configJSON = cand.Config
