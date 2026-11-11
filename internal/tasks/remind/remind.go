@@ -2,6 +2,7 @@ package remind
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/config"
@@ -39,18 +40,19 @@ func Due(ctx context.Context, d *db.DB, env config.Env, now float64) (int, error
 		if body == "" {
 			body = fmt.Sprintf("Task #%d is due.", one.id)
 		}
-		result, err := notify.Send(ctx, d.Write, notify.Message{
+		result, err := notify.Send(ctx, d, notify.Message{
 			Channel: notify.Assistant, Title: "atrium: reminder: " + one.title, Body: body,
-			Now: func() float64 { return now },
+			Now: func() float64 { return now }, Occurrence: fmt.Sprintf("task-reminder:%d:%g", one.id, one.at),
+			Mark: func(ctx context.Context, tx *sql.Tx) error {
+				_, err := tx.ExecContext(ctx, "UPDATE tasks SET reminded_ts = ? WHERE id = ? AND reminded_ts IS NULL", now, one.id)
+				return err
+			},
 		})
 		if err != nil {
 			return sent, err
 		}
-		if !result.Delivered {
+		if result.Duplicate {
 			continue
-		}
-		if _, err := d.Write.ExecContext(context.WithoutCancel(ctx), "UPDATE tasks SET reminded_ts = ? WHERE id = ? AND reminded_ts IS NULL", now, one.id); err != nil {
-			return sent, err
 		}
 		sent++
 	}

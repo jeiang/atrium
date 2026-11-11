@@ -16,7 +16,7 @@ func init() {
 		if !Enabled(ctx) {
 			return nil
 		}
-		_, err := Send(ctx, d.Write, Message{Channel: System, Priority: 4, Title: title, Body: body})
+		_, err := Send(ctx, d, Message{Channel: System, Priority: 4, Title: title, Body: body})
 		return err
 	})
 }
@@ -29,7 +29,7 @@ func PauseChanged(ctx context.Context, d *db.DB, env config.Env, paused bool) er
 	if paused {
 		title = "atrium: mail writes paused"
 	}
-	_, err := Send(ctx, d.Write, Message{Channel: System, Priority: 4, Title: title, Body: "Changed by the operator."})
+	_, err := Send(ctx, d, Message{Channel: System, Priority: 4, Title: title, Body: "Changed by the operator."})
 	return err
 }
 
@@ -68,7 +68,8 @@ func noticeBudget(ctx context.Context, d *db.DB, env config.Env, now float64, bu
 			continue
 		}
 		body := fmt.Sprintf("$%s of $%s spent this month.", strconv.FormatFloat(status.SpentUSD, 'f', 2, 64), strconv.FormatFloat(status.BudgetUSD, 'f', 2, 64))
-		if _, err := Send(ctx, d.Write, Message{Channel: System, Title: title, Body: body, Now: func() float64 { return now }}); err != nil {
+		if _, err := Send(ctx, d, Message{Channel: System, Title: title, Body: body, Now: func() float64 { return now },
+			Occurrence: fmt.Sprintf("budget:%g:%g", monthStart, threshold)}); err != nil {
 			return err
 		}
 	}

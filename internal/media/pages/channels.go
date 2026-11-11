@@ -155,7 +155,7 @@ func (s *service) channelAdd(w http.ResponseWriter, r *http.Request) {
 		s.chPage(w, r, chToast("success", "Watching "+row.Name, "The first poll only records what is already out; later matches are downloaded."), http.StatusOK, "", nil, nil, false)
 		return
 	}
-	out, err := media.Poll(ctx, s.deps.DB.Write, s.deps.Env, set, media.PollOptions{Now: s.now, Only: &row.ID, Force: true})
+	out, err := media.Poll(ctx, s.deps.DB, s.deps.Env, set, media.PollOptions{Now: s.now, Only: &row.ID, Force: true})
 	if err != nil {
 		text, kind := mustClassify(err)
 		if kind != backendError {
@@ -265,7 +265,7 @@ func (s *service) channelDelete(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) channelPoll(w http.ResponseWriter, r *http.Request) {
 	settings := s.settings(r.Context())
-	out, err := media.Poll(r.Context(), s.deps.DB.Write, s.deps.Env, settings, media.PollOptions{Now: s.now})
+	out, err := media.Poll(r.Context(), s.deps.DB, s.deps.Env, settings, media.PollOptions{Now: s.now})
 	if err != nil {
 		text, kind := mustClassify(err)
 		if kind != backendError {

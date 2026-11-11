@@ -615,6 +615,7 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 	key := eventKey(latest)
 	hasData := next != "" || len(tracking.Events) > 0
 	notified := false
+	enabled := notify.Enabled(ctx)
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
 		for _, e := range tracking.Events {
 			if _, err := tx.ExecContext(ctx,
@@ -640,7 +641,7 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 			nextNotified = advanced
 			notified = true
 		}
-		if nextNotified != notifiedStatus {
+		if nextNotified != notifiedStatus && (!notify || !enabled) {
 			sets = append(sets, "notified_status = ?")
 			args = append(args, nextNotified)
 		}
@@ -650,7 +651,7 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 	if err != nil {
 		return false, err
 	}
-	if notified && notify.Enabled(ctx) {
+	if notified && enabled {
 		title := "Package delivered"
 		if advanced == exception {
 			title = "Package exception"
@@ -659,8 +660,13 @@ func save(ctx context.Context, d *db.DB, now float64, id int64, trackerID string
 		if body == "" {
 			body = "Status " + advanced
 		}
-		if _, err := notify.Send(ctx, d.Write, notify.Message{
+		if _, err := notify.Send(ctx, d, notify.Message{
 			Title: title, Body: body, Channel: notify.Assistant, Now: func() float64 { return now },
+			Occurrence: fmt.Sprintf("package:%d:%s:%g", id, advanced, now),
+			Mark: func(ctx context.Context, tx *sql.Tx) error {
+				_, err := tx.ExecContext(ctx, "UPDATE packages SET notified_status = ? WHERE id = ?", advanced, id)
+				return err
+			},
 		}); err != nil {
 			log.Warn("package notification failed", logx.Err, err.Error())
 		}

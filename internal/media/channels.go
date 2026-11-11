@@ -295,7 +295,7 @@ func (r PollResult) Dict() pollView {
 	return pollView{Added: added, Errors: errors}
 }
 
-func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, opts PollOptions) (PollResult, error) {
+func Poll(ctx context.Context, d *db.DB, env config.Env, settings Settings, opts PollOptions) (PollResult, error) {
 	now := opts.Now
 	if now == nil {
 		now = Now
@@ -306,7 +306,7 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, 
 	if err != nil {
 		return result, err
 	}
-	channels, err := ListChannels(ctx, q)
+	channels, err := ListChannels(ctx, d.Write)
 	if err != nil {
 		return result, err
 	}
@@ -332,7 +332,7 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, 
 			if !regex.MatchString(t.Title) {
 				continue
 			}
-			seen, err := isSeen(ctx, q, t.Hash)
+			seen, err := isSeen(ctx, d.Write, t.Hash)
 			if err != nil {
 				return result, err
 			}
@@ -350,15 +350,15 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, 
 				}
 				result.Added = append(result.Added, Added{Channel: rule.Name, Title: t.Title, Hash: t.Hash, SizeBytes: t.SizeBytes})
 			}
-			if err := markSeen(ctx, q, t.Hash, stamp); err != nil {
+			if err := markSeen(ctx, d.Write, t.Hash, stamp); err != nil {
 				return result, err
 			}
 		}
-		if _, err := q.ExecContext(ctx, "UPDATE media_channels SET primed = 1 WHERE id = ?", rule.ID); err != nil {
+		if _, err := d.Write.ExecContext(ctx, "UPDATE media_channels SET primed = 1 WHERE id = ?", rule.ID); err != nil {
 			return result, err
 		}
 	}
-	if err := settings.expireSeen(ctx, q, stamp); err != nil {
+	if err := settings.expireSeen(ctx, d.Write, stamp); err != nil {
 		return result, err
 	}
 	if len(result.Added) > 0 {
@@ -371,14 +371,19 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, 
 			title = fmt.Sprintf("Added %d releases", len(result.Added))
 		}
 		if notify.Enabled(ctx) {
-			message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Channel: notify.Media}
+			hashes := make([]string, len(result.Added))
+			for i, a := range result.Added {
+				hashes[i] = a.Hash
+			}
+			message := notify.Message{Title: title, Body: strings.Join(lines, "\n"), Now: func() float64 { return stamp }, Channel: notify.Media,
+				Occurrence: "media-added:" + strings.Join(hashes, ",")}
 			if settings.PublicURL != "" {
 				message.Click = settings.PublicURL + DownloadsPage
 			}
-			sent, err := notify.Send(ctx, q, message)
+			sent, err := notify.Send(ctx, d, message)
 			if err != nil {
 				result.Errors = append(result.Errors, "notify: "+err.Error())
-			} else if !sent.Delivered && sent.Error != notify.NoDevices {
+			} else if !sent.Duplicate && !sent.Delivered && sent.Error != notify.NoDevices {
 				result.Errors = append(result.Errors, "notify: "+sent.Error)
 			}
 		}
@@ -387,7 +392,7 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, 
 		}
 	}
 	if opts.Only == nil {
-		if err := saveChannelState(ctx, q, channelState{LastCheck: stamp, Errors: result.Errors}); err != nil {
+		if err := saveChannelState(ctx, d.Write, channelState{LastCheck: stamp, Errors: result.Errors}); err != nil {
 			return result, err
 		}
 	}

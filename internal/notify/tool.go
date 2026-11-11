@@ -58,12 +58,15 @@ func handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 		return nil, tool.Error(fmt.Sprintf("at most %d notification%s per run", limit, plural))
 	}
 	m := Message{Title: title, Body: body, ThreadID: tc.ThreadID, RunID: tc.RunID, Now: tc.Now}
+	if tc.ProposalID != nil {
+		m.ProposalID = *tc.ProposalID
+	}
 	if link, ok, err := tool.TextArg(args, "thread_link", false); err != nil {
 		return nil, err
 	} else if ok {
 		m.ThreadLink = &link
 	}
-	sent, err := Send(ctx, tc.DB.Write, m)
+	sent, err := Send(ctx, tc.DB, m)
 	if err != nil {
 		return nil, err
 	}

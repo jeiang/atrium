@@ -3,6 +3,7 @@ package notify
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/jeiang/atrium/internal/config"
@@ -44,7 +45,10 @@ func noticeStale(ctx context.Context, d *db.DB, env config.Env) error {
 	if err != nil {
 		return err
 	}
-	fresh := map[string]string{}
+	fresh := map[string]struct {
+		why string
+		at  float64
+	}{}
 	err = d.WithTx(ctx, func(tx *sql.Tx) error {
 		rows, err := tx.QueryContext(ctx, "SELECT job FROM pass_run_alerts")
 		if err != nil {
@@ -67,18 +71,23 @@ func noticeStale(ctx context.Context, d *db.DB, env config.Env) error {
 			}
 		}
 		for job, why := range stale {
-			if _, err := tx.ExecContext(ctx, "INSERT INTO pass_run_alerts (job, notified_at) VALUES (?, ?)", job, float64(time.Now().UnixNano())/1e9); err != nil {
+			at := float64(time.Now().UnixNano()) / 1e9
+			if _, err := tx.ExecContext(ctx, "INSERT INTO pass_run_alerts (job, notified_at) VALUES (?, ?)", job, at); err != nil {
 				return err
 			}
-			fresh[job] = why
+			fresh[job] = struct {
+				why string
+				at  float64
+			}{why, at}
 		}
 		return nil
 	})
 	if err != nil {
 		return err
 	}
-	for job, why := range fresh {
-		if _, err := Send(ctx, d.Write, Message{Channel: System, Title: "atrium: " + job + " is stale", Body: why}); err != nil {
+	for job, alert := range fresh {
+		if _, err := Send(ctx, d, Message{Channel: System, Title: "atrium: " + job + " is stale", Body: alert.why,
+			Occurrence: fmt.Sprintf("stale:%s:%g", job, alert.at)}); err != nil {
 			return err
 		}
 	}
