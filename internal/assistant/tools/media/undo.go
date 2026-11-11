@@ -4,18 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
-	"errors"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/tool"
 )
-
-type torrentUndo struct {
-	Op   string `json:"op"`
-	Hash string `json:"hash"`
-}
 
 type channelDeleteUndo struct {
 	Op string `json:"op"`
@@ -75,45 +69,6 @@ func validateOp(name string) func(json.RawMessage) error {
 	}
 }
 
-func undoTorrent(store *ledger.Store, env config.Env) ledger.Undoer {
-	return ledger.Undoer{
-		Validate: validateOp(UndoTorrent),
-		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
-			var u torrentUndo
-			if err := json.Unmarshal(raw, &u); err != nil || u.Hash == "" {
-				return ledger.Result{}, ledger.Refused("media undo payload is invalid")
-			}
-			hash := u.Hash
-			settings, err := media.Load(ctx, store.DB.Read, env)
-			if err != nil {
-				return ledger.Result{}, err
-			}
-			qb, err := settings.Qbit()
-			if err != nil {
-				return ledger.Result{}, ledger.Refused(err.Error())
-			}
-			found, err := qb.Torrent(ctx, hash)
-			if err == nil {
-				switch {
-				case found == nil:
-					return ledger.Result{State: ledger.Failed, Error: "the torrent is no longer in qBittorrent"}, nil
-				case found.HasTag(media.TagFiled):
-					return ledger.Result{State: ledger.Failed, Error: "the torrent was already filed into the library"}, nil
-				}
-				err = qb.Delete(ctx, hash, true)
-			}
-			var failure media.QbitError
-			if errors.As(err, &failure) {
-				return ledger.Result{State: ledger.Failed, Error: string(failure)}, nil
-			}
-			if err != nil {
-				return ledger.Result{}, err
-			}
-			return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"deleted": hash})}, nil
-		},
-	}
-}
-
 func channelFailed(err error) error {
 	return tool.Domain[media.ChannelError, ledger.Refused](err)
 }
@@ -142,7 +97,7 @@ func undoChannelRestore(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (a
 }
 
 func RegisterLedgerUndoer(s *ledger.Store, env config.Env) error {
-	if err := s.RegisterUndo(UndoTorrent, undoTorrent(s, env)); err != nil {
+	if err := media.RegisterLedgerUndoer(s, env); err != nil {
 		return err
 	}
 	if err := s.RegisterUndo(UndoChannelDelete, ledger.Undoer{

@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 )
@@ -37,7 +38,11 @@ var channels = skippable(func(ctx context.Context, d *db.DB, env config.Env, now
 	if err != nil {
 		return nil, err
 	}
-	result, err := media.Poll(ctx, d, env, settings, media.PollOptions{Now: now})
+	store := ledger.NewStore(d, now)
+	if err := media.RegisterLedgerUndoer(store, env); err != nil {
+		return nil, err
+	}
+	result, err := media.Poll(ctx, d, store, env, settings, media.PollOptions{Now: now})
 	if err != nil {
 		return nil, err
 	}
@@ -49,15 +54,15 @@ var sweep = skippable(func(ctx context.Context, d *db.DB, env config.Env, now fu
 	if err != nil {
 		return nil, err
 	}
-	qb, err := settings.Qbit()
+	store := ledger.NewStore(d, now)
+	if err := media.RegisterLedgerUndoer(store, env); err != nil {
+		return nil, err
+	}
+	selected, err := settings.SelectFiles(ctx, store, settings, nil)
 	if err != nil {
 		return nil, err
 	}
-	selected, err := settings.SelectFiles(ctx, qb, nil)
-	if err != nil {
-		return nil, err
-	}
-	swept, err := media.Sweep(ctx, qb)
+	swept, err := media.Sweep(ctx, store, settings)
 	if err != nil {
 		return nil, err
 	}
