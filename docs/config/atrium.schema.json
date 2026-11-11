@@ -2,112 +2,6 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
-    "auth": {
-      "additionalProperties": false,
-      "properties": {
-        "oidc_access_domains": {
-          "type": "string"
-        },
-        "oidc_access_domains_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_access_emails": {
-          "type": "string"
-        },
-        "oidc_access_emails_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_access_group": {
-          "default": "atrium_access",
-          "type": "string"
-        },
-        "oidc_access_group_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_admin_domains": {
-          "type": "string"
-        },
-        "oidc_admin_domains_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_admin_emails": {
-          "type": "string"
-        },
-        "oidc_admin_emails_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_admin_group": {
-          "default": "atrium_admin",
-          "type": "string"
-        },
-        "oidc_admin_group_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_api_client_id": {
-          "type": "string"
-        },
-        "oidc_api_client_id_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_client_id": {
-          "type": "string"
-        },
-        "oidc_client_id_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_client_secret_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_groups_claim": {
-          "type": "string"
-        },
-        "oidc_groups_claim_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_issuer": {
-          "type": "string"
-        },
-        "oidc_issuer_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_preset": {
-          "default": "generic",
-          "enum": [
-            "generic",
-            "pocket_id",
-            "authelia",
-            "authentik",
-            "keycloak",
-            "google",
-            "entra"
-          ],
-          "type": "string"
-        },
-        "oidc_preset_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_scopes": {
-          "type": "string"
-        },
-        "oidc_scopes_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
     "connections": {
       "additionalProperties": {
         "additionalProperties": false,
@@ -446,19 +340,6 @@
           "type": "string"
         },
         "media_tv_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "notify": {
-      "additionalProperties": false,
-      "properties": {
-        "webpush_ca_file": {
-          "type": "string"
-        },
-        "webpush_ca_file_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
@@ -922,6 +803,20 @@
     "assistant.weather_hourly_hours",
     "assistant.weather_open_meteo_url",
     "assistant.weather_timeout_seconds",
+    "auth.oidc_access_domains",
+    "auth.oidc_access_emails",
+    "auth.oidc_access_group",
+    "auth.oidc_admin_domains",
+    "auth.oidc_admin_emails",
+    "auth.oidc_admin_group",
+    "auth.oidc_api_client_id",
+    "auth.oidc_client_id",
+    "auth.oidc_client_secret",
+    "auth.oidc_groups_claim",
+    "auth.oidc_issuer",
+    "auth.oidc_preset",
+    "auth.oidc_recheck_minutes",
+    "auth.oidc_scopes",
     "grafana.grafana_ca_file",
     "grafana.grafana_logs_query",
     "grafana.grafana_logs_type",
@@ -965,6 +860,11 @@
     "memory.memory_tail_messages",
     "memory.memory_view_high",
     "memory.memory_view_low",
+    "notify.notify_body_chars",
+    "notify.notify_title_chars",
+    "notify.webpush_ca_file",
+    "notify.webpush_subject",
+    "notify.webpush_vapid_private_key",
     "notion.notion_block_depth",
     "notion.notion_branch_limit",
     "notion.notion_ca_file",
@@ -1104,7 +1004,20 @@
     "assistant.weather_longitude": "the operator setting assistant.weather_longitude stored in the database",
     "assistant.weather_open_meteo_url": "host configuration service/weather.config.forecast_url",
     "assistant.weather_timeout_seconds": "the compiled constant internal/weather/tuning.go:TuningWeatherTimeoutSeconds",
+    "auth.oidc_access_domains": "host configuration host.auth.oidc_access_domains",
+    "auth.oidc_access_emails": "host configuration host.auth.oidc_access_emails",
+    "auth.oidc_access_group": "host configuration host.auth.oidc_access_group",
+    "auth.oidc_admin_domains": "host configuration host.auth.oidc_admin_domains",
+    "auth.oidc_admin_emails": "host configuration host.auth.oidc_admin_emails",
+    "auth.oidc_admin_group": "host configuration host.auth.oidc_admin_group",
+    "auth.oidc_api_client_id": "host configuration host.auth.oidc_api_client_id",
+    "auth.oidc_client_id": "host configuration host.auth.oidc_client_id",
+    "auth.oidc_client_secret": "host configuration service/oidc host credential client_secret",
+    "auth.oidc_groups_claim": "host configuration host.auth.oidc_groups_claim",
+    "auth.oidc_issuer": "host configuration host.auth.oidc_issuer",
+    "auth.oidc_preset": "host configuration host.auth.oidc_preset",
     "auth.oidc_recheck_minutes": "the compiled constant internal/auth/oidc/tuning.go:TuningOidcRecheckMinutes",
+    "auth.oidc_scopes": "host configuration host.auth.oidc_scopes",
     "auth.oidc_session_idle_days": "the operator setting auth.oidc_session_idle_days stored in the database",
     "auth.oidc_session_max_days": "the operator setting auth.oidc_session_max_days stored in the database",
     "calendar.calendar_account": "the operator setting calendar.calendar_account stored in the database",
@@ -1273,6 +1186,7 @@
     "notify.notify_nightly_cap": "the operator setting notify.notify_nightly_cap stored in the database",
     "notify.notify_per_run_cap": "the operator setting notify.notify_per_run_cap stored in the database",
     "notify.notify_title_chars": "the compiled constant internal/notify/tuning.go:TuningNotifyTitleChars",
+    "notify.webpush_ca_file": "host configuration service/webpush.transport.ca_file",
     "notify.webpush_subject": "the connection field service/webpush.config.subject",
     "notify.webpush_vapid_private_key": "the connection field service/webpush credential vapid_private",
     "notion.notion_block_depth": "the compiled constant internal/notion/tuning.go:TuningNotionBlockDepth",
@@ -1333,7 +1247,6 @@
   },
   "x-atrium-secret": [
     "action_links.action_link_key",
-    "auth.oidc_client_secret",
     "calendar.google_calendar_refresh_token",
     "calendar.google_oauth_client_secret",
     "db.key",
@@ -1341,7 +1254,6 @@
     "mail.mail_chat_key",
     "mail.mail_embed_key",
     "mail.mail_ship24_api_key",
-    "media.link_key",
-    "notify.webpush_vapid_private_key"
+    "media.link_key"
   ]
 }

@@ -55,10 +55,6 @@ func (s *Server) registerLinkRoutes() {
 			return
 		}
 		setCookie(w, sessionCookie, grant.Token, int(grant.MaxAge.Seconds()), s.secure(r))
-		target := "/chat"
-		if s.oidc.Check(r.Context()) != nil {
-			target = wizardPath
-		}
-		http.Redirect(w, r, target, http.StatusSeeOther)
+		http.Redirect(w, r, "/chat", http.StatusSeeOther)
 	})
 }

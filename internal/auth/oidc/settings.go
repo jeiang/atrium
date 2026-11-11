@@ -10,21 +10,20 @@ import (
 const (
 	module = "auth"
 
-	KeyPreset         = "oidc_preset"
-	KeyIssuer         = "oidc_issuer"
-	KeyClientID       = "oidc_client_id"
-	KeyAPIClientID    = "oidc_api_client_id"
-	KeyScopes         = "oidc_scopes"
-	KeyGroupsClaim    = "oidc_groups_claim"
-	KeyAccessGroup    = "oidc_access_group"
-	KeyAdminGroup     = "oidc_admin_group"
-	KeyAccessEmails   = "oidc_access_emails"
-	KeyAdminEmails    = "oidc_admin_emails"
-	KeyAccessDomains  = "oidc_access_domains"
-	KeyAdminDomains   = "oidc_admin_domains"
-	KeyIdleDays       = "oidc_session_idle_days"
-	KeyMaxDays        = "oidc_session_max_days"
-	KeyRecheckMinutes = "oidc_recheck_minutes"
+	KeyPreset        = "oidc_preset"
+	KeyIssuer        = "oidc_issuer"
+	KeyClientID      = "oidc_client_id"
+	KeyAPIClientID   = "oidc_api_client_id"
+	KeyScopes        = "oidc_scopes"
+	KeyGroupsClaim   = "oidc_groups_claim"
+	KeyAccessGroup   = "oidc_access_group"
+	KeyAdminGroup    = "oidc_admin_group"
+	KeyAccessEmails  = "oidc_access_emails"
+	KeyAdminEmails   = "oidc_admin_emails"
+	KeyAccessDomains = "oidc_access_domains"
+	KeyAdminDomains  = "oidc_admin_domains"
+	KeyIdleDays      = "oidc_session_idle_days"
+	KeyMaxDays       = "oidc_session_max_days"
 
 	DefaultAccessGroup = "atrium_access"
 	DefaultAdminGroup  = "atrium_admin"
@@ -51,7 +50,6 @@ func init() {
 		text(KeyAdminDomains, nil),
 		settings.Value(settings.UI, settings.Def{Key: KeyIdleDays, Label: "Sign out after idle (days)", Module: module, Type: settings.Int, Default: "7", Check: settings.Between(1, 365)}),
 		settings.Value(settings.UI, settings.Def{Key: KeyMaxDays, Label: "Sign out after (days)", Module: module, Type: settings.Int, Default: "30", Check: settings.Between(1, 365)}),
-		settings.Value(settings.Advanced, settings.Def{Key: KeyRecheckMinutes, Module: module, Type: settings.Int, Default: "60", Check: settings.Between(1, 1440)}),
 	)
 }
 

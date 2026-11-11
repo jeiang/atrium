@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/anthropicconn"
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
+	"github.com/jeiang/atrium/internal/auth/oidcconn"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
@@ -23,6 +24,7 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/weather"
@@ -275,6 +277,7 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source str
 			return err
 		}
 		lines = append(lines, connLines...)
+		lines = append(lines, sourced.Notes...)
 		for _, name := range sourced.Secrets {
 			if _, err := tx.ExecContext(ctx, "DELETE FROM secrets WHERE name = ?", name); err != nil {
 				return err
@@ -411,6 +414,7 @@ type sourceConnectionsData struct {
 	Qbit     connections.ImportQbit
 	Services []connections.ImportService
 	Secrets  []string
+	Notes    []string
 }
 
 func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData, error) {
@@ -429,6 +433,7 @@ func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData,
 		"notion_ca_file", "notion_proxy",
 		"weather_open_meteo_url", "weather_geocoding_url", "open_meteo_ca_file", "open_meteo_proxy",
 		"media_tmdb_url", "media_tmdb_images_url", "media_eztv_url", "tmdb_ca_file", "tmdb_proxy",
+		"webpush_subject", "webpush_ca_file",
 	})
 	if err != nil {
 		return out, err
@@ -468,6 +473,19 @@ func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData,
 	if token.Value != "" {
 		out.Secrets = append(out.Secrets, "notion_token")
 	}
+	vapid, err := sourceSecret(ctx, src, "webpush_vapid_private_key", "vapid_private")
+	if err != nil {
+		return out, err
+	}
+	out.Services = append(out.Services, notify.ImportV2(values, vapid))
+	if vapid.Value != "" {
+		out.Secrets = append(out.Secrets, "webpush_vapid_private_key")
+	}
+	oidcSecret, err := sourceSecret(ctx, src, "oidc_client_secret", "client_secret")
+	if err != nil {
+		return out, err
+	}
+	out.Notes = append(out.Notes, oidcconn.ImportV2(oidcSecret)...)
 	return out, nil
 }
 

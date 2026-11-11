@@ -15,7 +15,7 @@ type HostDef struct {
 func HostDefs() []HostDef {
 	var out []HostDef
 	for _, e := range importManifest {
-		if e.Class != ImportHost || e.Module == "db" && e.Key == "key" {
+		if e.Class != ImportHost || e.Action == ImportRename || e.Module == "db" && e.Key == "key" {
 			continue
 		}
 		def, ok := LookupOf(e.Key)
