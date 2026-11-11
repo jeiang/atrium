@@ -204,8 +204,8 @@ func (l *Lookup) handle(ctx context.Context, tc *tool.Context, args tool.Args) (
 		return nil, err
 	}
 	set := assistant.Read(ctx, tc.DB.Read)
-	maxConcurrent := set.Int(assistant.KeySubagentMaxConcurrent)
-	maxSteps, maxCost := set.Int(assistant.KeySubagentMaxSteps), set.Float(assistant.KeySubagentMaxCostUSD)
+	maxConcurrent := assistant.TuningAgentSubagentMaxConcurrent
+	maxSteps, maxCost := assistant.TuningAgentSubagentMaxSteps, set.Float(assistant.KeySubagentMaxCostUSD)
 	if err := set.Err(); err != nil {
 		return nil, err
 	}

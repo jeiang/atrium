@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -200,32 +201,23 @@ func TestAsstRunsStopAtTheStepCapAndTheDoomLoopThreshold(t *testing.T) {
 	_, api, _ := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 
-	asstSet(t, "max_steps_cron", "2")
-	api.Push(asstProbes("a", 2, true)...)
-	if v, _ := asstRun(t, "--text", "go", "--kind", "cron"); v.State != "failed" || v.err() != "stopped: step cap reached after 2 steps in this cron run (max_steps_cron)" {
-		t.Errorf("cron run at a cap of 2: %+v %q", v, v.err())
+	api.Push(asstProbes("a", loop.TuningMaxStepsCron, true)...)
+	if v, _ := asstRun(t, "--text", "go", "--kind", "cron"); v.State != "failed" || v.err() != fmt.Sprintf("stopped: step cap reached after %d steps in this cron run (max_steps_cron)", loop.TuningMaxStepsCron) {
+		t.Errorf("cron run at the compiled cap: %+v %q", v, v.err())
 	}
-	asstSet(t, "max_steps_cron", "3")
-	api.Push(asstProbes("b", 3, true)...)
-	if v, _ := asstRun(t, "--text", "go", "--kind", "cron"); v.err() != "stopped: step cap reached after 3 steps in this cron run (max_steps_cron)" {
-		t.Errorf("cron run at a cap of 3: %+v %q", v, v.err())
-	}
-	asstSet(t, "max_steps_chat", "5")
-	api.Push(asstProbes("c", 1, true)...)
-	api.Push(asstReply("ok"))
-	if v, _ := asstRun(t, "--text", "go"); v.State != "done" {
-		t.Errorf("a chat run was bound by the cron cap: %+v %q", v, v.err())
+	api.Push(asstProbes("b", loop.TuningMaxStepsChat, true)...)
+	if v, _ := asstRun(t, "--text", "go"); v.State != "failed" || v.err() != fmt.Sprintf("stopped: step cap reached after %d steps in this chat run (max_steps_chat)", loop.TuningMaxStepsChat) {
+		t.Errorf("chat run at the compiled cap: %+v %q", v, v.err())
 	}
 
-	asstSet(t, "max_steps_cron", "10")
-	api.Push(asstProbes("d", 3, false)...)
-	if v, _ := asstRun(t, "--text", "go", "--kind", "cron"); v.State != "failed" || !strings.Contains(v.err(), "repeated 3 times with the same result") {
-		t.Errorf("repeated call at the default threshold: %+v %q", v, v.err())
+	api.Push(asstProbes("d", loop.TuningDoomLoopThreshold, false)...)
+	if v, _ := asstRun(t, "--text", "go", "--kind", "cron"); v.State != "failed" || !strings.Contains(v.err(), fmt.Sprintf("repeated %d times with the same result", loop.TuningDoomLoopThreshold)) {
+		t.Errorf("repeated call at the compiled threshold: %+v %q", v, v.err())
 	}
-	asstSet(t, "doom_loop_threshold", "2")
-	api.Push(asstProbes("e", 2, false)...)
-	if v, _ := asstRun(t, "--text", "go", "--kind", "cron"); !strings.Contains(v.err(), "repeated 2 times with the same result") {
-		t.Errorf("repeated call at a threshold of 2: %+v %q", v, v.err())
+	for _, key := range []string{"max_steps_cron", "max_steps_chat", "doom_loop_threshold"} {
+		if got := runSettings(t, "set", key, "2"); got.code != cli.ExitUsage || !strings.Contains(got.stderr, "unknown key") {
+			t.Errorf("set %s: exit %d stderr %q, want the key refused as a compiled constant", key, got.code, got.stderr)
+		}
 	}
 	if n := api.Remaining(); n != 0 {
 		t.Errorf("%d scripted replies unused", n)

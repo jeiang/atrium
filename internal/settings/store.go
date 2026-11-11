@@ -109,6 +109,9 @@ func (s *Store) writable(name string) (Def, error) {
 	if err != nil {
 		return d, err
 	}
+	if HostOwnedKey(name) {
+		return d, HostOwned(name)
+	}
 	if d.PinnedOnly() {
 		return d, PinOnly(name)
 	}
@@ -171,6 +174,9 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 	d, err := s.def(name)
 	if err != nil {
 		return err
+	}
+	if HostOwnedKey(name) {
+		return HostOwned(name)
 	}
 	if d.PinnedOnly() {
 		return PinOnly(name)

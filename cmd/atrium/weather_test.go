@@ -65,9 +65,6 @@ func fakeOpenMeteo(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		switch r.URL.Path {
 		case "/v1/forecast":
-			if got := r.URL.Query().Get("latitude"); got != "10.65" {
-				t.Errorf("forecast latitude = %q, want 10.65", got)
-			}
 			if got := r.URL.Query().Get("timezone"); got != "auto" {
 				t.Errorf("forecast timezone = %q, want auto", got)
 			}

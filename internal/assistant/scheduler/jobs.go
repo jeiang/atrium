@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/db"
 )
 
@@ -103,11 +102,7 @@ func atCap(ctx context.Context, q db.Querier) error {
 	if err != nil {
 		return err
 	}
-	r := assistant.Read(ctx, q)
-	limit := r.Int(KeyMaxActiveJobs)
-	if err := r.Err(); err != nil {
-		return err
-	}
+	limit := TuningAgentScheduleMaxActiveJobs
 	if n >= limit {
 		return errTooMany(limit)
 	}

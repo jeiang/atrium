@@ -9,11 +9,7 @@ import (
 )
 
 const (
-	KeyTickSeconds        = "agent_scheduler_tick_seconds"
-	KeyLeaseSeconds       = "agent_scheduler_lease_seconds"
-	KeyMissedGrace        = "agent_scheduler_missed_grace_seconds"
 	KeyMinInterval        = "agent_schedule_min_interval_seconds"
-	KeyMaxActiveJobs      = "agent_schedule_max_active_jobs"
 	KeyNightlySchedule    = "agent_schedule_nightly"
 	KeyWeeklyReview       = "agent_schedule_weekly_review"
 	KeyDailyNudges        = "agent_schedule_daily_nudges"
@@ -32,19 +28,12 @@ func init() {
 	adv := func(key string, kind settings.Type, value string, check func(string) error) settings.Def {
 		return settings.Value(settings.Advanced, settings.Def{Key: key, Module: "assistant", Type: kind, Default: value, Check: check})
 	}
-	timing := func(key, value string, lo, hi float64) settings.Def {
-		return adv(key, settings.Int, value, settings.Between(lo, hi))
-	}
-	tick := timing(KeyTickSeconds, "30", 5, 3600)
-	minimum := timing(KeyMinInterval, "3600", 60, 604800)
+	minimum := settings.Value(settings.Advanced, settings.Def{
+		Key: KeyMinInterval, Module: "assistant", Type: settings.Int, Default: "3600",
+		Check: settings.Between(60, 604800),
+	})
 	minimum.Peers = minimumIntervals
-	defs := []settings.Def{
-		tick,
-		timing(KeyLeaseSeconds, "1800", 60, 86400),
-		timing(KeyMissedGrace, "120", 0, 86400),
-		minimum,
-		timing(KeyMaxActiveJobs, "20", 1, 1000),
-	}
+	defs := []settings.Def{minimum}
 	for _, b := range Builtins {
 		def := adv(b.Setting, settings.String, b.Default, recurringSchedule)
 		if b.Run == PromptRun {

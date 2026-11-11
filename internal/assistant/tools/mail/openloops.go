@@ -20,7 +20,7 @@ func enum(values ...string) string {
 	return string(b)
 }
 
-var loopsLimitBound = tool.NewBound(assistant.KeyMailMaxLoopsLimit, "")
+var loopsLimitBound = tool.NewCeiling(assistant.TuningAgentMailMaxLoopsLimit, 1, assistant.TuningAgentMailMaxLoopsLimit)
 
 var openLoopsSchema = json.RawMessage(`{"type":"object","properties":{"state":{"type":"string","enum":` +
 	enum(openloops.States[:]...) + `},"limit":` + loopsLimitBound.Schema() + `},` +

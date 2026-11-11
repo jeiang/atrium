@@ -84,7 +84,6 @@ func TestModuleWithASectionGetsAPageAndKeepsRefusalsThere(t *testing.T) {
 		action, back, title string
 		form                url.Values
 	}{
-		{"/settings/integrations/open_meteo/settings", "/settings/assistant", "<title>Assistant · Settings", url.Values{"weather_latitude": {"north"}}},
 		{"/settings/integrations/mail_chat/test", "/settings/mail", "<title>Mail · Settings", url.Values{"url": {"http://127.0.0.1:1/v1"}}},
 	} {
 		c.form.Set("back", c.back)

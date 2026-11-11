@@ -64,7 +64,7 @@ func searchThreads(ctx context.Context, tc *tool.Context, args tool.Args) (any, 
 		return nil, err
 	}
 	defer func() { _ = rows.Close() }()
-	page := int64(assistant.Read(ctx, tc.DB.Read).Int(assistant.KeyRecallPageChars))
+	page := int64(assistant.TuningAgentRecallPageChars)
 	var hits []any
 	var ids []int64
 	seen := map[[3]int64]bool{}

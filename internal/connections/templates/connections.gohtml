@@ -1,0 +1,26 @@
+{{define "title"}}Connections · Settings{{end}}
+{{define "heading"}}Settings · Connections{{end}}
+{{define "content"}}{{$d := .Data}}{{$csrf := .CSRF}}
+{{template "settings_nav" (dict "Tab" "connections" "Settings" .Settings)}}
+<div class="flex flex-col gap-3">
+  {{with $d.Error}}<div class="set-group" data-error>{{.}}</div>{{end}}
+  {{range $d.Connections}}
+  <section class="set-group" data-connection="{{.ID}}" data-state="{{.State}}">
+    <div class="set-row"><span>{{.Label}}</span><span>{{.Kind}} · {{.State}}</span></div>
+    {{with .Reason}}<div class="set-row"><span>{{.}}</span></div>{{end}}
+    <form method="post" action="{{$.Path}}/test">
+      <input type="hidden" name="csrf_token" value="{{$csrf}}">
+      <input type="hidden" name="id" value="{{.ID}}">
+      {{with $d.URL .}}<label>URL <input name="url" value="{{.}}"></label>{{end}}
+      {{range .Credentials}}<label>{{.Slot}} <input name="credential.{{.Slot}}" type="password" autocomplete="off"></label>{{end}}
+      <button type="submit">Test and save</button>
+    </form>
+    <form method="post" action="{{$.Path}}/disconnect">
+      <input type="hidden" name="csrf_token" value="{{$csrf}}">
+      <input type="hidden" name="id" value="{{.ID}}">
+      <button type="submit">Disconnect</button>
+    </form>
+  </section>
+  {{end}}
+</div>
+{{end}}

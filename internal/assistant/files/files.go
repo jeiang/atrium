@@ -82,14 +82,12 @@ type Limits struct {
 	NameChars  int
 }
 
-func ReadLimits(ctx context.Context, q db.Querier) (Limits, error) {
-	r := assistant.Read(ctx, q)
-	l := Limits{
-		FileCap:    r.Int(assistant.KeyFileCapBytes),
-		MessageCap: r.Int(assistant.KeyMessageCapBytes),
-		NameChars:  r.Int(assistant.KeyFileNameChars),
-	}
-	return l, r.Err()
+func ReadLimits(_ context.Context, _ db.Querier) (Limits, error) {
+	return Limits{
+		FileCap:    assistant.TuningAgentFileCapBytes,
+		MessageCap: assistant.TuningAgentMessageCapBytes,
+		NameChars:  assistant.TuningAgentFileNameChars,
+	}, nil
 }
 
 func textBytes() int {
@@ -100,10 +98,8 @@ func MessageCapError(cap int) FileError {
 	return FileError(fmt.Sprintf("files in one message must total under %d MB", cap>>20))
 }
 
-func nameChars(ctx context.Context, q db.Querier) (int, error) {
-	r := assistant.Read(ctx, q)
-	n := r.Int(assistant.KeyFileNameChars)
-	return n, r.Err()
+func nameChars(_ context.Context, _ db.Querier) (int, error) {
+	return assistant.TuningAgentFileNameChars, nil
 }
 
 func safeName(name string, chars int) string {

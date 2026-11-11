@@ -1,4 +1,4 @@
-package main
+package builtin
 
 import (
 	_ "github.com/jeiang/atrium/internal/actionlink/policy"

@@ -403,10 +403,7 @@ func Search(ctx context.Context, q db.Querier, query string, includePrivate bool
 	if embedTexts == nil {
 		embedTexts = embed.Texts
 	}
-	limits, err := LoadSearch(ctx, q)
-	if err != nil {
-		return Result{}, err
-	}
+	limits := DefaultSearchLimits()
 	query = strings.TrimSpace(query)
 	if query == "" {
 		hits, err := recent(ctx, q, limits, includePrivate, limit)

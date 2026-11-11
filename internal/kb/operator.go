@@ -55,11 +55,7 @@ func writeResult(rec Record, before *beforeState) ledger.Result {
 }
 
 func checkPin(ctx context.Context, q db.Querier, id int64) error {
-	r := assistant.Read(ctx, q)
-	budget := int64(r.Int(assistant.KeyKBProfileTokens))
-	if err := r.Err(); err != nil {
-		return err
-	}
+	budget := int64(assistant.TuningAgentKbProfileTokens)
 	entries, err := ProfileEntries(ctx, q, budget)
 	if err != nil {
 		return err

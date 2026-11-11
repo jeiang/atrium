@@ -70,10 +70,14 @@ func (o Options) sync(ctx context.Context, d *db.DB, cfg config.Config, env *cli
 }
 
 func (o Options) syncPass(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env) error {
-	client, err := NewClient(ctx, d.Read, o.env())
+	if err := reconcileConnections(ctx, d); err != nil {
+		return err
+	}
+	client, err := NewClient(ctx, d.Read)
 	if err != nil {
 		return err
 	}
+	defer client.Close()
 	stats, err := o.locked(ctx, d, cfg, client)
 	if err != nil {
 		return err

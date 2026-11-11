@@ -1,51 +1,14 @@
 package notionmodule
 
 import (
-	"context"
-	"errors"
-	"fmt"
-	"net/http"
-
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notion/pages"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
-
-func init() {
-	integrations.Register(integrations.Integration{
-		Name: "notion", Label: "Notion", Module: module.Notion, SecretKey: notion.TokenKey,
-		Help: "Internal integration token with the wiki pages shared with it; a personal access token also works.",
-		Fields: []integrations.Field{
-			{Key: notion.WikiRootKey, Label: "Wiki root"},
-			{Key: notion.SensitivityPropertyKey, Label: "Sensitivity property"},
-			{Key: notion.PrivateValueKey, Label: "Private value"},
-			{Key: notion.WikiLogTitleKey, Label: "Wiki log title"},
-		},
-		Test: testToken,
-	})
-}
-
-func testToken(ctx context.Context, c integrations.Conn) (string, error) {
-	shared, more, err := notion.SharedPages(ctx, c.DB.Read, c.Env, c.Secret, c.HTTP)
-	var failure *notion.Error
-	switch {
-	case errors.As(err, &failure) && failure.Status == http.StatusUnauthorized:
-		return "", fmt.Errorf("%w: Notion refused the token", integrations.ErrAuth)
-	case err != nil:
-		return "", err
-	case shared == 0:
-		return "", errors.New("no pages shared with the integration")
-	case more:
-		return fmt.Sprintf("%d+ pages shared", shared), nil
-	case shared == 1:
-		return "1 page shared", nil
-	}
-	return fmt.Sprintf("%d pages shared", shared), nil
-}
 
 type Module struct {
 	Env config.Env
@@ -58,20 +21,13 @@ func (m Module) Register(module.Context) module.Registration {
 	}
 	return module.Registration{
 		Name: module.Notion,
-		Requires: []module.Requirement{{
-			Name: notion.TokenKey,
-			Check: func(ctx context.Context, p module.Probe) (string, error) {
-				_, err := notion.Token(ctx, p.Q)
-				var missing config.NotConfigured
-				if errors.As(err, &missing) {
-					return err.Error(), nil
-				}
-				return "", err
-			},
-		}},
 		Pages: []web.Page{{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Nav: []web.NavItem{
 			{Section: "library", Label: "Wiki", URL: "/library/wiki", Icon: "book-open", Page: "library_wiki", Order: 10},
 		}}},
+		Settings: []settings.Group{{
+			Name: "wiki", Title: "Wiki",
+			Keys: []string{notion.WikiRootKey, notion.SensitivityPropertyKey, notion.PrivateValueKey, notion.WikiLogTitleKey},
+		}},
 		Commands: []*cli.Command{notion.Command(notion.Options{Env: env})},
 	}
 }

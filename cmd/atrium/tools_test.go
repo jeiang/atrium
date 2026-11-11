@@ -93,7 +93,10 @@ func TestWebSearchAllowedCallers(t *testing.T) {
 	if len(requests) != 5 {
 		t.Fatalf("%d model requests, want 5", len(requests))
 	}
-	assertServerCallers(t, requests[1], "")
+	assertServerCallers(t, requests[1], "direct")
+	if got := runSettings(t, "set", "search_web_dynamic_filtering", "true"); got.code != cli.ExitUsage || !strings.Contains(got.stderr, "unknown key") {
+		t.Errorf("set search_web_dynamic_filtering: exit %d stderr %q, want the key refused as a compiled constant", got.code, got.stderr)
+	}
 }
 
 func assertServerCallers(t *testing.T, r anthropictest.Request, want string) {

@@ -67,11 +67,7 @@ func clean(ctx context.Context, q db.Querier, f Fields) (cleaned, error) {
 	if name == "" {
 		return cleaned{}, ProjectError("Give the project a name.")
 	}
-	r := assistant.Read(ctx, q)
-	maxName, maxInstructions := r.Int(assistant.KeyProjectNameChars), r.Int(assistant.KeyProjectInstructionChars)
-	if err := r.Err(); err != nil {
-		return cleaned{}, err
-	}
+	maxName, maxInstructions := assistant.TuningAgentProjectNameChars, assistant.TuningAgentProjectInstructionChars
 	if utf8.RuneCountInString(name) > maxName {
 		return cleaned{}, ProjectError(fmt.Sprintf("The name is limited to %d characters.", maxName))
 	}

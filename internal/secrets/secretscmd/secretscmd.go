@@ -106,11 +106,12 @@ func failure(e *cli.Env, err error) int {
 	var notSecret settings.NotSecret
 	var empty settings.EmptyValue
 	var pinOnly settings.PinOnly
+	var host settings.HostOwned
 	var unknown settings.UnknownKey
 	switch {
 	case errors.As(err, &unknown), errors.As(err, &notSecret):
 		return e.UsageError("%v", err)
-	case errors.As(err, &pinned), errors.As(err, &encrypted), errors.As(err, &empty), errors.As(err, &pinOnly):
+	case errors.As(err, &pinned), errors.As(err, &encrypted), errors.As(err, &empty), errors.As(err, &pinOnly), errors.As(err, &host):
 		_, _ = fmt.Fprintf(e.Stderr, "error: %v\n", err)
 		return cli.ExitError
 	}

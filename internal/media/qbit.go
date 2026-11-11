@@ -18,6 +18,7 @@ import (
 
 	"regexp"
 
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/urlx"
 )
 
@@ -330,6 +331,7 @@ func TorrentHash(data []byte) (string, error) {
 type Qbit struct {
 	base, key string
 	http      *http.Client
+	report    func(context.Context, connections.State, string)
 }
 
 func NewQbit(base, key string, client *http.Client) *Qbit {
@@ -355,14 +357,26 @@ func (q *Qbit) do(ctx context.Context, method, path string, params []param, body
 	if err != nil {
 		var failure *httpFailure
 		if errors.As(err, &failure) {
+			q.observe(ctx, connections.Failing, "qBittorrent unreachable: "+failure.class)
 			return nil, QbitError("qBittorrent unreachable: " + failure.class)
 		}
 		return nil, err
 	}
 	if res.status != http.StatusOK {
+		state := connections.Failing
+		if res.status == http.StatusUnauthorized || res.status == http.StatusForbidden {
+			state = connections.NeedsReauth
+		}
+		q.observe(ctx, state, fmt.Sprintf("qBittorrent answered %d", res.status))
 		return nil, &QbitStatusError{Path: path, Status: res.status}
 	}
 	return res.body, nil
+}
+
+func (q *Qbit) observe(ctx context.Context, state connections.State, reason string) {
+	if q.report != nil {
+		q.report(ctx, state, reason)
+	}
 }
 
 func (q *Qbit) post(ctx context.Context, path string, form []param) error {

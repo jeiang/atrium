@@ -15,19 +15,6 @@ const (
 	SensitivityPropertyKey = "sensitivity_property"
 	PrivateValueKey        = "notion_private_value"
 	WikiLogTitleKey        = "wiki_log_title"
-	MaxAliasesKey          = "notion_max_aliases"
-	MaxSourcesKey          = "notion_max_sources"
-	LabelCharsKey          = "notion_label_chars"
-	BranchLimitKey         = "notion_branch_limit"
-	RelatedLimitKey        = "notion_related_limit"
-	SnippetCharsKey        = "notion_snippet_chars"
-	HeadSourceCharsKey     = "notion_head_source_chars"
-	RetryAfterBaseKey      = "notion_retry_after_default_seconds"
-	RetryAfterMaxKey       = "notion_retry_after_max_seconds"
-	MaxRetriesKey          = "notion_max_retries"
-	TimeoutKey             = "notion_timeout_seconds"
-	PageSizeKey            = "notion_page_size"
-	BlockDepthKey          = "notion_block_depth"
 )
 
 func init() {
@@ -36,11 +23,6 @@ func init() {
 			Key: key, Module: "notion", Type: settings.String, Default: def,
 			Check: nonBlank})
 	}
-	number := func(key string, typ settings.Type, def string, check func(string) error) settings.Def {
-		return settings.Value(settings.Advanced, settings.Def{
-			Key: key, Module: "notion", Type: typ, Default: def,
-			Check: check})
-	}
 	settings.MustRegister(
 		settings.Value(settings.UI, settings.Def{
 			Key: WikiRootKey, Module: "notion", Type: settings.String,
@@ -48,19 +30,6 @@ func init() {
 		text(SensitivityPropertyKey, "sensitivity"),
 		text(PrivateValueKey, "private"),
 		text(WikiLogTitleKey, "Wiki Log"),
-		number(MaxAliasesKey, settings.Int, "20", settings.Between(1, 100)),
-		number(MaxSourcesKey, settings.Int, "12", settings.Between(1, 50)),
-		number(LabelCharsKey, settings.Int, "48", settings.Between(8, 200)),
-		number(BranchLimitKey, settings.Int, "50", settings.Between(1, 500)),
-		number(RelatedLimitKey, settings.Int, "10", settings.Between(1, 50)),
-		number(SnippetCharsKey, settings.Int, "220", settings.Between(20, 2000)),
-		number(HeadSourceCharsKey, settings.Int, "1000", settings.Between(100, 10000)),
-		number(RetryAfterBaseKey, settings.Float, "1", settings.Between(0, 300)),
-		number(RetryAfterMaxKey, settings.Float, "60", settings.Between(1, 3600)),
-		number(MaxRetriesKey, settings.Int, "5", settings.Between(0, 20)),
-		number(TimeoutKey, settings.Int, "60", settings.Between(1, 600)),
-		number(PageSizeKey, settings.Int, "100", settings.Between(1, 100)),
-		number(BlockDepthKey, settings.Int, "5", settings.Between(0, 20)),
 	)
 }
 
@@ -101,34 +70,6 @@ func (r *resolver) value(key string) string {
 	return found.Value
 }
 
-func (r *resolver) int(key string) int {
-	if r.err != nil {
-		return 0
-	}
-	found, err := settings.From(r.ctx).Resolve(r.ctx, r.q, key)
-	if err != nil {
-		r.err = err
-		return 0
-	}
-	n, err := found.Int()
-	r.err = err
-	return int(n)
-}
-
-func (r *resolver) float(key string) float64 {
-	if r.err != nil {
-		return 0
-	}
-	found, err := settings.From(r.ctx).Resolve(r.ctx, r.q, key)
-	if err != nil {
-		r.err = err
-		return 0
-	}
-	f, err := found.Float()
-	r.err = err
-	return f
-}
-
 type APILimits struct {
 	RetryAfterBase float64
 	RetryAfterMax  float64
@@ -138,35 +79,11 @@ type APILimits struct {
 	BlockDepth     int
 }
 
-func LoadAPI(ctx context.Context, q db.Querier) (APILimits, error) {
-	r := resolver{ctx: ctx, q: q}
-	out := APILimits{
-		RetryAfterBase: r.float(RetryAfterBaseKey),
-		RetryAfterMax:  r.float(RetryAfterMaxKey),
-		MaxRetries:     r.int(MaxRetriesKey),
-		Timeout:        time.Duration(r.int(TimeoutKey)) * time.Second,
-		PageSize:       r.int(PageSizeKey),
-		BlockDepth:     r.int(BlockDepthKey),
-	}
-	return out, r.err
-}
-
 type SearchLimits struct {
 	Branch     int
 	Related    int
 	Snippet    int
 	HeadSource int
-}
-
-func LoadSearch(ctx context.Context, q db.Querier) (SearchLimits, error) {
-	r := resolver{ctx: ctx, q: q}
-	out := SearchLimits{
-		Branch:     r.int(BranchLimitKey),
-		Related:    r.int(RelatedLimitKey),
-		Snippet:    r.int(SnippetCharsKey),
-		HeadSource: r.int(HeadSourceCharsKey),
-	}
-	return out, r.err
 }
 
 type Sensitivity struct {
@@ -196,9 +113,9 @@ func LoadWiki(ctx context.Context, q db.Querier) (Wiki, error) {
 	out := Wiki{
 		Root:       notionid.Normalize(r.value(WikiRootKey)),
 		LogTitle:   r.value(WikiLogTitleKey),
-		MaxAliases: r.int(MaxAliasesKey),
-		MaxSources: r.int(MaxSourcesKey),
-		LabelChars: r.int(LabelCharsKey),
+		MaxAliases: TuningNotionMaxAliases,
+		MaxSources: TuningNotionMaxSources,
+		LabelChars: TuningNotionLabelChars,
 	}
 	return out, r.err
 }

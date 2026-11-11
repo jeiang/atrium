@@ -179,7 +179,8 @@ func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 	err = settings.SaveFields(ctx, h.d.DB, fields, values)
 	var invalid settings.Invalid
 	var pinned *settings.PinnedError
-	if errors.As(err, &invalid) || errors.As(err, &pinned) {
+	var host settings.HostOwned
+	if errors.As(err, &invalid) || errors.As(err, &pinned) || errors.As(err, &host) {
 		views, loadErr := h.views(ctx, h.d.DB.Read, group.URL)
 		if loadErr != nil {
 			panic(loadErr)

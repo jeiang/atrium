@@ -2,18 +2,21 @@ package grafanatools
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"io"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/integrations"
-	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
+
+type Access struct {
+	URL   string
+	Token string
+	HTTP  *http.Client
+}
 
 const (
 	KeyURL   = "grafana_url"
@@ -21,88 +24,29 @@ const (
 )
 
 func init() {
-	settings.MustRegister(
-		settings.Value(settings.UI, settings.Def{Key: KeyURL, Module: "grafana", Type: settings.String}),
-		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyToken, Module: "grafana", Type: settings.String}),
-	)
-	integrations.Register(integrations.Integration{
-		Name: "grafana", Label: "Grafana", Module: "grafana", URLKey: KeyURL, SecretKey: KeyToken,
-		Help: "Service account token with the Viewer role; Viewer can query datasources.",
-		Fields: []integrations.Field{
-			{Key: KeyMetricsUID, Label: "Metrics datasource UID"},
-			{Key: KeyLogsUID, Label: "Logs datasource UID"},
-			{Key: KeyLogsType, Label: "Logs datasource type", Choices: []string{Loki, VictoriaLogs}},
-		},
-		Test: testAccess,
-	})
-}
-
-type Access struct {
-	URL   string
-	Token string
+	settings.MustRegister(settings.Deploy(settings.Def{Key: KeyURL, Module: "grafana", Type: settings.String}))
 }
 
 func Load(ctx context.Context, q db.Querier) (Access, error) {
-	found, err := settings.From(ctx).Resolve(ctx, q, KeyURL)
+	lease, err := connections.OpenRead(ctx, q, config.From(ctx).Host(), connections.ID(KindGrafana))
+	if err != nil {
+		var unknown connections.UnknownID
+		if errors.As(err, &unknown) {
+			return Access{}, config.NotConfigured("the Grafana connection is not configured")
+		}
+		return Access{}, err
+	}
+	base, err := lease.Endpoint("url")
+	if err != nil {
+		return Access{}, config.NotConfigured("the Grafana connection has no URL")
+	}
+	token, err := grafanaToken(lease)
+	if err != nil {
+		return Access{}, config.NotConfigured("the Grafana connection has no viewer token")
+	}
+	client, err := lease.HTTP("url")
 	if err != nil {
 		return Access{}, err
 	}
-	token, err := secrets.NewIn(settings.From(ctx), nil, q, nil).Value(ctx, KeyToken)
-	if err != nil {
-		return Access{}, err
-	}
-	a := Access{URL: strings.TrimRight(strings.TrimSpace(found.Value), "/"), Token: strings.TrimSpace(token)}
-	if a.URL == "" || a.Token == "" {
-		return Access{}, config.NotConfigured(KeyURL + " and " + KeyToken + " must be set")
-	}
-	return a, nil
-}
-
-func testAccess(ctx context.Context, c integrations.Conn) (string, error) {
-	if c.Secret == "" {
-		return "", fmt.Errorf("%w: no service account token", integrations.ErrAuth)
-	}
-	status, body, err := viewerGet(ctx, c, "/api/user")
-	if err != nil {
-		return "", err
-	}
-	if status == http.StatusUnauthorized {
-		return "", fmt.Errorf("%w: Grafana refused the token", integrations.ErrAuth)
-	}
-	if status != http.StatusOK {
-		return "", fmt.Errorf("grafana answered %d", status)
-	}
-	var user struct{ Login string }
-	if err := json.Unmarshal([]byte(body), &user); err != nil {
-		return "", fmt.Errorf("grafana returned an unreadable user profile: %w", err)
-	}
-	if user.Login == "" {
-		return "", fmt.Errorf("grafana returned a user profile without a login")
-	}
-	status, _, err = viewerGet(ctx, c, "/api/search?limit=1")
-	if err != nil {
-		return "", err
-	}
-	switch {
-	case status == http.StatusForbidden:
-		return "", fmt.Errorf("%s may not search dashboards; give it the Viewer role", user.Login)
-	case status != http.StatusOK:
-		return "", fmt.Errorf("grafana answered %d searching dashboards", status)
-	}
-	return "signed in as " + user.Login, nil
-}
-
-func viewerGet(ctx context.Context, c integrations.Conn, path string) (int, string, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.URL+path, nil)
-	if err != nil {
-		return 0, "", err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.Secret)
-	resp, err := c.HTTP.Do(req)
-	if err != nil {
-		return 0, "", err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	return resp.StatusCode, string(body), err
+	return Access{URL: strings.TrimRight(strings.TrimSpace(base), "/"), Token: token, HTTP: client}, nil
 }

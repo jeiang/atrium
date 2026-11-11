@@ -87,21 +87,6 @@ func Effort(ctx context.Context, q db.Querier) (string, error) {
 	return value, nil
 }
 
-func Concurrency(ctx context.Context, q db.Querier) (int, error) {
-	found, err := settings.From(ctx).Resolve(ctx, q, ConcurrencyKey)
-	if err != nil {
-		return 0, err
-	}
-	n, err := found.Int()
-	if err != nil {
-		return 0, err
-	}
-	if n < 1 {
-		n = 4
-	}
-	return int(n), nil
-}
-
 // Work drains one batch of queued summarizer jobs for a thread. It returns
 // the number of nodes that reached summary or fallback.
 func Work(ctx context.Context, d *db.DB, threadID int64, o WorkOptions) (int, error) {
@@ -113,11 +98,7 @@ func Work(ctx context.Context, d *db.DB, threadID int64, o WorkOptions) (int, er
 	}
 	limit := o.Limit
 	if limit <= 0 {
-		n, err := Concurrency(ctx, d.Read)
-		if err != nil {
-			return 0, err
-		}
-		limit = n
+		limit = TuningMemoryConcurrency
 	}
 	jobs, err := claim(ctx, d, threadID, o.Now, limit)
 	if err != nil {
@@ -188,10 +169,7 @@ func runJob(ctx context.Context, d *db.DB, threadID int64, job Job, o WorkOption
 	if source == "" {
 		source = text
 	}
-	limit, err := NodeBytes(ctx, d.Read)
-	if err != nil {
-		return false, err
-	}
+	limit := TuningMemoryNodeBytes
 	root, err := rootLine(ctx, d.Read, threadID)
 	if err != nil {
 		return false, err
