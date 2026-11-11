@@ -518,6 +518,8 @@ type DisabledConnection struct{ ID ID }
 
 func (e DisabledConnection) Error() string { return "connections: " + string(e.ID) + " is disabled" }
 
+func (e DisabledConnection) Unwrap() error { return UnknownID(e.ID) }
+
 func (s *Store) open(ctx context.Context, q db.Querier, id ID) (*Lease, error) {
 	return s.openLease(ctx, q, id, false)
 }
