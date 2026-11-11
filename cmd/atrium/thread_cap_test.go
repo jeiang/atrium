@@ -15,10 +15,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 )
 
 type runView struct {
@@ -50,7 +50,7 @@ func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 	}
 	thread := strconv.FormatInt(first.ThreadID, 10)
 
-	setEnv(t, settingEnv(budget.ThreadCapKey), "0.000001")
+	setEnv(t, settingEnv(inference.ThreadCapKey), "0.000001")
 	sent := len(api.Requests())
 	refused := agentRun(t, "--thread", thread, "--text", "again")
 	if refused.State != "failed" || refused.Error == nil || !strings.Contains(*refused.Error, "thread cost cap") || len(api.Requests()) != sent {
@@ -61,7 +61,7 @@ func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 		t.Fatalf("no request size in %q", *refused.Error)
 	}
 	tokens, _ := strconv.ParseInt(found[1], 10, 64)
-	cold, err := budget.ColdRequestUSD(pricing.HaikuID, tokens, "5m")
+	cold, err := inference.ColdRequestUSD(pricing.HaikuID, tokens, "5m")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -79,15 +79,15 @@ func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 		return spent
 	}
 	spent := threadSpend()
-	setEnv(t, settingEnv(budget.ThreadCapKey), fmt.Sprintf("%.8f", spent+cold*1.5))
+	setEnv(t, settingEnv(inference.ThreadCapKey), fmt.Sprintf("%.8f", spent+cold*1.5))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("second")))
 	if ran := agentRun(t, "--thread", thread, "--text", "one"); ran.State != "done" {
 		t.Fatalf("run under the thread cap: %+v", ran)
 	}
-	setEnv(t, settingEnv(budget.ThreadCapKey), fmt.Sprintf("%.8f", cold+threadSpend()/2))
+	setEnv(t, settingEnv(inference.ThreadCapKey), fmt.Sprintf("%.8f", cold+threadSpend()/2))
 	sent = len(api.Requests())
 	if held := agentRun(t, "--thread", thread, "--text", "two"); held.State != "failed" || held.Error == nil ||
-		!strings.Contains(*held.Error, budget.ThreadCapKey) || len(api.Requests()) != sent {
+		!strings.Contains(*held.Error, inference.ThreadCapKey) || len(api.Requests()) != sent {
 		t.Errorf("run once earlier runs of the thread used the cap: %+v", held)
 	}
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("elsewhere")))

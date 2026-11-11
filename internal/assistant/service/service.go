@@ -15,7 +15,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
@@ -29,6 +28,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/secrets"
@@ -54,12 +54,13 @@ type NotInterrupted int64
 func (e NotInterrupted) Error() string { return fmt.Sprintf("run %d is not interrupted", int64(e)) }
 
 type Service struct {
-	DB     *db.DB
-	Cfg    config.Config
-	Env    config.Env
-	Runner *loop.Runner
-	Client *anthropic.Client
-	Now    func() float64
+	DB        *db.DB
+	Cfg       config.Config
+	Env       config.Env
+	Runner    *loop.Runner
+	Client    *anthropic.Client
+	Now       func() float64
+	Inference *inference.Service
 
 	base   context.Context
 	mu     *sync.Mutex
@@ -70,7 +71,10 @@ type Service struct {
 var ErrClosed = errors.New("service: closed")
 
 func New(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, runner *loop.Runner) *Service {
-	return &Service{DB: d, Cfg: cfg, Env: env, Runner: runner, base: ctx, mu: &sync.Mutex{}, wg: &sync.WaitGroup{}}
+	s := &Service{DB: d, Cfg: cfg, Env: env, Runner: runner, base: ctx, mu: &sync.Mutex{}, wg: &sync.WaitGroup{}}
+	loc, _ := config.From(ctx).Location(env)
+	s.Inference = inference.New(d, s.now, loc, scopes{})
+	return s
 }
 
 func (s *Service) ResolveClient(ctx context.Context) (*anthropic.Client, error) {
@@ -171,7 +175,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env, threadID int64, now
 	if err != nil {
 		return nil, err
 	}
-	if _, err := budget.Check(ctx, q, now, loc, root == threads.Cron || root == threads.Nightly || root == threads.Worker); err != nil {
+	if _, err := inference.Check(ctx, q, now, loc, root == threads.Cron || root == threads.Nightly || root == threads.Worker); err != nil {
 		return nil, err
 	}
 	return thread, nil

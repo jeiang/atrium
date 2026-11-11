@@ -14,10 +14,10 @@ import (
 	"regexp"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/tokens"
 )
 
 const (
@@ -93,7 +93,7 @@ func ReadLimits(ctx context.Context, q db.Querier) (Limits, error) {
 }
 
 func textBytes() int {
-	return int(4 * actx.CharsPerToken * pricing.MaxContextWindow())
+	return int(4 * tokens.CharsPerToken * pricing.MaxContextWindow())
 }
 
 func MessageCapError(cap int) FileError {
@@ -236,7 +236,7 @@ func inspect(name string, data []byte, supplied string, l Limits) (Info, error) 
 			return Info{}, FileError(name + ": " + err.Error())
 		}
 		info.Text = &text
-		info.Tokens = actx.EstimateTokens(text)
+		info.Tokens = tokens.Estimate(text)
 	}
 	return info, nil
 }

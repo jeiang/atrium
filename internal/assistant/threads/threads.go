@@ -538,19 +538,6 @@ func SwitchModel(ctx context.Context, q db.Querier, threadID int64, model, effor
 			return sw, err
 		}
 	}
-	var ts float64
-	var prompt int64
-	err = q.QueryRowContext(ctx, "SELECT ts, input_tokens + cache_write_5m + cache_write_1h + cache_read FROM usage WHERE thread_id = ? ORDER BY ts DESC LIMIT 1", threadID).Scan(&ts, &prompt)
-	switch {
-	case err == nil && now-ts <= 300:
-		sw.Warm = true
-		sw.CostUSD, err = pricing.CostUSD(model, pricing.Tokens{Input: prompt}, 0)
-		if err != nil {
-			return sw, err
-		}
-	case err != nil && !errors.Is(err, sql.ErrNoRows):
-		return sw, err
-	}
 	if !sw.Changed {
 		return sw, nil
 	}
@@ -830,8 +817,7 @@ func (l Listed) Key() ListKey {
 
 const listSQL = "SELECT t.id, t.kind, t.title, t.pinned, t.archived, t.created_at, t.updated_at, t.project_id, " +
 	"(SELECT name FROM projects p WHERE p.id = t.project_id) AS project_name, " +
-	"(SELECT state FROM runs r WHERE r.thread_id = t.id ORDER BY r.id DESC LIMIT 1) AS run_state, " +
-	"(SELECT COALESCE(SUM(cost_usd), 0) FROM usage u WHERE u.thread_id = t.id) AS cost " +
+	"(SELECT state FROM runs r WHERE r.thread_id = t.id ORDER BY r.id DESC LIMIT 1) AS run_state " +
 	"FROM threads t WHERE t.kind = ? AND t.archived = ? AND t.deleted_at IS NULL"
 
 func ListThreads(ctx context.Context, q db.Querier, o ListOpts) ([]Listed, error) {
@@ -859,7 +845,7 @@ func ListThreads(ctx context.Context, q db.Querier, o ListOpts) ([]Listed, error
 	return db.Collect(rows, func(r *sql.Rows) (Listed, error) {
 		var l Listed
 		return l, r.Scan(&l.ID, &l.Kind, &l.Title, &l.Pinned, &l.Archived, &l.CreatedAt, &l.UpdatedAt, &l.ProjectID,
-			&l.ProjectName, &l.RunState, &l.Cost)
+			&l.ProjectName, &l.RunState)
 	})
 }
 

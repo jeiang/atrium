@@ -18,10 +18,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
-	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
 	"github.com/jeiang/atrium/internal/settings"
@@ -124,8 +124,21 @@ func asstLastAssistant(t *testing.T, d *db.DB, thread int64) string {
 
 func asstSpend(t *testing.T, d *db.DB, source string, usd float64) {
 	t.Helper()
-	asstExec(t, d, "INSERT INTO usage (ts, request_id, source, provider, thread_id, run_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, searches, tier, cost_usd) "+
-		"VALUES (?, lower(hex(randomblob(16))), ?, 'anthropic', 1, 1, 'chat', 'claude-haiku-5-5', 'medium', '[]', 0, 0, 0, 0, 0, 0, '<=100K', ?)", float64(time.Now().UnixMicro())/1e6, source, usd)
+	now := float64(time.Now().UnixMicro()) / 1e6
+	loc, err := time.LoadLocation("America/Port_of_Spain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	class := "interactive"
+	if source == inference.SourceSubscription {
+		class = "subscription"
+	}
+	asstExec(t, d, "INSERT INTO usage (attempt_key, ts, month_start, expires_at, settled_at, state, budget_class, reservation_nusd, accounted_nusd, "+
+		"request_id, source, provider, thread_id, run_id, kind, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, "+
+		"output_tokens, searches, tier, cost_usd) "+
+		"VALUES (lower(hex(randomblob(16))), ?, ?, ?, ?, 'settled', ?, 0, ?, lower(hex(randomblob(16))), ?, 'anthropic', 1, 1, 'chat', "+
+		"'claude-haiku-5-5', 'medium', '[]', 0, 0, 0, 0, 0, 0, '<=100K', ?)",
+		now, inference.MonthStart(now, loc), now, now, class, int64(math.Ceil(usd*1e9)), source, usd)
 }
 
 func TestAsstMonthlyBudgetPausesUnattendedRunsAt80AndChatAt100(t *testing.T) {
@@ -134,13 +147,13 @@ func TestAsstMonthlyBudgetPausesUnattendedRunsAt80AndChatAt100(t *testing.T) {
 	asstWarm(t)
 	d := asstDB(t, dir)
 
-	asstSpend(t, d, usage.SourceSubscription, 1000)
+	asstSpend(t, d, inference.SourceSubscription, 1000)
 	api.Push(asstReply("cron under budget"))
 	if ran := runApp(t, "agent", "run", "--text", "hello", "--kind", "cron"); ran.code != cli.ExitOK {
 		t.Fatalf("cron run with only subscription spend: exit %d stderr %q", ran.code, ran.stderr)
 	}
 
-	asstSpend(t, d, usage.SourceLoop, 120)
+	asstSpend(t, d, inference.SourceLoop, 120)
 	sent := len(api.Requests())
 	ran := runApp(t, "agent", "run", "--text", "hello", "--kind", "cron")
 	if ran.code != cli.ExitError || !strings.Contains(ran.stderr, "$150.00 spent (80%); unattended runs pause at 80%") || len(api.Requests()) != sent {
@@ -151,10 +164,10 @@ func TestAsstMonthlyBudgetPausesUnattendedRunsAt80AndChatAt100(t *testing.T) {
 		t.Fatalf("chat run at 80%%: exit %d stderr %q", ran.code, ran.stderr)
 	}
 
-	asstSpend(t, d, usage.SourceLoop, 30)
+	asstSpend(t, d, inference.SourceLoop, 30)
 	sent = len(api.Requests())
 	ran = runApp(t, "agent", "run", "--text", "hello")
-	if ran.code != cli.ExitError || !strings.Contains(ran.stderr, "(100%); chat pauses at 100%") || len(api.Requests()) != sent {
+	if ran.code != cli.ExitError || !strings.Contains(ran.stderr, "(100%); chat pauses at 95%") || len(api.Requests()) != sent {
 		t.Fatalf("chat run at 100%%: exit %d stderr %q, %d requests sent", ran.code, ran.stderr, len(api.Requests())-sent)
 	}
 	if n := api.Remaining(); n != 0 {
@@ -286,9 +299,9 @@ func TestAsstToolChoiceFollowsTheCatalogAndRefusesAnUnavailableTool(t *testing.T
 	}
 }
 
-func asstIterations(t *testing.T, raw string) []usage.Iteration {
+func asstIterations(t *testing.T, raw string) []inference.Iteration {
 	t.Helper()
-	var iters []usage.Iteration
+	var iters []inference.Iteration
 	if err := json.Unmarshal([]byte(raw), &iters); err != nil {
 		t.Fatalf("iterations %s: %v", raw, err)
 	}

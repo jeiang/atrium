@@ -10,8 +10,8 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/kb"
+	"github.com/jeiang/atrium/internal/tokens"
 	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/writes"
@@ -441,12 +441,12 @@ func (p *pages) knowledgeProfilePage(w http.ResponseWriter, r *http.Request, sta
 	for i, e := range entries {
 		rows[i] = knowledgeProfileEntry{ID: e.ID, Title: e.Title, Body: e.Body, Reason: e.Reason, InPrompt: e.InPrompt, Tokens: e.Tokens}
 	}
-	tokens := actx.EstimateTokens(block)
+	n := tokens.Estimate(block)
 	percent := int64(0)
 	if budget > 0 {
-		percent = min(tokens*100/budget, 100)
+		percent = min(n*100/budget, 100)
 	}
-	data := knowledgeProfileData{Block: block, Tokens: tokens, Budget: budget, Percent: percent, Entries: rows, Error: problem}
+	data := knowledgeProfileData{Block: block, Tokens: n, Budget: budget, Percent: percent, Entries: rows, Error: problem}
 	p.render(w, r, status, knowledgeFrame, "knowledge_profile.gohtml", data, nil)
 }
 

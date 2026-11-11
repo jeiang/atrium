@@ -21,6 +21,9 @@ func (p *pages) sidebar(ctx context.Context, f *tpl.Frame) error {
 	if err != nil {
 		return err
 	}
+	if err := fillThreadCosts(ctx, p.deps.DB.Read, listed); err != nil {
+		return err
+	}
 	shelved, err := projects.List(ctx, p.deps.DB.Read, true)
 	if err != nil {
 		return err

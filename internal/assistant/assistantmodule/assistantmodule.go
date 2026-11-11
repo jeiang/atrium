@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
@@ -36,6 +35,8 @@ import (
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/inference"
+	_ "github.com/jeiang/atrium/internal/inference/opsmetrics"
 	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/secrets"
@@ -100,7 +101,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 		}},
 		Settings: []settings.Group{
 			{Name: "spending", Title: "Spending", Keys: append([]string{
-				budget.BudgetKey, budget.ChatKey, budget.UnattendedKey, budget.ThreadCapKey,
+				inference.BudgetKey, inference.ChatKey, inference.UnattendedKey, inference.ThreadCapKey,
 			}, append(runCaps(), assistant.KeySubagentMaxCostUSD, websearch.KeyMaxCostUSD, assistant.KeyDreamingMaxCost,
 				assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
 			{Name: "background", Title: "Background work", Keys: []string{
@@ -142,7 +143,7 @@ func runCaps() []string {
 	models := pricing.Models()
 	keys := make([]string, len(models))
 	for i, m := range models {
-		keys[i] = budget.RunCapKey(m.ID)
+		keys[i] = inference.RunCapKey(m.ID)
 	}
 	return keys
 }

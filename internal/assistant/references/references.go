@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/textx"
+	"github.com/jeiang/atrium/internal/tokens"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -163,7 +164,7 @@ func resolve(ctx context.Context, q db.Querier, reader int64, tok Token, limit i
 	}
 	return Block{
 		Type: Type, ThreadID: tok.ThreadID, Seq: tok.Seq, Title: title, Text: body,
-		Marks: int64(marks.Set), Tokens: actx.EstimateTokens(Expanded(tok.ThreadID, tok.Seq, title, body)),
+		Marks: int64(marks.Set), Tokens: tokens.Estimate(Expanded(tok.ThreadID, tok.Seq, title, body)),
 	}, nil
 }
 
@@ -237,7 +238,7 @@ func threadText(messages []journal.Message, limit int64) (string, error) {
 	var total int64
 	omitted := 0
 	for i := len(exchanges) - 1; i >= 0; i-- {
-		n := actx.EstimateTokens(exchanges[i].text)
+		n := tokens.Estimate(exchanges[i].text)
 		if total+n > limit {
 			if len(kept) == 0 {
 				kept = append(kept, exchange{text: clip(exchanges[i].text, limit), count: exchanges[i].count})
@@ -270,10 +271,10 @@ func messageCount(exchanges []exchange) int {
 }
 
 func clip(text string, limit int64) string {
-	if actx.EstimateTokens(text) <= limit {
+	if tokens.Estimate(text) <= limit {
 		return text
 	}
-	return textx.Clip(text, int(limit*actx.CharsPerToken)) + "…"
+	return textx.Clip(text, int(limit*tokens.CharsPerToken)) + "…"
 }
 
 func Expanded(threadID int64, seq *int64, title, text string) string {

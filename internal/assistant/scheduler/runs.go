@@ -8,10 +8,9 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/budget"
-	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/safety"
 )
@@ -49,8 +48,8 @@ type Skipped struct {
 func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Location, now float64, owner string) ([]Claim, []Skipped, error) {
 	paused := safety.IsPaused(cfg.PausePath())
 	overBudget := false
-	if _, err := budget.Check(ctx, d.Read, now, loc, true); err != nil {
-		if !errors.As(err, new(budget.BudgetExceeded)) {
+	if _, err := inference.Check(ctx, d.Read, now, loc, true); err != nil {
+		if !errors.As(err, new(inference.BudgetExceeded)) {
 			return nil, nil, err
 		}
 		overBudget = true
@@ -177,10 +176,7 @@ func FinishRun(ctx context.Context, d *db.DB, c Claim, now float64, o Outcome) e
 }
 
 func RunTokens(ctx context.Context, q db.Querier, runID int64) (int64, error) {
-	var n int64
-	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(input_tokens + cache_write_5m + cache_write_1h + cache_read + output_tokens), 0) AS n "+
-		"FROM usage WHERE run_id = ?", runID).Scan(&n)
-	return n, err
+	return inference.RunTokens(ctx, q, runID)
 }
 
 func ReleaseStale(ctx context.Context, d *db.DB, now float64) error {
@@ -243,7 +239,7 @@ func SettleResumed(ctx context.Context, d *db.DB, now float64) error {
 		if err != nil {
 			return err
 		}
-		cost, err := usage.RunCost(ctx, d.Read, s.run)
+		cost, err := inference.RunCost(ctx, d.Read, s.run)
 		if err != nil {
 			return err
 		}

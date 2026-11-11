@@ -11,14 +11,13 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/notify"
 )
@@ -139,7 +138,7 @@ func (w *Worker) notifySkipped(ctx context.Context, skip scheduler.Skipped, now 
 	if err != nil {
 		return err
 	}
-	st, err := budget.StatusAt(ctx, w.Service.DB.Read, now, loc)
+	st, err := inference.StatusAt(ctx, w.Service.DB.Read, now, loc)
 	if err != nil {
 		return err
 	}
@@ -206,13 +205,13 @@ func (w *Worker) settle(ctx context.Context, claim scheduler.Claim, runID int64,
 	if err != nil {
 		return "", err
 	}
-	cost, err := usage.RunCost(ctx, d.Read, runID)
+	cost, err := inference.RunCost(ctx, d.Read, runID)
 	if err != nil {
 		return "", err
 	}
 	o := scheduler.Outcome{Status: scheduler.StatusOK, ThreadID: threadID, Tokens: tokens, Cost: cost}
 	switch {
-	case run.State != journal.Done && run.Error != nil && budget.IsCapError(*run.Error):
+	case run.State != journal.Done && run.Error != nil && inference.IsCapError(*run.Error):
 		o.Status = scheduler.StatusSkippedBudget
 		o.Error = run.Error
 	case run.State != journal.Done:
@@ -283,14 +282,14 @@ func (w *Worker) settleRuns(ctx context.Context, claim scheduler.Claim, runs []i
 		if err != nil {
 			return "", err
 		}
-		c, err := usage.RunCost(ctx, d.Read, runID)
+		c, err := inference.RunCost(ctx, d.Read, runID)
 		if err != nil {
 			return "", err
 		}
 		tokens += n
 		cost += c
 		switch {
-		case run.State != journal.Done && run.Error != nil && budget.IsCapError(*run.Error):
+		case run.State != journal.Done && run.Error != nil && inference.IsCapError(*run.Error):
 			status = scheduler.StatusSkippedBudget
 			failure = run.Error
 		case run.State != journal.Done:
@@ -313,7 +312,7 @@ func (w *Worker) failedRun(ctx context.Context, claim scheduler.Claim, threadID 
 		log.Info(fmt.Sprintf("job %d interrupted; its run resumes on restart", claim.Job.ID), logx.Job, claim.Job.ID)
 		return ""
 	}
-	if budgetErr := new(budget.BudgetExceeded); errors.As(err, budgetErr) {
+	if budgetErr := new(inference.BudgetExceeded); errors.As(err, budgetErr) {
 		_ = w.finish(ctx, claim, scheduler.Outcome{Status: scheduler.StatusSkippedBudget, ThreadID: threadID, Error: new(budgetErr.Error())})
 		return scheduler.StatusSkippedBudget
 	}

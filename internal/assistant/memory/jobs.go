@@ -10,11 +10,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/block"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
-	"github.com/jeiang/atrium/internal/assistant/usage"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -310,8 +309,8 @@ func recordUsage(ctx context.Context, d *db.DB, threadID int64, o WorkOptions, r
 	if err != nil {
 		return err
 	}
-	_, err = usage.Record(ctx, d, usage.Entry{
-		TS: o.Now, RequestID: resp.ID, ThreadID: threadID, RunID: runID, Kind: usage.KindMemory, Model: o.Model, Effort: o.Effort,
+	_, err = inference.Record(ctx, d, inference.Entry{
+		TS: o.Now, RequestID: resp.ID, ThreadID: threadID, RunID: runID, Kind: inference.KindMemory, Model: o.Model, Effort: o.Effort,
 	}, resp.Usage)
 	return err
 }
@@ -332,12 +331,12 @@ func QueuedThreads(ctx context.Context, q db.Querier, now float64) ([]int64, err
 // capCheck refuses a summary request that would exceed the model's run cost
 // cap, before anything is sent.
 func capCheck(ctx context.Context, q db.Querier, model string, promptBytes int) error {
-	cap, err := budget.RunCap(ctx, q, model)
+	cap, err := inference.RunCap(ctx, q, model)
 	if err != nil || cap <= 0 {
 		return err
 	}
 	tokens := int64(promptBytes/4) + 1
-	cold, err := budget.ColdRequestUSD(model, tokens, "5m")
+	cold, err := inference.ColdRequestUSD(model, tokens, "5m")
 	if err != nil {
 		return err
 	}

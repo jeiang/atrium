@@ -14,7 +14,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
-	"github.com/jeiang/atrium/internal/assistant/budget"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
@@ -25,6 +24,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -220,7 +220,7 @@ func (s *Search) runChild(ctx context.Context, tc *tool.Context, child int64, te
 	svc.Now = tc.Now
 	parent := tc.RunID
 	_, err := svc.RunOnce(ctx, child, text, service.Start{Kind: threads.Subagent, ParentRunID: &parent, Limits: limits})
-	var exceeded budget.BudgetExceeded
+	var exceeded inference.BudgetExceeded
 	if errors.As(err, &exceeded) {
 		return tool.Error(fmt.Sprintf("search_web not started: %s", exceeded))
 	}
