@@ -16,6 +16,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/weather"
 )
@@ -502,4 +503,49 @@ func TestUnattendedRunsAndSubagentsCannotParkOrEscape(t *testing.T) {
 			t.Errorf("parent marks = %d, want the child's messages mark", marks)
 		}
 	})
+}
+
+func TestCLIApprovalReauthorizesTheCurrentPermissions(t *testing.T) {
+	qb, qbURL := mnpNewQbit(t)
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	mnpMediaRoot(t, dir)
+	setEnv(t, settingEnv(media.KeyQbitURL), qbURL)
+	start := warm(t, api)
+	const hash = "dddddddddddddddddddddddddddddddddddddddd"
+	magnet := mediaMagnet(hash, "Lanterns.S01E12")
+	api.Push(
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("d1", "media_add_magnet", map[string]any{"magnet": magnet})),
+		anthropictest.Reply("end_turn", anthropictest.Text("asked")),
+	)
+	if ran := runApp(t, "agent", "run", "--text", "add "+magnet); ran.code != cli.ExitOK {
+		t.Fatalf("run: %d %s", ran.code, ran.stderr)
+	}
+	requests := api.Requests()[start:]
+	if len(requests) != 2 {
+		t.Fatalf("%d model requests, want 2", len(requests))
+	}
+	if result := toolResultFor(t, requests[1], "d1"); result["is_error"] == true {
+		t.Fatalf("media_add_magnet failed: %v", result)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	var id int64
+	if err := d.Read.QueryRow("SELECT MAX(id) FROM proposals WHERE kind = 'media_add_magnet'").Scan(&id); err != nil {
+		t.Fatalf("proposal: %v", err)
+	}
+	if ran := runApp(t, "settings", "set", "tool_media_add_magnet_enabled", "false"); ran.code != cli.ExitOK {
+		t.Fatalf("disable the tool: %d %s", ran.code, ran.stderr)
+	}
+	if ran := runApp(t, "proposals", "approve", fmt.Sprint(id)); ran.code == cli.ExitOK {
+		t.Fatalf("the CLI approved a disabled tool: %s", ran.stdout)
+	}
+	var status, result string
+	if err := d.Read.QueryRow("SELECT status, COALESCE(result, '') FROM proposals WHERE id = ?", id).Scan(&status, &result); err != nil {
+		t.Fatal(err)
+	}
+	if status != "failed" || !strings.Contains(result, "media_add_magnet is not allowed in this thread by the permission table") {
+		t.Errorf("proposal = %s %s, want a failed re-authorization", status, result)
+	}
+	if adds := qb.count("add"); adds != 0 {
+		t.Errorf("the CLI approval reached qBittorrent %d times, want none", adds)
+	}
 }

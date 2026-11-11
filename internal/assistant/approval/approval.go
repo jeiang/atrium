@@ -110,22 +110,23 @@ func (e *Executor) execute(t tool.Tool) proposals.Executor {
 			DB: e.DB, Env: e.Env, Kind: payload.RunKind, ThreadID: payload.ThreadID, RunID: payload.RunID,
 			ProposalID: &proposalID, AllowedURLs: map[string]struct{}{}, Now: e.now, Ledger: e.Ledger, MailOpen: e.MailOpen,
 		}
-		if e.Registry != nil {
-			r, err := e.Registry()
-			if err != nil {
-				return nil, err
-			}
-			auth, err := threads.ReadAuthority(ctx, e.DB.Read, payload.ThreadID)
-			if err != nil {
-				return nil, err
-			}
-			_, decision, err := r.Authorize(ctx, e.DB.Read, payload.RunKind, auth.Role, auth.WebSearch, auth.Effective(), registry.All(), t.Name, args)
-			if err != nil {
-				return nil, err
-			}
-			if decision != registry.Allowed {
-				return nil, proposals.ProposalError(t.Name + " is not allowed in this thread by the permission table")
-			}
+		if e.Registry == nil {
+			return nil, proposals.ProposalError("no tool registry is available to re-authorize " + t.Name)
+		}
+		r, err := e.Registry()
+		if err != nil {
+			return nil, err
+		}
+		auth, err := threads.ReadAuthority(ctx, e.DB.Read, payload.ThreadID)
+		if err != nil {
+			return nil, err
+		}
+		_, decision, err := r.Authorize(ctx, e.DB.Read, payload.RunKind, auth.Role, auth.WebSearch, auth.Effective(), registry.All(), t.Name, args)
+		if err != nil {
+			return nil, err
+		}
+		if decision != registry.Allowed {
+			return nil, proposals.ProposalError(t.Name + " is not allowed in this thread by the permission table")
 		}
 		value, err := t.Approval.Apply(ctx, tc, args)
 		if err != nil {

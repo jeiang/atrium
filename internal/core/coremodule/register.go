@@ -92,7 +92,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 			ledgercmd.Command(ledgercmd.Options{Env: mc.Env, Now: m.Now, Store: func(d *db.DB, cfg config.Config) *ledger.Store {
 				return toolset.Ledger(d, mc.Env, m.Clients(cfg), m.Now)
 			}}),
-			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Store: func(d *db.DB, cfg config.Config) *ledger.Store {
+			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: func(d *db.DB, cfg config.Config) *ledger.Store {
 				return toolset.Ledger(d, mc.Env, m.Clients(cfg), m.Now)
 			}}),
 			settingscmd.Command(mc.Env, m.Guard),
