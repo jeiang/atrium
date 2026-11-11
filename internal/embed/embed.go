@@ -2,7 +2,9 @@ package embed
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -62,6 +64,11 @@ func KBDocumentText(ctx context.Context, title, aliases, body string) string {
 
 func QueryText(query string) string {
 	return "task: search result | query: " + query
+}
+
+func Hash(text string) string {
+	sum := sha256.Sum256([]byte(text))
+	return hex.EncodeToString(sum[:])
 }
 
 type embeddingsRequest struct {
@@ -149,23 +156,28 @@ func Serialize(vector []float64) []byte {
 
 type source[T any] struct {
 	pending   string
+	compare   bool
 	missing   func(Index) string
-	load      func(context.Context, db.Querier, string, int) ([]T, error)
+	load      func(context.Context, db.Querier, string, int, int64) ([]T, error)
+	reload    func(context.Context, db.Querier, int64) (T, bool, error)
 	document  func(context.Context, T) string
+	hash      func(T) string
 	table     func(Index) string
 	insert    string
-	mark      func(context.Context, db.Querier, int64) error
+	mark      func(context.Context, db.Querier, int64, string) error
 	id        func(T) int64
 	partition func(T) string
 }
 
 var messageSource = source[mailembedding.Message]{
-	pending: "m.embedded = 0",
+	pending: "m.embedded_hash IS NULL",
 	missing: func(i Index) string { return "m.id NOT IN (SELECT rowid FROM " + i.MessageTable() + ")" },
 	load:    mailembedding.Pending,
+	reload:  mailembedding.Load,
 	document: func(ctx context.Context, m mailembedding.Message) string {
 		return DocumentText(ctx, m.Subject, m.Name, m.Addr, m.Body)
 	},
+	hash:   func(m mailembedding.Message) string { return m.EmbeddedHash },
 	table:  func(i Index) string { return i.MessageTable() },
 	insert: "INSERT INTO %s (rowid, account, embedding) VALUES (?, ?, ?)",
 	mark:   mailembedding.Mark,
@@ -176,12 +188,14 @@ var messageSource = source[mailembedding.Message]{
 }
 
 var notionSource = source[notionembedding.Page]{
-	pending: "embedded = 0",
+	compare: true,
 	missing: func(i Index) string { return "rid NOT IN (SELECT rowid FROM " + i.NotionTable() + ")" },
 	load:    notionembedding.Pending,
+	reload:  notionembedding.Load,
 	document: func(ctx context.Context, p notionembedding.Page) string {
 		return NotionDocumentText(ctx, p.Title, p.Path, p.Markdown)
 	},
+	hash:   func(p notionembedding.Page) string { return p.EmbeddedHash },
 	table:  func(i Index) string { return i.NotionTable() },
 	insert: "INSERT INTO %s (rowid, visibility, embedding) VALUES (?, ?, ?)",
 	mark:   notionembedding.Mark,
@@ -195,12 +209,14 @@ var notionSource = source[notionembedding.Page]{
 }
 
 var kbSource = source[kbembedding.Record]{
-	pending: "embedded = 0 AND retracted_at IS NULL",
+	compare: true,
 	missing: func(i Index) string { return "id NOT IN (SELECT rowid FROM " + i.KBTable() + ")" },
 	load:    kbembedding.Pending,
+	reload:  kbembedding.Load,
 	document: func(ctx context.Context, k kbembedding.Record) string {
 		return KBDocumentText(ctx, k.Title, k.Aliases, k.Body)
 	},
+	hash:   func(k kbembedding.Record) string { return k.EmbeddedHash },
 	table:  func(i Index) string { return i.KBTable() },
 	insert: "INSERT INTO %s (rowid, embedding) VALUES (?, ?)",
 	mark:   kbembedding.Mark,
@@ -214,14 +230,37 @@ func textsOr(texts TextsFunc) TextsFunc {
 	return texts
 }
 
-func fill[T any](ctx context.Context, d *db.DB, url string, idx Index, src source[T], where string, mark bool, texts TextsFunc) (int, error) {
-	batch, err := src.load(ctx, d.Read, where, endpoint.From(ctx).Batch)
-	if err != nil || len(batch) == 0 {
-		return 0, err
+func fill[T any](ctx context.Context, d *db.DB, url string, idx Index, src source[T], where string, compare bool, texts TextsFunc) (int, error) {
+	limit := endpoint.From(ctx).Batch
+	var batch []T
+	var docs, hashes []string
+	var after int64
+	for len(batch) < limit {
+		want := limit - len(batch)
+		rows, err := src.load(ctx, d.Read, where, want, after)
+		if err != nil {
+			return 0, err
+		}
+		if len(rows) == 0 {
+			break
+		}
+		for _, item := range rows {
+			after = src.id(item)
+			doc := src.document(ctx, item)
+			hash := Hash(doc)
+			if compare && src.hash(item) == hash {
+				continue
+			}
+			batch = append(batch, item)
+			docs = append(docs, doc)
+			hashes = append(hashes, hash)
+		}
+		if len(rows) < want {
+			break
+		}
 	}
-	docs := make([]string, len(batch))
-	for i, item := range batch {
-		docs[i] = src.document(ctx, item)
+	if len(batch) == 0 {
+		return 0, nil
 	}
 	vectors, err := textsOr(texts)(ctx, url, docs)
 	if err != nil {
@@ -230,21 +269,29 @@ func fill[T any](ctx context.Context, d *db.DB, url string, idx Index, src sourc
 	table := src.table(idx)
 	err = d.WithTx(ctx, func(tx *sql.Tx) error {
 		for i, item := range batch {
-			if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE rowid = ?", src.id(item)); err != nil {
+			id := src.id(item)
+			current, ok, err := src.reload(ctx, tx, id)
+			if err != nil {
 				return err
 			}
-			args := []any{src.id(item)}
+			if !ok || Hash(src.document(ctx, current)) != hashes[i] {
+				if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE rowid = ?", id); err != nil {
+					return err
+				}
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE rowid = ?", id); err != nil {
+				return err
+			}
+			args := []any{id}
 			if src.partition != nil {
-				args = append(args, src.partition(item))
+				args = append(args, src.partition(current))
 			}
 			args = append(args, Serialize(vectors[i]))
 			if _, err := tx.ExecContext(ctx, fmt.Sprintf(src.insert, table), args...); err != nil {
 				return err
 			}
-			if !mark {
-				continue
-			}
-			if err := src.mark(ctx, tx, src.id(item)); err != nil {
+			if err := src.mark(ctx, tx, id, hashes[i]); err != nil {
 				return err
 			}
 		}
@@ -263,7 +310,7 @@ func drain[T any](ctx context.Context, d *db.DB, url string, src source[T], text
 		if err != nil {
 			return done, err
 		}
-		n, err := fill(ctx, d, url, idx, src, src.pending, true, texts)
+		n, err := fill(ctx, d, url, idx, src, src.pending, src.compare, texts)
 		done += n
 		if err != nil || n == 0 {
 			return done, err

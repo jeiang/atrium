@@ -15,7 +15,7 @@ CREATE TABLE IF NOT EXISTS notion_pages (
     sensitivity TEXT NOT NULL DEFAULT '',
     private INTEGER NOT NULL DEFAULT 0,
     links TEXT NOT NULL DEFAULT '[]',
-    embedded INTEGER NOT NULL DEFAULT 0,
+    embedded_hash TEXT,
     synced_at REAL NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS notion_pages_parent ON notion_pages (parent_id);

@@ -100,13 +100,9 @@ func OperatorEdit(ctx context.Context, d *db.DB, reg *writes.Registry, id int64,
 			out = rec
 			return nil
 		}
-		embedded := rec.Embedded
-		if rec.Title != in.Title || rec.Body != in.Body || fmt.Sprint(rec.Aliases) != fmt.Sprint(normalizeAliases(in.Aliases)) {
-			embedded = false
-		}
 		if _, err := tx.ExecContext(ctx,
-			"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, private = ?, marks = ?, pinned = ?, embedded = ?, updated_at = ? WHERE id = ?",
-			in.Title, aliases, in.Body, in.Scope, b2i(in.Private), int64(in.Marks), b2i(in.Pinned), b2i(embedded), now, id); err != nil {
+			"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, private = ?, marks = ?, pinned = ?, updated_at = ? WHERE id = ?",
+			in.Title, aliases, in.Body, in.Scope, b2i(in.Private), int64(in.Marks), b2i(in.Pinned), now, id); err != nil {
 			return err
 		}
 		if in.Pinned && !rec.Pinned {
@@ -116,7 +112,7 @@ func OperatorEdit(ctx context.Context, d *db.DB, reg *writes.Registry, id int64,
 		}
 		next := rec
 		next.Title, next.Body, next.Scope, next.Private, next.Marks, next.Pinned = in.Title, in.Body, in.Scope, in.Private, in.Marks, in.Pinned
-		next.Aliases, next.Embedded, next.UpdatedAt = normalizeAliases(in.Aliases), embedded, now
+		next.Aliases, next.UpdatedAt = normalizeAliases(in.Aliases), now
 		out = next
 		writeID, err = recordWrite(ctx, tx, reg, "kb_edit", next, beforeOf(rec), now)
 		return err
@@ -146,8 +142,8 @@ func OperatorCreate(ctx context.Context, d *db.DB, reg *writes.Registry, in Edit
 			confirmed = now
 		}
 		res, err := tx.ExecContext(ctx,
-			"INSERT INTO kb_records (title, aliases, body, scope, private, marks, writer, pinned, confirmed_at, embedded, created_at, updated_at) "+
-				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)",
+			"INSERT INTO kb_records (title, aliases, body, scope, private, marks, writer, pinned, confirmed_at, created_at, updated_at) "+
+				"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 			in.Title, aliases, in.Body, in.Scope, b2i(in.Private), int64(in.Marks), WriterOperator, b2i(in.Pinned), confirmed, now, now)
 		if err != nil {
 			return err
@@ -219,14 +215,14 @@ func OperatorRetract(ctx context.Context, d *db.DB, reg *writes.Registry, id int
 			out = rec
 			return nil
 		}
-		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded = 0, updated_at = ? WHERE id = ?", now, now, id); err != nil {
+		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?", now, now, id); err != nil {
 			return err
 		}
 		if err := embed.DeleteKB(ctx, tx, id); err != nil {
 			return err
 		}
 		next := rec
-		next.RetractedAt, next.Embedded, next.UpdatedAt = &now, false, now
+		next.RetractedAt, next.UpdatedAt = &now, now
 		out = next
 		writeID, err = recordWrite(ctx, tx, reg, "kb_retract", next, beforeOf(rec), now)
 		return err
@@ -249,11 +245,11 @@ func Restore(ctx context.Context, d *db.DB, reg *writes.Registry, id int64, now 
 			out = rec
 			return nil
 		}
-		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = NULL, embedded = 0, updated_at = ? WHERE id = ?", now, id); err != nil {
+		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = NULL, embedded_hash = NULL, updated_at = ? WHERE id = ?", now, id); err != nil {
 			return err
 		}
 		next := rec
-		next.RetractedAt, next.Embedded, next.UpdatedAt = nil, false, now
+		next.RetractedAt, next.UpdatedAt = nil, now
 		out = next
 		writeID, err = recordWrite(ctx, tx, reg, "kb_restore", next, beforeOf(rec), now)
 		return err

@@ -174,7 +174,7 @@ type Message struct {
 
 const MessageColumns = "id, account, from_addr, from_domain, from_name, reply_to, rpath_domain, list_id, subject, " +
 	"subject_tmpl, msgid_domain, precedence, category, to_addrs, dkim_d, esp, att_types, att_names, date_ts, " +
-	"in_inbox, embedded, COALESCE(folder, ''), location, seen, flagged, digest, k_otp6, k_vcode, gone_at IS NOT NULL"
+	"in_inbox, embedded_hash IS NOT NULL AS embedded, COALESCE(folder, ''), location, seen, flagged, digest, k_otp6, k_vcode, gone_at IS NOT NULL"
 
 type Scanner interface{ Scan(dest ...any) error }
 

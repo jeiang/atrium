@@ -44,7 +44,6 @@ type Record struct {
 	ConfirmedAt    *float64   `json:"confirmed_at"`
 	RetractedAt    *float64   `json:"retracted_at"`
 	ExpiresAt      *float64   `json:"expires_at"`
-	Embedded       bool       `json:"embedded"`
 	CreatedAt      float64    `json:"created_at"`
 	UpdatedAt      float64    `json:"updated_at"`
 }
@@ -55,7 +54,7 @@ func (r Record) Confirmed() bool { return r.ConfirmedAt != nil }
 
 const columns = "r.id, r.title, r.aliases, r.body, r.scope, r.project_id, r.private, r.marks, r.writer, " +
 	"r.source_thread_id, r.source_seq, r.source_run_id, r.origin, r.pinned, r.confirmed_at, r.retracted_at, " +
-	"r.expires_at, r.embedded, r.created_at, r.updated_at"
+	"r.expires_at, r.created_at, r.updated_at"
 
 type scanner interface{ Scan(...any) error }
 
@@ -64,11 +63,11 @@ func scan(row scanner) (Record, error) { return scanExtra(row) }
 func scanExtra(row scanner, extra ...any) (Record, error) {
 	var r Record
 	var aliases string
-	var private, pinned, embedded int64
+	var private, pinned int64
 	var marks int64
 	dest := []any{&r.ID, &r.Title, &aliases, &r.Body, &r.Scope, &r.ProjectID, &private, &marks, &r.Writer,
 		&r.SourceThreadID, &r.SourceSeq, &r.SourceRunID, &r.Origin, &pinned, &r.ConfirmedAt, &r.RetractedAt,
-		&r.ExpiresAt, &embedded, &r.CreatedAt, &r.UpdatedAt}
+		&r.ExpiresAt, &r.CreatedAt, &r.UpdatedAt}
 	err := row.Scan(append(dest, extra...)...)
 	if err != nil {
 		return Record{}, err
@@ -79,7 +78,7 @@ func scanExtra(row scanner, extra ...any) (Record, error) {
 	if r.Aliases == nil {
 		r.Aliases = []string{}
 	}
-	r.Private, r.Pinned, r.Embedded = private != 0, pinned != 0, embedded != 0
+	r.Private, r.Pinned = private != 0, pinned != 0
 	r.Marks = tool.Marks(marks)
 	return r, nil
 }
