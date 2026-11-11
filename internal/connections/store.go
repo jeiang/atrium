@@ -962,7 +962,10 @@ func (s *Store) TestAndSave(ctx context.Context, id ID, cand Candidate) (View, e
 	if err := s.requireEncrypted(cand); err != nil {
 		return View{}, err
 	}
-	lease := s.candidateLease(current, cand)
+	lease, err := s.candidateLease(ctx, current, cand)
+	if err != nil {
+		return View{}, err
+	}
 	results, err := def.Test(ctx, lease, lease.caps)
 	if err != nil {
 		return View{}, err
@@ -1113,12 +1116,12 @@ func (s *Store) Observe(ctx context.Context, id ID, revision int64, result Resul
 	return err
 }
 
-func (s *Store) candidateLease(current View, cand Candidate) *Lease {
+func (s *Store) candidateLease(ctx context.Context, current View, cand Candidate) (*Lease, error) {
 	caps := make([]Capability, 0, len(cand.Capabilities))
 	caps = append(caps, cand.Capabilities...)
-	creds := map[string]credential{}
-	for _, c := range current.Credentials {
-		creds[c.Slot] = credential{source: c.Source, fileRef: c.FileRef, expires: c.ExpiresAt}
+	creds, err := s.loadCredentials(ctx, s.q, current.ID)
+	if err != nil {
+		return nil, err
 	}
 	for _, c := range cand.Credentials {
 		if c.Value != "" {
@@ -1131,7 +1134,7 @@ func (s *Store) candidateLease(current View, cand Candidate) *Lease {
 	}
 	lease := &Lease{store: s, id: current.ID, kind: current.Kind, revision: current.revisionValue(), config: config, options: current.transport, caps: caps, creds: creds}
 	lease.shared = s.sharedFor(current.ID, current.revisionValue())
-	return lease
+	return lease, nil
 }
 
 func (s *Store) requireEncrypted(cand Candidate) error {
