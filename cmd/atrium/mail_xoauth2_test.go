@@ -48,16 +48,12 @@ func TestGmailXOAUTH2SyncRetriesARejectedTokenWithAFreshOne(t *testing.T) {
 	t.Cleanup(srv.Close)
 	t.Setenv("ATRIUM_GOOGLE_TOKEN_URL", srv.URL)
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, "GOOGLE_OAUTH_CLIENT_SECRET", "secret")
-	setEnv(t, "GOOGLE_GMAIL_REFRESH_TOKEN", "refresh")
+	googleHostConfig(t, dir)
 	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Migrate(context.Background(), d, filepath.Join(dir, "atrium.db")); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('google_client_id', 'client-id')"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := d.Write.Exec("INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, auth_method, created_at) " +

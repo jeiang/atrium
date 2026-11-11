@@ -3,6 +3,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"net/http"
+	"net/http/cookiejar"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,7 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/secrets"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 func runSecrets(t *testing.T, stdin string, args ...string) settingsRun {
@@ -39,7 +41,7 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 		t.Errorf("set with the value in argv: exit %d stdout %q stderr %q", argv.code, argv.stdout, argv.stderr)
 	}
 	status := runSecrets(t, "", "status")
-	for _, want := range []string{"action_link_key: set\n", "google_oauth_client_secret: unset\n"} {
+	for _, want := range []string{"action_link_key: set\n"} {
 		if !strings.Contains(status.stdout, want) {
 			t.Errorf("status = %q, want %q", status.stdout, want)
 		}
@@ -68,14 +70,9 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 		t.Fatalf("secrets delete: exit %d stdout %q stderr %q", del.code, del.stdout, del.stderr)
 	}
 
-	refused := runSecrets(t, value, "set", secrets.GoogleOAuthClientSecret)
-	want := "error: " + settings.EncryptionRequired(secrets.GoogleOAuthClientSecret).Error() + "\n"
-	if refused.code != cli.ExitError || refused.stdout != "" || refused.stderr != want || !strings.Contains(want, "encrypt the database first") {
-		t.Fatalf("flagged set on plaintext: exit %d stdout %q stderr %q, want %q", refused.code, refused.stdout, refused.stderr, want)
-	}
 	var rows int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM secrets").Scan(&rows); err != nil || rows != 0 {
-		t.Errorf("secrets rows after refusal and delete = %d, %v; want 0", rows, err)
+		t.Errorf("secrets rows after delete = %d, %v; want 0", rows, err)
 	}
 
 	setEnv(t, "ATRIUM_ACTION_LINKS_ACTION_LINK_KEY", "pinned-value")
@@ -123,5 +120,28 @@ func TestEmptyPinnedLinkKeyIsRefused(t *testing.T) {
 			t.Errorf("%s config file: exit %d stdout %q stderr %q", name, r.code, r.stdout, r.stderr)
 		}
 		setEnv(t, "ATRIUM_CONFIG", "")
+	}
+}
+
+func TestConnectionsRefuseCredentialsOnAPlaintextDatabase(t *testing.T) {
+	dir := t.TempDir()
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	base := startServeIn(t, dir)
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/connections/google", nil); code != http.StatusOK {
+		t.Fatalf("google page: %d", code)
+	}
+	const value = "secret-never-printed"
+	code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/connections/google",
+		url.Values{"client_id": {"client-id"}, "client_secret": {value}})
+	if code != http.StatusUnprocessableEntity || !strings.Contains(body, "encrypt the database first") || strings.Contains(body, value) {
+		t.Fatalf("google credential on plaintext: %d %s", code, body)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	var rows int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'google/default'").Scan(&rows); err != nil || rows != 0 {
+		t.Errorf("credentials stored on plaintext = %d, %v", rows, err)
 	}
 }
