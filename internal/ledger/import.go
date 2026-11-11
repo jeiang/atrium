@@ -26,13 +26,40 @@ type ImportReport struct {
 	MissingIdentity     []string `json:"missing_identity,omitempty"`
 }
 
+func (r ImportReport) Notes() []string {
+	var out []string
+	if r.SyntheticUndo > 0 {
+		out = append(out, fmt.Sprintf("synthetic undos %d", r.SyntheticUndo))
+	}
+	if r.SyntheticResolution > 0 {
+		out = append(out, fmt.Sprintf("synthetic resolutions %d", r.SyntheticResolution))
+	}
+	if r.OrphanAudits > 0 {
+		out = append(out, fmt.Sprintf("orphan audits %d", r.OrphanAudits))
+	}
+	if r.DuplicateHolders > 0 {
+		out = append(out, fmt.Sprintf("duplicate holders %d", r.DuplicateHolders))
+	}
+	for _, key := range r.Conservative {
+		out = append(out, "conservative claim "+key)
+	}
+	for _, item := range r.MissingIdentity {
+		out = append(out, "identity missing: "+item)
+	}
+	for _, item := range r.Duplicates {
+		out = append(out, "possible duplicate: "+item)
+	}
+	return out
+}
+
 type LegacyImporter struct {
-	ctx  context.Context
-	dst  db.Querier
-	now  float64
-	rep  ImportReport
-	used map[int64]bool
-	res  map[int64]bool
+	ctx      context.Context
+	dst      db.Querier
+	now      float64
+	rep      ImportReport
+	used     map[int64]bool
+	res      map[int64]bool
+	claimKey func(tool, target string) (string, bool)
 
 	auto      map[int64]int64
 	autoUndo  map[int64]int64
@@ -71,17 +98,57 @@ type claimSpec struct {
 	missing bool
 }
 
-func NewLegacyImporter(ctx context.Context, dst db.Querier, now float64) *LegacyImporter {
-	return &LegacyImporter{
+func NewLegacyImporter(ctx context.Context, dst db.Querier, now float64) (*LegacyImporter, error) {
+	im := &LegacyImporter{
 		ctx: ctx, dst: dst, now: now,
 		used: map[int64]bool{}, res: map[int64]bool{},
 		auto: map[int64]int64{}, autoUndo: map[int64]int64{}, agent: map[int64]int64{}, agentUndo: map[int64]int64{},
 		proposal: map[int64]int64{}, direction: map[int64]string{},
 	}
+	if err := im.loadUsed(); err != nil {
+		return nil, err
+	}
+	return im, nil
 }
 
-func ImportLegacy(ctx context.Context, dst db.Querier, auto []LegacyAutoAction, agent []LegacyAgentWrite, proposal []LegacyProposalAction, resolutions []LegacyResolution, now float64) (ImportReport, error) {
-	im := NewLegacyImporter(ctx, dst, now)
+func (im *LegacyImporter) loadUsed() error {
+	rows, err := im.dst.QueryContext(im.ctx, "SELECT id FROM effects")
+	if err != nil {
+		return err
+	}
+	if _, err := db.Collect(rows, func(r *sql.Rows) (struct{}, error) {
+		var id int64
+		if err := r.Scan(&id); err != nil {
+			return struct{}{}, err
+		}
+		im.used[id] = true
+		return struct{}{}, nil
+	}); err != nil {
+		return err
+	}
+	rows, err = im.dst.QueryContext(im.ctx, "SELECT id FROM effect_resolutions")
+	if err != nil {
+		return err
+	}
+	if _, err := db.Collect(rows, func(r *sql.Rows) (struct{}, error) {
+		var id int64
+		if err := r.Scan(&id); err != nil {
+			return struct{}{}, err
+		}
+		im.res[id] = true
+		return struct{}{}, nil
+	}); err != nil {
+		return err
+	}
+	return nil
+}
+
+func ImportLegacy(ctx context.Context, dst db.Querier, auto []LegacyAutoAction, agent []LegacyAgentWrite, proposal []LegacyProposalAction, resolutions []LegacyResolution, now float64, claimKey func(tool, target string) (string, bool)) (ImportReport, error) {
+	im, err := NewLegacyImporter(ctx, dst, now)
+	if err != nil {
+		return ImportReport{}, err
+	}
+	im.claimKey = claimKey
 	for _, step := range []func() error{
 		func() error { return im.AutoActions(auto) },
 		func() error { return im.AgentWrites(agent) },
@@ -169,7 +236,7 @@ func (im *LegacyImporter) autoAction(a LegacyAutoAction) error {
 			created = a.UndoneTS.Float64
 		}
 		if err := im.insertEffect(effectRow{
-			id: undoID, createdAt: created, leaseAt: created, origin: "mail_auto", operation: "legacy_auto_undo",
+			id: undoID, createdAt: created, leaseAt: created, origin: "mail_auto", operation: LegacyAutoUndo,
 			operationKey: fmt.Sprintf("auto_action:%d", a.ID), target: target, direction: "undo", undoOf: &id,
 			account: a.Account, messageID: &a.MessageID, digest: a.Digest, src: a.Dest.String, dest: a.Src.String,
 			action: "{}", before: a.After.String, state: undoState, error: a.UndoneError.String, legacy: legacy,
@@ -189,7 +256,7 @@ func (im *LegacyImporter) autoAction(a LegacyAutoAction) error {
 			}
 		}
 	}
-	im.autoClaims(a, id, undoState, undo)
+	im.autoClaims(a, id, state, undoState, undo)
 	return nil
 }
 
@@ -225,16 +292,16 @@ func autoUndoState(state string) (State, bool) {
 	return "", false
 }
 
-func (im *LegacyImporter) autoClaims(a LegacyAutoAction, id int64, undoState State, undo bool) {
+func (im *LegacyImporter) autoClaims(a LegacyAutoAction, id int64, state, undoState State, undo bool) {
 	released := undo && undoState == Done
-	if a.State == "undo_settled" {
-		released = true
-	}
 	if released || a.State == "failed" || a.State == "skipped" {
 		return
 	}
-	key := fmt.Sprintf("auto/%d/%s/%s", a.MessageID, a.Kind, a.Dest.String)
+	key := AutoKey(a.MessageID, a.Kind, a.Dest.String)
 	im.claims = append(im.claims, claimSpec{key: key, effect: id, retain: true})
+	if state == Done || state == Partial {
+		return
+	}
 	if a.Src.Valid && a.Src.String != "" {
 		im.claims = append(im.claims, claimSpec{key: fmt.Sprintf("mail_folder/%s/%s", a.Account, a.Src.String), effect: id})
 	}
@@ -331,7 +398,13 @@ func (im *LegacyImporter) agentWrite(a LegacyAgentWrite) error {
 		}
 	}
 	if state == Unknown && a.State != "resolved" {
-		im.claims = append(im.claims, claimSpec{key: "legacy_agent/" + a.Target, effect: id, missing: true})
+		key, missing := "legacy_agent/"+a.Target, true
+		if im.claimKey != nil {
+			if mapped, ok := im.claimKey(a.Tool, a.Target); ok {
+				key, missing = mapped, false
+			}
+		}
+		im.claims = append(im.claims, claimSpec{key: key, effect: id, missing: missing})
 	}
 	return nil
 }

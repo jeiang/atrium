@@ -765,7 +765,7 @@ func (s *service) apiDraftResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	err := s.drafts.ResolveUnknown(ctx, row.ID, verdict)
+	err := s.drafts.ResolveUnknown(ctx, row.ID, verdict, ledger.Resolver{Actor: "operator", Source: "ui"})
 	var refused drafts.Error
 	if errors.As(err, &refused) {
 		web.APIError(w, http.StatusConflict, "not_resolved", err.Error())

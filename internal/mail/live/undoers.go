@@ -2,14 +2,18 @@ package live
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"slices"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/corrections"
 	"github.com/jeiang/atrium/internal/mail/mailops"
-	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/safety"
 )
 
 const (
@@ -57,21 +61,124 @@ type Unflag struct {
 	UIDs        []uint32 `json:"uids"`
 }
 
-func RegisterUndoers(r *proposals.Registry, open mail.OpenFunc, q db.Querier) {
-	r.Undoers[OpMoveBack] = plan(func(ctx context.Context, p MoveBack) (any, error) { return UndoMoveBack(ctx, open, q, p) })
-	r.Undoers[OpGmailLabels] = plan(func(ctx context.Context, p GmailLabels) (any, error) { return undoGmailLabels(ctx, open, q, p) })
-	r.Undoers[OpGmailUntrash] = plan(func(ctx context.Context, p GmailUntrash) (any, error) { return undoGmailUntrash(ctx, open, q, p) })
-	r.Undoers[OpUnflag] = plan(func(ctx context.Context, p Unflag) (any, error) { return undoUnflag(ctx, open, q, p) })
+func jsonOf(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return b
 }
 
-func plan[T any](fn func(context.Context, T) (any, error)) proposals.Undoer {
-	return func(ctx context.Context, raw json.RawMessage) (any, error) {
-		var p T
-		if err := json.Unmarshal(raw, &p); err != nil {
-			return nil, err
+func validateUndo(name string) func(json.RawMessage) error {
+	return func(raw json.RawMessage) error {
+		var head struct {
+			Op string `json:"op"`
 		}
-		return fn(ctx, p)
+		if err := json.Unmarshal(raw, &head); err != nil {
+			return ledger.Refused("mail undo payload is invalid")
+		}
+		if head.Op != name {
+			return ledger.Refused("mail undo payload names " + head.Op)
+		}
+		return nil
 	}
+}
+
+func undoResult(value any, err error) (ledger.Result, error) {
+	if err == nil {
+		return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
+	}
+	text := err.Error()
+	if mailops.OutcomeUnknown(err) {
+		return ledger.Result{State: ledger.Unknown, Error: text}, nil
+	}
+	var partial *mailops.PartialMove
+	if errors.As(err, &partial) {
+		return ledger.Result{State: ledger.Partial, Error: text}, nil
+	}
+	return ledger.Result{State: ledger.Failed, Error: text}, nil
+}
+
+func clearCorrection(ctx context.Context, tx *sql.Tx, forward ledger.Effect, result ledger.Result) error {
+	if result.State != ledger.Done || forward.Operation != Correct || forward.MessageID == nil {
+		return nil
+	}
+	dest := forward.Dest
+	_, err := corrections.Clear(ctx, tx, *forward.MessageID, &dest)
+	return err
+}
+
+func resolveCorrection(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
+	if e.Direction != "undo" || r.Outcome != "undone" {
+		return nil
+	}
+	forward, err := ledger.ForwardOf(ctx, tx, e.ID)
+	if err != nil {
+		var missing *ledger.NotFound
+		if errors.As(err, &missing) {
+			return nil
+		}
+		return err
+	}
+	if forward.Operation != Correct || forward.MessageID == nil {
+		return nil
+	}
+	dest := forward.Dest
+	_, err = corrections.Clear(ctx, tx, *forward.MessageID, &dest)
+	return err
+}
+
+func RegisterLedgerUndoers(s *ledger.Store, open mail.OpenFunc, q db.Querier) error {
+	undoers := []struct {
+		name string
+		fn   func(context.Context, mail.OpenFunc, db.Querier, json.RawMessage) (any, error)
+	}{
+		{OpMoveBack, func(ctx context.Context, open mail.OpenFunc, q db.Querier, raw json.RawMessage) (any, error) {
+			var p MoveBack
+			if err := json.Unmarshal(raw, &p); err != nil {
+				return nil, ledger.Refused("move undo payload is invalid")
+			}
+			return UndoMoveBack(ctx, open, q, p)
+		}},
+		{OpGmailLabels, func(ctx context.Context, open mail.OpenFunc, q db.Querier, raw json.RawMessage) (any, error) {
+			var p GmailLabels
+			if err := json.Unmarshal(raw, &p); err != nil {
+				return nil, ledger.Refused("label undo payload is invalid")
+			}
+			return undoGmailLabels(ctx, open, q, p)
+		}},
+		{OpGmailUntrash, func(ctx context.Context, open mail.OpenFunc, q db.Querier, raw json.RawMessage) (any, error) {
+			var p GmailUntrash
+			if err := json.Unmarshal(raw, &p); err != nil {
+				return nil, ledger.Refused("untrash undo payload is invalid")
+			}
+			return undoGmailUntrash(ctx, open, q, p)
+		}},
+		{OpUnflag, func(ctx context.Context, open mail.OpenFunc, q db.Querier, raw json.RawMessage) (any, error) {
+			var p Unflag
+			if err := json.Unmarshal(raw, &p); err != nil {
+				return nil, ledger.Refused("unflag undo payload is invalid")
+			}
+			return undoUnflag(ctx, open, q, p)
+		}},
+	}
+	for _, u := range undoers {
+		u := u
+		if err := s.RegisterUndo(u.name, ledger.Undoer{
+			Validate: validateUndo(u.name),
+			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
+				value, err := u.fn(safety.ApprovedWrites(ctx, "undo"), open, q, raw)
+				return undoResult(value, err)
+			},
+			After: clearCorrection,
+		}); err != nil {
+			return err
+		}
+		if err := s.RegisterResolve(u.name, resolveCorrection); err != nil {
+			return err
+		}
+	}
+	return s.RegisterResolve(ledger.LegacyAutoUndo, resolveCorrection)
 }
 
 type moveBackResult struct {
@@ -234,4 +341,12 @@ func derefOr0(v *uint32) uint32 {
 		return 0
 	}
 	return *v
+}
+
+func NewStore(d *db.DB, open mail.OpenFunc, now func() float64) *ledger.Store {
+	s := ledger.NewStore(d, now)
+	if err := RegisterLedgerUndoers(s, open, d.Read); err != nil {
+		panic(err)
+	}
+	return s
 }

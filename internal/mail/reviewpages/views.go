@@ -143,20 +143,23 @@ type PhoneActivity struct {
 }
 
 type MailActivity struct {
-	MessageID   int64   `json:"message_id"`
-	Subject     *string `json:"subject"`
-	Kind        string  `json:"kind"`
-	FromName    *string `json:"from_name"`
-	FromAddr    *string `json:"from_addr"`
-	Account     string  `json:"account"`
-	Src         *string `json:"src"`
-	Dest        *string `json:"dest"`
-	Status      string  `json:"status"`
-	Error       *string `json:"error"`
-	Undoable    bool    `json:"undoable"`
-	State       string  `json:"state"`
-	Blocked     bool    `json:"blocked"`
-	UndoBlocked bool    `json:"undo_blocked"`
+	MessageID        int64   `json:"message_id"`
+	Subject          *string `json:"subject"`
+	Kind             string  `json:"kind"`
+	FromName         *string `json:"from_name"`
+	FromAddr         *string `json:"from_addr"`
+	Account          string  `json:"account"`
+	Src              *string `json:"src"`
+	Dest             *string `json:"dest"`
+	Status           string  `json:"status"`
+	Error            *string `json:"error"`
+	Undoable         bool    `json:"undoable"`
+	State            string  `json:"state"`
+	Blocked          bool    `json:"blocked"`
+	UndoBlocked      bool    `json:"undo_blocked"`
+	Undone           bool    `json:"undone"`
+	Resolved         bool    `json:"resolved"`
+	EffectiveOutcome string  `json:"effective_outcome,omitempty"`
 }
 
 type WriteActivity struct {
@@ -182,13 +185,14 @@ type SettingsActivity struct {
 	After    string `json:"after"`
 }
 
-func mailEntry(a live.Action, now float64) ActivityEntry {
+func mailEntry(a live.Action) ActivityEntry {
 	return ActivityEntry{
 		Source: sourceMail, ID: a.ID, Category: categoryMail, TS: a.TS,
 		Mail: &MailActivity{
 			MessageID: a.MessageID, Subject: a.Subject, Kind: a.Kind, FromName: a.FromName, FromAddr: a.FromAddr,
 			Account: a.Account, Src: a.Src, Dest: a.Dest, Status: a.Status, Error: a.Error,
-			Undoable: a.Undoable && !live.Blocked(a, now), Blocked: live.Blocked(a, now), UndoBlocked: live.UndoBlocked(a, now),
+			Undoable: a.Undoable && !a.Blocked && !a.UndoBlocked, Blocked: a.Blocked || a.UndoBlocked, UndoBlocked: a.UndoBlocked,
+			Undone: a.Undone, Resolved: a.Resolved, EffectiveOutcome: a.EffectiveOutcome,
 		},
 	}
 }

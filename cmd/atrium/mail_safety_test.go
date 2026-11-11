@@ -5,10 +5,13 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
@@ -267,7 +270,7 @@ func TestMailGateRefusalsWriteNothing(t *testing.T) {
 		if got := m.verbs(); len(got) != 0 {
 			t.Fatalf("shadow mode wrote to IMAP: %v", got)
 		}
-		if n := m.count(t, "SELECT COUNT(*) FROM auto_actions"); n != 0 {
+		if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto'"); n != 0 {
 			t.Fatalf("shadow mode recorded %d automatic actions", n)
 		}
 	})
@@ -287,7 +290,7 @@ func TestMailGateRefusalsWriteNothing(t *testing.T) {
 		if got := m.verbs(); len(got) != 0 {
 			t.Fatalf("a paused pass wrote to IMAP: %v", got)
 		}
-		if n := m.count(t, "SELECT COUNT(*) FROM auto_actions"); n != 0 {
+		if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto'"); n != 0 {
 			t.Fatalf("a paused pass recorded %d automatic actions", n)
 		}
 
@@ -296,7 +299,7 @@ func TestMailGateRefusalsWriteNothing(t *testing.T) {
 		if got := m.verbs(); len(got) != 3 || got[0] != "COPY" || got[1] != "STORE" || got[2] != "EXPUNGE" {
 			t.Fatalf("after resume the write log = %v, want COPY, STORE, EXPUNGE", got)
 		}
-		if state := m.scalar(t, "SELECT state FROM auto_actions WHERE kind = 'correct'"); state != "applied" {
+		if state := m.scalar(t, "SELECT state FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'"); state != "done" {
 			t.Fatalf("correction state after resume = %s", state)
 		}
 	})
@@ -312,7 +315,7 @@ func TestMailGateRefusalsWriteNothing(t *testing.T) {
 		m.fake.Boxes["INBOX"].Box.SetFlags(uid, []string{`\Seen`}, nil)
 		m.run(t, "sync")
 
-		if state := m.scalar(t, "SELECT state FROM auto_actions WHERE kind = 'correct'"); state != "skipped" {
+		if state := m.scalar(t, "SELECT state FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'"); state != "skipped" {
 			t.Fatalf("a correction into a protected folder recorded %s, want skipped", state)
 		}
 		if got := m.verbs(); len(got) != 0 {
@@ -343,10 +346,10 @@ func TestMailGateRefusalsWriteNothing(t *testing.T) {
 		if n := m.copies(); n != 1 {
 			t.Fatalf("with a cap of one the pass made %d copies, want 1", n)
 		}
-		if n := m.count(t, "SELECT COUNT(*) FROM auto_actions WHERE state = 'applied'"); n != 1 {
+		if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto' AND state = 'done'"); n != 1 {
 			t.Fatalf("with a cap of one %d actions applied, want 1", n)
 		}
-		if n := m.count(t, "SELECT COUNT(*) FROM auto_actions WHERE message_id = ?", secondID); n != 0 {
+		if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto' AND message_id = ?", secondID); n != 0 {
 			t.Fatalf("the deferred message has %d automatic actions", n)
 		}
 
@@ -355,7 +358,7 @@ func TestMailGateRefusalsWriteNothing(t *testing.T) {
 		if n := m.copies(); n != 2 {
 			t.Fatalf("after raising the cap the pass made %d copies, want 2", n)
 		}
-		if n := m.count(t, "SELECT COUNT(*) FROM auto_actions WHERE kind = 'correct' AND state = 'applied'"); n != 2 {
+		if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto' AND operation = 'correct' AND state = 'done'"); n != 2 {
 			t.Fatalf("%d corrections applied after raising the cap, want 2", n)
 		}
 	})
@@ -374,9 +377,9 @@ func TestMailLiveUndoRestoresTheMessageAndAnUnknownUndoStaysBlocked(t *testing.T
 			id, mail.WallClock()+60)
 		m.fake.Boxes["INBOX"].Box.SetFlags(uid, []string{`\Seen`}, nil)
 		m.run(t, "sync")
-		action := m.scalar(t, "SELECT CAST(id AS TEXT) FROM auto_actions WHERE kind = 'correct'")
-		if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state != "applied" {
-			t.Fatalf("forward correction state = %s, want applied", state)
+		action := m.scalar(t, "SELECT CAST(id AS TEXT) FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'")
+		if state := m.scalar(t, "SELECT state FROM effects WHERE id = ?", action); state != "done" {
+			t.Fatalf("forward correction state = %s, want done", state)
 		}
 		if got := m.verbs(); len(got) != 3 || got[0] != "COPY" || got[1] != "STORE" || got[2] != "EXPUNGE" {
 			t.Fatalf("the forward move wrote %v, want COPY, STORE, EXPUNGE and never MOVE", got)
@@ -393,8 +396,8 @@ func TestMailLiveUndoRestoresTheMessageAndAnUnknownUndoStaysBlocked(t *testing.T
 	t.Run("undo", func(t *testing.T) {
 		m, action := prepare(t)
 		m.run(t, "live", "undo", action)
-		if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state != "undone" {
-			t.Fatalf("the action after undo is %s, want undone", state)
+		if undone := m.scalar(t, "SELECT CAST(undone_by IS NOT NULL AS TEXT) FROM effects WHERE id = ?", action); undone != "1" {
+			t.Fatalf("the action after undo is %s, want undone", undone)
 		}
 		if n := len(m.fake.Boxes["INBOX"].Box.Messages); n != 1 {
 			t.Fatalf("the inbox holds %d messages after the undo, want 1", n)
@@ -421,8 +424,8 @@ func TestMailLiveUndoRestoresTheMessageAndAnUnknownUndoStaysBlocked(t *testing.T
 		if ran := runApp(t, "live", "undo", action); ran.code == cli.ExitOK {
 			t.Fatalf("an undo with a dropped connection exited %d", ran.code)
 		}
-		if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state != "undo_unknown" {
-			t.Fatalf("the undo after a dropped connection is %s, want undo_unknown", state)
+		if state := m.scalar(t, "SELECT state FROM effects WHERE undo_of = ? ORDER BY id DESC LIMIT 1", action); state != "unknown" {
+			t.Fatalf("the undo after a dropped connection is %s, want unknown", state)
 		}
 		if ran := runApp(t, "live", "undo", action); ran.code == cli.ExitOK {
 			t.Fatalf("a second undo of a blocked undo exited %d", ran.code)
@@ -431,8 +434,8 @@ func TestMailLiveUndoRestoresTheMessageAndAnUnknownUndoStaysBlocked(t *testing.T
 			t.Fatalf("the destination holds %d messages, want the blocked undo left alone", n)
 		}
 		m.run(t, "live", "resolve", action, "--outcome", "undone")
-		if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state != "undone" {
-			t.Fatalf("after the operator resolution the action is %s, want undone", state)
+		if undone := m.scalar(t, "SELECT CAST(undone_by IS NOT NULL AS TEXT) FROM effects WHERE id = ?", action); undone != "1" {
+			t.Fatalf("after the operator resolution the action is %s, want undone", undone)
 		}
 	})
 }
@@ -459,11 +462,11 @@ func TestMailUnknownForwardOutcomeIsNotRetried(t *testing.T) {
 		t.Fatalf("a pass whose only move had an unknown outcome exited 0")
 	}
 
-	action := m.scalar(t, "SELECT CAST(id AS TEXT) FROM auto_actions WHERE kind = 'correct'")
-	if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state == "applied" {
-		t.Fatalf("a move whose copy was dropped is recorded as applied")
+	action := m.scalar(t, "SELECT CAST(id AS TEXT) FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'")
+	if state := m.scalar(t, "SELECT state FROM effects WHERE id = ?", action); state != "unknown" {
+		t.Fatalf("a move whose copy was dropped is recorded as %s, want unknown", state)
 	}
-	if recorded := m.scalar(t, "SELECT CAST(error IS NOT NULL AS TEXT) FROM auto_actions WHERE id = ?", action); recorded != "1" {
+	if recorded := m.scalar(t, "SELECT CAST(error IS NOT NULL AS TEXT) FROM effects WHERE id = ?", action); recorded != "1" {
 		t.Fatalf("the blocked move recorded no error text")
 	}
 	if copies != 1 {
@@ -482,8 +485,8 @@ func TestMailUnknownForwardOutcomeIsNotRetried(t *testing.T) {
 	if got := len(m.fake.Writes); got != attempts {
 		t.Fatalf("the next pass made %d writes, want the blocked move left alone", got-attempts)
 	}
-	if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state == "applied" {
-		t.Fatalf("the next pass applied the blocked move")
+	if state := m.scalar(t, "SELECT state FROM effects WHERE id = ?", action); state != "unknown" {
+		t.Fatalf("the next pass changed the blocked move to %s", state)
 	}
 
 	base, _, _ := startServeApp(t, m.app, &lockedBuffer{})
@@ -499,7 +502,221 @@ func TestMailUnknownForwardOutcomeIsNotRetried(t *testing.T) {
 	if got := len(m.fake.Writes); got != attempts {
 		t.Fatalf("the correction pass made %d writes, want the blocked move left alone", got-attempts)
 	}
-	if state := m.scalar(t, "SELECT state FROM auto_actions WHERE id = ?", action); state == "applied" {
-		t.Fatalf("the correction pass applied the blocked move")
+	if state := m.scalar(t, "SELECT state FROM effects WHERE id = ?", action); state != "unknown" {
+		t.Fatalf("the correction pass changed the blocked move to %s", state)
+	}
+
+	m.run(t, "live", "resolve", action, "--outcome", "not-applied")
+	if state := m.scalar(t, "SELECT state FROM effects WHERE id = ?", action); state != "unknown" {
+		t.Fatalf("the resolution rewrote the original outcome to %s", state)
+	}
+	if recorded := m.scalar(t, "SELECT effective_outcome FROM effect_resolutions WHERE effect_id = ? ORDER BY id DESC LIMIT 1", action); recorded != "failed" {
+		t.Fatalf("the resolution recorded %s, want failed", recorded)
+	}
+	before := len(m.fake.Writes)
+	m.run(t, "sync")
+	if got := len(m.fake.Writes) - before; got != 3 {
+		t.Fatalf("the pass after the resolution made %d writes, want COPY, STORE, EXPUNGE", got)
+	}
+	if state := m.scalar(t, "SELECT state FROM effects WHERE origin = 'mail_auto' AND operation = 'correct' ORDER BY id DESC LIMIT 1"); state != "done" {
+		t.Fatalf("the pass after the resolution left the action %s, want done", state)
+	}
+	if n := len(m.fake.Boxes["Bills"].Box.Messages); n != 1 {
+		t.Fatalf("the destination holds %d messages after the resolution, want 1", n)
+	}
+}
+
+func TestMailUndoneActionsDoNotRunAgain(t *testing.T) {
+	const from = "statements@bank.test"
+
+	t.Run("flag", func(t *testing.T) {
+		const from = "alice@example.com"
+		m := mailSafetyFixture(t, "live")
+		contactsDir := filepath.Join(m.dir, "contacts")
+		if err := os.MkdirAll(filepath.Join(contactsDir, "card"), 0o777); err != nil {
+			t.Fatal(err)
+		}
+		card := "BEGIN:VCARD\nVERSION:3.0\nFN:Bank\nEMAIL:" + from + "\nEND:VCARD\n"
+		if err := os.WriteFile(filepath.Join(contactsDir, "card", "bank.vcf"), []byte(card), 0o666); err != nil {
+			t.Fatal(err)
+		}
+		setEnv(t, settingEnv(contacts.DirKey), contactsDir)
+		uid := m.add("INBOX", "Question about your account", from, "target", "Can you confirm the transfer?")
+		m.run(t, "sync")
+		action := m.scalar(t, "SELECT CAST(id AS TEXT) FROM effects WHERE origin = 'mail_auto' AND operation = 'flag'")
+		if state := m.scalar(t, "SELECT state FROM effects WHERE id = ?", action); state != "done" {
+			t.Fatalf("the flag action is %s, want done", state)
+		}
+		m.run(t, "live", "undo", action)
+		if undone := m.scalar(t, "SELECT CAST(undone_by IS NOT NULL AS TEXT) FROM effects WHERE id = ?", action); undone != "1" {
+			t.Fatalf("the flag after undo is %s, want undone", undone)
+		}
+		if slices.Contains(m.fake.Boxes["INBOX"].Box.Messages[uid].Flags, `\Flagged`) {
+			t.Fatalf("the undo left the message flagged: %v", m.fake.Boxes["INBOX"].Box.Messages[uid].Flags)
+		}
+		before := len(m.fake.Writes)
+		m.run(t, "sync")
+		if got := len(m.fake.Writes) - before; got != 0 {
+			t.Fatalf("the pass after the undo made %d writes, want the undone flag left alone", got)
+		}
+		if slices.Contains(m.fake.Boxes["INBOX"].Box.Messages[uid].Flags, `\Flagged`) {
+			t.Fatalf("the pass after the undo flagged the message again: %v", m.fake.Boxes["INBOX"].Box.Messages[uid].Flags)
+		}
+		if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto' AND operation = 'flag'"); n != 1 {
+			t.Fatalf("%d flag actions, want the undone one not repeated", n)
+		}
+	})
+
+	t.Run("trash", func(t *testing.T) {
+		m := mailSafetyFixture(t, "live")
+		m.add("Bills", "Old statement", from, "old", "Your statement is ready.", `\Seen`)
+		m.run(t, "sync")
+		path := filepath.Join(m.dir, "rules.json")
+		body := `{"rules":[{"id":"old","account":"icloud","action":"delete",` +
+			`"when":[{"field":"from_addr","op":"eq","value":"` + from + `"}]}]}`
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		m.run(t, "rules", "import", path)
+		m.run(t, "live", "deletions")
+		action := m.scalar(t, "SELECT CAST(id AS TEXT) FROM effects WHERE origin = 'mail_auto' AND operation = 'trash'")
+		if state := m.scalar(t, "SELECT state FROM effects WHERE id = ?", action); state != "done" {
+			t.Fatalf("the trash action is %s, want done", state)
+		}
+		if n := len(m.fake.Boxes["Bills"].Box.Messages); n != 0 {
+			t.Fatalf("Bills holds %d messages after the trash, want 0", n)
+		}
+		m.run(t, "live", "undo", action)
+		if n := len(m.fake.Boxes["Bills"].Box.Messages); n != 1 {
+			t.Fatalf("Bills holds %d messages after the undo, want 1", n)
+		}
+		m.run(t, "sync")
+		before := len(m.fake.Writes)
+		m.run(t, "live", "deletions")
+		if got := len(m.fake.Writes) - before; got != 0 {
+			t.Fatalf("the deletion pass after the undo made %d writes, want the restored message left alone", got)
+		}
+		if n := len(m.fake.Boxes["Bills"].Box.Messages); n != 1 {
+			t.Fatalf("Bills holds %d messages after the second deletion pass, want the message where the operator put it", n)
+		}
+		if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto' AND operation = 'trash'"); n != 1 {
+			t.Fatalf("%d trash actions, want the undone one not repeated", n)
+		}
+	})
+}
+
+func TestMailInterruptedExpungeAfterCopyIsUnknown(t *testing.T) {
+	m := mailSafetyFixture(t, "live")
+	uid := m.add("INBOX", "Bank statement", "statements@bank.test", "target", "Your statement is ready.")
+	m.run(t, "sync")
+	id := m.messageID(t, "Bank statement")
+	m.run(t, "live", "rebaseline")
+	m.exec(t, "INSERT INTO corrections (message_id, account, folder, ts, source) VALUES (?, 'icloud', 'Bills', ?, 'operator')",
+		id, mail.WallClock()+60)
+	m.fake.Boxes["INBOX"].Box.SetFlags(uid, []string{`\Seen`}, nil)
+	m.fake.FailWrite = func(w mailtest.FakeWrite) error {
+		if w.Verb == "EXPUNGE" {
+			return &mail.WriteInterrupted{Command: "UID EXPUNGE", Err: errors.New("connection reset by peer")}
+		}
+		return nil
+	}
+	if ran := runApp(t, "sync"); ran.code == cli.ExitOK {
+		t.Fatalf("a pass whose expunge was interrupted exited 0")
+	}
+	action := m.scalar(t, "SELECT CAST(id AS TEXT) FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'")
+	if state := m.scalar(t, "SELECT state FROM effects WHERE id = ?", action); state != "unknown" {
+		t.Fatalf("an interrupted expunge after a confirmed copy is recorded as %s, want unknown", state)
+	}
+	if copied := m.scalar(t, "SELECT after_json FROM effects WHERE id = ?", action); !strings.Contains(copied, `"uid"`) {
+		t.Fatalf("the unknown move lost its confirmed copy evidence: %s", copied)
+	}
+	if n := len(m.fake.Boxes["Bills"].Box.Messages); n != 1 {
+		t.Fatalf("Bills holds %d messages after the interrupted expunge, want the confirmed copy", n)
+	}
+	if ran := runApp(t, "live", "undo", action); ran.code == cli.ExitOK {
+		t.Fatalf("an unknown move was offered a direct undo")
+	}
+	if state := m.scalar(t, "SELECT state FROM effects WHERE id = ?", action); state != "unknown" {
+		t.Fatalf("the refused undo changed the action to %s", state)
+	}
+}
+
+func TestMailPassRenewsItsLeaseBetweenGroups(t *testing.T) {
+	const from = "statements@bank.test"
+	m := mailSafetyFixture(t, "live")
+	m.add("INBOX", "Statement one", from, "one", "Your statement is ready.")
+	m.add("Bills", "Statement two", from, "two", "Your statement is ready.")
+	m.run(t, "sync")
+	m.run(t, "live", "rebaseline")
+	first := m.messageID(t, "Statement one")
+	second := m.messageID(t, "Statement two")
+	for _, row := range []struct {
+		id   int64
+		dest string
+	}{{first, "Bills"}, {second, "Receipts"}} {
+		m.exec(t, "INSERT INTO corrections (message_id, account, folder, ts, source) VALUES (?, 'icloud', ?, ?, 'operator')",
+			row.id, row.dest, mail.WallClock()+60)
+	}
+	for _, box := range []string{"INBOX", "Bills"} {
+		for uid := range m.fake.Boxes[box].Box.Messages {
+			m.fake.Boxes[box].Box.SetFlags(uid, []string{`\Seen`}, nil)
+		}
+	}
+	backdated := 0
+	m.fake.FailWrite = func(w mailtest.FakeWrite) error {
+		if w.Verb == "COPY" && backdated == 0 {
+			m.exec(t, "UPDATE effects SET lease_at = 0 WHERE state = 'intent'")
+			backdated = m.count(t, "SELECT COUNT(*) FROM effects WHERE state = 'intent' AND lease_at = 0")
+		}
+		return nil
+	}
+	m.run(t, "sync")
+	if backdated < 2 {
+		t.Fatalf("backdated %d intents, want the whole pass in flight", backdated)
+	}
+	later := max(first, second)
+	if state := m.scalar(t, "SELECT state FROM effects WHERE message_id = ? AND operation = 'correct'", later); state != "done" {
+		t.Fatalf("the later group's action is %s, want done", state)
+	}
+	if lease := m.scalar(t, "SELECT CAST(lease_at AS TEXT) FROM effects WHERE message_id = ? AND operation = 'correct'", later); lease == "0" || lease == "0.0" {
+		t.Fatalf("the later group's intent kept its expired lease (%s), want it renewed before the group ran", lease)
+	}
+	if n := len(m.fake.Boxes["Bills"].Box.Messages); n != 1 {
+		t.Fatalf("Bills holds %d messages, want the first move", n)
+	}
+	if n := len(m.fake.Boxes["Receipts"].Box.Messages); n != 1 {
+		t.Fatalf("Receipts holds %d messages, want the second move", n)
+	}
+}
+
+func TestMailGroupSettledMeanwhileSettlesTheRest(t *testing.T) {
+	const from = "statements@bank.test"
+	m := mailSafetyFixture(t, "live")
+	m.add("INBOX", "Statement one", from, "one", "Your statement is ready.")
+	m.add("INBOX", "Statement two", from, "two", "Your statement is ready.")
+	m.run(t, "sync")
+	m.run(t, "live", "rebaseline")
+	for _, subject := range []string{"Statement one", "Statement two"} {
+		m.exec(t, "INSERT INTO corrections (message_id, account, folder, ts, source) VALUES (?, 'icloud', 'Bills', ?, 'operator')",
+			m.messageID(t, subject), mail.WallClock()+60)
+	}
+	for uid := range m.fake.Boxes["INBOX"].Box.Messages {
+		m.fake.Boxes["INBOX"].Box.SetFlags(uid, []string{`\Seen`}, nil)
+	}
+	recovered := false
+	m.fake.FailWrite = func(w mailtest.FakeWrite) error {
+		if w.Verb == "COPY" && !recovered {
+			recovered = true
+			m.exec(t, "UPDATE effects SET state = 'unknown', settled_at = lease_at WHERE id = "+
+				"(SELECT MIN(id) FROM effects WHERE state = 'intent')")
+		}
+		return nil
+	}
+	m.run(t, "sync")
+	if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE state = 'intent'"); n != 0 {
+		t.Fatalf("%d intents left open after the group failed, want every entry settled", n)
+	}
+	if n := m.count(t, "SELECT COUNT(*) FROM effects WHERE state = 'unknown'"); n != 2 {
+		t.Fatalf("%d unknown actions, want the recovered one and the one that never ran", n)
 	}
 }

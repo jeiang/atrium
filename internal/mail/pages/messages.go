@@ -246,7 +246,7 @@ func (s *service) liveUndo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := context.WithoutCancel(r.Context())
-	found, err := live.Get(ctx, s.deps.DB.Read, id)
+	found, err := s.live.Get(ctx, id)
 	check(err)
 	if found == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown action")

@@ -13,16 +13,18 @@ import (
 
 type Server struct {
 	*httptest.Server
-	mu          sync.Mutex
-	Calendars   []string
-	objects     map[string]string
-	Puts        []string
-	PutAttempts int
-	FailPuts    int
-	PutStatus   int
-	Deleted     []string
-	User        string
-	Password    string
+	mu           sync.Mutex
+	Calendars    []string
+	objects      map[string]string
+	Puts         []string
+	PutAttempts  int
+	FailPuts     int
+	PutStatus    int
+	FailDeletes  int
+	DeleteStatus int
+	Deleted      []string
+	User         string
+	Password     string
 }
 
 const header = `<?xml version="1.0" encoding="utf-8"?><D:multistatus xmlns:D="DAV:" xmlns:C="urn:ietf:params:xml:ns:caldav" xmlns:CR="urn:ietf:params:xml:ns:carddav">`
@@ -115,6 +117,15 @@ func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusMultiStatus)
 		_, _ = io.WriteString(w, out.String())
 	case http.MethodDelete:
+		if s.FailDeletes > 0 {
+			s.FailDeletes--
+			status := s.DeleteStatus
+			if status == 0 {
+				status = http.StatusInternalServerError
+			}
+			w.WriteHeader(status)
+			return
+		}
 		if _, ok := s.objects[r.URL.Path]; !ok {
 			w.WriteHeader(http.StatusNotFound)
 			return

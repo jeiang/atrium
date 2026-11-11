@@ -3,12 +3,10 @@ package proposals
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/proposals/actions"
 )
 
 const (
@@ -19,8 +17,6 @@ const (
 	Failed     = "failed"
 	Suppressed = "suppressed"
 )
-
-type Undoer func(ctx context.Context, plan json.RawMessage) (any, error)
 
 type SyncHook func(ctx context.Context, account string) error
 
@@ -41,7 +37,6 @@ type DismissHook func(ctx context.Context, p *Proposal) error
 
 type Registry struct {
 	Executors  map[string]Executor
-	Undoers    map[string]Undoer
 	Dismissers map[string]DismissHook
 	kinds      []Kind
 	byName     map[string]Kind
@@ -49,7 +44,7 @@ type Registry struct {
 }
 
 func NewRegistry() *Registry {
-	return &Registry{Executors: map[string]Executor{}, Undoers: map[string]Undoer{}, Dismissers: map[string]DismissHook{}, byName: map[string]Kind{}}
+	return &Registry{Executors: map[string]Executor{}, Dismissers: map[string]DismissHook{}, byName: map[string]Kind{}}
 }
 
 func (r *Registry) AddKind(k Kind) {
@@ -99,11 +94,7 @@ func Known(ctx context.Context, q Querier, fingerprint string) (bool, error) {
 	if blocked {
 		return true, nil
 	}
-	var unresolved bool
-	if err := q.QueryRowContext(ctx, "SELECT "+actions.Unresolved("a")+" FROM proposals WHERE id = ?", id).Scan(&unresolved); err != nil {
-		return false, err
-	}
-	return unresolved, nil
+	return ledger.ProposalBlocked(ctx, q, id)
 }
 
 var OnCreate func(ctx context.Context, d *db.DB, p *Proposal)
@@ -132,12 +123,19 @@ func Create(ctx context.Context, d *db.DB, kind string, account *string, title s
 			created = true
 			return err
 		}
+		if err := tx.QueryRowContext(ctx, "SELECT id FROM proposals WHERE fingerprint = ?", fingerprint).Scan(&id); err != nil {
+			return err
+		}
+		blocked, err := ledger.ProposalBlocked(ctx, tx, id)
+		if err != nil || blocked {
+			return err
+		}
 		err = tx.QueryRowContext(ctx, "UPDATE proposals SET kind = ?, account = ?, title = ?, payload = ?, preview = ?, "+
 			"created_ts = ?, status = 'pending', decided_ts = NULL, applied_ts = NULL, undone_ts = NULL, recovered = 0, result = NULL "+
-			"WHERE fingerprint = ? AND status = 'failed' AND NOT "+actions.Unresolved("a")+" RETURNING id",
-			kind, account, title, body, view, ts, fingerprint).Scan(&id)
+			"WHERE id = ? AND status = 'failed' RETURNING id",
+			kind, account, title, body, view, ts, id).Scan(&id)
 		if errors.Is(err, sql.ErrNoRows) {
-			err = tx.QueryRowContext(ctx, "SELECT id FROM proposals WHERE fingerprint = ?", fingerprint).Scan(&id)
+			err = nil
 		}
 		return err
 	})

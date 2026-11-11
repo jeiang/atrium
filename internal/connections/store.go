@@ -297,7 +297,8 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 	}
 	for _, slot := range sortedKeys(hc.CredentialFiles) {
 		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO connection_credentials (connection_id, slot, source, file_ref, set_at, set_by) VALUES (?, ?, 'host_file', ?, ?, 'host')",
+			"INSERT INTO connection_credentials (connection_id, slot, source, file_ref, set_at, set_by) VALUES (?, ?, 'host_file', ?, ?, 'host') "+
+				"ON CONFLICT(connection_id,slot) DO NOTHING",
 			id, slot, hc.CredentialFiles[slot], s.stamp()); err != nil {
 			return err
 		}

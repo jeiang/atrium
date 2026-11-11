@@ -350,10 +350,10 @@ func (t Tuning) Apply(ctx context.Context, store *ledger.Store, set Settings, it
 		confirmed = append(confirmed, step.Rel)
 	}
 	if item.Torrent {
-		if err := set.Tag(ctx, store, set, item.ID, TagIgnored, false); err != nil {
+		if err := set.Tag(ctx, store, set, Scope{}, item.ID, TagIgnored, false); err != nil {
 			return err
 		}
-		return set.Tag(ctx, store, set, item.ID, TagFiled, true)
+		return set.Tag(ctx, store, set, Scope{}, item.ID, TagFiled, true)
 	}
 	if len(t.VideosUnder(item.Root)) == 0 {
 		return os.RemoveAll(item.Root)
@@ -381,10 +381,10 @@ func Ignore(ctx context.Context, store *ledger.Store, set Settings, item Item) e
 	if !item.Torrent {
 		return PlanError("Only torrents can be ignored; delete the import entry instead.")
 	}
-	if err := set.Tag(ctx, store, set, item.ID, TagFiled, false); err != nil {
+	if err := set.Tag(ctx, store, set, Scope{}, item.ID, TagFiled, false); err != nil {
 		return err
 	}
-	return set.Tag(ctx, store, set, item.ID, TagIgnored, true)
+	return set.Tag(ctx, store, set, Scope{}, item.ID, TagIgnored, true)
 }
 
 type SweepResult struct {
@@ -410,7 +410,7 @@ func Sweep(ctx context.Context, store *ledger.Store, set Settings) (SweepResult,
 		if !t.HasTag(TagMedia) || !t.HasTag(TagFiled) || t.State != StoppedUP {
 			continue
 		}
-		if err := set.Delete(ctx, store, set, t.Hash, true); err != nil {
+		if err := set.Delete(ctx, store, set, Scope{}, t.Hash, true); err != nil {
 			var conflict *ledger.Conflict
 			if !IsQbit(err) && !errors.As(err, &conflict) {
 				return out, err
@@ -428,7 +428,7 @@ func Sweep(ctx context.Context, store *ledger.Store, set Settings) (SweepResult,
 
 func (t Tuning) wanted(name string) bool { return t.IsVideo(name) || t.IsSubtitle(name) }
 
-func (t Tuning) SelectFiles(ctx context.Context, store *ledger.Store, set Settings, torrents []Torrent) ([]string, error) {
+func (t Tuning) SelectFiles(ctx context.Context, store *ledger.Store, set Settings, scope Scope, torrents []Torrent) ([]string, error) {
 	done := []string{}
 	qb, err := set.Qbit()
 	if err != nil {
@@ -447,7 +447,7 @@ func (t Tuning) SelectFiles(ctx context.Context, store *ledger.Store, set Settin
 		if !torrent.HasTag(TagMedia) || torrent.HasTag(TagSelected) {
 			continue
 		}
-		selected, err := t.selectOne(ctx, store, set, qb, torrent)
+		selected, err := t.selectOne(ctx, store, set, scope, qb, torrent)
 		if err != nil {
 			var conflict *ledger.Conflict
 			if !IsQbit(err) && !errors.As(err, &conflict) {
@@ -463,7 +463,7 @@ func (t Tuning) SelectFiles(ctx context.Context, store *ledger.Store, set Settin
 	return done, nil
 }
 
-func (t Tuning) selectOne(ctx context.Context, store *ledger.Store, set Settings, qb *Qbit, torrent Torrent) (bool, error) {
+func (t Tuning) selectOne(ctx context.Context, store *ledger.Store, set Settings, scope Scope, qb *Qbit, torrent Torrent) (bool, error) {
 	files, err := qb.Files(ctx, torrent.Hash)
 	if err != nil || len(files) == 0 {
 		return false, err
@@ -479,21 +479,21 @@ func (t Tuning) selectOne(ctx context.Context, store *ledger.Store, set Settings
 			}
 		}
 		if len(keep) > 0 {
-			if err := t.SetPriority(ctx, store, set, torrent.Hash, keep, PriorityNormal); err != nil {
+			if err := t.SetPriority(ctx, store, set, scope, torrent.Hash, keep, PriorityNormal); err != nil {
 				return false, err
 			}
 		}
 		if len(skip) > 0 {
-			if err := t.SetPriority(ctx, store, set, torrent.Hash, skip, PrioritySkip); err != nil {
+			if err := t.SetPriority(ctx, store, set, scope, torrent.Hash, skip, PrioritySkip); err != nil {
 				return false, err
 			}
 		}
 	}
-	if err := t.Tag(ctx, store, set, torrent.Hash, TagSelected, true); err != nil {
+	if err := t.Tag(ctx, store, set, scope, torrent.Hash, TagSelected, true); err != nil {
 		return false, err
 	}
 	if torrent.State == StoppedDL || torrent.State == "pausedDL" {
-		if err := t.Start(ctx, store, set, torrent.Hash); err != nil {
+		if err := t.Start(ctx, store, set, scope, torrent.Hash); err != nil {
 			return false, err
 		}
 	}

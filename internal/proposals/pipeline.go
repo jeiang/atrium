@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -15,11 +14,9 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/proposals/actions"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
@@ -151,46 +148,6 @@ func scanProposal(s scanner, full bool) (*Proposal, error) {
 	return &p, nil
 }
 
-type legacyFlag struct {
-	blocked     bool
-	error       string
-	blockedUndo bool
-	undoable    bool
-}
-
-func legacyFlags(ctx context.Context, q Querier, ids []int64) (map[int64]legacyFlag, error) {
-	out := map[int64]legacyFlag{}
-	if len(ids) == 0 {
-		return out, nil
-	}
-	query := "SELECT id, " +
-		"EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND a.state IN ('unknown','partial','undo_unknown','undo_partial')), " +
-		"COALESCE((SELECT COALESCE(a.error, '') FROM proposal_actions a WHERE a.proposal_id = proposals.id AND " +
-		"a.state IN ('unknown','partial','undo_unknown','undo_partial') ORDER BY a.id DESC LIMIT 1), ''), " +
-		"EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND a.state IN ('undo_unknown','undo_partial')), " +
-		"EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND a.state = 'ok' AND a.undo IS NOT NULL " +
-		"AND NOT EXISTS (SELECT 1 FROM proposal_actions b WHERE b.proposal_id = proposals.id AND b.kind = 'undo' AND b.state = 'ok' AND b.undo_of = a.id)) " +
-		"FROM proposals WHERE id IN (" + placeholders(len(ids)) + ")"
-	rows, err := q.QueryContext(ctx, query, int64Args(ids)...)
-	if err != nil {
-		return nil, err
-	}
-	if _, err := db.Collect(rows, func(r *sql.Rows) (struct{}, error) {
-		var id int64
-		var flag legacyFlag
-		var blocked, blockedUndo, undoable int64
-		if err := r.Scan(&id, &blocked, &flag.error, &blockedUndo, &undoable); err != nil {
-			return struct{}{}, err
-		}
-		flag.blocked, flag.blockedUndo, flag.undoable = blocked != 0, blockedUndo != 0, undoable != 0
-		out[id] = flag
-		return struct{}{}, nil
-	}); err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
 func decorate(ctx context.Context, q Querier, props []*Proposal) error {
 	if len(props) == 0 {
 		return nil
@@ -203,27 +160,16 @@ func decorate(ctx context.Context, q Querier, props []*Proposal) error {
 	if err != nil {
 		return err
 	}
-	legacy, err := legacyFlags(ctx, q, ids)
-	if err != nil {
-		return err
-	}
 	for _, p := range props {
-		flag, old := flags[p.ID], legacy[p.ID]
-		p.Blocked = flag.Blocked || old.blocked
-		p.BlockedError = ""
-		switch {
-		case flag.Blocked:
-			p.BlockedError = flag.BlockedError
-		case old.blocked:
-			p.BlockedError = old.error
-		}
+		flag := flags[p.ID]
+		p.Blocked = flag.Blocked
+		p.BlockedError = flag.BlockedError
 		if p.Blocked && p.BlockedError == "" {
 			p.BlockedError = UnknownOutcomeText
 		}
 		p.BlockedEffect = flag.Blocked
-		p.BlockedUndo = flag.BlockedUndo || old.blockedUndo
-		p.Undoable = (p.Status == Applied || p.Status == Failed) && p.UndoneTS == nil &&
-			(flag.Undoable || (old.undoable && (p.Status == Applied || p.Recovered)))
+		p.BlockedUndo = flag.BlockedUndo
+		p.Undoable = (p.Status == Applied || p.Status == Failed) && p.UndoneTS == nil && flag.Undoable
 	}
 	return nil
 }
@@ -281,45 +227,11 @@ func Get(ctx context.Context, q Querier, id int64) (*Proposal, error) {
 }
 
 func blockedIDs(ctx context.Context, q Querier) ([]int64, error) {
-	ids, err := ledger.BlockedProposalIDs(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := q.QueryContext(ctx, "SELECT DISTINCT proposal_id FROM proposal_actions WHERE "+
-		"state IN ('unknown','partial','undo_unknown','undo_partial') ORDER BY proposal_id")
-	if err != nil {
-		return nil, err
-	}
-	legacy, err := db.Collect(rows, func(r *sql.Rows) (int64, error) {
-		var id int64
-		return id, r.Scan(&id)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return unionIDs(ids, legacy), nil
+	return ledger.BlockedProposalIDs(ctx, q)
 }
 
 func undoableIDs(ctx context.Context, q Querier) ([]int64, error) {
-	ids, err := ledger.UndoableProposalIDs(ctx, q)
-	if err != nil {
-		return nil, err
-	}
-	rows, err := q.QueryContext(ctx, "SELECT DISTINCT p.id FROM proposals p WHERE p.status IN ('applied','failed') "+
-		"AND p.undone_ts IS NULL AND (p.status = 'applied' OR p.recovered = 1) AND EXISTS "+
-		"(SELECT 1 FROM proposal_actions a WHERE a.proposal_id = p.id AND a.state = 'ok' AND a.undo IS NOT NULL AND NOT EXISTS "+
-		"(SELECT 1 FROM proposal_actions b WHERE b.proposal_id = p.id AND b.kind = 'undo' AND b.state = 'ok' AND b.undo_of = a.id)) ORDER BY p.id")
-	if err != nil {
-		return nil, err
-	}
-	legacy, err := db.Collect(rows, func(r *sql.Rows) (int64, error) {
-		var id int64
-		return id, r.Scan(&id)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return unionIDs(ids, legacy), nil
+	return ledger.UndoableProposalIDs(ctx, q)
 }
 
 func unionIDs(a, b []int64) []int64 {
@@ -395,19 +307,16 @@ func Dismiss(ctx context.Context, d *db.DB, id int64, status string, who Resolve
 		return ProposalError("dismiss status must be " + Dismissed + " or " + Suppressed)
 	}
 	return d.WithTx(ctx, func(tx *sql.Tx) error {
-		var blocked bool
-		if err := tx.QueryRowContext(ctx, "SELECT "+actions.Unresolved("a")+" FROM proposals WHERE id = ?", id).Scan(&blocked); err != nil {
+		var one int
+		if err := tx.QueryRowContext(ctx, "SELECT 1 FROM proposals WHERE id = ?", id).Scan(&one); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return ProposalError(fmt.Sprintf("unknown proposal %d", id))
 			}
 			return err
 		}
-		if !blocked {
-			ledgerBlocked, err := ledger.ProposalBlocked(ctx, tx, id)
-			if err != nil {
-				return err
-			}
-			blocked = ledgerBlocked
+		blocked, err := ledger.ProposalBlocked(ctx, tx, id)
+		if err != nil {
+			return err
 		}
 		if blocked {
 			return ProposalError(fmt.Sprintf("proposal %d has an unresolved write; resolve it in the mailbox before dismissing", id))
@@ -434,151 +343,6 @@ func marshalJSON(v any) (string, error) {
 	return string(b), nil
 }
 
-func RecordAction(ctx context.Context, x Execer, proposalID int64, kind string, undoOf *int64, action, undo any, state ledger.State, errText *string, ts float64) (int64, error) {
-	var plan any
-	if undo != nil {
-		text, err := marshalJSON(undo)
-		if err != nil {
-			return 0, err
-		}
-		plan = text
-	}
-	body, err := marshalJSON(action)
-	if err != nil {
-		return 0, err
-	}
-	var of any
-	if undoOf != nil {
-		of = *undoOf
-	}
-	res, err := x.ExecContext(context.WithoutCancel(ctx), "INSERT INTO proposal_actions "+
-		"(proposal_id, ts, lease, kind, undo_of, action, undo, state, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		proposalID, ts, ts, kind, of, body, plan, state, errText)
-	if err != nil {
-		return 0, err
-	}
-	return res.LastInsertId()
-}
-
-func BeginAction(ctx context.Context, x Execer, proposalID int64, action any, ts float64) (int64, error) {
-	return RecordAction(ctx, x, proposalID, "write", nil, action, nil, ledger.Held, nil, ts)
-}
-
-func SettleAction(ctx context.Context, x Execer, id int64, action, undo any, state ledger.State, errText *string, ts float64) error {
-	var plan any
-	if undo != nil {
-		text, err := marshalJSON(undo)
-		if err != nil {
-			return err
-		}
-		plan = text
-	}
-	body, err := marshalJSON(action)
-	if err != nil {
-		return err
-	}
-	res, err := x.ExecContext(context.WithoutCancel(ctx), "UPDATE proposal_actions SET ts = ?, lease = ?, action = ?, undo = ?, state = ?, error = ? "+
-		"WHERE id = ? AND state = 'held'", ts, ts, body, plan, state, errText, id)
-	if err != nil {
-		return err
-	}
-	if n, err := res.RowsAffected(); err != nil {
-		return err
-	} else if n == 0 {
-		return ErrSettledMeanwhile
-	}
-	return nil
-}
-
-func (p *Pipeline) beginUndo(ctx context.Context, proposalID, of int64, action any) (int64, error) {
-	var held int64
-	err := p.DB.WithTx(context.WithoutCancel(ctx), func(tx *sql.Tx) error {
-		var open bool
-		if err := tx.QueryRowContext(ctx, "SELECT EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = ? AND a.kind = 'undo' "+
-			"AND a.undo_of = ? AND a.state IN ('held', 'ok', 'undo_unknown', 'undo_partial'))", proposalID, of).Scan(&open); err != nil {
-			return err
-		}
-		if open {
-			return ProposalError(fmt.Sprintf("action %d was already undone or has an undo that is in progress or unresolved; check the mailbox before undoing again", of))
-		}
-		var err error
-		held, err = RecordAction(ctx, tx, proposalID, "undo", &of, action, nil, ledger.Held, nil, p.now())
-		return err
-	})
-	return held, err
-}
-
-func DropAction(ctx context.Context, x Execer, id int64) error {
-	_, err := x.ExecContext(context.WithoutCancel(ctx), "DELETE FROM proposal_actions WHERE id = ? AND state = 'held' AND error IS NULL", id)
-	return err
-}
-
-type Action struct {
-	ID     int64
-	TS     float64
-	Lease  float64
-	Kind   string
-	UndoOf *int64
-	Action any
-	Undo   any
-	State  ledger.State
-	Error  *string
-}
-
-func Actions(ctx context.Context, q Querier, proposalID int64) ([]Action, error) {
-	rows, err := q.QueryContext(ctx, "SELECT id, ts, lease, kind, undo_of, action, undo, state, error FROM proposal_actions WHERE proposal_id = ? ORDER BY id", proposalID)
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (Action, error) {
-		var a Action
-		var action string
-		var undo *string
-		if err := r.Scan(&a.ID, &a.TS, &a.Lease, &a.Kind, &a.UndoOf, &action, &undo, &a.State, &a.Error); err != nil {
-			return a, err
-		}
-		var err error
-		if a.Action, err = jsonx.Loads([]byte(action)); err != nil {
-			return a, err
-		}
-		a.Undo, err = loads(undo)
-		return a, err
-	})
-}
-
-func undoneIDs(logged []Action) map[int64]bool {
-	done := map[int64]bool{}
-	for _, a := range logged {
-		if a.Kind == "undo" && a.State == ledger.OK && a.UndoOf != nil {
-			done[*a.UndoOf] = true
-		}
-	}
-	return done
-}
-
-func partialUndo(logged []Action, id int64) bool {
-	for _, a := range logged {
-		if a.Kind != "undo" || !a.State.Blocked() || a.UndoOf == nil {
-			continue
-		}
-		if *a.UndoOf == id {
-			return true
-		}
-	}
-	return false
-}
-
-func pending(logged []Action) []Action {
-	done := undoneIDs(logged)
-	var todo []Action
-	for _, a := range slices.Backward(logged) {
-		if a.State == ledger.OK && a.Undo != nil && !done[a.ID] {
-			todo = append(todo, a)
-		}
-	}
-	return todo
-}
-
 func pendingEffects(effects []ledger.Effect) ([]ledger.Effect, map[int64]bool) {
 	active := map[int64]bool{}
 	for _, e := range effects {
@@ -587,7 +351,7 @@ func pendingEffects(effects []ledger.Effect) ([]ledger.Effect, map[int64]bool) {
 		}
 	}
 	var todo []ledger.Effect
-	for _, e := range slices.Backward(effects) {
+	for _, e := range effects {
 		if e.Direction != "forward" || (e.State != ledger.Done && e.State != ledger.Partial) {
 			continue
 		}
@@ -611,6 +375,7 @@ func undoActive(e ledger.Effect) bool {
 }
 
 const (
+	RenewSeconds       = 30
 	StuckSeconds       = 4 * RenewSeconds
 	StuckUnheldSeconds = 3600
 )
@@ -621,22 +386,16 @@ func RecoverStuck(ctx context.Context, d *db.DB, now float64) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	query := "UPDATE proposals SET status = ?, result = ?, recovered = 1 WHERE status = ? AND " +
-		"(EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND a.state = 'held' AND a.kind = 'write')"
-	args := []any{Failed, jsonx.Dumps(held), Approved}
+	var heldN int64
 	if len(stale) > 0 {
-		query += " OR id IN (" + placeholders(len(stale)) + ")"
-		args = append(args, int64Args(stale)...)
-	}
-	query += ") AND NOT EXISTS (SELECT 1 FROM proposal_actions b WHERE b.proposal_id = proposals.id AND b.lease >= ?)"
-	args = append(args, now-StuckSeconds)
-	res, err := d.Write.ExecContext(ctx, query, args...)
-	if err != nil {
-		return 0, err
-	}
-	heldN, err := res.RowsAffected()
-	if err != nil {
-		return 0, err
+		res, err := d.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, result = ?, recovered = 1 WHERE status = ? AND id IN ("+
+			placeholders(len(stale))+")", append([]any{Failed, jsonx.Dumps(held), Approved}, int64Args(stale)...)...)
+		if err != nil {
+			return 0, err
+		}
+		if heldN, err = res.RowsAffected(); err != nil {
+			return 0, err
+		}
 	}
 	store := ledger.NewStore(d, func() float64 { return now })
 	if _, err := store.Recover(ctx, now-StuckSeconds); err != nil {
@@ -647,14 +406,13 @@ func RecoverStuck(ctx context.Context, d *db.DB, now float64) (int64, error) {
 		return heldN, err
 	}
 	unheld := map[string]any{"error": "approve interrupted before any write was in flight; the settled batches can be undone and the proposal approved again", "interrupted": true}
-	query = "UPDATE proposals SET status = ?, result = ?, recovered = 1 WHERE status = ? AND decided_ts < ? " +
-		"AND NOT EXISTS (SELECT 1 FROM proposal_actions a WHERE a.proposal_id = proposals.id AND (a.state IN ('held', 'unknown', 'partial') OR a.lease >= ?))"
-	args = []any{Failed, jsonx.Dumps(unheld), Approved, now - StuckUnheldSeconds, now - StuckUnheldSeconds}
+	query := "UPDATE proposals SET status = ?, result = ?, recovered = 1 WHERE status = ? AND decided_ts < ?"
+	args := []any{Failed, jsonx.Dumps(unheld), Approved, now - StuckUnheldSeconds}
 	if len(active) > 0 {
 		query += " AND id NOT IN (" + placeholders(len(active)) + ")"
 		args = append(args, int64Args(active)...)
 	}
-	res, err = d.Write.ExecContext(ctx, query, args...)
+	res, err := d.Write.ExecContext(ctx, query, args...)
 	if err != nil {
 		return heldN, err
 	}
@@ -719,8 +477,15 @@ func (p *Pipeline) claim(ctx context.Context, id int64, status string, who Resol
 		if err != nil || blocked {
 			return err
 		}
-		res, err := tx.ExecContext(ctx, "UPDATE proposals SET status = ?, decided_ts = ? WHERE id = ? AND status IN ('pending', 'failed') AND NOT "+
-			actions.Unresolved("a"), status, p.now(), id)
+		completed, err := ledger.ProposalHasCompletedWork(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if completed {
+			return ProposalError(fmt.Sprintf("proposal %d already has a completed write; undo it before approving again", id))
+		}
+		res, err := tx.ExecContext(ctx, "UPDATE proposals SET status = ?, decided_ts = ? WHERE id = ? AND status IN ('pending', 'failed')",
+			status, p.now(), id)
 		if err != nil {
 			return err
 		}
@@ -891,11 +656,6 @@ func (p *Pipeline) Undo(ctx context.Context, id int64, who Resolver) (UndoResult
 			return UndoResult{}, ProposalError(fmt.Sprintf("effect %d has an undo in progress or unresolved; resolve it before undoing again", e.ID))
 		}
 	}
-	logged, err := Actions(ctx, p.DB.Write, id)
-	if err != nil {
-		return UndoResult{}, err
-	}
-	approved := scope(ctx, id)
 	out := UndoResult{Outcomes: []map[string]any{}}
 	settle := context.WithoutCancel(ctx)
 	for _, e := range todo {
@@ -907,58 +667,6 @@ func (p *Pipeline) Undo(ctx context.Context, id int64, who Resolver) (UndoResult
 			continue
 		}
 		out.Outcomes = append(out.Outcomes, map[string]any{"action": e.ID, "ok": true})
-	}
-	for _, entry := range pending(logged) {
-		if partialUndo(logged, entry.ID) {
-			return out, ProposalError(fmt.Sprintf("action %d has a partial undo; resolve it in the mailbox before undoing again", entry.ID))
-		}
-		if err := ctx.Err(); err != nil {
-			return out, err
-		}
-		plan, _ := entry.Undo.(map[string]any)
-		op, found := plan["op"]
-		if !found {
-			return out, fmt.Errorf("%w: 'op'", httpx.ErrMissing)
-		}
-		name, isString := op.(string)
-		var undoer Undoer
-		if isString && p.Registry != nil {
-			undoer = p.Registry.Undoers[name]
-		}
-		if undoer == nil {
-			return out, ProposalError("no undo handler for " + fmt.Sprint(op))
-		}
-		undoAction := map[string]any{"op": UndoOp, "of": entry.ID}
-		held, err := p.beginUndo(ctx, id, entry.ID, undoAction)
-		if err != nil {
-			return out, err
-		}
-		detail, err := func() (any, error) {
-			defer KeepActionAlive(p.DB.Write, p.now, held)()
-			return undoer(approved, json.RawMessage(jsonx.Dumps(entry.Undo)))
-		}()
-		if err != nil {
-			state := ledger.UndoFailed
-			if outcomeUnknown(err) {
-				state = ledger.UndoUnknown
-			} else if outcomePartial(err) {
-				state = ledger.UndoPartial
-			}
-			text := err.Error()
-			if rerr := SettleAction(ctx, p.DB.Write, held, undoAction, nil, state, &text, p.now()); rerr != nil {
-				return out, rerr
-			}
-			out.Outcomes = append(out.Outcomes, map[string]any{"action": entry.ID, "ok": false, "error": err.Error()})
-			continue
-		}
-		var details any
-		if detail != nil {
-			details = detail
-		}
-		if err := SettleAction(ctx, p.DB.Write, held, map[string]any{"op": UndoOp, "of": entry.ID, "detail": details}, nil, ledger.OK, nil, p.now()); err != nil {
-			return out, err
-		}
-		out.Outcomes = append(out.Outcomes, map[string]any{"action": entry.ID, "ok": true})
 	}
 	if err := ctx.Err(); err != nil {
 		return out, err

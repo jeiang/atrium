@@ -80,8 +80,15 @@ var importTables = []tablePlan{
 	{table: "corrections", action: carry},
 	{table: "decisions", action: carry},
 	{table: "flag_decisions", action: carry},
-	{table: "auto_actions", action: carry},
-	{table: "write_resolutions", action: carry, where: "kind <> 'agent_write'"},
+	{table: "auto_actions", action: convert, run: func(im *importer) (int64, error) {
+		report, err := ConvertLegacyAutoActions(im.ctx, im.src, im.tx, im.now)
+		if err != nil {
+			return 0, err
+		}
+		im.notes = append(im.notes, report.Notes()...)
+		return report.Auto, nil
+	}},
+	{table: "write_resolutions", action: drop, why: "each row is converted into an effect resolution with the write it resolves"},
 	{table: "live_state", action: carry},
 	{table: "live_baseline", action: carry},
 	{table: "snoozes", action: carry},
@@ -122,12 +129,20 @@ var importTables = []tablePlan{
 	{table: "agent_events", action: carry},
 	{table: "tasks", action: carry},
 	{table: "proposals", action: carry},
-	{table: "proposal_actions", action: carry},
+	{table: "proposal_actions", action: convert, run: func(im *importer) (int64, error) {
+		report, err := ConvertLegacyProposals(im.ctx, im.src, im.tx, im.now)
+		if err != nil {
+			return 0, err
+		}
+		im.notes = append(im.notes, report.Notes()...)
+		return report.Proposal, nil
+	}},
 	{table: "agent_writes", action: convert, run: func(im *importer) (int64, error) {
 		report, err := ConvertLegacyAgentWrites(im.ctx, im.src, im.tx, im.now)
 		if err != nil {
 			return 0, err
 		}
+		im.notes = append(im.notes, report.Notes()...)
 		return report.Agent, nil
 	}},
 	{table: "media_channels", action: carry},
@@ -191,6 +206,7 @@ type importer struct {
 	now     float64
 	loc     *time.Location
 	vectors int64
+	notes   []string
 }
 
 func (s *service) importV2(a *cli.Args) cli.Handler {
@@ -263,6 +279,10 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source str
 				line += " (" + plan.why + ")"
 			}
 			lines = append(lines, line)
+			for _, note := range im.notes {
+				lines = append(lines, plan.table+": "+note)
+			}
+			im.notes = nil
 		}
 		settingLines, err := settings.ImportV2(ctx, tx, src)
 		if err != nil {

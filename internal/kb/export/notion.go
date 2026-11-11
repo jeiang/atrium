@@ -109,20 +109,19 @@ func runStep(ctx context.Context, store *ledger.Store, n ledger.New, hash string
 }
 
 func titleApplied(ctx context.Context, store *ledger.Store, target, hash string) (bool, error) {
-	found, err := store.List(ctx, ledger.Filter{Operation: opTitle, Target: target, Limit: 100})
-	if err != nil {
+	found, err := store.List(ctx, ledger.Filter{Operation: opTitle, Target: target, Limit: 1})
+	if err != nil || len(found) == 0 {
 		return false, err
 	}
-	for _, e := range found {
-		if e.State != ledger.Done {
-			continue
-		}
-		var after struct {
-			Hash string `json:"hash"`
-		}
-		if json.Unmarshal(e.After, &after) == nil && after.Hash == hash {
-			return true, nil
-		}
+	e := found[0]
+	if e.State != ledger.Done {
+		return false, nil
+	}
+	var after struct {
+		Hash string `json:"hash"`
+	}
+	if json.Unmarshal(e.After, &after) == nil && after.Hash == hash {
+		return true, nil
 	}
 	return false, nil
 }
@@ -150,13 +149,13 @@ func syncNotion(ctx context.Context, store *ledger.Store, now float64, client *n
 				return out, err
 			}
 			if !applied {
-				if err := runStep(ctx, store, step(target, opTitle, key+":title", map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID}), entry.page.Hash, func() (map[string]any, error) {
+				if err := runStep(ctx, store, step(target, opTitle, key+":title:"+ledger.NewKey(), map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID}), entry.page.Hash, func() (map[string]any, error) {
 					return map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID}, client.SetTitle(ctx, prior.remoteID, entry.page.Title)
 				}, nil); err != nil {
 					return out, err
 				}
 			}
-			if err := runStep(ctx, store, step(target, opContent, key+":content", map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID}), entry.page.Hash, func() (map[string]any, error) {
+			if err := runStep(ctx, store, step(target, opContent, key+":content:"+ledger.NewKey(), map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID}), entry.page.Hash, func() (map[string]any, error) {
 				return map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID}, client.UpdateMarkdown(ctx, prior.remoteID, notion.ReplaceContent(entry.page.Markdown))
 			}, func(ctx context.Context, tx *sql.Tx) error {
 				return savePage(ctx, tx, TargetNotion, entry.recordID, prior.remoteID, entry.page.Hash, now)
@@ -310,6 +309,16 @@ func RegisterLedgerResolves(s *ledger.Store) error {
 				return ledger.Result{State: ledger.Unknown, Error: err.Error()}, nil
 			}
 			return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"trashed": u.PageID})}, nil
+		},
+		After: func(ctx context.Context, tx *sql.Tx, e ledger.Effect, result ledger.Result) error {
+			if result.State != ledger.Done {
+				return nil
+			}
+			recordID, ok := recordOf(e.Target)
+			if !ok {
+				return nil
+			}
+			return deletePage(ctx, tx, TargetNotion, recordID)
 		},
 	})
 }

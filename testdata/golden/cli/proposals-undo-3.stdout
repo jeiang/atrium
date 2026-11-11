@@ -2,19 +2,19 @@
   "undone": true,
   "outcomes": [
     {
-      "action": 4,
+      "action": 2004,
       "ok": true
     },
     {
-      "action": 3,
+      "action": 2003,
       "ok": true
     },
     {
-      "action": 2,
+      "action": 2002,
       "ok": true
     },
     {
-      "action": 1,
+      "action": 2001,
       "ok": true
     }
   ],

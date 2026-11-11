@@ -323,23 +323,24 @@ behavior-parity target.
   the end, so a failed copy leaves the destination without imported rows.
   Carried with
   their ids: mail accounts, mailboxes, messages and the learned mail data
-  (rules, corrections, decisions, flag decisions, the action ledger with
-  its undo state, write resolutions, live state and baseline, snoozes,
-  drafts, scans, commitments, open loops and overrides, packages and their
-  events, watch dismissals, rebalance and event candidates), the active
+  (rules, corrections, decisions, flag decisions, live state and baseline,
+  snoozes, drafts, scans, commitments, open loops and overrides, packages
+  and their events, watch dismissals, rebalance and event candidates), the active
   generation's message vectors and index row (URL, model and dimension
   kept), settings, secrets (the row is readable only with the same
   database key, since the database encrypts it), notification channels,
   push subscriptions and attention snoozes, knowledge records (their
   `embedded_hash` cleared so vectors rebuild), projects, threads with their
   messages, files, plans and queue, agent profile, skills, operator-edited
-  subagents, jobs, agent events, tasks, proposals and their actions, agent
-  writes, media channels, the seen list and media state, and the current
-  calendar month's usage rows. A service credential whose owner has a
-  connection record (qBittorrent, TMDB, EZTV, Anthropic, Grafana, Notion) is written to
-  that connection's credential store and its source `secrets` row is
-  dropped; the connection keeps the source `set_at`/`set_by`. Rebuilt:
-  `message_fts`, `thread_fts` and `kb_fts`. Not carried: run history
+  subagents, jobs, agent events, tasks, proposals and their actions, media
+  channels, the seen list and media state, and the current calendar month's
+  usage rows. Converted into effect-ledger rows with their old identity
+  preserved: `auto_actions` and the `write_resolutions` rows that settle
+  them, and `agent_writes` with its resolutions. A service credential whose
+  owner has a connection record (qBittorrent, TMDB, EZTV, Anthropic, Grafana,
+  Notion) is written to that connection's credential store and its source
+  `secrets` row is dropped; the connection keeps the source `set_at`/`set_by`.
+  Rebuilt: `message_fts`, `thread_fts` and `kb_fts`. Not carried: run history
   (`runs`, `run_events`, `tool_calls`, `tool_results`, `context_ledger`,
   `context_projections`, `job_runs`), memory (rebuilt), Notion and wiki
   state (re-synced), knowledge and Notion
@@ -352,8 +353,10 @@ behavior-parity target.
   `agent_writes.run_id`, `threads.parent_run_id`, `jobs.last_run_id`,
   `kb_records.source_run_id`, `thread_files.run_id`, `thread_plans.run_id`,
   `thread_queue.run_id`). The importer prints one line per table with its
-  carried, rebuilt or dropped row count and names any settings key it
-  carries that v3 does not know. v1 data reaches v3 through v2: the v2
+  carried, rebuilt or dropped row count and one line per setting with its
+  action (carried, dropped, renamed, moved to a host key or a tuning
+  constant, or reset for cutover); a setting this build does not know
+  refuses the import and is named. v1 data reaches v3 through v2: the v2
   binary imports it first.
   `taint_private` and `taint_web` are dormant: no longer
   read or written, and kept because dropping them would rewrite the table.
@@ -361,11 +364,12 @@ behavior-parity target.
   a row to the append-only `settings_audit` table (old and new value, or
   only `changed` for secrets; actor and source), listed read-only in
   `/activity`. Known secret values are scrubbed from log output and
-  `agent_writes` snapshots. An operator can settle a blocked unknown, partial
+  effect snapshots. An operator can settle a blocked unknown, partial
   or in-flight mail write or undo after checking the mailbox
   (`atrium proposals resolve`, `atrium live resolve`, or the web buttons); the
   action touches no mailbox and appends actor, source, outcome and the prior
-  error to the append-only `write_resolutions` table.
+  error to the append-only `effect_resolutions` table (proposal approvals and
+  the remaining proposal-action resolutions use the same audit table).
 - Modules are toggled at runtime. The built-in modules are always compiled
   in. Core (settings, secrets,
   `db`, `serve`, the About, review and activity pages) is always on; mail,
@@ -412,12 +416,17 @@ behavior-parity target.
   their existing ledgers until their cutover.
 - Mail writes use the shared gate. Shadow mode records decisions without
   automatic mailbox writes; live automatic writes also depend on pause,
-  go-live eligibility, verification, caps, and action ledgers.
+  go-live eligibility, verification, caps, and the effect ledger.
+- Automatic mail actions, mail proposal actions and draft sends record an
+  effect before the IMAP or SMTP call. An unknown outcome stays blocked until
+  the operator resolves it and is never retried automatically; an action the
+  operator has undone is not applied again; moves use COPY, STORE Deleted and
+  UID EXPUNGE.
 - The assistant creates mail folders and moves messages with direct,
-  undoable writes. Each records a held `agent_writes` intent before the IMAP
-  call; shadow mode records the intent without a mailbox write, pause and the
-  write cap apply, protected folders are refused, and undo moves messages
-  back or deletes a folder only while it is empty.
+  undoable writes through the effect ledger; shadow mode records the effect
+  without a mailbox write, pause and the write cap apply, protected folders
+  are refused, and undo moves messages back or deletes a folder only while it
+  is empty.
 - Calendar writes record an intent in `agent_writes` before the external
   call. A write whose outcome is unknown stays blocked; further writes to the
   same calendar are refused until the operator resolves it with

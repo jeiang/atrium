@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -235,7 +236,7 @@ func (s *service) draftResolve(w http.ResponseWriter, r *http.Request) {
 		s.fail(w, r, http.StatusUnprocessableEntity, "outcome must be sent or draft")
 		return
 	}
-	err := s.drafts.ResolveUnknown(detached(r), id, verdict)
+	err := s.drafts.ResolveUnknown(detached(r), id, verdict, ledger.Resolver{Actor: "operator", Source: "ui"})
 	var refused drafts.Error
 	if errors.As(err, &refused) {
 		s.reply(w, r, id, drafts.Unknown, http.StatusConflict, toast("error", "Not updated", err.Error()))

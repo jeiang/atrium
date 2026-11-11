@@ -390,3 +390,106 @@ S: {t} OK DELETE completed
 		t.Fatal("write was not marked undone")
 	}
 }
+
+func TestMailMovePartialRecordsTheCopiedMessages(t *testing.T) {
+	fx := newFolderFixture(t, "live")
+	script := folderLogin + folderList(`S: * LIST () "/" "News"
+`) +
+		`C/ ^{t} STATUS INBOX \(.*\)$
+S: * STATUS "INBOX" (MESSAGES 2 UIDVALIDITY 1544650202 UIDNEXT 303 HIGHESTMODSEQ 81250)
+S: {t} OK STATUS completed
+C: {t} EXAMINE INBOX (CONDSTORE)
+S: * FLAGS (\Answered \Flagged \Draft \Deleted \Seen)
+S: * 2 EXISTS
+S: * 0 RECENT
+S: * OK [UIDVALIDITY 1544650202] UIDs valid
+S: * OK [UIDNEXT 303] Predicted next UID
+S: * OK [HIGHESTMODSEQ 81250] Highest
+S: {t} OK [READ-ONLY] EXAMINE completed
+C: {t} UID SEARCH UID 301:302
+S: * SEARCH 301 302
+S: {t} OK SEARCH completed
+C/ ^{t} UID FETCH 301:302 \(.*\)$
+S: * 1 FETCH (UID 301 FLAGS () BODY[HEADER] {18}
+S: Message-ID: <m1@x>)
+S: * 2 FETCH (UID 302 FLAGS () BODY[HEADER] {18}
+S: Message-ID: <m2@x>)
+S: {t} OK FETCH completed
+C: {t} SELECT INBOX (CONDSTORE)
+S: * FLAGS (\Answered \Flagged \Draft \Deleted \Seen)
+S: * OK [PERMANENTFLAGS (\Answered \Flagged \Draft \Deleted \Seen \*)] Limited
+S: * 2 EXISTS
+S: * 0 RECENT
+S: * OK [UIDVALIDITY 1544650202] UIDs valid
+S: * OK [UIDNEXT 303] Predicted next UID
+S: * OK [HIGHESTMODSEQ 81250] Highest
+S: {t} OK [READ-WRITE] SELECT completed
+C: {t} UID COPY 301:302 "News"
+S: {t} OK [COPYUID 1544650202 301:302 900:901] COPY completed
+C: {t} UID STORE 301:302 +FLAGS.SILENT (\Deleted)
+S: {t} NO STORE refused
+` + folderClose
+	server, ca := imapscript.ServeTLS(t, imapscript.MustParse(t, script))
+	t.Setenv("ATRIUM_IMAP_ADDR", server.Addr())
+	t.Setenv("ATRIUM_IMAP_CA", ca)
+
+	fx.api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "mail_move", map[string]any{"account": "icloud", "folder": "News", "message_ids": []any{1, 2}})))
+	fx.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
+	if ran := runApp(t, "agent", "run", "--text", "file the two messages"); ran.code != cli.ExitOK {
+		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
+	}
+	d, err := db.Connect(filepath.Join(fx.dir, "atrium.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	var state, after, undo string
+	if err := d.Read.QueryRow("SELECT state, after_json, undo_json FROM effects WHERE direction = 'forward' AND operation = 'mail_move' ORDER BY id DESC LIMIT 1").
+		Scan(&state, &after, &undo); err != nil {
+		t.Fatal(err)
+	}
+	if state != "partial" {
+		t.Fatalf("move state = %q, want partial; after=%s undo=%s", state, after, undo)
+	}
+	if !strings.Contains(undo, `"op":"mail_move_back"`) || !strings.Contains(undo, `"dest_uid":900`) || !strings.Contains(undo, `"dest_uid":901`) {
+		t.Fatalf("the partial move dropped its inverse: %s", undo)
+	}
+	if !strings.Contains(after, `"copied"`) && !strings.Contains(after, `"dest_uid":900`) {
+		t.Fatalf("the partial move dropped the copied evidence: %s", after)
+	}
+}
+
+func TestMailFolderCreateRecordsAPartialWhenSubscribeFails(t *testing.T) {
+	fx := newFolderFixture(t, "live")
+	script := folderLogin + folderList("") + folderList("") +
+		`C: {t} CREATE "News"
+S: {t} OK CREATE completed
+C: {t} SUBSCRIBE "News"
+S: {t} NO SUBSCRIBE refused
+` + folderClose
+	server, ca := imapscript.ServeTLS(t, imapscript.MustParse(t, script))
+	t.Setenv("ATRIUM_IMAP_ADDR", server.Addr())
+	t.Setenv("ATRIUM_IMAP_CA", ca)
+
+	fx.api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "mail_folder_create", map[string]any{"account": "icloud", "name": "News"})))
+	fx.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
+	if ran := runApp(t, "agent", "run", "--text", "create a news folder"); ran.code != cli.ExitOK {
+		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
+	}
+	d, err := db.Connect(filepath.Join(fx.dir, "atrium.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	var state, undo string
+	if err := d.Read.QueryRow("SELECT state, undo_json FROM effects WHERE direction = 'forward' AND operation = 'mail_folder_create' ORDER BY id DESC LIMIT 1").
+		Scan(&state, &undo); err != nil {
+		t.Fatal(err)
+	}
+	if state != "partial" {
+		t.Fatalf("folder create state = %q, want partial; undo=%s", state, undo)
+	}
+	if !strings.Contains(undo, `"op":"mail_folder_delete"`) || !strings.Contains(undo, `"imap_name":"News"`) {
+		t.Fatalf("the created folder has no delete inverse: %s", undo)
+	}
+}

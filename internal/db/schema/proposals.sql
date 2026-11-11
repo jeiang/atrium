@@ -15,16 +15,3 @@ CREATE TABLE IF NOT EXISTS proposals (
     fingerprint TEXT NOT NULL UNIQUE
 );
 CREATE INDEX IF NOT EXISTS proposals_status ON proposals (status, kind);
-CREATE TABLE IF NOT EXISTS proposal_actions (
-    id INTEGER PRIMARY KEY,
-    proposal_id INTEGER NOT NULL REFERENCES proposals(id),
-    ts REAL NOT NULL,
-    lease REAL NOT NULL,
-    kind TEXT NOT NULL CHECK (kind IN ('write','undo')),
-    undo_of INTEGER,
-    action TEXT NOT NULL,
-    undo TEXT,
-    state TEXT NOT NULL,
-    error TEXT
-);
-CREATE INDEX IF NOT EXISTS proposal_actions_proposal ON proposal_actions (proposal_id);
