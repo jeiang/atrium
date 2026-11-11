@@ -477,6 +477,13 @@ func (p *Pipeline) claim(ctx context.Context, id int64, status string, who Resol
 		if err != nil || blocked {
 			return err
 		}
+		completed, err := ledger.ProposalHasCompletedWork(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		if completed {
+			return ProposalError(fmt.Sprintf("proposal %d already has a completed write; undo it before approving again", id))
+		}
 		res, err := tx.ExecContext(ctx, "UPDATE proposals SET status = ?, decided_ts = ? WHERE id = ? AND status IN ('pending', 'failed')",
 			status, p.now(), id)
 		if err != nil {

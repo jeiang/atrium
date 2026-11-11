@@ -327,3 +327,33 @@ func TestApprovedMediaAddIsUndoneWithItsProposal(t *testing.T) {
 		t.Fatal("the undone proposal was not marked undone")
 	}
 }
+
+func TestRecoveredProposalWithRecordedWorkCannotBeApprovedAgain(t *testing.T) {
+	const hash = "ffffffffffffffffffffffffffffffffffffffff"
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	mnpMediaRoot(t, dir)
+	qb, qbURL := mnpNewQbit(t)
+	setEnv(t, settingEnv(media.KeyQbitURL), qbURL)
+	id := proposalID(t, toolResult(t, "media_add_magnet", map[string]any{"magnet": mediaMagnet(hash, "Lanterns.S01E11")}))
+	if got := runApp(t, "proposals", "approve", id); got.code != cli.ExitOK {
+		t.Fatalf("approve: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	if _, err := d.Write.Exec("UPDATE proposals SET status = 'failed', recovered = 1 WHERE id = ?", id); err != nil {
+		t.Fatal(err)
+	}
+	got := runApp(t, "proposals", "approve", id)
+	if got.code == cli.ExitOK || !strings.Contains(got.stderr, "already has a completed write") {
+		t.Fatalf("re-approving a recovered proposal = %d %q %q, want a refusal", got.code, got.stdout, got.stderr)
+	}
+	if adds := qb.count("add"); adds != 1 {
+		t.Fatalf("the refused re-approval reached qBittorrent: %d adds", adds)
+	}
+	if got := runApp(t, "proposals", "undo", id); got.code != cli.ExitOK {
+		t.Fatalf("proposals undo: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	if deletes := qb.count("delete"); deletes != 1 {
+		t.Fatalf("%d deletes after undoing the recovered proposal, want 1", deletes)
+	}
+}

@@ -509,6 +509,15 @@ func ProposalBlocked(ctx context.Context, q db.Querier, id int64) (bool, error) 
 	return blocked, err
 }
 
+func ProposalHasCompletedWork(ctx context.Context, q db.Querier, id int64) (bool, error) {
+	var found bool
+	err := q.QueryRowContext(ctx,
+		"SELECT EXISTS (SELECT 1 FROM effects e"+effectResolutionJoin+
+			" WHERE e.proposal_id = ? AND e.direction = 'forward' AND e.state IN ('done','partial') "+
+			"AND e.undone_by IS NULL AND (r.id IS NULL OR r.effective_outcome <> 'failed'))", id).Scan(&found)
+	return found, err
+}
+
 func ProposalsWithStaleIntent(ctx context.Context, q db.Querier, before float64) ([]int64, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT DISTINCT e.proposal_id FROM effects e WHERE e.proposal_id IS NOT NULL AND e.state = 'intent' AND e.lease_at < ? "+
