@@ -67,7 +67,7 @@ func runObsidian(ctx context.Context, d *db.DB, env config.Env, now float64) (Re
 		})
 	}
 	entries = append(entries, pageEntry{recordID: 0, page: render.Index(indexEntries(records, loc)), path: "index.md"})
-	store := ledger.NewStore(d, func() float64 { return now })
+	store := ledger.NewStore(d, nil)
 	if err := RegisterLedgerObsidian(store); err != nil {
 		return Result{}, err
 	}
@@ -97,17 +97,24 @@ func syncObsidian(ctx context.Context, store *ledger.Store, now float64, dir str
 			return out, err
 		}
 		content := []byte(entry.front + entry.page.Markdown)
-		if err := writeStep(ctx, store, entry.recordID, now, full, entry.path, content, func(ctx context.Context, tx *sql.Tx) error {
-			return savePage(ctx, tx, TargetObsidian, entry.recordID, entry.path, entry.page.Hash, now)
-		}); err != nil {
+		renaming := found && prior.remoteID != entry.path
+		var writeDone ledger.Mutation
+		if !renaming {
+			writeDone = func(ctx context.Context, tx *sql.Tx) error {
+				return savePage(ctx, tx, TargetObsidian, entry.recordID, entry.path, entry.page.Hash, now)
+			}
+		}
+		if err := writeStep(ctx, store, entry.recordID, now, full, entry.path, content, writeDone); err != nil {
 			return out, err
 		}
-		if found && prior.remoteID != entry.path {
+		if renaming {
 			oldFull, err := within(dir, prior.remoteID)
 			if err != nil {
 				return out, err
 			}
-			if err := removeStep(ctx, store, entry.recordID, now, oldFull, prior.remoteID, prior.hash, nil); err != nil {
+			if err := removeStep(ctx, store, entry.recordID, now, oldFull, prior.remoteID, prior.hash, func(ctx context.Context, tx *sql.Tx) error {
+				return savePage(ctx, tx, TargetObsidian, entry.recordID, entry.path, entry.page.Hash, now)
+			}); err != nil {
 				return out, err
 			}
 		}
@@ -315,6 +322,17 @@ func RegisterLedgerObsidian(s *ledger.Store) error {
 				return ledger.Result{}, err
 			}
 			return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"restored": u.Path})}, nil
+		},
+		After: func(ctx context.Context, tx *sql.Tx, e ledger.Effect, result ledger.Result) error {
+			if result.State != ledger.Done {
+				return nil
+			}
+			rel, ok := strings.CutPrefix(e.Target, TargetObsidian+":")
+			if !ok {
+				return nil
+			}
+			_, err := tx.ExecContext(ctx, "DELETE FROM export_pages WHERE target = ? AND remote_id = ?", TargetObsidian, rel)
+			return err
 		},
 	})
 }
