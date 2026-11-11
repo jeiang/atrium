@@ -504,7 +504,7 @@ Capabilities that do not exist yet:
 
 1. **Shared operations and read models (F1).** Without them every feature the app gains is a second implementation.
 2. **A schema for the API.** DTOs are handwritten; there is no OpenAPI source to generate a Swift client from.
-3. **Revisions and change feeds.** Responses are `no-store` with no ETag and no tombstones, so the app cannot cache or work offline.
+3. **Revisions.** Responses are `no-store` with no ETag, so the app fetches everything again on every open. It needs conditional reads. A change feed with tombstones is needed only for offline use, which is out of scope (decision 8).
 4. **Bounded lists.** The transcript endpoint loads the full history; `/pending` is not paginated.
 5. **Durable command identity.** `Idempotency-Key` is optional and held in memory for ten minutes. A phone on a poor network retries.
 6. **A stream contract.** Replay works while events are retained; a new run clears them and an expired cursor returns an empty stream with no signal.
@@ -523,7 +523,7 @@ Capabilities that do not exist yet:
 | Notification service extension | Keep the `title` privacy mode: APNs carries an id, the phone fetches the text over the API | A read endpoint for one inbox entry |
 | Time Sensitive notifications | Approvals with a deadline and delivery exceptions break through Focus | A priority field on the inbox entry |
 | Live Activities over APNs | A running agent run or a parked approval on the lock screen | Live Activity token registry, run progress as push updates |
-| Background push | Refresh Needs you and the day before the app opens | Change feed (item 3 above); Apple limits these to a few per hour |
+| Background push | Refresh Needs you and the day before the app opens | The same small summary read model as widgets; Apple limits these to a few per hour |
 | WeatherKit | Replace Open-Meteo; 500,000 calls a month are included | Already in the plan; a second weather connection |
 | Associated Domains | Universal links from mail and notifications into the app; passkeys shared with the web sign-in | `apple-app-site-association` on the public host |
 | App Intents, Siri, Shortcuts | "Ask atrium", add a task, approve the next item, by voice or automation | The same API operations; no extra surface |
