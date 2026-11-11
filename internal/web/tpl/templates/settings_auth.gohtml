@@ -18,9 +18,9 @@
   {{with $d.Secret}}<div class="set-row"><span>New token</span><span class="font-mono text-xs" data-secret>{{.}}</span></div>
   <p class="px-4 py-2 text-sm text-ink-2">Copy it now; it cannot be shown again.</p>{{end}}
   {{if $d.Tokens}}<table class="w-full text-sm">
-    <thead><tr><th>Name</th><th>Kind</th><th>Owner</th><th>Created</th><th>Expires</th><th>Last used</th><th>Revoked</th><th></th></tr></thead>
+    <thead><tr><th>Name</th><th>Kind</th><th>Subject</th><th>Created</th><th>Expires</th><th>Last used</th><th>Revoked</th><th></th></tr></thead>
     <tbody>{{range $d.Tokens}}<tr data-token="{{.ID}}">
-      <td>{{.Name}}</td><td>{{.Kind}}</td><td>{{.Owner}}</td>
+      <td>{{.Name}}</td><td>{{.Kind}}</td><td>{{.Subject}}</td>
       <td>{{.Created}}</td><td>{{.Expires}}</td><td>{{.LastUsed}}</td><td>{{.Revoked}}</td>
       <td>{{if .Active}}<form method="post" action="/settings/auth/tokens/{{.ID}}/revoke">
         <input type="hidden" name="csrf_token" value="{{$csrf}}">

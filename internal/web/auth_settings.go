@@ -34,7 +34,7 @@ type tokenView struct {
 	ID       int64
 	Name     string
 	Kind     string
-	Owner    string
+	Subject  string
 	Created  string
 	Expires  string
 	LastUsed string
@@ -172,7 +172,7 @@ func tokenViews(tokens []bearer.Token) []tokenView {
 			owner = "Operator"
 		}
 		out[i] = tokenView{
-			ID: tok.ID, Name: tok.Name, Kind: tok.Kind, Owner: owner,
+			ID: tok.ID, Name: tok.Name, Kind: tok.Kind, Subject: owner,
 			Created: tokenStamp(&tok.CreatedAt), Expires: tokenStamp(tok.ExpiresAt),
 			LastUsed: tokenStamp(tok.LastUsedAt), Revoked: tokenStamp(tok.RevokedAt),
 			Active: tok.RevokedAt == nil,
