@@ -6,19 +6,6 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 
 | Variable | Host key |
 | --- | --- |
-| `ATRIUM_AUTH_OIDC_ACCESS_DOMAINS` | `auth.oidc_access_domains` |
-| `ATRIUM_AUTH_OIDC_ACCESS_EMAILS` | `auth.oidc_access_emails` |
-| `ATRIUM_AUTH_OIDC_ACCESS_GROUP` | `auth.oidc_access_group` |
-| `ATRIUM_AUTH_OIDC_ADMIN_DOMAINS` | `auth.oidc_admin_domains` |
-| `ATRIUM_AUTH_OIDC_ADMIN_EMAILS` | `auth.oidc_admin_emails` |
-| `ATRIUM_AUTH_OIDC_ADMIN_GROUP` | `auth.oidc_admin_group` |
-| `ATRIUM_AUTH_OIDC_API_CLIENT_ID` | `auth.oidc_api_client_id` |
-| `ATRIUM_AUTH_OIDC_CLIENT_ID` | `auth.oidc_client_id` |
-| `ATRIUM_AUTH_OIDC_CLIENT_SECRET_FILE` | `auth.oidc_client_secret` |
-| `ATRIUM_AUTH_OIDC_GROUPS_CLAIM` | `auth.oidc_groups_claim` |
-| `ATRIUM_AUTH_OIDC_ISSUER` | `auth.oidc_issuer` |
-| `ATRIUM_AUTH_OIDC_PRESET` | `auth.oidc_preset` |
-| `ATRIUM_AUTH_OIDC_SCOPES` | `auth.oidc_scopes` |
 | `ATRIUM_CORE_ASSISTANT_ENABLED` | `core.assistant_enabled` |
 | `ATRIUM_CORE_CALENDAR_ENABLED` | `core.calendar_enabled` |
 | `ATRIUM_CORE_CONTACTS_ENABLED` | `core.contacts_enabled` |
@@ -53,7 +40,6 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `ATRIUM_MEDIA_MEDIA_MOVIES_URL` | `media.media_movies_url` |
 | `ATRIUM_MEDIA_MEDIA_ROOT` | `media.media_root` |
 | `ATRIUM_MEDIA_MEDIA_TV_URL` | `media.media_tv_url` |
-| `ATRIUM_NOTIFY_WEBPUSH_CA_FILE` | `notify.webpush_ca_file` |
 
 ## Bootstrap
 

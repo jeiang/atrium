@@ -152,6 +152,12 @@ func (p *Provider) Authorizations() []url.Values {
 	return append([]url.Values(nil), p.auths...)
 }
 
+func (p *Provider) Refreshes() int {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.RefreshCall
+}
+
 func (p *Provider) addKey() {
 	p.mu.Lock()
 	defer p.mu.Unlock()

@@ -9,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/calendar"
-	"github.com/jeiang/atrium/internal/notify"
 )
 
 type settingsFieldCase struct {
@@ -32,8 +31,8 @@ func startSettingsServe(t *testing.T, values map[string]string) string {
 
 func TestSettingsFieldsSaveFromTheirTabs(t *testing.T) {
 	t.Parallel()
-	unsetEnv(t, settingEnv(calendar.AppleIDKey), settingEnv(notify.KeyPushSubject))
-	base := startSettingsServe(t, map[string]string{notify.KeyPushSubject: "mailto:ops@example.invalid"})
+	unsetEnv(t, settingEnv(calendar.AppleIDKey))
+	base := startSettingsServe(t, nil)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -53,7 +52,6 @@ func TestSettingsFieldsSaveFromTheirTabs(t *testing.T) {
 		{"/settings/integrations", "/settings/integrations/sections/calendar", "work_days", "mon,tue,wed,thu,fri"},
 		{"/settings/mail", "/settings/mail/settings", "uncertain_dest", "Later"},
 		{"/settings/mail", "/settings/mail/settings", "openloops_remind_hour", "8"},
-		{"/settings/notifications", "/settings/notifications/push/subject", "webpush_subject", "mailto:ops@example.invalid"},
 		{"/settings/assistant", "/settings/groups/assistant/spending", "monthly_budget_usd", "200"},
 	}
 	pages := map[string]string{}
@@ -85,8 +83,8 @@ func TestSettingsFieldsSaveFromTheirTabs(t *testing.T) {
 
 func TestSettingsFieldsRefuseInvalidValues(t *testing.T) {
 	t.Parallel()
-	unsetEnv(t, settingEnv(calendar.AppleIDKey), settingEnv(notify.KeyPushSubject))
-	base := startSettingsServe(t, map[string]string{notify.KeyPushSubject: "mailto:ops@example.invalid"})
+	unsetEnv(t, settingEnv(calendar.AppleIDKey))
+	base := startSettingsServe(t, nil)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -103,7 +101,6 @@ func TestSettingsFieldsRefuseInvalidValues(t *testing.T) {
 		{"/settings/integrations/sections/calendar", "work_hours", "9-5", "must be HH:MM-HH:MM"},
 		{"/settings/integrations/sections/calendar", "work_days", "funday", "must be day names"},
 		{"/settings/groups/notion/wiki", "wiki_root", "nope", "must be a Notion page id"},
-		{"/settings/notifications/push/subject", "webpush_subject", "nope", "must be a mailto: or https: URL"},
 	} {
 		status, body, _ := fetch(t, client, http.MethodPost, base+c.action, url.Values{c.key: {c.value}})
 		if status != http.StatusUnprocessableEntity || !strings.Contains(body, c.want) {

@@ -230,7 +230,12 @@ func New(o Options) (*Server, error) {
 	guard.sessions = o.OIDC
 	guard.errPage = s.errPage
 	if o.DB != nil {
-		guard.admin = func(ctx context.Context) (string, error) { return oidc.AdminGroup(ctx, o.DB.Read) }
+		guard.admin = func(ctx context.Context) (string, error) {
+			if o.OIDC == nil {
+				return oidc.DefaultAdminGroup, nil
+			}
+			return o.OIDC.AdminGroup(ctx)
+		}
 		guard.bodyCap = func(ctx context.Context) (int, error) {
 			return config.From(ctx).Limit(ctx, o.DB.Read, config.KeyBodyCap)
 		}
