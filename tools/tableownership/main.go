@@ -57,7 +57,6 @@ var owners = map[string]string{
 	"memory_views":         "assistant",
 	"message_fts":          "mail",
 	"messages":             "mail",
-	"module_migrations":    "db",
 	"nightly_observations": "kb",
 	"notifications":        "notify",
 	"notion_fts":           "notion",
