@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/scanutil"
@@ -62,7 +63,7 @@ func detect(ctx context.Context, q live.Querier, account string) (*detection, er
 		_ = rows.Close()
 		return nil, err
 	}
-	unresolved, err := ledger.UnresolvedMailMessages(ctx, q, account)
+	unresolved, err := mail.UnresolvedMessages(ctx, q, account)
 	if err != nil {
 		_ = rows.Close()
 		return nil, err

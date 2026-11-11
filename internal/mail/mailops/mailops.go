@@ -12,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
-	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
 	"github.com/jeiang/atrium/internal/mail/mime"
@@ -182,7 +181,7 @@ func Verify(ctx context.Context, q db.Querier, client mail.Client, account strin
 	if err != nil {
 		return nil, nil, err
 	}
-	unresolved, err := ledger.UnresolvedMailMessages(ctx, q, account)
+	unresolved, err := mail.UnresolvedMessages(ctx, q, account)
 	if err != nil {
 		return nil, nil, err
 	}

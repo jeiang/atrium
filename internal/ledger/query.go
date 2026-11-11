@@ -569,36 +569,31 @@ func ResolutionsSince(ctx context.Context, q db.Querier, source string, limit in
 	})
 }
 
-func UnresolvedMailMessages(ctx context.Context, q db.Querier, account string) (map[int64]bool, error) {
+type UnresolvedMailEffect struct {
+	MessageID *int64
+	Account   string
+	Action    json.RawMessage
+}
+
+func UnresolvedMailEffects(ctx context.Context, q db.Querier, account string) ([]UnresolvedMailEffect, error) {
 	rows, err := q.QueryContext(ctx,
-		"SELECT DISTINCT m.id FROM effects e "+
-			"JOIN messages m ON m.account = ? "+
-			"JOIN mailboxes mb ON mb.id = m.mailbox_id "+
+		"SELECT e.message_id, COALESCE(e.account, ''), e.action_json FROM effects e "+
 			"WHERE e.direction = 'forward' AND e.state IN ('intent','unknown','partial') "+
-			"AND NOT EXISTS (SELECT 1 FROM effect_resolutions r WHERE r.effect_id = e.id AND r.effective_outcome IS NOT NULL) "+
-			"AND (e.message_id = m.id "+
-			"OR ((e.account IS NULL OR e.account = m.account) AND ("+
-			"EXISTS (SELECT 1 FROM json_each(e.action_json, '$.uids') u WHERE u.value = m.uid "+
-			"AND COALESCE(json_extract(e.action_json, '$.src_uidvalidity'), json_extract(e.action_json, '$.uidvalidity')) = m.uidvalidity "+
-			"AND COALESCE(json_extract(e.action_json, '$.src_imap'), json_extract(e.action_json, '$.imap_name')) = mb.imap_name) "+
-			"OR EXISTS (SELECT 1 FROM json_each(e.action_json, '$.copied') u WHERE u.key = CAST(m.uid AS TEXT) "+
-			"AND json_extract(e.action_json, '$.src_uidvalidity') = m.uidvalidity "+
-			"AND json_extract(e.action_json, '$.src_imap') = mb.imap_name))))", account)
+			"AND (e.account IS NULL OR e.account = ?) "+
+			"AND NOT EXISTS (SELECT 1 FROM effect_resolutions r WHERE r.effect_id = e.id AND r.effective_outcome IS NOT NULL)",
+		account)
 	if err != nil {
 		return nil, err
 	}
-	out := map[int64]bool{}
-	if _, err := db.Collect(rows, func(r *sql.Rows) (struct{}, error) {
-		var id int64
-		if err := r.Scan(&id); err != nil {
-			return struct{}{}, err
-		}
-		out[id] = true
-		return struct{}{}, nil
-	}); err != nil {
-		return nil, err
-	}
-	return out, nil
+	return db.Collect(rows, func(r *sql.Rows) (UnresolvedMailEffect, error) {
+		var e UnresolvedMailEffect
+		var messageID sql.NullInt64
+		var action string
+		err := r.Scan(&messageID, &e.Account, &action)
+		e.MessageID = intPtr(messageID)
+		e.Action = json.RawMessage(action)
+		return e, err
+	})
 }
 
 func BlockedEffectID(ctx context.Context, q db.Querier, operation, target string) (int64, error) {
