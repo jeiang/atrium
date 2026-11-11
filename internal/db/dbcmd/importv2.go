@@ -22,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/weather"
 )
@@ -415,6 +416,7 @@ func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData,
 	values, err := sourceSettings(ctx, src, []string{
 		"anthropic_ca_file", "anthropic_proxy",
 		"grafana_url", "grafana_metrics_uid", "grafana_logs_uid", "grafana_logs_type", "grafana_logs_query", "grafana_ca_file", "grafana_proxy",
+		"notion_ca_file", "notion_proxy",
 		"weather_open_meteo_url", "weather_geocoding_url", "open_meteo_ca_file", "open_meteo_proxy",
 	})
 	if err != nil {
@@ -439,6 +441,14 @@ func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData,
 		}
 	}
 	out.Services = append(out.Services, weather.ImportV2(values), webfetch.ImportV2())
+	token, err := sourceSecret(ctx, src, "notion_token", "token")
+	if err != nil {
+		return out, err
+	}
+	out.Services = append(out.Services, notion.ImportV2(values, token))
+	if token.Value != "" {
+		out.Secrets = append(out.Secrets, "notion_token")
+	}
 	return out, nil
 }
 

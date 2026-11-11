@@ -156,7 +156,16 @@ func notionHostConfig(t *testing.T, dir, api, token string) string {
 			t.Fatal(err)
 		}
 	}
+	anthropicKey := filepath.Join(dir, "anthropic.key")
+	if err := os.WriteFile(anthropicKey, []byte("dummy-anthropic-key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	var b strings.Builder
+	b.WriteString("[connections.\"service/anthropic\"]\n")
+	b.WriteString("kind = \"service/anthropic\"\n")
+	b.WriteString("label = \"Anthropic\"\n")
+	b.WriteString("capabilities = [\"models\"]\n")
+	b.WriteString("credential_files = { api_key = " + fmt.Sprintf("%q", anthropicKey) + " }\n\n")
 	b.WriteString("[connections.\"service/notion\"]\n")
 	b.WriteString("kind = \"service/notion\"\n")
 	b.WriteString("label = \"Notion\"\n")

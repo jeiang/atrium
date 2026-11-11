@@ -6,6 +6,7 @@ import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -34,23 +35,23 @@ func v2Fixture(t *testing.T) string {
 
 func importTestApp(t *testing.T, dir string, now float64) *cli.App {
 	t.Helper()
-	return importTestAppWithHost(t, dir, now, "http://127.0.0.1:9", "http://127.0.0.1:9")
+	return importTestAppWithHost(t, dir, now, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9")
 }
 
-func importTestAppWithHost(t *testing.T, dir string, now float64, anthropicURL, grafanaURL string) *cli.App {
+func importTestAppWithHost(t *testing.T, dir string, now float64, anthropicURL, grafanaURL, notionURL string) *cli.App {
 	t.Helper()
 	vars := varsFor(t).snapshot()
 	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_DB_KEY"] = rightKeyHex
-	vars["ATRIUM_HOST_CONFIG"] = importHostConfig(t, dir, anthropicURL, grafanaURL)
+	vars["ATRIUM_HOST_CONFIG"] = importHostConfig(t, dir, anthropicURL, grafanaURL, notionURL)
 	vars[settingEnv(config.KeyMailAccountsFile)] = defaultAccountsFile
 	reg := settings.New()
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	return newAppWith(config.Map(vars), reg, config.NewState(reg), nil, nil, func() float64 { return now }, quietLog)
 }
 
-func importHostConfig(t *testing.T, dir, anthropicURL, grafanaURL string) string {
+func importHostConfig(t *testing.T, dir, anthropicURL, grafanaURL, notionURL string) string {
 	t.Helper()
 	body := fmt.Sprintf(`[connections."service/anthropic"]
 kind = "service/anthropic"
@@ -63,7 +64,13 @@ kind = "service/grafana"
 label = "Grafana"
 config = { url = %q }
 capabilities = ["viewer"]
-`, anthropicURL, grafanaURL)
+
+[connections."service/notion"]
+kind = "service/notion"
+label = "Notion"
+config = { api = %q }
+capabilities = ["api"]
+`, anthropicURL, grafanaURL, notionURL)
 	path := filepath.Join(dir, "host.toml")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
@@ -392,12 +399,48 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 	}))
 	t.Cleanup(grafana.Close)
 
+	const notionPage = "44444444-4444-4444-4444-444444444444"
+	var notionTokens []string
+	notionFake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		notionTokens = append(notionTokens, r.Header.Get("Authorization"))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if r.Header.Get("Authorization") != "Bearer ntn-imported-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"object":"error","status":401,"code":"unauthorized","message":"API token is invalid."}`))
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/users/me":
+			_, _ = w.Write([]byte(`{"object":"user","id":"bot","type":"bot"}`))
+		case "/v1/search":
+			var body struct {
+				Filter struct {
+					Value string `json:"value"`
+				} `json:"filter"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body.Filter.Value != "page" {
+				_, _ = w.Write([]byte(`{"object":"list","results":[],"has_more":false,"next_cursor":null}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"object":"list","results":[{"object":"page","id":"` + notionPage + `","url":"https://notion.example/imported","last_edited_time":"2026-01-01T00:00:00.000Z","in_trash":false,"parent":{"type":"workspace"},"properties":{"title":{"type":"title","title":[{"plain_text":"Imported page"}]},"sensitivity":{"type":"formula","formula":{"type":"string","string":"private"}}}}],"has_more":false,"next_cursor":null}`))
+		case "/v1/pages/" + notionPage + "/markdown":
+			_, _ = w.Write([]byte(`{"markdown":"imported alpha","truncated":false}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(notionFake.Close)
+
 	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
 		('grafana_url', %[1]q),
 		('grafana_metrics_uid', 'prom'),
 		('weather_open_meteo_url', 'http://weather.invalid/forecast'),
 		('weather_geocoding_url', 'http://weather.invalid/search')`, grafana.URL))
 	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('grafana_viewer_token', 'glsa-imported-token', 1762000800, 'fixture')")
+	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('notion_token', 'ntn-imported-token', 1762000800, 'fixture')")
 
 	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
 	if got.code != cli.ExitOK {
@@ -407,6 +450,8 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 		"connection service/anthropic: credential api_key carried",
 		"connection service/grafana: created from host settings",
 		"connection service/grafana: credential viewer_token carried",
+		"connection service/notion: created from host settings",
+		"connection service/notion: credential token carried",
 		"connection service/weather: created from host settings",
 		"connection service/webfetch: created from host settings",
 	} {
@@ -414,7 +459,7 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
 		}
 	}
-	if strings.Contains(got.stdout+got.stderr, "sk-ant-fixture") || strings.Contains(got.stdout+got.stderr, "glsa-imported-token") {
+	if strings.Contains(got.stdout+got.stderr, "sk-ant-fixture") || strings.Contains(got.stdout+got.stderr, "glsa-imported-token") || strings.Contains(got.stdout+got.stderr, "ntn-imported-token") {
 		t.Error("the import printed a credential")
 	}
 
@@ -424,12 +469,13 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = q.Close() }()
-	if n := importCount(t, q, "SELECT COUNT(*) FROM secrets WHERE name IN ('anthropic_api_key', 'grafana_viewer_token')"); n != 0 {
+	if n := importCount(t, q, "SELECT COUNT(*) FROM secrets WHERE name IN ('anthropic_api_key', 'grafana_viewer_token', 'notion_token')"); n != 0 {
 		t.Errorf("%d migrated credentials stayed in the secrets table", n)
 	}
 	for _, tc := range []struct{ id, slot, want string }{
 		{"service/anthropic", "api_key", "sk-ant-fixture"},
 		{"service/grafana", "viewer_token", "glsa-imported-token"},
+		{"service/notion", "token", "ntn-imported-token"},
 	} {
 		if got := importValue(t, q, "SELECT value FROM connection_credentials WHERE connection_id = ? AND slot = ?", tc.id, tc.slot); got != tc.want {
 			t.Errorf("%s credential %s = %q", tc.id, tc.slot, got)
@@ -437,6 +483,9 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 		if got := importValue(t, q, "SELECT set_by FROM connection_credentials WHERE connection_id = ? AND slot = ?", tc.id, tc.slot); got != "fixture" {
 			t.Errorf("%s credential %s set_by = %q", tc.id, tc.slot, got)
 		}
+	}
+	if got := importValue(t, q, "SELECT config_json FROM connections WHERE id = 'service/notion'"); !strings.Contains(got, `"api":"https://api.notion.com"`) {
+		t.Errorf("the Notion config was not carried: %s", got)
 	}
 	if got := importValue(t, q, "SELECT config_json FROM connections WHERE id = 'service/grafana'"); !strings.Contains(got, grafana.URL) || !strings.Contains(got, `"metrics_uid":"prom"`) {
 		t.Errorf("the Grafana config was not carried: %s", got)
@@ -450,7 +499,7 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 
 	setEnv(t, anthropic.BaseURLEnv, api.URL)
 	setEnv(t, settingEnv(grafanatools.KeyURL), grafana.URL)
-	ran := runImportApp(t, importTestAppWithHost(t, dir, clock, api.URL, grafana.URL), "agent", "run", "--text", "list the datasources")
+	ran := runImportApp(t, importTestAppWithHost(t, dir, clock, api.URL, grafana.URL, notionFake.URL), "agent", "run", "--text", "list the datasources")
 	if ran.code != cli.ExitOK {
 		t.Fatalf("agent run: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
 	}
@@ -476,6 +525,25 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 	}
 	if n := importCount(t, q, "SELECT COUNT(*) FROM thread_messages WHERE run_id = (SELECT MAX(id) FROM runs) AND content_json LIKE '%Imported datasource%'"); n == 0 {
 		t.Error("the Grafana tool result did not reach the thread")
+	}
+
+	synced := runImportApp(t, importTestAppWithHost(t, dir, clock, api.URL, grafana.URL, notionFake.URL), "notion", "sync")
+	if synced.code != cli.ExitOK {
+		t.Fatalf("notion sync: exit %d stdout %q stderr %q", synced.code, synced.stdout, synced.stderr)
+	}
+	mu.Lock()
+	tokens := append([]string(nil), notionTokens...)
+	mu.Unlock()
+	if len(tokens) == 0 {
+		t.Fatal("notion sync never reached the Notion fake")
+	}
+	for _, token := range tokens {
+		if token != "Bearer ntn-imported-token" {
+			t.Errorf("Notion request used %q", token)
+		}
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM notion_pages WHERE id = ? AND in_trash = 0", notionPage); n != 1 {
+		t.Errorf("notion sync stored %d pages for the imported connection", n)
 	}
 }
 
