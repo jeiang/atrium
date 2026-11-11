@@ -8,6 +8,7 @@ linters:
   enable:
     - depguard
     - errcheck
+    - forbidigo
     - gosec
     - govet
     - staticcheck
@@ -24,3 +25,14 @@ linters:
           deny:
             - pkg: github.com/anthropics/anthropic-sdk-go
               desc: only internal/anthropic talks to the Anthropic SDK (https://github.com/jeiang/atrium/issues/123)
+    forbidigo:
+      analyze-types: true
+      forbid:
+        - pattern: '^anthropic\.Client\.(Stream|Create)$'
+          pkg: '^github\.com/jeiang/atrium/internal/anthropic$'
+          msg: raw Anthropic dispatch belongs in internal/inference
+  exclusions:
+    rules:
+      - path: 'internal/(inference|anthropic)/'
+        linters:
+          - forbidigo
