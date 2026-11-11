@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -222,4 +223,92 @@ func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
 	s.stop()
 	s.start()
 	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "ok" })
+}
+
+func TestAnExplicitEmbeddingFailureHoldsMailUntilAnExplicitTestPasses(t *testing.T) {
+	requireCipher(t)
+	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	setEnv(t, settingEnv(endpoint.KeyChatURL), chat.URL+"/v1")
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
+
+	embed.setStatus(http.StatusInternalServerError)
+	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitError {
+		t.Fatalf("failing Test: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code == cli.ExitOK {
+		t.Fatalf("mail enabled after an explicit failure: %q", on.stdout)
+	} else if !strings.Contains(on.stderr+on.stdout, "embed endpoint probe failed") {
+		t.Fatalf("the hold message: %q", on.stderr+on.stdout)
+	}
+
+	embed.setStatus(0)
+	s := &connectionSite{t: t, dir: dir}
+	s.start()
+	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "ok" })
+	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code == cli.ExitOK {
+		t.Fatalf("an automatic pass released the hold: %q", on.stdout)
+	}
+	s.stop()
+
+	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitOK {
+		t.Fatalf("passing Test: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+		t.Fatalf("mail not released after a passing Test: %d %q", on.code, on.stderr)
+	}
+
+	embed.setStatus(http.StatusInternalServerError)
+	s.start()
+	defer s.stop()
+	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "failing" })
+	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+		t.Fatalf("an automatic failure held mail: %d %q", on.code, on.stderr)
+	}
+}
+
+func TestConcurrentConnectionTestsRecordOneNotification(t *testing.T) {
+	requireCipher(t)
+	srv, status := grafanaHealthServer(t)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, srv.URL, "http://anthropic.invalid"))
+	setEnv(t, settingEnv(grafanatools.KeyURL), srv.URL)
+	s := &connectionSite{t: t, dir: dir}
+	s.start()
+	defer s.stop()
+	if code, body := s.conn("/test", url.Values{"id": {"service/grafana"}, "api_key": {"glsa_good"}}); code != http.StatusOK && code != http.StatusSeeOther {
+		t.Fatalf("grafana test: %d %s", code, body)
+	}
+
+	for i := 0; i < 5; i++ {
+		status.Store(http.StatusOK)
+		if got := runApp(t, "connections", "test", "service/grafana"); got.code != cli.ExitOK {
+			t.Fatalf("passing test %d: exit %d stdout %q stderr %q", i, got.code, got.stdout, got.stderr)
+		}
+		before := connectionNotices(t, dir, "Grafana")
+		status.Store(http.StatusInternalServerError)
+		var wg sync.WaitGroup
+		codes := make([]int, 2)
+		for j := range codes {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				codes[j] = runApp(t, "connections", "test", "service/grafana").code
+			}()
+		}
+		wg.Wait()
+		for j, code := range codes {
+			if code != cli.ExitError {
+				t.Fatalf("concurrent failing test %d/%d: exit %d", i, j, code)
+			}
+		}
+		if state := connectionState(t, dir, "service/grafana"); state != "failing" {
+			t.Fatalf("state after concurrent failing tests %d = %q", i, state)
+		}
+		if after := connectionNotices(t, dir, "Grafana"); after != before+1 {
+			t.Fatalf("%d notices after concurrent failing tests %d, want %d", after-before, i, 1)
+		}
+	}
 }
