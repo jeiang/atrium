@@ -55,7 +55,7 @@ func bounds(ctx context.Context, q db.Querier, threadID int64) (low, high, tail 
 
 // Build returns the thread's stable view. A new batch is computed only when
 // the summary or message count changed; otherwise the persisted batch is
-// returned unchanged, so a settings change applies to the next batch.
+// returned unchanged.
 func Build(ctx context.Context, q db.Querier, threadID int64, now float64) (*View, error) {
 	low, high, tail, ok, err := bounds(ctx, q, threadID)
 	if err != nil || !ok {
