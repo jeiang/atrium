@@ -1,6 +1,8 @@
 package mailcmd
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -48,6 +50,9 @@ func (o Options) replay(env *cli.Env, account string, limit int) int {
 	if err := state.LoadStoredAccounts(env.Ctx, q); err != nil {
 		return cli.Fail(env, err)
 	}
+	if err := addStoredAccounts(env.Ctx, state, q); err != nil {
+		return cli.Fail(env, err)
+	}
 	if account != "" {
 		if _, ok := state.Account(account); !ok {
 			names := make([]string, 0, len(state.Accounts()))
@@ -69,8 +74,40 @@ func (o Options) replay(env *cli.Env, account string, limit int) int {
 		}
 		_, _ = fmt.Fprintf(env.Stdout, "%s\n", data)
 	}
+	for _, reason := range result.Reasons {
+		_, _ = fmt.Fprintf(env.Stderr, "not routed: %s (%d messages)\n", reason.Text, reason.Count)
+	}
 	_, _ = fmt.Fprint(env.Stderr, replaySummary(result.Summary))
 	return cli.ExitOK
+}
+
+func addStoredAccounts(ctx context.Context, state *config.State, q db.Querier) error {
+	rows, err := q.QueryContext(ctx, "SELECT name, kind FROM accounts ORDER BY name")
+	if err != nil {
+		return err
+	}
+	stored, err := db.Collect(rows, func(r *sql.Rows) (config.AccountSpec, error) {
+		var name, kind string
+		err := r.Scan(&name, &kind)
+		return config.AccountSpec{Name: name, Label: name, Preset: kind, Enabled: true}, err
+	})
+	if err != nil {
+		return err
+	}
+	accounts := append([]config.AccountSpec(nil), state.Accounts()...)
+	seen := make(map[string]bool, len(accounts))
+	for _, a := range accounts {
+		seen[a.Name] = true
+	}
+	for _, a := range stored {
+		if seen[a.Name] {
+			continue
+		}
+		accounts = append(accounts, a)
+		seen[a.Name] = true
+	}
+	state.UseAccounts(accounts, nil)
+	return nil
 }
 
 func replaySummary(s replay.Summary) string {

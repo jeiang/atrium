@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"maps"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/llmstub"
@@ -86,22 +88,25 @@ func TestMailReplayReportsStoredDecisionsWithoutExternalCalls(t *testing.T) {
 		inner.ServeHTTP(w, r)
 	})
 	env := f.snapshotEnv()
-	env["ATRIUM_DB"] = dbPath
 	env["ATRIUM_MAIL_MAIL_CHAT_URL"] = srv.URL + "/v1"
 	env["ATRIUM_MAIL_MAIL_EMBED_URL"] = srv.URL + "/v1"
-	reg := settings.New()
-	app := newAppWith(config.Map(env), reg, config.NewState(reg), nil, clients, nil, quietLog)
-	run := func(args ...string) appRun {
+	appFor := func(path string) *cli.App {
+		vars := maps.Clone(env)
+		vars["ATRIUM_DB"] = path
+		reg := settings.New()
+		return newAppWith(config.Map(vars), reg, config.NewState(reg), nil, clients, nil, quietLog)
+	}
+	run := func(app *cli.App, args ...string) appRun {
 		var out, errs bytes.Buffer
 		code := app.Run(context.Background(), args, &out, &errs)
 		return appRun{code, out.String(), errs.String()}
 	}
 
-	first := run("replay")
+	first := run(appFor(dbPath), "replay")
 	if first.code != cli.ExitOK {
 		t.Fatalf("replay: exit %d stdout %q stderr %q", first.code, first.stdout, first.stderr)
 	}
-	second := run("replay")
+	second := run(appFor(dbPath), "replay")
 	if second.code != cli.ExitOK {
 		t.Fatalf("second replay: exit %d stderr %q", second.code, second.stderr)
 	}
@@ -202,7 +207,7 @@ func TestMailReplayReportsStoredDecisionsWithoutExternalCalls(t *testing.T) {
 		}
 	}
 
-	one := run("replay", "--account", "gmail", "--limit", "1")
+	one := run(appFor(dbPath), "replay", "--account", "gmail", "--limit", "1")
 	if one.code != cli.ExitOK {
 		t.Fatalf("replay --account gmail --limit 1: exit %d stderr %q", one.code, one.stderr)
 	}
@@ -210,7 +215,51 @@ func TestMailReplayReportsStoredDecisionsWithoutExternalCalls(t *testing.T) {
 	if len(limited) != 1 || limited[0].Account != "gmail" {
 		t.Errorf("replay --account gmail --limit 1 reported %+v", limited)
 	}
-	if got := run("replay", "--account", "nobody"); got.code != cli.ExitUsage {
+	if got := run(appFor(dbPath), "replay", "--account", "nobody"); got.code != cli.ExitUsage {
 		t.Errorf("replay of an unknown account: exit %d stderr %q", got.code, got.stderr)
 	}
+
+	t.Run("without an accounts file", func(t *testing.T) {
+		bare := filepath.Join(t.TempDir(), "atrium.db")
+		copyFile(t, dbPath, bare)
+		exec := func(query string) {
+			t.Helper()
+			d, err := db.Connect(bare)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := d.Write.Exec("PRAGMA foreign_keys = OFF"); err != nil {
+				_ = d.Close()
+				t.Fatal(err)
+			}
+			if _, err := d.Write.Exec(query); err != nil {
+				_ = d.Close()
+				t.Fatal(err)
+			}
+			if err := d.Close(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		exec("DELETE FROM mail_accounts")
+		fromRows := run(appFor(bare), "replay")
+		if fromRows.code != cli.ExitOK {
+			t.Fatalf("replay from the account rows: exit %d stderr %q", fromRows.code, fromRows.stderr)
+		}
+		if fromRows.stdout != first.stdout || fromRows.stderr != first.stderr {
+			t.Errorf("a copy without mail_accounts replayed differently:\nstdout %q\nstderr %q", fromRows.stdout, fromRows.stderr)
+		}
+		exec("DELETE FROM accounts WHERE name = 'gmail'")
+		unconfigured := run(appFor(bare), "replay")
+		if unconfigured.code != cli.ExitOK {
+			t.Fatalf("replay with an unconfigured account: exit %d stderr %q", unconfigured.code, unconfigured.stderr)
+		}
+		if !strings.Contains(unconfigured.stderr, `not routed: account "gmail" is not configured in the database (10 messages)`) {
+			t.Errorf("the summary does not name the unconfigured account:\n%s", unconfigured.stderr)
+		}
+		for _, line := range parseReplay(t, unconfigured.stdout) {
+			if line.Account == "gmail" && (line.Stage != "none" || line.Action != "none") {
+				t.Errorf("gmail message %d replayed at %q/%q without an account row", line.ID, line.Stage, line.Action)
+			}
+		}
+	})
 }
