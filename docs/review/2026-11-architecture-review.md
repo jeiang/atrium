@@ -645,11 +645,18 @@ Shape:
 
 Open, needs the operator:
 
-- **Where atrium runs, and how it embeds.** The model today is EmbeddingGemma 2 (`ggml-org/embeddinggemma-2-GGUF`, Q8, 310 MB, 768 dimensions) on llama.cpp. Measured on ricklent on 2026-11-11 with one thread: a chat query of 18 tokens takes 132 ms (median of 15), a 1,500-character document of 320 tokens takes 1.97 s (median of 8), a batch of 16 documents takes 31 s, and the server holds 475 MB. ricklent has one virtual CPU and 2 GB of memory, of which about 1 GB was free before the test, and it also runs the NetBird proxy replica, DNS, game ingress and the qBittorrent tunnel exit. Every embedding blocks its only core. ricklent as it is cannot hold atrium and a local embedding model. The choices:
-  1. A server with at least two cores and 4 GB, and EmbeddingGemma 2 kept. The stored vectors stay valid, and no new vendor sees mail text.
-  2. A hosted embedding API such as `voyage-4-lite` at $0.02 per million tokens. No model server at all and a full re-index for under $1, but a third vendor, a network call on the chat send path with no published latency, and no retrieval when it is down.
-  3. A smaller English model such as `gte-modernbert-base` (149M parameters). About half the compute, a full re-index, and still a model server.
-- **Edge path.** The Caddy edge is on alda and ricklent is in Atlanta. If atrium on ricklent is still entered through alda, a mesh hop remains. The latency gain needs atrium's hostname to terminate on the host that runs it.
+- **Where atrium runs, and how it embeds.** The model today is EmbeddingGemma 2 (`ggml-org/embeddinggemma-2-GGUF`, Q8, 310 MB, 768 dimensions) on llama.cpp. Measured on 2026-11-11 with atrium's own prefixes: a chat query of 18 tokens, a 1,500-character document of 320 tokens, and a batch of 16 such documents.
+
+  | Host | Cores, memory, free memory | Threads | Query | Document | Batch of 16 | Server memory |
+  |---|---|---|---|---|---|---|
+  | ricklent (Linode, Atlanta) | 1, 2 GB, about 1.0 GB | 1 | 132 ms | 1.97 s | 31.2 s | 475 MB |
+  | zantark (Hetzner) | 2, 2 GB, about 0.9 GB | 2 | 74 ms | 1.08 s | 14.8 s | 606 MB |
+  | zantark | same | 1 | 118 ms | 1.22 s | 19.2 s | 547 MB |
+
+  Neither host as sized holds atrium and a local embedding model. ricklent has one core, shared with the NetBird proxy replica, DNS, game ingress and the qBittorrent tunnel exit, and every embedding blocks it. zantark has the speed but not the memory: the monitoring stack already uses about 1 GB and 239 MB of swap, and the model takes two thirds of what is left. zantark shares the private network with the Caddy edge on alda, so no mesh hop remains there; ricklent is entered through alda over the mesh unless atrium's hostname terminates on ricklent itself. The choices:
+  1. zantark resized to 4 GB, EmbeddingGemma 2 kept. The stored vectors stay valid, no new vendor sees mail text, and a bulk re-index can still run on artemis's GPU because the model is the same.
+  2. Either host as sized, with a hosted embedding API such as `voyage-4-lite` at $0.02 per million tokens. No model server and a full re-index for under $1, but a third vendor, a network call on the chat send path with no published latency, and no dense retrieval when it is down.
+  3. A smaller English model such as `gte-modernbert-base` (149M parameters). About half the compute, a full re-index, and still a model server; its memory use was not measured.
 
 Research result on alternatives to embeddings (sources in the session report, not re-verified here): keep dense vectors as one side of the existing hybrid with full-text search and rank fusion. Lexical match carries entity-heavy queries, and hybrids beat either side alone. Graph memory systems show no gain over a plain hybrid for factual recall. Putting the whole knowledge base in the prompt costs more than the budget. Cheap gains: truncate vectors to 512 dimensions (68.41 against 68.46 on English MTEB), and let chat retrieval answer from the lexical side when the embedding call misses a deadline.
 
