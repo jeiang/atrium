@@ -93,12 +93,6 @@ func Module(r chi.Router, d *web.Deps) {
 	d.Admin(http.MethodPost, path+"/{name}/settings", h.saveSettings)
 	d.Admin(http.MethodPost, path+"/sections/{name}", h.saveSection)
 	d.Admin(http.MethodPost, path+"/{name}/disconnect", h.disconnect)
-	d.Admin(http.MethodGet, googlePath, h.google)
-	d.Admin(http.MethodPost, googlePath, h.googleSave)
-	d.Admin(http.MethodPost, googlePath+"/start", h.googleStart)
-	d.Admin(http.MethodGet, googleCallbackPath, h.googleCallback)
-	d.Admin(http.MethodPost, googlePastePath, h.googlePaste)
-	d.Admin(http.MethodPost, googleTestPath, h.googleTest)
 }
 
 func watch(d *web.Deps) {

@@ -40,6 +40,7 @@ type shared struct {
 	mu      sync.Mutex
 	clients map[string]*http.Client
 	tokens  map[string]string
+	google  *googleTokens
 }
 
 type credential struct {
@@ -680,7 +681,10 @@ func (l *Lease) Credential(slot string) (string, error) {
 	return value, nil
 }
 
-func (l *Lease) Token(_ context.Context, capability string) (string, error) {
+func (l *Lease) Token(ctx context.Context, capability string) (string, error) {
+	if l.kind == KindGoogle {
+		return l.googleToken(ctx, capability)
+	}
 	l.shared.mu.Lock()
 	defer l.shared.mu.Unlock()
 	if token, ok := l.shared.tokens[capability]; ok {
@@ -695,6 +699,14 @@ func (l *Lease) Token(_ context.Context, capability string) (string, error) {
 }
 
 func (l *Lease) InvalidateToken(capability string) {
+	if l.kind == KindGoogle {
+		tokens := l.googleTokens()
+		tokens.mu.Lock()
+		defer tokens.mu.Unlock()
+		delete(tokens.caps, capability)
+		delete(tokens.errs, capability)
+		return
+	}
 	l.shared.mu.Lock()
 	defer l.shared.mu.Unlock()
 	delete(l.shared.tokens, capability)
@@ -753,6 +765,43 @@ func (s *Store) record(ctx context.Context, id ID, revision int64, results []Res
 	}
 	if n == 0 {
 		return s.Get(ctx, id)
+	}
+	return s.Get(ctx, id)
+}
+
+// Save writes operator-owned configuration and credentials without running a
+// test. It is used by the consent flows, which obtain a grant before any test
+// can succeed.
+func (s *Store) Save(ctx context.Context, id ID, cand Candidate) (View, error) {
+	if !audit.HasActor(ctx) {
+		return View{}, audit.ErrNoActor
+	}
+	current, err := s.Get(ctx, id)
+	if err != nil {
+		return View{}, err
+	}
+	def, ok := s.reg.Lookup(current.Kind)
+	if !ok {
+		return View{}, UnknownKind(current.Kind)
+	}
+	merged := Candidate{Label: current.Label, Config: current.Config, Credentials: cand.Credentials}
+	for _, c := range current.Capabilities {
+		merged.Capabilities = append(merged.Capabilities, Capability(c))
+	}
+	if cand.Label != "" {
+		merged.Label = cand.Label
+	}
+	if cand.Config != nil {
+		merged.Config = cand.Config
+	}
+	if cand.Capabilities != nil {
+		merged.Capabilities = cand.Capabilities
+	}
+	if err := validateCandidate(def, merged, current); err != nil {
+		return View{}, err
+	}
+	if err := s.save(ctx, id, current, merged, []Result{}, Untested, ""); err != nil {
+		return View{}, err
 	}
 	return s.Get(ctx, id)
 }

@@ -97,7 +97,7 @@ func importService(ctx context.Context, tx *sql.Tx, s ImportService, encrypted b
 		s.ID, kind, s.Label, source, string(configJSON), string(transportJSON), now, now); err != nil {
 		return nil, err
 	}
-	lines := []string{"connection " + s.ID + ": created from host settings"}
+	lines := []string{"connection " + s.ID + ": created from " + source + " settings"}
 	for _, name := range s.Capabilities {
 		if _, err := tx.ExecContext(ctx,
 			"INSERT INTO connection_capabilities (connection_id, name, enabled, config_json) VALUES (?, ?, 1, '{}')", s.ID, name); err != nil {

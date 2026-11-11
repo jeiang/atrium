@@ -19,8 +19,7 @@ func reviewSMTP(t *testing.T, dir string) *smtpFake {
 	tokenSrv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(tokenSrv.Close)
 	t.Setenv("ATRIUM_GOOGLE_TOKEN_URL", tokenSrv.URL)
-	setEnv(t, "GOOGLE_OAUTH_CLIENT_SECRET", "secret")
-	setEnv(t, "GOOGLE_GMAIL_REFRESH_TOKEN", "refresh")
+	googleHostConfig(t, dir)
 	ca := smtpCert(t)
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
@@ -48,7 +47,6 @@ func reviewSMTP(t *testing.T, dir string) *smtpFake {
 		t.Fatal(err)
 	}
 	for _, q := range []string{
-		"INSERT INTO settings (key, value) VALUES ('google_client_id', 'client-id')",
 		"INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, auth_method, created_at) VALUES ('oauth', 'OAuth', 'gmail', 'atrium.test@gmail.test', 1, 0, 'xoauth2', 0)",
 	} {
 		if _, err := d.Write.Exec(q); err != nil {

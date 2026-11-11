@@ -55,6 +55,12 @@ func Module(r chi.Router, d *web.Deps) {
 	d.Admin(http.MethodGet, path, h.index)
 	d.Admin(http.MethodPost, path+"/test", h.test)
 	d.Admin(http.MethodPost, path+"/disconnect", h.disconnect)
+	d.Admin(http.MethodGet, googlePath, h.google)
+	d.Admin(http.MethodPost, googlePath, h.googleSave)
+	d.Admin(http.MethodPost, googlePath+"/start", h.googleStart)
+	d.Admin(http.MethodGet, googlePath+"/callback", h.googleCallback)
+	d.Admin(http.MethodPost, googlePath+"/paste", h.googlePaste)
+	d.Admin(http.MethodPost, googlePath+"/test", h.googleTest)
 }
 
 type handlers struct{ d *web.Deps }

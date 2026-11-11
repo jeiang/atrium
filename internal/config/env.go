@@ -54,15 +54,3 @@ type CalDAVLogin struct {
 	AppleID  string
 	Password string
 }
-
-type GoogleClient struct {
-	ID     string
-	Secret string
-}
-
-type GoogleCredentials struct {
-	GoogleClient
-	RefreshToken string
-}
-
-func GoogleOAuthSecret(env Env) string { return get(env, "GOOGLE_OAUTH_CLIENT_SECRET") }

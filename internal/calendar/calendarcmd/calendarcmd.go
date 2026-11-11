@@ -9,9 +9,11 @@ import (
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/passrun"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 func Command(env config.Env, tools registry.Source) *cli.Command {
@@ -21,6 +23,9 @@ func Command(env config.Env, tools registry.Source) *cli.Command {
 func syncCommand(env config.Env) *cli.Command {
 	return davmirror.SyncCommand("mirror the iCloud calendars into the calendar directory (read-only)", passrun.CalDAV,
 		func(ctx context.Context, d *db.DB) (davmirror.Stats, error) {
+			if err := reconcile(ctx, d); err != nil {
+				return davmirror.Stats{}, err
+			}
 			set, err := calendar.LoadSettings(ctx, d.Read)
 			if err != nil {
 				return davmirror.Stats{}, err
@@ -47,11 +52,20 @@ func googleAuth(env config.Env) *cli.Command {
 				if err := config.Boot(e.Ctx, env, d, cfg); err != nil {
 					return cli.Fail(e, err)
 				}
+				if err := reconcile(e.Ctx, d); err != nil {
+					return cli.Fail(e, err)
+				}
 				set, err := calendar.LoadSettings(e.Ctx, d.Read)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				auth := calendar.AuthOptions{ClientID: set.GoogleClientID, ClientSecret: config.GoogleOAuthSecret(env), Port: *port, Out: e.Stdout, Env: env}
+				if set.Google == nil {
+					_, _ = fmt.Fprintln(e.Stderr, "error: the google/default connection is not configured")
+					return cli.ExitError
+				}
+				clientID, _ := set.Google.Endpoint("client_id")
+				clientSecret, _ := set.Google.Credential("oauth/client_secret")
+				auth := calendar.AuthOptions{ClientID: clientID, ClientSecret: clientSecret, Port: *port, Out: e.Stdout, Env: env}
 				token, err := calendar.Authorize(e.Ctx, auth)
 				var failed calendar.Error
 				if errors.As(err, &failed) {
@@ -61,9 +75,21 @@ func googleAuth(env config.Env) *cli.Command {
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				_, _ = fmt.Fprintf(e.Stdout, "\nGOOGLE_REFRESH_TOKEN=%s\n", token)
+				ctx := audit.With(e.Ctx, "operator", audit.CLI)
+				if err := connections.StoreGoogleGrant(ctx, d, connections.GoogleCalendar, token); err != nil {
+					return cli.Fail(e, err)
+				}
+				_, _ = fmt.Fprintln(e.Stdout, "\nGoogle Calendar consent stored in google/default.")
 				return cli.ExitOK
 			}
 		},
 	}
+}
+
+func reconcile(ctx context.Context, d *db.DB) error {
+	store, err := connections.New(d, config.From(ctx).Host(), connections.DefaultRegistry())
+	if err != nil {
+		return err
+	}
+	return store.ReconcileHost(ctx)
 }
