@@ -86,7 +86,7 @@ func (r *Registry) writable(key string) (Def, error) {
 	if err != nil {
 		return Def{}, err
 	}
-	if HostKey(key) {
+	if HostOwnedKey(key) {
 		return Def{}, HostOwned(key)
 	}
 	if pins != nil {

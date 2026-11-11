@@ -77,7 +77,27 @@
     databaseKeyRefused = assert refusedWith "services.atrium.database.keyFile" {host.db.key_file = "/run/x";}; true;
     obsidianRefused = assert refusedWith "services.atrium.knowledgeExport.obsidianDirectory" {host.export.export_obsidian_dir = "/var/lib/x";}; true;
     secretRefused = assert refusedWith "services.atrium.database.keyFile" {secretFiles."db.key" = "/run/x";}; assert refusedWith "connection field service/qbittorrent credential api_key" {secretFiles."media.media_qbittorrent_api_key" = "/run/x";}; assert refusedWith "host configuration" {secretFiles."auth.oidc_client_secret" = "/run/x";}; assert refusedWith "is not a secret setting" {secretFiles."assistant.monthly_budget_usd" = "/run/x";}; true;
-    connectionRefused = assert refusedWith "needs a kind" {connections."service/x" = {kind = "";};}; assert refusedWith "needs a mail/<id> connection id" {connections."service/x" = {kind = "mail/icloud"; account = {preset = "icloud"; login = "x"; passwordFile = "/run/x";};};}; assert refusedWith "needs a passwordFile" {connections."mail/x" = {kind = "mail/icloud"; account = {preset = "icloud"; login = "x"; passwordFile = "";};};}; true;
+    connectionRefused = assert refusedWith "needs a kind" {connections."service/x" = {kind = "";};};
+    assert refusedWith "needs a mail/<id> connection id" {
+      connections."service/x" = {
+        kind = "mail/icloud";
+        account = {
+          preset = "icloud";
+          login = "x";
+          passwordFile = "/run/x";
+        };
+      };
+    };
+    assert refusedWith "needs a passwordFile" {
+      connections."mail/x" = {
+        kind = "mail/icloud";
+        account = {
+          preset = "icloud";
+          login = "x";
+          passwordFile = "";
+        };
+      };
+    }; true;
     cfg = nixos.config.services.atrium;
     unitText = name: nixos.config.systemd.units.${name}.text;
     appUnits = builtins.filter (lib.hasSuffix ".service") cfg.unitNames;
@@ -108,11 +128,11 @@
       assert lib.hasInfix "ReadWritePaths=/var/lib/media" scheduler;
       assert !(defaults.config.services.atrium.renderedHost ? export); true;
     hostConfig = assert cfg.renderedHost.core.public_url == "https://atrium.example.org";
-      assert cfg.renderedHost.connections."service/qbittorrent".config.url == "http://127.0.0.1:8081";
-      assert cfg.renderedHost.connections."service/qbittorrent".credential_files.api_key == "\${CREDENTIALS_DIRECTORY}/connection-service-qbittorrent-api_key";
-      assert cfg.renderedHost.mail.mail_accounts_file != "";
-      assert cfg.renderedHost.auth.oidc_client_secret_file == "\${CREDENTIALS_DIRECTORY}/host-auth-oidc_client_secret";
-      assert cfg.initialTimezone != null; true;
+    assert cfg.renderedHost.connections."service/qbittorrent".config.url == "http://127.0.0.1:8081";
+    assert cfg.renderedHost.connections."service/qbittorrent".credential_files.api_key == "\${CREDENTIALS_DIRECTORY}/connection-service-qbittorrent-api_key";
+    assert cfg.renderedHost.mail.mail_accounts_file != "";
+    assert cfg.renderedHost.auth.oidc_client_secret_file == "\${CREDENTIALS_DIRECTORY}/host-auth-oidc_client_secret";
+    assert cfg.initialTimezone != null; true;
     unit = name: pkgs.writeText name (builtins.unsafeDiscardStringContext nixos.config.systemd.units.${name}.text);
     inherit (cfg) unitNames;
     configFile = (pkgs.formats.toml {}).generate "atrium-host.toml" cfg.renderedHost;

@@ -23,7 +23,7 @@ func TestCoreSettingsRejectBadValuesAndDriveTheWebLayer(t *testing.T) {
 		{"body_cap_bytes", "0", "must be between"},
 		{"web_page_size", "9", "must be between"},
 		{"snooze_choices", "1,x", "must be comma-separated"},
-		{"public_url", "https://atrium.test", "is host configuration and is not editable here"},
+		{"media_qbittorrent_url", "http://127.0.0.1:8081", "is host configuration and is not editable here"},
 		{"http_timeout_seconds", "3601", "must be between"},
 	} {
 		got := runSettings(t, "set", tc.key, tc.value)

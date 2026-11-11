@@ -96,7 +96,7 @@ func LoadFields(ctx context.Context, q db.Querier, fields []Field) ([]FieldView,
 		view := FieldView{
 			Key: f.Key, Label: f.Label, Value: strings.TrimSpace(found.Value),
 			Number: f.Number, Whole: f.Whole, Bool: f.Bool, Multi: f.Multi, Choices: f.Choices,
-			Pinned: found.Pinned() || !def.Editable() || HostKey(f.Key),
+			Pinned: found.Pinned() || !def.Editable() || HostOwnedKey(f.Key),
 		}
 		if f.Multi {
 			selected := strings.Split(view.Value, ",")

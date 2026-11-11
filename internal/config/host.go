@@ -77,17 +77,16 @@ func (h *Host) readEnv(env Env, d settings.HostDef) error {
 	value := strings.TrimSpace(get(env, name))
 	path, fileSet := env(name + "_FILE")
 	if d.Secret {
-		if value != "" {
-			return fmt.Errorf("config: %s is a secret; set %s_FILE", name, name)
+		if fileSet {
+			if value != "" {
+				return fmt.Errorf("config: %s and %s_FILE are both set; set only one", name, name)
+			}
+			raw, err := os.ReadFile(path)
+			if err != nil {
+				return fmt.Errorf("config: %s_FILE: %w", name, err)
+			}
+			value = strings.TrimSpace(string(raw))
 		}
-		if !fileSet {
-			return nil
-		}
-		raw, err := os.ReadFile(path)
-		if err != nil {
-			return fmt.Errorf("config: %s_FILE: %w", name, err)
-		}
-		value = strings.TrimSpace(string(raw))
 	} else if fileSet {
 		if value != "" {
 			return fmt.Errorf("config: %s and %s_FILE are both set; set only one", name, name)

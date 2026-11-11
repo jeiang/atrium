@@ -30,7 +30,7 @@ func CutoverDestination(entry ImportEntry) string {
 	}
 }
 
-func HostKey(key string) bool {
+func HostOwnedKey(key string) bool {
 	entry, ok := ImportEntryFor(key)
-	return ok && entry.Class == ImportHost
+	return ok && entry.Class == ImportHost && entry.Runtime
 }

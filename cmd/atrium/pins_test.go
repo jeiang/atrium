@@ -65,9 +65,12 @@ func TestHostConfigurationIsReadOnlyAndWinsOverTheDatabase(t *testing.T) {
 	}
 	for _, verb := range [][]string{{"set", key, "https://other.example"}, {"set", "media_root", "/other"}, {"unset", key}} {
 		r := runSettings(t, verb...)
-		if r.code != cli.ExitError || !strings.Contains(r.stderr, "host configuration and is not editable here") {
+		if r.code != cli.ExitError || !strings.Contains(r.stderr, "pinned by host") {
 			t.Errorf("%s: exit %d stderr %q", verb[0], r.code, r.stderr)
 		}
+	}
+	if r := runSettings(t, "set", "media_qbittorrent_url", "http://127.0.0.1:8081"); r.code != cli.ExitError || !strings.Contains(r.stderr, "host configuration and is not editable here") {
+		t.Errorf("set a cut-over host key: exit %d stderr %q", r.code, r.stderr)
 	}
 	if _, ok := storedSetting(t, db, key); ok {
 		t.Error("a refused host write stored the value")

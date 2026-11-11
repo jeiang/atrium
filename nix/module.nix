@@ -39,27 +39,32 @@
 
   accounts = lib.filterAttrs (_: c: c.account != null) cfg.connections;
   accountsFile = toml.generate "mail-accounts.toml" {
-    account = lib.mapAttrsToList (id: c: {
-      id = lib.removePrefix "mail/" id;
-      inherit (c.account) preset login enabled;
-      label =
-        if c.account.label == null
-        then lib.removePrefix "mail/" id
-        else c.account.label;
-      password_file = "\${CREDENTIALS_DIRECTORY}/${accountCredential (lib.removePrefix "mail/" id)}";
-    })
-    accounts;
+    account =
+      lib.mapAttrsToList (id: c: {
+        id = lib.removePrefix "mail/" id;
+        inherit (c.account) preset login enabled;
+        label =
+          if c.account.label == null
+          then lib.removePrefix "mail/" id
+          else c.account.label;
+        password_file = "\${CREDENTIALS_DIRECTORY}/${accountCredential (lib.removePrefix "mail/" id)}";
+      })
+      accounts;
   };
 
-  renderedConnections = lib.mapAttrs (id: c: let
-    accountID = lib.removePrefix "mail/" id;
-    creds = c.credentialFiles // lib.optionalAttrs (c.account != null) {
-      "mail/${accountID}/password" = "\${CREDENTIALS_DIRECTORY}/${accountCredential accountID}";
-    };
-  in {
-    inherit (c) kind label config transport capabilities;
-    credential_files = lib.mapAttrs (slot: _: "\${CREDENTIALS_DIRECTORY}/${connectionCredential id slot}") creds;
-  }) cfg.connections;
+  renderedConnections =
+    lib.mapAttrs (id: c: let
+      accountID = lib.removePrefix "mail/" id;
+      creds =
+        c.credentialFiles
+        // lib.optionalAttrs (c.account != null) {
+          "mail/${accountID}/password" = "\${CREDENTIALS_DIRECTORY}/${accountCredential accountID}";
+        };
+    in {
+      inherit (c) kind label config transport capabilities;
+      credential_files = lib.mapAttrs (slot: _: "\${CREDENTIALS_DIRECTORY}/${connectionCredential id slot}") creds;
+    })
+    cfg.connections;
 
   hostValues = lib.mapAttrs (module: table:
     lib.mapAttrs (key: value:
@@ -128,10 +133,11 @@
         if t == "string"
         then builtins.isString value
         else if builtins.isList t
-        then (builtins.elem "integer" t && builtins.isInt value)
-        || (builtins.elem "number" t && (builtins.isInt value || builtins.isFloat value))
-        || (builtins.elem "boolean" t && builtins.isBool value)
-        || (builtins.elem "string" t && builtins.isString value)
+        then
+          (builtins.elem "integer" t && builtins.isInt value)
+          || (builtins.elem "number" t && (builtins.isInt value || builtins.isFloat value))
+          || (builtins.elem "boolean" t && builtins.isBool value)
+          || (builtins.elem "string" t && builtins.isString value)
         else true);
     enumOk = prop == null || !(prop ? enum) || builtins.elem (toString value) prop.enum;
   in
@@ -139,14 +145,18 @@
     then "connections are declared in services.atrium.connections, not in host"
     else if !(schema.properties ? ${module})
     then
-      (if destination != null
+      (
+        if destination != null
         then "${dotted} is ${destination}"
-        else "unknown module ${module}")
+        else "unknown module ${module}"
+      )
     else if prop == null
     then
-      (if destination != null
+      (
+        if destination != null
         then "${dotted} is ${destination}"
-        else "unknown key ${dotted}")
+        else "unknown key ${dotted}"
+      )
     else if !typeOk
     then "${dotted} has the wrong type"
     else if !enumOk
