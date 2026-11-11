@@ -158,7 +158,7 @@ func TestAuthTokenLocalBearerLifecycle(t *testing.T) {
 		t.Fatalf("issue: exit %d stderr %q", issued.code, issued.stderr)
 	}
 	secret := strings.TrimSpace(issued.stdout)
-	shortExpiry := time.Now().Add(3 * time.Second).UTC().Format(time.RFC3339)
+	shortExpiry := time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
 	expiring := runApp(t, "auth", "token", "issue", "--name", "short", "--expires-at", shortExpiry)
 	if expiring.code != cli.ExitOK {
 		t.Fatalf("issue with expiry: exit %d stderr %q", expiring.code, expiring.stderr)
@@ -202,13 +202,15 @@ func TestAuthTokenLocalBearerLifecycle(t *testing.T) {
 	if ok := api.do(http.MethodGet, "/api/v1/me", short, nil); ok.status != http.StatusOK {
 		t.Fatalf("the expiring token is refused before its expiry: %d %s", ok.status, ok.body)
 	}
-	time.Sleep(3500 * time.Millisecond)
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	if _, err := d.Write.Exec("UPDATE auth_bearers SET expires_at = ? WHERE name = 'short'", float64(time.Now().Add(-time.Minute).Unix())); err != nil {
+		t.Fatal(err)
+	}
 	if expired := api.do(http.MethodGet, "/api/v1/me", short, nil); expired.status != http.StatusUnauthorized || expired.code() != "invalid_token" {
 		t.Fatalf("an expired local token was admitted: %d %s", expired.status, expired.body)
 	}
 
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	defer func() { _ = d.Close() }()
 	var plain int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM auth_bearers WHERE token_hash IN (?, ?)", secret, short).Scan(&plain); err != nil || plain != 0 {
 		t.Fatalf("the database stores a plaintext token: %d, %v", plain, err)
