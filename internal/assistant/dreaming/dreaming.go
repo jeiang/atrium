@@ -372,44 +372,30 @@ func signals(ctx context.Context, q db.Querier, from float64) ([]signal, error) 
 			out = append(out, sig)
 		}
 	}
-	rows, err = q.QueryContext(ctx,
-		"SELECT id, kind, title FROM proposals WHERE status = 'dismissed' AND decided_ts >= ? ORDER BY id DESC LIMIT 10", from)
+	dismissed, err := proposals.DismissedSince(ctx, q, from, 10)
 	if err != nil {
 		return nil, err
 	}
-	dismissed, err := db.Collect(rows, func(r *sql.Rows) (signal, error) {
-		var id int64
-		var kind, title string
-		if err := r.Scan(&id, &kind, &title); err != nil {
-			return signal{}, err
-		}
+	for _, d := range dismissed {
 		marks := tool.Untrusted
-		thread, found, err := proposalThread(ctx, q, id)
+		thread, found, err := proposalThread(ctx, q, d.ID)
 		if err != nil {
-			return signal{}, err
+			return nil, err
 		}
 		if found {
 			foundMarks, private, ok, err := threadOrigin(ctx, q, thread)
 			if err != nil || private {
-				return signal{}, err
+				return nil, err
 			}
 			if ok {
 				marks = foundMarks
 			}
 		}
-		text := fmt.Sprintf("operator dismissed %s proposal %d: %s", kind, id, title)
+		text := fmt.Sprintf("operator dismissed %s proposal %d: %s", d.Kind, d.ID, d.Title)
 		if thread != 0 {
 			text += fmt.Sprintf(" (thread %d)", thread)
 		}
-		return signal{text: text, thread: thread, marks: marks}, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	for _, sig := range dismissed {
-		if sig.text != "" {
-			out = append(out, sig)
-		}
+		out = append(out, signal{text: text, thread: thread, marks: marks})
 	}
 	return out, nil
 }
@@ -419,15 +405,7 @@ func proposalThread(ctx context.Context, q db.Querier, id int64) (int64, bool, e
 	if err != nil || found {
 		return thread, found, err
 	}
-	var payloadThread int64
-	err = q.QueryRowContext(ctx, "SELECT COALESCE(json_extract(payload, '$.thread_id'), 0) FROM proposals WHERE id = ? AND kind = 'permission'", id).Scan(&payloadThread)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, false, nil
-	}
-	if err != nil {
-		return 0, false, err
-	}
-	return payloadThread, payloadThread != 0, nil
+	return proposals.PayloadThread(ctx, q, id)
 }
 
 func threadOrigin(ctx context.Context, q db.Querier, threadID int64) (tool.Marks, bool, bool, error) {

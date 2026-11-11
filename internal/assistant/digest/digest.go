@@ -20,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/notify"
+	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/writes"
 )
@@ -231,7 +232,7 @@ func dreamingOf(ctx context.Context, q db.Querier, now float64) (dreaming, error
 	} else {
 		out.exportID = id
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM ops_findings WHERE resolved_at IS NULL").Scan(&out.opsFinding); err != nil {
+	if out.opsFinding, err = serverops.CountUnresolved(ctx, q); err != nil {
 		return out, err
 	}
 	return out, nil

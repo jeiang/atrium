@@ -23,6 +23,8 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
+	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/textsearch"
 	"github.com/jeiang/atrium/internal/web"
@@ -94,13 +96,13 @@ func (p *pages) about(ctx context.Context, ref string) *About {
 	a := About{Ref: kind + ":" + number}
 	switch kind {
 	case "mail":
-		err = p.deps.DB.Read.QueryRowContext(ctx, "SELECT COALESCE(subject, '') FROM messages WHERE id = ?", id).Scan(&a.Label)
+		a.Label, err = mail.Subject(ctx, p.deps.DB.Read, id)
 		a.Line = "About mail message " + number + "."
 	case "knowledge":
 		a.Label, err = kb.Title(ctx, p.deps.DB.Read, id)
 		a.Line = "About knowledge record " + number + "."
 	case "package":
-		err = p.deps.DB.Read.QueryRowContext(ctx, "SELECT CASE WHEN merchant <> '' THEN merchant WHEN carrier <> '' THEN carrier ELSE 'Package' END FROM packages WHERE id = ?", id).Scan(&a.Label)
+		a.Label, err = tracking.Label(ctx, p.deps.DB.Read, id)
 		a.Line = "About tracked package " + number + "."
 	case "file":
 		err = p.deps.DB.Read.QueryRowContext(ctx, "SELECT name, project_id FROM thread_files WHERE id = ? AND project_id IS NOT NULL", id).Scan(&a.Label, &a.Project)

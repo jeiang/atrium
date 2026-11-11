@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/writes"
 )
@@ -41,15 +42,11 @@ func undoDraftDelete(ctx context.Context, q db.Querier, raw json.RawMessage) (an
 	if err := json.Unmarshal(raw, &u); err != nil {
 		return nil, writes.UndoError("draft undo payload is invalid")
 	}
-	res, err := q.ExecContext(ctx, "DELETE FROM drafts WHERE id = ? AND status = 'draft'", u.ID)
+	changed, err := drafts.DeleteIfDraft(ctx, q, u.ID)
 	if err != nil {
 		return nil, err
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return nil, err
-	}
-	if n == 0 {
+	if !changed {
 		return nil, writes.UndoError("the draft was sent or discarded")
 	}
 	return map[string]any{"deleted": u.ID}, nil
@@ -61,17 +58,14 @@ func undoDraftRestore(ctx context.Context, q db.Querier, raw json.RawMessage) (a
 		return nil, writes.UndoError("draft undo payload is invalid")
 	}
 	now := float64(time.Now().UnixNano()) / 1e9
-	res, err := q.ExecContext(ctx,
-		"UPDATE drafts SET account = ?, to_addrs = ?, cc_addrs = ?, subject = ?, body = ?, in_reply_to_message_id = ?, in_reply_to = ?, refs = ?, updated_at = ? WHERE id = ? AND status = 'draft'",
-		u.Account, u.To, u.Cc, u.Subject, u.Body, u.InReplyToMessageID, u.InReplyTo, u.Refs, now, u.ID)
+	changed, err := drafts.RestoreDraft(ctx, q, drafts.Restore{
+		ID: u.ID, Account: u.Account, To: u.To, Cc: u.Cc, Subject: u.Subject, Body: u.Body,
+		InReplyToMessageID: u.InReplyToMessageID, InReplyTo: u.InReplyTo, Refs: u.Refs, UpdatedAt: now,
+	})
 	if err != nil {
 		return nil, err
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return nil, err
-	}
-	if n == 0 {
+	if !changed {
 		return nil, writes.UndoError("the draft was sent or discarded")
 	}
 	return map[string]any{"restored": u.ID}, nil

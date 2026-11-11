@@ -2,7 +2,6 @@ package mailtools
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/search"
 	"github.com/jeiang/atrium/internal/timex"
@@ -91,32 +91,12 @@ func embedder(tc *tool.Context) embed.TextsFunc {
 }
 
 func recipients(ctx context.Context, q db.Querier, ids []int64) (map[int64]any, error) {
-	list := make([]any, len(ids))
-	for i, id := range ids {
-		list[i] = id
-	}
-	encoded, err := json.Marshal(list)
+	raw, err := mail.Recipients(ctx, q, ids)
 	if err != nil {
 		return nil, err
 	}
-	rows, err := q.QueryContext(ctx, "SELECT id, to_addrs FROM messages WHERE id IN (SELECT value FROM json_each(?))", encoded)
-	if err != nil {
-		return nil, err
-	}
-	type row struct {
-		id int64
-		to sql.NullString
-	}
-	found, err := db.Collect(rows, func(r *sql.Rows) (row, error) {
-		var x row
-		return x, r.Scan(&x.id, &x.to)
-	})
-	if err != nil {
-		return nil, err
-	}
-	out := make(map[int64]any, len(found))
-	for _, r := range found {
-		text := r.to.String
+	out := make(map[int64]any, len(raw))
+	for id, text := range raw {
 		if text == "" {
 			text = "[]"
 		}
@@ -124,7 +104,7 @@ func recipients(ctx context.Context, q db.Querier, ids []int64) (map[int64]any, 
 		if err := json.Unmarshal([]byte(text), &v); err != nil {
 			return nil, tool.Error("invalid recipients JSON")
 		}
-		out[r.id] = v
+		out[id] = v
 	}
 	return out, nil
 }
