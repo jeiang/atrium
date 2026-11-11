@@ -12,11 +12,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/approval"
-	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -94,13 +93,15 @@ func Tools() []tool.Tool {
 	}
 }
 
-func RegisterUndoer(r *writes.Registry, env config.Env) {
-	r.Register(UndoTorrent, undoTorrent(env))
-	r.Register(UndoChannelDelete, undoChannelDelete)
-	r.Register(UndoChannelRestore, undoChannelRestore)
-}
-
 func qbitFailed(err error) error {
+	var conflict *ledger.Conflict
+	if errors.As(err, &conflict) {
+		return tool.Error("the torrent is blocked by an unresolved earlier add")
+	}
+	var status *media.QbitStatusError
+	if errors.As(err, &status) {
+		return tool.Error(status.Error())
+	}
 	return tool.Domain[media.QbitError, tool.Error](err)
 }
 
@@ -280,37 +281,19 @@ func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 	if err != nil {
 		return nil, err
 	}
-	qb, err := qbitOf(settings)
-	if err != nil {
-		return nil, err
-	}
 	tags := ""
 	if asMedia {
 		tags = media.TagMedia
 	}
-	id, err := writes.Begin(ctx, tc.DB.Write, writes.New{
-		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "media_add_magnet", Target: hash,
-	})
-	if err != nil {
-		return nil, err
-	}
-	if err := qb.AddMagnet(ctx, magnet, tags); err != nil {
-		_ = writes.Discard(ctx, tc.DB.Write, id)
+	if _, err := settings.Add(ctx, tc.Ledger, settings, media.AddRequest{Magnet: magnet, Tags: tags}); err != nil {
 		return nil, qbitFailed(err)
 	}
 	if asMedia {
-		if _, err := settings.SelectFiles(ctx, qb, nil); err != nil {
+		if _, err := settings.SelectFiles(ctx, tc.Ledger, settings, nil); err != nil {
 			return nil, qbitFailed(err)
 		}
 	}
-	if err := writes.Settle(ctx, tc.DB.Write, tc.Undoers, id, writes.New{
-		Target: hash,
-		After:  map[string]any{"magnet": magnet, "media": asMedia},
-		Undo:   torrentUndo{Op: UndoTorrent, Hash: hash},
-	}); err != nil {
-		return nil, err
-	}
-	return map[string]any{"hash": hash, "kind": kindOf(asMedia), "write_id": id}, nil
+	return map[string]any{"hash": hash, "kind": kindOf(asMedia)}, nil
 }
 
 func showFromTMDB(ctx context.Context, client *media.TMDB, tmdbID int64) (string, string, error) {
@@ -400,18 +383,20 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any
 		return nil, tool.Error("give imdb_id (tt1234567) or tmdb_id")
 	}
 	var row *media.Channel
-	var writeID int64
-	err = tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
+	effect, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
+		Origin: "media", Operation: "media_channel_add", OperationKey: "media_channel_add:" + ledger.NewKey(),
+		Target: "channel:new", ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		var err error
 		if row, err = settings.AddChannel(ctx, tx, name, imdb, pattern, caseSensitive, stored); err != nil {
-			return err
+			return ledger.Result{}, err
 		}
-		writeID, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
-			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "media_channel_add", Target: fmt.Sprintf("channel:%d", row.ID),
-			After: channelDict(*row),
-			Undo:  channelDeleteUndo{Op: UndoChannelDelete, ID: row.ID},
-		})
-		return err
+		return ledger.Result{
+			State:  ledger.Done,
+			Target: fmt.Sprintf("channel:%d", row.ID),
+			After:  jsonOf(channelDict(*row)),
+			Undo:   jsonOf(channelDeleteUndo{Op: UndoChannelDelete, ID: row.ID}),
+		}, nil
 	})
 	if err != nil {
 		var failure media.ChannelError
@@ -421,7 +406,7 @@ func mediaChannelAdd(ctx context.Context, tc *tool.Context, args tool.Args) (any
 		return nil, err
 	}
 	out := channelDict(*row)
-	out["write_id"] = writeID
+	out["effect_id"] = effect.ID
 	out["note"] = "The first poll only records current releases; later matches are added."
 	return out, nil
 }
@@ -433,19 +418,20 @@ func mediaChannelRemove(ctx context.Context, tc *tool.Context, args tool.Args) (
 		return nil, err
 	}
 	var row media.Channel
-	var writeID int64
-	err = tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
+	effect, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
+		Origin: "media", Operation: "media_channel_remove", OperationKey: "media_channel_remove:" + ledger.NewKey(),
+		Target: fmt.Sprintf("channel:%d", id), ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		var err error
 		if row, err = media.DeleteChannel(ctx, tx, id); err != nil {
-			return err
+			return ledger.Result{}, err
 		}
-		dict := channelDict(row)
-		writeID, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
-			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "media_channel_remove", Target: fmt.Sprintf("channel:%d", id),
-			Before: dict,
-			Undo:   channelRestoreUndo{Op: UndoChannelRestore, Row: channelUndoOf(row)},
-		})
-		return err
+		return ledger.Result{
+			State:  ledger.Done,
+			Target: fmt.Sprintf("channel:%d", id),
+			Before: jsonOf(channelDict(row)),
+			Undo:   jsonOf(channelRestoreUndo{Op: UndoChannelRestore, Row: channelUndoOf(row)}),
+		}, nil
 	})
 	if err != nil {
 		var failure media.ChannelError
@@ -454,5 +440,5 @@ func mediaChannelRemove(ctx context.Context, tc *tool.Context, args tool.Args) (
 		}
 		return nil, err
 	}
-	return map[string]any{"removed": id, "name": row.Name, "write_id": writeID}, nil
+	return map[string]any{"removed": id, "name": row.Name, "effect_id": effect.ID}, nil
 }

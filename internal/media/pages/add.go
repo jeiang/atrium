@@ -69,29 +69,26 @@ func (s *service) dlAddPost(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) dlAdd(r *http.Request, set media.Settings, magnet, name string, data []byte, present bool, tags string) (string, error) {
 	ctx := r.Context()
-	client, err := set.Qbit()
-	if err != nil {
-		return "", err
-	}
+	req := media.AddRequest{Magnet: magnet, Data: data, Tags: tags}
 	shown := "the magnet link"
 	if present {
 		file := strings.TrimSpace(name)
 		if file == "" {
 			file = "upload.torrent"
 		}
+		req.Name = file
 		shown = strings.TrimSpace(name)
 		if shown == "" {
 			shown = "the torrent"
 		}
-		err = client.AddFile(ctx, data, file, tags)
-	} else {
-		err = client.AddMagnet(ctx, magnet, tags)
 	}
-	if err == nil && tags != "" {
-		_, err = set.SelectFiles(ctx, client, nil)
-	}
-	if err != nil {
+	if _, err := set.Add(ctx, s.effects, set, req); err != nil {
 		return "", err
+	}
+	if tags != "" {
+		if _, err := set.SelectFiles(ctx, s.effects, set, nil); err != nil {
+			return "", err
+		}
 	}
 	return shown, nil
 }

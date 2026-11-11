@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -81,7 +82,8 @@ func bootstrap(ctx context.Context, cfgEnv config.Env, tools registry.Source, no
 		_ = d.Close()
 		return nil, nil, err
 	}
-	r, err := runner.New(tools, toolset.Ledger(d, func() float64 { return float64(time.Now().UnixNano()) / 1e9 }))
+	open := imapclient.Opener(cfg)
+	r, err := runner.New(tools, toolset.Ledger(d, cfgEnv, open, func() float64 { return float64(time.Now().UnixNano()) / 1e9 }), open)
 	if err != nil {
 		_ = d.Close()
 		return nil, nil, err

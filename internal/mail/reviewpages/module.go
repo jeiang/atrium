@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
@@ -23,11 +24,12 @@ import (
 	"github.com/jeiang/atrium/internal/proposals/handlers"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 //go:embed templates/*.gohtml
 var templates embed.FS
+
+var directOrigins = []string{"agent", "local", "calendar", "export", "tracking", "media", "notify"}
 
 const (
 	sourceMail     = "mail"
@@ -50,8 +52,8 @@ func RecoverDrafts(ctx context.Context, d *db.DB, cfg config.Config) error {
 }
 
 type Options struct {
-	Writes  *writes.Registry
-	Ledger  func(*db.DB) *ledger.Store
+	Clients func(config.Config) mail.OpenFunc
+	Ledger  func(*db.DB, config.Config) *ledger.Store
 	Enabled func(context.Context, db.Querier, string) (bool, error)
 }
 
@@ -60,7 +62,7 @@ type service struct {
 	now      func() float64
 	pipeline *proposals.Pipeline
 	live     *live.Live
-	writes   *writes.Registry
+	open     mail.OpenFunc
 	ledger   *ledger.Store
 	drafts   *drafts.Store
 	registry *proposals.Registry
@@ -71,6 +73,9 @@ func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
 		open := imapclient.Opener(d.Cfg)
+		if o.Clients != nil {
+			open = o.Clients(d.Cfg)
+		}
 		now := wallClock
 		registry := proposals.NewRegistry()
 		syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: now}
@@ -80,20 +85,16 @@ func Module(o Options) web.Module {
 			}
 			return d.ResumeRun(ctx, runID)
 		}})
-		undo := o.Writes
-		if undo == nil {
-			undo = writes.NewRegistry()
-		}
 		effects := ledger.NewStore(d.DB, now)
 		if o.Ledger != nil {
-			effects = o.Ledger(d.DB)
+			effects = o.Ledger(d.DB, d.Cfg)
 		}
 		s := &service{
 			deps:     d,
 			now:      now,
 			pipeline: &proposals.Pipeline{DB: d.DB, Registry: registry, Now: now, Enabled: o.Enabled},
 			live:     &live.Live{DB: d.DB, Cfg: d.Cfg, Registry: registry, Now: now},
-			writes:   undo,
+			open:     open,
 			ledger:   effects,
 			drafts:   &drafts.Store{DB: d.DB, Cfg: d.Cfg, Open: open, Now: now},
 			registry: registry,
@@ -120,8 +121,7 @@ func Module(o Options) web.Module {
 		r.Get("/activity/recent", s.recentActivity)
 		r.Post("/activity/mail/{action_id}/undo", s.undoMail)
 		r.Post("/activity/mail/{action_id}/resolve", s.resolveMail)
-		r.Post("/activity/write/{write_id}/undo", s.undoWrite)
-		r.Post("/activity/write/{write_id}/resolve", s.resolveWrite)
+
 		r.Post("/activity/effect/{effect_id}/undo", s.undoEffect)
 		r.Post("/activity/effect/{effect_id}/resolve", s.resolveEffect)
 

@@ -769,6 +769,10 @@ type effectRow struct {
 	legacy       string
 }
 
+const insertImportedEffect = "INSERT INTO effects (id, created_at, lease_at, token, origin, operation, operation_key, direction, undo_of, " +
+	"proposal_id, thread_id, run_id, account, message_id, digest, decision_id, src, dest, target, action_json, before_json, after_json, " +
+	"undo_json, state, settled_at, error) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+
 func (im *LegacyImporter) insertEffect(e effectRow) error {
 	token, err := newToken()
 	if err != nil {
@@ -778,8 +782,8 @@ func (im *LegacyImporter) insertEffect(e effectRow) error {
 	if e.state != Intent {
 		settled = e.createdAt
 	}
-	_, err = im.dst.ExecContext(im.ctx, insertEffect,
-		e.createdAt, e.leaseAt, token, e.origin, e.operation, e.operationKey, e.direction, e.undoOf,
+	_, err = im.dst.ExecContext(im.ctx, insertImportedEffect,
+		e.id, e.createdAt, e.leaseAt, token, e.origin, e.operation, e.operationKey, e.direction, e.undoOf,
 		e.proposalID, e.threadID, e.runID, nullText(e.account), e.messageID, e.digest, e.decisionID,
 		nullText(e.src), nullText(e.dest), e.target, actionText(json.RawMessage(e.action)), nullText(e.before),
 		nullText(e.after), nullText(e.undo), string(e.state), settled, nullText(e.error))

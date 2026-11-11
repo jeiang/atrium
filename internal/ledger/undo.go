@@ -32,10 +32,15 @@ func (s *Store) Undo(ctx context.Context, id int64, who Resolver) (Effect, error
 		return Effect{}, err
 	}
 	result, err := fn.External(ctx, payload)
+	settleCtx := context.WithoutCancel(ctx)
 	if err != nil {
+		var refused Refused
+		if errors.As(err, &refused) {
+			_ = s.Settle(settleCtx, ticket, Result{State: Failed, Error: err.Error()}, nil)
+			return Effect{}, err
+		}
 		result = Result{State: Unknown, Error: err.Error()}
 	}
-	settleCtx := context.WithoutCancel(ctx)
 	var finalize Mutation
 	if fn.Finalize != nil {
 		finalize = func(ctx context.Context, tx *sql.Tx) error {

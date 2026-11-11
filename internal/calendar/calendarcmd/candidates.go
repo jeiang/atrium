@@ -18,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 )
 
@@ -73,7 +74,8 @@ func candidatesCommand(env config.Env, tools registry.Source, now func() float64
 				if err := config.Boot(e.Ctx, env, d, cfg); err != nil {
 					return cli.Fail(e, err)
 				}
-				r, err := runner.New(tools, toolset.Ledger(d, now))
+				open := imapclient.Opener(cfg)
+				r, err := runner.New(tools, toolset.Ledger(d, env, open, now), open)
 				if err != nil {
 					return cli.Fail(e, err)
 				}

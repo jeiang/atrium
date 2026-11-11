@@ -52,7 +52,7 @@ func callables(jobs []map[string]worker.Callable) map[string]worker.Callable {
 	out[scheduler.DailyNudgesName] = worker.Callable{
 		Modules: []string{module.Assistant},
 		Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
-			_, err := digest.Run(ctx, e.Service, e.Now, attentionSources(ctx))
+			_, err := digest.Run(ctx, e.Service, e.Now, e.JobRunID, attentionSources(ctx))
 			return worker.Result{}, err
 		},
 	}

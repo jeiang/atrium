@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
 )
 
 const (
@@ -72,14 +73,20 @@ type Resolution struct {
 }
 
 type Filter struct {
-	Origin      string
-	Operation   string
-	ProposalID  *int64
-	ThreadID    *int64
-	RunID       *int64
-	BeforeID    int64
-	Limit       int
-	BlockedOnly bool
+	Origin           string
+	Origins          []string
+	Operation        string
+	OperationLike    []string
+	OperationNotLike []string
+	Target           string
+	ProposalID       *int64
+	ThreadID         *int64
+	RunID            *int64
+	BeforeID         int64
+	BeforeTS         float64
+	Since            float64
+	Limit            int
+	BlockedOnly      bool
 }
 
 type Mutation func(context.Context, *sql.Tx) error
@@ -91,11 +98,14 @@ type Undoer struct {
 	Finalize func(context.Context, *sql.Tx, json.RawMessage, Result) error
 }
 
+type ResolveHook func(context.Context, *sql.Tx, Effect, Resolution) error
+
 type Store struct {
-	DB      *db.DB
-	now     func() float64
-	mu      sync.RWMutex
-	undoers map[string]Undoer
+	DB       *db.DB
+	now      func() float64
+	mu       sync.RWMutex
+	undoers  map[string]Undoer
+	resolves map[string]ResolveHook
 }
 
 type Conflict struct{ Resource string }
@@ -120,7 +130,7 @@ func NewStore(d *db.DB, now func() float64) *Store {
 	if now == nil {
 		now = func() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 	}
-	return &Store{DB: d, now: now, undoers: map[string]Undoer{}}
+	return &Store{DB: d, now: now, undoers: map[string]Undoer{}, resolves: map[string]ResolveHook{}}
 }
 
 func (s *Store) Now() float64 { return s.now() }
@@ -142,6 +152,26 @@ func (s *Store) undoer(name string) (Undoer, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	fn, ok := s.undoers[name]
+	return fn, ok
+}
+
+func (s *Store) RegisterResolve(operation string, fn ResolveHook) error {
+	if strings.TrimSpace(operation) == "" {
+		return errors.New("ledger: resolve registration without an operation")
+	}
+	if fn == nil {
+		return errors.New("ledger: resolve registration without a hook")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.resolves[operation] = fn
+	return nil
+}
+
+func (s *Store) resolveHook(operation string) (ResolveHook, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	fn, ok := s.resolves[operation]
 	return fn, ok
 }
 
@@ -176,7 +206,7 @@ func (s *Store) Begin(ctx context.Context, n New, admit Mutation) (Ticket, error
 		res, err := tx.ExecContext(ctx, insertEffect,
 			now, now, token, n.Origin, n.Operation, n.OperationKey, "forward", nil,
 			n.ProposalID, n.ThreadID, n.RunID, n.Account, n.MessageID, n.Digest, n.DecisionID,
-			nullText(n.Src), nullText(n.Dest), n.Target, actionText(n.Action), rawText(n.Before), nil, rawText(n.Undo),
+			nullText(n.Src), nullText(n.Dest), n.Target, actionText(n.Action), scrubText(n.Before), nil, rawText(n.Undo),
 			string(Intent), nil, nil)
 		if err != nil {
 			return err
@@ -233,7 +263,7 @@ func (s *Store) Settle(ctx context.Context, t Ticket, r Result, local Mutation) 
 				"undo_json = COALESCE(?, undo_json), error = ? "+
 				"WHERE id = ? AND token = ? AND state = 'intent' "+
 				"AND NOT EXISTS (SELECT 1 FROM effect_resolutions r WHERE r.effect_id = effects.id)",
-			string(r.State), s.now(), nullText(r.Target), rawText(r.Before), rawText(r.After), rawText(r.Undo), nullText(r.Error), t.ID, t.Token)
+			string(r.State), s.now(), nullText(r.Target), scrubText(r.Before), scrubText(r.After), rawText(r.Undo), nullText(r.Error), t.ID, t.Token)
 		if err != nil {
 			return err
 		}
@@ -258,65 +288,86 @@ func (s *Store) ApplyLocal(ctx context.Context, n New, apply func(context.Contex
 	if err := ctx.Err(); err != nil {
 		return Effect{}, err
 	}
-	if err := validateNew(n); err != nil {
-		return Effect{}, err
-	}
-	if err := s.validateUndo(n.Undo); err != nil {
-		return Effect{}, err
-	}
-	token, err := newToken()
-	if err != nil {
-		return Effect{}, err
-	}
-	now := s.now()
 	var id int64
-	err = s.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		res, err := tx.ExecContext(ctx, insertEffect,
-			now, now, token, n.Origin, n.Operation, n.OperationKey, "forward", nil,
-			n.ProposalID, n.ThreadID, n.RunID, n.Account, n.MessageID, n.Digest, n.DecisionID,
-			nullText(n.Src), nullText(n.Dest), n.Target, actionText(n.Action), rawText(n.Before), nil, rawText(n.Undo),
-			string(Intent), nil, nil)
-		if err != nil {
-			return err
-		}
-		if id, err = res.LastInsertId(); err != nil {
-			return err
-		}
-		if err := claim(ctx, tx, id, n.Resources); err != nil {
-			return err
-		}
-		r, err := apply(ctx, tx)
-		if err != nil {
-			return err
-		}
-		if !r.State.Final() {
-			return fmt.Errorf("ledger: effect %d cannot settle as %q", id, r.State)
-		}
-		if err := s.validateUndo(r.Undo); err != nil {
-			return err
-		}
-		res, err = tx.ExecContext(ctx,
-			"UPDATE effects SET state = ?, settled_at = ?, target = COALESCE(?, target), "+
-				"before_json = COALESCE(?, before_json), after_json = COALESCE(?, after_json), "+
-				"undo_json = COALESCE(?, undo_json), error = ? "+
-				"WHERE id = ? AND token = ? AND state = 'intent'",
-			string(r.State), s.now(), nullText(r.Target), rawText(r.Before), rawText(r.After), rawText(r.Undo), nullText(r.Error), id, token)
-		if err != nil {
-			return err
-		}
-		n, err := res.RowsAffected()
-		if err != nil {
-			return err
-		}
-		if n == 0 {
-			return &SettledMeanwhile{ID: id}
-		}
-		return s.afterTransition(ctx, tx, id, "forward", r.State)
+	err := s.DB.WithTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		id, err = s.applyLocalTx(ctx, tx, n, apply)
+		return err
 	})
 	if err != nil {
 		return Effect{}, err
 	}
 	return s.Get(context.WithoutCancel(ctx), id)
+}
+
+func (s *Store) ApplyLocalTx(ctx context.Context, tx *sql.Tx, n New, apply func(context.Context, *sql.Tx) (Result, error)) (Effect, error) {
+	if err := ctx.Err(); err != nil {
+		return Effect{}, err
+	}
+	id, err := s.applyLocalTx(ctx, tx, n, apply)
+	if err != nil {
+		return Effect{}, err
+	}
+	return Effect{ID: id}, nil
+}
+
+func (s *Store) applyLocalTx(ctx context.Context, tx *sql.Tx, n New, apply func(context.Context, *sql.Tx) (Result, error)) (int64, error) {
+	if err := validateNew(n); err != nil {
+		return 0, err
+	}
+	if err := s.validateUndo(n.Undo); err != nil {
+		return 0, err
+	}
+	token, err := newToken()
+	if err != nil {
+		return 0, err
+	}
+	now := s.now()
+	res, err := tx.ExecContext(ctx, insertEffect,
+		now, now, token, n.Origin, n.Operation, n.OperationKey, "forward", nil,
+		n.ProposalID, n.ThreadID, n.RunID, n.Account, n.MessageID, n.Digest, n.DecisionID,
+		nullText(n.Src), nullText(n.Dest), n.Target, actionText(n.Action), scrubText(n.Before), nil, rawText(n.Undo),
+		string(Intent), nil, nil)
+	if err != nil {
+		return 0, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return 0, err
+	}
+	if err := claim(ctx, tx, id, n.Resources); err != nil {
+		return 0, err
+	}
+	r, err := apply(ctx, tx)
+	if err != nil {
+		return 0, err
+	}
+	if !r.State.Final() {
+		return 0, fmt.Errorf("ledger: effect %d cannot settle as %q", id, r.State)
+	}
+	if err := s.validateUndo(r.Undo); err != nil {
+		return 0, err
+	}
+	res, err = tx.ExecContext(ctx,
+		"UPDATE effects SET state = ?, settled_at = ?, target = COALESCE(?, target), "+
+			"before_json = COALESCE(?, before_json), after_json = COALESCE(?, after_json), "+
+			"undo_json = COALESCE(?, undo_json), error = ? "+
+			"WHERE id = ? AND token = ? AND state = 'intent'",
+		string(r.State), s.now(), nullText(r.Target), scrubText(r.Before), scrubText(r.After), rawText(r.Undo), nullText(r.Error), id, token)
+	if err != nil {
+		return 0, err
+	}
+	n2, err := res.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if n2 == 0 {
+		return 0, &SettledMeanwhile{ID: id}
+	}
+	if err := s.afterTransition(ctx, tx, id, "forward", r.State); err != nil {
+		return 0, err
+	}
+	return id, nil
 }
 
 func (s *Store) Recover(ctx context.Context, before float64) (int64, error) {
@@ -519,6 +570,13 @@ func rawText(v json.RawMessage) any {
 		return nil
 	}
 	return string(v)
+}
+
+func scrubText(v json.RawMessage) any {
+	if len(v) == 0 {
+		return nil
+	}
+	return logx.Scrub(string(v))
 }
 
 func actionText(v json.RawMessage) string {

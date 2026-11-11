@@ -3,12 +3,13 @@ package kb
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 func VisibleClause(alias string) string {
@@ -60,21 +61,33 @@ func CountRunMarked(ctx context.Context, q db.Querier, runIDs []int64) (int, err
 }
 
 func CountRunWrites(ctx context.Context, q db.Querier, runIDs []int64, toolName string, excludeSourceRuns bool) (int, error) {
-	marks, args := runArgs(runIDs)
-	if marks == "" {
+	targets, err := ledger.TargetsForRuns(ctx, q, runIDs, toolName)
+	if err != nil {
+		return 0, err
+	}
+	ids := make([]any, 0, len(targets))
+	for _, target := range targets {
+		var id int64
+		if _, err := fmt.Sscanf(target, "kb:%d", &id); err == nil {
+			ids = append(ids, id)
+		}
+	}
+	if len(ids) == 0 {
 		return 0, nil
 	}
-	query := "SELECT COUNT(*) FROM " + writes.FromClause("w") + " JOIN kb_records r ON w.target = 'kb:' || r.id WHERE w.run_id IN (" + marks + ") AND w.tool = ?"
-	args = append(args, toolName)
+	query := "SELECT COUNT(*) FROM kb_records r WHERE r.id IN (" + strings.TrimSuffix(strings.Repeat("?,", len(ids)), ",") + ")"
+	args := append([]any{}, ids...)
 	if excludeSourceRuns {
-		query += " AND r.id NOT IN (SELECT id FROM kb_records WHERE source_run_id IN (" + marks + "))"
-		for _, id := range runIDs {
-			args = append(args, id)
+		marks, runIDArgs := runArgs(runIDs)
+		if marks == "" {
+			return 0, nil
 		}
+		query += " AND r.id NOT IN (SELECT id FROM kb_records WHERE source_run_id IN (" + marks + "))"
+		args = append(args, runIDArgs...)
 	}
 	query += " AND " + VisibleClause("r")
 	var n int
-	err := q.QueryRowContext(ctx, query, args...).Scan(&n)
+	err = q.QueryRowContext(ctx, query, args...).Scan(&n)
 	return n, err
 }
 

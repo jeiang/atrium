@@ -193,7 +193,7 @@ S: {t} OK DELETE completed
 		t.Fatal(err)
 	}
 	defer func() { _ = d.Close() }()
-	rows, err := d.Read.Query("SELECT id, tool, state, after_json, undo_json FROM agent_writes ORDER BY id")
+	rows, err := d.Read.Query("SELECT id, operation, state, after_json, undo_json FROM effects WHERE direction = 'forward' ORDER BY id")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -217,7 +217,7 @@ S: {t} OK DELETE completed
 		_ = d.Read.QueryRow("SELECT body FROM tool_results ORDER BY result_id DESC LIMIT 1").Scan(&body)
 		t.Fatalf("writes = %v %v; last tool result = %s; stdout=%s stderr=%s", ids, tools, body, ran.stdout, ran.stderr)
 	}
-	if states[0] != "ok" || states[1] != "ok" {
+	if states[0] != "done" || states[1] != "done" {
 		t.Fatalf("write states = %v", states)
 	}
 	if !strings.Contains(undos[0], `"op":"mail_folder_delete"`) || !strings.Contains(undos[0], `"imap_name":"News"`) {
@@ -240,14 +240,14 @@ S: {t} OK DELETE completed
 		t.Fatalf("GET /activity = %d %s", status, body)
 	}
 	for _, id := range []int64{ids[1], ids[0]} {
-		status, body, _ := fetch(t, client, "POST", base+"/activity/write/"+strconv.FormatInt(id, 10)+"/undo", url.Values{})
+		status, body, _ := fetch(t, client, "POST", base+"/activity/effect/"+strconv.FormatInt(id, 10)+"/undo", url.Values{})
 		if status != http.StatusSeeOther {
 			t.Fatalf("undo write %d = %d %s", id, status, body)
 		}
 	}
 	for _, id := range ids {
-		var undone *float64
-		if err := d.Read.QueryRow("SELECT undone_at FROM agent_writes WHERE id = ?", id).Scan(&undone); err != nil {
+		var undone *int64
+		if err := d.Read.QueryRow("SELECT undone_by FROM effects WHERE id = ?", id).Scan(&undone); err != nil {
 			t.Fatal(err)
 		}
 		if undone == nil {
@@ -271,10 +271,10 @@ func TestMailFolderCreateShadowRecordsWithoutWrite(t *testing.T) {
 	}
 	defer func() { _ = d.Close() }()
 	var state, after, undo string
-	if err := d.Read.QueryRow("SELECT state, after_json, coalesce(undo_json, '') FROM agent_writes WHERE tool = 'mail_folder_create'").Scan(&state, &after, &undo); err != nil {
+	if err := d.Read.QueryRow("SELECT state, after_json, coalesce(undo_json, '') FROM effects WHERE operation = 'mail_folder_create' AND direction = 'forward'").Scan(&state, &after, &undo); err != nil {
 		t.Fatal(err)
 	}
-	if state != "ok" || !strings.Contains(after, `"shadow":true`) || undo != "" {
+	if state != "skipped" || !strings.Contains(after, `"shadow":true`) || undo != "" {
 		t.Fatalf("shadow write = %q %s %q", state, after, undo)
 	}
 }
@@ -300,7 +300,7 @@ func TestMailMoveRefusesProtectedFolder(t *testing.T) {
 		t.Fatalf("tool result = %s", body)
 	}
 	var n int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM agent_writes").Scan(&n); err != nil {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE direction = 'forward'").Scan(&n); err != nil {
 		t.Fatal(err)
 	}
 	if n != 0 {
@@ -366,7 +366,7 @@ S: {t} OK DELETE completed
 	}
 	defer func() { _ = d.Close() }()
 	var id int64
-	if err := d.Read.QueryRow("SELECT id FROM agent_writes WHERE tool = 'mail_folder_create'").Scan(&id); err != nil {
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'mail_folder_create' AND direction = 'forward'").Scan(&id); err != nil {
 		t.Fatal(err)
 	}
 	setEnv(t, settingEnv(mail.KeyMode), "shadow")
@@ -379,11 +379,11 @@ S: {t} OK DELETE completed
 	if status, body, _ := fetch(t, client, "GET", base+"/activity", nil); status != http.StatusOK {
 		t.Fatalf("GET /activity = %d %s", status, body)
 	}
-	if status, body, _ := fetch(t, client, "POST", base+"/activity/write/"+strconv.FormatInt(id, 10)+"/undo", url.Values{}); status != http.StatusSeeOther {
+	if status, body, _ := fetch(t, client, "POST", base+"/activity/effect/"+strconv.FormatInt(id, 10)+"/undo", url.Values{}); status != http.StatusSeeOther {
 		t.Fatalf("undo in shadow mode = %d %s", status, body)
 	}
-	var undone *float64
-	if err := d.Read.QueryRow("SELECT undone_at FROM agent_writes WHERE id = ?", id).Scan(&undone); err != nil {
+	var undone *int64
+	if err := d.Read.QueryRow("SELECT undone_by FROM effects WHERE id = ?", id).Scan(&undone); err != nil {
 		t.Fatal(err)
 	}
 	if undone == nil {

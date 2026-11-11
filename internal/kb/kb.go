@@ -10,8 +10,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -252,7 +252,7 @@ type WriteRow struct {
 }
 
 func History(ctx context.Context, q db.Querier, id int64) ([]WriteRow, error) {
-	found, err := writes.History(ctx, q, "kb:"+fmt.Sprint(id))
+	found, err := ledger.History(ctx, q, "kb:"+fmt.Sprint(id))
 	if err != nil {
 		return nil, err
 	}

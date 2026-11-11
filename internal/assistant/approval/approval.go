@@ -12,9 +12,9 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 type Payload struct {
@@ -65,12 +65,12 @@ func request(ctx context.Context, tc *tool.Context, name string, a *tool.Approva
 }
 
 type Executor struct {
-	DB      *db.DB
-	Env     config.Env
-	Now     func() float64
-	Undoers *writes.Registry
-	Ledger  *ledger.Store
-	Tools   []tool.Tool
+	DB       *db.DB
+	Env      config.Env
+	Now      func() float64
+	Ledger   *ledger.Store
+	MailOpen mail.OpenFunc
+	Tools    []tool.Tool
 }
 
 func (e *Executor) Register(r *proposals.Registry) {
@@ -102,37 +102,17 @@ func (e *Executor) execute(t tool.Tool) proposals.Executor {
 		if err := dec.Decode(&args); err != nil {
 			return nil, err
 		}
-		action := map[string]any{"tool": t.Name}
-		start := e.now()
-		held, err := proposals.BeginAction(ctx, e.DB.Write, p.ID, action, start)
-		if err != nil {
-			return nil, err
-		}
+		proposalID := p.ID
 		tc := &tool.Context{
 			DB: e.DB, Env: e.Env, Kind: payload.RunKind, ThreadID: payload.ThreadID, RunID: payload.RunID,
-			AllowedURLs: map[string]struct{}{}, Now: e.now, Undoers: e.Undoers, Ledger: e.Ledger,
+			ProposalID: &proposalID, AllowedURLs: map[string]struct{}{}, Now: e.now, Ledger: e.Ledger, MailOpen: e.MailOpen,
 		}
 		value, err := t.Approval.Apply(ctx, tc, args)
 		if err != nil {
-			text := err.Error()
-			unknown, qerr := writes.UnknownExists(context.WithoutCancel(ctx), e.DB.Write, payload.RunID, t.Name, start)
-			if qerr != nil {
-				return nil, qerr
-			}
 			message, refused := tool.Message(err)
-			state := ledger.Failed
-			if unknown || !refused {
-				state = ledger.Unknown
-			}
-			if settleErr := proposals.SettleAction(ctx, e.DB.Write, held, action, nil, state, &text, e.now()); settleErr != nil {
-				return nil, settleErr
-			}
 			if refused {
 				return nil, proposals.ProposalError(message)
 			}
-			return nil, err
-		}
-		if err := proposals.SettleAction(ctx, e.DB.Write, held, action, nil, ledger.OK, nil, e.now()); err != nil {
 			return nil, err
 		}
 		return map[string]any{"summary": t.Approval.Label + ": done", "result": value}, nil

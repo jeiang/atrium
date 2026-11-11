@@ -21,11 +21,12 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 //go:embed templates/*.gohtml
@@ -44,10 +45,10 @@ type Options struct {
 }
 
 type pages struct {
-	deps *web.Deps
-	svc  *service.Service
-	now  func() float64
-	reg  *writes.Registry
+	deps   *web.Deps
+	svc    *service.Service
+	now    func() float64
+	ledger *ledger.Store
 }
 
 const (
@@ -59,7 +60,8 @@ const (
 
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
-		run, err := runner.New(o.Tools, toolset.Ledger(d.DB, assistant.Now))
+		open := imapclient.Opener(d.Cfg)
+		run, err := runner.New(o.Tools, toolset.Ledger(d.DB, d.Env, open, assistant.Now), open)
 		if err != nil {
 			panic(err)
 		}
@@ -86,7 +88,7 @@ func Module(o Options) web.Module {
 		if d.OnClose != nil {
 			d.OnClose(shutdown)
 		}
-		p := &pages{deps: d, svc: svc, now: assistant.Now, reg: toolset.Undoers(d.Env)}
+		p := &pages{deps: d, svc: svc, now: assistant.Now, ledger: run.Ledger}
 		d.OnFrame(p.sidebar)
 		tz := config.From(base).TZName(d.Env)
 		stamp := assistant.Now()

@@ -7,18 +7,17 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/subagents/lookup"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
 	"github.com/jeiang/atrium/internal/assistant/subagents/websearch"
-	"github.com/jeiang/atrium/internal/assistant/toolset"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail"
 )
 
-func New(tools registry.Source, store *ledger.Store) (*loop.Runner, error) {
+func New(tools registry.Source, store *ledger.Store, open mail.OpenFunc) (*loop.Runner, error) {
 	reg, err := tools()
 	if err != nil {
 		return nil, err
 	}
-	r := &loop.Runner{Registry: reg, Undoers: toolset.Undoers(config.OS), Ledger: store, Profile: kb.ProfileBlock}
+	r := &loop.Runner{Registry: reg, Ledger: store, MailOpen: open, Profile: kb.ProfileBlock}
 	rs := research.New(r)
 	if err := rs.Install(reg); err != nil {
 		return nil, err

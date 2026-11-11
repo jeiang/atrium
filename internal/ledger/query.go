@@ -165,9 +165,35 @@ func (s *Store) List(ctx context.Context, f Filter) ([]Effect, error) {
 		where = append(where, "e.origin = ?")
 		args = append(args, f.Origin)
 	}
+	if len(f.Origins) > 0 {
+		where = append(where, "e.origin IN ("+placeholders(len(f.Origins))+")")
+		for _, origin := range f.Origins {
+			args = append(args, origin)
+		}
+	}
 	if f.Operation != "" {
 		where = append(where, "e.operation = ?")
 		args = append(args, f.Operation)
+	}
+	if len(f.OperationLike) > 0 {
+		likes := make([]string, len(f.OperationLike))
+		for i, pattern := range f.OperationLike {
+			likes[i] = "e.operation LIKE ?"
+			args = append(args, pattern)
+		}
+		where = append(where, "("+strings.Join(likes, " OR ")+")")
+	}
+	for _, pattern := range f.OperationNotLike {
+		where = append(where, "e.operation NOT LIKE ?")
+		args = append(args, pattern)
+	}
+	if f.Target != "" {
+		where = append(where, "e.target = ?")
+		args = append(args, f.Target)
+	}
+	if f.Since > 0 {
+		where = append(where, "e.created_at >= ?")
+		args = append(args, f.Since)
 	}
 	if f.ProposalID != nil {
 		where = append(where, "e.proposal_id = ?")
@@ -184,6 +210,15 @@ func (s *Store) List(ctx context.Context, f Filter) ([]Effect, error) {
 	if f.BeforeID > 0 {
 		where = append(where, "e.id < ?")
 		args = append(args, f.BeforeID)
+	}
+	if f.BeforeTS > 0 {
+		if f.BeforeID > 0 {
+			where = append(where, "(e.created_at < ? OR (e.created_at = ? AND e.id < ?))")
+			args = append(args, f.BeforeTS, f.BeforeTS, f.BeforeID)
+		} else {
+			where = append(where, "e.created_at < ?")
+			args = append(args, f.BeforeTS)
+		}
 	}
 	if f.BlockedOnly {
 		where = append(where, "e.state IN ('intent','unknown','partial') AND r.id IS NULL")
@@ -258,6 +293,140 @@ func ThreadsForTargets(ctx context.Context, q db.Querier, targets []string) ([]i
 		var id int64
 		return id, r.Scan(&id)
 	})
+}
+
+func CountForRuns(ctx context.Context, q db.Querier, runIDs []int64, operation string) (int, error) {
+	if len(runIDs) == 0 {
+		return 0, nil
+	}
+	args := make([]any, len(runIDs))
+	for i, id := range runIDs {
+		args[i] = id
+	}
+	args = append(args, operation)
+	var n int
+	err := q.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM effects WHERE direction = 'forward' AND run_id IN ("+placeholders(len(runIDs))+") AND operation = ?",
+		args...).Scan(&n)
+	return n, err
+}
+
+func TargetsForRuns(ctx context.Context, q db.Querier, runIDs []int64, operation string) ([]string, error) {
+	if len(runIDs) == 0 {
+		return nil, nil
+	}
+	args := make([]any, len(runIDs))
+	for i, id := range runIDs {
+		args[i] = id
+	}
+	args = append(args, operation)
+	rows, err := q.QueryContext(ctx,
+		"SELECT DISTINCT target FROM effects WHERE direction = 'forward' AND run_id IN ("+placeholders(len(runIDs))+") AND operation = ?",
+		args...)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (string, error) {
+		var target string
+		return target, r.Scan(&target)
+	})
+}
+
+func TargetsLike(ctx context.Context, q db.Querier, like, excludeOperation string) ([]string, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT DISTINCT target FROM effects WHERE direction = 'forward' AND target LIKE ? AND operation != ?", like, excludeOperation)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (string, error) {
+		var target string
+		return target, r.Scan(&target)
+	})
+}
+
+func BlockedTarget(ctx context.Context, q db.Querier, prefix string) (int64, error) {
+	var id int64
+	err := q.QueryRowContext(ctx,
+		"SELECT id FROM effects e WHERE e.direction = 'forward' AND e.state IN ('intent','unknown','partial') "+
+			"AND substr(e.target, 1, length(?)) = ? "+
+			"AND NOT EXISTS (SELECT 1 FROM effect_resolutions r WHERE r.effect_id = e.id AND r.effective_outcome IS NOT NULL) "+
+			"ORDER BY e.id LIMIT 1", prefix, prefix).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return id, err
+}
+
+func BlockedCount(ctx context.Context, q db.Querier, operation, target string) (int, error) {
+	var n int
+	err := q.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM effects e WHERE e.direction = 'forward' AND e.operation = ? AND e.target = ? "+
+			"AND e.state IN ('intent','unknown','partial') "+
+			"AND NOT EXISTS (SELECT 1 FROM effect_resolutions r WHERE r.effect_id = e.id AND r.effective_outcome IS NOT NULL)",
+		operation, target).Scan(&n)
+	return n, err
+}
+
+func CountSince(ctx context.Context, q db.Querier, operation string, since float64) (int, error) {
+	var n int
+	err := q.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM effects WHERE direction = 'forward' AND operation = ? AND created_at >= ?", operation, since).Scan(&n)
+	return n, err
+}
+
+type HistoryRow struct {
+	ID       int64
+	TS       float64
+	Tool     string
+	UndoneAt *float64
+}
+
+func History(ctx context.Context, q db.Querier, target string) ([]HistoryRow, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT e.id, e.created_at, e.operation, (SELECT u.settled_at FROM effects u WHERE u.id = e.undone_by) "+
+			"FROM effects e WHERE e.direction = 'forward' AND e.target = ? ORDER BY e.id DESC", target)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (HistoryRow, error) {
+		var h HistoryRow
+		var undone sql.NullFloat64
+		if err := r.Scan(&h.ID, &h.TS, &h.Tool, &undone); err != nil {
+			return h, err
+		}
+		if undone.Valid {
+			h.UndoneAt = &undone.Float64
+		}
+		return h, nil
+	})
+}
+
+type UndoneEffect struct {
+	Operation string
+	Target    string
+	ThreadID  int64
+}
+
+func UndoneSince(ctx context.Context, q db.Querier, from float64, limit int) ([]UndoneEffect, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT e.operation, e.target, COALESCE(e.thread_id, 0) FROM effects e "+
+			"JOIN effects u ON u.id = e.undone_by "+
+			"WHERE u.settled_at >= ? ORDER BY e.id DESC LIMIT ?", from, limit)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (UndoneEffect, error) {
+		var u UndoneEffect
+		err := r.Scan(&u.Operation, &u.Target, &u.ThreadID)
+		return u, err
+	})
+}
+
+func PurgeTarget(ctx context.Context, q db.Querier, target string) error {
+	_, err := q.ExecContext(ctx,
+		"UPDATE effects SET before_json = '{\"purged\":true}', after_json = '{\"purged\":true}', undo_json = '{\"purged\":true}' "+
+			"WHERE target = ? AND state <> 'intent'", target)
+	return err
 }
 
 func placeholders(n int) string {

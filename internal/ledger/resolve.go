@@ -3,6 +3,7 @@ package ledger
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -90,6 +91,11 @@ func (s *Store) Resolve(ctx context.Context, id int64, r Resolution, who Resolve
 				return err
 			}
 		}
+		if hook, ok := s.resolveHook(e.Operation); ok {
+			if err := hook(ctx, tx, e, r); err != nil {
+				return err
+			}
+		}
 		switch e.Direction {
 		case "forward":
 			switch effective {
@@ -112,6 +118,14 @@ func (s *Store) Resolve(ctx context.Context, id int64, r Resolution, who Resolve
 		return Effect{}, err
 	}
 	return s.Get(context.WithoutCancel(ctx), id)
+}
+
+func (s *Store) SetUndo(ctx context.Context, tx *sql.Tx, id int64, undo json.RawMessage) error {
+	if err := s.validateUndo(undo); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, "UPDATE effects SET undo_json = ? WHERE id = ?", string(undo), id)
+	return err
 }
 
 func effectiveOutcome(direction, outcome string) (string, bool) {

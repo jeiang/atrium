@@ -116,7 +116,7 @@ func TestKnowledgePurgeIsAdministratorOnly(t *testing.T) {
 	if err := s.db.Read.QueryRow("SELECT id FROM kb_records WHERE title = 'Old note'").Scan(&id); err != nil {
 		t.Fatal(err)
 	}
-	s.exec("INSERT INTO agent_writes (ts, tool, target, before_json, after_json, undo_json) VALUES (1, 'kb_write', ?, '{\"body\":\"secret text\"}', '{\"body\":\"secret text\"}', '{\"op\":\"kb_restore\"}')", "kb:"+strconv.FormatInt(id, 10))
+	s.exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, target, action_json, before_json, after_json, undo_json, state, settled_at) VALUES (1, 1, 'legacy-test', 'local', 'kb_write', 'legacy-test', 'forward', ?, '{}', '{\"body\":\"secret text\"}', '{\"body\":\"secret text\"}', '{\"op\":\"kb_restore\"}', 'done', 1)", "kb:"+strconv.FormatInt(id, 10))
 
 	member := s.browser()
 	member.mustSignIn("member")
@@ -135,10 +135,10 @@ func TestKnowledgePurgeIsAdministratorOnly(t *testing.T) {
 	if n := s.count("SELECT COUNT(*) FROM kb_records WHERE id = ?", id); n != 0 {
 		t.Fatal("purge left the record")
 	}
-	if n := s.count("SELECT COUNT(*) FROM agent_writes WHERE target = ? AND before_json = '{\"purged\":true}'", "kb:"+strconv.FormatInt(id, 10)); n != 1 {
+	if n := s.count("SELECT COUNT(*) FROM effects WHERE target = ? AND before_json = '{\"purged\":true}'", "kb:"+strconv.FormatInt(id, 10)); n != 1 {
 		t.Fatalf("purge blanked %d earlier snapshots, want 1", n)
 	}
-	if n := s.count("SELECT COUNT(*) FROM agent_writes WHERE tool = 'kb_purge' AND target = ?", "kb:"+strconv.FormatInt(id, 10)); n != 1 {
+	if n := s.count("SELECT COUNT(*) FROM effects WHERE operation = 'kb_purge' AND target = ?", "kb:"+strconv.FormatInt(id, 10)); n != 1 {
 		t.Fatalf("purge rows = %d, want one contentless kb_purge row", n)
 	}
 	activity := admin.get("/activity")

@@ -33,11 +33,14 @@ type exportPage struct {
 }
 
 type exportNotion struct {
-	mu       sync.Mutex
-	pages    map[string]*exportPage
-	order    []string
-	requests []string
-	failNext bool
+	mu           sync.Mutex
+	pages        map[string]*exportPage
+	order        []string
+	requests     []string
+	failNext     bool
+	failCreate   int
+	failMarkdown int
+	dropCreate   bool
 }
 
 func (f *exportNotion) created() []*exportPage {
@@ -48,6 +51,15 @@ func (f *exportNotion) created() []*exportPage {
 		out = append(out, f.pages[id])
 	}
 	return out
+}
+
+func (f *exportNotion) first() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.order) == 0 {
+		return ""
+	}
+	return f.order[0]
 }
 
 func (f *exportNotion) byTitle(title string) *exportPage {
@@ -106,6 +118,10 @@ func (f *exportNotion) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			Markdown string `json:"markdown"`
 		}
 		_ = json.NewDecoder(r.Body).Decode(&body)
+		if f.failCreate != 0 {
+			reply(f.failCreate, map[string]any{"object": "error", "status": f.failCreate, "code": "internal_error", "message": "unavailable"})
+			return
+		}
 		if f.failNext {
 			f.failNext = false
 			if hijacker, ok := w.(http.Hijacker); ok {
@@ -118,6 +134,15 @@ func (f *exportNotion) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		id := fmt.Sprintf("00000000-0000-0000-0000-%012d", len(f.order)+1)
 		f.pages[id] = &exportPage{parent: body.Parent.PageID, title: exportTitle(body.Properties.Title), markdown: body.Markdown}
 		f.order = append(f.order, id)
+		if f.dropCreate {
+			f.dropCreate = false
+			if hijacker, ok := w.(http.Hijacker); ok {
+				if conn, _, err := hijacker.Hijack(); err == nil {
+					_ = conn.Close()
+					return
+				}
+			}
+		}
 		reply(http.StatusOK, map[string]any{"object": "page", "id": id, "url": "https://notion.invalid/" + id, "in_trash": false,
 			"parent": map[string]any{"type": "page_id", "page_id": body.Parent.PageID}, "properties": map[string]any{}})
 	case strings.HasPrefix(r.URL.Path, "/v1/pages/"):
@@ -128,6 +153,12 @@ func (f *exportNotion) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		if sub == "markdown" && r.Method == http.MethodPatch {
+			if f.failMarkdown != 0 {
+				status := f.failMarkdown
+				f.failMarkdown = 0
+				reply(status, map[string]any{"object": "error", "status": status, "code": "validation_error", "message": "content refused"})
+				return
+			}
 			var body struct {
 				Replace struct {
 					NewStr string `json:"new_str"`
@@ -707,7 +738,7 @@ func TestUnknownNotionWriteBlocksTheExport(t *testing.T) {
 	fake.failNext = true
 	runExport(t, f, d)
 	var writeID int64
-	if err := d.Read.QueryRow("SELECT id FROM agent_writes WHERE state = 'unknown' AND target LIKE 'export:notion:%'").Scan(&writeID); err != nil {
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE direction = 'forward' AND state = 'unknown' AND target LIKE 'export:notion:%'").Scan(&writeID); err != nil {
 		t.Fatalf("unknown write after a dropped connection: %v", err)
 	}
 	var status, text string
@@ -722,8 +753,8 @@ func TestUnknownNotionWriteBlocksTheExport(t *testing.T) {
 	if fake.count() != requests {
 		t.Errorf("a blocked run made %d Notion requests", fake.count()-requests)
 	}
-	if ran := runApp(t, "writes", "resolve", fmt.Sprint(writeID)); ran.code != cli.ExitOK {
-		t.Fatalf("writes resolve: %d %s", ran.code, ran.stderr)
+	if ran := runApp(t, "effects", "resolve", fmt.Sprint(writeID), "--outcome", "not-applied"); ran.code != cli.ExitOK {
+		t.Fatalf("effects resolve: %d %s", ran.code, ran.stderr)
 	}
 	runExport(t, f, d)
 	if fake.byTitle("Dentist") == nil {
@@ -926,5 +957,161 @@ func TestKnowledgeExportsToAnObsidianFolder(t *testing.T) {
 		if _, err := os.Stat(blockedPath); err != nil {
 			t.Errorf("the export did not resume after the write failed: %v", err)
 		}
+	}
+}
+
+func countRequests(fake *exportNotion, want string) int {
+	fake.mu.Lock()
+	defer fake.mu.Unlock()
+	n := 0
+	for _, r := range fake.requests {
+		if r == want {
+			n++
+		}
+	}
+	return n
+}
+
+func TestNotionExportKeepsATitleSuccessWhenContentFails(t *testing.T) {
+	fake := &exportNotion{}
+	_, f, d := exportFixture(t, fake)
+	exportEnable(t, "messages,personal")
+	id := exportRecord(t, d, "Dentist", "first body", "personal", "chat", 0, 0, 0, 0, 0)
+	runExport(t, f, d)
+	page := fake.byTitle("Dentist")
+	if page == nil {
+		t.Fatal("the first export created no page")
+	}
+	pageID := fake.first()
+	if _, err := d.Write.Exec("UPDATE kb_records SET title = 'Dentist visit', body = 'second body', updated_at = 300 WHERE id = ?", id); err != nil {
+		t.Fatal(err)
+	}
+	fake.failMarkdown = 400
+	runExport(t, f, d)
+	var titleState, contentState string
+	if err := d.Read.QueryRow("SELECT state FROM effects WHERE operation = 'kb_export_title' ORDER BY id DESC LIMIT 1").Scan(&titleState); err != nil {
+		t.Fatalf("title effect: %v", err)
+	}
+	if err := d.Read.QueryRow("SELECT state FROM effects WHERE operation = 'kb_export_content' ORDER BY id DESC LIMIT 1").Scan(&contentState); err != nil {
+		t.Fatalf("content effect: %v", err)
+	}
+	if titleState != "done" || contentState != "failed" {
+		t.Fatalf("title/content states = %s/%s, want done/failed", titleState, contentState)
+	}
+	if page.title != "Dentist visit" || !strings.Contains(page.markdown, "first body") {
+		t.Fatalf("page after the content refusal = %q %q", page.title, page.markdown)
+	}
+	titlePatches := countRequests(fake, "PATCH /v1/pages/"+pageID)
+	runExport(t, f, d)
+	if got := countRequests(fake, "PATCH /v1/pages/"+pageID); got != titlePatches {
+		t.Errorf("the retry patched the title again (%d -> %d)", titlePatches, got)
+	}
+	if !strings.Contains(page.markdown, "second body") {
+		t.Errorf("the retry did not write the content: %q", page.markdown)
+	}
+}
+
+func TestNotionMutationIsNotRetriedAfterAServerError(t *testing.T) {
+	fake := &exportNotion{failCreate: 503}
+	_, f, d := exportFixture(t, fake)
+	exportEnable(t, "messages,personal")
+	exportRecord(t, d, "Dentist", "body", "personal", "chat", 0, 0, 0, 0, 0)
+	runExport(t, f, d)
+	if got := countRequests(fake, "POST /v1/pages"); got != 1 {
+		t.Fatalf("the create was attempted %d times, want 1", got)
+	}
+	var state string
+	if err := d.Read.QueryRow("SELECT state FROM effects WHERE operation = 'kb_export_create' ORDER BY id DESC LIMIT 1").Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if state != "unknown" {
+		t.Fatalf("a 503 create settled as %s, want unknown", state)
+	}
+}
+
+func TestNotionCreateResolutionVerifiesThePageAndUpdatesTheMapping(t *testing.T) {
+	fake := &exportNotion{dropCreate: true}
+	_, f, d := exportFixture(t, fake)
+	exportEnable(t, "messages,personal")
+	id := exportRecord(t, d, "Dentist", "body", "personal", "chat", 0, 0, 0, 0, 0)
+	runExport(t, f, d)
+	var effectID int64
+	var action string
+	if err := d.Read.QueryRow("SELECT id, action_json FROM effects WHERE operation = 'kb_export_create' AND state = 'unknown' ORDER BY id DESC LIMIT 1").
+		Scan(&effectID, &action); err != nil {
+		t.Fatalf("unknown create: %v", err)
+	}
+	var payload struct {
+		Hash string `json:"hash"`
+	}
+	if err := json.Unmarshal([]byte(action), &payload); err != nil || payload.Hash == "" {
+		t.Fatalf("create action = %q, %v", action, err)
+	}
+	pageID := fake.first()
+	evidence := fmt.Sprintf(`{"page_id":%q,"hash":%q}`, pageID, payload.Hash)
+	if ran := runApp(t, "effects", "resolve", fmt.Sprint(effectID), "--outcome", "applied", "--evidence", evidence); ran.code != cli.ExitOK {
+		t.Fatalf("resolve: %d %s", ran.code, ran.stderr)
+	}
+	var remote string
+	if err := d.Read.QueryRow("SELECT remote_id FROM export_pages WHERE target = 'notion' AND record_id = ?", id).Scan(&remote); err != nil {
+		t.Fatalf("mapping after the resolution: %v", err)
+	}
+	if remote != pageID {
+		t.Fatalf("mapping remote id = %q, want %q", remote, pageID)
+	}
+	requests := fake.count()
+	runExport(t, f, d)
+	if fake.count() == requests {
+		t.Errorf("the export made no request after the create was resolved")
+	}
+	created := fake.created()
+	dentists := 0
+	for _, page := range created {
+		if page.title == "Dentist" {
+			dentists++
+		}
+	}
+	if dentists != 1 {
+		t.Errorf("the resolution created %d Dentist pages, want 1", dentists)
+	}
+	if len(created) != 2 {
+		t.Errorf("%d pages after the resolution, want the record and the index", len(created))
+	}
+}
+
+func TestInterruptedObsidianWriteBlocksTheExport(t *testing.T) {
+	_, f, d := obsidianFixture(t)
+	vault := t.TempDir()
+	obsidianEnable(t, vault)
+	id := exportRecord(t, d, "Dentist", "body", "personal", "chat", 0, 0, 0, 0, 0)
+	now := float64(time.Now().Unix())
+	res, err := d.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, target, action_json, state) "+
+		"VALUES (?, ?, 'stale', 'export', 'obsidian_write', 'stale', 'forward', ?, '{}', 'intent')",
+		now-3600, now-3600, "obsidian:personal/dentist-K"+fmt.Sprint(id)+".md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	effectID, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	runExport(t, f, d)
+	var status, text string
+	if err := d.Read.QueryRow("SELECT status, COALESCE(error, '') FROM job_runs ORDER BY id DESC LIMIT 1").Scan(&status, &text); err != nil {
+		t.Fatal(err)
+	}
+	if status != "error" || !strings.Contains(text, fmt.Sprint(effectID)) {
+		t.Fatalf("job run = %s %q, want an error naming write %d", status, text, effectID)
+	}
+	path := filepath.Join(vault, "personal", "dentist-K"+fmt.Sprint(id)+".md")
+	if _, err := os.Stat(path); !os.IsNotExist(err) {
+		t.Fatalf("a blocked export wrote the file: %v", err)
+	}
+	if ran := runApp(t, "effects", "resolve", fmt.Sprint(effectID), "--outcome", "not-applied"); ran.code != cli.ExitOK {
+		t.Fatalf("effects resolve: %d %s", ran.code, ran.stderr)
+	}
+	runExport(t, f, d)
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("the export did not resume after the write was resolved: %v", err)
 	}
 }

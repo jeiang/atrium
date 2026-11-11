@@ -198,7 +198,8 @@ func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
 	if wanted != 0 {
 		priority = media.PriorityNormal
 	}
-	client, err := s.settings(ctx).Qbit()
+	set := s.settings(ctx)
+	client, err := set.Qbit()
 	if err == nil {
 		var found *media.Torrent
 		if found, err = client.Torrent(ctx, hash); err == nil && (found == nil || !found.HasTag(media.TagMedia)) {
@@ -207,7 +208,7 @@ func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if err == nil {
-		err = client.SetPriority(ctx, hash, []int{int(index)}, priority)
+		err = set.SetPriority(ctx, s.effects, set, hash, []int{int(index)}, priority)
 	}
 	if err != nil {
 		text, kind := mustClassify(err)
@@ -223,7 +224,7 @@ func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
 func (s *service) dlFilePost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	form := dlLastValues(web.FormValues(r))
-	set, client, root, item, err := s.dlFind(ctx, form["id"])
+	set, _, root, item, err := s.dlFind(ctx, form["id"])
 	if err != nil {
 		text, _ := mustClassify(err)
 		s.dlDownloads(w, r, &tpl.Toast{Category: "error", Title: "Not filed", Description: text}, http.StatusUnprocessableEntity, nil)
@@ -241,7 +242,7 @@ func (s *service) dlFilePost(w http.ResponseWriter, r *http.Request) {
 		s.dlDownloads(w, r, nil, http.StatusOK, &view)
 		return
 	}
-	if err := set.Apply(ctx, client, item, ops, root); err != nil {
+	if err := set.Apply(ctx, s.effects, set, item, ops, root); err != nil {
 		view.Error = err.Error()
 		s.dlDownloads(w, r, nil, http.StatusBadGateway, &view)
 		return
@@ -274,9 +275,9 @@ func (s *service) dlIgnorePost(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, web.Missing("body", "id"))
 		return
 	}
-	_, client, _, item, err := s.dlFind(r.Context(), id)
+	set, _, _, item, err := s.dlFind(r.Context(), id)
 	if err == nil {
-		err = media.Ignore(r.Context(), client, item)
+		err = media.Ignore(r.Context(), s.effects, set, item)
 	}
 	if err != nil {
 		text, _ := mustClassify(err)

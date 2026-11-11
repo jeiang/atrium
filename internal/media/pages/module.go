@@ -10,6 +10,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
@@ -31,9 +32,10 @@ type Options struct {
 }
 
 type service struct {
-	deps  *web.Deps
-	now   func() float64
-	links *media.Links
+	deps    *web.Deps
+	now     func() float64
+	links   *media.Links
+	effects *ledger.Store
 }
 
 func (s *service) settings(ctx context.Context) media.Settings {
@@ -58,7 +60,11 @@ func Module(o Options) web.Module {
 		if now == nil {
 			now = media.Now
 		}
-		s := &service{deps: d, now: now, links: media.NewLinks(d.Settings, d.DB, d.Cfg.MediaLinkKeyPath())}
+		effects := ledger.NewStore(d.DB, now)
+		if err := media.RegisterLedgerUndoer(effects, d.Env); err != nil {
+			panic(err)
+		}
+		s := &service{deps: d, now: now, links: media.NewLinks(d.Settings, d.DB, d.Cfg.MediaLinkKeyPath()), effects: effects}
 		s.registerDownloads(r)
 		s.registerChannels(r)
 		s.registerLibrary(r)

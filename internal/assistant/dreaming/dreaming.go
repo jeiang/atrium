@@ -19,10 +19,10 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/kb"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/timex"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const daySeconds = 86400
@@ -339,38 +339,22 @@ func signals(ctx context.Context, q db.Querier, from float64) ([]signal, error) 
 			out = append(out, sig)
 		}
 	}
-	rows, err = q.QueryContext(ctx,
-		"SELECT w.tool, w.target, COALESCE(w.thread_id, 0) FROM "+writes.FromClause("w")+
-			" LEFT JOIN threads t ON t.id = w.thread_id LEFT JOIN projects p ON p.id = t.project_id "+
-			"WHERE w.undone_at >= ? AND (w.thread_id IS NULL OR t.project_id IS NULL OR p.private = 0) ORDER BY w.id DESC LIMIT 10", from)
+	undone, err := ledger.UndoneSince(ctx, q, from, 10)
 	if err != nil {
 		return nil, err
 	}
-	undone, err := db.Collect(rows, func(r *sql.Rows) (signal, error) {
-		var toolName, target string
-		var thread int64
-		if err := r.Scan(&toolName, &target, &thread); err != nil {
-			return signal{}, err
-		}
+	for _, u := range undone {
 		marks := tool.Untrusted
-		if thread != 0 {
-			foundMarks, private, found, err := threadOrigin(ctx, q, thread)
+		if u.ThreadID != 0 {
+			foundMarks, private, found, err := threadOrigin(ctx, q, u.ThreadID)
 			if err != nil || private {
-				return signal{}, err
+				return nil, err
 			}
 			if found {
 				marks = foundMarks
 			}
 		}
-		return signal{text: fmt.Sprintf("operator undid %s on %s (thread %d)", toolName, target, thread), thread: thread, marks: marks}, nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	for _, sig := range undone {
-		if sig.text != "" {
-			out = append(out, sig)
-		}
+		out = append(out, signal{text: fmt.Sprintf("operator undid %s on %s (thread %d)", u.Operation, u.Target, u.ThreadID), thread: u.ThreadID, marks: marks})
 	}
 	dismissed, err := proposals.DismissedSince(ctx, q, from, 10)
 	if err != nil {
