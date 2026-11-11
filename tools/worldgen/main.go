@@ -23,7 +23,7 @@ type notionVector struct {
 }
 
 var seededTables = map[string]bool{
-	"schema_migrations": true, "module_migrations": true, "db_key_history": true, "secrets": true,
+	"schema_migrations": true, "db_key_history": true, "secrets": true,
 	"settings_audit": true, "write_resolutions": true, "pass_runs": true, "pass_run_alerts": true,
 	"endpoint_probes": true, "integration_health": true, "auth_sessions": true, "auth_logins": true,
 	"auth_login_links": true, "mail_accounts": true, "ntfy_channels": true, "embed_index": true,

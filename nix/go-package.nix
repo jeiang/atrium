@@ -1,7 +1,6 @@
 {
   lib,
   buildGo126Module,
-  buildPackages,
   file,
   go-licenses,
   removeReferencesTo,
@@ -42,32 +41,6 @@ in
       ${goSrc.licenseReport "internal/about/THIRD_PARTY_NOTICES"}
       ${sqlcipherLib.appendNotices "internal/about/THIRD_PARTY_NOTICES"}
     '';
-
-    passthru.withModules = {
-      modules,
-      hash ? lib.fakeHash,
-    }: let
-      imports = lib.concatMapStrings (m: "\t_ \"${m.path}\"\n") modules;
-      goGet = ''
-        export GOCACHE=$TMPDIR/go-cache GOPATH=$TMPDIR/go
-        go get ${lib.escapeShellArgs (map (m: "${m.path}@${m.version}") modules)}
-      '';
-    in
-      finalAttrs.finalPackage.overrideAttrs (prev: {
-        vendorHash = hash;
-        postPatch = ''
-          printf 'package main\n\nimport (\n%s)\n' ${lib.escapeShellArg imports} > cmd/atrium/modules_ext.go
-        '';
-        postConfigure = goGet;
-        passthru =
-          prev.passthru
-          // {
-            overrideModAttrs = old: {
-              nativeBuildInputs = old.nativeBuildInputs ++ [buildPackages.git];
-              postPatch = old.postPatch + goGet;
-            };
-          };
-      });
 
     postInstall = ''
       remove-references-to -t ${sqlcipherLib.openssl.etc} $out/bin/atrium

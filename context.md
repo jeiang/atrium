@@ -312,10 +312,7 @@ behavior-parity target.
   action touches no mailbox and appends actor, source, outcome and the prior
   error to the append-only `write_resolutions` table.
 - Modules are toggled at runtime. The built-in modules are always compiled
-  in; a build can add external compile-time modules that register through
-  the public `sdk` package (`withModules` in the Nix package), each with its
-  own `<name>_enabled` flag and migrations recorded in `module_migrations`.
-  Core (settings, secrets,
+  in. Core (settings, secrets,
   `db`, `serve`, the About, review and activity pages) is always on; mail,
   calendar, contacts, Notion, media, assistant, notifications and Grafana each
   have a `<name>_enabled` setting. A module is on only when its flag is true
