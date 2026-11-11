@@ -69,6 +69,7 @@ func newLimiter() *limiter {
 func (b *limitBucket) refill(now time.Time, c limitClass) float64 {
 	if elapsed := now.Sub(b.last); elapsed > 0 {
 		b.tokens = math.Min(c.burst, b.tokens+elapsed.Seconds()*c.rate)
+		b.last = now
 	}
 	return b.tokens
 }
