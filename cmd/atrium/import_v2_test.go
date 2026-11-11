@@ -5,11 +5,16 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/ecdh"
+	"crypto/rand"
 	"database/sql"
+	"encoding/base64"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -26,6 +31,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 )
@@ -42,11 +48,16 @@ func importTestApp(t *testing.T, dir string, now float64) *cli.App {
 
 func importTestAppWithHost(t *testing.T, dir string, now float64, anthropicURL, grafanaURL, notionURL string) *cli.App {
 	t.Helper()
+	return importTestAppHost(t, dir, now, importHostConfig(t, dir, anthropicURL, grafanaURL, notionURL))
+}
+
+func importTestAppHost(t *testing.T, dir string, now float64, host string) *cli.App {
+	t.Helper()
 	vars := varsFor(t).snapshot()
 	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_DB_KEY"] = rightKeyHex
-	vars["ATRIUM_HOST_CONFIG"] = importHostConfig(t, dir, anthropicURL, grafanaURL, notionURL)
+	vars["ATRIUM_HOST_CONFIG"] = host
 	vars[settingEnv(config.KeyMailAccountsFile)] = defaultAccountsFile
 	reg := settings.New()
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
@@ -582,6 +593,66 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 	}
 	if n := importCount(t, q, "SELECT COUNT(*) FROM notion_pages WHERE id = ? AND in_trash = 0", notionPage); n != 1 {
 		t.Errorf("notion sync stored %d pages for the imported connection", n)
+	}
+}
+
+func TestImportV2CarriesTheWebPushConnectionAndUsesItsVAPIDKey(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	key, err := ecdh.P256().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scalar := base64.RawURLEncoding.EncodeToString(key.Bytes())
+	public := base64.RawURLEncoding.EncodeToString(key.PublicKey().Bytes())
+	editImportSource(t, source, "INSERT INTO settings (key, value) VALUES ('webpush_subject', 'mailto:ops@example.test')")
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('webpush_vapid_private_key', %q, 1762000800, 'fixture')", scalar))
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	for _, want := range []string{
+		"connection service/webpush: created from host settings",
+		"connection service/webpush: credential vapid_private carried",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+	if strings.Contains(got.stdout+got.stderr, scalar) {
+		t.Error("the import printed the VAPID private key")
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	q, err := db.Connect(dest, db.WithKey(importKey(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	if stored := importValue(t, q.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'service/webpush' AND slot = 'vapid_private'"); stored != scalar {
+		t.Errorf("the imported VAPID key is %q", stored)
+	}
+
+	push := newFakePush(t)
+	ca := filepath.Join(dir, "push-ca.pem")
+	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: push.Certificate().Raw}), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	allowLoopbackPush.Do(func() { notify.UsePushAddresses(func(a netip.Addr) bool { return a.IsLoopback() }) })
+	browser := pushBrowser{key: key, secret: make([]byte, 16), endpoint: push.URL + "/push/device-1"}
+	_, _ = rand.Read(browser.secret)
+	browser.store(t, q)
+
+	tested := runImportApp(t, importTestAppHost(t, dir, clock, webPushOnlyHostConfig(t, dir, ca, "")), "connections", "test", "service/webpush", "--json")
+	if tested.code != cli.ExitOK || !strings.Contains(tested.stdout, "delivered to 1 device(s)") {
+		t.Fatalf("connections test service/webpush: exit %d stdout %q stderr %q", tested.code, tested.stdout, tested.stderr)
+	}
+	sent := push.requestFor(t, "/push/device-1")
+	checkVAPID(t, sent.header, public, push.URL)
+	if payload := browser.decrypt(t, sent.body); payload["title"] != "atrium test" {
+		t.Errorf("diagnostic payload %v", payload)
 	}
 }
 

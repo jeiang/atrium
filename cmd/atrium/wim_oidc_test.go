@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"io"
 	"net"
 	"net/http"
@@ -262,6 +263,76 @@ func TestWimOIDCSignInGrantsByGroupAndIgnoresForgedProxyHeaders(t *testing.T) {
 	hosted := strings.Join(secure.get(authz.location(), https...).header.Values("Set-Cookie"), "\n")
 	if !strings.Contains(hosted, "__Host-atrium_session=") || !strings.Contains(hosted, "Secure") || strings.Contains(hosted, "Domain=") {
 		t.Fatalf("https session cookie: %s", hosted)
+	}
+}
+
+type connectionReport struct {
+	ID      string `json:"id"`
+	State   string `json:"state"`
+	Results []struct {
+		Capability string `json:"capability"`
+		State      string `json:"state"`
+		Reason     string `json:"reason"`
+	} `json:"results"`
+}
+
+func connectionReports(t *testing.T, stdout string) []connectionReport {
+	t.Helper()
+	var reports []connectionReport
+	if err := json.Unmarshal([]byte(stdout), &reports); err != nil {
+		t.Fatalf("connection JSON: %v\n%s", err, stdout)
+	}
+	return reports
+}
+
+func connectionReportFor(t *testing.T, reports []connectionReport, id string) connectionReport {
+	t.Helper()
+	for _, report := range reports {
+		if report.ID == id {
+			return report
+		}
+	}
+	t.Fatalf("no report for %s in %+v", id, reports)
+	return connectionReport{}
+}
+
+func connectionResult(t *testing.T, report connectionReport, capability string) string {
+	t.Helper()
+	for _, result := range report.Results {
+		if result.Capability == capability {
+			return result.State
+		}
+	}
+	t.Fatalf("%s has no %s result: %+v", report.ID, capability, report.Results)
+	return ""
+}
+
+func TestWimOIDCConnectionTestReportsDiscoveryThenProvesClientAuth(t *testing.T) {
+	s := wimOIDCSite(t)
+	tested := runApp(t, "connections", "test", "service/oidc", "--json")
+	if tested.code != 0 {
+		t.Fatalf("connections test service/oidc: exit %d stdout %q stderr %q", tested.code, tested.stdout, tested.stderr)
+	}
+	report := connectionReportFor(t, connectionReports(t, tested.stdout), "service/oidc")
+	if got := connectionResult(t, report, "discovery"); got != "ok" {
+		t.Errorf("discovery = %q, want ok", got)
+	}
+	if got := connectionResult(t, report, "client_auth"); got != "untested" {
+		t.Errorf("client_auth = %q before a login, want untested", got)
+	}
+
+	s.browser().mustSignIn("admin")
+
+	listed := runApp(t, "connections", "list", "--json")
+	if listed.code != 0 {
+		t.Fatalf("connections list: exit %d stdout %q stderr %q", listed.code, listed.stdout, listed.stderr)
+	}
+	report = connectionReportFor(t, connectionReports(t, listed.stdout), "service/oidc")
+	if got := connectionResult(t, report, "client_auth"); got != "ok" {
+		t.Errorf("client_auth = %q after a login, want ok", got)
+	}
+	if got := connectionResult(t, report, "discovery"); got != "ok" {
+		t.Errorf("discovery = %q after a login, want ok", got)
 	}
 }
 
