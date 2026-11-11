@@ -352,6 +352,25 @@ func (h *Host) deriveHostConnections() {
 	h.deriveService("service/webfetch", "Web fetch", map[string]string{
 		"url": "https://example.com/",
 	}, nil, []string{"egress"}, false)
+	h.deriveService("service/oidc", "Sign-in", map[string]string{
+		"preset":         h.Values["oidc_preset"],
+		"issuer":         h.Values["oidc_issuer"],
+		"client_id":      h.Values["oidc_client_id"],
+		"api_client_id":  h.Values["oidc_api_client_id"],
+		"scopes":         h.Values["oidc_scopes"],
+		"groups_claim":   h.Values["oidc_groups_claim"],
+		"access_group":   h.Values["oidc_access_group"],
+		"admin_group":    h.Values["oidc_admin_group"],
+		"access_emails":  h.Values["oidc_access_emails"],
+		"admin_emails":   h.Values["oidc_admin_emails"],
+		"access_domains": h.Values["oidc_access_domains"],
+		"admin_domains":  h.Values["oidc_admin_domains"],
+	}, nil, []string{"discovery", "client_auth"}, false)
+	if ca := h.Values["webpush_ca_file"]; ca != "" {
+		h.deriveService("service/webpush", "Web push", map[string]string{
+			"subject": h.Values["webpush_subject"],
+		}, map[string]string{"ca_file": ca}, []string{"delivery"}, false)
+	}
 }
 
 func (h *Host) deriveService(id, label string, config, transport map[string]string, capabilities []string, override bool) {

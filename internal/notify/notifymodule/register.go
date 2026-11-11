@@ -16,9 +16,6 @@ type Module struct {
 func (m Module) Register(module.Context) module.Registration {
 	return module.Registration{
 		Name: module.Notifications,
-		Requires: []module.Requirement{
-			module.Setting(notify.KeyPushSubject),
-		},
 		Pages: []web.Page{{Module: notify.Module(actionlinkpages.Load, m.Budget), Templates: notify.Templates(), Nav: []web.NavItem{
 			{Section: "review", Label: "Inbox", URL: "/inbox", Icon: "inbox", Page: "inbox", Order: 50},
 			{Label: "Notifications", URL: "/settings/notifications", Page: "notifications", Settings: true, Primary: true, Order: 40},

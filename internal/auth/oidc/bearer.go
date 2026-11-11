@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 const bearerCacheMax = 1024
@@ -25,11 +24,12 @@ func accessTokenType(typ string) bool {
 }
 
 func (s *Service) APIClientID(ctx context.Context) (string, error) {
-	found, err := settings.From(ctx).Resolve(ctx, s.d.Read, KeyAPIClientID)
+	lease, err := s.lease(ctx)
 	if err != nil {
-		return "", err
+		return "", nil
 	}
-	return strings.TrimSpace(found.Value), nil
+	defer lease.Close()
+	return strings.TrimSpace(configValues(lease)[cfgAPIClientID]), nil
 }
 
 func (s *Service) AuthenticateBearer(ctx context.Context, raw string) (Session, error) {

@@ -13,6 +13,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"math/big"
 	"net/http"
@@ -29,7 +30,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/netguard"
 	"github.com/jeiang/atrium/internal/notify"
@@ -196,8 +196,9 @@ func checkVAPID(t *testing.T, header http.Header, publicKey, audience string) {
 }
 
 func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *testing.T) {
+	requireCipher(t)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	push, browser := pushRig(t, dir)
+	push, browser := pushRigGenerated(t, dir)
 
 	base, logs := startServeLogged(t, dir)
 	jar, _ := cookiejar.New(nil)
@@ -243,8 +244,8 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 		t.Error("the VAPID key changed between page loads")
 	}
 	var stored int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM secrets WHERE name = ?", notify.KeyVAPIDKey).Scan(&stored); err != nil || stored != 1 {
-		t.Fatalf("stored VAPID secrets = %d, %v", stored, err)
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/webpush' AND slot = 'vapid_private' AND source = 'database'").Scan(&stored); err != nil || stored != 1 {
+		t.Fatalf("stored VAPID credentials = %d, %v", stored, err)
 	}
 	code, _, swHeader := fetch(t, client, http.MethodGet, base+"/static/sw.js", nil)
 	if code != http.StatusOK || swHeader.Get("Service-Worker-Allowed") != "/" {
@@ -364,15 +365,56 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 
 var allowLoopbackPush sync.Once
 
+func writeVAPIDKey(t *testing.T, dir string) string {
+	t.Helper()
+	key, err := ecdh.P256().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "vapid.key")
+	if err := os.WriteFile(path, []byte(base64.RawURLEncoding.EncodeToString(key.Bytes())+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func webPushHostConfig(t *testing.T, dir, ca, vapid string) string {
+	t.Helper()
+	var b strings.Builder
+	b.WriteString("\n[connections.\"service/webpush\"]\nkind = \"service/webpush\"\nlabel = \"Web push\"\n")
+	fmt.Fprintf(&b, "config = { subject = %q }\n", "mailto:ops@example.test")
+	fmt.Fprintf(&b, "transport = { ca_file = %q }\n", ca)
+	b.WriteString("capabilities = [\"delivery\"]\n")
+	if vapid != "" {
+		fmt.Fprintf(&b, "credential_files = { vapid_private = %q }\n", vapid)
+	}
+	path := filepath.Join(dir, "webpush-host.toml")
+	if err := os.WriteFile(path, []byte(hostConfigBody(b.String())), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func pushRig(t *testing.T, dir string) (*fakePush, pushBrowser) {
+	return pushRigWith(t, dir, true)
+}
+
+func pushRigGenerated(t *testing.T, dir string) (*fakePush, pushBrowser) {
+	return pushRigWith(t, dir, false)
+}
+
+func pushRigWith(t *testing.T, dir string, hostCredential bool) (*fakePush, pushBrowser) {
 	t.Helper()
 	push := newFakePush(t)
 	ca := filepath.Join(dir, "push-ca.pem")
 	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: push.Certificate().Raw}), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	setEnv(t, settingEnv(notify.KeyPushSubject), "mailto:ops@example.test")
-	setEnv(t, settingEnv(transport.CAKey(notify.PushTransport)), ca)
+	vapid := ""
+	if hostCredential {
+		vapid = writeVAPIDKey(t, dir)
+	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", webPushHostConfig(t, dir, ca, vapid))
 	allowLoopbackPush.Do(func() { notify.UsePushAddresses(func(a netip.Addr) bool { return a.IsLoopback() }) })
 	key, err := ecdh.P256().GenerateKey(rand.Reader)
 	if err != nil {

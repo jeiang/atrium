@@ -101,8 +101,8 @@ type delivery struct {
 	actions                     []Action
 }
 
-func deliver(ctx context.Context, q db.Querier, m delivery, link string) (bool, string, error) {
-	tried, delivered, failure, err := deliverPush(ctx, q, m, link)
+func deliver(ctx context.Context, d *db.DB, m delivery, link string) (bool, string, error) {
+	tried, delivered, failure, err := deliverPush(ctx, d, m, link)
 	if err == nil && !tried {
 		failure = NoDevices
 		pushLog.Info("no push devices; notification kept in the inbox")
@@ -110,12 +110,12 @@ func deliver(ctx context.Context, q db.Querier, m delivery, link string) (bool, 
 	return delivered, failure, err
 }
 
-func Resend(ctx context.Context, q db.Querier, id int64) (Sent, error) {
+func Resend(ctx context.Context, d *db.DB, id int64) (Sent, error) {
 	var title, body string
 	var link, channel, click *string
 	var priority *int64
 	var delivered bool
-	err := q.QueryRowContext(ctx, "SELECT title, body, thread_link, channel, click, priority, delivered FROM notifications WHERE id = ?", id).
+	err := d.Read.QueryRowContext(ctx, "SELECT title, body, thread_link, channel, click, priority, delivered FROM notifications WHERE id = ?", id).
 		Scan(&title, &body, &link, &channel, &click, &priority, &delivered)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Sent{}, ChannelError("no notification " + fmt.Sprint(id))
@@ -133,11 +133,11 @@ func Resend(ctx context.Context, q db.Querier, id int64) (Sent, error) {
 	if priority != nil {
 		m.priority = int(*priority)
 	}
-	ok, failure, err := deliver(ctx, q, m, deref(link))
+	ok, failure, err := deliver(ctx, d, m, deref(link))
 	if err != nil {
 		return Sent{}, err
 	}
-	if _, err := q.ExecContext(ctx, "UPDATE notifications SET delivered = ?, error = ? WHERE id = ?", ok, nullable(failure), id); err != nil {
+	if _, err := d.Write.ExecContext(ctx, "UPDATE notifications SET delivered = ?, error = ? WHERE id = ?", ok, nullable(failure), id); err != nil {
 		return Sent{}, err
 	}
 	return Sent{ID: id, Delivered: ok, Error: failure}, nil
@@ -184,15 +184,7 @@ func errorClass(err error) string {
 }
 
 func Send(ctx context.Context, d *db.DB, m Message) (Sent, error) {
-	titleChars, err := whole(ctx, d.Read, KeyTitleChars)
-	if err != nil {
-		return Sent{}, err
-	}
-	bodyChars, err := whole(ctx, d.Read, KeyBodyChars)
-	if err != nil {
-		return Sent{}, err
-	}
-	title, body := Plain(m.Title, titleChars), Plain(m.Body, bodyChars)
+	title, body := Plain(m.Title, TuningNotifyTitleChars), Plain(m.Body, TuningNotifyBodyChars)
 	if title == "" {
 		return Sent{}, tool.Error("title is required")
 	}
@@ -260,7 +252,7 @@ func Send(ctx context.Context, d *db.DB, m Message) (Sent, error) {
 		}
 		return Sent{}, err
 	}
-	delivered, failure, err := deliver(ctx, d.Write, delivery{channel: channel, title: title, body: body, click: m.Click, priority: m.Priority, actions: m.Actions}, link)
+	delivered, failure, err := deliver(ctx, d, delivery{channel: channel, title: title, body: body, click: m.Click, priority: m.Priority, actions: m.Actions}, link)
 	if err != nil {
 		return Sent{}, err
 	}

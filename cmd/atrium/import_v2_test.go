@@ -161,6 +161,8 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		"connection service/anthropic: credential api_key carried",
 		"connection service/weather: created from host settings",
 		"connection service/webfetch: created from host settings",
+		"connection service/webpush: created from host settings",
+		`oidc client secret: no source secret; set connections."service/oidc".credential_files.client_secret in the host configuration`,
 	} {
 		if !strings.Contains(got.stdout, want) {
 			t.Errorf("the report lacks %q:\n%s", want, got.stdout)

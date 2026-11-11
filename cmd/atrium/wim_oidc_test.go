@@ -7,15 +7,12 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/auth/oidc/oidctest"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/secrets"
 )
 
 type wimSite struct {
@@ -53,12 +50,14 @@ func wimOIDCSite(t *testing.T) *wimSite {
 	idp.AddUser(oidctest.User{Name: "member", Email: "friend@example.com", Groups: []string{"atrium_access"}})
 	idp.AddUser(oidctest.User{Name: "outsider", Email: "stranger@example.com", Groups: []string{"other"}})
 	idp.AddUser(oidctest.User{Name: "boss", Email: "owner@example.com", Groups: []string{"team_access", "team_admin"}})
-	setEnv(t, settingEnv(config.KeyPublicURL), base)
-	setEnv(t, settingEnv(oidc.KeyIssuer), idp.Issuer())
-	setEnv(t, settingEnv(oidc.KeyClientID), idp.ClientID())
-	setEnv(t, settingEnv(oidc.KeyGroupsClaim), "groups")
-	setEnv(t, settingEnv(secrets.OIDCClientSecret), "s3cret-for-the-test")
 	dir := t.TempDir()
+	setEnv(t, settingEnv(config.KeyPublicURL), base)
+	setEnv(t, "ATRIUM_HOST_CONFIG", oidcHostConfig(t, dir, oidcHost{
+		Issuer:      idp.Issuer(),
+		ClientID:    idp.ClientID(),
+		Secret:      "s3cret-for-the-test",
+		GroupsClaim: "groups",
+	}))
 	got, _ := wimServeIn(t, dir, "--port", port, "--auth", "oidc", "--allowed-host", "127.0.0.1")
 	if got != base {
 		t.Fatalf("serve listens on %s, want %s", got, base)
@@ -207,9 +206,6 @@ func TestWimOIDCSignInGrantsByGroupAndIgnoresForgedProxyHeaders(t *testing.T) {
 	if hx.status != http.StatusUnauthorized || hx.header.Get("HX-Redirect") != "/login" {
 		t.Fatalf("anonymous htmx request: %d %q", hx.status, hx.header.Get("HX-Redirect"))
 	}
-	if form := anon.do(http.MethodPost, "/settings/auth/activate", url.Values{"fingerprint": {"x"}}); form.status != http.StatusSeeOther || form.location() != "/login" {
-		t.Fatalf("anonymous form post: %d %q", form.status, form.location())
-	}
 	forged := []string{"Remote-Groups", "atrium_access,atrium_admin", "Remote-User", "root"}
 	wimExpect(t, anon.get("/settings/auth", forged...), http.StatusSeeOther)
 	login := anon.get("/login")
@@ -247,7 +243,6 @@ func TestWimOIDCSignInGrantsByGroupAndIgnoresForgedProxyHeaders(t *testing.T) {
 	member.mustSignIn("member")
 	wimExpect(t, member.get("/settings/auth"), http.StatusForbidden, "Admins only", `action="/logout"`)
 	wimExpect(t, member.get("/settings/auth", forged...), http.StatusForbidden)
-	wimExpect(t, member.post("/settings/auth/activate", url.Values{"fingerprint": {"x"}}), http.StatusForbidden)
 
 	outsider := s.browser()
 	wimExpect(t, outsider.signIn("outsider"), http.StatusForbidden, "This account does not have access.")
@@ -334,12 +329,12 @@ func TestWimOIDCSessionsEndOnRevocationExpiryAndSignOut(t *testing.T) {
 	b.mustSignIn("admin")
 	s.exec(stale, "sub-admin")
 	wimExpect(t, b.get("/settings/auth"), http.StatusOK)
-	if s.idp.RefreshCall != 1 {
-		t.Fatalf("%d refresh calls", s.idp.RefreshCall)
+	if s.idp.Refreshes() != 1 {
+		t.Fatalf("%d refresh calls", s.idp.Refreshes())
 	}
 	wimExpect(t, b.get("/settings/auth"), http.StatusOK)
-	if s.idp.RefreshCall != 1 {
-		t.Fatalf("re-checked again within the hour: %d", s.idp.RefreshCall)
+	if s.idp.Refreshes() != 1 {
+		t.Fatalf("re-checked again within the hour: %d", s.idp.Refreshes())
 	}
 	s.idp.SetGroups("admin", "atrium_access")
 	s.exec(stale, "sub-admin")
@@ -390,84 +385,5 @@ func TestWimOIDCSessionsEndOnRevocationExpiryAndSignOut(t *testing.T) {
 	wimExpect(t, o.get(out.location()), http.StatusOK, "You are signed out.")
 	if n := s.count("SELECT COUNT(*) FROM auth_sessions"); n != 0 {
 		t.Fatalf("%d sessions after sign-out", n)
-	}
-}
-
-func TestWimOIDCWizardActivatesOnlyAnAdminsPassedTest(t *testing.T) {
-	t.Parallel()
-	s := wimOIDCSite(t)
-	admin := s.browser()
-	admin.mustSignIn("admin")
-	form := func(access, adminGroup string) url.Values {
-		return url.Values{
-			"preset": {"generic"}, oidc.KeyIssuer: {s.idp.Issuer()}, oidc.KeyClientID: {s.idp.ClientID()},
-			oidc.KeyAccessGroup: {access}, oidc.KeyAdminGroup: {adminGroup},
-			oidc.KeyGroupsClaim: {"groups"}, oidc.KeyScopes: {"openid profile email groups"},
-		}
-	}
-	providerTab := func(b *wimBrowser, user string, start wimReply) wimReply {
-		t.Helper()
-		wimExpect(t, start, http.StatusOK)
-		s.idp.Approve(user)
-		target, ok := strings.CutPrefix(start.header.Get("Refresh"), "0; url=")
-		if !ok {
-			t.Fatalf("no provider redirect: %q", start.header.Get("Refresh"))
-		}
-		return b.get(b.get(target).location())
-	}
-	audits := func() int {
-		return s.count("SELECT COUNT(*) FROM settings_audit WHERE key IN (?, ?)", oidc.KeyAccessGroup, oidc.KeyAdminGroup)
-	}
-
-	member := s.browser()
-	member.mustSignIn("member")
-	wimExpect(t, member.post("/settings/auth/test", form("atrium_access", "atrium_admin")), http.StatusForbidden)
-	wimExpect(t, member.get("/settings/auth/test/status"), http.StatusForbidden)
-	wimExpect(t, member.get("/settings/auth/preset?preset=entra"), http.StatusForbidden)
-	wimExpect(t, s.browser().post("/settings/auth/test", form("atrium_access", "atrium_admin")), http.StatusSeeOther)
-
-	wimExpect(t, providerTab(admin, "member", admin.post("/settings/auth/test", form("atrium_access", "atrium_admin"))), http.StatusForbidden, "Test failed", "This account is not in `atrium_admin`.")
-	if status := admin.get("/settings/auth/test/status"); strings.Contains(status.body, "Activate") {
-		t.Fatal("a failed test offers Activate")
-	}
-	wimExpect(t, admin.post("/settings/auth/activate", url.Values{"fingerprint": {"anything"}}), http.StatusConflict)
-
-	foreignStart := admin.post("/settings/auth/test", form("atrium_access", "atrium_admin"))
-	s.idp.Approve("admin")
-	callback := admin.get(strings.TrimPrefix(foreignStart.header.Get("Refresh"), "0; url=")).location()
-	wimExpect(t, s.browser().get(callback), http.StatusBadRequest, "Test failed")
-	if status := admin.get("/settings/auth/test/status"); strings.Contains(status.body, "Activate") {
-		t.Fatal("a foreign browser completed the test")
-	}
-	if n := audits(); n != 0 {
-		t.Fatalf("failed tests wrote %d group settings", n)
-	}
-
-	before := admin.cookie("atrium_session")
-	wimExpect(t, providerTab(admin, "boss", admin.post("/settings/auth/test", form("team_access", "team_admin"))), http.StatusOK, "Test passed", "team_access", "team_admin")
-	wimExpect(t, admin.get(callback), http.StatusBadRequest)
-	status := admin.get("/settings/auth/test/status")
-	wimExpect(t, status, http.StatusOK, "Activate")
-	fingerprint := regexp.MustCompile(`name="fingerprint" value="([0-9a-f]+)"`).FindStringSubmatch(status.body)
-	if fingerprint == nil {
-		t.Fatalf("no fingerprint in %s", status.body)
-	}
-	wimExpect(t, admin.post("/settings/auth/activate", url.Values{"fingerprint": {"stale"}}), http.StatusConflict, "Test sign-in again")
-	wimExpect(t, member.post("/settings/auth/activate", url.Values{"fingerprint": {fingerprint[1]}}), http.StatusForbidden)
-	if n := audits(); n != 0 {
-		t.Fatalf("refused activations wrote %d group settings", n)
-	}
-	wimExpect(t, admin.post("/settings/auth/activate", url.Values{"fingerprint": {fingerprint[1]}}), http.StatusOK, "Active")
-	if admin.cookie("atrium_session") != before {
-		t.Fatal("activation replaced the session cookie")
-	}
-	wimExpect(t, admin.post("/settings/auth/activate", url.Values{"fingerprint": {fingerprint[1]}}), http.StatusConflict)
-
-	boss := s.browser()
-	boss.mustSignIn("boss")
-	wimExpect(t, boss.get("/settings/auth"), http.StatusOK)
-	wimExpect(t, s.browser().signIn("member"), http.StatusForbidden)
-	if n := s.count("SELECT COUNT(*) FROM settings_audit WHERE key = ? AND source = 'ui'", oidc.KeyAccessGroup); n != 1 {
-		t.Fatalf("%d audit rows for the activation", n)
 	}
 }

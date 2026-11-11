@@ -83,6 +83,92 @@ func OpenRead(ctx context.Context, q db.Querier, host config.Host, id ID) (*Leas
 	return s.open(ctx, q, id)
 }
 
+func (s *Store) Open(ctx context.Context, id ID) (*Lease, error) {
+	return s.open(ctx, s.q, id)
+}
+
+// Ensure materializes an operator-owned built-in connection without touching a
+// host-owned record or an existing operator configuration.
+func (s *Store) Ensure(ctx context.Context, id ID, kind Kind, label string, caps []Capability) error {
+	if s.d == nil {
+		return errors.New("connections: built-in materialization needs a writable database")
+	}
+	if _, ok := s.reg.Lookup(kind); !ok {
+		return UnknownKind(kind)
+	}
+	now := s.stamp()
+	return s.d.WithTx(ctx, func(tx *sql.Tx) error {
+		var source string
+		err := tx.QueryRowContext(ctx, "SELECT config_source FROM connections WHERE id = ?", id).Scan(&source)
+		switch {
+		case errors.Is(err, sql.ErrNoRows):
+			if _, err := tx.ExecContext(ctx,
+				"INSERT INTO connections (id, kind, label, config_source, config_json, transport_json, revision, enabled, state, created_at, updated_at) "+
+					"VALUES (?, ?, ?, 'operator', '{}', '{}', 1, 1, 'untested', ?, ?)",
+				id, kind, labelOr(label, string(id)), now, now); err != nil {
+				return err
+			}
+		case err != nil:
+			return err
+		case source == SourceHost:
+			return nil
+		}
+		for _, c := range caps {
+			config := c.Config
+			if len(config) == 0 {
+				config = json.RawMessage("{}")
+			}
+			if _, err := tx.ExecContext(ctx,
+				"INSERT INTO connection_capabilities (connection_id, name, enabled, config_json) VALUES (?, ?, ?, ?) "+
+					"ON CONFLICT(connection_id,name) DO NOTHING",
+				id, c.Name, boolInt(c.Enabled), string(config)); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+}
+
+// EnsureCredential returns a credential value, generating and storing it when
+// the slot is absent.
+func (s *Store) EnsureCredential(ctx context.Context, id ID, slot string, generate func() (string, error)) (string, error) {
+	if s.d == nil {
+		return "", errors.New("connections: credential generation needs a writable database")
+	}
+	lease, err := s.open(ctx, s.d.Read, id)
+	if err != nil {
+		return "", err
+	}
+	value, err := lease.Credential(slot)
+	lease.Close()
+	if err == nil {
+		return value, nil
+	}
+	var missing MissingCredential
+	if !errors.As(err, &missing) {
+		return "", err
+	}
+	if !s.d.Encrypted() {
+		return "", &EncryptedRequired{Slot: slot}
+	}
+	value, err = generate()
+	if err != nil {
+		return "", err
+	}
+	if _, err := s.d.Write.ExecContext(ctx,
+		"INSERT INTO connection_credentials (connection_id, slot, source, value, set_at, set_by) VALUES (?, ?, 'database', ?, ?, 'generated') "+
+			"ON CONFLICT(connection_id,slot) DO NOTHING",
+		id, slot, value, s.stamp()); err != nil {
+		return "", err
+	}
+	lease, err = s.open(ctx, s.d.Read, id)
+	if err != nil {
+		return "", err
+	}
+	defer lease.Close()
+	return lease.Credential(slot)
+}
+
 func (s *Store) ReconcileHost(ctx context.Context) error {
 	if s.d == nil {
 		return errors.New("connections: host reconciliation needs a writable database")
@@ -528,16 +614,7 @@ func (l *Lease) HTTP(name string) (*http.Client, error) {
 	if client, ok := l.shared.clients[name]; ok {
 		return client, nil
 	}
-	timeout := defaultTimeout
-	if l.options.Timeout > 0 {
-		timeout = time.Duration(l.options.Timeout) * time.Second
-	}
-	client, err := transport.New(transport.Options{
-		Timeout:         timeout,
-		CAFile:          l.options.CAFile,
-		Proxy:           l.options.Proxy,
-		FollowRedirects: true,
-	})
+	client, err := l.newClient()
 	if err != nil {
 		return nil, err
 	}
@@ -553,6 +630,32 @@ func (l *Lease) HTTP(name string) (*http.Client, error) {
 	}
 	l.shared.clients[name] = client
 	return client, nil
+}
+
+// DB returns the writable database behind a lease opened by a store; a
+// read-only lease has none.
+func (l *Lease) DB() *db.DB { return l.store.d }
+
+func (l *Lease) newClient() (*http.Client, error) {
+	timeout := defaultTimeout
+	if l.options.Timeout > 0 {
+		timeout = time.Duration(l.options.Timeout) * time.Second
+	}
+	return transport.New(transport.Options{
+		Timeout:         timeout,
+		CAFile:          l.options.CAFile,
+		Proxy:           l.options.Proxy,
+		FollowRedirects: true,
+	})
+}
+
+// Transport returns a client for a connection whose destinations are not a
+// single declared endpoint.
+func (l *Lease) Transport() (*http.Client, error) {
+	if l.closed {
+		return nil, errors.New("connections: the lease is closed")
+	}
+	return l.newClient()
 }
 
 func (l *Lease) Credential(slot string) (string, error) {
@@ -595,6 +698,13 @@ func (l *Lease) InvalidateToken(capability string) {
 	l.shared.mu.Lock()
 	defer l.shared.mu.Unlock()
 	delete(l.shared.tokens, capability)
+}
+
+func (l *Lease) Observe(ctx context.Context, result Result) error {
+	if l.store.d == nil {
+		return errors.New("connections: observation needs a writable store")
+	}
+	return l.store.Observe(ctx, l.id, l.revision, result)
 }
 
 func (l *Lease) Close() { l.closed = true }
