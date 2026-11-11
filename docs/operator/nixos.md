@@ -16,14 +16,15 @@ The module has a small set of typed deployment options. Host configuration goes 
 | `uid` | int | `880` | uid of the user and gid of the group. |
 | `port` | port | `8480` | Port of the public listener. |
 | `host` | TOML table per module | `{}` | Host configuration, rendered to the file named by `ATRIUM_HOST_CONFIG`. Only host keys from the configuration reference are accepted; operator and tuning keys, and derived keys such as `export.export_obsidian_dir`, fail evaluation with their destination. Host values are read-only in the application. |
-| `connections` | attribute set of connection | `{}` | Host-owned connections by id. Each has `kind`, optional `label`, `config`, `transport`, `capabilities`, `credentialFiles` (slot to host file), and an optional `account` for a `mail/<id>` connection (`preset`, `login`, `passwordFile`, optional `label` and `enabled`). Each file is delivered through `LoadCredential`; secret values never enter the Nix store. A mail account id keys its cached mail, so keep it stable. |
+| `connections` | attribute set of connection | `{}` | Host-owned connections by id. Each has `kind`, optional `label`, `config`, `transport`, `capabilities` and `credentialFiles` (slot to host file). Each file is delivered through `LoadCredential`; secret values never enter the Nix store. The kind must be one the application registers. |
+| `mailAccounts` | attribute set of mail account | `{}` | Mail accounts by id, rendered to the file named by `mail.mail_accounts_file`. Each has `preset` (`icloud` or `gmail`), `login`, `passwordFile`, and optional `label` and `enabled`. The password file is delivered through `LoadCredential`; the id keys the account's cached mail, so keep it stable. |
 | `secretFiles` | attribute set of string | `{}` | Secret settings as `"<module>.<key>" = "<host file>"`, delivered through systemd `LoadCredential` and pinned as `<key>_file`. Connection credentials belong in `connections.<id>.credentialFiles`; host secret inputs belong in `host.<module>.<key>_file`; the database key belongs in `database.keyFile`. |
 | `database.keyFile` | null or string | `null` | Host file holding the database key, delivered as the `db-key` credential and `ATRIUM_DB_KEY_FILE`. |
 | `initialTimezone` | null or string | `time.timeZone` | Time zone stored as the operator `tz` value when a fresh database has none. A stored or imported value wins, and the operator can change it afterwards. |
-| `environmentFiles` | list of string | `[]` | `EnvironmentFile=` paths read by every unit and by `atrium-run`; no application credential needs one. The TMDB read token is a connection credential in `connections."service/tmdb".credentialFiles.read_token`; the Grafana token is a connection credential until its owner is cut over; the Notion token is a connection credential in `connections."service/notion".credentialFiles.token`. Calendar and contacts sign in with an iCloud entry of `connections`. |
+| `environmentFiles` | list of string | `[]` | `EnvironmentFile=` paths read by every unit and by `atrium-run`; no application credential needs one. The TMDB read token is a connection credential in `connections."service/tmdb".credentialFiles.read_token`; the Grafana token is a connection credential until its owner is cut over; the Notion token is a connection credential in `connections."service/notion".credentialFiles.token`. Calendar and contacts reuse an iCloud mail account for their CalDAV and CardDAV login. |
 | `modelServerUnits` | list of string | `[]` | Units serving the mail chat and embed endpoints. The application units start after them and want them. |
 
-The module writes `calendar.calendar_dir` and `contacts.contacts_dir` as the mirror directories under `stateDir`, `core.otel_traces_endpoint` from `observability.tracesEndpoint`, `export.export_obsidian_dir` from `knowledgeExport.obsidianDirectory`, and `mail.mail_accounts_file` from the `mail/<id>` connections. It does not pin an operator setting.
+The module writes `calendar.calendar_dir` and `contacts.contacts_dir` as the mirror directories under `stateDir`, `core.otel_traces_endpoint` from `observability.tracesEndpoint`, `export.export_obsidian_dir` from `knowledgeExport.obsidianDirectory`, and `mail.mail_accounts_file` from `mailAccounts`. It does not pin an operator setting.
 
 ```nix
 services.atrium = {
@@ -66,7 +67,6 @@ These options are removed; setting one now fails evaluation as an unknown option
 - `web.oidc.enable` → `web.auth = "proxy+oidc"` (or `"oidc"` for OIDC only)
 - `media.root`, `media.moviesUrl`, `media.tvUrl` → `host.media.*`; qBittorrent, TMDB and EZTV are `connections."service/{qbittorrent,tmdb,eztv}"`
 - `grafanaUrl` → `host.grafana.grafana_url`
-- `mailAccounts` → `connections."mail/<id>".account`
 - `secretFiles."db.key"` → `database.keyFile`
 - `vdirsyncer` options and the `stateDir/vdirsyncer/` directory → `stateDir/mirrors/`; the old directory is not read and the mirrors re-sync.
 

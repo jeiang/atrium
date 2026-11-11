@@ -37,32 +37,24 @@
   connectionCredential = id: slot: "connection-${lib.replaceStrings ["/" "."] ["-" "-"] id}-${lib.replaceStrings ["/" "."] ["-" "-"] slot}";
   hostCredential = module: key: "host-${module}-${key}";
 
-  accounts = lib.filterAttrs (_: c: c.account != null) cfg.connections;
   accountsFile = toml.generate "mail-accounts.toml" {
     account =
-      lib.mapAttrsToList (id: c: {
-        id = lib.removePrefix "mail/" id;
-        inherit (c.account) preset login enabled;
+      lib.mapAttrsToList (id: account: {
+        inherit id;
+        inherit (account) preset login enabled;
         label =
-          if c.account.label == null
-          then lib.removePrefix "mail/" id
-          else c.account.label;
-        password_file = "\${CREDENTIALS_DIRECTORY}/${accountCredential (lib.removePrefix "mail/" id)}";
+          if account.label == null
+          then id
+          else account.label;
+        password_file = "\${CREDENTIALS_DIRECTORY}/${accountCredential id}";
       })
-      accounts;
+      cfg.mailAccounts;
   };
 
   renderedConnections =
-    lib.mapAttrs (id: c: let
-      accountID = lib.removePrefix "mail/" id;
-      creds =
-        c.credentialFiles
-        // lib.optionalAttrs (c.account != null) {
-          "mail/${accountID}/password" = "\${CREDENTIALS_DIRECTORY}/${accountCredential accountID}";
-        };
-    in {
+    lib.mapAttrs (id: c: {
       inherit (c) kind label config transport capabilities;
-      credential_files = lib.mapAttrs (slot: _: "\${CREDENTIALS_DIRECTORY}/${connectionCredential id slot}") creds;
+      credential_files = lib.mapAttrs (slot: _: "\${CREDENTIALS_DIRECTORY}/${connectionCredential id slot}") c.credentialFiles;
     })
     cfg.connections;
 
@@ -81,7 +73,7 @@
     }
     // lib.optionalAttrs (cfg.observability.tracesEndpoint != null) {core.otel_traces_endpoint = cfg.observability.tracesEndpoint;}
     // lib.optionalAttrs (cfg.knowledgeExport.obsidianDirectory != null) {export.export_obsidian_dir = cfg.knowledgeExport.obsidianDirectory;}
-    // lib.optionalAttrs (accounts != {}) {mail.mail_accounts_file = "${accountsFile}";}
+    // lib.optionalAttrs (cfg.mailAccounts != {}) {mail.mail_accounts_file = "${accountsFile}";}
     // lib.optionalAttrs (cfg.connections != {}) {connections = renderedConnections;}
   );
   hostConfigFile = toml.generate "atrium-host.toml" renderedHost;
@@ -93,9 +85,9 @@
       (lib.filterAttrs (key: _: lib.hasSuffix "_file" key) table))
     cfg.host)
     ++ lib.concatLists (lib.mapAttrsToList (id: c:
-      lib.mapAttrsToList (slot: path: "${connectionCredential id slot}:${path}") c.credentialFiles
-      ++ lib.optional (c.account != null) "${accountCredential (lib.removePrefix "mail/" id)}:${c.account.passwordFile}")
+      lib.mapAttrsToList (slot: path: "${connectionCredential id slot}:${path}") c.credentialFiles)
     cfg.connections)
+    ++ lib.mapAttrsToList (id: account: "${accountCredential id}:${account.passwordFile}") cfg.mailAccounts
     ++ lib.optional (cfg.database.keyFile != null) "db-key:${cfg.database.keyFile}";
 
   mediaRoot = cfg.host.media.media_root or null;
@@ -193,10 +185,7 @@
 
   connectionErrors = lib.flatten (lib.mapAttrsToList (id: c:
     lib.optional (id == "") "services.atrium.connections has an empty id"
-    ++ lib.optional (c.kind == "") "services.atrium.connections.\"${id}\" needs a kind"
-    ++ lib.optional (c.account != null && !(lib.hasPrefix "mail/" id)) "services.atrium.connections.\"${id}\".account needs a mail/<id> connection id"
-    ++ lib.optional (c.account != null && c.account.passwordFile == "") "services.atrium.connections.\"${id}\".account needs a passwordFile"
-    ++ lib.optional (c.account != null && c.credentialFiles ? "mail/${lib.removePrefix "mail/" id}/password") "services.atrium.connections.\"${id}\" sets the account password twice")
+    ++ lib.optional (c.kind == "") "services.atrium.connections.\"${id}\" needs a kind")
   cfg.connections);
 
   runPropertyNames = ["User" "Group" "StateDirectory" "StateDirectoryMode" "UMask" "EnvironmentFile" "LoadCredential"];
@@ -497,7 +486,7 @@ in {
         options = {
           kind = mkOption {
             type = types.str;
-            description = "Connection kind, such as service/qbittorrent or mail/icloud.";
+            description = "Connection kind, such as service/qbittorrent or service/notion.";
           };
           label = mkOption {
             type = types.str;
@@ -524,36 +513,6 @@ in {
             default = {};
             description = "Credential slot to host file; each file is delivered through LoadCredential and never stored in the Nix store.";
           };
-          account = mkOption {
-            type = types.nullOr (types.submodule {
-              options = {
-                label = mkOption {
-                  type = types.nullOr types.str;
-                  default = null;
-                  description = "Display name; the connection id suffix when null.";
-                };
-                preset = mkOption {
-                  type = types.enum ["icloud" "gmail"];
-                  description = "Provider preset that supplies the IMAP and SMTP hosts.";
-                };
-                login = mkOption {
-                  type = types.str;
-                  description = "IMAP and SMTP login.";
-                };
-                passwordFile = mkOption {
-                  type = types.str;
-                  description = "Host file holding the app password, delivered through LoadCredential.";
-                };
-                enabled = mkOption {
-                  type = types.bool;
-                  default = true;
-                  description = "Whether the account is opened and synced.";
-                };
-              };
-            });
-            default = null;
-            description = "Host-owned mail account identity for a mail/<id> connection.";
-          };
         };
       }));
       default = {};
@@ -564,16 +523,46 @@ in {
           capabilities = ["api"];
           credentialFiles.api_key = "/run/secrets/qbittorrent-api-key";
         };
-        "mail/icloud" = {
-          kind = "mail/icloud";
-          account = {
-            preset = "icloud";
-            login = "me@icloud.com";
-            passwordFile = "/run/secrets/icloud-app-password";
+      };
+      description = "Host-owned connections. Each declaration generates a [connections.<id>] table and its LoadCredential bindings; secret values never enter the store. A connection kind must be one the application registers.";
+    };
+
+    mailAccounts = mkOption {
+      type = types.attrsOf (types.submodule {
+        options = {
+          label = mkOption {
+            type = types.nullOr types.str;
+            default = null;
+            description = "Display name; the id when null.";
+          };
+          preset = mkOption {
+            type = types.enum ["icloud" "gmail"];
+            description = "Provider preset that supplies the IMAP and SMTP hosts.";
+          };
+          login = mkOption {
+            type = types.str;
+            description = "IMAP and SMTP login.";
+          };
+          passwordFile = mkOption {
+            type = types.str;
+            description = "Host file holding the app password, delivered through LoadCredential.";
+          };
+          enabled = mkOption {
+            type = types.bool;
+            default = true;
+            description = "Whether the account is opened and synced.";
           };
         };
+      });
+      default = {};
+      example = {
+        icloud = {
+          preset = "icloud";
+          login = "me@icloud.com";
+          passwordFile = "/run/secrets/icloud-app-password";
+        };
       };
-      description = "Host-owned connections. Each declaration generates a [connections.<id>] table and its LoadCredential bindings; secret values never enter the store.";
+      description = "Mail accounts by id, rendered to the file named by mail.mail_accounts_file. The id keys the account's cached mail; keep it stable.";
     };
 
     secretFiles = mkOption {

@@ -126,7 +126,7 @@ func (h *Host) readFile(env Env, defs []settings.HostDef, path string) error {
 	}
 	for _, module := range slices.Sorted(maps.Keys(doc)) {
 		if module == "connections" {
-			if err := h.readConnections(path, doc[module]); err != nil {
+			if err := h.readConnections(env, path, doc[module]); err != nil {
 				return err
 			}
 			continue
@@ -193,7 +193,7 @@ func hostKeyRefusal(path, module, name string) error {
 	return fmt.Errorf("config: %s: %s.%s is a host bootstrap input; use the dedicated option", path, module, name)
 }
 
-func (h *Host) readConnections(path string, raw any) error {
+func (h *Host) readConnections(env Env, path string, raw any) error {
 	table, ok := raw.(map[string]any)
 	if !ok {
 		return fmt.Errorf("config: %s: connections must be a table", path)
@@ -237,9 +237,54 @@ func (h *Host) readConnections(path string, raw any) error {
 		if c.Kind == "" {
 			return fmt.Errorf("config: %s: connections.%s needs a kind", path, id)
 		}
+		var err error
+		if c.Config, err = expandMap(env, path, id, "config", c.Config); err != nil {
+			return err
+		}
+		if c.Transport, err = expandMap(env, path, id, "transport", c.Transport); err != nil {
+			return err
+		}
+		if c.CredentialFiles, err = expandMap(env, path, id, "credential_files", c.CredentialFiles); err != nil {
+			return err
+		}
+		for _, slot := range slices.Sorted(maps.Keys(c.CredentialFiles)) {
+			f, err := os.Open(c.CredentialFiles[slot])
+			if err != nil {
+				return fmt.Errorf("config: %s: connections.%s.credential_files.%s: %w", path, id, slot, err)
+			}
+			_ = f.Close()
+		}
 		h.Connections[id] = c
 	}
 	return nil
+}
+
+func expandMap(env Env, path, id, field string, m map[string]string) (map[string]string, error) {
+	out := make(map[string]string, len(m))
+	for k, v := range m {
+		value, err := expand(env, v)
+		if err != nil {
+			return nil, fmt.Errorf("config: %s: connections.%s.%s.%s: %w", path, id, field, k, err)
+		}
+		out[k] = value
+	}
+	return out, nil
+}
+
+func expand(env Env, value string) (string, error) {
+	var missing string
+	out := interpolation.ReplaceAllStringFunc(value, func(m string) string {
+		name := m[2 : len(m)-1]
+		replacement, ok := env(name)
+		if !ok && missing == "" {
+			missing = name
+		}
+		return replacement
+	})
+	if missing != "" {
+		return "", fmt.Errorf("environment variable %s is not set", missing)
+	}
+	return out, nil
 }
 
 func stringMap(raw any) (map[string]string, bool) {
@@ -257,17 +302,9 @@ func stringMap(raw any) (map[string]string, bool) {
 func hostScalar(env Env, dotted string, raw any) (string, error) {
 	switch v := raw.(type) {
 	case string:
-		var missing string
-		out := interpolation.ReplaceAllStringFunc(v, func(m string) string {
-			name := m[2 : len(m)-1]
-			value, ok := env(name)
-			if !ok && missing == "" {
-				missing = name
-			}
-			return value
-		})
-		if missing != "" {
-			return "", fmt.Errorf("config: %s: environment variable %s is not set", dotted, missing)
+		out, err := expand(env, v)
+		if err != nil {
+			return "", fmt.Errorf("config: %s: %w", dotted, err)
 		}
 		return out, nil
 	case bool:

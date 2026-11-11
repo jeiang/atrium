@@ -32,7 +32,7 @@ func TestSettingsShowsSixTabsAndDropsAdvancedPages(t *testing.T) {
 	for _, m := range settingsTabLabel.FindAllStringSubmatch(body[start:start+end], -1) {
 		labels = append(labels, m[1])
 	}
-	if want := []string{"Assistant", "Mail", "Connections", "Notifications", "Calendar", "Notion", "Media", "Usage"}; !slices.Equal(labels, want) {
+	if want := []string{"Assistant", "Mail", "Connections", "Notifications", "Calendar", "Notion", "Usage"}; !slices.Equal(labels, want) {
 		t.Errorf("settings tabs %q, want %q", labels, want)
 	}
 	for _, path := range []string{"/settings/config", "/settings/config/assistant", "/settings/audit", "/settings/subagents", "/settings/prompts"} {

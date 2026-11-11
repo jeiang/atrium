@@ -20,7 +20,7 @@ var derivedHost = map[string]string{
 	"core.otel_traces_endpoint":  "services.atrium.observability.tracesEndpoint",
 	"db.key":                     "services.atrium.database.keyFile",
 	"export.export_obsidian_dir": "services.atrium.knowledgeExport.obsidianDirectory",
-	"mail.mail_accounts_file":    "services.atrium.connections.\"mail/<id>\".account",
+	"mail.mail_accounts_file":    "services.atrium.mailAccounts",
 }
 
 func main() {

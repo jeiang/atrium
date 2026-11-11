@@ -46,20 +46,17 @@
           capabilities = ["api"];
           credentialFiles.api_key = "/run/secrets/qbittorrent-api-key";
         };
-        "mail/icloud" = {
-          kind = "mail/icloud";
-          account = {
-            preset = "icloud";
-            login = "operator@icloud.example";
-            passwordFile = "/run/secrets/icloud-app-password";
-          };
-        };
         "service/notion" = {
           kind = "service/notion";
           config.api = "https://api.notion.com";
           capabilities = ["api"];
           credentialFiles.token = "/run/secrets/notion-token";
         };
+      };
+      mailAccounts.icloud = {
+        preset = "icloud";
+        login = "operator@icloud.example";
+        passwordFile = "/run/secrets/icloud-app-password";
       };
       secretFiles = {
         "action_links.action_link_key" = "/run/secrets/action-link-key";
@@ -82,27 +79,7 @@
     databaseKeyRefused = assert refusedWith "services.atrium.database.keyFile" {host.db.key_file = "/run/x";}; true;
     obsidianRefused = assert refusedWith "services.atrium.knowledgeExport.obsidianDirectory" {host.export.export_obsidian_dir = "/var/lib/x";}; true;
     secretRefused = assert refusedWith "services.atrium.database.keyFile" {secretFiles."db.key" = "/run/x";}; assert refusedWith "connection field service/qbittorrent credential api_key" {secretFiles."media.media_qbittorrent_api_key" = "/run/x";}; assert refusedWith "connection field service/notion credential token" {secretFiles."notion.notion_token" = "/run/x";}; assert refusedWith "host configuration" {secretFiles."auth.oidc_client_secret" = "/run/x";}; assert refusedWith "is not a secret setting" {secretFiles."assistant.monthly_budget_usd" = "/run/x";}; true;
-    connectionRefused = assert refusedWith "needs a kind" {connections."service/x" = {kind = "";};};
-    assert refusedWith "needs a mail/<id> connection id" {
-      connections."service/x" = {
-        kind = "mail/icloud";
-        account = {
-          preset = "icloud";
-          login = "x";
-          passwordFile = "/run/x";
-        };
-      };
-    };
-    assert refusedWith "needs a passwordFile" {
-      connections."mail/x" = {
-        kind = "mail/icloud";
-        account = {
-          preset = "icloud";
-          login = "x";
-          passwordFile = "";
-        };
-      };
-    }; true;
+    connectionRefused = assert refusedWith "needs a kind" {connections."service/x" = {kind = "";};}; true;
     cfg = nixos.config.services.atrium;
     unitText = name: nixos.config.systemd.units.${name}.text;
     appUnits = builtins.filter (lib.hasSuffix ".service") cfg.unitNames;
@@ -198,7 +175,7 @@
           export CREDENTIALS_DIRECTORY=$TMPDIR/credentials
           mkdir -p "$CREDENTIALS_DIRECTORY"
           head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/action_links.action_link_key"
-          printf 'notion-token\n' >"$CREDENTIALS_DIRECTORY/notion.notion_token"
+          printf 'notion-token\n' >"$CREDENTIALS_DIRECTORY/connection-service-notion-token"
           head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/db-key"
           printf 'qbt-key\n' >"$CREDENTIALS_DIRECTORY/connection-service-qbittorrent-api_key"
           printf 'app-password\n' >"$CREDENTIALS_DIRECTORY/mail-account-icloud"

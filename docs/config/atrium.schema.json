@@ -991,7 +991,7 @@
     "core.otel_traces_endpoint": "services.atrium.observability.tracesEndpoint",
     "db.key": "services.atrium.database.keyFile",
     "export.export_obsidian_dir": "services.atrium.knowledgeExport.obsidianDirectory",
-    "mail.mail_accounts_file": "services.atrium.connections.\"mail/\u003cid\u003e\".account"
+    "mail.mail_accounts_file": "services.atrium.mailAccounts"
   },
   "x-atrium-destinations": {
     "action_links.action_link_key": "the operator setting action_links.action_link_key stored in the database",
@@ -1163,7 +1163,7 @@
     "mail.llm_body_chars": "the compiled constant internal/endpoint/tuning.go:TuningLlmBodyChars",
     "mail.llm_neighbors": "the compiled constant internal/mail/tuning.go:TuningLlmNeighbors",
     "mail.llm_top_senders": "the compiled constant internal/endpoint/tuning.go:TuningLlmTopSenders",
-    "mail.mail_accounts_file": "services.atrium.connections.\"mail/\u003cid\u003e\".account",
+    "mail.mail_accounts_file": "services.atrium.mailAccounts",
     "mail.mail_backoff_max_seconds": "the compiled constant internal/mail/tuning.go:TuningMailBackoffMaxSeconds",
     "mail.mail_backoff_start_seconds": "the compiled constant internal/mail/tuning.go:TuningMailBackoffStartSeconds",
     "mail.mail_body_cap_bytes": "the compiled constant internal/mail/tuning.go:TuningMailBodyCapBytes",
