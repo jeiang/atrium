@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/notionmd"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 const MaxImportBodyChars = 100000
@@ -281,15 +282,7 @@ func existingByOrigin(ctx context.Context, q db.Querier) (map[string]existingRec
 }
 
 func writtenTargets(ctx context.Context, q db.Querier) (map[int64]bool, error) {
-	rows, err := q.QueryContext(ctx, "SELECT DISTINCT target FROM agent_writes WHERE target LIKE 'kb:%' AND tool != 'kb_confirm'")
-	if err != nil {
-		return nil, err
-	}
-	targets, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
-		var target string
-		err := r.Scan(&target)
-		return target, err
-	})
+	targets, err := writes.TargetsLike(ctx, q, "kb:%", "kb_confirm")
 	if err != nil {
 		return nil, err
 	}

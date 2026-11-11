@@ -26,6 +26,7 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/textx"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 type Kind string
@@ -437,7 +438,7 @@ func MarksOf(ctx context.Context, q db.Querier, targets []string) (tool.Marks, e
 		args[i] = target
 	}
 	rows, err := q.QueryContext(ctx,
-		"SELECT DISTINCT t.marks FROM agent_writes w JOIN threads t ON t.id = w.thread_id "+
+		"SELECT DISTINCT t.marks FROM "+writes.FromClause("w")+" JOIN threads t ON t.id = w.thread_id "+
 			"WHERE w.target IN ("+placeholders+") AND w.state = 'ok' AND w.undone_at IS NULL", args...)
 	if err != nil {
 		return 0, err
@@ -666,6 +667,38 @@ func Get(ctx context.Context, q db.Querier, threadID int64) (*Thread, error) {
 		return nil, err
 	}
 	return &t, nil
+}
+
+func KindOf(ctx context.Context, q db.Querier, threadID int64) (Kind, error) {
+	var kind string
+	err := q.QueryRowContext(ctx, "SELECT kind FROM threads WHERE id = ?", threadID).Scan(&kind)
+	return Kind(kind), err
+}
+
+func KindsOf(ctx context.Context, q db.Querier, threadIDs []int64) (map[int64]Kind, error) {
+	if len(threadIDs) == 0 {
+		return nil, nil
+	}
+	marks := strings.TrimSuffix(strings.Repeat("?,", len(threadIDs)), ",")
+	args := make([]any, len(threadIDs))
+	for i, id := range threadIDs {
+		args[i] = id
+	}
+	rows, err := q.QueryContext(ctx, "SELECT id, kind FROM threads WHERE id IN ("+marks+")", args...)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := make(map[int64]Kind, len(threadIDs))
+	for rows.Next() {
+		var id int64
+		var kind string
+		if err := rows.Scan(&id, &kind); err != nil {
+			return nil, err
+		}
+		out[id] = Kind(kind)
+	}
+	return out, rows.Err()
 }
 
 func ContextLimitOf(t Thread) int64 {

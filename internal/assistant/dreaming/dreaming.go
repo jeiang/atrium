@@ -18,9 +18,11 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/timex"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 const daySeconds = 86400
@@ -338,8 +340,8 @@ func signals(ctx context.Context, q db.Querier, from float64) ([]signal, error) 
 		}
 	}
 	rows, err = q.QueryContext(ctx,
-		"SELECT w.tool, w.target, COALESCE(w.thread_id, 0) FROM agent_writes w "+
-			"LEFT JOIN threads t ON t.id = w.thread_id LEFT JOIN projects p ON p.id = t.project_id "+
+		"SELECT w.tool, w.target, COALESCE(w.thread_id, 0) FROM "+writes.FromClause("w")+
+			" LEFT JOIN threads t ON t.id = w.thread_id LEFT JOIN projects p ON p.id = t.project_id "+
 			"WHERE w.undone_at >= ? AND (w.thread_id IS NULL OR t.project_id IS NULL OR p.private = 0) ORDER BY w.id DESC LIMIT 10", from)
 	if err != nil {
 		return nil, err
@@ -448,28 +450,19 @@ func firstLine(text string) string {
 }
 
 func recordIndex(ctx context.Context, q db.Querier, now float64, allowed tool.Marks) ([]string, error) {
-	rows, err := q.QueryContext(ctx,
-		"SELECT r.id, r.title, r.scope, r.writer, r.confirmed_at IS NOT NULL, r.marks FROM kb_records r LEFT JOIN projects p ON p.id = r.project_id "+
-			"WHERE r.retracted_at IS NULL AND (r.expires_at IS NULL OR r.expires_at > ?) "+
-			"AND NOT ((r.private = 1 OR COALESCE(p.private, 0) = 1) AND (r.project_id IS NULL OR r.project_id != 0)) "+
-			"AND (r.marks & ?) = 0 ORDER BY r.updated_at DESC LIMIT 200", now, ^int64(allowed))
+	entries, err := kb.RecordIndex(ctx, q, now, allowed)
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (string, error) {
-		var id int64
-		var title, scope, writer string
-		var confirmed bool
-		var marks int64
-		if err := r.Scan(&id, &title, &scope, &writer, &confirmed, &marks); err != nil {
-			return "", err
-		}
+	out := make([]string, 0, len(entries))
+	for _, e := range entries {
 		state := "unconfirmed"
-		if confirmed {
+		if e.Confirmed {
 			state = "confirmed"
 		}
-		return fmt.Sprintf("K%d · %s · %s · %s · marks %s · %s", id, scope, writer, state, markNames(tool.Marks(marks)), title), nil
-	})
+		out = append(out, fmt.Sprintf("K%d · %s · %s · %s · marks %s · %s", e.ID, e.Scope, e.Writer, state, markNames(e.Marks), e.Title))
+	}
+	return out, nil
 }
 func markNames(m tool.Marks) string {
 	if m == 0 {

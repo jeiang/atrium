@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -33,17 +34,10 @@ type Resolver struct {
 }
 
 func RecordResolution(ctx context.Context, x Execer, who Resolver, ts float64, kind string, rowID int64, proposalID *int64, outcome, prior string) error {
-	var proposal any
 	if prior == "" {
 		prior = UnknownOutcomeText
 	}
-	if proposalID != nil {
-		proposal = *proposalID
-	}
-	_, err := x.ExecContext(ctx,
-		"INSERT INTO write_resolutions (ts, actor, source, kind, row_id, proposal_id, outcome, prior_error) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-		ts, who.Actor, who.Source, kind, rowID, proposal, outcome, prior)
-	return err
+	return writes.RecordResolution(ctx, x, who.Actor, who.Source, ts, kind, rowID, proposalID, outcome, prior)
 }
 
 const ErrSettledMeanwhile = ProposalError("the write was settled by the operator while it ran; the recorded outcome stands")

@@ -114,10 +114,8 @@ func (e *Executor) execute(t tool.Tool) proposals.Executor {
 		value, err := t.Approval.Apply(ctx, tc, args)
 		if err != nil {
 			text := err.Error()
-			var unknown bool
-			if qerr := e.DB.Write.QueryRowContext(context.WithoutCancel(ctx),
-				"SELECT EXISTS (SELECT 1 FROM agent_writes WHERE run_id = ? AND tool = ? AND state = 'unknown' AND ts >= ?)",
-				payload.RunID, t.Name, start).Scan(&unknown); qerr != nil {
+			unknown, qerr := writes.UnknownExists(context.WithoutCancel(ctx), e.DB.Write, payload.RunID, t.Name, start)
+			if qerr != nil {
 				return nil, qerr
 			}
 			message, refused := tool.Message(err)

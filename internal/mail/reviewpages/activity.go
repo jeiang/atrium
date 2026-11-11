@@ -10,6 +10,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -76,8 +77,6 @@ func writeCategoryWhere(category string) (string, []any) {
 	return strings.Join(clauses, " AND "), args
 }
 
-const writeColumns = "id, ts, thread_id, tool, target, before_json, after_json, undo_json, undone_at, state, error, thread_kind"
-
 func snippet(raw *string) (string, error) {
 	if raw == nil || *raw == "" {
 		return "", nil
@@ -93,43 +92,47 @@ func snippet(raw *string) (string, error) {
 	return string(text[:snippetLimit]) + "…", nil
 }
 
-func scanWrite(sc interface{ Scan(...any) error }) (ActivityEntry, error) {
+func writeEntry(w writes.Write, threadKind *string) (ActivityEntry, error) {
 	var e ActivityEntry
-	var threadID *int64
-	var tool, target string
-	var before, after, undo *string
-	var undoneAt *float64
-	var threadKind *string
-	var state string
-	var errorText *string
-	if err := sc.Scan(&e.ID, &e.TS, &threadID, &tool, &target, &before, &after, &undo, &undoneAt, &state, &errorText, &threadKind); err != nil {
-		return e, err
-	}
-	beforeText, err := snippet(before)
+	e.ID, e.TS = w.ID, w.TS
+	beforeText, err := snippet(w.Before)
 	if err != nil {
 		return e, err
 	}
-	afterText, err := snippet(after)
+	afterText, err := snippet(w.After)
 	if err != nil {
 		return e, err
 	}
 	e.Source = sourceWrite
-	e.Category = writeCategory(tool)
+	e.Category = writeCategory(w.Tool)
 	e.Write = &WriteActivity{
-		Tool: tool, Target: target, ThreadID: threadID, ThreadKind: threadKind, UndoneAt: undoneAt,
-		Before: beforeText, After: afterText, State: state, Error: errorText,
-		Undoable: undo != nil && *undo != "" && undoneAt == nil && state != "unknown",
+		Tool: w.Tool, Target: w.Target, ThreadID: w.ThreadID, ThreadKind: threadKind, UndoneAt: w.UndoneAt,
+		Before: beforeText, After: afterText, State: w.State, Error: w.Error,
+		Undoable: w.Undo != nil && *w.Undo != "" && w.UndoneAt == nil && w.State != "unknown",
 	}
 	return e, nil
 }
 
 func getWrite(ctx context.Context, q db.Querier, id int64) (*ActivityEntry, error) {
-	e, err := scanWrite(q.QueryRowContext(ctx,
-		"SELECT w.id, w.ts, w.thread_id, w.tool, w.target, w.before_json, w.after_json, w.undo_json, w.undone_at, w.state, w.error, t.kind "+
-			"FROM agent_writes w LEFT JOIN threads t ON t.id = w.thread_id WHERE w.id = ?", id))
-	if errors.Is(err, sql.ErrNoRows) {
+	w, err := writes.ByID(ctx, q, id)
+	if err != nil {
+		return nil, err
+	}
+	if w == nil {
 		return nil, nil
 	}
+	var kind *string
+	if w.ThreadID != nil {
+		found, err := threads.KindOf(ctx, q, *w.ThreadID)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return nil, err
+		}
+		if err == nil {
+			text := string(found)
+			kind = &text
+		}
+	}
+	e, err := writeEntry(*w, kind)
 	if err != nil {
 		return nil, err
 	}
@@ -174,29 +177,21 @@ func timeline(ctx context.Context, q db.Querier, category string, limit, offset 
 		}
 	}
 	if category == "" || category == categoryMail {
-		rows, err := q.QueryContext(ctx,
-			"SELECT id, ts, actor, kind, row_id, proposal_id, outcome FROM write_resolutions WHERE source = 'phone' ORDER BY ts DESC, id DESC LIMIT ?", want)
+		found, err := writes.ResolutionsSince(ctx, q, want)
 		if err != nil {
 			return nil, 0, err
 		}
-		phone, err := db.Collect(rows, func(r *sql.Rows) (ActivityEntry, error) {
+		phone := make([]ActivityEntry, 0, len(found))
+		for _, r := range found {
 			var e ActivityEntry
-			var rowID int64
-			var proposalID *int64
-			var actor, kind, status string
-			if err := r.Scan(&e.ID, &e.TS, &actor, &kind, &rowID, &proposalID, &status); err != nil {
-				return e, err
+			target := fmt.Sprintf("%s %d", r.Kind, r.RowID)
+			if r.ProposalID != nil {
+				target = fmt.Sprintf("proposal %d", *r.ProposalID)
 			}
-			target := fmt.Sprintf("%s %d", kind, rowID)
-			if proposalID != nil {
-				target = fmt.Sprintf("proposal %d", *proposalID)
-			}
+			e.ID, e.TS = r.ID, r.TS
 			e.Source, e.Category = "phone", categoryMail
-			e.Phone = &PhoneActivity{Actor: actor, Kind: kind, Status: status, Target: target}
-			return e, nil
-		})
-		if err != nil {
-			return nil, 0, err
+			e.Phone = &PhoneActivity{Actor: r.Actor, Kind: r.Kind, Status: r.Outcome, Target: target}
+			phone = append(phone, e)
 		}
 		entries = append(entries, phone...)
 	}
@@ -209,20 +204,34 @@ func timeline(ctx context.Context, q db.Querier, category string, limit, offset 
 	}
 	if category != categoryMail && category != categorySettings {
 		where, args := writeCategoryWhere(category)
-		query := "SELECT " + writeColumns + " FROM (SELECT w.*, t.kind AS thread_kind FROM agent_writes w " +
-			"LEFT JOIN threads t ON t.id = w.thread_id)"
-		if where != "" {
-			query += " WHERE " + where
-		}
-		query += " ORDER BY ts DESC, id DESC LIMIT ?"
-		args = append(args, want)
-		rows, err := q.QueryContext(ctx, query, args...)
+		found, err := writes.List(ctx, q, where, args, want)
 		if err != nil {
 			return nil, 0, err
 		}
-		written, err := db.Collect(rows, func(r *sql.Rows) (ActivityEntry, error) { return scanWrite(r) })
+		ids := make([]int64, 0, len(found))
+		for _, w := range found {
+			if w.ThreadID != nil {
+				ids = append(ids, *w.ThreadID)
+			}
+		}
+		kinds, err := threads.KindsOf(ctx, q, ids)
 		if err != nil {
 			return nil, 0, err
+		}
+		written := make([]ActivityEntry, 0, len(found))
+		for _, w := range found {
+			var kind *string
+			if w.ThreadID != nil {
+				if k, ok := kinds[*w.ThreadID]; ok {
+					text := string(k)
+					kind = &text
+				}
+			}
+			entry, err := writeEntry(w, kind)
+			if err != nil {
+				return nil, 0, err
+			}
+			written = append(written, entry)
 		}
 		entries = append(entries, written...)
 	}

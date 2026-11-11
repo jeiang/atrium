@@ -22,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/textsearch"
 	"github.com/jeiang/atrium/internal/web"
@@ -96,7 +97,7 @@ func (p *pages) about(ctx context.Context, ref string) *About {
 		err = p.deps.DB.Read.QueryRowContext(ctx, "SELECT COALESCE(subject, '') FROM messages WHERE id = ?", id).Scan(&a.Label)
 		a.Line = "About mail message " + number + "."
 	case "knowledge":
-		err = p.deps.DB.Read.QueryRowContext(ctx, "SELECT title FROM kb_records WHERE id = ?", id).Scan(&a.Label)
+		a.Label, err = kb.Title(ctx, p.deps.DB.Read, id)
 		a.Line = "About knowledge record " + number + "."
 	case "package":
 		err = p.deps.DB.Read.QueryRowContext(ctx, "SELECT CASE WHEN merchant <> '' THEN merchant WHEN carrier <> '' THEN carrier ELSE 'Package' END FROM packages WHERE id = ?", id).Scan(&a.Label)

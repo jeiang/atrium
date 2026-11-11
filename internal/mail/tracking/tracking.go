@@ -23,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 var log = logx.Logger("atrium.tracking")
@@ -413,16 +414,16 @@ func Resolve(ctx context.Context, d *db.DB, env config.Env, now float64, package
 		return Target{}, Settings{}, err
 	}
 	var blocked int
-	if err := d.Read.QueryRowContext(ctx,
-		"SELECT COUNT(*) FROM agent_writes WHERE tool = 'track_package' AND target = ? AND state IN ('held', 'unknown')",
-		fmt.Sprintf("package:%d", t.ID)).Scan(&blocked); err != nil {
+	blocked, err = writes.BlockedCount(ctx, d.Read, "track_package", fmt.Sprintf("package:%d", t.ID))
+	if err != nil {
 		return Target{}, Settings{}, err
 	}
 	if blocked > 0 {
 		return Target{}, Settings{}, Error("the previous track_package for this package has an unknown outcome; resolve it with 'atrium writes resolve <id>' before retrying")
 	}
 	var used int
-	if err := d.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_writes WHERE tool = 'track_package' AND ts >= ?", monthStart).Scan(&used); err != nil {
+	used, err = writes.CountSince(ctx, d.Read, "track_package", monthStart)
+	if err != nil {
 		return Target{}, Settings{}, err
 	}
 	if used >= s.Quota {

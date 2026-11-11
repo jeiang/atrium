@@ -303,9 +303,7 @@ func Purge(ctx context.Context, d *db.DB, id int64, now float64) error {
 		if _, err := tx.ExecContext(ctx, "DELETE FROM kb_records WHERE id = ?", id); err != nil {
 			return err
 		}
-		if _, err := tx.ExecContext(ctx,
-			"UPDATE agent_writes SET before_json = '{\"purged\":true}', after_json = '{\"purged\":true}', undo_json = '{\"purged\":true}' WHERE target = ?",
-			"kb:"+fmt.Sprint(id)); err != nil {
+		if err := writes.PurgeTarget(ctx, tx, "kb:"+fmt.Sprint(id)); err != nil {
 			return err
 		}
 		_, err = writes.Record(ctx, tx, nil, writes.New{TS: now, Tool: "kb_purge", Target: "kb:" + fmt.Sprint(id)})

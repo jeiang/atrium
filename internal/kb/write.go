@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/tool"
@@ -129,12 +130,7 @@ func projectPrivate(ctx context.Context, q db.Querier, project *int64) (bool, er
 	if project == nil {
 		return false, nil
 	}
-	var private int64
-	err := q.QueryRowContext(ctx, "SELECT private FROM projects WHERE id = ?", *project).Scan(&private)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	return private != 0, err
+	return projects.Private(ctx, q, *project)
 }
 
 func existing(ctx context.Context, q db.Querier, scope string, project int64, now float64) ([]exactRow, error) {
