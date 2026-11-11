@@ -45,8 +45,8 @@ func TestTuningKeysAreAbsentFromSettings(t *testing.T) {
 		}
 		for _, args := range [][]string{{"get", key}, {"set", key, "1"}, {"unset", key}} {
 			got := runSettings(t, args...)
-			if got.code == cli.ExitOK || !strings.Contains(got.stderr, "unknown key") {
-				t.Errorf("settings %s: exit %d stderr %q, want an unknown-key refusal", strings.Join(args, " "), got.code, got.stderr)
+			if got.code == cli.ExitOK || !strings.Contains(got.stderr, "compiled constant") {
+				t.Errorf("settings %s: exit %d stderr %q, want a compiled-constant refusal", strings.Join(args, " "), got.code, got.stderr)
 			}
 		}
 	}
