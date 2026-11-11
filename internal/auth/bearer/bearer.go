@@ -8,6 +8,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"math"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -17,13 +18,12 @@ import (
 )
 
 const (
-	Prefix        = "atr_"
-	secretBytes   = 32
-	maxName       = 100
-	maxTokenBytes = 64 << 10
-	kindLocal     = "local"
-	kindOIDC      = "oidc"
-	oidcName      = "OIDC access token"
+	Prefix      = "atr_"
+	secretBytes = 32
+	maxName     = 100
+	kindLocal   = "local"
+	kindOIDC    = "oidc"
+	oidcName    = "OIDC access token"
 )
 
 var (
@@ -36,14 +36,16 @@ var (
 )
 
 type Token struct {
-	ID         int64
-	Kind       string
-	Name       string
-	Subject    string
-	CreatedAt  time.Time
-	ExpiresAt  *time.Time
-	LastUsedAt *time.Time
-	RevokedAt  *time.Time
+	ID          int64
+	Kind        string
+	Name        string
+	Subject     string
+	Email       string
+	DisplayName string
+	CreatedAt   time.Time
+	ExpiresAt   *time.Time
+	LastUsedAt  *time.Time
+	RevokedAt   *time.Time
 }
 
 type Issued struct {
@@ -181,7 +183,7 @@ func (s *Service) authenticateOIDC(ctx context.Context, raw string) (Token, erro
 	if s.oidc == nil {
 		return Token{}, oidc.ErrAPIOff
 	}
-	if raw == "" || len(raw) > maxTokenBytes {
+	if raw == "" || len(raw) > oidc.MaxTokenBytes {
 		return Token{}, ErrInvalid
 	}
 	hash := hashSecret(raw)
@@ -211,7 +213,12 @@ func (s *Service) authenticateOIDC(ctx context.Context, raw string) (Token, erro
 		}
 		return s.admit(ctx, tx, hash, now, &tok)
 	})
-	return tok, err
+	if err != nil {
+		return Token{}, err
+	}
+	tok.Email = session.Email
+	tok.DisplayName = session.Name
+	return tok, nil
 }
 
 func (s *Service) admit(ctx context.Context, q db.Querier, hash string, now time.Time, out *Token) error {
@@ -282,11 +289,12 @@ func hashSecret(raw string) string {
 }
 
 func unix(t time.Time) float64 {
-	return float64(t.UnixNano()) / 1e9
+	return float64(t.Unix()) + float64(t.Nanosecond())/1e9
 }
 
 func fromUnix(v float64) time.Time {
-	return time.Unix(0, int64(v*1e9)).UTC()
+	seconds := math.Floor(v)
+	return time.Unix(int64(seconds), int64(math.Round((v-seconds)*1e9))).UTC()
 }
 
 func optional(v sql.NullFloat64) *time.Time {

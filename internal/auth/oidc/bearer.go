@@ -47,7 +47,7 @@ func (s *Service) AuthenticateBearer(ctx context.Context, raw string) (Session, 
 	if err != nil {
 		return Session{}, err
 	}
-	if raw == "" || len(raw) > maxTokenBytes {
+	if raw == "" || len(raw) > MaxTokenBytes {
 		return Session{}, tokenError("malformed bearer token")
 	}
 	key := digest(audience + "\x00" + cfg.Issuer + "\x00" + raw)

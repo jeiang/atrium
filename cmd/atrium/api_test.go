@@ -52,7 +52,7 @@ func newAPISite(t *testing.T) *apiSite {
 	return startAPISite(t, dir, api)
 }
 
-func startAPISite(t *testing.T, dir string, api *modelLog) *apiSite {
+func startAPISite(t *testing.T, dir string, api *modelLog, extra ...string) *apiSite {
 	t.Helper()
 	idp := oidctest.New(t, oidctest.Options{ClientSecret: "s3cret-for-the-test", GroupsIn: "userinfo"})
 	idp.AddUser(oidctest.User{Name: "owner", Email: "owner@example.com", Groups: []string{"atrium_access", "atrium_admin"}})
@@ -73,7 +73,9 @@ func startAPISite(t *testing.T, dir string, api *modelLog) *apiSite {
 		Secret:      "s3cret-for-the-test",
 		GroupsClaim: "groups",
 	}))
-	served, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, "--port", port, "--auth", "proxy", "--auth", "oidc", "--allowed-host", "127.0.0.1")
+	args := []string{"--port", port, "--auth", "proxy", "--auth", "oidc", "--allowed-host", "127.0.0.1"}
+	args = append(args, extra...)
+	served, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, args...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +288,7 @@ func TestAPIRefusesRequestsWithoutAValidBearer(t *testing.T) {
 	owner := s.token("owner")
 
 	me := s.do(http.MethodGet, "/api/v1/me", owner, nil)
-	if me.status != http.StatusOK || me.json["subject"] != "sub-owner" || me.header.Get("Cache-Control") != "no-store" {
+	if me.status != http.StatusOK || me.json["subject"] != "sub-owner" || me.json["email"] != "owner@example.com" || me.json["name"] != "owner" || me.header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("me: %d %s %v", me.status, me.body, me.header)
 	}
 	if _, ok := me.json["admin"]; ok {
@@ -375,7 +377,7 @@ func TestAPILocalTokensWorkWithoutOIDC(t *testing.T) {
 			t.Fatal(err)
 		}
 		s := &apiSite{t: t, base: base}
-		if me := s.do(http.MethodGet, "/api/v1/me", secret, nil); me.status != http.StatusOK || me.json["api_version"] != float64(1) {
+		if me := s.do(http.MethodGet, "/api/v1/me", secret, nil); me.status != http.StatusOK || me.json["api_version"] != float64(1) || me.json["email"] != "" || me.json["name"] != "" {
 			t.Fatalf("%v: a local token cannot read the API: %d %s", auth, me.status, me.body)
 		}
 		expectAPI(t, s.do(http.MethodGet, "/api/v1/me", "a.b.c", nil), http.StatusNotFound, "api_unavailable")
