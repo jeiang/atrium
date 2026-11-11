@@ -612,18 +612,18 @@ Each belongs under the fix named in brackets.
 - [F12] The restore drill's plaintext case starts from the v1 fixture.
 - Sound: the go-imap fork discipline, the sqlite-vec provenance check, and the test that cross-checks dashboard metric names against code.
 
-## Open decisions
+## Decisions
 
-These change the scope of the fixes and need the operator's answer.
+The operator settled these on 2026-11-10. They fix the scope of the fixes.
 
-1. **Processes.** One `atrium serve` that owns the scheduler, the mail watch and the sync timers, or the current units with one designated owner for background loops. One process fixes metrics, duplicate loops and idempotency at once; separate units keep isolation and systemd restart per concern.
-2. **Marked threads and knowledge writes.** Keep the code (a marked thread may write unconfirmed records that carry its marks) or keep `context.md:458` (it may not).
-3. **Administrator role.** Remove it, or state who the second person is.
-4. **Public `sdk`.** Delete until an external module exists, or widen it to the full module contract.
-5. **Tuning settings.** Whether the 189 tuning constants leave the settings registry.
-6. **Emergency access.** Loopback listener only, or loopback and login links.
-7. **App reach.** Whether the app is the chat and review client that the API already half serves, or a full replacement for the web interface including settings and media.
-8. **Offline.** Whether the app must work without the host.
+1. **Processes.** One `atrium serve` owns the scheduler, the mail watch and the sync passes. The separate units, the timers and `atrium-web-local` go away; unit names are a host-facing contract, so the host configuration changes with it (F2).
+2. **Marked threads and knowledge writes.** The code is right: a marked thread may write unconfirmed records that carry its marks. `context.md:458` is the statement to correct (F4).
+3. **Administrator role.** Removed. One principal (F4).
+4. **Public `sdk`.** Deleted for now, with `withModules` and `module_migrations` (F5).
+5. **Tuning settings.** The tuning constants leave the settings registry and become code (F7).
+6. **Emergency access.** Loopback only. Login links are removed, which also ends the reuse of `action_link_key` for them (F4). With one process, loopback is a second listener of that process (F2).
+7. **App reach.** The app is a full replacement for the web interface, so the API must reach all 22 feature areas, settings and media included (F1).
+8. **Offline.** Not required. The app still needs bounded lists, durable command identity and a resumable stream for poor networks; a local store and a change feed for offline use are out of scope.
 
 ## Not checked
 
