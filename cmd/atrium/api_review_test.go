@@ -114,7 +114,7 @@ func TestAPIApprovesUndoesAndSendsThroughTheSameGates(t *testing.T) {
 		t.Fatalf("a second approval wrote again: %d puts", len(dav.Puts))
 	}
 	var source string
-	if err := d.Read.QueryRow("SELECT source FROM write_resolutions WHERE proposal_id = ? AND outcome = 'approved'", approve).Scan(&source); err != nil || source != "ui" {
+	if err := d.Read.QueryRow("SELECT source FROM effect_resolutions WHERE proposal_id = ? AND effect_id IS NULL AND outcome = 'approved'", approve).Scan(&source); err != nil || source != "ui" {
 		t.Fatalf("approval resolution source = %q, %v", source, err)
 	}
 

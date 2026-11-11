@@ -42,8 +42,4 @@ func (s State) Final() bool {
 
 func (s State) Blocking() bool { return s == Intent || s == Unknown || s == Partial }
 
-func BlockedSQL(alias string) string {
-	return alias + ".state IN ('unknown', 'partial', 'undo_unknown', 'undo_partial')"
-}
-
 func ActiveSQL(alias string) string { return alias + ".state IN ('held', 'unknown', 'partial')" }

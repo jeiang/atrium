@@ -238,12 +238,23 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 		}
 	}
 	want := []string{
-		"operator/cli/proposal_action/settled", "operator/cli/proposal_action/approved", "operator/cli/auto_undo/undone",
+		"operator/cli/proposal_action/settled", "operator/cli/auto_undo/undone",
 		"operator/cli/auto_undo/undone", "operator/cli/auto_undo/not-undone", "operator/cli/proposal_action/not-undone",
 		"operator/ui/proposal_action/settled", "operator/ui/auto_undo/undone",
 	}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("write_resolutions = %v, want %v", got, want)
+	}
+	var approval, approvalProposal int64
+	var approvalOutcome string
+	var approvalEffective *string
+	if err := check.Read.QueryRow("SELECT COUNT(*), MAX(proposal_id), MAX(outcome), MAX(effective_outcome) FROM effect_resolutions "+
+		"WHERE effect_id IS NULL AND proposal_id = ? AND outcome = 'approved'", viaCLI).
+		Scan(&approval, &approvalProposal, &approvalOutcome, &approvalEffective); err != nil {
+		t.Fatal(err)
+	}
+	if approval != 1 || approvalProposal != viaCLI || approvalOutcome != "approved" || approvalEffective != nil {
+		t.Errorf("approval audit = %d rows for proposal %d outcome %q effective %v, want one proposal-only audit", approval, approvalProposal, approvalOutcome, approvalEffective)
 	}
 	var undone int
 	if err := check.Read.QueryRow("SELECT COUNT(*) FROM auto_actions WHERE undone_ts IS NOT NULL AND undone_error IS NULL").Scan(&undone); err != nil || undone != 3 {
