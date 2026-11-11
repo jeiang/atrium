@@ -345,7 +345,7 @@ func TargetsLike(ctx context.Context, q db.Querier, like, excludeOperation strin
 }
 
 const (
-	effectBlockedExpr = "e.state IN ('intent','unknown','partial') AND r.id IS NULL"
+	effectBlockedExpr  = "e.state IN ('intent','unknown','partial') AND r.id IS NULL"
 	effectUndoableExpr = "e.direction = 'forward' AND e.state IN ('done','partial') AND e.undo_json IS NOT NULL " +
 		"AND e.undone_by IS NULL AND (r.id IS NULL OR r.effective_outcome <> 'failed') " +
 		"AND NOT EXISTS (SELECT 1 FROM effects u WHERE u.undo_of = e.id AND u.state IN ('intent','unknown','partial','done') " +

@@ -36,23 +36,23 @@ type Execer interface {
 }
 
 type Proposal struct {
-	ID           int64
-	Kind         string
-	Account      *string
-	Status       string
-	CreatedTS    float64
-	DecidedTS    *float64
-	AppliedTS    *float64
-	UndoneTS     *float64
-	Recovered    bool
-	Title        string
-	Payload      json.RawMessage
-	Preview      any
-	Result       any
-	previewRaw   string
-	resultRaw    string
-	Fingerprint  string
-	Undoable     bool
+	ID            int64
+	Kind          string
+	Account       *string
+	Status        string
+	CreatedTS     float64
+	DecidedTS     *float64
+	AppliedTS     *float64
+	UndoneTS      *float64
+	Recovered     bool
+	Title         string
+	Payload       json.RawMessage
+	Preview       any
+	Result        any
+	previewRaw    string
+	resultRaw     string
+	Fingerprint   string
+	Undoable      bool
 	Blocked       bool
 	BlockedEffect bool
 	BlockedUndo   bool

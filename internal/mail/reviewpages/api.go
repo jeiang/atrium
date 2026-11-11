@@ -21,27 +21,27 @@ import (
 var appResolver = proposals.Resolver{Actor: "operator", Source: "ui"}
 
 type apiApproval struct {
-	ID          int64    `json:"id"`
-	Kind        string   `json:"kind"`
-	KindLabel   string   `json:"kind_label"`
-	Module      string   `json:"module"`
-	Approval    bool     `json:"approval"`
-	Status      string   `json:"status"`
-	Account     *string  `json:"account"`
-	Title       string   `json:"title"`
-	ThreadID    *int64   `json:"thread_id"`
-	RunID       *int64   `json:"run_id"`
-	CreatedAt   float64  `json:"created_at"`
-	DecidedAt   *float64 `json:"decided_at"`
-	AppliedAt   *float64 `json:"applied_at"`
-	UndoneAt    *float64 `json:"undone_at"`
-	Undoable    bool     `json:"undoable"`
+	ID            int64    `json:"id"`
+	Kind          string   `json:"kind"`
+	KindLabel     string   `json:"kind_label"`
+	Module        string   `json:"module"`
+	Approval      bool     `json:"approval"`
+	Status        string   `json:"status"`
+	Account       *string  `json:"account"`
+	Title         string   `json:"title"`
+	ThreadID      *int64   `json:"thread_id"`
+	RunID         *int64   `json:"run_id"`
+	CreatedAt     float64  `json:"created_at"`
+	DecidedAt     *float64 `json:"decided_at"`
+	AppliedAt     *float64 `json:"applied_at"`
+	UndoneAt      *float64 `json:"undone_at"`
+	Undoable      bool     `json:"undoable"`
 	Blocked       bool     `json:"blocked"`
 	BlockedEffect bool     `json:"blocked_effect"`
 	BlockedUndo   bool     `json:"blocked_undo"`
-	Args        []Arg    `json:"args"`
-	Preview     any      `json:"preview"`
-	Result      any      `json:"result"`
+	Args          []Arg    `json:"args"`
+	Preview       any      `json:"preview"`
+	Result        any      `json:"result"`
 }
 
 type apiDraft struct {
