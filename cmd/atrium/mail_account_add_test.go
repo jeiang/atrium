@@ -12,7 +12,7 @@ import (
 
 func TestMailAccountAddLeavesNothingWhenTheTestFails(t *testing.T) {
 	dir := keyedMailFixture(t)
-	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir))
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir, mailAccount{"home", "icloud", "me@home.test", "home-pass", false}))
 	fake := mailtest.NewFakeClient()
 	fake.AddBox("INBOX", mailtest.NewBox(1))
 	strictIMAPRig(t, map[string]string{"me@work.test": "work-pass"}, map[string]*mailtest.FakeClient{"work": fake})
@@ -64,6 +64,18 @@ func TestMailAccountAddLeavesNothingWhenTheTestFails(t *testing.T) {
 	} {
 		if n := mailCount(t, d, query); n != 1 {
 			t.Fatalf("a successful add left %d rows for %s", n, query)
+		}
+	}
+
+	if code, body := add("home", "work-pass"); code != http.StatusUnprocessableEntity {
+		t.Fatalf("add of an existing account id = %d: %.300s", code, body)
+	}
+	for _, query := range []string{
+		"SELECT COUNT(*) FROM mail_accounts WHERE id = 'home'",
+		"SELECT COUNT(*) FROM connections WHERE id = 'mail/home'",
+	} {
+		if n := mailCount(t, d, query); n != 1 {
+			t.Fatalf("a refused add left %d rows for the existing %s", n, query)
 		}
 	}
 }

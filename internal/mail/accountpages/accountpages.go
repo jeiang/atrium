@@ -279,7 +279,9 @@ func (h handlers) add(w http.ResponseWriter, r *http.Request) {
 			err = refusal(a.Name + " is already an account id")
 		}
 	}
+	attempted := false
 	if err == nil {
+		attempted = true
 		_, err = h.ensure(ctx, a)
 	}
 	if err == nil {
@@ -289,9 +291,11 @@ func (h handlers) add(w http.ResponseWriter, r *http.Request) {
 		err = h.save(ctx, a)
 	}
 	if err != nil {
-		_ = config.DeleteStoredAccount(ctx, h.d.DB.Write, a.Name)
-		h.drop(ctx, a)
-		_ = config.From(ctx).LoadStoredAccounts(ctx, h.d.DB.Read)
+		if attempted {
+			_ = config.DeleteStoredAccount(ctx, h.d.DB.Write, a.Name)
+			h.drop(ctx, a)
+			_ = config.From(ctx).LoadStoredAccounts(ctx, h.d.DB.Read)
+		}
 		h.fail(w, r, "new", kept, err)
 		return
 	}
