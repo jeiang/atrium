@@ -1,3 +1,5 @@
+//go:build !modernc
+
 package main
 
 import (
