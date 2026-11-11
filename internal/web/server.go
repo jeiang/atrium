@@ -233,8 +233,8 @@ func New(o Options) (*Server, error) {
 	guard.bearers = s.bearers
 	guard.errPage = s.errPage
 	if o.DB != nil {
-		guard.bodyCap = func(ctx context.Context) (int, error) {
-			return config.From(ctx).Limit(ctx, o.DB.Read, config.KeyBodyCap)
+		guard.bodyCap = func(context.Context) (int, error) {
+			return config.TuningBodyCapBytes, nil
 		}
 	}
 	s.handler = otelhttp.NewHandler(guard.Middleware(Gzip(recoverer(s.mux))), "http.server",

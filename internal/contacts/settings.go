@@ -10,17 +10,13 @@ import (
 )
 
 const (
-	DirKey        = "contacts_dir"
-	DirEnv        = "ATRIUM_CONTACTS_" + DirKey
-	MaxResultsKey = "contacts_max_results"
+	DirKey = "contacts_dir"
+	DirEnv = "ATRIUM_CONTACTS_" + DirKey
 )
 
 func init() {
 	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
 		Key: DirKey, Module: "contacts", Type: settings.String}))
-	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
-		Key: MaxResultsKey, Module: "contacts", Type: settings.Int, Default: "10", Min: 1, Max: 100,
-		Check: settings.Between(1, 100)}))
 }
 
 type State uint8
@@ -63,9 +59,5 @@ func Dir(ctx context.Context, q db.Querier) (string, error) {
 }
 
 func MaxResults(ctx context.Context, q db.Querier) (int64, error) {
-	found, err := settings.From(ctx).Resolve(ctx, q, MaxResultsKey)
-	if err != nil {
-		return 0, err
-	}
-	return found.Int()
+	return TuningContactsMaxResults, nil
 }

@@ -53,8 +53,7 @@ func scanLibraryFile(r *sql.Rows) (LibraryFile, error) {
 
 func (p *pages) libraryFiles(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
-	limit, err := config.From(ctx).Limit(ctx, p.deps.DB.Read, config.KeyPageSize)
-	check(err)
+	limit := config.TuningWebPageSize
 	rows, err := p.deps.DB.Read.QueryContext(ctx, libraryFilesQuery, limit)
 	check(err)
 	found, err := db.Collect(rows, scanLibraryFile)

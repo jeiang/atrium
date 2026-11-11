@@ -102,8 +102,7 @@ func (p *pages) scheduledData(r *http.Request) ScheduledData {
 	check(err)
 	jobs, err := scheduler.ListJobs(ctx, p.deps.DB.Read, false)
 	check(err)
-	history, err := config.From(ctx).Limit(ctx, p.deps.DB.Read, config.KeyRunHistory)
-	check(err)
+	history := config.TuningWebRunHistory
 	runs, err := scheduler.ListRuns(ctx, p.deps.DB.Read, 0, history)
 	check(err)
 	views := make([]JobView, len(jobs))

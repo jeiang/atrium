@@ -16,13 +16,7 @@ const (
 	AccountKey          = "calendar_account"
 	ICloudCalendarKey   = "icloud_calendar"
 	CalendarDirKey      = "calendar_dir"
-	MaxEventsKey        = "max_events"
-	MaxOccurrencesKey   = "max_occurrences"
 	DefaultMinutesKey   = "default_event_minutes"
-	CandidateScanKey    = "candidate_scan_limit"
-	CandidateDraftKey   = "candidate_draft_limit"
-	defaultMaxEvents    = "200"
-	defaultMaxOccur     = "2000"
 	defaultEventMinutes = "60"
 )
 
@@ -35,18 +29,6 @@ func init() {
 			Key: DefaultMinutesKey, Module: "calendar", Type: settings.Int, Default: defaultEventMinutes,
 			Check: settings.Between(5, 1440)}),
 		settings.Value(settings.Advanced, settings.Def{Key: CalendarDirKey, Module: "calendar", Type: settings.String}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: MaxEventsKey, Module: "calendar", Type: settings.Int, Default: defaultMaxEvents,
-			Check: settings.Between(1, 10000)}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: MaxOccurrencesKey, Module: "calendar", Type: settings.Int, Default: defaultMaxOccur,
-			Check: settings.Between(1, 100000)}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: CandidateScanKey, Module: "calendar", Type: settings.Int, Default: "50",
-			Check: settings.Between(1, 1000)}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: CandidateDraftKey, Module: "calendar", Type: settings.Int, Default: "10",
-			Check: settings.Between(1, 100)}),
 	)
 }
 
@@ -63,7 +45,7 @@ type Settings struct {
 }
 
 func LoadSettings(ctx context.Context, q db.Querier) (Settings, error) {
-	var out Settings
+	out := Settings{MaxEvents: TuningMaxEvents, MaxOccurrences: TuningMaxOccurrences}
 	text := func(key string, into *string) error {
 		found, err := settings.From(ctx).Resolve(ctx, q, key)
 		*into = found.Value
@@ -83,8 +65,6 @@ func LoadSettings(ctx context.Context, q db.Querier) (Settings, error) {
 		func() error { return text(AccountKey, &out.Account) },
 		func() error { return text(ICloudCalendarKey, &out.ICloudCalendar) },
 		func() error { return text(CalendarDirKey, &out.CalendarDir) },
-		func() error { return whole(MaxEventsKey, &out.MaxEvents) },
-		func() error { return whole(MaxOccurrencesKey, &out.MaxOccurrences) },
 		func() error { return whole(DefaultMinutesKey, &out.DefaultMinutes) },
 	} {
 		if err := step(); err != nil {
@@ -120,21 +100,7 @@ func openConnection(ctx context.Context, q db.Querier, id connections.ID) *conne
 func ICloudID(account string) connections.ID { return connections.ID("icloud/" + account) }
 
 func CandidateLimits(ctx context.Context, q db.Querier) (scan, draft int, err error) {
-	for _, step := range []struct {
-		key  string
-		into *int
-	}{{CandidateScanKey, &scan}, {CandidateDraftKey, &draft}} {
-		found, err := settings.From(ctx).Resolve(ctx, q, step.key)
-		if err != nil {
-			return 0, 0, err
-		}
-		n, err := found.Int()
-		if err != nil {
-			return 0, 0, err
-		}
-		*step.into = int(n)
-	}
-	return scan, draft, nil
+	return TuningCandidateScanLimit, TuningCandidateDraftLimit, nil
 }
 
 func missingCredentials(missing []string) error {

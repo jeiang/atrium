@@ -22,17 +22,16 @@ func TestPassesRecordOutcomesAndPruneByRetention(t *testing.T) {
 		t.Fatalf("settings list: %d %s", got.code, got.stderr)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	old := float64(time.Now().Add(-48 * time.Hour).Unix())
+	old := float64(time.Now().Add(-91 * 24 * time.Hour).Unix())
 	if _, err := d.Write.Exec("INSERT INTO pass_runs (job, started_at, finished_at, outcome) VALUES ('scan', ?, ?, 'ok')", old, old); err != nil {
 		t.Fatal(err)
 	}
-	setEnv(t, settingEnv(passrun.RetentionKey), "1")
 
 	if got := runApp(t, "proposals", "scan-all"); got.code != cli.ExitOK {
 		t.Fatalf("scan-all: %d %s", got.code, got.stderr)
 	}
 	if ok, failed, _ := passRows(t, dir, passrun.Scan); ok != 1 || failed != 0 {
-		t.Errorf("scan rows ok=%d failed=%d, want the new success only (old row pruned)", ok, failed)
+		t.Errorf("scan rows ok=%d failed=%d, want the new success only (old row pruned by the 90-day constant)", ok, failed)
 	}
 
 	missing := filepath.Join(dir, "no-such-dir", "out.backup")
