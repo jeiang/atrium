@@ -747,25 +747,7 @@ func refuseDestination(ctx context.Context, path string, key db.Key) error {
 }
 
 func importLocation(ctx context.Context, src *sql.DB, env config.Env) (*time.Location, error) {
-	reg := settings.From(ctx)
-	if value, _, ok := reg.Pin(config.KeyTZ); ok {
-		return config.Zone(value)
-	}
-	if def, ok := reg.Lookup(config.KeyTZ); ok {
-		if value, ok := env(config.EnvName(def)); ok && strings.TrimSpace(value) != "" {
-			return config.Zone(strings.TrimSpace(value))
-		}
-	}
-	var value string
-	err := src.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = ?", config.KeyTZ).Scan(&value)
-	switch {
-	case err == nil:
-		return config.Zone(strings.TrimSpace(value))
-	case errors.Is(err, sql.ErrNoRows):
-		return config.Zone(config.Timezone)
-	default:
-		return nil, err
-	}
+	return inference.Location(ctx, src)
 }
 
 func unknownSettings(ctx context.Context, src *sql.DB) ([]string, error) {

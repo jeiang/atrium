@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/registry"
@@ -28,12 +27,12 @@ func rowOf(a subagents.Agent) subagentRow {
 	return subagentRow{Name: a.Name, Enabled: a.Enabled, Builtin: a.Builtin, Effort: a.Effort, Tools: a.Tools}
 }
 
-func subagentsCommand(cfgEnv config.Env, tools registry.Source) *cli.Command {
+func subagentsCommand(cfgEnv config.Env, tools registry.Source, now func() float64) *cli.Command {
 	return &cli.Command{Name: "subagents", Commands: []*cli.Command{
 		subagentsList(cfgEnv),
-		subagentsSet(cfgEnv, tools),
-		subagentsToggle(cfgEnv, "enable", true),
-		subagentsToggle(cfgEnv, "disable", false),
+		subagentsSet(cfgEnv, tools, now),
+		subagentsToggle(cfgEnv, "enable", true, now),
+		subagentsToggle(cfgEnv, "disable", false, now),
 		subagentsDelete(cfgEnv),
 	}}
 }
@@ -66,7 +65,7 @@ func withDB(env *cli.Env, cfgEnv config.Env, act func(*db.DB) error) int {
 	return cli.ExitOK
 }
 
-func stamp() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
+func stamp(now func() float64) float64 { return clock(now)() }
 
 func unknown(name string) error { return fmt.Errorf("no subagent %q", name) }
 
@@ -93,7 +92,7 @@ func subagentsList(cfgEnv config.Env) *cli.Command {
 	}
 }
 
-func subagentsSet(cfgEnv config.Env, tools registry.Source) *cli.Command {
+func subagentsSet(cfgEnv config.Env, tools registry.Source, now func() float64) *cli.Command {
 	return &cli.Command{
 		Name: "set",
 		Help: "create or update a subagent; omitted fields keep their stored values",
@@ -143,7 +142,7 @@ func subagentsSet(cfgEnv config.Env, tools registry.Source) *cli.Command {
 								def.Tools = existing.Tools
 							}
 						}
-						saved, err = subagents.Save(env.Ctx, tx, reg, def, stamp())
+						saved, err = subagents.Save(env.Ctx, tx, reg, def, stamp(now))
 						return err
 					})
 					if err != nil {
@@ -157,7 +156,7 @@ func subagentsSet(cfgEnv config.Env, tools registry.Source) *cli.Command {
 	}
 }
 
-func subagentsToggle(cfgEnv config.Env, verb string, enabled bool) *cli.Command {
+func subagentsToggle(cfgEnv config.Env, verb string, enabled bool, now func() float64) *cli.Command {
 	return &cli.Command{
 		Name: verb,
 		Help: verb + " a subagent",
@@ -165,7 +164,7 @@ func subagentsToggle(cfgEnv config.Env, verb string, enabled bool) *cli.Command 
 			name := args.Arg("name", cli.Opt{})
 			return func(env *cli.Env) int {
 				return withDB(env, cfgEnv, func(d *db.DB) error {
-					changed, err := subagents.SetEnabled(env.Ctx, d.Write, *name, enabled, stamp())
+					changed, err := subagents.SetEnabled(env.Ctx, d.Write, *name, enabled, stamp(now))
 					if err != nil {
 						return err
 					}

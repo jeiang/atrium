@@ -188,11 +188,7 @@ func Record(ctx context.Context, d *db.DB, e Entry, u anthropic.Usage) (float64,
 	if e.Provider == "" {
 		e.Provider = ProviderAnthropic
 	}
-	found, err := settings.From(ctx).Resolve(ctx, d.Read, config.KeyTZ)
-	if err != nil {
-		return 0, err
-	}
-	loc, err := config.Zone(found.Value)
+	loc, err := Location(ctx, d.Read)
 	if err != nil {
 		return 0, err
 	}
@@ -246,6 +242,14 @@ func nullableText(text string) *string {
 		return nil
 	}
 	return &text
+}
+
+func Location(ctx context.Context, q db.Querier) (*time.Location, error) {
+	found, err := settings.From(ctx).Resolve(ctx, q, config.KeyTZ)
+	if err != nil {
+		return nil, err
+	}
+	return config.Zone(found.Value)
 }
 
 func MonthStart(now float64, loc *time.Location) float64 {

@@ -72,7 +72,7 @@ var ErrClosed = errors.New("service: closed")
 
 func New(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, runner *loop.Runner) *Service {
 	s := &Service{DB: d, Cfg: cfg, Env: env, Runner: runner, base: ctx, mu: &sync.Mutex{}, wg: &sync.WaitGroup{}}
-	loc, _ := config.From(ctx).Location(env)
+	loc, _ := inference.Location(ctx, d.Read)
 	s.Inference = inference.New(d, s.now, loc, scopes{})
 	return s
 }

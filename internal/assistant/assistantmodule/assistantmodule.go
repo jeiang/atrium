@@ -78,6 +78,7 @@ func testAnthropic(ctx context.Context, c integrations.Conn) (string, error) {
 }
 
 type Module struct {
+	Now       func() float64
 	Callables []map[string]worker.Callable
 }
 
@@ -109,7 +110,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 				memory.ModelKey, memory.EffortKey, serverops.KeyCondenser,
 			}},
 		},
-		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Callables...), memorycmd.Command(mc.Env)},
+		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Callables...), memorycmd.Command(mc.Env)},
 		Tools:    addTools,
 	}
 }

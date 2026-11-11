@@ -396,13 +396,7 @@ func TestImportV2BillsMemoryAndRefusesOverBudgetAgentCalls(t *testing.T) {
 	if status.CommittedUSD >= 1000 {
 		t.Error("subscription spend entered the monthly budget")
 	}
-	nowReal := float64(time.Now().UnixMicro()) / 1e6
-	if _, err := q.Write.ExecContext(context.Background(),
-		"INSERT INTO usage (attempt_key, ts, month_start, expires_at, settled_at, state, budget_class, reservation_nusd, accounted_nusd, "+
-			"request_id, source, provider, thread_id, kind, model, effort, iterations, cost_usd) "+
-			"VALUES ('budget-now', ?, ?, ?, ?, 'settled', 'interactive', 0, 200000000000, 'budget-now', 'loop', 'anthropic', 1, 'chat', "+
-			"'claude-haiku-5-5', 'medium', '[]', 200)",
-		nowReal, inference.MonthStart(nowReal, loc), nowReal, nowReal); err != nil {
+	if _, err := q.Write.ExecContext(context.Background(), "INSERT OR REPLACE INTO settings (key, value) VALUES ('monthly_budget_usd', '1')"); err != nil {
 		t.Fatal(err)
 	}
 	api := anthropictest.New(t, anthropictest.Reply("end_turn", anthropictest.Text("should not be sent")))

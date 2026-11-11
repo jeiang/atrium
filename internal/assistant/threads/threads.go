@@ -475,8 +475,6 @@ type Switch struct {
 	Changed          bool
 	ThinkingAdjusted bool
 	ThinkingDropped  bool
-	Warm             bool
-	CostUSD          float64
 }
 
 func SwitchModel(ctx context.Context, q db.Querier, threadID int64, model, effort string, contextLimit any, now float64) (Switch, error) {

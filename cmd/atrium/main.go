@@ -73,7 +73,7 @@ func newSet(env config.Env, reg *settings.Registry, st *config.State, mods []mod
 		calendarmodule.Module{},
 		notionmodule.Module{Env: env},
 		mediamodule.Module{Now: now},
-		assistantmodule.Module{Callables: []map[string]worker.Callable{calendarcmd.Callables(), mediacmd.Callables(), mailcmd.Callables(), kbcallables.Callables(), serverops.Callables()}},
+		assistantmodule.Module{Now: now, Callables: []map[string]worker.Callable{calendarcmd.Callables(), mediacmd.Callables(), mailcmd.Callables(), kbcallables.Callables(), serverops.Callables()}},
 		notifymodule.Module{Budget: budgetStatus},
 		grafanamodule.Module{},
 	}, mods...)

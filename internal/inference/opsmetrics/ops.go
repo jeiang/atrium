@@ -4,14 +4,13 @@ import (
 	"context"
 	"time"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/ops"
 )
 
 func opsStatus(ctx context.Context, q db.Querier) (inference.Status, error) {
-	loc, err := config.From(ctx).Location(config.EnvFrom(ctx))
+	loc, err := inference.Location(ctx, q)
 	if err != nil {
 		return inference.Status{}, err
 	}

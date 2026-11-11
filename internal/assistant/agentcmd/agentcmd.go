@@ -32,11 +32,18 @@ func threadKind(run string) threads.Kind {
 	return threads.Kind(run)
 }
 
-func Command(env config.Env, tools registry.Source, enabled func(module string) bool, jobs ...map[string]worker.Callable) *cli.Command {
-	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(env, tools, enabled, jobs...), runCommand(env, tools), subagentsCommand(env, tools)}}
+func Command(env config.Env, tools registry.Source, enabled func(module string) bool, now func() float64, jobs ...map[string]worker.Callable) *cli.Command {
+	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(env, tools, enabled, jobs...), runCommand(env, tools, now), subagentsCommand(env, tools, now)}}
 }
 
-func runCommand(cfgEnv config.Env, tools registry.Source) *cli.Command {
+func clock(now func() float64) func() float64 {
+	if now == nil {
+		return func() float64 { return float64(time.Now().UnixMicro()) / 1e6 }
+	}
+	return now
+}
+
+func runCommand(cfgEnv config.Env, tools registry.Source, now func() float64) *cli.Command {
 	return &cli.Command{
 		Name: "run",
 		Setup: func(args *cli.Args) cli.Handler {
@@ -50,7 +57,7 @@ func runCommand(cfgEnv config.Env, tools registry.Source) *cli.Command {
 					id := int64(*thread)
 					threadID = &id
 				}
-				if err := run(env, cfgEnv, tools, threadID, *text, *kind, *toolChoice, args.Has("kind")); err != nil {
+				if err := run(env, cfgEnv, tools, threadID, *text, *kind, *toolChoice, args.Has("kind"), now); err != nil {
 					_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)
 					return cli.ExitError
 				}
@@ -60,7 +67,7 @@ func runCommand(cfgEnv config.Env, tools registry.Source) *cli.Command {
 	}
 }
 
-func bootstrap(ctx context.Context, cfgEnv config.Env, tools registry.Source) (*service.Service, func(), error) {
+func bootstrap(ctx context.Context, cfgEnv config.Env, tools registry.Source, now func() float64) (*service.Service, func(), error) {
 	cfg, err := config.Load(cfgEnv)
 	if err != nil {
 		return nil, nil, err
@@ -79,22 +86,22 @@ func bootstrap(ctx context.Context, cfgEnv config.Env, tools registry.Source) (*
 		return nil, nil, err
 	}
 	svc := service.New(ctx, d, cfg, cfgEnv, r)
+	svc.Now = clock(now)
 	return svc, func() {
 		svc.Close()
 		_ = d.Close()
 	}, nil
 }
 
-func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64, text, kind, toolChoice string, explicitKind bool) error {
+func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64, text, kind, toolChoice string, explicitKind bool, now func() float64) error {
 	ctx := env.Ctx
-	svc, closeApp, err := bootstrap(ctx, cfgEnv, tools)
+	svc, closeApp, err := bootstrap(ctx, cfgEnv, tools, now)
 	if err != nil {
 		return err
 	}
 	defer closeApp()
 	if threadID == nil {
-		now := float64(time.Now().UnixMicro()) / 1e6
-		id, err := threads.Create(ctx, svc.DB.Write, now, threads.Spec{Kind: threadKind(kind)})
+		id, err := threads.Create(ctx, svc.DB.Write, svc.Now(), threads.Spec{Kind: threadKind(kind)})
 		if err != nil {
 			return err
 		}
