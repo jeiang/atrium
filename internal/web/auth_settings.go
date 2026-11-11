@@ -17,16 +17,17 @@ import (
 const authSettingsPath = "/settings/auth"
 
 type authSettingsView struct {
-	Active   bool
-	Provider string
-	Issuer   string
-	ClientID string
-	Redirect string
-	Reason   string
-	Tokens   []tokenView
-	Secret   string
-	Error    string
-	Notice   string
+	Active     bool
+	Configured bool
+	Provider   string
+	Issuer     string
+	ClientID   string
+	Redirect   string
+	Reason     string
+	Tokens     []tokenView
+	Secret     string
+	Error      string
+	Notice     string
 }
 
 type tokenView struct {
@@ -131,6 +132,7 @@ func (s *Server) recordToken(ctx context.Context, key string, tok bearer.Token) 
 func (s *Server) renderAuth(w http.ResponseWriter, r *http.Request, view authSettingsView) {
 	noStore(w)
 	if s.oidc != nil {
+		view.Configured = true
 		cfg, err := s.oidc.Config(r.Context())
 		if err != nil {
 			view.Reason = err.Error()

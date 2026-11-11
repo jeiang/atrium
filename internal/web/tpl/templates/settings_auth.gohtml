@@ -35,5 +35,5 @@
     <button type="submit" class="btn" data-size="sm">Issue</button>
   </form>
 </section>
-{{template "settings_groups" .}}
+{{if $d.Configured}}{{template "settings_groups" .}}{{end}}
 {{end}}
