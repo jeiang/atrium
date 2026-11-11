@@ -2,8 +2,11 @@ package main
 
 import (
 	"errors"
+	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -296,5 +299,75 @@ func TestMailProposalMoveCreatesAMissingFolderAsItsOwnEffect(t *testing.T) {
 	}
 	if n := len(fake.Boxes["Archive"].Box.Messages); n != 1 {
 		t.Fatalf("the new folder holds %d messages, want 1", n)
+	}
+}
+
+func TestMrvDraftSendUnknownSentAppendLeavesTheMailSentAndUnsendable(t *testing.T) {
+	m := mrvMailFixture(t, "shadow")
+	smtp := mrvSMTPServer(t)
+	toolResult(t, "draft_email_create", map[string]any{"account": "icloud", "to": []any{"friend@x.test"}, "subject": "Lunch plans", "body": "Noon works."})
+	dbPath := filepath.Join(m.dir, "atrium.db")
+	id := mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM drafts WHERE subject = 'Lunch plans'")
+	draft := "/drafts/" + id
+	status := func() string { return mrvScalar(t, dbPath, "SELECT status FROM drafts WHERE id = ?", id) }
+	hx := []string{"HX-Request", "true"}
+	base, _, _ := startServeApp(t, m.app, &lockedBuffer{})
+	client := mrvClient(t)
+	revision := func() string {
+		t.Helper()
+		code, page, _ := mrvDo(t, client, http.MethodGet, base+draft, nil)
+		found := regexp.MustCompile(`name="revision" value="([0-9]+)"`).FindStringSubmatch(page)
+		if code != http.StatusOK || found == nil {
+			t.Fatalf("draft page = %d without a revision: %.400s", code, page)
+		}
+		return found[1]
+	}
+
+	m.fake.FailWrite = func(w mailtest.FakeWrite) error {
+		if w.Verb == "APPEND" {
+			return &mail.WriteInterrupted{Command: "APPEND", Err: errors.New("connection reset by peer")}
+		}
+		return nil
+	}
+	code, body, _ := mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {revision()}}, hx...)
+	if code != http.StatusOK || !strings.Contains(body, "Sent copy failed") {
+		t.Fatalf("send with an interrupted Sent copy = %d: %.400s", code, body)
+	}
+	if got := status(); got != "sent" {
+		t.Fatalf("the draft after a sent mail with an unknown copy is %q, want sent", got)
+	}
+	if n := len(smtp.sent()); n != 1 {
+		t.Fatalf("%d deliveries, want 1", n)
+	}
+	appendID := mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM effects WHERE operation = 'sent_append' AND direction = 'forward'")
+	if state := mrvScalar(t, dbPath, "SELECT state FROM effects WHERE id = ?", appendID); state != "unknown" {
+		t.Fatalf("the Sent copy is %s, want unknown", state)
+	}
+	smtpID := mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM effects WHERE operation = 'smtp_send' AND direction = 'forward'")
+	rev := mrvScalar(t, dbPath, "SELECT CAST(revision AS TEXT) FROM drafts WHERE id = ?", id)
+	for _, r := range []string{rev, strconv.Itoa(mrvAtoi(t, rev) + 1)} {
+		if code, _, _ := mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {r}}, hx...); code != http.StatusConflict {
+			t.Fatalf("resend at revision %s = %d, want 409", r, code)
+		}
+	}
+	if n := len(smtp.sent()); n != 1 {
+		t.Fatalf("an unsendable draft was sent again: %d deliveries", n)
+	}
+	if ran := runApp(t, "effects", "resolve", appendID, "--outcome", "not-applied"); ran.code != cli.ExitOK {
+		t.Fatalf("effects resolve: %d %s", ran.code, ran.stderr)
+	}
+	if state := mrvScalar(t, dbPath, "SELECT state FROM effects WHERE id = ?", smtpID); state != "done" {
+		t.Fatalf("the SMTP effect after resolving the copy is %s, want done", state)
+	}
+	if effective := mrvScalar(t, dbPath, "SELECT effective_outcome FROM effect_resolutions WHERE effect_id = ? ORDER BY id DESC LIMIT 1", appendID); effective != "failed" {
+		t.Fatalf("the copy's resolution is %s, want failed", effective)
+	}
+	if got := status(); got != "sent" {
+		t.Fatalf("the draft after resolving the copy is %q, want sent", got)
+	}
+	for _, r := range []string{rev, strconv.Itoa(mrvAtoi(t, rev) + 1)} {
+		if code, _, _ := mrvDo(t, client, http.MethodPost, base+draft+"/send", url.Values{"revision": {r}}, hx...); code != http.StatusConflict {
+			t.Fatalf("resend after resolving the copy at revision %s = %d, want 409", r, code)
+		}
 	}
 }
