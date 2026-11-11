@@ -59,3 +59,32 @@ func TestIntegrationClientsUseTheConnectionTransportAndAFailedRequestChecksAtOnc
 	_, _, _ = fetch(t, s.client, http.MethodGet, s.base+"/apps/media/downloads", nil)
 	waitFor(t, func() bool { return connectionState(t, dir, "service/qbittorrent") == "failing" })
 }
+
+func TestTMDBRequestFailureReachesConnectionHealth(t *testing.T) {
+	var failing atomic.Bool
+	tmdb := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if failing.Load() {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		_, _ = w.Write([]byte(`{"results":[{"id":42,"name":"Lanterns","first_air_date":"2026-01-01","poster_path":"/lanterns.jpg"}]}`))
+	}))
+	t.Cleanup(tmdb.Close)
+	images := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("image"))
+	}))
+	t.Cleanup(images.Close)
+	eztv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"torrents":[]}`))
+	}))
+	t.Cleanup(eztv.Close)
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHostConfig(t, dir, "http://qbittorrent.invalid", tmdb.URL+"/3", images.URL, eztv.URL+"/api/get-torrents"))
+	base := startServeIn(t, dir)
+	if code, body, _ := fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns", nil); code != http.StatusOK || !strings.Contains(body, "Lanterns") {
+		t.Fatalf("channels search: %d %.300s", code, body)
+	}
+	failing.Store(true)
+	_, _, _ = fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns+again", nil)
+	waitFor(t, func() bool { return connectionState(t, dir, "service/tmdb") == "failing" })
+}

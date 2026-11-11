@@ -2,6 +2,7 @@ package grafanatools
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"strings"
@@ -13,9 +14,13 @@ import (
 )
 
 type Access struct {
-	URL   string
-	Token string
-	HTTP  *http.Client
+	URL        string
+	Token      string
+	HTTP       *http.Client
+	MetricsUID string
+	LogsUID    string
+	LogsType   string
+	LogsQuery  string
 }
 
 const (
@@ -48,5 +53,12 @@ func Load(ctx context.Context, q db.Querier) (Access, error) {
 	if err != nil {
 		return Access{}, err
 	}
-	return Access{URL: strings.TrimRight(strings.TrimSpace(base), "/"), Token: token, HTTP: client}, nil
+	var cfg connectionConfig
+	if err := json.Unmarshal(lease.Config(), &cfg); err != nil {
+		return Access{}, err
+	}
+	return Access{
+		URL: strings.TrimRight(strings.TrimSpace(base), "/"), Token: token, HTTP: client,
+		MetricsUID: cfg.MetricsUID, LogsUID: cfg.LogsUID, LogsType: cfg.LogsType, LogsQuery: cfg.LogsQuery,
+	}, nil
 }

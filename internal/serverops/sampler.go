@@ -48,15 +48,19 @@ func Sample(ctx context.Context, d *db.DB, env config.Env, now float64) error {
 		MetricDisk:        set.Text(KeyQueryDisk),
 		MetricFailedUnits: set.Text(KeyQueryFailedUnit),
 	}
-	uid := set.Text(grafanatools.KeyMetricsUID)
 	if err := set.Err(); err != nil {
 		return err
 	}
 	if len(hosts) == 0 {
 		return nil
 	}
+	access, err := grafanatools.Load(ctx, d.Read)
+	if err != nil {
+		return err
+	}
+	uid := access.MetricsUID
 	if uid == "" {
-		return config.NotConfigured(grafanatools.KeyMetricsUID + " must be set")
+		return config.NotConfigured("the Grafana connection has no metrics datasource UID")
 	}
 	lim, err := grafanatools.ReadLimits(ctx, d.Read)
 	if err != nil {

@@ -39,6 +39,10 @@ func settingEnv(key string) string {
 
 func flagEnv(name string) string { return settingEnv(module.FlagKey(name)) }
 
+func hostEnv(module, key string) string {
+	return "ATRIUM_" + strings.ToUpper(module) + "_" + strings.ToUpper(key)
+}
+
 var testRoot = func() string {
 	dir, err := os.MkdirTemp("", "atrium-test-")
 	if err != nil {

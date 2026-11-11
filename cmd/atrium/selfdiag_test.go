@@ -71,9 +71,9 @@ func TestSelfDiagnoseQueriesMetricsAndLogsInTheConfiguredDialect(t *testing.T) {
 			moduleFixture(t, flagsExcept("", ""))
 			grafana, seen := fakeGrafana(t)
 			setEnv(t, settingEnv(grafanatools.KeyURL), grafana.URL)
-			setEnv(t, settingEnv(grafanatools.KeyMetricsUID), "vm-uid")
-			setEnv(t, settingEnv(grafanatools.KeyLogsUID), "logs-uid")
-			setEnv(t, settingEnv(grafanatools.KeyLogsType), tc.dialect)
+			setEnv(t, hostEnv("grafana", grafanatools.KeyMetricsUID), "vm-uid")
+			setEnv(t, hostEnv("grafana", grafanatools.KeyLogsUID), "logs-uid")
+			setEnv(t, hostEnv("grafana", grafanatools.KeyLogsType), tc.dialect)
 			api := &modelLog{Server: anthropictest.New(t,
 				anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "atrium_self_diagnose", map[string]any{"scope": "both", "minutes": 30})),
 				anthropictest.Reply("end_turn", anthropictest.Text("healthy")),
