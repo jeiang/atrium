@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -92,10 +93,9 @@ func (s *Store) Open(ctx context.Context, id ID) (*Lease, error) {
 	return s.open(ctx, s.q, id)
 }
 
-// Ensure materializes an operator-owned built-in connection without touching a
-// host-owned record or an existing operator configuration. A host-owned record
-// the host no longer declares is adopted, because the built-in needs no host
-// declaration.
+// Ensure materializes an operator-owned built-in connection only when no row
+// exists. It never adopts, re-enables, or changes an existing row, so a
+// host-owned row the host no longer declares stays disabled.
 func (s *Store) Ensure(ctx context.Context, id ID, kind Kind, label string, config map[string]string, caps []Capability) error {
 	if s.d == nil {
 		return errors.New("connections: built-in materialization needs a writable database")
@@ -109,28 +109,19 @@ func (s *Store) Ensure(ctx context.Context, id ID, kind Kind, label string, conf
 	}
 	now := s.stamp()
 	return s.d.WithTx(ctx, func(tx *sql.Tx) error {
-		var source string
-		err := tx.QueryRowContext(ctx, "SELECT config_source FROM connections WHERE id = ?", id).Scan(&source)
-		switch {
-		case errors.Is(err, sql.ErrNoRows):
-			if _, err := tx.ExecContext(ctx,
-				"INSERT INTO connections (id, kind, label, config_source, config_json, transport_json, revision, enabled, state, created_at, updated_at) "+
-					"VALUES (?, ?, ?, 'operator', ?, '{}', 1, 1, 'untested', ?, ?)",
-				id, kind, labelOr(label, string(id)), string(configJSON), now, now); err != nil {
-				return err
-			}
-		case err != nil:
+		res, err := tx.ExecContext(ctx,
+			"INSERT INTO connections (id, kind, label, config_source, config_json, transport_json, revision, enabled, state, created_at, updated_at) "+
+				"VALUES (?, ?, ?, 'operator', ?, '{}', 1, 1, 'untested', ?, ?) ON CONFLICT(id) DO NOTHING",
+			id, kind, labelOr(label, string(id)), string(configJSON), now, now)
+		if err != nil {
 			return err
-		case source == SourceHost:
-			if _, declared := s.host.Connections[string(id)]; declared {
-				return nil
-			}
-			if _, err := tx.ExecContext(ctx,
-				"UPDATE connections SET config_source = 'operator', enabled = 1, state = 'untested', reason = '', "+
-					"checked_at = NULL, last_ok_at = NULL, results_json = '{}', revision = revision + 1, updated_at = ? WHERE id = ?",
-				now, id); err != nil {
-				return err
-			}
+		}
+		inserted, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		if inserted == 0 {
+			return nil
 		}
 		for _, c := range caps {
 			config := c.Config
@@ -295,6 +286,11 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 		takeover := currentSource == SourceOperator
 		hostOwns := currentSource == SourceHost || takeover
 		changed := takeover || currentTransport != string(transportJSON) || hostOwns && currentConfig != string(configJSON)
+		if changed {
+			if err := s.refuseCredentialMove(ctx, tx, id, currentConfig, string(configJSON), hc.CredentialFiles); err != nil {
+				return err
+			}
+		}
 		revision := currentRevision
 		if changed {
 			revision++
@@ -357,6 +353,80 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 	}
 	_ = currentRevision
 	return nil
+}
+
+func (s *Store) refuseCredentialMove(ctx context.Context, tx *sql.Tx, id ID, from, to string, files map[string]string) error {
+	rows, err := tx.QueryContext(ctx, "SELECT slot FROM connection_credentials WHERE connection_id = ? AND source = 'database'", id)
+	if err != nil {
+		return err
+	}
+	slots, err := db.Collect(rows, func(r *sql.Rows) (string, error) {
+		var slot string
+		return slot, r.Scan(&slot)
+	})
+	if err != nil {
+		return err
+	}
+	retained := false
+	for _, slot := range slots {
+		if _, ok := files[slot]; !ok {
+			retained = true
+			break
+		}
+	}
+	if !retained {
+		return nil
+	}
+	if field, changed := changedEndpoint(from, to); changed {
+		return &CredentialEndpointChanged{ID: id, Field: field}
+	}
+	return nil
+}
+
+func changedEndpoint(from, to string) (string, bool) {
+	var before, after map[string]string
+	_ = json.Unmarshal([]byte(from), &before)
+	_ = json.Unmarshal([]byte(to), &after)
+	keys := map[string]bool{}
+	for key := range before {
+		keys[key] = true
+	}
+	for key := range after {
+		keys[key] = true
+	}
+	for _, key := range sortedKeys(keys) {
+		old, ok := endpointIdentity(key, before[key])
+		if !ok {
+			continue
+		}
+		if next, _ := endpointIdentity(key, after[key]); next != old {
+			return key, true
+		}
+	}
+	return "", false
+}
+
+func endpointIdentity(key, value string) (string, bool) {
+	name := strings.ToLower(strings.TrimSpace(key))
+	if name != "url" && name != "api" && name != "host" && !strings.HasSuffix(name, "_url") && !strings.HasSuffix(name, "_host") {
+		return "", false
+	}
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", true
+	}
+	u, err := url.Parse(value)
+	if err != nil {
+		return value, true
+	}
+	if u.Scheme != "" || u.Host != "" {
+		return strings.ToLower(u.Scheme) + "://" + strings.ToLower(u.Hostname()) + ":" + u.Port() + strings.TrimRight(u.EscapedPath(), "/"), true
+	}
+	host, port := value, ""
+	if h, p, err := net.SplitHostPort(value); err == nil {
+		host, port = h, p
+	}
+	return "//" + strings.ToLower(host) + ":" + port, true
 }
 
 func (s *Store) List(ctx context.Context) ([]View, error) {

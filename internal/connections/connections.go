@@ -224,6 +224,17 @@ func (e *TestFailed) Error() string {
 	return fmt.Sprintf("test failed (%s): %s", e.View.State, e.View.Reason)
 }
 
+// CredentialEndpointChanged refuses a host declaration that would send a
+// retained database credential to a different endpoint.
+type CredentialEndpointChanged struct {
+	ID    ID
+	Field string
+}
+
+func (e *CredentialEndpointChanged) Error() string {
+	return fmt.Sprintf("connections: %s is declared with a different %s endpoint while it holds a stored credential; declare a credential file for it, or disconnect the stored credential first", e.ID, e.Field)
+}
+
 type EncryptedRequired struct{ Slot string }
 
 func (e *EncryptedRequired) Error() string {

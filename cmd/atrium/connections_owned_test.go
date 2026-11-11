@@ -23,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
+	"github.com/jeiang/atrium/internal/module"
 )
 
 func connectionRow(t *testing.T, dir, id string) (source string, enabled int, state, configJSON string) {
@@ -232,5 +233,53 @@ capabilities = ["api"]
 	var disabled connections.DisabledConnection
 	if !errors.As(err, &disabled) {
 		t.Errorf("a disabled connection opened: %v", err)
+	}
+}
+
+func TestARemovedHostBuiltinStaysDisabledAndNeverReachesItsEndpoint(t *testing.T) {
+	requireCipher(t)
+	embed := newFakeOpenAI(t)
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	unsetEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL")
+	plain := filepath.Join(dir, "host-plain.toml")
+	if err := os.WriteFile(plain, []byte(hostConfigBodyWith("", defaultWebPushConnection, filepath.Join(testRoot, "host", "anthropic.key"))), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", "embedding-secret"))
+	requests := func() int {
+		n := 0
+		for _, seen := range embed.authorizations() {
+			n += len(seen)
+		}
+		return n
+	}
+
+	s := &connectionSite{t: t, dir: dir}
+	s.start()
+	if source, enabled, _, _ := connectionRow(t, dir, "service/embedding"); source != "host" || enabled != 1 {
+		t.Fatalf("the declared built-in is %s/%d, not host/enabled", source, enabled)
+	}
+	s.stop()
+	before := requests()
+	setEnv(t, "ATRIUM_HOST_CONFIG", plain)
+	s.start()
+	s.stop()
+	s.start()
+	defer s.stop()
+
+	if source, enabled, state, _ := connectionRow(t, dir, "service/embedding"); source != "host" || enabled != 0 || state != "disabled" {
+		t.Fatalf("the removed built-in is %s/%d/%s", source, enabled, state)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	_, err := connections.OpenRead(context.Background(), d.Read, config.Host{}, connections.ID("service/embedding"))
+	var disabled connections.DisabledConnection
+	if !errors.As(err, &disabled) {
+		t.Errorf("the removed built-in opened: %v", err)
+	}
+	if after := requests(); after != before {
+		t.Errorf("%d requests reached the removed endpoint, want %d", after-before, 0)
 	}
 }
