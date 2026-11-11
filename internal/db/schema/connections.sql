@@ -14,6 +14,7 @@ CREATE TABLE IF NOT EXISTS connections (
     last_ok_at REAL,
     expires_at REAL,
     reauth_at REAL,
+    failed_test_revision INTEGER,
     results_json TEXT NOT NULL DEFAULT '{}' CHECK (json_valid(results_json)),
     created_at REAL NOT NULL,
     updated_at REAL NOT NULL

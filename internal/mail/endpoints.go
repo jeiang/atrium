@@ -220,7 +220,7 @@ func embeddingFailure(ctx context.Context, q db.Querier, e endpoint.Endpoint) (s
 		}
 		return "", err
 	}
-	if view.State != "failing" && view.State != "needs_reauth" {
+	if !view.TestFailed || view.State != "failing" && view.State != "needs_reauth" {
 		return "", nil
 	}
 	fingerprint := resultFingerprint(view.Data)

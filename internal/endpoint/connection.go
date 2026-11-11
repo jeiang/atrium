@@ -38,6 +38,7 @@ type EmbeddingView struct {
 	State      string
 	Reason     string
 	CheckedAt  *time.Time
+	TestFailed bool
 	Data       json.RawMessage
 }
 
@@ -346,6 +347,7 @@ func embeddingView(view connections.View) EmbeddingView {
 		State:      string(view.State),
 		Reason:     view.Reason,
 		CheckedAt:  view.CheckedAt,
+		TestFailed: view.TestFailed(),
 	}
 	for _, r := range view.Results {
 		if r.Capability == "embeddings" {

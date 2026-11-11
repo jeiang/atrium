@@ -7,12 +7,18 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/db/dbtest"
+	"github.com/jeiang/atrium/internal/endpoint"
+	"github.com/jeiang/atrium/internal/module"
 
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 )
@@ -149,4 +155,71 @@ func TestOpsMetricsReportAConnectionStateBeforeAndAfterAFailingTest(t *testing.T
 	if body := scrape(); !strings.Contains(body, `atrium_integration_state{integration="service/grafana",state="failing"} 1`) {
 		t.Fatalf("metrics after a failing test:\n%s", body)
 	}
+}
+
+func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
+	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)
+	dir, api, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	setEnv(t, settingEnv(endpoint.KeyChatURL), chat.URL+"/v1")
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
+
+	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitOK || !strings.Contains(got.stdout, "ok") {
+		t.Fatalf("passing Test: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+		t.Fatalf("enabling mail after a passing Test: %d %q", on.code, on.stderr)
+	}
+	if names := offeredTools(t, api, runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")); !slices.Contains(names, "mail_search") {
+		t.Fatalf("mail tools before the outage: %v", names)
+	}
+
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	if _, err := d.Write.Exec("INSERT INTO accounts (name, kind) VALUES ('icloud', 'icloud')"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO mailboxes (id, account, name, imap_name, role) VALUES (1, 'icloud', 'INBOX', 'INBOX', 'inbox')"); err != nil {
+		t.Fatal(err)
+	}
+	dbtest.AddMessage(t, d, 1, "a message to embed", map[string]any{"subject": "Outage", "from_addr": "seed@x.test"})
+	if _, err := d.Write.Exec("INSERT OR REPLACE INTO embed_index (generation, state, url, model, dimension) VALUES (0, 'active', '', 'embeddinggemma', ?)", config.EmbedDim); err != nil {
+		t.Fatal(err)
+	}
+	embed.mu.Lock()
+	embed.dim = config.EmbedDim
+	embed.mu.Unlock()
+	var checked float64
+	if err := d.Read.QueryRow("SELECT checked_at FROM connections WHERE id = 'service/embedding'").Scan(&checked); err != nil {
+		t.Fatal(err)
+	}
+	s := &connectionSite{t: t, dir: dir}
+	s.start()
+	waitFor(t, func() bool {
+		var next float64
+		return d.Read.QueryRow("SELECT checked_at FROM connections WHERE id = 'service/embedding'").Scan(&next) == nil && next > checked
+	})
+
+	embed.setStatus(http.StatusInternalServerError)
+	if _, err := d.Write.Exec("UPDATE connections SET checked_at = checked_at - 600 WHERE id = 'service/embedding'"); err != nil {
+		t.Fatal(err)
+	}
+	runApp(t, "reindex")
+	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "failing" })
+	if n := connectionNotices(t, dir, "Embedding"); n != 1 {
+		t.Fatalf("%d notices after the automatic failure, want 1", n)
+	}
+	if on := runSettings(t, "set", module.FlagKey(module.Mail), "true"); on.code != cli.ExitOK {
+		t.Fatalf("mail held by an automatic failure: %d %q", on.code, on.stderr)
+	}
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("hi")))
+	if names := offeredTools(t, api, runApp(t, "agent", "run", "--text", "hello", "--kind", "chat")); !slices.Contains(names, "mail_search") {
+		t.Fatalf("mail tools during the outage: %v", names)
+	}
+	if listed := runApp(t, "connections", "list"); listed.code != cli.ExitOK || !strings.Contains(listed.stdout, "service/embedding") || !strings.Contains(listed.stdout, "failing") {
+		t.Fatalf("connections list during the outage: %d %q", listed.code, listed.stdout)
+	}
+
+	embed.setStatus(0)
+	s.stop()
+	s.start()
+	waitFor(t, func() bool { return connectionState(t, dir, "service/embedding") == "ok" })
 }

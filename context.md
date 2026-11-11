@@ -243,8 +243,10 @@ behavior-parity target.
   takes a host-file bearer. The endpoint package carries the resolved chat
   and embed model, compiled body-character and batch constants and the
   dimension through the request context. `atrium endpoints probe` and each
-  connection's Test record whether they work, and mail is
-  held in needs-settings while the current endpoint's probe fails. Connected content sent to a hosted model leaves
+  connection's Test record whether they work, and mail is held in
+  needs-settings only while an explicit Test of the current embedding
+  configuration fails; automatic health checks and runtime failures update
+  the connection's health without changing that hold. Connected content sent to a hosted model leaves
   the host; privacy does not mean that inference is necessarily local.
   The embedding index records its embedder and dimension; changing the
   embedder re-embeds in the background under `atrium serve` and swaps the

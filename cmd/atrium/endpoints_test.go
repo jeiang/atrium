@@ -24,6 +24,7 @@ type fakeOpenAI struct {
 	*httptest.Server
 	mu         sync.Mutex
 	dim        int
+	status     int
 	auth       map[string][]string
 	chats      int
 	chatReply  string
@@ -37,6 +38,10 @@ func newFakeOpenAI(t *testing.T) *fakeOpenAI {
 		defer f.mu.Unlock()
 		f.auth[r.URL.Path] = append(f.auth[r.URL.Path], r.Header.Get("Authorization"))
 		raw, _ := io.ReadAll(r.Body)
+		if f.status != 0 {
+			w.WriteHeader(f.status)
+			return
+		}
 		switch {
 		case strings.HasSuffix(r.URL.Path, "/models"):
 			_, _ = io.WriteString(w, `{"data":[{"id":"qwen"},{"id":"embeddinggemma"}]}`)
@@ -65,6 +70,12 @@ func (f *fakeOpenAI) seen(path string) []string {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	return append([]string(nil), f.auth[path]...)
+}
+
+func (f *fakeOpenAI) setStatus(status int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.status = status
 }
 
 func (f *fakeOpenAI) setChatReply(reply string) {

@@ -106,7 +106,7 @@ func (s *Store) check(ctx context.Context, id ID) (View, error) {
 	if err != nil {
 		return View{}, err
 	}
-	return s.record(ctx, id, lease.revision, results)
+	return s.record(ctx, id, lease.revision, results, false)
 }
 
 type HealthState struct {
