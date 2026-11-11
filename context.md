@@ -280,6 +280,8 @@ behavior-parity target.
   the schema in `internal/db/schema/`, created by migration 1 as a single
   step. The schema files are edited directly until the freeze in phase 11;
   every later change is an additive migration in `internal/db/migrate.go`.
+  A database with tables but no v3 marker is refused before any write with
+  a message naming `atrium db import-v2`.
   `taint_private` and `taint_web` are dormant: no longer
   read or written, and kept because dropping them would rewrite the table.
   `atrium db import-v1` is the only path from a v1

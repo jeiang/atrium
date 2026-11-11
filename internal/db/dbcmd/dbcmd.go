@@ -60,6 +60,10 @@ func (s *service) open(e *cli.Env) (*db.DB, string, db.Key, int) {
 	if err != nil {
 		return nil, "", db.Key{}, cli.Fail(e, err)
 	}
+	if err := db.RequireV3(e.Ctx, d.Read); err != nil {
+		_ = d.Close()
+		return nil, "", db.Key{}, cli.Fail(e, err)
+	}
 	return d, path, key, cli.ExitOK
 }
 

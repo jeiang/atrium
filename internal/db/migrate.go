@@ -3,6 +3,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -65,9 +66,35 @@ func RefuseFutureSchema(ctx context.Context, q Querier) error {
 	return err
 }
 
-const schemaMigrationsDDL = "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at REAL NOT NULL)"
+const (
+	ApplicationID       = 0x6174726d
+	schemaMigrationsDDL = "CREATE TABLE IF NOT EXISTS schema_migrations (version INTEGER PRIMARY KEY, applied_at REAL NOT NULL)"
+)
+
+var ErrNotV3 = errors.New("db: this database has no v3 marker and was created by v2 or older; import it with `atrium db import-v2` into a fresh database; nothing was changed")
+
+func RequireV3(ctx context.Context, q Querier) error {
+	var tables int
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'").Scan(&tables); err != nil {
+		return err
+	}
+	if tables == 0 {
+		return nil
+	}
+	var id int64
+	if err := q.QueryRowContext(ctx, "PRAGMA application_id").Scan(&id); err != nil {
+		return err
+	}
+	if id != ApplicationID {
+		return ErrNotV3
+	}
+	return nil
+}
 
 func Migrate(ctx context.Context, d *DB, path string) error {
+	if err := RequireV3(ctx, d.Read); err != nil {
+		return err
+	}
 	applied, err := refuseAllFuture(ctx, d.Read)
 	if err != nil {
 		return err
