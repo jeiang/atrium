@@ -37,8 +37,8 @@
   connectionCredential = id: slot: "connection-${lib.replaceStrings ["/" "."] ["-" "-"] id}-${lib.replaceStrings ["/" "."] ["-" "-"] slot}";
   hostCredential = module: key: "host-${module}-${key}";
 
-  mailConnections =
-    lib.mapAttrs' (id: account: lib.nameValuePair "mail/${id}" {
+  mailConnections = lib.mapAttrs' (id: account:
+    lib.nameValuePair "mail/${id}" {
       kind = "mail";
       label =
         if account.label == null
@@ -52,14 +52,14 @@
       capabilities = ["imap" "smtp"];
       credential_files = {"mail/${id}/password" = "\${CREDENTIALS_DIRECTORY}/${accountCredential id}";};
     })
-    cfg.mailAccounts;
+  cfg.mailAccounts;
 
   renderedConnections =
     (lib.mapAttrs (id: c: {
-      inherit (c) kind label config transport capabilities;
-      credential_files = lib.mapAttrs (slot: _: "\${CREDENTIALS_DIRECTORY}/${connectionCredential id slot}") c.credentialFiles;
-    })
-    cfg.connections)
+        inherit (c) kind label config transport capabilities;
+        credential_files = lib.mapAttrs (slot: _: "\${CREDENTIALS_DIRECTORY}/${connectionCredential id slot}") c.credentialFiles;
+      })
+      cfg.connections)
     // mailConnections;
 
   hostValues = lib.mapAttrs (module: table:

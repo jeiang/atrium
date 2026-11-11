@@ -217,7 +217,7 @@ func candidate(a config.AccountSpec, password string) connections.Candidate {
 		"auth_method": string(a.AuthMethod),
 	})
 	c := connections.Candidate{
-		Label: a.Label,
+		Label:  a.Label,
 		Config: cfg,
 		Capabilities: []connections.Capability{
 			{Name: mailconn.CapabilityIMAP, Enabled: true},

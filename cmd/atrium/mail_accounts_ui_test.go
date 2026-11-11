@@ -6,8 +6,8 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"net/http"
 	"net"
+	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"path/filepath"
@@ -178,4 +178,3 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 		t.Errorf("remove dropped the cached mail: %d messages left", n)
 	}
 }
-
