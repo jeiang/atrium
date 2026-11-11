@@ -47,7 +47,7 @@
       config = {
         inherit (account) preset login;
         auth_method = "password";
-        enabled = toString account.enabled;
+        enabled = lib.boolToString account.enabled;
       };
       capabilities = ["imap" "smtp"];
       credential_files = {"mail/${id}/password" = "\${CREDENTIALS_DIRECTORY}/${accountCredential id}";};
