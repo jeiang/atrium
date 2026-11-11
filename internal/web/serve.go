@@ -8,6 +8,7 @@ import (
 	"maps"
 	"net"
 	"net/http"
+	"net/netip"
 	"os"
 	"strconv"
 	"strings"
@@ -109,8 +110,9 @@ func ServeCommand(boot Boot, pages ...Page) *cli.Command {
 			port := args.Int("port", 0, cli.Opt{Required: true})
 			modes := args.Repeated("auth", cli.Opt{Choices: authModes[:], Help: "authentication mode; repeatable (proxy and oidc combine; default proxy)"})
 			hosts := args.Repeated("allowed-host", cli.Opt{Help: "accepted Host header; repeatable (proxy mode requires one, or ATRIUM_PUBLIC_HOST)"})
+			trusted := args.Repeated("trusted-proxy", cli.Opt{Help: "socket peer CIDR allowed to set CF-Connecting-IP; repeatable"})
 			return func(env *cli.Env) int {
-				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, pages: pages, env: env.Env, boot: boot})
+				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, trusted: *trusted, pages: pages, env: env.Env, boot: boot})
 			}
 		},
 	}
@@ -121,6 +123,7 @@ type serveArgs struct {
 	port     int
 	auth     []string
 	hosts    []string
+	trusted  []string
 	pages    []Page
 	env      config.Env
 	settings *settings.Registry
@@ -136,6 +139,39 @@ func publicHosts(given []string, env config.Env) []string {
 		return []string{strings.TrimSpace(host)}
 	}
 	return nil
+}
+
+func trustedProxies(hostValue string, flags []string) ([]netip.Prefix, error) {
+	var values []string
+	for _, part := range strings.Split(hostValue, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			values = append(values, part)
+		}
+	}
+	for _, flag := range flags {
+		if flag = strings.TrimSpace(flag); flag != "" {
+			values = append(values, flag)
+		}
+	}
+	out := make([]netip.Prefix, 0, len(values))
+	for _, value := range values {
+		prefix, err := netip.ParsePrefix(value)
+		if err != nil {
+			addr, addrErr := netip.ParseAddr(value)
+			if addrErr != nil || addr.Zone() != "" {
+				return nil, fmt.Errorf("trusted proxy %q is not an address or CIDR", value)
+			}
+			prefix = netip.PrefixFrom(addr, addr.BitLen())
+		}
+		if prefix.Addr().Is4In6() {
+			if prefix.Bits() < 96 {
+				return nil, fmt.Errorf("trusted proxy %q maps more than the IPv4 space", value)
+			}
+			prefix = netip.PrefixFrom(prefix.Addr().Unmap(), prefix.Bits()-96)
+		}
+		out = append(out, prefix.Masked())
+	}
+	return out, nil
 }
 
 func serve(env *cli.Env, a serveArgs) int {
@@ -163,6 +199,10 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 	defer func() { _ = d.Close() }()
 	if _, err := a.state.Location(a.env); err != nil {
 		return fmt.Errorf("the tz setting is not a time zone: %w", err)
+	}
+	trusted, err := trustedProxies(a.state.Host().Value("web_trusted_proxy_cidrs"), a.trusted)
+	if err != nil {
+		return err
 	}
 	var recovers []Recover
 	for _, p := range a.pages {
@@ -221,7 +261,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 	if err != nil {
 		return err
 	}
-	srv, err := New(Options{Ctx: ctx, Cfg: cfg, Env: a.env, DB: d, Settings: a.settings, State: a.state, Auth: a.auth, Policy: &policy, AllowedHosts: hosts, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, Home: home, OnReady: func(deps *Deps) error {
+	srv, err := New(Options{Ctx: ctx, Cfg: cfg, Env: a.env, DB: d, Settings: a.settings, State: a.state, Auth: a.auth, Policy: &policy, AllowedHosts: hosts, Trusted: trusted, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, Home: home, OnReady: func(deps *Deps) error {
 		if err := a.boot.Start(ctx, deps); err != nil {
 			return err
 		}

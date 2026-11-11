@@ -61,6 +61,8 @@ func bodyCap(ctx context.Context) int {
 type Guard struct {
 	auth     Policy
 	hosts    map[string]struct{}
+	trusted  []netip.Prefix
+	limits   *limiter
 	public   func(*http.Request) bool
 	bodyCap  func(context.Context) (int, error)
 	sessions *oidc.Service
@@ -71,7 +73,7 @@ type Guard struct {
 	idem     *idemCache
 }
 
-func newGuard(auth Policy, allowedHosts []string, public func(*http.Request) bool, classify func(*http.Request) access) *Guard {
+func newGuard(auth Policy, allowedHosts []string, trusted []netip.Prefix, public func(*http.Request) bool, classify func(*http.Request) access) *Guard {
 	hosts := map[string]struct{}{}
 	switch {
 	case len(allowedHosts) > 0:
@@ -86,7 +88,7 @@ func newGuard(auth Policy, allowedHosts []string, public func(*http.Request) boo
 	if public == nil {
 		public = func(*http.Request) bool { return false }
 	}
-	return &Guard{auth: auth, hosts: hosts, public: public, classify: classify, idem: newIdemCache()}
+	return &Guard{auth: auth, hosts: hosts, trusted: trusted, limits: newLimiter(), public: public, classify: classify, idem: newIdemCache()}
 }
 
 func hostname(value string) string {
@@ -172,6 +174,9 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 		}
 		if isAPI(r) {
 			g.api(w, r, next)
+			return
+		}
+		if g.auth.OIDC() && signInRequest(r) && !g.limitSignIn(w, r) {
 			return
 		}
 		static := strings.HasPrefix(r.URL.Path, staticPrefix)

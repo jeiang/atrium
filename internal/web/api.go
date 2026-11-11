@@ -171,6 +171,20 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	setSecurityHeaders(h)
 	h.Set("Cache-Control", "no-store")
 	token, ok := bearerToken(r)
+	addr, addrOK := g.clientAddr(r)
+	if !addrOK {
+		APIError(w, http.StatusBadRequest, "bad_request", "The forwarded address is not valid.")
+		return
+	}
+	charges := []limitCharge{{class: classAPIAddress, key: addr.String()}}
+	if ok && boundedToken(token) {
+		charges = append(charges, limitCharge{class: classAPIToken, key: tokenKey(token)})
+	}
+	if wait, allowed := g.limits.charge(g.limits.now(), charges...); !allowed {
+		retryAfter(w, wait)
+		APIError(w, http.StatusTooManyRequests, "rate_limited", "Too many requests.")
+		return
+	}
 	if !ok {
 		h.Set("WWW-Authenticate", realm)
 		APIError(w, http.StatusUnauthorized, "unauthenticated", "A bearer access token is required.")

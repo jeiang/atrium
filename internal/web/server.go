@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -108,6 +109,7 @@ type Options struct {
 	State        *config.State
 	Auth         []string
 	AllowedHosts []string
+	Trusted      []netip.Prefix
 	Public       func(*http.Request) bool
 	Render       *Renderer
 	Modules      []Module
@@ -225,7 +227,7 @@ func New(o Options) (*Server, error) {
 	for _, register := range o.Modules {
 		register(s.mux, deps)
 	}
-	guard := newGuard(auth, o.AllowedHosts, o.Public, s.access)
+	guard := newGuard(auth, o.AllowedHosts, o.Trusted, o.Public, s.access)
 	guard.secure = s.secure
 	guard.sessions = o.OIDC
 	guard.bearers = s.bearers
