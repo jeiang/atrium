@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"time"
 )
 
 type Error string
@@ -175,6 +176,8 @@ func (o *OpenMeteo) Geocode(ctx context.Context, name string) ([]Location, error
 }
 
 func (o *OpenMeteo) get(ctx context.Context, target string, into any) error {
+	ctx, cancel := context.WithTimeout(ctx, TuningWeatherTimeoutSeconds*time.Second)
+	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, target, nil)
 	if err != nil {
 		return Error("the request URL is invalid")

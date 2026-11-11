@@ -17,7 +17,7 @@ func (Module) Register(module.Context) module.Registration {
 		Name:  module.Grafana,
 		Needs: []string{module.Assistant},
 		Requires: []module.Requirement{{
-			Name: grafanatools.KeyURL + " and " + grafanatools.KeyToken,
+			Name: "the Grafana connection",
 			Check: func(ctx context.Context, p module.Probe) (string, error) {
 				_, err := grafanatools.Load(ctx, p.Q)
 				var missing config.NotConfigured

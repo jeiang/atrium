@@ -1,19 +1,26 @@
+//go:build !modernc
+
 package main
 
 import (
 	"bytes"
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -33,14 +40,56 @@ func v2Fixture(t *testing.T) string {
 
 func importTestApp(t *testing.T, dir string, now float64) *cli.App {
 	t.Helper()
+	return importTestAppWithHost(t, dir, now, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9")
+}
+
+func importTestAppWithHost(t *testing.T, dir string, now float64, anthropicURL, grafanaURL, notionURL string) *cli.App {
+	t.Helper()
 	vars := varsFor(t).snapshot()
 	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
+	vars["ATRIUM_DB_KEY"] = rightKeyHex
+	vars["ATRIUM_HOST_CONFIG"] = importHostConfig(t, dir, anthropicURL, grafanaURL, notionURL)
 	vars[settingEnv(config.KeyMailAccountsFile)] = defaultAccountsFile
-	delete(vars, "ATRIUM_DB_KEY")
-	delete(vars, "ATRIUM_DB_KEY_FILE")
 	reg := settings.New()
+	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	return newAppWith(config.Map(vars), reg, config.NewState(reg), nil, nil, func() float64 { return now }, quietLog)
+}
+
+func importHostConfig(t *testing.T, dir, anthropicURL, grafanaURL, notionURL string) string {
+	t.Helper()
+	body := fmt.Sprintf(`[connections."service/anthropic"]
+kind = "service/anthropic"
+label = "Anthropic"
+config = { url = %q }
+capabilities = ["models"]
+
+[connections."service/grafana"]
+kind = "service/grafana"
+label = "Grafana"
+config = { url = %q }
+capabilities = ["viewer"]
+
+[connections."service/notion"]
+kind = "service/notion"
+label = "Notion"
+config = { api = %q }
+capabilities = ["api"]
+`, anthropicURL, grafanaURL, notionURL)
+	path := filepath.Join(dir, "host.toml")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func importKey(t *testing.T) db.Key {
+	t.Helper()
+	key, err := db.ParseKey(rightKeyHex)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return key
 }
 
 func runImportApp(t *testing.T, app *cli.App, args ...string) appRun {
@@ -85,7 +134,6 @@ func copyV2Fixture(t *testing.T, dir string) string {
 }
 
 func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
-	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -112,14 +160,20 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		"runs: dropped 8",
 		"job_runs: dropped 2",
 		"schema_migrations: dropped 11",
-		"setting not known to v3: money_since",
+		"setting money_since: dropped",
+		"connection service/anthropic: created from host settings",
+		"connection service/anthropic: credential api_key carried",
+		"connection service/weather: created from host settings",
+		"connection service/webfetch: created from host settings",
+		"connection service/tmdb: created from host settings",
+		"connection service/eztv: created from host settings",
 	} {
 		if !strings.Contains(got.stdout, want) {
 			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
 		}
 	}
 
-	q, err := db.OpenSource(dest, db.Key{})
+	q, err := db.OpenSource(dest, importKey(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -179,8 +233,11 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 	if got := importValue(t, q, "SELECT value FROM settings WHERE key = 'default_effort'"); got != "medium" {
 		t.Errorf("default_effort %q", got)
 	}
-	if n := importCount(t, q, "SELECT length(value) FROM secrets WHERE name = 'anthropic_api_key'"); n != 14 {
-		t.Errorf("secret length %d", n)
+	if n := importCount(t, q, "SELECT COUNT(*) FROM secrets WHERE name = 'anthropic_api_key'"); n != 0 {
+		t.Errorf("the Anthropic key stayed in the secrets table")
+	}
+	if got := importValue(t, q, "SELECT value FROM connection_credentials WHERE connection_id = 'service/anthropic' AND slot = 'api_key'"); got != "sk-ant-fixture" {
+		t.Errorf("the imported Anthropic credential is %q", got)
 	}
 	if n := importCount(t, q, "SELECT COUNT(*) FROM kb_records WHERE embedded_hash IS NOT NULL"); n != 0 {
 		t.Errorf("%d knowledge records kept an embedded hash", n)
@@ -332,7 +389,7 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		if got.code != cli.ExitOK {
 			t.Fatalf("import: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 		}
-		dest, err := db.OpenSource(filepath.Join(target, "atrium.db"), db.Key{})
+		dest, err := db.OpenSource(filepath.Join(target, "atrium.db"), importKey(t))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -351,7 +408,7 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		if got.code != cli.ExitOK {
 			t.Fatalf("import: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 		}
-		dest, err := db.OpenSource(filepath.Join(target, "atrium.db"), db.Key{})
+		dest, err := db.OpenSource(filepath.Join(target, "atrium.db"), importKey(t))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -365,9 +422,267 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 	})
 }
 
+func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+
+	api := anthropictest.New(t)
+	api.Push(
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("g1", "grafana_datasources", nil)),
+		anthropictest.Reply("end_turn", anthropictest.Text("listed")),
+	)
+	var mu sync.Mutex
+	var apiKeys []string
+	var authorizations []string
+	api.OnRequest = func(request anthropictest.Request) {
+		mu.Lock()
+		apiKeys = append(apiKeys, request.Header.Get("X-Api-Key"))
+		mu.Unlock()
+	}
+	grafana := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		authorizations = append(authorizations, r.Header.Get("Authorization"))
+		mu.Unlock()
+		if r.URL.Path != "/api/datasources" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(`[{"uid":"prom","name":"Imported datasource","type":"prometheus"}]`))
+	}))
+	t.Cleanup(grafana.Close)
+
+	const notionPage = "44444444-4444-4444-4444-444444444444"
+	var notionTokens []string
+	notionFake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		notionTokens = append(notionTokens, r.Header.Get("Authorization"))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if r.Header.Get("Authorization") != "Bearer ntn-imported-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"object":"error","status":401,"code":"unauthorized","message":"API token is invalid."}`))
+			return
+		}
+		switch r.URL.Path {
+		case "/v1/users/me":
+			_, _ = w.Write([]byte(`{"object":"user","id":"bot","type":"bot"}`))
+		case "/v1/search":
+			var body struct {
+				Filter struct {
+					Value string `json:"value"`
+				} `json:"filter"`
+			}
+			_ = json.NewDecoder(r.Body).Decode(&body)
+			if body.Filter.Value != "page" {
+				_, _ = w.Write([]byte(`{"object":"list","results":[],"has_more":false,"next_cursor":null}`))
+				return
+			}
+			_, _ = w.Write([]byte(`{"object":"list","results":[{"object":"page","id":"` + notionPage + `","url":"https://notion.example/imported","last_edited_time":"2026-01-01T00:00:00.000Z","in_trash":false,"parent":{"type":"workspace"},"properties":{"title":{"type":"title","title":[{"plain_text":"Imported page"}]},"sensitivity":{"type":"formula","formula":{"type":"string","string":"private"}}}}],"has_more":false,"next_cursor":null}`))
+		case "/v1/pages/" + notionPage + "/markdown":
+			_, _ = w.Write([]byte(`{"markdown":"imported alpha","truncated":false}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(notionFake.Close)
+
+	var tmdbMu sync.Mutex
+	var tmdbTokens []string
+	tmdbFake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		tmdbMu.Lock()
+		tmdbTokens = append(tmdbTokens, r.Header.Get("Authorization"))
+		tmdbMu.Unlock()
+		if r.Header.Get("Authorization") != "Bearer tmdb-imported-token" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		switch r.URL.Path {
+		case "/3/configuration":
+			_, _ = w.Write([]byte(`{}`))
+		case "/3/search/tv":
+			_, _ = w.Write([]byte(`{"results":[{"id":42,"name":"Lanterns","first_air_date":"2026-01-01","poster_path":"/lanterns.jpg"}]}`))
+		default:
+			w.WriteHeader(http.StatusNotFound)
+		}
+	}))
+	t.Cleanup(tmdbFake.Close)
+	tmdbImages := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("image"))
+	}))
+	t.Cleanup(tmdbImages.Close)
+	eztvFake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"torrents":[]}`))
+	}))
+	t.Cleanup(eztvFake.Close)
+
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
+		('grafana_url', %[1]q),
+		('grafana_metrics_uid', 'prom'),
+		('weather_open_meteo_url', 'http://weather.invalid/forecast'),
+		('weather_geocoding_url', 'http://weather.invalid/search')`, grafana.URL))
+	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('grafana_viewer_token', 'glsa-imported-token', 1762000800, 'fixture')")
+	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('notion_token', 'ntn-imported-token', 1762000800, 'fixture')")
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
+		('media_tmdb_url', %[1]q),
+		('media_tmdb_images_url', %[2]q),
+		('media_eztv_url', %[3]q)`, tmdbFake.URL+"/3", tmdbImages.URL, eztvFake.URL))
+	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('media_tmdb_token', 'tmdb-imported-token', 1762000800, 'fixture')")
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	for _, want := range []string{
+		"connection service/anthropic: credential api_key carried",
+		"connection service/grafana: created from host settings",
+		"connection service/grafana: credential viewer_token carried",
+		"connection service/notion: created from host settings",
+		"connection service/notion: credential token carried",
+		"connection service/tmdb: created from host settings",
+		"connection service/tmdb: credential read_token carried",
+		"connection service/eztv: created from host settings",
+		"connection service/weather: created from host settings",
+		"connection service/webfetch: created from host settings",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+	if strings.Contains(got.stdout+got.stderr, "sk-ant-fixture") || strings.Contains(got.stdout+got.stderr, "glsa-imported-token") || strings.Contains(got.stdout+got.stderr, "ntn-imported-token") || strings.Contains(got.stdout+got.stderr, "tmdb-imported-token") {
+		t.Error("the import printed a credential")
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	q, err := db.OpenSource(dest, importKey(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	if n := importCount(t, q, "SELECT COUNT(*) FROM secrets WHERE name IN ('anthropic_api_key', 'grafana_viewer_token', 'notion_token', 'media_tmdb_token')"); n != 0 {
+		t.Errorf("%d migrated credentials stayed in the secrets table", n)
+	}
+	for _, tc := range []struct{ id, slot, want string }{
+		{"service/anthropic", "api_key", "sk-ant-fixture"},
+		{"service/grafana", "viewer_token", "glsa-imported-token"},
+		{"service/notion", "token", "ntn-imported-token"},
+		{"service/tmdb", "read_token", "tmdb-imported-token"},
+	} {
+		if got := importValue(t, q, "SELECT value FROM connection_credentials WHERE connection_id = ? AND slot = ?", tc.id, tc.slot); got != tc.want {
+			t.Errorf("%s credential %s = %q", tc.id, tc.slot, got)
+		}
+		if got := importValue(t, q, "SELECT set_by FROM connection_credentials WHERE connection_id = ? AND slot = ?", tc.id, tc.slot); got != "fixture" {
+			t.Errorf("%s credential %s set_by = %q", tc.id, tc.slot, got)
+		}
+	}
+	if got := importValue(t, q, "SELECT config_json FROM connections WHERE id = 'service/notion'"); !strings.Contains(got, `"api":"https://api.notion.com"`) {
+		t.Errorf("the Notion config was not carried: %s", got)
+	}
+	if got := importValue(t, q, "SELECT config_json FROM connections WHERE id = 'service/grafana'"); !strings.Contains(got, grafana.URL) || !strings.Contains(got, `"metrics_uid":"prom"`) {
+		t.Errorf("the Grafana config was not carried: %s", got)
+	}
+	if got := importValue(t, q, "SELECT config_json FROM connections WHERE id = 'service/weather'"); !strings.Contains(got, "http://weather.invalid/forecast") || !strings.Contains(got, "http://weather.invalid/search") {
+		t.Errorf("the weather config was not carried: %s", got)
+	}
+	if got := importValue(t, q, "SELECT config_json FROM connections WHERE id = 'service/webfetch'"); !strings.Contains(got, "https://example.com/") {
+		t.Errorf("the web fetch probe was not carried: %s", got)
+	}
+	if got := importValue(t, q, "SELECT config_json FROM connections WHERE id = 'service/tmdb'"); !strings.Contains(got, tmdbFake.URL+"/3") || !strings.Contains(got, tmdbImages.URL) {
+		t.Errorf("the TMDB config was not carried: %s", got)
+	}
+	if got := importValue(t, q, "SELECT config_json FROM connections WHERE id = 'service/eztv'"); !strings.Contains(got, eztvFake.URL) {
+		t.Errorf("the EZTV config was not carried: %s", got)
+	}
+
+	setEnv(t, anthropic.BaseURLEnv, api.URL)
+	setEnv(t, settingEnv(grafanatools.KeyURL), grafana.URL)
+	ran := runImportApp(t, importTestAppWithHost(t, dir, clock, api.URL, grafana.URL, notionFake.URL), "agent", "run", "--text", "list the datasources")
+	if ran.code != cli.ExitOK {
+		t.Fatalf("agent run: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
+	}
+	mu.Lock()
+	keys := append([]string(nil), apiKeys...)
+	seen := append([]string(nil), authorizations...)
+	mu.Unlock()
+	if len(keys) == 0 {
+		t.Fatalf("the agent run never reached the Anthropic fake: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
+	}
+	for _, key := range keys {
+		if key != "sk-ant-fixture" {
+			t.Errorf("Anthropic request used key %q", key)
+		}
+	}
+	if len(seen) == 0 {
+		t.Fatal("the Grafana tool never reached the fake")
+	}
+	for _, authorization := range seen {
+		if authorization != "Bearer glsa-imported-token" {
+			t.Errorf("Grafana request used %q", authorization)
+		}
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM thread_messages WHERE run_id = (SELECT MAX(id) FROM runs) AND content_json LIKE '%Imported datasource%'"); n == 0 {
+		t.Error("the Grafana tool result did not reach the thread")
+	}
+
+	synced := runImportApp(t, importTestAppWithHost(t, dir, clock, api.URL, grafana.URL, notionFake.URL), "notion", "sync")
+	if synced.code != cli.ExitOK {
+		t.Fatalf("notion sync: exit %d stdout %q stderr %q", synced.code, synced.stdout, synced.stderr)
+	}
+	mu.Lock()
+	tokens := append([]string(nil), notionTokens...)
+	mu.Unlock()
+	if len(tokens) == 0 {
+		t.Fatal("notion sync never reached the Notion fake")
+	}
+	for _, token := range tokens {
+		if token != "Bearer ntn-imported-token" {
+			t.Errorf("Notion request used %q", token)
+		}
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM notion_pages WHERE id = ? AND in_trash = 0", notionPage); n != 1 {
+		t.Errorf("notion sync stored %d pages for the imported connection", n)
+	}
+
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	host := fmt.Sprintf(`[connections."service/tmdb"]
+kind = "service/tmdb"
+label = "TMDB"
+config = { url = %q, images_url = %q }
+capabilities = ["api", "images"]
+
+[connections."service/eztv"]
+kind = "service/eztv"
+label = "EZTV"
+config = { url = %q }
+capabilities = ["indexer"]
+`, tmdbFake.URL+"/3", tmdbImages.URL, eztvFake.URL)
+	hostPath := filepath.Join(dir, "media-host.toml")
+	if err := os.WriteFile(hostPath, []byte(host), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", hostPath)
+	base := startServeIn(t, dir)
+	code, body, _ := fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns", nil)
+	if code != http.StatusOK || !strings.Contains(body, "Lanterns") {
+		t.Fatalf("channels search after import: %d %.300s", code, body)
+	}
+	tmdbMu.Lock()
+	imported := append([]string(nil), tmdbTokens...)
+	tmdbMu.Unlock()
+	if len(imported) == 0 {
+		t.Fatal("the channels page never reached the TMDB fake")
+	}
+	for _, token := range imported {
+		if token != "Bearer tmdb-imported-token" {
+			t.Errorf("TMDB request used %q", token)
+		}
+	}
+}
+
 func editImportSource(t *testing.T, path, statement string) {
 	t.Helper()
-	d, err := db.Connect(path)
+	d, err := db.Connect(path, db.WithKey(db.Key{}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -378,7 +693,6 @@ func editImportSource(t *testing.T, path, statement string) {
 }
 
 func TestImportV2MapsAutoActionsToEffects(t *testing.T) {
-	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -423,7 +737,7 @@ func TestImportV2MapsAutoActionsToEffects(t *testing.T) {
 		t.Errorf("the report lacks the auto conversion count:\n%s", got.stdout)
 	}
 
-	q, err := db.OpenSource(dest, db.Key{})
+	q, err := db.OpenSource(dest, importKey(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -466,7 +780,6 @@ func TestImportV2MapsAutoActionsToEffects(t *testing.T) {
 }
 
 func TestImportV2MapsAgentWritesToEffects(t *testing.T) {
-	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -517,7 +830,7 @@ func TestImportV2MapsAgentWritesToEffects(t *testing.T) {
 		}
 	}
 
-	q, err := db.OpenSource(dest, db.Key{})
+	q, err := db.OpenSource(dest, importKey(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -560,7 +873,6 @@ func TestImportV2MapsAgentWritesToEffects(t *testing.T) {
 }
 
 func TestImportV2BillsMemoryAndRefusesOverBudgetAgentCalls(t *testing.T) {
-	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	loc, err := time.LoadLocation("America/Port_of_Spain")
 	if err != nil {
@@ -580,7 +892,7 @@ func TestImportV2BillsMemoryAndRefusesOverBudgetAgentCalls(t *testing.T) {
 	if got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source); got.code != cli.ExitOK {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
-	q, err := db.Connect(dest)
+	q, err := db.Connect(dest, db.WithKey(importKey(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -645,7 +957,6 @@ func TestImportV2BillsMemoryAndRefusesOverBudgetAgentCalls(t *testing.T) {
 }
 
 func TestImportV2UndoesImportedAutomaticActions(t *testing.T) {
-	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -692,10 +1003,11 @@ func TestImportV2UndoesImportedAutomaticActions(t *testing.T) {
 	vars := varsFor(t).snapshot()
 	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
+	vars["ATRIUM_DB_KEY"] = rightKeyHex
 	vars[settingEnv(config.KeyMailAccountsFile)] = defaultAccountsFile
-	delete(vars, "ATRIUM_DB_KEY")
 	delete(vars, "ATRIUM_DB_KEY_FILE")
 	reg := settings.New()
+	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	app := newAppWith(config.Map(vars), reg, config.NewState(reg), nil,
 		func(config.Config) mail.OpenFunc { return fake.Open }, nil, quietLog)
 
@@ -704,7 +1016,7 @@ func TestImportV2UndoesImportedAutomaticActions(t *testing.T) {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 
-	q, err := db.OpenSource(dest, db.Key{})
+	q, err := db.OpenSource(dest, importKey(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -759,7 +1071,6 @@ func TestImportV2UndoesImportedAutomaticActions(t *testing.T) {
 }
 
 func TestImportV2ResolvingAnImportedUndoClearsTheCorrection(t *testing.T) {
-	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -784,7 +1095,7 @@ func TestImportV2ResolvingAnImportedUndoClearsTheCorrection(t *testing.T) {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 	dest := filepath.Join(dir, "atrium.db")
-	q, err := db.OpenSource(dest, db.Key{})
+	q, err := db.OpenSource(dest, importKey(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -808,7 +1119,6 @@ func TestImportV2ResolvingAnImportedUndoClearsTheCorrection(t *testing.T) {
 }
 
 func TestImportV2MapsUnresolvedAgentClaimsToWriterKeys(t *testing.T) {
-	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -850,7 +1160,7 @@ func TestImportV2MapsUnresolvedAgentClaimsToWriterKeys(t *testing.T) {
 	if !strings.Contains(got.stdout, "agent_writes: conservative claim legacy_agent/task:9") {
 		t.Errorf("the report does not name the fallback claim:\n%s", got.stdout)
 	}
-	q, err := db.OpenSource(dest, db.Key{})
+	q, err := db.OpenSource(dest, importKey(t))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -877,5 +1187,64 @@ func TestImportV2MapsUnresolvedAgentClaimsToWriterKeys(t *testing.T) {
 		if key != tc.key {
 			t.Errorf("agent_writes %d claim = %q, want %q", tc.id, key, tc.key)
 		}
+	}
+}
+
+func TestImportV2RefusesAnUnknownSettingWithItsName(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	d, err := db.Connect(source, db.WithKey(db.Key{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('not_a_real_key', 'x')"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code == cli.ExitOK || !strings.Contains(got.stderr, "not_a_real_key") {
+		t.Fatalf("an unknown setting: exit %d stderr %q, want a refusal naming it", got.code, got.stderr)
+	}
+}
+
+func TestImportV2ResetsLiveMailToShadowAndAccountsEverySetting(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	d, err := db.Connect(source, db.WithKey(db.Key{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('mail_mode', 'live')"); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stderr %q", got.code, got.stderr)
+	}
+	for _, want := range []string{
+		"setting mail_mode: reset-for-cutover live -> shadow",
+		"setting cache_ttl_chat: carried",
+		"setting default_context_limit: carried",
+		"setting default_effort: carried",
+		"setting money_since: dropped",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+	dest, err := db.OpenSource(filepath.Join(dir, "atrium.db"), importKey(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = dest.Close() }()
+	if value := importValue(t, dest, "SELECT value FROM settings WHERE key = 'mail_mode'"); value != "shadow" {
+		t.Fatalf("imported mail_mode = %q, want shadow", value)
 	}
 }

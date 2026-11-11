@@ -102,11 +102,7 @@ func Resolve(ctx context.Context, q db.Querier, reader int64, text string) ([]js
 	if len(tokens) > MaxPerMessage {
 		return nil, Refused(fmt.Sprintf("at most %d references per message", MaxPerMessage))
 	}
-	r := assistant.Read(ctx, q)
-	limit := int64(r.Int(assistant.KeyRefTokens))
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
+	limit := int64(assistant.TuningAgentRefTokens)
 	out := make([]json.RawMessage, 0, len(tokens))
 	for _, tok := range tokens {
 		ref, err := resolve(ctx, q, reader, tok, limit)

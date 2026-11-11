@@ -43,17 +43,15 @@ type Limits struct {
 	UserAgent    string
 }
 
-func ReadLimits(ctx context.Context, q db.Querier) (Limits, error) {
-	r := assistant.Read(ctx, q)
-	lim := Limits{
-		MaxBytes:     r.Int(assistant.KeyWebfetchMaxBytes),
-		Timeout:      time.Duration(r.Int(assistant.KeyWebfetchTimeout)) * time.Second,
-		MaxRedirects: r.Int(assistant.KeyWebfetchMaxRedirects),
-		PageChars:    r.Int(assistant.KeyWebfetchPageChars),
-		TextDefault:  r.Int(assistant.KeyWebfetchTextDefault),
-		UserAgent:    r.Text(assistant.KeyWebfetchUserAgent),
-	}
-	return lim, r.Err()
+func ReadLimits(_ context.Context, _ db.Querier) (Limits, error) {
+	return Limits{
+		MaxBytes:     assistant.TuningAgentWebfetchMaxBytes,
+		Timeout:      time.Duration(assistant.TuningAgentWebfetchTimeoutSeconds) * time.Second,
+		MaxRedirects: assistant.TuningAgentWebfetchMaxRedirects,
+		PageChars:    assistant.TuningAgentWebfetchPageChars,
+		TextDefault:  assistant.TuningAgentWebfetchTextDefault,
+		UserAgent:    assistant.TuningAgentWebfetchUserAgent,
+	}, nil
 }
 
 var fetchAllowed atomic.Pointer[func(netip.Addr) bool]

@@ -345,6 +345,12 @@ type NotEditable struct{ Key string }
 
 func (e *NotEditable) Error() string { return "settings: " + e.Key + " is not editable" }
 
+type HostOwned string
+
+func (e HostOwned) Error() string {
+	return "settings: " + string(e) + " is host configuration and is not editable here"
+}
+
 type PinnedError struct {
 	Key    string
 	Source string

@@ -273,12 +273,11 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 	for _, tc := range []struct{ module, reason string }{
 		{module.Mail, "mail_chat_url is not set"},
 		{module.Calendar, "iCloud CalDAV login or Google Calendar credentials"},
-		{module.Notion, "notion_token is not set"},
 		{module.Media, "media_root is not set"},
-		{module.Assistant, "anthropic_api_key is not set"},
+		{module.Assistant, "the Anthropic connection is not configured"},
 		{module.Notifications, "webpush_subject is not set"},
 		{module.Contacts, "contacts_dir is not set"},
-		{module.Grafana, "grafana_url and grafana_viewer_token"},
+		{module.Grafana, "the Grafana connection is not configured"},
 		{module.Grafana, "needs assistant"},
 	} {
 		got := runSettings(t, "set", module.FlagKey(tc.module), "true")
@@ -291,6 +290,9 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 	}
 	for name, value := range requirementEnv(filepath.Join(dir, "media")) {
 		setEnv(t, name, value)
+	}
+	if got := runApp(t, "connections", "list"); got.code != cli.ExitOK {
+		t.Fatalf("connections list: exit %d %q", got.code, got.stderr)
 	}
 	for _, name := range []string{module.Mail, module.Notifications} {
 		if got := runSettings(t, "set", module.FlagKey(name), "true"); got.code != cli.ExitOK || got.row(t).Value == nil || *got.row(t).Value != "true" {

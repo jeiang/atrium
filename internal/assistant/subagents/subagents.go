@@ -191,11 +191,7 @@ func Save(ctx context.Context, q db.Querier, reg *registry.Registry, d Definitio
 	if !name.MatchString(agent) {
 		return nil, Error("name must be lowercase letters, digits, - or _ (max 32 characters)")
 	}
-	r := assistant.Read(ctx, q)
-	maxDescription, maxPrompt := r.Int(assistant.KeySubagentDescChars), r.Int(assistant.KeySubagentPromptChars)
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
+	maxDescription, maxPrompt := assistant.TuningAgentSubagentDescriptionChars, assistant.TuningAgentSubagentPromptChars
 	if n := utf8.RuneCountInString(description); n == 0 || n > maxDescription {
 		return nil, Error(fmt.Sprintf("description is required, one line, at most %d characters", maxDescription))
 	}
@@ -270,12 +266,7 @@ func DigestOf(ctx context.Context, q db.Querier, threadID int64) (string, error)
 			return "", fmt.Errorf("subagents: thread %d message %d: %w", threadID, messages[i].ID, err)
 		}
 		if text := strings.TrimSpace(strings.Join(texts, "\n")); text != "" {
-			r := assistant.Read(ctx, q)
-			limit := r.Int(assistant.KeySubagentDigestChars)
-			if err := r.Err(); err != nil {
-				return "", err
-			}
-			return textx.Clip(text, limit), nil
+			return textx.Clip(text, assistant.TuningAgentSubagentDigestChars), nil
 		}
 	}
 	return "", nil

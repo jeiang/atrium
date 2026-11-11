@@ -122,7 +122,7 @@ func leaf(ctx context.Context, tc *tool.Context, nodes []memory.Node, id, at int
 		body = strings.Join(parts, "\n")
 		break
 	}
-	limit := int64(assistant.Read(ctx, tc.DB.Read).Int(assistant.KeyRecallPageChars))
+	limit := int64(assistant.TuningAgentRecallPageChars)
 	text := slice(body, at, limit)
 	total := int64(utf8.RuneCountInString(body))
 	end := at + int64(utf8.RuneCountInString(text))

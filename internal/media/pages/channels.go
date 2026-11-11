@@ -47,7 +47,7 @@ func (s *service) chPage(w http.ResponseWriter, r *http.Request, notice *tpl.Toa
 	data := ChannelsPage{
 		Channels: channels,
 		Status:   ChannelStatusView{LastCheck: state.LastCheck, Errors: errs},
-		TMDB:     set.TMDBToken != "",
+		TMDB:     set.TMDB() != nil,
 		Q:        q,
 		Results:  results,
 		Searched: searched,

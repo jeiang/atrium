@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/media"
@@ -141,6 +142,14 @@ func handler(cfgEnv config.Env, run job, clock func() float64) func(*cli.Args) c
 			if err := config.Boot(env.Ctx, cfgEnv, d, cfg); err != nil {
 				return cli.Fail(env, err)
 			}
+			store, err := connections.New(d, config.From(env.Ctx).Host(), connections.DefaultRegistry())
+			if err != nil {
+				return cli.Fail(env, err)
+			}
+			if err := store.ReconcileHost(env.Ctx); err != nil {
+				return cli.Fail(env, err)
+			}
+			connections.SetDefault(d.Read, store)
 			out, err := run(env.Ctx, d, cfgEnv, clock)
 			if err != nil {
 				return cli.Fail(env, err)

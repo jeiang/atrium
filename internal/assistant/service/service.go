@@ -15,6 +15,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/anthropicconn"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/journal"
@@ -26,12 +27,12 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/assistant/workspace"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -89,11 +90,20 @@ func (s *Service) ResolveClient(ctx context.Context) (*anthropic.Client, error) 
 	if s.Client != nil {
 		return s.Client, nil
 	}
-	key, err := secrets.Credential(ctx, s.DB.Read, secrets.AnthropicAPIKey)
+	lease, err := connections.OpenRead(ctx, s.DB.Read, config.From(ctx).Host(), connections.ID(anthropicconn.Kind))
 	if err != nil {
 		return nil, err
 	}
-	return anthropic.New(strings.TrimSpace(key), s.Env)
+	defer lease.Close()
+	key, err := lease.Credential("api_key")
+	if err != nil {
+		return nil, config.NotConfigured("the Anthropic connection has no API key")
+	}
+	client, err := lease.HTTP("url")
+	if err != nil {
+		return nil, err
+	}
+	return anthropic.New(strings.TrimSpace(key), anthropicconn.Env(s.Env, lease), anthropic.HTTPClient(client))
 }
 
 const catalogCheckTimeout = 30 * time.Second
@@ -249,12 +259,8 @@ func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now 
 }
 
 func (s *Service) knowledge(ctx context.Context, thread *threads.Thread, text string, now float64) (json.RawMessage, error) {
-	r := assistant.Read(ctx, s.DB.Read)
-	budget := int64(r.Int(assistant.KeyKBRetrievalTokens))
-	distance := r.Float(assistant.KeyKBRetrievalDistance)
-	if err := r.Err(); err != nil {
-		return nil, err
-	}
+	budget := int64(assistant.TuningAgentKbRetrievalTokens)
+	distance := assistant.TuningAgentKbRetrievalDistance
 	if budget == 0 {
 		return nil, nil
 	}

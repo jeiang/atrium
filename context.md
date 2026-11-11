@@ -242,9 +242,9 @@ behavior-parity target.
   hash of the text that was sent, so an edit re-queues it, a write-back whose
   row changed, was retracted or was deleted in flight is discarded, and a
   retraction or deletion removes the vector in the same transaction.
-- qBittorrent (API key), TMDB (read token) and Ship24 (API key) are connection records on the Integrations settings
+- Ship24 (API key) is a connection record on the Integrations settings; qBittorrent (API key), TMDB (read token), EZTV (no credential) and Notion (token) are connection records on the `/settings/connections`
   page, with Test before save, recorded health, a daily check, disconnect,
-  and a per-integration CA bundle and proxy. Certificate verification
+  and a per-connection CA bundle and proxy. Certificate verification
   cannot be turned off. Open-Meteo is a keyless connection record for the
   `weather` tool: current conditions and an hourly/daily forecast for the
   configured location or a named place, fetched over the shared transport.
@@ -323,10 +323,14 @@ behavior-parity target.
   channels, the seen list and media state, and the current calendar month's
   usage rows. Converted into effect-ledger rows with their old identity
   preserved: `auto_actions` and the `write_resolutions` rows that settle
-  them, and `agent_writes` with its resolutions. Rebuilt: `message_fts`, `thread_fts` and
-  `kb_fts`. Not carried: run history (`runs`, `run_events`, `tool_calls`,
-  `tool_results`, `context_ledger`, `context_projections`, `job_runs`),
-  memory (rebuilt), Notion and wiki state (re-synced), knowledge and Notion
+  them, and `agent_writes` with its resolutions. A service credential whose
+  owner has a connection record (qBittorrent, TMDB, EZTV, Anthropic, Grafana,
+  Notion) is written to that connection's credential store and its source
+  `secrets` row is dropped; the connection keeps the source `set_at`/`set_by`.
+  Rebuilt: `message_fts`, `thread_fts` and `kb_fts`. Not carried: run history
+  (`runs`, `run_events`, `tool_calls`, `tool_results`, `context_ledger`,
+  `context_projections`, `job_runs`), memory (rebuilt), Notion and wiki
+  state (re-synced), knowledge and Notion
   vectors (rebuilt), notifications, auth sessions and login links, OAuth
   handshakes, action links, the settings audit, the mail event log, ops
   data, endpoint probes, integration health, nightly observations,
@@ -415,7 +419,7 @@ behavior-parity target.
 - The knowledge export is export-only: a built-in job renders live,
   non-expired records into the Notion page named by
   `export_notion_parent` and overwrites the pages it created; a target with no
-  destination is skipped. The Notion controls sit in the Notion record on the
+  destination is skipped. The Notion controls are a standalone section on the
   Integrations page, the Obsidian folder has its own section, and the parent
   page accepts a pasted page URL or id stored as the normalized id. Each
   external write records an `agent_writes` intent first; an unknown outcome
@@ -640,7 +644,7 @@ behavior-parity target.
 - **The day is home.** Five navigation entries: today and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings. The home brief lists the morning digest lines and names the next event.
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
-- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its registration (`Settings` on the registration, a label on the setting) and that render and save through one shared path; an external module declares them through the `sdk` package and gets a page at `/settings/{module}`. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Media, Notion and Grafana each have a page with their connections and sections, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
+- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its registration (`Settings` on the registration, a label on the setting) and that render and save through one shared path; an external module declares them through the `sdk` package and gets a page at `/settings/{module}`. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Media and Grafana each have a page with their connections and sections, Notion has a page with its wiki settings, its connection is on `/settings/connections`, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.

@@ -1,19 +1,38 @@
 package memorycmd
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/anthropicconn"
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
+
+func client(ctx context.Context, d *db.DB, env config.Env) (*anthropic.Client, error) {
+	lease, err := connections.OpenRead(ctx, d.Read, config.From(ctx).Host(), connections.ID(anthropicconn.Kind))
+	if err != nil {
+		return nil, err
+	}
+	defer lease.Close()
+	key, err := lease.Credential("api_key")
+	if err != nil {
+		return nil, config.NotConfigured("the Anthropic connection has no API key")
+	}
+	httpClient, err := lease.HTTP("url")
+	if err != nil {
+		return nil, err
+	}
+	return anthropic.New(strings.TrimSpace(key), anthropicconn.Env(env, lease), anthropic.HTTPClient(httpClient))
+}
 
 func Command(cfgEnv config.Env) *cli.Command {
 	return &cli.Command{Name: "memory", Commands: []*cli.Command{treeCommand(cfgEnv), workCommand(cfgEnv), viewCommand(cfgEnv), backfillCommand(cfgEnv)}}
@@ -88,11 +107,7 @@ func workCommand(cfgEnv config.Env) *cli.Command {
 					return cli.Fail(env, err)
 				}
 				defer func() { _ = d.Close() }()
-				key, err := secrets.Credential(env.Ctx, d.Read, secrets.AnthropicAPIKey)
-				if err != nil {
-					return cli.Fail(env, err)
-				}
-				client, err := anthropic.New(strings.TrimSpace(key), cfgEnv)
+				client, err := client(env.Ctx, d, cfgEnv)
 				if err != nil {
 					return cli.Fail(env, err)
 				}
@@ -187,11 +202,7 @@ func backfillCommand(cfgEnv config.Env) *cli.Command {
 						return cli.Fail(env, fmt.Errorf("backfill already completed at %s; use --thread to redo one thread", done))
 					}
 				}
-				key, err := secrets.Credential(env.Ctx, d.Read, secrets.AnthropicAPIKey)
-				if err != nil {
-					return cli.Fail(env, err)
-				}
-				client, err := anthropic.New(strings.TrimSpace(key), cfgEnv)
+				client, err := client(env.Ctx, d, cfgEnv)
 				if err != nil {
 					return cli.Fail(env, err)
 				}

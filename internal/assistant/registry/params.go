@@ -4,17 +4,8 @@ import (
 	"bytes"
 	"encoding/json"
 
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
 )
-
-const DynamicFilteringKey = "search_web_dynamic_filtering"
-
-func init() {
-	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
-		Key: DynamicFilteringKey, Module: "web_search", Type: settings.Bool, Default: "false",
-	}))
-}
 
 const (
 	WebSearchName = "web_search"

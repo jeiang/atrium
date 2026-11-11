@@ -23,8 +23,8 @@ import (
 	webpush "github.com/SherClockHolmes/webpush-go"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/integrations/transport"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/netguard"
 	"github.com/jeiang/atrium/internal/obs"

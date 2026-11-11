@@ -37,6 +37,11 @@ func HasActor(ctx context.Context) bool {
 	return ok && o.actor != "" && o.source != ""
 }
 
+func Actor(ctx context.Context) string {
+	o, _ := ctx.Value(originKey{}).(origin)
+	return o.actor
+}
+
 type Entry struct {
 	Key    string
 	Old    *string

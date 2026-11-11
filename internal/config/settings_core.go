@@ -21,6 +21,7 @@ const (
 	KeySnoozeChoices     = "snooze_choices"
 	KeyPreviewBytes      = "preview_bytes"
 	KeyRunHistory        = "web_run_history"
+	InitialTZEnv         = "ATRIUM_INITIAL_TZ"
 	coreModule           = "core"
 	webModule            = "web"
 	defaultHTTPTimeout   = 600

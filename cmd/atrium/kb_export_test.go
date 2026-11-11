@@ -203,7 +203,7 @@ func exportFixture(t *testing.T, fake *exportNotion) (string, *fixture, *db.DB) 
 	fake.pages = map[string]*exportPage{}
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
-	setEnv(t, "ATRIUM_NOTION_BASE_URL", srv.URL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", notionHostConfig(t, dir, srv.URL, "ntn_export"))
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
 	}
@@ -402,6 +402,19 @@ func integrationCard(body, name string) string {
 	return rest
 }
 
+func sectionCard(body, name string) string {
+	marker := `data-section="` + name + `"`
+	start := strings.Index(body, marker)
+	if start < 0 {
+		return ""
+	}
+	rest := body[start+len(marker):]
+	if end := strings.Index(rest, `data-section="`); end >= 0 {
+		return rest[:end]
+	}
+	return rest
+}
+
 func exportForm(t *testing.T, body, action string) ([][2]string, map[string]bool) {
 	t.Helper()
 	z := html.NewTokenizer(strings.NewReader(body))
@@ -576,33 +589,6 @@ func TestObsidianExportRefusedSaveKeepsForm(t *testing.T) {
 	}
 }
 
-func TestIntegrationSettingsRefusedSaveKeepsForm(t *testing.T) {
-	dir, _, _ := exportFixture(t, &exportNotion{})
-	w := asstBrowse(t, startServeIn(t, dir))
-	const action = "/settings/integrations/open_meteo/settings"
-	status, body, _ := w.get("/settings/integrations", false)
-	if status != http.StatusOK {
-		t.Fatalf("GET integrations = %d", status)
-	}
-	fields, _ := exportForm(t, body, action)
-	for i := range fields {
-		switch fields[i][0] {
-		case "weather_latitude":
-			fields[i][1] = "91"
-		case "weather_location_name":
-			fields[i][1] = "Draft location"
-		}
-	}
-	status, body, _ = exportPost(t, w, action, fields, false)
-	if status != http.StatusUnprocessableEntity {
-		t.Fatalf("invalid weather save = %d: %s", status, body)
-	}
-	returned, _ := exportForm(t, body, action)
-	if !slices.Equal(returned, fields) {
-		t.Errorf("refused form = %v, want %v", returned, fields)
-	}
-}
-
 func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 	fake := &exportNotion{}
 	dir, f, d := exportFixture(t, fake)
@@ -628,9 +614,9 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 	if strings.Contains(body, "Knowledge export") || strings.Contains(body, `data-section="export"`) {
 		t.Errorf("the standalone Knowledge export section is still rendered")
 	}
-	notion := integrationCard(body, "notion")
-	if !strings.Contains(notion, `data-section="export_notion"`) || !strings.Contains(notion, "Export knowledge to Notion") {
-		t.Errorf("the Notion card does not contain the export group")
+	notion := sectionCard(body, "export_notion")
+	if !strings.Contains(notion, "Export knowledge to Notion") {
+		t.Errorf("the Notion export section is missing")
 	}
 	if !strings.Contains(body, `data-section="export_obsidian"`) || !strings.Contains(body, "Obsidian export") {
 		t.Errorf("the Obsidian export section is missing")

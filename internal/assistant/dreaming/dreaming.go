@@ -233,11 +233,7 @@ func monthStart(ts float64, loc *time.Location) float64 {
 }
 
 func gather(ctx context.Context, q db.Querier, now float64, loc *time.Location) (gathered, error) {
-	r := assistant.Read(ctx, q)
-	maxThreads, threadChars, totalChars := r.Int(assistant.KeyNightlyMaxThreads), r.Int(assistant.KeyNightlyThreadChars), r.Int(assistant.KeyNightlyTotalChars)
-	if err := r.Err(); err != nil {
-		return gathered{}, err
-	}
+	maxThreads, threadChars, totalChars := assistant.TuningAgentNightlyMaxThreads, assistant.TuningAgentNightlyThreadChars, assistant.TuningAgentNightlyTotalChars
 	from, to := now-daySeconds, now
 	out := gathered{from: from, to: to}
 	rows, err := q.QueryContext(ctx,

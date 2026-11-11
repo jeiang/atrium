@@ -43,8 +43,8 @@ func TestNotionSyncTreatsAFormulaPrivacyValueAsPrivate(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 
-	f := newFixture(t, goldenData{}, map[string]string{"NOTION_TOKEN": "ntn_good"}, "")
-	setEnv(t, "ATRIUM_NOTION_BASE_URL", srv.URL)
+	f := newFixture(t, goldenData{}, nil, "")
+	setEnv(t, "ATRIUM_HOST_CONFIG", notionHostConfig(t, f.dir, srv.URL, "ntn_good"))
 	ctx := context.Background()
 	if code, _, stderr := f.Run(ctx, "notion", "sync"); code != 0 {
 		t.Fatalf("notion sync exited %d: %s", code, stderr)
