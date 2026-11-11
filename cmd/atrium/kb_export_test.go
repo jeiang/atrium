@@ -53,6 +53,15 @@ func (f *exportNotion) created() []*exportPage {
 	return out
 }
 
+func (f *exportNotion) first() string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if len(f.order) == 0 {
+		return ""
+	}
+	return f.order[0]
+}
+
 func (f *exportNotion) byTitle(title string) *exportPage {
 	for _, page := range f.created() {
 		if page.title == title {
@@ -973,7 +982,7 @@ func TestNotionExportKeepsATitleSuccessWhenContentFails(t *testing.T) {
 	if page == nil {
 		t.Fatal("the first export created no page")
 	}
-	pageID := fake.order[0]
+	pageID := fake.first()
 	if _, err := d.Write.Exec("UPDATE kb_records SET title = 'Dentist visit', body = 'second body', updated_at = 300 WHERE id = ?", id); err != nil {
 		t.Fatal(err)
 	}
@@ -1038,7 +1047,7 @@ func TestNotionCreateResolutionVerifiesThePageAndUpdatesTheMapping(t *testing.T)
 	if err := json.Unmarshal([]byte(action), &payload); err != nil || payload.Hash == "" {
 		t.Fatalf("create action = %q, %v", action, err)
 	}
-	pageID := fake.order[0]
+	pageID := fake.first()
 	evidence := fmt.Sprintf(`{"page_id":%q,"hash":%q}`, pageID, payload.Hash)
 	if ran := runApp(t, "effects", "resolve", fmt.Sprint(effectID), "--outcome", "applied", "--evidence", evidence); ran.code != cli.ExitOK {
 		t.Fatalf("resolve: %d %s", ran.code, ran.stderr)
