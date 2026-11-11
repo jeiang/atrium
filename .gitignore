@@ -14,3 +14,5 @@ node_modules/
 # SQLite sidecars from opening the golden world fixture
 testdata/golden/world.db-shm
 testdata/golden/world.db-wal
+testdata/v2/atrium.db-shm
+testdata/v2/atrium.db-wal

@@ -32,3 +32,11 @@ CREATE TABLE IF NOT EXISTS notion_state (
     value TEXT NOT NULL
 );
 CREATE VIRTUAL TABLE IF NOT EXISTS notion_fts USING fts5(title, path, body);
+CREATE TABLE IF NOT EXISTS export_pages (
+    target TEXT NOT NULL CHECK (target IN ('notion', 'obsidian')),
+    record_id INTEGER NOT NULL,
+    remote_id TEXT NOT NULL,
+    hash TEXT NOT NULL,
+    updated_at REAL NOT NULL,
+    PRIMARY KEY (target, record_id)
+);

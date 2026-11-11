@@ -19,8 +19,8 @@ import (
 
 const maxKeyInput = 1024
 
-func Command(env config.Env) *cli.Command {
-	s := &service{env: env}
+func Command(env config.Env, now func() float64) *cli.Command {
+	s := &service{env: env, now: now}
 	return &cli.Command{
 		Name: "db",
 		Commands: []*cli.Command{
@@ -29,12 +29,15 @@ func Command(env config.Env) *cli.Command {
 			{Name: "backup", Help: "write a consistent copy of the database, encrypted like the source", Setup: s.backup},
 			{Name: "shell", Help: "run SQL statements from standard input against the database", Setup: s.shell},
 			{Name: "check", Help: "verify database integrity and report FTS5 and vec0 table counts", Setup: s.check},
-			{Name: "import-v1", Help: "copy the learned-rule data from a v1 database into this fresh v2 database", Setup: s.importV1},
+			{Name: "import-v2", Help: "copy a v2 database into this fresh v3 database", Setup: s.importV2},
 		},
 	}
 }
 
-type service struct{ env config.Env }
+type service struct {
+	env config.Env
+	now func() float64
+}
 
 func (s *service) path() (string, error) {
 	cfg, err := config.Load(s.env)
@@ -58,6 +61,10 @@ func (s *service) open(e *cli.Env) (*db.DB, string, db.Key, int) {
 	}
 	d, err := db.Connect(path, db.WithKey(key))
 	if err != nil {
+		return nil, "", db.Key{}, cli.Fail(e, err)
+	}
+	if err := db.RequireV3(e.Ctx, d.Read); err != nil {
+		_ = d.Close()
 		return nil, "", db.Key{}, cli.Fail(e, err)
 	}
 	return d, path, key, cli.ExitOK

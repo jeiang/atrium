@@ -31,7 +31,6 @@ func TestMain(m *testing.M) {
 		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
 		os.Exit(0)
 	}
-	extModules()
 	reg := settings.New()
 	newApp(config.OS, reg, config.NewState(reg), nil)
 	os.Exit(m.Run())

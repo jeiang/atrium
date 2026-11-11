@@ -1,0 +1,323 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"database/sql"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/testutil/golden"
+)
+
+func v2Fixture(t *testing.T) string {
+	t.Helper()
+	return filepath.Join(golden.Dir(), "..", "v2", "atrium.db")
+}
+
+func importTestApp(t *testing.T, dir string, now float64) *cli.App {
+	t.Helper()
+	vars := varsFor(t).snapshot()
+	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
+	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
+	vars[settingEnv(config.KeyMailAccountsFile)] = defaultAccountsFile
+	delete(vars, "ATRIUM_DB_KEY")
+	delete(vars, "ATRIUM_DB_KEY_FILE")
+	reg := settings.New()
+	return newAppWith(config.Map(vars), reg, config.NewState(reg), nil, nil, func() float64 { return now }, quietLog)
+}
+
+func runImportApp(t *testing.T, app *cli.App, args ...string) appRun {
+	t.Helper()
+	var out, errs bytes.Buffer
+	code := app.Run(context.Background(), args, &out, &errs)
+	return appRun{code, out.String(), errs.String()}
+}
+
+func importCount(t *testing.T, q db.Querier, query string, args ...any) int64 {
+	t.Helper()
+	var n int64
+	if err := q.QueryRowContext(context.Background(), query, args...).Scan(&n); err != nil {
+		t.Fatalf("%s: %v", query, err)
+	}
+	return n
+}
+
+func importValue(t *testing.T, q db.Querier, query string, args ...any) string {
+	t.Helper()
+	var value sql.NullString
+	if err := q.QueryRowContext(context.Background(), query, args...).Scan(&value); err != nil {
+		t.Fatalf("%s: %v", query, err)
+	}
+	return value.String
+}
+
+func importNull(t *testing.T, q db.Querier, query string, args ...any) bool {
+	t.Helper()
+	var value sql.NullString
+	if err := q.QueryRowContext(context.Background(), query, args...).Scan(&value); err != nil {
+		t.Fatalf("%s: %v", query, err)
+	}
+	return !value.Valid
+}
+
+func copyV2Fixture(t *testing.T, dir string) string {
+	t.Helper()
+	path := filepath.Join(dir, "v2.db")
+	copyFile(t, v2Fixture(t), path)
+	return path
+}
+
+func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
+	t.Parallel()
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	before := fileDigest(t, source)
+	dest := filepath.Join(dir, "atrium.db")
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if after := fileDigest(t, source); after != before {
+		t.Errorf("the import changed the source: %s -> %s", before, after)
+	}
+	for _, want := range []string{
+		"messages: carried 158",
+		"message_fts: rebuilt 158",
+		"thread_fts: rebuilt 24",
+		"kb_fts: rebuilt 3",
+		"embed_index: rebuilt 1",
+		"embed_message_0: carried 148",
+		"usage: carried 22",
+		"subagents: carried 1",
+		"runs: dropped 8",
+		"job_runs: dropped 2",
+		"schema_migrations: dropped 11",
+		"setting not known to v3: money_since",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+
+	q, err := db.OpenSource(dest, db.Key{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+
+	for _, tc := range []struct {
+		name  string
+		query string
+		want  int64
+	}{
+		{"messages", "SELECT COUNT(*) FROM messages", 158},
+		{"message fts", "SELECT COUNT(*) FROM message_fts", 158},
+		{"thread messages", "SELECT COUNT(*) FROM thread_messages WHERE thread_id = 2", 23},
+		{"thread fts", "SELECT COUNT(*) FROM thread_fts", 24},
+		{"kb records", "SELECT COUNT(*) FROM kb_records", 3},
+		{"kb fts", "SELECT COUNT(*) FROM kb_fts", 3},
+		{"vectors", "SELECT COUNT(*) FROM embed_message_0", 148},
+		{"usage", "SELECT COUNT(*) FROM usage", 22},
+		{"runs", "SELECT COUNT(*) FROM runs", 0},
+		{"subagents", "SELECT COUNT(*) FROM subagents", 4},
+		{"operator subagents", "SELECT COUNT(*) FROM subagents WHERE builtin = 0", 1},
+		{"parent threads", "SELECT COUNT(*) FROM threads WHERE parent_thread_id = 2", 1},
+	} {
+		if n := importCount(t, q, tc.query); n != tc.want {
+			t.Errorf("%s: %d, want %d", tc.name, n, tc.want)
+		}
+	}
+	if got := importValue(t, q, "SELECT subject FROM messages WHERE id = 85"); got != "Lunch next week" {
+		t.Errorf("message 85 subject %q", got)
+	}
+	if got := importValue(t, q, "SELECT folder FROM corrections WHERE message_id = 93"); got != "Bills" {
+		t.Errorf("correction for message 93 folder %q", got)
+	}
+	if got := importValue(t, q, "SELECT stage FROM decisions WHERE id = 1"); got != "knn" {
+		t.Errorf("decision 1 stage %q", got)
+	}
+	if got := importValue(t, q, "SELECT state FROM auto_actions WHERE id = 5"); got != "undone" {
+		t.Errorf("auto action 5 state %q", got)
+	}
+	if got := importValue(t, q, "SELECT undo FROM auto_actions WHERE id = 5"); !strings.Contains(got, "move_back") {
+		t.Errorf("auto action 5 undo data %q", got)
+	}
+	if got := importValue(t, q, "SELECT dest FROM rules WHERE id = 'club-news'"); got != "Newsletters" {
+		t.Errorf("rule club-news dest %q", got)
+	}
+	if got := importValue(t, q, "SELECT value FROM settings WHERE key = 'default_effort'"); got != "medium" {
+		t.Errorf("default_effort %q", got)
+	}
+	if n := importCount(t, q, "SELECT length(value) FROM secrets WHERE name = 'anthropic_api_key'"); n != 14 {
+		t.Errorf("secret length %d", n)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM kb_records WHERE embedded != 0"); n != 0 {
+		t.Errorf("%d knowledge records kept embedded=1", n)
+	}
+	if got := importValue(t, q, "SELECT name FROM media_channels WHERE id = 1"); got != "Lanterns" {
+		t.Errorf("media channel 1 %q", got)
+	}
+	if got := importValue(t, q, "SELECT title FROM tasks WHERE id = 1"); got != "Book the passport appointment" {
+		t.Errorf("task 1 %q", got)
+	}
+	if got := importValue(t, q, "SELECT status FROM drafts WHERE id = 1"); got != "draft" {
+		t.Errorf("draft 1 status %q", got)
+	}
+	if !importNull(t, q, "SELECT run_id FROM thread_messages WHERE thread_id = 2 AND seq = 1") {
+		t.Error("thread_messages.run_id was not cleared")
+	}
+	if !importNull(t, q, "SELECT run_id FROM usage WHERE id = 1") {
+		t.Error("usage.run_id was not cleared")
+	}
+	if n := importCount(t, q, "SELECT thread_id FROM usage WHERE id = 1"); n != 1 {
+		t.Errorf("usage 1 thread_id %d", n)
+	}
+	if !importNull(t, q, "SELECT run_id FROM agent_writes WHERE id = 7") {
+		t.Error("agent_writes.run_id was not cleared")
+	}
+	if n := importCount(t, q, "SELECT thread_id FROM agent_writes WHERE id = 7"); n != 2 {
+		t.Errorf("agent_writes 7 thread_id %d", n)
+	}
+	if !importNull(t, q, "SELECT last_run_id FROM jobs WHERE id = 1") {
+		t.Error("jobs.last_run_id was not cleared")
+	}
+
+	replay := runImportApp(t, importTestApp(t, dir, clock), "replay")
+	if replay.code != cli.ExitOK {
+		t.Fatalf("replay: exit %d stdout %q stderr %q", replay.code, replay.stdout, replay.stderr)
+	}
+	baseline, err := os.ReadFile(filepath.Join(golden.Dir(), "..", "v2", "replay.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if replay.stdout != string(baseline) {
+		t.Errorf("the imported copy replays differently from the v2 baseline:\ngot:\n%s\nwant:\n%s", replay.stdout, baseline)
+	}
+
+	t.Run("a second import is refused and changes nothing", func(t *testing.T) {
+		before := fileDigest(t, source)
+		again := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+		if again.code == cli.ExitOK || !strings.Contains(again.stderr, "already holds rows") || !strings.Contains(again.stderr, "messages=158") {
+			t.Fatalf("second import: exit %d stdout %q stderr %q", again.code, again.stdout, again.stderr)
+		}
+		if after := fileDigest(t, source); after != before {
+			t.Error("the refused import changed the source")
+		}
+		if n := importCount(t, q, "SELECT COUNT(*) FROM messages"); n != 158 {
+			t.Errorf("the refused import changed the destination: messages %d", n)
+		}
+	})
+
+	t.Run("a source below version 11 is refused", func(t *testing.T) {
+		old := copyV2Fixture(t, t.TempDir())
+		editImportSource(t, old, "DELETE FROM schema_migrations WHERE version = 11")
+		target := t.TempDir()
+		got := runImportApp(t, importTestApp(t, target, clock), "db", "import-v2", old)
+		if got.code == cli.ExitOK || !strings.Contains(got.stderr, "version 10") || !strings.Contains(got.stderr, "version 11") {
+			t.Fatalf("import of a version 10 source: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+		}
+		if _, err := os.Stat(filepath.Join(target, "atrium.db")); err == nil {
+			t.Error("the refused import created the destination")
+		}
+	})
+
+	t.Run("an unknown source table is refused by name", func(t *testing.T) {
+		extra := copyV2Fixture(t, t.TempDir())
+		editImportSource(t, extra, "CREATE TABLE surprise (x INTEGER)")
+		target := t.TempDir()
+		got := runImportApp(t, importTestApp(t, target, clock), "db", "import-v2", extra)
+		if got.code == cli.ExitOK || !strings.Contains(got.stderr, "surprise") {
+			t.Fatalf("import with an unknown table: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+		}
+		if _, err := os.Stat(filepath.Join(target, "atrium.db")); err == nil {
+			t.Error("the refused import created the destination")
+		}
+	})
+
+	t.Run("a populated destination is refused", func(t *testing.T) {
+		target := t.TempDir()
+		app := importTestApp(t, target, clock)
+		if got := runImportApp(t, app, "settings", "set", "tz", "UTC"); got.code != cli.ExitOK {
+			t.Fatalf("settings set: exit %d stderr %q", got.code, got.stderr)
+		}
+		got := runImportApp(t, app, "db", "import-v2", source)
+		if got.code == cli.ExitOK || !strings.Contains(got.stderr, "already holds rows") || !strings.Contains(got.stderr, "settings=1") {
+			t.Fatalf("import into a populated destination: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+		}
+	})
+
+	t.Run("a source with a send in flight is refused", func(t *testing.T) {
+		sending := copyV2Fixture(t, t.TempDir())
+		editImportSource(t, sending, "UPDATE drafts SET status = 'sending' WHERE id = 1")
+		target := t.TempDir()
+		got := runImportApp(t, importTestApp(t, target, clock), "db", "import-v2", sending)
+		if got.code == cli.ExitOK || !strings.Contains(got.stderr, "drafts=1") || !strings.Contains(got.stderr, "stop v2") {
+			t.Fatalf("import with a send in flight: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+		}
+		if _, err := os.Stat(filepath.Join(target, "atrium.db")); err == nil {
+			t.Error("the refused import created the destination")
+		}
+	})
+
+	t.Run("knowledge records are reset for a rebuild", func(t *testing.T) {
+		embedded := copyV2Fixture(t, t.TempDir())
+		editImportSource(t, embedded, "UPDATE kb_records SET embedded = 1")
+		target := t.TempDir()
+		got := runImportApp(t, importTestApp(t, target, clock), "db", "import-v2", embedded)
+		if got.code != cli.ExitOK {
+			t.Fatalf("import: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+		}
+		dest, err := db.OpenSource(filepath.Join(target, "atrium.db"), db.Key{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = dest.Close() }()
+		if n := importCount(t, dest, "SELECT COUNT(*) FROM kb_records WHERE embedded != 0"); n != 0 {
+			t.Errorf("%d knowledge records kept embedded=1", n)
+		}
+	})
+
+	t.Run("usage outside the current month is not carried", func(t *testing.T) {
+		old := copyV2Fixture(t, t.TempDir())
+		editImportSource(t, old, `INSERT INTO usage (id, ts, request_id, source, provider, thread_id, run_id, kind, job_name, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, reasoning_tokens, searches, tool_calls, wall_ms, tier, cost_usd, partial, unpriced, clear_edits, cleared_tokens, compaction)
+			SELECT 99, 1789000000, 'old-month', source, provider, thread_id, run_id, kind, job_name, model, effort, iterations, input_tokens, cache_write_5m, cache_write_1h, cache_read, output_tokens, reasoning_tokens, searches, tool_calls, wall_ms, tier, cost_usd, partial, unpriced, clear_edits, cleared_tokens, compaction FROM usage WHERE id = 1`)
+		target := t.TempDir()
+		got := runImportApp(t, importTestApp(t, target, clock), "db", "import-v2", old)
+		if got.code != cli.ExitOK {
+			t.Fatalf("import: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+		}
+		dest, err := db.OpenSource(filepath.Join(target, "atrium.db"), db.Key{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = dest.Close() }()
+		if n := importCount(t, dest, "SELECT COUNT(*) FROM usage"); n != 22 {
+			t.Errorf("usage rows %d, want the 22 in-month rows", n)
+		}
+		if n := importCount(t, dest, "SELECT COUNT(*) FROM usage WHERE request_id = 'old-month'"); n != 0 {
+			t.Error("the previous month's usage row was carried")
+		}
+	})
+}
+
+func editImportSource(t *testing.T, path, statement string) {
+	t.Helper()
+	d, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	if _, err := d.Write.Exec(statement); err != nil {
+		t.Fatal(err)
+	}
+}

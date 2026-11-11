@@ -49,7 +49,7 @@ const (
 	ErrTampered       KeyError = "backup: the archive is corrupt or was modified"
 	ErrNotArchive     KeyError = "backup: the file is not an atrium backup archive"
 	ErrNewerFormat    KeyError = "backup: the archive uses a newer archive format than this atrium understands"
-	ErrOldFormat      KeyError = "backup: this is a v1 archive, which v2 does not read; decrypt or extract it with the v1 binary and import the database with atrium db import-v1"
+	ErrOldFormat      KeyError = "backup: this is a v1 archive, which this atrium does not read; decrypt or extract it with the v1 binary"
 	ErrNewerSchema    KeyError = "backup: the archive holds a newer database schema than this atrium knows; run the atrium release that made it"
 	ErrArchiveKey     KeyError = "backup: the key does not match the key the archive was made under"
 	ErrPlaintextKeyed KeyError = "backup: the archive holds a plaintext database but a database key is configured; clear the " + db.KeySetting + " setting or restore an encrypted archive"

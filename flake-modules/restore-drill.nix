@@ -8,7 +8,7 @@
       restore-drill =
         pkgs.runCommand "atrium-restore-drill" {
           nativeBuildInputs = [self'.packages.atrium pkgs.coreutils];
-          golden = ../testdata/golden/atrium.db;
+          golden = ../testdata/golden/world.db;
         } ''
           set -euo pipefail
           export HOME=$TMPDIR

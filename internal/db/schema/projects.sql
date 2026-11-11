@@ -7,5 +7,6 @@ CREATE TABLE IF NOT EXISTS projects (
     wiki_hub_id TEXT,
     archived INTEGER NOT NULL DEFAULT 0,
     created_at REAL NOT NULL,
-    updated_at REAL NOT NULL
+    updated_at REAL NOT NULL,
+    private INTEGER NOT NULL DEFAULT 0
 );

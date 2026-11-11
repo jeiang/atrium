@@ -4,10 +4,13 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"math"
+	"sort"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/mail/rules"
 )
@@ -39,9 +42,15 @@ type Summary struct {
 	Differ   int
 }
 
+type Reason struct {
+	Text  string
+	Count int
+}
+
 type Result struct {
 	Lines   []Line
 	Summary Summary
+	Reasons []Reason
 }
 
 type stored struct {
@@ -68,6 +77,7 @@ func Run(ctx context.Context, q db.Querier, opts Options) (Result, error) {
 	tunings := map[string]router.Tuning{}
 	contexts := map[string]*router.LLMContext{}
 	res := Result{Summary: Summary{Stages: map[string]int{}}}
+	reasons := map[string]int{}
 	for i := range messages {
 		m := &messages[i]
 		ruleList, ok := ruleLists[m.Account]
@@ -99,10 +109,6 @@ func Run(ctx context.Context, q db.Querier, opts Options) (Result, error) {
 			return Result{}, err
 		}
 		m.Embedded = vector
-		decision, err := r.Decide(ctx, q, m, ruleList, lc, tuning)
-		if err != nil {
-			return Result{}, err
-		}
 		previous, err := latestDecision(ctx, q, m.ID)
 		if err != nil {
 			return Result{}, err
@@ -111,7 +117,13 @@ func Run(ctx context.Context, q db.Querier, opts Options) (Result, error) {
 			ID: m.ID, Account: m.Account, StoredStage: previous.stage, StoredAction: previous.action,
 			StoredDest: nullable(previous.dest), Vector: vector,
 		}
+		decision, err := r.Decide(ctx, q, m, ruleList, lc, tuning)
 		switch {
+		case errors.Is(err, httpx.ErrMissing):
+			line.Stage, line.Action = StageNone, StageNone
+			reasons[fmt.Sprintf("account %q is not configured in the database", m.Account)]++
+		case err != nil:
+			return Result{}, err
 		case decision == nil:
 			line.Stage, line.Action = StageNone, StageNone
 		default:
@@ -126,6 +138,10 @@ func Run(ctx context.Context, q db.Querier, opts Options) (Result, error) {
 		res.Summary.Stages[line.Stage]++
 		res.Lines = append(res.Lines, line)
 	}
+	for text, count := range reasons {
+		res.Reasons = append(res.Reasons, Reason{Text: text, Count: count})
+	}
+	sort.Slice(res.Reasons, func(i, j int) bool { return res.Reasons[i].Text < res.Reasons[j].Text })
 	return res, nil
 }
 

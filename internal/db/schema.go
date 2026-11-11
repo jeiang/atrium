@@ -15,6 +15,9 @@ import (
 var schemaFS embed.FS
 
 func initSchema(ctx context.Context, q Querier) error {
+	if _, err := q.ExecContext(ctx, fmt.Sprintf("PRAGMA application_id = %d", ApplicationID)); err != nil {
+		return fmt.Errorf("db: application id: %w", err)
+	}
 	scripts, err := fs.Glob(schemaFS, "schema/*.sql")
 	if err != nil {
 		return err

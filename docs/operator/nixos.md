@@ -112,19 +112,6 @@ The module defines these units: `atrium-web`, `atrium-watch`, `atrium-agent-sche
 ## Upgrading
 
 - Update the flake input that pins this repository and run `nixos-rebuild switch`. The units run pending migrations when they open the database; a binary refuses a database that records a newer schema, so a downgrade needs a backup taken before the upgrade.
-- From v1: stop the atrium units and timers, take a backup with the v1 binary, update the module to v2, create a fresh v2 database with the same database key, and run `atrium-run db import-v1 <path-to-v1-db>`. The import carries only the learned-rule data; mail re-syncs and the other records are re-entered or rebuilt. v2 refuses a v1 backup archive with a message pointing at `atrium db import-v1`.
+- v2 to v3 is a database import, not a migration. Stop the atrium units and timers, then run `atrium-run db import-v2 /path/to/v2/atrium.db` with the configured database pointing at a fresh path; the importer creates and migrates it through the normal boot path. It refuses a source that is not at v2 schema version 11, that has an embedding index rebuild in progress, or that has a mail or agent write in flight, and it refuses a destination that already holds rows. It carries mail accounts, mailboxes and messages with their ids, the learned mail data and action ledger, the active message vectors and index row, settings, secrets (readable only with the same database key), knowledge records, threads, tasks, proposals, media channels and the current month's spend. It rebuilds the full-text and knowledge indexes and does not carry run history, memory, Notion or wiki state, notifications, sessions or ops data. The import prints one line per table with its carried, rebuilt or dropped row count. Keep the v2 database and a backup until the v3 copy is verified; rollback restores the v2 database and loses writes made in v3.
 - The old `stateDir/vdirsyncer/` directory is not read; the calendar and contacts mirrors under `stateDir/mirrors/` re-sync from the providers.
 - A database key must be kept outside the host state; an archive made under a key restores only with that key, and archives made before a `db rekey` need the old key.
-
-## External modules
-
-`package` accepts a build with extra compile-time modules. Each entry pairs a Go module path with a version; the build blank-imports it into `cmd/atrium`, and the module registers itself through `github.com/jeiang/atrium/sdk`. Omit `hash` on the first build and copy the hash Nix reports.
-
-```nix
-services.atrium.package = atrium.packages.x86_64-linux.atrium.withModules {
-  modules = [{path = "example.com/atrium-extra"; version = "v0.1.0";}];
-  hash = "sha256-...";
-};
-```
-
-An external module is off until its `<name>_enabled` setting is true. Its migrations run whenever a command opens the database, whether the module is on or off, and are recorded in `module_migrations`. A database migrated by a newer version of the module is refused. Removing the module from the build leaves its tables in place.
