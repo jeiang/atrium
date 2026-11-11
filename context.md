@@ -200,7 +200,8 @@ behavior-parity target.
   monthly budget defaults to $150 with scheduled runs paused at 80% and chat at
   95%; the last 5% is reserved for classification. Every paid model call,
   memory summaries included, reserves its full cold prompt plus the request's
-  maximum output tokens and maximum web searches before dispatch. The prompt
+  maximum output tokens, 8,000 input tokens for each allowed web search and
+  the search fees before dispatch. The prompt
   estimate counts text at its character rate and each attachment at the token
   estimate stored with it, not at the size of the base64 copy inlined into the
   request, so a large PDF or image does not reserve its encoded size. An

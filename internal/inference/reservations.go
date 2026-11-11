@@ -39,6 +39,8 @@ const (
 	RequestTimeout = 15 * time.Minute
 )
 
+const SearchResultTokens = 8_000
+
 type Request struct {
 	AttemptKey string
 	RunID      int64
@@ -457,7 +459,7 @@ func searchUses(tools []json.RawMessage) (int64, error) {
 }
 
 func reservationNUSD(model string, prompt, maxTokens, searches int64, ttl string) (int64, error) {
-	t := pricing.Tokens{Output: maxTokens}
+	t := pricing.Tokens{Input: searches * SearchResultTokens, Output: maxTokens}
 	switch ttl {
 	case prompts.TTL1h:
 		t.CacheWrite1h = prompt
