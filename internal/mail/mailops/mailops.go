@@ -12,10 +12,10 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
-	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
 	"github.com/jeiang/atrium/internal/mail/mime"
+	"github.com/jeiang/atrium/internal/proposals/actions"
 	"golang.org/x/text/cases"
 )
 
@@ -189,7 +189,7 @@ func Verify(ctx context.Context, q db.Querier, client mail.Client, account strin
 		var uid, validity int64
 		var digest, imapName string
 		var unresolved bool
-		err := q.QueryRowContext(ctx, "SELECT m.gone_at, m.uid, m.uidvalidity, m.digest, mb.imap_name, "+ledger.MailUnresolvedSQL+" FROM messages m "+
+		err := q.QueryRowContext(ctx, "SELECT m.gone_at, m.uid, m.uidvalidity, m.digest, mb.imap_name, "+actions.MailUnresolved+" FROM messages m "+
 			"JOIN mailboxes mb ON mb.id = m.mailbox_id WHERE m.id = ?", snap.ID).Scan(&gone, &uid, &validity, &digest, &imapName, &unresolved)
 		reason := ""
 		switch {

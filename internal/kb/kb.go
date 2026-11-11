@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -142,7 +144,7 @@ func liveWhere(alias string, project int64, now float64, scope string) (string, 
 	return where + " AND " + clause, append(args, pargs...)
 }
 
-func fromClause() string { return " FROM kb_records r LEFT JOIN projects p ON p.id = r.project_id" }
+func fromClause() string { return " FROM kb_records r" + projects.JoinClause("p", "r") }
 
 type ReadFilter struct {
 	IDs       []int64
@@ -251,15 +253,15 @@ type WriteRow struct {
 }
 
 func History(ctx context.Context, q db.Querier, id int64) ([]WriteRow, error) {
-	rows, err := q.QueryContext(ctx, "SELECT id, ts, tool, undone_at FROM agent_writes WHERE target = ? ORDER BY id DESC", "kb:"+fmt.Sprint(id))
+	found, err := writes.History(ctx, q, "kb:"+fmt.Sprint(id))
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (WriteRow, error) {
-		var w WriteRow
-		err := r.Scan(&w.ID, &w.TS, &w.Tool, &w.UndoneAt)
-		return w, err
-	})
+	out := make([]WriteRow, len(found))
+	for i, w := range found {
+		out[i] = WriteRow{ID: w.ID, TS: w.TS, Tool: w.Tool, UndoneAt: w.UndoneAt}
+	}
+	return out, nil
 }
 
 type ExportFilter struct {

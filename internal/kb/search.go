@@ -119,23 +119,15 @@ func lexical(ctx context.Context, q db.Querier, match string, f SearchFilter) ([
 }
 
 func knn(ctx context.Context, q db.Querier, idx embed.Index, blob []byte, k int) ([]int64, error) {
-	var total int
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+idx.KBTable()).Scan(&total); err != nil {
+	total, err := embed.KBCount(ctx, q, idx)
+	if err != nil {
 		return nil, err
 	}
 	if total == 0 {
 		return nil, nil
 	}
 	k = min(k, total, embed.KNNMax)
-	rows, err := q.QueryContext(ctx, "SELECT rowid FROM "+idx.KBTable()+" WHERE embedding MATCH ? AND k = ? ORDER BY distance", blob, k)
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (int64, error) {
-		var id int64
-		err := r.Scan(&id)
-		return id, err
-	})
+	return embed.KBIDs(ctx, q, idx, blob, k)
 }
 
 func visibleIDs(ctx context.Context, q db.Querier, ids []int64, f SearchFilter) (map[int64]bool, error) {

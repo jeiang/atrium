@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/kb"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -253,8 +254,7 @@ func idExists(ctx context.Context, q db.Querier, project int64, now float64, f F
 	}
 	switch f.IDOf {
 	case "mail_message":
-		var n int
-		err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM messages WHERE id = ?", id).Scan(&n)
+		n, err := mail.MessageCount(ctx, q, id)
 		return n > 0, err
 	case "file":
 		var n int

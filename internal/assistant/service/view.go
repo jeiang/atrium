@@ -21,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/kb"
+	"github.com/jeiang/atrium/internal/mail/drafts"
 )
 
 const draftCreate = "draft_email_create"
@@ -478,7 +479,7 @@ func CostOfThread(ctx context.Context, q db.Querier, threadID int64) (float64, e
 }
 
 func DraftsOf(ctx context.Context, q db.Querier, threadID int64) ([]map[string]any, error) {
-	return rowDicts(ctx, q, "SELECT * FROM drafts WHERE thread_id = ? ORDER BY id", threadID)
+	return drafts.DictsForThread(ctx, q, threadID)
 }
 
 func rowDicts(ctx context.Context, q db.Querier, query string, args ...any) ([]map[string]any, error) {

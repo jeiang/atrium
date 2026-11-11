@@ -2,7 +2,6 @@ package reviewpages
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/approval"
 	"github.com/jeiang/atrium/internal/assistant/permission"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/drafts"
@@ -303,25 +301,20 @@ func (s *service) apiResolve(w http.ResponseWriter, r *http.Request) {
 	web.JSON(w, http.StatusOK, map[string]any{"approval": s.currentApproval(ctx, found.ID)})
 }
 
-const undoWriteColumns = "id, ts, thread_id, run_id, tool, target, before_json, after_json, undo_json, undone_at, state, error"
-
-func scanUndoWrite(sc interface{ Scan(...any) error }) (apiUndoEntry, error) {
+func undoWriteEntry(w writes.Write) (apiUndoEntry, error) {
 	var e apiUndoEntry
-	var id int64
-	var before, after, undo *string
-	if err := sc.Scan(&id, &e.TS, &e.ThreadID, &e.RunID, &e.Tool, &e.Target, &before, &after, &undo, &e.UndoneAt, &e.State, &e.Error); err != nil {
-		return e, err
-	}
+	e.TS, e.ThreadID, e.RunID, e.Tool, e.Target = w.TS, w.ThreadID, w.RunID, w.Tool, w.Target
+	e.UndoneAt, e.State, e.Error = w.UndoneAt, w.State, w.Error
 	var err error
-	if e.Before, err = snippet(before); err != nil {
+	if e.Before, err = snippet(w.Before); err != nil {
 		return e, err
 	}
-	if e.After, err = snippet(after); err != nil {
+	if e.After, err = snippet(w.After); err != nil {
 		return e, err
 	}
-	e.ID = "write:" + strconv.FormatInt(id, 10)
+	e.ID = "write:" + strconv.FormatInt(w.ID, 10)
 	e.Source = sourceWrite
-	e.Undoable = undo != nil && *undo != "" && e.UndoneAt == nil && e.State != "unknown"
+	e.Undoable = w.Undo != nil && *w.Undo != "" && w.UndoneAt == nil && w.State != "unknown"
 	return e, nil
 }
 
@@ -387,11 +380,14 @@ func (s *service) apiUndoFeed(w http.ResponseWriter, r *http.Request) {
 		propWhere = append(propWhere, "(COALESCE(applied_ts, created_ts) < ? OR (COALESCE(applied_ts, created_ts) = ? AND ? = 1 AND id < ?))")
 		propArgs = append(propArgs, cursor.TS, cursor.TS, cursor.Source, cursor.ID)
 	}
-	rows, err := s.deps.DB.Read.QueryContext(ctx, "SELECT "+undoWriteColumns+" FROM agent_writes WHERE "+strings.Join(writeWhere, " AND ")+
-		" ORDER BY ts DESC, id DESC LIMIT ?", append(writeArgs, limit+1)...)
+	found, err := writes.List(ctx, s.deps.DB.Read, strings.Join(writeWhere, " AND "), writeArgs, limit+1)
 	check(err)
-	written, err := db.Collect(rows, func(r *sql.Rows) (apiUndoEntry, error) { return scanUndoWrite(r) })
-	check(err)
+	written := make([]apiUndoEntry, 0, len(found))
+	for _, w := range found {
+		entry, err := undoWriteEntry(w)
+		check(err)
+		written = append(written, entry)
+	}
 	applied, err := proposals.ListUndoable(ctx, s.deps.DB.Read, strings.Join(propWhere, " AND "), propArgs, limit+1)
 	check(err)
 	keys := make([]undoCursor, 0, len(written)+len(applied))
@@ -423,10 +419,14 @@ func (s *service) apiUndoFeed(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) undoWriteEntry(ctx context.Context, id int64) (*apiUndoEntry, error) {
-	e, err := scanUndoWrite(s.deps.DB.Read.QueryRowContext(ctx, "SELECT "+undoWriteColumns+" FROM agent_writes WHERE id = ?", id))
-	if errors.Is(err, sql.ErrNoRows) {
+	w, err := writes.ByID(ctx, s.deps.DB.Read, id)
+	if err != nil {
+		return nil, err
+	}
+	if w == nil {
 		return nil, nil
 	}
+	e, err := undoWriteEntry(*w)
 	if err != nil {
 		return nil, err
 	}

@@ -7,6 +7,9 @@ import (
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/db"
+	kbembedding "github.com/jeiang/atrium/internal/kb/embedding"
+	mailembedding "github.com/jeiang/atrium/internal/mail/embedding"
+	notionembedding "github.com/jeiang/atrium/internal/notion/embedding"
 )
 
 const (
@@ -105,14 +108,14 @@ func (b *Build) Swap(ctx context.Context) (bool, error) {
 		if err != nil {
 			return err
 		}
-		for _, stmt := range []string{
-			"UPDATE messages SET embedded = 1 WHERE id IN (SELECT rowid FROM " + b.MessageTable() + ")",
-			"UPDATE notion_pages SET embedded = 1 WHERE rid IN (SELECT rowid FROM " + b.NotionTable() + ")",
-			"UPDATE kb_records SET embedded = 1 WHERE id IN (SELECT rowid FROM " + b.KBTable() + ")",
-		} {
-			if _, err := tx.ExecContext(ctx, stmt); err != nil {
-				return err
-			}
+		if err := mailembedding.MarkIn(ctx, tx, b.MessageTable()); err != nil {
+			return err
+		}
+		if err := notionembedding.MarkIn(ctx, tx, b.NotionTable()); err != nil {
+			return err
+		}
+		if err := kbembedding.MarkIn(ctx, tx, b.KBTable()); err != nil {
+			return err
 		}
 		if err := drop(ctx, tx, old); err != nil {
 			return err
@@ -222,13 +225,18 @@ func drop(ctx context.Context, tx *sql.Tx, i Index) error {
 	return err
 }
 
-func counts(ctx context.Context, q rowQuerier, i Index) (done, total int, err error) {
-	err = q.QueryRowContext(ctx, "SELECT "+
-		"(SELECT COUNT(*) FROM messages WHERE gone_at IS NULL AND id IN (SELECT rowid FROM message_fts) AND id IN (SELECT rowid FROM "+i.MessageTable()+")) + "+
-		"(SELECT COUNT(*) FROM notion_pages WHERE in_trash = 0 AND rid IN (SELECT rowid FROM "+i.NotionTable()+")) + "+
-		"(SELECT COUNT(*) FROM kb_records WHERE retracted_at IS NULL AND id IN (SELECT rowid FROM "+i.KBTable()+")), "+
-		"(SELECT COUNT(*) FROM messages WHERE gone_at IS NULL AND id IN (SELECT rowid FROM message_fts)) + "+
-		"(SELECT COUNT(*) FROM notion_pages WHERE in_trash = 0) + "+
-		"(SELECT COUNT(*) FROM kb_records WHERE retracted_at IS NULL)").Scan(&done, &total)
-	return done, total, err
+func counts(ctx context.Context, q db.Querier, i Index) (done, total int, err error) {
+	messageDone, messageTotal, err := mailembedding.Counts(ctx, q, i.MessageTable())
+	if err != nil {
+		return 0, 0, err
+	}
+	notionDone, notionTotal, err := notionembedding.Counts(ctx, q, i.NotionTable())
+	if err != nil {
+		return 0, 0, err
+	}
+	kbDone, kbTotal, err := kbembedding.Counts(ctx, q, i.KBTable())
+	if err != nil {
+		return 0, 0, err
+	}
+	return messageDone + notionDone + kbDone, messageTotal + notionTotal + kbTotal, nil
 }

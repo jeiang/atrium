@@ -73,41 +73,19 @@ func samples(ctx context.Context, tc *tool.Context, args tool.Args) (any, error)
 	if err != nil {
 		return nil, err
 	}
-	query := "SELECT ts, host, metric, value, state, detail FROM ops_samples WHERE ts >= ?"
-	params := []any{tc.Now() - float64(hours)*3600}
-	if host != "" {
-		query += " AND host = ?"
-		params = append(params, host)
-	}
-	if metric != "" {
-		query += " AND metric = ?"
-		params = append(params, metric)
-	}
-	query += " ORDER BY ts DESC, id DESC LIMIT 2000"
-	rows, err := tc.DB.Read.QueryContext(ctx, query, params...)
+	found, err := serverops.Samples(ctx, tc.DB.Read, tc.Now()-float64(hours)*3600, host, metric, 2000)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
 	out := []any{}
 	var marks tool.Marks
-	for rows.Next() {
-		var ts float64
-		var rowHost, rowMetric string
-		var value *float64
-		var state, detail *string
-		if err := rows.Scan(&ts, &rowHost, &rowMetric, &value, &state, &detail); err != nil {
-			return nil, err
-		}
-		item := map[string]any{"ts": ts, "host": rowHost, "metric": rowMetric, "value": value, "state": state}
-		if detail != nil {
-			item["detail"] = *detail
+	for _, sample := range found {
+		item := map[string]any{"ts": sample.TS, "host": sample.Host, "metric": sample.Metric, "value": sample.Value, "state": sample.State}
+		if sample.Detail != nil {
+			item["detail"] = *sample.Detail
 			marks |= tool.Untrusted
 		}
 		out = append(out, item)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
 	}
 	return tool.Marked{Value: map[string]any{"samples": out}, Marks: marks}, nil
 }
@@ -162,37 +140,22 @@ func findings(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	if err != nil {
 		return nil, err
 	}
-	rows, err := tc.DB.Read.QueryContext(ctx,
-		"SELECT id, fact, severity, title, body, marks, created_at, resolved_at, resolved_reason FROM ops_findings "+
-			"WHERE thread_id = ? ORDER BY created_at DESC, id DESC LIMIT ?", tc.ThreadID, limit)
+	found, err := serverops.FindingsByThread(ctx, tc.DB.Read, tc.ThreadID, limit)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
 	out := []any{}
 	var marks tool.Marks
-	for rows.Next() {
-		var id int64
-		var fact, severity, title, body string
-		var stored int64
-		var created float64
-		var resolvedAt *float64
-		var reason *string
-		if err := rows.Scan(&id, &fact, &severity, &title, &body, &stored, &created, &resolvedAt, &reason); err != nil {
-			return nil, err
-		}
+	for _, f := range found {
 		item := map[string]any{
-			"id": id, "fact": fact, "severity": severity, "title": title, "body": body,
-			"written": created, "resolved": resolvedAt != nil,
+			"id": f.ID, "fact": f.Fact, "severity": f.Severity, "title": f.Title, "body": f.Body,
+			"written": f.CreatedAt, "resolved": f.ResolvedAt != nil,
 		}
-		if reason != nil {
-			item["resolved_reason"] = *reason
+		if f.ResolvedReason != nil {
+			item["resolved_reason"] = *f.ResolvedReason
 		}
 		out = append(out, item)
-		marks |= tool.Marks(stored)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
+		marks |= tool.Marks(f.Marks)
 	}
 	return tool.Marked{Value: map[string]any{"findings": out}, Marks: marks}, nil
 }
@@ -202,27 +165,20 @@ func findingByID(ctx context.Context, tc *tool.Context, args tool.Args) (any, er
 	if err != nil || !ok {
 		return nil, tool.Error("id is required")
 	}
-	var fact, severity, title, body string
-	var stored int64
-	var created float64
-	var resolvedAt *float64
-	var reason *string
-	err = tc.DB.Read.QueryRowContext(ctx,
-		"SELECT fact, severity, title, body, marks, created_at, resolved_at, resolved_reason FROM ops_findings WHERE id = ?", id).
-		Scan(&fact, &severity, &title, &body, &stored, &created, &resolvedAt, &reason)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, tool.Error(fmt.Sprintf("finding %d is unknown", id))
-	}
+	f, err := serverops.FindingByID(ctx, tc.DB.Read, id)
 	if err != nil {
 		return nil, err
 	}
-	marks := tool.Marks(stored)
-	out := map[string]any{
-		"id": id, "fact": fact, "severity": severity, "title": title, "body": body,
-		"marks": markList(marks), "written": created, "resolved": resolvedAt != nil,
+	if f == nil {
+		return nil, tool.Error(fmt.Sprintf("finding %d is unknown", id))
 	}
-	if reason != nil {
-		out["resolved_reason"] = *reason
+	marks := tool.Marks(f.Marks)
+	out := map[string]any{
+		"id": f.ID, "fact": f.Fact, "severity": f.Severity, "title": f.Title, "body": f.Body,
+		"marks": markList(marks), "written": f.CreatedAt, "resolved": f.ResolvedAt != nil,
+	}
+	if f.ResolvedReason != nil {
+		out["resolved_reason"] = *f.ResolvedReason
 	}
 	return tool.Marked{Value: out, Marks: marks | tool.Untrusted}, nil
 }
@@ -283,48 +239,36 @@ func threadMarks(ctx context.Context, q db.Querier, threadID int64) (tool.Marks,
 
 func status(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 	var last *float64
-	if err := tc.DB.Read.QueryRowContext(ctx, "SELECT MAX(ts) FROM ops_samples").Scan(&last); err != nil {
+	last, err := serverops.LatestSampleTS(ctx, tc.DB.Read)
+	if err != nil {
 		return nil, err
 	}
-	rows, err := tc.DB.Read.QueryContext(ctx,
-		"SELECT host, metric, value, state FROM ops_samples WHERE id IN (SELECT MAX(id) FROM ops_samples GROUP BY host, metric)")
+	found, err := serverops.LatestSamples(ctx, tc.DB.Read)
 	if err != nil {
 		return nil, err
 	}
 	latest := map[string]map[string]any{}
-	for rows.Next() {
-		var host, metric string
-		var value *float64
-		var state *string
-		if err := rows.Scan(&host, &metric, &value, &state); err != nil {
-			_ = rows.Close()
-			return nil, err
+	for _, sample := range found {
+		if latest[sample.Host] == nil {
+			latest[sample.Host] = map[string]any{}
 		}
-		if latest[host] == nil {
-			latest[host] = map[string]any{}
-		}
-		switch metric {
+		switch sample.Metric {
 		case serverops.MetricUp:
-			if state != nil {
-				latest[host]["up"] = *state
+			if sample.State != nil {
+				latest[sample.Host]["up"] = *sample.State
 			}
 		case serverops.MetricCPU:
-			latest[host]["cpu_pct"] = value
+			latest[sample.Host]["cpu_pct"] = sample.Value
 		case serverops.MetricMemory:
-			latest[host]["mem_pct"] = value
+			latest[sample.Host]["mem_pct"] = sample.Value
 		case serverops.MetricDisk:
-			latest[host]["disk_root_pct"] = value
+			latest[sample.Host]["disk_root_pct"] = sample.Value
 		case serverops.MetricFailedUnits:
-			latest[host]["failed_units"] = value
+			latest[sample.Host]["failed_units"] = sample.Value
 		case serverops.MetricAlerts:
-			latest[host]["alerts_firing"] = value
+			latest[sample.Host]["alerts_firing"] = sample.Value
 		}
 	}
-	if err := rows.Err(); err != nil {
-		_ = rows.Close()
-		return nil, err
-	}
-	_ = rows.Close()
 	set := assistant.Read(ctx, tc.DB.Read)
 	hosts := []any{}
 	for _, host := range serverops.SplitHosts(set.Text(serverops.KeyHosts)) {
@@ -364,23 +308,15 @@ func status(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 }
 
 func liveFindings(ctx context.Context, q db.Querier) ([]any, error) {
-	rows, err := q.QueryContext(ctx,
-		"SELECT id, fact, severity, title, created_at FROM ops_findings WHERE resolved_at IS NULL ORDER BY created_at DESC, id DESC")
+	found, err := serverops.UnresolvedFindings(ctx, q)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
-	out := []any{}
-	for rows.Next() {
-		var id int64
-		var fact, severity, title string
-		var written float64
-		if err := rows.Scan(&id, &fact, &severity, &title, &written); err != nil {
-			return nil, err
-		}
-		out = append(out, map[string]any{"id": id, "severity": severity, "fact": fact, "title": title, "written": written})
+	out := make([]any, 0, len(found))
+	for _, f := range found {
+		out = append(out, map[string]any{"id": f.ID, "severity": f.Severity, "fact": f.Fact, "title": f.Title, "written": f.CreatedAt})
 	}
-	return out, rows.Err()
+	return out, nil
 }
 
 func RegisterUndoer(r *writes.Registry) { serverops.RegisterUndoer(r) }

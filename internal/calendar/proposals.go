@@ -3,10 +3,8 @@ package calendar
 import (
 	"context"
 	"crypto/sha256"
-	"database/sql"
 	"encoding/hex"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -16,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -207,16 +206,13 @@ func payloadOf(prop *proposals.Proposal) (target Target, spec Spec, err error) {
 }
 
 func (p *Proposals) guard(ctx context.Context, target Target) error {
-	var id int64
 	prefix := string(target) + ":"
-	err := p.DB.Read.QueryRowContext(ctx,
-		"SELECT id FROM agent_writes WHERE state = 'unknown' AND substr(target, 1, length(?)) = ? ORDER BY id LIMIT 1",
-		prefix, prefix).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil
-	}
+	id, err := writes.UnknownTarget(ctx, p.DB.Read, prefix)
 	if err != nil {
 		return err
+	}
+	if id == 0 {
+		return nil
 	}
 	return Error(fmt.Sprintf("calendar write %d has an unknown outcome; resolve it with `atrium writes resolve %d` before writing to the %s calendar again", id, id, target))
 }

@@ -11,11 +11,12 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/mail/scanutil"
+	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/proposals/actions"
 )
 
 var log = logx.Logger("atrium.backlog")
@@ -27,7 +28,7 @@ var candidates = "SELECT m.id, m.subject, m.from_name, m.from_addr, m.date_ts, d
 	"WHERE m.account = :account AND m.in_inbox = 1 AND m.seen = 1 AND m.flagged = 0 AND m.sent = 0 " +
 	"AND m.gone_at IS NULL AND d.action = 'file' AND d.dest IS NOT NULL " +
 	"AND m.id IN (SELECT message_id FROM live_baseline) " +
-	"AND " + live.NoNewCorrection + " AND " + live.NotBlocked + " AND NOT " + ledger.MailUnresolvedSQL + " ORDER BY m.id"
+	"AND " + live.NoNewCorrection + " AND " + live.NotBlocked + " AND NOT " + actions.MailUnresolved + " ORDER BY m.id"
 
 type Error string
 
@@ -219,8 +220,7 @@ func Backlog(ctx context.Context, d *db.DB, ts float64) (Result, error) {
 }
 
 func Refresh(ctx context.Context, d *db.DB, ts float64) (Result, error) {
-	if _, err := d.Write.ExecContext(ctx, "UPDATE proposals SET status = 'dismissed', decided_ts = ? WHERE kind = ? AND status = 'pending'",
-		ts, Kind); err != nil {
+	if err := proposals.DismissKind(ctx, d.Write, Kind, ts); err != nil {
 		return Result{}, err
 	}
 	return Backlog(ctx, d, ts)
