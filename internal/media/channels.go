@@ -303,6 +303,7 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 	}
 	stamp := now()
 	result := PollResult{Added: []Added{}, Errors: []string{}}
+	request := ledger.NewKey()
 	if _, err := settings.Qbit(); err != nil {
 		return result, err
 	}
@@ -343,7 +344,7 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 			if rule.Primed || opts.Force {
 				_, err := settings.Add(ctx, store, settings, AddRequest{
 					Magnet: t.MagnetURL, Tags: TagMedia,
-					OperationKey: "media:channel:" + strconv.FormatInt(rule.ID, 10) + ":" + t.Hash,
+					OperationKey: "media:channel:" + strconv.FormatInt(rule.ID, 10) + ":" + t.Hash + ":" + request,
 					Done: func(ctx context.Context, tx *sql.Tx) error {
 						return markSeen(ctx, tx, t.Hash, stamp)
 					},
@@ -400,7 +401,7 @@ func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, se
 				result.Errors = append(result.Errors, "notify: "+sent.Error)
 			}
 		}
-		if _, err := settings.SelectFiles(ctx, store, settings, nil); err != nil {
+		if _, err := settings.SelectFiles(ctx, store, settings, Scope{}, nil); err != nil {
 			return result, err
 		}
 	}

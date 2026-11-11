@@ -101,7 +101,7 @@ func (s *Store) Resolve(ctx context.Context, id int64, r Resolution, who Resolve
 		switch e.Direction {
 		case "forward":
 			switch effective {
-			case "done":
+			case "done", "partial":
 				return release(ctx, tx, id, false)
 			case "failed":
 				return release(ctx, tx, id, true)
@@ -119,6 +119,7 @@ func (s *Store) Resolve(ctx context.Context, id int64, r Resolution, who Resolve
 	if err != nil {
 		return Effect{}, err
 	}
+	s.untrack(id)
 	return s.Get(context.WithoutCancel(ctx), id)
 }
 

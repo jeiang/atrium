@@ -81,7 +81,7 @@ func New(env config.Env, d *db.DB, cfg config.Config, open mail.OpenFunc, now fu
 	syncer := &mailsync.Syncer{DB: d, Cfg: cfg, Now: now}
 	registry := proposals.NewRegistry()
 	handlers.Register(registry, handlers.Deps{DB: d, Open: open, Syncer: syncer, Now: now, Env: env})
-	l := &live.Live{DB: d, Cfg: cfg, Registry: registry, Now: now}
+	l := &live.Live{DB: d, Cfg: cfg, Store: live.NewStore(d, open, now), Open: open, Registry: registry, Now: now}
 	p := &Pass{
 		DB:       d,
 		Cfg:      cfg,

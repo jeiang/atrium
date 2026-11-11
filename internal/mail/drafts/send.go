@@ -2,12 +2,15 @@ package drafts
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"unicode/utf16"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/gmailauth"
 	"github.com/jeiang/atrium/internal/mail/mime"
@@ -71,11 +74,31 @@ func (s *Store) fileSentCopy(ctx context.Context, account string, msg *smtp.Mess
 	if sent == "" {
 		return FiledNoMailbox, nil
 	}
+	msgid := mime.ParseMsgID(msg.Get("Message-ID")).Bare()
+	store := s.ledgerStore()
+	ticket, err := store.Begin(ctx, ledger.New{
+		Origin: "operator_send", Operation: AppendOperation, OperationKey: AppendOperation + ":" + msgid,
+		Target: fmt.Sprintf("mail:%s:%s", account, sent), Account: account, Dest: sent,
+		Action:    jsonOf(map[string]any{"account": account, "imap_name": sent, "msgid": msgid}),
+		Resources: []ledger.Resource{{Key: "mail_folder:" + account + ":" + sent}},
+	}, nil)
+	if err != nil {
+		return FiledFailed, err
+	}
 	raw := msg.Bytes("\r\n", false)
 	if err := client.Append(safety.OperatorSend(ctx, sent), sent, raw, `\Seen`); err != nil {
+		state := ledger.Failed
+		text := err.Error()
 		if _, unknown := errors.AsType[*mail.WriteInterrupted](err); unknown {
-			return FiledFailed, errors.New("the copy in Sent may exist: check Sent before filing it again")
+			state = ledger.Unknown
+			text = "the copy in Sent may exist: check Sent before filing it again"
 		}
+		_ = store.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: state, Error: text}, nil)
+		return FiledFailed, errors.New(text)
+	}
+	if err := store.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
+		State: ledger.Done, After: jsonOf(map[string]any{"account": account, "imap_name": sent, "msgid": msgid}),
+	}, nil); err != nil {
 		return FiledFailed, err
 	}
 	return FiledCopy, nil
@@ -90,39 +113,63 @@ func (s *Store) abandon(ctx context.Context, id int64, cause error) {
 }
 
 func (s *Store) Send(ctx context.Context, id int64, reviewedRevision int64) (Result, error) {
-	n, err := s.exec(ctx, "UPDATE drafts SET status = ?, updated_at = ?, revision = revision + 1 WHERE id = ? AND status = ? AND revision = ?",
-		string(Sending), s.now(), id, string(Draft), reviewedRevision)
-	if err != nil {
-		return Result{}, err
-	}
-	if n == 0 {
-		current, err := s.Get(ctx, id)
+	var draft *Row
+	var ticket ledger.Ticket
+	err := s.DB.WithTx(ctx, func(tx *sql.Tx) error {
+		res, err := tx.ExecContext(ctx, "UPDATE drafts SET status = ?, updated_at = ?, revision = revision + 1 WHERE id = ? AND status = ? AND revision = ?",
+			string(Sending), s.now(), id, string(Draft), reviewedRevision)
 		if err != nil {
-			return Result{}, err
+			return err
 		}
-		if current != nil && current.Status == Draft {
-			return Result{}, Error("draft changed, review again")
+		n, err := res.RowsAffected()
+		if err != nil {
+			return err
 		}
-		return Result{}, Error("draft is not in a sendable state")
-	}
-	draft, err := s.Get(ctx, id)
+		if n == 0 {
+			return errNotSendable
+		}
+		row, err := scanRow(tx.QueryRowContext(ctx, "SELECT "+columns+" FROM drafts WHERE id = ?", id))
+		if err != nil {
+			return err
+		}
+		draft = &row
+		ticket, err = s.ledgerStore().BeginTx(ctx, tx, ledger.New{
+			Origin: "operator_send", Operation: SendOperation,
+			OperationKey: fmt.Sprintf("draft:%d:%d", id, reviewedRevision),
+			Target:       SendTarget(row.Account, id), Account: row.Account, Src: string(Draft), Dest: string(Sending),
+			Action:    jsonOf(map[string]any{"draft_id": id, "revision": reviewedRevision}),
+			Resources: []ledger.Resource{{Key: fmt.Sprintf("mail:draft:%d", id)}},
+		}, nil)
+		return err
+	})
 	if err != nil {
-		s.abandon(ctx, id, err)
+		if errors.Is(err, errNotSendable) {
+			current, gerr := s.Get(ctx, id)
+			if gerr != nil {
+				return Result{}, gerr
+			}
+			if current != nil && current.Status == Draft {
+				return Result{}, Error("draft changed, review again")
+			}
+			return Result{}, Error("draft is not in a sendable state")
+		}
 		return Result{}, err
 	}
 	msg, refused, err := s.submit(ctx, draft)
 	var unknown *smtp.OutcomeUnknown
 	if errors.As(err, &unknown) {
-		if uerr := s.transition(ctx, id, Sending, Unknown, func(u *updateSet) {
-			u.set("smtp_result", "send outcome unknown: "+unknown.Error())
+		text := "send outcome unknown: " + unknown.Error()
+		if uerr := s.settle(ctx, ticket, ledger.Result{State: ledger.Unknown, Error: text}, func(ctx context.Context, tx *sql.Tx) error {
+			return transitionTx(ctx, tx, s.now(), id, Sending, Unknown, func(u *updateSet) { u.set("smtp_result", text) })
 		}); uerr != nil {
 			return Result{}, uerr
 		}
 		return Result{}, OutcomeUnknown("the mail may have been sent (" + unknown.Error() + "); check before you choose Back to draft")
 	}
 	if err != nil {
-		if uerr := s.transition(ctx, id, Sending, Draft, func(u *updateSet) {
-			u.set("smtp_result", "send failed: "+err.Error())
+		text := "send failed: " + err.Error()
+		if uerr := s.settle(ctx, ticket, ledger.Result{State: ledger.Failed, Error: text}, func(ctx context.Context, tx *sql.Tx) error {
+			return transitionTx(ctx, tx, s.now(), id, Sending, Draft, func(u *updateSet) { u.set("smtp_result", text) })
 		}); uerr != nil {
 			return Result{}, uerr
 		}
@@ -132,10 +179,14 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedRevision int64) (Res
 	if len(refused) > 0 {
 		result += "; refused: " + refusalsJSON(refused)
 	}
-	if err := s.transition(ctx, id, Sending, Sent, func(u *updateSet) {
-		u.set("sent_at", s.now())
-		u.set("smtp_result", result)
-		u.set("sent_msgid", mime.ParseMsgID(msg.Get("Message-ID")).Bare())
+	msgid := mime.ParseMsgID(msg.Get("Message-ID")).Bare()
+	if err := s.settle(ctx, ticket, ledger.Result{State: ledger.Done,
+		After: jsonOf(map[string]any{"draft_id": id, "msgid": msgid})}, func(ctx context.Context, tx *sql.Tx) error {
+		return transitionTx(ctx, tx, s.now(), id, Sending, Sent, func(u *updateSet) {
+			u.set("sent_at", s.now())
+			u.set("smtp_result", result)
+			u.set("sent_msgid", msgid)
+		})
 	}); err != nil {
 		return Result{}, err
 	}
@@ -155,6 +206,23 @@ func (s *Store) Send(ctx context.Context, id int64, reviewedRevision int64) (Res
 	}
 	return Result{Refused: refused, Filed: filed, FiledError: filedError}, nil
 }
+
+func (s *Store) settle(ctx context.Context, ticket ledger.Ticket, result ledger.Result, local ledger.Mutation) error {
+	return s.ledgerStore().Settle(ctx, ticket, result, local)
+}
+
+func jsonOf(v any) json.RawMessage {
+	if v == nil {
+		return nil
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil
+	}
+	return b
+}
+
+var errNotSendable = errors.New("draft is not sendable")
 
 func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusals, error) {
 	method, source, err := gmailauth.Resolve(ctx, s.DB.Read, d.Account)

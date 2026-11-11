@@ -20,6 +20,7 @@ import (
 const (
 	RenewSeconds = 30
 	StuckSeconds = 4 * RenewSeconds
+	renewEvery   = time.Second
 )
 
 type Resource struct {
@@ -76,9 +77,12 @@ type Filter struct {
 	Origin           string
 	Origins          []string
 	Operation        string
+	OperationKey     string
+	Direction        string
 	OperationLike    []string
 	OperationNotLike []string
 	Target           string
+	Account          string
 	ProposalID       *int64
 	ThreadID         *int64
 	RunID            *int64
@@ -86,6 +90,8 @@ type Filter struct {
 	BeforeTS         float64
 	Since            float64
 	Limit            int
+	Offset           int
+	All              bool
 	BlockedOnly      bool
 }
 
@@ -96,6 +102,7 @@ type Undoer struct {
 	External func(context.Context, json.RawMessage) (Result, error)
 	Local    func(context.Context, *sql.Tx, json.RawMessage) (Result, error)
 	Finalize func(context.Context, *sql.Tx, json.RawMessage, Result) error
+	After    func(context.Context, *sql.Tx, Effect, Result) error
 }
 
 type ResolveHook func(context.Context, *sql.Tx, Effect, Resolution) error
@@ -106,6 +113,14 @@ type Store struct {
 	mu       sync.RWMutex
 	undoers  map[string]Undoer
 	resolves map[string]ResolveHook
+	liveMu   sync.Mutex
+	live     map[int64]liveTicket
+	stop     chan struct{}
+}
+
+type liveTicket struct {
+	ticket  Ticket
+	stopCtx func() bool
 }
 
 type Conflict struct{ Resource string }
@@ -182,6 +197,16 @@ func NewKey() string {
 }
 
 func (s *Store) Begin(ctx context.Context, n New, admit Mutation) (Ticket, error) {
+	var ticket Ticket
+	err := s.DB.WithTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		ticket, err = s.BeginTx(ctx, tx, n, admit)
+		return err
+	})
+	return ticket, err
+}
+
+func (s *Store) BeginTx(ctx context.Context, tx *sql.Tx, n New, admit Mutation) (Ticket, error) {
 	if err := ctx.Err(); err != nil {
 		return Ticket{}, err
 	}
@@ -191,36 +216,37 @@ func (s *Store) Begin(ctx context.Context, n New, admit Mutation) (Ticket, error
 	if err := s.validateUndo(n.Undo); err != nil {
 		return Ticket{}, err
 	}
+	if err := admitOperationKey(ctx, tx, n.OperationKey); err != nil {
+		return Ticket{}, err
+	}
 	token, err := newToken()
 	if err != nil {
 		return Ticket{}, err
 	}
 	now := s.now()
-	var id int64
-	err = s.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		if admit != nil {
-			if err := admit(ctx, tx); err != nil {
-				return err
-			}
+	if admit != nil {
+		if err := admit(ctx, tx); err != nil {
+			return Ticket{}, err
 		}
-		res, err := tx.ExecContext(ctx, insertEffect,
-			now, now, token, n.Origin, n.Operation, n.OperationKey, "forward", nil,
-			n.ProposalID, n.ThreadID, n.RunID, n.Account, n.MessageID, n.Digest, n.DecisionID,
-			nullText(n.Src), nullText(n.Dest), n.Target, actionText(n.Action), scrubText(n.Before), nil, rawText(n.Undo),
-			string(Intent), nil, nil)
-		if err != nil {
-			return err
-		}
-		id, err = res.LastInsertId()
-		if err != nil {
-			return err
-		}
-		return claim(ctx, tx, id, n.Resources)
-	})
+	}
+	res, err := tx.ExecContext(ctx, insertEffect,
+		now, now, token, n.Origin, n.Operation, n.OperationKey, "forward", nil,
+		n.ProposalID, n.ThreadID, n.RunID, n.Account, n.MessageID, n.Digest, n.DecisionID,
+		nullText(n.Src), nullText(n.Dest), n.Target, actionText(n.Action), scrubText(n.Before), nil, rawText(n.Undo),
+		string(Intent), nil, nil)
 	if err != nil {
 		return Ticket{}, err
 	}
-	return Ticket{ID: id, Token: token}, nil
+	id, err := res.LastInsertId()
+	if err != nil {
+		return Ticket{}, err
+	}
+	if err := claim(ctx, tx, id, n.Resources); err != nil {
+		return Ticket{}, err
+	}
+	ticket := Ticket{ID: id, Token: token}
+	s.track(ctx, ticket)
+	return ticket, nil
 }
 
 func (s *Store) Heartbeat(ctx context.Context, t Ticket) error {
@@ -240,7 +266,115 @@ func (s *Store) Heartbeat(ctx context.Context, t Ticket) error {
 	return nil
 }
 
+func (s *Store) Renew(ctx context.Context, tickets []Ticket) {
+	for _, t := range tickets {
+		err := s.Heartbeat(ctx, t)
+		var settled *SettledMeanwhile
+		if err != nil && !errors.As(err, &settled) {
+			logx.Logger("atrium.ledger").Warn(fmt.Sprintf("could not renew the lease on effect %d", t.ID), logx.Err, err.Error())
+		}
+	}
+}
+
+func (s *Store) KeepAlive(ctx context.Context, tickets []Ticket) func() {
+	if len(tickets) == 0 {
+		return func() {}
+	}
+	done := make(chan struct{})
+	var once sync.Once
+	stop := func() { once.Do(func() { close(done) }) }
+	ctx = context.WithoutCancel(ctx)
+	go func() {
+		ticker := time.NewTicker(RenewSeconds * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-done:
+				return
+			case <-ticker.C:
+				s.Renew(ctx, tickets)
+			}
+		}
+	}()
+	return stop
+}
+
+func (s *Store) track(ctx context.Context, t Ticket) {
+	if t.ID == 0 {
+		return
+	}
+	s.liveMu.Lock()
+	defer s.liveMu.Unlock()
+	if s.live == nil {
+		s.live = map[int64]liveTicket{}
+	}
+	s.live[t.ID] = liveTicket{ticket: t, stopCtx: context.AfterFunc(ctx, func() { s.untrack(t.ID) })}
+	if s.stop == nil {
+		s.stop = make(chan struct{})
+		go s.renewLoop(s.stop)
+	}
+}
+
+func (s *Store) untrack(id int64) {
+	s.liveMu.Lock()
+	if s.live == nil {
+		s.liveMu.Unlock()
+		return
+	}
+	entry, ok := s.live[id]
+	delete(s.live, id)
+	empty := len(s.live) == 0
+	if empty && s.stop != nil {
+		close(s.stop)
+		s.stop = nil
+	}
+	s.liveMu.Unlock()
+	if ok {
+		entry.stopCtx()
+	}
+}
+
+func (s *Store) renewLoop(stop chan struct{}) {
+	ticker := time.NewTicker(renewEvery)
+	defer ticker.Stop()
+	last, lastReal := s.now(), time.Now()
+	for {
+		select {
+		case <-stop:
+			return
+		case <-ticker.C:
+			now, real := s.now(), time.Now()
+			if now-last < RenewSeconds && real.Sub(lastReal) < RenewSeconds*time.Second {
+				continue
+			}
+			last, lastReal = now, real
+			s.renewLive()
+		}
+	}
+}
+
+func (s *Store) renewLive() {
+	s.liveMu.Lock()
+	tickets := make([]Ticket, 0, len(s.live))
+	for _, t := range s.live {
+		tickets = append(tickets, t.ticket)
+	}
+	s.liveMu.Unlock()
+	for _, t := range tickets {
+		err := s.Heartbeat(context.Background(), t)
+		var settled *SettledMeanwhile
+		if errors.As(err, &settled) {
+			s.untrack(t.ID)
+			continue
+		}
+		if err != nil {
+			logx.Logger("atrium.ledger").Warn(fmt.Sprintf("could not renew the lease on effect %d", t.ID), logx.Err, err.Error())
+		}
+	}
+}
+
 func (s *Store) Settle(ctx context.Context, t Ticket, r Result, local Mutation) error {
+	defer s.untrack(t.ID)
 	ctx = context.WithoutCancel(ctx)
 	if !r.State.Final() {
 		return fmt.Errorf("ledger: effect %d cannot settle as %q", t.ID, r.State)
@@ -412,6 +546,21 @@ func (s *Store) afterTransition(ctx context.Context, tx *sql.Tx, id int64, direc
 		return release(ctx, tx, id, false)
 	case state == Failed || state == Skipped:
 		return release(ctx, tx, id, true)
+	}
+	return nil
+}
+
+func admitOperationKey(ctx context.Context, tx *sql.Tx, key string) error {
+	var prior int64
+	if err := tx.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM effects e WHERE e.direction = 'forward' AND e.operation_key = ? AND e.undone_by IS NULL "+
+			"AND (e.state = 'intent' OR "+effectiveOutcomeSQL("e")+" IN ('done','partial') "+
+			"OR (e.state IN ('unknown','partial') AND "+effectiveOutcomeSQL("e")+" IS NULL))",
+		key).Scan(&prior); err != nil {
+		return err
+	}
+	if prior > 0 {
+		return &Conflict{Resource: key}
 	}
 	return nil
 }

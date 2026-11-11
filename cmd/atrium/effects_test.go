@@ -1,20 +1,25 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail/tracking"
 )
 
 func TestTaskAddEffectUndoAndActivityListing(t *testing.T) {
@@ -246,5 +251,306 @@ func TestFreshDirectIntentBlocksASecondWrite(t *testing.T) {
 	}
 	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
 		t.Fatalf("the blocked write touched the file: %v", err)
+	}
+}
+
+type leaseClock struct {
+	mu sync.Mutex
+	at float64
+}
+
+func (c *leaseClock) Now() float64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.at
+}
+
+func (c *leaseClock) Advance(seconds float64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.at += seconds
+}
+
+func TestRunningExternalWriteRenewsItsLeasePastTheStuckThreshold(t *testing.T) {
+	clock := &leaseClock{at: float64(time.Now().Unix())}
+	dir, api, _ := moduleFixtureAt(t, flagsExcept("", ""), clock.Now)
+	var recovered int64
+	var recoveryErr error
+	var d *db.DB
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.Method == http.MethodPost && r.URL.Path == "/public/v1/trackers" {
+			clock.Advance(ledger.StuckSeconds + 60)
+			time.Sleep(2500 * time.Millisecond)
+			recovered, recoveryErr = ledger.NewStore(d, clock.Now).Recover(context.Background(), clock.Now()-ledger.StuckSeconds)
+			w.WriteHeader(http.StatusCreated)
+			_, _ = w.Write([]byte(`{"data":{"tracker":{"trackerId":"trk_1","trackingNumber":"1Z999AA10123456784"}}}`))
+			return
+		}
+		_, _ = w.Write([]byte(`{"data":{"trackings":[]}}`))
+	}))
+	t.Cleanup(srv.Close)
+	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
+	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	d = mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, " +
+		"source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)"); err != nil {
+		t.Fatal(err)
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("l1", "track_package", map[string]any{"package_id": 1})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("asked")))
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "track the package"); ran.code != cli.ExitOK {
+		t.Fatalf("track run: %d %s", ran.code, ran.stderr)
+	}
+	var proposal int64
+	if err := d.Read.QueryRow("SELECT id FROM proposals WHERE kind = 'track_package' AND status = 'pending' ORDER BY id DESC LIMIT 1").Scan(&proposal); err != nil {
+		t.Fatalf("no pending track_package proposal: %v", err)
+	}
+	if ran := runApp(t, "proposals", "approve", strconv.FormatInt(proposal, 10)); ran.code != cli.ExitOK {
+		t.Fatalf("approve tracking: %d %s", ran.code, ran.stderr)
+	}
+	if recoveryErr != nil {
+		t.Fatal(recoveryErr)
+	}
+	if recovered != 0 {
+		t.Fatalf("recovery flipped %d running effects to unknown", recovered)
+	}
+	var state, tracker string
+	if err := d.Read.QueryRow("SELECT state FROM effects WHERE operation = 'track_package' AND direction = 'forward'").Scan(&state); err != nil {
+		t.Fatal(err)
+	}
+	if state != string(ledger.Done) {
+		t.Fatalf("the write held past the stuck threshold settled as %q, want done", state)
+	}
+	if err := d.Read.QueryRow("SELECT tracker_id FROM packages WHERE id = 1").Scan(&tracker); err != nil {
+		t.Fatal(err)
+	}
+	if tracker != "trk_1" {
+		t.Fatalf("tracker after the long registration = %q, want trk_1", tracker)
+	}
+}
+
+func TestResolvedUnknownEffectCanBeUndone(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("u1", "task_add", map[string]any{"title": "Return the parcel"})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("added")))
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "add a task"); ran.code != cli.ExitOK {
+		t.Fatalf("task_add run: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	var taskID, effectID int64
+	if err := d.Read.QueryRow("SELECT id FROM tasks WHERE title = 'Return the parcel'").Scan(&taskID); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'task_add' AND direction = 'forward'").Scan(&effectID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("UPDATE effects SET state = 'unknown', settled_at = lease_at WHERE id = ?", effectID); err != nil {
+		t.Fatal(err)
+	}
+	id := strconv.FormatInt(effectID, 10)
+	if ran := runApp(t, "effects", "resolve", id, "--outcome", "applied"); ran.code != cli.ExitOK {
+		t.Fatalf("resolve applied: %d %s", ran.code, ran.stderr)
+	}
+	shown := runApp(t, "effects", "show", id)
+	if shown.code != cli.ExitOK {
+		t.Fatalf("effects show: %d %s", shown.code, shown.stderr)
+	}
+	var effect ledger.Effect
+	if err := json.Unmarshal([]byte(shown.stdout), &effect); err != nil {
+		t.Fatalf("effects show output %q: %v", shown.stdout, err)
+	}
+	if !effect.Undoable || effect.Blocked || effect.EffectiveOutcome != "done" {
+		t.Fatalf("resolved-unknown effect = %+v, want done and undoable", effect)
+	}
+	undone := runApp(t, "effects", "undo", id)
+	if undone.code != cli.ExitOK {
+		t.Fatalf("undo of a resolved-unknown effect: %d %s", undone.code, undone.stderr)
+	}
+	var left int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM tasks WHERE id = ?", taskID).Scan(&left); err != nil {
+		t.Fatal(err)
+	}
+	if left != 0 {
+		t.Fatal("the undo of the resolved-unknown effect did not delete the task")
+	}
+	var undoneBy int64
+	if err := d.Read.QueryRow("SELECT undone_by FROM effects WHERE id = ?", effectID).Scan(&undoneBy); err != nil {
+		t.Fatal(err)
+	}
+	if undoneBy == 0 {
+		t.Fatal("the forward effect is not marked undone")
+	}
+}
+
+func TestAcceptedPartialEffectReleasesItsClaims(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	path := filepath.Join(dir, "files", "1", "note.txt")
+	now := float64(time.Now().Unix())
+	res, err := d.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, target, action_json, state, settled_at) "+
+		"VALUES (?, ?, 'partial-claim', 'agent', 'file_write', 'partial-claim', 'forward', 'note.txt', '{}', 'partial', ?)", now, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO effect_resources (effect_id, resource, holding, retain_on_done) VALUES (?, ?, 1, 0)", id, "file:"+path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO effect_claims (resource) VALUES (?)", "file:"+path); err != nil {
+		t.Fatal(err)
+	}
+	write := func(content string) appRun {
+		t.Helper()
+		api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("p"+content, "file_write", map[string]any{"name": "note.txt", "content": content})))
+		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
+		return runApp(t, "agent", "run", "--thread", "1", "--text", "write the note")
+	}
+	if ran := write("blocked"); ran.code != cli.ExitOK {
+		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
+	}
+	var body string
+	if err := d.Read.QueryRow("SELECT coalesce(error, '') FROM tool_calls ORDER BY id DESC LIMIT 1").Scan(&body); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(body, "already claimed") {
+		t.Fatalf("the partially applied claim did not block the write: %s", body)
+	}
+	if ran := runApp(t, "effects", "resolve", strconv.FormatInt(id, 10), "--outcome", "partial"); ran.code != cli.ExitOK {
+		t.Fatalf("resolve partial: %d %s", ran.code, ran.stderr)
+	}
+	var claims int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effect_claims WHERE resource = ?", "file:"+path).Scan(&claims); err != nil {
+		t.Fatal(err)
+	}
+	if claims != 0 {
+		t.Fatalf("accepting the partial effect kept %d claims on the file", claims)
+	}
+	if ran := write("accepted"); ran.code != cli.ExitOK {
+		t.Fatalf("agent run after the resolution: %d %s", ran.code, ran.stderr)
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("the write after accepting the partial effect did not land: %v", err)
+	}
+	if string(content) != "accepted" {
+		t.Fatalf("file content = %q, want the new write", content)
+	}
+}
+
+func TestEffectsCLIUsesTheProposalUndoers(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	now := float64(time.Now().Unix())
+	res, err := d.Write.Exec("INSERT INTO tasks (title, remind_at, created_ts, updated_ts) VALUES ('Call the plumber', ?, ?, ?)", now+3600, now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	taskID, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	seed := func(token, target, undo string) int64 {
+		t.Helper()
+		res, err := d.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, target, action_json, undo_json, state, settled_at) "+
+			"VALUES (?, ?, ?, 'local', 'seed', ?, 'forward', ?, '{}', ?, 'done', ?)", now, now, token, token, target, undo, now)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, err := res.LastInsertId()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return id
+	}
+	reminder := seed("seed-reminder", "reminder:"+strconv.FormatInt(taskID, 10), `{"op":"reminder_cancel","id":`+strconv.FormatInt(taskID, 10)+`}`)
+	calendar := seed("seed-calendar", "calendar:icloud:event-1", `{"op":"calendar_restore","calendar":"icloud","uid":"event-1","ics":"BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n"}`)
+	for _, id := range []int64{reminder, calendar} {
+		shown := runApp(t, "effects", "show", strconv.FormatInt(id, 10))
+		if shown.code != cli.ExitOK {
+			t.Fatalf("effects show %d: %d %s", id, shown.code, shown.stderr)
+		}
+		var effect ledger.Effect
+		if err := json.Unmarshal([]byte(shown.stdout), &effect); err != nil {
+			t.Fatalf("effects show %d output %q: %v", id, shown.stdout, err)
+		}
+		if !effect.Undoable {
+			t.Fatalf("effect %d is not undoable through the effects CLI", id)
+		}
+	}
+	undone := runApp(t, "effects", "undo", strconv.FormatInt(reminder, 10))
+	if undone.code != cli.ExitOK {
+		t.Fatalf("undo the reminder: %d %s", undone.code, undone.stderr)
+	}
+	var left int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM tasks WHERE id = ?", taskID).Scan(&left); err != nil {
+		t.Fatal(err)
+	}
+	if left != 0 {
+		t.Fatal("the effects CLI did not cancel the reminder task")
+	}
+}
+
+func TestOperationKeyAdmissionRefusesASecondSuccessfulAttempt(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, settingEnv(tracking.KeyShip24URL), "http://ship24.invalid/public/v1")
+	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "dummy")
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, " +
+		"source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)"); err != nil {
+		t.Fatal(err)
+	}
+	now := float64(time.Now().Unix())
+	const identity = "tracking:ups:1Z999AA10123456784"
+	if _, err := d.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, target, action_json, state, settled_at) "+
+		"VALUES (?, ?, 'admission-done', 'tracking', 'track_package', ?, 'forward', ?, '{}', 'done', ?)",
+		now, now, "track_package:"+identity, identity, now); err != nil {
+		t.Fatal(err)
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("a1", "track_package", map[string]any{"package_id": 1})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("asked")))
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "track it again"); ran.code != cli.ExitOK {
+		t.Fatalf("track run: %d %s", ran.code, ran.stderr)
+	}
+	var proposal int64
+	if err := d.Read.QueryRow("SELECT id FROM proposals WHERE kind = 'track_package' AND status = 'pending' ORDER BY id DESC LIMIT 1").Scan(&proposal); err != nil {
+		t.Fatalf("no pending track_package proposal: %v", err)
+	}
+	ran := runApp(t, "proposals", "approve", strconv.FormatInt(proposal, 10))
+	if ran.code == cli.ExitOK {
+		t.Fatalf("a second attempt with a successful operation key was admitted: %s", ran.stdout)
+	}
+	if !strings.Contains(ran.stdout+ran.stderr, "already claimed") {
+		t.Fatalf("the refusal = %q, want the operation-key conflict", ran.stdout+ran.stderr)
+	}
+	var writes int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE operation_key = ? AND direction = 'forward'", "track_package:"+identity).Scan(&writes); err != nil {
+		t.Fatal(err)
+	}
+	if writes != 1 {
+		t.Fatalf("%d forward effects for the operation key, want the seeded one only", writes)
 	}
 }

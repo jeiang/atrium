@@ -59,7 +59,7 @@ var sweep = skippable(func(ctx context.Context, d *db.DB, env config.Env, now fu
 	if err := media.RegisterLedgerUndoer(store, env); err != nil {
 		return nil, err
 	}
-	selected, err := settings.SelectFiles(ctx, store, settings, nil)
+	selected, err := settings.SelectFiles(ctx, store, settings, media.Scope{}, nil)
 	if err != nil {
 		return nil, err
 	}

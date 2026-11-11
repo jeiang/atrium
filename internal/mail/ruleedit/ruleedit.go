@@ -120,6 +120,16 @@ func ListRules(ctx context.Context, q rules.Querier, account *string) ([]RuleDic
 }
 
 func CreateRule(ctx context.Context, d *db.DB, raw any) (rules.Rule, error) {
+	var rule rules.Rule
+	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+		var err error
+		rule, err = CreateRuleTx(ctx, tx, raw)
+		return err
+	})
+	return rule, err
+}
+
+func CreateRuleTx(ctx context.Context, tx *sql.Tx, raw any) (rules.Rule, error) {
 	id := "r-" + randomHex()
 	if v := get(raw, "id"); v != nil && v != "" {
 		s, ok := v.(string)
@@ -132,23 +142,20 @@ func CreateRule(ctx context.Context, d *db.DB, raw any) (rules.Rule, error) {
 	if err != nil {
 		return rules.Rule{}, err
 	}
-	err = d.WithTx(ctx, func(tx *sql.Tx) error {
-		var one int
-		switch err := tx.QueryRowContext(ctx, "SELECT 1 FROM rules WHERE id = ?", rule.ID).Scan(&one); {
-		case err == nil:
-			return ruleErrorf("rule " + strconv.Quote(rule.ID) + " already exists")
-		case !errors.Is(err, sql.ErrNoRows):
-			return err
-		}
-		var position int
-		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(position) + 1, 0) FROM rules").Scan(&position); err != nil {
-			return err
-		}
-		_, err := tx.ExecContext(ctx,
-			"INSERT INTO rules (position, id, account, action, dest, conditions) VALUES (?, ?, ?, ?, ?, ?)",
-			slices.Concat([]any{position, rule.ID}, store(rule))...)
-		return err
-	})
+	var one int
+	switch err := tx.QueryRowContext(ctx, "SELECT 1 FROM rules WHERE id = ?", rule.ID).Scan(&one); {
+	case err == nil:
+		return rules.Rule{}, ruleErrorf("rule " + strconv.Quote(rule.ID) + " already exists")
+	case !errors.Is(err, sql.ErrNoRows):
+		return rules.Rule{}, err
+	}
+	var position int
+	if err := tx.QueryRowContext(ctx, "SELECT COALESCE(MAX(position) + 1, 0) FROM rules").Scan(&position); err != nil {
+		return rules.Rule{}, err
+	}
+	_, err = tx.ExecContext(ctx,
+		"INSERT INTO rules (position, id, account, action, dest, conditions) VALUES (?, ?, ?, ?, ?, ?)",
+		slices.Concat([]any{position, rule.ID}, store(rule))...)
 	return rule, err
 }
 
@@ -175,7 +182,11 @@ func UpdateRule(ctx context.Context, d *db.DB, id string, raw any) (rules.Rule, 
 }
 
 func DeleteRule(ctx context.Context, d *db.DB, id string) (bool, error) {
-	res, err := d.Write.ExecContext(ctx, "DELETE FROM rules WHERE id = ?", id)
+	return DeleteRuleTx(ctx, d.Write, id)
+}
+
+func DeleteRuleTx(ctx context.Context, x db.Querier, id string) (bool, error) {
+	res, err := x.ExecContext(ctx, "DELETE FROM rules WHERE id = ?", id)
 	if err != nil {
 		return false, err
 	}

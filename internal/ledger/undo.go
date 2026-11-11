@@ -47,6 +47,17 @@ func (s *Store) Undo(ctx context.Context, id int64, who Resolver) (Effect, error
 			return fn.Finalize(ctx, tx, payload, result)
 		}
 	}
+	if fn.After != nil {
+		before, after := finalize, fn.After
+		finalize = func(ctx context.Context, tx *sql.Tx) error {
+			if before != nil {
+				if err := before(ctx, tx); err != nil {
+					return err
+				}
+			}
+			return after(ctx, tx, forward, result)
+		}
+	}
 	if err := s.Settle(settleCtx, ticket, result, finalize); err != nil {
 		return Effect{}, err
 	}
@@ -63,7 +74,16 @@ func (s *Store) undoPlan(forward Effect) (Undoer, json.RawMessage, error) {
 	if forward.Resolution != nil && forward.Resolution.EffectiveOutcome == "failed" {
 		return Undoer{}, nil, Refused(fmt.Sprintf("effect %d was resolved as not applied", forward.ID))
 	}
-	switch forward.State {
+	state := forward.State
+	if state == Unknown && forward.Resolution != nil {
+		switch forward.Resolution.EffectiveOutcome {
+		case "done":
+			state = Done
+		case "partial":
+			state = Partial
+		}
+	}
+	switch state {
 	case Done, Partial:
 	case Unknown:
 		return Undoer{}, nil, Refused(fmt.Sprintf("effect %d has an unknown outcome; resolve it first", forward.ID))
@@ -119,6 +139,15 @@ func (s *Store) undoLocal(ctx context.Context, id int64, fn Undoer, payload json
 			return err
 		} else if n == 0 {
 			return &SettledMeanwhile{ID: undoID}
+		}
+		if fn.After != nil {
+			forward, err := scanEffect(tx.QueryRowContext(ctx, effectSelect+" WHERE e.id = ?", id))
+			if err != nil {
+				return err
+			}
+			if err := fn.After(ctx, tx, forward, result); err != nil {
+				return err
+			}
 		}
 		return s.afterTransition(ctx, tx, undoID, "undo", result.State)
 	})
@@ -202,7 +231,9 @@ func (s *Store) reserveUndoTx(ctx context.Context, tx *sql.Tx, id int64, payload
 			return Ticket{}, err
 		}
 	}
-	return Ticket{ID: undoID, Token: token}, nil
+	ticket := Ticket{ID: undoID, Token: token}
+	s.track(ctx, ticket)
+	return ticket, nil
 }
 
 func undoOperation(payload json.RawMessage, fallback string) string {

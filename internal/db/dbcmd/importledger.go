@@ -4,29 +4,24 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail/tracking"
 )
 
-func ConvertLegacyLedgers(ctx context.Context, src, dst db.Querier, now float64) (ledger.ImportReport, error) {
+func ConvertLegacyAutoActions(ctx context.Context, src, dst db.Querier, now float64) (ledger.ImportReport, error) {
 	auto, err := readLegacyAuto(ctx, src)
 	if err != nil {
 		return ledger.ImportReport{}, err
 	}
-	agent, err := readLegacyAgent(ctx, src)
+	resolutions, err := readLegacyAutoResolutions(ctx, src)
 	if err != nil {
 		return ledger.ImportReport{}, err
 	}
-	proposal, err := readLegacyProposal(ctx, src)
-	if err != nil {
-		return ledger.ImportReport{}, err
-	}
-	resolutions, err := readLegacyResolutions(ctx, src)
-	if err != nil {
-		return ledger.ImportReport{}, err
-	}
-	return ledger.ImportLegacy(ctx, dst, auto, agent, proposal, resolutions, now)
+	return ledger.ImportLegacy(ctx, dst, auto, nil, nil, resolutions, now, nil)
 }
 
 func ConvertLegacyAgentWrites(ctx context.Context, src, dst db.Querier, now float64) (ledger.ImportReport, error) {
@@ -38,7 +33,59 @@ func ConvertLegacyAgentWrites(ctx context.Context, src, dst db.Querier, now floa
 	if err != nil {
 		return ledger.ImportReport{}, err
 	}
-	return ledger.ImportLegacy(ctx, dst, nil, agent, nil, resolutions, now)
+	claim := func(tool, target string) (string, bool) { return legacyAgentClaim(ctx, dst, tool, target) }
+	return ledger.ImportLegacy(ctx, dst, nil, agent, nil, resolutions, now, claim)
+}
+
+func ConvertLegacyProposals(ctx context.Context, src, dst db.Querier, now float64) (ledger.ImportReport, error) {
+	proposal, err := readLegacyProposal(ctx, src)
+	if err != nil {
+		return ledger.ImportReport{}, err
+	}
+	resolutions, err := readLegacyProposalResolutions(ctx, src)
+	if err != nil {
+		return ledger.ImportReport{}, err
+	}
+	return ledger.ImportLegacy(ctx, dst, nil, nil, proposal, resolutions, now, nil)
+}
+
+func legacyAgentClaim(ctx context.Context, q db.Querier, tool, target string) (string, bool) {
+	switch tool {
+	case "track_package":
+		raw, ok := strings.CutPrefix(target, "package:")
+		if !ok {
+			return "", false
+		}
+		id, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			return "", false
+		}
+		var carrier, number string
+		if err := q.QueryRowContext(ctx, "SELECT carrier, tracking_number FROM packages WHERE id = ?", id).Scan(&carrier, &number); err != nil {
+			return "", false
+		}
+		if number == "" {
+			return "", false
+		}
+		return tracking.Identity(carrier, number), true
+	case "media_add_magnet":
+		var url string
+		if err := q.QueryRowContext(ctx, "SELECT value FROM settings WHERE key = 'media_qbittorrent_url'").Scan(&url); err != nil {
+			return "", false
+		}
+		url = strings.TrimRight(strings.TrimSpace(url), "/")
+		if url == "" {
+			return "", false
+		}
+		return "qbit:" + url + ":" + strings.ToLower(target), true
+	case "mail_move":
+		return "mail_move:" + target, true
+	case "mail_folder_create":
+		return "mail_folder:" + target, true
+	case "calendar_create", "calendar_delete", "calendar_update", "calendar_rsvp":
+		return "calendar:" + target, true
+	}
+	return "", false
 }
 
 func readLegacyAuto(ctx context.Context, q db.Querier) ([]ledger.LegacyAutoAction, error) {
@@ -115,6 +162,37 @@ func readLegacyProposal(ctx context.Context, q db.Querier) ([]ledger.LegacyPropo
 func readLegacyResolutions(ctx context.Context, q db.Querier) ([]ledger.LegacyResolution, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT id, ts, actor, source, kind, row_id, proposal_id, outcome, prior_error FROM write_resolutions ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (ledger.LegacyResolution, error) {
+		var l ledger.LegacyResolution
+		var proposalID sql.NullInt64
+		err := r.Scan(&l.ID, &l.TS, &l.Actor, &l.Source, &l.Kind, &l.RowID, &proposalID, &l.Outcome, &l.PriorError)
+		l.ProposalID = proposalID
+		return l, err
+	})
+}
+
+func readLegacyAutoResolutions(ctx context.Context, q db.Querier) ([]ledger.LegacyResolution, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT id, ts, actor, source, kind, row_id, proposal_id, outcome, prior_error FROM write_resolutions "+
+			"WHERE kind IN ('auto_action', 'auto_undo') ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (ledger.LegacyResolution, error) {
+		var l ledger.LegacyResolution
+		var proposalID sql.NullInt64
+		err := r.Scan(&l.ID, &l.TS, &l.Actor, &l.Source, &l.Kind, &l.RowID, &proposalID, &l.Outcome, &l.PriorError)
+		l.ProposalID = proposalID
+		return l, err
+	})
+}
+
+func readLegacyProposalResolutions(ctx context.Context, q db.Querier) ([]ledger.LegacyResolution, error) {
+	rows, err := q.QueryContext(ctx,
+		"SELECT id, ts, actor, source, kind, row_id, proposal_id, outcome, prior_error FROM write_resolutions WHERE kind = 'proposal_action' ORDER BY id")
 	if err != nil {
 		return nil, err
 	}

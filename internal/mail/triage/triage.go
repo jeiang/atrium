@@ -28,12 +28,10 @@ const agreementSQL = "CASE WHEN actual IS NULL THEN 'gone' WHEN actual_inbox = 1
 var latestSQL = "SELECT d.id AS decision_id, d.ts, d.stage, d.key, d.action, d.dest, d.confidence, d.detail, " +
 	"m.id AS message_id, m.account, m.subject, m.from_addr, m.from_name, m.date_ts, m.seen, m.flagged, " +
 	report.ActualSQL + ", c.folder AS corrected_to, " +
-	"aa.id AS action_id, aa.kind AS action_kind, aa.state AS action_state, aa.error AS action_error, " +
-	"aa.undone_ts AS action_undone_ts, aa.undo IS NOT NULL AS action_has_undo " +
+	"NULL AS action_id, NULL AS action_kind, NULL AS action_state, NULL AS action_error, " +
+	"NULL AS action_undone_ts, 0 AS action_has_undo " +
 	"FROM decisions d JOIN messages m ON m.id = d.message_id " +
 	"LEFT JOIN corrections c ON c.message_id = m.id " +
-	"LEFT JOIN auto_actions aa ON aa.id = (SELECT MAX(y.id) FROM auto_actions y " +
-	"WHERE y.message_id = m.id AND y.kind IN ('file', 'trash', 'correct')) " +
 	"WHERE d.id = (SELECT MAX(x.id) FROM decisions x WHERE x.message_id = d.message_id)"
 
 var base = "SELECT *, " + agreementSQL + " AS agreement FROM (" + latestSQL + ")"
@@ -121,8 +119,7 @@ func applied(r Row) *Applied {
 	if r.ActionState != nil {
 		state = ledger.State(*r.ActionState)
 	}
-	a := &Applied{ID: *r.ActionID, Status: string(state), Error: r.ActionError,
-		Undoable: (state == ledger.Applied || state == ledger.UndoFailed || state == ledger.UndoSettled) && r.ActionHasUndo != 0}
+	a := &Applied{ID: *r.ActionID, Status: string(state), Error: r.ActionError, Undoable: r.ActionHasUndo != 0}
 	if r.ActionKind != nil {
 		a.Kind = *r.ActionKind
 	}
@@ -153,6 +150,40 @@ func (e FilterError) Error() string { return string(e) }
 type Page struct {
 	Total int   `json:"total"`
 	Rows  []Row `json:"rows"`
+}
+
+func enrich(ctx context.Context, q report.Querier, rows []Row) error {
+	ids := make([]int64, 0, len(rows))
+	for _, row := range rows {
+		ids = append(ids, row.MessageID)
+	}
+	effects, err := ledger.AutoForMessages(ctx, q, ids, mail.WallClock())
+	if err != nil {
+		return err
+	}
+	for i := range rows {
+		e, ok := effects[rows[i].MessageID]
+		if !ok {
+			continue
+		}
+		id := e.ID
+		kind := e.Operation
+		state := string(e.State)
+		rows[i].ActionID = &id
+		rows[i].ActionKind = &kind
+		rows[i].ActionState = &state
+		if e.Error != "" {
+			text := e.Error
+			rows[i].ActionError = &text
+		}
+		rows[i].ActionUndoneTS = e.UndoneAt
+		rows[i].ActionHasUndo = 0
+		if e.Undoable {
+			rows[i].ActionHasUndo = 1
+		}
+		rows[i].Applied = applied(rows[i])
+	}
+	return nil
 }
 
 func Triage(ctx context.Context, q report.Querier, f Filter) (Page, error) {
@@ -215,10 +246,16 @@ func Triage(ctx context.Context, q report.Querier, f Filter) (Page, error) {
 		return page, err
 	}
 	page.Rows, err = db.Collect(rows, scan)
+	if err != nil {
+		return page, err
+	}
+	if err := enrich(ctx, q, page.Rows); err != nil {
+		return page, err
+	}
 	if page.Rows == nil {
 		page.Rows = []Row{}
 	}
-	return page, err
+	return page, nil
 }
 
 func Get(ctx context.Context, q report.Querier, messageID int64) (*Row, error) {
@@ -228,6 +265,9 @@ func Get(ctx context.Context, q report.Querier, messageID int64) (*Row, error) {
 	}
 	found, err := db.Collect(rows, scanRow)
 	if err != nil || len(found) == 0 {
+		return nil, err
+	}
+	if err := enrich(ctx, q, found); err != nil {
 		return nil, err
 	}
 	return &found[0], nil

@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -107,43 +106,28 @@ func deref(s *string) string {
 	return *s
 }
 
-func timeline(ctx context.Context, q db.Querier, store *ledger.Store, category string, limit, offset int, now float64) ([]ActivityEntry, int, error) {
+func timeline(ctx context.Context, q db.Querier, store *ledger.Store, liveSvc *live.Live, category string, limit, offset int) ([]ActivityEntry, int, error) {
 	want := offset + limit + 1
 	var entries []ActivityEntry
 	if category == "" || category == categoryMail {
-		actions, err := live.List(ctx, q, "", "", want, 0)
+		actions, err := liveSvc.List(ctx, "", "", want, 0)
 		if err != nil {
 			return nil, 0, err
 		}
 		for _, a := range actions {
-			entries = append(entries, mailEntry(a, now))
+			entries = append(entries, mailEntry(a))
 		}
 	}
 	if category == "" || category == categoryMail {
-		found, err := writes.ResolutionsSince(ctx, q, want)
+		found, err := ledger.ResolutionsSince(ctx, q, "phone", want)
 		if err != nil {
 			return nil, 0, err
 		}
 		phone := make([]ActivityEntry, 0, len(found))
 		for _, r := range found {
-			var e ActivityEntry
-			target := fmt.Sprintf("%s %d", r.Kind, r.RowID)
-			if r.ProposalID != nil {
-				target = fmt.Sprintf("proposal %d", *r.ProposalID)
-			}
-			e.ID, e.TS = r.ID, r.TS
-			e.Source, e.Category = "phone", categoryMail
-			e.Phone = &PhoneActivity{Actor: r.Actor, Kind: r.Kind, Status: r.Outcome, Target: target}
-			phone = append(phone, e)
-		}
-		audits, err := ledger.ProposalAuditsSince(ctx, q, "phone", want)
-		if err != nil {
-			return nil, 0, err
-		}
-		for _, a := range audits {
 			phone = append(phone, ActivityEntry{
-				ID: a.ID, TS: a.TS, Source: "phone", Category: categoryMail,
-				Phone: &PhoneActivity{Actor: a.Actor, Kind: "proposal", Status: a.Outcome, Target: fmt.Sprintf("proposal %d", a.ProposalID)},
+				ID: r.ID, TS: r.TS, Source: "phone", Category: categoryMail,
+				Phone: &PhoneActivity{Actor: r.Actor, Kind: phoneKind(r), Status: r.Outcome, Target: phoneTarget(r)},
 			})
 		}
 		entries = append(entries, phone...)
@@ -213,7 +197,7 @@ func (s *service) activityPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	offset = max(offset, 0)
-	entries, next, err := timeline(r.Context(), s.deps.DB.Read, s.ledger, category, pageSize, int(offset), s.now())
+	entries, next, err := timeline(r.Context(), s.deps.DB.Read, s.ledger, s.live, category, pageSize, int(offset))
 	check(err)
 	data := activityPage{Entries: entries, Category: category, Categories: categories, NextOffset: next, Offset: int(offset)}
 	if web.IsPartial(r) && offset != 0 {
@@ -241,7 +225,7 @@ func (s *service) undoMail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	known, err := live.Get(ctx, s.deps.DB.Read, id)
+	known, err := s.live.Get(ctx, id)
 	check(err)
 	if known == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown action")
@@ -262,9 +246,9 @@ func (s *service) undoMail(w http.ResponseWriter, r *http.Request) {
 	default:
 		notice = toast("success", "Undone")
 	}
-	found, err := live.Get(ctx, s.deps.DB.Read, id)
+	found, err := s.live.Get(ctx, id)
 	check(err)
-	s.undone(w, r, mailEntry(*found, s.now()), notice)
+	s.undone(w, r, mailEntry(*found), notice)
 }
 
 func (s *service) resolveMail(w http.ResponseWriter, r *http.Request) {
@@ -289,13 +273,32 @@ func (s *service) resolveMail(w http.ResponseWriter, r *http.Request) {
 	default:
 		notice = resolvedToast(outcome)
 	}
-	found, err := live.Get(ctx, s.deps.DB.Read, id)
+	found, err := s.live.Get(ctx, id)
 	check(err)
 	if found == nil {
 		s.fail(w, r, http.StatusNotFound, "unknown action")
 		return
 	}
-	s.undone(w, r, mailEntry(*found, s.now()), notice)
+	s.undone(w, r, mailEntry(*found), notice)
+}
+
+func phoneKind(r ledger.ResolutionRow) string {
+	if r.EffectID == nil {
+		return "proposal"
+	}
+	return r.Operation
+}
+
+func phoneTarget(r ledger.ResolutionRow) string {
+	switch {
+	case r.EffectID == nil && r.ProposalID != nil:
+		return fmt.Sprintf("proposal %d", *r.ProposalID)
+	case r.EffectID != nil && r.Origin == ledger.AutoOrigin:
+		return fmt.Sprintf("mail %d", *r.EffectID)
+	case r.EffectID != nil:
+		return fmt.Sprintf("%s %d", r.Operation, *r.EffectID)
+	}
+	return ""
 }
 
 func effectEntry(e ledger.Effect) ActivityEntry {

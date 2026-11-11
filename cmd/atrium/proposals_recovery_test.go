@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -44,14 +43,18 @@ func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoabl
 		if _, err := seed.Write.Exec("UPDATE proposals SET status = 'approved', decided_ts = ? WHERE id = ?", settledAt-1, id); err != nil {
 			t.Fatal(err)
 		}
-		undo := map[string]any{"op": "rule_delete", "id": rule}
-		if _, err := proposals.RecordAction(ctx, seed.Write, id, "write", nil, undo, undo, ledger.OK, nil, settledAt); err != nil {
-			t.Fatal(err)
-		}
+		undo := `{"op":"rule_delete","id":"` + rule + `"}`
+		seedEffect(t, seed, seededEffect{
+			Origin: "proposal", Operation: "rule_delete", OperationKey: "proposal:" + strconv.FormatInt(id, 10) + ":rule_delete:" + rule,
+			Direction: "forward", Target: "proposal:" + strconv.FormatInt(id, 10), ProposalID: &id,
+			Action: undo, Undo: undo, State: "done", CreatedAt: settledAt, LeaseAt: settledAt, Settled: true,
+		})
 		if held {
-			if _, err := proposals.BeginAction(ctx, seed.Write, id, map[string]any{"op": "move"}, now-700); err != nil {
-				t.Fatal(err)
-			}
+			seedEffect(t, seed, seededEffect{
+				Origin: "proposal", Operation: "move", OperationKey: "proposal:" + strconv.FormatInt(id, 10) + ":move",
+				Direction: "forward", Target: "proposal:" + strconv.FormatInt(id, 10), ProposalID: &id,
+				Action: `{"op":"move"}`, State: "intent", CreatedAt: now - 700, LeaseAt: now - 700,
+			})
 		}
 		return id
 	}

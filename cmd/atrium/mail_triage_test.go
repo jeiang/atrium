@@ -131,7 +131,7 @@ S: {t} OK
 		t.Fatalf("proposal status = %q, %v", status, err)
 	}
 	var action string
-	if err := d.Read.QueryRow("SELECT action FROM proposal_actions WHERE proposal_id = ? AND kind = 'write' AND state = 'ok'", id).Scan(&action); err != nil {
+	if err := d.Read.QueryRow("SELECT action_json FROM effects WHERE proposal_id = ? AND direction = 'forward' AND state = 'done' AND operation = 'move'", id).Scan(&action); err != nil {
 		t.Fatalf("no recorded move: %v", err)
 	}
 	if !strings.Contains(action, `"op":"move"`) || !strings.Contains(action, `"dest_imap":"Archive"`) {

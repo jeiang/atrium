@@ -281,11 +281,12 @@ func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 	if asMedia {
 		tags = media.TagMedia
 	}
-	if _, err := settings.Add(ctx, tc.Ledger, settings, media.AddRequest{Magnet: magnet, Tags: tags}); err != nil {
+	scope := media.Scope{ProposalID: tc.ProposalID, ThreadID: &tc.ThreadID, RunID: &tc.RunID}
+	if _, err := settings.Add(ctx, tc.Ledger, settings, media.AddRequest{Magnet: magnet, Tags: tags, Scope: scope}); err != nil {
 		return nil, qbitFailed(err)
 	}
 	if asMedia {
-		if _, err := settings.SelectFiles(ctx, tc.Ledger, settings, nil); err != nil {
+		if _, err := settings.SelectFiles(ctx, tc.Ledger, settings, scope, nil); err != nil {
 			return nil, qbitFailed(err)
 		}
 	}

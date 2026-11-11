@@ -4,119 +4,129 @@
     "ts": 1792094400,
     "account": "icloud",
     "kind": "correct",
-    "status": "applied",
+    "status": "done",
     "src": "Receipts",
     "dest": "Bills",
     "subject": "Your Shop A receipt #2002",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 9,
     "ts": 1792090800,
     "account": "gmail",
     "kind": "file",
-    "status": "applied",
+    "status": "done",
     "src": "[Gmail]/All Mail",
     "dest": "Family",
     "subject": "Family news 11",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 8,
     "ts": 1792090800,
     "account": "gmail",
     "kind": "file",
-    "status": "applied",
+    "status": "done",
     "src": "[Gmail]/All Mail",
     "dest": "Work",
     "subject": "Weekly status 14",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 7,
     "ts": 1792090800,
     "account": "icloud",
     "kind": "file",
-    "status": "applied",
+    "status": "done",
     "src": "INBOX",
     "dest": "Bills",
     "subject": "Water statement October",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 6,
     "ts": 1792090800,
     "account": "icloud",
     "kind": "file",
-    "status": "applied",
+    "status": "done",
     "src": "INBOX",
     "dest": "Receipts",
     "subject": "Your Shop A receipt #2002",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 5,
     "ts": 1792090800,
     "account": "icloud",
     "kind": "file",
-    "status": "undone",
+    "status": "done",
     "src": "INBOX",
     "dest": "Bills",
     "subject": "Power bill reminder",
     "error": null,
-    "undoable": false
+    "undoable": false,
+    "effective_outcome": "done"
   },
   {
     "id": 4,
     "ts": 1792087200,
     "account": "gmail",
     "kind": "flag",
-    "status": "applied",
+    "status": "done",
     "src": "[Gmail]/All Mail",
     "dest": null,
     "subject": "Call me this weekend",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 3,
     "ts": 1792087200,
     "account": "icloud",
     "kind": "trash",
-    "status": "applied",
+    "status": "done",
     "src": "INBOX",
     "dest": "Deleted Messages",
     "subject": "Big promo",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 2,
     "ts": 1792087200,
     "account": "icloud",
     "kind": "flag",
-    "status": "applied",
+    "status": "done",
     "src": "INBOX",
     "dest": null,
     "subject": "Dinner on Saturday",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   },
   {
     "id": 1,
     "ts": 1792087200,
     "account": "icloud",
     "kind": "flag",
-    "status": "applied",
+    "status": "done",
     "src": "INBOX",
     "dest": null,
     "subject": "Question about the trip",
     "error": null,
-    "undoable": true
+    "undoable": true,
+    "effective_outcome": "done"
   }
 ]

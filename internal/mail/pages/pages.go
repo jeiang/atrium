@@ -79,7 +79,7 @@ func Module(r chi.Router, d *web.Deps) {
 	syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: wallClock}
 	registry := proposals.NewRegistry()
 	handlers.Register(registry, handlers.Deps{DB: d.DB, Open: open, Syncer: syncer, Now: wallClock, Env: d.Env})
-	l := &live.Live{DB: d.DB, Cfg: d.Cfg, Registry: registry, Now: wallClock}
+	l := &live.Live{DB: d.DB, Cfg: d.Cfg, Store: live.NewStore(d.DB, open, wallClock), Open: open, Registry: registry, Now: wallClock}
 	s := &service{deps: d, now: wallClock, live: l, applier: applier.New(l, open, syncer), drafts: &drafts.Store{DB: d.DB, Cfg: d.Cfg}}
 
 	r.Get("/messages/{message_id}", s.messagePage)
