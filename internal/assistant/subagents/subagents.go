@@ -244,10 +244,11 @@ func SystemAddendum(ctx context.Context, q db.Querier, a Agent) (string, error) 
 	return rules + "\n\nAgent `" + a.Name + "`: " + a.Prompt, nil
 }
 
-func CreateChild(ctx context.Context, q db.Querier, parentThread, parentRun int64, a Agent, title string, now float64) (int64, error) {
+func CreateChild(ctx context.Context, q db.Querier, parentThread, parentRun int64, a Agent, title string, project *int64, marks threads.Marks, now float64) (int64, error) {
 	return threads.Create(ctx, q, now, threads.Spec{
 		Kind: threads.Subagent, Title: &title, ParentID: &parentThread,
 		Effort: a.Effort, Role: &a.Name, ParentRunID: &parentRun,
+		ProjectID: project, Marks: marks,
 	})
 }
 

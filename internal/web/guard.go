@@ -7,9 +7,12 @@ import (
 	"encoding/base64"
 	"errors"
 	"io"
+	"net"
 	"net/http"
+	"net/netip"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
 )
@@ -58,16 +61,19 @@ func bodyCap(ctx context.Context) int {
 type Guard struct {
 	auth     Policy
 	hosts    map[string]struct{}
+	trusted  []netip.Prefix
+	limits   *limiter
 	public   func(*http.Request) bool
 	bodyCap  func(context.Context) (int, error)
 	sessions *oidc.Service
+	bearers  *bearer.Service
 	errPage  ErrorPage
 	secure   func(*http.Request) bool
 	classify func(*http.Request) access
 	idem     *idemCache
 }
 
-func newGuard(auth Policy, allowedHosts []string, public func(*http.Request) bool, classify func(*http.Request) access) *Guard {
+func newGuard(auth Policy, allowedHosts []string, trusted []netip.Prefix, public func(*http.Request) bool, classify func(*http.Request) access) *Guard {
 	hosts := map[string]struct{}{}
 	switch {
 	case len(allowedHosts) > 0:
@@ -82,7 +88,7 @@ func newGuard(auth Policy, allowedHosts []string, public func(*http.Request) boo
 	if public == nil {
 		public = func(*http.Request) bool { return false }
 	}
-	return &Guard{auth: auth, hosts: hosts, public: public, classify: classify, idem: newIdemCache()}
+	return &Guard{auth: auth, hosts: hosts, trusted: trusted, limits: newLimiter(), public: public, classify: classify, idem: newIdemCache()}
 }
 
 func hostname(value string) string {
@@ -136,6 +142,15 @@ func healthProbe(r *http.Request) bool {
 	return r.Method == http.MethodGet && r.URL.EscapedPath() == healthPath
 }
 
+func loopbackPeer(remoteAddr string) bool {
+	host, _, err := net.SplitHostPort(remoteAddr)
+	if err != nil {
+		return false
+	}
+	addr, err := netip.ParseAddr(host)
+	return err == nil && addr.Unmap().IsLoopback()
+}
+
 func setSecurityHeaders(h http.Header) {
 	h.Set("Content-Security-Policy", csp)
 	h.Set("X-Content-Type-Options", "nosniff")
@@ -144,6 +159,10 @@ func setSecurityHeaders(h http.Header) {
 
 func (g *Guard) Middleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if g.auth.Local() && !loopbackPeer(r.RemoteAddr) {
+			deny(w, http.StatusForbidden, "Forbidden")
+			return
+		}
 		if healthProbe(r) {
 			setSecurityHeaders(w.Header())
 			next.ServeHTTP(w, r)
@@ -155,6 +174,9 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 		}
 		if isAPI(r) {
 			g.api(w, r, next)
+			return
+		}
+		if g.auth.OIDC() && signInRequest(r) && !g.limitSignIn(w, r) {
 			return
 		}
 		static := strings.HasPrefix(r.URL.Path, staticPrefix)
@@ -180,7 +202,6 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			token = newToken()
 		}
 		if err == nil {
-			who.NoAuth = who.Source == SourceLocal && g.auth.Open
 			r = r.WithContext(context.WithValue(r.Context(), identityKey{}, who))
 		}
 		if isUnsafe(r.Method) && !strings.HasPrefix(r.URL.Path, "/actions/") {

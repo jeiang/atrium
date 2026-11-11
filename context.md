@@ -100,13 +100,19 @@ behavior-parity target.
   limit, and the old projection and ledger rows stay untouched.
 - Memory is the knowledge store. A record has a title, aliases, a body, a
   scope (personal or a project) and marks; `kb_search` and `kb_get` return
-  personal records plus the marks of the records they return, and
-  `kb_write`/`kb_retract` are undoable. A record written by `kb_write`
-  takes its writer thread's marks and project; an edit can only add marks.
-  A record is confirmed by the operator, and confirmed records and records
-  written by the operator or the import cannot be edited or retracted by
-  the agent. Pinned, confirmed, unmarked records form the system prompt's
-  profile block within `agent_kb_profile_tokens`. Dreaming also receives
+  personal records visible to the reader's project plus the marks of the
+  records they return, and `kb_write`/`kb_retract` are undoable. A record
+  written by `kb_write` takes its writer thread's marks and project; an
+  edit can only add marks. `search_threads` reads the summaries of threads
+  outside private projects and of the reader's own project; an explicit
+  project id only narrows, and a deleted thread is never read. A record is
+  confirmed by the operator, and confirmed records and records written by
+  the operator or the import cannot be edited or retracted by the agent; a
+  retract must name a record in the writer thread's project. Pinned,
+  confirmed, unmarked records outside a private project, or in the reader's
+  own project, form the system prompt's profile block within
+  `agent_kb_profile_tokens`, and a private record without a project never
+  enters it. Dreaming also receives
   code-built signals (failed runs, undone writes, dismissed proposals and
   denied permission requests) and may write `Lesson: …` records with the
   tool names as aliases and the thread where it happened as their source.
@@ -123,7 +129,8 @@ behavior-parity target.
   gathered `source.thread_id`; the write thread takes the union of the
   gathered marks, so records from clean threads are unmarked while records
   from marked sources stay unconfirmed and out of the prompt until the
-  operator confirms them. Dreaming is capped at `dreaming_max_cost_usd`
+  operator confirms them; confirmation keeps their marks, so a `pii` or
+  `messages` record still stays out of the profile. Dreaming is capped at `dreaming_max_cost_usd`
   ($0.30) per night and `dreaming_monthly_usd` ($3) per calendar month; at
   the monthly cap it does not run and raises an attention item. The Notion wiki is read-only
   for the operator: sync and the Wiki tab remain, the agent has no Notion
@@ -532,8 +539,9 @@ behavior-parity target.
   bound and return the marks of the threads that wrote the listed rows;
   they mark nothing when those threads were clean. A cron thread starts with
   the marks of the thread that wrote its schedule unless the operator wrote
-  the prompt. `kb_write` and `kb_retract` are `write_undo`, so a marked
-  thread is not offered them.
+  the prompt. `kb_write` and `kb_retract` are `write_undo` and are offered
+  in every situation: a marked thread may create an unconfirmed record that
+  inherits its marks and project, and an edit can only add marks.
 - Tools declare a channel: `none`, own accounts, notify, people or
   internet. Admission classifies the thread into one of six situations:
   nothing marked; kinds without untrusted text; `pii` without untrusted
@@ -553,7 +561,14 @@ behavior-parity target.
   tool in a permission gate: the call creates a `permission` proposal and
   parks the run; approving resumes the run and performs the call once,
   dismissing resumes it with a denial result, and the handler never runs
-  while the request is pending or after it is dismissed. Cron, nightly
+  while the request is pending or after it is dismissed. Settlement reuses
+  the recorded result of every call that already completed in the parked
+  response and authorizes only the unfinished calls, so a resume continues
+  at the parked call. An approval card's apply re-authorizes the
+  originating thread against the current tool settings, permission table
+  and marks at execution time, whichever entry point approved it (web
+  card, phone link or `atrium proposals approve`); a disabled tool or a
+  tightened table fails the proposal instead of applying it. Cron, nightly
   and subagent runs never park: an ask without a card is a deny there. A
   tool that leaves the allow set is withdrawn from dispatch; the request
   keeps its tools array so the run's thinking stays valid, and only a
@@ -624,19 +639,30 @@ behavior-parity target.
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Every
   admitted proxy request or OIDC session is the one operator with full
   authority; no role distinguishes them. A separate local mode provides
-  loopback access. `atrium serve` refuses to start
-  with no authentication in force unless `--force-disable-auth` is given, which
-  shows a persistent banner. Public media file access requires an expiring signed
+  loopback access: it binds only a numeric loopback address, refuses any other
+  bind at startup, and rejects a request whose socket peer is not loopback
+  regardless of forwarded address headers. There is no flag that serves
+  without authentication on a non-loopback address. Public media file access requires an expiring signed
   link and still checks Host. The link signing key is a generated secret held in
   the database (pinnable by the deployment); a legacy `media-link.key` file is
-  moved into it on first use.
-- The Sign-in settings tab shows the OIDC connection and activates a configuration only after a Test sign-in in a separate state showed the tested account would be admitted.
-- `/api/v1` is a JSON API for a native client, available only in listeners
-  with oidc mode and only when `oidc_api_client_id` names the client. It
-  accepts nothing but a bearer access token from the configured issuer
-  (RFC 9068 `at+jwt`, audience and `client_id` equal to that client, expiry
+  moved into it on first use. In-process token buckets, owned by each server
+  instance, bound public requests: 10 sign-in requests a minute per client
+  address, 120 API requests a minute per address and 60 a minute per bearer
+  token. A refusal is `429` with `Retry-After` and `no-store` and changes
+  nothing. The client address is the socket peer, unless the peer is in the
+  host's `web.trusted_proxy_cidrs` list, in which case exactly one valid
+  `CF-Connecting-IP` names it; other forwarded headers are ignored.
+- The Sign-in settings tab shows the OIDC connection and session settings, and issues, lists and revokes API bearer tokens.
+- `/api/v1` is a JSON API for a native client, available in every listener.
+  It accepts nothing but a bearer token: a locally issued `atr_` token, or,
+  when `oidc_api_client_id` names the client, an RFC 9068 access token from
+  the configured issuer (audience and `client_id` equal to that client, expiry
   with 60 s skew); session cookies and proxy headers grant nothing there.
-  Groups come from the token or the userinfo endpoint and decide admission
+  Both formats pass one persisted revocation and usage gate, and a token is
+  stored only as its SHA-256 hash; an OIDC access token enrolls on its first
+  successful validation. `atrium auth token issue|list|revoke` and Settings ›
+  Sign-in issue, list and revoke tokens, with the secret shown once. Groups
+  come from the token or the userinfo endpoint and decide admission
   exactly as for web sessions. Implemented endpoints: `/me`,
   thread list, create and transcript, send, stop and answer, the run event
   stream (SSE), the inbox, `/pending` (pending and blocked
@@ -671,7 +697,7 @@ behavior-parity target.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.
 - **Telemetry:** OpenTelemetry traces to VictoriaTraces, Prometheus metrics, and a `trace_id` in logs.
 - **Integrations:** weather (Open-Meteo, later WeatherKit) and package tracking (Ship24 free tier for flagged packages).
-- **An iOS app** through the `/api/v1` JSON API. Chat, the run stream, the inbox, approvals, undo entries and drafts are implemented; attachments, push device registration (APNs) and API rate limiting are deferred.
+- **An iOS app** through the `/api/v1` JSON API. Chat, the run stream, the inbox, approvals, undo entries and drafts are implemented; attachments and push device registration (APNs) are deferred.
 - **Birthdays** have no page; the agent keeps access.
 - **Open loops** cover only mail addressed to the owner that needs a reply.
 

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -41,6 +42,7 @@ type Options struct {
 	Env     config.Env
 	Enabled func(context.Context, db.Querier, string) (bool, error)
 	Store   func(*db.DB, config.Config) *ledger.Store
+	Tools   registry.Source
 }
 
 func (o Options) store(d *db.DB, cfg config.Config) *ledger.Store {
@@ -121,7 +123,7 @@ func (x *exec) registry(store *ledger.Store) *proposals.Registry {
 	open := clients(x.Cfg)
 	handlers.Register(registry, handlers.Deps{
 		DB: x.DB, Ledger: store, Open: open,
-		Syncer: &mailsync.Syncer{DB: x.DB, Cfg: x.Cfg, Now: x.opts.Now}, Now: x.opts.Now, Env: x.opts.env(),
+		Syncer: &mailsync.Syncer{DB: x.DB, Cfg: x.Cfg, Now: x.opts.Now}, Now: x.opts.Now, Env: x.opts.env(), Registry: x.opts.Tools,
 	})
 	return registry
 }
@@ -312,6 +314,11 @@ func (o Options) run(env *cli.Env, run body) error {
 	defer func() { _ = d.Close() }()
 	if err := config.Boot(env.Ctx, o.env(), d, cfg); err != nil {
 		return err
+	}
+	if set := module.SetFrom(env.Ctx); set != nil {
+		if err := set.Refresh(env.Ctx, d.Read); err != nil {
+			return err
+		}
 	}
 	return run(&exec{Ctx: env.Ctx, Cfg: cfg, DB: d, Stdout: env.Stdout, Stderr: env.Stderr, opts: o})
 }

@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -107,6 +109,7 @@ type Options struct {
 	State        *config.State
 	Auth         []string
 	AllowedHosts []string
+	Trusted      []netip.Prefix
 	Public       func(*http.Request) bool
 	Render       *Renderer
 	Modules      []Module
@@ -121,6 +124,8 @@ type Server struct {
 	state    *config.State
 	auth     Policy
 	oidc     *oidc.Service
+	bearers  *bearer.Service
+	db       *db.DB
 	render   *Renderer
 	secure   func(*http.Request) bool
 	handler  http.Handler
@@ -144,9 +149,6 @@ func New(o Options) (*Server, error) {
 			return nil, err
 		}
 	}
-	if auth.Open && !auth.Local() {
-		return nil, errors.New("open authentication requires local mode")
-	}
 	if o.Env == nil {
 		o.Env = config.OS
 	}
@@ -162,7 +164,10 @@ func New(o Options) (*Server, error) {
 	if auth.OIDC() && (o.OIDC == nil || o.Render == nil || o.DB == nil) {
 		return nil, errors.New("oidc auth needs a session service, a renderer and a database")
 	}
-	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, settings: o.Settings, state: o.State}
+	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, settings: o.Settings, state: o.State, db: o.DB}
+	if o.DB != nil {
+		s.bearers = bearer.New(o.DB, o.OIDC)
+	}
 	s.mux.Use(instrument)
 	if s.errPage == nil && o.Render != nil {
 		s.errPage = o.Render.ErrorPage
@@ -201,6 +206,9 @@ func New(o Options) (*Server, error) {
 		deps.OnFrame = o.Render.OnFrame
 	}
 	deps.API(http.MethodGet, "/me", me)
+	deps.Authenticated(http.MethodGet, authSettingsPath, s.signInPage)
+	deps.Authenticated(http.MethodPost, authSettingsPath+"/tokens", s.tokenIssue)
+	deps.Authenticated(http.MethodPost, authSettingsPath+"/tokens/{id}/revoke", s.tokenRevoke)
 	s.secure = func(r *http.Request) bool {
 		return hasSecureTransport(r, strings.HasPrefix(o.State.PublicURL(o.Env), "https://"))
 	}
@@ -219,9 +227,10 @@ func New(o Options) (*Server, error) {
 	for _, register := range o.Modules {
 		register(s.mux, deps)
 	}
-	guard := newGuard(auth, o.AllowedHosts, o.Public, s.access)
+	guard := newGuard(auth, o.AllowedHosts, o.Trusted, o.Public, s.access)
 	guard.secure = s.secure
 	guard.sessions = o.OIDC
+	guard.bearers = s.bearers
 	guard.errPage = s.errPage
 	if o.DB != nil {
 		guard.bodyCap = func(ctx context.Context) (int, error) {

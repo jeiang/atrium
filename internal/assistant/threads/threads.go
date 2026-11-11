@@ -387,12 +387,16 @@ func Create(ctx context.Context, q db.Querier, now float64, s Spec) (int64, erro
 	if s.WebSearch != nil {
 		web = *s.WebSearch
 	}
+	tainted := s.Marks.At
+	if tainted == nil && s.Marks.Set != 0 {
+		tainted = &now
+	}
 	res, err := q.ExecContext(ctx,
 		"INSERT INTO threads (kind, title, job_id, parent_thread_id, model, effort, context_limit, project_id, allowed_urls, role, parent_run_id, branched_from_thread_id, branched_from_seq, created_at, updated_at, thinking, web_search, cost_cap_usd, environment, repo, base_branch, agent, beta_set, speed, tainted_at, marks) "+
 			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		s.Kind, s.Title, s.JobID, s.ParentID, o.Model, o.Effort, o.ContextLimit, s.ProjectID, jsonx.Dumps(urls), s.Role, s.ParentRunID,
 		s.BranchedFromThreadID, s.BranchedFromSeq, now, now, o.Thinking, b2i(web), o.CostCapUSD, s.Environment, s.Repo, s.BaseBranch, s.Agent, s.BetaSet, s.Speed,
-		s.Marks.At, int64(s.Marks.Set))
+		tainted, int64(s.Marks.Set))
 	if err != nil {
 		return 0, err
 	}
@@ -473,6 +477,55 @@ func ReadMarks(ctx context.Context, q db.Querier, threadID int64) (Marks, error)
 	}
 	m.Set = tool.Marks(set)
 	return m, err
+}
+
+type Authority struct {
+	ThreadID  int64
+	ProjectID *int64
+	Kind      Kind
+	Role      *string
+	WebSearch bool
+	Marks     Marks
+	Ancestors tool.Marks
+}
+
+func (a Authority) Effective() Marks {
+	return Marks{At: a.Marks.At, Set: a.Marks.Set | a.Ancestors}
+}
+
+func ReadAuthority(ctx context.Context, q db.Querier, threadID int64) (Authority, error) {
+	var a Authority
+	var web store.Flag
+	var set int64
+	var parent *int64
+	err := q.QueryRowContext(ctx,
+		"SELECT kind, project_id, role, web_search, tainted_at, marks, parent_thread_id FROM threads WHERE id = ?", threadID).
+		Scan(&a.Kind, &a.ProjectID, &a.Role, &web, &a.Marks.At, &set, &parent)
+	if errors.Is(err, sql.ErrNoRows) {
+		return Authority{}, nil
+	}
+	if err != nil {
+		return Authority{}, err
+	}
+	a.ThreadID = threadID
+	a.WebSearch = bool(web)
+	a.Marks.Set = tool.Marks(set)
+	seen := map[int64]bool{threadID: true}
+	for parent != nil && !seen[*parent] {
+		seen[*parent] = true
+		var ancestorSet int64
+		var next *int64
+		err := q.QueryRowContext(ctx, "SELECT marks, parent_thread_id FROM threads WHERE id = ?", *parent).Scan(&ancestorSet, &next)
+		if errors.Is(err, sql.ErrNoRows) {
+			break
+		}
+		if err != nil {
+			return Authority{}, err
+		}
+		a.Ancestors |= tool.Marks(ancestorSet)
+		parent = next
+	}
+	return a, nil
 }
 
 func EffortFixed(thinking string) bool { return thinking == "between_tools" || thinking == "disabled" }

@@ -12,6 +12,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/actionlink"
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
@@ -55,6 +56,7 @@ type Options struct {
 	Clients func(config.Config) mail.OpenFunc
 	Ledger  func(*db.DB, config.Config) *ledger.Store
 	Enabled func(context.Context, db.Querier, string) (bool, error)
+	Tools   registry.Source
 }
 
 type service struct {
@@ -83,7 +85,7 @@ func Module(o Options) web.Module {
 		if o.Ledger != nil {
 			effects = o.Ledger(d.DB, d.Cfg)
 		}
-		handlers.Register(registry, handlers.Deps{DB: d.DB, Ledger: effects, Open: open, Syncer: syncer, Now: now, Env: d.Env, Resume: func(ctx context.Context, runID int64) error {
+		handlers.Register(registry, handlers.Deps{DB: d.DB, Ledger: effects, Open: open, Syncer: syncer, Now: now, Env: d.Env, Registry: o.Tools, Resume: func(ctx context.Context, runID int64) error {
 			if d.ResumeRun == nil {
 				return proposals.ProposalError("the assistant module is not running")
 			}

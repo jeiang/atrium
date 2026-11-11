@@ -69,7 +69,11 @@ func (r *Runner) systemBlocks(ctx context.Context, q db.Querier, thread threads.
 		return prompts.SystemBlocks(p, cc), nil
 	}
 	if r.Profile != nil {
-		if p.Profile, err = r.Profile(ctx, q); err != nil {
+		var projectID int64
+		if thread.ProjectID != nil {
+			projectID = *thread.ProjectID
+		}
+		if p.Profile, err = r.Profile(ctx, q, projectID); err != nil {
 			return nil, err
 		}
 	}

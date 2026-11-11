@@ -111,8 +111,15 @@ settings the operator edits in the UI or pins from the host.
   shared allowlist and SSRF protections on every redirect.
 - Preserve proxy authentication, Host validation, CSRF, same-origin checks,
   CSP, and loopback listener defaults.
+- Every admitted proxy, OIDC or local identity is the one principal with full
+  authority; do not add an administrator role, login links, or a remote
+  emergency bypass.
 - `/api/v1` is bearer-only: never read session cookies or proxy headers
-  there. Within v1, responses change only additively.
+  there. Bearer tokens are persisted by hash and pass one revocation and usage
+  gate. Within v1, responses change only additively.
+- Public request limits are in-process code constants owned by each server
+  instance. Do not move them into settings, a shared process, or a dependency,
+  and never trust a forwarded client address from an untrusted peer.
 - Media writes touch only torrents tagged media. Preserve library group
   permissions and expiring signed file links; public links still check Host.
 - The files in `internal/db/schema/` are the v3 baseline under construction

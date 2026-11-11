@@ -583,16 +583,17 @@ type ToolCall struct {
 	State       string   `json:"state"`
 	Error       *string  `json:"error"`
 	ResultID    *int64   `json:"result_id"`
+	Result      *string  `json:"result"`
 	StartedAt   float64  `json:"started_at"`
 	FinishedAt  *float64 `json:"finished_at"`
 }
 
-const callColumns = "id, run_id, tool_use_id, name, args_json, args_sha256, replay_class, state, error, result_id, started_at, finished_at"
+const callColumns = "id, run_id, tool_use_id, name, args_json, args_sha256, replay_class, state, error, result_id, result, started_at, finished_at"
 
 func scanCall(row interface{ Scan(...any) error }) (ToolCall, error) {
 	var c ToolCall
 	err := row.Scan(&c.ID, &c.RunID, &c.ToolUseID, &c.Name, &c.ArgsJSON, &c.ArgsSHA256, &c.ReplayClass, &c.State, &c.Error,
-		&c.ResultID, &c.StartedAt, &c.FinishedAt)
+		&c.ResultID, &c.Result, &c.StartedAt, &c.FinishedAt)
 	return c, err
 }
 
@@ -612,9 +613,9 @@ func StartToolCall(ctx context.Context, q db.Querier, runID int64, toolUseID, na
 	return res.LastInsertId()
 }
 
-func FinishToolCall(ctx context.Context, q db.Querier, callID int64, state string, now float64, errText *string, resultID *int64) error {
-	_, err := q.ExecContext(ctx, "UPDATE tool_calls SET state = ?, error = ?, result_id = ?, finished_at = ? WHERE id = ?",
-		state, errText, resultID, now, callID)
+func FinishToolCall(ctx context.Context, q db.Querier, callID int64, state string, now float64, errText *string, resultID *int64, result *string) error {
+	_, err := q.ExecContext(ctx, "UPDATE tool_calls SET state = ?, error = ?, result_id = ?, result = ?, finished_at = ? WHERE id = ?",
+		state, errText, resultID, result, now, callID)
 	return err
 }
 
@@ -643,7 +644,7 @@ type CallKey struct {
 
 func ToolCallsForThread(ctx context.Context, q db.Querier, threadID int64) ([]ToolCall, error) {
 	return calls(q.QueryContext(ctx,
-		"SELECT c.id, c.run_id, c.tool_use_id, c.name, c.args_json, c.args_sha256, c.replay_class, c.state, c.error, c.result_id, c.started_at, c.finished_at "+
+		"SELECT c.id, c.run_id, c.tool_use_id, c.name, c.args_json, c.args_sha256, c.replay_class, c.state, c.error, c.result_id, c.result, c.started_at, c.finished_at "+
 			"FROM tool_calls c JOIN runs r ON r.id = c.run_id WHERE r.thread_id = ? AND r.superseded = 0 ORDER BY c.id", threadID))
 }
 

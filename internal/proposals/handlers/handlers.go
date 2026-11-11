@@ -6,6 +6,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/approval"
 	"github.com/jeiang/atrium/internal/assistant/permission"
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/config"
@@ -20,13 +21,14 @@ import (
 )
 
 type Deps struct {
-	DB     *db.DB
-	Ledger *ledger.Store
-	Open   mail.OpenFunc
-	Syncer *mailsync.Syncer
-	Now    func() float64
-	Env    config.Env
-	Resume func(ctx context.Context, runID int64) error
+	DB       *db.DB
+	Ledger   *ledger.Store
+	Open     mail.OpenFunc
+	Syncer   *mailsync.Syncer
+	Now      func() float64
+	Env      config.Env
+	Resume   func(ctx context.Context, runID int64) error
+	Registry registry.Source
 }
 
 func Register(r *proposals.Registry, deps Deps) {
@@ -44,7 +46,7 @@ func Register(r *proposals.Registry, deps Deps) {
 	if err := openloops.RegisterLedgerUndoer(deps.Ledger); err != nil {
 		panic(err)
 	}
-	(&approval.Executor{DB: deps.DB, Env: deps.Env, Now: deps.Now, MailOpen: deps.Open, Ledger: deps.Ledger, Tools: toolset.Approvals()}).Register(r)
+	(&approval.Executor{DB: deps.DB, Env: deps.Env, Now: deps.Now, MailOpen: deps.Open, Ledger: deps.Ledger, Tools: toolset.Approvals(), Registry: deps.Registry}).Register(r)
 	if deps.Resume != nil {
 		registerPermission(r, deps.Resume)
 	}

@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -17,10 +18,11 @@ import (
 )
 
 type wimSite struct {
-	t    *testing.T
-	base string
-	idp  *oidctest.Provider
-	db   *db.DB
+	t     *testing.T
+	base  string
+	idp   *oidctest.Provider
+	db    *db.DB
+	peers int
 }
 
 type wimReply struct {
@@ -35,6 +37,7 @@ type wimBrowser struct {
 	site *wimSite
 	jar  *cookiejar.Jar
 	http *http.Client
+	addr string
 }
 
 func wimOIDCSite(t *testing.T) *wimSite {
@@ -59,7 +62,7 @@ func wimOIDCSite(t *testing.T) *wimSite {
 		Secret:      "s3cret-for-the-test",
 		GroupsClaim: "groups",
 	}))
-	got, _ := wimServeIn(t, dir, "--port", port, "--auth", "oidc", "--allowed-host", "127.0.0.1")
+	got, _ := wimServeIn(t, dir, "--port", port, "--auth", "oidc", "--allowed-host", "127.0.0.1", "--trusted-proxy", "127.0.0.1/32")
 	if got != base {
 		t.Fatalf("serve listens on %s, want %s", got, base)
 	}
@@ -92,7 +95,8 @@ func (s *wimSite) browser() *wimBrowser {
 	if err != nil {
 		s.t.Fatal(err)
 	}
-	return &wimBrowser{site: s, jar: jar, http: &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
+	s.peers++
+	return &wimBrowser{site: s, jar: jar, addr: fmt.Sprintf("198.51.100.%d", s.peers), http: &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}}
 }
 
 func (b *wimBrowser) do(method, target string, form url.Values, headers ...string) wimReply {
@@ -110,6 +114,9 @@ func (b *wimBrowser) do(method, target string, form url.Values, headers ...strin
 		t.Fatal(err)
 	}
 	req.Header.Set("Accept", "text/html")
+	if b.addr != "" {
+		req.Header.Set("CF-Connecting-IP", b.addr)
+	}
 	if form != nil {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		req.Header.Set("Origin", b.site.base)

@@ -16,6 +16,18 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
     hosted_domain TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS auth_sessions_absolute ON auth_sessions (absolute_expires_at);
+CREATE TABLE IF NOT EXISTS auth_bearers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    token_hash TEXT NOT NULL UNIQUE CHECK (length(token_hash) = 64),
+    kind TEXT NOT NULL CHECK (kind IN ('local', 'oidc')),
+    name TEXT NOT NULL,
+    subject TEXT NOT NULL DEFAULT '',
+    created_at REAL NOT NULL,
+    expires_at REAL,
+    last_used_at REAL,
+    revoked_at REAL,
+    CHECK (kind != 'oidc' OR expires_at IS NOT NULL)
+);
 CREATE TABLE IF NOT EXISTS auth_logins (
     state_hash TEXT PRIMARY KEY,
     binding_hash TEXT NOT NULL,

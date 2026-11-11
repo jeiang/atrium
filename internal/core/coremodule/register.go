@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
+	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
@@ -63,7 +64,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},
 			}},
 			{Module: mailpages.PauseModule},
-			{Module: reviewpages.Module(reviewpages.Options{Clients: m.Clients, Ledger: func(d *db.DB, cfg config.Config) *ledger.Store {
+			{Module: reviewpages.Module(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools, Ledger: func(d *db.DB, cfg config.Config) *ledger.Store {
 				return toolset.Ledger(d, mc.Env, m.Clients(cfg), m.Now)
 			}, Enabled: enabled}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Recover: reviewpages.RecoverDrafts, Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
@@ -75,7 +76,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 			{Module: startEmbed},
 			{Module: actionlinkpages.Module, Templates: actionlinkpages.Templates()},
 			{Nav: []web.NavItem{
-				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Auth: true, Order: 50},
+				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}},
 		},
 		Settings: []settings.Group{
@@ -88,10 +89,11 @@ func (m Module) Register(mc module.Context) module.Registration {
 			ledgercmd.Command(ledgercmd.Options{Env: mc.Env, Now: m.Now, Store: func(d *db.DB, cfg config.Config) *ledger.Store {
 				return toolset.Ledger(d, mc.Env, m.Clients(cfg), m.Now)
 			}}),
-			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Store: func(d *db.DB, cfg config.Config) *ledger.Store {
+			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: func(d *db.DB, cfg config.Config) *ledger.Store {
 				return toolset.Ledger(d, mc.Env, m.Clients(cfg), m.Now)
 			}}),
 			settingscmd.Command(mc.Env, m.Guard),
+			bearer.Command(mc.Env),
 			secretscmd.Command(mc.Env),
 			dbcmd.Command(mc.Env, m.Now),
 			kbcmd.Command(mc.Env),

@@ -90,7 +90,6 @@ func (s *Server) registerAuthRoutes() {
 		setCookie(w, bindingCookie, login.Binding, 600, secure(r))
 		http.Redirect(w, r, login.URL, http.StatusSeeOther)
 	})
-	s.route(accessDefault, http.MethodGet, authSettingsPath, s.signInPage)
 	s.route(accessPublic, http.MethodGet, callbackPath, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
 		q := r.URL.Query()

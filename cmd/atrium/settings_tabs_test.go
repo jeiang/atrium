@@ -11,8 +11,7 @@ import (
 
 var settingsTabLabel = regexp.MustCompile(`<a href="/settings/[^"]*"[^>]*>([^<]+)</a>`)
 
-func TestSettingsShowsSixTabsAndDropsAdvancedPages(t *testing.T) {
-	t.Parallel()
+func TestSettingsShowsTabsAndDropsAdvancedPages(t *testing.T) {
 	base := startServe(t)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -32,7 +31,7 @@ func TestSettingsShowsSixTabsAndDropsAdvancedPages(t *testing.T) {
 	for _, m := range settingsTabLabel.FindAllStringSubmatch(body[start:start+end], -1) {
 		labels = append(labels, m[1])
 	}
-	if want := []string{"Assistant", "Mail", "Connections", "Notifications", "Calendar", "Notion", "Media", "Export", "Usage"}; !slices.Equal(labels, want) {
+	if want := []string{"Assistant", "Mail", "Connections", "Notifications", "Calendar", "Notion", "Media", "Export", "Sign-in", "Usage"}; !slices.Equal(labels, want) {
 		t.Errorf("settings tabs %q, want %q", labels, want)
 	}
 	for _, path := range []string{"/settings/config", "/settings/config/assistant", "/settings/audit", "/settings/subagents", "/settings/prompts"} {

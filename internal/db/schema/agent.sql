@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS tool_calls (
     state TEXT NOT NULL,
     error TEXT,
     result_id INTEGER,
+    result TEXT,
     started_at REAL NOT NULL,
     finished_at REAL,
     UNIQUE (run_id, tool_use_id)

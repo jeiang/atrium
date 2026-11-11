@@ -109,7 +109,6 @@ type SidebarThread struct {
 
 type AuthView struct {
 	SignOut  bool
-	NoAuth   bool
 	Settings bool
 }
 

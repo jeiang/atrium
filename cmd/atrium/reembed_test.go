@@ -62,8 +62,11 @@ func newFakeEmbedder(t *testing.T) *fakeEmbedder {
 				}
 			}
 		}
-		if f.gate != nil {
-			f.gate(r.Context(), req.Input)
+		f.mu.Lock()
+		gate := f.gate
+		f.mu.Unlock()
+		if gate != nil {
+			gate(r.Context(), req.Input)
 		}
 		f.mu.Lock()
 		f.texts[req.Model] += len(req.Input)
@@ -81,6 +84,12 @@ func newFakeEmbedder(t *testing.T) *fakeEmbedder {
 	}))
 	t.Cleanup(f.Close)
 	return f
+}
+
+func (f *fakeEmbedder) setGate(gate func(ctx context.Context, texts []string)) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.gate = gate
 }
 
 func (f *fakeEmbedder) take() bool {

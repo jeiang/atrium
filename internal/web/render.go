@@ -63,7 +63,7 @@ func NewRenderer(extra tpl.Config, nav ...tpl.NavItem) (*Renderer, error) {
 func (rd *Renderer) Frame(r *http.Request, page string, data any) (*tpl.Frame, error) {
 	auth := tpl.AuthView{Settings: rd.oidcOn.Load()}
 	if who, ok := IdentityOf(r.Context()); ok {
-		auth.SignOut, auth.NoAuth = who.Source == SourceOIDC, who.NoAuth
+		auth.SignOut = who.Source == SourceOIDC
 	}
 	nav := rd.navFor(page)
 	f := &tpl.Frame{

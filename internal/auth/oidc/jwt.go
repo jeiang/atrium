@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	maxTokenBytes = 64 << 10
+	MaxTokenBytes = 64 << 10
 	clockLeeway   = 60 * time.Second
 )
 
@@ -148,7 +148,7 @@ type rawToken struct {
 }
 
 func splitToken(raw string) (rawToken, error) {
-	if len(raw) > maxTokenBytes {
+	if len(raw) > MaxTokenBytes {
 		return rawToken{}, tokenError("token too large")
 	}
 	parts := strings.Split(raw, ".")

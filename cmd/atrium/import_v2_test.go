@@ -2057,6 +2057,9 @@ func TestImportV2UnionsOIDCSelectorsAndDropsLoginState(t *testing.T) {
 	if n := importCount(t, q, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'auth_login_links'"); n != 0 {
 		t.Errorf("the destination still has an auth_login_links table")
 	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM auth_bearers"); n != 0 {
+		t.Errorf("the destination imported %d bearer rows; v2 has none", n)
+	}
 
 	listed := runImportApp(t, importTestAppHost(t, dir, clock, host), "connections", "list", "--json")
 	if listed.code != cli.ExitOK {
