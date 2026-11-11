@@ -37,6 +37,7 @@ type ImportService struct {
 	ID           string
 	Kind         string
 	Label        string
+	Source       string
 	Config       map[string]string
 	Transport    map[string]string
 	Capabilities []string
@@ -86,10 +87,14 @@ func importService(ctx context.Context, tx *sql.Tx, s ImportService, encrypted b
 	if err != nil {
 		return nil, err
 	}
+	source := s.Source
+	if source == "" {
+		source = SourceHost
+	}
 	if _, err := tx.ExecContext(ctx,
 		"INSERT INTO connections (id, kind, label, config_source, config_json, transport_json, revision, enabled, state, created_at, updated_at) "+
-			"VALUES (?, ?, ?, 'host', ?, ?, 1, 1, 'untested', ?, ?)",
-		s.ID, kind, s.Label, string(configJSON), string(transportJSON), now, now); err != nil {
+			"VALUES (?, ?, ?, ?, ?, ?, 1, 1, 'untested', ?, ?)",
+		s.ID, kind, s.Label, source, string(configJSON), string(transportJSON), now, now); err != nil {
 		return nil, err
 	}
 	lines := []string{"connection " + s.ID + ": created from host settings"}

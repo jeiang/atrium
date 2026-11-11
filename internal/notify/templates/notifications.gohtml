@@ -15,7 +15,6 @@
     </span>
   </h2>
   {{with $d.Push.Problem}}<p class="px-4 py-2 text-sm text-destructive" role="alert">{{.}}</p>{{end}}
-  {{template "settings_fields" (dict "Fields" $d.Push.Fields "Action" "/settings/notifications/push/subject" "CSRF" $csrf)}}
   {{range $d.Push.Devices}}
   <div class="set-row border-t" data-push-device="{{.Endpoint}}">
     <span class="flex min-w-0 flex-col"><span class="font-medium">{{.Label}}</span><span class="font-mono text-xs text-ink-3">{{ts .CreatedTS}}{{with .LastError}} · {{str .}}{{end}}</span></span>

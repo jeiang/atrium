@@ -31,8 +31,6 @@
       host = {
         core.public_url = "https://atrium.example.org";
         core.ops_listen = "127.0.0.1:9180";
-        auth.oidc_api_client_id = "api-client";
-        auth.oidc_client_secret_file = "/run/secrets/oidc-client-secret";
         mail = {
           mail_chat_url = "http://127.0.0.1:8187/v1";
           mail_embed_url = "http://127.0.0.1:8188/v1";
@@ -40,6 +38,17 @@
         media.media_root = "/var/lib/media";
       };
       connections = {
+        "service/oidc" = {
+          kind = "service/oidc";
+          config = {
+            preset = "generic";
+            issuer = "https://idp.example.org";
+            client_id = "atrium";
+            api_client_id = "api-client";
+          };
+          capabilities = ["discovery" "client_auth"];
+          credentialFiles.client_secret = "/run/secrets/oidc-client-secret";
+        };
         "service/qbittorrent" = {
           kind = "service/qbittorrent";
           config.url = "http://127.0.0.1:8081";
@@ -89,7 +98,7 @@
       "LoadCredential=db-key:/run/secrets/db-key"
       "LoadCredential=connection-service-qbittorrent-api_key:/run/secrets/qbittorrent-api-key"
       "LoadCredential=mail-account-icloud:/run/secrets/icloud-app-password"
-      "LoadCredential=host-auth-oidc_client_secret:/run/secrets/oidc-client-secret"
+      "LoadCredential=connection-service-oidc-client_secret:/run/secrets/oidc-client-secret"
     ];
     sharedLines = credentialLines ++ ["EnvironmentFile=/run/secrets/atrium.env" "User=atrium" "Group=atrium" "StateDirectory=atrium"];
     credentialsMatch = assert builtins.all (line: builtins.elem line cfg.runProperties) sharedLines;
@@ -113,7 +122,8 @@
     assert cfg.renderedHost.connections."service/qbittorrent".config.url == "http://127.0.0.1:8081";
     assert cfg.renderedHost.connections."service/qbittorrent".credential_files.api_key == "\${CREDENTIALS_DIRECTORY}/connection-service-qbittorrent-api_key";
     assert cfg.renderedHost.mail.mail_accounts_file != "";
-    assert cfg.renderedHost.auth.oidc_client_secret_file == "\${CREDENTIALS_DIRECTORY}/host-auth-oidc_client_secret";
+    assert cfg.renderedHost.connections."service/oidc".config.api_client_id == "api-client";
+    assert cfg.renderedHost.connections."service/oidc".credential_files.client_secret == "\${CREDENTIALS_DIRECTORY}/connection-service-oidc-client_secret";
     assert cfg.initialTimezone != null; true;
     unit = name: pkgs.writeText name (builtins.unsafeDiscardStringContext nixos.config.systemd.units.${name}.text);
     inherit (cfg) unitNames;
@@ -179,7 +189,7 @@
           head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/db-key"
           printf 'qbt-key\n' >"$CREDENTIALS_DIRECTORY/connection-service-qbittorrent-api_key"
           printf 'app-password\n' >"$CREDENTIALS_DIRECTORY/mail-account-icloud"
-          printf 'oidc-secret\n' >"$CREDENTIALS_DIRECTORY/host-auth-oidc_client_secret"
+          printf 'oidc-secret\n' >"$CREDENTIALS_DIRECTORY/connection-service-oidc-client_secret"
           atrium settings list >/dev/null
           atrium settings get public_url | grep -q '"value": "https://atrium.example.org"'
           atrium settings get mail_accounts_file | grep -q 'mail-accounts.toml'

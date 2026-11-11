@@ -45,7 +45,6 @@ var (
 type Service struct {
 	d   *db.DB
 	env config.Env
-	hc  *http.Client
 	now func() time.Time
 
 	keyRefetchGap time.Duration
@@ -70,17 +69,16 @@ func New(d *db.DB, env config.Env, opts ...Option) *Service {
 	for _, opt := range opts {
 		opt(s)
 	}
-	s.hc = s.client()
 	return s
 }
 
 func (s *Service) Check(ctx context.Context) error {
-	_, err := load(ctx, s.d.Read, s.env, s.d.Encrypted())
+	_, err := s.load(ctx)
 	return err
 }
 
 func (s *Service) Config(ctx context.Context) (Config, error) {
-	return load(ctx, s.d.Read, s.env, s.d.Encrypted())
+	return s.load(ctx)
 }
 
 func (s *Service) unix() float64 { return float64(s.now().UnixNano()) / 1e9 }
@@ -111,7 +109,7 @@ type Login struct {
 }
 
 func (s *Service) Begin(ctx context.Context, returnTo string) (Login, error) {
-	cfg, err := load(ctx, s.d.Read, s.env, s.d.Encrypted())
+	cfg, err := s.load(ctx)
 	if err != nil {
 		return Login{}, err
 	}
@@ -222,7 +220,7 @@ func (s *Service) Complete(ctx context.Context, state, code, binding string) (Gr
 	if state == "" || code == "" || binding == "" {
 		return Grant{}, ErrLogin
 	}
-	cfg, err := load(ctx, s.d.Read, s.env, s.d.Encrypted())
+	cfg, err := s.load(ctx)
 	if err != nil {
 		return Grant{}, err
 	}
@@ -270,6 +268,9 @@ func (s *Service) Complete(ctx context.Context, state, code, binding string) (Gr
 	})
 	if err != nil {
 		return Grant{}, err
+	}
+	if cfg.ClientSecret != "" {
+		s.recordClientAuth(ctx, cfg.ClientSecret)
 	}
 	return Grant{Token: token, ReturnTo: pending.returnTo, MaxAge: cfg.Max}, nil
 }

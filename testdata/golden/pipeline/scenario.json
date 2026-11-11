@@ -39,7 +39,6 @@
     "ICLOUD_APP_PASSWORD": "golden-app-password",
     "ICLOUD_MAIL_USERNAME": "operator@icloud.example",
     "NOTION_TOKEN": "golden-notion-token",
-    "ATRIUM_NOTIFY_WEBPUSH_SUBJECT": "mailto:operator@golden.example",
     "QBITTORRENT_URL": "http://qbit.test",
     "TMDB_API_KEY": "k",
     "TZ": "UTC"

@@ -100,7 +100,7 @@ CREATE TABLE IF NOT EXISTS usage (
     id INTEGER PRIMARY KEY,
     attempt_key TEXT NOT NULL UNIQUE,
     ts REAL NOT NULL,
-    month_start REAL NOT NULL,
+    month TEXT NOT NULL,
     expires_at REAL NOT NULL,
     settled_at REAL,
     state TEXT NOT NULL CHECK (state IN ('reserved','settled','unknown','expired')),
@@ -144,7 +144,7 @@ CREATE TABLE IF NOT EXISTS usage (
 CREATE INDEX IF NOT EXISTS usage_ts ON usage(ts);
 CREATE INDEX IF NOT EXISTS usage_thread ON usage(thread_id);
 CREATE INDEX IF NOT EXISTS usage_run ON usage(run_id);
-CREATE INDEX IF NOT EXISTS usage_month ON usage(month_start, budget_class);
+CREATE INDEX IF NOT EXISTS usage_month ON usage(month, budget_class);
 CREATE INDEX IF NOT EXISTS usage_pending ON usage(expires_at)
     WHERE state IN ('reserved','unknown');
 CREATE TABLE IF NOT EXISTS context_ledger (

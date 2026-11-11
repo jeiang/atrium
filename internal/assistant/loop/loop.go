@@ -481,21 +481,22 @@ const memoryPrompt = "\n\nMemory view: the first user message opens with this th
 	"the messages after it are verbatim. Each memory line carries a message range and a zoom id; call zoom(id, n) to open " +
 	"a summary's two children, or zoom(id, 1) to read one message's source, when the summary is not enough."
 
-func (s *state) dispatch(ctx context.Context, params anthropic.Params, unattended bool) (inference.Outcome, inference.Receipt, error) {
+func (s *state) dispatch(ctx context.Context, params anthropic.Params, promptTokens int64, unattended bool) (inference.Outcome, inference.Receipt, error) {
 	class := inference.Interactive
 	if unattended {
 		class = inference.Unattended
 	}
 	attempt, err := s.inference.Reserve(ctx, inference.Request{
-		AttemptKey: inference.NewAttemptKey(fmt.Sprintf("loop:%d:%d", s.run.ID, s.stepIndex)),
-		RunID:      s.run.ID,
-		ThreadID:   s.thread.ID,
-		Kind:       string(s.kind),
-		JobName:    s.jobName,
-		Effort:     s.run.Effort,
-		Class:      class,
-		CacheTTL:   s.ttl,
-		Params:     params,
+		AttemptKey:            inference.NewAttemptKey(fmt.Sprintf("loop:%d:%d", s.run.ID, s.stepIndex)),
+		RunID:                 s.run.ID,
+		ThreadID:              s.thread.ID,
+		Kind:                  string(s.kind),
+		JobName:               s.jobName,
+		Effort:                s.run.Effort,
+		Class:                 class,
+		CacheTTL:              s.ttl,
+		Params:                params,
+		EstimatedPromptTokens: promptTokens,
 	})
 	if err != nil {
 		return inference.Outcome{}, inference.Receipt{}, err
@@ -643,7 +644,7 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		obs.String(obs.GenAIRequestModel, s.run.Model),
 		obs.String(obs.RunKind, string(s.kind)),
 	))
-	outcome, receipt, err := s.dispatch(reqCtx, params, unattended)
+	outcome, receipt, err := s.dispatch(reqCtx, params, size, unattended)
 	response := outcome.Message
 	genAIAttrs(reqSpan, response, outcome.WallMS, receipt.ActualUSD, outcome.Err != nil)
 	if err != nil {

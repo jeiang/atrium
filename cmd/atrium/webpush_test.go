@@ -13,6 +13,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"math/big"
 	"net/http"
@@ -29,13 +30,13 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/netguard"
 	"github.com/jeiang/atrium/internal/notify"
 )
 
 type pushRequest struct {
+	path   string
 	header http.Header
 	body   []byte
 }
@@ -44,6 +45,7 @@ type fakePush struct {
 	*httptest.Server
 	mu       sync.Mutex
 	status   int
+	route    func(*http.Request) int
 	received []pushRequest
 	arrived  chan pushRequest
 }
@@ -53,9 +55,12 @@ func newFakePush(t *testing.T) *fakePush {
 	f.Server = httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, _ := io.ReadAll(r.Body)
 		f.mu.Lock()
-		req := pushRequest{header: r.Header.Clone(), body: body}
+		req := pushRequest{path: r.URL.Path, header: r.Header.Clone(), body: body}
 		f.received = append(f.received, req)
 		status := f.status
+		if f.route != nil {
+			status = f.route(r)
+		}
 		f.mu.Unlock()
 		select {
 		case f.arrived <- req:
@@ -71,6 +76,25 @@ func (f *fakePush) answer(status int) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.status = status
+}
+
+func (f *fakePush) answerRoute(route func(*http.Request) int) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.route = route
+}
+
+func (f *fakePush) requestFor(t *testing.T, path string) pushRequest {
+	t.Helper()
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	for _, req := range f.received {
+		if req.path == path {
+			return req
+		}
+	}
+	t.Fatalf("the push endpoint received nothing for %s", path)
+	return pushRequest{}
 }
 
 func (f *fakePush) count() int {
@@ -196,8 +220,9 @@ func checkVAPID(t *testing.T, header http.Header, publicKey, audience string) {
 }
 
 func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *testing.T) {
+	requireCipher(t)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	push, browser := pushRig(t, dir)
+	push, browser := pushRigGenerated(t, dir)
 
 	base, logs := startServeLogged(t, dir)
 	jar, _ := cookiejar.New(nil)
@@ -243,8 +268,8 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 		t.Error("the VAPID key changed between page loads")
 	}
 	var stored int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM secrets WHERE name = ?", notify.KeyVAPIDKey).Scan(&stored); err != nil || stored != 1 {
-		t.Fatalf("stored VAPID secrets = %d, %v", stored, err)
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/webpush' AND slot = 'vapid_private' AND source = 'database'").Scan(&stored); err != nil || stored != 1 {
+		t.Fatalf("stored VAPID credentials = %d, %v", stored, err)
 	}
 	code, _, swHeader := fetch(t, client, http.MethodGet, base+"/static/sw.js", nil)
 	if code != http.StatusOK || swHeader.Get("Service-Worker-Allowed") != "/" {
@@ -362,17 +387,127 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 	}
 }
 
+func TestConnectionsCLIWebPushTestDeliversDropsGoneAndBlocksPrivateEndpoints(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	push, browser := pushRig(t, dir)
+	if ran := runApp(t, "connections", "list"); ran.code != 0 {
+		t.Fatalf("connections list: exit %d stderr %q", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	browser.store(t, d)
+	gone := browser
+	gone.endpoint = push.URL + "/push/gone"
+	gone.store(t, d)
+	push.answerRoute(func(r *http.Request) int {
+		if r.URL.Path == "/push/gone" {
+			return http.StatusGone
+		}
+		return http.StatusCreated
+	})
+
+	tested := runApp(t, "connections", "test", "service/webpush", "--json")
+	if tested.code != 0 || !strings.Contains(tested.stdout, "delivered to 1 device(s)") {
+		t.Fatalf("connections test: exit %d stdout %q stderr %q", tested.code, tested.stdout, tested.stderr)
+	}
+	payload := browser.decrypt(t, push.requestFor(t, "/push/device-1").body)
+	if payload["title"] != "atrium test" || payload["body"] != "Test push notification." {
+		t.Errorf("diagnostic payload %v", payload)
+	}
+	var goneLeft int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM push_subscriptions WHERE endpoint = ?", gone.endpoint).Scan(&goneLeft); err != nil || goneLeft != 0 {
+		t.Fatalf("the 410 device is still stored: %d, %v", goneLeft, err)
+	}
+	var left int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM push_subscriptions").Scan(&left); err != nil || left != 1 {
+		t.Fatalf("%d subscriptions after the 410, want the one that answered", left)
+	}
+
+	evil := browser
+	evil.endpoint = "https://10.0.0.1/push/evil"
+	evil.store(t, d)
+	before := push.count()
+	blocked := runApp(t, "connections", "test", "service/webpush", "--json")
+	if blocked.code != 0 || !strings.Contains(blocked.stdout, "delivered to 1 device(s)") {
+		t.Fatalf("connections test with a private endpoint: exit %d stdout %q stderr %q", blocked.code, blocked.stdout, blocked.stderr)
+	}
+	if got := push.count() - before; got != 1 {
+		t.Fatalf("the fake endpoint received %d requests, want only the public device", got)
+	}
+	var failure string
+	if err := d.Read.QueryRow("SELECT COALESCE(last_error, '') FROM push_subscriptions WHERE endpoint = ?", evil.endpoint).Scan(&failure); err != nil || !strings.Contains(failure, "non-public address") {
+		t.Fatalf("private endpoint error %q, %v", failure, err)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM push_subscriptions").Scan(&left); err != nil || left != 2 {
+		t.Fatalf("%d subscriptions after the blocked device, want it kept", left)
+	}
+}
+
 var allowLoopbackPush sync.Once
 
+func writeVAPIDKey(t *testing.T, dir string) string {
+	t.Helper()
+	key, err := ecdh.P256().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(dir, "vapid.key")
+	if err := os.WriteFile(path, []byte(base64.RawURLEncoding.EncodeToString(key.Bytes())+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func webPushConnectionTable(ca, vapid string) string {
+	var b strings.Builder
+	b.WriteString("\n[connections.\"service/webpush\"]\nkind = \"service/webpush\"\nlabel = \"Web push\"\n")
+	fmt.Fprintf(&b, "config = { subject = %q }\n", "mailto:ops@example.test")
+	fmt.Fprintf(&b, "transport = { ca_file = %q }\n", ca)
+	b.WriteString("capabilities = [\"delivery\"]\n")
+	if vapid != "" {
+		fmt.Fprintf(&b, "credential_files = { vapid_private = %q }\n", vapid)
+	}
+	return b.String()
+}
+
+func writeHostFile(t *testing.T, dir, name, body string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func webPushHostConfig(t *testing.T, dir, ca, vapid string) string {
+	t.Helper()
+	return writeHostFile(t, dir, "webpush-host.toml", hostConfigBody(webPushConnectionTable(ca, vapid)))
+}
+
+func webPushOnlyHostConfig(t *testing.T, dir, ca, vapid string) string {
+	t.Helper()
+	return writeHostFile(t, dir, "webpush-only-host.toml", webPushConnectionTable(ca, vapid))
+}
+
 func pushRig(t *testing.T, dir string) (*fakePush, pushBrowser) {
+	return pushRigWith(t, dir, true)
+}
+
+func pushRigGenerated(t *testing.T, dir string) (*fakePush, pushBrowser) {
+	return pushRigWith(t, dir, false)
+}
+
+func pushRigWith(t *testing.T, dir string, hostCredential bool) (*fakePush, pushBrowser) {
 	t.Helper()
 	push := newFakePush(t)
 	ca := filepath.Join(dir, "push-ca.pem")
 	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: push.Certificate().Raw}), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	setEnv(t, settingEnv(notify.KeyPushSubject), "mailto:ops@example.test")
-	setEnv(t, settingEnv(transport.CAKey(notify.PushTransport)), ca)
+	vapid := ""
+	if hostCredential {
+		vapid = writeVAPIDKey(t, dir)
+	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", webPushHostConfig(t, dir, ca, vapid))
 	allowLoopbackPush.Do(func() { notify.UsePushAddresses(func(a netip.Addr) bool { return a.IsLoopback() }) })
 	key, err := ecdh.P256().GenerateKey(rand.Reader)
 	if err != nil {

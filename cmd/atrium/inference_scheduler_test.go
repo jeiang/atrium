@@ -132,15 +132,11 @@ func TestInferenceUsagePageShowsReservationsAndCeilings(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	d := asstDB(t, dir)
-	loc, err := time.LoadLocation("America/Port_of_Spain")
-	if err != nil {
-		t.Fatal(err)
-	}
 	now := float64(time.Now().UnixMicro()) / 1e6
-	month := inference.MonthStart(now, loc)
+	month := asstMonth(t, now)
 	insert := func(key, state string, reservation, accounted int64, expires float64) {
 		t.Helper()
-		asstExec(t, d, "INSERT INTO usage (attempt_key, ts, month_start, expires_at, state, budget_class, reservation_nusd, accounted_nusd, source, provider, kind, model, effort) "+
+		asstExec(t, d, "INSERT INTO usage (attempt_key, ts, month, expires_at, state, budget_class, reservation_nusd, accounted_nusd, source, provider, kind, model, effort) "+
 			"VALUES (?, ?, ?, ?, ?, 'interactive', ?, ?, 'assistant', 'anthropic', 'chat', 'claude-haiku-5-5', 'medium')",
 			key, now, month, expires, state, reservation, accounted)
 	}

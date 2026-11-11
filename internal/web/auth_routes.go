@@ -91,14 +91,10 @@ func (s *Server) registerAuthRoutes() {
 		http.Redirect(w, r, login.URL, http.StatusSeeOther)
 	})
 	s.registerLinkRoutes()
-	s.registerWizardRoutes()
+	s.route(accessAdmin, http.MethodGet, authSettingsPath, s.signInPage)
 	s.route(accessPublic, http.MethodGet, callbackPath, func(w http.ResponseWriter, r *http.Request) {
 		noStore(w)
 		q := r.URL.Query()
-		if s.oidc.IsTestState(q.Get("state")) {
-			s.testCallback(w, r)
-			return
-		}
 		expireCookie(w, bindingCookie, secure(r))
 		if q.Get("error") != "" {
 			log.Warn("provider refused the sign-in", "error", sanitizeLog(q.Get("error")))
@@ -160,12 +156,4 @@ func (s *Server) signInFailed(w http.ResponseWriter, r *http.Request, err error,
 	}
 	log.Warn("sign-in failed", "reason", reason, logx.Err, err.Error())
 	s.loginPage(w, r, reason, next)
-}
-
-func (s *Server) registerWizardRoutes() {
-	s.route(accessAdmin, http.MethodGet, wizardPath, s.wizardPage)
-	s.route(accessAdmin, http.MethodGet, wizardPath+"/preset", s.wizardPreset)
-	s.route(accessAdmin, http.MethodPost, testPath, s.wizardTest)
-	s.route(accessAdmin, http.MethodGet, testPath+"/status", s.wizardStatus)
-	s.route(accessAdmin, http.MethodPost, wizardPath+"/activate", s.wizardActivate)
 }

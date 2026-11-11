@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"net"
 	"net/http"
 	"strings"
 	"testing"
@@ -155,5 +156,62 @@ func TestInferenceTransportRecordsKnownUsageWhenAStreamStallsAndTheCallerCancels
 	}
 	if input != 700 || output != 0 || partial != 1 {
 		t.Errorf("stalled row %d %d %d", input, output, partial)
+	}
+}
+
+func TestInferenceTransportTreatsARefusedConnectionAsUnsent(t *testing.T) {
+	t.Parallel()
+	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	asstWarm(t)
+	d := asstDB(t, dir)
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	closed := listener.Addr().String()
+	_ = listener.Close()
+	f.set(anthropic.BaseURLEnv, "http://"+closed)
+
+	sent := len(api.Requests())
+	v, _ := asstRun(t, "--text", "go")
+	if v.State != "failed" || !strings.Contains(v.err(), anthropic.ConnectionMessage) {
+		t.Fatalf("refused run: %+v %q", v, v.err())
+	}
+	var state string
+	var accounted int64
+	if err := d.Read.QueryRow("SELECT state, accounted_nusd FROM usage WHERE run_id = ?", v.ID).Scan(&state, &accounted); err != nil {
+		t.Fatal(err)
+	}
+	if state != "settled" || accounted != 0 {
+		t.Errorf("refused row state %q accounted %d, want a zero settled row", state, accounted)
+	}
+	if got := len(api.Requests()) - sent; got != 0 {
+		t.Errorf("%d requests reached the fake", got)
+	}
+}
+
+func TestInferenceTransportTreatsAnOverloadedStatusAsRejected(t *testing.T) {
+	t.Parallel()
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	asstWarm(t)
+	d := asstDB(t, dir)
+
+	api.Push(anthropictest.Failure(http.StatusTooManyRequests+100, "overloaded_error", "Overloaded"))
+	sent := len(api.Requests())
+	v, _ := asstRun(t, "--text", "go")
+	if v.State != "failed" || !strings.Contains(v.err(), "Overloaded") {
+		t.Fatalf("overloaded run: %+v %q", v, v.err())
+	}
+	var state string
+	var accounted int64
+	if err := d.Read.QueryRow("SELECT state, accounted_nusd FROM usage WHERE run_id = ?", v.ID).Scan(&state, &accounted); err != nil {
+		t.Fatal(err)
+	}
+	if state != "settled" || accounted != 0 {
+		t.Errorf("overloaded row state %q accounted %d, want a zero settled row", state, accounted)
+	}
+	if got := len(api.Requests()) - sent; got != 1 {
+		t.Errorf("%d requests sent, want 1", got)
 	}
 }

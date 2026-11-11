@@ -176,6 +176,11 @@ func Location(ctx context.Context, q db.Querier) (*time.Location, error) {
 	return config.Zone(found.Value)
 }
 
+func MonthKey(now float64, loc *time.Location) string {
+	sec, us := timex.SplitTimestamp(now)
+	return time.Unix(sec, us*1000).In(loc).Format("2006-01")
+}
+
 func MonthStart(now float64, loc *time.Location) float64 {
 	sec, us := timex.SplitTimestamp(now)
 	year, month, _ := time.Unix(sec, us*1000).In(loc).Date()
@@ -195,15 +200,15 @@ const committedSQL = "CASE WHEN budget_class = 'subscription' THEN 0 " +
 
 func MonthToDate(ctx context.Context, q db.Querier, now float64, loc *time.Location) (float64, error) {
 	var n int64
-	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM("+committedSQL+"), 0) FROM usage WHERE month_start = ? AND budget_class <> ?",
-		MonthStart(now, loc), ClassSubscription).Scan(&n)
+	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM("+committedSQL+"), 0) FROM usage WHERE month = ? AND budget_class <> ?",
+		MonthKey(now, loc), ClassSubscription).Scan(&n)
 	return usdOf(n), err
 }
 
 func ThreadMonthToDate(ctx context.Context, q db.Querier, threadID int64, now float64, loc *time.Location) (float64, error) {
 	var cost float64
-	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE thread_id = ? AND ts >= ?",
-		threadID, MonthStart(now, loc)).Scan(&cost)
+	err := q.QueryRowContext(ctx, "SELECT COALESCE(SUM(cost_usd), 0) AS cost FROM usage WHERE thread_id = ? AND month = ?",
+		threadID, MonthKey(now, loc)).Scan(&cost)
 	return cost, err
 }
 
@@ -369,18 +374,18 @@ func scanSummary(row *sql.Row) (Summary, error) {
 }
 
 func MonthSummary(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Summary, error) {
-	return scanSummary(q.QueryRowContext(ctx, "SELECT "+summaryFields+" FROM usage WHERE month_start = ? AND budget_class <> ?",
-		pricing.TierHigh, MonthStart(now, loc), ClassSubscription))
+	return scanSummary(q.QueryRowContext(ctx, "SELECT "+summaryFields+" FROM usage WHERE month = ? AND budget_class <> ?",
+		pricing.TierHigh, MonthKey(now, loc), ClassSubscription))
 }
 
 func MemorySummary(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Summary, error) {
-	return scanSummary(q.QueryRowContext(ctx, "SELECT "+summaryFields+" FROM usage WHERE month_start = ? AND kind = ?",
-		pricing.TierHigh, MonthStart(now, loc), KindMemory))
+	return scanSummary(q.QueryRowContext(ctx, "SELECT "+summaryFields+" FROM usage WHERE month = ? AND kind = ?",
+		pricing.TierHigh, MonthKey(now, loc), KindMemory))
 }
 
 func SubscriptionSummary(ctx context.Context, q db.Querier, now float64, loc *time.Location) (Summary, error) {
-	return scanSummary(q.QueryRowContext(ctx, "SELECT "+summaryFields+" FROM usage WHERE month_start = ? AND budget_class = ?",
-		pricing.TierHigh, MonthStart(now, loc), ClassSubscription))
+	return scanSummary(q.QueryRowContext(ctx, "SELECT "+summaryFields+" FROM usage WHERE month = ? AND budget_class = ?",
+		pricing.TierHigh, MonthKey(now, loc), ClassSubscription))
 }
 
 type KindRow struct {
@@ -395,8 +400,8 @@ type KindRow struct {
 func ByKind(ctx context.Context, q db.Querier, now float64, loc *time.Location) ([]KindRow, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT kind, COUNT(*) AS calls, SUM(cost_usd) AS cost, SUM(searches) AS searches, SUM(tool_calls) AS tool_calls, "+
-			"SUM(wall_ms) AS wall_ms FROM usage WHERE month_start = ? AND budget_class <> ? GROUP BY kind ORDER BY cost DESC",
-		MonthStart(now, loc), ClassSubscription)
+			"SUM(wall_ms) AS wall_ms FROM usage WHERE month = ? AND budget_class <> ? GROUP BY kind ORDER BY cost DESC",
+		MonthKey(now, loc), ClassSubscription)
 	if err != nil {
 		return nil, err
 	}
@@ -425,8 +430,8 @@ func ByThread(ctx context.Context, q db.Querier, now float64, loc *time.Location
 			"SUM(input_tokens + cache_write_5m + cache_write_1h + cache_read) AS prompt_tokens, "+
 			"MAX(input_tokens + cache_write_5m + cache_write_1h + cache_read) AS max_prompt_tokens, "+
 			"SUM(output_tokens) AS output_tokens, SUM(reasoning_tokens) AS reasoning_tokens, SUM(searches) AS searches "+
-			"FROM usage WHERE month_start = ? AND budget_class <> ? AND thread_id IS NOT NULL "+
-			"GROUP BY thread_id ORDER BY cost DESC LIMIT ?", MonthStart(now, loc), ClassSubscription, limit)
+			"FROM usage WHERE month = ? AND budget_class <> ? AND thread_id IS NOT NULL "+
+			"GROUP BY thread_id ORDER BY cost DESC LIMIT ?", MonthKey(now, loc), ClassSubscription, limit)
 	if err != nil {
 		return nil, err
 	}

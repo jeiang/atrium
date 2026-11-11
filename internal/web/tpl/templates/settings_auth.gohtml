@@ -2,16 +2,13 @@
 {{define "heading"}}Settings · Sign-in{{end}}
 {{define "content"}}{{$d := .Data}}
 {{template "settings_nav" (dict "Tab" "auth" "Settings" .Settings)}}
-<section class="set-group" data-signin>
-  <h2>{{template "_oidc_state.gohtml" .}}</h2>
-  <div role="group" class="set-row">
-    <label for="oidc-preset">Provider</label>
-    <select id="oidc-preset" name="preset" class="select" hx-get="/settings/auth/preset" hx-target="#oidc-setup" hx-swap="innerHTML" hx-include="this"{{if $d.PresetPinned}} disabled{{end}}>
-      {{range $d.Presets}}<option value="{{.Name}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}
-    </select>
-  </div>
-  <div id="oidc-setup" class="flex flex-col border-t">{{template "_oidc_setup.gohtml" .}}</div>
-  <div class="px-4 empty:hidden has-[#oidc-test:empty]:hidden pb-3">{{template "_oidc_test.gohtml" .}}</div>
+<section class="set-group" data-signin data-active="{{$d.Active}}">
+  <h2>Provider</h2>
+  <div class="set-row"><span>Provider</span><span>{{$d.Provider}}</span></div>
+  {{with $d.Issuer}}<div class="set-row"><span>Issuer</span><span class="font-mono text-xs">{{.}}</span></div>{{end}}
+  {{with $d.ClientID}}<div class="set-row"><span>Client ID</span><span class="font-mono text-xs">{{.}}</span></div>{{end}}
+  {{with $d.Redirect}}<div class="set-row"><span>Redirect URI</span><span class="font-mono text-xs">{{.}}</span></div>{{end}}
+  {{with $d.Reason}}<div class="set-row"><span role="alert">{{.}}</span></div>{{end}}
 </section>
 {{template "settings_groups" .}}
 {{end}}
