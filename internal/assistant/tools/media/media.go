@@ -94,6 +94,14 @@ func Tools() []tool.Tool {
 }
 
 func qbitFailed(err error) error {
+	var conflict *ledger.Conflict
+	if errors.As(err, &conflict) {
+		return tool.Error("the torrent is blocked by an unresolved earlier add")
+	}
+	var status *media.QbitStatusError
+	if errors.As(err, &status) {
+		return tool.Error(status.Error())
+	}
 	return tool.Domain[media.QbitError, tool.Error](err)
 }
 
@@ -273,35 +281,15 @@ func mediaAddMagnet(ctx context.Context, tc *tool.Context, args tool.Args) (any,
 	if err != nil {
 		return nil, err
 	}
-	qb, err := qbitOf(settings)
-	if err != nil {
-		return nil, err
-	}
 	tags := ""
 	if asMedia {
 		tags = media.TagMedia
 	}
-	ticket, err := tc.Ledger.Begin(ctx, ledger.New{
-		Origin: "media", Operation: "media_add_magnet", OperationKey: "media_add_magnet:" + ledger.NewKey(),
-		Target: hash, ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
-		Undo: jsonOf(torrentUndo{Op: UndoTorrent, Hash: hash}), Resources: []ledger.Resource{{Key: "qbit:" + hash}},
-	}, nil)
-	if err != nil {
-		return nil, err
-	}
-	if err := qb.AddMagnet(ctx, magnet, tags); err != nil {
-		_ = tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: ledger.Unknown, Target: hash, Error: err.Error()}, nil)
+	if _, err := settings.Add(ctx, tc.Ledger, settings, media.AddRequest{Magnet: magnet, Tags: tags}); err != nil {
 		return nil, qbitFailed(err)
 	}
-	if err := tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
-		State: ledger.Done, Target: hash,
-		After: jsonOf(map[string]any{"magnet": magnet, "media": asMedia}),
-		Undo:  jsonOf(torrentUndo{Op: UndoTorrent, Hash: hash}),
-	}, nil); err != nil {
-		return nil, err
-	}
 	if asMedia {
-		if _, err := settings.SelectFiles(ctx, qb, nil); err != nil {
+		if _, err := settings.SelectFiles(ctx, tc.Ledger, settings, nil); err != nil {
 			return nil, qbitFailed(err)
 		}
 	}

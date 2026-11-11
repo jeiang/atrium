@@ -15,6 +15,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/notify"
 )
@@ -295,17 +296,17 @@ func (r PollResult) Dict() pollView {
 	return pollView{Added: added, Errors: errors}
 }
 
-func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, opts PollOptions) (PollResult, error) {
+func Poll(ctx context.Context, d *db.DB, store *ledger.Store, env config.Env, settings Settings, opts PollOptions) (PollResult, error) {
 	now := opts.Now
 	if now == nil {
 		now = Now
 	}
 	stamp := now()
 	result := PollResult{Added: []Added{}, Errors: []string{}}
-	qb, err := settings.Qbit()
-	if err != nil {
+	if _, err := settings.Qbit(); err != nil {
 		return result, err
 	}
+	q := d.Write
 	channels, err := ListChannels(ctx, q)
 	if err != nil {
 		return result, err
@@ -340,15 +341,27 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, 
 				continue
 			}
 			if rule.Primed || opts.Force {
-				if err := qb.AddMagnet(ctx, t.MagnetURL, TagMedia); err != nil {
-					var qbitErr QbitError
-					if !errors.As(err, &qbitErr) {
+				_, err := settings.Add(ctx, store, settings, AddRequest{
+					Magnet: t.MagnetURL, Tags: TagMedia,
+					OperationKey: "media:channel:" + strconv.FormatInt(rule.ID, 10) + ":" + t.Hash,
+					Done: func(ctx context.Context, tx *sql.Tx) error {
+						return markSeen(ctx, tx, t.Hash, stamp)
+					},
+				})
+				if err != nil {
+					var conflict *ledger.Conflict
+					if errors.As(err, &conflict) {
+						result.Errors = append(result.Errors, fmt.Sprintf("%s: %s: an earlier add is unresolved", rule.Name, t.Title))
+						continue
+					}
+					if !IsQbit(err) {
 						return result, err
 					}
 					result.Errors = append(result.Errors, fmt.Sprintf("%s: %s: %v", rule.Name, t.Title, err))
 					continue
 				}
 				result.Added = append(result.Added, Added{Channel: rule.Name, Title: t.Title, Hash: t.Hash, SizeBytes: t.SizeBytes})
+				continue
 			}
 			if err := markSeen(ctx, q, t.Hash, stamp); err != nil {
 				return result, err
@@ -382,7 +395,7 @@ func Poll(ctx context.Context, q db.Querier, env config.Env, settings Settings, 
 				result.Errors = append(result.Errors, "notify: "+sent.Error)
 			}
 		}
-		if _, err := settings.SelectFiles(ctx, qb, nil); err != nil {
+		if _, err := settings.SelectFiles(ctx, store, settings, nil); err != nil {
 			return result, err
 		}
 	}
