@@ -27,6 +27,7 @@ type HostConnection struct {
 
 type Host struct {
 	Values      map[string]string
+	Sources     map[string]string
 	Connections map[string]HostConnection
 }
 
@@ -37,13 +38,23 @@ func (h Host) Connection(id string) (HostConnection, bool) {
 	return c, ok
 }
 
+func (h Host) Pin(key string) (value, source string, ok bool) {
+	source, ok = h.Sources[key]
+	if !ok {
+		return "", "", false
+	}
+	return h.Values[key], source, true
+}
+
 func (h Host) LogValue() string {
 	return fmt.Sprintf("%d host values, %d connections", len(h.Values), len(h.Connections))
 }
 
+func HostFile(env Env) string { return stripped(env, HostConfigEnv) }
+
 func LoadHost(env Env, filename string) (Host, error) {
 	defs := settings.HostDefs()
-	h := Host{Values: map[string]string{}, Connections: map[string]HostConnection{}}
+	h := Host{Values: map[string]string{}, Sources: map[string]string{}, Connections: map[string]HostConnection{}}
 	for _, d := range defs {
 		h.Values[d.Key] = d.Default
 	}
@@ -64,7 +75,20 @@ func LoadHost(env Env, filename string) (Host, error) {
 func (h *Host) readEnv(env Env, d settings.HostDef) error {
 	name := "ATRIUM_" + strings.ToUpper(d.Module) + "_" + strings.ToUpper(d.Key)
 	value := strings.TrimSpace(get(env, name))
-	if path, set := env(name + "_FILE"); set {
+	path, fileSet := env(name + "_FILE")
+	if d.Secret {
+		if value != "" {
+			return fmt.Errorf("config: %s is a secret; set %s_FILE", name, name)
+		}
+		if !fileSet {
+			return nil
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("config: %s_FILE: %w", name, err)
+		}
+		value = strings.TrimSpace(string(raw))
+	} else if fileSet {
 		if value != "" {
 			return fmt.Errorf("config: %s and %s_FILE are both set; set only one", name, name)
 		}
@@ -81,6 +105,7 @@ func (h *Host) readEnv(env Env, d settings.HostDef) error {
 		return fmt.Errorf("config: %s: %w", name, err)
 	}
 	h.Values[d.Key] = value
+	h.Sources[d.Key] = "env " + name
 	return nil
 }
 
@@ -113,21 +138,60 @@ func (h *Host) readFile(env Env, defs []settings.HostDef, path string) error {
 			return fmt.Errorf("config: %s: unknown host key %q", path, module)
 		}
 		for _, name := range slices.Sorted(maps.Keys(table)) {
-			d, ok := keys[name]
+			d, isFile, ok := hostKeyOf(keys, name)
 			if !ok {
+				if err := hostKeyRefusal(path, module, name); err != nil {
+					return err
+				}
 				return fmt.Errorf("config: %s: unknown host key %q", path, module+"."+name)
+			}
+			if d.Secret && !isFile {
+				return fmt.Errorf("config: %s: %s is a secret; set %s_file", path, module+"."+name, module+"."+d.Key)
+			}
+			if entry, known := settings.ImportEntryFor(d.Key); known && entry.Runtime {
+				return fmt.Errorf("config: %s: %s.%s is cut over; use %s", path, module, name, settings.CutoverDestination(entry))
 			}
 			value, err := hostScalar(env, module+"."+name, table[name])
 			if err != nil {
 				return err
 			}
+			if isFile {
+				raw, err := os.ReadFile(value)
+				if err != nil {
+					return fmt.Errorf("config: %s: %w", module+"."+name, err)
+				}
+				value = strings.TrimSpace(string(raw))
+			}
 			if err := validateHostValue(d, value); err != nil {
 				return fmt.Errorf("config: %s: %s: %w", path, module+"."+name, err)
 			}
 			h.Values[d.Key] = value
+			h.Sources[d.Key] = "host " + path + " " + module + "." + name
 		}
 	}
 	return nil
+}
+
+func hostKeyOf(keys map[string]settings.HostDef, name string) (d settings.HostDef, isFile, ok bool) {
+	if d, ok = keys[name]; ok {
+		return d, false, true
+	}
+	if base, cut := strings.CutSuffix(name, "_file"); cut {
+		d, ok = keys[base]
+		return d, true, ok
+	}
+	return d, false, false
+}
+
+func hostKeyRefusal(path, module, name string) error {
+	entry, ok := settings.ImportEntryFor(name)
+	if !ok || entry.Module != module {
+		return nil
+	}
+	if entry.Class != settings.ImportHost {
+		return fmt.Errorf("config: %s: %s.%s is not host configuration; use %s", path, module, name, settings.CutoverDestination(entry))
+	}
+	return fmt.Errorf("config: %s: %s.%s is a host bootstrap input; use the dedicated option", path, module, name)
 }
 
 func (h *Host) readConnections(path string, raw any) error {
@@ -236,6 +300,9 @@ func validateHostValue(d settings.HostDef, value string) error {
 			return fmt.Errorf("%s must be one of %s", d.Key, strings.Join(d.Choices, ", "))
 		}
 	}
+	if err := settings.ValidateHost(d.Key, value); err != nil {
+		return fmt.Errorf("%s %w", d.Key, err)
+	}
 	return nil
 }
 
@@ -261,6 +328,25 @@ func (h *Host) deriveHostConnections() {
 		c.Transport["proxy"] = v
 	}
 	h.Connections["service/qbittorrent"] = c
+}
+
+type combinedPins struct {
+	host   Host
+	legacy settings.PinSource
+}
+
+func (p combinedPins) Pin(key string) (value, source string, ok bool) {
+	if value, source, ok := p.host.Pin(key); ok {
+		return value, source, true
+	}
+	if p.legacy != nil {
+		return p.legacy.Pin(key)
+	}
+	return "", "", false
+}
+
+func CombinePins(host Host, legacy settings.PinSource) settings.PinSource {
+	return combinedPins{host: host, legacy: legacy}
 }
 
 type hostKey struct{}

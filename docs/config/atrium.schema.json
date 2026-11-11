@@ -2,769 +2,9 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "additionalProperties": false,
   "properties": {
-    "action_links": {
-      "additionalProperties": false,
-      "properties": {
-        "action_link_key_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "phone_actions_enabled": {
-          "default": false,
-          "type": [
-            "boolean",
-            "string"
-          ]
-        },
-        "phone_actions_enabled_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "phone_actions_kinds": {
-          "default": "reminder,triage_label,triage_archive,triage_snooze,memory,profile",
-          "type": "string"
-        },
-        "phone_actions_kinds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "anthropic": {
-      "additionalProperties": false,
-      "properties": {
-        "anthropic_api_key_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
     "assistant": {
       "additionalProperties": false,
       "properties": {
-        "agent_effort_cron": {
-          "default": "high",
-          "enum": [
-            "low",
-            "medium",
-            "high",
-            "xhigh",
-            "max"
-          ],
-          "type": "string"
-        },
-        "agent_effort_cron_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_effort_nightly": {
-          "default": "high",
-          "enum": [
-            "low",
-            "medium",
-            "high",
-            "xhigh",
-            "max"
-          ],
-          "type": "string"
-        },
-        "agent_effort_nightly_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_effort_subagent": {
-          "default": "medium",
-          "enum": [
-            "low",
-            "medium",
-            "high",
-            "xhigh",
-            "max"
-          ],
-          "type": "string"
-        },
-        "agent_effort_subagent_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_file_cap_bytes": {
-          "default": 33554432,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_file_cap_bytes_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_file_name_chars": {
-          "default": 80,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_file_name_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_grafana_cell_chars": {
-          "default": 300,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_grafana_cell_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_grafana_max_alerts": {
-          "default": 50,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_grafana_max_alerts_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_grafana_max_dashboards": {
-          "default": 20,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_grafana_max_dashboards_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_grafana_max_log_rows": {
-          "default": 200,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_grafana_max_log_rows_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_grafana_max_metric_rows": {
-          "default": 50,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_grafana_max_metric_rows_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_grafana_max_series": {
-          "default": 20,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_grafana_max_series_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_grafana_timeout_seconds": {
-          "default": 15,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_grafana_timeout_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_journal_lease_seconds": {
-          "default": 1800,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_journal_lease_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_kb_profile_tokens": {
-          "default": 2000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_kb_profile_tokens_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_kb_retrieval_distance": {
-          "default": 0.35,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "agent_kb_retrieval_distance_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_kb_retrieval_tokens": {
-          "default": 1500,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_kb_retrieval_tokens_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_kb_write_chars": {
-          "default": 4000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_kb_write_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_mail_body_chars": {
-          "default": 8000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_mail_body_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_mail_max_loops_limit": {
-          "default": 100,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_mail_max_loops_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_mail_max_results": {
-          "default": 20,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_mail_max_results_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_mail_snippet_chars": {
-          "default": 300,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_mail_snippet_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_manifest_results": {
-          "default": 30,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_manifest_results_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_media_torrent_limit": {
-          "default": 50,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_media_torrent_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_message_cap_bytes": {
-          "default": 67108864,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_message_cap_bytes_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_nightly_max_threads": {
-          "default": 30,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_nightly_max_threads_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_nightly_thread_chars": {
-          "default": 3000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_nightly_thread_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_nightly_total_chars": {
-          "default": 40000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_nightly_total_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_preview_chars": {
-          "default": 600,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_preview_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_project_instruction_chars": {
-          "default": 20000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_project_instruction_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_project_name_chars": {
-          "default": 80,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_project_name_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_recall_max_page_chars": {
-          "default": 16000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_recall_max_page_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_recall_page_chars": {
-          "default": 8000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_recall_page_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_ref_tokens": {
-          "default": 8000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_ref_tokens_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_schedule_calendar_candidates": {
-          "default": "0 * * * *",
-          "type": "string"
-        },
-        "agent_schedule_calendar_candidates_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_schedule_daily_nudges": {
-          "default": "daily 08:00",
-          "type": "string"
-        },
-        "agent_schedule_daily_nudges_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_schedule_knowledge_export": {
-          "default": "daily 03:30",
-          "type": "string"
-        },
-        "agent_schedule_knowledge_export_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_schedule_max_active_jobs": {
-          "default": 20,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_schedule_max_active_jobs_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_schedule_media_channels": {
-          "default": "*/30 * * * *",
-          "type": "string"
-        },
-        "agent_schedule_media_channels_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_schedule_media_sweep": {
-          "default": "*/10 * * * *",
-          "type": "string"
-        },
-        "agent_schedule_media_sweep_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_schedule_media_thumbnails": {
-          "default": "daily 04:00",
-          "type": "string"
-        },
-        "agent_schedule_media_thumbnails_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_schedule_memory_work": {
-          "default": "*/2 * * * *",
-          "type": "string"
-        },
-        "agent_schedule_memory_work_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_schedule_min_interval_seconds": {
-          "default": 3600,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_schedule_min_interval_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_schedule_nightly": {
-          "default": "daily 02:30",
-          "type": "string"
-        },
-        "agent_schedule_nightly_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_schedule_ops_sampler": {
-          "default": "*/15 * * * *",
-          "type": "string"
-        },
-        "agent_schedule_ops_sampler_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_schedule_package_tracking": {
-          "default": "0 * * * *",
-          "type": "string"
-        },
-        "agent_schedule_package_tracking_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_schedule_task_reminders": {
-          "default": "*/5 * * * *",
-          "type": "string"
-        },
-        "agent_schedule_task_reminders_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_schedule_weekly_review": {
-          "default": "weekly sun 18:00",
-          "type": "string"
-        },
-        "agent_schedule_weekly_review_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_scheduler_lease_seconds": {
-          "default": 1800,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_scheduler_lease_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_scheduler_missed_grace_seconds": {
-          "default": 120,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_scheduler_missed_grace_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_scheduler_tick_seconds": {
-          "default": 30,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_scheduler_tick_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_stub_tokens": {
-          "default": 2000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_stub_tokens_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_subagent_context_ids": {
-          "default": 20,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_subagent_context_ids_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_subagent_description_chars": {
-          "default": 160,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_subagent_description_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_subagent_digest_chars": {
-          "default": 6000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_subagent_digest_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_subagent_max_concurrent": {
-          "default": 2,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_subagent_max_concurrent_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_subagent_max_cost_usd": {
-          "default": 0.25,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "agent_subagent_max_cost_usd_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_subagent_max_steps": {
-          "default": 12,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_subagent_max_steps_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_subagent_prompt_chars": {
-          "default": 4000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_subagent_prompt_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_subagent_task_chars": {
-          "default": 4000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_subagent_task_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_web_search_max_uses": {
-          "default": 5,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_web_search_max_uses_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_webfetch_max_bytes": {
-          "default": 2097152,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_webfetch_max_bytes_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_webfetch_max_redirects": {
-          "default": 5,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_webfetch_max_redirects_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_webfetch_page_text_chars": {
-          "default": 60000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_webfetch_page_text_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_webfetch_text_default": {
-          "default": 12000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_webfetch_text_default_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_webfetch_timeout_seconds": {
-          "default": 10,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_webfetch_timeout_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_webfetch_user_agent": {
-          "default": "atrium-webfetch/1",
-          "type": "string"
-        },
-        "agent_webfetch_user_agent_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_workspace_plan_item_chars": {
-          "default": 200,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_workspace_plan_item_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "agent_workspace_plan_items": {
-          "default": 20,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "agent_workspace_plan_items_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "anthropic_ca_file": {
           "type": "string"
         },
@@ -776,214 +16,6 @@
           "type": "string"
         },
         "anthropic_proxy_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "budget_chat_share": {
-          "default": 1,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "budget_chat_share_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "budget_unattended_share": {
-          "default": 0.8,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "budget_unattended_share_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "cache_ttl_chat": {
-          "default": "5m",
-          "enum": [
-            "5m",
-            "1h"
-          ],
-          "type": "string"
-        },
-        "cache_ttl_chat_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "default_context_limit": {
-          "default": "90000",
-          "enum": [
-            "90000",
-            "200000",
-            "500000",
-            "1000000"
-          ],
-          "type": "string"
-        },
-        "default_context_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "default_effort": {
-          "default": "xhigh",
-          "enum": [
-            "low",
-            "medium",
-            "high",
-            "xhigh",
-            "max"
-          ],
-          "type": "string"
-        },
-        "default_effort_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "default_model": {
-          "default": "claude-haiku-5-5",
-          "enum": [
-            "claude-haiku-5-5",
-            "claude-sonnet-5-5",
-            "claude-opus-5-5"
-          ],
-          "type": "string"
-        },
-        "default_model_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "digest_notify": {
-          "default": true,
-          "type": [
-            "boolean",
-            "string"
-          ]
-        },
-        "digest_notify_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "doom_loop_threshold": {
-          "default": 3,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "doom_loop_threshold_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "dreaming_max_cost_usd": {
-          "default": 0.3,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "dreaming_max_cost_usd_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "dreaming_monthly_usd": {
-          "default": 3,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "dreaming_monthly_usd_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "max_run_cost_usd_haiku_5_5": {
-          "default": 2,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "max_run_cost_usd_haiku_5_5_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "max_run_cost_usd_opus_5_5": {
-          "default": 10,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "max_run_cost_usd_opus_5_5_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "max_run_cost_usd_sonnet_5_5": {
-          "default": 6,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "max_run_cost_usd_sonnet_5_5_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "max_steps_chat": {
-          "default": 24,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "max_steps_chat_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "max_steps_cron": {
-          "default": 24,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "max_steps_cron_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "max_steps_nightly": {
-          "default": 24,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "max_steps_nightly_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "max_steps_worker": {
-          "default": 8,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "max_steps_worker_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "monthly_budget_usd": {
-          "default": 150,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "monthly_budget_usd_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -1001,94 +33,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "ops_condenser": {
-          "default": "haiku",
-          "enum": [
-            "haiku",
-            "local"
-          ],
-          "type": "string"
-        },
-        "ops_condenser_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "ops_condenser_max_tokens": {
-          "default": 2000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "ops_condenser_max_tokens_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "ops_condenser_model": {
-          "type": "string"
-        },
-        "ops_condenser_model_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "ops_worker_max_run_usd": {
-          "default": 0.1,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "ops_worker_max_run_usd_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "ops_worker_monthly_usd": {
-          "default": 5,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "ops_worker_monthly_usd_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "prompt_subagent": {
-          "type": "string"
-        },
-        "prompt_subagent_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "prompt_system": {
-          "type": "string"
-        },
-        "prompt_system_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "thread_cost_cap_usd": {
-          "default": 10,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "thread_cost_cap_usd_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "weather_forecast_days": {
-          "default": 7,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "weather_forecast_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "weather_geocoding_url": {
           "default": "https://geocoding-api.open-meteo.com/v1/search",
           "type": "string"
@@ -1097,60 +41,11 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "weather_hourly_hours": {
-          "default": 24,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "weather_hourly_hours_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "weather_latitude": {
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "weather_latitude_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "weather_location_name": {
-          "type": "string"
-        },
-        "weather_location_name_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "weather_longitude": {
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "weather_longitude_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "weather_open_meteo_url": {
           "default": "https://api.open-meteo.com/v1/forecast",
           "type": "string"
         },
         "weather_open_meteo_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "weather_timeout_seconds": {
-          "default": 15,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "weather_timeout_seconds_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
@@ -1253,190 +148,55 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "oidc_recheck_minutes": {
-          "default": 60,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "oidc_recheck_minutes_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "oidc_scopes": {
           "type": "string"
         },
         "oidc_scopes_file": {
           "description": "path of a file holding the value",
           "type": "string"
-        },
-        "oidc_session_idle_days": {
-          "default": 7,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "oidc_session_idle_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_session_max_days": {
-          "default": 30,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "oidc_session_max_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
         }
       },
       "type": "object"
     },
-    "calendar": {
-      "additionalProperties": false,
-      "properties": {
-        "calendar_account": {
-          "type": "string"
+    "connections": {
+      "additionalProperties": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "config": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "credential_files": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "transport": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
         },
-        "calendar_account_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "calendar_dir": {
-          "type": "string"
-        },
-        "calendar_dir_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "candidate_draft_limit": {
-          "default": 10,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "candidate_draft_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "candidate_scan_limit": {
-          "default": 50,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "candidate_scan_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "default_event_minutes": {
-          "default": 60,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "default_event_minutes_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "google_calendar_refresh_token_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "google_client_id": {
-          "type": "string"
-        },
-        "google_client_id_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "google_oauth_client_secret_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "icloud_apple_id": {
-          "type": "string"
-        },
-        "icloud_apple_id_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "icloud_calendar": {
-          "type": "string"
-        },
-        "icloud_calendar_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "max_events": {
-          "default": 200,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "max_events_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "max_occurrences": {
-          "default": 2000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "max_occurrences_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "work_days": {
-          "default": "mon,tue,wed,thu,fri",
-          "type": "string"
-        },
-        "work_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "work_hours": {
-          "default": "09:00-17:00",
-          "type": "string"
-        },
-        "work_hours_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "contacts": {
-      "additionalProperties": false,
-      "properties": {
-        "contacts_dir": {
-          "type": "string"
-        },
-        "contacts_dir_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "contacts_max_results": {
-          "default": 10,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "contacts_max_results_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
+        "required": [
+          "kind"
+        ],
+        "type": "object"
       },
       "type": "object"
     },
@@ -1484,17 +244,6 @@
           ]
         },
         "grafana_enabled_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "http_timeout_seconds": {
-          "default": 600,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "http_timeout_seconds_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -1561,107 +310,10 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "otel_traces_endpoint": {
-          "type": "string"
-        },
-        "otel_traces_endpoint_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "pass_run_retention_days": {
-          "default": 90,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "pass_run_retention_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "public_url": {
           "type": "string"
         },
         "public_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "tz": {
-          "default": "America/Port_of_Spain",
-          "type": "string"
-        },
-        "tz_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "db": {
-      "additionalProperties": false,
-      "properties": {
-        "key_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "export": {
-      "additionalProperties": false,
-      "properties": {
-        "export_notion_enabled": {
-          "default": false,
-          "type": [
-            "boolean",
-            "string"
-          ]
-        },
-        "export_notion_enabled_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "export_notion_kinds": {
-          "default": "pii,messages,personal",
-          "type": "string"
-        },
-        "export_notion_kinds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "export_notion_parent": {
-          "type": "string"
-        },
-        "export_notion_parent_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "export_notion_private_to": {
-          "type": "string"
-        },
-        "export_notion_private_to_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "export_obsidian_dir": {
-          "type": "string"
-        },
-        "export_obsidian_dir_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "export_obsidian_kinds": {
-          "default": "pii,messages,personal",
-          "type": "string"
-        },
-        "export_obsidian_kinds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "export_obsidian_private_to": {
-          "type": "string"
-        },
-        "export_obsidian_private_to_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
@@ -1722,10 +374,6 @@
           "type": "string"
         },
         "grafana_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "grafana_viewer_token_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -1790,259 +438,6 @@
     "mail": {
       "additionalProperties": false,
       "properties": {
-        "birthdays_default_days": {
-          "default": 14,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "birthdays_default_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "birthdays_max_days": {
-          "default": 366,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "birthdays_max_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "deletion_interval_seconds": {
-          "default": 86400,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "deletion_interval_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "deletions_min_deleted_share": {
-          "default": 0.7,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "deletions_min_deleted_share_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "deletions_min_group": {
-          "default": 5,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "deletions_min_group_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "deletions_otp_min_share": {
-          "default": 0.8,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "deletions_otp_min_share_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "deletions_otp_older_than_days": {
-          "default": 7,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "deletions_otp_older_than_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "drafts_max_body": {
-          "default": 100000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "drafts_max_body_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "drafts_max_subject": {
-          "default": 300,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "drafts_max_subject_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "folder_min_messages": {
-          "default": 10,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "folder_min_messages_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "gmail_labels_max_messages": {
-          "default": 10,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "gmail_labels_max_messages_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "gmail_labels_min_overlap": {
-          "default": 0.5,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "gmail_labels_min_overlap_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "gmail_labels_min_target_messages": {
-          "default": 10,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "gmail_labels_min_target_messages_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "google_gmail_refresh_token_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "knn_k": {
-          "default": 7,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "knn_k_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "knn_max": {
-          "default": 4096,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "knn_max_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "knn_min_share": {
-          "default": 0.9,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "knn_min_share_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "llm_body_chars": {
-          "default": 1500,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "llm_body_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "llm_neighbors": {
-          "default": 10,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "llm_neighbors_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "llm_top_senders": {
-          "default": 3,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "llm_top_senders_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_accounts_file": {
-          "type": "string"
-        },
-        "mail_accounts_file_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_backoff_max_seconds": {
-          "default": 300,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_backoff_max_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_backoff_start_seconds": {
-          "default": 5,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_backoff_start_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_body_cap_bytes": {
-          "default": 65536,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_body_cap_bytes_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "mail_chat_ca_file": {
           "type": "string"
         },
@@ -2051,17 +446,6 @@
           "type": "string"
         },
         "mail_chat_key_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_chat_max_tokens": {
-          "default": 80,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_chat_max_tokens_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -2084,28 +468,6 @@
           "type": "string"
         },
         "mail_chat_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_embed_batch": {
-          "default": 16,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_embed_batch_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_embed_body_chars": {
-          "default": 1500,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_embed_body_chars_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -2142,540 +504,11 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "mail_fetch_batch": {
-          "default": 40,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_fetch_batch_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_flag_batch": {
-          "default": 500,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_flag_batch_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_fts_body_chars": {
-          "default": 20000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_fts_body_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_idle_settle_seconds": {
-          "default": 2,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_idle_settle_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_mode": {
-          "default": "shadow",
-          "type": "string"
-        },
-        "mail_mode_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_scan_sample_subjects": {
-          "default": 5,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_scan_sample_subjects_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_scan_top_labels": {
-          "default": 5,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_scan_top_labels_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_search_branch_limit": {
-          "default": 50,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_search_branch_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_search_max_terms": {
-          "default": 12,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_search_max_terms_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_search_rrf_k": {
-          "default": 60,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_search_rrf_k_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_search_snippet_chars": {
-          "default": 220,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_search_snippet_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_search_snippet_tokens": {
-          "default": 24,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_search_snippet_tokens_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_ship24_api_key_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_ship24_destination_country": {
-          "type": "string"
-        },
-        "mail_ship24_destination_country_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_ship24_destination_postcode": {
-          "type": "string"
-        },
-        "mail_ship24_destination_postcode_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_ship24_monthly_quota": {
-          "default": 10,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_ship24_monthly_quota_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_ship24_poll_days": {
-          "default": 30,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_ship24_poll_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_ship24_poll_limit": {
-          "default": 40,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_ship24_poll_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_ship24_timeout_seconds": {
-          "default": 15,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mail_ship24_timeout_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "mail_ship24_url": {
           "default": "https://api.ship24.com/public/v1",
           "type": "string"
         },
         "mail_ship24_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mailops_batch": {
-          "default": 100,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "mailops_batch_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "openloops_commitment_scan_limit": {
-          "default": 20,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "openloops_commitment_scan_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "openloops_commitment_window_days": {
-          "default": 14,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "openloops_commitment_window_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "openloops_commitments_per_message": {
-          "default": 5,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "openloops_commitments_per_message_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "openloops_owe_max_age_days": {
-          "default": 45,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "openloops_owe_max_age_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "openloops_remind_ahead_days": {
-          "default": 1,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "openloops_remind_ahead_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "openloops_remind_hour": {
-          "default": 9,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "openloops_remind_hour_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "openloops_remind_overdue_days": {
-          "default": 14,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "openloops_remind_overdue_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "openloops_snooze_default_days": {
-          "default": 3,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "openloops_snooze_default_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "openloops_waiting_after_days": {
-          "default": 3,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "openloops_waiting_after_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "openloops_waiting_max_age_days": {
-          "default": 60,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "openloops_waiting_max_age_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "openloops_window_days": {
-          "default": 120,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "openloops_window_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "rebalance_cluster_iterations": {
-          "default": 15,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "rebalance_cluster_iterations_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "rebalance_cluster_ks": {
-          "default": "2,3,4",
-          "type": "string"
-        },
-        "rebalance_cluster_ks_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "rebalance_cluster_margin": {
-          "default": 0.04,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "rebalance_cluster_margin_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "rebalance_cluster_min_embedded": {
-          "default": 0.8,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "rebalance_cluster_min_embedded_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "rebalance_merge_min_group": {
-          "default": 3,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "rebalance_merge_min_group_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "rebalance_merge_min_others": {
-          "default": 10,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "rebalance_merge_min_others_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "rebalance_merge_min_share": {
-          "default": 0.9,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "rebalance_merge_min_share_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "rebalance_min_folder": {
-          "default": 40,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "rebalance_min_folder_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "rebalance_min_group": {
-          "default": 20,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "rebalance_min_group_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "rebalance_min_share": {
-          "default": 0.1,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "rebalance_min_share_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "rebalance_name_max_chars": {
-          "default": 40,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "rebalance_name_max_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "rebalance_run_gap_seconds": {
-          "default": 1209600,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "rebalance_run_gap_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "rebalance_runs_required": {
-          "default": 2,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "rebalance_runs_required_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "rebalance_top_terms": {
-          "default": 5,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "rebalance_top_terms_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "report_disagreement_lines": {
-          "default": 40,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "report_disagreement_lines_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "report_top_dests": {
-          "default": 15,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "report_top_dests_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "rule_min_n": {
-          "default": 3,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "rule_min_n_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "rule_min_purity": {
-          "default": 0.9,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "rule_min_purity_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "sent_backfill_days": {
-          "default": 90,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "sent_backfill_days_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -2692,99 +525,6 @@
         "ship24_proxy_file": {
           "description": "path of a file holding the value",
           "type": "string"
-        },
-        "triage_top_dests": {
-          "default": 15,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "triage_top_dests_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "uncertain_dest": {
-          "default": "Misc",
-          "type": "string"
-        },
-        "uncertain_dest_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "watches_body_chars": {
-          "default": 3000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "watches_body_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "watches_carrier_domains": {
-          "default": "ups.com,fedex.com,usps.com,dhl.com,usps.gov,dhl.de",
-          "type": "string"
-        },
-        "watches_carrier_domains_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "watches_package_window_days": {
-          "default": 60,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "watches_package_window_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "watches_scan_limit": {
-          "default": 25,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "watches_scan_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "watches_stale_package_days": {
-          "default": 60,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "watches_stale_package_days_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "write_attempts": {
-          "default": 3,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "write_attempts_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "write_cap": {
-          "default": 100,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "write_cap_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
         }
       },
       "type": "object"
@@ -2792,136 +532,11 @@
     "media": {
       "additionalProperties": false,
       "properties": {
-        "link_key_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_artwork_miss_ttl_seconds": {
-          "default": 604800,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_artwork_miss_ttl_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_artwork_show_search_limit": {
-          "default": 5,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_artwork_show_search_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_channel_name_chars": {
-          "default": 120,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_channel_name_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_channel_pattern_chars": {
-          "default": 300,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_channel_pattern_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_channel_seen_ttl_seconds": {
-          "default": 7776000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_channel_seen_ttl_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_child_limit": {
-          "default": 500,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_child_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_eztv_limit": {
-          "default": 100,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_eztv_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_eztv_timeout_seconds": {
-          "default": 30,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_eztv_timeout_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "media_eztv_url": {
           "default": "https://eztvx.to/api/get-torrents",
           "type": "string"
         },
         "media_eztv_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_ffmpeg_nice": {
-          "default": 10,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_ffmpeg_nice_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_ffmpeg_timeout_seconds": {
-          "default": 120,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_ffmpeg_timeout_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_link_ttl_seconds": {
-          "default": 43200,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_link_ttl_seconds_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -2932,80 +547,10 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "media_qbittorrent_timeout_seconds": {
-          "default": 15,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_qbittorrent_timeout_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_qbittorrent_url": {
-          "type": "string"
-        },
-        "media_qbittorrent_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "media_root": {
           "type": "string"
         },
         "media_root_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_search_limit": {
-          "default": 50,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_search_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_subtitle_extensions": {
-          "default": ".srt,.sub,.idx,.ass,.ssa,.vtt",
-          "type": "string"
-        },
-        "media_subtitle_extensions_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_thumbnail_pass_limit": {
-          "default": 200,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_thumbnail_pass_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_thumbnail_position": {
-          "default": 0.1,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "media_thumbnail_position_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_thumbnail_width": {
-          "default": 480,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_thumbnail_width_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -3017,32 +562,6 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "media_tmdb_search_limit": {
-          "default": 8,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_tmdb_search_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_tmdb_timeout_seconds": {
-          "default": 15,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_tmdb_timeout_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_tmdb_token_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "media_tmdb_url": {
           "default": "https://api.themoviedb.org/3",
           "type": "string"
@@ -3051,29 +570,10 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "media_torrent_upload_bytes": {
-          "default": 1048576,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "media_torrent_upload_bytes_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "media_tv_url": {
           "type": "string"
         },
         "media_tv_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_video_extensions": {
-          "default": ".mkv,.mp4,.m4v,.avi,.mov,.ts,.wmv",
-          "type": "string"
-        },
-        "media_video_extensions_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -3094,156 +594,13 @@
       },
       "type": "object"
     },
-    "memory": {
-      "additionalProperties": false,
-      "properties": {
-        "memory_concurrency": {
-          "default": 4,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "memory_concurrency_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "memory_effort": {
-          "default": "low",
-          "type": "string"
-        },
-        "memory_effort_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "memory_model": {
-          "default": "claude-haiku-5-5",
-          "type": "string"
-        },
-        "memory_model_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "memory_node_bytes": {
-          "default": 512,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "memory_node_bytes_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "memory_tail_messages": {
-          "default": 6,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "memory_tail_messages_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "memory_verbatim_tokens": {
-          "default": 16000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "memory_verbatim_tokens_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "memory_view_high": {
-          "default": 128000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "memory_view_high_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "memory_view_low": {
-          "default": 64000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "memory_view_low_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
     "notify": {
       "additionalProperties": false,
       "properties": {
-        "notify_body_chars": {
-          "default": 1000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notify_body_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notify_nightly_cap": {
-          "default": 1,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notify_nightly_cap_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notify_per_run_cap": {
-          "default": 3,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notify_per_run_cap_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notify_title_chars": {
-          "default": 120,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notify_title_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "webpush_ca_file": {
           "type": "string"
         },
         "webpush_ca_file_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "webpush_subject": {
-          "type": "string"
-        },
-        "webpush_subject_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "webpush_vapid_private_key_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
@@ -3253,106 +610,10 @@
     "notion": {
       "additionalProperties": false,
       "properties": {
-        "notion_block_depth": {
-          "default": 5,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notion_block_depth_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_branch_limit": {
-          "default": 50,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notion_branch_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "notion_ca_file": {
           "type": "string"
         },
         "notion_ca_file_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_head_source_chars": {
-          "default": 1000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notion_head_source_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_label_chars": {
-          "default": 48,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notion_label_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_max_aliases": {
-          "default": 20,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notion_max_aliases_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_max_retries": {
-          "default": 5,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notion_max_retries_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_max_sources": {
-          "default": 12,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notion_max_sources_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_page_size": {
-          "default": 100,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notion_page_size_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_private_value": {
-          "default": "private",
-          "type": "string"
-        },
-        "notion_private_value_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -3362,539 +623,747 @@
         "notion_proxy_file": {
           "description": "path of a file holding the value",
           "type": "string"
-        },
-        "notion_related_limit": {
-          "default": 10,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notion_related_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_retry_after_default_seconds": {
-          "default": 1,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "notion_retry_after_default_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_retry_after_max_seconds": {
-          "default": 60,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "notion_retry_after_max_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_snippet_chars": {
-          "default": 220,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notion_snippet_chars_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_timeout_seconds": {
-          "default": 60,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "notion_timeout_seconds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "notion_token_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "sensitivity_property": {
-          "default": "sensitivity",
-          "type": "string"
-        },
-        "sensitivity_property_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "wiki_log_title": {
-          "default": "Wiki Log",
-          "type": "string"
-        },
-        "wiki_log_title_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "wiki_root": {
-          "type": "string"
-        },
-        "wiki_root_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "permissions": {
-      "additionalProperties": false,
-      "properties": {
-        "permission_internet_clean": {
-          "default": "allow",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_internet_clean_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_internet_kinds": {
-          "default": "ask",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_internet_kinds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_internet_pii": {
-          "default": "deny",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_internet_pii_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_internet_untrusted_isolated": {
-          "default": "allow",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_internet_untrusted_isolated_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_internet_untrusted_kinds": {
-          "default": "deny",
-          "enum": [
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_internet_untrusted_kinds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_internet_untrusted_knowledge": {
-          "default": "ask",
-          "enum": [
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_internet_untrusted_knowledge_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_notify_clean": {
-          "default": "allow",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_notify_clean_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_notify_kinds": {
-          "default": "allow",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_notify_kinds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_notify_pii": {
-          "default": "allow",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_notify_pii_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_notify_untrusted_isolated": {
-          "default": "allow",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_notify_untrusted_isolated_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_notify_untrusted_kinds": {
-          "default": "allow",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_notify_untrusted_kinds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_notify_untrusted_knowledge": {
-          "default": "allow",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_notify_untrusted_knowledge_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_own_clean": {
-          "default": "allow",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_own_clean_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_own_kinds": {
-          "default": "allow",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_own_kinds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_own_pii": {
-          "default": "allow",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_own_pii_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_own_untrusted_isolated": {
-          "default": "allow",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_own_untrusted_isolated_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_own_untrusted_kinds": {
-          "default": "allow",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_own_untrusted_kinds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_own_untrusted_knowledge": {
-          "default": "allow",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_own_untrusted_knowledge_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_people_clean": {
-          "default": "ask",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_people_clean_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_people_kinds": {
-          "default": "ask",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_people_kinds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_people_pii": {
-          "default": "ask",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_people_pii_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_people_untrusted_isolated": {
-          "default": "ask",
-          "enum": [
-            "allow",
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_people_untrusted_isolated_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_people_untrusted_kinds": {
-          "default": "ask",
-          "enum": [
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_people_untrusted_kinds_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "permission_people_untrusted_knowledge": {
-          "default": "ask",
-          "enum": [
-            "ask",
-            "deny"
-          ],
-          "type": "string"
-        },
-        "permission_people_untrusted_knowledge_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "web": {
-      "additionalProperties": false,
-      "properties": {
-        "body_cap_bytes": {
-          "default": 1048576,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "body_cap_bytes_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "chat_thread_limit": {
-          "default": 50,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "chat_thread_limit_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "preview_bytes": {
-          "default": 200000,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "preview_bytes_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "snooze_choices": {
-          "default": "1,3,7,14",
-          "type": "string"
-        },
-        "snooze_choices_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "web_page_size": {
-          "default": 50,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "web_page_size_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "web_run_history": {
-          "default": 30,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "web_run_history_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "web_search": {
-      "additionalProperties": false,
-      "properties": {
-        "search_web_dynamic_filtering": {
-          "default": false,
-          "type": [
-            "boolean",
-            "string"
-          ]
-        },
-        "search_web_dynamic_filtering_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "search_web_max_cost_usd": {
-          "default": 0.15,
-          "type": [
-            "number",
-            "string"
-          ]
-        },
-        "search_web_max_cost_usd_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "search_web_max_searches": {
-          "default": 5,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "search_web_max_searches_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "search_web_max_steps": {
-          "default": 8,
-          "type": [
-            "integer",
-            "string"
-          ]
-        },
-        "search_web_max_steps_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "search_web_model": {
-          "default": "claude-haiku-5-5",
-          "enum": [
-            "claude-haiku-5-5",
-            "claude-sonnet-5-5",
-            "claude-opus-5-5"
-          ],
-          "type": "string"
-        },
-        "search_web_model_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
         }
       },
       "type": "object"
     }
   },
-  "title": "atrium configuration",
-  "type": "object"
+  "title": "atrium host configuration",
+  "type": "object",
+  "x-atrium-classes": {
+    "action_links.action_link_key": "operator",
+    "action_links.phone_actions_enabled": "operator",
+    "action_links.phone_actions_kinds": "operator",
+    "anthropic.anthropic_api_key": "operator",
+    "assistant.agent_effort_cron": "operator",
+    "assistant.agent_effort_nightly": "operator",
+    "assistant.agent_effort_subagent": "operator",
+    "assistant.agent_file_cap_bytes": "tuning",
+    "assistant.agent_file_name_chars": "tuning",
+    "assistant.agent_grafana_cell_chars": "tuning",
+    "assistant.agent_grafana_max_alerts": "tuning",
+    "assistant.agent_grafana_max_dashboards": "tuning",
+    "assistant.agent_grafana_max_log_rows": "tuning",
+    "assistant.agent_grafana_max_metric_rows": "tuning",
+    "assistant.agent_grafana_max_series": "tuning",
+    "assistant.agent_grafana_timeout_seconds": "tuning",
+    "assistant.agent_journal_lease_seconds": "tuning",
+    "assistant.agent_kb_profile_tokens": "tuning",
+    "assistant.agent_kb_retrieval_distance": "tuning",
+    "assistant.agent_kb_retrieval_tokens": "tuning",
+    "assistant.agent_kb_write_chars": "tuning",
+    "assistant.agent_mail_body_chars": "tuning",
+    "assistant.agent_mail_max_loops_limit": "tuning",
+    "assistant.agent_mail_max_results": "tuning",
+    "assistant.agent_mail_snippet_chars": "tuning",
+    "assistant.agent_manifest_results": "tuning",
+    "assistant.agent_media_torrent_limit": "tuning",
+    "assistant.agent_message_cap_bytes": "tuning",
+    "assistant.agent_nightly_max_threads": "tuning",
+    "assistant.agent_nightly_thread_chars": "tuning",
+    "assistant.agent_nightly_total_chars": "tuning",
+    "assistant.agent_preview_chars": "tuning",
+    "assistant.agent_project_instruction_chars": "tuning",
+    "assistant.agent_project_name_chars": "tuning",
+    "assistant.agent_recall_max_page_chars": "tuning",
+    "assistant.agent_recall_page_chars": "tuning",
+    "assistant.agent_ref_tokens": "tuning",
+    "assistant.agent_schedule_calendar_candidates": "operator",
+    "assistant.agent_schedule_daily_nudges": "operator",
+    "assistant.agent_schedule_knowledge_export": "operator",
+    "assistant.agent_schedule_max_active_jobs": "tuning",
+    "assistant.agent_schedule_media_channels": "operator",
+    "assistant.agent_schedule_media_sweep": "operator",
+    "assistant.agent_schedule_media_thumbnails": "operator",
+    "assistant.agent_schedule_memory_work": "operator",
+    "assistant.agent_schedule_min_interval_seconds": "operator",
+    "assistant.agent_schedule_nightly": "operator",
+    "assistant.agent_schedule_ops_sampler": "operator",
+    "assistant.agent_schedule_package_tracking": "operator",
+    "assistant.agent_schedule_task_reminders": "operator",
+    "assistant.agent_schedule_weekly_review": "operator",
+    "assistant.agent_scheduler_lease_seconds": "tuning",
+    "assistant.agent_scheduler_missed_grace_seconds": "tuning",
+    "assistant.agent_scheduler_tick_seconds": "tuning",
+    "assistant.agent_stub_tokens": "tuning",
+    "assistant.agent_subagent_context_ids": "tuning",
+    "assistant.agent_subagent_description_chars": "tuning",
+    "assistant.agent_subagent_digest_chars": "tuning",
+    "assistant.agent_subagent_max_concurrent": "tuning",
+    "assistant.agent_subagent_max_cost_usd": "operator",
+    "assistant.agent_subagent_max_steps": "tuning",
+    "assistant.agent_subagent_prompt_chars": "tuning",
+    "assistant.agent_subagent_task_chars": "tuning",
+    "assistant.agent_web_search_max_uses": "tuning",
+    "assistant.agent_webfetch_max_bytes": "tuning",
+    "assistant.agent_webfetch_max_redirects": "tuning",
+    "assistant.agent_webfetch_page_text_chars": "tuning",
+    "assistant.agent_webfetch_text_default": "tuning",
+    "assistant.agent_webfetch_timeout_seconds": "tuning",
+    "assistant.agent_webfetch_user_agent": "tuning",
+    "assistant.agent_workspace_plan_item_chars": "tuning",
+    "assistant.agent_workspace_plan_items": "tuning",
+    "assistant.anthropic_ca_file": "host",
+    "assistant.anthropic_proxy": "host",
+    "assistant.budget_chat_share": "operator",
+    "assistant.budget_unattended_share": "operator",
+    "assistant.cache_ttl_chat": "operator",
+    "assistant.default_context_limit": "operator",
+    "assistant.default_effort": "operator",
+    "assistant.default_model": "operator",
+    "assistant.digest_notify": "operator",
+    "assistant.doom_loop_threshold": "tuning",
+    "assistant.dreaming_max_cost_usd": "operator",
+    "assistant.dreaming_monthly_usd": "operator",
+    "assistant.max_run_cost_usd_haiku_5_5": "operator",
+    "assistant.max_run_cost_usd_opus_5_5": "operator",
+    "assistant.max_run_cost_usd_sonnet_5_5": "operator",
+    "assistant.max_steps_chat": "tuning",
+    "assistant.max_steps_cron": "tuning",
+    "assistant.max_steps_nightly": "tuning",
+    "assistant.max_steps_worker": "tuning",
+    "assistant.monthly_budget_usd": "operator",
+    "assistant.open_meteo_ca_file": "host",
+    "assistant.open_meteo_proxy": "host",
+    "assistant.ops_condenser": "operator",
+    "assistant.ops_condenser_max_tokens": "tuning",
+    "assistant.ops_condenser_model": "operator",
+    "assistant.ops_worker_max_run_usd": "operator",
+    "assistant.ops_worker_monthly_usd": "operator",
+    "assistant.prompt_subagent": "operator",
+    "assistant.prompt_system": "operator",
+    "assistant.thread_cost_cap_usd": "operator",
+    "assistant.weather_forecast_days": "tuning",
+    "assistant.weather_geocoding_url": "host",
+    "assistant.weather_hourly_hours": "tuning",
+    "assistant.weather_latitude": "operator",
+    "assistant.weather_location_name": "operator",
+    "assistant.weather_longitude": "operator",
+    "assistant.weather_open_meteo_url": "host",
+    "assistant.weather_timeout_seconds": "tuning",
+    "auth.oidc_access_domains": "host",
+    "auth.oidc_access_emails": "host",
+    "auth.oidc_access_group": "host",
+    "auth.oidc_admin_domains": "host",
+    "auth.oidc_admin_emails": "host",
+    "auth.oidc_admin_group": "host",
+    "auth.oidc_api_client_id": "host",
+    "auth.oidc_client_id": "host",
+    "auth.oidc_client_secret": "host",
+    "auth.oidc_groups_claim": "host",
+    "auth.oidc_issuer": "host",
+    "auth.oidc_preset": "host",
+    "auth.oidc_recheck_minutes": "tuning",
+    "auth.oidc_scopes": "host",
+    "auth.oidc_session_idle_days": "operator",
+    "auth.oidc_session_max_days": "operator",
+    "calendar.calendar_account": "operator",
+    "calendar.calendar_dir": "host",
+    "calendar.candidate_draft_limit": "tuning",
+    "calendar.candidate_scan_limit": "tuning",
+    "calendar.default_event_minutes": "operator",
+    "calendar.google_calendar_refresh_token": "operator",
+    "calendar.google_client_id": "operator",
+    "calendar.google_oauth_client_secret": "operator",
+    "calendar.icloud_apple_id": "operator",
+    "calendar.icloud_calendar": "operator",
+    "calendar.max_events": "tuning",
+    "calendar.max_occurrences": "tuning",
+    "calendar.work_days": "operator",
+    "calendar.work_hours": "operator",
+    "contacts.contacts_dir": "host",
+    "contacts.contacts_max_results": "tuning",
+    "core.assistant_enabled": "host",
+    "core.calendar_enabled": "host",
+    "core.contacts_enabled": "host",
+    "core.grafana_enabled": "host",
+    "core.http_timeout_seconds": "tuning",
+    "core.mail_enabled": "host",
+    "core.media_enabled": "host",
+    "core.notifications_enabled": "host",
+    "core.notion_enabled": "host",
+    "core.ops_listen": "host",
+    "core.ops_pprof": "host",
+    "core.otel_traces_endpoint": "host",
+    "core.pass_run_retention_days": "tuning",
+    "core.public_url": "host",
+    "core.tz": "operator",
+    "db.key": "host",
+    "export.export_notion_enabled": "operator",
+    "export.export_notion_kinds": "operator",
+    "export.export_notion_parent": "operator",
+    "export.export_notion_private_to": "operator",
+    "export.export_obsidian_dir": "host",
+    "export.export_obsidian_kinds": "operator",
+    "export.export_obsidian_private_to": "operator",
+    "grafana.grafana_ca_file": "host",
+    "grafana.grafana_logs_query": "host",
+    "grafana.grafana_logs_type": "host",
+    "grafana.grafana_logs_uid": "host",
+    "grafana.grafana_metrics_uid": "host",
+    "grafana.grafana_proxy": "host",
+    "grafana.grafana_url": "host",
+    "grafana.grafana_viewer_token": "operator",
+    "grafana.ops_hosts": "host",
+    "grafana.ops_label_selector": "host",
+    "grafana.ops_query_cpu": "host",
+    "grafana.ops_query_disk": "host",
+    "grafana.ops_query_failed_units": "host",
+    "grafana.ops_query_mem": "host",
+    "grafana.ops_query_up": "host",
+    "mail.birthdays_default_days": "tuning",
+    "mail.birthdays_max_days": "tuning",
+    "mail.deletion_interval_seconds": "tuning",
+    "mail.deletions_min_deleted_share": "tuning",
+    "mail.deletions_min_group": "tuning",
+    "mail.deletions_otp_min_share": "tuning",
+    "mail.deletions_otp_older_than_days": "tuning",
+    "mail.drafts_max_body": "tuning",
+    "mail.drafts_max_subject": "tuning",
+    "mail.folder_min_messages": "tuning",
+    "mail.gmail_labels_max_messages": "tuning",
+    "mail.gmail_labels_min_overlap": "tuning",
+    "mail.gmail_labels_min_target_messages": "tuning",
+    "mail.google_gmail_refresh_token": "operator",
+    "mail.knn_k": "tuning",
+    "mail.knn_max": "tuning",
+    "mail.knn_min_share": "tuning",
+    "mail.llm_body_chars": "tuning",
+    "mail.llm_neighbors": "tuning",
+    "mail.llm_top_senders": "tuning",
+    "mail.mail_accounts_file": "host",
+    "mail.mail_backoff_max_seconds": "tuning",
+    "mail.mail_backoff_start_seconds": "tuning",
+    "mail.mail_body_cap_bytes": "tuning",
+    "mail.mail_chat_ca_file": "host",
+    "mail.mail_chat_key": "host",
+    "mail.mail_chat_max_tokens": "tuning",
+    "mail.mail_chat_model": "host",
+    "mail.mail_chat_proxy": "host",
+    "mail.mail_chat_url": "host",
+    "mail.mail_embed_batch": "tuning",
+    "mail.mail_embed_body_chars": "tuning",
+    "mail.mail_embed_ca_file": "host",
+    "mail.mail_embed_key": "host",
+    "mail.mail_embed_model": "host",
+    "mail.mail_embed_proxy": "host",
+    "mail.mail_embed_url": "host",
+    "mail.mail_fetch_batch": "tuning",
+    "mail.mail_flag_batch": "tuning",
+    "mail.mail_fts_body_chars": "tuning",
+    "mail.mail_idle_settle_seconds": "tuning",
+    "mail.mail_mode": "operator",
+    "mail.mail_scan_sample_subjects": "tuning",
+    "mail.mail_scan_top_labels": "tuning",
+    "mail.mail_search_branch_limit": "tuning",
+    "mail.mail_search_max_terms": "tuning",
+    "mail.mail_search_rrf_k": "tuning",
+    "mail.mail_search_snippet_chars": "tuning",
+    "mail.mail_search_snippet_tokens": "tuning",
+    "mail.mail_ship24_api_key": "operator",
+    "mail.mail_ship24_destination_country": "operator",
+    "mail.mail_ship24_destination_postcode": "operator",
+    "mail.mail_ship24_monthly_quota": "operator",
+    "mail.mail_ship24_poll_days": "tuning",
+    "mail.mail_ship24_poll_limit": "tuning",
+    "mail.mail_ship24_timeout_seconds": "tuning",
+    "mail.mail_ship24_url": "host",
+    "mail.mailops_batch": "tuning",
+    "mail.openloops_commitment_scan_limit": "tuning",
+    "mail.openloops_commitment_window_days": "tuning",
+    "mail.openloops_commitments_per_message": "tuning",
+    "mail.openloops_owe_max_age_days": "tuning",
+    "mail.openloops_remind_ahead_days": "operator",
+    "mail.openloops_remind_hour": "operator",
+    "mail.openloops_remind_overdue_days": "tuning",
+    "mail.openloops_snooze_default_days": "operator",
+    "mail.openloops_waiting_after_days": "operator",
+    "mail.openloops_waiting_max_age_days": "tuning",
+    "mail.openloops_window_days": "tuning",
+    "mail.rebalance_cluster_iterations": "tuning",
+    "mail.rebalance_cluster_ks": "tuning",
+    "mail.rebalance_cluster_margin": "tuning",
+    "mail.rebalance_cluster_min_embedded": "tuning",
+    "mail.rebalance_merge_min_group": "tuning",
+    "mail.rebalance_merge_min_others": "tuning",
+    "mail.rebalance_merge_min_share": "tuning",
+    "mail.rebalance_min_folder": "tuning",
+    "mail.rebalance_min_group": "tuning",
+    "mail.rebalance_min_share": "tuning",
+    "mail.rebalance_name_max_chars": "tuning",
+    "mail.rebalance_run_gap_seconds": "tuning",
+    "mail.rebalance_runs_required": "tuning",
+    "mail.rebalance_top_terms": "tuning",
+    "mail.report_disagreement_lines": "tuning",
+    "mail.report_top_dests": "tuning",
+    "mail.rule_min_n": "tuning",
+    "mail.rule_min_purity": "tuning",
+    "mail.sent_backfill_days": "tuning",
+    "mail.ship24_ca_file": "host",
+    "mail.ship24_proxy": "host",
+    "mail.triage_top_dests": "tuning",
+    "mail.uncertain_dest": "operator",
+    "mail.watches_body_chars": "tuning",
+    "mail.watches_carrier_domains": "operator",
+    "mail.watches_package_window_days": "tuning",
+    "mail.watches_scan_limit": "tuning",
+    "mail.watches_stale_package_days": "tuning",
+    "mail.write_attempts": "tuning",
+    "mail.write_cap": "operator",
+    "media.link_key": "operator",
+    "media.media_artwork_miss_ttl_seconds": "tuning",
+    "media.media_artwork_show_search_limit": "tuning",
+    "media.media_channel_name_chars": "tuning",
+    "media.media_channel_pattern_chars": "tuning",
+    "media.media_channel_seen_ttl_seconds": "tuning",
+    "media.media_child_limit": "tuning",
+    "media.media_eztv_limit": "tuning",
+    "media.media_eztv_timeout_seconds": "tuning",
+    "media.media_eztv_url": "host",
+    "media.media_ffmpeg_nice": "tuning",
+    "media.media_ffmpeg_timeout_seconds": "tuning",
+    "media.media_link_ttl_seconds": "operator",
+    "media.media_movies_url": "host",
+    "media.media_qbittorrent_api_key": "operator",
+    "media.media_qbittorrent_timeout_seconds": "tuning",
+    "media.media_qbittorrent_url": "host",
+    "media.media_root": "host",
+    "media.media_search_limit": "tuning",
+    "media.media_subtitle_extensions": "tuning",
+    "media.media_thumbnail_pass_limit": "tuning",
+    "media.media_thumbnail_position": "tuning",
+    "media.media_thumbnail_width": "tuning",
+    "media.media_tmdb_images_url": "host",
+    "media.media_tmdb_search_limit": "tuning",
+    "media.media_tmdb_timeout_seconds": "tuning",
+    "media.media_tmdb_token": "operator",
+    "media.media_tmdb_url": "host",
+    "media.media_torrent_upload_bytes": "tuning",
+    "media.media_tv_url": "host",
+    "media.media_video_extensions": "tuning",
+    "media.qbittorrent_ca_file": "host",
+    "media.qbittorrent_proxy": "host",
+    "media.tmdb_ca_file": "host",
+    "media.tmdb_proxy": "host",
+    "memory.memory_concurrency": "tuning",
+    "memory.memory_effort": "operator",
+    "memory.memory_model": "operator",
+    "memory.memory_node_bytes": "tuning",
+    "memory.memory_tail_messages": "tuning",
+    "memory.memory_verbatim_tokens": "operator",
+    "memory.memory_view_high": "tuning",
+    "memory.memory_view_low": "tuning",
+    "notify.notify_body_chars": "tuning",
+    "notify.notify_nightly_cap": "operator",
+    "notify.notify_per_run_cap": "operator",
+    "notify.notify_title_chars": "tuning",
+    "notify.webpush_ca_file": "host",
+    "notify.webpush_subject": "operator",
+    "notify.webpush_vapid_private_key": "operator",
+    "notion.notion_block_depth": "tuning",
+    "notion.notion_branch_limit": "tuning",
+    "notion.notion_ca_file": "host",
+    "notion.notion_head_source_chars": "tuning",
+    "notion.notion_label_chars": "tuning",
+    "notion.notion_max_aliases": "tuning",
+    "notion.notion_max_retries": "tuning",
+    "notion.notion_max_sources": "tuning",
+    "notion.notion_page_size": "tuning",
+    "notion.notion_private_value": "operator",
+    "notion.notion_proxy": "host",
+    "notion.notion_related_limit": "tuning",
+    "notion.notion_retry_after_default_seconds": "tuning",
+    "notion.notion_retry_after_max_seconds": "tuning",
+    "notion.notion_snippet_chars": "tuning",
+    "notion.notion_timeout_seconds": "tuning",
+    "notion.notion_token": "operator",
+    "notion.sensitivity_property": "operator",
+    "notion.wiki_log_title": "operator",
+    "notion.wiki_root": "operator",
+    "permissions.permission_internet_clean": "operator",
+    "permissions.permission_internet_kinds": "operator",
+    "permissions.permission_internet_pii": "operator",
+    "permissions.permission_internet_untrusted_isolated": "operator",
+    "permissions.permission_internet_untrusted_kinds": "operator",
+    "permissions.permission_internet_untrusted_knowledge": "operator",
+    "permissions.permission_notify_clean": "operator",
+    "permissions.permission_notify_kinds": "operator",
+    "permissions.permission_notify_pii": "operator",
+    "permissions.permission_notify_untrusted_isolated": "operator",
+    "permissions.permission_notify_untrusted_kinds": "operator",
+    "permissions.permission_notify_untrusted_knowledge": "operator",
+    "permissions.permission_own_clean": "operator",
+    "permissions.permission_own_kinds": "operator",
+    "permissions.permission_own_pii": "operator",
+    "permissions.permission_own_untrusted_isolated": "operator",
+    "permissions.permission_own_untrusted_kinds": "operator",
+    "permissions.permission_own_untrusted_knowledge": "operator",
+    "permissions.permission_people_clean": "operator",
+    "permissions.permission_people_kinds": "operator",
+    "permissions.permission_people_pii": "operator",
+    "permissions.permission_people_untrusted_isolated": "operator",
+    "permissions.permission_people_untrusted_kinds": "operator",
+    "permissions.permission_people_untrusted_knowledge": "operator",
+    "web.body_cap_bytes": "tuning",
+    "web.chat_thread_limit": "tuning",
+    "web.preview_bytes": "tuning",
+    "web.snooze_choices": "operator",
+    "web.web_page_size": "tuning",
+    "web.web_run_history": "tuning",
+    "web_search.search_web_dynamic_filtering": "tuning",
+    "web_search.search_web_max_cost_usd": "operator",
+    "web_search.search_web_max_searches": "tuning",
+    "web_search.search_web_max_steps": "tuning",
+    "web_search.search_web_model": "operator"
+  },
+  "x-atrium-cutover": [
+    "media.media_qbittorrent_api_key",
+    "media.media_qbittorrent_timeout_seconds",
+    "media.media_qbittorrent_url",
+    "media.qbittorrent_ca_file",
+    "media.qbittorrent_proxy"
+  ],
+  "x-atrium-derived": {
+    "calendar.calendar_dir": "services.atrium.stateDir",
+    "contacts.contacts_dir": "services.atrium.stateDir",
+    "core.otel_traces_endpoint": "services.atrium.observability.tracesEndpoint",
+    "db.key": "services.atrium.database.keyFile",
+    "export.export_obsidian_dir": "services.atrium.knowledgeExport.obsidianDirectory",
+    "mail.mail_accounts_file": "services.atrium.connections.\"mail/\u003cid\u003e\".account"
+  },
+  "x-atrium-destinations": {
+    "action_links.action_link_key": "the operator setting action_links.action_link_key stored in the database",
+    "action_links.phone_actions_enabled": "the operator setting action_links.phone_actions_enabled stored in the database",
+    "action_links.phone_actions_kinds": "the operator setting action_links.phone_actions_kinds stored in the database",
+    "anthropic.anthropic_api_key": "the connection field service/anthropic credential api_key",
+    "assistant.agent_effort_cron": "the operator setting assistant.agent_effort_cron stored in the database",
+    "assistant.agent_effort_nightly": "the operator setting assistant.agent_effort_nightly stored in the database",
+    "assistant.agent_effort_subagent": "the operator setting assistant.agent_effort_subagent stored in the database",
+    "assistant.agent_file_cap_bytes": "the compiled constant internal/assistant/tuning.go:TuningAgentFileCapBytes",
+    "assistant.agent_file_name_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentFileNameChars",
+    "assistant.agent_grafana_cell_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentGrafanaCellChars",
+    "assistant.agent_grafana_max_alerts": "the compiled constant internal/assistant/tuning.go:TuningAgentGrafanaMaxAlerts",
+    "assistant.agent_grafana_max_dashboards": "the compiled constant internal/assistant/tuning.go:TuningAgentGrafanaMaxDashboards",
+    "assistant.agent_grafana_max_log_rows": "the compiled constant internal/assistant/tuning.go:TuningAgentGrafanaMaxLogRows",
+    "assistant.agent_grafana_max_metric_rows": "the compiled constant internal/assistant/tuning.go:TuningAgentGrafanaMaxMetricRows",
+    "assistant.agent_grafana_max_series": "the compiled constant internal/assistant/tuning.go:TuningAgentGrafanaMaxSeries",
+    "assistant.agent_grafana_timeout_seconds": "the compiled constant internal/assistant/tuning.go:TuningAgentGrafanaTimeoutSeconds",
+    "assistant.agent_journal_lease_seconds": "the compiled constant internal/assistant/tuning.go:TuningAgentJournalLeaseSeconds",
+    "assistant.agent_kb_profile_tokens": "the compiled constant internal/assistant/tuning.go:TuningAgentKbProfileTokens",
+    "assistant.agent_kb_retrieval_distance": "the compiled constant internal/assistant/tuning.go:TuningAgentKbRetrievalDistance",
+    "assistant.agent_kb_retrieval_tokens": "the compiled constant internal/assistant/tuning.go:TuningAgentKbRetrievalTokens",
+    "assistant.agent_kb_write_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentKbWriteChars",
+    "assistant.agent_mail_body_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentMailBodyChars",
+    "assistant.agent_mail_max_loops_limit": "the compiled constant internal/assistant/tuning.go:TuningAgentMailMaxLoopsLimit",
+    "assistant.agent_mail_max_results": "the compiled constant internal/assistant/tuning.go:TuningAgentMailMaxResults",
+    "assistant.agent_mail_snippet_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentMailSnippetChars",
+    "assistant.agent_manifest_results": "the compiled constant internal/assistant/tuning.go:TuningAgentManifestResults",
+    "assistant.agent_media_torrent_limit": "the compiled constant internal/assistant/tuning.go:TuningAgentMediaTorrentLimit",
+    "assistant.agent_message_cap_bytes": "the compiled constant internal/assistant/tuning.go:TuningAgentMessageCapBytes",
+    "assistant.agent_nightly_max_threads": "the compiled constant internal/assistant/tuning.go:TuningAgentNightlyMaxThreads",
+    "assistant.agent_nightly_thread_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentNightlyThreadChars",
+    "assistant.agent_nightly_total_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentNightlyTotalChars",
+    "assistant.agent_preview_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentPreviewChars",
+    "assistant.agent_project_instruction_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentProjectInstructionChars",
+    "assistant.agent_project_name_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentProjectNameChars",
+    "assistant.agent_recall_max_page_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentRecallMaxPageChars",
+    "assistant.agent_recall_page_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentRecallPageChars",
+    "assistant.agent_ref_tokens": "the compiled constant internal/assistant/tuning.go:TuningAgentRefTokens",
+    "assistant.agent_schedule_calendar_candidates": "the operator setting assistant.agent_schedule_calendar_candidates stored in the database",
+    "assistant.agent_schedule_daily_nudges": "the operator setting assistant.agent_schedule_daily_nudges stored in the database",
+    "assistant.agent_schedule_knowledge_export": "the operator setting assistant.agent_schedule_knowledge_export stored in the database",
+    "assistant.agent_schedule_max_active_jobs": "the compiled constant internal/assistant/scheduler/tuning.go:TuningAgentScheduleMaxActiveJobs",
+    "assistant.agent_schedule_media_channels": "the operator setting assistant.agent_schedule_media_channels stored in the database",
+    "assistant.agent_schedule_media_sweep": "the operator setting assistant.agent_schedule_media_sweep stored in the database",
+    "assistant.agent_schedule_media_thumbnails": "the operator setting assistant.agent_schedule_media_thumbnails stored in the database",
+    "assistant.agent_schedule_memory_work": "the operator setting assistant.agent_schedule_memory_work stored in the database",
+    "assistant.agent_schedule_min_interval_seconds": "the operator setting assistant.agent_schedule_min_interval_seconds stored in the database",
+    "assistant.agent_schedule_nightly": "the operator setting assistant.agent_schedule_nightly stored in the database",
+    "assistant.agent_schedule_ops_sampler": "the operator setting assistant.agent_schedule_ops_sampler stored in the database",
+    "assistant.agent_schedule_package_tracking": "the operator setting assistant.agent_schedule_package_tracking stored in the database",
+    "assistant.agent_schedule_task_reminders": "the operator setting assistant.agent_schedule_task_reminders stored in the database",
+    "assistant.agent_schedule_weekly_review": "the operator setting assistant.agent_schedule_weekly_review stored in the database",
+    "assistant.agent_scheduler_lease_seconds": "the compiled constant internal/assistant/scheduler/tuning.go:TuningAgentSchedulerLeaseSeconds",
+    "assistant.agent_scheduler_missed_grace_seconds": "the compiled constant internal/assistant/scheduler/tuning.go:TuningAgentSchedulerMissedGraceSeconds",
+    "assistant.agent_scheduler_tick_seconds": "the compiled constant internal/assistant/scheduler/tuning.go:TuningAgentSchedulerTickSeconds",
+    "assistant.agent_stub_tokens": "the compiled constant internal/assistant/tuning.go:TuningAgentStubTokens",
+    "assistant.agent_subagent_context_ids": "the compiled constant internal/assistant/tuning.go:TuningAgentSubagentContextIds",
+    "assistant.agent_subagent_description_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentSubagentDescriptionChars",
+    "assistant.agent_subagent_digest_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentSubagentDigestChars",
+    "assistant.agent_subagent_max_concurrent": "the compiled constant internal/assistant/tuning.go:TuningAgentSubagentMaxConcurrent",
+    "assistant.agent_subagent_max_cost_usd": "the operator setting assistant.agent_subagent_max_cost_usd stored in the database",
+    "assistant.agent_subagent_max_steps": "the compiled constant internal/assistant/tuning.go:TuningAgentSubagentMaxSteps",
+    "assistant.agent_subagent_prompt_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentSubagentPromptChars",
+    "assistant.agent_subagent_task_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentSubagentTaskChars",
+    "assistant.agent_web_search_max_uses": "the compiled constant internal/assistant/tuning.go:TuningAgentWebSearchMaxUses",
+    "assistant.agent_webfetch_max_bytes": "the compiled constant internal/assistant/tuning.go:TuningAgentWebfetchMaxBytes",
+    "assistant.agent_webfetch_max_redirects": "the compiled constant internal/assistant/tuning.go:TuningAgentWebfetchMaxRedirects",
+    "assistant.agent_webfetch_page_text_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentWebfetchPageTextChars",
+    "assistant.agent_webfetch_text_default": "the compiled constant internal/assistant/tuning.go:TuningAgentWebfetchTextDefault",
+    "assistant.agent_webfetch_timeout_seconds": "the compiled constant internal/assistant/tuning.go:TuningAgentWebfetchTimeoutSeconds",
+    "assistant.agent_webfetch_user_agent": "the compiled constant internal/assistant/tuning.go:TuningAgentWebfetchUserAgent",
+    "assistant.agent_workspace_plan_item_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentWorkspacePlanItemChars",
+    "assistant.agent_workspace_plan_items": "the compiled constant internal/assistant/tuning.go:TuningAgentWorkspacePlanItems",
+    "assistant.budget_chat_share": "the operator setting assistant.budget_chat_share stored in the database",
+    "assistant.budget_unattended_share": "the operator setting assistant.budget_unattended_share stored in the database",
+    "assistant.cache_ttl_chat": "the operator setting assistant.cache_ttl_chat stored in the database",
+    "assistant.default_context_limit": "the operator setting assistant.default_context_limit stored in the database",
+    "assistant.default_effort": "the operator setting assistant.default_effort stored in the database",
+    "assistant.default_model": "the operator setting assistant.default_model stored in the database",
+    "assistant.digest_notify": "the operator setting assistant.digest_notify stored in the database",
+    "assistant.doom_loop_threshold": "the compiled constant internal/assistant/loop/tuning.go:TuningDoomLoopThreshold",
+    "assistant.dreaming_max_cost_usd": "the operator setting assistant.dreaming_max_cost_usd stored in the database",
+    "assistant.dreaming_monthly_usd": "the operator setting assistant.dreaming_monthly_usd stored in the database",
+    "assistant.max_run_cost_usd_haiku_5_5": "the operator setting assistant.max_run_cost_usd_haiku_5_5 stored in the database",
+    "assistant.max_run_cost_usd_opus_5_5": "the operator setting assistant.max_run_cost_usd_opus_5_5 stored in the database",
+    "assistant.max_run_cost_usd_sonnet_5_5": "the operator setting assistant.max_run_cost_usd_sonnet_5_5 stored in the database",
+    "assistant.max_steps_chat": "the compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsChat",
+    "assistant.max_steps_cron": "the compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsCron",
+    "assistant.max_steps_nightly": "the compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsNightly",
+    "assistant.max_steps_worker": "the compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsWorker",
+    "assistant.monthly_budget_usd": "the operator setting assistant.monthly_budget_usd stored in the database",
+    "assistant.ops_condenser": "the operator setting assistant.ops_condenser stored in the database",
+    "assistant.ops_condenser_max_tokens": "the compiled constant internal/serverops/tuning.go:TuningOpsCondenserMaxTokens",
+    "assistant.ops_condenser_model": "the operator setting assistant.ops_condenser_model stored in the database",
+    "assistant.ops_worker_max_run_usd": "the operator setting assistant.ops_worker_max_run_usd stored in the database",
+    "assistant.ops_worker_monthly_usd": "the operator setting assistant.ops_worker_monthly_usd stored in the database",
+    "assistant.prompt_subagent": "the operator setting assistant.prompt_subagent stored in the database",
+    "assistant.prompt_system": "the operator setting assistant.prompt_system stored in the database",
+    "assistant.thread_cost_cap_usd": "the operator setting assistant.thread_cost_cap_usd stored in the database",
+    "assistant.weather_forecast_days": "the compiled constant internal/weather/tuning.go:TuningWeatherForecastDays",
+    "assistant.weather_hourly_hours": "the compiled constant internal/weather/tuning.go:TuningWeatherHourlyHours",
+    "assistant.weather_latitude": "the operator setting assistant.weather_latitude stored in the database",
+    "assistant.weather_location_name": "the operator setting assistant.weather_location_name stored in the database",
+    "assistant.weather_longitude": "the operator setting assistant.weather_longitude stored in the database",
+    "assistant.weather_timeout_seconds": "the compiled constant internal/weather/tuning.go:TuningWeatherTimeoutSeconds",
+    "auth.oidc_recheck_minutes": "the compiled constant internal/auth/oidc/tuning.go:TuningOidcRecheckMinutes",
+    "auth.oidc_session_idle_days": "the operator setting auth.oidc_session_idle_days stored in the database",
+    "auth.oidc_session_max_days": "the operator setting auth.oidc_session_max_days stored in the database",
+    "calendar.calendar_account": "the operator setting calendar.calendar_account stored in the database",
+    "calendar.calendar_dir": "services.atrium.stateDir",
+    "calendar.candidate_draft_limit": "the compiled constant internal/calendar/tuning.go:TuningCandidateDraftLimit",
+    "calendar.candidate_scan_limit": "the compiled constant internal/calendar/tuning.go:TuningCandidateScanLimit",
+    "calendar.default_event_minutes": "the operator setting calendar.default_event_minutes stored in the database",
+    "calendar.google_calendar_refresh_token": "the connection field google/default credential oauth/calendar/refresh",
+    "calendar.google_client_id": "the connection field google/default.config.client_id",
+    "calendar.google_oauth_client_secret": "the connection field google/default credential oauth/client_secret",
+    "calendar.icloud_apple_id": "the connection field icloud/\u003caccount\u003e caldav/carddav config.apple_id",
+    "calendar.icloud_calendar": "the operator setting calendar.icloud_calendar stored in the database",
+    "calendar.max_events": "the compiled constant internal/calendar/tuning.go:TuningMaxEvents",
+    "calendar.max_occurrences": "the compiled constant internal/calendar/tuning.go:TuningMaxOccurrences",
+    "calendar.work_days": "the operator setting calendar.work_days stored in the database",
+    "calendar.work_hours": "the operator setting calendar.work_hours stored in the database",
+    "contacts.contacts_dir": "services.atrium.stateDir",
+    "contacts.contacts_max_results": "the compiled constant internal/contacts/tuning.go:TuningContactsMaxResults",
+    "core.http_timeout_seconds": "the compiled constant internal/config/tuning.go:TuningHttpTimeoutSeconds",
+    "core.otel_traces_endpoint": "services.atrium.observability.tracesEndpoint",
+    "core.pass_run_retention_days": "the compiled constant internal/passrun/tuning.go:TuningPassRunRetentionDays",
+    "core.tz": "the operator setting core.tz stored in the database",
+    "db.key": "services.atrium.database.keyFile",
+    "export.export_notion_enabled": "the operator setting export.export_notion_enabled stored in the database",
+    "export.export_notion_kinds": "the operator setting export.export_notion_kinds stored in the database",
+    "export.export_notion_parent": "the operator setting export.export_notion_parent stored in the database",
+    "export.export_notion_private_to": "the operator setting export.export_notion_private_to stored in the database",
+    "export.export_obsidian_dir": "services.atrium.knowledgeExport.obsidianDirectory",
+    "export.export_obsidian_kinds": "the operator setting export.export_obsidian_kinds stored in the database",
+    "export.export_obsidian_private_to": "the operator setting export.export_obsidian_private_to stored in the database",
+    "grafana.grafana_viewer_token": "the connection field service/grafana credential viewer_token",
+    "mail.birthdays_default_days": "the compiled constant internal/mail/tuning.go:TuningBirthdaysDefaultDays",
+    "mail.birthdays_max_days": "the compiled constant internal/mail/tuning.go:TuningBirthdaysMaxDays",
+    "mail.deletion_interval_seconds": "the compiled constant internal/mail/tuning.go:TuningDeletionIntervalSeconds",
+    "mail.deletions_min_deleted_share": "the compiled constant internal/mail/tuning.go:TuningDeletionsMinDeletedShare",
+    "mail.deletions_min_group": "the compiled constant internal/mail/tuning.go:TuningDeletionsMinGroup",
+    "mail.deletions_otp_min_share": "the compiled constant internal/mail/tuning.go:TuningDeletionsOtpMinShare",
+    "mail.deletions_otp_older_than_days": "the compiled constant internal/mail/tuning.go:TuningDeletionsOtpOlderThanDays",
+    "mail.drafts_max_body": "the compiled constant internal/mail/tuning.go:TuningDraftsMaxBody",
+    "mail.drafts_max_subject": "the compiled constant internal/mail/tuning.go:TuningDraftsMaxSubject",
+    "mail.folder_min_messages": "the compiled constant internal/mail/tuning.go:TuningFolderMinMessages",
+    "mail.gmail_labels_max_messages": "the compiled constant internal/mail/tuning.go:TuningGmailLabelsMaxMessages",
+    "mail.gmail_labels_min_overlap": "the compiled constant internal/mail/tuning.go:TuningGmailLabelsMinOverlap",
+    "mail.gmail_labels_min_target_messages": "the compiled constant internal/mail/tuning.go:TuningGmailLabelsMinTargetMessages",
+    "mail.google_gmail_refresh_token": "the connection field google/default credential oauth/gmail/refresh",
+    "mail.knn_k": "the compiled constant internal/mail/tuning.go:TuningKnnK",
+    "mail.knn_max": "the compiled constant internal/mail/tuning.go:TuningKnnMax",
+    "mail.knn_min_share": "the compiled constant internal/mail/tuning.go:TuningKnnMinShare",
+    "mail.llm_body_chars": "the compiled constant internal/endpoint/tuning.go:TuningLlmBodyChars",
+    "mail.llm_neighbors": "the compiled constant internal/mail/tuning.go:TuningLlmNeighbors",
+    "mail.llm_top_senders": "the compiled constant internal/endpoint/tuning.go:TuningLlmTopSenders",
+    "mail.mail_accounts_file": "services.atrium.connections.\"mail/\u003cid\u003e\".account",
+    "mail.mail_backoff_max_seconds": "the compiled constant internal/mail/tuning.go:TuningMailBackoffMaxSeconds",
+    "mail.mail_backoff_start_seconds": "the compiled constant internal/mail/tuning.go:TuningMailBackoffStartSeconds",
+    "mail.mail_body_cap_bytes": "the compiled constant internal/mail/tuning.go:TuningMailBodyCapBytes",
+    "mail.mail_chat_max_tokens": "the compiled constant internal/endpoint/tuning.go:TuningMailChatMaxTokens",
+    "mail.mail_embed_batch": "the compiled constant internal/endpoint/tuning.go:TuningMailEmbedBatch",
+    "mail.mail_embed_body_chars": "the compiled constant internal/endpoint/tuning.go:TuningMailEmbedBodyChars",
+    "mail.mail_fetch_batch": "the compiled constant internal/mail/tuning.go:TuningMailFetchBatch",
+    "mail.mail_flag_batch": "the compiled constant internal/mail/tuning.go:TuningMailFlagBatch",
+    "mail.mail_fts_body_chars": "the compiled constant internal/mail/tuning.go:TuningMailFtsBodyChars",
+    "mail.mail_idle_settle_seconds": "the compiled constant internal/mail/tuning.go:TuningMailIdleSettleSeconds",
+    "mail.mail_mode": "the operator setting mail.mail_mode stored in the database",
+    "mail.mail_scan_sample_subjects": "the compiled constant internal/mail/tuning.go:TuningMailScanSampleSubjects",
+    "mail.mail_scan_top_labels": "the compiled constant internal/mail/tuning.go:TuningMailScanTopLabels",
+    "mail.mail_search_branch_limit": "the compiled constant internal/mail/tuning.go:TuningMailSearchBranchLimit",
+    "mail.mail_search_max_terms": "the compiled constant internal/mail/tuning.go:TuningMailSearchMaxTerms",
+    "mail.mail_search_rrf_k": "the compiled constant internal/mail/tuning.go:TuningMailSearchRrfK",
+    "mail.mail_search_snippet_chars": "the compiled constant internal/mail/tuning.go:TuningMailSearchSnippetChars",
+    "mail.mail_search_snippet_tokens": "the compiled constant internal/mail/tuning.go:TuningMailSearchSnippetTokens",
+    "mail.mail_ship24_api_key": "the connection field service/ship24 credential api_key",
+    "mail.mail_ship24_destination_country": "the operator setting mail.mail_ship24_destination_country stored in the database",
+    "mail.mail_ship24_destination_postcode": "the operator setting mail.mail_ship24_destination_postcode stored in the database",
+    "mail.mail_ship24_monthly_quota": "the operator setting mail.mail_ship24_monthly_quota stored in the database",
+    "mail.mail_ship24_poll_days": "the compiled constant internal/mail/tracking/tuning.go:TuningMailShip24PollDays",
+    "mail.mail_ship24_poll_limit": "the compiled constant internal/mail/tracking/tuning.go:TuningMailShip24PollLimit",
+    "mail.mail_ship24_timeout_seconds": "the compiled constant internal/mail/tracking/tuning.go:TuningMailShip24TimeoutSeconds",
+    "mail.mailops_batch": "the compiled constant internal/mail/tuning.go:TuningMailopsBatch",
+    "mail.openloops_commitment_scan_limit": "the compiled constant internal/mail/tuning.go:TuningOpenloopsCommitmentScanLimit",
+    "mail.openloops_commitment_window_days": "the compiled constant internal/mail/tuning.go:TuningOpenloopsCommitmentWindowDays",
+    "mail.openloops_commitments_per_message": "the compiled constant internal/mail/tuning.go:TuningOpenloopsCommitmentsPerMessage",
+    "mail.openloops_owe_max_age_days": "the compiled constant internal/mail/tuning.go:TuningOpenloopsOweMaxAgeDays",
+    "mail.openloops_remind_ahead_days": "the operator setting mail.openloops_remind_ahead_days stored in the database",
+    "mail.openloops_remind_hour": "the operator setting mail.openloops_remind_hour stored in the database",
+    "mail.openloops_remind_overdue_days": "the compiled constant internal/mail/tuning.go:TuningOpenloopsRemindOverdueDays",
+    "mail.openloops_snooze_default_days": "the operator setting mail.openloops_snooze_default_days stored in the database",
+    "mail.openloops_waiting_after_days": "the operator setting mail.openloops_waiting_after_days stored in the database",
+    "mail.openloops_waiting_max_age_days": "the compiled constant internal/mail/tuning.go:TuningOpenloopsWaitingMaxAgeDays",
+    "mail.openloops_window_days": "the compiled constant internal/mail/tuning.go:TuningOpenloopsWindowDays",
+    "mail.rebalance_cluster_iterations": "the compiled constant internal/mail/tuning.go:TuningRebalanceClusterIterations",
+    "mail.rebalance_cluster_ks": "the compiled constant internal/mail/tuning.go:TuningRebalanceClusterKs",
+    "mail.rebalance_cluster_margin": "the compiled constant internal/mail/tuning.go:TuningRebalanceClusterMargin",
+    "mail.rebalance_cluster_min_embedded": "the compiled constant internal/mail/tuning.go:TuningRebalanceClusterMinEmbedded",
+    "mail.rebalance_merge_min_group": "the compiled constant internal/mail/tuning.go:TuningRebalanceMergeMinGroup",
+    "mail.rebalance_merge_min_others": "the compiled constant internal/mail/tuning.go:TuningRebalanceMergeMinOthers",
+    "mail.rebalance_merge_min_share": "the compiled constant internal/mail/tuning.go:TuningRebalanceMergeMinShare",
+    "mail.rebalance_min_folder": "the compiled constant internal/mail/tuning.go:TuningRebalanceMinFolder",
+    "mail.rebalance_min_group": "the compiled constant internal/mail/tuning.go:TuningRebalanceMinGroup",
+    "mail.rebalance_min_share": "the compiled constant internal/mail/tuning.go:TuningRebalanceMinShare",
+    "mail.rebalance_name_max_chars": "the compiled constant internal/mail/tuning.go:TuningRebalanceNameMaxChars",
+    "mail.rebalance_run_gap_seconds": "the compiled constant internal/mail/tuning.go:TuningRebalanceRunGapSeconds",
+    "mail.rebalance_runs_required": "the compiled constant internal/mail/tuning.go:TuningRebalanceRunsRequired",
+    "mail.rebalance_top_terms": "the compiled constant internal/mail/tuning.go:TuningRebalanceTopTerms",
+    "mail.report_disagreement_lines": "the compiled constant internal/mail/tuning.go:TuningReportDisagreementLines",
+    "mail.report_top_dests": "the compiled constant internal/mail/tuning.go:TuningReportTopDests",
+    "mail.rule_min_n": "the compiled constant internal/mail/tuning.go:TuningRuleMinN",
+    "mail.rule_min_purity": "the compiled constant internal/mail/tuning.go:TuningRuleMinPurity",
+    "mail.sent_backfill_days": "the compiled constant internal/mail/tuning.go:TuningSentBackfillDays",
+    "mail.triage_top_dests": "the compiled constant internal/mail/tuning.go:TuningTriageTopDests",
+    "mail.uncertain_dest": "the operator setting mail.uncertain_dest stored in the database",
+    "mail.watches_body_chars": "the compiled constant internal/mail/tuning.go:TuningWatchesBodyChars",
+    "mail.watches_carrier_domains": "the operator setting mail.watches_carrier_domains stored in the database",
+    "mail.watches_package_window_days": "the compiled constant internal/mail/tuning.go:TuningWatchesPackageWindowDays",
+    "mail.watches_scan_limit": "the compiled constant internal/mail/tuning.go:TuningWatchesScanLimit",
+    "mail.watches_stale_package_days": "the compiled constant internal/mail/tuning.go:TuningWatchesStalePackageDays",
+    "mail.write_attempts": "the compiled constant internal/mail/tuning.go:TuningWriteAttempts",
+    "mail.write_cap": "the operator setting mail.write_cap stored in the database",
+    "media.link_key": "the operator setting media.link_key stored in the database",
+    "media.media_artwork_miss_ttl_seconds": "the compiled constant internal/media/tuning.go:TuningMediaArtworkMissTtlSeconds",
+    "media.media_artwork_show_search_limit": "the compiled constant internal/media/tuning.go:TuningMediaArtworkShowSearchLimit",
+    "media.media_channel_name_chars": "the compiled constant internal/media/tuning.go:TuningMediaChannelNameChars",
+    "media.media_channel_pattern_chars": "the compiled constant internal/media/tuning.go:TuningMediaChannelPatternChars",
+    "media.media_channel_seen_ttl_seconds": "the compiled constant internal/media/tuning.go:TuningMediaChannelSeenTtlSeconds",
+    "media.media_child_limit": "the compiled constant internal/media/tuning.go:TuningMediaChildLimit",
+    "media.media_eztv_limit": "the compiled constant internal/media/tuning.go:TuningMediaEztvLimit",
+    "media.media_eztv_timeout_seconds": "the compiled constant internal/media/tuning.go:TuningMediaEztvTimeoutSeconds",
+    "media.media_ffmpeg_nice": "the compiled constant internal/media/tuning.go:TuningMediaFfmpegNice",
+    "media.media_ffmpeg_timeout_seconds": "the compiled constant internal/media/tuning.go:TuningMediaFfmpegTimeoutSeconds",
+    "media.media_link_ttl_seconds": "the operator setting media.media_link_ttl_seconds stored in the database",
+    "media.media_qbittorrent_api_key": "the connection field service/qbittorrent credential api_key",
+    "media.media_qbittorrent_timeout_seconds": "the compiled constant internal/media/tuning.go:TuningMediaQbittorrentTimeoutSeconds",
+    "media.media_qbittorrent_url": "host configuration service/qbittorrent.config.url",
+    "media.media_search_limit": "the compiled constant internal/media/tuning.go:TuningMediaSearchLimit",
+    "media.media_subtitle_extensions": "the compiled constant internal/media/tuning.go:TuningMediaSubtitleExtensions",
+    "media.media_thumbnail_pass_limit": "the compiled constant internal/media/tuning.go:TuningMediaThumbnailPassLimit",
+    "media.media_thumbnail_position": "the compiled constant internal/media/tuning.go:TuningMediaThumbnailPosition",
+    "media.media_thumbnail_width": "the compiled constant internal/media/tuning.go:TuningMediaThumbnailWidth",
+    "media.media_tmdb_search_limit": "the compiled constant internal/media/tuning.go:TuningMediaTmdbSearchLimit",
+    "media.media_tmdb_timeout_seconds": "the compiled constant internal/media/tuning.go:TuningMediaTmdbTimeoutSeconds",
+    "media.media_tmdb_token": "the connection field service/tmdb credential read_token",
+    "media.media_torrent_upload_bytes": "the compiled constant internal/media/tuning.go:TuningMediaTorrentUploadBytes",
+    "media.media_video_extensions": "the compiled constant internal/media/tuning.go:TuningMediaVideoExtensions",
+    "media.qbittorrent_ca_file": "host configuration service/qbittorrent.transport.ca_file",
+    "media.qbittorrent_proxy": "host configuration service/qbittorrent.transport.proxy",
+    "memory.memory_concurrency": "the compiled constant internal/assistant/memory/tuning.go:TuningMemoryConcurrency",
+    "memory.memory_effort": "the operator setting memory.memory_effort stored in the database",
+    "memory.memory_model": "the operator setting memory.memory_model stored in the database",
+    "memory.memory_node_bytes": "the compiled constant internal/assistant/memory/tuning.go:TuningMemoryNodeBytes",
+    "memory.memory_tail_messages": "the compiled constant internal/assistant/memory/tuning.go:TuningMemoryTailMessages",
+    "memory.memory_verbatim_tokens": "the operator setting memory.memory_verbatim_tokens stored in the database",
+    "memory.memory_view_high": "the compiled constant internal/assistant/memory/tuning.go:TuningMemoryViewHigh",
+    "memory.memory_view_low": "the compiled constant internal/assistant/memory/tuning.go:TuningMemoryViewLow",
+    "notify.notify_body_chars": "the compiled constant internal/notify/tuning.go:TuningNotifyBodyChars",
+    "notify.notify_nightly_cap": "the operator setting notify.notify_nightly_cap stored in the database",
+    "notify.notify_per_run_cap": "the operator setting notify.notify_per_run_cap stored in the database",
+    "notify.notify_title_chars": "the compiled constant internal/notify/tuning.go:TuningNotifyTitleChars",
+    "notify.webpush_subject": "the connection field service/webpush.config.subject",
+    "notify.webpush_vapid_private_key": "the connection field service/webpush credential vapid_private",
+    "notion.notion_block_depth": "the compiled constant internal/notion/tuning.go:TuningNotionBlockDepth",
+    "notion.notion_branch_limit": "the compiled constant internal/notion/tuning.go:TuningNotionBranchLimit",
+    "notion.notion_head_source_chars": "the compiled constant internal/notion/tuning.go:TuningNotionHeadSourceChars",
+    "notion.notion_label_chars": "the compiled constant internal/notion/tuning.go:TuningNotionLabelChars",
+    "notion.notion_max_aliases": "the compiled constant internal/notion/tuning.go:TuningNotionMaxAliases",
+    "notion.notion_max_retries": "the compiled constant internal/notion/tuning.go:TuningNotionMaxRetries",
+    "notion.notion_max_sources": "the compiled constant internal/notion/tuning.go:TuningNotionMaxSources",
+    "notion.notion_page_size": "the compiled constant internal/notion/tuning.go:TuningNotionPageSize",
+    "notion.notion_private_value": "the operator setting notion.notion_private_value stored in the database",
+    "notion.notion_related_limit": "the compiled constant internal/notion/tuning.go:TuningNotionRelatedLimit",
+    "notion.notion_retry_after_default_seconds": "the compiled constant internal/notion/tuning.go:TuningNotionRetryAfterDefaultSeconds",
+    "notion.notion_retry_after_max_seconds": "the compiled constant internal/notion/tuning.go:TuningNotionRetryAfterMaxSeconds",
+    "notion.notion_snippet_chars": "the compiled constant internal/notion/tuning.go:TuningNotionSnippetChars",
+    "notion.notion_timeout_seconds": "the compiled constant internal/notion/tuning.go:TuningNotionTimeoutSeconds",
+    "notion.notion_token": "the connection field service/notion credential token",
+    "notion.sensitivity_property": "the operator setting notion.sensitivity_property stored in the database",
+    "notion.wiki_log_title": "the operator setting notion.wiki_log_title stored in the database",
+    "notion.wiki_root": "the operator setting notion.wiki_root stored in the database",
+    "permissions.permission_internet_clean": "the operator setting permissions.permission_internet_clean stored in the database",
+    "permissions.permission_internet_kinds": "the operator setting permissions.permission_internet_kinds stored in the database",
+    "permissions.permission_internet_pii": "the operator setting permissions.permission_internet_pii stored in the database",
+    "permissions.permission_internet_untrusted_isolated": "the operator setting permissions.permission_internet_untrusted_isolated stored in the database",
+    "permissions.permission_internet_untrusted_kinds": "the operator setting permissions.permission_internet_untrusted_kinds stored in the database",
+    "permissions.permission_internet_untrusted_knowledge": "the operator setting permissions.permission_internet_untrusted_knowledge stored in the database",
+    "permissions.permission_notify_clean": "the operator setting permissions.permission_notify_clean stored in the database",
+    "permissions.permission_notify_kinds": "the operator setting permissions.permission_notify_kinds stored in the database",
+    "permissions.permission_notify_pii": "the operator setting permissions.permission_notify_pii stored in the database",
+    "permissions.permission_notify_untrusted_isolated": "the operator setting permissions.permission_notify_untrusted_isolated stored in the database",
+    "permissions.permission_notify_untrusted_kinds": "the operator setting permissions.permission_notify_untrusted_kinds stored in the database",
+    "permissions.permission_notify_untrusted_knowledge": "the operator setting permissions.permission_notify_untrusted_knowledge stored in the database",
+    "permissions.permission_own_clean": "the operator setting permissions.permission_own_clean stored in the database",
+    "permissions.permission_own_kinds": "the operator setting permissions.permission_own_kinds stored in the database",
+    "permissions.permission_own_pii": "the operator setting permissions.permission_own_pii stored in the database",
+    "permissions.permission_own_untrusted_isolated": "the operator setting permissions.permission_own_untrusted_isolated stored in the database",
+    "permissions.permission_own_untrusted_kinds": "the operator setting permissions.permission_own_untrusted_kinds stored in the database",
+    "permissions.permission_own_untrusted_knowledge": "the operator setting permissions.permission_own_untrusted_knowledge stored in the database",
+    "permissions.permission_people_clean": "the operator setting permissions.permission_people_clean stored in the database",
+    "permissions.permission_people_kinds": "the operator setting permissions.permission_people_kinds stored in the database",
+    "permissions.permission_people_pii": "the operator setting permissions.permission_people_pii stored in the database",
+    "permissions.permission_people_untrusted_isolated": "the operator setting permissions.permission_people_untrusted_isolated stored in the database",
+    "permissions.permission_people_untrusted_kinds": "the operator setting permissions.permission_people_untrusted_kinds stored in the database",
+    "permissions.permission_people_untrusted_knowledge": "the operator setting permissions.permission_people_untrusted_knowledge stored in the database",
+    "web.body_cap_bytes": "the compiled constant internal/config/tuning.go:TuningBodyCapBytes",
+    "web.chat_thread_limit": "the compiled constant internal/config/tuning.go:TuningChatThreadLimit",
+    "web.preview_bytes": "the compiled constant internal/config/tuning.go:TuningPreviewBytes",
+    "web.snooze_choices": "the operator setting web.snooze_choices stored in the database",
+    "web.web_page_size": "the compiled constant internal/config/tuning.go:TuningWebPageSize",
+    "web.web_run_history": "the compiled constant internal/config/tuning.go:TuningWebRunHistory",
+    "web_search.search_web_dynamic_filtering": "the compiled constant internal/assistant/registry/tuning.go:TuningSearchWebDynamicFiltering",
+    "web_search.search_web_max_cost_usd": "the operator setting web_search.search_web_max_cost_usd stored in the database",
+    "web_search.search_web_max_searches": "the compiled constant internal/assistant/subagents/websearch/tuning.go:TuningSearchWebMaxSearches",
+    "web_search.search_web_max_steps": "the compiled constant internal/assistant/subagents/websearch/tuning.go:TuningSearchWebMaxSteps",
+    "web_search.search_web_model": "the operator setting web_search.search_web_model stored in the database"
+  },
+  "x-atrium-secret": [
+    "action_links.action_link_key",
+    "anthropic.anthropic_api_key",
+    "auth.oidc_client_secret",
+    "calendar.google_calendar_refresh_token",
+    "calendar.google_oauth_client_secret",
+    "db.key",
+    "grafana.grafana_viewer_token",
+    "mail.google_gmail_refresh_token",
+    "mail.mail_chat_key",
+    "mail.mail_embed_key",
+    "mail.mail_ship24_api_key",
+    "media.link_key",
+    "media.media_tmdb_token",
+    "notify.webpush_vapid_private_key",
+    "notion.notion_token"
+  ]
 }

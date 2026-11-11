@@ -166,6 +166,9 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	vars["ATRIUM_EMBED_URL"] = srv.URL + "/v1"
 	vars["ATRIUM_NOTION_BASE_URL"] = "http://127.0.0.1:9"
 	vars[calendar.CalDAVEnv] = caldavURL
+	for _, name := range moduleNames {
+		vars["ATRIUM_CORE_"+strings.ToUpper(name)+"_ENABLED"] = "true"
+	}
 	for k, v := range extraEnv {
 		vars[k] = v
 	}

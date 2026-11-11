@@ -131,8 +131,9 @@ func failure(e *cli.Env, err error) int {
 	var invalid settings.Invalid
 	var pinned *settings.PinnedError
 	var notEditable *settings.NotEditable
+	var host settings.HostOwned
 	var refused *Refused
-	if errors.As(err, &invalid) || errors.As(err, &pinned) || errors.As(err, &notEditable) || errors.As(err, &refused) {
+	if errors.As(err, &invalid) || errors.As(err, &pinned) || errors.As(err, &notEditable) || errors.As(err, &host) || errors.As(err, &refused) {
 		_, _ = fmt.Fprintf(e.Stderr, "error: %v\n", err)
 		return cli.ExitError
 	}

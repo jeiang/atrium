@@ -77,16 +77,16 @@ func Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 
 func (s *State) Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 	reg := s.settings
+	host, err := LoadHost(env, HostFile(env))
+	if err != nil {
+		return err
+	}
 	if reg.PinSource() == nil {
 		pins, err := LoadPins(env, reg)
 		if err != nil {
 			return err
 		}
-		reg.SetPins(pins)
-	}
-	host, err := LoadHost(env, stripped(env, HostConfigEnv))
-	if err != nil {
-		return err
+		reg.SetPins(CombinePins(host, pins))
 	}
 	s.mu.Lock()
 	s.host = host
@@ -96,6 +96,11 @@ func (s *State) Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 	}
 	if err := settings.NewStore(reg, d, d).Load(ctx); err != nil {
 		return err
+	}
+	if initial := stripped(env, InitialTZEnv); initial != "" {
+		if _, err := reg.Seed(ctx, d.Write, KeyTZ, initial); err != nil {
+			return err
+		}
 	}
 	c, err := loadCore(ctx, d.Read)
 	if err != nil {

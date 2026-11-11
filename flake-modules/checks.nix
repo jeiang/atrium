@@ -20,6 +20,7 @@
               then pkgs.stdenv.hostPlatform.system
               else "x86_64-linux";
             system.stateVersion = "25.11";
+            time.timeZone = "UTC";
             services.atrium = {enable = true;} // atrium;
           }
         ];
@@ -27,27 +28,38 @@
     nixos = host {
       environmentFiles = ["/run/secrets/atrium.env"];
       modelServerUnits = ["llama.service"];
-      settings = {
+      host = {
         core.public_url = "https://atrium.example.org";
+        core.ops_listen = "127.0.0.1:9180";
+        auth.oidc_api_client_id = "api-client";
+        auth.oidc_client_secret_file = "/run/secrets/oidc-client-secret";
         mail = {
-          mail_mode = "live";
           mail_chat_url = "http://127.0.0.1:8187/v1";
           mail_embed_url = "http://127.0.0.1:8188/v1";
         };
-        media = {
-          media_root = "/var/lib/media";
-          media_qbittorrent_url = "http://127.0.0.1:8081";
+        media.media_root = "/var/lib/media";
+      };
+      connections = {
+        "service/qbittorrent" = {
+          kind = "service/qbittorrent";
+          config.url = "http://127.0.0.1:8081";
+          capabilities = ["api"];
+          credentialFiles.api_key = "/run/secrets/qbittorrent-api-key";
+        };
+        "mail/icloud" = {
+          kind = "mail/icloud";
+          account = {
+            preset = "icloud";
+            login = "operator@icloud.example";
+            passwordFile = "/run/secrets/icloud-app-password";
+          };
         };
       };
       secretFiles = {
-        "anthropic.anthropic_api_key" = "/run/secrets/anthropic-api-key";
         "action_links.action_link_key" = "/run/secrets/action-link-key";
+        "notion.notion_token" = "/run/secrets/notion-token";
       };
-      mailAccounts.icloud = {
-        preset = "icloud";
-        login = "operator@icloud.example";
-        passwordFile = "/run/secrets/icloud-app-password";
-      };
+      database.keyFile = "/run/secrets/db-key";
       web.allowedHost = "atrium.example.org";
       backup.enable = true;
       media.enable = true;
@@ -58,11 +70,25 @@
     refusedWith = text: atrium: builtins.any (lib.hasInfix text) (failing (host ({web.allowedHost = "atrium.example.org";} // atrium)));
 
     exampleEvaluates = assert failing nixos == [] && failing defaults == []; true;
-    unknownKeyRefused = assert refusedWith "unknown keys mail.mail_bogus" {settings.mail.mail_bogus = true;}; assert refusedWith "unknown keys bogus" {settings.bogus.x = 1;}; assert refusedWith "unknown keys anthropic.anthropic_bogus_file" {secretFiles."anthropic.anthropic_bogus" = "/run/x";}; true;
+    hostKeyRefused = assert refusedWith "unknown key core.not_a_key" {host.core.not_a_key = true;}; true;
+    operatorKeyRefused = assert refusedWith "operator setting assistant.monthly_budget_usd" {host.assistant.monthly_budget_usd = 1;}; true;
+    tuningKeyRefused = assert refusedWith "compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsChat" {host.assistant.max_steps_chat = 1;}; true;
+    cutoverHostRefused = assert refusedWith "host configuration service/qbittorrent.config.url" {host.media.media_qbittorrent_url = "http://127.0.0.1:8081";}; true;
+    databaseKeyRefused = assert refusedWith "services.atrium.database.keyFile" {host.db.key_file = "/run/x";}; true;
+    obsidianRefused = assert refusedWith "services.atrium.knowledgeExport.obsidianDirectory" {host.export.export_obsidian_dir = "/var/lib/x";}; true;
+    secretRefused = assert refusedWith "services.atrium.database.keyFile" {secretFiles."db.key" = "/run/x";}; assert refusedWith "connection field service/qbittorrent credential api_key" {secretFiles."media.media_qbittorrent_api_key" = "/run/x";}; assert refusedWith "host configuration" {secretFiles."auth.oidc_client_secret" = "/run/x";}; assert refusedWith "is not a secret setting" {secretFiles."assistant.monthly_budget_usd" = "/run/x";}; true;
+    connectionRefused = assert refusedWith "needs a kind" {connections."service/x" = {kind = "";};}; assert refusedWith "needs a mail/<id> connection id" {connections."service/x" = {kind = "mail/icloud"; account = {preset = "icloud"; login = "x"; passwordFile = "/run/x";};};}; assert refusedWith "needs a passwordFile" {connections."mail/x" = {kind = "mail/icloud"; account = {preset = "icloud"; login = "x"; passwordFile = "";};};}; true;
     cfg = nixos.config.services.atrium;
     unitText = name: nixos.config.systemd.units.${name}.text;
     appUnits = builtins.filter (lib.hasSuffix ".service") cfg.unitNames;
-    credentialLines = ["LoadCredential=anthropic.anthropic_api_key:/run/secrets/anthropic-api-key" "LoadCredential=action_links.action_link_key:/run/secrets/action-link-key" "LoadCredential=mail-account-icloud:/run/secrets/icloud-app-password"];
+    credentialLines = [
+      "LoadCredential=action_links.action_link_key:/run/secrets/action-link-key"
+      "LoadCredential=notion.notion_token:/run/secrets/notion-token"
+      "LoadCredential=db-key:/run/secrets/db-key"
+      "LoadCredential=connection-service-qbittorrent-api_key:/run/secrets/qbittorrent-api-key"
+      "LoadCredential=mail-account-icloud:/run/secrets/icloud-app-password"
+      "LoadCredential=host-auth-oidc_client_secret:/run/secrets/oidc-client-secret"
+    ];
     sharedLines = credentialLines ++ ["EnvironmentFile=/run/secrets/atrium.env" "User=atrium" "Group=atrium" "StateDirectory=atrium"];
     credentialsMatch = assert builtins.all (line: builtins.elem line cfg.runProperties) sharedLines;
     assert builtins.all (name: builtins.all (line: lib.hasInfix line (unitText name)) sharedLines) appUnits;
@@ -77,13 +103,20 @@
     vaultExport = let
       scheduler = unitText "atrium-agent-scheduler.service";
     in
-      assert cfg.renderedSettings.export.export_obsidian_dir == "/var/lib/atrium-vault";
+      assert cfg.renderedHost.export.export_obsidian_dir == "/var/lib/atrium-vault";
       assert lib.hasInfix "ReadWritePaths=/var/lib/atrium-vault" scheduler;
       assert lib.hasInfix "ReadWritePaths=/var/lib/media" scheduler;
-      assert !(defaults.config.services.atrium.renderedSettings ? export); true;
+      assert !(defaults.config.services.atrium.renderedHost ? export); true;
+    hostConfig = assert cfg.renderedHost.core.public_url == "https://atrium.example.org";
+      assert cfg.renderedHost.connections."service/qbittorrent".config.url == "http://127.0.0.1:8081";
+      assert cfg.renderedHost.connections."service/qbittorrent".credential_files.api_key == "\${CREDENTIALS_DIRECTORY}/connection-service-qbittorrent-api_key";
+      assert cfg.renderedHost.mail.mail_accounts_file != "";
+      assert cfg.renderedHost.auth.oidc_client_secret_file == "\${CREDENTIALS_DIRECTORY}/host-auth-oidc_client_secret";
+      assert cfg.initialTimezone != null; true;
     unit = name: pkgs.writeText name (builtins.unsafeDiscardStringContext nixos.config.systemd.units.${name}.text);
     inherit (cfg) unitNames;
-    configFile = (pkgs.formats.toml {}).generate "atrium.toml" cfg.renderedSettings;
+    configFile = (pkgs.formats.toml {}).generate "atrium-host.toml" cfg.renderedHost;
+    pinsFile = (pkgs.formats.toml {}).generate "atrium.toml" cfg.renderedPins;
   in {
     checks =
       {
@@ -94,7 +127,7 @@
           touch $out
         '';
 
-        module = assert exampleEvaluates && unknownKeyRefused && credentialsMatch && backupAbsentByDefault && notifyOnLongRunning && vaultExport;
+        module = assert exampleEvaluates && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && obsidianRefused && secretRefused && connectionRefused && credentialsMatch && backupAbsentByDefault && notifyOnLongRunning && vaultExport && hostConfig;
           pkgs.linkFarm "atrium-units" (map (name: {
               inherit name;
               path = unit name;
@@ -135,23 +168,40 @@
       // lib.optionalAttrs (self'.packages ? atrium) {
         module-config = pkgs.runCommand "atrium-module-config" {nativeBuildInputs = [self'.packages.atrium pkgs.gnugrep];} ''
           set -euo pipefail
-          export HOME=$TMPDIR ATRIUM_DB=$TMPDIR/atrium.db ATRIUM_CACHE_DIR=$TMPDIR/cache ATRIUM_CONFIG=${configFile}
+          export HOME=$TMPDIR ATRIUM_DB=$TMPDIR/atrium.db ATRIUM_CACHE_DIR=$TMPDIR/cache
+          export ATRIUM_HOST_CONFIG=${configFile} ATRIUM_CONFIG=${pinsFile} ATRIUM_INITIAL_TZ=UTC
           export CREDENTIALS_DIRECTORY=$TMPDIR/credentials
           mkdir -p "$CREDENTIALS_DIRECTORY"
-          printf 'sk-ant-module-check\n' >"$CREDENTIALS_DIRECTORY/anthropic.anthropic_api_key"
           head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/action_links.action_link_key"
+          printf 'notion-token\n' >"$CREDENTIALS_DIRECTORY/notion.notion_token"
+          head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/db-key"
+          printf 'qbt-key\n' >"$CREDENTIALS_DIRECTORY/connection-service-qbittorrent-api_key"
           printf 'app-password\n' >"$CREDENTIALS_DIRECTORY/mail-account-icloud"
+          printf 'oidc-secret\n' >"$CREDENTIALS_DIRECTORY/host-auth-oidc_client_secret"
           atrium settings list >/dev/null
-          atrium settings get mail_mode | grep -q '"value": "live"'
           atrium settings get public_url | grep -q '"value": "https://atrium.example.org"'
           atrium settings get mail_accounts_file | grep -q 'mail-accounts.toml'
+          atrium settings get tz | grep -q '"value": "UTC"'
+          atrium settings set tz Europe/Berlin >/dev/null
+          atrium settings get tz | grep -q '"value": "Europe/Berlin"'
+          if atrium settings set public_url https://other.example >/dev/null 2>&1; then
+            echo "a host setting was editable" >&2
+            exit 1
+          fi
+          atrium connections list | grep -q 'service/qbittorrent'
           rm "$CREDENTIALS_DIRECTORY/mail-account-icloud"
           if atrium settings list >/dev/null 2>&1; then
             echo "a missing mail account password was accepted" >&2
             exit 1
           fi
           printf 'app-password\n' >"$CREDENTIALS_DIRECTORY/mail-account-icloud"
-          rm "$CREDENTIALS_DIRECTORY/anthropic.anthropic_api_key"
+          rm "$CREDENTIALS_DIRECTORY/connection-service-qbittorrent-api_key"
+          if atrium settings list >/dev/null 2>&1; then
+            echo "a missing connection credential file was accepted" >&2
+            exit 1
+          fi
+          printf 'qbt-key\n' >"$CREDENTIALS_DIRECTORY/connection-service-qbittorrent-api_key"
+          rm "$CREDENTIALS_DIRECTORY/action_links.action_link_key"
           if atrium settings list >/dev/null 2>&1; then
             echo "a missing credential file was accepted" >&2
             exit 1

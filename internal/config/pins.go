@@ -46,12 +46,33 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 		}
 	}
 	for _, d := range defs {
+		entry, known := settings.ImportEntryFor(d.Key)
+		if known && entry.Class == settings.ImportHost {
+			continue
+		}
+		if known && entry.Runtime {
+			if err := refuseCutoverEnv(env, entry); err != nil {
+				return nil, err
+			}
+			continue
+		}
 		found, ok, err := pinFromEnv(env, reg, d)
 		if err != nil {
 			return nil, err
 		}
 		if ok {
 			pins.m[d.Key] = found
+		}
+	}
+	for _, entry := range settings.Manifest() {
+		if !entry.Runtime || entry.Class == settings.ImportHost {
+			continue
+		}
+		if _, ok := reg.Lookup(entry.Key); ok {
+			continue
+		}
+		if err := refuseCutoverEnv(env, entry); err != nil {
+			return nil, err
 		}
 	}
 	for _, retired := range settings.Retired {
@@ -61,6 +82,14 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 		}
 	}
 	return pins, nil
+}
+
+func refuseCutoverEnv(env Env, entry settings.ImportEntry) error {
+	name := "ATRIUM_" + strings.ToUpper(entry.Module) + "_" + strings.ToUpper(entry.Key)
+	if strings.TrimSpace(get(env, name)) != "" || strings.TrimSpace(get(env, name+"_FILE")) != "" {
+		return fmt.Errorf("config: %s is cut over and no longer a setting; use %s", entry.Module+"."+entry.Key, settings.CutoverDestination(entry))
+	}
+	return nil
 }
 
 func pinFromEnv(env Env, reg *settings.Registry, d settings.Def) (pin, bool, error) {
@@ -129,6 +158,9 @@ func (p *Pins) readFile(env Env, reg *settings.Registry, defs []settings.Def, pa
 		}
 		for _, name := range slices.Sorted(maps.Keys(table)) {
 			dotted := module + "." + name
+			if entry, known := settings.ImportEntryFor(name); known && entry.Module == module && entry.Runtime {
+				return fmt.Errorf("config: %s: %q is cut over and no longer a setting; use %s", path, dotted, settings.CutoverDestination(entry))
+			}
 			d, isFile, ok := keyOf(keys, name)
 			if !ok {
 				if retired, gone := settings.RetiredAt(module, name); gone {

@@ -147,6 +147,9 @@ func (s *Set) adopt(ctx context.Context, q db.Querier, only map[string]bool) err
 		if only != nil && !only[r.Name] {
 			continue
 		}
+		if settings.HostKey(FlagKey(r.Name)) {
+			continue
+		}
 		if _, pinned, err := s.reg.Pinned(FlagKey(r.Name)); err != nil {
 			return err
 		} else if pinned {

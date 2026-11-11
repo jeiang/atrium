@@ -250,6 +250,7 @@ func (h handlers) refuse(w http.ResponseWriter, r *http.Request, name string, er
 	var invalid settings.Invalid
 	var pinned *settings.PinnedError
 	var scope *settings.NotEditable
+	var host settings.HostOwned
 	var encryption settings.EncryptionRequired
 	var empty settings.EmptyValue
 	var unknown Unknown
@@ -257,7 +258,7 @@ func (h handlers) refuse(w http.ResponseWriter, r *http.Request, name string, er
 	switch {
 	case errors.As(err, &unknown):
 		http.NotFound(w, r)
-	case errors.As(err, &failed), errors.As(err, &invalid), errors.As(err, &pinned), errors.As(err, &scope), errors.As(err, &encryption), errors.As(err, &empty):
+	case errors.As(err, &failed), errors.As(err, &invalid), errors.As(err, &pinned), errors.As(err, &scope), errors.As(err, &host), errors.As(err, &encryption), errors.As(err, &empty):
 		data := page{Failed: name, Error: err.Error()}
 		if len(submitted) > 0 {
 			data.SubmittedSection = submitted[0].SubmittedSection
