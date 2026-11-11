@@ -32,9 +32,10 @@ import (
 )
 
 type smtpFake struct {
-	mu     sync.Mutex
-	tokens []string
-	data   string
+	mu        sync.Mutex
+	tokens    []string
+	passwords []string
+	data      string
 }
 
 func (f *smtpFake) handle(c net.Conn) {
@@ -84,6 +85,11 @@ func (f *smtpFake) handle(c net.Conn) {
 			} else {
 				write("235 2.7.0 accepted")
 			}
+		case strings.HasPrefix(upper, "AUTH PLAIN "), strings.HasPrefix(upper, "AUTH LOGIN"):
+			f.mu.Lock()
+			f.passwords = append(f.passwords, strings.TrimSpace(line))
+			f.mu.Unlock()
+			write("235 2.7.0 accepted")
 		case strings.HasPrefix(upper, "MAIL FROM:"), strings.HasPrefix(upper, "RCPT TO:"):
 			write("250 OK")
 		case upper == "DATA":
@@ -189,10 +195,7 @@ func TestDraftSendOverXOAUTH2RefreshesTheTokenOnlyAtAuth(t *testing.T) {
 	if err := db.Migrate(context.Background(), d, filepath.Join(dir, "atrium.db")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Write.Exec("INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, auth_method, created_at) " +
-		"VALUES ('oauth', 'OAuth', 'gmail', 'atrium.test@gmail.test', 1, 0, 'xoauth2', 0)"); err != nil {
-		t.Fatal(err)
-	}
+	insertMailAccount(t, d, "oauth", "gmail", "atrium.test@gmail.test", "xoauth2")
 
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)

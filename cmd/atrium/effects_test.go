@@ -19,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
-	"github.com/jeiang/atrium/internal/mail/tracking"
 )
 
 func TestTaskAddEffectUndoAndActivityListing(t *testing.T) {
@@ -290,8 +289,7 @@ func TestRunningExternalWriteRenewsItsLeasePastTheStuckThreshold(t *testing.T) {
 		_, _ = w.Write([]byte(`{"data":{"trackings":[]}}`))
 	}))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(tracking.KeyShip24URL), srv.URL+"/public/v1")
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "good")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
@@ -512,8 +510,7 @@ func TestEffectsCLIUsesTheProposalUndoers(t *testing.T) {
 
 func TestOperationKeyAdmissionRefusesASecondSuccessfulAttempt(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(tracking.KeyShip24URL), "http://ship24.invalid/public/v1")
-	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "dummy")
+	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, "http://ship24.invalid/public/v1", "dummy"))
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}

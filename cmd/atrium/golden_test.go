@@ -192,7 +192,11 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 			accounts[i] = mailAccount{a.id, a.preset, a.id, "unset", true}
 		}
 	}
-	vars[settingEnv(config.KeyMailAccountsFile)] = accountsFile(t, dir, accounts...)
+	anthropicKey := filepath.Join(testRoot, "host", "anthropic.key")
+	if value, ok := extraEnv["ANTHROPIC_API_KEY"]; ok && value == "" {
+		anthropicKey = ""
+	}
+	vars["ATRIUM_HOST_CONFIG"] = accountsFileWith(t, dir, anthropicKey, accounts...)
 	for _, name := range []string{"ATRIUM_TZ", "ATRIUM_PUBLIC_URL", "ICLOUD_APPLE_ID", "ICLOUD_MAIL_USERNAME", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD"} {
 		delete(vars, name)
 	}

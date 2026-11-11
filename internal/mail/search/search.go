@@ -11,7 +11,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/textsearch"
@@ -23,12 +22,11 @@ type limits struct {
 }
 
 func readLimits(ctx context.Context, q Querier) (limits, error) {
-	r := endpoint.Read(ctx, q)
 	l := limits{
-		rrfK: r.Int(mail.KeySearchRRFK), branchLimit: r.Int(mail.KeySearchBranchLimit), maxTerms: r.Int(mail.KeySearchMaxTerms),
-		snippetTokens: r.Int(mail.KeySearchSnippetTokens), snippetChars: r.Int(mail.KeySearchSnippetChars), knnMax: r.Int(mail.KeyKNNMax),
+		rrfK: mail.TuningMailSearchRrfK, branchLimit: mail.TuningMailSearchBranchLimit, maxTerms: mail.TuningMailSearchMaxTerms,
+		snippetTokens: mail.TuningMailSearchSnippetTokens, snippetChars: mail.TuningMailSearchSnippetChars, knnMax: mail.TuningKnnMax,
 	}
-	return l, r.Err()
+	return l, nil
 }
 
 const baseSelect = "SELECT m.id, m.account, COALESCE(c.folder, m.folder, m.location) AS folder, m.from_addr, m.from_name, " +

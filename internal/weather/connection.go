@@ -39,7 +39,7 @@ func validateConnection(c connections.Candidate) error {
 }
 
 func testConnection(ctx context.Context, lease *connections.Lease, _ []connections.Capability) ([]connections.Result, error) {
-	client, err := lease.HTTP("url")
+	client, err := lease.HTTPRead("url")
 	if err != nil {
 		return nil, err
 	}

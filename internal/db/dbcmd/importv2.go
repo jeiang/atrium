@@ -3,6 +3,7 @@ package dbcmd
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -23,7 +24,9 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/notion"
@@ -70,7 +73,7 @@ type tablePlan struct {
 
 var importTables = []tablePlan{
 	{table: "accounts", action: carry},
-	{table: "mail_accounts", action: carry, ignore: true, why: "the accounts file wins on a conflict"},
+	{table: "mail_accounts", action: carry, ignore: true, why: "a host-declared account keeps its identity; the import supplies its credential"},
 	{table: "mailboxes", action: carry},
 	{table: "messages", action: carry, skip: []string{"embedded"}},
 	{table: "message_fts", action: rebuild, run: func(im *importer) (int64, error) {
@@ -183,8 +186,36 @@ var importTables = []tablePlan{
 	{table: "events", action: drop, why: "the mail event log is not carried"},
 	{table: "pass_runs", action: drop, why: "ops pass history is not carried"},
 	{table: "pass_run_alerts", action: drop, why: "ops pass history is not carried"},
-	{table: "endpoint_probes", action: drop, why: "endpoints are re-probed"},
-	{table: "integration_health", action: drop, why: "integrations are re-probed"},
+	{table: "endpoint_probes", action: carry, run: func(im *importer) (int64, error) {
+		n, err := im.copy("endpoint_probes", "kind = ?", []any{"chat"}, nil, nil, nil, false)
+		if err != nil {
+			return n, err
+		}
+		var moved int64
+		if err := im.src.QueryRowContext(im.ctx, "SELECT COUNT(*) FROM endpoint_probes WHERE kind = 'embed'").Scan(&moved); err != nil {
+			return n, err
+		}
+		if moved > 0 {
+			im.notes = append(im.notes, "the embed probe moved to connection service/embedding")
+		}
+		return n, nil
+	}},
+	{table: "integration_health", action: carry, run: func(im *importer) (int64, error) {
+		n, err := im.copy("integration_health", "name = ?", []any{"mail_chat"}, nil, nil, nil, false)
+		if err != nil {
+			return n, err
+		}
+		if n > 0 {
+			var accounts int
+			if err := im.tx.QueryRowContext(im.ctx, "SELECT COUNT(*) FROM mail_accounts WHERE id = 'chat'").Scan(&accounts); err != nil {
+				return n, err
+			}
+			if accounts > 0 {
+				im.notes = append(im.notes, "ambiguous-health mail_chat: the name is both the local chat endpoint and a mail account; kept as local-chat legacy, the account is untested")
+			}
+		}
+		return n, nil
+	}},
 	{table: "ops_samples", action: drop, why: "ops samples are not carried"},
 	{table: "ops_findings", action: drop, why: "ops findings are not carried"},
 	{table: "nightly_observations", action: drop, why: "nightly observations are not carried"},
@@ -289,7 +320,11 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source str
 			return err
 		}
 		lines = append(lines, settingLines...)
-		sourced, err := sourceConnections(ctx, src)
+		accounts, err := importedAccountIDs(ctx, tx)
+		if err != nil {
+			return err
+		}
+		sourced, err := sourceConnections(ctx, src, accounts)
 		if err != nil {
 			return err
 		}
@@ -299,6 +334,19 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source str
 		}
 		lines = append(lines, connLines...)
 		lines = append(lines, sourced.Notes...)
+		host := config.From(ctx).Host()
+		for _, id := range sourced.MailIDs {
+			pinned := 0
+			if c, ok := host.Connection(id); ok && c.Kind == "mail" {
+				pinned = 1
+			}
+			if _, err := tx.ExecContext(ctx,
+				"UPDATE mail_accounts SET connection_id = ?, capability_prefix = ?, pinned = ? WHERE id = ?",
+				id, id, pinned, strings.TrimPrefix(id, "mail/")); err != nil {
+				return err
+			}
+			lines = append(lines, "mail_accounts: linked "+id)
+		}
 		for _, name := range sourced.Secrets {
 			if _, err := tx.ExecContext(ctx, "DELETE FROM secrets WHERE name = ?", name); err != nil {
 				return err
@@ -436,9 +484,30 @@ type sourceConnectionsData struct {
 	Services []connections.ImportService
 	Secrets  []string
 	Notes    []string
+	MailIDs  []string
 }
 
-func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData, error) {
+func importedAccountIDs(ctx context.Context, q *sql.Tx) (map[string]bool, error) {
+	rows, err := q.QueryContext(ctx, "SELECT id FROM mail_accounts")
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]bool{}
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			_ = rows.Close()
+			return nil, err
+		}
+		out[id] = true
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func sourceConnections(ctx context.Context, src *sql.DB, accounts map[string]bool) (sourceConnectionsData, error) {
 	var out sourceConnectionsData
 	qbit, err := sourceQbit(ctx, src)
 	if err != nil {
@@ -455,6 +524,8 @@ func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData,
 		"weather_open_meteo_url", "weather_geocoding_url", "open_meteo_ca_file", "open_meteo_proxy",
 		"media_tmdb_url", "media_tmdb_images_url", "media_eztv_url", "tmdb_ca_file", "tmdb_proxy",
 		"webpush_subject", "webpush_ca_file",
+		"mail_embed_url", "mail_embed_model", "mail_embed_ca_file", "mail_embed_proxy",
+		"mail_ship24_url", "ship24_ca_file", "ship24_proxy",
 	})
 	if err != nil {
 		return out, err
@@ -516,12 +587,79 @@ func sourceConnections(ctx context.Context, src *sql.DB) (sourceConnectionsData,
 	}
 	out.Services = append(out.Services, iclouds...)
 	out.Notes = append(out.Notes, icloudNotes...)
+	mails, mailSecrets, mailNotes, err := sourceMailAccounts(ctx, src)
+	if err != nil {
+		return out, err
+	}
+	out.Services = append(out.Services, mails...)
+	out.Secrets = append(out.Secrets, mailSecrets...)
+	out.Notes = append(out.Notes, mailNotes...)
+	for _, service := range mails {
+		out.MailIDs = append(out.MailIDs, service.ID)
+	}
 	oidcSecret, err := sourceSecret(ctx, src, "oidc_client_secret", "client_secret")
 	if err != nil {
 		return out, err
 	}
 	out.Notes = append(out.Notes, oidcconn.ImportV2(oidcSecret)...)
+	embedKey, err := sourceSecret(ctx, src, "mail_embed_key", "bearer")
+	if err != nil {
+		return out, err
+	}
+	probe, err := sourceProbe(ctx, src, "embed")
+	if err != nil {
+		return out, err
+	}
+	var embedHealth *connections.ImportHealth
+	if state, reason, checked, expires, ok, err := sourceHealth(ctx, src, "mail_embed"); err != nil {
+		return out, err
+	} else if ok {
+		embedHealth = &connections.ImportHealth{State: state, Reason: reason, CheckedAt: checked, ExpiresAt: expires}
+	}
+	embedding, embedNotes := endpoint.ImportV2(values, probe, embedHealth, accounts["embed"], embedKey)
+	out.Services = append(out.Services, embedding)
+	out.Notes = append(out.Notes, embedNotes...)
+	if embedKey.Value != "" {
+		out.Secrets = append(out.Secrets, "mail_embed_key")
+	}
+	ship24Key, err := sourceSecret(ctx, src, "mail_ship24_api_key", "api_key")
+	if err != nil {
+		return out, err
+	}
+	var ship24Health *connections.ImportHealth
+	if state, reason, checked, expires, ok, err := sourceHealth(ctx, src, "ship24"); err != nil {
+		return out, err
+	} else if ok {
+		ship24Health = &connections.ImportHealth{State: state, Reason: reason, CheckedAt: checked, ExpiresAt: expires}
+	}
+	out.Services = append(out.Services, tracking.ImportV2(values, ship24Key, ship24Health))
+	if ship24Key.Value != "" {
+		out.Secrets = append(out.Secrets, "mail_ship24_api_key")
+	}
 	return out, nil
+}
+
+func sourceProbe(ctx context.Context, src *sql.DB, kind string) (*endpoint.ImportProbe, error) {
+	var (
+		p         endpoint.ImportProbe
+		models    string
+		probed    float64
+		dimension sql.NullInt64
+	)
+	err := src.QueryRowContext(ctx, "SELECT fingerprint, ok, reason, dimension, models, probed_at FROM endpoint_probes WHERE kind = ?", kind).
+		Scan(&p.Fingerprint, &p.OK, &p.Reason, &dimension, &models, &probed)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	p.ProbedAt = probed
+	if dimension.Valid {
+		p.Dimension = int(dimension.Int64)
+	}
+	_ = json.Unmarshal([]byte(models), &p.Models)
+	return &p, nil
 }
 
 func sourceGoogle(ctx context.Context, src *sql.DB) (connections.ImportService, []string, error) {
@@ -624,22 +762,78 @@ func sourceICloud(ctx context.Context, src *sql.DB) ([]connections.ImportService
 	var services []connections.ImportService
 	var notes []string
 	for _, a := range accounts {
-		password, err := sourceSecret(ctx, src, "mail_password_"+a.id, "mail/"+a.id+"/password")
-		if err != nil {
-			return nil, nil, err
-		}
 		service := connections.ImportService{
 			ID: "icloud/" + a.id, Kind: string(calendar.KindICloud), Label: "iCloud " + a.id, Source: connections.SourceOperator,
 			Config:       map[string]string{"apple_id": values["icloud_apple_id"]},
 			Capabilities: []string{calendar.CapabilityCalDAV, calendar.CapabilityCardDAV},
-			Credentials:  []connections.ImportCredential{password},
-		}
-		if password.Value == "" {
-			notes = append(notes, "icloud/"+a.id+": unresolved-credential; the app password is not in the source database")
 		}
 		services = append(services, service)
 	}
 	return services, notes, nil
+}
+
+func sourceMailAccounts(ctx context.Context, src *sql.DB) ([]connections.ImportService, []string, []string, error) {
+	rows, err := src.QueryContext(ctx, "SELECT id, label, preset, login, enabled, auth_method FROM mail_accounts ORDER BY id")
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	type account struct {
+		id, label, preset, login, method string
+		enabled                          bool
+	}
+	var accounts []account
+	for rows.Next() {
+		var a account
+		if err := rows.Scan(&a.id, &a.label, &a.preset, &a.login, &a.enabled, &a.method); err != nil {
+			_ = rows.Close()
+			return nil, nil, nil, err
+		}
+		accounts = append(accounts, a)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, nil, nil, err
+	}
+	var (
+		services []connections.ImportService
+		secrets  []string
+		notes    []string
+	)
+	for _, a := range accounts {
+		if a.id == "chat" || a.id == "embed" {
+			notes = append(notes, "mail/"+a.id+": ambiguous-health; the account id collides with a local endpoint name")
+		}
+		enabled := a.enabled
+		service := connections.ImportService{
+			ID: "mail/" + a.id, Kind: "mail", Label: a.label, Source: connections.SourceOperator,
+			Config: map[string]string{
+				"preset": a.preset, "login": a.login, "auth_method": a.method,
+				"enabled": fmt.Sprintf("%t", a.enabled),
+			},
+			Capabilities: []string{"imap", "smtp"},
+			Enabled:      &enabled,
+		}
+		password, err := sourceSecret(ctx, src, "mail_password_"+a.id, "mail/"+a.id+"/password")
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if password.Value != "" {
+			service.Credentials = []connections.ImportCredential{password}
+			secrets = append(secrets, "mail_password_"+a.id)
+		} else if a.method == "password" {
+			notes = append(notes, "mail/"+a.id+": unresolved-credential; the app password is not in the source database")
+		}
+		if a.id != "chat" && a.id != "embed" {
+			state, reason, checked, expires, ok, err := sourceHealth(ctx, src, "mail_"+a.id)
+			if err != nil {
+				return nil, nil, nil, err
+			}
+			if ok {
+				service.Health = &connections.ImportHealth{State: state, Reason: reason, CheckedAt: checked, ExpiresAt: expires}
+			}
+		}
+		services = append(services, service)
+	}
+	return services, secrets, notes, nil
 }
 
 func sourceSettings(ctx context.Context, src *sql.DB, keys []string) (map[string]string, error) {

@@ -20,7 +20,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
@@ -397,10 +396,7 @@ func (s *Store) replyContext(ctx context.Context, messageID int64) (reply, error
 }
 
 func (s *Store) limits(ctx context.Context) (maxBody, maxSubject int, err error) {
-	r := endpoint.Read(ctx, s.read())
-	maxBody = r.Int(mail.KeyDraftsMaxBody)
-	maxSubject = r.Int(mail.KeyDraftsMaxSubject)
-	return maxBody, maxSubject, r.Err()
+	return mail.TuningDraftsMaxBody, mail.TuningDraftsMaxSubject, nil
 }
 
 func (s *Store) Create(ctx context.Context, threadID *int64, account string, to, cc any, subject string, body any, replyTo any) (int64, error) {

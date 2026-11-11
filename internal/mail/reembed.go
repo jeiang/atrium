@@ -21,24 +21,17 @@ func EmbedIndexes(ctx context.Context, d *db.DB) ([]embed.Index, error) {
 }
 
 func ReembedStep(ctx context.Context, d *db.DB) (bool, error) {
-	endpoints, err := endpoint.Endpoints(ctx, d.Read)
+	e, err := endpoint.OpenEmbedding(ctx, d.Read)
 	if err != nil {
+		if endpoint.IsUnconfigured(err) {
+			return false, nil
+		}
 		return false, err
 	}
-	target, ok := endpoint.Of(endpoints, endpoint.EndpointEmbed)
-	if !ok || target.URL == "" {
-		return false, nil
-	}
-	ctx, err = endpoint.WithEndpoints(ctx, d.Read, []endpoint.Endpoint{target})
-	if err != nil {
-		return false, err
-	}
-	r := endpoint.Read(ctx, d.Read)
-	s := endpoint.Settings{EmbedBodyChars: r.Int(endpoint.KeyEmbedBodyChars), Batch: r.Int(endpoint.KeyEmbedBatch)}
-	if r.Err() != nil {
-		return false, r.Err()
-	}
-	return embed.Rebuild(ctx, d, target.URL, target.Model, s, func(ctx context.Context, url, model string) (string, int) {
-		return probeEmbed(ctx, endpoint.Endpoint{Kind: endpoint.EndpointEmbed, URL: url, Model: model})
+	defer e.Close()
+	ctx = endpoint.WithEmbedding(ctx, e)
+	s := endpoint.Settings{EmbedBodyChars: endpoint.TuningMailEmbedBodyChars, Batch: endpoint.TuningMailEmbedBatch}
+	return embed.Rebuild(ctx, d, e.Base, e.Model, s, func(ctx context.Context, _, _ string) (string, int) {
+		return e.Probe(ctx)
 	})
 }

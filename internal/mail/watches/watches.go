@@ -389,9 +389,9 @@ type scanResult struct {
 
 func ScanPackages(ctx context.Context, d *db.DB, now float64, o Options) (scanResult, error) {
 	r := endpoint.Read(ctx, d.Read)
-	limit := r.Int(mail.KeyWatchesScanLimit)
-	window := r.Int(mail.KeyWatchesPackageWindow)
-	bodyChars := r.Int(mail.KeyWatchesBodyChars)
+	limit := mail.TuningWatchesScanLimit
+	window := mail.TuningWatchesPackageWindowDays
+	bodyChars := mail.TuningWatchesBodyChars
 	carrierDomains := r.List(mail.KeyWatchesCarrierDomains)
 	if err := r.Err(); err != nil {
 		return scanResult{}, err
@@ -467,11 +467,7 @@ type Package struct {
 func ListPackages(ctx context.Context, q db.Querier, env config.Env, now float64, activeOnly, includeDismissed bool) ([]Package, error) {
 	stale := 0
 	if activeOnly {
-		r := endpoint.Read(ctx, q)
-		stale = r.Int(mail.KeyWatchesStalePackage)
-		if err := r.Err(); err != nil {
-			return nil, err
-		}
+		stale = mail.TuningWatchesStalePackageDays
 	}
 	where := " WHERE dismissed = 0"
 	if includeDismissed {

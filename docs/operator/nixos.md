@@ -17,14 +17,14 @@ The module has a small set of typed deployment options. Host configuration goes 
 | `port` | port | `8480` | Port of the public listener. |
 | `host` | TOML table per module | `{}` | Host configuration, rendered to the file named by `ATRIUM_HOST_CONFIG`. Only host keys from the configuration reference are accepted; operator and tuning keys, and derived keys such as `export.export_obsidian_dir`, fail evaluation with their destination. Host values are read-only in the application. |
 | `connections` | attribute set of connection | `{}` | Host-owned connections by id. Each has `kind`, optional `label`, `config`, `transport`, `capabilities` and `credentialFiles` (slot to host file). Each file is delivered through `LoadCredential`; secret values never enter the Nix store. The kind must be one the application registers. |
-| `mailAccounts` | attribute set of mail account | `{}` | Mail accounts by id, rendered to the file named by `mail.mail_accounts_file`. Each has `preset` (`icloud` or `gmail`), `login`, `passwordFile`, and optional `label` and `enabled`. The password file is delivered through `LoadCredential`; the id keys the account's cached mail, so keep it stable. |
+| `mailAccounts` | attribute set of mail account | `{}` | Mail accounts by id, rendered as `mail/<id>` connections of kind `mail` with the `imap` and `smtp` capabilities and the password as a host-file credential. Each has `preset` (`icloud` or `gmail`), `login`, `passwordFile`, and optional `label` and `enabled`. The password file is delivered through `LoadCredential`; the id keys the account's cached mail, so keep it stable. |
 | `secretFiles` | attribute set of string | `{}` | Secret settings as `"<module>.<key>" = "<host file>"`, delivered through systemd `LoadCredential` and pinned as `<key>_file`. Connection credentials belong in `connections.<id>.credentialFiles`; host secret inputs belong in `host.<module>.<key>_file`; the database key belongs in `database.keyFile`. |
 | `database.keyFile` | null or string | `null` | Host file holding the database key, delivered as the `db-key` credential and `ATRIUM_DB_KEY_FILE`. |
 | `initialTimezone` | null or string | `time.timeZone` | Time zone stored as the operator `tz` value when a fresh database has none. A stored or imported value wins, and the operator can change it afterwards. |
 | `environmentFiles` | list of string | `[]` | `EnvironmentFile=` paths read by every unit and by `atrium-run`; no application credential needs one. The TMDB read token is a connection credential in `connections."service/tmdb".credentialFiles.read_token`; the Grafana token is a connection credential until its owner is cut over; the Notion token is a connection credential in `connections."service/notion".credentialFiles.token`. Calendar and contacts reuse an iCloud mail account for their CalDAV and CardDAV login. |
 | `modelServerUnits` | list of string | `[]` | Units serving the mail chat and embed endpoints. The application units start after them and want them. |
 
-The module writes `calendar.calendar_dir` and `contacts.contacts_dir` as the mirror directories under `stateDir`, `core.otel_traces_endpoint` from `observability.tracesEndpoint`, `export.export_obsidian_dir` from `knowledgeExport.obsidianDirectory`, and `mail.mail_accounts_file` from `mailAccounts`. It does not pin an operator setting.
+The module writes `calendar.calendar_dir` and `contacts.contacts_dir` as the mirror directories under `stateDir`, `core.otel_traces_endpoint` from `observability.tracesEndpoint`, `export.export_obsidian_dir` from `knowledgeExport.obsidianDirectory`, and the `mail/<id>` connections from `mailAccounts`. It does not pin an operator setting.
 
 ```nix
 services.atrium = {
@@ -58,7 +58,7 @@ These options are removed; setting one now fails evaluation as an unknown option
 - `id` → `uid`, `user` and `group`
 - `settings` → `host` for host keys; operator preferences are set in the application
 - `mode` → the operator `mail_mode` setting (a fresh import starts in `shadow`)
-- `chatUrl`, `embedUrl` → `host.mail.mail_chat_url`, `host.mail.mail_embed_url`
+- `chatUrl` → `host.mail.mail_chat_url`; `embedUrl` → `connections."service/embedding"`
 - `publicUrl` → `host.core.public_url`
 - `timeZone` → `initialTimezone`; the operator `tz` value is editable after bootstrap
 - `icloudAppleId` → the Settings page

@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/endpoint"
 )
 
 const ledgerMarker = "the ledger code is 7712"
@@ -25,8 +24,7 @@ func kbEmbedFixture(t *testing.T) (string, *fakeEmbedder, *modelLog, *db.DB) {
 	t.Helper()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := newFakeEmbedder(t)
-	setEnv(t, settingEnv(endpoint.KeyEmbedURL), fake.URL+"/v1")
-	setEnv(t, settingEnv(endpoint.KeyEmbedModel), "embeddinggemma")
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, fake.URL+"/v1", "embeddinggemma", ""))
 	return dir, fake, api, mustConnect(t, filepath.Join(dir, "atrium.db"))
 }
 
@@ -71,7 +69,7 @@ func TestKnowledgeEditDuringEmbeddingKeepsTheRecordPending(t *testing.T) {
 	first := make(chan string, 1)
 	second := make(chan string, 1)
 	release := make(chan struct{})
-	fake.gate = func(ctx context.Context, texts []string) {
+	fake.setGate(func(ctx context.Context, texts []string) {
 		if len(texts) == 1 && (texts[0] == "atrium probe" || strings.HasPrefix(texts[0], "task: search result")) {
 			return
 		}
@@ -89,7 +87,7 @@ func TestKnowledgeEditDuringEmbeddingKeepsTheRecordPending(t *testing.T) {
 		case <-release:
 		case <-ctx.Done():
 		}
-	}
+	})
 
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
@@ -143,7 +141,7 @@ func TestKnowledgeRetractDuringEmbeddingLeavesNoVector(t *testing.T) {
 	release := make(chan struct{})
 	var mu sync.Mutex
 	calls := 0
-	fake.gate = func(ctx context.Context, texts []string) {
+	fake.setGate(func(ctx context.Context, texts []string) {
 		if len(texts) == 1 && (texts[0] == "atrium probe" || strings.HasPrefix(texts[0], "task: search result")) {
 			return
 		}
@@ -161,7 +159,7 @@ func TestKnowledgeRetractDuringEmbeddingLeavesNoVector(t *testing.T) {
 		case <-release:
 		case <-ctx.Done():
 		}
-	}
+	})
 
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
@@ -237,7 +235,7 @@ func TestKnowledgeEditAfterEmbeddingRequeuesTheRecord(t *testing.T) {
 
 	sent := make(chan string, 1)
 	release := make(chan struct{})
-	fake.gate = func(ctx context.Context, texts []string) {
+	fake.setGate(func(ctx context.Context, texts []string) {
 		if len(texts) == 1 && (texts[0] == "atrium probe" || strings.HasPrefix(texts[0], "task: search result")) {
 			return
 		}
@@ -249,7 +247,7 @@ func TestKnowledgeEditAfterEmbeddingRequeuesTheRecord(t *testing.T) {
 		case <-release:
 		case <-ctx.Done():
 		}
-	}
+	})
 	_, _, stop = startServeStoppable(t, dir)
 	defer stop()
 	select {

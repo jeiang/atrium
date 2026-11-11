@@ -12,7 +12,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
@@ -78,11 +77,7 @@ func (p Params) Args() []any {
 }
 
 func QueryParams(ctx context.Context, q Querier, account string) (Params, error) {
-	r := endpoint.Read(ctx, q)
-	p := Params{Account: account, Attempts: r.Int(mail.KeyWriteAttempts), Golive: math.Inf(1)}
-	if err := r.Err(); err != nil {
-		return Params{}, err
-	}
+	p := Params{Account: account, Attempts: mail.TuningWriteAttempts, Golive: math.Inf(1)}
 	golive, err := GetState(ctx, q, GoliveKey)
 	if err != nil || golive == nil || *golive == "" {
 		return p, err

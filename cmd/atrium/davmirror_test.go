@@ -14,7 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
@@ -124,7 +123,7 @@ func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothi
 
 	srv.RemoveObject(caldavtest.CalendarPath(0) + "dentist.ics")
 	setEnv(t, "ICLOUD_APP_PASSWORD", davPassword)
-	setEnv(t, settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir, mailAccount{"icloud", "icloud", "operator@icloud.invalid", "wrong", false}))
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir, mailAccount{"icloud", "icloud", "operator@icloud.invalid", "wrong", false}))
 	if got := runApp(t, "calendar", "sync"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "401") {
 		t.Fatalf("sync with a bad password: %d %q", got.code, got.stderr)
 	}
@@ -136,7 +135,7 @@ func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothi
 	}
 
 	setEnv(t, settingEnv(calendar.AppleIDKey), "")
-	setEnv(t, settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir,
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir,
 		mailAccount{"work", "icloud", "work@icloud.invalid", "wrong", false},
 		mailAccount{"home", "icloud", "operator@icloud.invalid", davPassword, false}))
 	if got := runAppLogged(t, "calendar", "sync"); !strings.Contains(got.stderr, "needs-settings") || !strings.Contains(got.stderr, "several iCloud mail accounts; set calendar_account") {

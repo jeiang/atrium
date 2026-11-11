@@ -260,61 +260,6 @@
         "mail_chat_url_file": {
           "description": "path of a file holding the value",
           "type": "string"
-        },
-        "mail_embed_ca_file": {
-          "type": "string"
-        },
-        "mail_embed_ca_file_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_embed_key_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_embed_model": {
-          "default": "embeddinggemma",
-          "type": "string"
-        },
-        "mail_embed_model_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_embed_proxy": {
-          "type": "string"
-        },
-        "mail_embed_proxy_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_embed_url": {
-          "type": "string"
-        },
-        "mail_embed_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_ship24_url": {
-          "default": "https://api.ship24.com/public/v1",
-          "type": "string"
-        },
-        "mail_ship24_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "ship24_ca_file": {
-          "type": "string"
-        },
-        "ship24_ca_file_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "ship24_proxy": {
-          "type": "string"
-        },
-        "ship24_proxy_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
         }
       },
       "type": "object"
@@ -837,7 +782,88 @@
     "grafana.grafana_proxy",
     "grafana.grafana_url",
     "grafana.grafana_viewer_token",
+    "mail.birthdays_default_days",
+    "mail.birthdays_max_days",
+    "mail.deletion_interval_seconds",
+    "mail.deletions_min_deleted_share",
+    "mail.deletions_min_group",
+    "mail.deletions_otp_min_share",
+    "mail.deletions_otp_older_than_days",
+    "mail.drafts_max_body",
+    "mail.drafts_max_subject",
+    "mail.folder_min_messages",
+    "mail.gmail_labels_max_messages",
+    "mail.gmail_labels_min_overlap",
+    "mail.gmail_labels_min_target_messages",
     "mail.google_gmail_refresh_token",
+    "mail.knn_k",
+    "mail.knn_max",
+    "mail.knn_min_share",
+    "mail.llm_body_chars",
+    "mail.llm_neighbors",
+    "mail.llm_top_senders",
+    "mail.mail_backoff_max_seconds",
+    "mail.mail_backoff_start_seconds",
+    "mail.mail_body_cap_bytes",
+    "mail.mail_chat_max_tokens",
+    "mail.mail_embed_batch",
+    "mail.mail_embed_body_chars",
+    "mail.mail_embed_ca_file",
+    "mail.mail_embed_key",
+    "mail.mail_embed_model",
+    "mail.mail_embed_proxy",
+    "mail.mail_embed_url",
+    "mail.mail_fetch_batch",
+    "mail.mail_flag_batch",
+    "mail.mail_fts_body_chars",
+    "mail.mail_idle_settle_seconds",
+    "mail.mail_scan_sample_subjects",
+    "mail.mail_scan_top_labels",
+    "mail.mail_search_branch_limit",
+    "mail.mail_search_max_terms",
+    "mail.mail_search_rrf_k",
+    "mail.mail_search_snippet_chars",
+    "mail.mail_search_snippet_tokens",
+    "mail.mail_ship24_api_key",
+    "mail.mail_ship24_poll_days",
+    "mail.mail_ship24_poll_limit",
+    "mail.mail_ship24_timeout_seconds",
+    "mail.mail_ship24_url",
+    "mail.mailops_batch",
+    "mail.openloops_commitment_scan_limit",
+    "mail.openloops_commitment_window_days",
+    "mail.openloops_commitments_per_message",
+    "mail.openloops_owe_max_age_days",
+    "mail.openloops_remind_overdue_days",
+    "mail.openloops_waiting_max_age_days",
+    "mail.openloops_window_days",
+    "mail.rebalance_cluster_iterations",
+    "mail.rebalance_cluster_ks",
+    "mail.rebalance_cluster_margin",
+    "mail.rebalance_cluster_min_embedded",
+    "mail.rebalance_merge_min_group",
+    "mail.rebalance_merge_min_others",
+    "mail.rebalance_merge_min_share",
+    "mail.rebalance_min_folder",
+    "mail.rebalance_min_group",
+    "mail.rebalance_min_share",
+    "mail.rebalance_name_max_chars",
+    "mail.rebalance_run_gap_seconds",
+    "mail.rebalance_runs_required",
+    "mail.rebalance_top_terms",
+    "mail.report_disagreement_lines",
+    "mail.report_top_dests",
+    "mail.rule_min_n",
+    "mail.rule_min_purity",
+    "mail.sent_backfill_days",
+    "mail.ship24_ca_file",
+    "mail.ship24_proxy",
+    "mail.triage_top_dests",
+    "mail.watches_body_chars",
+    "mail.watches_package_window_days",
+    "mail.watches_scan_limit",
+    "mail.watches_stale_package_days",
+    "mail.write_attempts",
     "media.media_artwork_miss_ttl_seconds",
     "media.media_artwork_show_search_limit",
     "media.media_channel_name_chars",
@@ -1094,6 +1120,11 @@
     "mail.mail_chat_max_tokens": "the compiled constant internal/endpoint/tuning.go:TuningMailChatMaxTokens",
     "mail.mail_embed_batch": "the compiled constant internal/endpoint/tuning.go:TuningMailEmbedBatch",
     "mail.mail_embed_body_chars": "the compiled constant internal/endpoint/tuning.go:TuningMailEmbedBodyChars",
+    "mail.mail_embed_ca_file": "host configuration service/embedding.transport.ca_file",
+    "mail.mail_embed_key": "host configuration service/embedding host credential bearer",
+    "mail.mail_embed_model": "host configuration service/embedding.config.model",
+    "mail.mail_embed_proxy": "host configuration service/embedding.transport.proxy",
+    "mail.mail_embed_url": "host configuration service/embedding.config.url",
     "mail.mail_fetch_batch": "the compiled constant internal/mail/tuning.go:TuningMailFetchBatch",
     "mail.mail_flag_batch": "the compiled constant internal/mail/tuning.go:TuningMailFlagBatch",
     "mail.mail_fts_body_chars": "the compiled constant internal/mail/tuning.go:TuningMailFtsBodyChars",
@@ -1113,6 +1144,7 @@
     "mail.mail_ship24_poll_days": "the compiled constant internal/mail/tracking/tuning.go:TuningMailShip24PollDays",
     "mail.mail_ship24_poll_limit": "the compiled constant internal/mail/tracking/tuning.go:TuningMailShip24PollLimit",
     "mail.mail_ship24_timeout_seconds": "the compiled constant internal/mail/tracking/tuning.go:TuningMailShip24TimeoutSeconds",
+    "mail.mail_ship24_url": "host configuration service/ship24.config.url",
     "mail.mailops_batch": "the compiled constant internal/mail/tuning.go:TuningMailopsBatch",
     "mail.openloops_commitment_scan_limit": "the compiled constant internal/mail/tuning.go:TuningOpenloopsCommitmentScanLimit",
     "mail.openloops_commitment_window_days": "the compiled constant internal/mail/tuning.go:TuningOpenloopsCommitmentWindowDays",
@@ -1144,6 +1176,8 @@
     "mail.rule_min_n": "the compiled constant internal/mail/tuning.go:TuningRuleMinN",
     "mail.rule_min_purity": "the compiled constant internal/mail/tuning.go:TuningRuleMinPurity",
     "mail.sent_backfill_days": "the compiled constant internal/mail/tuning.go:TuningSentBackfillDays",
+    "mail.ship24_ca_file": "host configuration service/ship24.transport.ca_file",
+    "mail.ship24_proxy": "host configuration service/ship24.transport.proxy",
     "mail.triage_top_dests": "the compiled constant internal/mail/tuning.go:TuningTriageTopDests",
     "mail.uncertain_dest": "the operator setting mail.uncertain_dest stored in the database",
     "mail.watches_body_chars": "the compiled constant internal/mail/tuning.go:TuningWatchesBodyChars",
@@ -1260,8 +1294,6 @@
     "action_links.action_link_key",
     "db.key",
     "mail.mail_chat_key",
-    "mail.mail_embed_key",
-    "mail.mail_ship24_api_key",
     "media.link_key"
   ]
 }

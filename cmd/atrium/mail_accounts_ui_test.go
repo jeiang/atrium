@@ -6,18 +6,20 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/settings"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
@@ -29,7 +31,7 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
-	setEnv(t, settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir, mailAccount{"home", "icloud", "me@icloud.test", "home-pass", false}))
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir, mailAccount{"home", "icloud", "me@icloud.test", "home-pass", false}))
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
 	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
 	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "shadow")
@@ -41,12 +43,36 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	h, x := mailtest.RawWith("Standup", "lead@work.test", "<work-1@work.test>", "Moved to 10.")
 	all.Add(h, x, nil, []string{`\Inbox`})
 	passwords := map[string]string{"me@icloud.test": "home-pass", "me@work.test": "work-pass"}
+	var seenMu sync.Mutex
+	lastPassword := ""
 	t.Cleanup(imapclient.UseDialer(func(_ context.Context, a config.AccountSpec, password string) (mail.Conn, error) {
+		seenMu.Lock()
+		lastPassword = password
+		seenMu.Unlock()
 		if passwords[a.Login] != password {
 			return nil, errors.New("AUTHENTICATIONFAILED Invalid credentials")
 		}
 		return mailtest.NewFakeClient(), nil
 	}))
+
+	ca := smtpCert(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	smtpServer := &smtpFake{}
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go smtpServer.handle(c)
+		}
+	}()
+	t.Setenv("ATRIUM_SMTP_ADDR", ln.Addr().String())
+	t.Setenv("ATRIUM_SMTP_CA", ca)
 
 	base := startServeIn(t, dir)
 	jar, _ := cookiejar.New(nil)
@@ -101,22 +127,37 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	if strings.Contains(body, "work-pass") || strings.Contains(page(), "work-pass") {
 		t.Error("a page response carries the app password")
 	}
-	if count("SELECT COUNT(*) FROM secrets WHERE name = ?", config.PasswordKey("work")) != 1 || health(t, dir, "mail_work") != integrations.OK {
+	if count("SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'mail/work' AND slot = 'mail/work/password' AND source = 'database'") != 1 ||
+		connectionState(t, dir, "mail/work") != string(connections.OK) {
 		t.Error("the added account has no stored password or no ok health")
 	}
 	if !strings.Contains(page(), `id="new-auth" name="auth_method"`) {
 		t.Error("the add form does not offer an auth method")
 	}
-	update := url.Values{"label": {"Work"}, "login": {"me@work.test"}, "enabled": {"1"}, "auth_method": {"xoauth2"}}
-	if code, body := post("/accounts/work", update); code != http.StatusOK || !strings.Contains(body, `<option value="xoauth2" selected>`) {
-		t.Fatalf("switching to xoauth2: %d", code)
+	passwords["me@work2.test"] = "work-pass"
+	relogin := url.Values{"label": {"Work"}, "login": {"me@work2.test"}, "enabled": {"1"}, "auth_method": {"password"}}
+	if code, body := post("/accounts/work", relogin); code != http.StatusOK {
+		t.Fatalf("a login change with the stored password: %d %.300s", code, body)
 	}
-	if n := count("SELECT COUNT(*) FROM mail_accounts WHERE id = 'work' AND auth_method = 'xoauth2'"); n != 1 {
-		t.Fatal("the xoauth2 auth method was not stored")
+	if n := count("SELECT COUNT(*) FROM mail_accounts WHERE id = 'work' AND login = 'me@work2.test'"); n != 1 {
+		t.Fatal("the login change was not saved")
+	}
+	seenMu.Lock()
+	used := lastPassword
+	seenMu.Unlock()
+	if used != "work-pass" {
+		t.Fatalf("the candidate test used password %q", used)
+	}
+	update := url.Values{"label": {"Work"}, "login": {"me@work.test"}, "enabled": {"1"}, "auth_method": {"xoauth2"}}
+	if code, _ := post("/accounts/work", update); code != http.StatusUnprocessableEntity {
+		t.Fatalf("switching to xoauth2 without a Google grant: %d", code)
+	}
+	if n := count("SELECT COUNT(*) FROM mail_accounts WHERE id = 'work' AND auth_method = 'password'"); n != 1 {
+		t.Fatal("a failed xoauth2 Test changed the stored auth method")
 	}
 	update.Set("auth_method", "password")
 	if code, _ := post("/accounts/work", update); code != http.StatusOK {
-		t.Fatalf("switching back to password: %d", code)
+		t.Fatalf("saving the password method: %d", code)
 	}
 	if code, _ := post("/accounts", add); code != http.StatusUnprocessableEntity {
 		t.Errorf("a duplicate id: %d", code)
@@ -126,7 +167,7 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	}
 
 	passwords["me@icloud.test"] = "rotated"
-	if code, body := post("/accounts/home/test", nil); code != http.StatusUnprocessableEntity || !strings.Contains(body, `data-account="home" data-state="failing"`) {
+	if code, body := post("/accounts/home/test", nil); code != http.StatusUnprocessableEntity || !strings.Contains(body, `data-account="home" data-state="needs_reauth"`) {
 		t.Errorf("a failing Test of the deployment account: %d", code)
 	}
 
@@ -150,8 +191,8 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	if code, _ := post("/accounts/work/remove", nil); code != http.StatusOK {
 		t.Fatalf("remove: %d", code)
 	}
-	if count("SELECT COUNT(*) FROM mail_accounts WHERE pinned = 0") != 0 || count("SELECT COUNT(*) FROM secrets WHERE name = ?", config.PasswordKey("work")) != 0 {
-		t.Error("remove left the account or its password")
+	if count("SELECT COUNT(*) FROM mail_accounts WHERE pinned = 0") != 0 || count("SELECT COUNT(*) FROM connections WHERE id = 'mail/work'") != 0 {
+		t.Error("remove left the account or its connection")
 	}
 	if n := count("SELECT COUNT(*) FROM messages WHERE account = 'work'"); n != 1 {
 		t.Errorf("remove dropped the cached mail: %d messages left", n)

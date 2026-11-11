@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/testutil/llmstub"
@@ -25,15 +26,21 @@ type mailAccount struct {
 
 func accountsFile(t *testing.T, dir string, accounts ...mailAccount) string {
 	t.Helper()
+	return accountsFileWith(t, dir, filepath.Join(testRoot, "host", "anthropic.key"), accounts...)
+}
+
+func accountsFileWith(t *testing.T, dir, anthropicKey string, accounts ...mailAccount) string {
+	t.Helper()
 	var b strings.Builder
+	b.WriteString(hostConfigBodyWith("", defaultWebPushConnection, anthropicKey))
 	for _, a := range accounts {
 		secret := filepath.Join(dir, a.id+".password")
 		if err := os.WriteFile(secret, []byte(a.password+"\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		fmt.Fprintf(&b, "[[account]]\nid = %q\npreset = %q\nlogin = %q\npassword_file = %q\nenabled = %t\n\n", a.id, a.preset, a.login, secret, !a.disabled)
+		b.WriteString(mailConnection(a.id, a.preset, a.login, secret, !a.disabled))
 	}
-	path := filepath.Join(dir, "accounts.toml")
+	path := filepath.Join(dir, "host.toml")
 	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +88,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 		code := app.Run(context.Background(), args, &out, &errs)
 		return appRun{code, out.String(), errs.String()}
 	}
-	key := settingEnv(config.KeyMailAccountsFile)
+	key := "ATRIUM_HOST_CONFIG"
 	path := accountsFile(t, dir,
 		mailAccount{"home", "icloud", "me@icloud.test", "home pass", false},
 		mailAccount{"work", "gmail", "me@work.test", "work-pass", false},
@@ -135,11 +142,30 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 	}
 
 	bad := filepath.Join(dir, "bad.toml")
-	if err := os.WriteFile(bad, []byte("[[account]]\nid = \"x\"\npreset = \"yahoo\"\nlogin = \"a\"\npassword_file = \""+filepath.Join(dir, "home.password")+"\"\n"), 0o600); err != nil {
+	body := hostConfigBody(defaultWebPushConnection) + "\n[connections.\"mail/x\"]\nkind = \"mail\"\nconfig = { preset = \"yahoo\", login = \"a\", auth_method = \"password\" }\ncapabilities = [\"imap\", \"smtp\"]\ncredential_files = { \"mail/x/password\" = \"" + filepath.Join(dir, "home.password") + "\" }\n"
+	if err := os.WriteFile(bad, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	setEnv(t, key, bad)
 	if got := run("sync"); got.code == 0 || !strings.Contains(got.stderr, "preset must be icloud or gmail") {
 		t.Errorf("an unknown preset: %+v", got)
+	}
+}
+
+func insertMailAccount(t *testing.T, d *db.DB, id, preset, login, method string) {
+	t.Helper()
+	cfg := fmt.Sprintf(`{"preset":%q,"login":%q,"auth_method":%q}`, preset, login, method)
+	if _, err := d.Write.Exec("INSERT INTO connections (id, kind, label, config_source, config_json, transport_json, revision, enabled, state, created_at, updated_at) VALUES (?, 'mail', ?, 'operator', ?, '{}', 1, 1, 'untested', 0, 0)",
+		"mail/"+id, id, cfg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, auth_method, connection_id, capability_prefix, created_at) VALUES (?, ?, ?, ?, 1, 0, ?, ?, ?, 0)",
+		id, id, preset, login, method, "mail/"+id, "mail/"+id); err != nil {
+		t.Fatal(err)
+	}
+	for _, capability := range []string{"imap", "smtp"} {
+		if _, err := d.Write.Exec("INSERT INTO connection_capabilities (connection_id, name, enabled, config_json) VALUES (?, ?, 1, '{}')", "mail/"+id, capability); err != nil {
+			t.Fatal(err)
+		}
 	}
 }

@@ -1,9 +1,12 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"io"
 	"maps"
+	"net"
 	"os"
 	"path/filepath"
 	"strings"
@@ -44,16 +47,25 @@ var testRoot = func() string {
 	return dir
 }()
 
-var defaultAccountsFile = func() string {
+var defaultMailPassword = func() string {
 	dir := filepath.Join(testRoot, "accounts")
 	secret := filepath.Join(dir, "icloud.password")
-	path := filepath.Join(dir, "accounts.toml")
-	body := fmt.Sprintf("[[account]]\nid = \"icloud\"\npreset = \"icloud\"\nlogin = \"operator@icloud.invalid\"\npassword_file = %q\n", secret)
-	if os.MkdirAll(dir, 0o700) != nil || os.WriteFile(secret, []byte("dummy-icloud-password\n"), 0o600) != nil || os.WriteFile(path, []byte(body), 0o600) != nil {
-		panic("cannot write the default mail accounts file")
+	if os.MkdirAll(dir, 0o700) != nil || os.WriteFile(secret, []byte("dummy-icloud-password\n"), 0o600) != nil {
+		panic("cannot write the default mail password")
 	}
-	return path
+	return secret
 }()
+
+func mailConnection(id, preset, login, passwordFile string, enabled bool) string {
+	return fmt.Sprintf(`
+[connections."mail/%s"]
+kind = "mail"
+label = %q
+config = { preset = %q, login = %q, auth_method = "password", enabled = %q }
+capabilities = ["imap", "smtp"]
+credential_files = { "mail/%s/password" = %q }
+`, id, id, preset, login, fmt.Sprintf("%t", enabled), id, passwordFile)
+}
 
 const defaultWebPushConnection = `
 [connections."service/webpush"]
@@ -64,19 +76,87 @@ capabilities = ["delivery"]
 `
 
 func hostConfigBody(webpush string) string {
+	return hostConfigBodyWith("", webpush, filepath.Join(testRoot, "host", "anthropic.key"))
+}
+
+func hostConfigBodyWith(embedding, webpush, anthropicKey string) string {
 	dir := filepath.Join(testRoot, "host")
-	return fmt.Sprintf(`[connections."service/anthropic"]
+	anthropic := ""
+	if anthropicKey != "" {
+		anthropic = fmt.Sprintf(`[connections."service/anthropic"]
 kind = "service/anthropic"
 label = "Anthropic"
 capabilities = ["models"]
 credential_files = { api_key = %q }
 
-[connections."service/grafana"]
+`, anthropicKey)
+	}
+	return anthropic + fmt.Sprintf(`[connections."service/grafana"]
 kind = "service/grafana"
 label = "Grafana"
+config = { url = "http://grafana.invalid" }
 capabilities = ["viewer"]
 credential_files = { viewer_token = %q }
-%s`, filepath.Join(dir, "anthropic.key"), filepath.Join(dir, "grafana.key"), webpush)
+%s%s`, filepath.Join(dir, "grafana.key"), embedding, webpush)
+}
+
+func hostConnectionConfig(t *testing.T, dir, name, table string) string {
+	t.Helper()
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(hostConfigBody(defaultWebPushConnection)+table), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func embeddingHost(t *testing.T, dir, url, model, ca string) string {
+	t.Helper()
+	return embeddingHostWith(t, dir, url, model, ca, "")
+}
+
+func embeddingHostWith(t *testing.T, dir, url, model, ca, key string) string {
+	t.Helper()
+	table := fmt.Sprintf(`
+[connections."service/embedding"]
+kind = "service/embedding"
+label = "Embedding"
+config = { url = %q, model = %q }
+capabilities = ["embeddings"]
+`, url, model)
+	if ca != "" {
+		table += fmt.Sprintf("transport = { ca_file = %q }\n", ca)
+	}
+	if key != "" {
+		keyFile := filepath.Join(dir, "embedding.key")
+		if err := os.WriteFile(keyFile, []byte(key+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		table += fmt.Sprintf("credential_files = { bearer = %q }\n", keyFile)
+	}
+	path := filepath.Join(dir, "host-embedding.toml")
+	if err := os.WriteFile(path, []byte(hostConfigBodyWith(table, defaultWebPushConnection, filepath.Join(testRoot, "host", "anthropic.key"))), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func ship24Host(t *testing.T, dir, url, key string) string {
+	t.Helper()
+	table := fmt.Sprintf(`
+[connections."service/ship24"]
+kind = "service/ship24"
+label = "Ship24"
+config = { url = %q }
+capabilities = ["api"]
+`, url)
+	if key != "" {
+		keyFile := filepath.Join(dir, "ship24.key")
+		if err := os.WriteFile(keyFile, []byte(key+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		table += fmt.Sprintf("credential_files = { api_key = %q }\n", keyFile)
+	}
+	return hostConnectionConfig(t, dir, "host-ship24.toml", table)
 }
 
 var defaultHostConfig = func() string {
@@ -91,7 +171,8 @@ var defaultHostConfig = func() string {
 		panic("cannot write the default host credentials")
 	}
 	path := filepath.Join(dir, "host.toml")
-	if os.WriteFile(path, []byte(hostConfigBody(defaultWebPushConnection)), 0o600) != nil {
+	body := hostConfigBody(defaultWebPushConnection) + mailConnection("icloud", "icloud", "operator@icloud.invalid", defaultMailPassword, true)
+	if os.WriteFile(path, []byte(body), 0o600) != nil {
 		panic("cannot write the default host configuration")
 	}
 	return path
@@ -206,15 +287,14 @@ func moduleEnv(dir string) map[string]string {
 
 func requirementEnv(mediaRoot string) map[string]string {
 	return map[string]string{
-		settingEnv(endpoint.KeyChatURL):        "http://chat.invalid/v1",
-		settingEnv(endpoint.KeyEmbedURL):       "http://embed.invalid/v1",
-		settingEnv(media.KeyRoot):              mediaRoot,
-		settingEnv(media.KeyQbitURL):           "http://qbittorrent.invalid",
-		settingEnv(calendar.AppleIDKey):        "operator@icloud.invalid",
-		settingEnv(contacts.DirKey):            mediaRoot + "-contacts",
-		settingEnv(config.KeyMailAccountsFile): defaultAccountsFile,
-		"ATRIUM_HOST_CONFIG":                   defaultHostConfig,
-		settingEnv(grafanatools.KeyURL):        "http://grafana.invalid",
+		settingEnv(endpoint.KeyChatURL): "http://chat.invalid/v1",
+		settingEnv(media.KeyRoot):       mediaRoot,
+		settingEnv(media.KeyQbitURL):    "http://qbittorrent.invalid",
+		settingEnv(calendar.AppleIDKey): "operator@icloud.invalid",
+		settingEnv(contacts.DirKey):     mediaRoot + "-contacts",
+		"ATRIUM_HOST_CONFIG":            defaultHostConfig,
+		"ATRIUM_MAIL_MAIL_EMBED_URL":    "http://embed.invalid/v1",
+		settingEnv(grafanatools.KeyURL): "http://grafana.invalid",
 	}
 }
 
@@ -238,6 +318,17 @@ func init() {
 }
 
 func quietLog(io.Writer) {}
+
+var errExternalDNS = errors.New("external DNS is disabled in tests")
+
+func guardExternalHosts() {
+	net.DefaultResolver = &net.Resolver{
+		PreferGo: true,
+		Dial: func(context.Context, string, string) (net.Conn, error) {
+			return nil, errExternalDNS
+		},
+	}
+}
 
 func newTestApp(t *testing.T, mods []module.Module) *cli.App {
 	reg := settings.New()

@@ -107,7 +107,7 @@ func Load(ctx context.Context, q db.Querier) (Settings, error) {
 		return Settings{}, err
 	}
 	s.GeocodingURL = strings.TrimSpace(cfg.GeocodingURL)
-	if s.HTTP, err = lease.HTTP("url"); err != nil {
+	if s.HTTP, err = lease.HTTPRead("url"); err != nil {
 		return Settings{}, err
 	}
 	return s, nil

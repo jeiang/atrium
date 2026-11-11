@@ -15,10 +15,17 @@ type State struct {
 	passwords map[string]string
 	settings  *settings.Registry
 	host      Host
+	reconcile func(context.Context, *db.DB, Host) error
 }
 
 func NewState(reg *settings.Registry) *State {
 	return &State{settings: reg}
+}
+
+func (s *State) SetConnectionReconciler(f func(context.Context, *db.DB, Host) error) {
+	s.mu.Lock()
+	s.reconcile = f
+	s.mu.Unlock()
 }
 
 func (s *State) Host() Host {
@@ -97,6 +104,14 @@ func (s *State) Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 	if err := settings.NewStore(reg, d, d).Load(ctx); err != nil {
 		return err
 	}
+	s.mu.RLock()
+	reconcile := s.reconcile
+	s.mu.RUnlock()
+	if reconcile != nil {
+		if err := reconcile(ctx, d, host); err != nil {
+			return err
+		}
+	}
 	if initial := stripped(env, InitialTZEnv); initial != "" {
 		if _, err := reg.Seed(ctx, d.Write, KeyTZ, initial); err != nil {
 			return err
@@ -106,9 +121,14 @@ func (s *State) Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 	if err != nil {
 		return err
 	}
-	files, filePasswords, err := loadAccounts(env, reg)
-	if err != nil {
-		return err
+	var (
+		files         []AccountSpec
+		filePasswords map[string]string
+	)
+	if hostAccounts != nil {
+		if files, filePasswords, err = hostAccounts(host); err != nil {
+			return err
+		}
 	}
 	if err := reconcileAccounts(ctx, d, files); err != nil {
 		return err

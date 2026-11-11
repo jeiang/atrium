@@ -20,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
@@ -33,9 +32,8 @@ type limits struct {
 }
 
 func readLimits(ctx context.Context, q db.Querier) (limits, error) {
-	r := endpoint.Read(ctx, q)
-	l := limits{fetchBatch: r.Int(mail.KeyFetchBatch), flagBatch: r.Int(mail.KeyFlagBatch), sentBackfillDays: r.Int(mail.KeySentBackfillDays), ftsBodyChars: r.Int(mail.KeyFTSBodyChars)}
-	return l, r.Err()
+	l := limits{fetchBatch: mail.TuningMailFetchBatch, flagBatch: mail.TuningMailFlagBatch, sentBackfillDays: mail.TuningSentBackfillDays, ftsBodyChars: mail.TuningMailFtsBodyChars}
+	return l, nil
 }
 
 var (

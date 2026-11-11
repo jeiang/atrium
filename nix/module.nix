@@ -37,26 +37,30 @@
   connectionCredential = id: slot: "connection-${lib.replaceStrings ["/" "."] ["-" "-"] id}-${lib.replaceStrings ["/" "."] ["-" "-"] slot}";
   hostCredential = module: key: "host-${module}-${key}";
 
-  accountsFile = toml.generate "mail-accounts.toml" {
-    account =
-      lib.mapAttrsToList (id: account: {
-        inherit id;
-        inherit (account) preset login enabled;
-        label =
-          if account.label == null
-          then id
-          else account.label;
-        password_file = "\${CREDENTIALS_DIRECTORY}/${accountCredential id}";
-      })
-      cfg.mailAccounts;
-  };
+  mailConnections = lib.mapAttrs' (id: account:
+    lib.nameValuePair "mail/${id}" {
+      kind = "mail";
+      label =
+        if account.label == null
+        then id
+        else account.label;
+      config = {
+        inherit (account) preset login;
+        auth_method = "password";
+        enabled = lib.boolToString account.enabled;
+      };
+      capabilities = ["imap" "smtp"];
+      credential_files = {"mail/${id}/password" = "\${CREDENTIALS_DIRECTORY}/${accountCredential id}";};
+    })
+  cfg.mailAccounts;
 
   renderedConnections =
-    lib.mapAttrs (id: c: {
-      inherit (c) kind label config transport capabilities;
-      credential_files = lib.mapAttrs (slot: _: "\${CREDENTIALS_DIRECTORY}/${connectionCredential id slot}") c.credentialFiles;
-    })
-    cfg.connections;
+    (lib.mapAttrs (id: c: {
+        inherit (c) kind label config transport capabilities;
+        credential_files = lib.mapAttrs (slot: _: "\${CREDENTIALS_DIRECTORY}/${connectionCredential id slot}") c.credentialFiles;
+      })
+      cfg.connections)
+    // mailConnections;
 
   hostValues = lib.mapAttrs (module: table:
     lib.mapAttrs (key: value:
@@ -74,8 +78,7 @@
     // lib.optionalAttrs (cfg.observability.tracesEndpoint != null) {core.otel_traces_endpoint = cfg.observability.tracesEndpoint;}
     // lib.optionalAttrs (cfg.web.trustedProxyCidrs != []) {web.trusted_proxy_cidrs = lib.concatStringsSep "," cfg.web.trustedProxyCidrs;}
     // lib.optionalAttrs (cfg.knowledgeExport.obsidianDirectory != null) {export.export_obsidian_dir = cfg.knowledgeExport.obsidianDirectory;}
-    // lib.optionalAttrs (cfg.mailAccounts != {}) {mail.mail_accounts_file = "${accountsFile}";}
-    // lib.optionalAttrs (cfg.connections != {}) {connections = renderedConnections;}
+    // lib.optionalAttrs (cfg.connections != {} || cfg.mailAccounts != {}) {connections = renderedConnections;}
   );
   hostConfigFile = toml.generate "atrium-host.toml" renderedHost;
 
@@ -561,7 +564,7 @@ in {
           passwordFile = "/run/secrets/icloud-app-password";
         };
       };
-      description = "Mail accounts by id, rendered to the file named by mail.mail_accounts_file. The id keys the account's cached mail; keep it stable.";
+      description = "Mail accounts by id, rendered as mail/<id> connections with their IMAP and SMTP capabilities and a host-file password credential. The id keys the account's cached mail; keep it stable.";
     };
 
     secretFiles = mkOption {

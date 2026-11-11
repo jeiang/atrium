@@ -22,11 +22,11 @@ func TestKBSearchSkipsSemanticSearchWhenEmbeddingStalls(t *testing.T) {
 	var stall atomic.Bool
 	stall.Store(true)
 	query := embed.QueryText("ledger")
-	fake.gate = func(ctx context.Context, texts []string) {
+	fake.setGate(func(ctx context.Context, texts []string) {
 		if stall.Load() && len(texts) == 1 && texts[0] == query {
 			<-ctx.Done()
 		}
-	}
+	})
 
 	base, _, stop := startServeStoppable(t, dir)
 	w := asstBrowse(t, base)

@@ -11,7 +11,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/features"
 	"github.com/jeiang/atrium/internal/mail/mime"
@@ -28,9 +27,7 @@ const (
 )
 
 func batchFrom(ctx context.Context, q db.Querier) (int, error) {
-	r := endpoint.Read(ctx, q)
-	n := r.Int(mail.KeyMailopsBatch)
-	return n, r.Err()
+	return mail.TuningMailopsBatch, nil
 }
 
 func BatchSize(ctx context.Context, client mail.Client) (int, error) {

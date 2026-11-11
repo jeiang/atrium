@@ -4,20 +4,21 @@ import (
 	"context"
 	"database/sql"
 	"embed"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	vecindex "github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/integrations"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/secrets"
+	"github.com/jeiang/atrium/internal/mail/mailconn"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
@@ -71,8 +72,6 @@ type handlers struct{ d *web.Deps }
 
 func stamp() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
-func healthName(id string) string { return "mail_" + id }
-
 func Module(r chi.Router, d *web.Deps) {
 	h := handlers{d}
 	d.Authenticated(http.MethodGet, "/settings/mail", h.index)
@@ -90,17 +89,35 @@ func (h handlers) ctx(r *http.Request) context.Context {
 	return audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
 }
 
+func (h handlers) store(ctx context.Context) *connections.Store {
+	if store := connections.DefaultFor(h.d.DB.Read); store != nil {
+		return store
+	}
+	store, err := connections.New(h.d.DB, config.From(ctx).Host(), connections.DefaultRegistry())
+	if err != nil {
+		return nil
+	}
+	connections.SetDefault(h.d.DB.Read, store)
+	return store
+}
+
 func (h handlers) accounts(ctx context.Context) ([]account, error) {
+	store := h.store(ctx)
 	var out []account
 	for _, a := range config.From(ctx).Accounts() {
 		password, _ := config.From(ctx).Password(a.Name)
 		v := account{ID: a.Name, Label: a.Label, Preset: a.Preset, Login: a.Login, Enabled: a.Enabled, Pinned: a.Pinned,
-			PasswordSet: password != "", AuthMethod: string(a.AuthMethod), State: integrations.Untested}
-		state, reason, err := integrations.Health(ctx, h.d.DB.Read, healthName(a.Name))
-		if err != nil {
-			return nil, err
+			PasswordSet: password != "", AuthMethod: string(a.AuthMethod), State: string(connections.Untested)}
+		if store != nil {
+			view, err := store.Get(ctx, mailconn.ID(a.Name))
+			switch {
+			case errors.As(err, new(connections.UnknownID)):
+			case err != nil:
+				return nil, err
+			default:
+				v.State, v.Reason = string(view.State), view.Reason
+			}
 		}
-		v.State, v.Reason = state, reason
 		out = append(out, v)
 	}
 	return out, nil
@@ -144,7 +161,10 @@ func (h handlers) refuse(w http.ResponseWriter, r *http.Request, failed string, 
 	var invalid settings.Invalid
 	var pinned *settings.PinnedError
 	var encryption settings.EncryptionRequired
-	if !errors.As(err, &why) && !errors.As(err, &invalid) && !errors.As(err, &pinned) && !errors.As(err, &encryption) {
+	var required *connections.EncryptedRequired
+	var failedTest *connections.TestFailed
+	if !errors.As(err, &why) && !errors.As(err, &invalid) && !errors.As(err, &pinned) && !errors.As(err, &encryption) &&
+		!errors.As(err, &required) && !errors.As(err, &failedTest) {
 		return false
 	}
 	h.render(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()}, page{Failed: failed, Error: err.Error(), Form: form})
@@ -191,18 +211,53 @@ func (h handlers) stored(ctx context.Context, id string) (config.AccountSpec, er
 
 var errNotFound = errors.New("not found")
 
-func probe(ctx context.Context, a config.AccountSpec, password string) error {
-	if err := imapclient.Login(ctx, a, password); err != nil {
-		return refusal("Test failed: " + err.Error())
+func candidate(a config.AccountSpec, password string) connections.Candidate {
+	cfg, _ := json.Marshal(map[string]string{
+		"preset":      a.Preset,
+		"login":       a.Login,
+		"auth_method": string(a.AuthMethod),
+		"enabled":     strconv.FormatBool(a.Enabled),
+	})
+	c := connections.Candidate{
+		Label:  a.Label,
+		Config: cfg,
+		Capabilities: []connections.Capability{
+			{Name: mailconn.CapabilityIMAP, Enabled: true},
+			{Name: mailconn.CapabilitySMTP, Enabled: true},
+		},
 	}
-	return nil
+	if password != "" {
+		c.Credentials = []connections.CredentialInput{{Slot: mailconn.PasswordSlot(a.Name), Value: password}}
+	}
+	return c
+}
+
+func (h handlers) ensure(ctx context.Context, a config.AccountSpec) (created bool, err error) {
+	store := h.store(ctx)
+	if store == nil {
+		return false, errors.New("connections are not available")
+	}
+	_, err = store.Get(ctx, mailconn.ID(a.Name))
+	if err == nil {
+		return false, nil
+	}
+	if !errors.As(err, new(connections.UnknownID)) {
+		return false, err
+	}
+	return true, store.Ensure(ctx, mailconn.ID(a.Name), mailconn.Kind, a.Label, candidate(a, "").Capabilities)
+}
+
+func (h handlers) drop(ctx context.Context, a config.AccountSpec) {
+	if store := h.store(ctx); store != nil {
+		_ = store.Remove(ctx, mailconn.ID(a.Name))
+	}
 }
 
 func (h handlers) add(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
 	field := func(name string) string { return strings.TrimSpace(web.FormString(form, name, "")) }
 	kept := map[string]string{"id": field("id"), "label": field("label"), "preset": field("preset"), "login": field("login"), "auth_method": field("auth_method")}
-	password := web.FormString(form, "password", "")
+	password := config.NormalizePassword(web.FormString(form, "password", ""))
 	ctx := h.ctx(r)
 	a, err := config.NewAccount(kept["id"], kept["label"], kept["preset"], kept["login"], true)
 	if err == nil {
@@ -213,22 +268,34 @@ func (h handlers) add(w http.ResponseWriter, r *http.Request) {
 		err = refusal(err.Error())
 	case !config.AuthAllowed(a.Preset, a.AuthMethod):
 		err = refusal("XOAUTH2 is Gmail-only")
-	case a.Login == "" || password == "":
+	case a.Login == "":
+		err = refusal("login is required")
+	case a.AuthMethod == config.AuthPassword && password == "":
 		err = refusal("login and password are required")
 	case !h.d.DB.Encrypted():
-		err = settings.EncryptionRequired(config.PasswordKey(a.Name))
+		err = settings.EncryptionRequired(mailconn.PasswordSlot(a.Name))
 	default:
 		if _, exists := config.From(ctx).Account(a.Name); exists {
 			err = refusal(a.Name + " is already an account id")
 		}
 	}
+	attempted := false
 	if err == nil {
-		err = probe(ctx, a, config.NormalizePassword(password))
+		attempted = true
+		_, err = h.ensure(ctx, a)
 	}
 	if err == nil {
-		err = h.save(ctx, a, config.NormalizePassword(password), true, true)
+		_, err = h.store(ctx).TestAndSave(ctx, mailconn.ID(a.Name), candidate(a, password))
+	}
+	if err == nil {
+		err = h.save(ctx, a)
 	}
 	if err != nil {
+		if attempted {
+			_ = config.DeleteStoredAccount(ctx, h.d.DB.Write, a.Name)
+			h.drop(ctx, a)
+			_ = config.From(ctx).LoadStoredAccounts(ctx, h.d.DB.Read)
+		}
 		h.fail(w, r, "new", kept, err)
 		return
 	}
@@ -246,12 +313,8 @@ func (h handlers) update(w http.ResponseWriter, r *http.Request) {
 	ctx := h.ctx(r)
 	var a config.AccountSpec
 	if err == nil {
-		password := web.FormString(form, "password", "")
+		password := config.NormalizePassword(web.FormString(form, "password", ""))
 		login := strings.TrimSpace(web.FormString(form, "login", current.Login))
-		next, _ := config.From(ctx).Password(id)
-		if password != "" {
-			next = config.NormalizePassword(password)
-		}
 		a, err = config.NewAccount(id, strings.TrimSpace(web.FormString(form, "label", current.Label)), current.Preset, login, web.FormString(form, "enabled", "") != "")
 		if err == nil {
 			a.AuthMethod, err = config.ParseAuthMethod(web.FormString(form, "auth_method", string(current.AuthMethod)))
@@ -262,12 +325,23 @@ func (h handlers) update(w http.ResponseWriter, r *http.Request) {
 		if err == nil && a.Login == "" {
 			err = refusal("login is required")
 		}
-		tested := a.Login != current.Login || password != ""
+		if err == nil && a.AuthMethod == config.AuthPassword && password == "" {
+			_, known := config.From(ctx).Password(id)
+			if !known {
+				err = refusal("login and password are required")
+			}
+		}
+		tested := a.Login != current.Login || password != "" || a.AuthMethod != current.AuthMethod
+		if err == nil {
+			_, err = h.ensure(ctx, a)
+		}
 		if err == nil && tested {
-			err = probe(ctx, a, next)
+			_, err = h.store(ctx).TestAndSave(ctx, mailconn.ID(id), candidate(a, password))
+		} else if err == nil {
+			_, err = h.store(ctx).Save(ctx, mailconn.ID(id), candidate(a, password))
 		}
 		if err == nil {
-			err = h.save(ctx, a, next, password != "", tested)
+			err = h.save(ctx, a)
 		}
 	}
 	if err != nil {
@@ -277,48 +351,35 @@ func (h handlers) update(w http.ResponseWriter, r *http.Request) {
 	h.render(w, r, http.StatusOK, &tpl.Toast{Category: "success", Title: "Account saved", Description: "Restart the atrium units to apply it."}, page{})
 }
 
-func (h handlers) save(ctx context.Context, a config.AccountSpec, password string, setPassword, tested bool) error {
-	if err := config.From(ctx).RegisterPassword(a.Name); err != nil {
+func (h handlers) save(ctx context.Context, a config.AccountSpec) error {
+	if err := h.d.DB.WithTx(ctx, func(tx *sql.Tx) error {
+		return config.SaveStoredAccount(ctx, tx, a, stamp())
+	}); err != nil {
 		return err
 	}
-	err := h.d.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		if err := config.SaveStoredAccount(ctx, tx, a, stamp()); err != nil {
-			return err
-		}
-		if setPassword {
-			return secrets.NewIn(settings.From(ctx), h.d.DB, tx, h.d.DB).Set(ctx, config.PasswordKey(a.Name), password, "ui")
-		}
-		return nil
-	})
-	if err != nil {
-		return err
-	}
-	if err := config.From(ctx).LoadStoredAccounts(ctx, h.d.DB.Read); err != nil {
-		return err
-	}
-	if tested {
-		return integrations.RecordResult(ctx, h.d.DB, h.d.Env, healthName(a.Name), a.Label, integrations.OK, "", stamp())
-	}
-	return nil
+	return config.From(ctx).LoadStoredAccounts(ctx, h.d.DB.Read)
 }
 
 func (h handlers) test(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	a, ok := config.From(h.ctx(r)).Account(id)
-	if !ok {
+	if _, ok := config.From(h.ctx(r)).Account(id); !ok {
 		http.NotFound(w, r)
 		return
 	}
 	ctx := h.ctx(r)
-	state, reason := integrations.OK, ""
-	password, _ := config.From(ctx).Password(id)
-	if err := imapclient.Login(ctx, a, password); err != nil {
-		state, reason = integrations.Failing, err.Error()
+	store := h.store(ctx)
+	if store == nil {
+		panic(errors.New("connections are not available"))
 	}
-	if err := integrations.RecordResult(ctx, h.d.DB, h.d.Env, healthName(id), a.Label, state, reason, stamp()); err != nil {
+	view, err := store.Test(ctx, mailconn.ID(id))
+	if err != nil {
 		panic(err)
 	}
-	if state != integrations.OK {
+	if view.State != connections.OK {
+		reason := view.Reason
+		if reason == "" {
+			reason = "test failed"
+		}
 		h.render(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Test failed", Description: reason}, page{Failed: id, Error: reason})
 		return
 	}
@@ -335,14 +396,13 @@ func (h handlers) remove(w http.ResponseWriter, r *http.Request) {
 	ctx := h.ctx(r)
 	if err == nil {
 		err = h.d.DB.WithTx(ctx, func(tx *sql.Tx) error {
-			if err := config.DeleteStoredAccount(ctx, tx, id); err != nil {
-				return err
-			}
-			if err := secrets.NewIn(settings.From(ctx), h.d.DB, tx, h.d.DB).Delete(ctx, config.PasswordKey(id)); err != nil {
-				return err
-			}
-			return integrations.Delete(ctx, tx, healthName(id))
+			return config.DeleteStoredAccount(ctx, tx, id)
 		})
+	}
+	if err == nil {
+		if store := h.store(ctx); store != nil {
+			err = store.Remove(ctx, mailconn.ID(id))
+		}
 	}
 	if err == nil {
 		err = config.From(ctx).LoadStoredAccounts(ctx, h.d.DB.Read)

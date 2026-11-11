@@ -31,10 +31,7 @@
       host = {
         core.public_url = "https://atrium.example.org";
         core.ops_listen = "127.0.0.1:9180";
-        mail = {
-          mail_chat_url = "http://127.0.0.1:8187/v1";
-          mail_embed_url = "http://127.0.0.1:8188/v1";
-        };
+        mail.mail_chat_url = "http://127.0.0.1:8187/v1";
         media.media_root = "/var/lib/media";
       };
       connections = {
@@ -60,6 +57,14 @@
           config.api = "https://api.notion.com";
           capabilities = ["api"];
           credentialFiles.token = "/run/secrets/notion-token";
+        };
+        "service/embedding" = {
+          kind = "service/embedding";
+          config = {
+            url = "http://127.0.0.1:8188/v1";
+            model = "embeddinggemma";
+          };
+          capabilities = ["embeddings"];
         };
       };
       mailAccounts.icloud = {
@@ -121,7 +126,9 @@
     hostConfig = assert cfg.renderedHost.core.public_url == "https://atrium.example.org";
     assert cfg.renderedHost.connections."service/qbittorrent".config.url == "http://127.0.0.1:8081";
     assert cfg.renderedHost.connections."service/qbittorrent".credential_files.api_key == "\${CREDENTIALS_DIRECTORY}/connection-service-qbittorrent-api_key";
-    assert cfg.renderedHost.mail.mail_accounts_file != "";
+    assert cfg.renderedHost.connections."mail/icloud".config.preset == "icloud";
+    assert cfg.renderedHost.connections."mail/icloud".config.enabled == "true";
+    assert cfg.renderedHost.connections."mail/icloud".credential_files."mail/icloud/password" == "\${CREDENTIALS_DIRECTORY}/mail-account-icloud";
     assert cfg.renderedHost.connections."service/oidc".config.api_client_id == "api-client";
     assert cfg.renderedHost.connections."service/oidc".credential_files.client_secret == "\${CREDENTIALS_DIRECTORY}/connection-service-oidc-client_secret";
     assert cfg.initialTimezone != null; true;
@@ -192,7 +199,6 @@
           printf 'oidc-secret\n' >"$CREDENTIALS_DIRECTORY/connection-service-oidc-client_secret"
           atrium settings list >/dev/null
           atrium settings get public_url | grep -q '"value": "https://atrium.example.org"'
-          atrium settings get mail_accounts_file | grep -q 'mail-accounts.toml'
           atrium settings get tz | grep -q '"value": "UTC"'
           atrium settings set tz Europe/Berlin >/dev/null
           atrium settings get tz | grep -q '"value": "Europe/Berlin"'
@@ -201,6 +207,7 @@
             exit 1
           fi
           atrium connections list | grep -q 'service/qbittorrent'
+          atrium connections list | grep -q 'mail/icloud'
           rm "$CREDENTIALS_DIRECTORY/mail-account-icloud"
           if atrium settings list >/dev/null 2>&1; then
             echo "a missing mail account password was accepted" >&2

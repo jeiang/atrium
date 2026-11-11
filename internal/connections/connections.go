@@ -2,6 +2,7 @@ package connections
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 
 	"time"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 )
 
@@ -106,6 +108,18 @@ func (r *Registry) Kinds() []Kind {
 }
 
 var defaults sync.Map
+
+type AccountSync struct {
+	Validate  func(context.Context, config.Host) error
+	Reconcile func(context.Context, *sql.Tx, config.Host) error
+	Reload    func(context.Context, *Store) error
+}
+
+var accountSync *AccountSync
+
+// SetAccountSync registers the owner that validates host account inputs before
+// the connection transaction and materializes account rows inside it.
+func SetAccountSync(s *AccountSync) { accountSync = s }
 
 func SetDefault(q db.Querier, s *Store) { defaults.Store(q, s) }
 
@@ -222,7 +236,7 @@ func aggregate(results []Result, enabled []Capability) (State, string) {
 	if len(results) == 0 {
 		return Untested, "no capability has been tested"
 	}
-	rank := map[State]int{NeedsReauth: 5, Failing: 4, Expiring: 3, Untested: 2, OK: 1}
+	rank := map[State]int{NeedsReauth: 6, Unconfigured: 5, Failing: 4, Expiring: 3, Untested: 2, OK: 1}
 	state, reason := OK, ""
 	for _, r := range results {
 		if rank[r.State] >= rank[state] {

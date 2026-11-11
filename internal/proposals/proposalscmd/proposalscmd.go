@@ -281,13 +281,12 @@ func mailEnabled(ctx context.Context, q db.Querier) bool {
 	if err != nil || flag.Value != "true" {
 		return false
 	}
-	for _, key := range []string{endpoint.KeyChatURL, endpoint.KeyEmbedURL} {
-		found, err := settings.From(ctx).Resolve(ctx, q, key)
-		if err != nil || found.Value == "" {
-			return false
-		}
+	found, err := settings.From(ctx).Resolve(ctx, q, endpoint.KeyChatURL)
+	if err != nil || found.Value == "" {
+		return false
 	}
-	return true
+	reason, err := endpoint.EmbeddingConfigured(ctx, q)
+	return err == nil && reason == ""
 }
 
 func (o Options) execute(env *cli.Env, run body) int {

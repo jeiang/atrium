@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/gmailauth"
+	"github.com/jeiang/atrium/internal/mail/mailconn"
 	"github.com/jeiang/atrium/internal/mail/mime"
 	"github.com/jeiang/atrium/internal/mail/smtp"
 	"github.com/jeiang/atrium/internal/safety"
@@ -225,6 +226,15 @@ func jsonOf(v any) json.RawMessage {
 var errNotSendable = errors.New("draft is not sendable")
 
 func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusals, error) {
+	spec, known := config.From(ctx).Account(d.Account)
+	if !known {
+		return nil, nil, &smtp.Failure{Kind: "Config", Msg: d.Account + " is not configured"}
+	}
+	lease, err := mailconn.Open(ctx, s.DB.Read, d.Account)
+	if err != nil {
+		return nil, nil, err
+	}
+	host := mailconn.SMTPHost(lease, spec)
 	method, source, err := gmailauth.Resolve(ctx, s.DB.Read, d.Account)
 	if err != nil {
 		return nil, nil, err
@@ -234,11 +244,9 @@ func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusal
 		return nil, nil, &smtp.Failure{Kind: "Config", Msg: d.Account + " is not configured"}
 	}
 	if user == "" {
-		if spec, known := config.From(ctx).Account(d.Account); known {
-			user = spec.Login
-		}
+		user = spec.Login
 	}
-	sender := smtp.SenderAddress(config.From(ctx).Preset(d.Account), user)
+	sender := smtp.SenderAddress(spec.Preset, user)
 	makeID := s.MsgID
 	if makeID == nil {
 		makeID = smtp.MakeMsgID
@@ -250,9 +258,9 @@ func (s *Store) submit(ctx context.Context, d *Row) (*smtp.Message, smtp.Refusal
 	recipients := append(addresses(d.ToAddrs), addresses(d.CcAddrs)...)
 	var refused smtp.Refusals
 	if method == config.AuthXOAUTH2 {
-		refused, err = smtp.SendXOAUTH2(ctx, d.Account, user, msg, recipients, source.Token, source.Invalidate)
+		refused, err = smtp.SendXOAUTH2(ctx, host, d.Account, user, msg, recipients, source.Token, source.Invalidate)
 	} else {
-		refused, err = smtp.Send(ctx, config.Credential, d.Account, msg, recipients)
+		refused, err = smtp.Send(ctx, host, config.Credential, d.Account, msg, recipients)
 	}
 	return msg, refused, err
 }

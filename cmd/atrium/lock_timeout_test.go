@@ -33,6 +33,7 @@ func TestMain(m *testing.M) {
 	}
 	reg := settings.New()
 	newApp(config.OS, reg, config.NewState(reg), nil)
+	guardExternalHosts()
 	os.Exit(m.Run())
 }
 

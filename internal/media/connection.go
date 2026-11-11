@@ -58,7 +58,7 @@ func testQbitConnection(ctx context.Context, lease *connections.Lease, _ []conne
 	if err != nil {
 		return nil, err
 	}
-	client, err := lease.HTTP("url")
+	client, err := lease.HTTPRead("url")
 	if err != nil {
 		return nil, err
 	}
@@ -135,7 +135,7 @@ func testTMDBConnection(ctx context.Context, lease *connections.Lease, _ []conne
 	if err != nil {
 		return nil, err
 	}
-	client, err := lease.HTTP("url")
+	client, err := lease.HTTPRead("url")
 	if err != nil {
 		return nil, err
 	}
@@ -172,7 +172,7 @@ func testTMDBImages(ctx context.Context, lease *connections.Lease) (connections.
 	if err != nil {
 		return connections.Result{Capability: "images", State: connections.Failing, Reason: err.Error()}, nil
 	}
-	client, err := lease.HTTP("images_url")
+	client, err := lease.HTTPRead("images_url")
 	if err != nil {
 		return connections.Result{Capability: "images", State: connections.Failing, Reason: err.Error()}, nil
 	}
@@ -212,7 +212,7 @@ func testEZTVConnection(ctx context.Context, lease *connections.Lease, _ []conne
 	if err != nil {
 		return nil, err
 	}
-	client, err := lease.HTTP("url")
+	client, err := lease.HTTPRead("url")
 	if err != nil {
 		return nil, err
 	}

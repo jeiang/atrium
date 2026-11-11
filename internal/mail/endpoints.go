@@ -5,9 +5,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"net"
 	"net/http"
-	"net/url"
 	"slices"
 	"strings"
 	"time"
@@ -17,21 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 )
-
-func Hosted(raw string) bool {
-	u, err := url.Parse(raw)
-	if err != nil || u.Hostname() == "" {
-		return false
-	}
-	host := u.Hostname()
-	if host == "localhost" {
-		return false
-	}
-	if ip := net.ParseIP(host); ip != nil {
-		return !ip.IsLoopback() && !ip.IsPrivate() && !ip.IsLinkLocalUnicast()
-	}
-	return strings.Contains(host, ".")
-}
 
 type ProbeResult struct {
 	Kind      string   `json:"kind"`
@@ -71,7 +54,7 @@ var probeSchema = map[string]any{
 }
 
 func probeChat(ctx context.Context, e endpoint.Endpoint) (string, int) {
-	raw, err := llm.ChatJSON(endpoint.With(ctx, endpoint.Settings{ChatModel: e.Model, MaxTokens: 32}), e.URL, "Reply with JSON only.", `Return {"ok": true}.`, probeSchema, 0)
+	raw, err := llm.ChatJSON(endpoint.With(ctx, endpoint.Settings{ChatModel: e.Model, MaxTokens: endpoint.TuningMailChatMaxTokens}), e.URL, "Reply with JSON only.", `Return {"ok": true}.`, probeSchema, 0)
 	if err != nil {
 		return httpx.Message(err), 0
 	}
@@ -84,33 +67,17 @@ func probeChat(ctx context.Context, e endpoint.Endpoint) (string, int) {
 	return "", 0
 }
 
-func probeEmbed(ctx context.Context, e endpoint.Endpoint) (string, int) {
-	raw, err := httpx.PostJSON(ctx, e.URL+"/embeddings", map[string]any{"model": e.Model, "input": []string{"atrium probe"}})
-	if err != nil {
-		return httpx.Message(err), 0
-	}
-	var reply struct {
-		Data []struct {
-			Embedding []float64 `json:"embedding"`
-		} `json:"data"`
-	}
-	if json.Unmarshal(raw, &reply) != nil || len(reply.Data) != 1 || len(reply.Data[0].Embedding) == 0 {
-		return "the reply has no embedding", 0
-	}
-	return "", len(reply.Data[0].Embedding)
-}
-
 func probe(ctx context.Context, e endpoint.Endpoint) ProbeResult {
-	res := ProbeResult{Kind: e.Kind, URL: e.URL, Model: e.Model, Hosted: Hosted(e.URL)}
+	res := ProbeResult{Kind: e.Kind, URL: e.URL, Model: e.Model, Hosted: endpoint.Hosted(e.URL)}
+	if e.Kind != endpoint.EndpointChat {
+		res.Reason = "the embed endpoint is tested as a connection"
+		return res
+	}
 	if e.URL == "" {
 		res.Reason = "no URL configured"
 	} else {
 		res.Models = discover(ctx, e.URL)
-		if e.Kind == endpoint.EndpointChat {
-			res.Reason, res.Dimension = probeChat(ctx, e)
-		} else {
-			res.Reason, res.Dimension = probeEmbed(ctx, e)
-		}
+		res.Reason, res.Dimension = probeChat(ctx, e)
 	}
 	res.OK = res.Reason == ""
 	if res.Models == nil {
@@ -138,6 +105,14 @@ func ProbeEndpoints(ctx context.Context, d *db.DB, now float64) ([]ProbeResult, 
 	}
 	out := make([]ProbeResult, 0, len(endpoints))
 	for _, e := range endpoints {
+		if e.Kind != endpoint.EndpointChat {
+			res, err := probeEmbedding(ctx, d)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, res)
+			continue
+		}
 		res := probe(ctx, e)
 		if err := recordProbe(ctx, d, e, res, now); err != nil {
 			return nil, err
@@ -147,7 +122,40 @@ func ProbeEndpoints(ctx context.Context, d *db.DB, now float64) ([]ProbeResult, 
 	return out, nil
 }
 
+func probeEmbedding(ctx context.Context, d *db.DB) (ProbeResult, error) {
+	view, err := endpoint.TestEmbedding(ctx, d)
+	if err != nil {
+		if endpoint.IsUnconfigured(err) {
+			return ProbeResult{Kind: endpoint.EndpointEmbed, Model: endpoint.EmbedModel, Reason: "no embedding connection is configured", Models: []string{}}, nil
+		}
+		return ProbeResult{}, err
+	}
+	return probeResultFromView(view), nil
+}
+
+func probeResultFromView(view endpoint.EmbeddingView) ProbeResult {
+	res := ProbeResult{Kind: endpoint.EndpointEmbed, OK: view.State == "ok", Reason: view.Reason, Models: []string{}}
+	res.URL, res.Model = view.URL, view.Model
+	if res.Model == "" {
+		res.Model = endpoint.EmbedModel
+	}
+	var data struct {
+		Dimension int      `json:"dimension"`
+		Models    []string `json:"models"`
+		Hosted    bool     `json:"hosted"`
+	}
+	_ = json.Unmarshal(view.Data, &data)
+	res.Dimension, res.Hosted = data.Dimension, data.Hosted
+	if data.Models != nil {
+		res.Models = data.Models
+	}
+	return res
+}
+
 func ProbeCandidate(ctx context.Context, d *db.DB, kind, url, key string, client *http.Client, now float64) (ProbeResult, error) {
+	if kind != endpoint.EndpointChat {
+		return ProbeResult{}, errors.New("the embed endpoint is tested as a connection")
+	}
 	endpoints, err := endpoint.Endpoints(ctx, d.Read)
 	if err != nil {
 		return ProbeResult{}, err
@@ -178,6 +186,16 @@ func ProbeFailures(ctx context.Context, q db.Querier) (string, error) {
 	}
 	var reasons []string
 	for _, e := range endpoints {
+		if e.Kind != endpoint.EndpointChat {
+			reason, err := embeddingFailure(ctx, q, e)
+			if err != nil {
+				return "", err
+			}
+			if reason != "" {
+				reasons = append(reasons, reason)
+			}
+			continue
+		}
 		var fingerprint, reason string
 		var ok bool
 		err := q.QueryRowContext(ctx, "SELECT fingerprint, ok, reason FROM endpoint_probes WHERE kind = ?", e.Kind).Scan(&fingerprint, &ok, &reason)
@@ -192,4 +210,32 @@ func ProbeFailures(ctx context.Context, q db.Querier) (string, error) {
 		}
 	}
 	return strings.Join(reasons, "; "), nil
+}
+
+func embeddingFailure(ctx context.Context, q db.Querier, e endpoint.Endpoint) (string, error) {
+	view, err := endpoint.EmbeddingState(ctx, q)
+	if err != nil {
+		if endpoint.IsUnconfigured(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	if view.State != "failing" && view.State != "needs_reauth" {
+		return "", nil
+	}
+	fingerprint := resultFingerprint(view.Data)
+	if fingerprint == "" || fingerprint != e.Fingerprint() {
+		return "", nil
+	}
+	return "embed endpoint probe failed: " + view.Reason, nil
+}
+
+func resultFingerprint(data json.RawMessage) string {
+	var probe struct {
+		Fingerprint string `json:"fingerprint"`
+	}
+	if json.Unmarshal(data, &probe) == nil {
+		return probe.Fingerprint
+	}
+	return ""
 }

@@ -44,14 +44,6 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `mail_chat_model` | string | `qwen` | `ATRIUM_MAIL_MAIL_CHAT_MODEL` |
 | `mail_chat_proxy` | string | none | `ATRIUM_MAIL_MAIL_CHAT_PROXY` |
 | `mail_chat_url` | string | none | `ATRIUM_MAIL_MAIL_CHAT_URL` |
-| `mail_embed_ca_file` | string | none | `ATRIUM_MAIL_MAIL_EMBED_CA_FILE` |
-| `mail_embed_key` | string | none | `ATRIUM_MAIL_MAIL_EMBED_KEY_FILE` |
-| `mail_embed_model` | string | `embeddinggemma` | `ATRIUM_MAIL_MAIL_EMBED_MODEL` |
-| `mail_embed_proxy` | string | none | `ATRIUM_MAIL_MAIL_EMBED_PROXY` |
-| `mail_embed_url` | string | none | `ATRIUM_MAIL_MAIL_EMBED_URL` |
-| `mail_ship24_url` | string | `https://api.ship24.com/public/v1` | `ATRIUM_MAIL_MAIL_SHIP24_URL` |
-| `ship24_ca_file` | string | none | `ATRIUM_MAIL_SHIP24_CA_FILE` |
-| `ship24_proxy` | string | none | `ATRIUM_MAIL_SHIP24_PROXY` |
 
 ### media
 
@@ -160,7 +152,6 @@ Operator settings are stored in the database and edited in the application. They
 | Key | Type | Default | Class |
 | --- | --- | --- | --- |
 | `mail_mode` | string | `shadow` | bootstrap |
-| `mail_ship24_api_key` | string | none | secret |
 | `mail_ship24_destination_country` | string | none | ui |
 | `mail_ship24_destination_postcode` | string | none | ui |
 | `mail_ship24_monthly_quota` | int | `10` | advanced |

@@ -12,11 +12,16 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
+	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/netip"
+	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -31,13 +36,17 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/golden"
+	"github.com/jeiang/atrium/internal/testutil/imapscript"
 )
 
 func v2Fixture(t *testing.T) string {
@@ -62,10 +71,9 @@ func importTestAppHost(t *testing.T, dir string, now float64, host string) *cli.
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_DB_KEY"] = rightKeyHex
 	vars["ATRIUM_HOST_CONFIG"] = host
-	vars[settingEnv(config.KeyMailAccountsFile)] = defaultAccountsFile
 	reg := settings.New()
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
-	return newAppWith(config.Map(vars), reg, config.NewState(reg), nil, nil, func() float64 { return now }, quietLog)
+	return newAppWith(config.Map(vars), reg, config.NewState(reg), nil, imapclient.Opener, func() float64 { return now }, quietLog)
 }
 
 func importHostConfig(t *testing.T, dir, anthropicURL, grafanaURL, notionURL string) string {
@@ -754,6 +762,268 @@ func TestImportV2CarriesTheWebPushConnectionAndUsesItsVAPIDKey(t *testing.T) {
 	}
 }
 
+func TestImportV2CarriesTheEmbeddingConnectionAndItsKey(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	embed, chat := newFakeOpenAI(t), newFakeOpenAI(t)
+	const key = "sk-embed-imported-0123456789"
+	url := embed.URL + "/v1"
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
+		('mail_embed_url', %[1]q),
+		('mail_embed_model', 'embeddinggemma'),
+		('mail_embed_batch', '1')`, url))
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_embed_key', %q, 1762000800, 'fixture')", key))
+	editImportSource(t, source, "INSERT INTO endpoint_probes (kind, fingerprint, ok, reason, dimension, models, probed_at) VALUES ('embed', 'stale0000000000', 0, 'the old endpoint refused the key', 0, '[]', 1762000800)")
+	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", url)
+	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", chat.URL+"/v1")
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	for _, want := range []string{
+		"connection service/embedding: created from host settings",
+		"connection service/embedding: credential bearer carried",
+		"the embed probe moved to connection service/embedding",
+		"setting mail_embed_batch: drop-tuning -> internal/endpoint/tuning.go:TuningMailEmbedBatch; source value 1 differs from the compiled default 16",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+	if strings.Contains(got.stdout+got.stderr, key) {
+		t.Error("the import printed the embedding key")
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	q, err := db.Connect(dest, db.WithKey(importKey(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	if stored := importValue(t, q.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'service/embedding' AND slot = 'bearer'"); stored != key {
+		t.Errorf("the imported embedding key is %q", stored)
+	}
+	if config := importValue(t, q.Read, "SELECT config_json FROM connections WHERE id = 'service/embedding'"); !strings.Contains(config, url) || !strings.Contains(config, "embeddinggemma") {
+		t.Errorf("the embedding config is %s", config)
+	}
+	if results := importValue(t, q.Read, "SELECT results_json FROM connections WHERE id = 'service/embedding'"); !strings.Contains(results, "stale0000000000") || !strings.Contains(results, `"legacy":true`) {
+		t.Errorf("the imported embed probe is %s", results)
+	}
+
+	tested := runImportApp(t, importTestApp(t, dir, clock), "connections", "test", "service/embedding")
+	if tested.code != cli.ExitOK || !strings.Contains(tested.stdout, "service/embedding\tok") {
+		t.Fatalf("connections test service/embedding: exit %d stdout %q stderr %q", tested.code, tested.stdout, tested.stderr)
+	}
+	embedAuths := embed.authorizations()
+	if len(embedAuths["/v1/embeddings"]) == 0 {
+		t.Fatal("the embedding fake saw no request")
+	}
+	for path, values := range embedAuths {
+		for _, value := range values {
+			if value != "Bearer "+key {
+				t.Errorf("embedding %s used %q, want the imported bearer", path, value)
+			}
+		}
+	}
+
+	probed := runImportApp(t, importTestApp(t, dir, clock), "endpoints", "probe")
+	if probed.code != cli.ExitOK {
+		t.Fatalf("endpoints probe: exit %d stdout %q stderr %q", probed.code, probed.stdout, probed.stderr)
+	}
+	for path, values := range chat.authorizations() {
+		for _, value := range values {
+			if strings.Contains(value, key) {
+				t.Errorf("chat %s received the embedding bearer", path)
+			}
+		}
+	}
+}
+
+func TestImportV2CarriesTheShip24ConnectionAndPollsWithTheCompiledWindow(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	const key = "ship24-imported"
+	var mu sync.Mutex
+	var auths []string
+	ship24 := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		auths = append(auths, r.Header.Get("Authorization"))
+		mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if r.Header.Get("Authorization") != "Bearer "+key {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.Method == http.MethodGet && r.URL.Path == "/trackers/trk_1/results" {
+			_, _ = io.WriteString(w, `{"data":{"trackings":[{"tracker":{"trackerId":"trk_1","trackingNumber":"1Z999AA10123456784"},"shipment":{"statusMilestone":"in_transit","statusCode":"x"},"events":[]}]}}`)
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	t.Cleanup(ship24.Close)
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
+		('mail_ship24_url', %[1]q),
+		('mail_ship24_poll_days', '1'),
+		('mail_ship24_poll_limit', '1')`, ship24.URL))
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_ship24_api_key', %q, 1762000800, 'fixture')", key))
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO packages (id, carrier, tracking_number, status, status_text, source_message_id, last_message_id, updated_ts, first_seen, dismissed, aggregator, tracker_id, tracker_registered_ts, last_sync_ts, last_event_hash, last_event, last_event_ts, notified_status)
+		VALUES (3, 'ups', '1Z999AA10123456784', 'in_transit', 'In transit', 0, 0, %f, %f, 0, 'ship24', 'trk_1', %f, %f, '', '', 0, '')`,
+		clock-10*86400, clock-20*86400, clock-20*86400, clock-10*86400))
+	setEnv(t, "ATRIUM_MAIL_MAIL_SHIP24_URL", ship24.URL)
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	for _, want := range []string{
+		"connection service/ship24: created from host settings",
+		"connection service/ship24: credential api_key carried",
+		"setting mail_ship24_poll_days: drop-tuning -> internal/mail/tracking/tuning.go:TuningMailShip24PollDays; source value 1 differs from the compiled default 30",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+	if strings.Contains(got.stdout+got.stderr, key) {
+		t.Error("the import printed the Ship24 key")
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	q, err := db.Connect(dest, db.WithKey(importKey(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	if stored := importValue(t, q.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'service/ship24' AND slot = 'api_key'"); stored != key {
+		t.Errorf("the imported Ship24 key is %q", stored)
+	}
+
+	polled := runImportApp(t, importTestApp(t, dir, clock), "packages", "poll")
+	if polled.code != cli.ExitOK || !strings.Contains(polled.stdout, `"checked": 1`) {
+		t.Fatalf("packages poll: exit %d stdout %q stderr %q", polled.code, polled.stdout, polled.stderr)
+	}
+	mu.Lock()
+	seen := append([]string(nil), auths...)
+	mu.Unlock()
+	if len(seen) == 0 {
+		t.Fatal("the tracking poll never reached the Ship24 fake")
+	}
+	for _, value := range seen {
+		if value != "Bearer "+key {
+			t.Errorf("Ship24 request used %q", value)
+		}
+	}
+}
+
+func TestImportV2HoldsMailOnlyForAMatchingEmbeddingFingerprint(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	embed := newFakeOpenAI(t)
+	const key = "sk-embed-fingerprint-0123456789"
+	url := embed.URL + "/v1"
+	matching := endpoint.New(endpoint.EndpointEmbed, url, "embeddinggemma", key).Fingerprint()
+	for _, tc := range []struct {
+		name        string
+		fingerprint string
+		refused     bool
+	}{
+		{"matching", matching, true},
+		{"stale", "0000000000000000", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			source := copyV2Fixture(t, dir)
+			editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
+				('mail_embed_url', %[1]q),
+				('mail_embed_model', 'embeddinggemma')`, url))
+			editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_embed_key', %q, 1762000800, 'fixture')", key))
+			editImportSource(t, source, fmt.Sprintf("INSERT INTO endpoint_probes (kind, fingerprint, ok, reason, dimension, models, probed_at) VALUES ('embed', %q, 0, 'the endpoint refused the key', 0, '[]', 1762000800)", tc.fingerprint))
+			setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", url)
+			setEnv(t, flagEnv(module.Mail), "")
+
+			if got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source); got.code != cli.ExitOK {
+				t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+			}
+			dest := filepath.Join(dir, "atrium.db")
+			q, err := db.Connect(dest, db.WithKey(importKey(t)))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = q.Close() }()
+			if state := importValue(t, q.Read, "SELECT state FROM connections WHERE id = 'service/embedding'"); state != "failing" {
+				t.Fatalf("the imported embedding state is %q, want the carried failure", state)
+			}
+
+			if off := runImportApp(t, importTestApp(t, dir, clock), "settings", "set", module.FlagKey(module.Mail), "false"); off.code != cli.ExitOK {
+				t.Fatalf("disabling mail: exit %d %q", off.code, off.stderr)
+			}
+			on := runImportApp(t, importTestApp(t, dir, clock), "settings", "set", module.FlagKey(module.Mail), "true")
+			if tc.refused {
+				if on.code != cli.ExitError || !strings.Contains(on.stderr, "embed endpoint probe failed") {
+					t.Fatalf("enabling mail with a matching failure: exit %d %q", on.code, on.stderr)
+				}
+				return
+			}
+			if on.code != cli.ExitOK {
+				t.Fatalf("enabling mail with a stale failure: exit %d %q", on.code, on.stderr)
+			}
+		})
+	}
+}
+
+func TestImportV2KeepsEmbedAndChatAccountsFromClaimingTheEndpointHealth(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	embed := newFakeOpenAI(t)
+	url := embed.URL + "/v1"
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
+		('mail_embed_url', %[1]q),
+		('mail_embed_model', 'embeddinggemma')`, url))
+	editImportSource(t, source, `INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, auth_method, created_at) VALUES
+		('embed', 'Embed', 'gmail', 'embed@example.test', 1, 0, 'password', 1762000800),
+		('chat', 'Chat', 'gmail', 'chat@example.test', 1, 0, 'password', 1762000800)`)
+	editImportSource(t, source, "INSERT INTO integration_health (name, state, reason, checked_at, expires_at) VALUES ('mail_embed', 'failing', 'the embed endpoint refused', 1762000800, NULL)")
+	editImportSource(t, source, "INSERT INTO integration_health (name, state, reason, checked_at, expires_at) VALUES ('mail_chat', 'failing', 'the chat endpoint refused', 1762000800, NULL)")
+	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", url)
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	for _, want := range []string{
+		"ambiguous-health mail_embed: the name is both the embedding endpoint and a mail account; the account is untested",
+		"ambiguous-health mail_chat: the name is both the local chat endpoint and a mail account; kept as local-chat legacy, the account is untested",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	q, err := db.Connect(dest, db.WithKey(importKey(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	if state := importValue(t, q.Read, "SELECT state FROM connections WHERE id = 'service/embedding'"); state != "untested" {
+		t.Errorf("the embedding connection state is %q, want untested", state)
+	}
+	if results := importValue(t, q.Read, "SELECT results_json FROM connections WHERE id = 'service/embedding'"); !strings.Contains(results, `"ambiguous":"mail_embed"`) {
+		t.Errorf("the ambiguous embed health was not recorded: %s", results)
+	}
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM integration_health WHERE name = 'mail_chat'"); n != 1 {
+		t.Errorf("%d mail_chat health rows carried, want the local-chat legacy row", n)
+	}
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM endpoint_probes WHERE kind = 'embed'"); n != 0 {
+		t.Error("the embed probe stayed in the endpoint_probes table")
+	}
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM mail_accounts WHERE id IN ('embed', 'chat')"); n != 2 {
+		t.Errorf("%d colliding accounts carried, want both", n)
+	}
+}
+
 func editImportSource(t *testing.T, path, statement string) {
 	t.Helper()
 	d, err := db.Connect(path, db.WithKey(db.Key{}))
@@ -1274,7 +1544,7 @@ func TestImportV2UndoesImportedAutomaticActions(t *testing.T) {
 	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_DB_KEY"] = rightKeyHex
-	vars[settingEnv(config.KeyMailAccountsFile)] = defaultAccountsFile
+	vars["ATRIUM_HOST_CONFIG"] = defaultHostConfig
 	delete(vars, "ATRIUM_DB_KEY_FILE")
 	reg := settings.New()
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
@@ -1598,6 +1868,123 @@ func TestImportV2CarriesTheGoogleGrantsAndTheConnectionTestsWithThem(t *testing.
 	}
 }
 
+func TestImportV2CarriesTheMailPasswordIntoTheConnectionAndSyncsWithIt(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	const appPassword = "imported-app-pass"
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_password_icloud', %q, 1762000800, 'fixture')", appPassword))
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if strings.Contains(got.stdout+got.stderr, appPassword) {
+		t.Error("the import printed the mail password")
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	d := mustConnect(t, dest)
+	defer func() { _ = d.Close() }()
+	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM secrets WHERE name = 'mail_password_icloud'"); n != 0 {
+		t.Errorf("%d mail password secrets stayed in the secrets table", n)
+	}
+	if got := importValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'mail/icloud' AND slot = 'mail/icloud/password'"); got != appPassword {
+		t.Errorf("the imported mail credential is %q", got)
+	}
+
+	script := imapscript.MustParse(t, `
+S: {icloud.greeting}
+C: {t} LOGIN "operator@icloud.invalid" "`+appPassword+`"
+S: {t} OK [CAPABILITY {icloud.authcaps}] User logged in
+C: {t} LIST "" "*"
+S: * LIST (\Noselect) "/" "/"
+S: {t} OK LIST completed
+C: {t} LOGOUT
+S: * BYE
+S: {t} OK
+`)
+	server, ca := imapscript.ServeTLS(t, script)
+	t.Setenv("ATRIUM_IMAP_ADDR", server.Addr())
+	t.Setenv("ATRIUM_IMAP_CA", ca)
+
+	synced := runImportApp(t, importTestApp(t, dir, clock), "sync", "--account", "icloud")
+	if synced.code != cli.ExitOK {
+		t.Fatalf("sync with the imported password: exit %d stdout %q stderr %q", synced.code, synced.stdout, synced.stderr)
+	}
+	if strings.Contains(synced.stdout+synced.stderr, appPassword) {
+		t.Error("sync printed the mail password")
+	}
+
+	smtpCA := smtpCert(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	smtp := &smtpFake{}
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go smtp.handle(c)
+		}
+	}()
+	t.Setenv("ATRIUM_SMTP_ADDR", ln.Addr().String())
+	t.Setenv("ATRIUM_SMTP_CA", smtpCA)
+
+	res, err := d.Write.Exec("INSERT INTO drafts (account, to_addrs, subject, body, created_at, updated_at) VALUES ('icloud', 'to@x.test', 'Imported', 'body', 0, 0)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, _ := res.LastInsertId()
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	setEnv(t, "ATRIUM_HOST_CONFIG", importHostConfig(t, dir, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9"))
+	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	base := startServeIn(t, dir)
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	code, body, _ := fetch(t, client, http.MethodGet, base+"/drafts", nil)
+	if code != http.StatusOK {
+		t.Fatalf("drafts page: %d", code)
+	}
+	m := regexp.MustCompile(`name="revision" value="([0-9]+)"`).FindStringSubmatch(body)
+	if m == nil {
+		t.Fatal("the draft page has no revision")
+	}
+	code, body, _ = fetch(t, client, http.MethodPost, base+"/drafts/"+strconv.FormatInt(id, 10)+"/send", url.Values{"revision": {m[1]}})
+	if code != http.StatusOK {
+		t.Fatalf("send: %d %.300s", code, body)
+	}
+	if strings.Contains(body, appPassword) {
+		t.Error("the send response printed the mail password")
+	}
+	smtp.mu.Lock()
+	auth := append([]string(nil), smtp.passwords...)
+	smtp.mu.Unlock()
+	if len(auth) == 0 {
+		t.Fatal("the draft send never authenticated to the SMTP fake")
+	}
+	authenticated := false
+	for _, line := range auth {
+		fields := strings.Fields(line)
+		if len(fields) < 2 {
+			continue
+		}
+		raw, err := base64.RawStdEncoding.DecodeString(fields[len(fields)-1])
+		if err == nil && strings.Contains(string(raw), appPassword) {
+			authenticated = true
+		}
+	}
+	if !authenticated {
+		t.Errorf("the SMTP fake saw %v, not the imported password", auth)
+	}
+	if got := importValue(t, d.Read, "SELECT status FROM drafts WHERE id = ?", id); got != "sent" {
+		t.Errorf("draft status %q", got)
+	}
+}
 func TestImportV2UnionsOIDCSelectorsAndDropsLoginState(t *testing.T) {
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
@@ -1739,4 +2126,396 @@ capabilities = ["discovery", "client_auth"]
 		t.Fatal(err)
 	}
 	return path
+}
+func importHostConfigMail(t *testing.T, dir, passwordFile, login string) string {
+	t.Helper()
+	base, err := os.ReadFile(importHostConfig(t, dir, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(base) + mailConnection("icloud", "icloud", login, passwordFile, true)
+	path := filepath.Join(dir, "host.toml")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func TestImportV2RefusesAnEmptyHostCredentialWithoutLosingTheDatabasePassword(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	const appPassword = "imported-app-pass"
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_password_icloud', %q, 1762000800, 'fixture')", appPassword))
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	dest := filepath.Join(dir, "atrium.db")
+	d := mustConnect(t, dest)
+	defer func() { _ = d.Close() }()
+	if got := importValue(t, d.Read, "SELECT source FROM connection_credentials WHERE connection_id = 'mail/icloud' AND slot = 'mail/icloud/password'"); got != "database" {
+		t.Fatalf("the imported credential source is %q", got)
+	}
+
+	empty := filepath.Join(dir, "empty.password")
+	if err := os.WriteFile(empty, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	host := importHostConfigMail(t, dir, empty, "operator@icloud.invalid")
+
+	booted := runImportApp(t, importTestAppHost(t, dir, clock, host), "connections", "list")
+	if booted.code == cli.ExitOK || !strings.Contains(booted.stderr, "is empty") {
+		t.Fatalf("boot with an empty host credential: exit %d stdout %q stderr %q", booted.code, booted.stdout, booted.stderr)
+	}
+	if strings.Contains(booted.stdout+booted.stderr, appPassword) {
+		t.Error("the failed boot printed the database password")
+	}
+
+	var credSource, value string
+	if err := d.Read.QueryRow("SELECT source, value FROM connection_credentials WHERE connection_id = 'mail/icloud' AND slot = 'mail/icloud/password'").Scan(&credSource, &value); err != nil {
+		t.Fatal(err)
+	}
+	if credSource != "database" || value != appPassword {
+		t.Errorf("the failed boot changed the credential to source %q value %q", credSource, value)
+	}
+	if got := importValue(t, d.Read, "SELECT config_source FROM connections WHERE id = 'mail/icloud'"); got != "operator" {
+		t.Errorf("the failed boot changed the connection source to %q", got)
+	}
+	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM mail_accounts WHERE id = 'icloud' AND enabled = 1"); n != 1 {
+		t.Errorf("%d enabled icloud accounts after the failed boot", n)
+	}
+
+	var opened int
+	t.Cleanup(imapclient.UseDialer(func(context.Context, config.AccountSpec, string) (mail.Conn, error) {
+		opened++
+		return nil, fmt.Errorf("unexpected mail dial")
+	}))
+	synced := runImportApp(t, importTestAppHost(t, dir, clock, host), "sync", "--account", "icloud")
+	if synced.code == cli.ExitOK {
+		t.Fatalf("sync after the failed boot: exit %d stdout %q stderr %q", synced.code, synced.stdout, synced.stderr)
+	}
+	if opened != 0 {
+		t.Errorf("sync opened %d mail connections with an empty host credential", opened)
+	}
+}
+func TestImportV2KeepsHostPinningAndRefusesARemovedAccount(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	hostPass := filepath.Join(dir, "host-icloud.password")
+	if err := os.WriteFile(hostPass, []byte("host-pass\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	host := importHostConfigMail(t, dir, hostPass, "operator@icloud.invalid")
+
+	got := runImportApp(t, importTestAppHost(t, dir, clock, host), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	dest := filepath.Join(dir, "atrium.db")
+	d := mustConnect(t, dest)
+	defer func() { _ = d.Close() }()
+	if got := importValue(t, d.Read, "SELECT pinned FROM mail_accounts WHERE id = 'icloud'"); got != "1" {
+		t.Fatalf("the imported host account pin is %q", got)
+	}
+	if got := importValue(t, d.Read, "SELECT config_source FROM connections WHERE id = 'mail/icloud'"); got != "host" {
+		t.Fatalf("the imported host connection source is %q", got)
+	}
+
+	removed := importHostConfig(t, dir, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9")
+	var opened int
+	t.Cleanup(imapclient.UseDialer(func(context.Context, config.AccountSpec, string) (mail.Conn, error) {
+		opened++
+		return nil, fmt.Errorf("unexpected mail dial")
+	}))
+	synced := runImportApp(t, importTestAppHost(t, dir, clock, removed), "sync", "--account", "icloud")
+	if synced.code == cli.ExitOK {
+		t.Fatalf("sync of an account removed from the host file: exit %d stdout %q stderr %q", synced.code, synced.stdout, synced.stderr)
+	}
+	if opened != 0 {
+		t.Errorf("sync opened %d connections for an account removed from the host file", opened)
+	}
+	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM mail_accounts WHERE id = 'icloud'"); n != 0 {
+		t.Errorf("%d icloud account rows survived the host removal", n)
+	}
+	if got := importValue(t, d.Read, "SELECT enabled FROM connections WHERE id = 'mail/icloud'"); got != "0" {
+		t.Errorf("the removed host connection is enabled %q", got)
+	}
+
+	smtpCA := smtpCert(t)
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = ln.Close() })
+	smtp := &smtpFake{}
+	go func() {
+		for {
+			c, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			go smtp.handle(c)
+		}
+	}()
+	t.Setenv("ATRIUM_SMTP_ADDR", ln.Addr().String())
+	t.Setenv("ATRIUM_SMTP_CA", smtpCA)
+
+	res, err := d.Write.Exec("INSERT INTO drafts (account, to_addrs, subject, body, created_at, updated_at) VALUES ('icloud', 'to@x.test', 'Removed', 'body', 0, 0)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, _ := res.LastInsertId()
+	var revision int64
+	if err := d.Read.QueryRow("SELECT revision FROM drafts WHERE id = ?", id).Scan(&revision); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	setEnv(t, "ATRIUM_HOST_CONFIG", removed)
+	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	base := startServeIn(t, dir)
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	code, body, _ := fetch(t, client, http.MethodPost, base+"/drafts/"+strconv.FormatInt(id, 10)+"/send", url.Values{"revision": {strconv.FormatInt(revision, 10)}})
+	if code == http.StatusOK {
+		t.Fatalf("draft send for an account removed from the host file: %d %.300s", code, body)
+	}
+	smtp.mu.Lock()
+	attempts := len(smtp.passwords) + len(smtp.tokens)
+	smtp.mu.Unlock()
+	if attempts != 0 {
+		t.Errorf("the SMTP fake saw %d authentication attempts for a removed account", attempts)
+	}
+}
+func TestImportV2CarriesAStoredPasswordForAXOAUTH2Account(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	const appPassword = "work-app-pass"
+	editImportSource(t, source, `INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, auth_method, created_at) VALUES ('work', 'Work', 'gmail', 'me@work.test', 1, 0, 'xoauth2', 1762000800)`)
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_password_work', %q, 1762000800, 'fixture')", appPassword))
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if strings.Contains(got.stdout+got.stderr, appPassword) {
+		t.Error("the import printed the XOAUTH2 account's stored password")
+	}
+	if strings.Contains(got.stdout, "mail/work: unresolved-credential") {
+		t.Errorf("the import reported the stored password as unresolved:\n%s", got.stdout)
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	d := mustConnect(t, dest)
+	defer func() { _ = d.Close() }()
+	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM secrets WHERE name = 'mail_password_work'"); n != 0 {
+		t.Errorf("%d work password secrets stayed in the secrets table", n)
+	}
+	if got := importValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'mail/work' AND slot = 'mail/work/password'"); got != appPassword {
+		t.Errorf("the carried work credential is %q", got)
+	}
+
+	if _, err := d.Write.Exec("UPDATE mail_accounts SET auth_method = 'password' WHERE id = 'work'"); err != nil {
+		t.Fatal(err)
+	}
+	script := imapscript.MustParse(t, `
+S: {gmail.greeting}
+C: {t} CAPABILITY
+S: * CAPABILITY {gmail.caps}
+S: {t} OK CAPABILITY completed
+C: {t} LOGIN "me@work.test" "`+appPassword+`"
+S: {t} OK [CAPABILITY {gmail.authcaps}] User logged in
+C: {t} LIST "" "*"
+S: * LIST (\Noselect) "/" "/"
+S: {t} OK LIST completed
+C: {t} LOGOUT
+S: * BYE
+S: {t} OK
+`)
+	server, ca := imapscript.ServeTLS(t, script)
+	t.Setenv("ATRIUM_IMAP_ADDR", server.Addr())
+	t.Setenv("ATRIUM_IMAP_CA", ca)
+	synced := runImportApp(t, importTestApp(t, dir, clock), "sync", "--account", "work")
+	if synced.code != cli.ExitOK {
+		t.Fatalf("sync after switching to password authentication: exit %d stdout %q stderr %q", synced.code, synced.stdout, synced.stderr)
+	}
+	if strings.Contains(synced.stdout+synced.stderr, appPassword) {
+		t.Error("sync printed the mail password")
+	}
+}
+func TestImportV2KeepsTheEmbeddingFingerprintWithLegacyHealth(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	embed := newFakeOpenAI(t)
+	const key = "sk-embed-health-0123456789"
+	url := embed.URL + "/v1"
+	matching := endpoint.New(endpoint.EndpointEmbed, url, "embeddinggemma", key).Fingerprint()
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
+		('mail_embed_url', %[1]q),
+		('mail_embed_model', 'embeddinggemma')`, url))
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_embed_key', %q, 1762000800, 'fixture')", key))
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO endpoint_probes (kind, fingerprint, ok, reason, dimension, models, probed_at) VALUES ('embed', %q, 0, 'the endpoint refused the key', 0, '[]', 1762000800)", matching))
+	editImportSource(t, source, "INSERT INTO integration_health (name, state, reason, checked_at, expires_at) VALUES ('mail_embed', 'ok', 'the legacy check passed', 1762000800, NULL)")
+	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", url)
+	setEnv(t, flagEnv(module.Mail), "")
+
+	if got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source); got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	dest := filepath.Join(dir, "atrium.db")
+	q, err := db.Connect(dest, db.WithKey(importKey(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	if state := importValue(t, q.Read, "SELECT state FROM connections WHERE id = 'service/embedding'"); state != "failing" {
+		t.Fatalf("the imported embedding state is %q, want the carried failure", state)
+	}
+	results := importValue(t, q.Read, "SELECT results_json FROM connections WHERE id = 'service/embedding'")
+	if n := strings.Count(results, `"capability":"embeddings"`); n != 1 {
+		t.Errorf("%d embeddings results were imported: %s", n, results)
+	}
+	if !strings.Contains(results, matching) {
+		t.Errorf("the imported embeddings result lost the fingerprint: %s", results)
+	}
+
+	if off := runImportApp(t, importTestApp(t, dir, clock), "settings", "set", module.FlagKey(module.Mail), "false"); off.code != cli.ExitOK {
+		t.Fatalf("disabling mail: exit %d %q", off.code, off.stderr)
+	}
+	on := runImportApp(t, importTestApp(t, dir, clock), "settings", "set", module.FlagKey(module.Mail), "true")
+	if on.code != cli.ExitError || !strings.Contains(on.stderr, "embed endpoint probe failed") {
+		t.Fatalf("enabling mail with a matching failed probe and legacy health: exit %d stdout %q stderr %q", on.code, on.stdout, on.stderr)
+	}
+}
+func importDeploymentHost(t *testing.T, dir, passwordFile, login string) (string, string, string) {
+	t.Helper()
+	anthropicKey := filepath.Join(dir, "host-anthropic.key")
+	grafanaKey := filepath.Join(dir, "host-grafana.key")
+	if err := os.WriteFile(anthropicKey, []byte("host-anthropic-key\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(grafanaKey, []byte("host-grafana-token\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	body := fmt.Sprintf(`[connections."service/anthropic"]
+kind = "service/anthropic"
+label = "Anthropic"
+config = { url = "http://127.0.0.1:9" }
+capabilities = ["models"]
+credential_files = { api_key = %q }
+
+[connections."service/grafana"]
+kind = "service/grafana"
+label = "Grafana"
+config = { url = "http://127.0.0.1:9" }
+capabilities = ["viewer"]
+credential_files = { viewer_token = %q }
+
+[connections."service/notion"]
+kind = "service/notion"
+label = "Notion"
+config = { api = "http://127.0.0.1:9" }
+capabilities = ["api"]
+`, anthropicKey, grafanaKey) + mailConnection("icloud", "icloud", login, passwordFile, true)
+	path := filepath.Join(dir, "host.toml")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path, anthropicKey, grafanaKey
+}
+
+func TestImportV2IntoADeploymentThatDeclaresTheSameMailAccountAndServices(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	const importedPass = "imported-app-pass"
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_password_icloud', %q, 1762000800, 'fixture')", importedPass))
+	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('notion_token', 'ntn-imported-token', 1762000800, 'fixture')")
+
+	hostPass := filepath.Join(dir, "host-icloud.password")
+	if err := os.WriteFile(hostPass, []byte("host-pass\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	host, anthropicKey, grafanaKey := importDeploymentHost(t, dir, hostPass, "host@icloud.invalid")
+
+	got := runImportApp(t, importTestAppHost(t, dir, clock, host), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if strings.Contains(got.stdout+got.stderr, importedPass) || strings.Contains(got.stdout+got.stderr, "host-pass") {
+		t.Error("the import printed a mail password")
+	}
+	booted := runImportApp(t, importTestAppHost(t, dir, clock, host), "connections", "list")
+	if booted.code != cli.ExitOK {
+		t.Fatalf("boot after import: exit %d stdout %q stderr %q", booted.code, booted.stdout, booted.stderr)
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	d := mustConnect(t, dest)
+	defer func() { _ = d.Close() }()
+	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM mail_accounts WHERE id = 'icloud'"); n != 1 {
+		t.Errorf("%d icloud account rows after import into a declaring host", n)
+	}
+	if got := importValue(t, d.Read, "SELECT login FROM mail_accounts WHERE id = 'icloud'"); got != "host@icloud.invalid" {
+		t.Errorf("the account login is %q, want the host file's", got)
+	}
+	if got := importValue(t, d.Read, "SELECT pinned FROM mail_accounts WHERE id = 'icloud'"); got != "1" {
+		t.Errorf("the host account pin is %q", got)
+	}
+	if got := importValue(t, d.Read, "SELECT enabled FROM mail_accounts WHERE id = 'icloud'"); got != "1" {
+		t.Errorf("the host account is enabled %q", got)
+	}
+	if got := importValue(t, d.Read, "SELECT config_source FROM connections WHERE id = 'mail/icloud'"); got != "host" {
+		t.Errorf("the mail connection source is %q", got)
+	}
+	if got := importValue(t, d.Read, "SELECT enabled FROM connections WHERE id = 'mail/icloud'"); got != "1" {
+		t.Errorf("the mail connection is enabled %q", got)
+	}
+	if got := importValue(t, d.Read, "SELECT state FROM connections WHERE id = 'mail/icloud'"); got == "disabled" {
+		t.Errorf("the mail connection state is %q", got)
+	}
+	if got := importValue(t, d.Read, "SELECT config_json FROM connections WHERE id = 'mail/icloud'"); !strings.Contains(got, "host@icloud.invalid") {
+		t.Errorf("the mail connection config is %s, want the host file's login", got)
+	}
+	for _, tc := range []struct{ id, slot, source, value, file string }{
+		{"mail/icloud", "mail/icloud/password", "host_file", "", hostPass},
+		{"service/anthropic", "api_key", "host_file", "", anthropicKey},
+		{"service/grafana", "viewer_token", "host_file", "", grafanaKey},
+		{"service/notion", "token", "database", "ntn-imported-token", ""},
+	} {
+		var source, value, fileRef sql.NullString
+		if err := d.Read.QueryRow("SELECT source, value, file_ref FROM connection_credentials WHERE connection_id = ? AND slot = ?", tc.id, tc.slot).Scan(&source, &value, &fileRef); err != nil {
+			t.Errorf("%s credential %s: %v", tc.id, tc.slot, err)
+			continue
+		}
+		if source.String != tc.source || value.String != tc.value || fileRef.String != tc.file {
+			t.Errorf("%s credential %s = source %q value %q file %q", tc.id, tc.slot, source.String, value.String, fileRef.String)
+		}
+	}
+
+	script := imapscript.MustParse(t, `
+S: {icloud.greeting}
+C: {t} LOGIN "host@icloud.invalid" "host-pass"
+S: {t} OK [CAPABILITY {icloud.authcaps}] User logged in
+C: {t} LIST "" "*"
+S: * LIST (\Noselect) "/" "/"
+S: {t} OK LIST completed
+C: {t} LOGOUT
+S: * BYE
+S: {t} OK
+`)
+	server, ca := imapscript.ServeTLS(t, script)
+	t.Setenv("ATRIUM_IMAP_ADDR", server.Addr())
+	t.Setenv("ATRIUM_IMAP_CA", ca)
+	synced := runImportApp(t, importTestAppHost(t, dir, clock, host), "sync", "--account", "icloud")
+	if synced.code != cli.ExitOK {
+		t.Fatalf("sync with the host file's password: exit %d stdout %q stderr %q", synced.code, synced.stdout, synced.stderr)
+	}
+	if strings.Contains(synced.stdout+synced.stderr, "host-pass") {
+		t.Error("sync printed the mail password")
+	}
 }

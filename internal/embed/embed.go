@@ -104,7 +104,11 @@ func Texts(ctx context.Context, url string, texts []string) ([][]float64, error)
 }
 
 func textsAt(ctx context.Context, url string, texts []string, s endpoint.Settings) ([][]float64, error) {
-	raw, err := httpx.PostJSON(ctx, url+"/embeddings", embeddingsRequest{s.EmbedModel, texts})
+	embedding := endpoint.EmbeddingFrom(ctx)
+	if embedding == nil {
+		return nil, &httpx.ServiceUnavailable{Msg: "no embedding connection is configured"}
+	}
+	raw, err := embedding.Post(ctx, url, embeddingsRequest{s.EmbedModel, texts})
 	if err != nil {
 		return nil, err
 	}

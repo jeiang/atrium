@@ -40,7 +40,7 @@ func mailSafetyFixture(t *testing.T, mode string) *mailSafety {
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
 	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", "http://127.0.0.1:1/v1")
 	setEnv(t, settingEnv(mail.KeyMode), mode)
-	setEnv(t, settingEnv(config.KeyMailAccountsFile), accountsFile(t, dir, mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir, mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
 	return &mailSafety{dir: dir, app: f.app, api: api, fake: fake, path: filepath.Join(dir, "atrium.db")}
 }
 
@@ -176,6 +176,16 @@ func TestMailRoutingRecordsEachStage(t *testing.T) {
 			filed: []filedMail{
 				{"Bills", "Statement 8", "bills@bank.test", "s8"},
 				{"Receipts", "Receipt 7", "shop@store.test", "s7"},
+				{"Bills", "Filed 1", "f1@filler1.test", "f1"},
+				{"Bills", "Filed 2", "f2@filler2.test", "f2"},
+				{"Bills", "Filed 3", "f3@filler3.test", "f3"},
+				{"Bills", "Filed 4", "f4@filler4.test", "f4"},
+				{"Bills", "Filed 5", "f5@filler5.test", "f5"},
+				{"Bills", "Filed 6", "f6@filler6.test", "f6"},
+				{"Bills", "Filed 7", "f7@filler7.test", "f7"},
+				{"Bills", "Filed 8", "f8@filler8.test", "f8"},
+				{"Bills", "Filed 9", "f9@filler9.test", "f9"},
+				{"Bills", "Filed 10", "f10@filler10.test", "f10"},
 			},
 			prepare: func(t *testing.T, m *mailSafety, id int64) {
 				m.embed(t, id, m.messageID(t, "Statement 8"), m.messageID(t, "Receipt 7"))
@@ -193,7 +203,6 @@ func TestMailRoutingRecordsEachStage(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.stage, func(t *testing.T) {
 			m := mailSafetyFixture(t, "shadow")
-			setEnv(t, settingEnv(mail.KeyFolderMinMessages), "1")
 			subject := c.subject
 			if subject == "" {
 				subject = "Bank statement"

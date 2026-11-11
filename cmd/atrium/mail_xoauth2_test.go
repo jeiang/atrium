@@ -56,10 +56,7 @@ func TestGmailXOAUTH2SyncRetriesARejectedTokenWithAFreshOne(t *testing.T) {
 	if err := db.Migrate(context.Background(), d, filepath.Join(dir, "atrium.db")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Write.Exec("INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, auth_method, created_at) " +
-		"VALUES ('oauth', 'OAuth', 'gmail', 'atrium.test@gmail.test', 1, 0, 'xoauth2', 0)"); err != nil {
-		t.Fatal(err)
-	}
+	insertMailAccount(t, d, "oauth", "gmail", "atrium.test@gmail.test", "xoauth2")
 	_ = d.Close()
 
 	script := imapscript.MustParse(t, `
