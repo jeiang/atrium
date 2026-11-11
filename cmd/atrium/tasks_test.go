@@ -34,16 +34,16 @@ func TestTaskAddUndoAndRegistryMatrix(t *testing.T) {
 	}
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
-	var writeID int64
-	if err := d.Read.QueryRow("SELECT id FROM agent_writes WHERE tool = 'task_add' ORDER BY id DESC LIMIT 1").Scan(&writeID); err != nil {
+	var effectID int64
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'task_add' AND direction = 'forward' ORDER BY id DESC LIMIT 1").Scan(&effectID); err != nil {
 		t.Fatal(err)
 	}
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
-	if code, body, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); code != http.StatusOK || !strings.Contains(body, "/activity/write/"+strconv.FormatInt(writeID, 10)+"/undo") {
-		t.Fatalf("activity page = %d, want an undo for the task_add write: %.400s", code, body)
+	if code, body, _ := fetch(t, client, http.MethodGet, base+"/activity", nil); code != http.StatusOK || !strings.Contains(body, "/activity/effect/"+strconv.FormatInt(effectID, 10)+"/undo") {
+		t.Fatalf("activity page = %d, want an undo for the task_add effect: %.400s", code, body)
 	}
-	if code, body, _ := fetch(t, client, http.MethodPost, base+"/activity/write/"+strconv.FormatInt(writeID, 10)+"/undo", url.Values{}); code != http.StatusOK {
+	if code, body, _ := fetch(t, client, http.MethodPost, base+"/activity/effect/"+strconv.FormatInt(effectID, 10)+"/undo", url.Values{}); code != http.StatusOK {
 		t.Fatalf("undo = %d %s", code, body)
 	}
 	var n int

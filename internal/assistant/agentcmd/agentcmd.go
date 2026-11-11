@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
+	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -80,7 +81,7 @@ func bootstrap(ctx context.Context, cfgEnv config.Env, tools registry.Source, no
 		_ = d.Close()
 		return nil, nil, err
 	}
-	r, err := runner.New(tools)
+	r, err := runner.New(tools, toolset.Ledger(d, func() float64 { return float64(time.Now().UnixNano()) / 1e9 }))
 	if err != nil {
 		_ = d.Close()
 		return nil, nil, err

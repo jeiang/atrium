@@ -771,6 +771,12 @@ func refuseDestination(ctx context.Context, path string, key db.Key) error {
 	if n > 0 {
 		counts = append(counts, fmt.Sprintf("subagents=%d", n))
 	}
+	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM effects").Scan(&n); err != nil {
+		return fmt.Errorf("db import-v2: destination: %w", err)
+	}
+	if n > 0 {
+		counts = append(counts, fmt.Sprintf("effects=%d", n))
+	}
 	if active, err := embed.Active(ctx, q); err == nil {
 		if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+quoteName(active.MessageTable())).Scan(&n); err != nil {
 			return fmt.Errorf("db import-v2: destination: %w", err)

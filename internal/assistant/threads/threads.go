@@ -22,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/store"
 	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/textx"
@@ -450,6 +451,30 @@ func MarksOf(ctx context.Context, q db.Querier, targets []string) (tool.Marks, e
 	})
 	if err != nil {
 		return 0, err
+	}
+	effectThreads, err := ledger.ThreadsForTargets(ctx, q, targets)
+	if err != nil {
+		return 0, err
+	}
+	if len(effectThreads) > 0 {
+		effectArgs := make([]any, len(effectThreads))
+		for i, id := range effectThreads {
+			effectArgs[i] = id
+		}
+		effectRows, err := q.QueryContext(ctx,
+			"SELECT marks FROM threads WHERE id IN ("+strings.TrimSuffix(strings.Repeat("?,", len(effectThreads)), ",")+")", effectArgs...)
+		if err != nil {
+			return 0, err
+		}
+		effectSets, err := db.Collect(effectRows, func(r *sql.Rows) (int64, error) {
+			var set int64
+			err := r.Scan(&set)
+			return set, err
+		})
+		if err != nil {
+			return 0, err
+		}
+		sets = append(sets, effectSets...)
 	}
 	var marks tool.Marks
 	for _, set := range sets {
