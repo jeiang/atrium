@@ -9,6 +9,10 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 )
 
+func FromClause(alias string) string { return "messages " + alias }
+
+func JoinClause(alias, on string) string { return " JOIN messages " + alias + " ON " + on }
+
 func Subject(ctx context.Context, q db.Querier, id int64) (string, error) {
 	var subject string
 	err := q.QueryRowContext(ctx, "SELECT COALESCE(subject, '') FROM messages WHERE id = ?", id).Scan(&subject)

@@ -2,6 +2,8 @@ package threads
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
@@ -47,4 +49,14 @@ func MarksOfID(ctx context.Context, q db.Querier, threadID int64) (tool.Marks, e
 		return 0, err
 	}
 	return tool.Marks(marks), nil
+}
+
+func IDByKindRole(ctx context.Context, q db.Querier, kind Kind, role string) (int64, error) {
+	var id int64
+	err := q.QueryRowContext(ctx,
+		"SELECT id FROM threads WHERE kind = ? AND role = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1", string(kind), role).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return 0, nil
+	}
+	return id, err
 }

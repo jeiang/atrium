@@ -7,7 +7,7 @@ import (
 	"errors"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/proposals/actions"
 )
 
 const (
@@ -81,7 +81,7 @@ type Querier = db.Querier
 func Known(ctx context.Context, q Querier, fingerprint string) (bool, error) {
 	var status string
 	var unresolved bool
-	err := q.QueryRowContext(ctx, "SELECT status, "+ledger.UnresolvedSQL("a")+" FROM proposals WHERE fingerprint = ?", fingerprint).Scan(&status, &unresolved)
+	err := q.QueryRowContext(ctx, "SELECT status, "+actions.Unresolved("a")+" FROM proposals WHERE fingerprint = ?", fingerprint).Scan(&status, &unresolved)
 	if errors.Is(err, sql.ErrNoRows) {
 		return false, nil
 	}
@@ -116,7 +116,7 @@ func Create(ctx context.Context, d *db.DB, kind string, account *string, title s
 		}
 		err = tx.QueryRowContext(ctx, "UPDATE proposals SET kind = ?, account = ?, title = ?, payload = ?, preview = ?, "+
 			"created_ts = ?, status = 'pending', decided_ts = NULL, applied_ts = NULL, undone_ts = NULL, recovered = 0, result = NULL "+
-			"WHERE fingerprint = ? AND status = 'failed' AND NOT "+ledger.UnresolvedSQL("a")+" RETURNING id",
+			"WHERE fingerprint = ? AND status = 'failed' AND NOT "+actions.Unresolved("a")+" RETURNING id",
 			kind, account, title, body, view, ts, fingerprint).Scan(&id)
 		if errors.Is(err, sql.ErrNoRows) {
 			err = tx.QueryRowContext(ctx, "SELECT id FROM proposals WHERE fingerprint = ?", fingerprint).Scan(&id)
