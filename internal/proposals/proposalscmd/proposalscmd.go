@@ -281,8 +281,7 @@ func mailEnabled(ctx context.Context, q db.Querier) bool {
 	if err != nil || flag.Value != "true" {
 		return false
 	}
-	found, err := settings.From(ctx).Resolve(ctx, q, endpoint.KeyChatURL)
-	if err != nil || found.Value == "" {
+	if config.From(ctx).HostValue(endpoint.KeyChatURL) == "" {
 		return false
 	}
 	reason, err := endpoint.EmbeddingConfigured(ctx, q)

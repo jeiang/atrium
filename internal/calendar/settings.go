@@ -21,6 +21,8 @@ const (
 )
 
 func init() {
+	settings.MustRegisterHost(settings.HostDef{
+		Key: CalendarDirKey, Module: "calendar", Type: settings.String})
 	settings.MustRegister(
 		settings.Value(settings.UI, settings.Def{Key: AppleIDKey, Module: "calendar", Type: settings.String}),
 		settings.Value(settings.UI, settings.Def{Key: AccountKey, Module: "calendar", Type: settings.String}),
@@ -28,7 +30,6 @@ func init() {
 		settings.Value(settings.UI, settings.Def{
 			Key: DefaultMinutesKey, Module: "calendar", Type: settings.Int, Default: defaultEventMinutes,
 			Check: settings.Between(5, 1440)}),
-		settings.Value(settings.Advanced, settings.Def{Key: CalendarDirKey, Module: "calendar", Type: settings.String}),
 	)
 }
 
@@ -64,7 +65,7 @@ func LoadSettings(ctx context.Context, q db.Querier) (Settings, error) {
 		func() error { return text(AppleIDKey, &out.AppleID) },
 		func() error { return text(AccountKey, &out.Account) },
 		func() error { return text(ICloudCalendarKey, &out.ICloudCalendar) },
-		func() error { return text(CalendarDirKey, &out.CalendarDir) },
+		func() error { out.CalendarDir = config.From(ctx).HostValue(CalendarDirKey); return nil },
 		func() error { return whole(DefaultMinutesKey, &out.DefaultMinutes) },
 	} {
 		if err := step(); err != nil {

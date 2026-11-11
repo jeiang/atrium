@@ -106,7 +106,7 @@ func (s *Set) validate() error {
 			}
 		}
 		for _, rq := range r.Requires {
-			if rq.Key == "" {
+			if rq.Key == "" || rq.Host || rq.Connection {
 				continue
 			}
 			if _, ok := s.reg.Lookup(rq.Key); !ok {

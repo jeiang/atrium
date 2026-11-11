@@ -45,7 +45,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 		Name:      module.Mail,
 		Attention: []attention.Source{attentionsources.Drafts(), attentionsources.Loops(), attentionsources.Commitments(), attentionsources.Packages()},
 		Requires: []module.Requirement{
-			module.Setting(endpoint.KeyChatURL),
+			module.HostSetting(endpoint.KeyChatURL),
 			{Name: "service/embedding", Check: func(ctx context.Context, p module.Probe) (string, error) {
 				return endpoint.EmbeddingConfigured(ctx, p.Q)
 			}},

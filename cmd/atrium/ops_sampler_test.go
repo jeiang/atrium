@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -239,8 +240,11 @@ func TestOpsQuerySettingsRefuseNonQueryValues(t *testing.T) {
 		{"ops_hosts", `node"}`},
 	}
 	for _, c := range bad {
-		if code, _, _ := runIn(t, dir, "settings", "set", c.key, c.value); code == cli.ExitOK {
-			t.Errorf("settings set %s %q was accepted", c.key, c.value)
+		setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "bad.toml", "[grafana]\n"+c.key+" = "+strconv.Quote(c.value)+"\n"))
+		if code, _, stderr := runIn(t, dir, "settings", "list"); code == cli.ExitOK {
+			t.Errorf("host %s %q was accepted", c.key, c.value)
+		} else if !strings.Contains(stderr, c.key) {
+			t.Errorf("refusal for %s does not name it: %s", c.key, stderr)
 		}
 	}
 	good := []struct{ key, value string }{
@@ -249,10 +253,12 @@ func TestOpsQuerySettingsRefuseNonQueryValues(t *testing.T) {
 		{"ops_hosts", "node-a"},
 	}
 	for _, c := range good {
-		if code, _, stderr := runIn(t, dir, "settings", "set", c.key, c.value); code != cli.ExitOK {
-			t.Errorf("settings set %s %q: exit %d %s", c.key, c.value, code, stderr)
+		setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "good.toml", "[grafana]\n"+c.key+" = "+strconv.Quote(c.value)+"\n"))
+		if code, _, stderr := runIn(t, dir, "settings", "list"); code != cli.ExitOK {
+			t.Errorf("host %s %q: exit %d %s", c.key, c.value, code, stderr)
 		}
 	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", "")
 }
 
 func TestOpsSamplerNeverWritesToGrafana(t *testing.T) {

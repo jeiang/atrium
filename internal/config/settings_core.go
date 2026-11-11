@@ -22,13 +22,12 @@ const (
 )
 
 func init() {
+	settings.MustRegisterHost(settings.HostDef{
+		Key: KeyPublicURL, Module: coreModule, Type: settings.String, Check: checkPublicURL})
 	settings.MustRegister(
 		settings.Value(settings.UI, settings.Def{
 			Key: KeyTZ, Module: coreModule, Type: settings.String, Default: Timezone,
 			Check: checkZone}),
-		settings.Value(settings.UI, settings.Def{
-			Key: KeyPublicURL, Module: coreModule, Type: settings.String,
-			Check: checkPublicURL}),
 		settings.Value(settings.UI, settings.Def{
 			Key: KeySnoozeChoices, Label: "Snooze choices (days)", Module: webModule, Type: settings.String, Default: defaultSnoozeChoices,
 			Check: checkSnoozeChoices}),
@@ -70,7 +69,7 @@ func checkSnoozeChoices(value string) error {
 }
 
 type core struct {
-	tz, publicURL string
+	tz string
 }
 
 func loadCore(ctx context.Context, q db.Querier) (core, error) {
@@ -80,7 +79,6 @@ func loadCore(ctx context.Context, q db.Querier) (core, error) {
 		into func(value string) error
 	}{
 		{KeyTZ, func(v string) error { c.tz = strings.TrimSpace(v); return nil }},
-		{KeyPublicURL, func(v string) error { c.publicURL = strings.TrimRight(strings.TrimSpace(v), "/"); return nil }},
 	} {
 		found, err := settings.From(ctx).Resolve(ctx, q, field.key)
 		if err != nil {
@@ -115,8 +113,6 @@ func (s *State) coreValue(env Env, key string) (string, bool) {
 	switch key {
 	case KeyTZ:
 		return c.tz, c.tz != ""
-	case KeyPublicURL:
-		return c.publicURL, true
 	}
 	return "", false
 }
@@ -129,8 +125,7 @@ func (s *State) TZName(env Env) string {
 }
 
 func (s *State) PublicURL(env Env) string {
-	value, _ := s.coreValue(env, KeyPublicURL)
-	return strings.TrimRight(value, "/")
+	return strings.TrimRight(s.HostValue(KeyPublicURL), "/")
 }
 
 func (s *State) HTTPTimeout(env Env) time.Duration {

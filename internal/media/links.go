@@ -79,6 +79,11 @@ func (l *Links) reread(ctx context.Context) []byte {
 }
 
 func (l *Links) load(ctx context.Context) ([]byte, error) {
+	if raw, ok, err := secrets.FileKey(ctx, secrets.LinkKeyFile); err != nil {
+		return nil, err
+	} else if ok {
+		return raw, nil
+	}
 	store := secrets.New(l.reg, l.d, l.d)
 	value, err := store.Reading().Value(ctx, KeyLinkKey)
 	if err != nil {

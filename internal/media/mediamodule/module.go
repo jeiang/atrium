@@ -20,8 +20,8 @@ func (m Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
 		Name: module.Media,
 		Requires: []module.Requirement{
-			module.Setting(media.KeyRoot),
-			module.Setting(media.KeyQbitURL),
+			module.HostSetting(media.KeyRoot),
+			module.Connection(string(media.KindQbittorrent)),
 		},
 		Pages: []web.Page{{
 			Module:    pages.Module(pages.Options{Now: m.Now}),

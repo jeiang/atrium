@@ -154,7 +154,15 @@ func (h *Host) readFile(env Env, defs []settings.HostDef, path string) error {
 		}
 		keys, known := byModule[module]
 		table, isTable := doc[module].(map[string]any)
-		if !known || !isTable {
+		if !isTable {
+			return fmt.Errorf("config: %s: unknown host key %q", path, module)
+		}
+		if !known {
+			for _, name := range slices.Sorted(maps.Keys(table)) {
+				if err := hostKeyRefusal(path, module, name); err != nil {
+					return err
+				}
+			}
 			return fmt.Errorf("config: %s: unknown host key %q", path, module)
 		}
 		for _, name := range slices.Sorted(maps.Keys(table)) {
@@ -167,9 +175,6 @@ func (h *Host) readFile(env Env, defs []settings.HostDef, path string) error {
 			}
 			if d.Secret && !isFile {
 				return fmt.Errorf("config: %s: %s is a secret; set %s_file", path, module+"."+name, module+"."+d.Key)
-			}
-			if entry, known := settings.ImportEntryFor(d.Key); known && entry.Runtime {
-				return fmt.Errorf("config: %s: %s.%s is cut over; use %s", path, module, name, settings.CutoverDestination(entry))
 			}
 			value, err := hostScalar(env, module+"."+name, table[name])
 			if err != nil {
@@ -211,10 +216,16 @@ func hostKeyRefusal(path, module, name string) error {
 	if !ok || entry.Module != module {
 		return nil
 	}
-	if entry.Class != settings.ImportHost {
+	switch {
+	case entry.Module == "db" && entry.Key == "key":
+		return fmt.Errorf("config: %s: db.key is the database key; use ATRIUM_DB_KEY_FILE", path)
+	case entry.Class == settings.ImportHost:
+		return fmt.Errorf("config: %s: %s.%s is now the connection field %s; declare it under [connections]", path, module, name, entry.Target)
+	case entry.Class == settings.ImportTuning:
+		return fmt.Errorf("config: %s: %s.%s is a compiled constant %s", path, module, name, entry.Target)
+	default:
 		return fmt.Errorf("config: %s: %s.%s is not host configuration; use %s", path, module, name, settings.CutoverDestination(entry))
 	}
-	return fmt.Errorf("config: %s: %s.%s is a host bootstrap input; use the dedicated option", path, module, name)
 }
 
 func (h *Host) readConnections(env Env, path string, raw any) error {

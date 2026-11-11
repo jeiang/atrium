@@ -281,7 +281,11 @@ func snakeCase(s string) bool {
 }
 
 func (d Def) validate(value string) error {
-	switch d.Type {
+	return validateTyped(d.Type, d.Choices, d.Check, value)
+}
+
+func validateTyped(t Type, choices []string, check func(string) error, value string) error {
+	switch t {
 	case Int:
 		if _, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64); err != nil {
 			return Invalid("must be a whole number")
@@ -295,12 +299,12 @@ func (d Def) validate(value string) error {
 			return Invalid("must be true or false")
 		}
 	case Enum:
-		if !slices.Contains(d.Choices, value) {
-			return Invalid("must be one of " + strings.Join(d.Choices, ", "))
+		if !slices.Contains(choices, value) {
+			return Invalid("must be one of " + strings.Join(choices, ", "))
 		}
 	}
-	if d.Check != nil {
-		return d.Check(value)
+	if check != nil {
+		return check(value)
 	}
 	return nil
 }
@@ -345,10 +349,16 @@ type NotEditable struct{ Key string }
 
 func (e *NotEditable) Error() string { return "settings: " + e.Key + " is not editable" }
 
-type HostOwned string
+type HostOwned struct {
+	Key         string
+	Destination string
+}
 
 func (e HostOwned) Error() string {
-	return "settings: " + string(e) + " is host configuration and is not editable here"
+	if e.Destination == "" {
+		return "settings: " + e.Key + " is host configuration and is not editable here"
+	}
+	return "settings: " + e.Key + " is host configuration and is not editable here; set " + e.Destination + " in the host file"
 }
 
 type PinnedError struct {

@@ -34,6 +34,12 @@ func (s *State) Host() Host {
 	return s.host
 }
 
+func (s *State) HostValue(key string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.host.Values[key]
+}
+
 type stateKey struct{}
 
 type envKey struct{}

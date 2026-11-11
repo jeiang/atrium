@@ -30,11 +30,13 @@ import (
 var moduleNames = module.Builtins
 
 func settingEnv(key string) string {
-	d, ok := settings.LookupOf(key)
-	if !ok {
-		panic("unregistered setting " + key)
+	if d, ok := settings.LookupOf(key); ok {
+		return config.EnvName(d)
 	}
-	return config.EnvName(d)
+	if entry, ok := settings.ImportEntryFor(key); ok {
+		return "ATRIUM_" + strings.ToUpper(entry.Module) + "_" + strings.ToUpper(entry.Key)
+	}
+	panic("unregistered setting " + key)
 }
 
 func flagEnv(name string) string { return settingEnv(module.FlagKey(name)) }

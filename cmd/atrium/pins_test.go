@@ -60,17 +60,24 @@ func TestHostConfigurationIsReadOnlyAndWinsOverTheDatabase(t *testing.T) {
 	setEnv(t, "ATRIUM_HOST_CONFIG", host)
 
 	got := pinRowOf(t, runSettings(t, "get", key))
-	if got.Value != "https://atrium.host.example" || got.Source != "pin" || !strings.Contains(got.PinSource, host) || !strings.Contains(got.PinSource, "core."+key) {
+	if got.Value != "https://atrium.host.example" || got.Source != "host" {
 		t.Errorf("host value: %+v", got)
 	}
-	for _, verb := range [][]string{{"set", key, "https://other.example"}, {"set", "media_root", "/other"}, {"unset", key}} {
-		r := runSettings(t, verb...)
-		if r.code != cli.ExitError || !strings.Contains(r.stderr, "pinned by host") {
-			t.Errorf("%s: exit %d stderr %q", verb[0], r.code, r.stderr)
+	for _, verb := range []struct {
+		args []string
+		want string
+	}{
+		{[]string{"set", key, "https://other.example"}, "core.public_url"},
+		{[]string{"set", "media_root", "/other"}, "media.media_root"},
+		{[]string{"unset", key}, "core.public_url"},
+	} {
+		r := runSettings(t, verb.args...)
+		if r.code != cli.ExitError || !strings.Contains(r.stderr, "host configuration and is not editable here") || !strings.Contains(r.stderr, verb.want) {
+			t.Errorf("%s: exit %d stderr %q, want %s", verb.args[0], r.code, r.stderr, verb.want)
 		}
 	}
-	if r := runSettings(t, "set", "media_qbittorrent_url", "http://127.0.0.1:8081"); r.code != cli.ExitError || !strings.Contains(r.stderr, "host configuration and is not editable here") {
-		t.Errorf("set a cut-over host key: exit %d stderr %q", r.code, r.stderr)
+	if r := runSettings(t, "set", "calendar_dir", "/srv/calendar"); r.code != cli.ExitError || !strings.Contains(r.stderr, "calendar.calendar_dir") {
+		t.Errorf("set a host path: exit %d stderr %q", r.code, r.stderr)
 	}
 	if _, ok := storedSetting(t, db, key); ok {
 		t.Error("a refused host write stored the value")
@@ -85,22 +92,22 @@ func TestHostConfigurationIsReadOnlyAndWinsOverTheDatabase(t *testing.T) {
 	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "env.toml", "[core]\npublic_url = \"https://atrium.host.example\"\n"))
 	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", "https://atrium.env.example")
 	got = pinRowOf(t, runSettings(t, "get", key))
-	if got.Value != "https://atrium.env.example" || got.PinSource != "env ATRIUM_CORE_PUBLIC_URL" {
+	if got.Value != "https://atrium.env.example" || got.Source != "host" {
 		t.Errorf("env override: %+v", got)
 	}
 	setEnv(t, "ATRIUM_CORE_PUBLIC_URL", "")
 
 	urlFile := writeFile(t, dir, "public-url", "https://atrium.file.example\n")
 	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "file.toml", "[core]\npublic_url_file = \""+urlFile+"\"\n"))
-	if got := pinRowOf(t, runSettings(t, "get", key)); got.Value != "https://atrium.file.example" || got.Source != "pin" {
+	if got := pinRowOf(t, runSettings(t, "get", key)); got.Value != "https://atrium.file.example" || got.Source != "host" {
 		t.Errorf("host file value: %+v", got)
 	}
 
 	for name, c := range map[string]struct{ body, want string }{
-		"secret direct": {"[auth]\noidc_client_secret = \"x\"\n", "is a host bootstrap input; use the dedicated option"},
+		"secret direct": {"[auth]\noidc_client_secret = \"x\"\n", "is now the connection field service/oidc host credential client_secret"},
 		"operator key":  {"[assistant]\nmonthly_budget_usd = 1\n", "not host configuration; use the operator setting assistant.monthly_budget_usd"},
 		"tuning key":    {"[assistant]\nmax_steps_chat = 10\n", "compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsChat"},
-		"cutover host":  {"[media]\nmedia_qbittorrent_url = \"http://127.0.0.1:8081\"\n", "host configuration service/qbittorrent.config.url"},
+		"database key":  {"[db]\nkey = \"00\"\n", "use ATRIUM_DB_KEY_FILE"},
 		"unknown key":   {"[core]\nnot_a_key = 1\n", "unknown host key \"core.not_a_key\""},
 	} {
 		setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "bad.toml", c.body))

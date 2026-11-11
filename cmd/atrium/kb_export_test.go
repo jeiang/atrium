@@ -233,8 +233,8 @@ func exportFixture(t *testing.T, fake *exportNotion) (string, *fixture, *db.DB) 
 
 func exportEnable(t *testing.T, kinds string) {
 	t.Helper()
+	setEnv(t, settingEnv("public_url"), "https://atrium.invalid")
 	for key, value := range map[string]string{
-		"public_url":              "https://atrium.invalid",
 		kbexport.NotionEnabledKey: "true",
 		kbexport.NotionParentKey:  exportParent,
 		kbexport.NotionKindsKey:   kinds,
@@ -581,7 +581,7 @@ func TestNotionExportRefusedSaveKeepsForm(t *testing.T) {
 	}
 }
 
-func TestObsidianExportRefusedSaveKeepsForm(t *testing.T) {
+func TestObsidianFolderIsHostConfiguration(t *testing.T) {
 	dir, _, _ := obsidianFixture(t)
 	w := asstBrowse(t, startServeIn(t, dir))
 	const action = "/settings/sections/export_obsidian"
@@ -589,31 +589,21 @@ func TestObsidianExportRefusedSaveKeepsForm(t *testing.T) {
 	if status != http.StatusOK {
 		t.Fatalf("GET integrations = %d", status)
 	}
+	if strings.Contains(body, `name="export_obsidian_dir"`) {
+		t.Errorf("the folder is still an editable control")
+	}
 	fields, _ := exportForm(t, body, action)
-	var submitted [][2]string
-	for _, field := range fields {
-		if field[0] == "export_obsidian_dir" {
-			field[1] = "relative/folder"
-		}
-		if field != [2]string{"export_obsidian_kinds", "messages"} {
-			submitted = append(submitted, field)
-		}
-	}
-	status, body, _ = exportPost(t, w, action, submitted, false)
-	if status != http.StatusUnprocessableEntity || !strings.Contains(body, "must be an absolute path") {
-		t.Fatalf("invalid folder save = %d: %s", status, body)
-	}
-	returned, checked := exportForm(t, body, action)
-	if !slices.Equal(returned, submitted) || checked["export_obsidian_kinds=messages"] {
-		t.Errorf("refused form = %v, want %v", returned, submitted)
+	submitted := append(fields, [2]string{"export_obsidian_dir", "/srv/vault"})
+	if status, body, _ := exportPost(t, w, action, submitted, false); status != http.StatusOK {
+		t.Fatalf("folder save = %d: %.300s", status, body)
 	}
 }
 
 func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 	fake := &exportNotion{}
 	dir, f, d := exportFixture(t, fake)
+	setEnv(t, settingEnv("public_url"), "https://atrium.invalid")
 	for key, value := range map[string]string{
-		"public_url":            "https://atrium.invalid",
 		kbexport.NotionKindsKey: "pii,messages,personal",
 	} {
 		if ran := runApp(t, "settings", "set", key, value); ran.code != cli.ExitOK {
@@ -714,8 +704,8 @@ func TestPrivateExportNeedsTheDestinationNamed(t *testing.T) {
 func TestExportWithoutADestinationIsSkipped(t *testing.T) {
 	fake := &exportNotion{}
 	_, f, d := exportFixture(t, fake)
+	setEnv(t, settingEnv("public_url"), "https://atrium.invalid")
 	for key, value := range map[string]string{
-		"public_url":              "https://atrium.invalid",
 		kbexport.NotionEnabledKey: "true",
 		kbexport.NotionKindsKey:   "pii,messages,personal",
 	} {
@@ -780,9 +770,9 @@ func obsidianFixture(t *testing.T) (string, *fixture, *db.DB) {
 
 func obsidianEnable(t *testing.T, vault string) {
 	t.Helper()
+	setEnv(t, settingEnv("public_url"), "https://atrium.invalid")
+	setEnv(t, settingEnv(kbexport.ObsidianDirKey), vault)
 	for key, value := range map[string]string{
-		"public_url":              "https://atrium.invalid",
-		kbexport.ObsidianDirKey:   vault,
 		kbexport.ObsidianKindsKey: "messages,personal",
 	} {
 		if ran := runApp(t, "settings", "set", key, value); ran.code != cli.ExitOK {
@@ -907,7 +897,6 @@ func TestKnowledgeExportsToAnObsidianFolder(t *testing.T) {
 		t.Fatalf("GET integrations = %d", status)
 	}
 	form := url.Values{
-		"export_obsidian_dir":        {vault},
 		"export_obsidian_kinds":      {"messages", "personal"},
 		"export_obsidian_private_to": {vault},
 	}

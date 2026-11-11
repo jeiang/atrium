@@ -110,7 +110,7 @@ func (s *Store) writable(name string) (Def, error) {
 		return d, err
 	}
 	if HostOwnedKey(name) {
-		return d, HostOwned(name)
+		return d, hostOwned(name)
 	}
 	if d.PinnedOnly() {
 		return d, PinOnly(name)
@@ -176,7 +176,7 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 		return err
 	}
 	if HostOwnedKey(name) {
-		return HostOwned(name)
+		return hostOwned(name)
 	}
 	if d.PinnedOnly() {
 		return PinOnly(name)
@@ -201,6 +201,9 @@ func (s *Store) Status(ctx context.Context, name string) (Status, error) {
 		}
 		return "", err
 	}
+	if !DBBacked(name) {
+		return Unset, nil
+	}
 	var one int
 	err := s.q.QueryRowContext(ctx, "SELECT 1 FROM secrets WHERE name = ?", name).Scan(&one)
 	switch {
@@ -219,6 +222,9 @@ func (s *Store) Generate(ctx context.Context, name string) (string, error) {
 	}
 	if !d.IsGenerated() {
 		return "", NotGenerated(name)
+	}
+	if !DBBacked(name) {
+		return "", hostOwned(name)
 	}
 	if _, pinned, err := s.reg.Pinned(name); err != nil {
 		return "", err
@@ -269,6 +275,9 @@ func (s *Store) Value(ctx context.Context, name string) (string, error) {
 		logx.AddSecret(found.Value)
 		return found.Value, nil
 	}
+	if !DBBacked(name) {
+		return "", nil
+	}
 	var value string
 	err := s.q.QueryRowContext(ctx, "SELECT value FROM secrets WHERE name = ?", name).Scan(&value)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -298,6 +307,9 @@ func (s *Store) Adopt(ctx context.Context, name, value string) (bool, error) {
 	}
 	if !d.IsGenerated() {
 		return false, NotGenerated(name)
+	}
+	if !DBBacked(name) {
+		return false, hostOwned(name)
 	}
 	if value == "" {
 		return false, EmptyValue(name)
@@ -348,6 +360,9 @@ func (s *Store) Snapshot(ctx context.Context) (*Snapshot, error) {
 			return nil, err
 		}
 		for _, pair := range pairs {
+			if !DBBacked(pair.key) {
+				continue
+			}
 			table.into[pair.key] = pair.value
 		}
 	}
@@ -365,6 +380,9 @@ func (s *Store) Resolve(ctx context.Context, snap *Snapshot, key string) (Resolv
 		}
 	}
 	out := Resolved{Key: key, Value: d.Default, Origin: FromDefault}
+	if !DBBacked(key) {
+		return out, nil
+	}
 	if d.IsSecret() {
 		if value, ok := snap.secrets[key]; ok {
 			out.Value, out.Origin = value, FromInstance

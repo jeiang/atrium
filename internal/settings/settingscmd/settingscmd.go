@@ -102,6 +102,20 @@ func (s *service) unset(a *cli.Args) cli.Handler {
 func (s *service) keyed(e *cli.Env, key string, act func(*db.DB, *settings.Store) error) int {
 	def, ok := settings.From(e.Ctx).Lookup(key)
 	if !ok {
+		if host, hosted := settings.HostDefOf(key); hosted {
+			if act != nil {
+				_, _ = fmt.Fprintf(e.Stderr, "error: %s is host configuration and is not editable here; set %s.%s in the host file\n", key, host.Module, host.Key)
+				return cli.ExitError
+			}
+			return s.with(e, func(*db.DB, *settings.Store) (int, error) {
+				writeRows(e.Stdout, settingRow{Key: key, Value: config.From(e.Ctx).HostValue(key), Source: "host", Class: "host"})
+				return cli.ExitOK, nil
+			})
+		}
+		if entry, known := settings.ImportEntryFor(key); known {
+			_, _ = fmt.Fprintf(e.Stderr, "error: %s is not an operator setting; use %s\n", key, settings.CutoverDestination(entry))
+			return cli.ExitError
+		}
 		return e.UsageError("%v", settings.UnknownKey(key))
 	}
 	if def.IsSecret() {

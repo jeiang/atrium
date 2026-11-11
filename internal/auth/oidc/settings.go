@@ -26,31 +26,15 @@ const (
 )
 
 func init() {
-	text := func(key string, check func(string) error) settings.Def {
-		return settings.Value(settings.UI, settings.Def{Key: key, Module: module, Type: settings.String, Check: check})
-	}
+	settings.MustRegisterHost(
+		settings.HostDef{Key: KeyAccessGroups, Module: module, Type: settings.String, Default: DefaultAccessGroups, Check: settings.NonEmpty},
+		settings.HostDef{Key: KeyAccessEmails, Module: module, Type: settings.String},
+		settings.HostDef{Key: KeyAccessDomains, Module: module, Type: settings.String},
+	)
 	settings.MustRegister(
-		settings.Value(settings.UI, settings.Def{
-			Key: KeyPreset, Module: module, Type: settings.Enum, Default: PresetGeneric,
-			Choices: PresetNames()}),
-		text(KeyIssuer, checkIssuer),
-		text(KeyClientID, nil),
-		text(KeyAPIClientID, nil),
-		text(KeyScopes, nil),
-		text(KeyGroupsClaim, nil),
-		settings.Value(settings.UI, settings.Def{Key: KeyAccessGroups, Module: module, Type: settings.String, Default: DefaultAccessGroups, Check: settings.NonEmpty}),
-		text(KeyAccessEmails, nil),
-		text(KeyAccessDomains, nil),
 		settings.Value(settings.UI, settings.Def{Key: KeyIdleDays, Label: "Sign out after idle (days)", Module: module, Type: settings.Int, Default: "7", Check: settings.Between(1, 365)}),
 		settings.Value(settings.UI, settings.Def{Key: KeyMaxDays, Label: "Sign out after (days)", Module: module, Type: settings.Int, Default: "30", Check: settings.Between(1, 365)}),
 	)
-}
-
-func checkIssuer(value string) error {
-	if strings.TrimSpace(value) == "" {
-		return nil
-	}
-	return checkEndpoint(strings.TrimSpace(value))
 }
 
 func checkEndpoint(raw string) error {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"path/filepath"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings"
@@ -15,8 +16,8 @@ const (
 )
 
 func init() {
-	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
-		Key: DirKey, Module: "contacts", Type: settings.String}))
+	settings.MustRegisterHost(settings.HostDef{
+		Key: DirKey, Module: "contacts", Type: settings.String})
 }
 
 type State uint8
@@ -40,14 +41,11 @@ func Resolve(ctx context.Context, q db.Querier) (Source, error) {
 	if on.Value != "true" {
 		return Source{State: Off}, nil
 	}
-	found, err := settings.From(ctx).Resolve(ctx, q, DirKey)
-	if err != nil {
-		return Source{}, err
-	}
-	if found.Value == "" {
+	dir := config.From(ctx).HostValue(DirKey)
+	if dir == "" {
 		return Source{State: Unset}, nil
 	}
-	return Source{State: Ready, Dir: filepath.Clean(found.Value)}, nil
+	return Source{State: Ready, Dir: filepath.Clean(dir)}, nil
 }
 
 func Dir(ctx context.Context, q db.Querier) (string, error) {

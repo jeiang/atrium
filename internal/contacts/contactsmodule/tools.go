@@ -23,7 +23,7 @@ type Module struct{}
 func (Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
 		Name:     module.Contacts,
-		Requires: []module.Requirement{module.Setting(contacts.DirKey)},
+		Requires: []module.Requirement{module.HostSetting(contacts.DirKey)},
 		Commands: []*cli.Command{{Name: "contacts", Commands: []*cli.Command{syncCommand(mc.Env)}}},
 		Tools:    func(r *registry.Registry) error { return r.Add(Tools()...) },
 	}
