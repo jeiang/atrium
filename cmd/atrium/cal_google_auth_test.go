@@ -1,3 +1,5 @@
+//go:build !modernc
+
 package main
 
 import (
@@ -8,6 +10,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -38,12 +41,35 @@ func (f *calTokenFake) seen() []url.Values {
 	return append([]url.Values(nil), f.forms...)
 }
 
-func calRunGoogleAuth(t *testing.T, redirect func(consent url.Values) url.Values) (appRun, url.Values) {
+func calHostConfig(t *testing.T, dir string) {
 	t.Helper()
+	secret := filepath.Join(dir, "client_secret")
+	if err := os.WriteFile(secret, []byte("secret\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	body := `
+[connections."google/default"]
+kind = "google"
+label = "Google"
+config = { client_id = "client-id" }
+capabilities = ["calendar"]
+credential_files = { "oauth/client_secret" = "` + secret + `" }
+`
+	path := filepath.Join(dir, "host.toml")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", path)
+}
+
+func calRunGoogleAuth(t *testing.T, redirect func(consent url.Values) url.Values) (appRun, url.Values, string) {
+	t.Helper()
+	requireCipher(t)
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_CONFIG", "")
+	calHostConfig(t, dir)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	var out, errs lockedBuffer
@@ -75,20 +101,24 @@ func calRunGoogleAuth(t *testing.T, redirect func(consent url.Values) url.Values
 	}
 	select {
 	case code := <-done:
-		return appRun{code, out.String(), errs.String()}, consent
+		return appRun{code, out.String(), errs.String()}, consent, dir
 	case <-ctx.Done():
 		t.Fatal("calendar google-auth did not finish")
-		return appRun{}, nil
+		return appRun{}, nil, dir
 	}
 }
 
 func TestCalendarGoogleAuthExchangesTheCodeWithPKCEAndRefusesAForeignState(t *testing.T) {
 	t.Run("client not set", func(t *testing.T) {
-		setEnv(t, "ATRIUM_CALENDAR_GOOGLE_CLIENT_ID", "")
-		setEnv(t, "GOOGLE_OAUTH_CLIENT_SECRET", "")
-		run, _ := calRunGoogleAuth(t, nil)
-		if run.code != cli.ExitError || run.stdout != "" || run.stderr != "error: ATRIUM_CALENDAR_GOOGLE_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET are required\n" {
-			t.Fatalf("%+v", run)
+		dir := t.TempDir()
+		setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+		setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+		setEnv(t, "ATRIUM_CONFIG", "")
+		var out, errs lockedBuffer
+		app := newTestApp(t, nil)
+		code := app.Run(context.Background(), []string{"calendar", "google-auth", "--port", "0"}, &out, &errs)
+		if code != cli.ExitError || out.String() != "" || errs.String() != "error: the google/default connection is not configured\n" {
+			t.Fatalf("%d %q %q", code, out.String(), errs.String())
 		}
 	})
 
@@ -97,11 +127,9 @@ func TestCalendarGoogleAuthExchangesTheCodeWithPKCEAndRefusesAForeignState(t *te
 	t.Cleanup(srv.Close)
 
 	t.Run("state mismatch", func(t *testing.T) {
-		setEnv(t, "ATRIUM_CALENDAR_GOOGLE_CLIENT_ID", "client-id")
-		setEnv(t, "GOOGLE_OAUTH_CLIENT_SECRET", "secret")
 		setEnv(t, calendar.GoogleTokenEnv, srv.URL+"/token")
-		run, _ := calRunGoogleAuth(t, func(url.Values) url.Values { return url.Values{"state": {"forged"}, "code": {"x"}} })
-		if run.code != cli.ExitError || strings.Contains(run.stdout, "GOOGLE_REFRESH_TOKEN") || run.stderr != "error: state mismatch; start again\n" {
+		run, _, _ := calRunGoogleAuth(t, func(url.Values) url.Values { return url.Values{"state": {"forged"}, "code": {"x"}} })
+		if run.code != cli.ExitError || strings.Contains(run.stdout, "refresh-1") || run.stderr != "error: state mismatch; start again\n" {
 			t.Fatalf("%+v", run)
 		}
 		if n := len(fake.seen()); n != 0 {
@@ -110,13 +138,11 @@ func TestCalendarGoogleAuthExchangesTheCodeWithPKCEAndRefusesAForeignState(t *te
 	})
 
 	t.Run("code exchange", func(t *testing.T) {
-		setEnv(t, "ATRIUM_CALENDAR_GOOGLE_CLIENT_ID", "client-id")
-		setEnv(t, "GOOGLE_OAUTH_CLIENT_SECRET", "secret")
 		setEnv(t, calendar.GoogleTokenEnv, srv.URL+"/token")
-		run, consent := calRunGoogleAuth(t, func(c url.Values) url.Values {
+		run, consent, dir := calRunGoogleAuth(t, func(c url.Values) url.Values {
 			return url.Values{"state": {c.Get("state")}, "code": {"google-code"}, "scope": {"calendar"}}
 		})
-		if run.code != cli.ExitOK || !strings.HasSuffix(run.stdout, "\nGOOGLE_REFRESH_TOKEN=refresh-1\n") || run.stderr != "" {
+		if run.code != cli.ExitOK || !strings.Contains(run.stdout, "Google Calendar consent stored") || strings.Contains(run.stdout, "refresh-1") || run.stderr != "" {
 			t.Fatalf("%+v", run)
 		}
 		if consent.Get("client_id") != "client-id" || consent.Get("access_type") != "offline" || consent.Get("prompt") != "consent" ||
@@ -132,6 +158,10 @@ func TestCalendarGoogleAuthExchangesTheCodeWithPKCEAndRefusesAForeignState(t *te
 		if form.Get("grant_type") != "authorization_code" || form.Get("code") != "google-code" || form.Get("redirect_uri") != consent.Get("redirect_uri") ||
 			base64.RawURLEncoding.EncodeToString(digest[:]) != consent.Get("code_challenge") {
 			t.Fatalf("token request %v does not match the consent URL %v", form, consent)
+		}
+		d := keyedDB(t, filepath.Join(dir, "atrium.db"))
+		if got := importValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'google/default' AND slot = 'oauth/calendar/refresh'"); got != "refresh-1" {
+			t.Fatalf("stored calendar grant = %q", got)
 		}
 	})
 }

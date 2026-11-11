@@ -17,6 +17,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -178,7 +179,7 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		"connection service/webfetch: created from host settings",
 		"connection service/tmdb: created from host settings",
 		"connection service/eztv: created from host settings",
-		"connection service/webpush: created from host settings",
+		"connection service/webpush: created from operator settings",
 		`oidc client secret: no source secret; set connections."service/oidc".credential_files.client_secret in the host configuration`,
 	} {
 		if !strings.Contains(got.stdout, want) {
@@ -711,7 +712,7 @@ func TestImportV2CarriesTheWebPushConnectionAndUsesItsVAPIDKey(t *testing.T) {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 	for _, want := range []string{
-		"connection service/webpush: created from host settings",
+		"connection service/webpush: created from operator settings",
 		"connection service/webpush: credential vapid_private carried",
 	} {
 		if !strings.Contains(got.stdout, want) {
@@ -1515,5 +1516,84 @@ func TestImportV2ResetsLiveMailToShadowAndAccountsEverySetting(t *testing.T) {
 	defer func() { _ = dest.Close() }()
 	if value := importValue(t, dest, "SELECT value FROM settings WHERE key = 'mail_mode'"); value != "shadow" {
 		t.Fatalf("imported mail_mode = %q, want shadow", value)
+	}
+}
+
+func TestImportV2CarriesTheGoogleGrantsAndTheConnectionTestsWithThem(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	src, err := db.Connect(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, q := range []string{
+		"INSERT INTO settings (key, value) VALUES ('google_client_id', 'imported-client')",
+		"INSERT INTO secrets (name, value, set_at, set_by) VALUES ('google_oauth_client_secret', 'imported-secret', 1, 'ui')",
+		"INSERT INTO secrets (name, value, set_at, set_by) VALUES ('google_calendar_refresh_token', 'calendar-refresh', 1, 'ui')",
+		"INSERT INTO secrets (name, value, set_at, set_by) VALUES ('google_gmail_refresh_token', 'gmail-refresh', 1, 'ui')",
+		"INSERT INTO integration_health (name, state, reason, checked_at) VALUES ('google', 'ok', 'connected', 1)",
+	} {
+		if _, err := src.Write.Exec(q); err != nil {
+			t.Fatal(err)
+		}
+	}
+	_ = src.Close()
+
+	var mu sync.Mutex
+	var grants []string
+	fake := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/token" {
+			_ = r.ParseForm()
+			mu.Lock()
+			grants = append(grants, r.PostForm.Get("refresh_token"))
+			mu.Unlock()
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"access_token":"access","token_type":"Bearer","expires_in":3600}`))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"items":[]}`))
+	}))
+	t.Cleanup(fake.Close)
+	t.Setenv("ATRIUM_GOOGLE_TOKEN_URL", fake.URL+"/token")
+	t.Setenv("ATRIUM_GOOGLE_API_URL", fake.URL+"/calendar/v3")
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	for _, want := range []string{
+		"connection google/default: created from operator settings",
+		"connection google/default: credential oauth/client_secret carried",
+		"connection google/default: credential oauth/calendar/refresh carried",
+		"connection google/default: credential oauth/gmail/refresh carried",
+		"connection google/default: legacy health carried as ok",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+	d, err := db.Connect(filepath.Join(dir, "atrium.db"), db.WithKey(importKey(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = d.Close() })
+	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM secrets WHERE name LIKE 'google_%'"); n != 0 {
+		t.Errorf("%d google secret rows survived the import", n)
+	}
+
+	tested := runImportApp(t, importTestApp(t, dir, clock), "connections", "test", "google/default")
+	if tested.code != cli.ExitOK {
+		t.Fatalf("connections test google/default: exit %d stdout %q stderr %q", tested.code, tested.stdout, tested.stderr)
+	}
+	mu.Lock()
+	seen := append([]string(nil), grants...)
+	mu.Unlock()
+	if !slices.Contains(seen, "calendar-refresh") || !slices.Contains(seen, "gmail-refresh") {
+		t.Fatalf("the connection refreshed %v, want both imported grants", seen)
+	}
+	if state := importValue(t, d.Read, "SELECT state FROM connections WHERE id = 'google/default'"); state != "ok" {
+		t.Errorf("google/default state = %q, want ok", state)
 	}
 }

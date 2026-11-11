@@ -54,21 +54,17 @@ func credentials(ctx context.Context, p module.Probe) (string, error) {
 		return "", nil
 	}
 
-	google, err := p.Settings.Resolve(ctx, p.Q, calendar.GoogleClientIDKey)
+	set, err := calendar.LoadSettings(ctx, p.Q)
 	if err != nil {
 		return "", err
 	}
-	if err := p.Settings.Validate(calendar.GoogleClientIDKey, google.Value); err != nil {
-		var invalid settings.Invalid
-		if !errors.As(err, &invalid) {
-			return "", err
+	if set.Google != nil {
+		clientID, _ := set.Google.Endpoint("client_id")
+		secret, _ := set.Google.Credential("oauth/client_secret")
+		grant, _ := set.Google.Credential("oauth/calendar/refresh")
+		if strings.TrimSpace(clientID) != "" && secret != "" && grant != "" {
+			return "", nil
 		}
-		google.Value = ""
-	}
-	secret, _ := p.Env("GOOGLE_OAUTH_CLIENT_SECRET")
-	refresh, _ := p.Env("GOOGLE_REFRESH_TOKEN")
-	if strings.TrimSpace(google.Value) != "" && strings.TrimSpace(secret) != "" && strings.TrimSpace(refresh) != "" {
-		return "", nil
 	}
 	return "an iCloud CalDAV login or Google Calendar credentials are required (" + icloudErr.Error() + ")", nil
 }

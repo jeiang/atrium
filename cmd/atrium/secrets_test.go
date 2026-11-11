@@ -11,7 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/secrets"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 func runSecrets(t *testing.T, stdin string, args ...string) settingsRun {
@@ -39,7 +38,7 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 		t.Errorf("set with the value in argv: exit %d stdout %q stderr %q", argv.code, argv.stdout, argv.stderr)
 	}
 	status := runSecrets(t, "", "status")
-	for _, want := range []string{"action_link_key: set\n", "google_oauth_client_secret: unset\n"} {
+	for _, want := range []string{"action_link_key: set\n"} {
 		if !strings.Contains(status.stdout, want) {
 			t.Errorf("status = %q, want %q", status.stdout, want)
 		}
@@ -68,14 +67,9 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 		t.Fatalf("secrets delete: exit %d stdout %q stderr %q", del.code, del.stdout, del.stderr)
 	}
 
-	refused := runSecrets(t, value, "set", secrets.GoogleOAuthClientSecret)
-	want := "error: " + settings.EncryptionRequired(secrets.GoogleOAuthClientSecret).Error() + "\n"
-	if refused.code != cli.ExitError || refused.stdout != "" || refused.stderr != want || !strings.Contains(want, "encrypt the database first") {
-		t.Fatalf("flagged set on plaintext: exit %d stdout %q stderr %q, want %q", refused.code, refused.stdout, refused.stderr, want)
-	}
 	var rows int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM secrets").Scan(&rows); err != nil || rows != 0 {
-		t.Errorf("secrets rows after refusal and delete = %d, %v; want 0", rows, err)
+		t.Errorf("secrets rows after delete = %d, %v; want 0", rows, err)
 	}
 
 	setEnv(t, "ATRIUM_ACTION_LINKS_ACTION_LINK_KEY", "pinned-value")

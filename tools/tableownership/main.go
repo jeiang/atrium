@@ -70,7 +70,7 @@ var owners = map[string]string{
 	"notion_sources":          "notion",
 	"notion_state":            "notion",
 	"ntfy_channels":           "notify",
-	"oauth_states":            "integrations",
+	"oauth_states":            "connections",
 	"open_loops":              "mail",
 	"ops_findings":            "serverops",
 	"ops_samples":             "serverops",
