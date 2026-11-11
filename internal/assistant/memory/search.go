@@ -20,8 +20,6 @@ type Hit struct {
 	Title     *string
 	Kind      string
 	ProjectID int64
-	Level     int
-	Index     int
 	FromSeq   int64
 	ToSeq     int64
 	State     string
@@ -30,7 +28,7 @@ type Hit struct {
 	Marks     tool.Marks
 }
 
-const searchSQL = "SELECT n.thread_id, t.title, t.kind, COALESCE(t.project_id, 0), n.level, n.idx, n.src_from_seq, n.src_to_seq, n.state, n.text, n.created_at, t.marks " +
+const searchSQL = "SELECT n.thread_id, t.title, t.kind, COALESCE(t.project_id, 0), n.src_from_seq, n.src_to_seq, n.state, n.text, n.created_at, t.marks " +
 	"FROM memory_fts f JOIN memory_nodes n ON n.thread_id = f.thread_id AND n.level = f.level AND n.idx = f.idx " +
 	"JOIN threads t ON t.id = n.thread_id LEFT JOIN projects p ON p.id = t.project_id " +
 	"WHERE memory_fts MATCH ? AND n.state IN (?, ?, ?) AND t.deleted_at IS NULL " +
@@ -56,7 +54,7 @@ func Search(ctx context.Context, q db.Querier, reader int64, f SearchFilter) ([]
 	return db.Collect(rows, func(r *sql.Rows) (Hit, error) {
 		var h Hit
 		var marks int64
-		err := r.Scan(&h.ThreadID, &h.Title, &h.Kind, &h.ProjectID, &h.Level, &h.Index, &h.FromSeq, &h.ToSeq, &h.State, &h.Text, &h.CreatedAt, &marks)
+		err := r.Scan(&h.ThreadID, &h.Title, &h.Kind, &h.ProjectID, &h.FromSeq, &h.ToSeq, &h.State, &h.Text, &h.CreatedAt, &marks)
 		h.Marks = tool.Marks(marks)
 		return h, err
 	})
