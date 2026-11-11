@@ -119,4 +119,3 @@ func TestEmptyPinnedLinkKeyIsRefused(t *testing.T) {
 		setEnv(t, "ATRIUM_CONFIG", "")
 	}
 }
-
