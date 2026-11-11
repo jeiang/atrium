@@ -14,7 +14,6 @@ var owners = map[string]string{
 	"action_links":         "actionlink",
 	"agent_events":         "calendar",
 	"agent_profile":        "kb",
-	"agent_writes":         "writes",
 	"attention_snoozes":    "attention",
 	"auth_login_links":     "auth",
 	"auth_logins":          "auth",

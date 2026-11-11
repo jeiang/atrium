@@ -390,7 +390,7 @@ INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url
 	if _, err := d.Write.Exec("UPDATE kb_records SET body = ?, marks = 0, confirmed_at = 123 WHERE id = ?", alphaMarkdown, alpha.id); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Write.Exec("INSERT INTO agent_writes (ts, tool, target) VALUES (1, 'kb_confirm', ?)", fmt.Sprintf("kb:%d", alpha.id)); err != nil {
+	if _, err := d.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, target, action_json, state, settled_at) VALUES (1, 1, 'kb-confirm-test', 'local', 'kb_confirm', 'kb-confirm-test', 'forward', ?, '{}', 'done', 1)", fmt.Sprintf("kb:%d", alpha.id)); err != nil {
 		t.Fatal(err)
 	}
 	code, stdout, stderr = kbImportRun(t, "", "kb", "import")
@@ -412,7 +412,7 @@ INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url
 	if _, err := d.Write.Exec("UPDATE kb_records SET body = 'Edited in the tab.' WHERE id = ?", beta.id); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := d.Write.Exec("INSERT INTO agent_writes (ts, tool, target) VALUES (1, 'kb_edit', ?)", fmt.Sprintf("kb:%d", beta.id)); err != nil {
+	if _, err := d.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, target, action_json, state, settled_at) VALUES (1, 1, 'kb-edit-test', 'local', 'kb_edit', 'kb-edit-test', 'forward', ?, '{}', 'done', 1)", fmt.Sprintf("kb:%d", beta.id)); err != nil {
 		t.Fatal(err)
 	}
 	code, stdout, stderr = kbImportRun(t, "", "kb", "import")

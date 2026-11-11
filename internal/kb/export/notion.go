@@ -2,14 +2,15 @@ package export
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb/render"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/notion"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -66,32 +67,34 @@ func deletePage(ctx context.Context, q db.Querier, target string, recordID int64
 	return err
 }
 
-func intent(now float64, target string, after map[string]any) writes.New {
-	return writes.New{TS: now, Tool: "kb_export", Target: target, After: after}
+func intent(target string, after map[string]any) ledger.New {
+	return ledger.New{Origin: "export", Operation: "kb_export", OperationKey: "kb_export:" + ledger.NewKey(), Target: target, Action: jsonOf(after),
+		Resources: []ledger.Resource{{Key: target}}}
 }
 
-func settleFailure(ctx context.Context, d *db.DB, id int64, target string, hash string, err error) error {
+func settleFailure(ctx context.Context, store *ledger.Store, ticket ledger.Ticket, target string, hash string, err error) error {
 	var refused *notion.Error
 	if errors.As(err, &refused) && refused.Status >= 400 && refused.Status < 500 {
-		if derr := writes.Discard(ctx, d.Write, id); derr != nil {
-			return derr
+		if serr := store.Settle(ctx, ticket, ledger.Result{State: ledger.Failed, Target: target, Error: err.Error()}, nil); serr != nil {
+			return serr
 		}
 		return err
 	}
-	unknown := intent(0, target, map[string]any{"hash": hash})
-	if serr := writes.SettleUnknown(ctx, d.Write, id, unknown, err.Error()); serr != nil {
+	unknown := ledger.Result{State: ledger.Unknown, Target: target, After: jsonOf(map[string]any{"hash": hash}), Error: err.Error()}
+	if serr := store.Settle(ctx, ticket, unknown, nil); serr != nil {
 		return serr
 	}
 	return err
 }
 
-func syncNotion(ctx context.Context, d *db.DB, now float64, client *notion.Client, parent string, entries []pageEntry) (Result, error) {
+func syncNotion(ctx context.Context, store *ledger.Store, now float64, client *notion.Client, parent string, entries []pageEntry) (Result, error) {
 	var out Result
+	d := store.DB
 	stored, err := loadPages(ctx, d.Read, TargetNotion)
 	if err != nil {
 		return out, err
 	}
-	ledger := context.WithoutCancel(ctx)
+	ledgerCtx := context.WithoutCancel(ctx)
 	current := make(map[int64]bool, len(entries))
 	for _, entry := range entries {
 		current[entry.recordID] = true
@@ -102,26 +105,27 @@ func syncNotion(ctx context.Context, d *db.DB, now float64, client *notion.Clien
 			continue
 		}
 		if found {
-			id, err := writes.Begin(ledger, d.Write, intent(now, target, map[string]any{"hash": entry.page.Hash}))
+			ticket, err := store.Begin(ledgerCtx, intent(target, map[string]any{"hash": entry.page.Hash}), nil)
 			if err != nil {
 				return out, err
 			}
 			if err := client.SetTitle(ctx, prior.remoteID, entry.page.Title); err != nil {
-				return out, settleFailure(ledger, d, id, target, entry.page.Hash, err)
+				return out, settleFailure(ledgerCtx, store, ticket, target, entry.page.Hash, err)
 			}
 			if err := client.UpdateMarkdown(ctx, prior.remoteID, notion.ReplaceContent(entry.page.Markdown)); err != nil {
-				return out, settleFailure(ledger, d, id, target, entry.page.Hash, err)
+				return out, settleFailure(ledgerCtx, store, ticket, target, entry.page.Hash, err)
 			}
-			if err := writes.Settle(ledger, d.Write, nil, id, intent(now, target, map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID})); err != nil {
+			done := ledger.Result{State: ledger.Done, Target: target, After: jsonOf(map[string]any{"hash": entry.page.Hash, "page_id": prior.remoteID})}
+			if err := store.Settle(ledgerCtx, ticket, done, nil); err != nil {
 				return out, err
 			}
-			if err := savePage(ledger, d.Write, TargetNotion, entry.recordID, prior.remoteID, entry.page.Hash, now); err != nil {
+			if err := savePage(ledgerCtx, d.Write, TargetNotion, entry.recordID, prior.remoteID, entry.page.Hash, now); err != nil {
 				return out, err
 			}
 			out.Updated++
 			continue
 		}
-		id, err := writes.Begin(ledger, d.Write, intent(now, target, map[string]any{"hash": entry.page.Hash}))
+		ticket, err := store.Begin(ledgerCtx, intent(target, map[string]any{"hash": entry.page.Hash}), nil)
 		if err != nil {
 			return out, err
 		}
@@ -131,12 +135,13 @@ func syncNotion(ctx context.Context, d *db.DB, now float64, client *notion.Clien
 			"markdown":   entry.page.Markdown,
 		})
 		if err != nil {
-			return out, settleFailure(ledger, d, id, target, entry.page.Hash, err)
+			return out, settleFailure(ledgerCtx, store, ticket, target, entry.page.Hash, err)
 		}
-		if err := writes.Settle(ledger, d.Write, nil, id, intent(now, target, map[string]any{"hash": entry.page.Hash, "page_id": page.ID})); err != nil {
+		done := ledger.Result{State: ledger.Done, Target: target, After: jsonOf(map[string]any{"hash": entry.page.Hash, "page_id": page.ID})}
+		if err := store.Settle(ledgerCtx, ticket, done, nil); err != nil {
 			return out, err
 		}
-		if err := savePage(ledger, d.Write, TargetNotion, entry.recordID, page.ID, entry.page.Hash, now); err != nil {
+		if err := savePage(ledgerCtx, d.Write, TargetNotion, entry.recordID, page.ID, entry.page.Hash, now); err != nil {
 			return out, err
 		}
 		out.Created++
@@ -146,17 +151,18 @@ func syncNotion(ctx context.Context, d *db.DB, now float64, client *notion.Clien
 			continue
 		}
 		target := targetPrefix + cite(recordID)
-		id, err := writes.Begin(ledger, d.Write, intent(now, target, map[string]any{"trash": true}))
+		ticket, err := store.Begin(ledgerCtx, intent(target, map[string]any{"trash": true}), nil)
 		if err != nil {
 			return out, err
 		}
 		if err := client.SetTrash(ctx, prior.remoteID, true); err != nil {
-			return out, settleFailure(ledger, d, id, target, prior.hash, err)
+			return out, settleFailure(ledgerCtx, store, ticket, target, prior.hash, err)
 		}
-		if err := writes.Settle(ledger, d.Write, nil, id, intent(now, target, map[string]any{"trash": true, "page_id": prior.remoteID})); err != nil {
+		done := ledger.Result{State: ledger.Done, Target: target, After: jsonOf(map[string]any{"trash": true, "page_id": prior.remoteID})}
+		if err := store.Settle(ledgerCtx, ticket, done, nil); err != nil {
 			return out, err
 		}
-		if err := deletePage(ledger, d.Write, TargetNotion, recordID); err != nil {
+		if err := deletePage(ledgerCtx, d.Write, TargetNotion, recordID); err != nil {
 			return out, err
 		}
 		out.Removed++
@@ -168,8 +174,16 @@ func richText(text string) []any {
 	return []any{map[string]any{"type": "text", "text": map[string]any{"content": text}}}
 }
 
+func jsonOf(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return b
+}
+
 func blocked(ctx context.Context, q db.Querier) error {
-	id, err := writes.UnknownTarget(ctx, q, targetPrefix)
+	id, err := ledger.BlockedTarget(ctx, q, targetPrefix)
 	if err != nil {
 		return err
 	}

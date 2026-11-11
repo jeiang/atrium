@@ -10,11 +10,11 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notionid"
 	"github.com/jeiang/atrium/internal/notionmd"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const MaxImportBodyChars = 100000
@@ -250,7 +250,7 @@ func existingByOrigin(ctx context.Context, q db.Querier) (map[string]existingRec
 }
 
 func writtenTargets(ctx context.Context, q db.Querier) (map[int64]bool, error) {
-	targets, err := writes.TargetsLike(ctx, q, "kb:%", "kb_confirm")
+	targets, err := ledger.TargetsLike(ctx, q, "kb:%", "kb_confirm")
 	if err != nil {
 		return nil, err
 	}

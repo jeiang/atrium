@@ -513,7 +513,7 @@ func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.
 	}
 	dbPath := filepath.Join(dir, "atrium.db")
 	writeID := func(tool string, nth int) string {
-		return mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM agent_writes WHERE tool = ? ORDER BY id LIMIT 1 OFFSET ?", tool, nth)
+		return mrvScalar(t, dbPath, "SELECT CAST(id AS TEXT) FROM effects WHERE direction = 'forward' AND operation = ? ORDER BY id LIMIT 1 OFFSET ?", tool, nth)
 	}
 	fileFirst, fileSecond := writeID("file_write", 0), writeID("file_write", 1)
 	profileFirst, profileSecond := writeID("kb_write", 0), writeID("kb_write", 1)
@@ -545,12 +545,12 @@ func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.
 	base := startServeIn(t, dir)
 	client := mrvClient(t)
 	code, page, _ := mrvDo(t, client, http.MethodGet, base+"/activity", nil)
-	if code != http.StatusOK || !strings.Contains(page, "/activity/write/"+fileSecond+"/undo") || !strings.Contains(page, "/activity/write/"+profileSecond+"/undo") {
+	if code != http.StatusOK || !strings.Contains(page, "/activity/effect/"+fileSecond+"/undo") || !strings.Contains(page, "/activity/effect/"+profileSecond+"/undo") {
 		t.Fatalf("activity = %d without the undo controls: %.400s", code, page)
 	}
 	undo := func(id string) (int, string) {
 		t.Helper()
-		code, body, _ := mrvDo(t, client, http.MethodPost, base+"/activity/write/"+id+"/undo", url.Values{})
+		code, body, _ := mrvDo(t, client, http.MethodPost, base+"/activity/effect/"+id+"/undo", url.Values{})
 		return code, body
 	}
 

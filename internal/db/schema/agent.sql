@@ -130,21 +130,6 @@ CREATE TABLE IF NOT EXISTS usage (
 CREATE INDEX IF NOT EXISTS usage_ts ON usage (ts);
 CREATE INDEX IF NOT EXISTS usage_thread ON usage (thread_id);
 CREATE INDEX IF NOT EXISTS usage_run ON usage (run_id);
-CREATE TABLE IF NOT EXISTS agent_writes (
-    id INTEGER PRIMARY KEY,
-    ts REAL NOT NULL,
-    thread_id INTEGER REFERENCES threads(id),
-    run_id INTEGER REFERENCES runs(id),
-    tool TEXT NOT NULL,
-    target TEXT NOT NULL,
-    before_json TEXT,
-    after_json TEXT,
-    undo_json TEXT,
-    undone_at REAL,
-    state TEXT NOT NULL DEFAULT 'ok',
-    error TEXT,
-    resolved_at REAL
-);
 CREATE TABLE IF NOT EXISTS context_ledger (
     id INTEGER PRIMARY KEY,
     run_id INTEGER NOT NULL REFERENCES runs(id),

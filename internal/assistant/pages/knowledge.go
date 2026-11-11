@@ -12,9 +12,9 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/kb"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/web"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const knowledgeFrame = "library_knowledge"
@@ -135,7 +135,7 @@ func rowsOf(records []kb.Record) []knowledgeRow {
 	return out
 }
 
-func (p *pages) undoers() *writes.Registry { return p.reg }
+func (p *pages) store() *ledger.Store { return p.ledger }
 
 func (p *pages) knowledgeRoutes(r chi.Router) {
 	r.Get("/library/knowledge", p.knowledgeList)
@@ -239,7 +239,7 @@ func (p *pages) knowledgeNew(w http.ResponseWriter, r *http.Request) {
 
 func (p *pages) knowledgeCreate(w http.ResponseWriter, r *http.Request) {
 	in := submittedKnowledge(web.FormValues(r))
-	rec, _, err := kb.OperatorCreate(detached(r), p.deps.DB, p.undoers(), in, p.now())
+	rec, _, err := kb.OperatorCreate(detached(r), p.store(), in, p.now())
 	var refused kb.Refused
 	if errors.As(err, &refused) {
 		problem := err.Error()
@@ -296,7 +296,7 @@ func (p *pages) knowledgeUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	in := submittedKnowledge(web.FormValues(r))
-	rec, _, err := kb.OperatorEdit(detached(r), p.deps.DB, p.undoers(), id, in, p.now())
+	rec, _, err := kb.OperatorEdit(detached(r), p.store(), id, in, p.now())
 	var refused kb.Refused
 	if errors.As(err, &refused) {
 		problem := err.Error()
@@ -318,7 +318,7 @@ func (p *pages) knowledgeConfirm(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rec, _, err := kb.Confirm(detached(r), p.deps.DB, p.undoers(), id, p.now())
+	rec, _, err := kb.Confirm(detached(r), p.store(), id, p.now())
 	var refused kb.Refused
 	if errors.As(err, &refused) {
 		p.failure(w, r, "Not confirmed", err.Error())
@@ -333,7 +333,7 @@ func (p *pages) knowledgeRetract(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rec, _, err := kb.OperatorRetract(detached(r), p.deps.DB, p.undoers(), id, p.now())
+	rec, _, err := kb.OperatorRetract(detached(r), p.store(), id, p.now())
 	var refused kb.Refused
 	if errors.As(err, &refused) {
 		p.failure(w, r, "Not retracted", err.Error())
@@ -358,7 +358,7 @@ func (p *pages) knowledgeRestore(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	rec, _, err := kb.Restore(detached(r), p.deps.DB, p.undoers(), id, p.now())
+	rec, _, err := kb.Restore(detached(r), p.store(), id, p.now())
 	var refused kb.Refused
 	if errors.As(err, &refused) {
 		p.failure(w, r, "Not restored", err.Error())
@@ -374,7 +374,7 @@ func (p *pages) knowledgeRunRetract(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, errs...)
 		return
 	}
-	_, err := kb.RunRetract(detached(r), p.deps.DB, p.undoers(), runID, p.now())
+	_, err := kb.RunRetract(detached(r), p.store(), runID, p.now())
 	check(err)
 	navigate(w, r, "/library/knowledge")
 }
@@ -396,7 +396,7 @@ func (p *pages) knowledgeConfirmSelected(w http.ResponseWriter, r *http.Request)
 		return
 	}
 	for _, id := range ids {
-		_, _, err := kb.Confirm(detached(r), p.deps.DB, p.undoers(), id, p.now())
+		_, _, err := kb.Confirm(detached(r), p.store(), id, p.now())
 		var refused kb.Refused
 		if errors.As(err, &refused) {
 			p.failure(w, r, "Not confirmed", err.Error())
@@ -420,7 +420,7 @@ func (p *pages) knowledgeConfirmAll(w http.ResponseWriter, r *http.Request) {
 		if rec.Confirmed() || rec.Retracted() {
 			continue
 		}
-		if _, _, err := kb.Confirm(detached(r), p.deps.DB, p.undoers(), rec.ID, p.now()); err != nil {
+		if _, _, err := kb.Confirm(detached(r), p.store(), rec.ID, p.now()); err != nil {
 			check(err)
 		}
 	}
@@ -462,7 +462,7 @@ func (p *pages) knowledgeProfileAdd(w http.ResponseWriter, r *http.Request) {
 		Scope:  kb.ScopePersonal,
 		Pinned: true,
 	}
-	_, _, err := kb.OperatorCreate(detached(r), p.deps.DB, p.undoers(), in, p.now())
+	_, _, err := kb.OperatorCreate(detached(r), p.store(), in, p.now())
 	var refused kb.Refused
 	if errors.As(err, &refused) {
 		problem := err.Error()
@@ -492,7 +492,7 @@ func (p *pages) knowledgePurge(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	err := kb.Purge(detached(r), p.deps.DB, id, p.now())
+	err := kb.Purge(detached(r), p.store(), id, p.now())
 	var refused kb.Refused
 	if errors.As(err, &refused) {
 		p.failure(w, r, "Not purged", err.Error())

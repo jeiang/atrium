@@ -15,9 +15,8 @@ import (
 
 	filestore "github.com/jeiang/atrium/internal/assistant/files"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const UndoOp = "file_restore"
@@ -172,49 +171,76 @@ func write(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 		}
 		before = string(prior)
 	}
-	if err := os.WriteFile(path, []byte(content), 0o666); err != nil {
+	undo := map[string]any{"op": UndoOp, "path": path, "before": before, "sha": hash([]byte(content))}
+	ticket, err := tc.Ledger.Begin(ctx, ledger.New{
+		Origin: "agent", Operation: writeName, OperationKey: writeName + ":" + ledger.NewKey(),
+		Target: name, ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+		Before: jsonOf(before), Undo: jsonOf(undo), Resources: []ledger.Resource{{Key: "file:" + path}},
+	}, nil)
+	if err != nil {
 		return nil, err
 	}
-	undo := map[string]any{"op": UndoOp, "path": path, "before": before, "sha": hash([]byte(content))}
-	if _, err := writes.Record(ctx, tc.DB.Write, tc.Undoers, writes.New{
-		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: writeName,
-		Target: name, Before: before, After: content, Undo: undo,
-	}); err != nil {
+	if err := os.WriteFile(path, []byte(content), 0o666); err != nil {
+		_ = tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: ledger.Unknown, Target: name, Error: err.Error()}, nil)
+		return nil, err
+	}
+	if err := tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
+		State: ledger.Done, Target: name, After: jsonOf(content), Undo: jsonOf(undo),
+	}, nil); err != nil {
 		return nil, err
 	}
 	return "wrote " + name, nil
 }
 
-func RegisterUndoer(r *writes.Registry) {
-	r.Register(UndoOp, func(_ context.Context, _ db.Querier, payload json.RawMessage) (any, error) {
-		var p struct {
-			Path   string  `json:"path"`
-			Before *string `json:"before"`
-			SHA    string  `json:"sha"`
-		}
-		if err := json.Unmarshal(payload, &p); err != nil {
-			return nil, err
-		}
-		if p.Path == "" {
-			return nil, writes.UndoError("file_restore without a path")
-		}
-		current, err := os.ReadFile(p.Path)
-		if err != nil && !errors.Is(err, os.ErrNotExist) {
-			return nil, err
-		}
-		if hash(current) != p.SHA {
-			return nil, writes.UndoError("file changed since the write; not restoring")
-		}
-		if p.Before == nil {
-			if err := os.Remove(p.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
-				return nil, err
+func jsonOf(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return b
+}
+
+func RegisterLedgerUndoer(s *ledger.Store) error {
+	return s.RegisterUndo(UndoOp, ledger.Undoer{
+		Validate: func(payload json.RawMessage) error {
+			var p struct {
+				Path string `json:"path"`
 			}
-			return "removed", nil
-		}
-		if err := os.WriteFile(p.Path, []byte(*p.Before), 0o666); err != nil {
-			return nil, err
-		}
-		return "restored", nil
+			if err := json.Unmarshal(payload, &p); err != nil || p.Path == "" {
+				return ledger.Refused("file_restore without a path")
+			}
+			return nil
+		},
+		External: func(ctx context.Context, payload json.RawMessage) (ledger.Result, error) {
+			var p struct {
+				Path   string  `json:"path"`
+				Before *string `json:"before"`
+				SHA    string  `json:"sha"`
+			}
+			if err := json.Unmarshal(payload, &p); err != nil {
+				return ledger.Result{}, ledger.Refused("file_restore payload is invalid")
+			}
+			if p.Path == "" {
+				return ledger.Result{}, ledger.Refused("file_restore without a path")
+			}
+			current, err := os.ReadFile(p.Path)
+			if err != nil && !errors.Is(err, os.ErrNotExist) {
+				return ledger.Result{}, err
+			}
+			if hash(current) != p.SHA {
+				return ledger.Result{}, ledger.Refused("file changed since the write; not restoring")
+			}
+			if p.Before == nil {
+				if err := os.Remove(p.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
+					return ledger.Result{}, err
+				}
+				return ledger.Result{State: ledger.Done, After: jsonOf("removed")}, nil
+			}
+			if err := os.WriteFile(p.Path, []byte(*p.Before), 0o666); err != nil {
+				return ledger.Result{}, err
+			}
+			return ledger.Result{State: ledger.Done, After: jsonOf("restored")}, nil
+		},
 	})
 }
 

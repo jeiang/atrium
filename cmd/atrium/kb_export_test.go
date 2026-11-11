@@ -707,7 +707,7 @@ func TestUnknownNotionWriteBlocksTheExport(t *testing.T) {
 	fake.failNext = true
 	runExport(t, f, d)
 	var writeID int64
-	if err := d.Read.QueryRow("SELECT id FROM agent_writes WHERE state = 'unknown' AND target LIKE 'export:notion:%'").Scan(&writeID); err != nil {
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE direction = 'forward' AND state = 'unknown' AND target LIKE 'export:notion:%'").Scan(&writeID); err != nil {
 		t.Fatalf("unknown write after a dropped connection: %v", err)
 	}
 	var status, text string
@@ -722,8 +722,8 @@ func TestUnknownNotionWriteBlocksTheExport(t *testing.T) {
 	if fake.count() != requests {
 		t.Errorf("a blocked run made %d Notion requests", fake.count()-requests)
 	}
-	if ran := runApp(t, "writes", "resolve", fmt.Sprint(writeID)); ran.code != cli.ExitOK {
-		t.Fatalf("writes resolve: %d %s", ran.code, ran.stderr)
+	if ran := runApp(t, "effects", "resolve", fmt.Sprint(writeID), "--outcome", "not-applied"); ran.code != cli.ExitOK {
+		t.Fatalf("effects resolve: %d %s", ran.code, ran.stderr)
 	}
 	runExport(t, f, d)
 	if fake.byTitle("Dentist") == nil {

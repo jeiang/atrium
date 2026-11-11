@@ -13,9 +13,9 @@ import (
 	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const timeNote = "ISO-8601 (2026-10-16T09:00 or 2026-10-16); times without an offset are in the operator's timezone."
@@ -26,12 +26,12 @@ var eventProperties = `"calendar":{"type":"string","enum":["icloud","google"]},"
 	`"all_day":{"type":"boolean","description":"start/end are dates"},"location":{"type":"string"},"notes":{"type":"string"}`
 
 func guard(ctx context.Context, q db.Querier, target calendar.Target) error {
-	id, err := writes.UnknownTarget(ctx, q, string(target)+":")
+	id, err := ledger.BlockedTarget(ctx, q, string(target)+":")
 	if err != nil {
 		return err
 	}
 	if id != 0 {
-		return tool.Error(fmt.Sprintf("calendar write %d has an unknown outcome; resolve it with `atrium writes resolve %d` or on the Activity page before writing to the %s calendar again", id, id, target))
+		return tool.Error(fmt.Sprintf("calendar write %d has an unknown outcome; resolve it with `atrium effects resolve %d --outcome applied` or on the Activity page before writing to the %s calendar again", id, id, target))
 	}
 	return nil
 }
@@ -148,36 +148,29 @@ func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	if err := guard(ctx, tc.DB.Read, rowTarget); err != nil {
 		return nil, err
 	}
-	intent, err := writes.Begin(ctx, tc.DB.Write, writes.New{
-		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "calendar_delete",
-		Target: row.Calendar + ":" + uid,
-	})
+	target := row.Calendar + ":" + uid
+	before := jsonOf(map[string]any{"calendar": row.Calendar, "spec": stored})
+	undo := jsonOf(recreateUndo{Op: "calendar_recreate", Calendar: row.Calendar, Spec: stored})
+	ticket, err := tc.Ledger.Begin(ctx, ledger.New{
+		Origin: "calendar", Operation: "calendar_delete", OperationKey: "calendar_delete:" + ledger.NewKey(),
+		Target: target, ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID, Before: before, Undo: undo,
+		Resources: []ledger.Resource{{Key: "calendar:" + target}},
+	}, nil)
 	if err != nil {
 		return nil, err
 	}
 	if err := calendar.DeleteEvent(ctx, tc.Env, set, rowTarget, uid); err != nil {
+		state := ledger.Failed
 		if calendar.OutcomeUnknown(err) {
-			text := err.Error()
-			if settleErr := writes.SettleUnknown(ctx, tc.DB.Write, intent, writes.New{
-				Target: row.Calendar + ":" + uid,
-				Before: map[string]any{"calendar": row.Calendar, "spec": stored},
-			}, text); settleErr != nil {
-				return nil, settleErr
-			}
-			return nil, wrap(err)
+			state = ledger.Unknown
 		}
-		_ = writes.Discard(ctx, tc.DB.Write, intent)
+		_ = tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: state, Target: target, Before: before, Error: err.Error()}, nil)
 		return nil, wrap(err)
 	}
-	err = tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
-		if err := calendar.Untrack(ctx, tx, uid, tc.Now()); err != nil {
-			return err
-		}
-		return writes.Settle(ctx, tx, tc.Undoers, intent, writes.New{
-			Target: row.Calendar + ":" + uid,
-			Before: map[string]any{"calendar": row.Calendar, "spec": stored},
-			Undo:   recreateUndo{Op: "calendar_recreate", Calendar: row.Calendar, Spec: stored},
-		})
+	err = tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
+		State: ledger.Done, Target: target, Before: before, Undo: undo,
+	}, func(ctx context.Context, tx *sql.Tx) error {
+		return calendar.Untrack(ctx, tx, uid, tc.Now())
 	})
 	if err != nil {
 		return nil, err
@@ -238,75 +231,125 @@ type recreateUndo struct {
 	Spec     any    `json:"spec"`
 }
 
-func undoDelete(env config.Env) writes.Undoer {
-	return func(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
-		var u deleteUndo
-		if err := json.Unmarshal(raw, &u); err != nil {
-			return nil, writes.UndoError("calendar undo payload is invalid")
-		}
-		target, err := calendar.ParseTarget(u.Calendar)
-		if err != nil {
-			return nil, writes.UndoError(err.Error())
-		}
-		uid := u.UID
-		set, err := calendar.LoadSettings(ctx, q)
-		if err != nil {
-			return nil, err
-		}
-		if err := calendar.DeleteEvent(ctx, env, set, target, uid); err != nil {
-			var failed calendar.Error
-			if errors.As(err, &failed) {
-				return nil, writes.UndoError(failed.Error())
+func jsonOf(v any) json.RawMessage {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage(`{}`)
+	}
+	return b
+}
+
+func undoDelete(store *ledger.Store, env config.Env) ledger.Undoer {
+	return ledger.Undoer{
+		Validate: func(raw json.RawMessage) error {
+			var u deleteUndo
+			if err := json.Unmarshal(raw, &u); err != nil || u.UID == "" {
+				return ledger.Refused("calendar undo payload is invalid")
 			}
-			return nil, err
-		}
-		if err := calendar.Untrack(ctx, q, uid, nowSeconds()); err != nil {
-			return nil, err
-		}
-		return map[string]any{"deleted": uid}, nil
+			return nil
+		},
+		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
+			var u deleteUndo
+			if err := json.Unmarshal(raw, &u); err != nil {
+				return ledger.Result{}, ledger.Refused("calendar undo payload is invalid")
+			}
+			target, err := calendar.ParseTarget(u.Calendar)
+			if err != nil {
+				return ledger.Result{}, ledger.Refused(err.Error())
+			}
+			uid := u.UID
+			set, err := calendar.LoadSettings(ctx, store.DB.Read)
+			if err != nil {
+				return ledger.Result{}, err
+			}
+			if err := calendar.DeleteEvent(ctx, env, set, target, uid); err != nil {
+				var failed calendar.Error
+				if errors.As(err, &failed) {
+					return ledger.Result{State: ledger.Failed, Error: failed.Error()}, nil
+				}
+				return ledger.Result{}, err
+			}
+			return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"deleted": uid})}, nil
+		},
+		Finalize: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage, _ ledger.Result) error {
+			var u deleteUndo
+			if err := json.Unmarshal(raw, &u); err != nil {
+				return err
+			}
+			return calendar.Untrack(ctx, tx, u.UID, nowSeconds())
+		},
 	}
 }
 
-func undoRecreate(env config.Env) writes.Undoer {
-	return func(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
-		var u recreateUndo
-		if err := json.Unmarshal(raw, &u); err != nil {
-			return nil, writes.UndoError("calendar undo payload is invalid")
-		}
-		target, err := calendar.ParseTarget(u.Calendar)
-		if err != nil {
-			return nil, writes.UndoError(err.Error())
-		}
-		restored, err := calendar.SpecOf(u.Spec)
-		if err != nil {
-			return nil, err
-		}
-		restored.UID = calendar.NewUID()
-		tz, err := calendar.Zone(ctx, env)
-		if err != nil {
-			return nil, err
-		}
-		set, err := calendar.LoadSettings(ctx, q)
-		if err != nil {
-			return nil, err
-		}
-		if _, err := calendar.CreateEvent(ctx, env, set, target, restored, tz); err != nil {
-			var failed calendar.Error
-			if errors.As(err, &failed) {
-				return nil, writes.UndoError(failed.Error())
+func undoRecreate(store *ledger.Store, env config.Env) ledger.Undoer {
+	return ledger.Undoer{
+		Validate: func(raw json.RawMessage) error {
+			var u recreateUndo
+			if err := json.Unmarshal(raw, &u); err != nil || u.Calendar == "" || u.Spec == nil {
+				return ledger.Refused("calendar undo payload is invalid")
 			}
-			return nil, err
-		}
-		if err := calendar.Track(ctx, q, restored, target, nil, nowSeconds()); err != nil {
-			return nil, err
-		}
-		return map[string]any{"created": restored.UID}, nil
+			return nil
+		},
+		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
+			var u recreateUndo
+			if err := json.Unmarshal(raw, &u); err != nil {
+				return ledger.Result{}, ledger.Refused("calendar undo payload is invalid")
+			}
+			target, err := calendar.ParseTarget(u.Calendar)
+			if err != nil {
+				return ledger.Result{}, ledger.Refused(err.Error())
+			}
+			restored, err := calendar.SpecOf(u.Spec)
+			if err != nil {
+				return ledger.Result{}, ledger.Refused(err.Error())
+			}
+			restored.UID = calendar.NewUID()
+			tz, err := calendar.Zone(ctx, env)
+			if err != nil {
+				return ledger.Result{}, err
+			}
+			set, err := calendar.LoadSettings(ctx, store.DB.Read)
+			if err != nil {
+				return ledger.Result{}, err
+			}
+			if _, err := calendar.CreateEvent(ctx, env, set, target, restored, tz); err != nil {
+				var failed calendar.Error
+				if errors.As(err, &failed) {
+					return ledger.Result{State: ledger.Failed, Error: failed.Error()}, nil
+				}
+				return ledger.Result{}, err
+			}
+			return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"created": restored.UID, "spec": restored})}, nil
+		},
+		Finalize: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage, result ledger.Result) error {
+			var u recreateUndo
+			if err := json.Unmarshal(raw, &u); err != nil {
+				return err
+			}
+			target, err := calendar.ParseTarget(u.Calendar)
+			if err != nil {
+				return err
+			}
+			var after struct {
+				Spec any `json:"spec"`
+			}
+			if err := json.Unmarshal(result.After, &after); err != nil {
+				return err
+			}
+			restored, err := calendar.SpecOf(after.Spec)
+			if err != nil {
+				return err
+			}
+			return calendar.Track(ctx, tx, restored, target, nil, nowSeconds())
+		},
 	}
 }
 
-func RegisterUndoers(r *writes.Registry, env config.Env) {
-	r.Register("calendar_delete", undoDelete(env))
-	r.Register("calendar_recreate", undoRecreate(env))
+func RegisterLedgerUndoers(s *ledger.Store, env config.Env) error {
+	if err := s.RegisterUndo("calendar_delete", undoDelete(s, env)); err != nil {
+		return err
+	}
+	return s.RegisterUndo("calendar_recreate", undoRecreate(s, env))
 }
 
 func schema(properties string, required string) json.RawMessage {

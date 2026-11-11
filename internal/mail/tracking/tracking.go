@@ -19,11 +19,11 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/integrations/transport"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 var log = logx.Logger("atrium.tracking")
@@ -414,15 +414,15 @@ func Resolve(ctx context.Context, d *db.DB, env config.Env, now float64, package
 		return Target{}, Settings{}, err
 	}
 	var blocked int
-	blocked, err = writes.BlockedCount(ctx, d.Read, "track_package", fmt.Sprintf("package:%d", t.ID))
+	blocked, err = ledger.BlockedCount(ctx, d.Read, "track_package", fmt.Sprintf("package:%d", t.ID))
 	if err != nil {
 		return Target{}, Settings{}, err
 	}
 	if blocked > 0 {
-		return Target{}, Settings{}, Error("the previous track_package for this package has an unknown outcome; resolve it with 'atrium writes resolve <id>' before retrying")
+		return Target{}, Settings{}, Error("the previous track_package for this package has an unknown outcome; resolve it with `atrium effects list --blocked` before retrying")
 	}
 	var used int
-	used, err = writes.CountSince(ctx, d.Read, "track_package", monthStart)
+	used, err = ledger.CountSince(ctx, d.Read, "track_package", monthStart)
 	if err != nil {
 		return Target{}, Settings{}, err
 	}

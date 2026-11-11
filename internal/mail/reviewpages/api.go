@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"math"
 	"net/http"
 	"strconv"
 	"strings"
@@ -15,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/web"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 var appResolver = proposals.Resolver{Actor: "operator", Source: "ui"}
@@ -301,21 +301,25 @@ func (s *service) apiResolve(w http.ResponseWriter, r *http.Request) {
 	web.JSON(w, http.StatusOK, map[string]any{"approval": s.currentApproval(ctx, found.ID)})
 }
 
-func undoWriteEntry(w writes.Write) (apiUndoEntry, error) {
-	var e apiUndoEntry
-	e.TS, e.ThreadID, e.RunID, e.Tool, e.Target = w.TS, w.ThreadID, w.RunID, w.Tool, w.Target
-	e.UndoneAt, e.State, e.Error = w.UndoneAt, w.State, w.Error
+func undoEffectEntry(e ledger.Effect) (apiUndoEntry, error) {
+	var entry apiUndoEntry
+	entry.TS, entry.ThreadID, entry.RunID, entry.Tool, entry.Target = e.CreatedAt, e.ThreadID, e.RunID, e.Operation, e.Target
+	entry.UndoneAt, entry.State = e.UndoneAt, string(e.State)
+	if e.Error != "" {
+		text := e.Error
+		entry.Error = &text
+	}
 	var err error
-	if e.Before, err = snippet(w.Before); err != nil {
-		return e, err
+	if entry.Before, err = snippet(rawTextPtr(e.Before)); err != nil {
+		return entry, err
 	}
-	if e.After, err = snippet(w.After); err != nil {
-		return e, err
+	if entry.After, err = snippet(rawTextPtr(e.After)); err != nil {
+		return entry, err
 	}
-	e.ID = "write:" + strconv.FormatInt(w.ID, 10)
-	e.Source = sourceWrite
-	e.Undoable = w.Undo != nil && *w.Undo != "" && w.UndoneAt == nil && w.State != "unknown"
-	return e, nil
+	entry.ID = "write:" + strconv.FormatInt(e.ID, 10)
+	entry.Source = sourceWrite
+	entry.Undoable = e.Undoable
+	return entry, nil
 }
 
 func undoProposalEntry(p *proposals.Proposal) apiUndoEntry {
@@ -358,33 +362,37 @@ func (s *service) apiUndoFeed(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	writeWhere := []string{"undo_json IS NOT NULL", "undo_json <> ''"}
-	var writeArgs []any
 	var propWhere []string
 	var propArgs []any
 	if thread != nil {
-		writeWhere = append(writeWhere, "thread_id = ?")
-		writeArgs = append(writeArgs, *thread)
 		propWhere = append(propWhere, "json_extract(payload, '$.thread_id') = ?")
 		propArgs = append(propArgs, *thread)
 	}
 	if run != nil {
-		writeWhere = append(writeWhere, "run_id = ?")
-		writeArgs = append(writeArgs, *run)
 		propWhere = append(propWhere, "json_extract(payload, '$.run_id') = ?")
 		propArgs = append(propArgs, *run)
 	}
 	if after {
-		writeWhere = append(writeWhere, "(ts < ? OR (ts = ? AND (? > 0 OR id < ?)))")
-		writeArgs = append(writeArgs, cursor.TS, cursor.TS, cursor.Source, cursor.ID)
 		propWhere = append(propWhere, "(COALESCE(applied_ts, created_ts) < ? OR (COALESCE(applied_ts, created_ts) = ? AND ? = 1 AND id < ?))")
 		propArgs = append(propArgs, cursor.TS, cursor.TS, cursor.Source, cursor.ID)
 	}
-	found, err := writes.List(ctx, s.deps.DB.Read, strings.Join(writeWhere, " AND "), writeArgs, limit+1)
+	filter := ledger.Filter{Origins: directOrigins, Limit: limit + 1, ThreadID: thread, RunID: run}
+	if after {
+		filter.BeforeTS = cursor.TS
+		if cursor.Source == undoProposal {
+			filter.BeforeID = math.MaxInt64
+		} else {
+			filter.BeforeID = cursor.ID
+		}
+	}
+	found, err := s.ledger.List(ctx, filter)
 	check(err)
 	written := make([]apiUndoEntry, 0, len(found))
-	for _, w := range found {
-		entry, err := undoWriteEntry(w)
+	for _, e := range found {
+		if !e.Undoable {
+			continue
+		}
+		entry, err := undoEffectEntry(e)
 		check(err)
 		written = append(written, entry)
 	}
@@ -418,19 +426,20 @@ func (s *service) apiUndoFeed(w http.ResponseWriter, r *http.Request) {
 	web.JSON(w, http.StatusOK, out)
 }
 
-func (s *service) undoWriteEntry(ctx context.Context, id int64) (*apiUndoEntry, error) {
-	w, err := writes.ByID(ctx, s.deps.DB.Read, id)
-	if err != nil {
-		return nil, err
-	}
-	if w == nil {
+func (s *service) undoEffectEntry(ctx context.Context, id int64) (*apiUndoEntry, error) {
+	e, err := s.ledger.Get(ctx, id)
+	var missing *ledger.NotFound
+	if errors.As(err, &missing) {
 		return nil, nil
 	}
-	e, err := undoWriteEntry(*w)
 	if err != nil {
 		return nil, err
 	}
-	return &e, nil
+	entry, err := undoEffectEntry(e)
+	if err != nil {
+		return nil, err
+	}
+	return &entry, nil
 }
 
 func (s *service) apiUndo(w http.ResponseWriter, r *http.Request) {
@@ -443,20 +452,22 @@ func (s *service) apiUndo(w http.ResponseWriter, r *http.Request) {
 	ctx := detached(r)
 	switch source {
 	case "write":
-		known, err := s.undoWriteEntry(ctx, id)
+		known, err := s.undoEffectEntry(ctx, id)
 		check(err)
 		if known == nil {
 			web.APIError(w, http.StatusNotFound, "not_found", "Unknown undo entry.")
 			return
 		}
-		_, err = s.writes.Undo(ctx, s.deps.DB, id, s.now)
-		var refused writes.UndoError
-		if errors.As(err, &refused) {
-			web.APIError(w, http.StatusConflict, "not_undone", writeUndoDetail(err))
+		_, err = s.ledger.Undo(ctx, id, ledger.Resolver{Actor: "operator", Source: "ui"})
+		var refused ledger.Refused
+		var conflict *ledger.Conflict
+		var settled *ledger.SettledMeanwhile
+		if errors.As(err, &refused) || errors.As(err, &conflict) || errors.As(err, &settled) {
+			web.APIError(w, http.StatusConflict, "not_undone", err.Error())
 			return
 		}
 		check(err)
-		entry, err := s.undoWriteEntry(ctx, id)
+		entry, err := s.undoEffectEntry(ctx, id)
 		check(err)
 		web.JSON(w, http.StatusOK, map[string]any{"entry": entry, "undone": true})
 	case "proposal":

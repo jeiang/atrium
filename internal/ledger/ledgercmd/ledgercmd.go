@@ -14,7 +14,7 @@ import (
 type Options struct {
 	Env   config.Env
 	Now   func() float64
-	Store func(*db.DB) *ledger.Store
+	Store func(*db.DB, config.Config) *ledger.Store
 }
 
 func (o Options) now() float64 {
@@ -24,9 +24,9 @@ func (o Options) now() float64 {
 	return float64(time.Now().UnixNano()) / 1e9
 }
 
-func (o Options) store(d *db.DB) *ledger.Store {
+func (o Options) store(d *db.DB, cfg config.Config) *ledger.Store {
 	if o.Store != nil {
-		return o.Store(d)
+		return o.Store(d, cfg)
 	}
 	return ledger.NewStore(d, o.now)
 }
@@ -182,7 +182,7 @@ func open(o Options) (*db.DB, *ledger.Store, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	return d, o.store(d), nil
+	return d, o.store(d, cfg), nil
 }
 
 func write(e *cli.Env, value any) int {

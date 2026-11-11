@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -182,10 +183,11 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 	if n := importCount(t, q, "SELECT thread_id FROM usage WHERE id = 1"); n != 1 {
 		t.Errorf("usage 1 thread_id %d", n)
 	}
-	if !importNull(t, q, "SELECT run_id FROM agent_writes WHERE id = 7") {
+	const agentEffect = "SELECT effect_id FROM effect_import_refs WHERE source_table = 'agent_writes' AND source_id = 7 AND role = 'forward'"
+	if !importNull(t, q, "SELECT run_id FROM effects WHERE id = ("+agentEffect+")") {
 		t.Error("agent_writes.run_id was not cleared")
 	}
-	if n := importCount(t, q, "SELECT thread_id FROM agent_writes WHERE id = 7"); n != 2 {
+	if n := importCount(t, q, "SELECT thread_id FROM effects WHERE id = ("+agentEffect+")"); n != 2 {
 		t.Errorf("agent_writes 7 thread_id %d", n)
 	}
 	if !importNull(t, q, "SELECT last_run_id FROM jobs WHERE id = 1") {
@@ -319,5 +321,94 @@ func editImportSource(t *testing.T, path, statement string) {
 	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec(statement); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestImportV2MapsAgentWritesToEffects(t *testing.T) {
+	t.Parallel()
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	d, err := db.Connect(source)
+	if err != nil {
+		t.Fatal(err)
+	}
+	undone := clock - 100
+	resolved := clock - 50
+	for _, row := range []struct {
+		id       int64
+		state    string
+		undone   *float64
+		resolved *float64
+	}{
+		{101, "ok", nil, nil},
+		{102, "held", nil, nil},
+		{103, "unknown", nil, nil},
+		{104, "resolved", nil, &resolved},
+		{105, "ok", &undone, nil},
+	} {
+		if _, err := d.Write.Exec(
+			"INSERT INTO agent_writes (id, ts, tool, target, state, undone_at, resolved_at, error) VALUES (?, ?, 'task_add', ?, ?, ?, ?, ?)",
+			row.id, clock, "task:"+strconv.FormatInt(row.id, 10), row.state, row.undone, row.resolved, "checked"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := d.Write.Exec(
+		"INSERT INTO write_resolutions (ts, actor, source, kind, row_id, proposal_id, outcome, prior_error) VALUES (?, 'operator', 'cli', 'agent_write', 102, NULL, 'resolved', 'checked')",
+		clock-10); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if !strings.Contains(got.stdout, "agent_writes: converted 12") {
+		t.Errorf("the report lacks the agent conversion count:\n%s", got.stdout)
+	}
+
+	q, err := db.OpenSource(dest, db.Key{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+
+	effectOf := func(id int64) int64 {
+		t.Helper()
+		var effect int64
+		if err := q.QueryRow("SELECT effect_id FROM effect_import_refs WHERE source_table = 'agent_writes' AND source_id = ? AND role = 'forward'", id).Scan(&effect); err != nil {
+			t.Fatalf("agent_writes %d has no effect: %v", id, err)
+		}
+		return effect
+	}
+	for _, tc := range []struct {
+		id    int64
+		state string
+	}{
+		{101, "done"},
+		{102, "unknown"},
+		{103, "unknown"},
+		{104, "unknown"},
+		{105, "done"},
+	} {
+		if got := importValue(t, q, "SELECT state FROM effects WHERE id = ?", effectOf(tc.id)); got != tc.state {
+			t.Errorf("agent_writes %d state %q, want %q", tc.id, got, tc.state)
+		}
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effect_resolutions WHERE effect_id = ? AND outcome = 'resolved' AND effective_outcome = 'partial'", effectOf(102)); n != 1 {
+		t.Errorf("agent_writes 102 resolutions %d, want one historical partial", n)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effect_resolutions WHERE effect_id = ? AND effective_outcome = 'partial'", effectOf(104)); n != 1 {
+		t.Errorf("agent_writes 104 resolutions %d, want one synthetic partial", n)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effects WHERE undo_of = ? AND state = 'done'", effectOf(105)); n != 1 {
+		t.Errorf("agent_writes 105 synthetic undo %d, want one done undo", n)
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM effects WHERE id = ? AND undone_by IS NOT NULL", effectOf(105)); n != 1 {
+		t.Errorf("agent_writes 105 undone_by %d, want set", n)
 	}
 }

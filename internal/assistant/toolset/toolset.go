@@ -28,29 +28,28 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
-func Undoers(env config.Env) *writes.Registry {
-	r := writes.NewRegistry()
-	kb.RegisterUndoer(r)
-	calendartools.RegisterUndoers(r, env)
-	mediatools.RegisterUndoer(r, env)
-	mailtools.RegisterUndoer(r)
-	scheduletools.RegisterUndoers(r)
-	filetools.RegisterUndoer(r)
-	taskstools.RegisterUndoer(r)
-	opstools.RegisterUndoer(r)
-	return r
-}
-
-func Ledger(d *db.DB, now func() float64) *ledger.Store {
+func Ledger(d *db.DB, env config.Env, open mail.OpenFunc, now func() float64) *ledger.Store {
 	s := ledger.NewStore(d, now)
-	if err := taskstools.RegisterLedgerUndoers(s); err != nil {
-		panic(err)
+	registers := []func(*ledger.Store) error{
+		taskstools.RegisterLedgerUndoers,
+		kb.RegisterLedgerUndoers,
+		scheduletools.RegisterLedgerUndoers,
+		filetools.RegisterLedgerUndoer,
+		opstools.RegisterLedgerUndoer,
+		func(s *ledger.Store) error { return calendartools.RegisterLedgerUndoers(s, env) },
+		func(s *ledger.Store) error { return mediatools.RegisterLedgerUndoer(s, env) },
+		func(s *ledger.Store) error { return mailtools.RegisterLedgerUndoer(s, open) },
+	}
+	for _, register := range registers {
+		if err := register(s); err != nil {
+			panic(err)
+		}
 	}
 	return s
 }

@@ -11,9 +11,9 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/timex"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const Help = "ISO datetime for a one-off ('2026-11-02T09:00'), 'daily HH:MM', 'weekly mon HH:MM', or a 5-field cron expression " +
@@ -74,24 +74,27 @@ func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 		fields[i] = s
 	}
 	var job *scheduler.Job
-	err := tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
+	_, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
+		Origin: "agent", Operation: "schedule_create", OperationKey: "schedule_create:" + ledger.NewKey(),
+		Target: "schedule:new", ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		id, err := scheduler.CreateJob(ctx, tx, scheduler.NewJob{
 			Name: fields[0], Prompt: fields[1], Schedule: fields[2], TZ: config.From(ctx).TZName(tc.Env), Now: tc.Now(),
 			CreatedBy: scheduler.Agent, PromptBy: scheduler.Agent, ThreadID: &tc.ThreadID,
 		})
 		if err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		job, err = scheduler.GetJob(ctx, tx, id)
 		if err != nil {
-			return err
+			return ledger.Result{}, err
 		}
-		_, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
-			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "schedule_create", Target: fmt.Sprintf("schedule:%d", id),
-			After: map[string]any{"id": id, "name": fields[0], "schedule": fields[2]},
-			Undo:  scheduleDeleteUndo{Op: "schedule_delete", ID: id},
-		})
-		return err
+		return ledger.Result{
+			State:  ledger.Done,
+			Target: fmt.Sprintf("schedule:%d", id),
+			After:  jsonOf(map[string]any{"id": id, "name": fields[0], "schedule": fields[2]}),
+			Undo:   jsonOf(scheduleDeleteUndo{Op: "schedule_delete", ID: id}),
+		}, nil
 	})
 	if err != nil {
 		return nil, raised(err)
@@ -101,42 +104,45 @@ func create(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 
 func update(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	var updated *scheduler.Job
-	err := tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
+	_, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
+		Origin: "agent", Operation: "schedule_update", OperationKey: "schedule_update:" + ledger.NewKey(),
+		Target: "schedule:new", ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		job, err := agentJob(ctx, tx, args)
 		if err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		u := scheduler.JobUpdate{PromptBy: scheduler.Agent, Actor: scheduler.Agent}
 		if raw, _ := args.Get("enabled"); raw != nil {
 			b, ok := raw.(bool)
 			if !ok {
-				return tool.Error("enabled must be a boolean")
+				return ledger.Result{}, tool.Error("enabled must be a boolean")
 			}
 			u.Enabled = &b
 		}
 		if u.Name, err = text(args, "name"); err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		if u.Prompt, err = text(args, "prompt"); err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		if u.Schedule, err = text(args, "schedule"); err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		updated, err = scheduler.UpdateJob(ctx, tx, job.ID, tc.Now(), u)
 		if err != nil {
-			return err
+			return ledger.Result{}, err
 		}
-		_, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
-			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "schedule_update", Target: fmt.Sprintf("schedule:%d", job.ID),
-			Before: map[string]any{"name": job.Name, "prompt": job.Prompt, "schedule": job.Schedule, "enabled": job.State.Active()},
-			After:  map[string]any{"name": updated.Name, "prompt": updated.Prompt, "schedule": updated.Schedule, "enabled": updated.State.Active()},
-			Undo: scheduleRestoreUndo{
+		return ledger.Result{
+			State:  ledger.Done,
+			Target: fmt.Sprintf("schedule:%d", job.ID),
+			Before: jsonOf(map[string]any{"name": job.Name, "prompt": job.Prompt, "schedule": job.Schedule, "enabled": job.State.Active()}),
+			After:  jsonOf(map[string]any{"name": updated.Name, "prompt": updated.Prompt, "schedule": updated.Schedule, "enabled": updated.State.Active()}),
+			Undo: jsonOf(scheduleRestoreUndo{
 				Op: "schedule_restore", ID: job.ID, Name: job.Name, Prompt: job.Prompt, Schedule: job.Schedule,
 				State: string(job.State), NextDue: job.NextDue,
-			},
-		})
-		return err
+			}),
+		}, nil
 	})
 	if err != nil {
 		return nil, raised(err)
@@ -146,25 +152,28 @@ func update(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 
 func cancel(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	var id int64
-	err := tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
+	_, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
+		Origin: "agent", Operation: "schedule_cancel", OperationKey: "schedule_cancel:" + ledger.NewKey(),
+		Target: "schedule:new", ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		job, err := agentJob(ctx, tx, args)
 		if err != nil {
-			return err
+			return ledger.Result{}, err
 		}
 		id = job.ID
 		if err := scheduler.CancelJob(ctx, tx, id); err != nil {
-			return err
+			return ledger.Result{}, err
 		}
-		_, err = writes.Record(ctx, tx, tc.Undoers, writes.New{
-			TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "schedule_cancel", Target: fmt.Sprintf("schedule:%d", id),
-			Before: map[string]any{"enabled": true},
-			After:  map[string]any{"enabled": false},
-			Undo: scheduleRestoreUndo{
+		return ledger.Result{
+			State:  ledger.Done,
+			Target: fmt.Sprintf("schedule:%d", id),
+			Before: jsonOf(map[string]any{"enabled": true}),
+			After:  jsonOf(map[string]any{"enabled": false}),
+			Undo: jsonOf(scheduleRestoreUndo{
 				Op: "schedule_restore", ID: job.ID, Name: job.Name, Prompt: job.Prompt, Schedule: job.Schedule,
 				State: string(job.State), NextDue: job.NextDue,
-			},
-		})
-		return err
+			}),
+		}, nil
 	})
 	if err != nil {
 		return nil, err

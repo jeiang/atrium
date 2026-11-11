@@ -334,8 +334,13 @@ func TestUndoneWriteBecomesALesson(t *testing.T) {
 	}
 	d := mustConnect(t, dir+"/atrium.db")
 	source := chatThread(t, d)
-	if _, err := d.Write.Exec("INSERT INTO agent_writes (ts, thread_id, tool, target, state, before_json, after_json, undo_json, undone_at) VALUES (?, ?, 'task_add', 'task:1', 'ok', '{}', '{}', '{}', ?)",
-		float64(time.Now().Unix())-60, source, float64(time.Now().Unix())-30); err != nil {
+	if _, err := d.Write.Exec("INSERT INTO effects (id, created_at, lease_at, token, origin, operation, operation_key, direction, thread_id, target, action_json, before_json, after_json, undo_json, state, settled_at) VALUES (9301, ?, ?, 'dream-9301', 'agent', 'task_add', 'dream-9301', 'forward', ?, 'task:1', '{}', '{}', '{}', '{}', 'done', ?)", float64(time.Now().Unix())-60, float64(time.Now().Unix())-60, source, float64(time.Now().Unix())-60); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO effects (id, created_at, lease_at, token, origin, operation, operation_key, direction, undo_of, thread_id, target, action_json, state, settled_at) VALUES (9302, ?, ?, 'dream-9302', 'agent', 'task_delete', 'dream-9301', 'undo', 9301, ?, 'task:1', '{}', 'done', ?)", float64(time.Now().Unix())-60, float64(time.Now().Unix())-60, source, float64(time.Now().Unix())-60); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("UPDATE effects SET undone_by = 9302 WHERE id = 9301"); err != nil {
 		t.Fatal(err)
 	}
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w1", "kb_write", map[string]any{

@@ -11,7 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/tasks"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -135,7 +134,7 @@ func add(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	var id int64
 	effect, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
 		Origin: "agent", Operation: "task_add", OperationKey: "task_add:" + ledger.NewKey(),
-		Target: "task:new", ThreadID: &tc.ThreadID, RunID: &tc.RunID,
+		Target: "task:new", ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
 		Action: mustJSON(map[string]any{"title": spec.Title, "due": spec.Due, "remind_at": spec.RemindAt}),
 	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		var err error
@@ -169,7 +168,7 @@ func update(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	}
 	effect, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
 		Origin: "agent", Operation: "task_update", OperationKey: "task_update:" + ledger.NewKey(),
-		Target: "task:" + tasks.IDString(id), ThreadID: &tc.ThreadID, RunID: &tc.RunID,
+		Target: "task:" + tasks.IDString(id), ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
 	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		previous, err := tasks.Get(ctx, tx, id)
 		if err != nil {
@@ -219,7 +218,7 @@ func done(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	}
 	effect, err := tc.Ledger.ApplyLocal(ctx, ledger.New{
 		Origin: "agent", Operation: "task_done", OperationKey: "task_done:" + ledger.NewKey(),
-		Target: "task:" + tasks.IDString(id), ThreadID: &tc.ThreadID, RunID: &tc.RunID,
+		Target: "task:" + tasks.IDString(id), ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
 	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 		previous, err := tasks.Get(ctx, tx, id)
 		if err != nil {
@@ -259,13 +258,13 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 		Op string `json:"op"`
 	}
 	if err := json.Unmarshal(payload, &head); err != nil {
-		return nil, writes.UndoError("task undo payload is invalid")
+		return nil, ledger.Refused("task undo payload is invalid")
 	}
 	switch head.Op {
 	case UndoDelete:
 		var u undoDelete
 		if err := json.Unmarshal(payload, &u); err != nil {
-			return nil, writes.UndoError("task undo payload is invalid")
+			return nil, ledger.Refused("task undo payload is invalid")
 		}
 		if _, err := tasks.Delete(ctx, q, u.ID); err != nil {
 			return nil, err
@@ -274,19 +273,14 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 	case UndoRestore:
 		var u undoRestore
 		if err := json.Unmarshal(payload, &u); err != nil {
-			return nil, writes.UndoError("task undo payload is invalid")
+			return nil, ledger.Refused("task undo payload is invalid")
 		}
 		if _, err := tasks.Restore(ctx, q, u.Task); err != nil {
 			return nil, err
 		}
 		return map[string]any{"restored": u.Task.ID}, nil
 	}
-	return nil, writes.UndoError(fmt.Sprintf("unknown task undo %q", head.Op))
-}
-
-func RegisterUndoer(r *writes.Registry) {
-	r.Register(UndoDelete, undo)
-	r.Register(UndoRestore, undo)
+	return nil, ledger.Refused(fmt.Sprintf("unknown task undo %q", head.Op))
 }
 
 func RegisterLedgerUndoers(s *ledger.Store) error {
@@ -313,10 +307,10 @@ func validateLedgerUndo(name string) func(json.RawMessage) error {
 			Op string `json:"op"`
 		}
 		if err := json.Unmarshal(payload, &head); err != nil {
-			return writes.UndoError("task undo payload is invalid")
+			return ledger.Refused("task undo payload is invalid")
 		}
 		if head.Op != name {
-			return writes.UndoError("task undo payload names " + head.Op)
+			return ledger.Refused("task undo payload names " + head.Op)
 		}
 		return nil
 	}

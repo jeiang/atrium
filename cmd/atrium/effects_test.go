@@ -2,8 +2,10 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/cookiejar"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -183,5 +185,54 @@ func TestEffectResolveRecoversAnExpiredIntentAndRefusesAFreshLease(t *testing.T)
 	}
 	if !strings.Contains(refused.stderr, "may still be running") {
 		t.Fatalf("fresh lease refusal = %q", refused.stderr)
+	}
+}
+
+func TestFreshDirectIntentBlocksASecondWrite(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	path := filepath.Join(dir, "files", "1", "note.txt")
+	now := float64(time.Now().Unix())
+	res, err := d.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, target, action_json, state) "+
+		"VALUES (?, ?, 'fresh-block', 'agent', 'file_write', 'fresh-block', 'forward', 'note.txt', '{}', 'intent')", now, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO effect_resources (effect_id, resource, holding, retain_on_done) VALUES (?, ?, 1, 0)", id, "file:"+path); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO effect_claims (resource) VALUES (?)", "file:"+path); err != nil {
+		t.Fatal(err)
+	}
+
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w1", "file_write", map[string]any{"name": "note.txt", "content": "blocked"})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "write the note"); ran.code != cli.ExitOK {
+		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
+	}
+	var body string
+	if err := d.Read.QueryRow("SELECT coalesce(error, '') FROM tool_calls ORDER BY id DESC LIMIT 1").Scan(&body); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(body, "already claimed") {
+		t.Fatalf("the claimed target was not refused: %s", body)
+	}
+	var done int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE operation = 'file_write' AND state = 'done'").Scan(&done); err != nil {
+		t.Fatal(err)
+	}
+	if done != 0 {
+		t.Fatalf("%d file writes completed while the target was claimed", done)
+	}
+	if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+		t.Fatalf("the blocked write touched the file: %v", err)
 	}
 }

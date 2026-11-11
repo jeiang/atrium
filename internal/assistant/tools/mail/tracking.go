@@ -8,11 +8,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/approval"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 var trackPackageSchema = json.RawMessage(`{"type":"object","properties":{"package_id":{"type":"integer"},"tracking_number":{"type":"string"},"carrier":{"type":"string"},"destination_country":{"type":"string"},"destination_postcode":{"type":"string"}},"additionalProperties":false}`)
@@ -72,32 +71,38 @@ func trackPackage(ctx context.Context, tc *tool.Context, args tool.Args) (any, e
 		}
 		return result, nil
 	}
-	writeID, err := writes.Begin(ctx, tc.DB.Write, writes.New{
-		TS: tc.Now(), ThreadID: &tc.ThreadID, RunID: &tc.RunID, Tool: "track_package",
-		Target: fmt.Sprintf("package:%d", target.ID),
-	})
+	targetName := fmt.Sprintf("package:%d", target.ID)
+	ticket, err := tc.Ledger.Begin(ctx, ledger.New{
+		Origin: "tracking", Operation: "track_package", OperationKey: "track_package:" + ledger.NewKey(),
+		Target: targetName, ThreadID: &tc.ThreadID, RunID: &tc.RunID, ProposalID: tc.ProposalID,
+		Resources: []ledger.Resource{{Key: "package:" + fmt.Sprint(target.ID)}},
+	}, nil)
 	if err != nil {
 		return nil, err
 	}
 	result, err := tracking.Register(ctx, tc.DB, tc.Now(), target, settings)
 	if err != nil {
-		ledger := context.WithoutCancel(ctx)
+		settleCtx := context.WithoutCancel(ctx)
+		state := ledger.Failed
 		if tracking.OutcomeUnknown(err) {
-			_ = writes.SettleUnknown(ledger, tc.DB.Write, writeID, writes.New{Target: fmt.Sprintf("package:%d", target.ID)}, err.Error())
-			return nil, tool.Error("the Ship24 registration outcome is unknown: " + err.Error() +
-				"; the write is blocked until the operator resolves it with 'atrium writes resolve <id>'")
+			state = ledger.Unknown
 		}
-		_ = writes.Discard(ledger, tc.DB.Write, writeID)
+		_ = tc.Ledger.Settle(settleCtx, ticket, ledger.Result{State: state, Target: targetName, Error: err.Error()}, nil)
+		if state == ledger.Unknown {
+			return nil, tool.Error("the Ship24 registration outcome is unknown: " + err.Error() +
+				"; the write is blocked until the operator resolves it with `atrium effects resolve " + fmt.Sprint(ticket.ID) + " --outcome applied`")
+		}
 		return nil, trackingFailed(err)
 	}
-	if err := writes.Settle(context.WithoutCancel(ctx), tc.DB.Write, tc.Undoers, writeID, writes.New{
-		Target: fmt.Sprintf("package:%d", target.ID),
-		After:  map[string]any{"tracker_id": result.TrackerID, "status": result.Status},
-		Undo:   tracking.Undo{Op: tracking.UndoUntrack, PackageID: target.ID, TrackerID: result.TrackerID, Before: target},
-	}); err != nil {
+	undo := tracking.Undo{Op: tracking.UndoUntrack, PackageID: target.ID, TrackerID: result.TrackerID, Before: target}
+	if err := tc.Ledger.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
+		State: ledger.Done, Target: targetName,
+		After: jsonOf(map[string]any{"tracker_id": result.TrackerID, "status": result.Status}),
+		Undo:  jsonOf(undo),
+	}, nil); err != nil {
 		return nil, err
 	}
-	result.WriteID = writeID
+	result.WriteID = ticket.ID
 	return result, nil
 }
 
@@ -123,20 +128,4 @@ func trackingFailed(err error) error {
 		return tool.Error(transport.Error())
 	}
 	return err
-}
-
-func undoPackageUntrack(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
-	var u tracking.Undo
-	if err := json.Unmarshal(raw, &u); err != nil || u.Op != tracking.UndoUntrack || u.PackageID == 0 {
-		return nil, writes.UndoError("package undo payload is invalid")
-	}
-	result, err := tracking.Untrack(ctx, q, u)
-	if err != nil {
-		var missing config.NotConfigured
-		if errors.As(err, &missing) {
-			return nil, writes.UndoError(missing.Error())
-		}
-		return nil, writes.UndoError(err.Error())
-	}
-	return result, nil
 }

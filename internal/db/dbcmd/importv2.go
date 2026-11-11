@@ -28,6 +28,7 @@ type importAction int
 const (
 	carry importAction = iota
 	rebuild
+	convert
 	drop
 )
 
@@ -37,6 +38,8 @@ func (a importAction) String() string {
 		return "carried"
 	case rebuild:
 		return "rebuilt"
+	case convert:
+		return "converted"
 	default:
 		return "dropped"
 	}
@@ -67,7 +70,7 @@ var importTables = []tablePlan{
 	{table: "decisions", action: carry},
 	{table: "flag_decisions", action: carry},
 	{table: "auto_actions", action: carry},
-	{table: "write_resolutions", action: carry},
+	{table: "write_resolutions", action: carry, where: "kind <> 'agent_write'"},
 	{table: "live_state", action: carry},
 	{table: "live_baseline", action: carry},
 	{table: "snoozes", action: carry},
@@ -109,7 +112,13 @@ var importTables = []tablePlan{
 	{table: "tasks", action: carry},
 	{table: "proposals", action: carry},
 	{table: "proposal_actions", action: carry},
-	{table: "agent_writes", action: carry, null: []string{"run_id"}},
+	{table: "agent_writes", action: convert, run: func(im *importer) (int64, error) {
+		report, err := ConvertLegacyAgentWrites(im.ctx, im.src, im.tx, im.now)
+		if err != nil {
+			return 0, err
+		}
+		return report.Agent, nil
+	}},
 	{table: "media_channels", action: carry},
 	{table: "media_seen", action: carry},
 	{table: "media_state", action: carry},
@@ -310,7 +319,6 @@ func refuseInFlight(ctx context.Context, src *sql.DB, now float64) error {
 		{"auto_actions", "SELECT COUNT(*) FROM auto_actions WHERE (state = 'held' AND error IS NULL) OR (state = 'undo_held' AND undone_error IS NULL)", nil},
 		{"proposal_actions", "SELECT COUNT(*) FROM proposal_actions WHERE state = 'held' AND error IS NULL AND lease >= ?", []any{now}},
 		{"drafts", "SELECT COUNT(*) FROM drafts WHERE status = 'sending'", nil},
-		{"agent_writes", "SELECT COUNT(*) FROM agent_writes WHERE state = 'held'", nil},
 	}
 	var parts []string
 	for _, check := range checks {

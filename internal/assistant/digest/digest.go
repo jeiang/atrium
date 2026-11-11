@@ -19,10 +19,10 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
-	"github.com/jeiang/atrium/internal/writes"
 )
 
 const (
@@ -207,7 +207,7 @@ func dreamingOf(ctx context.Context, q db.Querier, now float64) (dreaming, error
 	if out.retracted, err = kb.CountRunWrites(ctx, q, runIDs, "kb_retract", false); err != nil {
 		return out, err
 	}
-	if out.tasks, err = writes.CountForRuns(ctx, q, runIDs, "task_add"); err != nil {
+	if out.tasks, err = ledger.CountForRuns(ctx, q, runIDs, "task_add"); err != nil {
 		return out, err
 	}
 	if out.lessons, err = kb.CountRunLessons(ctx, q, runIDs); err != nil {
@@ -223,11 +223,11 @@ func dreamingOf(ctx context.Context, q db.Querier, now float64) (dreaming, error
 	for _, c := range conflicts {
 		out.conflicts = append(out.conflicts, conflict{id: c.ID, title: c.Title, thread: c.Thread, marks: int64(c.Marks)})
 	}
-	if id, err := writes.UnknownTarget(ctx, q, "export:notion:"); err != nil {
+	if id, err := ledger.BlockedTarget(ctx, q, "export:notion:"); err != nil {
 		return out, err
 	} else if id != 0 {
 		out.exportID = id
-	} else if id, err := writes.UnknownTarget(ctx, q, "export:obsidian:"); err != nil {
+	} else if id, err := ledger.BlockedTarget(ctx, q, "export:obsidian:"); err != nil {
 		return out, err
 	} else {
 		out.exportID = id

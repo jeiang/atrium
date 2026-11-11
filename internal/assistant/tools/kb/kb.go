@@ -260,7 +260,7 @@ func write(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 			return nil, tool.Error("source.thread_id must be one of the threads gathered for this run")
 		}
 	}
-	rec, writeID, err := kb.Write(ctx, tc.DB, tc.Undoers, kb.Writer{
+	rec, writeID, err := kb.Write(ctx, tc.Ledger, kb.Writer{
 		ThreadID: tc.ThreadID, RunID: tc.RunID, Kind: string(tc.Kind), Now: tc.Now(),
 	}, kb.WriteInput{ID: id, Title: title, Body: body, Aliases: aliases, Scope: scope, Source: source})
 	if err != nil {
@@ -290,7 +290,7 @@ func retract(ctx context.Context, tc *tool.Context, args tool.Args) (any, error)
 			return nil, tool.Error("only records from the threads gathered for this run can be retracted")
 		}
 	}
-	rec, writeID, err := kb.Retract(ctx, tc.DB, tc.Undoers, kb.Writer{
+	rec, writeID, err := kb.Retract(ctx, tc.Ledger, kb.Writer{
 		ThreadID: tc.ThreadID, RunID: tc.RunID, Kind: string(tc.Kind), Now: tc.Now(),
 	}, id, reason)
 	if err != nil {
