@@ -848,8 +848,8 @@ func ImportV2(ctx context.Context, tx *sql.Tx, src *sql.DB, pins map[string]Impo
 			lines = append(lines, "pin "+key+": credential-file-binding "+entry.Target)
 			continue
 		}
-		switch {
-		case entry.Action == ImportCarry:
+		switch entry.Action {
+		case ImportCarry:
 			if _, err := tx.ExecContext(ctx, "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, pin.Value); err != nil {
 				return nil, summary, err
 			}
@@ -859,16 +859,16 @@ func ImportV2(ctx context.Context, tx *sql.Tx, src *sql.DB, pins map[string]Impo
 			}
 			lines = append(lines, line)
 			summary.Carried++
-		case entry.Action == ImportRename:
+		case ImportRename:
 			lines = append(lines, "pin "+key+": renamed -> "+entry.Target+" from pin "+pin.Source)
 			summary.Renamed++
-		case entry.Action == ImportDrop:
+		case ImportDrop:
 			lines = append(lines, "pin "+key+": dropped -> "+entry.Target)
 			summary.Dropped++
-		case entry.Action == ImportDropHost:
+		case ImportDropHost:
 			lines = append(lines, "pin "+key+": drop-host -> "+entry.Target+hostRequirement(entry, "", pin, true))
 			summary.DropHost++
-		case entry.Action == ImportDropTuning:
+		case ImportDropTuning:
 			lines = append(lines, tuningLine("pin "+key+": drop-tuning -> "+entry.Target, entry, "", pin, true))
 			summary.DropTuning++
 		default:
