@@ -2,10 +2,13 @@ package applier
 
 import (
 	"context"
+	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/executors"
 	"github.com/jeiang/atrium/internal/mail/live"
@@ -90,9 +93,6 @@ func (a *Applier) ApplySnoozes(ctx context.Context, account string) (Outcome, er
 			if err := a.Live.Skip(ctx, account, s.MessageID, digest, live.SnoozeReturn, &s.IMAPName, &inbox, "shadow mode: would return the snooze", nil); err != nil {
 				return out, err
 			}
-			if err := a.finishSnooze(ctx, s.ID, "returned", ""); err != nil {
-				return out, err
-			}
 			out.Skipped++
 			continue
 		}
@@ -117,23 +117,20 @@ func (a *Applier) ApplySnoozes(ctx context.Context, account string) (Outcome, er
 		if err != nil {
 			var interrupted *mail.WriteInterrupted
 			if errors.As(err, &interrupted) {
-				if uerr := a.Live.Unknown(ctx, ticket, err.Error(), nil, nil); uerr != nil {
+				if uerr := a.settleSnooze(ctx, ticket, ledger.Result{State: ledger.Unknown, Error: err.Error()}, s.ID, "failed", err.Error()); uerr != nil {
 					return out, uerr
 				}
-			} else if ferr := a.Live.Fail(ctx, ticket, err.Error()); ferr != nil {
-				return out, ferr
-			}
-			if ferr := a.finishSnooze(ctx, s.ID, "failed", err.Error()); ferr != nil {
+			} else if ferr := a.settleSnooze(ctx, ticket, ledger.Result{State: ledger.Failed, Error: err.Error()}, s.ID, "failed", err.Error()); ferr != nil {
 				return out, ferr
 			}
 			out.Failed++
 			continue
 		}
-		after := map[string]any{"imap_name": config.Inbox, "labels": []string{mailops.InboxLabel}}
-		if err := a.Live.Finish(ctx, ticket, after, nil, nil); err != nil {
-			return out, err
+		after, merr := json.Marshal(map[string]any{"imap_name": config.Inbox, "labels": []string{mailops.InboxLabel}})
+		if merr != nil {
+			return out, merr
 		}
-		if err := a.finishSnooze(ctx, s.ID, "returned", ""); err != nil {
+		if err := a.settleSnooze(ctx, ticket, ledger.Result{State: ledger.Done, After: after}, s.ID, "returned", ""); err != nil {
 			return out, err
 		}
 		out.Written++
@@ -160,12 +157,32 @@ func (a *Applier) returnSnooze(ctx context.Context, client mail.Client, account 
 		func([]uint32, *mail.CopyUID) error { return nil })
 }
 
-func (a *Applier) finishSnooze(ctx context.Context, id int64, state, reason string) error {
-	var text any
-	if reason != "" {
-		text = reason
+func (a *Applier) settleSnooze(ctx context.Context, ticket ledger.Ticket, result ledger.Result, id int64, state, reason string) error {
+	err := a.Live.Store.Settle(ctx, ticket, result, func(ctx context.Context, tx *sql.Tx) error {
+		return finishSnoozeTx(ctx, tx, a.now(), id, state, reason)
+	})
+	var settled *ledger.SettledMeanwhile
+	if errors.As(err, &settled) {
+		return a.finishSnooze(ctx, id, state, reason)
 	}
-	_, err := a.Live.DB.Write.ExecContext(ctx, "UPDATE snoozes SET state = ?, returned_ts = ?, error = ? WHERE id = ? AND state = 'pending'",
-		state, a.now(), text, id)
 	return err
+}
+
+func (a *Applier) finishSnooze(ctx context.Context, id int64, state, reason string) error {
+	_, err := a.Live.DB.Write.ExecContext(ctx, "UPDATE snoozes SET state = ?, returned_ts = ?, error = ? WHERE id = ? AND state = 'pending'",
+		state, a.now(), nullableText(reason), id)
+	return err
+}
+
+func finishSnoozeTx(ctx context.Context, tx *sql.Tx, now float64, id int64, state, reason string) error {
+	_, err := tx.ExecContext(ctx, "UPDATE snoozes SET state = ?, returned_ts = ?, error = ? WHERE id = ? AND state = 'pending'",
+		state, now, nullableText(reason), id)
+	return err
+}
+
+func nullableText(reason string) any {
+	if reason == "" {
+		return nil
+	}
+	return reason
 }

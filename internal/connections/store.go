@@ -20,10 +20,13 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 const defaultTimeout = 15 * time.Second
+
+var log = logx.Logger("atrium.connections")
 
 type Store struct {
 	d       *db.DB
@@ -296,9 +299,24 @@ func (s *Store) reconcileOne(ctx context.Context, tx *sql.Tx, id ID, hc config.H
 		return err
 	}
 	for _, slot := range sortedKeys(hc.CredentialFiles) {
+		var prior string
+		err := tx.QueryRowContext(ctx, "SELECT source FROM connection_credentials WHERE connection_id = ? AND slot = ?", id, slot).Scan(&prior)
+		if err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if prior == "database" {
+			log.Info("the host credential file replaces the database credential", logx.Integration, string(id), "SLOT", slot)
+			if _, err := tx.ExecContext(ctx,
+				"UPDATE connections SET revision = revision + 1, state = 'untested', reason = '', checked_at = NULL, "+
+					"last_ok_at = NULL, results_json = '{}', updated_at = ? WHERE id = ?", s.stamp(), id); err != nil {
+				return err
+			}
+		}
+		if _, err := tx.ExecContext(ctx, "DELETE FROM connection_credentials WHERE connection_id = ? AND slot = ?", id, slot); err != nil {
+			return err
+		}
 		if _, err := tx.ExecContext(ctx,
-			"INSERT INTO connection_credentials (connection_id, slot, source, file_ref, set_at, set_by) VALUES (?, ?, 'host_file', ?, ?, 'host') "+
-				"ON CONFLICT(connection_id,slot) DO NOTHING",
+			"INSERT INTO connection_credentials (connection_id, slot, source, file_ref, set_at, set_by) VALUES (?, ?, 'host_file', ?, ?, 'host')",
 			id, slot, hc.CredentialFiles[slot], s.stamp()); err != nil {
 			return err
 		}

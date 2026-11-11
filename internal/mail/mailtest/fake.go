@@ -105,6 +105,7 @@ type FakeClient struct {
 	Gmail        bool
 	CategoryUIDs map[string][]uint32
 	FailWrite    func(FakeWrite) error
+	StatusHook   func(imapName string, messages uint32) uint32
 	Idle         bool
 
 	Selected  string
@@ -200,13 +201,21 @@ func (c fakeConn) Status(_ context.Context, imapName string) (mail.Status, error
 	m, ok := c.f.Boxes[imapName]
 	if !ok && c.f.Gmail {
 		one := uint64(1)
-		return mail.Status{UIDValidity: 1, UIDNext: 1, HighestModSeq: &one, Messages: c.f.labelCount(c.f.name(imapName))}, nil
+		count := c.f.labelCount(c.f.name(imapName))
+		if c.f.StatusHook != nil {
+			count = c.f.StatusHook(imapName, count)
+		}
+		return mail.Status{UIDValidity: 1, UIDNext: 1, HighestModSeq: &one, Messages: count}, nil
 	}
 	if !ok {
 		return mail.Status{}, fmt.Errorf("fake IMAP: no mailbox %q", imapName)
 	}
 	modseq := m.Box.ModSeq
-	return mail.Status{UIDValidity: m.Box.Validity, UIDNext: m.Box.NextUID, HighestModSeq: &modseq, Messages: uint32(len(m.Box.Messages))}, nil
+	count := uint32(len(m.Box.Messages))
+	if c.f.StatusHook != nil {
+		count = c.f.StatusHook(imapName, count)
+	}
+	return mail.Status{UIDValidity: m.Box.Validity, UIDNext: m.Box.NextUID, HighestModSeq: &modseq, Messages: count}, nil
 }
 
 func (c fakeConn) Select(_ context.Context, imapName string) error {

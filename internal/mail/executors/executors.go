@@ -348,7 +348,7 @@ func (s *slot) release(ctx context.Context) error {
 
 func (s *slot) fail(ctx context.Context, action map[string]any, err error) error {
 	if err == nil {
-		return nil
+		return s.release(ctx)
 	}
 	state := ledger.Failed
 	text := err.Error()
