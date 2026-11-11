@@ -291,7 +291,8 @@ behavior-parity target.
   hold with a live lease, a `drafts` send); it refuses a destination that
   already holds rows in an imported table. Everything is copied in one
   transaction with foreign keys enforced and `PRAGMA foreign_key_check` at
-  the end, so a failure leaves the destination unchanged. Carried with
+  the end, so a failed copy leaves the destination without imported rows.
+  Carried with
   their ids: mail accounts, mailboxes, messages and the learned mail data
   (rules, corrections, decisions, flag decisions, the action ledger with
   its undo state, write resolutions, live state and baseline, snoozes,
