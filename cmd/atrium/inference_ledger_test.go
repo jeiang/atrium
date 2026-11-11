@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"strings"
 	"sync"
 	"testing"
@@ -32,10 +33,6 @@ func TestInferenceConcurrentAdmissionSendsOneRequest(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	asstWarm(t)
 	d := asstDB(t, dir)
-	loc, err := time.LoadLocation("America/Port_of_Spain")
-	if err != nil {
-		t.Fatal(err)
-	}
 	now := float64(time.Now().UnixMicro()) / 1e6
 	var reservationN int64
 	if err := d.Read.QueryRow("SELECT reservation_nusd FROM usage ORDER BY id DESC LIMIT 1").Scan(&reservationN); err != nil {
@@ -43,8 +40,8 @@ func TestInferenceConcurrentAdmissionSendsOneRequest(t *testing.T) {
 	}
 	reservation := float64(reservationN) / inference.NanoUSD
 	var committedN int64
-	if err := d.Read.QueryRow("SELECT COALESCE(SUM(accounted_nusd), 0) FROM usage WHERE month_start = ? AND budget_class <> 'subscription'",
-		inference.MonthStart(now, loc)).Scan(&committedN); err != nil {
+	if err := d.Read.QueryRow("SELECT COALESCE(SUM(accounted_nusd), 0) FROM usage WHERE month = ? AND budget_class <> 'subscription'",
+		asstMonth(t, now)).Scan(&committedN); err != nil {
 		t.Fatal(err)
 	}
 	ceiling := 150 * (1 - inference.ClassificationReserveShare)
@@ -200,10 +197,179 @@ func TestInferenceMemoryCallsAreAdmittedAndBilled(t *testing.T) {
 		t.Errorf("memory sent %d requests under an exhausted budget", got)
 	}
 	var state2, errText string
-	if err := asstDB(t, dir).Read.QueryRow("SELECT state, COALESCE(error, '') FROM memory_jobs WHERE thread_id = 1 ORDER BY id DESC LIMIT 1").Scan(&state2, &errText); err != nil {
+	var nextAt float64
+	if err := asstDB(t, dir).Read.QueryRow("SELECT state, COALESCE(error, ''), next_at FROM memory_jobs WHERE thread_id = 1 ORDER BY id DESC LIMIT 1").Scan(&state2, &errText, &nextAt); err != nil {
 		t.Fatal(err)
 	}
-	if state2 != "failed" || !strings.Contains(errText, "monthly budget") {
-		t.Errorf("job state %q error %q, want a monthly budget refusal", state2, errText)
+	if state2 != "queued" || !strings.Contains(errText, "monthly budget") || nextAt <= float64(time.Now().UnixMicro())/1e6 {
+		t.Errorf("job state %q next_at %v error %q, want a monthly budget refusal left queued for next month", state2, nextAt, errText)
+	}
+}
+
+func TestInferenceMonthSpendSurvivesATimezoneChange(t *testing.T) {
+	now := float64(time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir, api, f := moduleFixtureAt(t, flagsExcept("", ""), func() float64 { return now })
+	asstWarm(t)
+	d := asstDB(t, dir)
+	asstSpendAt(t, d, inference.SourceLoop, 149.99, now)
+
+	f.unset("ATRIUM_CORE_TZ")
+	asstSet(t, "tz", "Europe/London")
+
+	sent := len(api.Requests())
+	ran := runApp(t, "agent", "run", "--text", "hello")
+	if ran.code != cli.ExitError || !strings.Contains(ran.stdout+ran.stderr, "monthly budget") {
+		t.Fatalf("run after the timezone change: exit %d stdout %q stderr %q, want a monthly budget refusal", ran.code, ran.stdout, ran.stderr)
+	}
+	if got := len(api.Requests()) - sent; got != 0 {
+		t.Errorf("%d provider requests after the refusal", got)
+	}
+}
+
+func TestInferenceInterruptedStreamChargesTheOutputItReceived(t *testing.T) {
+	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	asstWarm(t)
+	d := asstDB(t, dir)
+
+	text := strings.Repeat("generated output ", 400)
+	api.Push(anthropictest.Response{
+		StopReason: "end_turn",
+		Usage:      anthropictest.Usage{Input: 700, Output: 900}.JSON(),
+		StartUsage: anthropictest.Usage{Input: 700}.JSON(),
+		Content:    append([]json.RawMessage{anthropictest.Text(text)}, anthropictest.WebSearch("s1", "atrium")...),
+		Stall:      true,
+	})
+	base := asstCount(t, d, "SELECT COUNT(*) FROM run_events WHERE kind = 'tool_start'")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan appRun, 1)
+	go func() { done <- runAppContext(t, f, ctx, "agent", "run", "--text", "go") }()
+	deadline := time.Now().Add(30 * time.Second)
+	for asstCount(t, d, "SELECT COUNT(*) FROM run_events WHERE kind = 'tool_start'") <= base {
+		if time.Now().After(deadline) {
+			t.Fatal("the stalled stream never delivered text")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	cancel()
+	select {
+	case <-done:
+	case <-time.After(30 * time.Second):
+		t.Fatal("the canceled run did not return")
+	}
+
+	state, partial, _, accounted, _, output, _, _ := ledgerRow(t, dir,
+		"SELECT state, partial, reservation_nusd, accounted_nusd, input_tokens, output_tokens, request_id, error FROM usage ORDER BY id DESC LIMIT 1")
+	if state != "settled" || partial != 1 {
+		t.Fatalf("interrupted row: state %q partial %d", state, partial)
+	}
+	if output < 1600 || output > 2000 {
+		t.Errorf("output tokens %d, want the received text estimated at about 1700", output)
+	}
+	if accounted <= 0 {
+		t.Errorf("accounted %d, want the received output charged", accounted)
+	}
+}
+
+func TestInferenceLargePDFIsEstimatedFromItsStoredTokens(t *testing.T) {
+	_, api, d, w := asstServe(t)
+
+	pdf := make([]byte, 0, 6<<20)
+	pdf = append(pdf, "%PDF-1.7\n"...)
+	for range 5 {
+		pdf = append(pdf, "1 0 obj << /Type /Page >> endobj\n"...)
+	}
+	for len(pdf) < 6<<20 {
+		pdf = append(pdf, '%')
+	}
+
+	before := len(api.Requests())
+	api.Push(asstReply("read"))
+	thread := w.startFiles(map[string]string{"text": "read this", "model": "claude-opus-5-5"},
+		[]asstFile{{"big.pdf", "application/pdf", pdf}})
+	if state := asstSettleThread(t, d, thread); state != "done" {
+		t.Fatalf("large PDF run %s", state)
+	}
+	if got := len(api.Requests()) - before; got != 1 {
+		t.Fatalf("%d provider requests, want 1", got)
+	}
+	var prompt, reservation int64
+	if err := d.Read.QueryRow("SELECT estimated_prompt_tokens, reservation_nusd FROM usage WHERE thread_id = ? ORDER BY id DESC LIMIT 1", thread).
+		Scan(&prompt, &reservation); err != nil {
+		t.Fatal(err)
+	}
+	if prompt <= 0 || prompt > 100_000 {
+		t.Errorf("estimated prompt %d, want the stored attachment estimate rather than the base64 size", prompt)
+	}
+	if reservation <= 0 || reservation >= int64(10*inference.NanoUSD) {
+		t.Errorf("reservation %d, want a positive value below the $10 Opus run cap", reservation)
+	}
+}
+
+func TestInferenceMemoryMonthlyRefusalResumesNextMonth(t *testing.T) {
+	now := float64(time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir, api, _ := moduleFixtureAt(t, flagsExcept("", ""), func() float64 { return now })
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	long := strings.Repeat("evidence ", 120)
+	for i := range 4 {
+		api.Push(anthropictest.Reply("end_turn", anthropictest.Text(long)))
+		if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "message "+strings.Repeat("x", i+1)); ran.code != cli.ExitOK {
+			t.Fatalf("chat run %d: %d %s", i, ran.code, ran.stderr)
+		}
+	}
+	if ran := runApp(t, "memory", "view", "1"); ran.code != cli.ExitOK {
+		t.Fatalf("memory view: %d %s", ran.code, ran.stderr)
+	}
+	if ran := runApp(t, "settings", "set", "monthly_budget_usd", "0.000001"); ran.code != cli.ExitOK {
+		t.Fatalf("settings set: %d %s", ran.code, ran.stderr)
+	}
+	before := len(api.Requests())
+	if ran := runApp(t, "memory", "work", "1"); ran.code != cli.ExitOK {
+		t.Fatalf("memory work under an exhausted budget: %d %s", ran.code, ran.stderr)
+	}
+	if got := len(api.Requests()) - before; got != 0 {
+		t.Fatalf("memory sent %d requests under an exhausted budget", got)
+	}
+	d := asstDB(t, dir)
+	queued, failed := 0, 0
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM memory_jobs WHERE thread_id = 1 AND state = 'queued'").Scan(&queued); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM memory_jobs WHERE thread_id = 1 AND state = 'failed'").Scan(&failed); err != nil {
+		t.Fatal(err)
+	}
+	if queued == 0 || failed != 0 {
+		t.Fatalf("%d queued and %d failed jobs after a monthly refusal, want all queued", queued, failed)
+	}
+	if ran := runApp(t, "settings", "set", "monthly_budget_usd", "150"); ran.code != cli.ExitOK {
+		t.Fatalf("settings restore: %d %s", ran.code, ran.stderr)
+	}
+	now = float64(time.Date(2026, 12, 2, 12, 0, 0, 0, time.UTC).Unix())
+	for range 20 {
+		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("summary")))
+	}
+	for range 8 {
+		if ran := runApp(t, "memory", "work", "1"); ran.code != cli.ExitOK {
+			t.Fatalf("memory work next month: %d %s", ran.code, ran.stderr)
+		}
+		var pending int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM memory_jobs WHERE thread_id = 1 AND state <> 'done'").Scan(&pending); err != nil {
+			t.Fatal(err)
+		}
+		if pending == 0 {
+			break
+		}
+	}
+	if got := len(api.Requests()) - before; got == 0 {
+		t.Fatalf("memory sent no requests next month")
+	}
+	var pending int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM memory_jobs WHERE thread_id = 1 AND state <> 'done'").Scan(&pending); err != nil {
+		t.Fatal(err)
+	}
+	if pending != 0 {
+		t.Errorf("%d memory jobs not done after the next month", pending)
 	}
 }

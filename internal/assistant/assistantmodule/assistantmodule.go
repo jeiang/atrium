@@ -76,7 +76,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 				memory.ModelKey, memory.EffortKey, serverops.KeyCondenser,
 			}},
 		},
-		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Callables...), memorycmd.Command(mc.Env)},
+		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Callables...), memorycmd.Command(mc.Env, m.Now)},
 		Tools:    addTools,
 	}
 }

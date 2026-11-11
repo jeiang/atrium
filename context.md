@@ -200,10 +200,23 @@ behavior-parity target.
   monthly budget defaults to $150 with scheduled runs paused at 80% and chat at
   95%; the last 5% is reserved for classification. Every paid model call,
   memory summaries included, reserves its full cold prompt plus the request's
-  maximum output tokens and maximum web searches before dispatch, and an
+  maximum output tokens, 8,000 input tokens for each allowed web search and
+  the search fees before dispatch. The prompt
+  estimate counts text at its character rate and each attachment at the token
+  estimate stored with it, not at the size of the base64 copy inlined into the
+  request, so a large PDF or image does not reserve its encoded size. An
   attempt whose outcome is unknown stays reserved and expires to an estimated
-  charge after 24 hours. Reservations from the previous month carry into the
-  new month until they settle or expire. When the budget is exhausted,
+  charge after 24 hours; a stream stopped mid-generation settles the output it
+  delivered, estimated from its text and thinking and never below the usage the
+  provider reported. Each reservation records its calendar month
+  (`YYYY-MM`) in the time zone in use at that moment, and admission, the Usage
+  page and the scheduler compare that key, so changing the time zone does not
+  move committed spend out of the month. Reservations from the previous month
+  carry into the new month until they settle or expire. A memory job refused
+  by the monthly budget stays queued until the first of the next month, a
+  thread-cap refusal retries with the normal backoff, and only a run-cap
+  refusal fails the job. When the budget is
+  exhausted,
   scheduled jobs that need no model call still run. Each model has its own run
   cost cap, checked against the next request written cold at the thread's
   cache lifetime, as is a $10 thread cost cap over all runs of a thread and

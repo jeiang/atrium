@@ -39,6 +39,8 @@ const (
 	RequestTimeout = 15 * time.Minute
 )
 
+const SearchResultTokens = 8_000
+
 type Request struct {
 	AttemptKey string
 	RunID      int64
@@ -50,6 +52,8 @@ type Request struct {
 	Class      Class
 	CacheTTL   string
 	Params     anthropic.Params
+
+	EstimatedPromptTokens int64
 }
 
 type RunScope struct {
@@ -74,15 +78,14 @@ type Scopes interface {
 type Service struct {
 	db     *db.DB
 	now    func() float64
-	loc    *time.Location
 	scopes Scopes
 }
 
-func New(d *db.DB, now func() float64, loc *time.Location, scopes Scopes) *Service {
+func New(d *db.DB, now func() float64, scopes Scopes) *Service {
 	if now == nil {
 		now = func() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 	}
-	return &Service{db: d, now: now, loc: loc, scopes: scopes}
+	return &Service{db: d, now: now, scopes: scopes}
 }
 
 type Outcome struct {
@@ -147,11 +150,7 @@ func (s *Service) Reserve(ctx context.Context, r Request) (*Attempt, error) {
 	if err != nil {
 		return nil, err
 	}
-	if s.loc == nil {
-		return nil, errors.New("inference: no configured timezone")
-	}
 	now := s.now()
-	month := MonthStart(now, s.loc)
 	expires := now + UnknownExpiry.Seconds()
 	deadline := now + RequestTimeout.Seconds()
 	var id int64
@@ -165,12 +164,17 @@ func (s *Service) Reserve(ctx context.Context, r Request) (*Attempt, error) {
 			now, now); err != nil {
 			return err
 		}
-		if err := s.admit(ctx, tx, r, p, now, month); err != nil {
+		loc, err := Location(ctx, tx)
+		if err != nil {
+			return err
+		}
+		month := MonthKey(now, loc)
+		if err := s.admit(ctx, tx, r, p, now, month, loc); err != nil {
 			refused = err
 			return nil
 		}
 		res, err := tx.ExecContext(ctx,
-			"INSERT INTO usage (attempt_key, ts, month_start, expires_at, state, budget_class, reservation_nusd, accounted_nusd, "+
+			"INSERT INTO usage (attempt_key, ts, month, expires_at, state, budget_class, reservation_nusd, accounted_nusd, "+
 				"estimated_prompt_tokens, max_output_tokens, max_searches, cache_ttl, request_id, source, provider, thread_id, run_id, "+
 				"kind, job_name, model, effort, iterations) "+
 				"VALUES (?, ?, ?, ?, 'reserved', ?, ?, 0, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, '[]')",
@@ -194,7 +198,7 @@ func (s *Service) Reserve(ctx context.Context, r Request) (*Attempt, error) {
 	}, nil
 }
 
-func (s *Service) admit(ctx context.Context, tx *sql.Tx, r Request, p prepared, now, month float64) error {
+func (s *Service) admit(ctx context.Context, tx *sql.Tx, r Request, p prepared, now float64, month string, loc *time.Location) error {
 	if r.RunID <= 0 {
 		return errors.New("inference: a reservation needs a run")
 	}
@@ -238,7 +242,7 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, r Request, p prepared, 
 			return BudgetExceeded{
 				Text: fmt.Sprintf("%s: the next request would reserve $%s, with $%s of $%s already committed; raise %s to continue",
 					what, strconvUSD(usdOf(p.reservation)), strconvUSD(usdOf(committed)), strconvUSD(capUSD), RunCapKey(scope.Model)),
-				Reason: reason, Class: classOf(r), NextMonth: NextMonthStart(now, s.loc),
+				Reason: reason, Class: classOf(r), NextMonth: NextMonthStart(now, loc),
 			}
 		}
 	}
@@ -258,7 +262,7 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, r Request, p prepared, 
 		return BudgetExceeded{
 			Text: fmt.Sprintf("thread cost cap: the next request would reserve $%s, with $%s of $%s already committed in this thread and its subagents; %s",
 				strconvUSD(usdOf(p.reservation)), strconvUSD(usdOf(spent)), strconvUSD(usdOf(limit)), remedy),
-			Reason: ReasonThread, Class: classOf(r), NextMonth: NextMonthStart(now, s.loc),
+			Reason: ReasonThread, Class: classOf(r), NextMonth: NextMonthStart(now, loc),
 		}
 	}
 	budget, err := MonthlyBudget(ctx, tx)
@@ -284,12 +288,12 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, r Request, p prepared, 
 	}
 	var committed, carry int64
 	if err := tx.QueryRowContext(ctx,
-		"SELECT COALESCE(SUM("+committedSQL+"), 0) FROM usage WHERE month_start = ? AND budget_class <> ?",
+		"SELECT COALESCE(SUM("+committedSQL+"), 0) FROM usage WHERE month = ? AND budget_class <> ?",
 		month, ClassSubscription).Scan(&committed); err != nil {
 		return err
 	}
 	if err := tx.QueryRowContext(ctx,
-		"SELECT COALESCE(SUM(reservation_nusd), 0) FROM usage WHERE month_start < ? AND state IN ('reserved','unknown') "+
+		"SELECT COALESCE(SUM(reservation_nusd), 0) FROM usage WHERE month < ? AND state IN ('reserved','unknown') "+
 			"AND expires_at > ? AND budget_class <> ?", month, now, ClassSubscription).Scan(&carry); err != nil {
 		return err
 	}
@@ -297,7 +301,7 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, r Request, p prepared, 
 		return BudgetExceeded{
 			Text: fmt.Sprintf("monthly budget: $%s of $%s committed (%s); the next request would reserve $%s",
 				strconvUSD(usdOf(committed+carry)), strconvUSD(budget), strconvPercent(usdOf(committed+carry)/budget), strconvUSD(usdOf(p.reservation))),
-			Reason: ReasonMonthly, Class: classOf(r), NextMonth: NextMonthStart(now, s.loc),
+			Reason: ReasonMonthly, Class: classOf(r), NextMonth: NextMonthStart(now, loc),
 		}
 	}
 	return nil
@@ -339,9 +343,12 @@ func prepare(r Request) (prepared, error) {
 			return prepared{}, errors.New("inference: classification may not use tools")
 		}
 	}
-	prompt, err := estimatePrompt(r.Params)
-	if err != nil {
-		return prepared{}, err
+	prompt := r.EstimatedPromptTokens
+	if prompt <= 0 {
+		prompt, err = estimatePrompt(r.Params)
+		if err != nil {
+			return prepared{}, err
+		}
 	}
 	reservation, err := reservationNUSD(model.ID, prompt, r.Params.MaxTokens, searches, cacheTTLOf(r))
 	if err != nil {
@@ -452,7 +459,7 @@ func searchUses(tools []json.RawMessage) (int64, error) {
 }
 
 func reservationNUSD(model string, prompt, maxTokens, searches int64, ttl string) (int64, error) {
-	t := pricing.Tokens{Output: maxTokens}
+	t := pricing.Tokens{Input: searches * SearchResultTokens, Output: maxTokens}
 	switch ttl {
 	case prompts.TTL1h:
 		t.CacheWrite1h = prompt
@@ -554,6 +561,9 @@ func (s *Service) settle(ctx context.Context, a *Attempt, st Settlement, partial
 		if !o.known && o.Message != nil {
 			usage = o.Message.Usage
 		}
+		if partial {
+			chargePartialOutput(&usage, o.Message)
+		}
 		p = priceUsage(a.model, usage)
 	}
 	var requestID any
@@ -650,6 +660,42 @@ func emitUsage(model, kind string, partial bool, wallMS int64, p priced) {
 	obs.LLMTokens.Add(float64(p.tokens.Output), model, kind, "output")
 	obs.LLMTokens.Add(float64(p.reasoning), model, kind, "reasoning")
 	obs.LLMCost.Add(p.cost, model, kind)
+}
+
+func chargePartialOutput(usage *anthropic.Usage, msg *anthropic.Message) {
+	received := receivedOutput(msg)
+	if received <= usage.OutputTokens {
+		return
+	}
+	if len(usage.Iterations) > 0 {
+		last := &usage.Iterations[len(usage.Iterations)-1]
+		last.OutputTokens += received - usage.OutputTokens
+	}
+	usage.OutputTokens = received
+}
+
+func receivedOutput(msg *anthropic.Message) int64 {
+	if msg == nil {
+		return 0
+	}
+	var total int64
+	for _, raw := range msg.Content {
+		var block struct {
+			Type     string `json:"type"`
+			Text     string `json:"text"`
+			Thinking string `json:"thinking"`
+		}
+		if json.Unmarshal(raw, &block) != nil {
+			continue
+		}
+		switch block.Type {
+		case "text":
+			total += tokens.Estimate(block.Text)
+		case "thinking":
+			total += tokens.Estimate(block.Thinking)
+		}
+	}
+	return total
 }
 
 func (s *Service) markUnknown(ctx context.Context, a *Attempt, o Outcome) (Receipt, error) {

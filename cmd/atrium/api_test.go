@@ -3,10 +3,12 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -18,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/auth/oidc/oidctest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/secrets"
 )
 
 const apiClient = "atrium-ios"
@@ -57,17 +58,92 @@ func startAPISite(t *testing.T, dir string, api *modelLog) *apiSite {
 	idp.AddUser(oidctest.User{Name: "guest", Email: "guest@example.com", Groups: []string{"atrium_access"}})
 	idp.AddUser(oidctest.User{Name: "stranger", Email: "stranger@example.com"})
 	setEnv(t, settingEnv(config.KeyPublicURL), "http://127.0.0.1")
-	setEnv(t, settingEnv(oidc.KeyIssuer), idp.Issuer())
-	setEnv(t, settingEnv(oidc.KeyClientID), idp.ClientID())
-	setEnv(t, settingEnv(oidc.KeyGroupsClaim), "groups")
-	setEnv(t, settingEnv(oidc.KeyAPIClientID), apiClient)
-	setEnv(t, settingEnv(secrets.OIDCClientSecret), "s3cret-for-the-test")
+	setEnv(t, "ATRIUM_HOST_CONFIG", oidcHostConfig(t, dir, oidcHost{
+		Issuer:      idp.Issuer(),
+		ClientID:    idp.ClientID(),
+		APIClientID: apiClient,
+		Secret:      "s3cret-for-the-test",
+		GroupsClaim: "groups",
+	}))
 	base, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, "--auth", "proxy", "--auth", "oidc", "--allowed-host", "127.0.0.1")
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(stop)
 	return &apiSite{t: t, base: base, dir: dir, idp: idp, api: api}
+}
+
+type oidcHost struct {
+	Issuer      string
+	ClientID    string
+	APIClientID string
+	Secret      string
+	GroupsClaim string
+	AccessGroup string
+	AdminGroup  string
+	Scopes      string
+	Preset      string
+}
+
+func oidcHostConfig(t *testing.T, dir string, h oidcHost) string {
+	t.Helper()
+	if h.Preset == "" {
+		h.Preset = oidc.PresetGeneric
+	}
+	if h.GroupsClaim == "" {
+		h.GroupsClaim = "groups"
+	}
+	if h.Scopes == "" {
+		h.Scopes = "openid profile email groups"
+	}
+	base := defaultHostConfig
+	if f := fixtureFor(t); f != nil {
+		if path, ok := f.lookup("ATRIUM_HOST_CONFIG"); ok && path != "" {
+			base = path
+		}
+	}
+	existing, err := os.ReadFile(base)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := [][2]string{
+		{"preset", h.Preset},
+		{"issuer", h.Issuer},
+		{"client_id", h.ClientID},
+		{"scopes", h.Scopes},
+		{"groups_claim", h.GroupsClaim},
+	}
+	if h.APIClientID != "" {
+		config = append(config, [2]string{"api_client_id", h.APIClientID})
+	}
+	if h.AccessGroup != "" {
+		config = append(config, [2]string{"access_group", h.AccessGroup})
+	}
+	if h.AdminGroup != "" {
+		config = append(config, [2]string{"admin_group", h.AdminGroup})
+	}
+	var b strings.Builder
+	b.Write(existing)
+	b.WriteString("\n[connections.\"service/oidc\"]\nkind = \"service/oidc\"\nlabel = \"Sign-in\"\nconfig = {")
+	for i, kv := range config {
+		if i > 0 {
+			b.WriteString(",")
+		}
+		fmt.Fprintf(&b, " %s = %q", kv[0], kv[1])
+	}
+	b.WriteString(" }\ncapabilities = [\"discovery\", \"client_auth\"]\n")
+	if h.Secret != "" {
+		secret := filepath.Join(dir, "oidc-client-secret")
+		if err := os.WriteFile(secret, []byte(h.Secret+"\n"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		fmt.Fprintf(&b, "credential_files = { client_secret = %q }\n", secret)
+	}
+	path := filepath.Join(dir, "oidc-host.toml")
+	if err := os.WriteFile(path, []byte(b.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
 }
 
 func (s *apiSite) token(name string, o ...oidctest.AccessOptions) string {
@@ -258,7 +334,6 @@ func TestAPIRefusesRequestsWithoutAValidBearer(t *testing.T) {
 
 func TestAPIIsUnavailableWithoutOIDC(t *testing.T) {
 	moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(oidc.KeyAPIClientID), apiClient)
 	for _, auth := range [][]string{{"--auth", "local"}, {"--auth", "proxy", "--allowed-host", "127.0.0.1"}} {
 		base, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, auth...)
 		if err != nil {

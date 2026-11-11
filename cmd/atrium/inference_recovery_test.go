@@ -51,12 +51,12 @@ func recoveryReservation(t *testing.T, d *db.DB, runID int64) int64 {
 	return reservation
 }
 
-func recoveryMonthCommitted(t *testing.T, d *db.DB, month float64) int64 {
+func recoveryMonthCommitted(t *testing.T, d *db.DB, month string) int64 {
 	t.Helper()
 	var n int64
 	if err := d.Read.QueryRow(
 		"SELECT COALESCE(SUM(CASE WHEN budget_class = 'subscription' THEN 0 WHEN state IN ('reserved','unknown') THEN reservation_nusd ELSE accounted_nusd END), 0) "+
-			"FROM usage WHERE month_start = ?", month).Scan(&n); err != nil {
+			"FROM usage WHERE month = ?", month).Scan(&n); err != nil {
 		t.Fatalf("committed amount of month %v: %v", month, err)
 	}
 	return n
@@ -119,7 +119,7 @@ func TestInferenceUnknownReservationSurvivesRestartAndExpiresToItsEstimate(t *te
 	}
 
 	clock.at += (inference.UnknownExpiry + time.Hour).Seconds()
-	month := inference.MonthStart(clock.at, loc)
+	month := inference.MonthKey(clock.at, loc)
 	current := recoveryMonthCommitted(t, d, month)
 	asstSet(t, inference.BudgetKey, recoveryBudget(current+estimate/2))
 	before := len(api.Requests())
@@ -155,9 +155,9 @@ func TestInferenceReservationAtTheMonthBoundaryCarriesIntoTheNextMonth(t *testin
 	if lost.State != "failed" {
 		t.Fatalf("disconnected run: %+v %q", lost, ran.stderr)
 	}
-	january := inference.MonthStart(clock.at, loc)
-	var month float64
-	if err := d.Read.QueryRow("SELECT month_start FROM usage WHERE run_id = ?", lost.ID).Scan(&month); err != nil {
+	january := inference.MonthKey(clock.at, loc)
+	var month string
+	if err := d.Read.QueryRow("SELECT month FROM usage WHERE run_id = ?", lost.ID).Scan(&month); err != nil {
 		t.Fatal(err)
 	}
 	state, reservation, _ := recoveryRow(t, d, lost.ID)
@@ -166,7 +166,7 @@ func TestInferenceReservationAtTheMonthBoundaryCarriesIntoTheNextMonth(t *testin
 	}
 
 	clock.at = float64(time.Date(2026, 2, 1, 0, 0, 30, 0, loc).Unix())
-	february := inference.MonthStart(clock.at, loc)
+	february := inference.MonthKey(clock.at, loc)
 	if february == january {
 		t.Fatalf("the clock did not cross the month boundary")
 	}

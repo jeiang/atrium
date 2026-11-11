@@ -23,6 +23,7 @@ type APIError struct {
 	StatusCode  int
 	Message     string
 	spendCapped bool
+	unsent      bool
 	err         error
 }
 
@@ -31,6 +32,17 @@ func (e *APIError) Error() string { return e.Message }
 func (e *APIError) Unwrap() error { return e.err }
 
 func (e *APIError) SpendCapped() bool { return e.spendCapped }
+
+func (e *APIError) Unsent() bool { return e.unsent }
+
+func neverConnected(err error) bool {
+	var dns *net.DNSError
+	if errors.As(err, &dns) {
+		return true
+	}
+	var op *net.OpError
+	return errors.As(err, &op) && op.Op == "dial"
+}
 
 func classify(err error) error {
 	if err == nil || errors.Is(err, context.Canceled) {
@@ -43,6 +55,8 @@ func classify(err error) error {
 	var urlErr *url.Error
 	var netErr net.Error
 	switch {
+	case neverConnected(err):
+		return &APIError{Message: ConnectionMessage, unsent: true, err: err}
 	case errors.As(err, &netErr) && netErr.Timeout():
 		return &APIError{Message: TimeoutMessage, err: err}
 	case errors.As(err, &urlErr), errors.As(err, &netErr), errors.Is(err, io.ErrUnexpectedEOF):
