@@ -94,7 +94,7 @@ type Store struct {
 }
 
 const (
-	SendOperation = "smtp_send"
+	SendOperation   = "smtp_send"
 	AppendOperation = "sent_append"
 )
 
