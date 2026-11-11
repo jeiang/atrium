@@ -509,3 +509,48 @@ func TestEffectsCLIUsesTheProposalUndoers(t *testing.T) {
 		t.Fatal("the effects CLI did not cancel the reminder task")
 	}
 }
+
+func TestOperationKeyAdmissionRefusesASecondSuccessfulAttempt(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, settingEnv(tracking.KeyShip24URL), "http://ship24.invalid/public/v1")
+	setEnv(t, settingEnv(tracking.KeyShip24APIKey), "dummy")
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, " +
+		"source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)"); err != nil {
+		t.Fatal(err)
+	}
+	now := float64(time.Now().Unix())
+	const identity = "tracking:ups:1Z999AA10123456784"
+	if _, err := d.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, target, action_json, state, settled_at) "+
+		"VALUES (?, ?, 'admission-done', 'tracking', 'track_package', ?, 'forward', ?, '{}', 'done', ?)",
+		now, now, "track_package:"+identity, identity, now); err != nil {
+		t.Fatal(err)
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("a1", "track_package", map[string]any{"package_id": 1})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("asked")))
+	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "track it again"); ran.code != cli.ExitOK {
+		t.Fatalf("track run: %d %s", ran.code, ran.stderr)
+	}
+	var proposal int64
+	if err := d.Read.QueryRow("SELECT id FROM proposals WHERE kind = 'track_package' AND status = 'pending' ORDER BY id DESC LIMIT 1").Scan(&proposal); err != nil {
+		t.Fatalf("no pending track_package proposal: %v", err)
+	}
+	ran := runApp(t, "proposals", "approve", strconv.FormatInt(proposal, 10))
+	if ran.code == cli.ExitOK {
+		t.Fatalf("a second attempt with a successful operation key was admitted: %s", ran.stdout)
+	}
+	if !strings.Contains(ran.stdout+ran.stderr, "already claimed") {
+		t.Fatalf("the refusal = %q, want the operation-key conflict", ran.stdout+ran.stderr)
+	}
+	var writes int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE operation_key = ? AND direction = 'forward'", "track_package:"+identity).Scan(&writes); err != nil {
+		t.Fatal(err)
+	}
+	if writes != 1 {
+		t.Fatalf("%d forward effects for the operation key, want the seeded one only", writes)
+	}
+}

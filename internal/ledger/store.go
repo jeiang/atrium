@@ -209,6 +209,9 @@ func (s *Store) BeginTx(ctx context.Context, tx *sql.Tx, n New, admit Mutation) 
 	if err := s.validateUndo(n.Undo); err != nil {
 		return Ticket{}, err
 	}
+	if err := admitOperationKey(ctx, tx, n.OperationKey); err != nil {
+		return Ticket{}, err
+	}
 	token, err := newToken()
 	if err != nil {
 		return Ticket{}, err
@@ -530,6 +533,21 @@ func (s *Store) afterTransition(ctx context.Context, tx *sql.Tx, id int64, direc
 		return release(ctx, tx, id, false)
 	case state == Failed || state == Skipped:
 		return release(ctx, tx, id, true)
+	}
+	return nil
+}
+
+func admitOperationKey(ctx context.Context, tx *sql.Tx, key string) error {
+	var prior int64
+	if err := tx.QueryRowContext(ctx,
+		"SELECT COUNT(*) FROM effects e WHERE e.direction = 'forward' AND e.operation_key = ? AND e.undone_by IS NULL "+
+			"AND (e.state IN ('intent','done') OR (e.state IN ('unknown','partial') AND COALESCE("+
+			"(SELECT r.effective_outcome FROM effect_resolutions r WHERE r.effect_id = e.id ORDER BY r.id DESC LIMIT 1), '') <> 'failed'))",
+		key).Scan(&prior); err != nil {
+		return err
+	}
+	if prior > 0 {
+		return &Conflict{Resource: key}
 	}
 	return nil
 }
