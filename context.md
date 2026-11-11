@@ -211,7 +211,10 @@ behavior-parity target.
   (`YYYY-MM`) in the time zone in use at that moment, and admission, the Usage
   page and the scheduler compare that key, so changing the time zone does not
   move committed spend out of the month. Reservations from the previous month
-  carry into the new month until they settle or expire. When the budget is
+  carry into the new month until they settle or expire. A memory job refused
+  by the monthly budget stays queued until the first of the next month, a
+  thread-cap refusal retries with the normal backoff, and only a run-cap
+  refusal fails the job. When the budget is
   exhausted,
   scheduled jobs that need no model call still run. Each model has its own run
   cost cap, checked against the next request written cold at the thread's

@@ -197,11 +197,12 @@ func TestInferenceMemoryCallsAreAdmittedAndBilled(t *testing.T) {
 		t.Errorf("memory sent %d requests under an exhausted budget", got)
 	}
 	var state2, errText string
-	if err := asstDB(t, dir).Read.QueryRow("SELECT state, COALESCE(error, '') FROM memory_jobs WHERE thread_id = 1 ORDER BY id DESC LIMIT 1").Scan(&state2, &errText); err != nil {
+	var nextAt float64
+	if err := asstDB(t, dir).Read.QueryRow("SELECT state, COALESCE(error, ''), next_at FROM memory_jobs WHERE thread_id = 1 ORDER BY id DESC LIMIT 1").Scan(&state2, &errText, &nextAt); err != nil {
 		t.Fatal(err)
 	}
-	if state2 != "failed" || !strings.Contains(errText, "monthly budget") {
-		t.Errorf("job state %q error %q, want a monthly budget refusal", state2, errText)
+	if state2 != "queued" || !strings.Contains(errText, "monthly budget") || nextAt <= float64(time.Now().UnixMicro())/1e6 {
+		t.Errorf("job state %q next_at %v error %q, want a monthly budget refusal left queued for next month", state2, nextAt, errText)
 	}
 }
 
@@ -269,6 +270,7 @@ func TestInferenceInterruptedStreamChargesTheOutputItReceived(t *testing.T) {
 		t.Errorf("accounted %d, want the received output charged", accounted)
 	}
 }
+
 func TestInferenceLargePDFIsEstimatedFromItsStoredTokens(t *testing.T) {
 	_, api, d, w := asstServe(t)
 
@@ -304,3 +306,70 @@ func TestInferenceLargePDFIsEstimatedFromItsStoredTokens(t *testing.T) {
 	}
 }
 
+func TestInferenceMemoryMonthlyRefusalResumesNextMonth(t *testing.T) {
+	now := float64(time.Date(2026, 11, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir, api, _ := moduleFixtureAt(t, flagsExcept("", ""), func() float64 { return now })
+	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
+		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
+	}
+	long := strings.Repeat("evidence ", 120)
+	for i := range 4 {
+		api.Push(anthropictest.Reply("end_turn", anthropictest.Text(long)))
+		if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "message "+strings.Repeat("x", i+1)); ran.code != cli.ExitOK {
+			t.Fatalf("chat run %d: %d %s", i, ran.code, ran.stderr)
+		}
+	}
+	if ran := runApp(t, "memory", "view", "1"); ran.code != cli.ExitOK {
+		t.Fatalf("memory view: %d %s", ran.code, ran.stderr)
+	}
+	if ran := runApp(t, "settings", "set", "monthly_budget_usd", "0.000001"); ran.code != cli.ExitOK {
+		t.Fatalf("settings set: %d %s", ran.code, ran.stderr)
+	}
+	before := len(api.Requests())
+	if ran := runApp(t, "memory", "work", "1"); ran.code != cli.ExitOK {
+		t.Fatalf("memory work under an exhausted budget: %d %s", ran.code, ran.stderr)
+	}
+	if got := len(api.Requests()) - before; got != 0 {
+		t.Fatalf("memory sent %d requests under an exhausted budget", got)
+	}
+	d := asstDB(t, dir)
+	queued, failed := 0, 0
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM memory_jobs WHERE thread_id = 1 AND state = 'queued'").Scan(&queued); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM memory_jobs WHERE thread_id = 1 AND state = 'failed'").Scan(&failed); err != nil {
+		t.Fatal(err)
+	}
+	if queued == 0 || failed != 0 {
+		t.Fatalf("%d queued and %d failed jobs after a monthly refusal, want all queued", queued, failed)
+	}
+	if ran := runApp(t, "settings", "set", "monthly_budget_usd", "150"); ran.code != cli.ExitOK {
+		t.Fatalf("settings restore: %d %s", ran.code, ran.stderr)
+	}
+	now = float64(time.Date(2026, 12, 2, 12, 0, 0, 0, time.UTC).Unix())
+	for range 20 {
+		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("summary")))
+	}
+	for range 8 {
+		if ran := runApp(t, "memory", "work", "1"); ran.code != cli.ExitOK {
+			t.Fatalf("memory work next month: %d %s", ran.code, ran.stderr)
+		}
+		var pending int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM memory_jobs WHERE thread_id = 1 AND state <> 'done'").Scan(&pending); err != nil {
+			t.Fatal(err)
+		}
+		if pending == 0 {
+			break
+		}
+	}
+	if got := len(api.Requests()) - before; got == 0 {
+		t.Fatalf("memory sent no requests next month")
+	}
+	var pending int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM memory_jobs WHERE thread_id = 1 AND state <> 'done'").Scan(&pending); err != nil {
+		t.Fatal(err)
+	}
+	if pending != 0 {
+		t.Errorf("%d memory jobs not done after the next month", pending)
+	}
+}
