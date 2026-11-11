@@ -28,7 +28,6 @@ type ImportReport struct {
 
 type LegacyImporter struct {
 	ctx  context.Context
-	src  db.Querier
 	dst  db.Querier
 	now  float64
 	rep  ImportReport
@@ -72,18 +71,24 @@ type claimSpec struct {
 	missing bool
 }
 
-func NewLegacyImporter(ctx context.Context, src, dst db.Querier, now float64) *LegacyImporter {
+func NewLegacyImporter(ctx context.Context, dst db.Querier, now float64) *LegacyImporter {
 	return &LegacyImporter{
-		ctx: ctx, src: src, dst: dst, now: now,
+		ctx: ctx, dst: dst, now: now,
 		used: map[int64]bool{}, res: map[int64]bool{},
 		auto: map[int64]int64{}, autoUndo: map[int64]int64{}, agent: map[int64]int64{}, agentUndo: map[int64]int64{},
 		proposal: map[int64]int64{}, direction: map[int64]string{},
 	}
 }
 
-func ImportLegacy(ctx context.Context, src, dst db.Querier, now float64) (ImportReport, error) {
-	im := NewLegacyImporter(ctx, src, dst, now)
-	for _, step := range []func() error{im.AutoActions, im.AgentWrites, im.ProposalActions, im.WriteResolutions, im.Finish} {
+func ImportLegacy(ctx context.Context, dst db.Querier, auto []LegacyAutoAction, agent []LegacyAgentWrite, proposal []LegacyProposalAction, resolutions []LegacyResolution, now float64) (ImportReport, error) {
+	im := NewLegacyImporter(ctx, dst, now)
+	for _, step := range []func() error{
+		func() error { return im.AutoActions(auto) },
+		func() error { return im.AgentWrites(agent) },
+		func() error { return im.ProposalActions(proposal) },
+		func() error { return im.WriteResolutions(resolutions) },
+		im.Finish,
+	} {
 		if err := step(); err != nil {
 			return im.rep, err
 		}
@@ -91,28 +96,8 @@ func ImportLegacy(ctx context.Context, src, dst db.Querier, now float64) (Import
 	return im.rep, nil
 }
 
-func (im *LegacyImporter) AutoActions() error {
-	rows, err := im.src.QueryContext(im.ctx,
-		"SELECT id, ts, account, message_id, digest, kind, src, dest, before, after, undo, decision_id, state, error, "+
-			"undone_ts, undone_error, undo_started_at FROM auto_actions ORDER BY id")
-	if err != nil {
-		return err
-	}
-	all, err := db.Collect(rows, func(r *sql.Rows) (legacyAuto, error) {
-		var a legacyAuto
-		var src, dest, before, after, undo, errorText, undoneError sql.NullString
-		var decisionID sql.NullInt64
-		var undoneTS, undoStarted sql.NullFloat64
-		err := r.Scan(&a.ID, &a.TS, &a.Account, &a.MessageID, &a.Digest, &a.Kind, &src, &dest, &before, &after, &undo,
-			&decisionID, &a.State, &errorText, &undoneTS, &undoneError, &undoStarted)
-		a.Src, a.Dest, a.Before, a.After, a.Undo = src, dest, before, after, undo
-		a.DecisionID, a.Error, a.UndoneTS, a.UndoneError, a.UndoStartedAt = decisionID, errorText, undoneTS, undoneError, undoStarted
-		return a, err
-	})
-	if err != nil {
-		return err
-	}
-	for _, a := range all {
+func (im *LegacyImporter) AutoActions(rows []LegacyAutoAction) error {
+	for _, a := range rows {
 		if err := im.autoAction(a); err != nil {
 			return fmt.Errorf("auto_actions %d: %w", a.ID, err)
 		}
@@ -121,7 +106,7 @@ func (im *LegacyImporter) AutoActions() error {
 	return nil
 }
 
-type legacyAuto struct {
+type LegacyAutoAction struct {
 	ID            int64
 	TS            float64
 	Account       string
@@ -139,9 +124,13 @@ type legacyAuto struct {
 	UndoneTS      sql.NullFloat64
 	UndoneError   sql.NullString
 	UndoStartedAt sql.NullFloat64
+	Identity      bool
+	UIDValidity   int64
+	UID           int64
+	IMAPName      string
 }
 
-func (im *LegacyImporter) autoAction(a legacyAuto) error {
+func (im *LegacyImporter) autoAction(a LegacyAutoAction) error {
 	state, ok := autoForwardState(a.State)
 	if !ok {
 		return fmt.Errorf("unknown state %q", a.State)
@@ -236,7 +225,7 @@ func autoUndoState(state string) (State, bool) {
 	return "", false
 }
 
-func (im *LegacyImporter) autoClaims(a legacyAuto, id int64, undoState State, undo bool) {
+func (im *LegacyImporter) autoClaims(a LegacyAutoAction, id int64, undoState State, undo bool) {
 	released := undo && undoState == Done
 	if a.State == "undo_settled" {
 		released = true
@@ -252,43 +241,16 @@ func (im *LegacyImporter) autoClaims(a legacyAuto, id int64, undoState State, un
 	if a.Dest.Valid && a.Dest.String != "" {
 		im.claims = append(im.claims, claimSpec{key: fmt.Sprintf("mail_folder/%s/%s", a.Account, a.Dest.String), effect: id})
 	}
-	var uidvalidity, uid int64
-	var imap string
-	err := im.src.QueryRowContext(im.ctx,
-		"SELECT m.uidvalidity, m.uid, mb.imap_name FROM messages m JOIN mailboxes mb ON mb.id = m.mailbox_id WHERE m.id = ?",
-		a.MessageID).Scan(&uidvalidity, &uid, &imap)
-	if err == nil {
-		im.claims = append(im.claims, claimSpec{key: fmt.Sprintf("mail/%s/%s/%d/%d", a.Account, imap, uidvalidity, uid), effect: id})
-	} else if errors.Is(err, sql.ErrNoRows) {
-		im.rep.MissingIdentity = append(im.rep.MissingIdentity, fmt.Sprintf("auto_actions %d: message %d is gone", a.ID, a.MessageID))
-		im.claims = append(im.claims, claimSpec{key: fmt.Sprintf("mail_account/%s", a.Account), effect: id, missing: true})
+	if a.Identity {
+		im.claims = append(im.claims, claimSpec{key: fmt.Sprintf("mail/%s/%s/%d/%d", a.Account, a.IMAPName, a.UIDValidity, a.UID), effect: id})
 	} else {
-		im.rep.MissingIdentity = append(im.rep.MissingIdentity, fmt.Sprintf("auto_actions %d: %v", a.ID, err))
+		im.rep.MissingIdentity = append(im.rep.MissingIdentity, fmt.Sprintf("auto_actions %d: message %d is gone", a.ID, a.MessageID))
 		im.claims = append(im.claims, claimSpec{key: fmt.Sprintf("mail_account/%s", a.Account), effect: id, missing: true})
 	}
 }
 
-func (im *LegacyImporter) AgentWrites() error {
-	rows, err := im.src.QueryContext(im.ctx,
-		"SELECT id, ts, thread_id, run_id, tool, target, before_json, after_json, undo_json, undone_at, state, error, resolved_at "+
-			"FROM agent_writes ORDER BY id")
-	if err != nil {
-		return err
-	}
-	all, err := db.Collect(rows, func(r *sql.Rows) (legacyAgent, error) {
-		var a legacyAgent
-		var threadID, runID sql.NullInt64
-		var before, after, undo, errorText sql.NullString
-		var undoneAt, resolvedAt sql.NullFloat64
-		err := r.Scan(&a.ID, &a.TS, &threadID, &runID, &a.Tool, &a.Target, &before, &after, &undo, &undoneAt, &a.State, &errorText, &resolvedAt)
-		a.ThreadID, a.RunID, a.Before, a.After, a.Undo = threadID, runID, before, after, undo
-		a.UndoneAt, a.Error, a.ResolvedAt = undoneAt, errorText, resolvedAt
-		return a, err
-	})
-	if err != nil {
-		return err
-	}
-	for _, a := range all {
+func (im *LegacyImporter) AgentWrites(rows []LegacyAgentWrite) error {
+	for _, a := range rows {
 		if err := im.agentWrite(a); err != nil {
 			return fmt.Errorf("agent_writes %d: %w", a.ID, err)
 		}
@@ -297,7 +259,7 @@ func (im *LegacyImporter) AgentWrites() error {
 	return nil
 }
 
-type legacyAgent struct {
+type LegacyAgentWrite struct {
 	ID         int64
 	TS         float64
 	ThreadID   sql.NullInt64
@@ -313,7 +275,7 @@ type legacyAgent struct {
 	ResolvedAt sql.NullFloat64
 }
 
-func (im *LegacyImporter) agentWrite(a legacyAgent) error {
+func (im *LegacyImporter) agentWrite(a LegacyAgentWrite) error {
 	var state State
 	switch a.State {
 	case "ok":
@@ -386,40 +348,24 @@ func agentOrigin(tool string) string {
 	return "agent"
 }
 
-func (im *LegacyImporter) ProposalActions() error {
-	rows, err := im.src.QueryContext(im.ctx,
-		"SELECT id, proposal_id, ts, lease, kind, undo_of, action, undo, state, error FROM proposal_actions ORDER BY id")
-	if err != nil {
-		return err
-	}
-	all, err := db.Collect(rows, func(r *sql.Rows) (legacyProposal, error) {
-		var p legacyProposal
-		var undoOf sql.NullInt64
-		var undo, errorText sql.NullString
-		err := r.Scan(&p.ID, &p.ProposalID, &p.TS, &p.Lease, &p.Kind, &undoOf, &p.Action, &undo, &p.State, &errorText)
-		p.UndoOf, p.Undo, p.Error = undoOf, undo, errorText
-		return p, err
-	})
-	if err != nil {
-		return err
-	}
-	for _, p := range all {
+func (im *LegacyImporter) ProposalActions(rows []LegacyProposalAction) error {
+	for _, p := range rows {
 		if p.Kind != "undo" {
 			if err := im.proposalAction(p); err != nil {
 				return fmt.Errorf("proposal_actions %d: %w", p.ID, err)
 			}
 		}
 	}
-	for _, p := range all {
+	for _, p := range rows {
 		if p.Kind == "undo" {
 			if err := im.proposalAction(p); err != nil {
 				return fmt.Errorf("proposal_actions %d: %w", p.ID, err)
 			}
 		}
 	}
-	im.rep.Proposal = int64(len(all))
+	im.rep.Proposal = int64(len(rows))
 	seen := map[string]int{}
-	for _, p := range all {
+	for _, p := range rows {
 		if p.Kind == "undo" {
 			continue
 		}
@@ -434,7 +380,7 @@ func (im *LegacyImporter) ProposalActions() error {
 	return nil
 }
 
-type legacyProposal struct {
+type LegacyProposalAction struct {
 	ID         int64
 	ProposalID int64
 	TS         float64
@@ -447,7 +393,7 @@ type legacyProposal struct {
 	Error      sql.NullString
 }
 
-func (im *LegacyImporter) proposalAction(p legacyProposal) error {
+func (im *LegacyImporter) proposalAction(p LegacyProposalAction) error {
 	operation := proposalOperation(p.Action)
 	if p.Kind == "undo" {
 		if !p.UndoOf.Valid {
@@ -571,23 +517,8 @@ func proposalOperation(action string) string {
 	return "legacy_proposal_action"
 }
 
-func (im *LegacyImporter) WriteResolutions() error {
-	rows, err := im.src.QueryContext(im.ctx,
-		"SELECT id, ts, actor, source, kind, row_id, proposal_id, outcome, prior_error FROM write_resolutions ORDER BY id")
-	if err != nil {
-		return err
-	}
-	all, err := db.Collect(rows, func(r *sql.Rows) (legacyResolution, error) {
-		var l legacyResolution
-		var proposalID sql.NullInt64
-		err := r.Scan(&l.ID, &l.TS, &l.Actor, &l.Source, &l.Kind, &l.RowID, &proposalID, &l.Outcome, &l.PriorError)
-		l.ProposalID = proposalID
-		return l, err
-	})
-	if err != nil {
-		return err
-	}
-	for _, l := range all {
+func (im *LegacyImporter) WriteResolutions(rows []LegacyResolution) error {
+	for _, l := range rows {
 		if err := im.writeResolution(l); err != nil {
 			return fmt.Errorf("write_resolutions %d: %w", l.ID, err)
 		}
@@ -596,7 +527,7 @@ func (im *LegacyImporter) WriteResolutions() error {
 	return nil
 }
 
-type legacyResolution struct {
+type LegacyResolution struct {
 	ID         int64
 	TS         float64
 	Actor      string
@@ -608,7 +539,7 @@ type legacyResolution struct {
 	PriorError string
 }
 
-func (im *LegacyImporter) writeResolution(l legacyResolution) error {
+func (im *LegacyImporter) writeResolution(l LegacyResolution) error {
 	var effectID, proposalID *int64
 	approvalOnly := l.Outcome == "approved" || l.Outcome == "dismissed" || l.Outcome == "suppressed"
 	if approvalOnly {
@@ -756,7 +687,7 @@ func (im *LegacyImporter) Finish() error {
 	return nil
 }
 
-func (a legacyAuto) json() string {
+func (a LegacyAutoAction) json() string {
 	return mustJSON(map[string]any{
 		"id": a.ID, "ts": a.TS, "account": a.Account, "message_id": a.MessageID, "digest": a.Digest, "kind": a.Kind,
 		"src": nullString(a.Src), "dest": nullString(a.Dest), "before": nullString(a.Before), "after": nullString(a.After),
@@ -765,7 +696,7 @@ func (a legacyAuto) json() string {
 	})
 }
 
-func (a legacyAgent) json() string {
+func (a LegacyAgentWrite) json() string {
 	return mustJSON(map[string]any{
 		"id": a.ID, "ts": a.TS, "thread_id": nullInt(a.ThreadID), "run_id": nullInt(a.RunID), "tool": a.Tool,
 		"target": a.Target, "before_json": nullString(a.Before), "after_json": nullString(a.After),
@@ -774,7 +705,7 @@ func (a legacyAgent) json() string {
 	})
 }
 
-func (p legacyProposal) json() string {
+func (p LegacyProposalAction) json() string {
 	return mustJSON(map[string]any{
 		"id": p.ID, "proposal_id": p.ProposalID, "ts": p.TS, "lease": p.Lease, "kind": p.Kind,
 		"undo_of": nullInt(p.UndoOf), "action": p.Action, "undo": nullString(p.Undo), "state": p.State,
@@ -782,7 +713,7 @@ func (p legacyProposal) json() string {
 	})
 }
 
-func (l legacyResolution) json() string {
+func (l LegacyResolution) json() string {
 	return mustJSON(map[string]any{
 		"id": l.ID, "ts": l.TS, "actor": l.Actor, "source": l.Source, "kind": l.Kind, "row_id": l.RowID,
 		"proposal_id": nullInt(l.ProposalID), "outcome": l.Outcome, "prior_error": l.PriorError,
