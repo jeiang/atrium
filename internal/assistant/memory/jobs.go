@@ -169,12 +169,21 @@ func claim(ctx context.Context, d *db.DB, threadID int64, now float64, limit int
 
 func runJob(ctx context.Context, d *db.DB, threadID int64, job Job, o WorkOptions) (bool, error) {
 	var text, state string
-	err := d.Read.QueryRowContext(ctx, "SELECT text, state FROM memory_nodes WHERE id = ?", job.NodeID).Scan(&text, &state)
+	var from, to int64
+	err := d.Read.QueryRowContext(ctx,
+		"SELECT text, state, src_from_seq, src_to_seq FROM memory_nodes WHERE id = ?", job.NodeID).Scan(&text, &state, &from, &to)
 	if errors.Is(err, sql.ErrNoRows) || (err == nil && state != Pending) {
 		return false, finishJob(ctx, d, job.ID, JobDone, nil)
 	}
 	if err != nil {
 		return false, err
+	}
+	source, err := sourceText(ctx, d.Read, threadID, from, to)
+	if err != nil {
+		return false, err
+	}
+	if source == "" {
+		source = text
 	}
 	limit, err := NodeBytes(ctx, d.Read)
 	if err != nil {
@@ -184,11 +193,11 @@ func runJob(ctx context.Context, d *db.DB, threadID int64, job Job, o WorkOption
 	if err != nil {
 		return false, err
 	}
-	if cerr := capCheck(ctx, d.Read, o.Model, len(text)+len(root)); cerr != nil {
+	if cerr := capCheck(ctx, d.Read, o.Model, len(source)+len(root)); cerr != nil {
 		msg := cerr.Error()
 		return false, finishJob(ctx, d, job.ID, JobFail, &msg)
 	}
-	answer, resp, retry, err := summarize(ctx, o.Client, o.Model, o.Effort, text, root, limit)
+	answer, resp, retry, err := summarize(ctx, o.Client, o.Model, o.Effort, source, root, limit)
 	if retry {
 		_, uerr := d.Write.ExecContext(ctx,
 			"UPDATE memory_jobs SET state = ?, attempts = attempts + 1, next_at = ?, lease_until = NULL WHERE id = ?",
@@ -200,7 +209,7 @@ func runJob(ctx context.Context, d *db.DB, threadID int64, job Job, o WorkOption
 	}
 	nodeState := Summary
 	if answer == "" {
-		answer, nodeState = flatten(text, limit), Fallback
+		answer, nodeState = flatten(source, limit), Fallback
 	}
 	answer = clip(answer, limit)
 	if _, err := d.Write.ExecContext(ctx,
@@ -214,6 +223,25 @@ func runJob(ctx context.Context, d *db.DB, threadID int64, job Job, o WorkOption
 		}
 	}
 	return true, finishJob(ctx, d, job.ID, JobDone, nil)
+}
+
+func sourceText(ctx context.Context, q db.Querier, threadID, from, to int64) (string, error) {
+	messages, err := journal.MessagesOf(ctx, q, threadID)
+	if err != nil {
+		return "", err
+	}
+	parts := make([]string, 0, len(messages))
+	for _, m := range messages {
+		if m.Seq < from || m.Seq > to {
+			continue
+		}
+		text, _, err := render(m)
+		if err != nil {
+			return "", err
+		}
+		parts = append(parts, text)
+	}
+	return strings.Join(parts, "\n"), nil
 }
 
 func summarize(ctx context.Context, client *anthropic.Client, model, effort, source, root string, limit int) (string, *anthropic.Message, bool, error) {
