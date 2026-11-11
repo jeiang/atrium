@@ -8,6 +8,7 @@
       (root + "/cmd")
       (root + "/internal")
       (root + "/tools/settingsgen")
+      (root + "/tools/tableownership")
       (root + "/docs/config")
       (root + "/docs/tools.md")
       (root + "/docs/integrations.md")

@@ -17,6 +17,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail/accounts"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -84,13 +85,12 @@ func (s *State) Account(name string) (AccountSpec, bool) {
 func ExistingAccounts(ctx context.Context, q db.Querier) ([]AccountSpec, error) {
 	var out []AccountSpec
 	for _, spec := range From(ctx).Accounts() {
-		var one int
-		err := q.QueryRowContext(ctx, "SELECT 1 FROM accounts WHERE name = ?", spec.Name).Scan(&one)
-		if errors.Is(err, sql.ErrNoRows) {
-			continue
-		}
+		found, err := accounts.Exists(ctx, q, spec.Name)
 		if err != nil {
 			return nil, err
+		}
+		if !found {
+			continue
 		}
 		out = append(out, spec)
 	}

@@ -258,9 +258,7 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 		if err := json.Unmarshal(payload, &u); err != nil {
 			return nil, writes.UndoError("task undo payload is invalid")
 		}
-		if _, err := q.ExecContext(ctx,
-			"UPDATE tasks SET title = ?, notes = ?, due = ?, remind_at = ?, status = ?, priority = ?, updated_ts = ?, done_ts = ? WHERE id = ?",
-			u.Task.Title, u.Task.Notes, u.Task.Due, u.Task.RemindAt, u.Task.Status, u.Task.Priority, u.Task.UpdatedTS, u.Task.DoneTS, u.Task.ID); err != nil {
+		if _, err := tasks.Restore(ctx, q, u.Task); err != nil {
 			return nil, err
 		}
 		return map[string]any{"restored": u.Task.ID}, nil

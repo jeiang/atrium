@@ -111,29 +111,27 @@ func NearestFiled(ctx context.Context, q Querier, m *rules.Message, count, knnMa
 	if err != nil {
 		return nil, err
 	}
-	table := idx.MessageTable()
-	var blob []byte
-	err = q.QueryRowContext(ctx, "SELECT embedding FROM "+table+" WHERE rowid = ?", m.ID).Scan(&blob)
+	blob, err := embed.MessageEmbedding(ctx, q, idx, m.ID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	var total int
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+table+" WHERE account = ?", m.Account).Scan(&total); err != nil {
+	total, err := embed.MessageAccountCount(ctx, q, idx, m.Account)
+	if err != nil {
 		return nil, err
 	}
 	k := max(count*4, 32)
 	for {
-		hits, err := knn(ctx, q, table, blob, min(k, max(total, 1), knnMax), m.Account)
+		hits, err := embed.MessageNeighbors(ctx, q, idx, blob, min(k, max(total, 1), knnMax), m.Account)
 		if err != nil {
 			return nil, err
 		}
 		var ids []any
 		for _, h := range hits {
-			if h.rowid != m.ID {
-				ids = append(ids, h.rowid)
+			if h.ID != m.ID {
+				ids = append(ids, h.ID)
 			}
 		}
 		info := map[int64]Neighbor{}
@@ -157,8 +155,8 @@ func NearestFiled(ctx context.Context, q Querier, m *rules.Message, count, knnMa
 		}
 		var neighbors []Neighbor
 		for _, h := range hits {
-			if n, ok := info[h.rowid]; ok {
-				n.Similarity = max(1.0-h.distance, 0.0)
+			if n, ok := info[h.ID]; ok {
+				n.Similarity = max(1.0-h.Distance, 0.0)
 				neighbors = append(neighbors, n)
 			}
 		}
@@ -167,24 +165,6 @@ func NearestFiled(ctx context.Context, q Querier, m *rules.Message, count, knnMa
 		}
 		k *= 4
 	}
-}
-
-type hit struct {
-	rowid    int64
-	distance float64
-}
-
-func knn(ctx context.Context, q Querier, table string, blob []byte, k int, account string) ([]hit, error) {
-	rows, err := q.QueryContext(ctx,
-		"SELECT rowid, distance FROM "+table+" WHERE embedding MATCH ? AND k = ? AND account = ?", blob, k, account)
-	if err != nil {
-		return nil, err
-	}
-	return db.Collect(rows, func(r *sql.Rows) (hit, error) {
-		var h hit
-		err := r.Scan(&h.rowid, &h.distance)
-		return h, err
-	})
 }
 
 func Vote(neighbors []Neighbor) (folder string, share float64, ok bool) {

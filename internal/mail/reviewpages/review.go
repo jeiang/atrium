@@ -3,26 +3,23 @@ package reviewpages
 import (
 	"cmp"
 	"context"
-	"database/sql"
 	"net/http"
 	"slices"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/serverops"
 )
 
-var needsQuery = "SELECT (SELECT COUNT(*) FROM proposals WHERE status = 'pending') + " +
-	"(SELECT COUNT(*) FROM proposals p WHERE p.status <> 'pending' AND EXISTS " +
-	"(SELECT 1 FROM proposal_actions a WHERE a.proposal_id = p.id AND " + ledger.BlockedSQL("a") + ")) + " +
-	"(SELECT COUNT(*) FROM drafts WHERE status IN ('draft', 'unknown'))"
-
 func needsCount(ctx context.Context, q db.Querier) (int, error) {
-	var n int
-	err := q.QueryRowContext(ctx, needsQuery).Scan(&n)
-	return n, err
+	n, err := proposals.NeedsCount(ctx, q)
+	if err != nil {
+		return 0, err
+	}
+	d, err := drafts.CountNeeds(ctx, q)
+	return n + d, err
 }
 
 type needsData struct {
@@ -44,20 +41,14 @@ type FindingView struct {
 }
 
 func (s *service) findings(ctx context.Context) []FindingView {
-	rows, err := s.deps.DB.Read.QueryContext(ctx,
-		"SELECT id, fact, severity, title, body, created_at FROM ops_findings WHERE resolved_at IS NULL "+
-			"ORDER BY created_at DESC, id DESC LIMIT 20")
+	found, err := serverops.ReviewFindings(ctx, s.deps.DB.Read, 20)
 	check(err)
-	out, err := db.Collect(rows, func(r *sql.Rows) (FindingView, error) {
-		var f FindingView
-		var fact string
-		if err := r.Scan(&f.ID, &fact, &f.Severity, &f.Title, &f.Body, &f.Created); err != nil {
-			return FindingView{}, err
-		}
-		f.Host, f.Metric, _ = strings.Cut(fact, ":")
-		return f, nil
-	})
-	check(err)
+	out := make([]FindingView, 0, len(found))
+	for _, f := range found {
+		view := FindingView{ID: f.ID, Severity: f.Severity, Title: f.Title, Body: f.Body, Created: f.CreatedAt}
+		view.Host, view.Metric, _ = strings.Cut(f.Fact, ":")
+		out = append(out, view)
+	}
 	return out
 }
 

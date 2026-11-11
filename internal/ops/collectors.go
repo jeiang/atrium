@@ -4,7 +4,17 @@ import (
 	"context"
 	"time"
 
+	"github.com/jeiang/atrium/internal/actionlink/counts"
+	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/integrations"
+	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/drafts"
+	"github.com/jeiang/atrium/internal/mail/openloops"
+	mailsync "github.com/jeiang/atrium/internal/mail/sync"
+	notifycounts "github.com/jeiang/atrium/internal/notify/counts"
+	"github.com/jeiang/atrium/internal/proposals"
 )
 
 func gauge(name, help string, collect func(ctx context.Context, q db.Querier) ([]Sample, error)) Metric {
@@ -23,17 +33,20 @@ func init() {
 			return one(float64(db.ExclusiveTimeouts.Load())), nil
 		}})
 	Register(gauge("atrium_queue_depth", "Open items in each attention queue.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
-		queues := []struct{ name, query string }{
-			{"thread_queue", "SELECT COUNT(*) FROM thread_queue WHERE consumed_at IS NULL"},
-			{"embed_index", "SELECT COALESCE(SUM(total - done), 0) FROM embed_index"},
-			{"drafts", "SELECT COUNT(*) FROM drafts WHERE status = 'draft'"},
-			{"proposals", "SELECT COUNT(*) FROM proposals WHERE status = 'pending'"},
-			{"open_loops", "SELECT COUNT(*) FROM open_loops"},
+		queues := []struct {
+			name  string
+			count func(context.Context, db.Querier) (int, error)
+		}{
+			{"thread_queue", journal.QueueDepth},
+			{"embed_index", embed.PendingTotal},
+			{"drafts", drafts.CountDraft},
+			{"proposals", proposals.CountPending},
+			{"open_loops", openloops.CountOpen},
 		}
 		out := make([]Sample, 0, len(queues))
 		for _, queue := range queues {
-			var n int64
-			if err := q.QueryRowContext(ctx, queue.query).Scan(&n); err != nil {
+			n, err := queue.count(ctx, q)
+			if err != nil {
 				return nil, err
 			}
 			out = append(out, Sample{Labels: [][2]string{{"queue", queue.name}}, Value: float64(n)})
@@ -41,114 +54,80 @@ func init() {
 		return out, nil
 	}))
 	Register(gauge("atrium_integration_state", "Current health state of each configured integration.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
-		rows, err := q.QueryContext(ctx, "SELECT name, state FROM integration_health ORDER BY name")
+		states, err := integrations.HealthStates(ctx, q)
 		if err != nil {
 			return nil, err
 		}
-		defer func() { _ = rows.Close() }()
-		var out []Sample
-		for rows.Next() {
-			var name, state string
-			if err := rows.Scan(&name, &state); err != nil {
-				return nil, err
-			}
-			out = append(out, Sample{Labels: [][2]string{{"integration", name}, {"state", state}}, Value: 1})
+		out := make([]Sample, 0, len(states))
+		for _, state := range states {
+			out = append(out, Sample{Labels: [][2]string{{"integration", state.Name}, {"state", state.State}}, Value: 1})
 		}
-		return out, rows.Err()
+		return out, nil
 	}))
 	Register(gauge("atrium_action_links_outstanding", "Phone action links that are unused and unexpired.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
-		var n int64
 		now := float64(time.Now().UnixNano()) / 1e9
-		err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM action_links WHERE used_ts IS NULL AND expires_ts > ?", now).Scan(&n)
+		n, err := counts.Outstanding(ctx, q, now)
 		return one(float64(n)), err
 	}))
 	Register(gauge("atrium_action_links_minted_last_hour", "Phone action links created in the last hour.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
-		var n int64
 		now := float64(time.Now().UnixNano()) / 1e9
-		err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM action_links WHERE created_ts > ?", now-3600).Scan(&n)
+		n, err := counts.MintedSince(ctx, q, now-3600)
 		return one(float64(n)), err
 	}))
 	Register(gauge("atrium_action_links_used_total", "Phone action links redeemed since the database was created.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
-		var n int64
-		err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM action_links WHERE used_ts IS NOT NULL").Scan(&n)
+		n, err := counts.Used(ctx, q)
 		return one(float64(n)), err
 	}))
 	Register(gauge("atrium_endpoint_probe_ok", "1 when the last probe of a chat or embed endpoint succeeded.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
-		rows, err := q.QueryContext(ctx, "SELECT kind, ok FROM endpoint_probes ORDER BY kind")
+		probes, err := mail.Probes(ctx, q)
 		if err != nil {
 			return nil, err
 		}
-		defer func() { _ = rows.Close() }()
-		var out []Sample
-		for rows.Next() {
-			var kind string
-			var ok int64
-			if err := rows.Scan(&kind, &ok); err != nil {
-				return nil, err
-			}
-			out = append(out, Sample{Labels: [][2]string{{"kind", kind}}, Value: float64(ok)})
+		out := make([]Sample, 0, len(probes))
+		for _, probe := range probes {
+			out = append(out, Sample{Labels: [][2]string{{"kind", probe.Kind}}, Value: float64(probe.OK)})
 		}
-		return out, rows.Err()
+		return out, nil
 	}))
 	Register(gauge("atrium_endpoint_probe_timestamp_seconds", "Time of the last chat or embed endpoint probe.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
-		rows, err := q.QueryContext(ctx, "SELECT kind, probed_at FROM endpoint_probes ORDER BY kind")
+		probes, err := mail.Probes(ctx, q)
 		if err != nil {
 			return nil, err
 		}
-		defer func() { _ = rows.Close() }()
-		var out []Sample
-		for rows.Next() {
-			var kind string
-			var at float64
-			if err := rows.Scan(&kind, &at); err != nil {
-				return nil, err
-			}
-			out = append(out, Sample{Labels: [][2]string{{"kind", kind}}, Value: at})
+		out := make([]Sample, 0, len(probes))
+		for _, probe := range probes {
+			out = append(out, Sample{Labels: [][2]string{{"kind", probe.Kind}}, Value: probe.ProbedAt})
 		}
-		return out, rows.Err()
+		return out, nil
 	}))
 	Register(gauge("atrium_endpoint_probe_dimension", "Embedding dimension reported by the last embed endpoint probe.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
-		rows, err := q.QueryContext(ctx, "SELECT kind, COALESCE(dimension, 0) FROM endpoint_probes ORDER BY kind")
+		probes, err := mail.Probes(ctx, q)
 		if err != nil {
 			return nil, err
 		}
-		defer func() { _ = rows.Close() }()
-		var out []Sample
-		for rows.Next() {
-			var kind string
-			var dimension int64
-			if err := rows.Scan(&kind, &dimension); err != nil {
-				return nil, err
-			}
-			out = append(out, Sample{Labels: [][2]string{{"kind", kind}}, Value: float64(dimension)})
+		out := make([]Sample, 0, len(probes))
+		for _, probe := range probes {
+			out = append(out, Sample{Labels: [][2]string{{"kind", probe.Kind}}, Value: float64(probe.Dimension)})
 		}
-		return out, rows.Err()
+		return out, nil
 	}))
 	Register(gauge("atrium_notifications_undelivered", "Recorded notifications that were not delivered.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
-		var n int64
-		err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM notifications WHERE delivered = 0").Scan(&n)
+		n, err := notifycounts.Undelivered(ctx, q)
 		return one(float64(n)), err
 	}))
 	Register(gauge("atrium_notification_push_failing_devices", "Push devices whose last three or more deliveries failed.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
-		var n int64
-		err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM push_subscriptions WHERE failure_count >= 3").Scan(&n)
+		n, err := notifycounts.FailingPush(ctx, q)
 		return one(float64(n)), err
 	}))
 	Register(gauge("atrium_mail_sync_last_success_timestamp_seconds", "Finish time of the last successful mail sync, by account.", func(ctx context.Context, q db.Querier) ([]Sample, error) {
-		rows, err := q.QueryContext(ctx, "SELECT name, last_sync_at FROM accounts WHERE last_sync_at IS NOT NULL ORDER BY name")
+		accounts, err := mailsync.AccountSyncTimes(ctx, q)
 		if err != nil {
 			return nil, err
 		}
-		defer func() { _ = rows.Close() }()
-		var out []Sample
-		for rows.Next() {
-			var name string
-			var at float64
-			if err := rows.Scan(&name, &at); err != nil {
-				return nil, err
-			}
-			out = append(out, Sample{Labels: [][2]string{{"account", name}}, Value: at})
+		out := make([]Sample, 0, len(accounts))
+		for _, account := range accounts {
+			out = append(out, Sample{Labels: [][2]string{{"account", account.Name}}, Value: account.LastSyncAt})
 		}
-		return out, rows.Err()
+		return out, nil
 	}))
 }

@@ -2,7 +2,9 @@ package embed
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,7 +18,10 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
+	kbembedding "github.com/jeiang/atrium/internal/kb/embedding"
 	"github.com/jeiang/atrium/internal/logx"
+	mailembedding "github.com/jeiang/atrium/internal/mail/embedding"
+	notionembedding "github.com/jeiang/atrium/internal/notion/embedding"
 	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/textutil"
 )
@@ -59,6 +64,11 @@ func KBDocumentText(ctx context.Context, title, aliases, body string) string {
 
 func QueryText(query string) string {
 	return "task: search result | query: " + query
+}
+
+func Hash(text string) string {
+	sum := sha256.Sum256([]byte(text))
+	return hex.EncodeToString(sum[:])
 }
 
 type embeddingsRequest struct {
@@ -146,107 +156,71 @@ func Serialize(vector []float64) []byte {
 
 type source[T any] struct {
 	pending   string
+	compare   bool
 	missing   func(Index) string
-	query     func(string) string
-	scan      func(*sql.Rows) (T, error)
+	load      func(context.Context, db.Querier, string, int, int64) ([]T, error)
+	reload    func(context.Context, db.Querier, int64) (T, bool, error)
 	document  func(context.Context, T) string
+	hash      func(T) string
 	table     func(Index) string
 	insert    string
-	mark      string
+	mark      func(context.Context, db.Querier, int64, string) error
 	id        func(T) int64
 	partition func(T) string
 }
 
-type messageRow struct {
-	id      int64
-	account string
-	subject string
-	name    string
-	addr    string
-	body    string
-}
-
-var messageSource = source[messageRow]{
-	pending: "m.embedded = 0",
+var messageSource = source[mailembedding.Message]{
+	pending: "m.embedded_hash IS NULL",
 	missing: func(i Index) string { return "m.id NOT IN (SELECT rowid FROM " + i.MessageTable() + ")" },
-	query: func(where string) string {
-		return "SELECT m.id, m.account, m.subject, m.from_name, m.from_addr, f.body FROM messages m " +
-			"JOIN message_fts f ON f.rowid = m.id WHERE " + where + " AND m.gone_at IS NULL ORDER BY m.id LIMIT ?"
+	load:    mailembedding.Pending,
+	reload:  mailembedding.Load,
+	document: func(ctx context.Context, m mailembedding.Message) string {
+		return DocumentText(ctx, m.Subject, m.Name, m.Addr, m.Body)
 	},
-	scan: func(r *sql.Rows) (messageRow, error) {
-		var m messageRow
-		var subject, name, addr, body sql.NullString
-		err := r.Scan(&m.id, &m.account, &subject, &name, &addr, &body)
-		m.subject, m.name, m.addr, m.body = subject.String, name.String, addr.String, body.String
-		return m, err
-	},
-	document: func(ctx context.Context, m messageRow) string {
-		return DocumentText(ctx, m.subject, m.name, m.addr, m.body)
-	},
+	hash:   func(m mailembedding.Message) string { return m.EmbeddedHash },
 	table:  func(i Index) string { return i.MessageTable() },
 	insert: "INSERT INTO %s (rowid, account, embedding) VALUES (?, ?, ?)",
-	mark:   "UPDATE messages SET embedded = 1 WHERE id = ?",
-	id:     func(m messageRow) int64 { return m.id },
-	partition: func(m messageRow) string {
-		return m.account
+	mark:   mailembedding.Mark,
+	id:     func(m mailembedding.Message) int64 { return m.ID },
+	partition: func(m mailembedding.Message) string {
+		return m.Account
 	},
 }
 
-type notionRow struct {
-	rid                   int64
-	title, path, markdown string
-	private               int64
-}
-
-var notionSource = source[notionRow]{
-	pending: "embedded = 0",
+var notionSource = source[notionembedding.Page]{
+	compare: true,
 	missing: func(i Index) string { return "rid NOT IN (SELECT rowid FROM " + i.NotionTable() + ")" },
-	query: func(where string) string {
-		return "SELECT rid, title, path, markdown, private FROM notion_pages WHERE " + where + " AND in_trash = 0 ORDER BY rid LIMIT ?"
+	load:    notionembedding.Pending,
+	reload:  notionembedding.Load,
+	document: func(ctx context.Context, p notionembedding.Page) string {
+		return NotionDocumentText(ctx, p.Title, p.Path, p.Markdown)
 	},
-	scan: func(r *sql.Rows) (notionRow, error) {
-		var p notionRow
-		err := r.Scan(&p.rid, &p.title, &p.path, &p.markdown, &p.private)
-		return p, err
-	},
-	document: func(ctx context.Context, p notionRow) string {
-		return NotionDocumentText(ctx, p.title, p.path, p.markdown)
-	},
+	hash:   func(p notionembedding.Page) string { return p.EmbeddedHash },
 	table:  func(i Index) string { return i.NotionTable() },
 	insert: "INSERT INTO %s (rowid, visibility, embedding) VALUES (?, ?, ?)",
-	mark:   "UPDATE notion_pages SET embedded = 1 WHERE rid = ?",
-	id:     func(p notionRow) int64 { return p.rid },
-	partition: func(p notionRow) string {
-		if p.private != 0 {
+	mark:   notionembedding.Mark,
+	id:     func(p notionembedding.Page) int64 { return p.RID },
+	partition: func(p notionembedding.Page) string {
+		if p.Private != 0 {
 			return VisibilityPrivate
 		}
 		return VisibilityPublic
 	},
 }
 
-type kbRow struct {
-	id                   int64
-	title, aliases, body string
-}
-
-var kbSource = source[kbRow]{
-	pending: "embedded = 0 AND retracted_at IS NULL",
+var kbSource = source[kbembedding.Record]{
+	compare: true,
 	missing: func(i Index) string { return "id NOT IN (SELECT rowid FROM " + i.KBTable() + ")" },
-	query: func(where string) string {
-		return "SELECT id, title, aliases, body FROM kb_records WHERE " + where + " AND retracted_at IS NULL ORDER BY id LIMIT ?"
+	load:    kbembedding.Pending,
+	reload:  kbembedding.Load,
+	document: func(ctx context.Context, k kbembedding.Record) string {
+		return KBDocumentText(ctx, k.Title, k.Aliases, k.Body)
 	},
-	scan: func(r *sql.Rows) (kbRow, error) {
-		var k kbRow
-		err := r.Scan(&k.id, &k.title, &k.aliases, &k.body)
-		return k, err
-	},
-	document: func(ctx context.Context, k kbRow) string {
-		return KBDocumentText(ctx, k.title, k.aliases, k.body)
-	},
+	hash:   func(k kbembedding.Record) string { return k.EmbeddedHash },
 	table:  func(i Index) string { return i.KBTable() },
 	insert: "INSERT INTO %s (rowid, embedding) VALUES (?, ?)",
-	mark:   "UPDATE kb_records SET embedded = 1 WHERE id = ?",
-	id:     func(k kbRow) int64 { return k.id },
+	mark:   kbembedding.Mark,
+	id:     func(k kbembedding.Record) int64 { return k.ID },
 }
 
 func textsOr(texts TextsFunc) TextsFunc {
@@ -256,18 +230,37 @@ func textsOr(texts TextsFunc) TextsFunc {
 	return texts
 }
 
-func fill[T any](ctx context.Context, d *db.DB, url string, idx Index, src source[T], where string, mark bool, texts TextsFunc) (int, error) {
-	rows, err := d.Read.QueryContext(ctx, src.query(where), endpoint.From(ctx).Batch)
-	if err != nil {
-		return 0, err
+func fill[T any](ctx context.Context, d *db.DB, url string, idx Index, src source[T], where string, compare bool, texts TextsFunc) (int, error) {
+	limit := endpoint.From(ctx).Batch
+	var batch []T
+	var docs, hashes []string
+	var after int64
+	for len(batch) < limit {
+		want := limit - len(batch)
+		rows, err := src.load(ctx, d.Read, where, want, after)
+		if err != nil {
+			return 0, err
+		}
+		if len(rows) == 0 {
+			break
+		}
+		for _, item := range rows {
+			after = src.id(item)
+			doc := src.document(ctx, item)
+			hash := Hash(doc)
+			if compare && src.hash(item) == hash {
+				continue
+			}
+			batch = append(batch, item)
+			docs = append(docs, doc)
+			hashes = append(hashes, hash)
+		}
+		if len(rows) < want {
+			break
+		}
 	}
-	batch, err := collect(rows, src.scan)
-	if err != nil || len(batch) == 0 {
-		return 0, err
-	}
-	docs := make([]string, len(batch))
-	for i, item := range batch {
-		docs[i] = src.document(ctx, item)
+	if len(batch) == 0 {
+		return 0, nil
 	}
 	vectors, err := textsOr(texts)(ctx, url, docs)
 	if err != nil {
@@ -276,21 +269,29 @@ func fill[T any](ctx context.Context, d *db.DB, url string, idx Index, src sourc
 	table := src.table(idx)
 	err = d.WithTx(ctx, func(tx *sql.Tx) error {
 		for i, item := range batch {
-			if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE rowid = ?", src.id(item)); err != nil {
+			id := src.id(item)
+			current, ok, err := src.reload(ctx, tx, id)
+			if err != nil {
 				return err
 			}
-			args := []any{src.id(item)}
+			if !ok || Hash(src.document(ctx, current)) != hashes[i] {
+				if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE rowid = ?", id); err != nil {
+					return err
+				}
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, "DELETE FROM "+table+" WHERE rowid = ?", id); err != nil {
+				return err
+			}
+			args := []any{id}
 			if src.partition != nil {
-				args = append(args, src.partition(item))
+				args = append(args, src.partition(current))
 			}
 			args = append(args, Serialize(vectors[i]))
 			if _, err := tx.ExecContext(ctx, fmt.Sprintf(src.insert, table), args...); err != nil {
 				return err
 			}
-			if !mark {
-				continue
-			}
-			if _, err := tx.ExecContext(ctx, src.mark, src.id(item)); err != nil {
+			if err := src.mark(ctx, tx, id, hashes[i]); err != nil {
 				return err
 			}
 		}
@@ -309,7 +310,7 @@ func drain[T any](ctx context.Context, d *db.DB, url string, src source[T], text
 		if err != nil {
 			return done, err
 		}
-		n, err := fill(ctx, d, url, idx, src, src.pending, true, texts)
+		n, err := fill(ctx, d, url, idx, src, src.pending, src.compare, texts)
 		done += n
 		if err != nil || n == 0 {
 			return done, err
@@ -340,7 +341,7 @@ func Reindex(ctx context.Context, d *db.DB, url string) (int, error) {
 	if _, err := d.Write.ExecContext(ctx, "DELETE FROM "+idx.MessageTable()); err != nil {
 		return 0, err
 	}
-	if _, err := d.Write.ExecContext(ctx, "UPDATE messages SET embedded = 0"); err != nil {
+	if err := mailembedding.Reset(ctx, d.Write); err != nil {
 		return 0, err
 	}
 	return Pending(ctx, d, url, nil)
@@ -364,19 +365,6 @@ func Fill(ctx context.Context, d *db.DB, url string, idx Index, texts TextsFunc)
 		return n, err
 	}
 	return fill(ctx, d, url, idx, kbSource, kbSource.missing(idx), false, texts)
-}
-
-func collect[T any](rows *sql.Rows, scan func(*sql.Rows) (T, error)) ([]T, error) {
-	defer func() { _ = rows.Close() }()
-	var out []T
-	for rows.Next() {
-		v, err := scan(rows)
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, v)
-	}
-	return out, rows.Err()
 }
 
 func EmbedURL(ctx context.Context, q endpoint.Querier) (string, error) {

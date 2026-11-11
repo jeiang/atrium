@@ -18,7 +18,9 @@ import (
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/notify"
+	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/writes"
 )
@@ -192,46 +194,34 @@ func dreamingOf(ctx context.Context, q db.Querier, now float64) (dreaming, error
 		return out, nil
 	}
 	out.run = runs[0].id
-	ids := make([]any, 0, len(runs))
-	marks := strings.TrimSuffix(strings.Repeat("?,", len(runs)), ",")
+	runIDs := make([]int64, 0, len(runs))
 	for _, run := range runs {
-		ids = append(ids, run.id)
+		runIDs = append(runIDs, run.id)
 	}
-	visible := "r.private = 0 AND (r.project_id IS NULL OR r.project_id NOT IN (SELECT id FROM projects WHERE private = 1))"
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM kb_records r WHERE r.source_run_id IN ("+marks+") AND "+visible, ids...).Scan(&out.new); err != nil {
+	if out.new, err = kb.CountRunRecords(ctx, q, runIDs); err != nil {
 		return out, err
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_writes w JOIN kb_records r ON w.target = 'kb:' || r.id WHERE w.run_id IN ("+marks+") AND w.tool = 'kb_write' AND r.id NOT IN (SELECT id FROM kb_records WHERE source_run_id IN ("+marks+")) AND "+visible, append(append([]any{}, ids...), ids...)...).Scan(&out.edited); err != nil {
+	if out.edited, err = kb.CountRunWrites(ctx, q, runIDs, "kb_write", true); err != nil {
 		return out, err
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_writes w JOIN kb_records r ON w.target = 'kb:' || r.id WHERE w.run_id IN ("+marks+") AND w.tool = 'kb_retract' AND "+visible, ids...).Scan(&out.retracted); err != nil {
+	if out.retracted, err = kb.CountRunWrites(ctx, q, runIDs, "kb_retract", false); err != nil {
 		return out, err
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM agent_writes WHERE run_id IN ("+marks+") AND tool = 'task_add'", ids...).Scan(&out.tasks); err != nil {
+	if out.tasks, err = writes.CountForRuns(ctx, q, runIDs, "task_add"); err != nil {
 		return out, err
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM kb_records r WHERE r.source_run_id IN ("+marks+") AND r.retracted_at IS NULL AND r.title LIKE 'Lesson: %' AND "+visible, ids...).Scan(&out.lessons); err != nil {
+	if out.lessons, err = kb.CountRunLessons(ctx, q, runIDs); err != nil {
 		return out, err
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM kb_records r WHERE r.source_run_id IN ("+marks+") AND r.retracted_at IS NULL AND r.marks != 0 AND "+visible, ids...).Scan(&out.marked); err != nil {
+	if out.marked, err = kb.CountRunMarked(ctx, q, runIDs); err != nil {
 		return out, err
 	}
-	rows, err = q.QueryContext(ctx,
-		"SELECT r.id, r.title, r.source_thread_id, r.marks FROM kb_records r WHERE r.source_run_id IN ("+marks+") AND r.retracted_at IS NULL AND r.aliases LIKE ? AND "+visible+" ORDER BY r.id LIMIT 2",
-		append(ids, `%"conflict"%`)...)
+	conflicts, err := kb.RunConflicts(ctx, q, runIDs, `%"conflict"%`)
 	if err != nil {
 		return out, err
 	}
-	defer func() { _ = rows.Close() }()
-	for rows.Next() {
-		var c conflict
-		if err := rows.Scan(&c.id, &c.title, &c.thread, &c.marks); err != nil {
-			return out, err
-		}
-		out.conflicts = append(out.conflicts, c)
-	}
-	if err := rows.Err(); err != nil {
-		return out, err
+	for _, c := range conflicts {
+		out.conflicts = append(out.conflicts, conflict{id: c.ID, title: c.Title, thread: c.Thread, marks: int64(c.Marks)})
 	}
 	if id, err := writes.UnknownTarget(ctx, q, "export:notion:"); err != nil {
 		return out, err
@@ -242,7 +232,7 @@ func dreamingOf(ctx context.Context, q db.Querier, now float64) (dreaming, error
 	} else {
 		out.exportID = id
 	}
-	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM ops_findings WHERE resolved_at IS NULL").Scan(&out.opsFinding); err != nil {
+	if out.opsFinding, err = serverops.CountUnresolved(ctx, q); err != nil {
 		return out, err
 	}
 	return out, nil

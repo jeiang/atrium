@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/mime"
 )
@@ -62,8 +63,8 @@ type Item struct {
 
 func Queued(ctx context.Context, q db.Querier, limit int) ([]Item, error) {
 	rows, err := q.QueryContext(ctx,
-		"SELECT e.message_id, m.account, e.reason FROM event_candidates e JOIN messages m ON m.id = e.message_id "+
-			"WHERE e.status = ? ORDER BY e.ts, e.message_id LIMIT ?", string(StatusQueued), limit)
+		"SELECT e.message_id, m.account, e.reason FROM event_candidates e"+mail.JoinClause("m", "m.id = e.message_id")+
+			" WHERE e.status = ? ORDER BY e.ts, e.message_id LIMIT ?", string(StatusQueued), limit)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +93,7 @@ func pending(ctx context.Context, d *db.DB, account string) ([]row, error) {
 		return nil, err
 	}
 	rows, err := d.Read.QueryContext(ctx,
-		"SELECT m.id, m.account, m.subject, m.from_name, m.from_addr, m.raw_path FROM messages m WHERE m.account = ? AND m.in_inbox = 1 "+
+		"SELECT m.id, m.account, m.subject, m.from_name, m.from_addr, m.raw_path FROM "+mail.FromClause("m")+" WHERE m.account = ? AND m.in_inbox = 1 "+
 			"AND m.seen = 0 AND m.sent = 0 AND m.gone_at IS NULL AND NOT EXISTS (SELECT 1 FROM event_candidates e WHERE e.message_id = m.id) "+
 			"ORDER BY m.id LIMIT ?", account, scan)
 	if err != nil {

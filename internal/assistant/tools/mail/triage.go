@@ -11,6 +11,7 @@ import (
 
 	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/executors"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -156,24 +157,13 @@ func proposeTriage(ctx context.Context, tc *tool.Context, payload map[string]any
 }
 
 func messageRows(ctx context.Context, tc *tool.Context, ids []int64) (map[int64]string, map[int64]string, map[int64]string, map[int64]float64, error) {
-	args := make([]any, len(ids))
-	for i, id := range ids {
-		args[i] = id
-	}
-	rows, err := tc.DB.Read.QueryContext(ctx, "SELECT id, account, subject, from_addr, date_ts FROM messages WHERE id IN (?"+strings.Repeat(",?", len(ids)-1)+")", args...)
+	found, err := mail.MessageInfos(ctx, tc.DB.Read, ids)
 	if err != nil {
 		return nil, nil, nil, nil, err
 	}
-	defer func() { _ = rows.Close() }()
 	owners, subjects, senders, dates := map[int64]string{}, map[int64]string{}, map[int64]string{}, map[int64]float64{}
-	for rows.Next() {
-		var id int64
-		var account, subject, sender string
-		var date float64
-		if err := rows.Scan(&id, &account, &subject, &sender, &date); err != nil {
-			return nil, nil, nil, nil, err
-		}
-		owners[id], subjects[id], senders[id], dates[id] = account, subject, sender, date
+	for _, m := range found {
+		owners[m.ID], subjects[m.ID], senders[m.ID], dates[m.ID] = m.Account, m.Subject, m.FromAddr, m.DateTS
 	}
-	return owners, subjects, senders, dates, rows.Err()
+	return owners, subjects, senders, dates, nil
 }

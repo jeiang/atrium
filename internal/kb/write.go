@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/projects"
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/tool"
@@ -80,8 +82,7 @@ func stateMap(r Record) map[string]any {
 }
 
 func threadProject(ctx context.Context, q db.Querier, threadID int64) (*int64, error) {
-	var project *int64
-	err := q.QueryRowContext(ctx, "SELECT project_id FROM threads WHERE id = ? AND deleted_at IS NULL", threadID).Scan(&project)
+	project, err := threads.ProjectOf(ctx, q, threadID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, tool.Error("this thread is gone")
 	}
@@ -89,12 +90,11 @@ func threadProject(ctx context.Context, q db.Querier, threadID int64) (*int64, e
 }
 
 func threadMarks(ctx context.Context, q db.Querier, threadID int64) (tool.Marks, error) {
-	var marks int64
-	err := q.QueryRowContext(ctx, "SELECT marks FROM threads WHERE id = ?", threadID).Scan(&marks)
+	marks, err := threads.MarksOfID(ctx, q, threadID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, tool.Error("this thread is gone")
 	}
-	return tool.Marks(marks), err
+	return marks, err
 }
 
 func sourceOf(ctx context.Context, q db.Querier, w Writer, in WriteInput, project *int64) (threadID int64, seq, runID *int64, err error) {
@@ -113,14 +113,11 @@ func sourceOf(ctx context.Context, q db.Querier, w Writer, in WriteInput, projec
 		run := w.RunID
 		return in.Source.ThreadID, in.Source.Seq, &run, nil
 	}
-	var first sql.NullInt64
-	if err := q.QueryRowContext(ctx, "SELECT MIN(seq) FROM thread_messages WHERE thread_id = ? AND run_id = ?",
-		w.ThreadID, w.RunID).Scan(&first); err != nil {
+	first, err := journal.MinSeq(ctx, q, w.ThreadID, w.RunID)
+	if err != nil {
 		return 0, nil, nil, err
 	}
-	if first.Valid {
-		seq = &first.Int64
-	}
+	seq = first
 	run := w.RunID
 	return w.ThreadID, seq, &run, nil
 }
@@ -129,12 +126,7 @@ func projectPrivate(ctx context.Context, q db.Querier, project *int64) (bool, er
 	if project == nil {
 		return false, nil
 	}
-	var private int64
-	err := q.QueryRowContext(ctx, "SELECT private FROM projects WHERE id = ?", *project).Scan(&private)
-	if errors.Is(err, sql.ErrNoRows) {
-		return false, nil
-	}
-	return private != 0, err
+	return projects.Private(ctx, q, *project)
 }
 
 func existing(ctx context.Context, q db.Querier, scope string, project int64, now float64) ([]exactRow, error) {
@@ -230,19 +222,15 @@ func Write(ctx context.Context, d *db.DB, reg *writes.Registry, w Writer, in Wri
 			}
 			next.Marks = rec.Marks | marks
 			next.UpdatedAt = w.Now
-			if next.Title != rec.Title || next.Body != rec.Body || strings.Join(next.Aliases, "\x00") != strings.Join(rec.Aliases, "\x00") {
-				next.Embedded = false
-			}
 			aliases, err := aliasesJSON(next.Aliases)
 			if err != nil {
 				return err
 			}
 			if _, err := tx.ExecContext(ctx,
-				"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, marks = ?, embedded = ?, updated_at = ? WHERE id = ?",
-				next.Title, aliases, next.Body, next.Scope, int64(next.Marks), b2i(next.Embedded), next.UpdatedAt, next.ID); err != nil {
+				"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, marks = ?, updated_at = ? WHERE id = ?",
+				next.Title, aliases, next.Body, next.Scope, int64(next.Marks), next.UpdatedAt, next.ID); err != nil {
 				return err
 			}
-			next.Embedded = b2i(next.Embedded) != 0
 			out = next
 			writeID, err = writes.Record(ctx, tx, reg, writes.New{
 				TS: w.Now, ThreadID: &w.ThreadID, RunID: &w.RunID, Tool: "kb_write", Target: "kb:" + fmt.Sprint(next.ID),
@@ -278,7 +266,7 @@ func Write(ctx context.Context, d *db.DB, reg *writes.Registry, w Writer, in Wri
 		}
 		res, err := tx.ExecContext(ctx,
 			"INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, source_thread_id, source_seq, "+
-				"source_run_id, pinned, embedded, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, 0, ?, ?)",
+				"source_run_id, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, ?, ?)",
 			in.Title, aliases, in.Body, scope, project, int64(marks), writer, sourceThread, sourceSeq, sourceRun, w.Now, w.Now)
 		if err != nil {
 			return err
@@ -320,7 +308,7 @@ func Retract(ctx context.Context, d *db.DB, reg *writes.Registry, w Writer, id i
 			return err
 		}
 		now := w.Now
-		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded = 0, updated_at = ? WHERE id = ?",
+		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?",
 			now, now, id); err != nil {
 			return err
 		}
@@ -328,7 +316,7 @@ func Retract(ctx context.Context, d *db.DB, reg *writes.Registry, w Writer, id i
 			return err
 		}
 		next := *rec
-		next.RetractedAt, next.Embedded, next.UpdatedAt = &now, false, now
+		next.RetractedAt, next.UpdatedAt = &now, now
 		out = next
 		writeID, err = writes.Record(ctx, tx, reg, writes.New{
 			TS: now, ThreadID: &w.ThreadID, RunID: &w.RunID, Tool: "kb_retract", Target: "kb:" + fmt.Sprint(id),
@@ -367,7 +355,7 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 	}
 	now := float64(time.Now().UnixNano()) / 1e9
 	if u.Before == nil {
-		if _, err := q.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded = 0, updated_at = ? WHERE id = ?", now, now, u.ID); err != nil {
+		if _, err := q.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?", now, now, u.ID); err != nil {
 			return nil, err
 		}
 		if err := embed.DeleteKB(ctx, q, u.ID); err != nil {
@@ -381,7 +369,7 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 	}
 	if _, err := q.ExecContext(ctx,
 		"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, marks = ?, pinned = ?, confirmed_at = ?, "+
-			"retracted_at = ?, embedded = 0, updated_at = ? WHERE id = ?",
+			"retracted_at = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?",
 		u.Before.Title, aliases, u.Before.Body, u.Before.Scope, u.Before.Marks, b2i(u.Before.Pinned), u.Before.ConfirmedAt,
 		u.Before.RetractedAt, now, u.ID); err != nil {
 		return nil, err

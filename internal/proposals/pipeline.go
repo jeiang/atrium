@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -18,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/proposals/actions"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
@@ -214,23 +216,13 @@ func ListUndoable(ctx context.Context, q Querier, filter string, args []any, lim
 	return db.Collect(rows, func(r *sql.Rows) (*Proposal, error) { return scanProposal(r, true) })
 }
 
-const threadRefs = "SELECT m.thread_id AS thread_id, m.id AS message_id, CASE WHEN b.type = 'object' THEN " +
-	"CASE WHEN json_extract(b.value, '$.type') = 'tool_result' AND NOT COALESCE(json_extract(b.value, '$.is_error'), 0) " +
-	"AND json_valid(json_extract(b.value, '$.content')) THEN json_extract(json_extract(b.value, '$.content'), '$.proposal_id') END " +
-	"END AS proposal_id FROM thread_messages m, json_each(m.content_json) b WHERE m.content_json LIKE '%proposal_id%'"
-
 func ThreadOf(ctx context.Context, q Querier, id int64) (int64, bool, error) {
-	var thread int64
-	err := q.QueryRowContext(ctx, "SELECT thread_id FROM ("+threadRefs+") WHERE proposal_id = ? ORDER BY message_id LIMIT 1", id).Scan(&thread)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, false, nil
-	}
-	return thread, err == nil, err
+	return journal.ProposalThread(ctx, q, id)
 }
 
 func PendingInThread(ctx context.Context, q Querier, threadID int64) ([]*Proposal, error) {
 	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM proposals p WHERE p.status = 'pending' AND (p.id IN "+
-		"(SELECT proposal_id FROM ("+threadRefs+" AND m.thread_id = ?)) OR (p.kind = ? AND json_extract(p.payload, '$.thread_id') = ?)) "+
+		"(SELECT proposal_id FROM ("+journal.ThreadRefsSQL()+" AND m.thread_id = ?)) OR (p.kind = ? AND json_extract(p.payload, '$.thread_id') = ?)) "+
 		"ORDER BY p.created_ts, p.id", threadID, permission.Kind, threadID)
 	if err != nil {
 		return nil, err
@@ -244,7 +236,7 @@ func Dismiss(ctx context.Context, d *db.DB, id int64, status string, who Resolve
 	}
 	return d.WithTx(ctx, func(tx *sql.Tx) error {
 		var blocked bool
-		if err := tx.QueryRowContext(ctx, "SELECT "+ledger.UnresolvedSQL("a")+" FROM proposals WHERE id = ?", id).Scan(&blocked); err != nil {
+		if err := tx.QueryRowContext(ctx, "SELECT "+actions.Unresolved("a")+" FROM proposals WHERE id = ?", id).Scan(&blocked); err != nil {
 			if errors.Is(err, sql.ErrNoRows) {
 				return ProposalError(fmt.Sprintf("unknown proposal %d", id))
 			}
@@ -500,7 +492,7 @@ func (p *Pipeline) Dismiss(ctx context.Context, id int64, status string, who Res
 
 func (p *Pipeline) claim(ctx context.Context, id int64, status string) (bool, error) {
 	res, err := p.DB.Write.ExecContext(ctx, "UPDATE proposals SET status = ?, decided_ts = ? WHERE id = ? AND status IN ('pending', 'failed') AND NOT "+
-		ledger.UnresolvedSQL("a"), status, p.now(), id)
+		actions.Unresolved("a"), status, p.now(), id)
 	if err != nil {
 		return false, err
 	}

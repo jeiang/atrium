@@ -49,14 +49,7 @@ type sample struct {
 }
 
 func WorkerThreadID(ctx context.Context, q db.Querier) (int64, error) {
-	var id int64
-	err := q.QueryRowContext(ctx,
-		"SELECT id FROM threads WHERE kind = ? AND role = ? AND deleted_at IS NULL ORDER BY id DESC LIMIT 1",
-		threads.Worker, WorkerRole).Scan(&id)
-	if errors.Is(err, sql.ErrNoRows) {
-		return 0, nil
-	}
-	return id, err
+	return threads.IDByKindRole(ctx, q, threads.Worker, WorkerRole)
 }
 
 func workerThread(ctx context.Context, d *db.DB, now float64) (int64, error) {
@@ -335,16 +328,12 @@ func thresholdLabel(metric string) string {
 }
 
 func lastDelta(ctx context.Context, q db.Querier, threadID int64) (*delta, error) {
-	var raw string
-	err := q.QueryRowContext(ctx,
-		"SELECT content_json FROM thread_messages WHERE thread_id = ? AND role = 'user' AND superseded = 0 "+
-			"AND content_json LIKE '%OPS_DELTA %' ORDER BY seq DESC LIMIT 1",
-		threadID).Scan(&raw)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
+	raw, err := journal.LatestUserContentMatching(ctx, q, threadID, "%OPS_DELTA %")
 	if err != nil {
 		return nil, err
+	}
+	if raw == "" {
+		return nil, nil
 	}
 	var blocks []struct {
 		Type string `json:"type"`
