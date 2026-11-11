@@ -620,9 +620,10 @@ behavior-parity target.
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Every
   admitted proxy request or OIDC session is the one operator with full
   authority; no role distinguishes them. A separate local mode provides
-  loopback access. `atrium serve` refuses to start
-  with no authentication in force unless `--force-disable-auth` is given, which
-  shows a persistent banner. Public media file access requires an expiring signed
+  loopback access: it binds only a numeric loopback address, refuses any other
+  bind at startup, and rejects a request whose socket peer is not loopback
+  regardless of forwarded address headers. There is no flag that serves
+  without authentication on a non-loopback address. Public media file access requires an expiring signed
   link and still checks Host. The link signing key is a generated secret held in
   the database (pinnable by the deployment); a legacy `media-link.key` file is
   moved into it on first use.

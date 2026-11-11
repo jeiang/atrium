@@ -1244,7 +1244,6 @@
   },
   "x-atrium-secret": [
     "action_links.action_link_key",
-    "auth.oidc_wizard_key",
     "db.key",
     "mail.mail_chat_key",
     "mail.mail_embed_key",
