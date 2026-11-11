@@ -678,11 +678,10 @@ func editImportSource(t *testing.T, path, statement string) {
 }
 
 func TestImportV2MapsAgentWritesToEffects(t *testing.T) {
-	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
-	d, err := db.Connect(source)
+	d, err := db.Connect(source, db.WithKey(db.Key{}))
 	if err != nil {
 		t.Fatal(err)
 	}
