@@ -812,17 +812,15 @@ func sourceMailAccounts(ctx context.Context, src *sql.DB) ([]connections.ImportS
 			Capabilities: []string{"imap", "smtp"},
 			Enabled:      &enabled,
 		}
-		if a.method == "password" {
-			password, err := sourceSecret(ctx, src, "mail_password_"+a.id, "mail/"+a.id+"/password")
-			if err != nil {
-				return nil, nil, nil, err
-			}
-			if password.Value != "" {
-				service.Credentials = []connections.ImportCredential{password}
-				secrets = append(secrets, "mail_password_"+a.id)
-			} else {
-				notes = append(notes, "mail/"+a.id+": unresolved-credential; the app password is not in the source database")
-			}
+		password, err := sourceSecret(ctx, src, "mail_password_"+a.id, "mail/"+a.id+"/password")
+		if err != nil {
+			return nil, nil, nil, err
+		}
+		if password.Value != "" {
+			service.Credentials = []connections.ImportCredential{password}
+			secrets = append(secrets, "mail_password_"+a.id)
+		} else if a.method == "password" {
+			notes = append(notes, "mail/"+a.id+": unresolved-credential; the app password is not in the source database")
 		}
 		if a.id != "chat" && a.id != "embed" {
 			state, reason, checked, expires, ok, err := sourceHealth(ctx, src, "mail_"+a.id)

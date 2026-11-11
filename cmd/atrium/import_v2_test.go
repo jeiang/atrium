@@ -2286,3 +2286,60 @@ func TestImportV2KeepsHostPinningAndRefusesARemovedAccount(t *testing.T) {
 		t.Errorf("the SMTP fake saw %d authentication attempts for a removed account", attempts)
 	}
 }
+func TestImportV2CarriesAStoredPasswordForAXOAUTH2Account(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	const appPassword = "work-app-pass"
+	editImportSource(t, source, `INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, auth_method, created_at) VALUES ('work', 'Work', 'gmail', 'me@work.test', 1, 0, 'xoauth2', 1762000800)`)
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_password_work', %q, 1762000800, 'fixture')", appPassword))
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if strings.Contains(got.stdout+got.stderr, appPassword) {
+		t.Error("the import printed the XOAUTH2 account's stored password")
+	}
+	if strings.Contains(got.stdout, "mail/work: unresolved-credential") {
+		t.Errorf("the import reported the stored password as unresolved:\n%s", got.stdout)
+	}
+
+	dest := filepath.Join(dir, "atrium.db")
+	d := mustConnect(t, dest)
+	defer func() { _ = d.Close() }()
+	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM secrets WHERE name = 'mail_password_work'"); n != 0 {
+		t.Errorf("%d work password secrets stayed in the secrets table", n)
+	}
+	if got := importValue(t, d.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'mail/work' AND slot = 'mail/work/password'"); got != appPassword {
+		t.Errorf("the carried work credential is %q", got)
+	}
+
+	if _, err := d.Write.Exec("UPDATE mail_accounts SET auth_method = 'password' WHERE id = 'work'"); err != nil {
+		t.Fatal(err)
+	}
+	script := imapscript.MustParse(t, `
+S: {gmail.greeting}
+C: {t} CAPABILITY
+S: * CAPABILITY {gmail.caps}
+S: {t} OK CAPABILITY completed
+C: {t} LOGIN "me@work.test" "`+appPassword+`"
+S: {t} OK [CAPABILITY {gmail.authcaps}] User logged in
+C: {t} LIST "" "*"
+S: * LIST (\Noselect) "/" "/"
+S: {t} OK LIST completed
+C: {t} LOGOUT
+S: * BYE
+S: {t} OK
+`)
+	server, ca := imapscript.ServeTLS(t, script)
+	t.Setenv("ATRIUM_IMAP_ADDR", server.Addr())
+	t.Setenv("ATRIUM_IMAP_CA", ca)
+	synced := runImportApp(t, importTestApp(t, dir, clock), "sync", "--account", "work")
+	if synced.code != cli.ExitOK {
+		t.Fatalf("sync after switching to password authentication: exit %d stdout %q stderr %q", synced.code, synced.stdout, synced.stderr)
+	}
+	if strings.Contains(synced.stdout+synced.stderr, appPassword) {
+		t.Error("sync printed the mail password")
+	}
+}
