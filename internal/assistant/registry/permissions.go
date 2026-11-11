@@ -3,9 +3,7 @@ package registry
 import (
 	"context"
 
-	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -140,53 +138,3 @@ func (t Table) Decide(c tool.Channel, s Situation, kind tool.Kind) Decision {
 }
 
 func hasCard(t tool.Tool) bool { return t.Approval != nil || t.Effect == tool.Propose }
-
-func Gate(t tool.Tool, table Table, s Situation, kind tool.Kind) tool.Tool {
-	real := t.Handler
-	t.Handler = func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-		channel := t.Channel
-		if t.ChannelOf != nil {
-			channel = t.ChannelOf(args)
-		}
-		decision := table.Decide(channel, s, kind)
-		if decision == Ask && !hasCard(t) && kind != tool.Chat {
-			decision = Denied
-		}
-		switch decision {
-		case Allowed:
-			return real(ctx, tc, args)
-		case Denied:
-			return nil, tool.Error(t.Name + " is not allowed in this thread by the permission table")
-		}
-		return ask(ctx, tc, t, args, real)
-	}
-	return t
-}
-
-func ask(ctx context.Context, tc *tool.Context, t tool.Tool, args tool.Args, real tool.Handler) (any, error) {
-	payload, err := permission.NewPayload(t.Name, tc, args)
-	if err != nil {
-		return nil, err
-	}
-	title := permission.Title(t.Name)
-	id, _, err := proposals.Create(ctx, tc.DB, permission.Kind, nil, title, payload, permission.Preview{Args: args},
-		permission.Fingerprint(t.Name, tc.RunID, payload.Args), tc.Now())
-	if err != nil {
-		return nil, err
-	}
-	found, err := proposals.Get(ctx, tc.DB.Read, id)
-	if err != nil {
-		return nil, err
-	}
-	if found == nil {
-		return nil, tool.Error("the permission request disappeared")
-	}
-	switch found.Status {
-	case proposals.Pending, proposals.Failed:
-		return nil, &tool.Park{Question: title}
-	case proposals.Approved, proposals.Applied:
-		return real(ctx, tc, args)
-	default:
-		return nil, tool.Error("the operator denied this request")
-	}
-}

@@ -111,11 +111,12 @@ type admission struct {
 }
 
 func (s *state) admit(ctx context.Context) (registry.Set, error) {
-	marks, err := threads.ReadMarks(ctx, s.d.Read, s.thread.ID)
+	auth, err := threads.ReadAuthority(ctx, s.d.Read, s.thread.ID)
 	if err != nil {
 		return registry.Set{}, err
 	}
-	set, err := s.r.Registry.Admit(ctx, s.kind, s.thread.Role, bool(s.thread.WebSearch), marks, s.admission.allow, s.d.Read)
+	marks := auth.Effective()
+	set, err := s.r.Registry.Admit(ctx, s.kind, auth.Role, auth.WebSearch, marks, s.admission.allow, s.d.Read)
 	if err != nil {
 		return registry.Set{}, err
 	}
@@ -147,14 +148,15 @@ func (s *state) use(set registry.Set, marks threads.Marks) {
 }
 
 func (s *state) readmit(ctx context.Context) error {
-	marks, err := threads.ReadMarks(ctx, s.d.Read, s.thread.ID)
+	auth, err := threads.ReadAuthority(ctx, s.d.Read, s.thread.ID)
 	if err != nil {
 		return err
 	}
+	marks := auth.Effective()
 	if marks.Set == s.marks.Set {
 		return nil
 	}
-	set, err := s.r.Registry.Admit(ctx, s.kind, s.thread.Role, bool(s.thread.WebSearch), marks, s.admission.allow, s.d.Read)
+	set, err := s.r.Registry.Admit(ctx, s.kind, auth.Role, auth.WebSearch, marks, s.admission.allow, s.d.Read)
 	if err != nil {
 		return err
 	}
@@ -361,12 +363,13 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, contextLimit: contextLimit,
 		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, inference: o.Inference, ttl: ttl, jobName: jobName,
-		x: &dispatcher{d: d, tc: tc, now: now, tuning: tuning, withdrawn: map[string]struct{}{}},
+		x: &dispatcher{d: d, tc: tc, now: now, tuning: tuning, withdrawn: map[string]struct{}{}, registry: r.Registry, allow: allow},
 		admission: admission{
 			allow: allow, model: model.ID, cc: prompts.PrefixCacheControl(kind, ttl), extra: extra,
 			webSearchMaxUses: webSearchMaxUses, dynamicFiltering: dynamicFiltering, report: o.Limits.Report,
 		},
 	}
+	s.x.drain = s.drainQueued
 	set, err := s.admit(ctx)
 	if err != nil {
 		return nil, err
@@ -440,6 +443,26 @@ func (s *state) allowURLs(ctx context.Context, urls []string) error {
 		s.x.tc.AllowedURLs[u] = struct{}{}
 	}
 	return threads.AddAllowedURLs(ctx, s.d, s.thread.ID, urls)
+}
+
+func (s *state) drainQueued(ctx context.Context) error {
+	queued, err := journal.Queued(ctx, s.d.Read, s.thread.ID)
+	if err != nil {
+		return err
+	}
+	for _, row := range queued {
+		if err := s.allowURLs(ctx, threads.URLsIn(row.Text)); err != nil {
+			return err
+		}
+		marks, err := references.Marks(row.Files)
+		if err != nil {
+			return err
+		}
+		if err := threads.AddMarks(ctx, s.d.Write, s.thread.ID, s.now(), marks); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (s *state) injectQueued(ctx context.Context) (bool, error) {
@@ -600,9 +623,6 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 		}
 		span.End()
 	}()
-	if err := s.readmit(ctx); err != nil {
-		return false, nil, err
-	}
 	if err := s.renew(ctx); err != nil {
 		return false, nil, err
 	}
@@ -616,6 +636,9 @@ func (s *state) step(ctx context.Context, loc *time.Location, unattended bool, l
 	if injected {
 		last = nil
 		s.callsKey, s.repeats = "", 0
+	}
+	if err := s.readmit(ctx); err != nil {
+		return false, nil, err
 	}
 	h, err := s.history(ctx)
 	if err != nil {

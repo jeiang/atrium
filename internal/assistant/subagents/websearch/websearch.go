@@ -69,7 +69,7 @@ func (s *Search) Tool() tool.Tool {
 		Effect:      tool.Read,
 		Annotated:   true,
 		Channel:     tool.ChannelInternet,
-		Marks:       tool.Untrusted,
+		Marks:       tool.AllMarks,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 	}
 }
@@ -122,12 +122,17 @@ func (s *Search) handle(ctx context.Context, tc *tool.Context, args tool.Args) (
 		now = assistant.Now
 	}
 	title := "search_web: " + threads.TitleFrom(query)
+	auth, err := threads.ReadAuthority(ctx, tc.DB.Read, tc.ThreadID)
+	if err != nil {
+		return nil, err
+	}
 	var child int64
 	if err := tc.DB.WithTx(ctx, func(tx *sql.Tx) error {
 		var err error
 		child, err = threads.Create(ctx, tx, now(), threads.Spec{
 			Kind: threads.Subagent, Title: &title, ParentID: &tc.ThreadID, ParentRunID: &tc.RunID,
 			Role: new(Name), Model: modelID, Effort: pricing.Medium, AllowedURLs: threads.URLsIn(query + "\n" + question),
+			Marks: auth.Effective(),
 		})
 		return err
 	}); err != nil {

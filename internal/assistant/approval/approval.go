@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
@@ -71,6 +73,7 @@ type Executor struct {
 	Ledger   *ledger.Store
 	MailOpen mail.OpenFunc
 	Tools    []tool.Tool
+	Registry registry.Source
 }
 
 func (e *Executor) Register(r *proposals.Registry) {
@@ -106,6 +109,23 @@ func (e *Executor) execute(t tool.Tool) proposals.Executor {
 		tc := &tool.Context{
 			DB: e.DB, Env: e.Env, Kind: payload.RunKind, ThreadID: payload.ThreadID, RunID: payload.RunID,
 			ProposalID: &proposalID, AllowedURLs: map[string]struct{}{}, Now: e.now, Ledger: e.Ledger, MailOpen: e.MailOpen,
+		}
+		if e.Registry != nil {
+			r, err := e.Registry()
+			if err != nil {
+				return nil, err
+			}
+			auth, err := threads.ReadAuthority(ctx, e.DB.Read, payload.ThreadID)
+			if err != nil {
+				return nil, err
+			}
+			_, decision, err := r.Authorize(ctx, e.DB.Read, payload.RunKind, auth.Role, auth.WebSearch, auth.Effective(), registry.All(), t.Name, args)
+			if err != nil {
+				return nil, err
+			}
+			if decision != registry.Allowed {
+				return nil, proposals.ProposalError(t.Name + " is not allowed in this thread by the permission table")
+			}
 		}
 		value, err := t.Approval.Apply(ctx, tc, args)
 		if err != nil {
