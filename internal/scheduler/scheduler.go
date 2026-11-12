@@ -20,6 +20,7 @@ type Gate struct {
 }
 
 type Dependencies struct {
+	DBPath  string
 	Now     func() float64
 	Zone    func(context.Context) string
 	Owner   string
@@ -83,23 +84,41 @@ func (s *Scheduler) Tick(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	claims, skipped, err := ClaimDue(ctx, s.db, stamp, s.deps.Owner, s.admit(gate))
+	due, err := DueJobs(ctx, s.db.Read, stamp)
 	if err != nil {
 		return err
 	}
-	if len(claims)+len(skipped) > 0 {
-		s.dirty.Store(true)
-	}
-	for _, skip := range skipped {
-		if err := s.deps.Notice(ctx, skip, stamp); err != nil {
-			log.Error("skip notice failed", logx.Job, skip.Job.ID, logx.Err, err)
+	admit := s.admit(gate)
+	for _, job := range due {
+		locks, err := db.TryResourceLocks(s.deps.DBPath, claimResources(s.jobs, job))
+		if errors.As(err, new(*db.LockBusy)) {
+			continue
 		}
-	}
-	for _, claim := range claims {
+		if err != nil {
+			return err
+		}
+		claim, skip, err := claimJob(ctx, s.db, job.ID, stamp, s.deps.Owner, admit)
+		if err != nil || claim == nil {
+			_ = locks.Close()
+		}
+		if err != nil {
+			return err
+		}
+		if skip != nil {
+			s.dirty.Store(true)
+			if err := s.deps.Notice(ctx, *skip, stamp); err != nil {
+				log.Error("skip notice failed", logx.Job, skip.Job.ID, logx.Err, err)
+			}
+		}
+		if claim == nil {
+			continue
+		}
+		s.dirty.Store(true)
 		s.active.Add(1)
 		s.wg.Go(func() {
 			defer s.finished(ctx)
-			s.execute(ctx, claim)
+			defer func() { _ = locks.Close() }()
+			s.execute(ctx, *claim)
 		})
 	}
 	return nil
@@ -167,7 +186,7 @@ func (s *Scheduler) Cycle(ctx context.Context) error {
 	if err := db.Ready(ctx, s.db); err != nil {
 		return err
 	}
-	if err := Recover(ctx, s.db, s.now(), s.deps.Recover); err != nil {
+	if err := Recover(ctx, s.db, s.deps.DBPath, s.now(), s.deps.Recover); err != nil {
 		return err
 	}
 	resumed, err := s.deps.Resume(ctx)

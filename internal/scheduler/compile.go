@@ -3,6 +3,8 @@ package scheduler
 import (
 	"slices"
 	"strings"
+
+	"github.com/jeiang/atrium/internal/db"
 )
 
 type InvalidJob struct {
@@ -52,8 +54,8 @@ func Compile(defs []Definition) ([]Definition, error) {
 			return nil, bad("has no run function")
 		case def.PromptRun && strings.TrimSpace(def.Prompt) == "":
 			return nil, bad("runs a prompt but declares none")
-		case slices.Contains(def.Resources, "") || slices.Contains(def.Needs, ""):
-			return nil, bad("names an empty resource or module")
+		case slices.ContainsFunc(def.Resources, invalidResource) || slices.Contains(def.Needs, ""):
+			return nil, bad("names an invalid resource or an empty module")
 		}
 		spec, err := Parse(def.Schedule, "UTC")
 		if err != nil {
@@ -66,4 +68,8 @@ func Compile(defs []Definition) ([]Definition, error) {
 		nightly = nightly || def.Kind == JobNightly
 	}
 	return Clone(defs), nil
+}
+
+func invalidResource(key string) bool {
+	return !db.ValidResource(key) || strings.HasPrefix(key, "job/")
 }

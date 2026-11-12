@@ -428,9 +428,12 @@ behavior-parity target.
   settings from them. The neutral `internal/scheduler` package owns the
   `jobs` and `job_runs` tables, seeding, claiming, recovery and the tick
   loop; `internal/assistant/jobworker` supplies the assistant's prompt runs,
-  run accounting, skip notices and recovery lookups. The scheduler seeds
-  every catalog job, and a job whose needed module is off records
-  `skipped_module`. Core (settings, secrets, `db`,
+  run accounting, skip notices and recovery lookups. A claim first takes a
+  non-blocking lock on `job/<id>` and the job's declared resources; the lock
+  files live in `<canonical database path>.locks/`, named by the SHA-256 of
+  the resource key and never unlinked, separate from the migration lock.
+  The scheduler seeds every catalog job, and a job whose needed module is off
+  records `skipped_module`. Core (settings, secrets, `db`,
   `serve`, the About, review and activity pages) is always on; mail,
   calendar, contacts, Notion, media, assistant, notifications and Grafana each
   have a `<name>_enabled` setting. A module flag is an operator setting, and

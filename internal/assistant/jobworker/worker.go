@@ -37,6 +37,7 @@ func New(svc *service.Service, jobs []scheduler.Definition, enabled func(string)
 		return float64(time.Now().UnixMicro()) / 1e6
 	}
 	return scheduler.New(svc.DB, jobs, scheduler.Dependencies{
+		DBPath:  svc.Cfg.DBPath,
 		Now:     now,
 		Zone:    func(ctx context.Context) string { return config.From(ctx).TZName(svc.Env) },
 		Owner:   journal.NewOwner(),
