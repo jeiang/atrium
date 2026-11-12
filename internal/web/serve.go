@@ -49,6 +49,7 @@ type Resource struct {
 type Boot interface {
 	Open(context.Context) (context.Context, *db.DB, config.Config, func() error, error)
 	Start(ctx context.Context, d *Deps, services bool) error
+	Alive() bool
 }
 
 func ServeCommand(boot Boot, pages ...Page) *cli.Command {
@@ -214,7 +215,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 			return err
 		}
 	}
-	return listenAndShutdown(ctx, listener, srv, a.env)
+	return listenAndShutdown(ctx, listener, srv, a.env, a.boot.Alive)
 }
 
 func anyPublic(checks []func(*http.Request) bool) func(*http.Request) bool {
@@ -231,7 +232,7 @@ func anyPublic(checks []func(*http.Request) bool) func(*http.Request) bool {
 	}
 }
 
-func listenAndShutdown(ctx context.Context, listener net.Listener, srv *Server, env config.Env) error {
+func listenAndShutdown(ctx context.Context, listener net.Listener, srv *Server, env config.Env, alive func() bool) error {
 	httpServer := &http.Server{Handler: srv, ReadHeaderTimeout: 30 * time.Second}
 	httpServer.RegisterOnShutdown(srv.StopStreams)
 	failed := make(chan error, 1)
@@ -241,7 +242,7 @@ func listenAndShutdown(ctx context.Context, listener net.Listener, srv *Server, 
 	srv.Release()
 	notifier.Ready()
 	notifier.Status("serving " + listener.Addr().String())
-	go notifier.RunWatchdog(ctx, nil)
+	go notifier.RunWatchdog(ctx, alive)
 	select {
 	case err := <-failed:
 		return err

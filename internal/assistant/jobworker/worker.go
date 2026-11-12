@@ -34,10 +34,11 @@ type Result struct {
 type Own func(ctx context.Context, owner string) (context.Context, func(), error)
 
 type Options struct {
-	Enabled func(string) bool
-	Active  func() bool
-	Beat    func()
-	Own     Own
+	Enabled   func(string) bool
+	Active    func() bool
+	Beat      func()
+	Recovered func(error)
+	Own       Own
 }
 
 func New(svc *service.Service, jobs []scheduler.Definition, o Options) *scheduler.Scheduler {
@@ -83,10 +84,11 @@ func New(svc *service.Service, jobs []scheduler.Definition, o Options) *schedule
 		Notice: func(ctx context.Context, skip scheduler.Skipped, at float64) error {
 			return notifySkipped(ctx, svc, skip, at)
 		},
-		RunCron: runCron,
-		Enabled: o.Enabled,
-		Active:  o.Active,
-		Beat:    o.Beat,
+		RunCron:   runCron,
+		Enabled:   o.Enabled,
+		Active:    o.Active,
+		Beat:      o.Beat,
+		Recovered: o.Recovered,
 	})
 }
 
@@ -102,6 +104,9 @@ func owned(own Own, owner string, run func(context.Context, scheduler.Run) (sche
 		}
 		defer done()
 		result, err := run(work, r)
+		if errors.Is(context.Cause(work), scheduler.ErrInterrupted) {
+			return result, scheduler.ErrInterrupted
+		}
 		if errors.As(context.Cause(work), &off) {
 			why := off.Error()
 			result.Status, result.Error = scheduler.StatusSkippedModule, &why

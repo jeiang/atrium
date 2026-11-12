@@ -116,7 +116,8 @@ func (b *Bindings) OpenAssistant(ctx context.Context) (context.Context, *service
 func (b *Bindings) ServeBoot() web.Boot { return &serveBoot{b: b} }
 
 type serveBoot struct {
-	b *Bindings
+	b   *Bindings
+	app *App
 }
 
 func (s *serveBoot) Open(ctx context.Context) (context.Context, *db.DB, config.Config, func() error, error) {
@@ -124,8 +125,11 @@ func (s *serveBoot) Open(ctx context.Context) (context.Context, *db.DB, config.C
 	if err != nil {
 		return nil, nil, config.Config{}, nil, err
 	}
+	s.app = a
 	return ctx, a.DB(), a.Config(), a.Close, nil
 }
+
+func (s *serveBoot) Alive() bool { return s.app == nil || s.app.alive() }
 
 func (s *serveBoot) Start(ctx context.Context, d *web.Deps, services bool) error {
 	a, err := bound(ctx)
