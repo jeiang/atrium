@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -112,5 +113,42 @@ func TestAgentTickSettlesALateDreamingChildAfterRestart(t *testing.T) {
 	}
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM job_resource_leases"); n != 0 {
 		t.Fatalf("%d resource leases after settlement, want none", n)
+	}
+}
+
+func TestAgentTickRefusesARecoveredDreamingChildPastTheCap(t *testing.T) {
+	t.Parallel()
+	d, api, before := twoDreamingGroups(t)
+	spent := asstReply("first done")
+	spent.Usage = json.RawMessage(`{"input_tokens":50000,"output_tokens":100}`)
+	api.Push(spent, asstReply("second interrupted"))
+	release := holdNth(t, api, 2)
+	first, stderr := tickProcess(t)
+	waitUntil(t, 30*time.Second, "the held second child", func() bool { return len(api.Requests())-before == 2 })
+	if err := first.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	_ = first.Wait()
+	release()
+	if status, text := schedulerStatus(t, d, "nightly"); status != "running" {
+		t.Fatalf("nightly status after cancel %s %s, want running: %s", status, text, stderr)
+	}
+	asstSet(t, "dreaming_max_cost_usd", "0.01")
+	api.Push(asstReply("second done"))
+	next, nextErr := tickProcess(t)
+	if code := exitCode(next.Wait()); code != 0 {
+		t.Fatalf("recovery tick exit %d: %s", code, nextErr)
+	}
+	if status, text := schedulerStatus(t, d, "nightly"); status != "skipped_budget" {
+		t.Fatalf("nightly status %s %s, want skipped_budget", status, text)
+	}
+	if got := len(api.Requests()) - before; got != 2 {
+		t.Fatalf("%d dreaming requests, want no request from the refused child", got)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM runs r JOIN threads t ON t.id = r.thread_id WHERE t.kind = 'nightly' AND r.state NOT IN ('done', 'failed')"); n != 0 {
+		t.Fatalf("%d unsettled children, want none", n)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.name = 'nightly' AND r.tokens > 0 AND r.cost > 0"); n != 1 {
+		t.Fatalf("%d nightly runs keeping the finished child's tokens and cost, want 1", n)
 	}
 }

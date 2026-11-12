@@ -300,7 +300,11 @@ func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error
 		if err := journal.FinishRun(ctx, s.DB.Write, runID, journal.Failed, s.now(), new(nc.Error())); err != nil {
 			return nil, err
 		}
-		return nil, nc
+		run, err := journal.GetRun(ctx, s.DB.Read, runID)
+		if err != nil {
+			return nil, err
+		}
+		return run, nc
 	}
 	if err != nil {
 		return nil, err
@@ -562,10 +566,10 @@ func (s *Service) ResumeInterrupted(ctx context.Context, background bool, claime
 		return 0, err
 	}
 	found = slices.DeleteFunc(found, func(r journal.Run) bool { return claimed[r.ThreadID] })
-	return s.resume(ctx, found, background)
+	return s.resume(ctx, found, background, nil)
 }
 
-func (s *Service) ResumeThreads(ctx context.Context, threads []int64) error {
+func (s *Service) ResumeRuns(ctx context.Context, runs []int64, dead string, admit func(context.Context, journal.Run) (bool, error)) error {
 	ctx, err := module.BindOwner(ctx, module.Assistant)
 	if err != nil {
 		return err
@@ -573,19 +577,19 @@ func (s *Service) ResumeThreads(ctx context.Context, threads []int64) error {
 	if err := ledger.CheckAdmission(ctx); err != nil {
 		return err
 	}
-	if err := journal.InterruptThreads(ctx, s.DB.Write, threads); err != nil {
+	if err := journal.InterruptRuns(ctx, s.DB.Write, runs, s.now(), dead); err != nil {
 		return err
 	}
 	found, err := journal.InterruptedRuns(ctx, s.DB.Read)
 	if err != nil {
 		return err
 	}
-	found = slices.DeleteFunc(found, func(r journal.Run) bool { return !slices.Contains(threads, r.ThreadID) })
-	_, err = s.resume(ctx, found, false)
+	found = slices.DeleteFunc(found, func(r journal.Run) bool { return !slices.Contains(runs, r.ID) })
+	_, err = s.resume(ctx, found, false, admit)
 	return err
 }
 
-func (s *Service) resume(ctx context.Context, found []journal.Run, background bool) (int, error) {
+func (s *Service) resume(ctx context.Context, found []journal.Run, background bool, admit func(context.Context, journal.Run) (bool, error)) (int, error) {
 	resumed := 0
 	for _, run := range found {
 		waiting, err := NeedsOperator(ctx, s.DB.Read, run)
@@ -597,6 +601,15 @@ func (s *Service) resume(ctx context.Context, found []journal.Run, background bo
 		}
 		if err := ledger.CheckAdmission(ctx); err != nil {
 			return resumed, err
+		}
+		if admit != nil {
+			ok, err := admit(ctx, run)
+			if err != nil {
+				return resumed, err
+			}
+			if !ok {
+				continue
+			}
 		}
 		ok, err := journal.ClaimResume(ctx, s.DB.Write, run.ID, journal.NewOwner(), s.now())
 		if err != nil {

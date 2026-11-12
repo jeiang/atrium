@@ -124,12 +124,11 @@ func Run(ctx context.Context, svc *service.Service, now func() float64, claim sc
 	}); err != nil {
 		return nil, err
 	}
-	limits := func(group gathered, left float64) journal.Limits {
-		return journal.Limits{AllowedTools: allowedTools, MaxCostUSD: &left, SystemExtra: new(systemExtra), Sources: sourcesOf(group)}
-	}
+	zero := 0.0
 	runIDs := make([]int64, 0, len(groups))
 	for i, group := range groups {
-		runID, err := svc.Prepare(ctx, ids[i], prompt(group, stamp, loc), stamp, service.Start{Kind: threads.Nightly, Limits: limits(group, left)})
+		limits := journal.Limits{AllowedTools: allowedTools, MaxCostUSD: &zero, SystemExtra: new(systemExtra), Sources: sourcesOf(group)}
+		runID, err := svc.Prepare(ctx, ids[i], prompt(group, stamp, loc), stamp, service.Start{Kind: threads.Nightly, Limits: limits})
 		if err != nil {
 			for _, prepared := range runIDs {
 				if ferr := journal.FinishRun(context.WithoutCancel(ctx), svc.DB.Write, prepared, journal.Failed, now(), new(err.Error())); ferr != nil {
@@ -141,20 +140,12 @@ func Run(ctx context.Context, svc *service.Service, now func() float64, claim sc
 		runIDs = append(runIDs, runID)
 	}
 	for i, runID := range runIDs {
-		tonight, err := nightlySpend(ctx, svc.DB.Read, stamp, loc)
+		ok, err := admit(ctx, svc, stamp, now(), runID)
 		if err != nil {
 			return runIDs, err
 		}
-		left := nightlyCap - tonight
-		if left <= 0 {
-			text := fmt.Sprintf("run cost ceiling reached: dreaming nightly cap ($%.2f of $%.2f)", tonight, nightlyCap)
-			if err := journal.FinishRun(context.WithoutCancel(ctx), svc.DB.Write, runID, journal.Failed, now(), &text); err != nil {
-				return runIDs, err
-			}
+		if !ok {
 			continue
-		}
-		if err := journal.SetLimits(ctx, svc.DB.Write, runID, limits(groups[i], left)); err != nil {
-			return runIDs, err
 		}
 		if run, err := journal.GetRun(ctx, svc.DB.Read, runID); err != nil {
 			return runIDs, err
@@ -182,6 +173,58 @@ func Run(ctx context.Context, svc *service.Service, now func() float64, claim sc
 		}
 	}
 	return runIDs, nil
+}
+
+func Admit(ctx context.Context, svc *service.Service, run journal.Run) (bool, error) {
+	stamp := float64(time.Now().UnixMicro()) / 1e6
+	if svc.Now != nil {
+		stamp = svc.Now()
+	}
+	return admit(ctx, svc, run.StartedAt, stamp, run.ID)
+}
+
+func admit(ctx context.Context, svc *service.Service, night, stamp float64, runID int64) (bool, error) {
+	loc, err := config.From(ctx).Location(svc.Env)
+	if err != nil {
+		return false, err
+	}
+	q := svc.DB.Read
+	r := assistant.Read(ctx, q)
+	nightlyCap, monthlyCap := r.Float(assistant.KeyDreamingMaxCost), r.Float(assistant.KeyDreamingMonthly)
+	if err := r.Err(); err != nil {
+		return false, err
+	}
+	tonight, err := nightlySpend(ctx, q, night, loc)
+	if err != nil {
+		return false, err
+	}
+	month, err := monthlySpend(ctx, q, night, loc)
+	if err != nil {
+		return false, err
+	}
+	left := min(nightlyCap-tonight, monthlyCap-month)
+	if left <= 0 {
+		text := fmt.Sprintf("run cost ceiling reached: dreaming caps (tonight $%.2f of $%.2f, this month $%.2f of $%.2f)", tonight, nightlyCap, month, monthlyCap)
+		return false, journal.FinishRun(context.WithoutCancel(ctx), svc.DB.Write, runID, journal.Failed, stamp, &text)
+	}
+	tree, err := journal.RunDescendants(ctx, q, runID)
+	if err != nil {
+		return false, err
+	}
+	allowance := left
+	for _, id := range tree {
+		cost, err := inference.RunCost(ctx, q, id)
+		if err != nil {
+			return false, err
+		}
+		allowance += cost
+	}
+	limits, err := journal.LimitsOf(ctx, q, runID)
+	if err != nil {
+		return false, err
+	}
+	limits.MaxCostUSD = &allowance
+	return true, journal.SetLimits(ctx, svc.DB.Write, runID, limits)
 }
 
 func split(data gathered) []gathered {

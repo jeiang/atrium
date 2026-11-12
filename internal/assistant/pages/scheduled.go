@@ -44,6 +44,7 @@ type RunView struct {
 	Cost        float64 `json:"cost"`
 	Error       *string `json:"error"`
 	ThreadID    *int64  `json:"thread_id"`
+	Hint        string  `json:"-"`
 }
 
 type ScheduledData struct {
@@ -77,7 +78,11 @@ func runView(run scheduler.ListedRun, zone *time.Location) RunView {
 	if run.StartedAt != nil && *run.StartedAt != 0 {
 		at = *run.StartedAt
 	}
-	return RunView{JobName: run.JobName, Status: run.Status, StartedText: stamp(&at, zone), Cost: run.Cost, Error: run.Error, ThreadID: run.ThreadID}
+	hint := run.Status
+	if strings.HasPrefix(hint, "skipped_") && (run.Tokens > 0 || run.Cost > 0) {
+		hint += "_partial"
+	}
+	return RunView{JobName: run.JobName, Status: run.Status, StartedText: stamp(&at, zone), Cost: run.Cost, Error: run.Error, ThreadID: run.ThreadID, Hint: hint}
 }
 
 func runViews(runs []scheduler.ListedRun, zone *time.Location) []RunView {

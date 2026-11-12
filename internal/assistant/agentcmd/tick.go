@@ -2,6 +2,7 @@ package agentcmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/scheduler"
 )
 
 func tickCommand(cfgEnv config.Env, tools registry.Source, enabled func(string) bool, holder *jobworker.Holder) *cli.Command {
@@ -25,6 +27,10 @@ func tickCommand(cfgEnv config.Env, tools registry.Source, enabled func(string) 
 				}
 				s := jobworker.New(svc, module.SetFrom(ctx).Catalog().Jobs(), enabled, nil)
 				err = s.Once(ctx)
+			}
+			if errors.Is(err, scheduler.ErrAllBusy) {
+				_, _ = fmt.Fprintf(env.Stderr, "%v\n", err)
+				return cli.ExitTempFail
 			}
 			if err != nil {
 				_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)

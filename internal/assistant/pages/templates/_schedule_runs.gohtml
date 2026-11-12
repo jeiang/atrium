@@ -6,7 +6,7 @@
   {{range .runs}}
   <li class="flex flex-wrap items-center gap-x-3 gap-y-1 px-4 py-2.5">
     <span class="font-medium">{{.JobName}}</span>
-    {{$title := lbl "job_run_hint" .Status ""}}{{if .Error}}{{$title = (str .Error)}}{{end}}{{template "scheduled_status" (dict "status" .Status "title" $title)}}
+    {{$title := lbl "job_run_hint" .Hint ""}}{{if .Error}}{{$title = (str .Error)}}{{end}}{{template "scheduled_status" (dict "status" .Status "title" $title)}}
     <span class="text-xs text-muted-foreground tabular-nums">{{str .StartedText}}</span>
     {{if .Cost}}<span class="text-xs text-muted-foreground tabular-nums">${{printf "%.3f" .Cost}}</span>{{end}}
     {{if .Error}}<span class="min-w-0 max-w-full truncate text-xs text-muted-foreground" title="{{str .Error}}">{{str .Error}}</span>{{end}}

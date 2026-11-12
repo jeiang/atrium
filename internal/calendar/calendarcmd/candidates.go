@@ -2,6 +2,7 @@ package calendarcmd
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -33,17 +34,31 @@ func CandidatesJob(deps jobworker.Dependencies) scheduler.Definition {
 			if err != nil {
 				return jobworker.Result{}, err
 			}
-			out, err := candidates.DraftEventProposals(ctx, e.Service.DB, assistantRun(e.Service), limit, e.Now)
+			out, err := candidates.DraftEventProposals(ctx, e.Service.DB, assistantRun(e.Service, &e.Claim), limit, e.Now)
 			return jobworker.Result{RunID: out.RunID}, err
 		}),
 	}
 }
 
-func assistantRun(svc *service.Service) candidates.Run {
+func assistantRun(svc *service.Service, claim *scheduler.Claim) candidates.Run {
 	return func(ctx context.Context, prompt string, now float64) (int64, bool, error) {
 		title := "Event candidates"
-		threadID, err := threads.Create(ctx, svc.DB.Write, now, threads.Spec{Kind: threads.Cron, Title: &title})
-		if err != nil {
+		spec := threads.Spec{Kind: threads.Cron, Title: &title}
+		if claim != nil {
+			spec.JobID = &claim.Job.ID
+		}
+		var threadID int64
+		if err := svc.DB.WithTx(ctx, func(tx *sql.Tx) error {
+			id, err := threads.Create(ctx, tx, now, spec)
+			if err != nil {
+				return err
+			}
+			threadID = id
+			if claim == nil {
+				return nil
+			}
+			return scheduler.AttachThread(ctx, tx, *claim, id)
+		}); err != nil {
 			return 0, false, err
 		}
 		runID, err := svc.RunOnce(ctx, threadID, prompt, service.Start{Kind: threads.Cron})
@@ -90,7 +105,7 @@ func candidatesCommand(env config.Env, tools registry.Source, now func() float64
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				out, err := candidates.DraftEventProposals(e.Ctx, d, assistantRun(svc), limit, now)
+				out, err := candidates.DraftEventProposals(e.Ctx, d, assistantRun(svc, nil), limit, now)
 				if err != nil {
 					return cli.Fail(e, err)
 				}

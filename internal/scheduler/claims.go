@@ -17,6 +17,8 @@ type Claim struct {
 	Owner     string
 	DueAt     float64
 	Missed    bool
+	StartedAt float64
+	Previous  string
 	resources []string
 	until     float64
 }
@@ -127,7 +129,7 @@ func claimJob(ctx context.Context, d *db.DB, jobID int64, resources []string, no
 		if err := takeLeases(ctx, tx, resources, owner, runID, now); err != nil {
 			return err
 		}
-		claim = &Claim{Job: job, JobRunID: runID, Owner: owner, DueAt: dueAt, Missed: missed(now, dueAt), resources: resources, until: leaseUntil(now)}
+		claim = &Claim{Job: job, JobRunID: runID, Owner: owner, DueAt: dueAt, Missed: missed(now, dueAt), StartedAt: now, resources: resources, until: leaseUntil(now)}
 		return nil
 	})
 	if errors.Is(err, errLeaseHeld) {
@@ -180,6 +182,13 @@ func takeOver(ctx context.Context, d *db.DB, p expiredRun, resources []string, n
 		if err != nil {
 			return err
 		}
+		var previous string
+		if err := tx.QueryRowContext(ctx, "SELECT COALESCE(owner, '') FROM job_runs WHERE id = ? AND job_id = ? AND status = ?",
+			p.jobRunID, job.ID, StatusRunning).Scan(&previous); errors.Is(err, sql.ErrNoRows) {
+			return nil
+		} else if err != nil {
+			return err
+		}
 		ok, err := db.Changed(tx.ExecContext(ctx, "UPDATE job_runs SET owner = ?, heartbeat_at = ? WHERE id = ? AND job_id = ? AND status = ?",
 			owner, now, p.jobRunID, job.ID, StatusRunning))
 		if err != nil || !ok {
@@ -195,7 +204,8 @@ func takeOver(ctx context.Context, d *db.DB, p expiredRun, resources []string, n
 		if err := takeLeases(ctx, tx, resources, owner, p.jobRunID, now); err != nil {
 			return err
 		}
-		claim = &Claim{Job: job, JobRunID: p.jobRunID, Owner: owner, DueAt: p.dueAt, Missed: missed(p.startedAt, p.dueAt), resources: resources, until: leaseUntil(now)}
+		claim = &Claim{Job: job, JobRunID: p.jobRunID, Owner: owner, DueAt: p.dueAt, Missed: missed(p.startedAt, p.dueAt), StartedAt: p.startedAt, Previous: previous,
+			resources: resources, until: leaseUntil(now)}
 		return nil
 	})
 	if errors.Is(err, errLeaseHeld) {

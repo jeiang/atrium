@@ -2,6 +2,7 @@ package agentcmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -131,14 +132,16 @@ func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64
 	if toolChoice != "" {
 		start.Limits.ToolChoice = &toolChoice
 	}
-	runID, err := svc.RunOnce(ctx, *threadID, text, start)
-	if err != nil {
-		return err
+	runID, runErr := svc.RunOnce(ctx, *threadID, text, start)
+	if runID == 0 || runErr != nil && !errors.As(runErr, new(config.NotConfigured)) {
+		return runErr
 	}
 	out, err := service.RunDict(ctx, svc.DB.Read, runID)
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(env.Stdout, jsonx.Dumps(out, jsonx.Opts{Indent: 2}))
-	return err
+	if _, err := fmt.Fprintln(env.Stdout, jsonx.Dumps(out, jsonx.Opts{Indent: 2})); err != nil {
+		return err
+	}
+	return runErr
 }

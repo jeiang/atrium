@@ -29,6 +29,7 @@ type Dependencies struct {
 	Owner   string
 	Gate    func(context.Context, float64) (Gate, error)
 	Recover Recovery
+	Abandon func(context.Context, Run, []int64, string) error
 	Resume  func(context.Context) (int, error)
 	Idle    func(context.Context) bool
 	Notice  func(context.Context, Skipped, float64) error
@@ -172,6 +173,9 @@ func (s *Scheduler) recovery(ctx context.Context, run Run) (Result, error) {
 		lost := workerLost
 		return Result{Status: StatusError, Error: &lost}, nil
 	}
+	if def, ok := Declared(s.jobs, run.Claim.Job); ok && def.Recover != nil {
+		return def.Recover(ctx, run, threads)
+	}
 	return s.deps.Recover(ctx, run, threads)
 }
 
@@ -215,9 +219,9 @@ func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Co
 	if def, ok := Declared(s.jobs, claim.Job); ok {
 		timeout = def.Timeout
 	}
-	ctx, stopWork := context.WithTimeout(ctx, timeout)
+	limited, stopWork := context.WithTimeoutCause(ctx, timeout, errTimedOut)
 	defer stopWork()
-	work, cancel := context.WithCancelCause(ctx)
+	work, cancel := context.WithCancelCause(limited)
 	defer cancel(nil)
 	var lost atomic.Bool
 	lose := func() {
@@ -250,6 +254,14 @@ func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Co
 		log.Info(fmt.Sprintf("job %d interrupted; its run resumes on restart", id), logx.Job, id)
 		s.settle(done, claim, s.release(done, claim))
 		return
+	case err != nil && errors.Is(context.Cause(limited), errTimedOut):
+		text := fmt.Sprintf("timed out after %s", timeout)
+		log.Error(fmt.Sprintf("job %d %s", id, text), logx.Job, id)
+		if aerr := s.abandon(done, claim, text); aerr != nil {
+			s.settle(done, claim, aerr)
+			return
+		}
+		result = Result{Status: StatusError, ThreadID: result.ThreadID, Error: &text}
 	case err != nil:
 		log.Error(fmt.Sprintf("job %d crashed", id), logx.Job, id, logx.Err, err)
 		result = Result{Status: StatusError, ThreadID: result.ThreadID, Error: new(err.Error())}
@@ -258,6 +270,19 @@ func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Co
 		return
 	}
 	s.settle(done, claim, s.Finish(done, claim, result))
+}
+
+var errTimedOut = errors.New("scheduler: the job reached its timeout")
+
+func (s *Scheduler) abandon(ctx context.Context, claim Claim, reason string) error {
+	if s.deps.Abandon == nil {
+		return nil
+	}
+	threads, err := JobRunThreads(ctx, s.db.Read, claim.JobRunID)
+	if err != nil || len(threads) == 0 {
+		return err
+	}
+	return s.deps.Abandon(ctx, Run{Claim: claim, Now: s.now}, threads, reason)
 }
 
 func (s *Scheduler) settle(ctx context.Context, claim Claim, err error) {
@@ -321,10 +346,6 @@ func (s *Scheduler) renew(ctx context.Context, claim Claim, stop <-chan struct{}
 var ErrAllBusy = errors.New("scheduler: every due job is busy")
 
 func (s *Scheduler) Once(ctx context.Context) error {
-	var running int64
-	if err := s.db.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE r.status = ? AND j.lease_until >= ?", StatusRunning, s.now()).Scan(&running); err != nil {
-		return err
-	}
 	before := s.started.Load()
 	err := s.Cycle(ctx)
 	s.wg.Wait()
@@ -332,7 +353,7 @@ func (s *Scheduler) Once(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if s.started.Load() == before && (running > 0 || s.busy.Load() > 0) {
+	if s.started.Load() == before && s.busy.Load() > 0 {
 		return ErrAllBusy
 	}
 	return ctx.Err()

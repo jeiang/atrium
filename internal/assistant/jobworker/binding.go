@@ -58,17 +58,18 @@ func (d Dependencies) Callable(fn func(context.Context, Env) (Result, error)) fu
 			runs = []int64{result.RunID}
 		}
 		var missing config.NotConfigured
-		if errors.As(err, &missing) {
-			return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new(missing.Error())}, nil
-		}
-		if err != nil && (len(runs) == 0 || ctx.Err() != nil) {
+		unconfigured := errors.As(err, &missing)
+		if err != nil && !unconfigured && (len(runs) == 0 || ctx.Err() != nil) {
 			if budgetErr := new(inference.BudgetExceeded); errors.As(err, budgetErr) {
 				return scheduler.Result{Status: scheduler.StatusSkippedBudget, Error: new(budgetErr.Error())}, nil
 			}
 			return scheduler.Result{}, err
 		}
 		if len(runs) == 0 {
-			if run.Claim.Missed {
+			switch {
+			case unconfigured:
+				return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new(missing.Error())}, nil
+			case run.Claim.Missed:
 				return scheduler.Result{Status: scheduler.StatusMissed}, nil
 			}
 			return scheduler.Result{Status: scheduler.StatusOK}, nil
@@ -77,7 +78,11 @@ func (d Dependencies) Callable(fn func(context.Context, Env) (Result, error)) fu
 		if oerr != nil {
 			return out, oerr
 		}
-		if err != nil && out.Status != scheduler.StatusRunning && out.Status != scheduler.StatusError {
+		switch {
+		case out.Status == scheduler.StatusRunning:
+		case unconfigured:
+			out.Status, out.Error = scheduler.StatusSkippedUnconfigured, new(missing.Error())
+		case err != nil && out.Status != scheduler.StatusError:
 			out.Status, out.Error = scheduler.StatusError, new(err.Error())
 		}
 		return out, nil

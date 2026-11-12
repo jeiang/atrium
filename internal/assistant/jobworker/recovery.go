@@ -14,27 +14,80 @@ import (
 
 const unprepared = "worker lost before the child run was prepared"
 
+type Admit func(context.Context, *service.Service, journal.Run) (bool, error)
+
 func recovery(svc *service.Service) scheduler.Recovery {
 	return func(ctx context.Context, run scheduler.Run, threads []int64) (scheduler.Result, error) {
-		if err := svc.ResumeThreads(ctx, threads); err != nil {
+		return recoverThreads(ctx, svc, run, threads, nil)
+	}
+}
+
+func (d Dependencies) Recover(admit Admit) scheduler.Recovery {
+	return func(ctx context.Context, run scheduler.Run, threads []int64) (scheduler.Result, error) {
+		if d.Service == nil {
+			return scheduler.Result{}, errors.New("scheduled jobs are not bound to an assistant service")
+		}
+		svc, err := d.Service(ctx)
+		if err != nil {
 			return scheduler.Result{}, err
 		}
-		q := svc.DB.Read
-		runs := make([]int64, 0, len(threads))
-		for _, thread := range threads {
-			var runID int64
-			err := q.QueryRowContext(ctx, "SELECT MAX(id) FROM runs WHERE thread_id = ? AND parent_run_id IS NULL HAVING MAX(id) IS NOT NULL", thread).Scan(&runID)
-			if errors.Is(err, sql.ErrNoRows) {
-				lost := unprepared
-				return scheduler.Result{Status: scheduler.StatusError, ThreadID: &threads[0], Error: &lost}, nil
-			}
-			if err != nil {
-				return scheduler.Result{}, err
-			}
-			runs = append(runs, runID)
-		}
-		return outcome(ctx, q, runs, run.Claim.Missed)
+		return recoverThreads(ctx, svc, run, threads, admit)
 	}
+}
+
+func jobRuns(ctx context.Context, q db.Querier, run scheduler.Run, threads []int64) ([]int64, bool, error) {
+	runs := make([]int64, 0, len(threads))
+	complete := true
+	for _, thread := range threads {
+		var runID int64
+		err := q.QueryRowContext(ctx, "SELECT MIN(id) FROM runs WHERE thread_id = ? AND parent_run_id IS NULL AND started_at >= ? HAVING MIN(id) IS NOT NULL",
+			thread, run.Claim.StartedAt).Scan(&runID)
+		if errors.Is(err, sql.ErrNoRows) {
+			complete = false
+			continue
+		}
+		if err != nil {
+			return nil, false, err
+		}
+		runs = append(runs, runID)
+	}
+	return runs, complete, nil
+}
+
+func recoverThreads(ctx context.Context, svc *service.Service, run scheduler.Run, threads []int64, admit Admit) (scheduler.Result, error) {
+	q := svc.DB.Read
+	runs, complete, err := jobRuns(ctx, q, run, threads)
+	if err != nil {
+		return scheduler.Result{}, err
+	}
+	if !complete {
+		lost := unprepared
+		return scheduler.Result{Status: scheduler.StatusError, ThreadID: &threads[0], Error: &lost}, nil
+	}
+	var before func(context.Context, journal.Run) (bool, error)
+	if admit != nil {
+		before = func(ctx context.Context, r journal.Run) (bool, error) { return admit(ctx, svc, r) }
+	}
+	if err := svc.ResumeRuns(ctx, runs, journal.DeadProcess(run.Claim.Previous), before); err != nil {
+		return scheduler.Result{}, err
+	}
+	return outcome(ctx, q, runs, run.Claim.Missed)
+}
+
+func abandon(ctx context.Context, svc *service.Service, run scheduler.Run, threads []int64, reason string) error {
+	runs, _, err := jobRuns(ctx, svc.DB.Read, run, threads)
+	if err != nil {
+		return err
+	}
+	var tree []int64
+	for _, id := range runs {
+		ids, err := journal.RunDescendants(ctx, svc.DB.Read, id)
+		if err != nil {
+			return err
+		}
+		tree = append(tree, ids...)
+	}
+	return journal.FailUnsettled(ctx, svc.DB.Write, tree, run.Now(), reason, journal.ProcessPrefix())
 }
 
 func outcome(ctx context.Context, q db.Querier, runs []int64, missed bool) (scheduler.Result, error) {

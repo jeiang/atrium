@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"os"
 	"os/exec"
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/jeiang/atrium/internal/cli"
 )
 
 func tickProcess(t *testing.T) (*exec.Cmd, *bytes.Buffer) {
@@ -32,7 +35,7 @@ func TestAgentTickWaitsAndExcludesConcurrentTicksPastTheLease(t *testing.T) {
 		t.Fatal("tick did not renew its claim")
 	}
 	other, otherErr := tickProcess(t)
-	if code := exitCode(other.Wait()); code != 1 {
+	if code := exitCode(other.Wait()); code != 0 {
 		t.Fatalf("busy tick exit %d: %s", code, otherErr)
 	}
 	if code := exitCode(first.Wait()); code != 0 {
@@ -87,7 +90,7 @@ func TestAgentTickStoppedPastItsLeaseIsFencedBeforeSuccessor(t *testing.T) {
 	t.Cleanup(func() { _ = first.Process.Signal(syscall.SIGCONT) })
 	time.Sleep(time.Until(time.UnixMicro(int64(*original.leaseUntil * 1e6)).Add(2 * time.Second)))
 	busy, _ := tickProcess(t)
-	if code := exitCode(busy.Wait()); code != 1 {
+	if code := exitCode(busy.Wait()); code != cli.ExitTempFail {
 		t.Fatalf("stopped owner lock not held: exit %d", code)
 	}
 	if err := first.Process.Signal(syscall.SIGCONT); err != nil {
@@ -108,5 +111,31 @@ func TestAgentTickStoppedPastItsLeaseIsFencedBeforeSuccessor(t *testing.T) {
 	}
 	if status, text := schedulerStatus(t, d, "weekly-review"); status != "ok" {
 		t.Fatalf("%s: %s", status, text)
+	}
+}
+
+func TestAgentTickTightensAnExistingLockDirectory(t *testing.T) {
+	t.Parallel()
+	d, _, f, _ := startWeeklyReview(t, asstReply("reviewed"))
+	locks := f.dir + "/atrium.db.locks"
+	if err := os.MkdirAll(locks, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(locks, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	tick, stderr := tickProcess(t)
+	if code := exitCode(tick.Wait()); code != 0 {
+		t.Fatalf("tick exit %d: %s", code, stderr)
+	}
+	if status, text := schedulerStatus(t, d, "weekly-review"); status != "ok" {
+		t.Fatalf("weekly status %s %s, want ok", status, text)
+	}
+	info, err := os.Stat(locks)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if mode := info.Mode().Perm(); mode != 0o700 {
+		t.Fatalf("lock directory mode %o, want 700", mode)
 	}
 }

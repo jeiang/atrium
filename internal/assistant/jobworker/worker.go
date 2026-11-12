@@ -44,6 +44,9 @@ func New(svc *service.Service, jobs []scheduler.Definition, enabled func(string)
 		Owner:   journal.NewOwner(),
 		Gate:    func(ctx context.Context, at float64) (scheduler.Gate, error) { return gate(ctx, svc, at) },
 		Recover: recovery(svc),
+		Abandon: func(ctx context.Context, run scheduler.Run, threads []int64, reason string) error {
+			return abandon(ctx, svc, run, threads, reason)
+		},
 		Resume: func(ctx context.Context) (int, error) {
 			claimed, err := scheduler.ClaimedThreads(ctx, svc.DB.Read)
 			if err != nil {
@@ -156,7 +159,7 @@ func prompt(ctx context.Context, svc *service.Service, run scheduler.Run, text s
 	if err != nil {
 		return refused(threadID, err)
 	}
-	result, err := settle(ctx, svc, claim, runID, threadID)
+	result, err := outcome(context.WithoutCancel(ctx), d.Read, []int64{runID}, claim.Missed)
 	if err != nil {
 		return refused(threadID, err)
 	}
@@ -172,36 +175,4 @@ func refused(threadID *int64, err error) (scheduler.Result, error) {
 		return scheduler.Result{Status: scheduler.StatusSkippedBudget, ThreadID: threadID, Error: new(budgetErr.Error())}, nil
 	}
 	return scheduler.Result{ThreadID: threadID}, err
-}
-
-func settle(ctx context.Context, svc *service.Service, claim scheduler.Claim, runID int64, threadID *int64) (scheduler.Result, error) {
-	d := svc.DB
-	run, err := journal.GetRun(ctx, d.Read, runID)
-	if err != nil {
-		return scheduler.Result{}, err
-	}
-	tokens, err := inference.RunTokens(ctx, d.Read, runID)
-	if err != nil {
-		return scheduler.Result{}, err
-	}
-	cost, err := inference.RunCost(ctx, d.Read, runID)
-	if err != nil {
-		return scheduler.Result{}, err
-	}
-	o := scheduler.Result{Status: scheduler.StatusOK, ThreadID: threadID, Tokens: tokens, Cost: cost}
-	switch {
-	case run.State != journal.Done && run.Error != nil && inference.IsCapError(*run.Error):
-		o.Status = scheduler.StatusSkippedBudget
-		o.Error = run.Error
-	case run.State != journal.Done:
-		o.Status = scheduler.StatusError
-		text := run.State
-		if run.Error != nil && *run.Error != "" {
-			text = *run.Error
-		}
-		o.Error = &text
-	case claim.Missed:
-		o.Status = scheduler.StatusMissed
-	}
-	return o, nil
 }

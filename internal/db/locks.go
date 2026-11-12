@@ -52,6 +52,9 @@ func TryResourceLocks(path string, resources []string) (*LockSet, error) {
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, err
 	}
+	if err := os.Chmod(dir, 0o700); err != nil {
+		return nil, err
+	}
 	keys := slices.Clone(resources)
 	slices.Sort(keys)
 	keys = slices.Compact(keys)

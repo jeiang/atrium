@@ -54,4 +54,5 @@ type Definition struct {
 	Resources       []string
 	Needs           []string
 	Run             func(context.Context, Run) (Result, error)
+	Recover         Recovery
 }

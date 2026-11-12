@@ -46,6 +46,7 @@ func Jobs(deps jobworker.Dependencies) []scheduler.Definition {
 		runs, err := dreaming.Run(ctx, e.Service, e.Now, e.Claim)
 		return jobworker.Result{Runs: runs}, err
 	})
+	nightly.Recover = deps.Recover(dreaming.Admit)
 	weekly := assistantJob(assistant.WeeklyReviewName, scheduler.JobBuiltin, weeklyReviewPrompt,
 		"weekly sun 18:00", assistant.KeyWeeklyReview, 30*time.Minute, scheduler.AlwaysSpends)
 	weekly.PromptRun = true

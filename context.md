@@ -443,14 +443,24 @@ behavior-parity target.
   opened in `job_run_threads`; attaching a thread requires the run to be
   running and owned by the claimant (`ErrClaimLost` otherwise). `agent tick`
   runs one bounded pass, waits for its started work and settlement, and exits
-  1 when every eligible occurrence is busy (0 for an idle pass). It has no
+  0 when it finished work or nothing was due, 75 (`cli.ExitTempFail`) when a
+  due job lost its lock to another invocation and nothing started, and 1 on
+  an error. It has no
   ticker or service notification; declared invocation deadlines still apply.
+  A job that reaches its own declared timeout fails its unsettled runs and
+  ends `error` ("timed out after …"); only shutdown or cancellation releases
+  it for resume.
   Missing configuration records `skipped_unconfigured`, not success. Nightly
   dreaming creates and associates every child thread in one transaction and
-  prepares every child run before the first executes. A job is settled only
+  prepares every child run with no spend allowance before the first
+  executes; immediately before a child runs, on the first pass or in
+  recovery, it receives the nightly and dreaming-monthly allowance that
+  remains, and a child with none is failed with a cap error. A job is settled only
   from all associated children: a failed child makes it fail, an unprepared
   association is an error, and an unsettled child keeps the run recoverable
-  and its claim released for recovery. A claim first takes a
+  and its claim released for recovery. A child's run is the first top-level
+  run on its thread started under the job run; later operator runs on the
+  thread never settle the job. A claim first takes a
   non-blocking lock on `job/<id>` and the job's declared resources; the lock
   files live in `<canonical database path>.locks/`, named by the SHA-256 of
   the resource key and never unlinked, separate from the migration lock.
@@ -465,10 +475,21 @@ behavior-parity target.
   release on interruption use the same fence, so a claimant that lost its
   claim never settles or clears its successor's run. A run whose lease has
   expired is taken over under the same locks with a new owner, which fences
-  the old one; the assistant recovery adapter then force-interrupts the
-  run's threads, resumes them synchronously and settles the run from their
-  outcome (no threads is `worker lost`). The global interrupted-run resume
+  the old one; the assistant recovery adapter then interrupts only those of
+  the job's runs whose own journal lease expired or whose owner is the
+  previous claimant's process when that process is gone, resumes them
+  synchronously and settles the run from their outcome (no threads is
+  `worker lost`). A run another live process executes, such as one the
+  operator approved and `serve` resumed, stays running and the job stays
+  released until it ends. The global interrupted-run resume
   skips threads of running job runs.
+  Accepted limits: a claimant stopped (SIGSTOP) past its lease and then
+  continued learns of the takeover only at its next 20-second renewal and may
+  send one more model request first; its lock still excludes any successor
+  while it lives. Lock identity is the canonical path after resolving
+  symlinks, so a hard link or bind mount of the same database gets separate
+  lock files and only the database lease fences it; `serve` refuses hard
+  links at start in slice 3c.
   The scheduler seeds every catalog job, cancels a keyed job no longer
   declared, and a job whose needed module is off
   records `skipped_module`. Core (settings, secrets, `db`,
