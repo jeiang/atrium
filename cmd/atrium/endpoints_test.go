@@ -3,6 +3,7 @@ package main
 import (
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -240,5 +241,83 @@ func TestConnectionsTestReusesTheStoredEmbeddingBearerWhenTheInputIsBlank(t *tes
 		if got != "Bearer sk-embed-stored" {
 			t.Fatalf("the blank-bearer test sent %q", got)
 		}
+	}
+}
+
+func TestLocalChatKeyFileBindsTheChatEndpoint(t *testing.T) {
+	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	keyPath := filepath.Join(dir, "chat.key")
+	const key = "chat-key-file-sentinel"
+	if err := os.WriteFile(keyPath, []byte(key+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	base, err := os.ReadFile(defaultHostConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(base) + fmt.Sprintf(`
+[connections."service/embedding"]
+kind = "service/embedding"
+label = "Embedding"
+config = { url = %q, model = "embeddinggemma" }
+capabilities = ["embeddings"]
+
+[mail]
+mail_chat_url = %q
+mail_chat_key_file = %q
+`, embed.URL+"/v1", chat.URL+"/v1", keyPath)
+	hostPath := filepath.Join(dir, "host-chat.toml")
+	if err := os.WriteFile(hostPath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", hostPath)
+	setEnv(t, settingEnv(endpoint.KeyChatURL), "")
+	setEnv(t, settingEnv(endpoint.KeyChatModel), "")
+	got := runApp(t, "endpoints", "probe")
+	if got.code != cli.ExitOK {
+		t.Fatalf("endpoints probe: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	seen := chat.seen("/v1/chat/completions")
+	if len(seen) == 0 {
+		t.Fatal("the chat endpoint was not probed")
+	}
+	for _, auth := range seen {
+		if auth != "Bearer "+key {
+			t.Errorf("chat Authorization %q, want the host file key", auth)
+		}
+	}
+	if strings.Contains(got.stdout+got.stderr, key) {
+		t.Errorf("the probe printed the chat key: %q", got.stdout)
+	}
+}
+
+func TestLocalChatStoredEndpointStillDrivesTheChatProbe(t *testing.T) {
+	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
+	setEnv(t, settingEnv(endpoint.KeyChatURL), "")
+	setEnv(t, settingEnv(endpoint.KeyChatModel), "")
+	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
+		t.Fatalf("settings list: exit %d stderr %q", ran.code, ran.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	seedSetting(t, d, endpoint.KeyChatURL, chat.URL+"/v1")
+	seedSetting(t, d, endpoint.KeyChatModel, "stored-chat-model")
+	got := runApp(t, "endpoints", "probe")
+	if got.code != cli.ExitOK {
+		t.Fatalf("endpoints probe: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	for _, want := range []string{`"url": "` + chat.URL + `/v1"`, `"model": "stored-chat-model"`} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the probe lacks %q: %s", want, got.stdout)
+		}
+	}
+	calls, bodies := chat.chatCalls()
+	if calls == 0 || len(bodies) == 0 {
+		t.Fatal("the stored chat endpoint was not probed")
+	}
+	if model, _ := bodies[0]["model"].(string); model != "stored-chat-model" {
+		t.Errorf("the chat request model = %q, want the stored model", model)
 	}
 }

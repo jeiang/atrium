@@ -48,8 +48,26 @@ func readSourcePins(env config.Env, configPath, envPath string) (*sourcePins, er
 	for _, entry := range append(settings.Manifest(), retiredEntries()...) {
 		name := sourceEnvName(entry)
 		fileName := name + "_FILE"
+		if strings.HasSuffix(entry.Key, "_file") {
+			if raw, ok := file[name]; ok && raw != "" {
+				value, err := sourcePinValue(entry, raw, "source env "+envPath+" "+name, false)
+				if err != nil {
+					return nil, err
+				}
+				p.m[entry.Key] = value
+				continue
+			}
+			if path, ok := file[fileName]; ok && path != "" {
+				value, err := sourcePinValue(entry, path, "source env "+envPath+" "+fileName, true)
+				if err != nil {
+					return nil, err
+				}
+				p.m[entry.Key] = value
+			}
+			continue
+		}
 		if path, ok := file[fileName]; ok && path != "" {
-			value, err := sourcePinValue(entry, path, "source env "+envPath+" "+fileName, true, lookup)
+			value, err := sourcePinValue(entry, path, "source env "+envPath+" "+fileName, true)
 			if err != nil {
 				return nil, err
 			}
@@ -57,7 +75,7 @@ func readSourcePins(env config.Env, configPath, envPath string) (*sourcePins, er
 			continue
 		}
 		if raw, ok := file[name]; ok && raw != "" {
-			value, err := sourcePinValue(entry, raw, "source env "+envPath+" "+name, false, lookup)
+			value, err := sourcePinValue(entry, raw, "source env "+envPath+" "+name, false)
 			if err != nil {
 				return nil, err
 			}
@@ -83,8 +101,17 @@ func (p *sourcePins) readSourceConfig(lookup func(string) (string, string, bool)
 			continue
 		}
 		for _, name := range slices.Sorted(maps.Keys(table)) {
-			base, isFile := strings.CutSuffix(name, "_file")
-			entry, known := sourceEntry(module, base)
+			entry, known := sourceEntry(module, name)
+			isFile := false
+			if !known {
+				base, cut := strings.CutSuffix(name, "_file")
+				if !cut {
+					p.unknown = append(p.unknown, module+"."+name)
+					continue
+				}
+				entry, known = sourceEntry(module, base)
+				isFile = true
+			}
 			if !known {
 				p.unknown = append(p.unknown, module+"."+name)
 				continue
@@ -93,7 +120,7 @@ func (p *sourcePins) readSourceConfig(lookup func(string) (string, string, bool)
 			if err != nil {
 				return fmt.Errorf("db import-v2: source config %s: %w", path, err)
 			}
-			value, err := sourcePinValue(entry, text, "config "+path+" "+module+"."+name, isFile, lookup)
+			value, err := sourcePinValue(entry, text, "config "+path+" "+module+"."+name, isFile)
 			if err != nil {
 				return fmt.Errorf("db import-v2: source config %s: %w", path, err)
 			}
@@ -103,7 +130,7 @@ func (p *sourcePins) readSourceConfig(lookup func(string) (string, string, bool)
 	return nil
 }
 
-func sourcePinValue(entry settings.ImportEntry, raw, source string, isFile bool, lookup func(string) (string, string, bool)) (settings.ImportPin, error) {
+func sourcePinValue(entry settings.ImportEntry, raw, source string, isFile bool) (settings.ImportPin, error) {
 	if settings.ImportSecretName(entry.Key) {
 		return settings.ImportPin{Source: source}, nil
 	}
@@ -115,11 +142,7 @@ func sourcePinValue(entry settings.ImportEntry, raw, source string, isFile bool,
 		}
 		value = strings.TrimSpace(string(content))
 	}
-	resolved, err := sourceInterpolate(lookup, source, value)
-	if err != nil {
-		return settings.ImportPin{}, err
-	}
-	return settings.ImportPin{Value: resolved, Source: source}, nil
+	return settings.ImportPin{Value: value, Source: source}, nil
 }
 
 func sourceInterpolate(lookup func(string) (string, string, bool), source, value string) (string, error) {
@@ -163,7 +186,9 @@ func readSourceEnv(path string) (map[string]string, error) {
 	}
 	defer func() { _ = f.Close() }()
 	scanner := bufio.NewScanner(f)
+	lineNo := 0
 	for scanner.Scan() {
+		lineNo++
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -171,7 +196,7 @@ func readSourceEnv(path string) (map[string]string, error) {
 		line = strings.TrimPrefix(line, "export ")
 		name, value, ok := strings.Cut(line, "=")
 		if !ok {
-			return nil, fmt.Errorf("db import-v2: source environment %s: %q is not NAME=VALUE", path, line)
+			return nil, fmt.Errorf("db import-v2: source environment %s: line %d is not NAME=VALUE", path, lineNo)
 		}
 		out[strings.TrimSpace(name)] = strings.TrimSpace(value)
 	}

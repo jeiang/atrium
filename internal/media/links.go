@@ -71,6 +71,9 @@ func (l *Links) secretKey(ctx context.Context) (key []byte, fresh bool, err erro
 }
 
 func (l *Links) reread(ctx context.Context) []byte {
+	if _, ok, err := secrets.FileKey(ctx, secrets.LinkKeyFile); err != nil || ok {
+		return nil
+	}
 	value, err := secrets.New(l.reg, l.d, l.d).Reading().Value(ctx, KeyLinkKey)
 	if err != nil || value == "" {
 		return nil

@@ -43,7 +43,7 @@ func HostDefs() []HostDef {
 		if slices.ContainsFunc(out, func(d HostDef) bool { return d.Key == e.Key }) {
 			continue
 		}
-		out = append(out, HostDef{Key: e.Key, Module: e.Module, Type: e.Type, Default: e.Default, Choices: slices.Clone(e.Choices)})
+		out = append(out, HostDef{Key: e.Key, Module: e.Module, Type: e.Type, Default: e.Default, Choices: slices.Clone(e.Choices), Secret: e.Secret})
 	}
 	slices.SortFunc(out, func(a, b HostDef) int { return strings.Compare(a.Key, b.Key) })
 	return out

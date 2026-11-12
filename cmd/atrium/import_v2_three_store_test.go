@@ -30,7 +30,7 @@ func TestImportV2ThreeStoresAccountForEveryRowAndPin(t *testing.T) {
 	}
 	before := fileDigest(t, source)
 	configPath := filepath.Join(dir, "v2.toml")
-	if err := os.WriteFile(configPath, []byte("[assistant]\ndefault_effort = \"xhigh\"\n[core]\npublic_url = \"https://pin.example\"\n"), 0o600); err != nil {
+	if err := os.WriteFile(configPath, []byte("[assistant]\ndefault_effort = \"xhigh\"\n[core]\npublic_url = \"https://pin.example\"\n[mail]\nmail_chat_ca_file = \"/operator/chat-ca.pem\"\n[grafana]\ngrafana_ca_file = \"/operator/grafana-ca.pem\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	envPath := filepath.Join(dir, "v2.env")
@@ -49,6 +49,8 @@ func TestImportV2ThreeStoresAccountForEveryRowAndPin(t *testing.T) {
 		"setting default_effort: carried -> settings.default_effort from pin config " + configPath + " assistant.default_effort",
 		"setting public_url: drop-host -> host.core.public_url; host requirement host.core.public_url = https://pin.example (pin config " + configPath + " core.public_url)",
 		"setting mail_embed_batch: drop-tuning -> internal/endpoint/tuning.go:TuningMailEmbedBatch; pin source env " + envPath + " ATRIUM_MAIL_MAIL_EMBED_BATCH value 1 differs from the compiled default 16 (changed-from-default)",
+		"pin mail_chat_ca_file: drop-host -> host.local_chat.ca_file; host requirement host.local_chat.ca_file = /operator/chat-ca.pem (pin config " + configPath + " mail.mail_chat_ca_file)",
+		"pin grafana_ca_file: drop-host -> service/grafana.transport.ca_file; host requirement service/grafana.transport.ca_file = /operator/grafana-ca.pem (pin config " + configPath + " grafana.grafana_ca_file)",
 		"setting assistant_enabled: carried -> settings.assistant_enabled; module flag stays an operator setting",
 		"setting oidc_access_group: dropped -> host.auth.oidc_access_groups; host requirement host.auth.oidc_access_groups = legacy-group (settings)",
 		"setting not_a_real_key: drop-unknown",
@@ -96,6 +98,7 @@ func TestImportV2CarriesHistoricalAuditUnchangedAndAppendsImportEntries(t *testi
 	} {
 		editImportSource(t, source, statement)
 	}
+	setEnv(t, "ATRIUM_INITIAL_TZ", "Europe/Paris")
 	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
 	if got.code != cli.ExitOK {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
@@ -141,6 +144,17 @@ func TestImportV2CarriesHistoricalAuditUnchangedAndAppendsImportEntries(t *testi
 		if audit[i] != w {
 			t.Errorf("audit row %d = %+v, want %+v", i, audit[i], w)
 		}
+	}
+	var bootstrap *auditRow
+	for i := range audit {
+		if audit[i].key == "tz" && audit[i].actor == "bootstrap" {
+			bootstrap = &audit[i]
+		}
+	}
+	if bootstrap == nil {
+		t.Error("the destination bootstrap audit row is missing")
+	} else if bootstrap.id <= 9 {
+		t.Errorf("the destination bootstrap audit row id = %d, want it renumbered above the source range", bootstrap.id)
 	}
 	last := audit[len(audit)-1]
 	if last.key != "mail_mode" || last.source != "migration" || last.secret != 0 {
@@ -227,5 +241,129 @@ func TestImportV2RefusesAnUnknownSecretBeforeCreatingTheDestination(t *testing.T
 	}
 	if _, err := os.Stat(filepath.Join(dir, "atrium.db")); !os.IsNotExist(err) {
 		t.Errorf("the destination exists after a refused import: %v", err)
+	}
+}
+
+func TestImportV2ResetsEveryEffectiveLiveMailMode(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	for _, tc := range []struct {
+		name string
+		row  string
+		want string
+	}{
+		{name: "pin only", want: "pin mail_mode: reset-for-cutover live -> shadow from pin config "},
+		{name: "pin over shadow row", row: "shadow", want: "setting mail_mode: reset-for-cutover live -> shadow"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "")
+			dir := t.TempDir()
+			source := copyV2Fixture(t, dir)
+			editImportSource(t, source, "DELETE FROM settings WHERE key = 'mail_mode'")
+			if tc.row != "" {
+				editImportSource(t, source, "INSERT INTO settings (key, value) VALUES ('mail_mode', '"+tc.row+"')")
+			}
+			configPath := filepath.Join(dir, "v2.toml")
+			if err := os.WriteFile(configPath, []byte("[mail]\nmail_mode = \"live\"\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source, "--source-config", configPath)
+			if got.code != cli.ExitOK {
+				t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+			}
+			if !strings.Contains(got.stdout, tc.want) {
+				t.Errorf("the report lacks %q:\n%s", tc.want, got.stdout)
+			}
+			dest, err := db.OpenSource(filepath.Join(dir, "atrium.db"), importKey(t))
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = dest.Close() }()
+			if value := importValue(t, dest, "SELECT value FROM settings WHERE key = 'mail_mode'"); value != "shadow" {
+				t.Errorf("mail_mode = %q, want shadow", value)
+			}
+			if n := importCount(t, dest, "SELECT COUNT(*) FROM settings_audit WHERE key = 'mail_mode' AND old_value = 'live' AND new_value = 'shadow'"); n != 1 {
+				t.Errorf("the reset audit rows = %d, want 1", n)
+			}
+		})
+	}
+}
+
+func TestImportV2RefusesAnAmbiguousICloudOverride(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	editImportSource(t, source, `INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, auth_method, created_at) VALUES ('icloud2', 'iCloud Two', 'icloud', 'second@icloud.invalid', 1, 0, 'password', 1762000800)`)
+	const appleID = "override@example.test"
+	configPath := filepath.Join(dir, "v2.toml")
+	if err := os.WriteFile(configPath, []byte("[calendar]\nicloud_apple_id = \""+appleID+"\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source, "--source-config", configPath)
+	if got.code == cli.ExitOK {
+		t.Fatalf("the import accepted an ambiguous iCloud override: %s", got.stdout)
+	}
+	for _, want := range []string{"calendar.icloud_apple_id", "calendar_account", "icloud", "icloud2"} {
+		if !strings.Contains(got.stderr, want) {
+			t.Errorf("the refusal lacks %q: %q", want, got.stderr)
+		}
+	}
+	if strings.Contains(got.stdout+got.stderr, appleID) {
+		t.Errorf("the refusal printed the override value: %q", got.stderr)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "atrium.db")); !os.IsNotExist(err) {
+		t.Errorf("the destination exists after a refused import: %v", err)
+	}
+}
+
+func TestImportV2NamesTheSourceEnvLineWithoutTheValue(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	const sentinel = "malformed-secret-sentinel"
+	envPath := filepath.Join(dir, "v2.env")
+	if err := os.WriteFile(envPath, []byte("ATRIUM_MAIL_MAIL_CHAT_KEY: "+sentinel+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source, "--source-env", envPath)
+	if got.code == cli.ExitOK {
+		t.Fatalf("the import accepted a malformed source environment: %s", got.stdout)
+	}
+	want := "source environment " + envPath + ": line 1 is not NAME=VALUE"
+	if !strings.Contains(got.stderr, want) {
+		t.Errorf("the refusal lacks %q: %q", want, got.stderr)
+	}
+	if strings.Contains(got.stdout+got.stderr, sentinel) {
+		t.Errorf("the refusal printed the line: %q", got.stderr)
+	}
+}
+
+func TestImportV2KeepsFileContentsLiteral(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	promptPath := filepath.Join(dir, "prompt.txt")
+	const literal = "Keep ${HOME} literal\n"
+	if err := os.WriteFile(promptPath, []byte(literal), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, "PROMPT_SUBAGENT", "Keep ${HOME} literal")
+	configPath := filepath.Join(dir, "v2.toml")
+	body := "[assistant]\nprompt_system_file = \"" + promptPath + "\"\nprompt_subagent = \"${PROMPT_SUBAGENT}\"\n"
+	if err := os.WriteFile(configPath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source, "--source-config", configPath)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	dest, err := db.OpenSource(filepath.Join(dir, "atrium.db"), importKey(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = dest.Close() }()
+	for _, key := range []string{"prompt_system", "prompt_subagent"} {
+		if value := importValue(t, dest, "SELECT value FROM settings WHERE key = ?", key); value != "Keep ${HOME} literal" {
+			t.Errorf("%s = %q, want the literal file and scalar contents", key, value)
+		}
 	}
 }

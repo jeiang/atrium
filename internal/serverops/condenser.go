@@ -73,7 +73,7 @@ func condense(ctx context.Context, e worker.Env, threadID int64, now float64, lo
 	set := assistant.Read(ctx, d.Read)
 	model := set.Text(KeyCondenserModel)
 	if model == "" {
-		model = endpoint.Read(ctx, d.Read).Host(endpoint.KeyChatModel)
+		model = endpoint.Read(ctx, d.Read).Text(endpoint.KeyChatModel)
 	}
 	maxTokens := TuningOpsCondenserMaxTokens
 	if err := set.Err(); err != nil {
