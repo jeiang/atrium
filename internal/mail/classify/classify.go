@@ -89,7 +89,8 @@ func Unanswered(err error) (final, ok bool) {
 	}
 	if unanswered.Reason != classifier.ReasonExhausted {
 		log.Warn("paid classification gave no usable answer for this message; the pass continues",
-			"caller", string(unanswered.Caller), "item", unanswered.ItemKey, "reason", unanswered.Reason, "final", unanswered.Final)
+			"caller", string(unanswered.Caller), "item", unanswered.ItemKey, "reason", unanswered.Reason, "final", unanswered.Final,
+			logx.Err, unanswered.Error())
 	}
 	return unanswered.Final, true
 }
