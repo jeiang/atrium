@@ -763,8 +763,12 @@ func ImportV2(ctx context.Context, tx *sql.Tx, src *sql.DB, pins map[string]Impo
 			summary.Dropped++
 			continue
 		}
+		effective := r.value
+		if pinned {
+			effective = pin.Value
+		}
 		switch {
-		case r.key == "mail_mode" && r.value == "live":
+		case r.key == "mail_mode" && effective == "live":
 			if _, err := tx.ExecContext(ctx, "UPDATE settings SET value = 'shadow' WHERE key = 'mail_mode'"); err != nil {
 				return nil, summary, err
 			}
@@ -850,7 +854,21 @@ func ImportV2(ctx context.Context, tx *sql.Tx, src *sql.DB, pins map[string]Impo
 		}
 		switch entry.Action {
 		case ImportCarry:
-			if _, err := tx.ExecContext(ctx, "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, pin.Value); err != nil {
+			value := pin.Value
+			if key == "mail_mode" && value == "live" {
+				value = "shadow"
+				if _, err := tx.ExecContext(ctx, "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value); err != nil {
+					return nil, summary, err
+				}
+				old, next := "live", "shadow"
+				if err := audit.Record(ctx, tx, audit.Entry{Key: key, Old: &old, New: &next}); err != nil {
+					return nil, summary, err
+				}
+				lines = append(lines, "pin "+key+": reset-for-cutover live -> shadow from pin "+pin.Source)
+				summary.ResetShadow++
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value); err != nil {
 				return nil, summary, err
 			}
 			line := "pin " + key + ": carried -> " + entry.Target + " from pin " + pin.Source
