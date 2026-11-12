@@ -46,6 +46,7 @@ func davFixture(t *testing.T) (dir string, srv *caldavtest.Server) {
 	setEnv(t, calendar.CardDAVEnv, srv.URL+"/")
 	setEnv(t, settingEnv(contacts.DirKey), filepath.Join(dir, "contacts"))
 	setEnv(t, settingEnv(calendar.CalendarDirKey), filepath.Join(dir, "calendars"))
+	seedSettings(t, map[string]string{calendar.AppleIDKey: "operator@icloud.invalid"})
 	return dir, srv
 }
 

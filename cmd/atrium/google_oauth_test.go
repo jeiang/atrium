@@ -82,15 +82,12 @@ func TestGoogleOAuthWizardStoresPerCapabilityRefreshTokensAndReportsHealth(t *te
 	fake := &googleTokenFake{status: http.StatusOK, refresh: "refresh-1"}
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
+	requireCipher(t)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	t.Setenv("ATRIUM_GOOGLE_AUTH_URL", srv.URL+"/auth")
 	t.Setenv("ATRIUM_GOOGLE_TOKEN_URL", srv.URL+"/token")
 	t.Setenv("ATRIUM_GOOGLE_API_URL", srv.URL+"/calendar/v3")
 	t.Setenv("ATRIUM_CALENDAR_GOOGLE_API_URL", srv.URL+"/calendar/v3")
-	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() {
-		db.SetDefaultKey(db.Key{})
-	})
 	base, logs, stop := startServeStoppable(t, dir)
 	t.Cleanup(stop)
 	jar, _ := cookiejar.New(nil)

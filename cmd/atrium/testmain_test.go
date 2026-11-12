@@ -25,6 +25,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 var moduleNames = module.Builtins
@@ -333,14 +334,47 @@ func seedAllFlagsIn(t *testing.T, dir string) {
 	seedAllFlags(t)
 }
 
+func flagKeyOf(key string) bool {
+	for _, name := range moduleNames {
+		if key == module.FlagKey(name) {
+			return true
+		}
+	}
+	return false
+}
+
 func seedSettingsAt(t *testing.T, path string, kv map[string]string) {
 	t.Helper()
+	env := testLookupFor(t)
+	reg := settings.New()
+	st := config.NewState(reg)
+	ctx := config.With(context.Background(), st)
+	ctx = settings.With(ctx, reg)
+	if err := bootstrap(env, reg)(ctx, io.Discard); err != nil {
+		t.Fatalf("seed bootstrap: %v", err)
+	}
 	d, err := db.Connect(path)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer func() { _ = d.Close() }()
+	if err := newSet(env, reg, st, nil, imapclient.Opener, nil).Seed(ctx, d); err != nil {
+		t.Fatalf("seed modules: %v", err)
+	}
+	ctx = audit.With(ctx, "fixture", audit.UI)
 	for key, value := range kv {
+		if key == "" {
+			continue
+		}
+		if flagKeyOf(key) {
+			if value == "" {
+				value = "false"
+			}
+			if err := reg.Set(ctx, d.Write, key, value); err != nil {
+				t.Fatalf("seed %s: %v", key, err)
+			}
+			continue
+		}
 		if _, err := d.Write.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value); err != nil {
 			t.Fatalf("seed %s: %v", key, err)
 		}
@@ -406,7 +440,12 @@ func qbitHostWithCA(t *testing.T, dir, url, ca string) string {
 
 func embedHost(t *testing.T, dir, url string) string {
 	t.Helper()
-	return hostConfigEdit(t, dir, "host-embed.toml", map[string]string{
+	return embedHostNamed(t, dir, "host-embed.toml", url)
+}
+
+func embedHostNamed(t *testing.T, dir, name, url string) string {
+	t.Helper()
+	return hostConfigEdit(t, dir, name, map[string]string{
 		`config = { url = "http://embed.invalid/v1", model = "embeddinggemma" }`: `config = { url = ` + strconv.Quote(url) + `, model = "embeddinggemma" }`,
 	})
 }

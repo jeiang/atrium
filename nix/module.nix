@@ -69,7 +69,7 @@
   appKeyHost = lib.foldl' lib.recursiveUpdate {} (lib.mapAttrsToList (key: _: let
     k = splitKey appKeyFiles.${key};
   in {${k.table}."${k.name}" = "\${CREDENTIALS_DIRECTORY}/${key}";})
-  (lib.filterAttrs (key: _: appKeyFiles ? key) cfg.secretFiles));
+  (lib.filterAttrs (key: _: appKeyFiles ? ${key}) cfg.secretFiles));
 
   renderedHost = lib.recursiveUpdate hostValues (
     {
@@ -174,7 +174,7 @@
   in
     if builtins.length parts != 2
     then ["services.atrium.secretFiles keys are <module>.<key>"]
-    else if appKeyFiles ? key
+    else if appKeyFiles ? ${key}
     then []
     else if key == "db.key"
     then ["services.atrium.secretFiles.\"db.key\" is the database key; use services.atrium.database.keyFile"]
@@ -187,7 +187,7 @@
     k = splitKey appKeyFiles.${key};
   in
     lib.optional ((cfg.host.${k.table} or {}) ? ${k.name}) "services.atrium.secretFiles.\"${key}\" and services.atrium.host.${k.table}.${k.name} are both set; set only one")
-  (lib.filterAttrs (key: _: appKeyFiles ? key) cfg.secretFiles));
+  (lib.filterAttrs (key: _: appKeyFiles ? ${key}) cfg.secretFiles));
 
   connectionErrors = lib.flatten (lib.mapAttrsToList (id: c:
     lib.optional (id == "") "services.atrium.connections has an empty id"

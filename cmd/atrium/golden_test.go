@@ -173,6 +173,7 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	}
 	mode := vars["ATRIUM_MODE"]
 	qbitURL := vars["QBITTORRENT_URL"]
+	eztvURL := vars["EZTV_URL"]
 	for phaseA, canonical := range map[string]string{
 		"ATRIUM_CHAT_URL": "ATRIUM_MAIL_MAIL_CHAT_URL",
 		"ATRIUM_MEDIA_ROOT": "ATRIUM_MEDIA_MEDIA_ROOT",
@@ -186,6 +187,7 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	}
 	delete(vars, "ATRIUM_MODE")
 	delete(vars, "QBITTORRENT_URL")
+	delete(vars, "EZTV_URL")
 	accounts := []mailAccount{
 		{"icloud", "icloud", vars["ICLOUD_MAIL_USERNAME"], vars["ICLOUD_APP_PASSWORD"], false},
 		{"gmail", "gmail", vars["GMAIL_ADDRESS"], vars["GMAIL_APP_PASSWORD"], false},
@@ -213,6 +215,23 @@ label = "qBittorrent"
 config = { url = %q }
 capabilities = ["api"]
 `, qbitURL)
+		if err := os.WriteFile(hostPath, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if eztvURL != "" {
+		hostPath := vars["ATRIUM_HOST_CONFIG"]
+		raw, err := os.ReadFile(hostPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body := string(raw) + fmt.Sprintf(`
+[connections."service/eztv"]
+kind = "service/eztv"
+label = "EZTV"
+config = { url = %q }
+capabilities = ["api"]
+`, eztvURL)
 		if err := os.WriteFile(hostPath, []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
@@ -463,5 +482,5 @@ func mediaServices(t *testing.T) map[string]string {
 	mux.HandleFunc("/", func(http.ResponseWriter, *http.Request) {})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
-	return map[string]string{"QBITTORRENT_URL": srv.URL, "ATRIUM_MEDIA_MEDIA_EZTV_URL": srv.URL + "/api/get-torrents"}
+	return map[string]string{"QBITTORRENT_URL": srv.URL, "EZTV_URL": srv.URL + "/api/get-torrents"}
 }

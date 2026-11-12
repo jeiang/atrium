@@ -133,10 +133,12 @@ func TestRemovedEnvironmentAndFilePinsAreRefused(t *testing.T) {
 		want string
 	}{
 		"credential env": {env: map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_API_KEY": "qbt"}, want: `connections."service/qbittorrent".credential_files.api_key`},
-		"tuning env":     {env: map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_TIMEOUT_SECONDS": "30"}, want: "compiled constant internal/media/tuning.go:TuningMediaQbittorrentTimeoutSeconds"},
-		"operator env":   {env: map[string]string{"ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD": "120"}, want: "atrium settings set monthly_budget_usd"},
-		"host env":       {env: map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL": "http://q.invalid"}, want: `connections."service/qbittorrent".config.url`},
-		"anthropic env":  {env: map[string]string{"ANTHROPIC_API_KEY": "sk-test"}, want: `connections."service/anthropic".credential_files.api_key`},
+		"credential file env": {env: map[string]string{"ATRIUM_AUTH_OIDC_CLIENT_SECRET_FILE": writeFile(t, dir, "oidc-client-secret", "client-secret-value\n")},
+			want: `connections."service/oidc".credential_files.client_secret`},
+		"tuning env":    {env: map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_TIMEOUT_SECONDS": "30"}, want: "compiled constant internal/media/tuning.go:TuningMediaQbittorrentTimeoutSeconds"},
+		"operator env":  {env: map[string]string{"ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD": "120"}, want: "atrium settings set monthly_budget_usd"},
+		"host env":      {env: map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL": "http://q.invalid"}, want: `connections."service/qbittorrent".config.url`},
+		"anthropic env": {env: map[string]string{"ANTHROPIC_API_KEY": "sk-test"}, want: `connections."service/anthropic".credential_files.api_key`},
 	} {
 		for key, value := range c.env {
 			setEnv(t, key, value)
