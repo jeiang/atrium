@@ -26,7 +26,7 @@ func twoDreamingGroups(t *testing.T) (*db.DB, *modelLog, int) {
 			t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
 		}
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", keyFor(t))
 	asstExec(t, d, "UPDATE threads SET marks = 5, tainted_at = ? WHERE id = ?", unixNow(), chatThread(t, d))
 	schedulerSeed(t, f, d)
 	asstExec(t, d, "UPDATE jobs SET next_due = NULL")

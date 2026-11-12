@@ -79,7 +79,7 @@ func TestOwnerScheduleSettingRoundTripsThroughTheScheduledPage(t *testing.T) {
 	code, page, _ := w.get("/scheduled", false)
 	w.want(code, http.StatusOK, page, "package-tracking", "*/45 * * * *", "calendar-candidates", "ops-sampler", "media-thumbnails")
 
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	var id, n int64
 	if err := d.Read.QueryRow("SELECT id FROM jobs WHERE name = 'package-tracking' AND kind = 'builtin'").Scan(&id); err != nil {
 		t.Fatalf("the package-tracking job: %v", err)
