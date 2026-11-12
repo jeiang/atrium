@@ -8,27 +8,34 @@ import (
 )
 
 type commitKey struct{}
-type PrepareCommit func(context.Context, db.Querier) (func(bool), error)
 
-func WithCommit(ctx context.Context, prepare PrepareCommit) context.Context {
-	return context.WithValue(ctx, commitKey{}, prepare)
+type Commit interface {
+	Lock() (unlock func())
+	Prepare(ctx context.Context, q db.Querier) (publish func(), err error)
+}
+
+func WithCommit(ctx context.Context, c Commit) context.Context {
+	return context.WithValue(ctx, commitKey{}, c)
 }
 
 func WithTx(ctx context.Context, d *db.DB, fn func(*sql.Tx) error) error {
-	var publish func(bool)
+	c, ok := ctx.Value(commitKey{}).(Commit)
+	if !ok {
+		return d.WithTx(ctx, fn)
+	}
+	unlock := c.Lock()
+	defer unlock()
+	var publish func()
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
 		if err := fn(tx); err != nil {
 			return err
 		}
-		if prepare, ok := ctx.Value(commitKey{}).(PrepareCommit); ok {
-			var err error
-			publish, err = prepare(ctx, tx)
-			return err
-		}
-		return nil
+		var err error
+		publish, err = c.Prepare(ctx, tx)
+		return err
 	})
-	if publish != nil {
-		publish(err == nil)
+	if err == nil && publish != nil {
+		publish()
 	}
 	return err
 }

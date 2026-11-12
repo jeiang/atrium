@@ -3,7 +3,9 @@ package app
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
@@ -19,14 +21,17 @@ const (
 )
 
 type services struct {
-	ctx    context.Context
-	set    *module.Set
-	mu     sync.Mutex
-	owners map[string]*runtime.Supervisor
-	work   map[string]*ownedWork
-	sched  *runtime.Supervisor
-	closed bool
-	unhook func()
+	ctx       context.Context
+	set       *module.Set
+	mu        sync.Mutex
+	owners    map[string]*runtime.Supervisor
+	work      map[string]*ownedWork
+	sched     *runtime.Supervisor
+	closed    bool
+	unhook    func()
+	recovered atomic.Bool
+	attempted chan struct{}
+	attempt   sync.Once
 }
 
 type ownedWork struct {
@@ -39,20 +44,15 @@ func (a *App) serve(ctx context.Context, set *module.Set) error {
 	if err := set.Current().Recover(ctx, a.db, a.config); err != nil {
 		return err
 	}
-	rt := &services{ctx: ctx, set: set, owners: map[string]*runtime.Supervisor{}, work: map[string]*ownedWork{}}
+	rt := &services{ctx: ctx, set: set, owners: map[string]*runtime.Supervisor{}, work: map[string]*ownedWork{}, attempted: make(chan struct{})}
 	a.rt = rt
-	if set.Current().Enabled(module.Assistant) {
-		if err := a.scheduler(nil).Recover(ctx); err != nil {
-			return err
-		}
-	}
-	sched, err := runtime.New([]runtime.ServiceDefinition{{Name: schedulerService, Critical: true, Stall: schedulerStall, Run: func(ctx context.Context, s *runtime.Services) error {
-		a.scheduler(func() { s.Heartbeat(schedulerService) }).Run(ctx)
-		return ctx.Err()
+	sched, err := runtime.New([]runtime.ServiceDefinition{{Name: schedulerService, Critical: true, Stall: schedulerStall, Run: func(run context.Context, s *runtime.Services) error {
+		return a.scheduler(func() { s.Heartbeat(schedulerService) }).Run(run, ctx.Done())
 	}}})
 	if err != nil {
 		return err
 	}
+	started := false
 	rt.unhook = set.Supervise(func(snap *module.Snapshot) {
 		for _, d := range a.catalog.Declarations() {
 			a.startOwner(d.Name, snap)
@@ -60,21 +60,81 @@ func (a *App) serve(ctx context.Context, set *module.Set) error {
 		rt.sched = sched
 		if err := sched.Start(ctx); err != nil {
 			log.Error("the scheduler did not start", logx.Err, err.Error())
+			return
 		}
+		started = true
 	}, a.reconcile)
+	if started {
+		select {
+		case <-rt.attempted:
+		case <-ctx.Done():
+		}
+	}
 	return nil
 }
 
 func (a *App) scheduler(beat func()) *scheduler.Scheduler {
-	set := a.rt.set
-	enabled := func(name string) bool { return set.Current().Enabled(name) }
+	rt := a.rt
+	enabled := func(name string) bool { return rt.set.Current().Enabled(name) }
 	return jobworker.New(a.Assistant(), a.catalog.Jobs(), jobworker.Options{
-		Enabled: enabled,
-		Active:  func() bool { return enabled(module.Assistant) },
-		Beat:    beat,
-		Own:     a.own,
+		Enabled:   enabled,
+		Active:    func() bool { return enabled(module.Assistant) },
+		Beat:      beat,
+		Recovered: rt.recover,
+		Own:       a.own,
 	})
 }
+
+func (rt *services) recover(err error) {
+	if err == nil {
+		rt.recovered.Store(true)
+	}
+	rt.attempt.Do(func() { close(rt.attempted) })
+}
+
+func (rt *services) ready() error {
+	if !rt.recovered.Load() {
+		return errors.New("scheduler recovery has not finished")
+	}
+	return rt.healthy()
+}
+
+func (rt *services) healthy() error {
+	rt.mu.Lock()
+	sups := make([]*runtime.Supervisor, 0, len(rt.owners)+1)
+	if rt.sched != nil {
+		sups = append(sups, rt.sched)
+	}
+	for _, sup := range rt.owners {
+		sups = append(sups, sup)
+	}
+	rt.mu.Unlock()
+	var err error
+	for _, sup := range sups {
+		for _, svc := range sup.Health().Services {
+			if svc.Critical && (svc.Status != runtime.StatusRunning && svc.Status != runtime.StatusStarting || svc.Stalled) {
+				err = errors.Join(err, fmt.Errorf("service %s is %s%s", svc.Name, svc.Status, stalled(svc)))
+			}
+		}
+	}
+	return err
+}
+
+func stalled(svc runtime.ServiceHealth) string {
+	if svc.Stalled {
+		return " and stalled"
+	}
+	return ""
+}
+
+func (a *App) ready() error {
+	if a.rt == nil {
+		return errors.New("background services have not started")
+	}
+	return a.rt.ready()
+}
+
+func (a *App) alive() bool { return a.ready() == nil }
 
 func (a *App) startOwner(owner string, snap *module.Snapshot) {
 	defs := snap.ServicesOf(owner)
@@ -104,7 +164,7 @@ func (a *App) own(ctx context.Context, owner string) (context.Context, func(), e
 	rt.mu.Lock()
 	defer rt.mu.Unlock()
 	if rt.closed {
-		return nil, nil, &module.OwnerDisabled{Module: owner}
+		return nil, nil, scheduler.ErrInterrupted
 	}
 	bound, err := module.BindOwner(ctx, owner)
 	if err != nil {
@@ -178,8 +238,8 @@ func (rt *services) drainScheduler() error {
 	work := rt.work
 	rt.work = map[string]*ownedWork{}
 	rt.mu.Unlock()
-	for owner, w := range work {
-		w.cancel(&module.OwnerDisabled{Module: owner})
+	for _, w := range work {
+		w.cancel(scheduler.ErrInterrupted)
 		err = errors.Join(err, wait(ctx, &w.wg))
 	}
 	return err

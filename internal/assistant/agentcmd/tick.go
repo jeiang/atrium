@@ -28,8 +28,7 @@ func tickCommand(open Open, enabled func(string) bool) *cli.Command {
 				return cli.ExitTempFail
 			}
 			if err != nil {
-				_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)
-				return cli.ExitError
+				return cli.Fail(env, err)
 			}
 			return cli.ExitOK
 		}

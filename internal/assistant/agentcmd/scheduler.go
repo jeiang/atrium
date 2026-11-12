@@ -1,8 +1,6 @@
 package agentcmd
 
 import (
-	"fmt"
-
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/module"
@@ -15,8 +13,7 @@ func schedulerCommand(open Open, enabled func(module string) bool) *cli.Command 
 		Setup: func(*cli.Args) cli.Handler {
 			return func(env *cli.Env) int {
 				if err := runScheduler(env, open, enabled); err != nil {
-					_, _ = fmt.Fprintf(env.Stderr, "error: %v\n", err)
-					return cli.ExitError
+					return cli.Fail(env, err)
 				}
 				return cli.ExitOK
 			}
@@ -41,6 +38,8 @@ func runScheduler(env *cli.Env, open Open, enabled func(module string) bool) err
 		<-ctx.Done()
 		notifier.Stopping()
 	}()
-	s.Run(ctx)
+	if err := s.Run(ctx, ctx.Done()); err != nil && ctx.Err() == nil {
+		return err
+	}
 	return nil
 }
