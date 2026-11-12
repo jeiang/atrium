@@ -74,7 +74,7 @@ func newAppWith(env config.Env, clients func(config.Config) mail.OpenFunc, now f
 	st.SetAccountCredential(cat.AccountCredential())
 	st.SetHostAccounts(cat.HostAccounts())
 	set, err = module.NewSet(cat, reg, env, func(ctx context.Context) (*db.DB, config.Config, error) {
-		a, err := app.Open(ctx, env, cat)
+		a, err := app.Open(ctx, env, cat, app.OneShot)
 		if err != nil {
 			return nil, config.Config{}, err
 		}

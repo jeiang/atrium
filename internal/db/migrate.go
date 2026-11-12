@@ -100,6 +100,9 @@ func Migrate(ctx context.Context, d *DB, path string) error {
 		return err
 	}
 	if pending(applied) {
+		if err := probeServe(ctx, d, path); err != nil {
+			return err
+		}
 		if err := applyPending(ctx, d, path); err != nil {
 			return err
 		}
@@ -113,6 +116,21 @@ func Migrate(ctx context.Context, d *DB, path string) error {
 		return err
 	}
 	return Ready(ctx, d)
+}
+
+func probeServe(ctx context.Context, d *DB, path string) error {
+	if !d.deferToServe {
+		return nil
+	}
+	l, err := TryServeLock(ctx, path)
+	var running *AlreadyRunning
+	if errors.As(err, &running) {
+		return fmt.Errorf("db: %s needs schema migrations, which only the full atrium serve may apply while it runs: %w", running.Path, err)
+	}
+	if err != nil {
+		return err
+	}
+	return l.Close()
 }
 
 func pending(applied map[int]bool) bool {

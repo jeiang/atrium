@@ -15,6 +15,15 @@ import (
 
 func (s *service) shell(*cli.Args) cli.Handler {
 	return func(e *cli.Env) int {
+		path, err := s.path()
+		if err != nil {
+			return cli.Fail(e, err)
+		}
+		exclusion, err := db.TryServeLock(e.Ctx, path)
+		if err != nil {
+			return cli.Fail(e, fmt.Errorf("db shell refused: %w", err))
+		}
+		defer func() { _ = exclusion.Close() }()
 		d, _, _, code := s.open(e)
 		if code != cli.ExitOK {
 			return code

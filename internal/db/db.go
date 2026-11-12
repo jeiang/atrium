@@ -65,10 +65,11 @@ func (d *DB) Checkpoint(ctx context.Context, wait time.Duration) (Checkpoint, er
 }
 
 type DB struct {
-	Write     *sql.DB
-	Read      *sql.DB
-	KNN       *sql.DB
-	encrypted bool
+	Write        *sql.DB
+	Read         *sql.DB
+	KNN          *sql.DB
+	encrypted    bool
+	deferToServe bool
 }
 
 func (d *DB) Encrypted() bool { return d.encrypted }
@@ -79,7 +80,8 @@ func connect(path string, opts []Option) (*DB, error) {
 	if strings.ContainsAny(path, "?#") {
 		return nil, fmt.Errorf("db: path %q contains '?' or '#'", path)
 	}
-	key := applyOptions(opts).key
+	o := applyOptions(opts)
+	key := o.key
 	writeDSN, err := dsn(path, true, key)
 	if err != nil {
 		return nil, err
@@ -107,7 +109,7 @@ func connect(path string, opts []Option) (*DB, error) {
 	}
 	r := newReader(readDSN, pragmas, smallCacheKiB)
 	k := newKNN(readDSN, pragmas)
-	return &DB{Write: w, Read: r, KNN: k, encrypted: !key.IsZero()}, nil
+	return &DB{Write: w, Read: r, KNN: k, encrypted: !key.IsZero(), deferToServe: o.deferToServe}, nil
 }
 
 func (d *DB) Close() error {

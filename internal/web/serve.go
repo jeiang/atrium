@@ -47,7 +47,7 @@ type Resource struct {
 }
 
 type Boot interface {
-	Open(context.Context) (context.Context, *db.DB, config.Config, func() error, error)
+	Open(ctx context.Context, services bool) (context.Context, *db.DB, config.Config, func() error, error)
 	Start(ctx context.Context, d *Deps, services bool) error
 }
 
@@ -143,7 +143,7 @@ func serve(env *cli.Env, a serveArgs) int {
 }
 
 func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error {
-	ctx, d, cfg, closeApp, err := a.boot.Open(ctx)
+	ctx, d, cfg, closeApp, err := a.boot.Open(ctx, a.services)
 	if err != nil {
 		return err
 	}

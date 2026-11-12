@@ -56,12 +56,12 @@ func bound(ctx context.Context) (*App, error) {
 	return nil, errUnbound
 }
 
-func (b *Bindings) open(ctx context.Context) (*App, context.Context, error) {
+func (b *Bindings) open(ctx context.Context, mode Mode) (*App, context.Context, error) {
 	set := module.SetFrom(ctx)
 	if set == nil {
 		return nil, nil, module.ErrNotEvaluated
 	}
-	a, err := Open(ctx, b.env, set.Catalog())
+	a, err := Open(ctx, b.env, set.Catalog(), mode)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -99,7 +99,7 @@ func (b *Bindings) OpenAssistant(ctx context.Context) (context.Context, *service
 	if b == nil {
 		return nil, nil, nil, errUnbound
 	}
-	a, ctx, err := b.open(ctx)
+	a, ctx, err := b.open(ctx, OneShot)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -119,8 +119,12 @@ type serveBoot struct {
 	b *Bindings
 }
 
-func (s *serveBoot) Open(ctx context.Context) (context.Context, *db.DB, config.Config, func() error, error) {
-	a, ctx, err := s.b.open(ctx)
+func (s *serveBoot) Open(ctx context.Context, services bool) (context.Context, *db.DB, config.Config, func() error, error) {
+	mode := WebOnly
+	if services {
+		mode = Resident
+	}
+	a, ctx, err := s.b.open(ctx, mode)
 	if err != nil {
 		return nil, nil, config.Config{}, nil, err
 	}

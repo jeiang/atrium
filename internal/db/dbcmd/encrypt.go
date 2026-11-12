@@ -29,6 +29,11 @@ func (s *service) encrypt(a *cli.Args) cli.Handler {
 		if err != nil {
 			return cli.Fail(e, err)
 		}
+		exclusion, err := db.TryServeLock(e.Ctx, path)
+		if err != nil {
+			return cli.Fail(e, fmt.Errorf("db encrypt refused: %w", err))
+		}
+		defer func() { _ = exclusion.Close() }()
 		lock, err := db.Exclusive(e.Ctx, path, db.ShortLockWait)
 		if err != nil {
 			return cli.Fail(e, err)

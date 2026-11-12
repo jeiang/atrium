@@ -43,11 +43,16 @@ func (k Key) Raw() []byte {
 	return raw
 }
 
-type options struct{ key Key }
+type options struct {
+	key          Key
+	deferToServe bool
+}
 
 type Option func(*options)
 
 func WithKey(k Key) Option { return func(o *options) { o.key = k } }
+
+func DeferMigrationsToServe() Option { return func(o *options) { o.deferToServe = true } }
 
 func applyOptions(opts []Option) options {
 	o := options{}
