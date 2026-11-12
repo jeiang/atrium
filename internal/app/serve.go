@@ -4,10 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"os"
 	"slices"
-	"time"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/service"
@@ -20,8 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
-
-const shutdownTimeout = 10 * time.Second
 
 type ListenOptions struct {
 	Plan  web.Plan
@@ -41,10 +37,10 @@ func (b *Bindings) ServeCommand(pages ...web.Page) *cli.Command {
 					return cli.ExitError
 				}
 				if err := b.serve(env.Ctx, ListenOptions{Plan: plan, Pages: pages, Tools: b.tools, Now: b.now}); err != nil {
-					if env.Ctx.Err() != nil {
-						return cli.ExitOK
+					if env.Ctx.Err() != nil && !errors.As(err, new(*uncleanStop)) {
+						return cli.Fail(env, err)
 					}
-					log.Error("serve failed", logx.Err, err.Error())
+					log.Error("serve did not stop cleanly", logx.Err, err.Error())
 					return cli.ExitError
 				}
 				return cli.ExitOK
@@ -58,23 +54,29 @@ func (b *Bindings) serve(ctx context.Context, o ListenOptions) error {
 	if err != nil {
 		return err
 	}
-	defer func() {
-		if err := a.Close(); err != nil {
-			log.Warn("could not drain the application before closing the database", logx.Err, err.Error())
-		}
-	}()
-	return a.Serve(ctx, o)
+	err = a.Serve(ctx, o)
+	if cerr := a.Close(); cerr != nil {
+		err = errors.Join(err, &uncleanStop{cerr})
+	}
+	return err
 }
+
+type uncleanStop struct{ err error }
+
+func (e *uncleanStop) Error() string { return e.err.Error() }
+
+func (e *uncleanStop) Unwrap() error { return e.err }
 
 func (a *App) Serve(ctx context.Context, o ListenOptions) error {
 	if _, err := a.state.Location(a.env); err != nil {
 		return fmt.Errorf("the tz setting is not a time zone: %w", err)
 	}
+	a.work, a.stopWork = context.WithCancelCause(context.WithoutCancel(ctx))
 	ls, err := bind(o.Plan, ops.Address(ctx))
 	if err != nil {
 		return err
 	}
-	public, emergency, err := o.Plan.Build(web.Site{Ctx: ctx, Cfg: a.config, Env: a.env, DB: a.db, Settings: settings.From(ctx), State: a.state, Pages: o.Pages, Start: func(d *web.Deps) error {
+	public, emergency, err := o.Plan.Build(web.Site{Ctx: a.work, Cfg: a.config, Env: a.env, DB: a.db, Settings: settings.From(ctx), State: a.state, Pages: o.Pages, Start: func(d *web.Deps) error {
 		return a.start(ctx, d, o.Tools, o.Now)
 	}})
 	if err != nil {
@@ -84,13 +86,11 @@ func (a *App) Serve(ctx context.Context, o ListenOptions) error {
 	if emergency != nil {
 		sites = append(sites, emergency)
 	}
-	defer func() {
-		for _, s := range sites {
-			s.Close()
-		}
-	}()
 	if path, _ := a.env("ATRIUM_SERVE_ADDR_FILE"); path != "" {
 		if err := os.WriteFile(path, []byte(ls.public.net.Addr().String()), 0o600); err != nil {
+			for _, s := range sites {
+				s.Close()
+			}
 			return errors.Join(err, ls.close())
 		}
 	}
@@ -100,16 +100,16 @@ func (a *App) Serve(ctx context.Context, o ListenOptions) error {
 	}
 	if ls.ops != nil {
 		checks := slices.Concat(a.catalog.Checks(), []ops.Check{{Name: "services", Critical: true, Run: func(context.Context, *db.DB) error { return a.ready() }}})
-		ls.ops.srv = ops.Server(ctx, a.db, a.env, a.catalog.Metrics(), checks)
+		ls.ops.srv = ops.Server(ctx, a.db, a.env, a.catalog.Metrics(), checks, a.health)
 	}
 	return a.run(ctx, ls, sites)
 }
 
 func (a *App) run(ctx context.Context, ls *listeners, sites []*web.Server) error {
 	served := ls.all()
-	results := make(chan error, len(served))
+	failed := make(chan error, len(served))
 	for _, l := range served {
-		go l.serve(results)
+		go l.serve(failed)
 		log.Info("listening", "listener", l.name, "addr", l.net.Addr().String())
 	}
 	for _, s := range sites {
@@ -118,30 +118,47 @@ func (a *App) run(ctx context.Context, ls *listeners, sites []*web.Server) error
 	notifier := sdnotify.New(func(name string) string { v, _ := a.env(name); return v })
 	notifier.Ready()
 	notifier.Status("serving " + ls.public.net.Addr().String())
-	stopWatchdog := notifier.Watch(ctx, a.alive)
+	a.watchdog = notifier.Watch(context.WithoutCancel(ctx), a.alive)
 	var err error
-	pending := len(served)
 	select {
-	case err = <-results:
-		pending--
+	case err = <-failed:
 	case <-ctx.Done():
 	}
+	a.draining.Store(true)
+	if a.live != nil {
+		a.live.svc.Interrupt()
+	}
+	sd := newShutdown()
+	a.stopping = sd
+	notifier.Stopping()
+	notifier.Status("draining")
 	for _, s := range sites {
 		s.StopStreams()
 	}
-	notifier.Stopping()
-	stopWatchdog()
-	stop, cancel := context.WithTimeout(context.Background(), shutdownTimeout)
-	defer cancel()
+	errs := make(chan error, len(served))
 	for _, l := range served {
-		err = errors.Join(err, l.srv.Shutdown(stop))
-	}
-	for ; pending > 0; pending-- {
-		if serveErr := <-results; !errors.Is(serveErr, http.ErrServerClosed) {
-			err = errors.Join(err, serveErr)
+		if l != ls.ops {
+			go func() { errs <- l.shutdown(sd) }()
 		}
 	}
-	return err
+	for _, l := range served {
+		if l != ls.ops {
+			err = errors.Join(err, <-errs)
+		}
+	}
+	sd.last = func() error {
+		for _, s := range sites {
+			s.Close()
+		}
+		if ls.ops == nil {
+			return nil
+		}
+		return ls.ops.shutdown(sd)
+	}
+	if err != nil {
+		return &uncleanStop{err}
+	}
+	return nil
 }
 
 func (a *App) start(ctx context.Context, d *web.Deps, tools registry.Source, now func() float64) error {

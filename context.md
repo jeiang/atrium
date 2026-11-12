@@ -221,7 +221,10 @@ behavior-parity target.
   unset. One live-run service per process, built by the application with its
   effect ledger store and runner, serves chat pages, tools, jobs and the
   `agent run`/`tick`/`scheduler` commands; the application drains it, then
-  that store, before closing the database. The
+  that store, before closing the database. Serve stops in one bounded order
+  of 120 s (105 s for work to finish, 15 s to settle effects and interrupted
+  runs), then checkpoints and closes the database and releases the serve
+  lock last; any step that does not finish makes the exit nonzero. The
   monthly budget defaults to $150 with scheduled runs paused at 80% and chat at
   95%; the last 5% is reserved for classification. Every paid model call,
   memory summaries included, reserves its full cold prompt plus the request's

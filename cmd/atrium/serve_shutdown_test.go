@@ -73,45 +73,63 @@ func interruptTickDuringWeeklyReview(t *testing.T, api *modelLog, g *heldGates, 
 	return run
 }
 
+func stopHoldingJob(t *testing.T, p *serveProcess, g *heldGates, gate int, api *modelLog) int {
+	t.Helper()
+	if err := p.cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-p.done:
+		p.err, p.waited = err, true
+		t.Fatalf("serve exited while its job's model request was in flight: %v %s", err, p.stderr.String())
+	case <-time.After(2 * time.Second):
+	}
+	g.release(gate)
+	waitUntil(t, 30*time.Second, "the in-flight reply to reach the job", func() bool { return api.Remaining() == 0 })
+	return exitCode(p.wait())
+}
+
 func TestServeDrainsTheJobItRecoveredAtStartup(t *testing.T) {
 	t.Parallel()
-	d, api, f, before := startWeeklyReview(t, asstReply("abandoned"))
+	resume := func(id string) anthropictest.Response {
+		return anthropictest.Reply("tool_use", anthropictest.ToolUse(id, "profile_get", map[string]any{"key": "k"}))
+	}
+	d, api, f, before := startWeeklyReview(t, resume("first"))
 	g, seen := holdJobRequests(t, api, 2)
 
 	first := serveCLIProcess(t, f.dir)
 	waitUntil(t, 30*time.Second, "the held job request", func() bool { return seen.Load() == 1 })
-	if code := first.stop(t, syscall.SIGTERM); code != cli.ExitOK {
+	if code := stopHoldingJob(t, first, g, 0, api); code != cli.ExitOK {
 		t.Fatalf("first serve exit %d: %s", code, first.stderr.String())
 	}
-	g.release(0)
-	waitUntil(t, 10*time.Second, "the abandoned reply", func() bool { return api.Remaining() == 0 })
 	run := weeklyRunID(t, d)
 	released := func(what string, p *serveProcess) {
 		t.Helper()
 		if text := p.stderr.String(); strings.Contains(text, "database is closed") {
 			t.Fatalf("%s wrote after closing its database: %s", what, text)
 		}
+		if !strings.Contains(p.stderr.String(), "stopped for shutdown") {
+			t.Fatalf("%s did not stop its run at the next boundary: %s", what, p.stderr.String())
+		}
 		if n := asstCount(t, d, weeklyReleased, run); n != 1 {
 			t.Fatalf("%s left weekly review run %d claimed: %s", what, run, p.stderr.String())
 		}
 		if n := asstCount(t, d, weeklyRunning); n != 1 {
-			t.Fatalf("%s left %d running weekly reviews, want 1 recoverable run", what, n)
+			t.Fatalf("%s left %d running weekly reviews, want 1 recoverable run: %s", what, n, p.stderr.String())
 		}
 		if n := asstCount(t, d, "SELECT COUNT(*) FROM runs WHERE state = 'running'"); n != 0 {
-			t.Fatalf("%s left %d assistant runs running", what, n)
+			t.Fatalf("%s left %d assistant runs running: %s", what, n, p.stderr.String())
 		}
 	}
 	released("the first serve", first)
 
-	api.Push(asstReply("abandoned again"))
+	api.Push(resume("second"))
 	second := restartServe(t, f.dir)
 	waitUntil(t, 30*time.Second, "the recovered job request", func() bool { return seen.Load() == 2 })
-	if code := second.stop(t, syscall.SIGTERM); code != cli.ExitOK {
+	if code := stopHoldingJob(t, second, g, 1, api); code != cli.ExitOK {
 		t.Fatalf("second serve exit %d: %s", code, second.stderr.String())
 	}
 	released("the serve that recovered the job", second)
-	g.release(1)
-	waitUntil(t, 10*time.Second, "the second abandoned reply", func() bool { return api.Remaining() == 0 })
 
 	api.Push(asstReply("reviewed"))
 	third := restartServe(t, f.dir)
@@ -365,10 +383,10 @@ func TestAgentTickLeavesAFullServeRecoveredJobRunAlone(t *testing.T) {
 	}
 }
 
-func TestAgentSchedulerAndTickStopCleanlyWhenCanceledDuringStartup(t *testing.T) {
+func TestSchedulerTickAndServeStopCleanlyWhenCanceledDuringStartup(t *testing.T) {
 	t.Parallel()
 	_, _, f := moduleFixture(t, flagsExcept("", ""))
-	for _, args := range [][]string{{"agent", "scheduler"}, {"agent", "tick"}} {
+	for _, args := range [][]string{{"agent", "scheduler"}, {"agent", "tick"}, {"serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local"}} {
 		for _, delay := range []time.Duration{0, time.Millisecond, 10 * time.Millisecond, 50 * time.Millisecond, 200 * time.Millisecond} {
 			ctx, cancel := context.WithCancel(context.Background())
 			done := make(chan appRun, 1)

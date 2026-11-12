@@ -17,6 +17,7 @@ import (
 
 const (
 	schedulerService = "scheduler"
+	recoveryService  = "recovery"
 	schedulerStall   = 10 * time.Minute
 )
 
@@ -81,6 +82,7 @@ func (a *App) scheduler(beat func()) *scheduler.Scheduler {
 		Active:    func() bool { return enabled(module.Assistant) },
 		Beat:      beat,
 		Recovered: rt.recover,
+		Work:      a.work,
 		Own:       a.own,
 	})
 }
@@ -96,10 +98,12 @@ func (rt *services) ready() error {
 	if !rt.recovered.Load() {
 		return errors.New("scheduler recovery has not finished")
 	}
-	return rt.healthy()
+	return critical(rt.health(), func(svc runtime.ServiceHealth) bool {
+		return svc.Status != runtime.StatusRunning && svc.Status != runtime.StatusStarting || svc.Stalled
+	})
 }
 
-func (rt *services) healthy() error {
+func (rt *services) health() []runtime.ServiceHealth {
 	rt.mu.Lock()
 	sups := make([]*runtime.Supervisor, 0, len(rt.owners)+1)
 	if rt.sched != nil {
@@ -109,12 +113,22 @@ func (rt *services) healthy() error {
 		sups = append(sups, sup)
 	}
 	rt.mu.Unlock()
-	var err error
+	recovery := runtime.ServiceHealth{Name: recoveryService, Critical: true, Status: runtime.StatusStarting}
+	if rt.recovered.Load() {
+		recovery.Status = runtime.StatusRunning
+	}
+	out := []runtime.ServiceHealth{recovery}
 	for _, sup := range sups {
-		for _, svc := range sup.Health().Services {
-			if svc.Critical && (svc.Status != runtime.StatusRunning && svc.Status != runtime.StatusStarting || svc.Stalled) {
-				err = errors.Join(err, fmt.Errorf("service %s is %s%s", svc.Name, svc.Status, stalled(svc)))
-			}
+		out = append(out, sup.Health().Services...)
+	}
+	return out
+}
+
+func critical(services []runtime.ServiceHealth, bad func(runtime.ServiceHealth) bool) error {
+	var err error
+	for _, svc := range services {
+		if svc.Critical && bad(svc) {
+			err = errors.Join(err, fmt.Errorf("service %s is %s%s", svc.Name, svc.Status, stalled(svc)))
 		}
 	}
 	return err
@@ -128,13 +142,36 @@ func stalled(svc runtime.ServiceHealth) string {
 }
 
 func (a *App) ready() error {
+	if a.draining.Load() {
+		return errors.New("serve is draining")
+	}
 	if a.rt == nil {
 		return errors.New("background services have not started")
 	}
 	return a.rt.ready()
 }
 
-func (a *App) alive() bool { return a.ready() == nil }
+func (a *App) alive() bool {
+	if !a.draining.Load() {
+		return a.ready() == nil
+	}
+	return a.rt == nil || critical(a.rt.health(), func(svc runtime.ServiceHealth) bool { return svc.Stalled }) == nil
+}
+
+func (a *App) health() runtime.Health {
+	h := runtime.Health{Started: a.rt != nil, Draining: a.draining.Load()}
+	if a.rt == nil {
+		return h
+	}
+	h.Services = a.rt.health()
+	h.Ready = a.ready() == nil
+	for _, svc := range h.Services {
+		if !svc.Critical && (svc.Status == runtime.StatusBackoff || svc.Stalled) {
+			h.Degraded = true
+		}
+	}
+	return h
+}
 
 func (a *App) startOwner(owner string, snap *module.Snapshot) {
 	defs := snap.ServicesOf(owner)
@@ -203,46 +240,48 @@ func (rt *services) stopOwner(ctx context.Context, owner string) error {
 	return err
 }
 
-func (rt *services) drainOwners() error {
+func (rt *services) drainOwners(work, settle context.Context) error {
 	if rt.unhook != nil {
 		rt.unhook()
 	}
 	rt.mu.Lock()
 	rt.closed = true
-	owners := make([]string, 0, len(rt.owners))
-	for owner := range rt.owners {
-		owners = append(owners, owner)
+	sups := make([]*runtime.Supervisor, 0, len(rt.owners))
+	for owner, sup := range rt.owners {
+		sups = append(sups, sup)
+		delete(rt.owners, owner)
 	}
 	rt.mu.Unlock()
-	ctx, cancel := context.WithTimeout(context.Background(), workDrainTimeout)
-	defer cancel()
 	var err error
-	for _, owner := range owners {
-		rt.mu.Lock()
-		sup := rt.owners[owner]
-		delete(rt.owners, owner)
-		rt.mu.Unlock()
-		err = errors.Join(err, sup.Drain(ctx))
+	for _, sup := range sups {
+		err = errors.Join(err, drainSupervisor(sup, work, settle))
 	}
 	return err
 }
 
-func (rt *services) drainScheduler() error {
-	ctx, cancel := context.WithTimeout(context.Background(), workDrainTimeout)
-	defer cancel()
+func (rt *services) drainScheduler(work, settle context.Context) error {
 	var err error
 	if rt.sched != nil {
-		err = rt.sched.Drain(ctx)
+		err = drainSupervisor(rt.sched, work, settle)
 	}
 	rt.mu.Lock()
-	work := rt.work
+	owned := rt.work
 	rt.work = map[string]*ownedWork{}
 	rt.mu.Unlock()
-	for _, w := range work {
+	for _, w := range owned {
 		w.cancel(scheduler.ErrInterrupted)
-		err = errors.Join(err, wait(ctx, &w.wg))
+		err = errors.Join(err, wait(settle, &w.wg))
 	}
 	return err
+}
+
+func drainSupervisor(sup *runtime.Supervisor, work, settle context.Context) error {
+	err := sup.Drain(work)
+	if err == nil {
+		return nil
+	}
+	log.Warn("services outlived the work deadline; waiting for them to settle", logx.Err, err.Error())
+	return sup.Drain(settle)
 }
 
 func wait(ctx context.Context, wg *sync.WaitGroup) error {

@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"sync/atomic"
-	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/registry"
@@ -18,11 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
-)
-
-const (
-	workDrainTimeout   = 15 * time.Second
-	ledgerDrainTimeout = 5 * time.Second
 )
 
 var (
@@ -122,7 +116,11 @@ func (a *App) bindLive(ctx context.Context, tools registry.Source, now func() fl
 	if err != nil {
 		return err
 	}
-	base, cancel := context.WithCancel(ctx)
+	parent := ctx
+	if a.work != nil {
+		parent = a.work
+	}
+	base, cancel := context.WithCancel(parent)
 	svc := service.New(base, a.db, a.config, a.env, run)
 	svc.Now = now
 	if svc.Now == nil {
@@ -154,16 +152,12 @@ func (a *App) startAssistant(ctx context.Context) error {
 	return nil
 }
 
-func (l *liveRun) drain() error {
-	work, stopWork := context.WithTimeout(context.Background(), workDrainTimeout)
-	defer stopWork()
+func (l *liveRun) drain(work context.Context) error {
 	err := l.svc.Drain(work)
 	l.cancel()
 	return err
 }
 
-func (l *liveRun) drainStore() error {
-	final, stopFinal := context.WithTimeout(context.Background(), ledgerDrainTimeout)
-	defer stopFinal()
-	return l.store.Drain(final)
+func (l *liveRun) drainStore(settle context.Context) error {
+	return l.store.Drain(settle)
 }

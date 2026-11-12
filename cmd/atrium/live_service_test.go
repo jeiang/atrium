@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 )
 
 func TestServeChatAndAgentTickShareOneRunAuthority(t *testing.T) {
@@ -21,7 +23,7 @@ func TestServeChatAndAgentTickShareOneRunAuthority(t *testing.T) {
 	base, _, stop := startServeStoppable(t, dir)
 	asstExec(t, d, "UPDATE jobs SET next_due = NULL")
 	w := asstBrowse(t, base)
-	api.Push(asstReply("abandoned reply"))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("held", "profile_get", map[string]any{"key": "k"})))
 	thread := w.start(map[string]string{"text": "authoritymarker"})
 	asstWaitRequests(t, api, before+1)
 	run := asstLastRun(t, d, thread)
@@ -42,9 +44,8 @@ func TestServeChatAndAgentTickShareOneRunAuthority(t *testing.T) {
 		t.Fatalf("chat run %d moved from %s to %s during the tick", run, owner, got)
 	}
 
-	stop()
-	release()
-	waitUntil(t, 10*time.Second, "the abandoned reply", func() bool { return api.Remaining() == 0 })
+	stopWhileHeld(t, stop, release)
+	waitUntil(t, 10*time.Second, "the in-flight reply", func() bool { return api.Remaining() == 0 })
 	var state string
 	if err := d.Read.QueryRow("SELECT state FROM runs WHERE id = ?", run).Scan(&state); err != nil || state != "running" && state != "interrupted" {
 		t.Fatalf("chat run %s after serve stopped, want it left resumable: %v", state, err)
@@ -119,4 +120,20 @@ func TestAssistantWithoutTheAnthropicKeyRefusesPaidRunsAndKeepsModelFreeWork(t *
 	if n := len(api.Requests()); n != 0 {
 		t.Errorf("%d model requests without an Anthropic key, want 0", n)
 	}
+}
+
+func stopWhileHeld(t *testing.T, stop, release func()) {
+	t.Helper()
+	stopped := make(chan struct{})
+	go func() {
+		stop()
+		close(stopped)
+	}()
+	select {
+	case <-stopped:
+		t.Fatal("serve stopped while a model request was in flight")
+	case <-time.After(2 * time.Second):
+	}
+	release()
+	<-stopped
 }

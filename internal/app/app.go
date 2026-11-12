@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -29,6 +30,11 @@ type App struct {
 	catalog   *module.Catalog
 	live      *liveRun
 	rt        *services
+	work      context.Context
+	stopWork  context.CancelCauseFunc
+	draining  atomic.Bool
+	stopping  *shutdown
+	watchdog  func()
 }
 
 func Open(ctx context.Context, env config.Env, cat *module.Catalog, mode Mode) (*App, error) {
@@ -68,18 +74,21 @@ func (a *App) State() *config.State { return a.state }
 func (a *App) Catalog() *module.Catalog { return a.catalog }
 
 func (a *App) Close() error {
-	var err error
-	if a.rt != nil {
-		err = a.rt.drainOwners()
+	sd := a.stopping
+	if sd == nil {
+		sd = newShutdown()
 	}
+	defer sd.release()
+	err := a.drainWork(sd)
 	if a.live != nil {
-		err = errors.Join(err, a.live.drain())
+		err = errors.Join(err, a.live.drainStore(sd.settle))
 	}
-	if a.rt != nil {
-		err = errors.Join(err, a.rt.drainScheduler())
+	if a.stopping != nil {
+		err = errors.Join(err, checkpoint(sd.settle, a.db))
 	}
-	if a.live != nil {
-		err = errors.Join(err, a.live.drainStore())
+	err = errors.Join(err, a.db.Close())
+	if a.watchdog != nil {
+		a.watchdog()
 	}
-	return errors.Join(err, a.db.Close(), a.exclusion.Close())
+	return errors.Join(err, a.exclusion.Close())
 }

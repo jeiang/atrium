@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
@@ -18,7 +19,7 @@ type Admit func(context.Context, *service.Service, journal.Run) (bool, error)
 
 func recovery(svc *service.Service) scheduler.Recovery {
 	return func(ctx context.Context, run scheduler.Run, threads []int64) (scheduler.Result, error) {
-		return recoverThreads(ctx, svc, run, threads, nil)
+		return interruptedBy(recoverThreads(ctx, svc, run, threads, nil))
 	}
 }
 
@@ -31,8 +32,15 @@ func (d Dependencies) Recover(admit Admit) scheduler.Recovery {
 		if err != nil {
 			return scheduler.Result{}, err
 		}
-		return recoverThreads(ctx, svc, run, threads, admit)
+		return interruptedBy(recoverThreads(ctx, svc, run, threads, admit))
 	}
+}
+
+func interruptedBy(result scheduler.Result, err error) (scheduler.Result, error) {
+	if errors.Is(err, progress.ErrShutdown) {
+		return result, scheduler.ErrInterrupted
+	}
+	return result, err
 }
 
 func jobRuns(ctx context.Context, q db.Querier, run scheduler.Run, threads []int64) ([]int64, bool, error) {

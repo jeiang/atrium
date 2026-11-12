@@ -65,18 +65,20 @@ type Service struct {
 	Now       func() float64
 	Inference *inference.Service
 
-	base   context.Context
-	cancel context.CancelFunc
-	mu     *sync.Mutex
-	wg     *sync.WaitGroup
-	closed bool
+	base     context.Context
+	cancel   context.CancelFunc
+	mu       *sync.Mutex
+	wg       *sync.WaitGroup
+	stop     chan struct{}
+	stopOnce *sync.Once
+	closed   bool
 }
 
 var ErrClosed = errors.New("service: closed")
 
 func New(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, runner *loop.Runner) *Service {
 	base, cancel := context.WithCancel(ctx)
-	s := &Service{DB: d, Cfg: cfg, Env: env, Runner: runner, base: base, cancel: cancel, mu: &sync.Mutex{}, wg: &sync.WaitGroup{}}
+	s := &Service{DB: d, Cfg: cfg, Env: env, Runner: runner, base: base, cancel: cancel, mu: &sync.Mutex{}, wg: &sync.WaitGroup{}, stop: make(chan struct{}), stopOnce: &sync.Once{}}
 	s.Inference = inference.New(d, func() float64 { return s.now() }, scopes{})
 	return s
 }
@@ -136,6 +138,11 @@ func (s *Service) StopAdmission() {
 	s.mu.Lock()
 	s.closed = true
 	s.mu.Unlock()
+}
+
+func (s *Service) Interrupt() {
+	s.StopAdmission()
+	s.stopOnce.Do(func() { close(s.stop) })
 }
 
 func (s *Service) Close() {
@@ -342,7 +349,7 @@ func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error
 	if err != nil {
 		return nil, err
 	}
-	return s.Runner.Run(ctx, s.DB, s.Cfg, s.Env, client, runID, loop.Options{Now: s.now, Embed: s.embed, Limits: stored, Inference: s.Inference})
+	return s.Runner.Run(ctx, s.DB, s.Cfg, s.Env, client, runID, loop.Options{Now: s.now, Embed: s.embed, Limits: stored, Inference: s.Inference, Stop: s.stop})
 }
 
 func (s *Service) embed(ctx context.Context, texts []string) ([][]float64, error) {
@@ -380,8 +387,8 @@ func (s *Service) inBackground(runID int64) error {
 				log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, fmt.Sprintf("panic: %v\n%s", p, debug.Stack()))
 			}
 		}()
-		if _, err := s.Execute(s.base, runID); errors.Is(err, context.Canceled) {
-			log.Info(fmt.Sprintf("background run %d cancelled", runID), logx.RunID, runID)
+		if _, err := s.Execute(s.base, runID); errors.Is(err, context.Canceled) || errors.Is(err, progress.ErrShutdown) {
+			log.Info(fmt.Sprintf("background run %d interrupted", runID), logx.RunID, runID)
 		} else if err != nil {
 			log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, err)
 		}

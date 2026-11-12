@@ -5,14 +5,18 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/web"
 )
 
 type listener struct {
-	name string
-	net  net.Listener
-	srv  *http.Server
+	name     string
+	net      net.Listener
+	srv      *http.Server
+	done     chan error
+	handlers sync.WaitGroup
 }
 
 type listeners struct {
@@ -43,7 +47,7 @@ func listen(name, addr string) (*listener, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s listener: %w", name, err)
 	}
-	return &listener{name: name, net: l}, nil
+	return &listener{name: name, net: l, done: make(chan error, 1)}, nil
 }
 
 func (ls *listeners) all() []*listener {
@@ -68,10 +72,32 @@ func (ls *listeners) close() error {
 	return err
 }
 
-func (l *listener) serve(results chan<- error) {
+func (l *listener) serve(failed chan<- error) {
+	next := l.srv.Handler
+	l.srv.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		l.handlers.Add(1)
+		defer l.handlers.Done()
+		next.ServeHTTP(w, r)
+	})
 	err := l.srv.Serve(l.net)
 	if !errors.Is(err, http.ErrServerClosed) {
 		err = fmt.Errorf("%s listener stopped: %w", l.name, err)
+		failed <- err
 	}
-	results <- err
+	l.done <- err
+}
+
+func (l *listener) shutdown(sd *shutdown) error {
+	var err error
+	if serr := l.srv.Shutdown(sd.work); serr != nil {
+		log.Warn(fmt.Sprintf("%s listener requests outlived the work deadline; closing their connections", l.name), logx.Err, serr.Error())
+		err = l.srv.Close()
+		if werr := wait(sd.settle, &l.handlers); werr != nil {
+			err = errors.Join(err, fmt.Errorf("%s listener: requests did not finish before the shutdown deadline", l.name))
+		}
+	}
+	if serveErr := <-l.done; !errors.Is(serveErr, http.ErrServerClosed) {
+		err = errors.Join(err, serveErr)
+	}
+	return err
 }

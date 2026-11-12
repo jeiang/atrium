@@ -288,6 +288,8 @@
         Type = "notify";
         WatchdogSec = "1min";
         TimeoutStartSec = writeTimeout;
+        TimeoutStopSec = "150s";
+        KillMode = "mixed";
         Restart = "always";
         RestartSec = 5;
       };

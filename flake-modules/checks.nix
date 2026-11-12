@@ -119,7 +119,9 @@
     assert !(defaults.config.systemd.units ? "atrium-web-local.service");
     assert lib.hasInfix "--emergency-host 127.0.0.1 --emergency-port 8481" (unitText "atrium-web.service");
     assert lib.hasInfix "--emergency-host 127.0.0.1 --emergency-port 8481" defaults.config.systemd.units."atrium-web.service".text;
-    assert !(lib.hasInfix "ATRIUM_CORE_OPS_LISTEN=off" (unitText "atrium-web.service")); true;
+    assert !(lib.hasInfix "ATRIUM_CORE_OPS_LISTEN=off" (unitText "atrium-web.service"));
+    assert lib.hasInfix "TimeoutStopSec=150s" (unitText "atrium-web.service");
+    assert lib.hasInfix "KillMode=mixed" (unitText "atrium-web.service"); true;
     notifyOnLongRunning = let
       notifying = name: let t = unitText name; in lib.hasInfix "Type=notify" t && lib.hasInfix "WatchdogSec=" t;
     in
