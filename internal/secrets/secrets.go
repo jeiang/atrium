@@ -37,7 +37,7 @@ func FileBinding(ctx context.Context, name string) (string, bool) {
 	if !ok || strings.TrimSpace(config.HostValueFrom(ctx, file)) == "" {
 		return "", false
 	}
-	return file, true
+	return "app_keys." + file, true
 }
 
 func FileKey(ctx context.Context, key string) ([]byte, bool, error) {

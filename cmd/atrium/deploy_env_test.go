@@ -40,7 +40,7 @@ func TestRetiredSettingEnvironmentVariableWarns(t *testing.T) {
 	if r := runSettings(t, "list"); r.code != cli.ExitOK {
 		t.Fatalf("settings list with a retired variable: exit %d stderr %q", r.code, r.stderr)
 	}
-	if !strings.Contains(logs.String(), "ignoring a removed setting") || !strings.Contains(logs.String(), "assistant.nightly_stale_months") {
+	if !strings.Contains(logs.String(), "ignoring a removed setting") || !strings.Contains(logs.String(), "ATRIUM_ASSISTANT_NIGHTLY_STALE_MONTHS") {
 		t.Errorf("the retired variable was not warned about: %q", logs.String())
 	}
 }

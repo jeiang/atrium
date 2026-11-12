@@ -64,7 +64,7 @@ func Rotate(ctx context.Context, q db.Querier) error {
 	if _, ok, err := secrets.FileKey(ctx, secrets.ActionLinkKeyFile); err != nil {
 		return err
 	} else if ok {
-		return settings.AppKeyFile{Key: secrets.ActionLinkKey, File: secrets.ActionLinkKeyFile}
+		return settings.AppKeyFile{Key: secrets.ActionLinkKey, File: "app_keys." + secrets.ActionLinkKeyFile}
 	}
 	store := secrets.NewIn(settings.From(ctx), nil, q, nil)
 	var buf [32]byte

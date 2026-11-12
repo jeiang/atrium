@@ -291,7 +291,6 @@ func TestLocalChatKeyFileFromTheEnvironmentBindsTheChatEndpoint(t *testing.T) {
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", chat.URL+"/v1")
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_KEY_FILE", keyPath)
-	setEnv(t, settingEnv(endpoint.KeyChatURL), "")
 	setEnv(t, settingEnv(endpoint.KeyChatModel), "")
 	got := runApp(t, "endpoints", "probe")
 	if got.code != cli.ExitOK {

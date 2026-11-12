@@ -37,9 +37,24 @@ func operatorEmbedding(t *testing.T, dir, endpoint, token string) {
 
 func operatorBoot(t *testing.T, dir string) {
 	t.Helper()
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	if _, err := d.Write.Exec("DELETE FROM connections WHERE id = 'service/embedding'"); err != nil {
+		_ = d.Close()
+		t.Fatalf("clearing the fixture embedding row: %v", err)
+	}
+	_ = d.Close()
 	setEnv(t, "ATRIUM_HOST_CONFIG", plainHostConfig(t, dir))
 	if listed := runApp(t, "connections", "list"); listed.code != cli.ExitOK {
 		t.Fatalf("materializing the operator embedding: exit %d stdout %q stderr %q", listed.code, listed.stdout, listed.stderr)
+	}
+	d = mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	var source string
+	if err := d.Read.QueryRow("SELECT config_source FROM connections WHERE id = 'service/embedding'").Scan(&source); err != nil {
+		t.Fatalf("reading the materialized embedding row: %v", err)
+	}
+	if source != "operator" {
+		t.Fatalf("the materialized embedding row is %q, want operator", source)
 	}
 }
 
