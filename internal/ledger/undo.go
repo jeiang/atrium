@@ -53,6 +53,12 @@ func (s *Store) Undo(ctx context.Context, id int64, who Resolver) (Effect, error
 			return Effect{}, startErr
 		}
 		if err != nil {
+			recorded := context.WithoutCancel(ctx)
+			ticket, startErr = s.reserveUndo(recorded, id, payload)
+			if startErr != nil {
+				return Effect{}, startErr
+			}
+			_ = s.Settle(recorded, ticket, Result{State: Failed, Error: err.Error()}, nil)
 			return Effect{}, err
 		}
 		if err := begin(); err != nil {
