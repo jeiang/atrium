@@ -1,6 +1,7 @@
 package ledgercmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -55,7 +56,7 @@ func list(o Options) *cli.Command {
 			limit := a.Int("limit", 50, cli.Opt{Help: "maximum effects"})
 			blocked := a.Bool("blocked", cli.Opt{Help: "only unresolved effects"})
 			return func(e *cli.Env) int {
-				d, s, err := open(o)
+				d, s, err := open(e.Ctx, o)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
@@ -93,7 +94,7 @@ func show(o Options) *cli.Command {
 		Setup: func(a *cli.Args) cli.Handler {
 			id := a.IntArg("id", cli.Opt{})
 			return func(e *cli.Env) int {
-				d, s, err := open(o)
+				d, s, err := open(e.Ctx, o)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
@@ -123,7 +124,7 @@ func resolve(o Options) *cli.Command {
 			actor := a.String("actor", "operator", cli.Opt{Help: "who resolved it"})
 			source := a.String("source", "cli", cli.Opt{Choices: []string{"cli", "ui", "phone"}, Help: "resolution source"})
 			return func(e *cli.Env) int {
-				d, s, err := open(o)
+				d, s, err := open(e.Ctx, o)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
@@ -152,7 +153,7 @@ func undo(o Options) *cli.Command {
 		Setup: func(a *cli.Args) cli.Handler {
 			id := a.IntArg("id", cli.Opt{})
 			return func(e *cli.Env) int {
-				d, s, err := open(o)
+				d, s, err := open(e.Ctx, o)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
@@ -170,12 +171,12 @@ func undo(o Options) *cli.Command {
 	}
 }
 
-func open(o Options) (*db.DB, *ledger.Store, error) {
+func open(ctx context.Context, o Options) (*db.DB, *ledger.Store, error) {
 	cfg, err := config.Load(o.Env)
 	if err != nil {
 		return nil, nil, err
 	}
-	d, err := db.Connect(cfg.DBPath)
+	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(ctx).DBKey()))
 	if err != nil {
 		return nil, nil, err
 	}

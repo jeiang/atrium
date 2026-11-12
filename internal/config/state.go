@@ -103,7 +103,7 @@ func OpenStore(ctx context.Context, env Env) (*db.DB, *settings.Store, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	d, err := db.Connect(cfg.DBPath)
+	d, err := db.Connect(cfg.DBPath, db.WithKey(From(ctx).DBKey()))
 	if err != nil {
 		return nil, nil, err
 	}

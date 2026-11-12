@@ -306,7 +306,7 @@ func (o Options) run(env *cli.Env, run body) error {
 	if err != nil {
 		return err
 	}
-	d, err := db.Connect(cfg.DBPath)
+	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(env.Ctx).DBKey()))
 	if err != nil {
 		return err
 	}

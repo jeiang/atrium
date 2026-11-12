@@ -74,7 +74,7 @@ func bootstrap(ctx context.Context, cfgEnv config.Env, tools registry.Source, no
 	if err != nil {
 		return nil, nil, err
 	}
-	d, err := db.Connect(cfg.DBPath)
+	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(ctx).DBKey()))
 	if err != nil {
 		return nil, nil, err
 	}
