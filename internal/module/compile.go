@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settingspage"
 )
@@ -118,11 +119,29 @@ func Compile(decls []Declaration) (*Catalog, error) {
 			}
 		}
 	}
+	metrics := map[string]bool{}
+	checks := map[string]bool{}
+	var allMetrics []ops.Metric
+	var allChecks []ops.Check
 	tools := map[string]bool{}
 	var optional []string
 	for _, d := range decls {
 		if !d.Core {
 			optional = append(optional, d.Name)
+		}
+		for _, m := range d.Metrics {
+			if metrics[m.Name] {
+				return nil, &DuplicateMetric{Name: m.Name}
+			}
+			metrics[m.Name] = true
+			allMetrics = append(allMetrics, m)
+		}
+		for _, c := range d.Checks {
+			if checks[c.Name] {
+				return nil, &DuplicateCheck{Name: c.Name}
+			}
+			checks[c.Name] = true
+			allChecks = append(allChecks, c)
 		}
 		for _, def := range d.Tools {
 			if tools[def.Tool.Name] {
@@ -134,7 +153,7 @@ func Compile(decls []Declaration) (*Catalog, error) {
 			}
 		}
 	}
-	return &Catalog{decls: slices.Clone(decls), optional: optional, settings: reg, sections: sections}, nil
+	return &Catalog{decls: slices.Clone(decls), optional: optional, settings: reg, sections: sections, metrics: allMetrics, checks: allChecks}, nil
 }
 
 func compileSettings(decls []Declaration) (*settings.Registry, error) {

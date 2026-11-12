@@ -39,7 +39,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/inference"
-	_ "github.com/jeiang/atrium/internal/inference/opsmetrics"
+	"github.com/jeiang/atrium/internal/inference/opsmetrics"
 	"github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/serverops"
@@ -64,6 +64,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Host:      export.HostSettings(),
 		Sections:  export.Sections(),
 		Attention: AttentionSources(mc.Env),
+		Metrics:   slices.Concat(scheduler.Metrics(), opsmetrics.Metrics()),
 		Requires:  Requirements(),
 		Pages: []web.Page{{
 			Module:    chatpages.Module(chatpages.Options{Tools: mc.Tools}),

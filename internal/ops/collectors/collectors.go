@@ -24,12 +24,6 @@ func gauge(name, help string, collect func(ctx context.Context, q db.Querier) ([
 
 func one(v float64) []ops.Sample { return []ops.Sample{{Value: v}} }
 
-func init() {
-	for _, m := range Metrics() {
-		ops.Register(m)
-	}
-}
-
 func Metrics() []ops.Metric {
 	var metrics []ops.Metric
 	add := func(m ops.Metric) { metrics = append(metrics, m) }

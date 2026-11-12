@@ -31,9 +31,3 @@ func Metrics() []ops.Metric {
 		gauge("atrium_budget_spent_ratio", "Share of the monthly budget spent.", func(st inference.Status) float64 { return st.Share }),
 	}
 }
-
-func init() {
-	for _, m := range Metrics() {
-		ops.Register(m)
-	}
-}

@@ -32,10 +32,11 @@ import (
 	mailpages "github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/module"
-	_ "github.com/jeiang/atrium/internal/obs/opsmetrics"
+	"github.com/jeiang/atrium/internal/obs/opsmetrics"
 	"github.com/jeiang/atrium/internal/observability"
 	"github.com/jeiang/atrium/internal/ops"
-	_ "github.com/jeiang/atrium/internal/ops/collectors"
+	"github.com/jeiang/atrium/internal/ops/collectors"
+	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/proposals/proposalscmd"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
@@ -66,6 +67,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Settings:  slices.Concat(config.Settings(), dbkey.Settings(), oidc.Settings(), secrets.Settings()),
 		Host:      slices.Concat(config.HostSettings(), secrets.HostSettings(), observability.HostSettings(), ops.HostSettings()),
 		Attention: AttentionSources(),
+		Metrics:   slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics()),
+		Checks:    slices.Concat(ops.Checks(), passrun.Checks()),
 		Pages: []web.Page{
 			{Module: about.Module(m.Version), Templates: about.Templates(), Nav: []web.NavItem{
 				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},
@@ -79,7 +82,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 			}},
-			{Start: startOps},
+			{Start: func(ctx context.Context, d *web.Deps) error { return startOps(ctx, d, mc.Catalog()) }},
 			{Module: startEmbed},
 			{Module: actionlinkpages.Module, Templates: actionlinkpages.Templates()},
 			{Nav: []web.NavItem{
@@ -118,8 +121,8 @@ func SettingGroups() []settings.Group {
 
 var log = logx.Logger("atrium.core")
 
-func startOps(ctx context.Context, d *web.Deps) error {
-	stop, err := ops.Start(ctx, d.DB, d.Env)
+func startOps(ctx context.Context, d *web.Deps, cat *module.Catalog) error {
+	stop, err := ops.Start(ctx, d.DB, d.Env, cat.Metrics(), cat.Checks())
 	if err != nil {
 		log.Error("ops listener did not start", logx.Err, err.Error())
 		return nil
