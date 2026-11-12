@@ -311,8 +311,8 @@ behavior-parity target.
   settings are database rows edited in the application or with `atrium
   settings set`; a value the host file declares for one, including a
   `<name>_enabled` module flag, wins and makes that setting read-only. Each
-  application instance builds its own settings registry (`settings.New()`)
-  and every command reads the same stored operator values. There is no
+  application instance gets its own settings registry from the compiled
+  module declaration catalog, and every command reads the same stored operator values. There is no
   legacy pin file: `ATRIUM_CONFIG` is refused at startup, and so is an
   `ATRIUM_<MODULE>_<KEY>` variable for an operator or tuning key or for a
   connection-owned host key (the refusal names the destination). Provider
@@ -413,8 +413,11 @@ behavior-parity target.
   error to the append-only `effect_resolutions` table (proposal approvals and
   the remaining proposal-action resolutions use the same audit table).
 - Modules are toggled at runtime. The built-in modules are always compiled
-  in. Core (settings, secrets,
-  `db`, `serve`, the About, review and activity pages) is always on; mail,
+  in. One compiled `module.Declaration` catalog supplies the registration
+  path for module pages, commands, tools, settings, connections, hooks,
+  metrics, checks, proposals and effect handlers; module enablement gates
+  the applicable runtime projections. Core (settings, secrets, `db`,
+  `serve`, the About, review and activity pages) is always on; mail,
   calendar, contacts, Notion, media, assistant, notifications and Grafana each
   have a `<name>_enabled` setting. A module flag is an operator setting, and
   the host file may declare it; a declared value wins and makes the flag
@@ -730,7 +733,7 @@ behavior-parity target.
 - **The day is home.** Five navigation entries: today and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings. The home brief lists the morning digest lines and names the next event.
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
-- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its registration (`Settings` on the registration, a label on the setting) and that render and save through one shared path; an external module declares them through the `sdk` package and gets a page at `/settings/{module}`. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Media and Grafana each have a page with their connections and sections, Notion has a page with its wiki settings, its connection is on `/settings/connections`, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
+- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its `module.Declaration` and that render and save through one shared path. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Media and Grafana each have a page with their connections and sections, Notion has a page with its wiki settings, its connection is on `/settings/connections`, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.

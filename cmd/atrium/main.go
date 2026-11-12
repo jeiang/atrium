@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/app"
-	_ "github.com/jeiang/atrium/internal/builtin"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
