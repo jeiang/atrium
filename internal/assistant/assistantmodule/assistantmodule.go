@@ -17,8 +17,11 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/jeiang/atrium/internal/assistant/report"
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
+	"github.com/jeiang/atrium/internal/assistant/subagents/lookup"
+	"github.com/jeiang/atrium/internal/assistant/subagents/research"
 	"github.com/jeiang/atrium/internal/assistant/subagents/websearch"
 	"github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	attentiontool "github.com/jeiang/atrium/internal/assistant/tools/attention"
@@ -127,7 +130,7 @@ func anthropicKey(ctx context.Context, p module.Probe) (string, error) {
 }
 
 func ToolDefinitions() []module.ToolDefinition {
-	var defs []module.ToolDefinition
+	defs := []module.ToolDefinition{{Tool: registry.WebSearchTool()}}
 	for _, tools := range [][]tool.Tool{
 		askoperator.Tools(), attentiontool.Tools(), filetools.Tools(), memorytools.Tools(),
 		webfetch.Tools(), recalltools.Tools(), plantools.Tools(),
@@ -138,7 +141,7 @@ func ToolDefinitions() []module.ToolDefinition {
 			defs = append(defs, module.ToolDefinition{Tool: t})
 		}
 	}
-	return defs
+	return append(defs, research.Definition(), lookup.Definition(), websearch.Definition(), report.Definition())
 }
 
 func runCaps() []string {

@@ -1,6 +1,8 @@
 package runner
 
 import (
+	"errors"
+
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/report"
@@ -10,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 func New(tools registry.Source, store *ledger.Store, open mail.OpenFunc) (*loop.Runner, error) {
@@ -19,19 +22,24 @@ func New(tools registry.Source, store *ledger.Store, open mail.OpenFunc) (*loop.
 	}
 	r := &loop.Runner{Registry: reg, Ledger: store, MailOpen: open, Profile: kb.ProfileBlock}
 	rs := research.New(r)
-	if err := rs.Install(reg); err != nil {
-		return nil, err
-	}
 	lk := lookup.New(r)
-	if err := lk.Install(reg); err != nil {
-		return nil, err
-	}
 	ws := websearch.New(r)
-	if err := ws.Install(reg); err != nil {
-		return nil, err
-	}
-	if err := reg.Add(report.Tool()); err != nil {
-		return nil, err
+	for _, handler := range []struct {
+		name string
+		fn   tool.Handler
+	}{
+		{research.Name, rs.Handle},
+		{lookup.Name, lk.Handle},
+		{websearch.Name, ws.Handle},
+		{report.Name, report.Handle},
+	} {
+		if err := reg.Handle(handler.name, handler.fn); err != nil {
+			var unknown *registry.UnknownTool
+			if errors.As(err, &unknown) {
+				continue
+			}
+			return nil, err
+		}
 	}
 	return r, nil
 }

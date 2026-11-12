@@ -287,12 +287,6 @@ func Metadata() tool.Tool {
 	}
 }
 
-func Tool() tool.Tool {
-	t := Metadata()
-	t.Handler = handle
-	return t
-}
-
 func Definition() module.ToolDefinition {
 	return module.ToolDefinition{Tool: Metadata()}
 }
@@ -380,7 +374,7 @@ func fieldSchema(field Field) map[string]any {
 	}
 }
 
-func handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func Handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	answer, ok := args["answer"].(map[string]any)
 	if !ok {
 		return nil, tool.Error("answer must be an object")

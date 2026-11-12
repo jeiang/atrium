@@ -57,10 +57,6 @@ type Search struct{ runner *loop.Runner }
 
 func New(runner *loop.Runner) *Search { return &Search{runner: runner} }
 
-func (s *Search) Install(reg *registry.Registry) error {
-	return reg.Add(s.Tool())
-}
-
 func Metadata() tool.Tool {
 	return tool.Tool{
 		Name:        Name,
@@ -72,12 +68,6 @@ func Metadata() tool.Tool {
 		Marks:       tool.AllMarks,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 	}
-}
-
-func (s *Search) Tool() tool.Tool {
-	t := Metadata()
-	t.Handler = s.handle
-	return t
 }
 
 func Definition() module.ToolDefinition {
@@ -95,7 +85,7 @@ func spec(maxSources int) report.Spec {
 	}}
 }
 
-func (s *Search) handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func (s *Search) Handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	query, _, err := tool.TextArg(args, "query", true)
 	if err != nil {
 		return nil, err

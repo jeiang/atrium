@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/jeiang/atrium/internal/app"
 	"github.com/jeiang/atrium/internal/assistant/toolset"
 )
 
@@ -13,15 +14,11 @@ func main() {
 	if len(os.Args) > 1 && !check {
 		fail(fmt.Errorf("usage: toolsdocs [check]"))
 	}
-	reg, err := toolset.Registry()
+	cat, err := app.Docs()
 	if err != nil {
 		fail(err)
 	}
-	tools, err := reg.All()
-	if err != nil {
-		fail(err)
-	}
-	want := toolset.Render(tools)
+	want := toolset.Render(cat.ToolDocs())
 	if check {
 		have, err := os.ReadFile(path)
 		if err != nil {

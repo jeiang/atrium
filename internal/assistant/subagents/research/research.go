@@ -15,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/loop"
-	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/subagents"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -41,14 +40,6 @@ type Research struct{ runner *loop.Runner }
 
 func New(runner *loop.Runner) *Research { return &Research{runner: runner} }
 
-func (r *Research) Install(reg *registry.Registry) error {
-	if err := reg.Add(r.Tool()); err != nil {
-		return err
-	}
-	reg.Bind(Name, Bind)
-	return nil
-}
-
 func Metadata() tool.Tool {
 	return tool.Tool{
 		Name:        Name,
@@ -60,12 +51,6 @@ func Metadata() tool.Tool {
 		Marks:       tool.AllMarks,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 	}
-}
-
-func (r *Research) Tool() tool.Tool {
-	t := Metadata()
-	t.Handler = r.handle
-	return t
 }
 
 func Definition() module.ToolDefinition {
@@ -126,7 +111,7 @@ func sortedURLs(allowed map[string]struct{}) []string {
 	return slices.Sorted(maps.Keys(allowed))
 }
 
-func (r *Research) handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func (r *Research) Handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	roleValue, _ := args.Get("role")
 	task, _, err := tool.TextArg(args, "task", true)
 	if err != nil {

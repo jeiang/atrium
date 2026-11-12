@@ -5,6 +5,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
@@ -127,6 +128,7 @@ func Compile(decls []Declaration) (*Catalog, error) {
 	var allMetrics []ops.Metric
 	var allChecks []ops.Check
 	tools := map[string]bool{}
+	scratch := registry.New(settings.NewFrom(nil))
 	var optional []string
 	for _, d := range decls {
 		if !d.Core {
@@ -153,6 +155,15 @@ func Compile(decls []Declaration) (*Catalog, error) {
 			tools[def.Tool.Name] = true
 			if _, ok := reg.Lookup("tool_" + def.Tool.Name + "_enabled"); ok {
 				return nil, &ToolSettingCollision{Module: d.Name, Key: "tool_" + def.Tool.Name + "_enabled"}
+			}
+			var err error
+			if def.Tool.Handler == nil && !def.Tool.Server {
+				err = scratch.Declare(def.Tool)
+			} else {
+				err = scratch.Add(def.Tool)
+			}
+			if err != nil {
+				return nil, &DeclarationError{Module: d.Name, Field: "tools", Err: err}
 			}
 		}
 	}

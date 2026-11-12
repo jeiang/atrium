@@ -180,7 +180,13 @@ func (n *Snapshot) buildRegistry() (*registry.Registry, error) {
 			continue
 		}
 		for _, def := range d.Tools {
-			if err := out.Add(def.Tool); err != nil {
+			var err error
+			if def.Tool.Handler == nil && !def.Tool.Server {
+				err = out.Declare(def.Tool)
+			} else {
+				err = out.Add(def.Tool)
+			}
+			if err != nil {
 				return nil, err
 			}
 			if def.Bind != nil {

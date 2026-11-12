@@ -3,6 +3,7 @@ package module
 import (
 	"context"
 	"slices"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
@@ -10,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settingspage"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 type Catalog struct {
@@ -43,6 +45,17 @@ func (c *Catalog) Connections() *connections.Registry { return c.conns }
 func (c *Catalog) Hooks() proposals.Hooks { return c.hooks }
 
 func (c *Catalog) AccountCredential() config.AccountCredentialFunc { return c.credential }
+
+func (c *Catalog) ToolDocs() []tool.Tool {
+	var out []tool.Tool
+	for _, d := range c.decls {
+		for _, def := range d.Tools {
+			out = append(out, def.Tool)
+		}
+	}
+	slices.SortFunc(out, func(a, b tool.Tool) int { return strings.Compare(a.Name, b.Name) })
+	return out
+}
 
 func (c *Catalog) Context(ctx context.Context) context.Context {
 	ctx = connections.With(ctx, c.conns)
