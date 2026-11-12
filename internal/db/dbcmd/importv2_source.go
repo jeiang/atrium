@@ -163,7 +163,9 @@ func readSourceEnv(path string) (map[string]string, error) {
 	}
 	defer func() { _ = f.Close() }()
 	scanner := bufio.NewScanner(f)
+	lineNo := 0
 	for scanner.Scan() {
+		lineNo++
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
@@ -171,7 +173,7 @@ func readSourceEnv(path string) (map[string]string, error) {
 		line = strings.TrimPrefix(line, "export ")
 		name, value, ok := strings.Cut(line, "=")
 		if !ok {
-			return nil, fmt.Errorf("db import-v2: source environment %s: %q is not NAME=VALUE", path, line)
+			return nil, fmt.Errorf("db import-v2: source environment %s: line %d is not NAME=VALUE", path, lineNo)
 		}
 		out[strings.TrimSpace(name)] = strings.TrimSpace(value)
 	}
