@@ -320,6 +320,17 @@ func TestMailPassBudgetRefusalDefersPaidStagesUntilRaised(t *testing.T) {
 	t.Parallel()
 	r := newMailClassifierRig(t, nil)
 	a, b, c := r.targets[0], r.targets[1], r.targets[2]
+	if _, err := r.d.Write.Exec("DELETE FROM mail_scans"); err != nil {
+		t.Fatal(err)
+	}
+	scans := func(where string) int {
+		t.Helper()
+		var n int
+		if err := r.d.Read.QueryRow("SELECT COUNT(*) FROM mail_scans WHERE " + where).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
 	var once sync.Once
 	r.mu.Lock()
 	r.hook = func(req anthropictest.Request) {
@@ -359,6 +370,19 @@ func TestMailPassBudgetRefusalDefersPaidStagesUntilRaised(t *testing.T) {
 		caller != "mail_flag" || item != fmt.Sprintf("icloud:%d", b.id) {
 		t.Errorf("recorded deferral: %q %q %v", caller, item, err)
 	}
+	if sent := r.requests(t); len(sent) != 1 {
+		t.Errorf("paid requests in the deferred pass = %d, want only the first flag", len(sent))
+	}
+	if n := scans("kind = 'commitments'"); n != 0 {
+		t.Errorf("deferred commitment scans left %d markers", n)
+	}
+	if n := scans("kind = 'packages' AND found = 0"); n != 0 {
+		t.Errorf("deferred model-only package scans left %d markers", n)
+	}
+	regexFound := scans("kind = 'packages' AND found = 1")
+	if regexFound == 0 {
+		t.Errorf("the package regex found nothing after the paid stages stopped")
+	}
 	r.noMailWrites(t)
 	r.noLocalJudgments(t)
 
@@ -388,6 +412,27 @@ func TestMailPassBudgetRefusalDefersPaidStagesUntilRaised(t *testing.T) {
 		if got := r.event(t, m.id); got == "" {
 			t.Errorf("deferred message %q has no event judgment after the retry", m.subject)
 		}
+	}
+	seen := map[string]map[string]bool{"commitments": {}, "packages": {}}
+	for _, s := range r.requests(t)[before:] {
+		kind := map[string]string{"commitments": "commitments"}[s.caller]
+		if strings.Contains(s.caller, "tracking_number") {
+			kind = "packages"
+		}
+		if kind == "" {
+			continue
+		}
+		user := userText(s.body)
+		if seen[kind][user] {
+			t.Errorf("%s scan judged one message twice", kind)
+		}
+		seen[kind][user] = true
+	}
+	if n := scans("kind = 'commitments'"); n != len(seen["commitments"]) {
+		t.Errorf("commitment markers = %d for %d commitment requests", n, len(seen["commitments"]))
+	}
+	if len(seen["packages"]) == 0 || scans("kind = 'packages'") < regexFound+len(seen["packages"]) {
+		t.Errorf("package retry: %d requests, %d markers, %d regex finds", len(seen["packages"]), scans("kind = 'packages'"), regexFound)
 	}
 	r.noMailWrites(t)
 }

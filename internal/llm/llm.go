@@ -46,8 +46,6 @@ type Neighbor struct{ Folder, FromDomain, Subject string }
 
 type Message struct{ Subject, FromName, FromAddr string }
 
-func BodyChars(ctx context.Context) int { return endpoint.From(ctx).LLMBodyChars }
-
 func FolderCatalog(ctx context.Context, rows []FolderSender) string {
 	topSenders := endpoint.From(ctx).TopSenders
 	byFolder := map[string]map[string]int{}

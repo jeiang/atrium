@@ -62,6 +62,13 @@ type Deferral struct {
 
 func (d *Deferral) Stopped() bool { return d.first != nil }
 
+func (d *Deferral) Err() error {
+	if d.first == nil {
+		return nil
+	}
+	return d.first
+}
+
 func (d *Deferral) Note(err error) bool {
 	var deferred *classifier.Deferred
 	if !errors.As(err, &deferred) {

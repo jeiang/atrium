@@ -62,25 +62,26 @@ type Classifier func(ctx context.Context, env config.Env, d *db.DB, cfg config.C
 
 type Extra struct {
 	Name string
-	Run  func(ctx context.Context) (any, error)
+	Run  func(ctx context.Context, paid *classify.Deferral) (any, error)
 }
 
 type Pass struct {
-	DB       *db.DB
-	Cfg      config.Config
-	Open     mail.OpenFunc
-	Now      func() float64
-	Syncer   *mailsync.Syncer
-	Live     *live.Live
-	Registry *proposals.Registry
-	Router   *router.Router
-	Applier  *applier.Applier
-	Classify *classify.Service
-	Events   func(ctx context.Context, account string, paid *classify.Deferral) (invites, candidates int, err error)
-	Extras   []Extra
+	DB         *db.DB
+	Cfg        config.Config
+	Open       mail.OpenFunc
+	Now        func() float64
+	Syncer     *mailsync.Syncer
+	Live       *live.Live
+	Registry   *proposals.Registry
+	Router     *router.Router
+	Applier    *applier.Applier
+	Classifier *classifier.Service
+	Classify   *classify.Service
+	Events     func(ctx context.Context, account string, paid *classify.Deferral) (invites, candidates int, err error)
+	Extras     []Extra
 }
 
-func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open mail.OpenFunc, now func() float64, judge *classify.Service) (*Pass, error) {
+func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open mail.OpenFunc, now func() float64, c *classifier.Service) (*Pass, error) {
 	if now == nil {
 		now = mail.WallClock
 	}
@@ -95,17 +96,19 @@ func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open 
 		return nil, err
 	}
 	l := &live.Live{DB: d, Cfg: cfg, Store: store, Open: open, Registry: registry, Now: now}
+	judge := classify.New(c)
 	p := &Pass{
-		DB:       d,
-		Cfg:      cfg,
-		Open:     open,
-		Now:      now,
-		Syncer:   syncer,
-		Live:     l,
-		Registry: registry,
-		Router:   &router.Router{DB: d, Now: now},
-		Applier:  applier.New(l, open, syncer),
-		Classify: judge,
+		DB:         d,
+		Cfg:        cfg,
+		Open:       open,
+		Now:        now,
+		Syncer:     syncer,
+		Live:       l,
+		Registry:   registry,
+		Router:     &router.Router{DB: d, Now: now},
+		Applier:    applier.New(l, open, syncer),
+		Classifier: c,
+		Classify:   judge,
 		Events: func(ctx context.Context, account string, paid *classify.Deferral) (int, int, error) {
 			if !module.IsEnabled(ctx, module.Calendar) {
 				return 0, 0, nil
@@ -114,11 +117,11 @@ func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open 
 		},
 	}
 	p.Extras = []Extra{
-		{"open loops", func(ctx context.Context) (any, error) {
-			return openloops.Refresh(ctx, d, now(), openloops.Options{Env: env, Clock: now, CacheDir: cfg.CacheDir})
+		{"open loops", func(ctx context.Context, paid *classify.Deferral) (any, error) {
+			return openloops.Refresh(ctx, d, now(), openloops.Options{Env: env, Classifier: c, Paid: paid, Clock: now, CacheDir: cfg.CacheDir})
 		}},
-		{"watches", func(ctx context.Context) (any, error) {
-			return watches.Refresh(ctx, d, now(), watches.Options{Env: env, Clock: now})
+		{"watches", func(ctx context.Context, paid *classify.Deferral) (any, error) {
+			return watches.Refresh(ctx, d, now(), watches.Options{Classifier: c, Paid: paid, Clock: now, Env: env})
 		}},
 	}
 	return p, nil
@@ -141,7 +144,7 @@ func Open(ctx context.Context, env config.Env, cfg config.Config, open mail.Open
 		_ = d.Close()
 		return nil, nil, err
 	}
-	p, err := New(ctx, env, d, cfg, open, now, classify.New(c))
+	p, err := New(ctx, env, d, cfg, open, now, c)
 	if err != nil {
 		_ = d.Close()
 		return nil, nil, err
@@ -230,7 +233,7 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		result, err := extra.Run(ctx)
+		result, err := extra.Run(ctx, paid)
 		if err != nil {
 			log.Error("refresh failed", "name", extra.Name, logx.Err, err.Error())
 			continue

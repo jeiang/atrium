@@ -9,6 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail/classify"
 	"github.com/jeiang/atrium/internal/mail/message"
 )
 
@@ -40,6 +41,7 @@ type Spec struct {
 	WindowDays int
 	FetchLimit int
 	Limit      int
+	Paid       *classify.Deferral
 	Eligible   func(Message) (bool, error)
 	Judge      func(ctx context.Context, row Message, body string) (found int, err error)
 }
@@ -104,11 +106,9 @@ func Run(ctx context.Context, d *db.DB, now float64, spec Spec) (Result, error) 
 			return result, err
 		}
 		found, err := spec.Judge(ctx, row, body)
-		var unavailable *httpx.ServiceUnavailable
 		switch {
-		case errors.As(err, &unavailable):
-			log.Warn(fmt.Sprintf("chat unavailable, deferring %s scan: %s", spec.Kind, unavailable))
-			return result, nil
+		case spec.Paid.Note(err):
+			continue
 		case errors.Is(err, httpx.ErrPayload) || errors.Is(err, httpx.ErrMissing) || errors.Is(err, httpx.ErrShape):
 			log.Warn(fmt.Sprintf("message %d: unusable %s answer: %s", row.ID, spec.Kind, httpx.Message(err)))
 			found = 0
