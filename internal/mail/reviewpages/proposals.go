@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -163,7 +164,8 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 		done, err = s.pipeline.ApproveAndApply(ctx, id, selection, proposals.Resolver{Actor: "operator", Source: "ui"})
 	}
 	var refused proposals.ProposalError
-	if errors.As(err, &refused) {
+	var disabled *module.OwnerDisabled
+	if errors.As(err, &refused) || errors.As(err, &disabled) {
 		s.card(w, r, id, toast("error", "Not approved", err.Error()))
 		return
 	}
@@ -187,7 +189,8 @@ func (s *service) proposalDismiss(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.pipeline.Dismiss(detached(r), id, status, proposals.Resolver{Actor: "operator", Source: "ui"})
 	var refused proposals.ProposalError
-	if errors.As(err, &refused) {
+	var disabled *module.OwnerDisabled
+	if errors.As(err, &refused) || errors.As(err, &disabled) {
 		s.card(w, r, id, toast("error", "Not dismissed", err.Error()))
 		return
 	}
@@ -206,7 +209,8 @@ func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
 	}
 	outcome, err := s.pipeline.Undo(detached(r), id, proposals.Resolver{Actor: "operator", Source: "ui"})
 	var refused proposals.ProposalError
-	if errors.As(err, &refused) {
+	var disabled *module.OwnerDisabled
+	if errors.As(err, &refused) || errors.As(err, &disabled) {
 		s.card(w, r, id, toast("error", "Not undone", err.Error()))
 		return
 	}
@@ -249,7 +253,8 @@ func (s *service) proposalResolve(w http.ResponseWriter, r *http.Request) {
 	outcome, _ := web.Value(web.FormValues(r), "outcome")
 	_, err := s.pipeline.Resolve(detached(r), id, outcome, proposals.Resolver{Actor: "operator", Source: "ui"})
 	var refused proposals.ProposalError
-	if errors.As(err, &refused) {
+	var disabled *module.OwnerDisabled
+	if errors.As(err, &refused) || errors.As(err, &disabled) {
 		s.card(w, r, id, toast("error", "Not settled", err.Error()))
 		return
 	}

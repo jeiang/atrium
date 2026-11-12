@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/db"
+	moduleowner "github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
@@ -75,18 +76,29 @@ func serve(d *web.Deps, phone Section, budget BudgetStatus) {
 		return err
 	})
 	d.Authenticated(http.MethodGet, page, h.index)
-	d.Authenticated(http.MethodPost, page+"/channels/{name}/content", h.content)
-	d.Authenticated(http.MethodPost, page+"/push/subscriptions", h.subscribe)
-	d.Authenticated(http.MethodPost, page+"/push/unsubscribe", h.unsubscribe)
-	d.Authenticated(http.MethodPost, page+"/push/test", h.pushTest)
-	d.Authenticated(http.MethodPost, page+"/push/{id}/remove", h.removeDevice)
+	d.Authenticated(http.MethodPost, page+"/channels/{name}/content", h.owned(h.content))
+	d.Authenticated(http.MethodPost, page+"/push/subscriptions", h.owned(h.subscribe))
+	d.Authenticated(http.MethodPost, page+"/push/unsubscribe", h.owned(h.unsubscribe))
+	d.Authenticated(http.MethodPost, page+"/push/test", h.owned(h.pushTest))
+	d.Authenticated(http.MethodPost, page+"/push/{id}/remove", h.owned(h.removeDevice))
 	d.Authenticated(http.MethodGet, inboxPage, h.inbox)
-	d.Authenticated(http.MethodPost, inboxPage+"/{id}/resend", h.resend)
+	d.Authenticated(http.MethodPost, inboxPage+"/{id}/resend", h.owned(h.resend))
 	d.API(http.MethodGet, "/inbox", h.apiInbox)
 }
 
 func (h handlers) ctx(r *http.Request) context.Context {
 	return audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
+}
+
+func (h handlers) owned(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx, err := moduleowner.BindOwner(r.Context(), moduleowner.Notifications)
+		if err != nil {
+			h.done(w, r, err, "")
+			return
+		}
+		next(w, r.WithContext(ctx))
+	}
 }
 
 func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, toast *tpl.Toast, problem string) {
@@ -142,7 +154,8 @@ func refused(err error) bool {
 	var channel ChannelError
 	var push PushError
 	var pinned *settings.PinnedError
-	return errors.As(err, &channel) || errors.As(err, &push) || errors.As(err, &pinned)
+	var disabled *moduleowner.OwnerDisabled
+	return errors.As(err, &channel) || errors.As(err, &push) || errors.As(err, &pinned) || errors.As(err, &disabled)
 }
 
 func (h handlers) done(w http.ResponseWriter, r *http.Request, err error, title string) {

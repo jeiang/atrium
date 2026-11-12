@@ -19,7 +19,9 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
+	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/module"
 )
 
@@ -571,19 +573,9 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 	}
 }
 
-func TestMailPauseStaysAvailableWhileMailIsOff(t *testing.T) {
+func TestMailPauseUnavailableWhileMailIsOff(t *testing.T) {
 	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, "false"))
-	paused := func() bool {
-		got := runApp(t, "live", "status")
-		return got.code == cli.ExitOK && strings.Contains(got.stdout, `"paused": true`)
-	}
-	if got := runApp(t, "live", "pause"); got.code != cli.ExitOK || !paused() {
-		t.Fatalf("live pause while mail is off: exit %d stderr %q, paused %v", got.code, got.stderr, paused())
-	}
-	if got := runApp(t, "live", "resume"); got.code != cli.ExitOK || paused() {
-		t.Fatalf("live resume while mail is off: exit %d stderr %q", got.code, got.stderr)
-	}
 	base := startServeIn(t, dir)
 	jar, err := cookiejar.New(nil)
 	if err != nil {
@@ -591,10 +583,192 @@ func TestMailPauseStaysAvailableWhileMailIsOff(t *testing.T) {
 	}
 	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	fetch(t, client, "GET", base+"/about", nil)
-	if status, _, _ := fetch(t, client, "POST", base+"/live/pause", url.Values{}); status != http.StatusSeeOther || !paused() {
-		t.Errorf("POST /live/pause while mail is off = %d, paused %v", status, paused())
+	for _, path := range []string{"/live/pause", "/live/resume"} {
+		if status, _, _ := fetch(t, client, "POST", base+path, url.Values{}); status != http.StatusNotFound {
+			t.Errorf("POST %s while mail is off = %d, want 404", path, status)
+		}
 	}
-	if status, _, _ := fetch(t, client, "POST", base+"/live/resume", url.Values{}); status != http.StatusSeeOther || paused() {
-		t.Errorf("POST /live/resume while mail is off = %d, paused %v", status, paused())
+}
+
+func TestMailDisableDuringProposalApproval(t *testing.T) {
+	fake := mailtest.NewFakeClient()
+	inbox := fake.AddBox("INBOX", mailtest.NewBox(1))
+	fake.AddBox("Bills", mailtest.NewBox(3))
+	h, x := mailtest.RawWith("Bank statement", "statements@bank.test", "disable-approval", "Your statement is ready.")
+	inbox.Add(h, x, []string{`\Seen`}, nil)
+	m := mailEffectsFixture(t, "live", "icloud", fake)
+	m.ruleFor(t, "work", "Bills", "statements@bank.test")
+	m.run(t, "sync")
+	m.run(t, "live", "rebaseline")
+	m.run(t, "live", "backlog")
+	proposal := m.scalar(t, "SELECT CAST(id AS TEXT) FROM proposals WHERE kind = 'inbox_backlog' AND status = 'pending' ORDER BY id DESC LIMIT 1")
+	startServeIn(t, m.dir)
+	arrived := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	defer once.Do(func() { close(release) })
+	var arrivedOnce sync.Once
+	fake.StatusHook = func(_ string, count uint32) uint32 {
+		arrivedOnce.Do(func() {
+			close(arrived)
+			<-release
+		})
+		return count
+	}
+	result := make(chan appRun, 1)
+	go func() { result <- asstRunApp(m.app, context.Background(), "proposals", "approve", proposal) }()
+	select {
+	case <-arrived:
+	case <-time.After(10 * time.Second):
+		t.Fatal("approval did not reach IMAP preflight")
+	}
+	asstSet(t, module.FlagKey(module.Mail), "false")
+	asstSet(t, module.FlagKey(module.Mail), "true")
+	once.Do(func() { close(release) })
+	ran := <-result
+	if ran.code == cli.ExitOK || !strings.Contains(ran.stderr+ran.stdout, "the mail module was disabled; start the action again") {
+		t.Fatalf("approval after disable and re-enable: %d %q %q", ran.code, ran.stdout, ran.stderr)
+	}
+	fake.StatusHook = nil
+	if len(fake.Writes) != 0 || m.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'proposal'") != 0 {
+		t.Fatalf("disabled approval wrote IMAP %v or recorded a proposal effect", m.verbs())
+	}
+	m.run(t, "proposals", "approve", proposal)
+	if len(fake.Boxes["Bills"].Box.Messages) != 1 {
+		t.Fatal("approval after re-enabling did not move the message")
+	}
+}
+
+func TestMailUndoRefusedWhileDisabledAndHistoryRemains(t *testing.T) {
+	m := mailSafetyFixture(t, "live")
+	uid := m.add("INBOX", "Bank statement", "statements@bank.test", "disable-undo", "Your statement is ready.")
+	m.run(t, "sync")
+	id := m.messageID(t, "Bank statement")
+	m.run(t, "live", "rebaseline")
+	m.exec(t, "INSERT INTO corrections (message_id, account, folder, ts, source) VALUES (?, 'icloud', 'Bills', ?, 'operator')", id, mail.WallClock()+60)
+	m.fake.Boxes["INBOX"].Box.SetFlags(uid, []string{`\Seen`}, nil)
+	m.run(t, "sync")
+	effect := m.scalar(t, "SELECT CAST(id AS TEXT) FROM effects WHERE origin = 'mail_auto' AND operation = 'correct'")
+	base := startServeIn(t, m.dir)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	status, body, _ := fetch(t, client, http.MethodGet, base+"/activity", nil)
+	if status != http.StatusOK || !strings.Contains(body, "/activity/mail/"+effect+"/undo") {
+		t.Fatalf("activity before disabling: %d %s", status, body)
+	}
+	writes := len(m.fake.Writes)
+	arrived := make(chan struct{})
+	release := make(chan struct{})
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+	var arrivedOnce sync.Once
+	m.fake.StatusHook = func(_ string, count uint32) uint32 {
+		arrivedOnce.Do(func() {
+			close(arrived)
+			<-release
+		})
+		return count
+	}
+	type response struct {
+		status int
+		body   string
+	}
+	result := make(chan response, 1)
+	go func() {
+		status, body, _ := fetch(t, client, http.MethodPost, base+"/activity/mail/"+effect+"/undo", url.Values{})
+		result <- response{status: status, body: body}
+	}()
+	select {
+	case <-arrived:
+	case <-time.After(10 * time.Second):
+		t.Fatal("undo did not reach IMAP preflight")
+	}
+	asstSet(t, module.FlagKey(module.Mail), "false")
+	releaseOnce.Do(func() { close(release) })
+	refused := <-result
+	m.fake.StatusHook = nil
+	if !strings.Contains(refused.body, "the mail module was disabled; start the action again") {
+		t.Fatalf("disabled pending undo response %d: %s", refused.status, refused.body)
+	}
+	status, body, _ = fetch(t, client, http.MethodGet, base+"/activity", nil)
+	if status != http.StatusOK || !strings.Contains(body, "/activity/mail/"+effect+"/undo") {
+		t.Fatalf("activity while disabled: %d %s", status, body)
+	}
+	listed := runApp(t, "effects", "list", "--operation", "correct")
+	if listed.code != cli.ExitOK || !strings.Contains(listed.stdout, `"id": `+effect) {
+		t.Fatalf("historical effect missing while disabled: %d %s %s", listed.code, listed.stdout, listed.stderr)
+	}
+	status, body, _ = fetch(t, client, http.MethodPost, base+"/activity/mail/"+effect+"/undo", url.Values{})
+	if !strings.Contains(body, "the mail module was disabled; start the action again") {
+		t.Fatalf("disabled undo response %d: %s", status, body)
+	}
+	if len(m.fake.Writes) != writes || m.count(t, "SELECT COUNT(*) FROM effects WHERE undo_of = ?", effect) != 0 {
+		t.Fatal("disabled undo wrote IMAP or recorded an undo intent")
+	}
+	asstSet(t, module.FlagKey(module.Mail), "true")
+	m.run(t, "live", "undo", effect)
+	if len(m.fake.Boxes["INBOX"].Box.Messages) != 1 {
+		t.Fatal("undo after re-enabling did not restore the message")
+	}
+}
+
+func TestMailToolRefusesRunStartedBeforeDisable(t *testing.T) {
+	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	asstWarm(t)
+	message := seedMail(t, dir)
+	startServeIn(t, dir)
+	api.Push(
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("disabled-mail", "mail_read", map[string]any{"message_id": message})),
+		anthropictest.Reply("end_turn", anthropictest.Text("refused")),
+	)
+	arrived := make(chan struct{})
+	release := make(chan struct{})
+	var once sync.Once
+	var releaseOnce sync.Once
+	defer releaseOnce.Do(func() { close(release) })
+	previous := api.OnRequest
+	api.OnRequest = func(r anthropictest.Request) {
+		previous(r)
+		once.Do(func() {
+			close(arrived)
+			<-release
+		})
+	}
+	result := make(chan appRun, 1)
+	go func() { result <- asstRunApp(f.app, context.Background(), "agent", "run", "--text", "read my mail") }()
+	select {
+	case <-arrived:
+	case <-time.After(10 * time.Second):
+		t.Fatal("model request did not arrive")
+	}
+	asstSet(t, module.FlagKey(module.Mail), "false")
+	releaseOnce.Do(func() { close(release) })
+	ran := <-result
+	api.OnRequest = previous
+	if ran.code != cli.ExitOK {
+		t.Fatalf("agent run: %d %s %s", ran.code, ran.stdout, ran.stderr)
+	}
+	resultBlock := findToolResult(t, api.Requests(), "disabled-mail")
+	encoded, err := json.Marshal(resultBlock)
+	if err != nil || !strings.Contains(string(encoded), "the mail module was disabled; start the action again") {
+		t.Fatalf("disabled tool result = %s (%v)", encoded, err)
+	}
+	if resultBlock["is_error"] != true {
+		t.Fatalf("disabled tool result is not an error: %s", encoded)
+	}
+	asstSet(t, module.FlagKey(module.Mail), "true")
+	api.Push(
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("enabled-mail", "mail_read", map[string]any{"message_id": message})),
+		anthropictest.Reply("end_turn", anthropictest.Text("read")),
+	)
+	if ran := runApp(t, "agent", "run", "--text", "read my mail"); ran.code != cli.ExitOK {
+		t.Fatalf("enabled agent run: %d %s", ran.code, ran.stderr)
+	}
+	enabled := findToolResult(t, api.Requests(), "enabled-mail")
+	if enabled == nil || enabled["is_error"] == true {
+		t.Fatalf("enabled tool result = %v", enabled)
 	}
 }

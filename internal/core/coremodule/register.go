@@ -32,7 +32,6 @@ import (
 	"github.com/jeiang/atrium/internal/ledger/ledgercmd"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
-	mailpages "github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/obs/opsmetrics"
@@ -85,11 +84,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Module: about.Module(m.Version), Templates: about.Templates(), Nav: []web.NavItem{
 				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},
 			}},
-			{Module: mailpages.PauseModule},
-			{Module: reviewpages.Module(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Recover: reviewpages.RecoverDrafts, Nav: []web.NavItem{
+			{Module: reviewpages.Module(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
-				{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20},
-				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 			}},
 			{Start: func(ctx context.Context, d *web.Deps) error { return startOps(ctx, d, mc.Catalog()) }},

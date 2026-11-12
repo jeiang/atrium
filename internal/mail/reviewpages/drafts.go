@@ -9,6 +9,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/drafts"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -124,7 +125,8 @@ func (s *service) draftUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := s.drafts.Update(detached(r), id, changes)
 	var refused drafts.Error
-	if errors.As(err, &refused) {
+	var disabled *module.OwnerDisabled
+	if errors.As(err, &refused) || errors.As(err, &disabled) {
 		row, gerr := s.drafts.Get(detached(r), id)
 		if gerr == nil && row != nil {
 			submitted := *row
@@ -171,7 +173,8 @@ func (s *service) draftDiscard(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.drafts.Discard(detached(r), id)
 	var refused drafts.Error
-	if errors.As(err, &refused) {
+	var disabled *module.OwnerDisabled
+	if errors.As(err, &refused) || errors.As(err, &disabled) {
 		s.reply(w, r, id, drafts.Draft, http.StatusConflict, toast("error", "Not discarded", err.Error()))
 		return
 	}
@@ -238,7 +241,8 @@ func (s *service) draftResolve(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.drafts.ResolveUnknown(detached(r), id, verdict, ledger.Resolver{Actor: "operator", Source: "ui"})
 	var refused drafts.Error
-	if errors.As(err, &refused) {
+	var disabled *module.OwnerDisabled
+	if errors.As(err, &refused) || errors.As(err, &disabled) {
 		s.reply(w, r, id, drafts.Unknown, http.StatusConflict, toast("error", "Not updated", err.Error()))
 		return
 	}

@@ -1911,7 +1911,7 @@ func TestImportV2CarriesTheMailPasswordIntoTheConnectionAndSyncsWithIt(t *testin
 	const appPassword = "imported-app-pass"
 	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_password_icloud', %q, 1762000800, 'fixture')", appPassword))
 
-	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source, "--source-env", importMailPins(t, dir))
 	if got.code != cli.ExitOK {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}

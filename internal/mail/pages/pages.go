@@ -46,8 +46,23 @@ func PauseModule(r chi.Router, d *web.Deps) {
 		f.Paused = safety.IsPaused(d.Cfg.PausePath())
 		return nil
 	})
-	r.Post("/live/pause", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, true) })
-	d.Authenticated(http.MethodPost, "/live/resume", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, false) })
+	r.With(bindMail).Post("/live/pause", func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, true) })
+	d.Authenticated(http.MethodPost, "/live/resume", bindMail(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { s.togglePause(w, r, false) })).ServeHTTP)
+}
+
+func bindMail(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead {
+			next.ServeHTTP(w, r)
+			return
+		}
+		ctx, err := module.BindOwner(r.Context(), module.Mail)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusConflict)
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func Globals() map[string]any {
@@ -74,6 +89,7 @@ const learnedLimit = 50
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
 func Module(r chi.Router, d *web.Deps) {
+	r = r.With(bindMail)
 	open := imapclient.Opener(d.Cfg)
 	syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: wallClock}
 	cat := module.SetFrom(d.Ctx).Catalog()

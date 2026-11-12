@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/live"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
@@ -234,8 +235,9 @@ func (s *service) undoMail(w http.ResponseWriter, r *http.Request) {
 	var notice *tpl.Toast
 	_, err = s.live.Undo(ctx, id)
 	var refused live.UndoError
+	var disabled *module.OwnerDisabled
 	switch {
-	case errors.As(err, &refused):
+	case errors.As(err, &refused) || errors.As(err, &disabled):
 		if !web.IsPartial(r) {
 			s.fail(w, r, http.StatusConflict, err.Error())
 			return
@@ -261,8 +263,9 @@ func (s *service) resolveMail(w http.ResponseWriter, r *http.Request) {
 	var notice *tpl.Toast
 	_, err := s.live.Resolve(ctx, id, outcome, proposals.Resolver{Actor: "operator", Source: "ui"})
 	var refused live.UndoError
+	var disabled *module.OwnerDisabled
 	switch {
-	case errors.As(err, &refused):
+	case errors.As(err, &refused) || errors.As(err, &disabled):
 		if !web.IsPartial(r) {
 			s.fail(w, r, http.StatusConflict, err.Error())
 			return
@@ -344,8 +347,9 @@ func (s *service) undoEffect(w http.ResponseWriter, r *http.Request) {
 	var refused ledger.Refused
 	var conflict *ledger.Conflict
 	var settled *ledger.SettledMeanwhile
+	var disabled *module.OwnerDisabled
 	switch {
-	case errors.As(err, &refused) || errors.As(err, &conflict) || errors.As(err, &settled):
+	case errors.As(err, &refused) || errors.As(err, &conflict) || errors.As(err, &settled) || errors.As(err, &disabled):
 		if !web.IsPartial(r) {
 			s.fail(w, r, http.StatusConflict, err.Error())
 			return
@@ -372,11 +376,12 @@ func (s *service) resolveEffect(w http.ResponseWriter, r *http.Request) {
 	_, err := s.ledger.Resolve(ctx, id, ledger.Resolution{Outcome: outcome}, ledger.Resolver{Actor: "operator", Source: "ui"}, nil)
 	var refused ledger.Refused
 	var missing *ledger.NotFound
+	var disabled *module.OwnerDisabled
 	switch {
 	case errors.As(err, &missing):
 		s.fail(w, r, http.StatusNotFound, "unknown effect")
 		return
-	case errors.As(err, &refused):
+	case errors.As(err, &refused) || errors.As(err, &disabled):
 		if !web.IsPartial(r) {
 			s.fail(w, r, http.StatusConflict, err.Error())
 			return

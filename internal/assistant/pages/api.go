@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/textsearch"
 	"github.com/jeiang/atrium/internal/web"
@@ -118,11 +119,11 @@ type seqCursor struct {
 
 func (p *pages) apiRoutes(d *web.Deps) {
 	d.API(http.MethodGet, "/threads", p.apiThreads)
-	d.API(http.MethodPost, "/threads", web.Idempotent(p.apiNewThread))
+	d.API(http.MethodPost, "/threads", bindAssistant(web.Idempotent(p.apiNewThread)).ServeHTTP)
 	d.API(http.MethodGet, "/threads/{thread_id}", p.apiTranscript)
-	d.API(http.MethodPost, "/threads/{thread_id}/messages", web.Idempotent(p.apiMessage))
-	d.API(http.MethodPost, "/threads/{thread_id}/stop", p.apiStop)
-	d.API(http.MethodPost, "/threads/{thread_id}/answer", p.apiAnswer)
+	d.API(http.MethodPost, "/threads/{thread_id}/messages", bindAssistant(web.Idempotent(p.apiMessage)).ServeHTTP)
+	d.API(http.MethodPost, "/threads/{thread_id}/stop", bindAssistant(http.HandlerFunc(p.apiStop)).ServeHTTP)
+	d.API(http.MethodPost, "/threads/{thread_id}/answer", bindAssistant(http.HandlerFunc(p.apiAnswer)).ServeHTTP)
 	d.API(http.MethodGet, "/threads/{thread_id}/runs/{run_id}/events", p.apiEvents)
 }
 
@@ -174,9 +175,12 @@ func (p *pages) apiRefused(w http.ResponseWriter, err error) bool {
 	var unknown service.UnknownThread
 	var option threads.OptionError
 	var refused references.Refused
+	var disabled *module.OwnerDisabled
 	switch {
 	case err == nil:
 		return false
+	case errors.As(err, &disabled):
+		web.APIError(w, http.StatusConflict, "module_disabled", err.Error())
 	case errors.As(err, &exceeded):
 		web.APIError(w, http.StatusConflict, "budget_exceeded", err.Error())
 	case errors.As(err, &refused):

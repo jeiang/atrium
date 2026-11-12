@@ -71,38 +71,42 @@ type service struct {
 
 func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
+func newService(o Options, d *web.Deps) *service {
+	open := imapclient.Opener(d.Cfg)
+	if o.Clients != nil {
+		open = o.Clients(d.Cfg)
+	}
+	now := wallClock
+	syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: now}
+	cat := module.SetFrom(d.Ctx).Catalog()
+	effects, err := cat.Ledger(d.DB, d.Env, open, now)
+	if err != nil {
+		panic(err)
+	}
+	registry, err := cat.Proposals(module.EffectDeps{DB: d.DB, Ledger: effects, Open: open, Syncer: syncer, Now: now, Env: d.Env, Tools: o.Tools, Approvals: cat.Approvals(), Resume: func(ctx context.Context, runID int64) error {
+		if d.ResumeRun == nil {
+			return proposals.ProposalError("the assistant module is not running")
+		}
+		return d.ResumeRun(ctx, runID)
+	}})
+	if err != nil {
+		panic(err)
+	}
+	return &service{
+		deps:     d,
+		now:      now,
+		pipeline: &proposals.Pipeline{DB: d.DB, Ledger: effects, Registry: registry, Now: now, Enabled: o.Enabled},
+		live:     &live.Live{DB: d.DB, Cfg: d.Cfg, Store: effects, Open: open, Registry: registry, Now: now},
+		open:     open,
+		ledger:   effects,
+		drafts:   &drafts.Store{DB: d.DB, Cfg: d.Cfg, Ledger: effects, Open: open, Now: now},
+		registry: registry,
+	}
+}
+
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
-		open := imapclient.Opener(d.Cfg)
-		if o.Clients != nil {
-			open = o.Clients(d.Cfg)
-		}
-		now := wallClock
-		syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: now}
-		cat := module.SetFrom(d.Ctx).Catalog()
-		effects, err := cat.Ledger(d.DB, d.Env, open, now)
-		if err != nil {
-			panic(err)
-		}
-		registry, err := cat.Proposals(module.EffectDeps{DB: d.DB, Ledger: effects, Open: open, Syncer: syncer, Now: now, Env: d.Env, Tools: o.Tools, Approvals: cat.Approvals(), Resume: func(ctx context.Context, runID int64) error {
-			if d.ResumeRun == nil {
-				return proposals.ProposalError("the assistant module is not running")
-			}
-			return d.ResumeRun(ctx, runID)
-		}})
-		if err != nil {
-			panic(err)
-		}
-		s := &service{
-			deps:     d,
-			now:      now,
-			pipeline: &proposals.Pipeline{DB: d.DB, Ledger: effects, Registry: registry, Now: now, Enabled: o.Enabled},
-			live:     &live.Live{DB: d.DB, Cfg: d.Cfg, Store: effects, Open: open, Registry: registry, Now: now},
-			open:     open,
-			ledger:   effects,
-			drafts:   &drafts.Store{DB: d.DB, Cfg: d.Cfg, Ledger: effects, Open: open, Now: now},
-			registry: registry,
-		}
+		s := newService(o, d)
 
 		d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
 			n, err := needsCount(ctx, d.DB.Read)
@@ -129,6 +133,14 @@ func Module(o Options) web.Module {
 		r.Post("/activity/effect/{effect_id}/undo", s.undoEffect)
 		r.Post("/activity/effect/{effect_id}/resolve", s.resolveEffect)
 
+		s.apiRoutes(d)
+	}
+}
+
+func MailModule(o Options) web.Module {
+	return func(r chi.Router, d *web.Deps) {
+		s := newService(o, d)
+		r = r.With(bindMail)
 		r.Get("/drafts", s.draftsPage)
 		r.Get("/drafts/{draft_id}", s.draftPage)
 		r.Get("/drafts/{draft_id}/card", s.draftCardPage)
@@ -145,8 +157,27 @@ func Module(o Options) web.Module {
 
 		r.Get("/watches", s.watchesPage)
 		r.Post("/watches/packages/{package_id}/dismiss", s.packageDismiss)
-		s.apiRoutes(d)
+		s.mailAPIRoutes(d)
 	}
+}
+
+func bindMail(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead {
+			next.ServeHTTP(w, r)
+			return
+		}
+		ctx, err := module.BindOwner(r.Context(), module.Mail)
+		if err != nil {
+			if strings.HasPrefix(r.URL.Path, web.APIPrefix+"/") {
+				web.APIError(w, http.StatusConflict, "module_disabled", err.Error())
+			} else {
+				http.Error(w, err.Error(), http.StatusConflict)
+			}
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
 }
 
 func check(err error) {

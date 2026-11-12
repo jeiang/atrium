@@ -133,6 +133,9 @@ func Resend(ctx context.Context, d *db.DB, id int64) (Sent, error) {
 	if priority != nil {
 		m.priority = int(*priority)
 	}
+	if err := ledger.CheckAdmission(ctx); err != nil {
+		return Sent{}, err
+	}
 	ok, failure, err := deliver(ctx, d, m, deref(link))
 	if err != nil {
 		return Sent{}, err

@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/drafts"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -101,11 +102,14 @@ func (s *service) apiRoutes(d *web.Deps) {
 	d.API(http.MethodGet, "/effects/{effect_id}", s.apiEffect)
 	d.API(http.MethodPost, "/effects/{effect_id}/resolve", s.apiEffectResolve)
 	d.API(http.MethodPost, "/effects/{effect_id}/undo", s.apiEffectUndo)
+}
+
+func (s *service) mailAPIRoutes(d *web.Deps) {
 	d.API(http.MethodGet, "/drafts/{draft_id}", s.apiDraft)
-	d.API(http.MethodPatch, "/drafts/{draft_id}", s.apiDraftUpdate)
-	d.API(http.MethodPost, "/drafts/{draft_id}/send", web.Idempotent(s.apiDraftSend))
-	d.API(http.MethodPost, "/drafts/{draft_id}/discard", s.apiDraftDiscard)
-	d.API(http.MethodPost, "/drafts/{draft_id}/resolve", s.apiDraftResolve)
+	d.API(http.MethodPatch, "/drafts/{draft_id}", bindMail(http.HandlerFunc(s.apiDraftUpdate)).ServeHTTP)
+	d.API(http.MethodPost, "/drafts/{draft_id}/send", bindMail(web.Idempotent(s.apiDraftSend)).ServeHTTP)
+	d.API(http.MethodPost, "/drafts/{draft_id}/discard", bindMail(http.HandlerFunc(s.apiDraftDiscard)).ServeHTTP)
+	d.API(http.MethodPost, "/drafts/{draft_id}/resolve", bindMail(http.HandlerFunc(s.apiDraftResolve)).ServeHTTP)
 }
 
 func payloadRefs(raw json.RawMessage) (thread, run *int64) {
@@ -234,11 +238,12 @@ func (s *service) apiApprove(w http.ResponseWriter, r *http.Request) {
 	done, err := s.pipeline.ApproveAndApply(ctx, found.ID, selection, appResolver)
 	var badSelection proposals.SelectionError
 	var refused proposals.ProposalError
+	var disabled *module.OwnerDisabled
 	switch {
 	case errors.As(err, &badSelection):
 		web.APIError(w, http.StatusUnprocessableEntity, "bad_selection", err.Error())
 		return
-	case errors.As(err, &refused):
+	case errors.As(err, &refused) || errors.As(err, &disabled):
 		web.APIError(w, http.StatusConflict, "not_approved", err.Error())
 		return
 	}
@@ -272,7 +277,8 @@ func (s *service) apiDeny(w http.ResponseWriter, r *http.Request) {
 	ctx := detached(r)
 	err := s.pipeline.Dismiss(ctx, found.ID, status, appResolver)
 	var refused proposals.ProposalError
-	if errors.As(err, &refused) {
+	var disabled *module.OwnerDisabled
+	if errors.As(err, &refused) || errors.As(err, &disabled) {
 		web.APIError(w, http.StatusConflict, "not_dismissed", err.Error())
 		return
 	}
@@ -294,7 +300,8 @@ func (s *service) apiResolve(w http.ResponseWriter, r *http.Request) {
 	ctx := detached(r)
 	_, err := s.pipeline.Resolve(ctx, found.ID, in.Outcome, appResolver)
 	var refused proposals.ProposalError
-	if errors.As(err, &refused) {
+	var disabled *module.OwnerDisabled
+	if errors.As(err, &refused) || errors.As(err, &disabled) {
 		web.APIError(w, http.StatusConflict, "not_resolved", err.Error())
 		return
 	}
@@ -463,7 +470,8 @@ func (s *service) apiUndo(w http.ResponseWriter, r *http.Request) {
 		var refused ledger.Refused
 		var conflict *ledger.Conflict
 		var settled *ledger.SettledMeanwhile
-		if errors.As(err, &refused) || errors.As(err, &conflict) || errors.As(err, &settled) {
+		var disabled *module.OwnerDisabled
+		if errors.As(err, &refused) || errors.As(err, &conflict) || errors.As(err, &settled) || errors.As(err, &disabled) {
 			web.APIError(w, http.StatusConflict, "not_undone", err.Error())
 			return
 		}
@@ -480,7 +488,8 @@ func (s *service) apiUndo(w http.ResponseWriter, r *http.Request) {
 		}
 		outcome, err := s.pipeline.Undo(ctx, id, proposals.Resolver{Actor: "operator", Source: "ui"})
 		var refused proposals.ProposalError
-		if errors.As(err, &refused) {
+		var disabled *module.OwnerDisabled
+		if errors.As(err, &refused) || errors.As(err, &disabled) {
 			web.APIError(w, http.StatusConflict, "not_undone", err.Error())
 			return
 		}
@@ -567,11 +576,12 @@ func (s *service) apiEffectResolve(w http.ResponseWriter, r *http.Request) {
 	found, err := s.ledger.Resolve(ctx, id, ledger.Resolution{Outcome: in.Outcome, Evidence: in.Evidence}, ledger.Resolver{Actor: "operator", Source: "ui"}, nil)
 	var refused ledger.Refused
 	var missing *ledger.NotFound
+	var disabled *module.OwnerDisabled
 	switch {
 	case errors.As(err, &missing):
 		web.APIError(w, http.StatusNotFound, "not_found", "Unknown effect.")
 		return
-	case errors.As(err, &refused):
+	case errors.As(err, &refused) || errors.As(err, &disabled):
 		web.APIError(w, http.StatusConflict, "not_resolved", err.Error())
 		return
 	}
@@ -590,11 +600,12 @@ func (s *service) apiEffectUndo(w http.ResponseWriter, r *http.Request) {
 	var conflict *ledger.Conflict
 	var settled *ledger.SettledMeanwhile
 	var missing *ledger.NotFound
+	var disabled *module.OwnerDisabled
 	switch {
 	case errors.As(err, &missing):
 		web.APIError(w, http.StatusNotFound, "not_found", "Unknown effect.")
 		return
-	case errors.As(err, &refused) || errors.As(err, &conflict) || errors.As(err, &settled):
+	case errors.As(err, &refused) || errors.As(err, &conflict) || errors.As(err, &settled) || errors.As(err, &disabled):
 		web.APIError(w, http.StatusConflict, "not_undone", err.Error())
 		return
 	}
@@ -657,7 +668,11 @@ func (s *service) apiDraftUpdate(w http.ResponseWriter, r *http.Request) {
 	_, err := s.drafts.Update(ctx, row.ID, changes)
 	var invalid drafts.Error
 	var stale drafts.Stale
+	var disabled *module.OwnerDisabled
 	switch {
+	case errors.As(err, &disabled):
+		web.APIError(w, http.StatusConflict, "module_disabled", err.Error())
+		return
 	case errors.As(err, &stale):
 		web.APIError(w, http.StatusConflict, "stale", err.Error())
 		return
@@ -734,7 +749,8 @@ func (s *service) apiDraftDiscard(w http.ResponseWriter, r *http.Request) {
 	ctx := detached(r)
 	err := s.drafts.Discard(ctx, row.ID)
 	var refused drafts.Error
-	if errors.As(err, &refused) {
+	var disabled *module.OwnerDisabled
+	if errors.As(err, &refused) || errors.As(err, &disabled) {
 		web.APIError(w, http.StatusConflict, "not_discarded", err.Error())
 		return
 	}
@@ -767,7 +783,8 @@ func (s *service) apiDraftResolve(w http.ResponseWriter, r *http.Request) {
 	ctx := detached(r)
 	err := s.drafts.ResolveUnknown(ctx, row.ID, verdict, ledger.Resolver{Actor: "operator", Source: "ui"})
 	var refused drafts.Error
-	if errors.As(err, &refused) {
+	var disabled *module.OwnerDisabled
+	if errors.As(err, &refused) || errors.As(err, &disabled) {
 		web.APIError(w, http.StatusConflict, "not_resolved", err.Error())
 		return
 	}

@@ -28,6 +28,7 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/connections/transport"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/netguard"
 	"github.com/jeiang/atrium/internal/obs"
@@ -255,6 +256,9 @@ func Subscribe(ctx context.Context, q db.Querier, endpoint, p256dh, auth, label 
 	if err != nil || len(secret) != 16 {
 		return PushError("auth must be 16 bytes of base64url")
 	}
+	if err := ledger.CheckAdmission(ctx); err != nil {
+		return err
+	}
 	_, err = q.ExecContext(ctx, `INSERT INTO push_subscriptions (endpoint, p256dh, auth, label, created_ts) VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT (endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth, label = excluded.label, failure_count = 0, last_error = NULL`,
 		endpoint, base64.RawURLEncoding.EncodeToString(public), base64.RawURLEncoding.EncodeToString(secret), Plain(label, pushLabelChars), stamp())
@@ -262,11 +266,17 @@ func Subscribe(ctx context.Context, q db.Querier, endpoint, p256dh, auth, label 
 }
 
 func Unsubscribe(ctx context.Context, q db.Querier, endpoint string) error {
+	if err := ledger.CheckAdmission(ctx); err != nil {
+		return err
+	}
 	_, err := q.ExecContext(ctx, "DELETE FROM push_subscriptions WHERE endpoint = ?", strings.TrimSpace(endpoint))
 	return err
 }
 
 func RemoveDevice(ctx context.Context, q db.Querier, id int64) error {
+	if err := ledger.CheckAdmission(ctx); err != nil {
+		return err
+	}
 	_, err := q.ExecContext(ctx, "DELETE FROM push_subscriptions WHERE id = ?", id)
 	return err
 }
@@ -340,6 +350,9 @@ func deliverPush(ctx context.Context, d *db.DB, m delivery, link string) (tried,
 func PushTest(ctx context.Context, d *db.DB) (int, string, error) {
 	payload, err := json.Marshal(pushPayload{Title: "atrium test", Body: "Test push notification.", URL: pushInbox})
 	if err != nil {
+		return 0, "", err
+	}
+	if err := ledger.CheckAdmission(ctx); err != nil {
 		return 0, "", err
 	}
 	return pushAll(ctx, d, System, payload, webpush.UrgencyNormal)

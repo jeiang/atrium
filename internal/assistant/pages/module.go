@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -60,6 +61,7 @@ const (
 
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
+		r = r.With(bindAssistant)
 		open := imapclient.Opener(d.Cfg)
 		store, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, open, assistant.Now)
 		if err != nil {
@@ -143,6 +145,25 @@ func Module(o Options) web.Module {
 	}
 }
 
+func bindAssistant(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead {
+			next.ServeHTTP(w, r)
+			return
+		}
+		ctx, err := module.BindOwner(r.Context(), module.Assistant)
+		if err != nil {
+			if strings.HasPrefix(r.URL.Path, web.APIPrefix+"/") {
+				web.APIError(w, http.StatusConflict, "module_disabled", err.Error())
+			} else {
+				http.Error(w, err.Error(), http.StatusConflict)
+			}
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 func check(err error) {
 	if err != nil {
 		panic(err)
@@ -183,9 +204,12 @@ func (p *pages) refused(w http.ResponseWriter, r *http.Request, err error) bool 
 	var redo service.NothingToRedo
 	var unknown service.UnknownThread
 	var refused references.Refused
+	var disabled *module.OwnerDisabled
 	switch {
 	case err == nil:
 		return false
+	case errors.As(err, &disabled):
+		p.failure(w, r, "Not available", err.Error())
 	case errors.As(err, &exceeded):
 		p.failure(w, r, "Budget reached", err.Error())
 	case errors.As(err, &refused):
