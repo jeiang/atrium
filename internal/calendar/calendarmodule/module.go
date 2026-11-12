@@ -44,7 +44,8 @@ func (Module) Declare(mc module.Context) module.Declaration {
 			"calendar candidates":  {Needs: []string{module.Mail}},
 			"calendar google-auth": {Always: true},
 		},
-		Tools: ToolDefinitions(),
+		Tools:       ToolDefinitions(),
+		Connections: calendar.Connections(),
 	}
 }
 

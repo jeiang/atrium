@@ -32,11 +32,12 @@ func ToolDefinitions() []module.ToolDefinition {
 
 func (Module) Declare(module.Context) module.Declaration {
 	return module.Declaration{
-		Name:     module.Grafana,
-		Needs:    []string{module.Assistant},
-		Settings: serverops.Settings(),
-		Host:     serverops.HostSettingDefs(),
-		Requires: Requirements(),
-		Tools:    ToolDefinitions(),
+		Name:        module.Grafana,
+		Needs:       []string{module.Assistant},
+		Settings:    serverops.Settings(),
+		Host:        serverops.HostSettingDefs(),
+		Requires:    Requirements(),
+		Tools:       ToolDefinitions(),
+		Connections: grafanatools.Connections(),
 	}
 }

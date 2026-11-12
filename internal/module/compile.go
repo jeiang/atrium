@@ -6,7 +6,10 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/ops"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settingspage"
 )
@@ -153,7 +156,58 @@ func Compile(decls []Declaration) (*Catalog, error) {
 			}
 		}
 	}
-	return &Catalog{decls: slices.Clone(decls), optional: optional, settings: reg, sections: sections, metrics: allMetrics, checks: allChecks}, nil
+	conns, hooks, credential, err := compileConnections(decls)
+	if err != nil {
+		return nil, err
+	}
+	return &Catalog{decls: slices.Clone(decls), optional: optional, settings: reg, sections: sections,
+		conns: conns, hooks: hooks, credential: credential, metrics: allMetrics, checks: allChecks}, nil
+}
+
+func compileConnections(decls []Declaration) (*connections.Registry, proposals.Hooks, config.AccountCredentialFunc, error) {
+	var (
+		defs        []connections.Definition
+		sync        *connections.AccountSync
+		notice      connections.Notifier
+		credential  config.AccountCredentialFunc
+		created     proposals.CreatedHook
+		syncOwner   string
+		noticeOwner string
+		credOwner   string
+		createdBy   string
+	)
+	for _, d := range decls {
+		defs = append(defs, d.Connections...)
+		if d.AccountSync != nil {
+			if syncOwner != "" {
+				return nil, proposals.Hooks{}, nil, &DuplicateHook{Hook: "account sync", Modules: []string{syncOwner, d.Name}}
+			}
+			sync, syncOwner = d.AccountSync, d.Name
+		}
+		if d.ConnectionNotice != nil {
+			if noticeOwner != "" {
+				return nil, proposals.Hooks{}, nil, &DuplicateHook{Hook: "connection notice", Modules: []string{noticeOwner, d.Name}}
+			}
+			notice, noticeOwner = d.ConnectionNotice, d.Name
+		}
+		if d.AccountCredential != nil {
+			if credOwner != "" {
+				return nil, proposals.Hooks{}, nil, &DuplicateHook{Hook: "account credential", Modules: []string{credOwner, d.Name}}
+			}
+			credential, credOwner = d.AccountCredential, d.Name
+		}
+		if d.ProposalCreated != nil {
+			if createdBy != "" {
+				return nil, proposals.Hooks{}, nil, &DuplicateHook{Hook: "proposal created", Modules: []string{createdBy, d.Name}}
+			}
+			created, createdBy = d.ProposalCreated, d.Name
+		}
+	}
+	reg, err := connections.Compile(defs, sync, notice)
+	if err != nil {
+		return nil, proposals.Hooks{}, nil, err
+	}
+	return reg, proposals.Hooks{Created: created}, credential, nil
 }
 
 func compileSettings(decls []Declaration) (*settings.Registry, error) {

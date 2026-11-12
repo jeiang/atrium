@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoable(t *testing.T) {
@@ -21,7 +19,7 @@ func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoabl
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	setEnv(t, "ATRIUM_DB", path)
-	ctx := settings.With(context.Background(), testSettings())
+	ctx := testProposalContext()
 	seed, err := db.Connect(path)
 	if err != nil {
 		t.Fatal(err)

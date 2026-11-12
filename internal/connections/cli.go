@@ -24,6 +24,10 @@ func Command(env config.Env) *cli.Command {
 type service struct{ env config.Env }
 
 func (s *service) open(e *cli.Env) (*db.DB, *Store, int) {
+	reg, err := From(e.Ctx)
+	if err != nil {
+		return nil, nil, cli.Fail(e, err)
+	}
 	cfg, err := config.Load(s.env)
 	if err != nil {
 		return nil, nil, cli.Fail(e, err)
@@ -36,7 +40,7 @@ func (s *service) open(e *cli.Env) (*db.DB, *Store, int) {
 		_ = d.Close()
 		return nil, nil, cli.Fail(e, err)
 	}
-	store, err := New(d, config.From(e.Ctx).Host(), DefaultRegistry())
+	store, err := New(d, config.From(e.Ctx).Host(), reg)
 	if err != nil {
 		_ = d.Close()
 		return nil, nil, cli.Fail(e, err)

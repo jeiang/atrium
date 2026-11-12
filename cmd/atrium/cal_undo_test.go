@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"path/filepath"
 	"strconv"
@@ -15,7 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/mailops"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 func TestProposalUndoIsRefusedWhileAnUndoRunsOrAfterAPartialUndo(t *testing.T) {
@@ -25,7 +23,7 @@ func TestProposalUndoIsRefusedWhileAnUndoRunsOrAfterAPartialUndo(t *testing.T) {
 	setEnv(t, "ATRIUM_DB", path)
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
-	ctx := settings.With(context.Background(), testSettings())
+	ctx := testProposalContext()
 	seed, err := db.Connect(path)
 	if err != nil {
 		t.Fatal(err)
@@ -250,7 +248,7 @@ func TestProposalsResolveRefusesAMixedDirectionOutcomeWithoutCommitting(t *testi
 	setEnv(t, "ATRIUM_DB", path)
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
-	ctx := settings.With(context.Background(), testSettings())
+	ctx := testProposalContext()
 	seed, err := db.Connect(path)
 	if err != nil {
 		t.Fatal(err)

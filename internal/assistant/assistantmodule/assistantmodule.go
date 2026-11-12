@@ -79,9 +79,10 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Group: "Instance", Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 60},
 			},
 		}},
-		Groups:   SettingGroups(),
-		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Callables...), memorycmd.Command(mc.Env, m.Now)},
-		Tools:    ToolDefinitions(),
+		Groups:      SettingGroups(),
+		Commands:    []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Callables...), memorycmd.Command(mc.Env, m.Now)},
+		Tools:       ToolDefinitions(),
+		Connections: slices.Concat(anthropicconn.Connections(), webfetch.Connections(), weather.Connections()),
 	}
 }
 

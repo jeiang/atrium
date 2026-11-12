@@ -42,12 +42,6 @@ type EmbeddingView struct {
 	Data       json.RawMessage
 }
 
-func init() {
-	for _, d := range Connections() {
-		connections.Register(d)
-	}
-}
-
 func Connections() []connections.Definition {
 	return []connections.Definition{{
 		Kind:     connections.Kind(KindEmbedding),
@@ -318,8 +312,11 @@ func EmbeddingState(ctx context.Context, q Querier) (EmbeddingView, error) {
 func TestEmbedding(ctx context.Context, d *db.DB) (EmbeddingView, error) {
 	store := connections.DefaultFor(d.Read)
 	if store == nil {
-		var err error
-		store, err = connections.New(d, config.From(ctx).Host(), connections.DefaultRegistry())
+		reg, err := connections.From(ctx)
+		if err != nil {
+			return EmbeddingView{}, err
+		}
+		store, err = connections.New(d, config.From(ctx).Host(), reg)
 		if err != nil {
 			return EmbeddingView{}, err
 		}

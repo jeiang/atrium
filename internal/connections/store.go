@@ -183,8 +183,8 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 	if s.d == nil {
 		return errors.New("connections: host reconciliation needs a writable database")
 	}
-	if accountSync != nil && accountSync.Validate != nil {
-		if err := accountSync.Validate(ctx, s.host); err != nil {
+	if s.reg != nil && s.reg.sync != nil && s.reg.sync.Validate != nil {
+		if err := s.reg.sync.Validate(ctx, s.host); err != nil {
 			return err
 		}
 	}
@@ -223,8 +223,8 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 				return err
 			}
 		}
-		if accountSync != nil && accountSync.Reconcile != nil {
-			if err := accountSync.Reconcile(ctx, tx, s.host); err != nil {
+		if s.reg != nil && s.reg.sync != nil && s.reg.sync.Reconcile != nil {
+			if err := s.reg.sync.Reconcile(ctx, tx, s.host); err != nil {
 				return err
 			}
 		}
@@ -233,8 +233,8 @@ func (s *Store) ReconcileHost(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if accountSync != nil && accountSync.Reload != nil {
-		return accountSync.Reload(ctx, s)
+	if s.reg != nil && s.reg.sync != nil && s.reg.sync.Reload != nil {
+		return s.reg.sync.Reload(ctx, s)
 	}
 	return nil
 }

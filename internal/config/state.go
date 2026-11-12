@@ -9,13 +9,14 @@ import (
 )
 
 type State struct {
-	mu        sync.RWMutex
-	core      core
-	accounts  []AccountSpec
-	passwords map[string]string
-	settings  *settings.Registry
-	host      Host
-	reconcile func(context.Context, *db.DB, Host) error
+	mu         sync.RWMutex
+	core       core
+	accounts   []AccountSpec
+	passwords  map[string]string
+	settings   *settings.Registry
+	host       Host
+	reconcile  func(context.Context, *db.DB, Host) error
+	credential AccountCredentialFunc
 }
 
 func NewState(reg *settings.Registry) *State {

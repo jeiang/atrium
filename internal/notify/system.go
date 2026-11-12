@@ -11,8 +11,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 )
 
-func init() { connections.SetNotifier(ConnectionNotice()) }
-
 func ConnectionNotice() connections.Notifier {
 	return func(ctx context.Context, d *db.DB, title, body string) error {
 		if !Enabled(ctx) {

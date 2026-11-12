@@ -20,12 +20,6 @@ const (
 
 const eztvProbeIMDb = "tt0000001"
 
-func init() {
-	for _, d := range Connections() {
-		connections.Register(d)
-	}
-}
-
 func Connections() []connections.Definition {
 	return []connections.Definition{
 		{

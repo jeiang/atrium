@@ -71,6 +71,7 @@ func newAppWith(env config.Env, clients func(config.Config) mail.OpenFunc, now f
 	reg := cat.Settings()
 	st := config.NewState(reg)
 	st.SetConnectionReconciler(connections.Reconcile)
+	st.SetAccountCredential(cat.AccountCredential())
 	set, err = module.NewSet(cat, reg, env)
 	if err != nil {
 		panic(err)
@@ -80,7 +81,7 @@ func newAppWith(env config.Env, clients func(config.Config) mail.OpenFunc, now f
 	app.Env = env
 	app.Settings = reg
 	app.State = st
-	app.SetupContext = func(ctx context.Context) context.Context { return module.WithSet(ctx, set) }
+	app.SetupContext = func(ctx context.Context) context.Context { return cat.Context(module.WithSet(ctx, set)) }
 	app.Bootstrap = bootstrap(env, reg)
 	pages := append(set.Pages(), connweb.Page())
 	app.Add(append(append(set.Commands(), connections.Command(env)), web.ServeCommand(set, pages...))...)

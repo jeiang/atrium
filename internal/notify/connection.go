@@ -12,12 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 )
 
-func init() {
-	for _, d := range Connections() {
-		connections.Register(d)
-	}
-}
-
 func Connections() []connections.Definition {
 	return []connections.Definition{{
 		Kind:     KindWebPush,

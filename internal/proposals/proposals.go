@@ -122,10 +122,29 @@ func Known(ctx context.Context, q Querier, fingerprint string) (bool, error) {
 
 type CreatedHook = func(ctx context.Context, d *db.DB, p *Proposal)
 
-var OnCreate CreatedHook
+type Hooks struct{ Created CreatedHook }
+
+type ErrNoHooks struct{}
+
+func (ErrNoHooks) Error() string { return "proposals: no hooks in context" }
+
+type hooksKey struct{}
+
+func WithHooks(ctx context.Context, h Hooks) context.Context {
+	return context.WithValue(ctx, hooksKey{}, h)
+}
+
+func HooksFrom(ctx context.Context) (Hooks, bool) {
+	h, ok := ctx.Value(hooksKey{}).(Hooks)
+	return h, ok
+}
 
 func Create(ctx context.Context, d *db.DB, kind string, account *string, title string, payload, preview any,
 	fingerprint string, ts float64) (id int64, created bool, err error) {
+	hooks, ok := HooksFrom(ctx)
+	if !ok {
+		return 0, false, ErrNoHooks{}
+	}
 	body, err := marshalJSON(payload)
 	if err != nil {
 		return 0, false, err
@@ -164,9 +183,9 @@ func Create(ctx context.Context, d *db.DB, kind string, account *string, title s
 		}
 		return err
 	})
-	if err == nil && created && OnCreate != nil {
+	if err == nil && created && hooks.Created != nil {
 		if p, getErr := Get(ctx, d.Read, id); getErr == nil && p != nil {
-			OnCreate(ctx, d, p)
+			hooks.Created(ctx, d, p)
 		}
 	}
 	return id, created, err

@@ -71,26 +71,27 @@ type Definition struct {
 }
 
 type Registry struct {
-	mu   sync.RWMutex
-	defs map[Kind]Definition
+	mu     sync.RWMutex
+	defs   map[Kind]Definition
+	sync   *AccountSync
+	notify Notifier
 }
 
-func NewRegistry() *Registry { return &Registry{defs: map[Kind]Definition{}} }
-
-func (r *Registry) Register(d Definition) error {
-	if d.Kind == "" {
-		return errors.New("connections: a definition needs a kind")
+func Compile(defs []Definition, sync *AccountSync, notify Notifier) (*Registry, error) {
+	r := &Registry{defs: make(map[Kind]Definition, len(defs)), sync: sync, notify: notify}
+	for _, d := range defs {
+		if d.Kind == "" {
+			return nil, errors.New("connections: a definition needs a kind")
+		}
+		if d.Test == nil {
+			return nil, fmt.Errorf("connections: %s has no test action", d.Kind)
+		}
+		if _, dup := r.defs[d.Kind]; dup {
+			return nil, fmt.Errorf("connections: duplicate kind %q", d.Kind)
+		}
+		r.defs[d.Kind] = d
 	}
-	if d.Test == nil {
-		return fmt.Errorf("connections: %s has no test action", d.Kind)
-	}
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if _, dup := r.defs[d.Kind]; dup {
-		return fmt.Errorf("connections: duplicate kind %q", d.Kind)
-	}
-	r.defs[d.Kind] = d
-	return nil
+	return r, nil
 }
 
 func (r *Registry) Lookup(kind Kind) (Definition, bool) {
@@ -110,6 +111,24 @@ func (r *Registry) Kinds() []Kind {
 	return out
 }
 
+type ErrNoRegistry struct{}
+
+func (ErrNoRegistry) Error() string { return "connections: no registry in context" }
+
+type registryKey struct{}
+
+func With(ctx context.Context, r *Registry) context.Context {
+	return context.WithValue(ctx, registryKey{}, r)
+}
+
+func From(ctx context.Context) (*Registry, error) {
+	r, _ := ctx.Value(registryKey{}).(*Registry)
+	if r == nil {
+		return nil, ErrNoRegistry{}
+	}
+	return r, nil
+}
+
 var defaults sync.Map
 
 type AccountSync struct {
@@ -117,12 +136,6 @@ type AccountSync struct {
 	Reconcile func(context.Context, *sql.Tx, config.Host) error
 	Reload    func(context.Context, *Store) error
 }
-
-var accountSync *AccountSync
-
-// SetAccountSync registers the owner that validates host account inputs before
-// the connection transaction and materializes account rows inside it.
-func SetAccountSync(s *AccountSync) { accountSync = s }
 
 func SetDefault(q db.Querier, s *Store) { defaults.Store(q, s) }
 
@@ -135,16 +148,6 @@ func DefaultFor(q db.Querier) *Store {
 	}
 	return nil
 }
-
-var defaultRegistry = NewRegistry()
-
-func Register(d Definition) {
-	if err := defaultRegistry.Register(d); err != nil {
-		panic(err)
-	}
-}
-
-func DefaultRegistry() *Registry { return defaultRegistry }
 
 type CapabilityView struct {
 	Name    string          `json:"name"`

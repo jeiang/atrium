@@ -25,6 +25,7 @@ import (
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/ops"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
@@ -38,6 +39,10 @@ var testCatalog = sync.OnceValue(func() *module.Catalog {
 })
 
 func testSettings() *settings.Registry { return testCatalog().Settings() }
+
+func testProposalContext() context.Context {
+	return proposals.WithHooks(settings.With(context.Background(), testSettings()), proposals.Hooks{})
+}
 
 var moduleNames = testCatalog().Optional()
 

@@ -14,12 +14,7 @@ import (
 
 const Kind connections.Kind = "service/oidc"
 
-func init() {
-	for _, d := range Connections() {
-		connections.Register(d)
-	}
-	oidc.UseConnections(source{})
-}
+func init() { oidc.UseConnections(source{}) }
 
 func Connections() []connections.Definition {
 	return []connections.Definition{{Kind: Kind, Validate: validate, Test: test}}
@@ -62,8 +57,11 @@ type source struct{}
 func (source) Open(ctx context.Context, d *db.DB, id string) (oidc.Connection, error) {
 	store := connections.DefaultFor(d.Read)
 	if store == nil {
-		var err error
-		store, err = connections.New(d, config.From(ctx).Host(), connections.DefaultRegistry())
+		reg, err := connections.From(ctx)
+		if err != nil {
+			return nil, err
+		}
+		store, err = connections.New(d, config.From(ctx).Host(), reg)
 		if err != nil {
 			return nil, err
 		}

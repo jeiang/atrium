@@ -32,7 +32,8 @@ func (m Module) Declare(module.Context) module.Declaration {
 		Pages: []web.Page{{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Nav: []web.NavItem{
 			{Section: "library", Label: "Wiki", URL: "/library/wiki", Icon: "book-open", Page: "library_wiki", Order: 10},
 		}}},
-		Groups:   SettingGroups(),
-		Commands: []*cli.Command{notion.Command(notion.Options{Env: env})},
+		Groups:      SettingGroups(),
+		Commands:    []*cli.Command{notion.Command(notion.Options{Env: env})},
+		Connections: notion.Connections(),
 	}
 }

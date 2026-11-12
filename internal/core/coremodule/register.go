@@ -16,13 +16,16 @@ import (
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
+	"github.com/jeiang/atrium/internal/auth/oidcconn"
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
 	dbkey "github.com/jeiang/atrium/internal/db/key"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/kb/kbcmd"
 	"github.com/jeiang/atrium/internal/ledger"
@@ -62,13 +65,15 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		return snap.Enabled(name), nil
 	}
 	return module.Declaration{
-		Name:      module.Core,
-		Core:      true,
-		Settings:  slices.Concat(config.Settings(), dbkey.Settings(), oidc.Settings(), secrets.Settings()),
-		Host:      slices.Concat(config.HostSettings(), secrets.HostSettings(), observability.HostSettings(), ops.HostSettings()),
-		Attention: AttentionSources(),
-		Metrics:   slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics()),
-		Checks:    slices.Concat(ops.Checks(), passrun.Checks()),
+		Name:              module.Core,
+		Core:              true,
+		Settings:          slices.Concat(config.Settings(), dbkey.Settings(), oidc.Settings(), secrets.Settings()),
+		Host:              slices.Concat(config.HostSettings(), secrets.HostSettings(), observability.HostSettings(), ops.HostSettings()),
+		Attention:         AttentionSources(),
+		Metrics:           slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics()),
+		Checks:            slices.Concat(ops.Checks(), passrun.Checks()),
+		Connections:       slices.Concat(connections.Connections(), oidcconn.Connections(), endpoint.Connections()),
+		AccountCredential: connections.AccountCredential(),
 		Pages: []web.Page{
 			{Module: about.Module(m.Version), Templates: about.Templates(), Nav: []web.NavItem{
 				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},

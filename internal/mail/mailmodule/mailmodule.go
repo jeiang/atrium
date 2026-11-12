@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/accountpages"
 	"github.com/jeiang/atrium/internal/mail/mailcmd"
+	"github.com/jeiang/atrium/internal/mail/mailconn"
 	"github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/tracking"
@@ -94,6 +95,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			"endpoints probe": {Always: true},
 			"replay":          {Always: true},
 		},
-		Tools: ToolDefinitions(),
+		Tools:       ToolDefinitions(),
+		Connections: slices.Concat(Connections(), tracking.Connections()),
+		AccountSync: mailconn.AccountSync(),
 	}
 }

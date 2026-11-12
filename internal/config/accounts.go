@@ -73,13 +73,13 @@ type AccountCredential struct {
 
 type AccountCredentialFunc = func(context.Context, db.Querier, string, string) (AccountCredential, error)
 
-// accountCredential reads the credential behind an account's connection. The
-// connections owner registers it; a process without the connections owner
-// reads no stored credential.
-var accountCredential AccountCredentialFunc
-
-func RegisterAccountCredential(f AccountCredentialFunc) {
-	accountCredential = f
+// SetAccountCredential installs the reader for the credential behind an
+// account's connection. A process without the connections owner reads no
+// stored credential.
+func (s *State) SetAccountCredential(f AccountCredentialFunc) {
+	s.mu.Lock()
+	s.credential = f
+	s.mu.Unlock()
 }
 
 func (s *State) Accounts() []AccountSpec {
@@ -174,6 +174,9 @@ func (s *State) loadAccountsFromDB(ctx context.Context, q db.Querier, filePasswo
 	}
 	accounts := make([]AccountSpec, 0, len(stored))
 	passwords := make(map[string]string, len(stored))
+	s.mu.RLock()
+	credential := s.credential
+	s.mu.RUnlock()
 	for _, x := range stored {
 		connection := x.connection.String
 		if connection == "" {
@@ -184,8 +187,8 @@ func (s *State) loadAccountsFromDB(ctx context.Context, q db.Querier, filePasswo
 			prefix = "mail/" + x.id
 		}
 		password := filePasswords[x.id]
-		if accountCredential != nil {
-			c, err := accountCredential(ctx, q, connection, prefix+"/password")
+		if credential != nil {
+			c, err := credential(ctx, q, connection, prefix+"/password")
 			if err != nil {
 				return nil, nil, fmt.Errorf("config: mail account %q credential: %w", x.id, err)
 			}

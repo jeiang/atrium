@@ -120,8 +120,7 @@ type Options struct {
 }
 
 type Server struct {
-	settings *settings.Registry
-	state    *config.State
+	base     context.Context
 	auth     Policy
 	oidc     *oidc.Service
 	bearers  *bearer.Service
@@ -164,7 +163,7 @@ func New(o Options) (*Server, error) {
 	if auth.OIDC() && (o.OIDC == nil || o.Render == nil || o.DB == nil) {
 		return nil, errors.New("oidc auth needs a session service, a renderer and a database")
 	}
-	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, settings: o.Settings, state: o.State, db: o.DB}
+	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, base: o.Ctx, db: o.DB}
 	if o.DB != nil {
 		s.bearers = bearer.New(o.DB, o.OIDC)
 	}
@@ -264,14 +263,19 @@ func instrument(next http.Handler) http.Handler {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	if s.settings != nil {
-		ctx = settings.With(ctx, s.settings)
+	s.handler.ServeHTTP(w, r.WithContext(baseValues{Context: r.Context(), base: s.base}))
+}
+
+type baseValues struct {
+	context.Context
+	base context.Context
+}
+
+func (b baseValues) Value(key any) any {
+	if v := b.Context.Value(key); v != nil {
+		return v
 	}
-	if s.state != nil {
-		ctx = config.With(ctx, s.state)
-	}
-	s.handler.ServeHTTP(w, r.WithContext(ctx))
+	return b.base.Value(key)
 }
 
 func (s *Server) route(class access, method, pattern string, h http.HandlerFunc) {

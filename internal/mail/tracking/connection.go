@@ -18,12 +18,6 @@ const (
 	ConnectionID                  = connections.ID("service/ship24")
 )
 
-func init() {
-	for _, d := range Connections() {
-		connections.Register(d)
-	}
-}
-
 func Connections() []connections.Definition {
 	return []connections.Definition{{
 		Kind:     KindShip24,

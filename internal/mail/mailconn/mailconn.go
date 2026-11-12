@@ -66,7 +66,6 @@ func Password(lease *connections.Lease, account string) (string, error) {
 }
 
 func init() {
-	connections.SetAccountSync(AccountSync())
 	config.RegisterHostAccounts(HostAccounts)
 }
 

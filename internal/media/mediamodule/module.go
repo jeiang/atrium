@@ -46,8 +46,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Section: "apps", Label: "Library", URL: "/apps/media/library", Icon: "film", Page: "media_library", Order: 30},
 			},
 		}},
-		Groups:   SettingGroups(),
-		Commands: []*cli.Command{mediacmd.Command(mc.Env, m.Now)},
-		Tools:    ToolDefinitions(),
+		Groups:      SettingGroups(),
+		Commands:    []*cli.Command{mediacmd.Command(mc.Env, m.Now)},
+		Tools:       ToolDefinitions(),
+		Connections: media.Connections(),
 	}
 }

@@ -140,7 +140,11 @@ func generateVAPID() (string, error) {
 }
 
 func pushConnection(ctx context.Context, d *db.DB) (*connections.Lease, error) {
-	store, err := connections.New(d, config.From(ctx).Host(), connections.DefaultRegistry())
+	reg, err := connections.From(ctx)
+	if err != nil {
+		return nil, err
+	}
+	store, err := connections.New(d, config.From(ctx).Host(), reg)
 	if err != nil {
 		return nil, err
 	}

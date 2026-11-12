@@ -22,12 +22,6 @@ type connectionConfig struct {
 	LogsQuery  string `json:"logs_query"`
 }
 
-func init() {
-	for _, d := range Connections() {
-		connections.Register(d)
-	}
-}
-
 func Connections() []connections.Definition {
 	return []connections.Definition{{
 		Kind:     KindGrafana,

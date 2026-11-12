@@ -15,12 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/smtp"
 )
 
-func init() {
-	for _, d := range Connections() {
-		connections.Register(d)
-	}
-}
-
 func Connections() []connections.Definition {
 	return []connections.Definition{{Kind: mailconn.Kind, Validate: validateConnection, Test: testConnection}}
 }

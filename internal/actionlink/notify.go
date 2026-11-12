@@ -12,8 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/proposals"
 )
 
-func init() { proposals.OnCreate = ProposalCreated() }
-
 func ProposalCreated() proposals.CreatedHook { return NotifyCreated }
 
 func NotifyCreated(ctx context.Context, d *db.DB, p *proposals.Proposal) {

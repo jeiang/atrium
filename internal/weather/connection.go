@@ -16,12 +16,6 @@ type connectionConfig struct {
 	GeocodingURL string `json:"geocoding_url"`
 }
 
-func init() {
-	for _, d := range Connections() {
-		connections.Register(d)
-	}
-}
-
 func Connections() []connections.Definition {
 	return []connections.Definition{{
 		Kind:     KindWeather,

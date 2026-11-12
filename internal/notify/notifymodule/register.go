@@ -3,6 +3,7 @@ package notifymodule
 import (
 	"slices"
 
+	"github.com/jeiang/atrium/internal/actionlink"
 	actionlinkpages "github.com/jeiang/atrium/internal/actionlink/pages"
 	"github.com/jeiang/atrium/internal/actionlink/policy"
 	"github.com/jeiang/atrium/internal/module"
@@ -33,7 +34,10 @@ func (m Module) Declare(module.Context) module.Declaration {
 			{Section: "review", Label: "Inbox", URL: "/inbox", Icon: "inbox", Page: "inbox", Order: 50},
 			{Label: "Notifications", URL: "/settings/notifications", Page: "notifications", Settings: true, Primary: true, Order: 40},
 		}}},
-		Groups: SettingGroups(),
-		Tools:  ToolDefinitions(),
+		Groups:           SettingGroups(),
+		Tools:            ToolDefinitions(),
+		Connections:      notify.Connections(),
+		ConnectionNotice: notify.ConnectionNotice(),
+		ProposalCreated:  actionlink.ProposalCreated(),
 	}
 }

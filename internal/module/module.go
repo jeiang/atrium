@@ -227,6 +227,15 @@ type DuplicateTool string
 
 func (e DuplicateTool) Error() string { return "module: duplicate tool " + string(e) }
 
+type DuplicateHook struct {
+	Hook    string
+	Modules []string
+}
+
+func (e *DuplicateHook) Error() string {
+	return "module: " + e.Hook + " is declared by " + strings.Join(e.Modules, " and ")
+}
+
 type NeedsSettingsError struct {
 	Module string
 	Unmet  []Unmet

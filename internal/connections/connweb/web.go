@@ -88,7 +88,12 @@ func watch(d *web.Deps) {
 		<-d.Stopping
 		cancel()
 	}()
-	store, err := connections.New(d.DB, d.State.Host(), connections.DefaultRegistry())
+	reg, err := connections.From(d.Ctx)
+	if err != nil {
+		log.Warn("connection health check failed", logx.Err, err.Error())
+		return
+	}
+	store, err := connections.New(d.DB, d.State.Host(), reg)
 	if err != nil {
 		log.Warn("connection health check failed", logx.Err, err.Error())
 		return
@@ -131,8 +136,12 @@ func recheckable(ctx context.Context, store *connections.Store, id connections.I
 
 type handlers struct{ d *web.Deps }
 
-func (h handlers) store(context.Context) (*connections.Store, error) {
-	return connections.New(h.d.DB, h.d.State.Host(), connections.DefaultRegistry())
+func (h handlers) store(ctx context.Context) (*connections.Store, error) {
+	reg, err := connections.From(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return connections.New(h.d.DB, h.d.State.Host(), reg)
 }
 
 func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, data pageData, toast *tpl.Toast) {
