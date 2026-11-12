@@ -66,12 +66,16 @@ func Password(lease *connections.Lease, account string) (string, error) {
 }
 
 func init() {
-	connections.SetAccountSync(&connections.AccountSync{
+	connections.SetAccountSync(AccountSync())
+	config.RegisterHostAccounts(HostAccounts)
+}
+
+func AccountSync() *connections.AccountSync {
+	return &connections.AccountSync{
 		Validate:  validateHostAccounts,
 		Reconcile: reconcileAccounts,
 		Reload:    reloadAccounts,
-	})
-	config.RegisterHostAccounts(HostAccounts)
+	}
 }
 
 func HostAccounts(host config.Host) ([]config.AccountSpec, map[string]string, error) {

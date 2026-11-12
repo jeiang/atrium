@@ -21,11 +21,17 @@ type connectionConfig struct {
 }
 
 func init() {
-	connections.Register(connections.Definition{
+	for _, d := range Connections() {
+		connections.Register(d)
+	}
+}
+
+func Connections() []connections.Definition {
+	return []connections.Definition{{
 		Kind:     Kind,
 		Validate: validate,
 		Test:     test,
-	})
+	}}
 }
 
 func validate(c connections.Candidate) error {

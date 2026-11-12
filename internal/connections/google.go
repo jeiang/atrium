@@ -90,7 +90,13 @@ func (s *Store) ConsumeOAuthState(ctx context.Context, state string) (OAuthState
 }
 
 func init() {
-	Register(Definition{Kind: KindGoogle, Validate: validateGoogle, Test: testGoogle})
+	for _, d := range Connections() {
+		Register(d)
+	}
+}
+
+func Connections() []Definition {
+	return []Definition{{Kind: KindGoogle, Validate: validateGoogle, Test: testGoogle}}
 }
 
 func validateGoogle(c Candidate) error {

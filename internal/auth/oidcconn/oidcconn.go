@@ -15,12 +15,14 @@ import (
 const Kind connections.Kind = "service/oidc"
 
 func init() {
-	connections.Register(connections.Definition{
-		Kind:     Kind,
-		Validate: validate,
-		Test:     test,
-	})
+	for _, d := range Connections() {
+		connections.Register(d)
+	}
 	oidc.UseConnections(source{})
+}
+
+func Connections() []connections.Definition {
+	return []connections.Definition{{Kind: Kind, Validate: validate, Test: test}}
 }
 
 func validate(c connections.Candidate) error {

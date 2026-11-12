@@ -97,7 +97,9 @@ func Known(ctx context.Context, q Querier, fingerprint string) (bool, error) {
 	return ledger.ProposalBlocked(ctx, q, id)
 }
 
-var OnCreate func(ctx context.Context, d *db.DB, p *Proposal)
+type CreatedHook = func(ctx context.Context, d *db.DB, p *Proposal)
+
+var OnCreate CreatedHook
 
 func Create(ctx context.Context, d *db.DB, kind string, account *string, title string, payload, preview any,
 	fingerprint string, ts float64) (id int64, created bool, err error) {

@@ -11,14 +11,16 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 )
 
-func init() {
-	connections.SetNotifier(func(ctx context.Context, d *db.DB, title, body string) error {
+func init() { connections.SetNotifier(ConnectionNotice()) }
+
+func ConnectionNotice() connections.Notifier {
+	return func(ctx context.Context, d *db.DB, title, body string) error {
 		if !Enabled(ctx) {
 			return nil
 		}
 		_, err := Send(ctx, d, Message{Channel: System, Priority: 4, Title: title, Body: body})
 		return err
-	})
+	}
 }
 
 func PauseChanged(ctx context.Context, d *db.DB, env config.Env, paused bool) error {

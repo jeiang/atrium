@@ -16,7 +16,13 @@ import (
 )
 
 func init() {
-	connections.Register(connections.Definition{Kind: mailconn.Kind, Validate: validateConnection, Test: testConnection})
+	for _, d := range Connections() {
+		connections.Register(d)
+	}
+}
+
+func Connections() []connections.Definition {
+	return []connections.Definition{{Kind: mailconn.Kind, Validate: validateConnection, Test: testConnection}}
 }
 
 func validateConnection(c connections.Candidate) error {

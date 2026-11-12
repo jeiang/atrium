@@ -21,21 +21,29 @@ const (
 const eztvProbeIMDb = "tt0000001"
 
 func init() {
-	connections.Register(connections.Definition{
-		Kind:     KindQbittorrent,
-		Validate: validateQbitConnection,
-		Test:     testQbitConnection,
-	})
-	connections.Register(connections.Definition{
-		Kind:     KindTMDB,
-		Validate: validateTMDBConnection,
-		Test:     testTMDBConnection,
-	})
-	connections.Register(connections.Definition{
-		Kind:     KindEZTV,
-		Validate: validateEZTVConnection,
-		Test:     testEZTVConnection,
-	})
+	for _, d := range Connections() {
+		connections.Register(d)
+	}
+}
+
+func Connections() []connections.Definition {
+	return []connections.Definition{
+		{
+			Kind:     KindQbittorrent,
+			Validate: validateQbitConnection,
+			Test:     testQbitConnection,
+		},
+		{
+			Kind:     KindTMDB,
+			Validate: validateTMDBConnection,
+			Test:     testTMDBConnection,
+		},
+		{
+			Kind:     KindEZTV,
+			Validate: validateEZTVConnection,
+			Test:     testEZTVConnection,
+		},
+	}
 }
 
 type qbitConfig struct {

@@ -13,12 +13,18 @@ import (
 )
 
 func init() {
-	connections.Register(connections.Definition{
+	for _, d := range Connections() {
+		connections.Register(d)
+	}
+}
+
+func Connections() []connections.Definition {
+	return []connections.Definition{{
 		Kind:     KindWebPush,
 		Validate: validatePushConnection,
 		Test:     testPushConnection,
 		Silent:   silentPushConnection,
-	})
+	}}
 }
 
 func silentPushConnection(ctx context.Context, lease *connections.Lease, _ []connections.Capability) ([]connections.Result, error) {

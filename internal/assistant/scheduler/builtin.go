@@ -8,7 +8,7 @@ import (
 	"slices"
 
 	"github.com/jeiang/atrium/internal/assistant/prompts"
-	"github.com/jeiang/atrium/internal/assistant/tools/grafana"
+	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"

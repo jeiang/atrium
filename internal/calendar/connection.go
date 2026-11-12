@@ -21,7 +21,13 @@ const (
 )
 
 func init() {
-	connections.Register(connections.Definition{Kind: KindICloud, Validate: validateICloud, Test: testICloud})
+	for _, d := range Connections() {
+		connections.Register(d)
+	}
+}
+
+func Connections() []connections.Definition {
+	return []connections.Definition{{Kind: KindICloud, Validate: validateICloud, Test: testICloud}}
 }
 
 func validateICloud(c connections.Candidate) error {

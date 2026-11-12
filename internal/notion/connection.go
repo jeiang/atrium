@@ -15,11 +15,17 @@ import (
 const KindNotion connections.Kind = "service/notion"
 
 func init() {
-	connections.Register(connections.Definition{
+	for _, d := range Connections() {
+		connections.Register(d)
+	}
+}
+
+func Connections() []connections.Definition {
+	return []connections.Definition{{
 		Kind:     KindNotion,
 		Validate: validateConnection,
 		Test:     testConnection,
-	})
+	}}
 }
 
 func validateConnection(c connections.Candidate) error {

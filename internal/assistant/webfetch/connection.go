@@ -18,11 +18,17 @@ type connectionConfig struct {
 }
 
 func init() {
-	connections.Register(connections.Definition{
+	for _, d := range Connections() {
+		connections.Register(d)
+	}
+}
+
+func Connections() []connections.Definition {
+	return []connections.Definition{{
 		Kind:     KindWebfetch,
 		Validate: validateConnection,
 		Test:     testConnection,
-	})
+	}}
 }
 
 func validateConnection(c connections.Candidate) error {

@@ -71,12 +71,14 @@ type AccountCredential struct {
 	FileRef string
 }
 
+type AccountCredentialFunc = func(context.Context, db.Querier, string, string) (AccountCredential, error)
+
 // accountCredential reads the credential behind an account's connection. The
 // connections owner registers it; a process without the connections owner
 // reads no stored credential.
-var accountCredential func(context.Context, db.Querier, string, string) (AccountCredential, error)
+var accountCredential AccountCredentialFunc
 
-func RegisterAccountCredential(f func(context.Context, db.Querier, string, string) (AccountCredential, error)) {
+func RegisterAccountCredential(f AccountCredentialFunc) {
 	accountCredential = f
 }
 

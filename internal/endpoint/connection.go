@@ -43,11 +43,17 @@ type EmbeddingView struct {
 }
 
 func init() {
-	connections.Register(connections.Definition{
+	for _, d := range Connections() {
+		connections.Register(d)
+	}
+}
+
+func Connections() []connections.Definition {
+	return []connections.Definition{{
 		Kind:     connections.Kind(KindEmbedding),
 		Validate: validateEmbedding,
 		Test:     testEmbedding,
-	})
+	}}
 }
 
 func validateEmbedding(c connections.Candidate) error {
