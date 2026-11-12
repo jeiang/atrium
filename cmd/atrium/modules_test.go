@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -556,6 +557,176 @@ func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 	time.Sleep(time.Second)
 	if n := api.ModelLists(); n != 1 {
 		t.Fatalf("%d model catalog requests after enabling the assistant twice, want 1", n)
+	}
+}
+
+func TestSettingsSavesDuringTheFirstAssistantEnableAllFinish(t *testing.T) {
+	t.Parallel()
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
+	base := startServeIn(t, dir)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, Timeout: time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/auth", nil); status != http.StatusOK {
+		t.Fatalf("GET /settings/auth = %d", status)
+	}
+	const action = "/settings/groups/core/sessions"
+	save := func(n int) (int, error) {
+		req, err := http.NewRequest(http.MethodPost, base+action, strings.NewReader(url.Values{"oidc_session_idle_days": {strconv.Itoa(n%7 + 1)}}.Encode()))
+		if err != nil {
+			return 0, err
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		for _, c := range jar.Cookies(req.URL) {
+			if c.Name == "atrium_csrf" {
+				req.Header.Set("X-CSRF-Token", c.Value)
+			}
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return 0, err
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode, nil
+	}
+	stop := make(chan struct{})
+	failures := make(chan string, 8)
+	started := make(chan struct{}, 8)
+	var savers sync.WaitGroup
+	for w := range 2 {
+		savers.Go(func() {
+			for i := 1; ; i++ {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				status, err := save(w + i)
+				if err != nil || status != http.StatusSeeOther {
+					failures <- fmt.Sprintf("concurrent save = %d: %v", status, err)
+					return
+				}
+				select {
+				case started <- struct{}{}:
+				default:
+				}
+			}
+		})
+	}
+	<-started
+	<-started
+	enabled := make(chan appRun, 1)
+	go func() { enabled <- runApp(t, "settings", "set", module.FlagKey(module.Assistant), "true") }()
+	select {
+	case got := <-enabled:
+		if got.code != cli.ExitOK {
+			t.Fatalf("assistant_enabled true: exit %d stderr %q", got.code, got.stderr)
+		}
+	case <-time.After(time.Minute):
+		t.Fatal("enabling the assistant did not finish while settings saves ran")
+	}
+	close(stop)
+	done := make(chan struct{})
+	go func() { savers.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(time.Minute):
+		t.Fatal("concurrent settings saves did not finish after the assistant was enabled")
+	}
+	close(failures)
+	for failure := range failures {
+		t.Error(failure)
+	}
+	if status, err := save(1); err != nil || status != http.StatusSeeOther {
+		t.Fatalf("a later save = %d: %v", status, err)
+	}
+	if row := runSettings(t, "get", "oidc_session_idle_days").row(t); row.Value == nil || *row.Value != "2" {
+		t.Errorf("oidc_session_idle_days = %+v, want 2", row)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	var jobs int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM jobs").Scan(&jobs); err != nil || jobs == 0 {
+		t.Fatalf("%d scheduler jobs after the first enable: %v", jobs, err)
+	}
+}
+
+func TestFailedAssistantStartIsRetriedAtTheNextPublication(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	if _, err := d.Write.Exec("CREATE TRIGGER jobs_refused BEFORE INSERT ON jobs BEGIN SELECT RAISE(ABORT, 'jobs refused'); END"); err != nil {
+		t.Fatal(err)
+	}
+	base, logs := startServeLogged(t, dir)
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	jobs := func() int {
+		t.Helper()
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM jobs").Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	set := func(key, value string) {
+		t.Helper()
+		if got := runApp(t, "settings", "set", key, value); got.code != cli.ExitOK {
+			t.Fatalf("settings set %s %s: exit %d stderr %q", key, value, got.code, got.stderr)
+		}
+	}
+	failures := func() int { return strings.Count(logs.String(), "module start failed") }
+	set(module.FlagKey(module.Assistant), "true")
+	if n := failures(); n != 1 {
+		t.Fatalf("%d start failures logged after the first enable, want 1", n)
+	}
+	nav := func() string {
+		t.Helper()
+		status, page, _ := fetch(t, client, http.MethodGet, base+"/settings/auth", nil)
+		if status != http.StatusOK {
+			t.Fatalf("GET /settings/auth = %d", status)
+		}
+		_, rest, found := strings.Cut(page, `href="/settings/assistant"`)
+		if !found {
+			return ""
+		}
+		value, _, _ := strings.Cut(rest, ">")
+		return "link " + strings.TrimSpace(value)
+	}
+	if got := nav(); got != "" {
+		t.Fatalf("the settings nav offers the assistant after a failed start: %q", got)
+	}
+	if text := logs.String(); !strings.Contains(text, "MODULE=assistant") || !strings.Contains(text, "jobs refused") {
+		t.Fatalf("the failed start and its reason are not logged: %s", text)
+	}
+	if status, _, _ := fetch(t, client, http.MethodGet, base+"/library/files", nil); status != http.StatusNotFound {
+		t.Fatalf("GET /library/files after a failed start = %d, want 404", status)
+	}
+	set("thread_cost_cap_usd", "12")
+	if n := failures(); n != 2 {
+		t.Fatalf("%d start failures logged after the retry, want 2", n)
+	}
+	if n := strings.Count(logs.String(), "MODULE=assistant STATE=unavailable"); n != 0 {
+		t.Fatalf("a start failure also logged %d unavailable transitions", n)
+	}
+	if _, err := d.Write.Exec("DROP TRIGGER jobs_refused"); err != nil {
+		t.Fatal(err)
+	}
+	set("thread_cost_cap_usd", "13")
+	if n := failures(); n != 2 {
+		t.Fatalf("%d start failures logged after the repair, want 2", n)
+	}
+	if n := jobs(); n == 0 {
+		t.Fatal("the retried start seeded no scheduler jobs")
+	}
+	if got := nav(); got != `link data-mark="on"` {
+		t.Fatalf("assistant settings nav after the retried start = %q, want an on link", got)
+	}
+	if status, _, _ := fetch(t, client, http.MethodGet, base+"/library/files", nil); status != http.StatusOK {
+		t.Fatalf("GET /library/files after the retried start = %d, want 200", status)
+	}
+	set("thread_cost_cap_usd", "14")
+	if n := failures(); n != 2 {
+		t.Fatalf("%d start failures logged after a later publication, want 2", n)
 	}
 }
 

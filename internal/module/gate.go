@@ -270,7 +270,7 @@ func (s *Set) Start(ctx context.Context, d *web.Deps) error {
 	if err != nil {
 		return err
 	}
-	s.store(snap)
+	s.start(s.store(snap))
 	return nil
 }
 
@@ -291,6 +291,6 @@ func (s *Set) load(ctx context.Context) (*Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.store(snap)
+	s.start(s.store(snap))
 	return snap, nil
 }
