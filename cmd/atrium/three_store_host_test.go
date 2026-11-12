@@ -136,3 +136,24 @@ func TestUnpinnedHostWritesAreRefused(t *testing.T) {
 		}
 	}
 }
+
+func TestHostFileRefusesARawLocalChatSecret(t *testing.T) {
+	dir := t.TempDir()
+	hostPath := filepath.Join(dir, "host.toml")
+	if err := os.WriteFile(hostPath, []byte("[mail]\nmail_chat_key = \"raw-secret-sentinel\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", hostPath)
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	got := runApp(t, "settings", "list")
+	if got.code == cli.ExitOK {
+		t.Fatalf("a raw secret in the host file was accepted: %s", got.stdout)
+	}
+	if !strings.Contains(got.stderr, "mail_chat_key") || !strings.Contains(got.stderr, "mail_chat_key_file") {
+		t.Errorf("the refusal does not name the key and its file binding: %q", got.stderr)
+	}
+	if strings.Contains(got.stdout+got.stderr, "raw-secret-sentinel") {
+		t.Errorf("the refusal printed the secret: %q", got.stderr)
+	}
+}
