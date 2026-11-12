@@ -14,7 +14,7 @@ import (
 
 const Kind connections.Kind = "service/oidc"
 
-func init() { oidc.UseConnections(source{}) }
+func Source() oidc.Source { return source{} }
 
 func Connections() []connections.Definition {
 	return []connections.Definition{{Kind: Kind, Validate: validate, Test: test}}

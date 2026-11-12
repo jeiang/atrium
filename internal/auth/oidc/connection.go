@@ -44,15 +44,15 @@ type Source interface {
 	Open(ctx context.Context, d *db.DB, id string) (Connection, error)
 }
 
-var source Source
-
-func UseConnections(s Source) { source = s }
+func WithConnections(src Source) Option {
+	return func(s *Service) { s.source = src }
+}
 
 func (s *Service) open(ctx context.Context) (Connection, error) {
-	if source == nil {
+	if s.source == nil {
 		return nil, ErrNoConnections
 	}
-	return source.Open(ctx, s.d, ConnectionID)
+	return s.source.Open(ctx, s.d, ConnectionID)
 }
 
 func (s *Service) lease(ctx context.Context) (Connection, error) { return s.open(ctx) }

@@ -70,6 +70,7 @@ func newAppWith(env config.Env, clients func(config.Config) mail.OpenFunc, now f
 	st := config.NewState(reg)
 	st.SetConnectionReconciler(connections.Reconcile)
 	st.SetAccountCredential(cat.AccountCredential())
+	st.SetHostAccounts(cat.HostAccounts())
 	set, err = module.NewSet(cat, reg, env)
 	if err != nil {
 		panic(err)

@@ -65,12 +65,9 @@ func Password(lease *connections.Lease, account string) (string, error) {
 	return config.NormalizePassword(value), nil
 }
 
-func init() {
-	config.RegisterHostAccounts(HostAccounts)
-}
-
 func AccountSync() *connections.AccountSync {
 	return &connections.AccountSync{
+		Accounts:  HostAccounts,
 		Validate:  validateHostAccounts,
 		Reconcile: reconcileAccounts,
 		Reload:    reloadAccounts,

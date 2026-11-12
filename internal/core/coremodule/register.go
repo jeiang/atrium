@@ -93,7 +93,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Module: actionlinkpages.Module, Templates: actionlinkpages.Templates()},
 			{Module: web.CoreModule, Nav: []web.NavItem{
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
-			}},
+			}, OIDC: oidcconn.Source()},
 			connweb.Page(),
 		},
 		Groups: SettingGroups(),

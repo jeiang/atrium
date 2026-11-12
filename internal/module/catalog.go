@@ -51,6 +51,15 @@ func (c *Catalog) Hooks() proposals.Hooks { return c.hooks }
 
 func (c *Catalog) AccountCredential() config.AccountCredentialFunc { return c.credential }
 
+func (c *Catalog) HostAccounts() config.HostAccountsFunc {
+	for _, d := range c.decls {
+		if d.AccountSync != nil {
+			return d.AccountSync.Accounts
+		}
+	}
+	return nil
+}
+
 func (c *Catalog) ToolDocs() []tool.Tool {
 	var out []tool.Tool
 	for _, d := range c.decls {

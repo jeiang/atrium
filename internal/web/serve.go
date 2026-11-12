@@ -75,6 +75,7 @@ type Page struct {
 	Start     func(context.Context, *Deps) error
 	Nav       []tpl.NavItem
 	Recover   Recover
+	OIDC      oidc.Source
 }
 
 type Resource struct {
@@ -239,6 +240,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 	var public []func(*http.Request) bool
 	var nav []tpl.NavItem
 	home := ""
+	var oidcSource oidc.Source
 	for _, p := range a.pages {
 		if p.Module != nil {
 			modules = append(modules, p.Module)
@@ -252,12 +254,15 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 		if p.Home != "" {
 			home = p.Home
 		}
+		if p.OIDC != nil {
+			oidcSource = p.OIDC
+		}
 		maps.Copy(globals, p.Globals)
 		nav = append(nav, p.Nav...)
 	}
 	var sessions *oidc.Service
 	if policy.OIDC() {
-		sessions = oidc.New(d, a.env)
+		sessions = oidc.New(d, a.env, oidc.WithConnections(oidcSource))
 		if err := sessions.Check(ctx); err != nil {
 			log.Warn("oidc sign-in is not set up; nobody can sign in until it is", logx.Err, err.Error())
 		}

@@ -56,12 +56,16 @@ var presets = map[string]preset{
 
 var accountID = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
 
-// HostAccounts derives the accounts declared by host mail connections. The
-// mail owner registers it; a process without the mail owner has no host
+// HostAccountsFunc derives the accounts declared by host mail connections.
+// The mail owner declares it; a process without the mail owner has no host
 // accounts.
-var hostAccounts func(Host) ([]AccountSpec, map[string]string, error)
+type HostAccountsFunc = func(Host) ([]AccountSpec, map[string]string, error)
 
-func RegisterHostAccounts(f func(Host) ([]AccountSpec, map[string]string, error)) { hostAccounts = f }
+func (s *State) SetHostAccounts(f HostAccountsFunc) {
+	s.mu.Lock()
+	s.hostAccounts = f
+	s.mu.Unlock()
+}
 
 // AccountCredential is the stored credential at a connection slot. An empty
 // Source means the slot is absent.
