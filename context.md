@@ -463,7 +463,10 @@ behavior-parity target.
   views of the same rows.
 - Mail writes use the shared gate. Shadow mode records decisions without
   automatic mailbox writes; live automatic writes also depend on pause,
-  go-live eligibility, verification, caps, and the effect ledger.
+  go-live eligibility, verification, caps, and the effect ledger. The mode is
+  the operator `mail_mode` setting, changed with
+  `atrium settings set mail_mode shadow|live` (audited) and shown on the Mail
+  page; it is not a settings-page field.
 - Automatic mail actions, mail proposal actions and draft sends record an
   effect before the IMAP or SMTP call. An unknown outcome stays blocked until
   the operator resolves it and is never retried automatically; an action the

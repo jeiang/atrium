@@ -41,7 +41,7 @@ func init() {
 		settings.HostDef{Key: endpoint.KeyChatModel, Module: module, Type: settings.String, Default: "qwen", Check: nonBlank},
 	)
 	settings.MustRegister(
-		settings.Deploy(settings.Def{Key: KeyMode, Module: module, Type: settings.String, Default: modeDefault, Check: modeCheck}),
+		settings.Value(settings.Advanced, settings.Def{Key: KeyMode, Module: module, Type: settings.String, Default: modeDefault, Check: modeCheck}),
 		ui(endpoint.KeyChatURL, settings.String, "", nil),
 		ui(endpoint.KeyChatModel, settings.String, "qwen", nonBlank),
 		settings.Value(settings.UI, settings.Def{

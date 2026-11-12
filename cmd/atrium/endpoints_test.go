@@ -280,6 +280,37 @@ mail_chat_key_file = %q
 	}
 }
 
+func TestLocalChatKeyFileFromTheEnvironmentBindsTheChatEndpoint(t *testing.T) {
+	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
+	keyPath := filepath.Join(dir, "chat.key")
+	const key = "chat-key-env-sentinel"
+	if err := os.WriteFile(keyPath, []byte(key+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
+	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", chat.URL+"/v1")
+	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_KEY_FILE", keyPath)
+	setEnv(t, settingEnv(endpoint.KeyChatURL), "")
+	setEnv(t, settingEnv(endpoint.KeyChatModel), "")
+	got := runApp(t, "endpoints", "probe")
+	if got.code != cli.ExitOK {
+		t.Fatalf("endpoints probe: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	seen := chat.seen("/v1/chat/completions")
+	if len(seen) == 0 {
+		t.Fatal("the chat endpoint was not probed")
+	}
+	for _, auth := range seen {
+		if auth != "Bearer "+key {
+			t.Errorf("chat Authorization %q, want the environment file key", auth)
+		}
+	}
+	if strings.Contains(got.stdout+got.stderr, key) {
+		t.Errorf("the probe printed the chat key: %q", got.stdout)
+	}
+}
+
 func TestLocalChatStoredEndpointStillDrivesTheChatProbe(t *testing.T) {
 	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))

@@ -351,6 +351,20 @@ func TestAuthRateLimitValidatesTrustedForwardedAddresses(t *testing.T) {
 	}
 }
 
+func TestTrustedProxiesFromTheEnvironmentAreHonored(t *testing.T) {
+	moduleFixture(t, flagsExcept("", ""))
+	setEnv(t, "ATRIUM_WEB_TRUSTED_PROXY_CIDRS", "127.0.0.1/32")
+	base, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, "--auth", "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(stop)
+	call := newRateCall(t, base)
+	if status, _, body := call.get("/api/v1/me", "not-an-address", ""); status != http.StatusBadRequest || rateCode(t, body) != "bad_request" {
+		t.Fatalf("a forwarded address from the trusted peer: %d %.200s", status, body)
+	}
+}
+
 func TestAuthRateLimitRefusesNewKeysWhenFull(t *testing.T) {
 	_, base, _ := rateSite(t, true)
 	call := newRateCall(t, base)

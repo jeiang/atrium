@@ -354,13 +354,6 @@
         "trusted_proxy_cidrs_file": {
           "description": "path of a file holding the value",
           "type": "string"
-        },
-        "web_trusted_proxy_cidrs": {
-          "type": "string"
-        },
-        "web_trusted_proxy_cidrs_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
         }
       },
       "type": "object"
@@ -749,7 +742,6 @@
     "web.trusted_proxy_cidrs": "host",
     "web.web_page_size": "tuning",
     "web.web_run_history": "tuning",
-    "web.web_trusted_proxy_cidrs": "host",
     "web_search.search_web_dynamic_filtering": "tuning",
     "web_search.search_web_max_cost_usd": "operator",
     "web_search.search_web_max_searches": "tuning",

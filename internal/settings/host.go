@@ -49,6 +49,10 @@ func HostDefs() []HostDef {
 	return out
 }
 
+func HostKey(key string) bool {
+	return slices.ContainsFunc(HostDefs(), func(d HostDef) bool { return d.Key == key })
+}
+
 func DefaultOf(key string) string {
 	entry, ok := ImportEntryFor(key)
 	if !ok {

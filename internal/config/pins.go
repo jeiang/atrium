@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -52,11 +53,13 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 	}
 	for _, retired := range settings.Retired {
 		name := retired.EnvName()
-		if strings.TrimSpace(get(env, name)) != "" || strings.TrimSpace(get(env, name+strings.ToUpper(fileSuffix))) != "" {
-			if retiredSecret(retired.Key) {
-				return nil, fmt.Errorf("config: %s was removed; it has no replacement", name)
-			}
+		if strings.TrimSpace(get(env, name)) == "" && strings.TrimSpace(get(env, name+strings.ToUpper(fileSuffix))) == "" {
+			continue
 		}
+		if retiredSecret(retired.Key) {
+			return nil, fmt.Errorf("config: %s was removed; it has no replacement", name)
+		}
+		logx.Logger("atrium.config").Warn("ignoring a removed setting", "key", retired.Module+"."+retired.Key, "source", "env "+name)
 	}
 	pins := &Pins{m: map[string]pin{}}
 	d, ok := reg.Lookup("key")
@@ -79,8 +82,9 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 
 func refuseEnvName(env Env, module, key string) error {
 	name := "ATRIUM_" + strings.ToUpper(module) + "_" + strings.ToUpper(key)
+	fileName := name + strings.ToUpper(fileSuffix)
 	value := strings.TrimSpace(get(env, name))
-	file := strings.TrimSpace(get(env, name+strings.ToUpper(fileSuffix)))
+	file := strings.TrimSpace(get(env, fileName))
 	if value == "" && file == "" {
 		return nil
 	}
@@ -88,14 +92,18 @@ func refuseEnvName(env Env, module, key string) error {
 	if known && entry.Module == "db" && entry.Key == "key" {
 		return nil
 	}
-	if _, hosted := settings.HostDefOf(key); hosted {
+	if settings.HostKey(key) {
 		return nil
 	}
 	destination := "the Connections page"
 	if known {
 		destination = settings.Destination(entry)
 	}
-	return fmt.Errorf("config: %s is no longer read; use %s", name, destination)
+	set := name
+	if value == "" {
+		set = fileName
+	}
+	return fmt.Errorf("config: %s is no longer read; use %s", set, destination)
 }
 
 func retiredSecret(key string) bool {
