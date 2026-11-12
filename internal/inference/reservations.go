@@ -1,6 +1,7 @@
 package inference
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -336,11 +337,8 @@ func prepare(r Request) (prepared, error) {
 		return prepared{}, err
 	}
 	if classOf(r) == Classification {
-		if model.ID != pricing.HaikuID {
-			return prepared{}, errors.New("inference: classification requires the Haiku model")
-		}
-		if len(r.Params.Tools) > 0 {
-			return prepared{}, errors.New("inference: classification may not use tools")
+		if err := classificationShape(model.ID, r); err != nil {
+			return prepared{}, err
 		}
 	}
 	prompt := r.EstimatedPromptTokens
@@ -349,6 +347,8 @@ func prepare(r Request) (prepared, error) {
 		if err != nil {
 			return prepared{}, err
 		}
+	} else if r.Params.OutputConfig != nil && r.Params.OutputConfig.Format != nil {
+		return prepared{}, errors.New("inference: only classification may request a fixed output format")
 	}
 	reservation, err := reservationNUSD(model.ID, prompt, r.Params.MaxTokens, searches, cacheTTLOf(r))
 	if err != nil {
@@ -362,6 +362,36 @@ func classOf(r Request) Class {
 		return Interactive
 	}
 	return r.Class
+}
+
+func classificationShape(model string, r Request) error {
+	p := r.Params
+	switch {
+	case model != pricing.HaikuID:
+		return errors.New("inference: classification requires the Haiku model")
+	case len(p.Tools) > 0:
+		return errors.New("inference: classification may not use tools")
+	case p.Thinking != nil:
+		return errors.New("inference: classification may not use thinking")
+	case p.ToolChoice != nil:
+		return errors.New("inference: classification may not set a tool choice")
+	case len(p.ContextManagement) > 0:
+		return errors.New("inference: classification may not use context management")
+	case len(p.Messages) != 1:
+		return errors.New("inference: classification sends exactly one message")
+	case r.EstimatedPromptTokens > 0:
+		return errors.New("inference: classification prompts are estimated by the ledger")
+	case p.OutputConfig == nil || p.OutputConfig.Format == nil || p.OutputConfig.Format.Type != anthropic.FormatJSONSchema:
+		return errors.New("inference: classification requires a fixed JSON schema output format")
+	}
+	wire, err := anthropic.JSONOutputSchema(p.OutputConfig.Format.Schema)
+	if err != nil {
+		return fmt.Errorf("inference: classification: %w", err)
+	}
+	if !bytes.Equal(wire, p.OutputConfig.Format.Schema) {
+		return errors.New("inference: classification output schema is not in wire form")
+	}
+	return nil
 }
 
 func sourceOf(r Request) string {
@@ -414,6 +444,13 @@ func estimatePrompt(p anthropic.Params) (int64, error) {
 		}
 		if err := json.Unmarshal(raw, &message); err != nil {
 			return 0, err
+	if p.OutputConfig != nil && p.OutputConfig.Format != nil {
+		schema, err := jsonx.Loads(p.OutputConfig.Format.Schema)
+		if err != nil {
+			return 0, err
+		}
+		fixed["output_config"] = map[string]any{"format": map[string]any{"type": p.OutputConfig.Format.Type, "schema": schema}}
+	}
 		}
 		if len(message.Content) == 0 {
 			continue
