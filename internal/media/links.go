@@ -16,6 +16,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/secrets"
@@ -71,6 +72,9 @@ func (l *Links) secretKey(ctx context.Context) (key []byte, fresh bool, err erro
 }
 
 func (l *Links) reread(ctx context.Context) []byte {
+	if strings.TrimSpace(config.HostValueFrom(ctx, secrets.LinkKeyFile)) != "" {
+		return nil
+	}
 	value, err := secrets.New(l.reg, l.d, l.d).Reading().Value(ctx, KeyLinkKey)
 	if err != nil || value == "" {
 		return nil
