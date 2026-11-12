@@ -90,6 +90,10 @@ func (s *Service) ResolveClient(ctx context.Context) (*anthropic.Client, error) 
 		return s.Client, nil
 	}
 	lease, err := connections.OpenRead(ctx, s.DB.Read, config.From(ctx).Host(), connections.ID(anthropicconn.Kind))
+	var unknown connections.UnknownID
+	if errors.As(err, &unknown) {
+		return nil, config.NotConfigured("the Anthropic connection is not configured")
+	}
 	if err != nil {
 		return nil, err
 	}
