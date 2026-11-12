@@ -168,23 +168,28 @@ type RecoveredRun struct {
 type Recovery func(context.Context, []PendingRun) ([]RecoveredRun, error)
 
 func pendingRuns(ctx context.Context, q db.Querier) ([]PendingRun, error) {
-	rows, err := q.QueryContext(ctx, "SELECT id, job_id, thread_id, due_at, COALESCE(started_at, due_at) FROM job_runs WHERE status = ? ORDER BY id", StatusRunning)
+	rows, err := q.QueryContext(ctx, "SELECT id, job_id, due_at, COALESCE(started_at, due_at) FROM job_runs WHERE status = ? ORDER BY id", StatusRunning)
 	if err != nil {
 		return nil, err
 	}
 	grace := float64(TuningAgentSchedulerMissedGraceSeconds)
-	return db.Collect(rows, func(r *sql.Rows) (PendingRun, error) {
+	pending, err := db.Collect(rows, func(r *sql.Rows) (PendingRun, error) {
 		var p PendingRun
-		var thread *int64
-		if err := r.Scan(&p.Claim.JobRunID, &p.Claim.Job.ID, &thread, &p.Claim.DueAt, &p.StartedAt); err != nil {
+		if err := r.Scan(&p.Claim.JobRunID, &p.Claim.Job.ID, &p.Claim.DueAt, &p.StartedAt); err != nil {
 			return p, err
-		}
-		if thread != nil {
-			p.Threads = []int64{*thread}
 		}
 		p.Claim.Missed = p.StartedAt-p.Claim.DueAt > grace
 		return p, nil
 	})
+	if err != nil {
+		return nil, err
+	}
+	for i := range pending {
+		if pending[i].Threads, err = JobRunThreads(ctx, q, pending[i].Claim.JobRunID); err != nil {
+			return nil, err
+		}
+	}
+	return pending, nil
 }
 
 func Recover(ctx context.Context, d *db.DB, path string, now float64, recover Recovery) error {
@@ -249,7 +254,7 @@ func jobResource(id int64) string { return fmt.Sprintf("job/%d", id) }
 
 func claimResources(defs []Definition, job Job) []string {
 	resources := []string{jobResource(job.ID)}
-	if def, ok := Declared(defs, job.Name); ok && job.Fixed() {
+	if def, ok := Declared(defs, job); ok {
 		resources = append(resources, def.Resources...)
 	}
 	return resources

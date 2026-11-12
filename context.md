@@ -398,7 +398,14 @@ behavior-parity target.
   uncarried rows are nulled (`thread_messages.run_id`, `usage.run_id`,
   the imported effect's run id, `threads.parent_run_id`, `jobs.last_run_id`,
   `kb_records.source_run_id`, `thread_files.run_id`, `thread_plans.run_id`,
-  `thread_queue.run_id`). The importer prints one line per table with its
+  `thread_queue.run_id`). Jobs are converted: a cron job belongs to
+  `assistant` with no key; a nightly or built-in job takes the owner and
+  `declaration_key` of the catalog job with its name, keeps its schedule,
+  state and prompt override, loses any v2 lease, and is dropped
+  (`drop-retired-job`) when no catalog job has that name; a stored schedule
+  setting then replaces the carried schedule and recomputes `next_due`.
+  `job_run_threads` and `job_resource_leases` start empty, and a source that
+  already has either table is refused. The importer prints one line per table with its
   carried, rebuilt or dropped row count, one line per setting with its
   action (carried, dropped, renamed, moved to a host key or a compiled
   constant, or reset for cutover), one line per effective source pin and per
@@ -426,13 +433,20 @@ behavior-parity target.
   package tracking, Grafana ops sampler); compiling the catalog checks their
   owner, keys, names, schedules and policies and derives the schedule
   settings from them. The neutral `internal/scheduler` package owns the
-  `jobs` and `job_runs` tables, seeding, claiming, recovery and the tick
+  `jobs`, `job_runs`, `job_run_threads` and `job_resource_leases` tables,
+  seeding, claiming, recovery and the tick
   loop; `internal/assistant/jobworker` supplies the assistant's prompt runs,
-  run accounting, skip notices and recovery lookups. A claim first takes a
+  run accounting, skip notices and recovery lookups. A job row records its
+  owning `module`; a declared job is matched by its unique
+  `declaration_key` (`<module>/<name>`), never by name, and a cron job has
+  none. Re-enabling a job sets `activated_at`. A run records the threads it
+  opened in `job_run_threads`; attaching a thread requires the run to be
+  running (`ErrClaimLost` otherwise). A claim first takes a
   non-blocking lock on `job/<id>` and the job's declared resources; the lock
   files live in `<canonical database path>.locks/`, named by the SHA-256 of
   the resource key and never unlinked, separate from the migration lock.
-  The scheduler seeds every catalog job, and a job whose needed module is off
+  The scheduler seeds every catalog job, cancels a keyed job no longer
+  declared, and a job whose needed module is off
   records `skipped_module`. Core (settings, secrets, `db`,
   `serve`, the About, review and activity pages) is always on; mail,
   calendar, contacts, Notion, media, assistant, notifications and Grafana each

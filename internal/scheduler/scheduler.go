@@ -140,8 +140,8 @@ func (s *Scheduler) execute(ctx context.Context, claim Claim) {
 	}()
 	job := claim.Job
 	run := Run{Claim: claim, Now: s.now}
-	def, declared := Declared(s.jobs, job.Name)
-	if !declared {
+	def, declared := Declared(s.jobs, job)
+	if !declared && !job.Fixed() {
 		s.record(ctx, claim, s.deps.RunCron, run)
 		return
 	}

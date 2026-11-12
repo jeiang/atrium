@@ -25,10 +25,30 @@ type Restore struct {
 	NextDue  *float64
 }
 
+var ErrClaimLost = errors.New("scheduler: the job claim was lost")
+
 func AttachThread(ctx context.Context, q db.Querier, c Claim, threadID int64) error {
-	_, err := q.ExecContext(ctx, "UPDATE job_runs SET thread_id = ? WHERE id = ? AND job_id = ? AND status = ?",
-		threadID, c.JobRunID, c.Job.ID, StatusRunning)
+	ok, err := db.Changed(q.ExecContext(ctx, "UPDATE job_runs SET thread_id = COALESCE(thread_id, ?) WHERE id = ? AND job_id = ? AND status = ?",
+		threadID, c.JobRunID, c.Job.ID, StatusRunning))
+	if err != nil {
+		return err
+	}
+	if !ok {
+		return ErrClaimLost
+	}
+	_, err = q.ExecContext(ctx, "INSERT OR IGNORE INTO job_run_threads (job_run_id, thread_id) VALUES (?, ?)", c.JobRunID, threadID)
 	return err
+}
+
+func JobRunThreads(ctx context.Context, q db.Querier, jobRunID int64) ([]int64, error) {
+	rows, err := q.QueryContext(ctx, "SELECT thread_id FROM job_run_threads WHERE job_run_id = ? ORDER BY thread_id", jobRunID)
+	if err != nil {
+		return nil, err
+	}
+	return db.Collect(rows, func(r *sql.Rows) (int64, error) {
+		var id int64
+		return id, r.Scan(&id)
+	})
 }
 
 func PreviousStatus(ctx context.Context, q db.Querier, jobID, jobRunID int64) (*Status, error) {

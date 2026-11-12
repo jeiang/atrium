@@ -42,6 +42,8 @@ var owners = map[string]string{
 	"events":                  "mail",
 	"export_pages":            "kb",
 	"flag_decisions":          "mail",
+	"job_resource_leases":     "scheduler",
+	"job_run_threads":         "scheduler",
 	"job_runs":                "scheduler",
 	"jobs":                    "scheduler",
 	"kb_fts":                  "kb",

@@ -178,7 +178,7 @@ func (p *pages) scheduleEdit(w http.ResponseWriter, r *http.Request) {
 		if schedule == "" {
 			return scheduler.Error("schedule is empty")
 		}
-		if def, known := scheduler.Declared(p.jobs, job.Name); known {
+		if def, known := scheduler.Declared(p.jobs, *job); known {
 			if err := settings.From(ctx).Set(ctx, tx, def.ScheduleSetting, schedule); err != nil {
 				return err
 			}

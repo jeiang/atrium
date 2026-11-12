@@ -11,6 +11,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -466,6 +467,91 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 			t.Error("the previous month's usage row was carried")
 		}
 	})
+}
+
+func TestImportV2KeysDeclaredJobsAndKeepsTheirOperatorState(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	editImportSource(t, source, "UPDATE jobs SET state = 'disabled' WHERE name = 'media-thumbnails'")
+	editImportSource(t, source, "UPDATE jobs SET prompt = 'Review the week, briefly.', prompt_by = 'operator' WHERE name = 'weekly-review'")
+	editImportSource(t, source, "UPDATE jobs SET lease_owner = 'v2-host', lease_until = 1792999999 WHERE name = 'media-sweep'")
+	editImportSource(t, source, "INSERT INTO settings (key, value) VALUES ('agent_schedule_media_sweep', '*/15 * * * *')")
+	before := fileDigest(t, source)
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if after := fileDigest(t, source); after != before {
+		t.Errorf("the import changed the source: %s -> %s", before, after)
+	}
+	for _, want := range []string{
+		"jobs: converted 9",
+		"jobs: drop-retired-job fx-rates",
+		"job_run_threads: kept empty 0",
+		"job_resource_leases: kept empty 0",
+		`jobs: media-sweep takes its schedule setting "*/15 * * * *" over the carried "*/10 * * * *"`,
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+
+	q, err := db.OpenSource(filepath.Join(dir, "atrium.db"), importKey(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	for _, tc := range []struct {
+		name, query, want string
+	}{
+		{"cron owner", "SELECT module || ':' || COALESCE(declaration_key, '-') || ':' || schedule FROM jobs WHERE id = 2", "assistant:-:2026-10-17T08:00"},
+		{"nightly key", "SELECT module || ':' || declaration_key || ':' || schedule FROM jobs WHERE name = 'nightly'", "assistant:assistant/nightly:daily 02:30"},
+		{"calendar key", "SELECT module || ':' || declaration_key FROM jobs WHERE name = 'calendar-candidates'", "calendar:calendar/calendar-candidates"},
+		{"disabled job", "SELECT state FROM jobs WHERE name = 'media-thumbnails'", "disabled"},
+		{"operator prompt", "SELECT prompt || ':' || prompt_by FROM jobs WHERE name = 'weekly-review'", "Review the week, briefly.:operator"},
+		{"overridden schedule", "SELECT schedule FROM jobs WHERE name = 'media-sweep'", "*/15 * * * *"},
+	} {
+		if v := importValue(t, q, tc.query); v != tc.want {
+			t.Errorf("%s: %q, want %q", tc.name, v, tc.want)
+		}
+	}
+	if n := importCount(t, q, "SELECT COUNT(*) FROM jobs WHERE name = 'fx-rates'"); n != 0 {
+		t.Errorf("the retired fx-rates job was carried")
+	}
+	if !importNull(t, q, "SELECT lease_owner FROM jobs WHERE name = 'media-sweep'") || !importNull(t, q, "SELECT lease_until FROM jobs WHERE name = 'media-sweep'") {
+		t.Error("the carried v2 lease was not cleared")
+	}
+	if due := importCount(t, q, "SELECT CAST(next_due AS INTEGER) FROM jobs WHERE name = 'media-sweep'"); due <= int64(clock) || due > int64(clock)+15*60 || due%(15*60) != 0 {
+		t.Errorf("media-sweep next_due %d was not recomputed from the new schedule after %d", due, int64(clock))
+	}
+	for _, table := range []string{"job_runs", "job_run_threads", "job_resource_leases"} {
+		if n := importCount(t, q, "SELECT COUNT(*) FROM "+table); n != 0 {
+			t.Errorf("%s has %d rows after the import", table, n)
+		}
+	}
+}
+
+func TestImportV2RefusesASourceThatAlreadyHasClaimTables(t *testing.T) {
+	for _, table := range []string{"job_run_threads", "job_resource_leases"} {
+		t.Run(table, func(t *testing.T) {
+			dir := t.TempDir()
+			source := copyV2Fixture(t, dir)
+			editImportSource(t, source, "CREATE TABLE "+table+" (id INTEGER PRIMARY KEY)")
+			before := fileDigest(t, source)
+			got := runImportApp(t, importTestApp(t, dir, 1792500000), "db", "import-v2", source)
+			if got.code == cli.ExitOK || !strings.Contains(got.stderr, "the source has a "+table+" table") {
+				t.Fatalf("a source with %s: exit %d stdout %q stderr %q", table, got.code, got.stdout, got.stderr)
+			}
+			if after := fileDigest(t, source); after != before {
+				t.Errorf("the refused import changed the source: %s -> %s", before, after)
+			}
+			if _, err := os.Stat(filepath.Join(dir, "atrium.db")); !errors.Is(err, os.ErrNotExist) {
+				t.Errorf("the refused import left a destination: %v", err)
+			}
+		})
+	}
 }
 
 func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
