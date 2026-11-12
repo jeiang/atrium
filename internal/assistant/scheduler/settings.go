@@ -9,19 +9,13 @@ import (
 )
 
 const (
-	KeyMinInterval        = "agent_schedule_min_interval_seconds"
-	KeyNightlySchedule    = "agent_schedule_nightly"
-	KeyWeeklyReview       = "agent_schedule_weekly_review"
-	KeyDailyNudges        = "agent_schedule_daily_nudges"
-	KeyCalendarCands      = "agent_schedule_calendar_candidates"
-	KeyMediaChannels      = "agent_schedule_media_channels"
-	KeyMediaSweep         = "agent_schedule_media_sweep"
-	KeyMediaThumbnails    = "agent_schedule_media_thumbnails"
-	KeyTaskReminders      = "agent_schedule_task_reminders"
-	KeyMemoryWork         = "agent_schedule_memory_work"
-	KeyPackageTracking    = "agent_schedule_package_tracking"
-	KeyKnowledgeExport    = "agent_schedule_knowledge_export"
-	KeyOpsSamplerSchedule = "agent_schedule_ops_sampler"
+	KeyMinInterval     = "agent_schedule_min_interval_seconds"
+	KeyNightlySchedule = "agent_schedule_nightly"
+	KeyWeeklyReview    = "agent_schedule_weekly_review"
+	KeyDailyNudges     = "agent_schedule_daily_nudges"
+	KeyTaskReminders   = "agent_schedule_task_reminders"
+	KeyMemoryWork      = "agent_schedule_memory_work"
+	KeyKnowledgeExport = "agent_schedule_knowledge_export"
 )
 
 func Settings() []settings.Def {

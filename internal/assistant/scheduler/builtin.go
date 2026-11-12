@@ -8,25 +8,24 @@ import (
 	"slices"
 
 	"github.com/jeiang/atrium/internal/assistant/prompts"
+	"github.com/jeiang/atrium/internal/assistant/tools/grafana"
+	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/mail/tracking"
+	"github.com/jeiang/atrium/internal/media"
+	scheddef "github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
 const (
 	NightlyName = "nightly"
 
-	WeeklyReviewName       = "weekly-review"
-	DailyNudgesName        = "daily-nudges"
-	CalendarCandidatesName = "calendar-candidates"
-	MediaChannelsName      = "media-channels"
-	MediaSweepName         = "media-sweep"
-	MediaThumbnailsName    = "media-thumbnails"
-	TaskRemindersName      = "task-reminders"
-	MemoryWorkName         = "memory-work"
-	PackageTrackingName    = "package-tracking"
-	KnowledgeExportName    = "knowledge-export"
-	OpsSamplerName         = "ops-sampler"
+	WeeklyReviewName    = "weekly-review"
+	DailyNudgesName     = "daily-nudges"
+	TaskRemindersName   = "task-reminders"
+	MemoryWorkName      = "memory-work"
+	KnowledgeExportName = "knowledge-export"
 )
 
 type RunKind uint8
@@ -74,15 +73,36 @@ var Builtins = []Builtin{
 	{NightlyName, KeyNightlySchedule, "daily 02:30", "Nightly: gather the last day and write knowledge records (one model run).", JobNightly, CallableRun, AlwaysSpends},
 	{WeeklyReviewName, KeyWeeklyReview, "weekly sun 18:00", weeklyReviewPrompt, JobBuiltin, PromptRun, AlwaysSpends},
 	{DailyNudgesName, KeyDailyNudges, "daily 08:00", "Daily: send the attention digest (no model run).", JobBuiltin, CallableRun, ModelFree},
-	{OpsSamplerName, KeyOpsSamplerSchedule, "*/15 * * * *", "Every 15 minutes: sample host metrics and firing alerts into ops samples (no model run).", JobBuiltin, CallableRun, ModelFree},
-	{CalendarCandidatesName, KeyCalendarCands, "0 * * * *", "Hourly: if event candidates are queued, draft calendar event proposals from them (no model run when the queue is empty).", JobBuiltin, CallableRun, ConditionalSpends},
-	{MediaChannelsName, KeyMediaChannels, "*/30 * * * *", "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run).", JobBuiltin, CallableRun, ModelFree},
-	{MediaSweepName, KeyMediaSweep, "*/10 * * * *", "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run).", JobBuiltin, CallableRun, ModelFree},
-	{MediaThumbnailsName, KeyMediaThumbnails, "daily 04:00", "Daily: generate missing episode thumbnails for the media library (no model run).", JobBuiltin, CallableRun, ModelFree},
+	callable(grafanatools.JobSampler, "Every 15 minutes: sample host metrics and firing alerts into ops samples (no model run).", ModelFree),
+	callable(calendar.JobCandidates, "Hourly: if event candidates are queued, draft calendar event proposals from them (no model run when the queue is empty).", ConditionalSpends),
+	callable(media.JobChannels, "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run).", ModelFree),
+	callable(media.JobSweep, "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run).", ModelFree),
+	callable(media.JobThumbnails, "Daily: generate missing episode thumbnails for the media library (no model run).", ModelFree),
 	{TaskRemindersName, KeyTaskReminders, "*/5 * * * *", "Every 5 minutes: send due task reminders (no model run).", JobBuiltin, CallableRun, ModelFree},
 	{MemoryWorkName, KeyMemoryWork, "*/2 * * * *", "Every 2 minutes: summarize pending memory nodes (no model run when the queue is empty).", JobBuiltin, CallableRun, ConditionalSpends},
-	{PackageTrackingName, KeyPackageTracking, "0 * * * *", "Hourly: refresh active Ship24 package trackers (no model run).", JobBuiltin, CallableRun, ModelFree},
+	callable(tracking.JobPackageTracking, "Hourly: refresh active Ship24 package trackers (no model run).", ModelFree),
 	{KnowledgeExportName, KeyKnowledgeExport, "daily 03:30", "Daily: project the knowledge base into the configured export targets (no model run).", JobBuiltin, CallableRun, ModelFree},
+}
+
+var declaredJobs = func() map[string]scheddef.Definition {
+	m := map[string]scheddef.Definition{}
+	for _, defs := range [][]scheddef.Definition{calendar.Jobs(), media.Jobs(), tracking.Jobs(), grafanatools.Jobs()} {
+		for _, def := range defs {
+			m[def.Key] = def
+		}
+	}
+	return m
+}()
+
+func callable(name, prompt string, spend Spend) Builtin {
+	def, ok := declaredJobs[name]
+	if !ok {
+		panic("scheduler: no declared job " + name)
+	}
+	return Builtin{
+		Name: def.Key, Setting: def.ScheduleSetting, Default: def.Schedule,
+		Prompt: prompt, Kind: JobBuiltin, Run: CallableRun, Spend: spend,
+	}
 }
 
 var builtinsByName = func() map[string]Builtin {

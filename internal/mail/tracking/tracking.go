@@ -43,16 +43,18 @@ const (
 	UndoUntrack            = "package_untrack"
 )
 
-func init() {
+func SettingsDefs() []settings.Def {
 	adv := func(key string, kind settings.Type, def string, check func(string) error) settings.Def {
 		return settings.Value(settings.Advanced, settings.Def{Key: key, Module: Module, Type: kind, Default: def, Check: check})
 	}
-	settings.MustRegister(
+	return []settings.Def{
 		adv(KeyMonthlyQuota, settings.Int, "10", settings.Between(1, 1000)),
 		settings.Shown("Destination country", adv(KeyDestinationCountry, settings.String, "", countryCheck)),
 		settings.Shown("Destination postcode", adv(KeyDestinationPostcode, settings.String, "", nil)),
-	)
+	}
 }
+
+func init() { settings.MustRegister(SettingsDefs()...) }
 
 func countryCheck(value string) error {
 	value = strings.TrimSpace(value)

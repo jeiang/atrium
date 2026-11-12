@@ -17,21 +17,23 @@ const (
 	WikiLogTitleKey        = "wiki_log_title"
 )
 
-func init() {
+func Settings() []settings.Def {
 	text := func(key, def string) settings.Def {
 		return settings.Value(settings.UI, settings.Def{
 			Key: key, Module: "notion", Type: settings.String, Default: def,
 			Check: nonBlank})
 	}
-	settings.MustRegister(
+	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{
 			Key: WikiRootKey, Module: "notion", Type: settings.String,
 			Check: pageID}),
 		text(SensitivityPropertyKey, "sensitivity"),
 		text(PrivateValueKey, "private"),
 		text(WikiLogTitleKey, "Wiki Log"),
-	)
+	}
 }
+
+func init() { settings.MustRegister(Settings()...) }
 
 func nonBlank(value string) error {
 	if strings.TrimSpace(value) == "" {

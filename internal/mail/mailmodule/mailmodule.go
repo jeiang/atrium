@@ -26,6 +26,36 @@ type Module struct {
 	Now     func() float64
 }
 
+func AttentionSources() []attention.Source {
+	return []attention.Source{attentionsources.Drafts(), attentionsources.Loops(), attentionsources.Commitments(), attentionsources.Packages()}
+}
+
+func Requirements() []module.Requirement {
+	return []module.Requirement{
+		module.Setting(endpoint.KeyChatURL),
+		{Name: "service/embedding", Check: func(ctx context.Context, p module.Probe) (string, error) {
+			return endpoint.EmbeddingConfigured(ctx, p.Q)
+		}},
+		{Name: "endpoint probes", Check: func(ctx context.Context, p module.Probe) (string, error) {
+			return mail.ProbeFailures(ctx, p.Q)
+		}},
+	}
+}
+
+func SettingGroups() []settings.Group {
+	return []settings.Group{
+		{Name: "safety", Title: "Safety", Keys: []string{mail.KeyWriteCap}},
+		{Name: "loops", Title: "Open loops", Keys: []string{
+			mail.KeyLoopsWaitingAfterDays, mail.KeyLoopsRemindAheadDays, mail.KeyLoopsSnoozeDefaultDays, config.KeySnoozeChoices,
+		}},
+		{Name: "packages", Title: "Packages", Keys: []string{tracking.KeyDestinationCountry, tracking.KeyDestinationPostcode}},
+	}
+}
+
+func ToolDefinitions() []module.ToolDefinition {
+	return mailtools.Definitions()
+}
+
 func (m Module) Register(mc module.Context) module.Registration {
 	mailCmds := mailcmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now}
 	cmds := []*cli.Command{
@@ -43,16 +73,8 @@ func (m Module) Register(mc module.Context) module.Registration {
 	cmds = append(cmds, mailCmds.TrackingCommands()...)
 	return module.Registration{
 		Name:      module.Mail,
-		Attention: []attention.Source{attentionsources.Drafts(), attentionsources.Loops(), attentionsources.Commitments(), attentionsources.Packages()},
-		Requires: []module.Requirement{
-			module.Setting(endpoint.KeyChatURL),
-			{Name: "service/embedding", Check: func(ctx context.Context, p module.Probe) (string, error) {
-				return endpoint.EmbeddingConfigured(ctx, p.Q)
-			}},
-			{Name: "endpoint probes", Check: func(ctx context.Context, p module.Probe) (string, error) {
-				return mail.ProbeFailures(ctx, p.Q)
-			}},
-		},
+		Attention: AttentionSources(),
+		Requires:  Requirements(),
 		Pages: []web.Page{
 			{Module: pages.Module, Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
 				{Section: "review", Label: "Mail decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 40},
@@ -61,13 +83,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 			}},
 			{Module: accountpages.Module, Templates: accountpages.Templates()},
 		},
-		Settings: []settings.Group{
-			{Name: "safety", Title: "Safety", Keys: []string{mail.KeyWriteCap}},
-			{Name: "loops", Title: "Open loops", Keys: []string{
-				mail.KeyLoopsWaitingAfterDays, mail.KeyLoopsRemindAheadDays, mail.KeyLoopsSnoozeDefaultDays, config.KeySnoozeChoices,
-			}},
-			{Name: "packages", Title: "Packages", Keys: []string{tracking.KeyDestinationCountry, tracking.KeyDestinationPostcode}},
-		},
+		Settings: SettingGroups(),
 		Commands: cmds,
 		Leaves: map[string]module.Leaf{
 			"live pause":      {Always: true},
@@ -77,8 +93,12 @@ func (m Module) Register(mc module.Context) module.Registration {
 			"replay":          {Always: true},
 		},
 		Tools: func(r *registry.Registry) error {
-			mailtools.RegisterProposalKinds()
-			return r.Add(mailtools.Tools()...)
+			for _, def := range ToolDefinitions() {
+				if err := r.Add(def.Tool); err != nil {
+					return err
+				}
+			}
+			return nil
 		},
 	}
 }

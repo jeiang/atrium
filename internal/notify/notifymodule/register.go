@@ -13,6 +13,16 @@ type Module struct {
 	Budget notify.BudgetStatus
 }
 
+func SettingGroups() []settings.Group {
+	return []settings.Group{
+		{Name: "volume", Title: "Volume", Keys: []string{notify.KeyPerRunCap, notify.KeyNightlyCap}},
+	}
+}
+
+func ToolDefinitions() []module.ToolDefinition {
+	return []module.ToolDefinition{notify.Definition()}
+}
+
 func (m Module) Register(module.Context) module.Registration {
 	return module.Registration{
 		Name: module.Notifications,
@@ -20,11 +30,14 @@ func (m Module) Register(module.Context) module.Registration {
 			{Section: "review", Label: "Inbox", URL: "/inbox", Icon: "inbox", Page: "inbox", Order: 50},
 			{Label: "Notifications", URL: "/settings/notifications", Page: "notifications", Settings: true, Primary: true, Order: 40},
 		}}},
-		Settings: []settings.Group{
-			{Name: "volume", Title: "Volume", Keys: []string{notify.KeyPerRunCap, notify.KeyNightlyCap}},
-		},
+		Settings: SettingGroups(),
 		Tools: func(r *registry.Registry) error {
-			return r.Add(notify.Tools()...)
+			for _, def := range ToolDefinitions() {
+				if err := r.Add(def.Tool); err != nil {
+					return err
+				}
+			}
+			return nil
 		},
 	}
 }

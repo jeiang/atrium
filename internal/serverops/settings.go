@@ -169,17 +169,20 @@ func balanced(expr string) bool {
 	return !quote && braces == 0 && parens == 0 && brackets == 0
 }
 
-func init() {
-	settings.MustRegisterHost(
-		settings.HostDef{Key: KeyHosts, Module: "grafana", Type: settings.String, Check: checkHosts},
-		settings.HostDef{Key: KeyLabelSelector, Module: "grafana", Type: settings.String, Default: defaultLabelSelector, Check: checkSelector},
-		settings.HostDef{Key: KeyQueryUp, Module: "grafana", Type: settings.String, Default: defaultQueryUp, Check: checkQuery},
-		settings.HostDef{Key: KeyQueryCPU, Module: "grafana", Type: settings.String, Default: defaultQueryCPU, Check: checkQuery},
-		settings.HostDef{Key: KeyQueryMemory, Module: "grafana", Type: settings.String, Default: defaultQueryMemory, Check: checkQuery},
-		settings.HostDef{Key: KeyQueryDisk, Module: "grafana", Type: settings.String, Default: defaultQueryDisk, Check: checkQuery},
-		settings.HostDef{Key: KeyQueryFailedUnit, Module: "grafana", Type: settings.String, Default: defaultQueryFailedUnit, Check: checkQuery},
-	)
-	settings.MustRegister(
+func HostSettingDefs() []settings.HostDef {
+	return []settings.HostDef{
+		{Key: KeyHosts, Module: "grafana", Type: settings.String, Check: checkHosts},
+		{Key: KeyLabelSelector, Module: "grafana", Type: settings.String, Default: defaultLabelSelector, Check: checkSelector},
+		{Key: KeyQueryUp, Module: "grafana", Type: settings.String, Default: defaultQueryUp, Check: checkQuery},
+		{Key: KeyQueryCPU, Module: "grafana", Type: settings.String, Default: defaultQueryCPU, Check: checkQuery},
+		{Key: KeyQueryMemory, Module: "grafana", Type: settings.String, Default: defaultQueryMemory, Check: checkQuery},
+		{Key: KeyQueryDisk, Module: "grafana", Type: settings.String, Default: defaultQueryDisk, Check: checkQuery},
+		{Key: KeyQueryFailedUnit, Module: "grafana", Type: settings.String, Default: defaultQueryFailedUnit, Check: checkQuery},
+	}
+}
+
+func Settings() []settings.Def {
+	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{
 			Key: KeyWorkerMonthlyUSD, Label: "Server-ops monthly cap (USD)", Module: "assistant", Type: settings.Float, Default: "5",
 			Check: settings.Between(0, 10000),
@@ -195,5 +198,10 @@ func init() {
 		settings.Value(settings.Advanced, settings.Def{
 			Key: KeyCondenserModel, Module: "assistant", Type: settings.String,
 		}),
-	)
+	}
+}
+
+func init() {
+	settings.MustRegisterHost(HostSettingDefs()...)
+	settings.MustRegister(Settings()...)
 }

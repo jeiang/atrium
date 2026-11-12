@@ -16,13 +16,25 @@ type Module struct {
 	Now func() float64
 }
 
+func Requirements() []module.Requirement {
+	return []module.Requirement{
+		module.HostSetting(media.KeyRoot),
+		module.Connection(string(media.KindQbittorrent)),
+	}
+}
+
+func SettingGroups() []settings.Group {
+	return []settings.Group{{Name: "library", Title: "Library", Keys: []string{media.KeyLinkTTL}}}
+}
+
+func ToolDefinitions() []module.ToolDefinition {
+	return mediatools.Definitions()
+}
+
 func (m Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
-		Name: module.Media,
-		Requires: []module.Requirement{
-			module.HostSetting(media.KeyRoot),
-			module.Connection(string(media.KindQbittorrent)),
-		},
+		Name:     module.Media,
+		Requires: Requirements(),
 		Pages: []web.Page{{
 			Module:    pages.Module(pages.Options{Now: m.Now}),
 			Templates: pages.Templates(),
@@ -33,10 +45,15 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Section: "apps", Label: "Library", URL: "/apps/media/library", Icon: "film", Page: "media_library", Order: 30},
 			},
 		}},
-		Settings: []settings.Group{{Name: "library", Title: "Library", Keys: []string{media.KeyLinkTTL}}},
+		Settings: SettingGroups(),
 		Commands: []*cli.Command{mediacmd.Command(mc.Env, m.Now)},
 		Tools: func(r *registry.Registry) error {
-			return r.Add(mediatools.Tools()...)
+			for _, def := range ToolDefinitions() {
+				if err := r.Add(def.Tool); err != nil {
+					return err
+				}
+			}
+			return nil
 		},
 	}
 }

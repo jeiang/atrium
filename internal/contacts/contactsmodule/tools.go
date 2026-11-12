@@ -20,12 +20,27 @@ import (
 
 type Module struct{}
 
+func Requirements() []module.Requirement {
+	return []module.Requirement{module.HostSetting(contacts.DirKey)}
+}
+
+func ToolDefinitions() []module.ToolDefinition {
+	return []module.ToolDefinition{Definition()}
+}
+
 func (Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
 		Name:     module.Contacts,
-		Requires: []module.Requirement{module.HostSetting(contacts.DirKey)},
+		Requires: Requirements(),
 		Commands: []*cli.Command{{Name: "contacts", Commands: []*cli.Command{syncCommand(mc.Env)}}},
-		Tools:    func(r *registry.Registry) error { return r.Add(Tools()...) },
+		Tools: func(r *registry.Registry) error {
+			for _, def := range ToolDefinitions() {
+				if err := r.Add(def.Tool); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
 	}
 }
 
@@ -59,17 +74,30 @@ var contactsSchema = json.RawMessage(`{"type":"object","properties":{"query":{"t
 
 var includeFields = []string{"emails", "phones", "dates"}
 
-func Tools() []tool.Tool {
-	return []tool.Tool{{
+func Metadata() tool.Tool {
+	return tool.Tool{
 		Name:        "contacts_lookup",
 		Description: "Look up people in the operator's address book by name, email, phone or organisation. Returns name and organisation; pass include for emails, phones or dates.",
 		InputSchema: contactsSchema,
-		Handler:     contactsLookup,
 		Effect:      tool.Read,
 		Annotated:   true,
 		Marks:       tool.PII,
 		Contexts:    tool.AllKinds,
-	}}
+	}
+}
+
+func Tool() tool.Tool {
+	t := Metadata()
+	t.Handler = contactsLookup
+	return t
+}
+
+func Definition() module.ToolDefinition {
+	return module.ToolDefinition{Tool: Tool()}
+}
+
+func Tools() []tool.Tool {
+	return []tool.Tool{Tool()}
 }
 
 func contactsLookup(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {

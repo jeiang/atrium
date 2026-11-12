@@ -29,13 +29,15 @@ const (
 	EndpointEmbed = "embed"
 )
 
-func init() {
-	settings.MustRegister(
+func SettingsDefs() []settings.Def {
+	return []settings.Def{
 		settings.Secret(settings.SecretOpts{Encrypted: true}, settings.Def{Key: KeyChatKey, Module: "mail", Type: settings.String}),
 		settings.Deploy(settings.Def{Key: transport.CAKey(Integration(EndpointChat)), Module: "mail", Type: settings.String}),
 		settings.Deploy(settings.Def{Key: transport.ProxyKey(Integration(EndpointChat)), Module: "mail", Type: settings.String}),
-	)
+	}
 }
+
+func init() { settings.MustRegister(SettingsDefs()...) }
 
 type Querier interface {
 	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)

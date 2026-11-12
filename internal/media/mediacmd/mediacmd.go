@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -104,9 +103,9 @@ func thumbnails(cfg config.Config) job {
 
 func Callables() map[string]worker.Callable {
 	return map[string]worker.Callable{
-		scheduler.MediaChannelsName: callable(channels),
-		scheduler.MediaSweepName:    callable(sweep),
-		scheduler.MediaThumbnailsName: {
+		media.JobChannels: callable(channels),
+		media.JobSweep:    callable(sweep),
+		media.JobThumbnails: {
 			Modules: []string{module.Media},
 			Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
 				_, err := thumbnails(e.Service.Cfg)(ctx, e.Service.DB, e.Service.Env, e.Now)

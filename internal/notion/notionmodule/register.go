@@ -14,6 +14,13 @@ type Module struct {
 	Env config.Env
 }
 
+func SettingGroups() []settings.Group {
+	return []settings.Group{{
+		Name: "wiki", Title: "Wiki",
+		Keys: []string{notion.WikiRootKey, notion.SensitivityPropertyKey, notion.PrivateValueKey, notion.WikiLogTitleKey},
+	}}
+}
+
 func (m Module) Register(module.Context) module.Registration {
 	env := m.Env
 	if env == nil {
@@ -24,10 +31,7 @@ func (m Module) Register(module.Context) module.Registration {
 		Pages: []web.Page{{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Nav: []web.NavItem{
 			{Section: "library", Label: "Wiki", URL: "/library/wiki", Icon: "book-open", Page: "library_wiki", Order: 10},
 		}}},
-		Settings: []settings.Group{{
-			Name: "wiki", Title: "Wiki",
-			Keys: []string{notion.WikiRootKey, notion.SensitivityPropertyKey, notion.PrivateValueKey, notion.WikiLogTitleKey},
-		}},
+		Settings: SettingGroups(),
 		Commands: []*cli.Command{notion.Command(notion.Options{Env: env})},
 	}
 }

@@ -366,6 +366,15 @@ func Tools() []tool.Tool {
 	return append(append(baseTools(), findSlotTool), updateTools...)
 }
 
+func Definitions() []module.ToolDefinition {
+	tools := Tools()
+	defs := make([]module.ToolDefinition, len(tools))
+	for i, t := range tools {
+		defs[i] = module.ToolDefinition{Tool: t}
+	}
+	return defs
+}
+
 func baseTools() []tool.Tool {
 	return []tool.Tool{
 		{

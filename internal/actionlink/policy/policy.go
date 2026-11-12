@@ -25,12 +25,14 @@ var WebOnly = map[string]bool{
 	"deletion_rule":     true,
 }
 
-func init() {
-	settings.MustRegister(
+func Settings() []settings.Def {
+	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{Key: EnabledKey, Module: "action_links", Type: settings.Bool, Default: "false"}),
 		settings.Value(settings.UI, settings.Def{Key: KindsKey, Module: "action_links", Type: settings.String, Default: strings.Join(DefaultKinds, ",")}),
-	)
+	}
 }
+
+func init() { settings.MustRegister(Settings()...) }
 
 type Policy struct {
 	Enabled bool

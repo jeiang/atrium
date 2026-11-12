@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	modules "github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -16,17 +17,30 @@ const description = "Send the operator a short plain-text notification (phone pu
 var inputSchema = json.RawMessage(`{"type":"object","properties":{"title":{"type":"string"},` +
 	`"body":{"type":"string"},"thread_link":{"type":"string"}},"required":["title","body"],"additionalProperties":false}`)
 
-func Tools() []tool.Tool {
-	return []tool.Tool{{
+func Metadata() tool.Tool {
+	return tool.Tool{
 		Name:        "notify",
 		Description: description,
 		InputSchema: inputSchema,
-		Handler:     handle,
 		Effect:      tool.Notify,
 		Annotated:   true,
 		Channel:     tool.ChannelNotify,
 		Contexts:    tool.DefaultKinds,
-	}}
+	}
+}
+
+func Tool() tool.Tool {
+	t := Metadata()
+	t.Handler = handle
+	return t
+}
+
+func Definition() modules.ToolDefinition {
+	return modules.ToolDefinition{Tool: Tool()}
+}
+
+func Tools() []tool.Tool {
+	return []tool.Tool{Tool()}
 }
 
 func handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {

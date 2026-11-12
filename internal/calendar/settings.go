@@ -20,17 +20,26 @@ const (
 	defaultEventMinutes = "60"
 )
 
-func init() {
-	settings.MustRegisterHost(settings.HostDef{
-		Key: CalendarDirKey, Module: "calendar", Type: settings.String})
-	settings.MustRegister(
+func SettingsDefs() []settings.Def {
+	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{Key: AppleIDKey, Module: "calendar", Type: settings.String}),
 		settings.Value(settings.UI, settings.Def{Key: AccountKey, Module: "calendar", Type: settings.String}),
 		settings.Value(settings.UI, settings.Def{Key: ICloudCalendarKey, Module: "calendar", Type: settings.String}),
 		settings.Value(settings.UI, settings.Def{
 			Key: DefaultMinutesKey, Module: "calendar", Type: settings.Int, Default: defaultEventMinutes,
 			Check: settings.Between(5, 1440)}),
-	)
+	}
+}
+
+func HostSettings() []settings.HostDef {
+	return []settings.HostDef{
+		{Key: CalendarDirKey, Module: "calendar", Type: settings.String},
+	}
+}
+
+func init() {
+	settings.MustRegisterHost(HostSettings()...)
+	settings.MustRegister(SettingsDefs()...)
 }
 
 type Settings struct {

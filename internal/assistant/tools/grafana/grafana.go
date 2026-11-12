@@ -21,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/timex"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -589,6 +590,15 @@ func searchDashboards(ctx context.Context, tc *tool.Context, args tool.Args) (an
 }
 
 const emptySchema = `{"type": "object", "properties": {}, "required": [], "additionalProperties": false}`
+
+func Definitions() []module.ToolDefinition {
+	tools := Tools()
+	defs := make([]module.ToolDefinition, len(tools))
+	for i, t := range tools {
+		defs[i] = module.ToolDefinition{Tool: t}
+	}
+	return defs
+}
 
 func Tools() []tool.Tool {
 	return []tool.Tool{

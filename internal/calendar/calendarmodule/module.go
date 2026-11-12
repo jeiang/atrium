@@ -18,18 +18,37 @@ import (
 
 type Module struct{}
 
+func AttentionSources() []attention.Source {
+	return []attention.Source{attentionsources.Candidates()}
+}
+
+func Requirements() []module.Requirement {
+	return []module.Requirement{{Name: "calendar credentials", Check: credentials}}
+}
+
+func ToolDefinitions() []module.ToolDefinition {
+	return calendartools.Definitions()
+}
+
 func (Module) Register(mc module.Context) module.Registration {
 	command := calendarcmd.Command(mc.Env, mc.Tools)
 	return module.Registration{
 		Name:      module.Calendar,
-		Attention: []attention.Source{attentionsources.Candidates()},
-		Requires:  []module.Requirement{{Name: "calendar credentials", Check: credentials}},
+		Attention: AttentionSources(),
+		Requires:  Requirements(),
 		Commands:  []*cli.Command{command},
 		Leaves: map[string]module.Leaf{
 			"calendar candidates":  {Needs: []string{module.Mail}},
 			"calendar google-auth": {Always: true},
 		},
-		Tools: func(r *registry.Registry) error { return r.Add(calendartools.Tools()...) },
+		Tools: func(r *registry.Registry) error {
+			for _, def := range ToolDefinitions() {
+				if err := r.Add(def.Tool); err != nil {
+					return err
+				}
+			}
+			return nil
+		},
 	}
 }
 

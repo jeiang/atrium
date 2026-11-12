@@ -8,7 +8,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/runner"
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -24,7 +23,7 @@ import (
 
 func Callables() map[string]worker.Callable {
 	return map[string]worker.Callable{
-		scheduler.CalendarCandidatesName: {
+		calendar.JobCandidates: {
 			Modules: []string{module.Calendar, module.Mail},
 			Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
 				_, limit, err := calendar.CandidateLimits(ctx, e.Service.DB.Read)

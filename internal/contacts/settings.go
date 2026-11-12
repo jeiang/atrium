@@ -15,10 +15,13 @@ const (
 	DirEnv = "ATRIUM_CONTACTS_" + DirKey
 )
 
-func init() {
-	settings.MustRegisterHost(settings.HostDef{
-		Key: DirKey, Module: "contacts", Type: settings.String})
+func HostSettings() []settings.HostDef {
+	return []settings.HostDef{
+		{Key: DirKey, Module: "contacts", Type: settings.String},
+	}
 }
+
+func init() { settings.MustRegisterHost(HostSettings()...) }
 
 type State uint8
 

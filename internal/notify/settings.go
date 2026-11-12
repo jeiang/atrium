@@ -15,16 +15,18 @@ const (
 	KeyNightlyCap = "notify_nightly_cap"
 )
 
-func init() {
-	settings.MustRegister(
+func Settings() []settings.Def {
+	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{
 			Key: KeyPerRunCap, Label: "Notifications per run", Module: module, Type: settings.Int, Default: "3",
 			Check: settings.Between(0, 100)}),
 		settings.Value(settings.UI, settings.Def{
 			Key: KeyNightlyCap, Label: "Notifications per night", Module: module, Type: settings.Int, Default: "1",
 			Check: settings.Between(0, 100)}),
-	)
+	}
 }
+
+func init() { settings.MustRegister(Settings()...) }
 
 func Enabled(ctx context.Context) bool {
 	return modules.IsEnabled(ctx, modules.Notifications)
