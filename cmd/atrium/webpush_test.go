@@ -244,7 +244,7 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 		code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/notifications"+path, form)
 		return code, body
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	t.Cleanup(func() { _ = d.Close() })
 	devices := func() int {
 		t.Helper()
@@ -393,7 +393,7 @@ func TestConnectionsCLIWebPushTestDeliversDropsGoneAndBlocksPrivateEndpoints(t *
 	if ran := runApp(t, "connections", "list"); ran.code != 0 {
 		t.Fatalf("connections list: exit %d stderr %q", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	browser.store(t, d)
 	gone := browser
 	gone.endpoint = push.URL + "/push/gone"

@@ -16,6 +16,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/weather"
 )
@@ -34,7 +35,7 @@ const forecastJSON = `{"latitude":10.65,"longitude":-61.5,"timezone":"America/Po
 
 func permissionProposals(t *testing.T, dir string) int {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var n int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposals WHERE kind = 'permission'").Scan(&n); err != nil {
 		t.Fatal(err)
@@ -170,7 +171,7 @@ func TestQueuedMarkedReferenceAppliesToTheRestOfTheBatch(t *testing.T) {
 	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, reader), url.Values{"text": {"weather then read " + srv.URL + "/a"}}); status >= http.StatusBadRequest {
 		t.Fatalf("POST message = %d: %s", status, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	waitRunState(t, d, reader, "done")
 	requests := api.Requests()[start:]
 	if len(requests) != 2 {
@@ -218,7 +219,7 @@ func TestServerWebSearchResultMarksBeforeTheSameResponseClientTool(t *testing.T)
 		t.Errorf("the client tool in the search response reached the web: %v", hits)
 	}
 	thread := latestThread(t, dir)
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	proposal, _ := waitParkedPermission(t, d, thread)
 	var title string
 	if err := d.Read.QueryRow("SELECT title FROM proposals WHERE id = ?", proposal).Scan(&title); err != nil {
@@ -295,7 +296,7 @@ func TestApprovedPermissionExecutesOnceAndDoesNotReplay(t *testing.T) {
 	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {text}}); status >= http.StatusBadRequest {
 		t.Fatalf("POST message = %d: %s", status, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	proposal, _ := waitParkedPermission(t, d, thread)
 	if hits := pages.seen(); !slices.Equal(hits, []string{"/a"}) {
 		t.Fatalf("page fetches before approval = %v, want /a only", hits)
@@ -348,7 +349,7 @@ func TestApprovalDeniedByANewMarkPerformsNothing(t *testing.T) {
 	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {"find the warm thread then read " + srv.URL + "/a"}}); status >= http.StatusBadRequest {
 		t.Fatalf("POST message = %d: %s", status, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	proposal, _ := waitParkedPermission(t, d, thread)
 	if hits := pages.seen(); len(hits) != 0 {
 		t.Fatalf("page fetches before the decision = %v, want none", hits)
@@ -393,7 +394,7 @@ func TestUnattendedRunsAndSubagentsCannotParkOrEscape(t *testing.T) {
 		if marks := threadMarkSet(t, dir, writer); marks != int64(tool.Messages) {
 			t.Fatalf("writer marks = %d, want messages", marks)
 		}
-		d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+		d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 		var job int64
 		if err := d.Read.QueryRow("SELECT id FROM jobs WHERE name = 'Batch check'").Scan(&job); err != nil {
 			t.Fatal(err)
@@ -526,7 +527,7 @@ func TestParkedBatchKeepsCompletedResultsAndDoesNotReplayThem(t *testing.T) {
 	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {text}}); status >= http.StatusBadRequest {
 		t.Fatalf("POST message = %d: %s", status, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	proposal, _ := waitParkedPermission(t, d, thread)
 	if hits := pages.seen(); !slices.Equal(hits, []string{"/a"}) {
 		t.Fatalf("page fetches before approval = %v, want /a only", hits)
@@ -580,7 +581,7 @@ func TestCLIApprovalReauthorizesTheCurrentPermissions(t *testing.T) {
 	if result := toolResultFor(t, requests[1], "d1"); result["is_error"] == true {
 		t.Fatalf("media_add_magnet failed: %v", result)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var id int64
 	if err := d.Read.QueryRow("SELECT MAX(id) FROM proposals WHERE kind = 'media_add_magnet'").Scan(&id); err != nil {
 		t.Fatalf("proposal: %v", err)

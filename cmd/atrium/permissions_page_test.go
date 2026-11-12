@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestPermissionsPageSavesWithinBounds(t *testing.T) {
@@ -41,7 +42,7 @@ func TestPermissionsPageSavesWithinBounds(t *testing.T) {
 	if status != http.StatusUnprocessableEntity || !strings.Contains(body, "<title>Assistant · Settings") {
 		t.Fatalf("bounded save = %d: %s", status, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var stored int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM settings WHERE key = 'permission_internet_untrusted_kinds'").Scan(&stored); err != nil || stored != 0 {

@@ -31,7 +31,7 @@ func TestTaskAddEffectUndoAndActivityListing(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "add a task"); ran.code != cli.ExitOK {
 		t.Fatalf("task_add run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var taskID, effectID int64
 	if err := d.Read.QueryRow("SELECT id FROM tasks WHERE title = 'Call the dentist'").Scan(&taskID); err != nil {
 		t.Fatal(err)
@@ -140,7 +140,7 @@ func TestEffectResolveRecoversAnExpiredIntentAndRefusesAFreshLease(t *testing.T)
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	now := float64(time.Now().Unix())
 	expired, err := d.Write.Exec("INSERT INTO effects (created_at, lease_at, token, origin, operation, operation_key, direction, target, action_json, state) "+
 		"VALUES (?, ?, 'expired', 'agent', 'task_add', 'expired', 'forward', 'task:1', '{}', 'intent')", now-1000, now-1000)
@@ -209,7 +209,7 @@ func TestFreshDirectIntentBlocksASecondWrite(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	path := filepath.Join(dir, "files", "1", "note.txt")
 	now := float64(time.Now().Unix())
@@ -293,7 +293,7 @@ func TestRunningExternalWriteRenewsItsLeasePastTheStuckThreshold(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d = mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d = mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, " +
 		"source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)"); err != nil {
@@ -342,7 +342,7 @@ func TestResolvedUnknownEffectCanBeUndone(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "add a task"); ran.code != cli.ExitOK {
 		t.Fatalf("task_add run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var taskID, effectID int64
 	if err := d.Read.QueryRow("SELECT id FROM tasks WHERE title = 'Return the parcel'").Scan(&taskID); err != nil {
@@ -394,7 +394,7 @@ func TestAcceptedPartialEffectReleasesItsClaims(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	path := filepath.Join(dir, "files", "1", "note.txt")
 	now := float64(time.Now().Unix())
@@ -456,7 +456,7 @@ func TestEffectsCLIUsesTheProposalUndoers(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	now := float64(time.Now().Unix())
 	res, err := d.Write.Exec("INSERT INTO tasks (title, remind_at, created_ts, updated_ts) VALUES ('Call the plumber', ?, ?, ?)", now+3600, now, now)
@@ -514,7 +514,7 @@ func TestOperationKeyAdmissionRefusesASecondSuccessfulAttempt(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, " +
 		"source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)"); err != nil {

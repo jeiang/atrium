@@ -32,7 +32,7 @@ func (s *service) open(e *cli.Env) (*db.DB, *Store, int) {
 	if err != nil {
 		return nil, nil, cli.Fail(e, err)
 	}
-	d, err := db.Connect(cfg.DBPath)
+	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(e.Ctx).DBKey()))
 	if err != nil {
 		return nil, nil, cli.Fail(e, err)
 	}

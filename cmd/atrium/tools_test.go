@@ -10,6 +10,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 )
 
@@ -19,7 +20,7 @@ func TestDisabledToolIsNotOffered(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('tool_kb_search_enabled', 'false')"); err != nil {
 		t.Fatal(err)
 	}
@@ -80,7 +81,7 @@ func TestWebSearchAllowedCallers(t *testing.T) {
 		t.Fatalf("%d model requests, want 5", len(requests))
 	}
 	assertServerCallers(t, requests[1], "direct")
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('search_web_dynamic_filtering', 'true')"); err != nil {
 		t.Fatal(err)
 	}
@@ -164,7 +165,7 @@ func TestFileToolsReadSearchAndTraversal(t *testing.T) {
 	if err != nil || string(data) != "hello world" {
 		t.Fatalf("note.txt = %q, %v; run: %s", data, err, ran.stdout)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	rows, err := d.Read.Query("SELECT content_json FROM thread_messages WHERE thread_id = 1 AND role = 'user' ORDER BY seq")
 	if err != nil {
 		t.Fatal(err)
@@ -190,7 +191,7 @@ func TestMemorySpendCountsTowardTheMonthlyBudget(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("DELETE FROM usage"); err != nil {
 		t.Fatal(err)
 	}

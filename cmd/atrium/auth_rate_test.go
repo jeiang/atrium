@@ -15,6 +15,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/auth/oidc/oidctest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 type rateCall struct {
@@ -394,7 +395,7 @@ func TestAuthRateLimitKeepsLastUsedOnRefusal(t *testing.T) {
 	if allowed, _, body := rateUntilRefused(t, call, "/api/v1/me", addr, token, http.StatusOK, 65); allowed < 60 {
 		t.Fatalf("the token bucket allowed %d requests, want at least 60: %.200s", allowed, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec("UPDATE auth_bearers SET last_used_at = 1"); err != nil {
 		t.Fatal(err)

@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestAttentionToolOrdersGroupsSnoozesAndDropsDisabledModules(t *testing.T) {
@@ -14,7 +15,7 @@ func TestAttentionToolOrdersGroupsSnoozesAndDropsDisabledModules(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	now := float64(time.Now().Unix())
 	today := time.Unix(int64(now), 0).UTC()
 	exec := func(query string, args ...any) {

@@ -14,7 +14,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/db"
 )
 
 func servicesHostConfig(t *testing.T, dir, grafanaURL, anthropicURL string) string {
@@ -39,6 +38,7 @@ capabilities = ["models"]
 }
 
 func TestConnectionTestsSaveOnlyWorkingCredentialsAndNeverRenderThem(t *testing.T) {
+	t.Parallel()
 	api := anthropictest.New(t)
 	api.RejectKey = "sk-ant-bad"
 	grafana := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -59,7 +59,6 @@ func TestConnectionTestsSaveOnlyWorkingCredentialsAndNeverRenderThem(t *testing.
 	t.Cleanup(grafana.Close)
 
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, grafana.URL, api.URL))
 	s := &connectionSite{t: t, dir: dir}
@@ -68,7 +67,7 @@ func TestConnectionTestsSaveOnlyWorkingCredentialsAndNeverRenderThem(t *testing.
 	stored := func(id, slot string) bool {
 		t.Helper()
 		var n int
-		if err := mustConnect(t, filepath.Join(dir, "atrium.db")).Read.QueryRow(
+		if err := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t)).Read.QueryRow(
 			"SELECT COUNT(*) FROM connection_credentials WHERE connection_id = ? AND slot = ?", id, slot).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
@@ -130,7 +129,7 @@ func TestGrafanaConnectionNeedsAViewerToken(t *testing.T) {
 		t.Fatalf("connections test without a token: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
 	}
 	var state string
-	if err := mustConnect(t, filepath.Join(dir, "atrium.db")).Read.QueryRow(
+	if err := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t)).Read.QueryRow(
 		"SELECT state FROM connections WHERE id = 'service/grafana'").Scan(&state); err != nil {
 		t.Fatal(err)
 	}

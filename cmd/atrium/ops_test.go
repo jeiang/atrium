@@ -55,7 +55,7 @@ func TestOpsListenerServesMetricsAndReadinessApartFromThePublicListener(t *testi
 	opsBase := opsAddr(t)
 
 	path := filepath.Join(dir, "atrium.db")
-	if err := db.Migrate(context.Background(), mustConnect(t, path), path); err != nil {
+	if err := db.Migrate(context.Background(), mustConnect(t, path, db.Key{}), path); err != nil {
 		t.Fatal(err)
 	}
 	held, err := db.Exclusive(context.Background(), path, 0)
@@ -99,7 +99,7 @@ func TestOpsListenerServesMetricsAndReadinessApartFromThePublicListener(t *testi
 		t.Errorf("readyz = %d %s, want 200 ready", status, state)
 	}
 
-	d := mustConnect(t, path)
+	d := mustConnect(t, path, db.Key{})
 	if _, err := d.Write.Exec("INSERT INTO schema_migrations (version, applied_at) VALUES (9999, 0)"); err != nil {
 		t.Fatal(err)
 	}
@@ -120,9 +120,9 @@ func TestOpsPprofFollowsItsSetting(t *testing.T) {
 	}
 }
 
-func mustConnect(t *testing.T, path string) *db.DB {
+func mustConnect(t *testing.T, path string, key db.Key) *db.DB {
 	t.Helper()
-	d, err := db.Connect(path)
+	d, err := db.Connect(path, db.WithKey(key))
 	if err != nil {
 		t.Fatal(err)
 	}

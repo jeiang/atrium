@@ -120,7 +120,7 @@ func TestNotificationInboxEffectIsDurableAndDeduped(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	browser.store(t, d)
 	now := float64(time.Now().Unix())
 	dueReminder(t, d, "Pay the rent", now-1)
@@ -198,7 +198,7 @@ func TestNotificationLostPushResponseLeavesTheInboxDone(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	browser.store(t, d)
 	now := float64(time.Now().Unix())
 	dueReminder(t, d, "Collect the parcel", now-1)
@@ -229,7 +229,7 @@ func TestNotificationCancelledPushKeepsTheInboxEffect(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	browser.store(t, d)
 	runJob(t, f, d, "task-reminders")
 
@@ -276,7 +276,7 @@ func TestNotificationLocalCommitFailureCreatesNothing(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	browser.store(t, d)
 	if _, err := d.Write.Exec("CREATE TRIGGER notify_boom BEFORE INSERT ON notifications BEGIN SELECT RAISE(ABORT, 'boom'); END"); err != nil {
 		t.Fatal(err)

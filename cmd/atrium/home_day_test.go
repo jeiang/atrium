@@ -11,6 +11,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestKnowledgeSelectedRecordsConfirmTogetherAndHomeShowsReceipts(t *testing.T) {
@@ -18,7 +19,7 @@ func TestKnowledgeSelectedRecordsConfirmTogetherAndHomeShowsReceipts(t *testing.
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
@@ -81,7 +82,7 @@ func TestAskBarCarriesWhatTheOperatorAskedAbout(t *testing.T) {
 	if code, body, _ := w.post("/chat", url.Values{"text": {"what is this"}, "about": {ref}}, false); code != http.StatusSeeOther {
 		t.Fatalf("POST /chat = %d: %s", code, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var sent, leaked int
 	pointer := fmt.Sprintf("%%About mail message %d.%%what is this%%", message)

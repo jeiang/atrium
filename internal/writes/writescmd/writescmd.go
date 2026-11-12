@@ -1,6 +1,7 @@
 package writescmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -52,7 +53,7 @@ func list(o Options) *cli.Command {
 			limit := a.Int("limit", 50, cli.Opt{Help: "maximum writes"})
 			blocked := a.Bool("blocked", cli.Opt{Help: "only unresolved writes"})
 			return func(e *cli.Env) int {
-				d, s, err := open(o)
+				d, s, err := open(e.Ctx, o)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
@@ -84,7 +85,7 @@ func resolve(o Options) *cli.Command {
 				Help: "applied, not-applied or partial"})
 			evidence := a.String("evidence", "", cli.Opt{Help: "JSON evidence recorded with the resolution"})
 			return func(e *cli.Env) int {
-				d, s, err := open(o)
+				d, s, err := open(e.Ctx, o)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
@@ -113,7 +114,7 @@ func undo(o Options) *cli.Command {
 		Setup: func(a *cli.Args) cli.Handler {
 			id := a.IntArg("id", cli.Opt{})
 			return func(e *cli.Env) int {
-				d, s, err := open(o)
+				d, s, err := open(e.Ctx, o)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
@@ -131,12 +132,12 @@ func undo(o Options) *cli.Command {
 	}
 }
 
-func open(o Options) (*db.DB, *ledger.Store, error) {
+func open(ctx context.Context, o Options) (*db.DB, *ledger.Store, error) {
 	cfg, err := config.Load(o.Env)
 	if err != nil {
 		return nil, nil, err
 	}
-	d, err := db.Connect(cfg.DBPath)
+	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(ctx).DBKey()))
 	if err != nil {
 		return nil, nil, err
 	}

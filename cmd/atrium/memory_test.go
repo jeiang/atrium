@@ -9,6 +9,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestMemoryTreeFollowsChatRuns(t *testing.T) {
@@ -47,7 +48,7 @@ func TestMemoryTreeFollowsChatRuns(t *testing.T) {
 	if strings.Contains(tree.stdout, "root level=2 idx=1") {
 		t.Errorf("memory tree has an unexpected second level-2 root:\n%s", tree.stdout)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var leaves int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM memory_nodes WHERE thread_id = ? AND level = 0", thread).Scan(&leaves); err != nil {
 		t.Fatal(err)

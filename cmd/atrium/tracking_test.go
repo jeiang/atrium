@@ -195,7 +195,7 @@ func TestTrackPackageRegistersAndRespectsTheQuota(t *testing.T) {
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	for i, number := range []string{"1Z999AA10123456784", "1Z999AA10123456785"} {
 		if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
@@ -253,7 +253,7 @@ func TestPackagePollingUpdatesStatusAndNotifiesOnceOnDelivered(t *testing.T) {
 	if warm := runApp(t, "settings", "list"); warm.code != cli.ExitOK {
 		t.Fatalf("warm command: %d %s", warm.code, warm.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	now := float64(time.Now().Unix())
 	if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
@@ -355,7 +355,7 @@ func TestTrackPackageUnknownOutcomeStaysBlocked(t *testing.T) {
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, " +
 		"source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)"); err != nil {
@@ -396,7 +396,7 @@ func TestTrackPackageQuotaSurvivesUndo(t *testing.T) {
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	for i, number := range []string{"1Z999AA10123456784", "1Z999AA10123456785"} {
 		if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
@@ -448,7 +448,7 @@ func TestPackagePollWithoutAKeyDoesNothing(t *testing.T) {
 	if warm := runApp(t, "settings", "list"); warm.code != cli.ExitOK {
 		t.Fatalf("warm command: %d %s", warm.code, warm.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	now := float64(time.Now().Unix())
 	if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
@@ -477,7 +477,7 @@ func TestUndoPackageUntrackRefusesWithoutAKey(t *testing.T) {
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, " +
 		"source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)"); err != nil {
@@ -529,7 +529,7 @@ func TestTrackingIdentityBlocksASecondPackageRow(t *testing.T) {
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	for i := 1; i <= 2; i++ {
 		if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, "+
@@ -611,7 +611,7 @@ func TestTrackPackageDoesNotReplayTheTrackerCreationOnARedirect(t *testing.T) {
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec("INSERT INTO packages (id, carrier, tracking_number, merchant, merchant_key, order_ref, status, status_text, " +
 		"source_message_id, last_message_id, updated_ts, first_seen) VALUES (1, 'UPS', '1Z999AA10123456784', 'Shop', 'shop', '', 'shipped', 'Shipped', 1, 1, 100, 100)"); err != nil {

@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/module"
@@ -45,7 +44,7 @@ func grafanaHealthServer(t *testing.T) (*httptest.Server, *atomic.Int32) {
 func connectionNotices(t *testing.T, dir, label string) int {
 	t.Helper()
 	var n int
-	if err := mustConnect(t, filepath.Join(dir, "atrium.db")).Read.QueryRow(
+	if err := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t)).Read.QueryRow(
 		"SELECT COUNT(*) FROM notifications WHERE title LIKE ?", "atrium: "+label+" %").Scan(&n); err != nil {
 		t.Fatal(err)
 	}
@@ -53,11 +52,11 @@ func connectionNotices(t *testing.T, dir, label string) int {
 }
 
 func TestConnectionHealthNotifiesOncePerTransitionAndDisconnectKeepsData(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	srv, status := grafanaHealthServer(t)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, srv.URL, "http://anthropic.invalid"))
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
@@ -120,11 +119,11 @@ func TestConnectionHealthNotifiesOncePerTransitionAndDisconnectKeepsData(t *test
 }
 
 func TestOpsMetricsReportAConnectionStateBeforeAndAfterAFailingTest(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	srv, status := grafanaHealthServer(t)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, srv.URL, "http://anthropic.invalid"))
 	ops := opsAddr(t)
 	s := &connectionSite{t: t, dir: dir}
@@ -170,7 +169,7 @@ func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
 		t.Fatalf("mail tools before the outage: %v", names)
 	}
 
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	if _, err := d.Write.Exec("INSERT INTO accounts (name, kind) VALUES ('icloud', 'icloud')"); err != nil {
 		t.Fatal(err)
 	}
@@ -222,6 +221,7 @@ func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
 }
 
 func TestAnExplicitEmbeddingFailureHoldsMailUntilAnExplicitTestPasses(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
@@ -264,11 +264,11 @@ func TestAnExplicitEmbeddingFailureHoldsMailUntilAnExplicitTestPasses(t *testing
 }
 
 func TestConcurrentConnectionTestsRecordOneNotification(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	srv, status := grafanaHealthServer(t)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, srv.URL, "http://anthropic.invalid"))
 	s := &connectionSite{t: t, dir: dir}
 	s.start()

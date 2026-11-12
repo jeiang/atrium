@@ -96,6 +96,10 @@ jobs:
         continue-on-error: true
         run: ./.ci/garret.sh watch
 
+      - name: Allow the loopback test namespace inside the build sandbox
+        if: runner.os == 'Linux'
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       - name: Build check
         env:
           SYSTEM: ${{ matrix.target.system }}

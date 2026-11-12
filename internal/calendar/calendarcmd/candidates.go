@@ -67,7 +67,7 @@ func candidatesCommand(env config.Env, tools registry.Source, now func() float64
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				d, err := db.Connect(cfg.DBPath)
+				d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(e.Ctx).DBKey()))
 				if err != nil {
 					return cli.Fail(e, err)
 				}

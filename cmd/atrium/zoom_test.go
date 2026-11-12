@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestZoomOpensSummariesLeavesAndRefusesBadRanges(t *testing.T) {
@@ -15,7 +16,7 @@ func TestZoomOpensSummariesLeavesAndRefusesBadRanges(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	for i := range 8 {
 		content := fmt.Sprintf(`[{"type":"text","text":"message-%d"}]`, i)
 		if _, err := d.Write.Exec("INSERT INTO thread_messages (thread_id, seq, role, content_json, created_at) VALUES (1, ?, 'user', ?, 0)", 3+i, content); err != nil {

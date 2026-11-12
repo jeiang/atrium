@@ -18,10 +18,23 @@ type State struct {
 	reconcile    func(context.Context, *db.DB, Host) error
 	credential   AccountCredentialFunc
 	hostAccounts HostAccountsFunc
+	dbKey        db.Key
 }
 
 func NewState(reg *settings.Registry) *State {
 	return &State{settings: reg}
+}
+
+func (s *State) SetDBKey(k db.Key) {
+	s.mu.Lock()
+	s.dbKey = k
+	s.mu.Unlock()
+}
+
+func (s *State) DBKey() db.Key {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.dbKey
 }
 
 func (s *State) SetConnectionReconciler(f func(context.Context, *db.DB, Host) error) {
@@ -90,7 +103,7 @@ func OpenStore(ctx context.Context, env Env) (*db.DB, *settings.Store, error) {
 	if err != nil {
 		return nil, nil, err
 	}
-	d, err := db.Connect(cfg.DBPath)
+	d, err := db.Connect(cfg.DBPath, db.WithKey(From(ctx).DBKey()))
 	if err != nil {
 		return nil, nil, err
 	}

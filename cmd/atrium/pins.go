@@ -21,6 +21,11 @@ func bootstrap(env config.Env, reg *settings.Registry) func(context.Context, io.
 			return err
 		}
 		reg.SetPins(config.CombinePins(host, pins))
-		return dbkey.Configure(env, reg)
+		k, err := dbkey.Configure(env, reg)
+		if err != nil {
+			return err
+		}
+		config.From(ctx).SetDBKey(k)
+		return nil
 	}
 }

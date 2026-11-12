@@ -40,7 +40,7 @@ func TestMailAccountUpdateTestsTheSubmittedLogin(t *testing.T) {
 	if code, body := update("me@other.test", "work-pass"); code != http.StatusUnprocessableEntity {
 		t.Fatalf("update to a login the password cannot authenticate = %d: %.300s", code, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	var login, configJSON string
 	if err := d.Read.QueryRow("SELECT login FROM mail_accounts WHERE id = 'work'").Scan(&login); err != nil {
 		t.Fatal(err)

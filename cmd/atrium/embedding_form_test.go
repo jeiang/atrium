@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestEmbeddingConnectionFormKeepsTheStoredModel(t *testing.T) {
@@ -24,7 +26,7 @@ func TestEmbeddingConnectionFormKeepsTheStoredModel(t *testing.T) {
 	if code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/connections/test", form); code != http.StatusOK {
 		t.Fatalf("submitting the embedding form = %d: %.300s", code, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var configJSON string
 	if err := d.Read.QueryRow("SELECT config_json FROM connections WHERE id = 'service/embedding'").Scan(&configJSON); err != nil {
 		t.Fatal(err)

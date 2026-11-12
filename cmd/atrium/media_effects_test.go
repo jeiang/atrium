@@ -66,7 +66,7 @@ func TestMediaUnknownAddBlocksWebAndPoll(t *testing.T) {
 	if code, body := b.do(http.MethodPost, "/apps/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}); code != http.StatusBadGateway {
 		t.Fatalf("dropped add = %d, want 502: %.400s", code, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	id := mediaEffectID(t, d, media.OpAddMagnet, hash, "unknown")
 	if adds := qb.count("add"); adds != 1 {
@@ -118,7 +118,7 @@ func TestMediaSelectionFailureKeepsTheAddAndBlocksTheRepeat(t *testing.T) {
 	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
 	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {mediaMagnet(fresh, "Lanterns.S01E09")}, "mode": {"media"}},
 		http.StatusOK, "Added the magnet link")
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	mediaEffectID(t, d, media.OpAddMagnet, fresh, "done")
 	priority := mediaEffectID(t, d, media.OpPriority, busy, "unknown")
@@ -159,7 +159,7 @@ func TestMediaSweepDeleteDropDoesNotRepeat(t *testing.T) {
 	if ran.code != cli.ExitOK {
 		t.Fatalf("sweep: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	id := mediaEffectID(t, d, media.OpDelete, hash, "unknown")
 	if deletes := qb.count("delete"); deletes != 1 {
@@ -210,7 +210,7 @@ func TestMediaFilingPlanIsInspectableAndUndoable(t *testing.T) {
 	if code, body := b.do(http.MethodPost, "/apps/media/file", form); code != http.StatusBadGateway {
 		t.Fatalf("filing with a blocked second placement = %d, want 502: %.400s", code, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	first := mediaEffectID(t, d, media.OpFile, hash, "done")
 	mediaEffectID(t, d, media.OpFile, hash, "failed")
@@ -270,7 +270,7 @@ func TestMediaFilingUndoRefusesAChangedDestination(t *testing.T) {
 	if _, err := os.Stat(src); !os.IsNotExist(err) {
 		t.Fatalf("the import source survived the rename: %v", err)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	id := mediaEffectID(t, d, media.OpFile, item, "done")
 	if err := os.Remove(placed); err != nil {
@@ -306,7 +306,7 @@ func TestApprovedMediaAddIsUndoneWithItsProposal(t *testing.T) {
 	if adds := qb.count("add"); adds != 1 {
 		t.Fatalf("%d adds after approval, want 1", adds)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var recorded int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE proposal_id = ? AND operation = ? AND direction = 'forward'",
@@ -341,7 +341,7 @@ func TestRecoveredProposalWithRecordedWorkCannotBeApprovedAgain(t *testing.T) {
 	if got := runApp(t, "proposals", "approve", id); got.code != cli.ExitOK {
 		t.Fatalf("approve: %d %q %q", got.code, got.stdout, got.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec("UPDATE proposals SET status = 'failed', recovered = 1 WHERE id = ?", id); err != nil {
 		t.Fatal(err)

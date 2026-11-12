@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestMemoryViewReducesWithSummaries(t *testing.T) {
@@ -14,7 +15,7 @@ func TestMemoryViewReducesWithSummaries(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	text := fmt.Sprintf(`[{"type":"text","text":%q}]`, strings.Repeat("x", 400))
 	for i := range 400 {
 		content := text
