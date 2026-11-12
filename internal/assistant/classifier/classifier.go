@@ -1,0 +1,221 @@
+package classifier
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/jsonx"
+)
+
+const (
+	ReasonBudget      = "budget"
+	ReasonRunCap      = "run_cap"
+	ReasonSourceCap   = "source_cap"
+	ReasonUnavailable = "unavailable"
+	ReasonAuth        = "auth"
+	ReasonSpendCap    = "spend_cap"
+	ReasonRefusal     = "refusal"
+	ReasonTruncated   = "truncated"
+	ReasonStop        = "unexpected_stop"
+)
+
+const finishTimeout = 5 * time.Second
+
+type Item struct {
+	Key string
+}
+
+type Request struct {
+	Caller       Caller
+	Item         Item
+	System, User string
+	Schema       json.RawMessage
+}
+
+type Deferred struct {
+	Caller  Caller
+	ItemKey string
+	Reason  string
+	Cause   error
+}
+
+func (e *Deferred) Error() string {
+	text := fmt.Sprintf("classifier: %s item %s deferred: %s", e.Caller, e.ItemKey, e.Reason)
+	if e.Cause != nil {
+		text += ": " + e.Cause.Error()
+	}
+	return text
+}
+
+func (e *Deferred) Unwrap() error { return e.Cause }
+
+type Service struct {
+	db     *db.DB
+	ledger *inference.Service
+	client *anthropic.Client
+	now    func() float64
+	loc    *time.Location
+}
+
+func New(d *db.DB, ledger *inference.Service, client *anthropic.Client, now func() float64, loc *time.Location) *Service {
+	return &Service{db: d, ledger: ledger, client: client, now: now, loc: loc}
+}
+
+func (s *Service) Classify(ctx context.Context, r Request) (json.RawMessage, error) {
+	def, ok := definitions[r.Caller]
+	if !ok {
+		return nil, fmt.Errorf("classifier: unknown caller %q", r.Caller)
+	}
+	if r.Item.Key == "" || strings.TrimSpace(r.System) == "" || strings.TrimSpace(r.User) == "" {
+		return nil, fmt.Errorf("classifier: %s needs an item key, a system prompt and a user prompt", r.Caller)
+	}
+	wire, err := def.wire(r.Caller, r.Schema)
+	if err != nil {
+		return nil, err
+	}
+	if s.client == nil {
+		return nil, &Deferred{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonUnavailable,
+			Cause: errors.New("the Anthropic connection is not configured")}
+	}
+	limits, err := def.caps(ctx, s.db.Read)
+	if err != nil {
+		return nil, err
+	}
+	runID, threadID, err := journal.StartClassification(ctx, s.db, string(r.Caller), r.Item.Key, s.now())
+	if err != nil {
+		return nil, err
+	}
+	out, reason, err := s.run(ctx, r, runID, threadID, wire, def.maxTokens, limits)
+	state := journal.Done
+	if err != nil {
+		state = journal.Failed
+	}
+	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), finishTimeout)
+	defer cancel()
+	if finishErr := journal.FinishClassification(finishCtx, s.db.Write, runID, state, s.now(), reason); finishErr != nil {
+		return nil, errors.Join(err, finishErr)
+	}
+	return out, err
+}
+
+func (s *Service) run(ctx context.Context, r Request, runID, threadID int64, wire json.RawMessage, maxTokens int64, limits caps) (json.RawMessage, string, error) {
+	if limits.runUSD != nil {
+		if err := journal.SetLimits(ctx, s.db.Write, runID, journal.Limits{MaxCostUSD: limits.runUSD, ItemKey: r.Item.Key}); err != nil {
+			return nil, "storage", err
+		}
+	}
+	source := "classifier:" + string(r.Caller)
+	attempt, err := s.ledger.Reserve(ctx, inference.Request{
+		AttemptKey: inference.NewAttemptKey(source),
+		RunID:      runID,
+		ThreadID:   threadID,
+		Kind:       "classification",
+		Source:     source,
+		Class:      inference.Classification,
+		Params: anthropic.Params{
+			Model:     pricing.HaikuID,
+			MaxTokens: maxTokens,
+			System:    json.RawMessage(jsonx.Dumps(r.System)),
+			OutputConfig: &anthropic.OutputConfig{Format: &anthropic.JSONOutputFormat{
+				Type: anthropic.FormatJSONSchema, Schema: wire,
+			}},
+			Messages: []json.RawMessage{json.RawMessage(jsonx.Dumps(map[string]any{"role": "user", "content": r.User}))},
+		},
+		SourceMonthlyCapUSD: limits.monthlyUSD,
+	})
+	var refused inference.BudgetExceeded
+	if errors.As(err, &refused) {
+		return s.refused(ctx, r, refused)
+	}
+	if err != nil {
+		return nil, "reserve", err
+	}
+	outcome := attempt.Create(ctx, s.client)
+	if _, err := s.ledger.Settle(ctx, attempt, inference.Settlement{Outcome: outcome}); err != nil {
+		return nil, "settlement", err
+	}
+	if outcome.Err != nil {
+		if ctx.Err() != nil {
+			return nil, "canceled", ctx.Err()
+		}
+		reason := transportReason(outcome.Err)
+		return nil, reason, &Deferred{Caller: r.Caller, ItemKey: r.Item.Key, Reason: reason, Cause: outcome.Err}
+	}
+	msg := outcome.Message
+	if msg == nil {
+		return nil, ReasonUnavailable, &Deferred{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonUnavailable}
+	}
+	switch msg.StopReason {
+	case "end_turn":
+	case "refusal":
+		return nil, ReasonRefusal, &Deferred{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonRefusal}
+	case "max_tokens":
+		return nil, ReasonTruncated, &Deferred{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonTruncated}
+	default:
+		return nil, ReasonStop, &Deferred{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonStop}
+	}
+	text, err := onlyText(msg.Content)
+	if err == nil {
+		err = anthropic.ValidateJSONOutput(r.Schema, json.RawMessage(text))
+	}
+	if err != nil {
+		return nil, "malformed_output", fmt.Errorf("classifier: %s: %w: %w", r.Caller, httpx.ErrPayload, err)
+	}
+	return json.RawMessage(text), "", nil
+}
+
+func (s *Service) refused(ctx context.Context, r Request, refused inference.BudgetExceeded) (json.RawMessage, string, error) {
+	reason := ReasonRunCap
+	switch refused.Reason {
+	case inference.ReasonMonthly:
+		reason = ReasonBudget
+		if err := s.ledger.RecordClassificationDeferral(ctx, inference.MonthStart(s.now(), s.loc), string(r.Caller), r.Item.Key); err != nil {
+			return nil, "storage", err
+		}
+	case inference.ReasonSourceMonth:
+		reason = ReasonSourceCap
+	}
+	return nil, reason, &Deferred{Caller: r.Caller, ItemKey: r.Item.Key, Reason: reason, Cause: refused}
+}
+
+func transportReason(err error) string {
+	var api *anthropic.APIError
+	switch {
+	case !errors.As(err, &api):
+		return ReasonUnavailable
+	case api.SpendCapped():
+		return ReasonSpendCap
+	case api.StatusCode == http.StatusUnauthorized || api.StatusCode == http.StatusForbidden:
+		return ReasonAuth
+	default:
+		return ReasonUnavailable
+	}
+}
+
+func onlyText(content []json.RawMessage) (string, error) {
+	if len(content) != 1 {
+		return "", fmt.Errorf("reply has %d content blocks, want one text block", len(content))
+	}
+	var b struct {
+		Type string `json:"type"`
+		Text string `json:"text"`
+	}
+	if err := json.Unmarshal(content[0], &b); err != nil {
+		return "", err
+	}
+	if b.Type != "text" {
+		return "", fmt.Errorf("reply block is %q, want text", b.Type)
+	}
+	return b.Text, nil
+}

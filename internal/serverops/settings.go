@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -19,8 +20,8 @@ const (
 	KeyQueryMemory      = "ops_query_mem"
 	KeyQueryDisk        = "ops_query_disk"
 	KeyQueryFailedUnit  = "ops_query_failed_units"
-	KeyWorkerMonthlyUSD = "ops_worker_monthly_usd"
-	KeyWorkerMaxRunUSD  = "ops_worker_max_run_usd"
+	KeyWorkerMonthlyUSD = classifier.OpsMonthlyCapKey
+	KeyWorkerMaxRunUSD  = classifier.OpsRunCapKey
 	KeyCondenser        = "ops_condenser"
 	KeyCondenserModel   = "ops_condenser_model"
 )

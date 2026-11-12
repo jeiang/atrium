@@ -27,6 +27,7 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
+	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/kb/kbcmd"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/ledger/ledgercmd"
@@ -44,6 +45,7 @@ import (
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
+	"github.com/jeiang/atrium/internal/usagepages"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/writes/writescmd"
 )
@@ -84,6 +86,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Module: about.Module(m.Version), Templates: about.Templates(), Nav: []web.NavItem{
 				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},
 			}},
+			{Module: usagepages.Module(), Templates: usagepages.Templates(), Nav: []web.NavItem{
+				{Group: "Instance", Label: "Usage", URL: usagepages.URL, Page: "usage", Settings: true, Order: 60},
+			}},
 			{Module: reviewpages.Module(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
@@ -112,11 +117,14 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	}
 }
 
-func AttentionSources() []attention.Source { return []attention.Source{attentionsources.Proposals()} }
+func AttentionSources() []attention.Source {
+	return []attention.Source{attentionsources.Proposals(), attentionsources.ClassificationBudget()}
+}
 
 func SettingGroups() []settings.Group {
 	return []settings.Group{
 		{Name: "sessions", Title: "Sessions", Page: "/settings/auth", Keys: []string{oidc.KeyIdleDays, oidc.KeyMaxDays}},
+		{Name: "budget", Title: "Monthly budget", Page: usagepages.URL, Keys: []string{inference.BudgetKey, inference.ChatKey, inference.UnattendedKey}},
 	}
 }
 

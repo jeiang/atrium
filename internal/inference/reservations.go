@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -55,6 +56,7 @@ type Request struct {
 	Params     anthropic.Params
 
 	EstimatedPromptTokens int64
+	SourceMonthlyCapUSD   *float64
 }
 
 type RunScope struct {
@@ -273,6 +275,19 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, r Request, p prepared, 
 			}
 		}
 	}
+	if r.SourceMonthlyCapUSD != nil {
+		spent, err := sourceMonthN(ctx, tx, sourceOf(r), month, now)
+		if err != nil {
+			return err
+		}
+		if spent+p.reservation > nanoUSD(*r.SourceMonthlyCapUSD) {
+			return BudgetExceeded{
+				Text: fmt.Sprintf("%s monthly cap: the next request would reserve $%s, with $%s of $%s already committed this month",
+					sourceOf(r), strconvUSD(usdOf(p.reservation)), strconvUSD(usdOf(spent)), strconvUSD(*r.SourceMonthlyCapUSD)),
+				Reason: ReasonSourceMonth, Class: classOf(r), NextMonth: NextMonthStart(now, loc),
+			}
+		}
+	}
 	budget, err := MonthlyBudget(ctx, tx)
 	if err != nil {
 		return err
@@ -333,6 +348,9 @@ func prepare(r Request) (prepared, error) {
 	}
 	if len(r.Params.Messages) == 0 {
 		return prepared{}, errors.New("inference: a reservation needs at least one message")
+	}
+	if c := r.SourceMonthlyCapUSD; c != nil && (math.IsNaN(*c) || math.IsInf(*c, 0) || *c < 0) {
+		return prepared{}, errors.New("inference: a source monthly cap must be a nonnegative amount")
 	}
 	switch r.CacheTTL {
 	case "", prompts.TTL5m, prompts.TTL1h:

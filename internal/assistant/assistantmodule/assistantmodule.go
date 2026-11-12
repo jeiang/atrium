@@ -83,7 +83,6 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Section: "library", Label: "Files", URL: "/library/files", Icon: "paperclip", Page: "library_files", Order: 20},
 				{Section: "library", Label: "Scheduled", URL: "/scheduled", Icon: "clock", Page: "scheduled", Order: 40},
 				{Label: "Assistant", URL: "/settings/assistant", Page: "assistant", Settings: true, Primary: true, PrimaryURL: "/settings", Order: 10},
-				{Group: "Instance", Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 60},
 			},
 		}},
 		Groups:   SettingGroups(),
@@ -114,10 +113,8 @@ func Requirements() []module.Requirement {
 
 func SettingGroups() []settings.Group {
 	return []settings.Group{
-		{Name: "spending", Title: "Spending", Keys: append([]string{
-			inference.BudgetKey, inference.ChatKey, inference.UnattendedKey, inference.ThreadCapKey,
-		}, append(runCaps(), assistant.KeySubagentMaxCostUSD, websearch.KeyMaxCostUSD, assistant.KeyDreamingMaxCost,
-			assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
+		{Name: "spending", Title: "Spending", Keys: append([]string{inference.ThreadCapKey}, append(runCaps(), assistant.KeySubagentMaxCostUSD,
+			websearch.KeyMaxCostUSD, assistant.KeyDreamingMaxCost, assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
 		{Name: "background", Title: "Background work", Keys: []string{
 			assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, websearch.KeyModel,
 			memory.ModelKey, memory.EffortKey, serverops.KeyCondenser,
