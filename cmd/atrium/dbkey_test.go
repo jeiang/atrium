@@ -80,9 +80,9 @@ func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 	if created.code != cli.ExitOK || isPlaintextSQLite(t, encrypted) {
 		t.Fatalf("keyed command on a fresh database exited %d, stderr %q, plaintext header %v; want 0 and an encrypted file", created.code, created.stderr, isPlaintextSQLite(t, encrypted))
 	}
-	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	seedSettingsAt(t, encrypted, map[string]string{module.FlagKey(module.Notion): "true"})
-	setEnv(t, "ATRIUM_DB_KEY", "")
+	if got := runProcess(t, "settings set "+module.FlagKey(module.Notion)+" true", dbEnv(encrypted), keyEnv(rightKeyHex)); got.code != cli.ExitOK {
+		t.Fatalf("enabling notion on the encrypted database exited %d: %s", got.code, got.stderr)
+	}
 
 	k, err := db.ParseKey(rightKeyHex)
 	if err != nil {
