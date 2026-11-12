@@ -35,12 +35,11 @@ func operatorEmbedding(t *testing.T, dir, endpoint, token string) {
 	s.stop()
 }
 
-func operatorOwnedEmbedding(t *testing.T, dir string) {
+func operatorBoot(t *testing.T, dir string) {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	defer func() { _ = d.Close() }()
-	if _, err := d.Write.Exec("UPDATE connections SET config_source = 'operator' WHERE id = 'service/embedding'"); err != nil {
-		t.Fatal(err)
+	setEnv(t, "ATRIUM_HOST_CONFIG", plainHostConfig(t, dir))
+	if listed := runApp(t, "connections", "list"); listed.code != cli.ExitOK {
+		t.Fatalf("materializing the operator embedding: exit %d stdout %q stderr %q", listed.code, listed.stdout, listed.stderr)
 	}
 }
 
@@ -76,8 +75,7 @@ func TestAHostTakeoverCannotMoveAStoredCredentialToAnotherEndpoint(t *testing.T)
 	a, b := newFakeOpenAI(t), newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
 	unsetEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL")
-	operatorOwnedEmbedding(t, dir)
-	setEnv(t, "ATRIUM_HOST_CONFIG", plainHostConfig(t, dir))
+	operatorBoot(t, dir)
 	operatorEmbedding(t, dir, a.URL+"/v1", "token-a")
 	revision, configJSON, source, value := embeddingRow(t, dir)
 
@@ -106,8 +104,7 @@ func TestAHostTakeoverWithTheSameEndpointKeepsTheStoredCredential(t *testing.T) 
 	a, b := newFakeOpenAI(t), newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
 	unsetEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL")
-	operatorOwnedEmbedding(t, dir)
-	setEnv(t, "ATRIUM_HOST_CONFIG", plainHostConfig(t, dir))
+	operatorBoot(t, dir)
 	operatorEmbedding(t, dir, a.URL+"/v1", "token-a")
 
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, a.URL+"/v1", "embeddinggemma", "", ""))
@@ -134,8 +131,7 @@ func TestAHostTakeoverWithACredentialFileForEverySlotIsAllowed(t *testing.T) {
 	a, b := newFakeOpenAI(t), newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
 	unsetEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL")
-	operatorOwnedEmbedding(t, dir)
-	setEnv(t, "ATRIUM_HOST_CONFIG", plainHostConfig(t, dir))
+	operatorBoot(t, dir)
 	operatorEmbedding(t, dir, a.URL+"/v1", "token-a")
 
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, b.URL+"/v1", "embeddinggemma", "", "token-file"))
