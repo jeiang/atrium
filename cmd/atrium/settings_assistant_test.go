@@ -54,8 +54,12 @@ func TestAssistantSettingOrderingAndBuiltinSchedules(t *testing.T) {
 	refused("agent_schedule_weekly_review", "set", "agent_schedule_weekly_review", "*/5 * * * *")
 
 	base := startServeIn(t, dir)
-	_, page, _ := fetch(t, http.DefaultClient, "GET", base+"/scheduled", nil)
-	if !strings.Contains(page, "*/10 * * * *") || strings.Contains(page, "*/20 * * * *") {
+	var page string
+	waitFor(t, func() bool {
+		_, page, _ = fetch(t, http.DefaultClient, "GET", base+"/scheduled", nil)
+		return strings.Contains(page, "*/10 * * * *")
+	})
+	if strings.Contains(page, "*/20 * * * *") {
 		t.Fatalf("GET /scheduled before the override should list the default media sweep schedule: %.800s", page)
 	}
 	accepted("set", "agent_schedule_media_sweep", "*/20 * * * *")
