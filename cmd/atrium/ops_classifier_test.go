@@ -241,13 +241,16 @@ func TestOpsSamplerClassifiesAChangeInOneFixedHaikuRequest(t *testing.T) {
 	}
 }
 
-func TestOpsInvalidReplyIsSettledAndRetriedOnce(t *testing.T) {
+func TestOpsChargedFailureIsRetriedOnceThenHeldUntilTheChangeSetChanges(t *testing.T) {
 	_, fake, api, f, d := opsClassifierFixture(t, nil)
 	before := len(api.Requests())
 	fake.setUp(0)
-	api.PushJSON(anthropictest.Reply("end_turn", anthropictest.Text(
-		`{"findings":[{"fact":"node-a:up","severity":"urgent","title":"Host node-a is down","body":"down"}]}`)).
-		WithUsage(anthropictest.Usage{Input: 900, Output: 40}))
+	invalid := func() anthropictest.Response {
+		return anthropictest.Reply("end_turn", anthropictest.Text(
+			`{"findings":[{"fact":"node-a:up","severity":"urgent","title":"Host node-a is down","body":"down"}]}`)).
+			WithUsage(anthropictest.Usage{Input: 900, Output: 40})
+	}
+	api.PushJSON(invalid())
 	tickOpsSampler(t, f, d)
 	if got := len(api.Requests()) - before; got != 1 {
 		t.Fatalf("requests = %d, want one", got)
@@ -266,18 +269,24 @@ func TestOpsInvalidReplyIsSettledAndRetriedOnce(t *testing.T) {
 	if status := lastSamplerStatus(t, d); status != "error" {
 		t.Errorf("sampler status after a schema violation = %q, want error", status)
 	}
-	api.PushJSON(hostDownFinding())
+	api.PushJSON(invalid())
 	tickOpsSampler(t, f, d)
 	if got := len(api.Requests()) - before; got != 2 {
-		t.Fatalf("requests after the retry = %d, want two", got)
+		t.Fatalf("requests after the one retry = %d, want two", got)
 	}
-	if _, _, found := workerFinding(t, d, "node-a:up"); !found {
-		t.Errorf("the retry filed no finding")
-	}
-	quiet := len(api.Requests())
 	tickOpsSampler(t, f, d)
-	if len(api.Requests()) != quiet {
-		t.Errorf("a settled retry was retried again: %d calls", len(api.Requests())-quiet)
+	tickOpsSampler(t, f, d)
+	if got := len(api.Requests()) - before; got != 2 {
+		t.Fatalf("a twice-charged change set was retried again: %d requests, want two", got)
+	}
+	if count, settled, _ := classificationUsage(t, d); count != 2 || settled != 2 {
+		t.Errorf("classification usage after the held retries = %d rows, %d settled, want two", count, settled)
+	}
+	fake.setUp(1)
+	api.PushJSON(anthropictest.JSON(map[string]any{"findings": []map[string]any{}}))
+	tickOpsSampler(t, f, d)
+	if got := len(api.Requests()) - before; got != 3 {
+		t.Fatalf("requests after the change set changed = %d, want three", got)
 	}
 }
 
@@ -348,6 +357,14 @@ func TestOpsSourceCapRefusesWithoutADeferral(t *testing.T) {
 	}
 	if items := classificationItems(t, f, d); len(items) != 0 {
 		t.Errorf("attention after a source cap refusal = %+v, want none", items)
+	}
+	ctx := config.With(settings.With(context.Background(), f.settings), f.state)
+	ops, err := attention.Query(ctx, d.Read, float64(time.Now().Unix()), serverops.AttentionSource(fixtureEnv(f)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ops.Items) != 1 || ops.Items[0].Kind != "ops_budget" {
+		t.Errorf("ops attention after a source cap refusal at a positive cap = %+v, want one ops_budget item", ops.Items)
 	}
 	if status := lastSamplerStatus(t, d); status != "skipped_budget" {
 		t.Errorf("sampler status = %q, want skipped_budget", status)

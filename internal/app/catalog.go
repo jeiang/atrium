@@ -33,7 +33,7 @@ type Dependencies struct {
 
 func Builtins(d Dependencies) []module.Builder {
 	holder := &jobworker.Holder{}
-	jobs := jobworker.Dependencies{Service: holder.Service, Classifier: (&classifiers{}).For, Now: d.Now, Attention: attentionSources}
+	jobs := jobworker.Dependencies{Service: holder.Service, Classifier: classifierFor, Now: d.Now, Attention: attentionSources}
 	return []module.Builder{
 		coremodule.Module{Version: d.Version, Guard: d.Guard, Clients: d.Clients, Now: d.Now},
 		contactsmodule.Module{},

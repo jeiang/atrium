@@ -35,7 +35,10 @@ type change struct {
 type delta struct {
 	Changes []change `json:"changes"`
 	Pending bool     `json:"pending,omitempty"`
+	Charged int      `json:"charged,omitempty"`
 }
+
+const maxChargedAttempts = 2
 
 type sample struct {
 	host, metric string
@@ -81,7 +84,7 @@ func Supervise(ctx context.Context, e jobworker.Env) error {
 			if err != nil {
 				return err
 			}
-			if last != nil && last.Pending && len(last.Changes) > 0 {
+			if last != nil && last.Pending && len(last.Changes) > 0 && last.Charged < maxChargedAttempts {
 				changes = last.Changes
 				retrying = true
 			}
@@ -249,10 +252,11 @@ func fingerprint(changes []change) string {
 	return strings.Join(parts, ";")
 }
 
-func deltaText(changes []change) (string, tool.Marks) { return deltaMessage(changes, false) }
+func deltaText(changes []change) (string, tool.Marks) { return deltaMessage(delta{Changes: changes}) }
 
-func deltaMessage(changes []change, pending bool) (string, tool.Marks) {
-	payload, err := json.Marshal(delta{Changes: changes, Pending: pending})
+func deltaMessage(d delta) (string, tool.Marks) {
+	changes := d.Changes
+	payload, err := json.Marshal(d)
 	if err != nil {
 		payload = []byte(`{"changes":[]}`)
 	}
