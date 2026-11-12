@@ -55,13 +55,15 @@ func newAppWith(env config.Env, clients func(config.Config) mail.OpenFunc, now f
 	guard := func(ctx context.Context, q db.Querier, key, value string) error {
 		return set.Guard(ctx, q, key, value)
 	}
+	bind := app.NewBindings(env, mc.Tools, now)
 	cat, err := app.Catalog(app.Dependencies{
-		Version: version,
-		Guard:   guard,
-		Clients: clients,
-		Now:     now,
-		Env:     env,
-		Budget:  budgetStatus,
+		Version:  version,
+		Guard:    guard,
+		Clients:  clients,
+		Now:      now,
+		Env:      env,
+		Budget:   budgetStatus,
+		Bindings: bind,
 	}, mc)
 	if err != nil {
 		panic(err)
@@ -88,7 +90,7 @@ func newAppWith(env config.Env, clients func(config.Config) mail.OpenFunc, now f
 	c.State = st
 	c.SetupContext = func(ctx context.Context) context.Context { return cat.Context(module.WithSet(ctx, set)) }
 	c.Bootstrap = bootstrap(env, reg)
-	c.Add(append(append(set.Commands(), connections.Command(env)), web.ServeCommand(set, set.Pages()...))...)
+	c.Add(append(append(set.Commands(), connections.Command(env)), web.ServeCommand(bind.ServeBoot(), set.Pages()...))...)
 	return c
 }
 

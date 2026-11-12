@@ -213,7 +213,15 @@ behavior-parity target.
   on each usage row, and a model outside the catalog fails closed. The API key is
   a write-only secret setting on the `service/anthropic` connection, or the
   connection's `credential_files.api_key` host file; `ANTHROPIC_API_KEY` is
-  refused at startup. The
+  refused at startup. The assistant module does not require the key: without
+  it the module stays on, chat and paid scheduled runs are refused as not
+  configured (jobs record `skipped_unconfigured`, with no model request or
+  reservation), model-free jobs and the Scheduled, settings and Export pages
+  keep working, and `/settings/connections` shows the Anthropic credential as
+  unset. One live-run service per process, built by the application with its
+  effect ledger store and runner, serves chat pages, tools, jobs and the
+  `agent run`/`tick`/`scheduler` commands; the application drains it, then
+  that store, before closing the database. The
   monthly budget defaults to $150 with scheduled runs paused at 80% and chat at
   95%; the last 5% is reserved for classification. Every paid model call,
   memory summaries included, reserves its full cold prompt plus the request's

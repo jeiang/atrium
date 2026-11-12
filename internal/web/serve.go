@@ -83,29 +83,9 @@ type Resource struct {
 	Mount Module
 }
 
-// Boot opens the application database and starts the modules that own it.
-// The serve command calls Open once, then Start after the modules are
-// registered and before the listener opens.
 type Boot interface {
-	Open(context.Context) (*db.DB, config.Config, error)
+	Open(context.Context) (context.Context, *db.DB, config.Config, func() error, error)
 	Start(context.Context, *Deps) error
-}
-
-// BootFunc adapts functions to Boot.
-type BootFunc struct {
-	OpenFunc  func(context.Context) (*db.DB, config.Config, error)
-	StartFunc func(context.Context, *Deps) error
-}
-
-func (b BootFunc) Open(ctx context.Context) (*db.DB, config.Config, error) {
-	return b.OpenFunc(ctx)
-}
-
-func (b BootFunc) Start(ctx context.Context, d *Deps) error {
-	if b.StartFunc == nil {
-		return nil
-	}
-	return b.StartFunc(ctx, d)
 }
 
 func ServeCommand(boot Boot, pages ...Page) *cli.Command {
@@ -198,11 +178,15 @@ func serve(env *cli.Env, a serveArgs) int {
 }
 
 func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error {
-	d, cfg, err := a.boot.Open(ctx)
+	ctx, d, cfg, closeApp, err := a.boot.Open(ctx)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = d.Close() }()
+	defer func() {
+		if err := closeApp(); err != nil {
+			log.Warn("could not drain the application before closing the database", logx.Err, err.Error())
+		}
+	}()
 	if _, err := a.state.Location(a.env); err != nil {
 		return fmt.Errorf("the tz setting is not a time zone: %w", err)
 	}

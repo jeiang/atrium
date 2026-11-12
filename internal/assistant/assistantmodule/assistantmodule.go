@@ -1,8 +1,6 @@
 package assistantmodule
 
 import (
-	"context"
-	"errors"
 	"slices"
 
 	"github.com/jeiang/atrium/internal/assistant"
@@ -40,7 +38,6 @@ import (
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/inference/opsmetrics"
 	"github.com/jeiang/atrium/internal/kb"
@@ -59,7 +56,7 @@ type Module struct {
 	ProposeKinds []proposals.Definition
 	Now          func() float64
 	Jobs         jobworker.Dependencies
-	Holder       *jobworker.Holder
+	Open         agentcmd.Open
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
@@ -73,9 +70,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Attention: AttentionSources(mc.Env),
 		Metrics:   opsmetrics.Metrics(),
 		Jobs:      Jobs(m.Jobs),
-		Requires:  Requirements(),
 		Pages: []web.Page{{
-			Module:    chatpages.Module(chatpages.Options{Tools: mc.Tools}),
+			Module:    chatpages.Module(chatpages.Options{Service: m.Jobs.Service}),
 			Templates: chatpages.Templates(),
 			Home:      "/chat",
 			Nav: []web.NavItem{
@@ -88,7 +84,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			},
 		}},
 		Groups:   SettingGroups(),
-		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Holder), memorycmd.Command(mc.Env, m.Now)},
+		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Open), memorycmd.Command(mc.Env, m.Now)},
 		Tools:    ToolDefinitions(m.ProposeKinds),
 		Effects: func(d module.EffectDeps) module.Effects {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, MailOpen: d.Open, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
@@ -109,10 +105,6 @@ func AttentionSources(env config.Env) []attention.Source {
 	}
 }
 
-func Requirements() []module.Requirement {
-	return []module.Requirement{{Name: "the Anthropic connection", Check: anthropicKey}}
-}
-
 func SettingGroups() []settings.Group {
 	return []settings.Group{
 		{Name: "spending", Title: "Spending", Keys: append([]string{
@@ -124,22 +116,6 @@ func SettingGroups() []settings.Group {
 			memory.ModelKey, memory.EffortKey, serverops.KeyCondenser,
 		}},
 	}
-}
-
-func anthropicKey(ctx context.Context, p module.Probe) (string, error) {
-	lease, err := connections.OpenRead(ctx, p.Q, config.From(ctx).Host(), connections.ID(anthropicconn.Kind))
-	if err != nil {
-		var unknown connections.UnknownID
-		if errors.As(err, &unknown) {
-			return "the Anthropic connection is not configured", nil
-		}
-		return "", err
-	}
-	defer lease.Close()
-	if _, err := lease.Credential("api_key"); err != nil {
-		return "the Anthropic connection has no API key", nil
-	}
-	return "", nil
 }
 
 func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {

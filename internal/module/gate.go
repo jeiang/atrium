@@ -239,8 +239,6 @@ func skip(path string, st Status, msg string) {
 	log.Info(msg, logx.Module, st.Name, logx.State, string(st.State), logx.Reason, st.Reason(), logx.Command, strings.TrimSpace(path))
 }
 
-// Open returns the application database from the opener the application
-// injected. It is the serve command's only path to the application database.
 func (s *Set) Open(ctx context.Context) (*db.DB, config.Config, error) {
 	return s.opener(ctx)
 }

@@ -2,18 +2,25 @@ package app
 
 import (
 	"context"
+	"errors"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/module"
 )
+
+var log = logx.Logger("atrium.app")
 
 type App struct {
 	key     db.Key
 	db      *db.DB
+	env     config.Env
 	config  config.Config
 	state   *config.State
 	catalog *module.Catalog
+	live    *liveRun
+	unbind  func()
 }
 
 func Open(ctx context.Context, env config.Env, cat *module.Catalog) (*App, error) {
@@ -31,7 +38,7 @@ func Open(ctx context.Context, env config.Env, cat *module.Catalog) (*App, error
 		_ = d.Close()
 		return nil, err
 	}
-	return &App{key: k, db: d, config: cfg, state: st, catalog: cat}, nil
+	return &App{key: k, db: d, env: env, config: cfg, state: st, catalog: cat}, nil
 }
 
 func (a *App) Key() db.Key { return a.key }
@@ -44,4 +51,13 @@ func (a *App) State() *config.State { return a.state }
 
 func (a *App) Catalog() *module.Catalog { return a.catalog }
 
-func (a *App) Close() error { return a.db.Close() }
+func (a *App) Close() error {
+	if a.unbind != nil {
+		a.unbind()
+	}
+	var err error
+	if a.live != nil {
+		err = a.live.drain()
+	}
+	return errors.Join(err, a.db.Close())
+}

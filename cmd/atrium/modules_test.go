@@ -751,7 +751,6 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 		{module.Mail, "mail_chat_url is not set"},
 		{module.Calendar, "iCloud CalDAV login or Google Calendar credentials"},
 		{module.Media, "media_root is not set"},
-		{module.Assistant, "the Anthropic connection has no API key"},
 		{module.Contacts, "contacts_dir is not set"},
 		{module.Grafana, "the Grafana connection is not configured"},
 		{module.Grafana, "needs assistant"},
@@ -762,6 +761,11 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 		}
 		if v, ok := storedSetting(t, filepath.Join(dir, "atrium.db"), module.FlagKey(tc.module)); ok {
 			t.Errorf("%s_enabled stored as %q after a refusal", tc.module, v)
+		}
+	}
+	for _, value := range []string{"true", "false"} {
+		if got := runSettings(t, "set", module.FlagKey(module.Assistant), value); got.code != cli.ExitOK {
+			t.Errorf("setting assistant %s without an Anthropic API key: exit %d stderr %q", value, got.code, got.stderr)
 		}
 	}
 	for name, value := range requirementEnv(filepath.Join(dir, "media")) {
