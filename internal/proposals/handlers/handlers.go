@@ -53,22 +53,30 @@ func Register(r *proposals.Registry, deps Deps) {
 }
 
 func registerPermission(r *proposals.Registry, resume func(ctx context.Context, runID int64) error) {
-	r.Executors[permission.Kind] = func(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
-		var payload permission.Payload
-		if err := json.Unmarshal(p.Payload, &payload); err != nil {
-			return nil, err
-		}
-		if err := resume(ctx, payload.RunID); err != nil {
-			return nil, err
-		}
-		return map[string]any{"summary": "Permission request approved"}, nil
+	for _, d := range permissionProposals(resume) {
+		r.Add(d)
 	}
-	r.AddKind(proposals.Kind{Name: permission.Kind, Module: module.Assistant, Label: "Permission request", Icon: "lock", Approval: true})
-	r.Dismissers[permission.Kind] = func(ctx context.Context, p *proposals.Proposal) error {
-		var payload permission.Payload
-		if err := json.Unmarshal(p.Payload, &payload); err != nil {
-			return err
-		}
-		return resume(ctx, payload.RunID)
-	}
+}
+
+func permissionProposals(resume func(ctx context.Context, runID int64) error) []proposals.Definition {
+	return []proposals.Definition{{
+		Kind: proposals.Kind{Name: permission.Kind, Module: module.Assistant, Label: "Permission request", Icon: "lock", Approval: true},
+		Execute: func(ctx context.Context, p *proposals.Proposal, _ any) (any, error) {
+			var payload permission.Payload
+			if err := json.Unmarshal(p.Payload, &payload); err != nil {
+				return nil, err
+			}
+			if err := resume(ctx, payload.RunID); err != nil {
+				return nil, err
+			}
+			return map[string]any{"summary": "Permission request approved"}, nil
+		},
+		Dismiss: func(ctx context.Context, p *proposals.Proposal) error {
+			var payload permission.Payload
+			if err := json.Unmarshal(p.Payload, &payload); err != nil {
+				return err
+			}
+			return resume(ctx, payload.RunID)
+		},
+	}}
 }

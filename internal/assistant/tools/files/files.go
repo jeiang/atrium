@@ -244,8 +244,8 @@ func jsonOf(v any) json.RawMessage {
 	return b
 }
 
-func RegisterLedgerUndoer(s *ledger.Store) error {
-	return s.RegisterUndo(UndoOp, ledger.Undoer{
+func Undo() []ledger.UndoDefinition {
+	return []ledger.UndoDefinition{{Operation: UndoOp, Undoer: ledger.Undoer{
 		Validate: func(payload json.RawMessage) error {
 			var p struct {
 				Path string `json:"path"`
@@ -291,7 +291,16 @@ func RegisterLedgerUndoer(s *ledger.Store) error {
 			}
 			return ledger.Result{State: ledger.Done, After: jsonOf("restored")}, nil
 		},
-	})
+	}}}
+}
+
+func RegisterLedgerUndoer(s *ledger.Store) error {
+	for _, d := range Undo() {
+		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func argName(args tool.Args) (string, error) {

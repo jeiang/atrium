@@ -321,51 +321,52 @@ func restoreFile(u fileUndo) error {
 	return writePath(u.Path, []byte(*u.Before))
 }
 
-func RegisterLedgerObsidian(s *ledger.Store) error {
-	if err := s.RegisterResolve("obsidian_write", func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
-		if r.Outcome != "applied" && r.Outcome != "partial" {
+func obsidianResolves(s *ledger.Store) []ledger.ResolveDefinition {
+	return []ledger.ResolveDefinition{
+		{Operation: "obsidian_write", Hook: func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
+			if r.Outcome != "applied" && r.Outcome != "partial" {
+				return nil
+			}
+			var action struct {
+				Hash     string `json:"hash"`
+				Path     string `json:"path"`
+				RecordID int64  `json:"record_id"`
+				Mapping  bool   `json:"mapping"`
+			}
+			if err := json.Unmarshal(e.Action, &action); err != nil {
+				return err
+			}
+			if !action.Mapping || action.Hash == "" || action.Path == "" {
+				return nil
+			}
+			return savePage(ctx, tx, TargetObsidian, action.RecordID, action.Path, action.Hash, s.Now())
+		}},
+		{Operation: "obsidian_remove", Hook: func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
+			if r.Outcome != "applied" && r.Outcome != "partial" {
+				return nil
+			}
+			var action struct {
+				RecordID int64  `json:"record_id"`
+				Retract  bool   `json:"retract"`
+				NextPath string `json:"next_path"`
+				NextHash string `json:"next_hash"`
+			}
+			if err := json.Unmarshal(e.Action, &action); err != nil {
+				return err
+			}
+			if action.Retract {
+				return deletePage(ctx, tx, TargetObsidian, action.RecordID)
+			}
+			if action.NextPath != "" {
+				return savePage(ctx, tx, TargetObsidian, action.RecordID, action.NextPath, action.NextHash, s.Now())
+			}
 			return nil
-		}
-		var action struct {
-			Hash     string `json:"hash"`
-			Path     string `json:"path"`
-			RecordID int64  `json:"record_id"`
-			Mapping  bool   `json:"mapping"`
-		}
-		if err := json.Unmarshal(e.Action, &action); err != nil {
-			return err
-		}
-		if !action.Mapping || action.Hash == "" || action.Path == "" {
-			return nil
-		}
-		return savePage(ctx, tx, TargetObsidian, action.RecordID, action.Path, action.Hash, s.Now())
-	}); err != nil {
-		return err
+		}},
 	}
-	if err := s.RegisterResolve("obsidian_remove", func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
-		if r.Outcome != "applied" && r.Outcome != "partial" {
-			return nil
-		}
-		var action struct {
-			RecordID int64  `json:"record_id"`
-			Retract  bool   `json:"retract"`
-			NextPath string `json:"next_path"`
-			NextHash string `json:"next_hash"`
-		}
-		if err := json.Unmarshal(e.Action, &action); err != nil {
-			return err
-		}
-		if action.Retract {
-			return deletePage(ctx, tx, TargetObsidian, action.RecordID)
-		}
-		if action.NextPath != "" {
-			return savePage(ctx, tx, TargetObsidian, action.RecordID, action.NextPath, action.NextHash, s.Now())
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
-	return s.RegisterUndo(UndoObsidianRestore, ledger.Undoer{
+}
+
+func obsidianUndo(s *ledger.Store) []ledger.UndoDefinition {
+	return []ledger.UndoDefinition{{Operation: UndoObsidianRestore, Undoer: ledger.Undoer{
 		Validate: func(raw json.RawMessage) error {
 			var u fileUndo
 			if err := json.Unmarshal(raw, &u); err != nil || u.Path == "" {
@@ -394,7 +395,16 @@ func RegisterLedgerObsidian(s *ledger.Store) error {
 			_, err := tx.ExecContext(ctx, "DELETE FROM export_pages WHERE target = ? AND remote_id = ?", TargetObsidian, rel)
 			return err
 		},
-	})
+	}}}
+}
+
+func RegisterLedgerObsidian(s *ledger.Store) error {
+	for _, d := range Undo(s) {
+		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func slug(title string) string {

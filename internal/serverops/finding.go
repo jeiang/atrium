@@ -145,8 +145,8 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 	return map[string]any{"id": u.ID, "deleted": true}, nil
 }
 
-func RegisterLedgerUndoer(s *ledger.Store) error {
-	return s.RegisterUndo(FindingUndoOp, ledger.Undoer{
+func Undo() []ledger.UndoDefinition {
+	return []ledger.UndoDefinition{{Operation: FindingUndoOp, Undoer: ledger.Undoer{
 		Validate: func(payload json.RawMessage) error {
 			var u findingUndo
 			if err := json.Unmarshal(payload, &u); err != nil {
@@ -164,5 +164,14 @@ func RegisterLedgerUndoer(s *ledger.Store) error {
 			}
 			return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
 		},
-	})
+	}}}
+}
+
+func RegisterLedgerUndoer(s *ledger.Store) error {
+	for _, d := range Undo() {
+		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
+			return err
+		}
+	}
+	return nil
 }

@@ -107,6 +107,16 @@ type Undoer struct {
 
 type ResolveHook func(context.Context, *sql.Tx, Effect, Resolution) error
 
+type UndoDefinition struct {
+	Operation string
+	Undoer    Undoer
+}
+
+type ResolveDefinition struct {
+	Operation string
+	Hook      ResolveHook
+}
+
 type Store struct {
 	DB       *db.DB
 	now      func() float64

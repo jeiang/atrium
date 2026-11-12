@@ -9,15 +9,13 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
 const Name = "propose"
 
-type Builder struct {
-	Description string
-	Build       func(ctx context.Context, tc *tool.Context, payload map[string]any) (*int64, error)
-}
+type Builder = proposals.Builder
 
 var (
 	mu    sync.RWMutex

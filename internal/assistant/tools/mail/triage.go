@@ -18,10 +18,22 @@ import (
 	"github.com/jeiang/atrium/internal/tool"
 )
 
+func Proposals() []proposals.Definition {
+	return []proposals.Definition{{
+		Kind: proposals.Kind{Name: executors.MailTriage},
+		Build: &proposals.Builder{
+			Description: "{items: [{id, action, label?, due?}]}: propose archive, label or snooze for a batch of messages; one proposal per run",
+			Build:       proposeTriage,
+		},
+	}}
+}
+
 func RegisterProposalKinds() {
-	proposetools.Register(executors.MailTriage,
-		"{items: [{id, action, label?, due?}]}: propose archive, label or snooze for a batch of messages; one proposal per run",
-		proposeTriage)
+	for _, d := range Proposals() {
+		if d.Build != nil {
+			proposetools.Register(d.Kind.Name, d.Build.Description, d.Build.Build)
+		}
+	}
 }
 
 type triageRequest struct {

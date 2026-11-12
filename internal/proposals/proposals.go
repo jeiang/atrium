@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 const (
@@ -35,6 +36,18 @@ type Kind struct {
 
 type DismissHook func(ctx context.Context, p *Proposal) error
 
+type Builder struct {
+	Description string
+	Build       func(ctx context.Context, tc *tool.Context, payload map[string]any) (*int64, error)
+}
+
+type Definition struct {
+	Kind    Kind
+	Execute Executor
+	Dismiss DismissHook
+	Build   *Builder
+}
+
 type Registry struct {
 	Executors  map[string]Executor
 	Dismissers map[string]DismissHook
@@ -53,6 +66,16 @@ func (r *Registry) AddKind(k Kind) {
 	}
 	r.byName[k.Name] = k
 	r.kinds = append(r.kinds, k)
+}
+
+func (r *Registry) Add(d Definition) {
+	if d.Execute != nil {
+		r.Executors[d.Kind.Name] = d.Execute
+	}
+	if d.Dismiss != nil {
+		r.Dismissers[d.Kind.Name] = d.Dismiss
+	}
+	r.AddKind(d.Kind)
 }
 
 func (r *Registry) Kinds() []Kind { return r.kinds }
