@@ -157,7 +157,9 @@ func FlagAccount(ctx context.Context, d *db.DB, account string, judge *classify.
 			switch {
 			case paid.Note(err):
 			case err != nil:
-				return done, err
+				if _, unanswered := classify.Unanswered(err); !unanswered {
+					return done, err
+				}
 			default:
 				judged = true
 			}

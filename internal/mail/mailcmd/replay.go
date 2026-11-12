@@ -113,7 +113,12 @@ func (o Options) replayModel(ctx context.Context, cfg config.Config, source *sql
 		return replay.Result{}, err
 	}
 	defer func() { err = errors.Join(err, d.Close()) }()
-	c, err := o.Classifiers(ctx, o.env(), d, cfg, o.Now)
+	ledger, err := db.Connect(cfg.DBPath, db.WithKey(key))
+	if err != nil {
+		return replay.Result{}, err
+	}
+	defer func() { err = errors.Join(err, ledger.Close()) }()
+	c, err := o.Classifiers(ctx, o.env(), ledger, cfg, o.Now)
 	if err != nil {
 		return replay.Result{}, err
 	}

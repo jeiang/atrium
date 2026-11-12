@@ -166,10 +166,7 @@ func TestMailPassRefusesAFolderOutsideTheCatalog(t *testing.T) {
 	const subject = "Order confirmation 55123"
 	r := newRoutingRig(t, "shadow", folderAnswers(t, map[string]string{subject: `{"folder":"Elsewhere","confident":true}`}), subject)
 	target := r.targets[0]
-	ran := runApp(t, "sync")
-	if ran.code == cli.ExitOK {
-		t.Fatalf("a folder outside the catalog was accepted: stderr %q", ran.stderr)
-	}
+	r.run(t, "sync")
 	if n := r.decisions(t, target.id); n != 0 {
 		t.Fatalf("the refused folder produced %d decisions", n)
 	}
@@ -305,7 +302,7 @@ func TestMailReplayModelClassifiesOnADisposableCopy(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t, loadGoldenData(t), nil, "")
 	dbPath := filepath.Join(f.dir, "atrium.db")
-	before := fileDigest(t, dbPath)
+	before := domainDigests(t, dbPath)
 
 	var imapOpens, embedCalls atomic.Int64
 	clients := func(config.Config) mail.OpenFunc {
@@ -357,8 +354,44 @@ func TestMailReplayModelClassifiesOnADisposableCopy(t *testing.T) {
 	if again.code != cli.ExitOK || again.stdout != plain.stdout || again.stderr != plain.stderr {
 		t.Fatalf("replay without --model changed after a model replay:\nstdout %q\nstderr %q", again.stdout, again.stderr)
 	}
-	if after := fileDigest(t, dbPath); after != before {
-		t.Errorf("replay --model changed the database: %s -> %s", before, after)
+	if after := domainDigests(t, dbPath); !maps.Equal(after, before) {
+		for name, digest := range after {
+			if before[name] != digest {
+				t.Errorf("replay --model changed domain table %s", name)
+			}
+		}
+	}
+	real := mustConnect(t, dbPath, keyFor(t))
+	countReal := func(query string) int {
+		t.Helper()
+		var n int
+		if err := real.Read.QueryRow(query).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	paid := len(requests())
+	if n := countReal("SELECT COUNT(*) FROM usage WHERE source = 'classifier:mail_folder' AND state = 'settled' AND budget_class = 'classification'"); n != paid || paid == 0 {
+		t.Errorf("the real ledger holds %d settled folder classifications for %d paid requests", n, paid)
+	}
+	if n := countReal("SELECT COUNT(*) FROM runs r JOIN threads t ON t.id = r.thread_id WHERE t.role = 'classification:mail_folder' AND r.state = 'done'"); n != paid {
+		t.Errorf("the real database holds %d accounting runs for %d paid requests", n, paid)
+	}
+	var spent float64
+	if err := real.Read.QueryRow("SELECT COALESCE(SUM(accounted_nusd), 0) FROM usage WHERE month = (SELECT month FROM usage WHERE source = 'classifier:mail_folder' ORDER BY id DESC LIMIT 1)").Scan(&spent); err != nil {
+		t.Fatal(err)
+	}
+	if set := run("settings", "set", "monthly_budget_usd", strconv.FormatFloat(spent/1e9, 'f', 9, 64)); set.code != cli.ExitOK {
+		t.Fatalf("settings set: exit %d stderr %q", set.code, set.stderr)
+	}
+	if refused := run("replay", "--model"); refused.code != cli.ExitOK {
+		t.Fatalf("replay --model with the budget spent: exit %d stderr %q", refused.code, refused.stderr)
+	}
+	if n := len(requests()); n != paid {
+		t.Errorf("a replay after the first one spent the budget sent %d more paid requests", n-paid)
+	}
+	if n := countReal("SELECT COUNT(*) FROM inference_classification_deferrals WHERE last_caller = 'mail_folder'"); n != 1 {
+		t.Errorf("the refused replay recorded %d budget deferrals in the real database, want 1", n)
 	}
 	if n := imapOpens.Load(); n != 0 {
 		t.Errorf("replay --model opened IMAP %d times", n)
@@ -373,7 +406,7 @@ func TestMailReplayModelClassifiesOnADisposableCopy(t *testing.T) {
 	}
 	script := mailscript.Load(t)
 	wanted := map[string]int{}
-	for _, req := range requests() {
+	for _, req := range requests()[:paid] {
 		body := req.JSON(t)
 		if caller := callerOf(t, body); caller != folderCaller {
 			t.Fatalf("replay --model sent a %s request", caller)
@@ -416,7 +449,7 @@ func TestMailReplayModelClassifiesOnADisposableCopy(t *testing.T) {
 			t.Errorf("an asked message replayed at %q under --model", m.Stage)
 		}
 	}
-	if asked != 2 || len(requests()) != asked || fmt.Sprint(got) != fmt.Sprint(wanted) {
+	if asked != 2 || paid != asked || fmt.Sprint(got) != fmt.Sprint(wanted) {
 		t.Errorf("model replay: %d asked, %d requests, decisions %v, want the recorded answers %v", asked, len(requests()), got, wanted)
 	}
 	if !strings.Contains(model.stderr, "messages replayed: 26") {

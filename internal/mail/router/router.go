@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -202,6 +203,7 @@ func NewLLMContext(ctx context.Context, q Querier, account string, folderMin int
 	if err != nil {
 		return LLMContext{}, err
 	}
+	folders = slices.DeleteFunc(folders, func(f string) bool { return !classify.Askable(f) })
 	if len(folders) == 0 {
 		return LLMContext{Folders: []string{}, Paid: paid}, nil
 	}
@@ -284,10 +286,14 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 		if lc.Paid.Note(err) {
 			return nil, nil
 		}
-		if err != nil {
+		final, unanswered := classify.Unanswered(err)
+		switch {
+		case unanswered && !final:
+			return nil, nil
+		case unanswered:
+		case err != nil:
 			return nil, err
-		}
-		if folder != classify.Uncertain {
+		case folder != classify.Uncertain:
 			return &Decision{Stage: "llm", Action: string(rules.ActionFile), Dest: new(folder), Key: new("chat"), Detail: map[string]any{"confident": confident}}, nil
 		}
 	}
