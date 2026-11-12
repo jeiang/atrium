@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 )
 
 func classifierFor(ctx context.Context, svc *service.Service) (*classifier.Service, error) {
@@ -16,7 +17,7 @@ func classifierFor(ctx context.Context, svc *service.Service) (*classifier.Servi
 		now = assistant.Now
 	}
 	client, err := svc.ResolveClient(ctx)
-	if missing := new(config.NotConfigured); errors.As(err, missing) {
+	if missing, unknown := new(config.NotConfigured), new(connections.UnknownID); errors.As(err, missing) || errors.As(err, unknown) {
 		client, err = nil, nil
 	}
 	if err != nil {
