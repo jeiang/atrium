@@ -51,6 +51,11 @@ settings the operator edits in the UI or pins from the host.
   uses a real temporary database when persistence is involved.
 - External services may use local fakes. Do not replace the internal behavior
   under test with mocks or stubs.
+- `just e2e` and the Linux `go-test` checks run the tests through
+  `tools/e2e-loopback`: a fresh network namespace on Linux, `sandbox-exec`
+  on macOS. Only loopback and local sockets are reachable, so a test that
+  needs any other address fails. A plain `go test` skips the `TestEgress`
+  containment tests.
 - Direct helper, parser, query, repository, or component tests do not qualify.
   Checking source text or internal call wiring does not qualify.
 - Test observable results, state transitions, refusals, and failure outcomes.
