@@ -23,26 +23,26 @@ import (
 )
 
 type Dependencies struct {
-	Version string
-	Guard   func(context.Context, db.Querier, string, string) error
-	Clients func(config.Config) mail.OpenFunc
-	Now     func() float64
-	Env     config.Env
-	Budget  notify.BudgetStatus
+	Version  string
+	Guard    func(context.Context, db.Querier, string, string) error
+	Clients  func(config.Config) mail.OpenFunc
+	Now      func() float64
+	Env      config.Env
+	Budget   notify.BudgetStatus
+	Bindings *Bindings
 }
 
 func Builtins(d Dependencies) []module.Builder {
-	holder := &jobworker.Holder{}
-	jobs := jobworker.Dependencies{Service: holder.Service, Now: d.Now, Attention: attentionSources}
+	jobs := jobworker.Dependencies{Service: d.Bindings.Assistant, Now: d.Now, Attention: attentionSources}
 	return []module.Builder{
-		coremodule.Module{Version: d.Version, Guard: d.Guard, Clients: d.Clients, Now: d.Now},
+		coremodule.Module{Version: d.Version, Guard: d.Guard, Clients: d.Clients, Now: d.Now, Resources: d.Bindings.Resources},
 		contactsmodule.Module{},
 		mailmodule.Module{Clients: d.Clients, Now: d.Now, Jobs: jobs},
 		calendarmodule.Module{Jobs: jobs},
 		notionmodule.Module{Env: d.Env},
 		mediamodule.Module{Now: d.Now, Jobs: jobs},
-		assistantmodule.Module{Now: d.Now, ProposeKinds: mailtools.Proposals(), Holder: holder, Jobs: jobs},
-		notifymodule.Module{Budget: d.Budget},
+		assistantmodule.Module{Now: d.Now, ProposeKinds: mailtools.Proposals(), Open: d.Bindings.OpenAssistant, Jobs: jobs, Start: d.Bindings.StartAssistant},
+		notifymodule.Module{Budget: d.Budget, Resources: d.Bindings.Resources},
 		grafanamodule.Module{Jobs: jobs},
 	}
 }

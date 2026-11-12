@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/scheduler"
@@ -30,7 +31,29 @@ type Result struct {
 	Runs  []int64
 }
 
-func New(svc *service.Service, jobs []scheduler.Definition, enabled func(string) bool, beat func()) *scheduler.Scheduler {
+type Own func(ctx context.Context, owner string) (context.Context, func(), error)
+
+type Options struct {
+	Enabled   func(string) bool
+	Active    func() bool
+	Beat      func()
+	Recovered func(error)
+	Own       Own
+}
+
+func New(svc *service.Service, jobs []scheduler.Definition, o Options) *scheduler.Scheduler {
+	runCron := func(ctx context.Context, run scheduler.Run) (scheduler.Result, error) {
+		return prompt(ctx, svc, run, run.Claim.Job.Prompt)
+	}
+	if o.Own != nil {
+		jobs = scheduler.Clone(jobs)
+		for i := range jobs {
+			if jobs[i].Run != nil {
+				jobs[i].Run = owned(o.Own, jobs[i].Module, jobs[i].Run)
+			}
+		}
+		runCron = owned(o.Own, module.Assistant, runCron)
+	}
 	now := func() float64 {
 		if svc.Now != nil {
 			return svc.Now()
@@ -61,12 +84,36 @@ func New(svc *service.Service, jobs []scheduler.Definition, enabled func(string)
 		Notice: func(ctx context.Context, skip scheduler.Skipped, at float64) error {
 			return notifySkipped(ctx, svc, skip, at)
 		},
-		RunCron: func(ctx context.Context, run scheduler.Run) (scheduler.Result, error) {
-			return prompt(ctx, svc, run, run.Claim.Job.Prompt)
-		},
-		Enabled: enabled,
-		Beat:    beat,
+		RunCron:   runCron,
+		Enabled:   o.Enabled,
+		Active:    o.Active,
+		Beat:      o.Beat,
+		Recovered: o.Recovered,
 	})
+}
+
+func owned(own Own, owner string, run func(context.Context, scheduler.Run) (scheduler.Result, error)) func(context.Context, scheduler.Run) (scheduler.Result, error) {
+	return func(ctx context.Context, r scheduler.Run) (scheduler.Result, error) {
+		work, done, err := own(ctx, owner)
+		var off *module.OwnerDisabled
+		if errors.As(err, &off) {
+			return scheduler.Result{Status: scheduler.StatusSkippedModule}, nil
+		}
+		if err != nil {
+			return scheduler.Result{}, err
+		}
+		defer done()
+		result, err := run(work, r)
+		if errors.Is(context.Cause(work), scheduler.ErrInterrupted) {
+			return result, scheduler.ErrInterrupted
+		}
+		if errors.As(context.Cause(work), &off) {
+			why := off.Error()
+			result.Status, result.Error = scheduler.StatusSkippedModule, &why
+			return result, nil
+		}
+		return result, err
+	}
 }
 
 func gate(ctx context.Context, svc *service.Service, now float64) (scheduler.Gate, error) {

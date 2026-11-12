@@ -54,6 +54,22 @@ func startServeIn(t *testing.T, dir string) string {
 	return base
 }
 
+func startWebOnlyIn(t *testing.T, dir string) string {
+	t.Helper()
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	app := newTestApp(t)
+	if f := fixtureFor(t); f != nil {
+		app = f.app
+	}
+	base, _, _, err := startServeAppArgs(t, app, &lockedBuffer{}, "--auth", "local", "--no-services")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return base
+}
+
 func startServeLogged(t *testing.T, dir string) (string, *lockedBuffer) {
 	t.Helper()
 	base, logs, _ := startServeWith(t, dir, true)

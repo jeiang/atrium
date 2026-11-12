@@ -81,6 +81,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	cmds = append(cmds, mailCmds.TrackingCommands()...)
 	return module.Declaration{
 		Name:      module.Mail,
+		Recover:   reviewpages.RecoverDrafts,
 		Settings:  slices.Concat(mail.Settings(), endpoint.SettingsDefs(), tracking.SettingsDefs()),
 		Host:      mail.HostSettings(),
 		Attention: AttentionSources(),
@@ -93,7 +94,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Label: "Mail", URL: "/settings/mail", Page: "mail", Settings: true, Primary: true, Order: 15},
 			}},
 			{Module: pages.PauseModule},
-			{Module: reviewpages.MailModule(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools}), Recover: reviewpages.RecoverDrafts, Nav: []web.NavItem{
+			{Module: reviewpages.MailModule(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools}), Nav: []web.NavItem{
 				{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20},
 				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
 			}},

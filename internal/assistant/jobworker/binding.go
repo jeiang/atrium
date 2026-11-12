@@ -3,7 +3,6 @@ package jobworker
 import (
 	"context"
 	"errors"
-	"sync/atomic"
 
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/attention"
@@ -16,20 +15,6 @@ type Dependencies struct {
 	Service   func(context.Context) (*service.Service, error)
 	Now       func() float64
 	Attention func(context.Context) []attention.Source
-}
-
-type Holder struct {
-	svc atomic.Pointer[service.Service]
-}
-
-func (h *Holder) Set(svc *service.Service) { h.svc.Store(svc) }
-
-func (h *Holder) Service(context.Context) (*service.Service, error) {
-	svc := h.svc.Load()
-	if svc == nil {
-		return nil, errors.New("scheduled jobs are not bound to an assistant service")
-	}
-	return svc, nil
 }
 
 func (d Dependencies) Sources(ctx context.Context) []attention.Source {

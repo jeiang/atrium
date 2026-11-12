@@ -18,9 +18,10 @@ import (
 )
 
 const (
-	RenewSeconds = 30
-	StuckSeconds = 4 * RenewSeconds
-	renewEvery   = time.Second
+	RenewSeconds     = 30
+	StuckSeconds     = 4 * RenewSeconds
+	renewEvery       = time.Second
+	completionWindow = 2 * time.Minute
 )
 
 type Resource struct {
@@ -128,13 +129,29 @@ type Store struct {
 	resolves   map[string]ResolveHook
 	liveMu     sync.Mutex
 	live       map[int64]liveTicket
+	keeps      map[*keepAlive]struct{}
 	stop       chan struct{}
+	running    int
+	changed    chan struct{}
+	drained    bool
+	renewCtx   context.Context
+	cancel     context.CancelFunc
 }
 
 type liveTicket struct {
-	ticket  Ticket
-	stopCtx func() bool
+	ticket   Ticket
+	stopCtx  func() bool
+	canceled time.Time
 }
+
+type keepAlive struct {
+	once    sync.Once
+	tickets []Ticket
+	quit    chan struct{}
+	done    chan struct{}
+}
+
+func (k *keepAlive) halt() { k.once.Do(func() { close(k.quit) }) }
 
 type Conflict struct{ Resource string }
 
@@ -315,33 +332,133 @@ func (s *Store) Renew(ctx context.Context, tickets []Ticket) {
 	for _, t := range tickets {
 		err := s.Heartbeat(ctx, t)
 		var settled *SettledMeanwhile
-		if err != nil && !errors.As(err, &settled) {
+		if err != nil && ctx.Err() == nil && !errors.As(err, &settled) {
 			logx.Logger("atrium.ledger").Warn(fmt.Sprintf("could not renew the lease on effect %d", t.ID), logx.Err, err.Error())
 		}
 	}
 }
 
-func (s *Store) KeepAlive(ctx context.Context, tickets []Ticket) func() {
+func (s *Store) KeepAlive(_ context.Context, tickets []Ticket) func() {
 	if len(tickets) == 0 {
 		return func() {}
 	}
-	done := make(chan struct{})
-	var once sync.Once
-	stop := func() { once.Do(func() { close(done) }) }
-	ctx = context.WithoutCancel(ctx)
+	s.liveMu.Lock()
+	if s.drained {
+		s.liveMu.Unlock()
+		return func() {}
+	}
+	k := &keepAlive{tickets: tickets, quit: make(chan struct{}), done: make(chan struct{})}
+	if s.keeps == nil {
+		s.keeps = map[*keepAlive]struct{}{}
+	}
+	s.keeps[k] = struct{}{}
+	s.running++
+	ctx := s.renewContext()
+	s.liveMu.Unlock()
 	go func() {
+		defer close(k.done)
+		defer s.exited(func() { delete(s.keeps, k) })
 		ticker := time.NewTicker(RenewSeconds * time.Second)
 		defer ticker.Stop()
 		for {
 			select {
-			case <-done:
+			case <-k.quit:
 				return
 			case <-ticker.C:
 				s.Renew(ctx, tickets)
 			}
 		}
 	}()
-	return stop
+	return func() {
+		k.halt()
+		<-k.done
+	}
+}
+
+func (s *Store) Drain(ctx context.Context) error {
+	s.liveMu.Lock()
+	unsettled := map[int64]bool{}
+	for id := range s.live {
+		unsettled[id] = true
+	}
+	for k := range s.keeps {
+		for _, t := range k.tickets {
+			unsettled[t.ID] = true
+		}
+	}
+	s.drained = true
+	s.halt()
+	s.liveMu.Unlock()
+	if len(unsettled) > 0 {
+		logx.Logger("atrium.ledger").Info(fmt.Sprintf("stopped renewing %d unsettled effect leases; recovery marks them unknown once they expire", len(unsettled)))
+	}
+	var err error
+	for {
+		s.liveMu.Lock()
+		if s.running == 0 {
+			s.liveMu.Unlock()
+			return err
+		}
+		if err == nil && ctx.Err() != nil {
+			err = fmt.Errorf("ledger: effect renewal outlived the drain deadline and was interrupted: %w", context.Cause(ctx))
+			if s.cancel != nil {
+				s.cancel()
+			}
+		}
+		changed := s.waitChange()
+		s.liveMu.Unlock()
+		if err != nil {
+			<-changed
+			continue
+		}
+		select {
+		case <-changed:
+		case <-ctx.Done():
+		}
+	}
+}
+
+func (s *Store) renewContext() context.Context {
+	if s.renewCtx == nil {
+		s.renewCtx, s.cancel = context.WithCancel(context.Background())
+	}
+	return s.renewCtx
+}
+
+func (s *Store) halt() {
+	if s.stop != nil {
+		close(s.stop)
+		s.stop = nil
+	}
+	for k := range s.keeps {
+		k.halt()
+	}
+	for _, entry := range s.live {
+		entry.stopCtx()
+	}
+	s.live = nil
+}
+
+func (s *Store) waitChange() <-chan struct{} {
+	if s.changed == nil {
+		s.changed = make(chan struct{})
+	}
+	return s.changed
+}
+
+func (s *Store) notifyChange() {
+	if s.changed != nil {
+		close(s.changed)
+		s.changed = nil
+	}
+}
+
+func (s *Store) exited(cleanup func()) {
+	s.liveMu.Lock()
+	defer s.liveMu.Unlock()
+	cleanup()
+	s.running--
+	s.notifyChange()
 }
 
 func (s *Store) track(ctx context.Context, t Ticket) {
@@ -350,29 +467,39 @@ func (s *Store) track(ctx context.Context, t Ticket) {
 	}
 	s.liveMu.Lock()
 	defer s.liveMu.Unlock()
+	if s.drained {
+		return
+	}
 	if s.live == nil {
 		s.live = map[int64]liveTicket{}
 	}
-	s.live[t.ID] = liveTicket{ticket: t, stopCtx: context.AfterFunc(ctx, func() { s.untrack(t.ID) })}
+	id := t.ID
+	s.live[id] = liveTicket{ticket: t, stopCtx: context.AfterFunc(ctx, func() { s.abandon(id) })}
 	if s.stop == nil {
 		s.stop = make(chan struct{})
+		s.running++
 		go s.renewLoop(s.stop)
+	}
+}
+
+func (s *Store) abandon(id int64) {
+	s.liveMu.Lock()
+	defer s.liveMu.Unlock()
+	if entry, ok := s.live[id]; ok && entry.canceled.IsZero() {
+		entry.canceled = time.Now()
+		s.live[id] = entry
 	}
 }
 
 func (s *Store) untrack(id int64) {
 	s.liveMu.Lock()
-	if s.live == nil {
-		s.liveMu.Unlock()
-		return
-	}
 	entry, ok := s.live[id]
 	delete(s.live, id)
-	empty := len(s.live) == 0
-	if empty && s.stop != nil {
+	if len(s.live) == 0 && s.stop != nil {
 		close(s.stop)
 		s.stop = nil
 	}
+	s.notifyChange()
 	s.liveMu.Unlock()
 	if ok {
 		entry.stopCtx()
@@ -380,6 +507,7 @@ func (s *Store) untrack(id int64) {
 }
 
 func (s *Store) renewLoop(stop chan struct{}) {
+	defer s.exited(func() {})
 	ticker := time.NewTicker(renewEvery)
 	defer ticker.Stop()
 	last, lastReal := s.now(), time.Now()
@@ -393,26 +521,40 @@ func (s *Store) renewLoop(stop chan struct{}) {
 				continue
 			}
 			last, lastReal = now, real
-			s.renewLive()
+			s.renewLive(stop)
 		}
 	}
 }
 
-func (s *Store) renewLive() {
+func (s *Store) renewLive(stop chan struct{}) {
 	s.liveMu.Lock()
 	tickets := make([]Ticket, 0, len(s.live))
-	for _, t := range s.live {
+	var expired []int64
+	for id, t := range s.live {
+		if !t.canceled.IsZero() && time.Since(t.canceled) >= completionWindow {
+			expired = append(expired, id)
+			continue
+		}
 		tickets = append(tickets, t.ticket)
 	}
+	ctx := s.renewContext()
 	s.liveMu.Unlock()
+	for _, id := range expired {
+		s.untrack(id)
+	}
 	for _, t := range tickets {
-		err := s.Heartbeat(context.Background(), t)
+		select {
+		case <-stop:
+			return
+		default:
+		}
+		err := s.Heartbeat(ctx, t)
 		var settled *SettledMeanwhile
 		if errors.As(err, &settled) {
 			s.untrack(t.ID)
 			continue
 		}
-		if err != nil {
+		if err != nil && ctx.Err() == nil {
 			logx.Logger("atrium.ledger").Warn(fmt.Sprintf("could not renew the lease on effect %d", t.ID), logx.Err, err.Error())
 		}
 	}

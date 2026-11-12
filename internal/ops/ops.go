@@ -88,6 +88,10 @@ type Check struct {
 	Run      func(ctx context.Context, d *db.DB) error
 }
 
+type Note string
+
+func (n Note) Error() string { return string(n) }
+
 type server struct {
 	d       *db.DB
 	env     config.Env
@@ -141,7 +145,7 @@ func (s *server) readiness(ctx context.Context) []byte {
 	b.WriteString("# HELP atrium_readiness_check_ok 1 when the readiness check passes.\n# TYPE atrium_readiness_check_ok gauge\n")
 	for _, c := range s.checks {
 		ok := 1
-		if s.run(ctx, c) != nil {
+		if err := s.run(ctx, c); err != nil && !errors.As(err, new(Note)) {
 			ok = 0
 		}
 		fmt.Fprintf(&b, "atrium_readiness_check_ok{check=%q} %d\n", c.Name, ok)
@@ -193,6 +197,9 @@ func (s *server) readyz(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		out[c.Name] = err.Error()
+		if errors.As(err, new(Note)) {
+			continue
+		}
 		if c.Critical {
 			state = StateNotReady
 		} else if state == StateReady {

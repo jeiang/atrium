@@ -7,7 +7,6 @@ import (
 	"io/fs"
 	"net/http"
 	"strconv"
-	"sync"
 
 	"github.com/go-chi/chi/v5"
 
@@ -59,31 +58,11 @@ type handlers struct {
 	phone Section
 }
 
-func Module(phone Section, budget BudgetStatus) web.Module {
-	return func(_ chi.Router, d *web.Deps) { serve(d, phone, budget) }
+func Module(phone Section) web.Module {
+	return func(_ chi.Router, d *web.Deps) { serve(d, phone) }
 }
 
-func serve(d *web.Deps, phone Section, budget BudgetStatus) {
-	var work sync.WaitGroup
-	var mu sync.Mutex
-	stopped := false
-	start := func() error {
-		mu.Lock()
-		defer mu.Unlock()
-		if !stopped {
-			work.Go(func() { watchStale(d.Ctx, d.DB, d.Env, d.Stopping, budget) })
-		}
-		return nil
-	}
-	d.OnClose(func() {
-		mu.Lock()
-		stopped = true
-		mu.Unlock()
-		work.Wait()
-	})
-	if err := moduleowner.SetFrom(d.Ctx).OnEnable(moduleowner.Notifications, start); err != nil {
-		panic(err)
-	}
+func serve(d *web.Deps, phone Section) {
 	h := handlers{d, phone}
 	d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
 		labels, err := failingDevices(ctx, d.DB.Read)

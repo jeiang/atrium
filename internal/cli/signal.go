@@ -59,11 +59,21 @@ func Received(ctx context.Context) (os.Signal, bool) {
 }
 
 func Fail(env *Env, err error) int {
-	if code, ok := signalExit(env.Ctx, env.Stderr); ok {
+	if code, ok := canceled(env.Ctx, env.Stderr); ok {
 		return code
 	}
 	printf(env.Stderr, "error: %s\n", err.Error())
 	return ExitError
+}
+
+func canceled(ctx context.Context, stderr io.Writer) (int, bool) {
+	if ctx.Err() == nil {
+		return 0, false
+	}
+	if code, ok := signalExit(ctx, stderr); ok {
+		return code, true
+	}
+	return ExitOK, true
 }
 
 func signalExit(ctx context.Context, stderr io.Writer) (int, bool) {

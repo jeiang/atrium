@@ -91,6 +91,7 @@ func TestImportedConnectionsStayOperatorOwnedAcrossBoots(t *testing.T) {
 		fmt.Sprintf(`{"api":%q}`, notion.URL)); err != nil {
 		t.Fatal(err)
 	}
+	asstExec(t, d, "UPDATE jobs SET next_due = NULL")
 	_ = d.Close()
 
 	s := &connectionSite{t: t, dir: dir}

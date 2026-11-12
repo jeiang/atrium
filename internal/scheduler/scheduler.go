@@ -23,20 +23,22 @@ type Gate struct {
 }
 
 type Dependencies struct {
-	DBPath  string
-	Now     func() float64
-	Zone    func(context.Context) string
-	Owner   string
-	Gate    func(context.Context, float64) (Gate, error)
-	Recover Recovery
-	Abandon func(context.Context, Run, []int64, string) error
-	Release func(context.Context, Run, []int64) error
-	Resume  func(context.Context) (int, error)
-	Idle    func(context.Context) bool
-	Notice  func(context.Context, Skipped, float64) error
-	RunCron func(context.Context, Run) (Result, error)
-	Enabled func(string) bool
-	Beat    func()
+	DBPath    string
+	Now       func() float64
+	Zone      func(context.Context) string
+	Owner     string
+	Gate      func(context.Context, float64) (Gate, error)
+	Recover   Recovery
+	Abandon   func(context.Context, Run, []int64, string) error
+	Release   func(context.Context, Run, []int64) error
+	Resume    func(context.Context) (int, error)
+	Idle      func(context.Context) bool
+	Notice    func(context.Context, Skipped, float64) error
+	RunCron   func(context.Context, Run) (Result, error)
+	Enabled   func(string) bool
+	Active    func() bool
+	Beat      func()
+	Recovered func(error)
 }
 
 type Scheduler struct {
@@ -44,6 +46,7 @@ type Scheduler struct {
 	jobs     []Definition
 	deps     Dependencies
 	interval time.Duration
+	stop     <-chan struct{}
 
 	wg      sync.WaitGroup
 	active  atomic.Int64
@@ -102,6 +105,9 @@ func (s *Scheduler) Tick(ctx context.Context) error {
 	}
 	admit := s.admit(gate)
 	for _, job := range due {
+		if s.stopping() {
+			return nil
+		}
 		resources := claimResources(s.jobs, job)
 		locks, err := db.TryResourceLocks(s.deps.DBPath, resources)
 		if errors.As(err, new(*db.LockBusy)) {
@@ -142,6 +148,9 @@ func (s *Scheduler) recoverRuns(ctx context.Context) error {
 		return err
 	}
 	for _, p := range expired {
+		if s.stopping() {
+			return nil
+		}
 		resources := claimResources(s.jobs, p.job)
 		locks, err := db.TryResourceLocks(s.deps.DBPath, resources)
 		if errors.As(err, new(*db.LockBusy)) {
@@ -251,7 +260,7 @@ func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Co
 	case lost.Load():
 		log.Warn(fmt.Sprintf("job %d lost its claim; it stopped and leaves the run to its successor", id), logx.Job, id)
 		return
-	case err != nil && interrupted(ctx, err):
+	case err != nil && (interrupted(ctx, err) || errors.Is(err, ErrInterrupted)):
 		log.Info(fmt.Sprintf("job %d interrupted; its run resumes on restart", id), logx.Job, id)
 		if err := s.handOver(done, claim); err != nil {
 			log.Error(fmt.Sprintf("job %d: interrupting its runs failed", id), logx.Job, id, logx.Err, err)
@@ -276,7 +285,10 @@ func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Co
 	s.settle(done, claim, s.Finish(done, claim, result))
 }
 
-var errTimedOut = errors.New("scheduler: the job reached its timeout")
+var (
+	errTimedOut    = errors.New("scheduler: the job reached its timeout")
+	ErrInterrupted = errors.New("scheduler: the process is shutting down")
+)
 
 func (s *Scheduler) abandon(ctx context.Context, claim Claim, reason string) error {
 	if s.deps.Abandon == nil {
@@ -375,39 +387,90 @@ func (s *Scheduler) Once(ctx context.Context) error {
 }
 
 func (s *Scheduler) Cycle(ctx context.Context) error {
+	_, err := s.cycle(ctx)
+	return err
+}
+
+func (s *Scheduler) cycle(ctx context.Context) (recovered bool, err error) {
 	if err := db.Ready(ctx, s.db); err != nil {
-		return err
+		return false, err
 	}
+	if err := s.Recover(ctx); err != nil {
+		return false, err
+	}
+	if err := s.Tick(ctx); err != nil {
+		return true, err
+	}
+	s.checkpoint(ctx)
+	return true, nil
+}
+
+func (s *Scheduler) Recover(ctx context.Context) error {
 	if err := s.recoverRuns(ctx); err != nil {
 		return err
 	}
-	resumed, err := s.deps.Resume(ctx)
-	if err != nil {
-		return err
+	if s.stopping() {
+		return nil
 	}
+	resumed, err := s.deps.Resume(ctx)
 	if resumed > 0 {
 		s.dirty.Store(true)
 	}
-	if err := s.Tick(ctx); err != nil {
-		return err
-	}
-	s.checkpoint(ctx)
-	return nil
+	return err
 }
 
-func (s *Scheduler) Run(ctx context.Context) {
+func (s *Scheduler) Run(ctx context.Context, stop <-chan struct{}) error {
 	log.Info(fmt.Sprintf("scheduler %s started", s.deps.Owner))
 	defer s.wg.Wait()
-	for ctx.Err() == nil {
+	s.stop = stop
+	recovered := false
+	for ctx.Err() == nil && !s.stopping() {
 		s.beat()
-		if err := s.safeCycle(ctx); err != nil && ctx.Err() == nil {
+		if s.deps.Active != nil && !s.deps.Active() {
+			s.recovered(nil)
+			s.wait(ctx)
+			continue
+		}
+		ok, err := s.safeCycle(ctx)
+		switch {
+		case ctx.Err() != nil || s.stopping():
+		case !recovered && !ok:
+			s.recovered(err)
+			return fmt.Errorf("scheduler recovery failed: %w", err)
+		case err != nil:
 			log.Error("scheduler tick failed", logx.Err, err)
 		}
-		s.beat()
-		select {
-		case <-ctx.Done():
-		case <-time.After(s.interval):
+		if ok && !recovered {
+			recovered = true
+			s.recovered(nil)
 		}
+		s.beat()
+		s.wait(ctx)
+	}
+	<-ctx.Done()
+	return ctx.Err()
+}
+
+func (s *Scheduler) recovered(err error) {
+	if s.deps.Recovered != nil {
+		s.deps.Recovered(err)
+	}
+}
+
+func (s *Scheduler) stopping() bool {
+	select {
+	case <-s.stop:
+		return true
+	default:
+		return false
+	}
+}
+
+func (s *Scheduler) wait(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+	case <-s.stop:
+	case <-time.After(s.interval):
 	}
 }
 
@@ -417,13 +480,13 @@ func (s *Scheduler) beat() {
 	}
 }
 
-func (s *Scheduler) safeCycle(ctx context.Context) (err error) {
+func (s *Scheduler) safeCycle(ctx context.Context) (recovered bool, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			err = fmt.Errorf("scheduler tick crashed: panic: %v\n%s", p, debug.Stack())
 		}
 	}()
-	return s.Cycle(ctx)
+	return s.cycle(ctx)
 }
 
 func (s *Scheduler) idle(ctx context.Context) bool {

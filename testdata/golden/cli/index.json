@@ -711,8 +711,9 @@
     "env": {
       "ANTHROPIC_API_KEY": ""
     },
-    "exit_code": 0,
+    "exit_code": 1,
     "name": "agent-run-not-configured",
+    "stderr": "agent-run-not-configured.stderr",
     "stdout": "agent-run-not-configured.stdout"
   },
   {
