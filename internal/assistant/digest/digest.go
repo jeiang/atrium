@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/attention"
@@ -151,20 +152,17 @@ func blockLines(content []json.RawMessage) (string, []block.DigestLine, bool, er
 
 func dreamingOf(ctx context.Context, q db.Querier, now float64) (dreaming, error) {
 	var out dreaming
-	var jobRun, jobID, threadID int64
-	var status string
-	var jobStarted float64
-	err := q.QueryRowContext(ctx,
-		"SELECT jr.id, jr.job_id, jr.status, COALESCE(jr.thread_id, 0), COALESCE(jr.started_at, jr.due_at) FROM job_runs jr JOIN jobs j ON j.id = jr.job_id "+
-			"WHERE j.name = 'nightly' AND jr.ended_at IS NOT NULL AND jr.ended_at >= ? ORDER BY jr.id DESC LIMIT 1", now-86400).Scan(&jobRun, &jobID, &status, &threadID, &jobStarted)
-	if errors.Is(err, sql.ErrNoRows) {
-		return out, nil
-	}
-	if err != nil {
+	latest, err := scheduler.LatestCompleted(ctx, q, scheduler.NightlyName, now-86400)
+	if err != nil || latest == nil {
 		return out, err
 	}
-	out.skipped = status == "skipped_budget"
-	out.failed = status == "error"
+	jobID, jobStarted := latest.JobID, latest.StartedAt
+	var threadID int64
+	if latest.ThreadID != nil {
+		threadID = *latest.ThreadID
+	}
+	out.skipped = latest.Status == scheduler.StatusSkippedBudget
+	out.failed = latest.Status == scheduler.StatusError
 	rows, err := q.QueryContext(ctx,
 		"SELECT r.id, r.started_at FROM runs r JOIN threads t ON t.id = r.thread_id WHERE t.job_id = ? AND r.started_at >= ? ORDER BY r.id", jobID, jobStarted)
 	if err != nil {

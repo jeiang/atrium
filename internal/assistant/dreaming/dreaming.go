@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
+	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
@@ -116,7 +117,7 @@ func Run(ctx context.Context, svc *service.Service, now func() float64, jobID, j
 			return runIDs, err
 		}
 		if first {
-			if _, err := svc.DB.Write.ExecContext(ctx, "UPDATE job_runs SET thread_id = ? WHERE id = ?", id, jobRunID); err != nil {
+			if err := scheduler.AttachThread(ctx, svc.DB.Write, scheduler.Claim{Job: scheduler.Job{ID: jobID}, JobRunID: jobRunID}, id); err != nil {
 				return runIDs, err
 			}
 			first = false

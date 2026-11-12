@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"encoding/json"
 
+	"github.com/jeiang/atrium/internal/assistant/scheduler"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 )
 
@@ -69,45 +71,33 @@ func validateScheduleUndo(name string) func(json.RawMessage) error {
 	}
 }
 
-func undoScheduleDelete(ctx context.Context, q interface {
-	ExecContext(context.Context, string, ...any) (sql.Result, error)
-}, raw json.RawMessage) (any, error) {
+func undoScheduleDelete(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
 	var u scheduleDeleteUndo
 	if err := json.Unmarshal(raw, &u); err != nil {
 		return nil, ledger.Refused("schedule undo payload is invalid")
 	}
-	res, err := q.ExecContext(ctx, "DELETE FROM jobs WHERE id = ? AND created_by = 'agent' AND state = 'active'", u.ID)
+	deleted, err := scheduler.DeleteAgentJob(ctx, q, u.ID)
 	if err != nil {
 		return nil, err
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return nil, err
-	}
-	if n == 0 {
+	if !deleted {
 		return nil, ledger.Refused("the schedule was changed or cancelled")
 	}
 	return map[string]any{"deleted": u.ID}, nil
 }
 
-func undoScheduleRestore(ctx context.Context, q interface {
-	ExecContext(context.Context, string, ...any) (sql.Result, error)
-}, raw json.RawMessage) (any, error) {
+func undoScheduleRestore(ctx context.Context, q db.Querier, raw json.RawMessage) (any, error) {
 	var u scheduleRestoreUndo
 	if err := json.Unmarshal(raw, &u); err != nil {
 		return nil, ledger.Refused("schedule undo payload is invalid")
 	}
-	res, err := q.ExecContext(ctx,
-		"UPDATE jobs SET name = ?, prompt = ?, schedule = ?, state = ?, next_due = ? WHERE id = ?",
-		u.Name, u.Prompt, u.Schedule, u.State, u.NextDue, u.ID)
+	restored, err := scheduler.RestoreJob(ctx, q, scheduler.Restore{
+		ID: u.ID, Name: u.Name, Prompt: u.Prompt, Schedule: u.Schedule, State: u.State, NextDue: u.NextDue,
+	})
 	if err != nil {
 		return nil, err
 	}
-	n, err := res.RowsAffected()
-	if err != nil {
-		return nil, err
-	}
-	if n == 0 {
+	if !restored {
 		return nil, ledger.Refused("the schedule no longer exists")
 	}
 	return map[string]any{"restored": u.ID}, nil

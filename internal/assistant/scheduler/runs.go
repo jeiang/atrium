@@ -170,92 +170,86 @@ func FinishRun(ctx context.Context, d *db.DB, c Claim, now float64, o Outcome) e
 	})
 }
 
-func RunTokens(ctx context.Context, q db.Querier, runID int64) (int64, error) {
-	return inference.RunTokens(ctx, q, runID)
+type PendingRun struct {
+	Claim     Claim
+	Threads   []int64
+	StartedAt float64
 }
 
-func ReleaseStale(ctx context.Context, d *db.DB, now float64) error {
+type RecoveredRun struct {
+	Claim    Claim
+	Outcome  Outcome
+	EndedAt  *float64
+	Complete bool
+}
+
+type Recovery func(context.Context, []PendingRun) ([]RecoveredRun, error)
+
+func pendingRuns(ctx context.Context, q db.Querier) ([]PendingRun, error) {
+	rows, err := q.QueryContext(ctx, "SELECT id, job_id, thread_id, due_at, COALESCE(started_at, due_at) FROM job_runs WHERE status = ? ORDER BY id", StatusRunning)
+	if err != nil {
+		return nil, err
+	}
+	grace := float64(TuningAgentSchedulerMissedGraceSeconds)
+	return db.Collect(rows, func(r *sql.Rows) (PendingRun, error) {
+		var p PendingRun
+		var thread *int64
+		if err := r.Scan(&p.Claim.JobRunID, &p.Claim.Job.ID, &thread, &p.Claim.DueAt, &p.StartedAt); err != nil {
+			return p, err
+		}
+		if thread != nil {
+			p.Threads = []int64{*thread}
+		}
+		p.Claim.Missed = p.StartedAt-p.Claim.DueAt > grace
+		return p, nil
+	})
+}
+
+func Recover(ctx context.Context, d *db.DB, now float64, recover Recovery) error {
+	pending, err := pendingRuns(ctx, d.Read)
+	if err != nil || len(pending) == 0 {
+		return err
+	}
+	recovered, err := recover(ctx, pending)
+	if err != nil {
+		return err
+	}
+	known := make(map[int64]bool, len(recovered))
+	for _, r := range recovered {
+		known[r.Claim.JobRunID] = true
+		if !r.Complete {
+			continue
+		}
+		ended := now
+		if r.EndedAt != nil {
+			ended = *r.EndedAt
+		}
+		if err := d.WithTx(ctx, func(tx *sql.Tx) error {
+			return settle(ctx, tx, r.Claim.JobRunID, r.Claim.Job.ID, ended, r.Outcome)
+		}); err != nil {
+			return err
+		}
+	}
 	return d.WithTx(ctx, func(tx *sql.Tx) error {
-		rows, err := tx.QueryContext(ctx, "SELECT r.id AS run_id, j.id AS job_id FROM job_runs r JOIN jobs j ON j.id = r.job_id "+
-			"WHERE r.status = ? AND j.lease_until IS NOT NULL AND j.lease_until < ? AND NOT EXISTS (SELECT 1 FROM runs x WHERE x.id = "+
-			"(SELECT MIN(id) FROM runs WHERE thread_id = r.thread_id AND parent_run_id IS NULL) AND x.state IN ('running', 'interrupted'))",
-			StatusRunning, now)
-		if err != nil {
-			return err
-		}
-		type stale struct{ run, job int64 }
-		found, err := db.Collect(rows, func(r *sql.Rows) (stale, error) {
-			var s stale
-			return s, r.Scan(&s.run, &s.job)
-		})
-		if err != nil {
-			return err
-		}
-		for _, s := range found {
+		for _, p := range pending {
+			if known[p.Claim.JobRunID] {
+				continue
+			}
+			var expired bool
+			if err := tx.QueryRowContext(ctx, "SELECT lease_until IS NOT NULL AND lease_until < ? FROM jobs WHERE id = ?", now, p.Claim.Job.ID).Scan(&expired); err != nil {
+				if errors.Is(err, sql.ErrNoRows) {
+					continue
+				}
+				return err
+			}
+			if !expired {
+				continue
+			}
 			lost := workerLost
-			if err := settle(ctx, tx, s.run, s.job, now, Outcome{Status: StatusError, Error: &lost}); err != nil {
+			if err := settle(ctx, tx, p.Claim.JobRunID, p.Claim.Job.ID, now, Outcome{Status: StatusError, Error: &lost}); err != nil {
 				return err
 			}
 		}
 		return nil
 	})
-}
-
-func SettleResumed(ctx context.Context, d *db.DB, now float64) error {
-	type settled struct {
-		jobRun, job  int64
-		thread       int64
-		due, started float64
-		run          int64
-		state        string
-		runError     *string
-		ended        *float64
-	}
-	rows, err := d.Read.QueryContext(ctx, "SELECT jr.id, jr.job_id, jr.thread_id, jr.due_at, jr.started_at, r.id, r.state, r.error, r.ended_at "+
-		"FROM job_runs jr JOIN runs r ON r.id = (SELECT MIN(id) FROM runs WHERE thread_id = jr.thread_id AND parent_run_id IS NULL) "+
-		"WHERE jr.status = ? AND jr.thread_id IS NOT NULL AND r.state IN ('done', 'failed') ORDER BY jr.id", StatusRunning)
-	if err != nil {
-		return err
-	}
-	found, err := db.Collect(rows, func(r *sql.Rows) (settled, error) {
-		var s settled
-		return s, r.Scan(&s.jobRun, &s.job, &s.thread, &s.due, &s.started, &s.run, &s.state, &s.runError, &s.ended)
-	})
-	if err != nil {
-		return err
-	}
-	grace := TuningAgentSchedulerMissedGraceSeconds
-	for _, s := range found {
-		tokens, err := RunTokens(ctx, d.Read, s.run)
-		if err != nil {
-			return err
-		}
-		cost, err := inference.RunCost(ctx, d.Read, s.run)
-		if err != nil {
-			return err
-		}
-		status, text := StatusOK, (*string)(nil)
-		switch {
-		case s.state != "done":
-			status = StatusError
-			if s.runError != nil && *s.runError != "" {
-				text = s.runError
-			} else {
-				text = &s.state
-			}
-		case s.started-s.due > float64(grace):
-			status = StatusMissed
-		}
-		ended := now
-		if s.ended != nil {
-			ended = *s.ended
-		}
-		err = d.WithTx(ctx, func(tx *sql.Tx) error {
-			return settle(ctx, tx, s.jobRun, s.job, ended, Outcome{Status: status, Error: text, Tokens: tokens, Cost: cost})
-		})
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }

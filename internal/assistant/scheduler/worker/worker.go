@@ -118,17 +118,15 @@ func (w *Worker) notifySkipped(ctx context.Context, skip scheduler.Skipped, now 
 	if skip.Status != scheduler.StatusSkippedBudget {
 		return nil
 	}
-	var previous scheduler.Status
-	err := w.Service.DB.Read.QueryRowContext(ctx, "SELECT status FROM job_runs WHERE job_id = ? AND id < ? ORDER BY id DESC LIMIT 1",
-		skip.Job.ID, skip.JobRunID).Scan(&previous)
-	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+	previous, err := scheduler.PreviousStatus(ctx, w.Service.DB.Read, skip.Job.ID, skip.JobRunID)
+	if err != nil {
 		return err
 	}
-	if previous == scheduler.StatusSkippedBudget {
+	if previous != nil && *previous == scheduler.StatusSkippedBudget {
 		return nil
 	}
 	if !notify.Enabled(ctx) {
-		return err
+		return nil
 	}
 	loc, err := config.From(ctx).Location(w.Service.Env)
 	if err != nil {
@@ -198,7 +196,7 @@ func (w *Worker) settle(ctx context.Context, claim scheduler.Claim, runID int64,
 	if err != nil {
 		return "", err
 	}
-	tokens, err := scheduler.RunTokens(ctx, d.Read, runID)
+	tokens, err := inference.RunTokens(ctx, d.Read, runID)
 	if err != nil {
 		return "", err
 	}
@@ -249,7 +247,7 @@ func (w *Worker) executePrompt(ctx context.Context, claim scheduler.Claim) sched
 			return 0, err
 		}
 		threadID = &id
-		if _, err := d.Write.ExecContext(ctx, "UPDATE job_runs SET thread_id = ? WHERE id = ?", id, claim.JobRunID); err != nil {
+		if err := scheduler.AttachThread(ctx, d.Write, claim, id); err != nil {
 			return 0, err
 		}
 		return w.Service.RunOnce(ctx, id, prompt, service.Start{Kind: kind, Operator: operator})
@@ -275,7 +273,7 @@ func (w *Worker) settleRuns(ctx context.Context, claim scheduler.Claim, runs []i
 		if err != nil {
 			return "", err
 		}
-		n, err := scheduler.RunTokens(ctx, d.Read, runID)
+		n, err := inference.RunTokens(ctx, d.Read, runID)
 		if err != nil {
 			return "", err
 		}
@@ -359,10 +357,7 @@ func (w *Worker) Cycle(ctx context.Context) error {
 	if err := db.Ready(ctx, d); err != nil {
 		return err
 	}
-	if err := scheduler.SettleResumed(ctx, d, w.now()); err != nil {
-		return err
-	}
-	if err := scheduler.ReleaseStale(ctx, d, w.now()); err != nil {
+	if err := scheduler.Recover(ctx, d, w.now(), Recovery(d.Read)); err != nil {
 		return err
 	}
 	resumed, err := w.Service.ResumeInterrupted(ctx, true)
