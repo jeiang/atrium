@@ -43,20 +43,22 @@ func (s *Set) Catalog() *Catalog { return s.cat }
 type setKey struct{}
 
 func WithSet(ctx context.Context, s *Set) context.Context {
-	return settings.WithCommit(context.WithValue(ctx, setKey{}, s), func(ctx context.Context, q db.Querier) (func(bool), error) {
-		s.publish.Lock()
-		snap, err := s.Evaluate(ctx, q)
-		if err != nil {
-			s.publish.Unlock()
-			return nil, err
-		}
-		return func(committed bool) {
-			if committed {
-				s.store(snap)
-			}
-			s.publish.Unlock()
-		}, nil
-	})
+	return settings.WithCommit(context.WithValue(ctx, setKey{}, s), commit{s})
+}
+
+type commit struct{ s *Set }
+
+func (c commit) Lock() func() {
+	c.s.publish.Lock()
+	return c.s.publish.Unlock
+}
+
+func (c commit) Prepare(ctx context.Context, q db.Querier) (func(), error) {
+	snap, err := c.s.Evaluate(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	return func() { c.s.store(snap) }, nil
 }
 
 func SetFrom(ctx context.Context) *Set {
