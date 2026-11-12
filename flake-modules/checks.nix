@@ -127,6 +127,7 @@
       assert cfg.renderedHost.export.export_obsidian_dir == "/var/lib/atrium-vault";
       assert lib.hasInfix "ReadWritePaths=/var/lib/atrium-vault" scheduler;
       assert lib.hasInfix "ReadWritePaths=/var/lib/media" scheduler;
+      assert !(nixos.config.systemd.units ? "atrium-web-local.service") || !(lib.hasInfix "/var/lib/atrium-vault" (unitText "atrium-web-local.service"));
       assert !(defaults.config.services.atrium.renderedHost ? export); true;
     hostConfig = assert cfg.renderedHost.core.public_url == "https://atrium.example.org";
     assert cfg.renderedHost.app_keys.action_link_key_file == "\${CREDENTIALS_DIRECTORY}/action_links.action_link_key";

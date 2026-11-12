@@ -284,7 +284,7 @@
     path = mediaPath;
     serviceConfig =
       mediaWriter
-      // exportWriter
+      // lib.optionalAttrs services exportWriter
       // {
         ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} ${authArgs auth}" + lib.optionalString needsHost " --allowed-host ${cfg.web.allowedHost}" + lib.optionalString (!services) " --no-services";
         Type = "notify";
