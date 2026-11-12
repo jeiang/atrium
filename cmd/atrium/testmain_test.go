@@ -15,6 +15,7 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/app"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
@@ -24,14 +25,29 @@ import (
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/ops"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
-var moduleNames = module.Builtins
+var testCatalog = sync.OnceValue(func() *module.Catalog {
+	cat, err := app.Docs()
+	if err != nil {
+		panic(err)
+	}
+	return cat
+})
+
+func testSettings() *settings.Registry { return testCatalog().Settings() }
+
+func testProposalContext() context.Context {
+	return proposals.WithHooks(settings.With(context.Background(), testSettings()), proposals.Hooks{})
+}
+
+var moduleNames = testCatalog().Optional()
 
 func settingEnv(key string) string {
-	if d, ok := settings.LookupOf(key); ok {
+	if d, ok := testSettings().Lookup(key); ok {
 		return config.EnvName(d)
 	}
 	if entry, ok := settings.ImportEntryFor(key); ok {
@@ -343,10 +359,22 @@ func flagKeyOf(key string) bool {
 	return false
 }
 
+func newTestSet(env config.Env) *module.Set {
+	cat, err := app.Catalog(app.Dependencies{Env: env}, module.Context{})
+	if err != nil {
+		panic(err)
+	}
+	set, err := module.NewSet(cat, cat.Settings(), env)
+	if err != nil {
+		panic(err)
+	}
+	return set
+}
+
 func seedSettingsAt(t *testing.T, path string, kv map[string]string) {
 	t.Helper()
 	env := testLookupFor(t)
-	reg := settings.New()
+	reg := testSettings()
 	st := config.NewState(reg)
 	ctx := config.With(context.Background(), st)
 	ctx = settings.With(ctx, reg)
@@ -358,7 +386,7 @@ func seedSettingsAt(t *testing.T, path string, kv map[string]string) {
 		t.Fatal(err)
 	}
 	defer func() { _ = d.Close() }()
-	if err := newSet(env, reg, st, nil, imapclient.Opener, nil).Seed(ctx, d); err != nil {
+	if err := newTestSet(env).Seed(ctx, d); err != nil {
 		t.Fatalf("seed modules: %v", err)
 	}
 	ctx = audit.With(ctx, "fixture", audit.UI)
@@ -575,14 +603,13 @@ func guardExternalHosts() {
 	}
 }
 
-func newTestApp(t *testing.T, mods []module.Module) *cli.App {
-	reg := settings.New()
-	return newAppWith(testLookupFor(t), reg, config.NewState(reg), mods, imapclient.Opener, nil, quietLog)
+func newTestApp(t *testing.T) *cli.App {
+	return newAppWith(testLookupFor(t), imapclient.Opener, nil, quietLog)
 }
 
 func defaultApp(t *testing.T) *cli.App {
 	if f := fixtureFor(t); f != nil {
 		return f.app
 	}
-	return newTestApp(t, nil)
+	return newTestApp(t)
 }

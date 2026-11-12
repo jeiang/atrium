@@ -25,10 +25,7 @@ func (o Options) now() float64 {
 }
 
 func (o Options) store(d *db.DB, cfg config.Config) *ledger.Store {
-	if o.Store != nil {
-		return o.Store(d, cfg)
-	}
-	return ledger.NewStore(d, o.now)
+	return o.Store(d, cfg)
 }
 
 func Command(o Options) *cli.Command {

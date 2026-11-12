@@ -7,6 +7,8 @@ import (
 	"errors"
 	"io/fs"
 	"net/http"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -18,12 +20,12 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -60,8 +62,13 @@ const (
 
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
+		r = r.With(bindAssistant)
 		open := imapclient.Opener(d.Cfg)
-		run, err := runner.New(o.Tools, toolset.Ledger(d.DB, d.Env, open, assistant.Now), open)
+		store, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, open, assistant.Now)
+		if err != nil {
+			panic(err)
+		}
+		run, err := runner.New(o.Tools, store, open)
 		if err != nil {
 			panic(err)
 		}
@@ -75,26 +82,39 @@ func Module(o Options) web.Module {
 			}
 			return err
 		}
-		checked := make(chan struct{})
-		go func() {
-			defer close(checked)
-			svc.CheckCatalog(base)
-		}()
+		var work sync.WaitGroup
+		var mu sync.Mutex
+		stopped := false
+		start := func() error {
+			mu.Lock()
+			defer mu.Unlock()
+			if stopped {
+				return nil
+			}
+			tz := config.From(base).TZName(d.Env)
+			stamp := assistant.Now()
+			if err := d.DB.WithTx(base, func(tx *sql.Tx) error {
+				return scheduler.Ensure(base, tx, tz, stamp)
+			}); err != nil && !errors.Is(err, context.Canceled) {
+				return err
+			}
+			work.Go(func() { svc.CheckCatalog(base) })
+			return nil
+		}
 		shutdown := func() {
+			mu.Lock()
+			stopped = true
+			mu.Unlock()
 			svc.Close()
 			cancel()
-			<-checked
+			work.Wait()
 		}
 		if d.OnClose != nil {
 			d.OnClose(shutdown)
 		}
 		p := &pages{deps: d, svc: svc, now: assistant.Now, ledger: run.Ledger}
 		d.OnFrame(p.sidebar)
-		tz := config.From(base).TZName(d.Env)
-		stamp := assistant.Now()
-		if err := d.DB.WithTx(base, func(tx *sql.Tx) error {
-			return scheduler.Ensure(base, tx, tz, stamp)
-		}); err != nil && !errors.Is(err, context.Canceled) {
+		if err := module.SetFrom(d.Ctx).OnEnable(module.Assistant, start); err != nil {
 			panic(err)
 		}
 
@@ -139,6 +159,25 @@ func Module(o Options) web.Module {
 	}
 }
 
+func bindAssistant(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet || r.Method == http.MethodHead {
+			next.ServeHTTP(w, r)
+			return
+		}
+		ctx, err := module.BindOwner(r.Context(), module.Assistant)
+		if err != nil {
+			if strings.HasPrefix(r.URL.Path, web.APIPrefix+"/") {
+				web.APIError(w, http.StatusConflict, "module_disabled", err.Error())
+			} else {
+				http.Error(w, err.Error(), http.StatusConflict)
+			}
+			return
+		}
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
 func check(err error) {
 	if err != nil {
 		panic(err)
@@ -179,9 +218,12 @@ func (p *pages) refused(w http.ResponseWriter, r *http.Request, err error) bool 
 	var redo service.NothingToRedo
 	var unknown service.UnknownThread
 	var refused references.Refused
+	var disabled *module.OwnerDisabled
 	switch {
 	case err == nil:
 		return false
+	case errors.As(err, &disabled):
+		p.failure(w, r, "Not available", err.Error())
 	case errors.As(err, &exceeded):
 		p.failure(w, r, "Budget reached", err.Error())
 	case errors.As(err, &refused):

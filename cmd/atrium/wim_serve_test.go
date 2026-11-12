@@ -26,7 +26,7 @@ func wimServeIn(t *testing.T, dir string, args ...string) (string, func()) {
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	seedAllFlags(t)
-	base, _, stop, err := startServeAppArgs(t, newTestApp(t, nil), &lockedBuffer{}, args...)
+	base, _, stop, err := startServeAppArgs(t, newTestApp(t), &lockedBuffer{}, args...)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestWimServeRefusesUnsafeAuthConfigurations(t *testing.T) {
 		{[]string{"--host", "127.0.0.1", "--auth", "local", "--force-disable-auth"}, "unknown arguments: --force-disable-auth"},
 	} {
 		var out, errs bytes.Buffer
-		code := newTestApp(t, nil).Run(context.Background(), append([]string{"serve", "--port", "1"}, c.args...), &out, &errs)
+		code := newTestApp(t).Run(context.Background(), append([]string{"serve", "--port", "1"}, c.args...), &out, &errs)
 		if code == cli.ExitOK || !strings.Contains(errs.String(), c.want) {
 			t.Errorf("serve %v: exit %d stderr %q", c.args, code, errs.String())
 		}
@@ -267,7 +267,7 @@ func TestWimServeMarksAStuckSendingDraftUnknownAndReportsItsLifecycle(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Migrate(settings.With(context.Background(), settings.New()), seed, path); err != nil {
+	if err := db.Migrate(settings.With(context.Background(), testSettings()), seed, path); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := seed.Write.Exec("INSERT INTO drafts (thread_id, account, to_addrs, subject, body, status, created_at, updated_at) VALUES (NULL, 'gmail', 'a@x.test', 's', 'b', 'sending', 1000, 1000)"); err != nil {

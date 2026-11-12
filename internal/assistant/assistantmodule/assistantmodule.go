@@ -3,17 +3,26 @@ package assistantmodule
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
 	"github.com/jeiang/atrium/internal/assistant/anthropicconn"
+	"github.com/jeiang/atrium/internal/assistant/approval"
+	"github.com/jeiang/atrium/internal/assistant/digest"
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
+	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/jeiang/atrium/internal/assistant/report"
+	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
+	"github.com/jeiang/atrium/internal/assistant/subagents/lookup"
+	"github.com/jeiang/atrium/internal/assistant/subagents/research"
 	"github.com/jeiang/atrium/internal/assistant/subagents/websearch"
 	"github.com/jeiang/atrium/internal/assistant/tools/askoperator"
 	attentiontool "github.com/jeiang/atrium/internal/assistant/tools/attention"
@@ -34,25 +43,36 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/inference"
-	_ "github.com/jeiang/atrium/internal/inference/opsmetrics"
+	"github.com/jeiang/atrium/internal/inference/opsmetrics"
+	"github.com/jeiang/atrium/internal/kb"
+	"github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tasks"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/weather"
 	"github.com/jeiang/atrium/internal/web"
 )
 
 type Module struct {
-	Now       func() float64
-	Callables []map[string]worker.Callable
+	ProposeKinds []proposals.Definition
+	Now          func() float64
+	Callables    []map[string]worker.Callable
 }
 
-func (m Module) Register(mc module.Context) module.Registration {
-	return module.Registration{
-		Name:      module.Assistant,
-		Attention: []attention.Source{attentionsources.Plans(), attentionsources.Questions(), tasks.AttentionSource(), serverops.AttentionSource(mc.Env), dreaming.Attention(mc.Env)},
-		Requires:  []module.Requirement{{Name: "the Anthropic connection", Check: anthropicKey}},
+func (m Module) Declare(mc module.Context) module.Declaration {
+	return module.Declaration{
+		Name: module.Assistant,
+		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
+			prompts.Settings(), registry.Settings(), scheduler.Settings(), websearch.Settings(), inference.Settings(),
+			export.Settings(), weather.SettingsDefs()),
+		Host:      export.HostSettings(),
+		Sections:  export.Sections(),
+		Attention: AttentionSources(mc.Env),
+		Metrics:   slices.Concat(scheduler.Metrics(), opsmetrics.Metrics()),
+		Requires:  Requirements(),
 		Pages: []web.Page{{
 			Module:    chatpages.Module(chatpages.Options{Tools: mc.Tools}),
 			Templates: chatpages.Templates(),
@@ -66,18 +86,42 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Group: "Instance", Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 60},
 			},
 		}},
-		Settings: []settings.Group{
-			{Name: "spending", Title: "Spending", Keys: append([]string{
-				inference.BudgetKey, inference.ChatKey, inference.UnattendedKey, inference.ThreadCapKey,
-			}, append(runCaps(), assistant.KeySubagentMaxCostUSD, websearch.KeyMaxCostUSD, assistant.KeyDreamingMaxCost,
-				assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
-			{Name: "background", Title: "Background work", Keys: []string{
-				assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, websearch.KeyModel,
-				memory.ModelKey, memory.EffortKey, serverops.KeyCondenser,
-			}},
-		},
+		Groups:   SettingGroups(),
 		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Callables...), memorycmd.Command(mc.Env, m.Now)},
-		Tools:    addTools,
+		Tools:    ToolDefinitions(m.ProposeKinds),
+		Effects: func(d module.EffectDeps) module.Effects {
+			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, MailOpen: d.Open, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
+			return module.Effects{
+				Proposals: slices.Concat(a.Proposals(), permissionProposals(d.Resume)),
+				Undo:      slices.Concat(filetools.Undo(), kb.Undo(), taskstools.Undo(), scheduletools.Undo(), serverops.Undo(), export.Undo(d.Ledger)),
+				Resolve:   export.Resolve(d.Ledger),
+			}
+		},
+		Connections: slices.Concat(anthropicconn.Connections(), webfetch.Connections(), weather.Connections()),
+	}
+}
+
+func AttentionSources(env config.Env) []attention.Source {
+	return []attention.Source{
+		attentionsources.Plans(), attentionsources.Questions(), tasks.AttentionSource(),
+		serverops.AttentionSource(env), dreaming.Attention(env),
+	}
+}
+
+func Requirements() []module.Requirement {
+	return []module.Requirement{{Name: "the Anthropic connection", Check: anthropicKey}}
+}
+
+func SettingGroups() []settings.Group {
+	return []settings.Group{
+		{Name: "spending", Title: "Spending", Keys: append([]string{
+			inference.BudgetKey, inference.ChatKey, inference.UnattendedKey, inference.ThreadCapKey,
+		}, append(runCaps(), assistant.KeySubagentMaxCostUSD, websearch.KeyMaxCostUSD, assistant.KeyDreamingMaxCost,
+			assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
+		{Name: "background", Title: "Background work", Keys: []string{
+			assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, websearch.KeyModel,
+			memory.ModelKey, memory.EffortKey, serverops.KeyCondenser,
+		}},
 	}
 }
 
@@ -97,18 +141,19 @@ func anthropicKey(ctx context.Context, p module.Probe) (string, error) {
 	return "", nil
 }
 
-func addTools(r *registry.Registry) error {
+func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
+	defs := []module.ToolDefinition{{Tool: registry.WebSearchTool()}, proposetools.Definition(kinds)}
 	for _, tools := range [][]tool.Tool{
 		askoperator.Tools(), attentiontool.Tools(), filetools.Tools(), memorytools.Tools(),
 		webfetch.Tools(), recalltools.Tools(), plantools.Tools(),
-		proposetools.Tools(), scheduletools.Tools(), taskstools.Tools(),
+		scheduletools.Tools(), taskstools.Tools(),
 		kbtools.Tools(), weathertools.Tools(), opstools.Tools(),
 	} {
-		if err := r.Add(tools...); err != nil {
-			return err
+		for _, t := range tools {
+			defs = append(defs, module.ToolDefinition{Tool: t})
 		}
 	}
-	return nil
+	return append(defs, research.Definition(), lookup.Definition(), websearch.Definition(), report.Definition())
 }
 
 func runCaps() []string {

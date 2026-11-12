@@ -24,8 +24,10 @@ func gauge(name, help string, value func(inference.Status) float64) ops.Metric {
 	}}
 }
 
-func init() {
-	ops.Register(gauge("atrium_budget_monthly_usd", "Monthly assistant budget in USD.", func(st inference.Status) float64 { return st.BudgetUSD }))
-	ops.Register(gauge("atrium_budget_spent_usd", "Assistant spend this calendar month in USD.", func(st inference.Status) float64 { return st.SpentUSD }))
-	ops.Register(gauge("atrium_budget_spent_ratio", "Share of the monthly budget spent.", func(st inference.Status) float64 { return st.Share }))
+func Metrics() []ops.Metric {
+	return []ops.Metric{
+		gauge("atrium_budget_monthly_usd", "Monthly assistant budget in USD.", func(st inference.Status) float64 { return st.BudgetUSD }),
+		gauge("atrium_budget_spent_usd", "Assistant spend this calendar month in USD.", func(st inference.Status) float64 { return st.SpentUSD }),
+		gauge("atrium_budget_spent_ratio", "Share of the monthly budget spent.", func(st inference.Status) float64 { return st.Share }),
+	}
 }

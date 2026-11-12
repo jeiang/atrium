@@ -25,11 +25,11 @@ const (
 	DefaultAccessGroups = "atrium_access,atrium_admin"
 )
 
-func init() {
-	settings.MustRegister(
+func Settings() []settings.Def {
+	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{Key: KeyIdleDays, Label: "Sign out after idle (days)", Module: module, Type: settings.Int, Default: "7", Check: settings.Between(1, 365)}),
 		settings.Value(settings.UI, settings.Def{Key: KeyMaxDays, Label: "Sign out after (days)", Module: module, Type: settings.Int, Default: "30", Check: settings.Between(1, 365)}),
-	)
+	}
 }
 
 func checkEndpoint(raw string) error {

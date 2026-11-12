@@ -70,8 +70,8 @@ func refuseRemovedSelectors(env Env) error {
 	return nil
 }
 
-func LoadHost(env Env, filename string) (Host, error) {
-	defs := settings.HostDefs()
+func LoadHost(env Env, reg *settings.Registry, filename string) (Host, error) {
+	defs := reg.HostDefs()
 	h := Host{Values: map[string]string{}, Sources: map[string]string{}, Connections: map[string]HostConnection{}}
 	for _, d := range defs {
 		h.Values[d.Key] = d.Default
@@ -80,12 +80,12 @@ func LoadHost(env Env, filename string) (Host, error) {
 		return Host{}, err
 	}
 	if filename != "" {
-		if err := h.readFile(env, defs, filename); err != nil {
+		if err := h.readFile(env, reg, defs, filename); err != nil {
 			return Host{}, err
 		}
 	}
 	for _, d := range defs {
-		if err := h.readEnv(env, d); err != nil {
+		if err := h.readEnv(env, reg, d); err != nil {
 			return Host{}, err
 		}
 	}
@@ -113,8 +113,8 @@ func (h *Host) validateAppKeys() error {
 	return nil
 }
 
-func (h *Host) readEnv(env Env, d settings.HostDef) error {
-	if err := refuseEnvName(env, d.Module, d.Key); err != nil {
+func (h *Host) readEnv(env Env, reg *settings.Registry, d settings.HostDef) error {
+	if err := refuseEnvName(env, reg, d.Module, d.Key); err != nil {
 		return err
 	}
 	name := "ATRIUM_" + strings.ToUpper(d.Module) + "_" + strings.ToUpper(d.Key)
@@ -146,7 +146,7 @@ func (h *Host) readEnv(env Env, d settings.HostDef) error {
 	if value == "" {
 		return nil
 	}
-	if err := validateHostValue(d, value); err != nil {
+	if err := validateHostValue(reg, d, value); err != nil {
 		return fmt.Errorf("config: %s: %w", name, err)
 	}
 	h.Values[d.Key] = value
@@ -154,7 +154,7 @@ func (h *Host) readEnv(env Env, d settings.HostDef) error {
 	return nil
 }
 
-func (h *Host) readFile(env Env, defs []settings.HostDef, path string) error {
+func (h *Host) readFile(env Env, reg *settings.Registry, defs []settings.HostDef, path string) error {
 	raw, err := os.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("config: %s: %w", HostConfigEnv, err)
@@ -212,7 +212,7 @@ func (h *Host) readFile(env Env, defs []settings.HostDef, path string) error {
 				}
 				value = strings.TrimSpace(string(raw))
 			}
-			if err := validateHostValue(d, value); err != nil {
+			if err := validateHostValue(reg, d, value); err != nil {
 				return fmt.Errorf("config: %s: %s: %w", path, module+"."+name, err)
 			}
 			h.Values[d.Key] = value
@@ -368,7 +368,7 @@ func hostScalar(env Env, dotted string, raw any) (string, error) {
 	return "", fmt.Errorf("config: %s: must be a string, number or boolean", dotted)
 }
 
-func validateHostValue(d settings.HostDef, value string) error {
+func validateHostValue(reg *settings.Registry, d settings.HostDef, value string) error {
 	switch d.Type {
 	case settings.Int:
 		if _, err := strconv.ParseInt(strings.TrimSpace(value), 10, 64); err != nil {
@@ -387,7 +387,7 @@ func validateHostValue(d settings.HostDef, value string) error {
 			return fmt.Errorf("%s must be one of %s", d.Key, strings.Join(d.Choices, ", "))
 		}
 	}
-	if err := settings.ValidateHost(d.Key, value); err != nil {
+	if err := reg.ValidateHost(d.Key, value); err != nil {
 		return fmt.Errorf("%s %w", d.Key, err)
 	}
 	return nil

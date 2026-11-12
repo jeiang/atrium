@@ -59,9 +59,10 @@ func validateOp(name string) func(json.RawMessage) error {
 	}
 }
 
-func RegisterLedgerUndoer(s *ledger.Store, open mail.OpenFunc) error {
+func Undo(s *ledger.Store, open mail.OpenFunc) []ledger.UndoDefinition {
+	var out []ledger.UndoDefinition
 	for _, name := range []string{"draft_delete", "draft_restore"} {
-		if err := s.RegisterUndo(name, ledger.Undoer{
+		out = append(out, ledger.UndoDefinition{Operation: name, Undoer: ledger.Undoer{
 			Validate: validateOp(name),
 			Local: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (ledger.Result, error) {
 				var value any
@@ -76,54 +77,47 @@ func RegisterLedgerUndoer(s *ledger.Store, open mail.OpenFunc) error {
 				}
 				return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
 			},
-		}); err != nil {
-			return err
-		}
+		}})
 	}
-	if err := s.RegisterUndo(UndoFolderDelete, ledger.Undoer{
-		Validate: validateOp(UndoFolderDelete),
-		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
-			value, err := undoFolderDelete(ctx, open, s, raw)
-			if err != nil {
-				return ledger.Result{}, mailUndoFailure(err)
-			}
-			return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
-		},
-	}); err != nil {
-		return err
-	}
-	if err := s.RegisterUndo(UndoMoveBack, ledger.Undoer{
-		Validate: validateOp(UndoMoveBack),
-		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
-			value, err := undoMailMoveBack(ctx, open, s, raw)
-			if err != nil {
-				return ledger.Result{}, mailUndoFailure(err)
-			}
-			return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
-		},
-	}); err != nil {
-		return err
-	}
-	return s.RegisterUndo(tracking.UndoUntrack, ledger.Undoer{
-		Validate: validateOp(tracking.UndoUntrack),
-		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
-			value, err := undoPackageUntrack(ctx, s, raw)
-			if err != nil {
-				return ledger.Result{}, mailUndoFailure(err)
-			}
-			return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
-		},
-		Finalize: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage, result ledger.Result) error {
-			if result.State != ledger.Done {
-				return nil
-			}
-			var u tracking.Undo
-			if err := json.Unmarshal(raw, &u); err != nil {
-				return ledger.Refused("package undo payload is invalid")
-			}
-			return tracking.Restore(ctx, tx, u)
-		},
-	})
+	return append(out,
+		ledger.UndoDefinition{Operation: UndoFolderDelete, Undoer: ledger.Undoer{
+			Validate: validateOp(UndoFolderDelete),
+			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
+				value, err := undoFolderDelete(ctx, open, s, raw)
+				if err != nil {
+					return ledger.Result{}, mailUndoFailure(err)
+				}
+				return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
+			}}},
+		ledger.UndoDefinition{Operation: UndoMoveBack, Undoer: ledger.Undoer{
+			Validate: validateOp(UndoMoveBack),
+			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
+				value, err := undoMailMoveBack(ctx, open, s, raw)
+				if err != nil {
+					return ledger.Result{}, mailUndoFailure(err)
+				}
+				return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
+			}}},
+		ledger.UndoDefinition{Operation: tracking.UndoUntrack, Undoer: ledger.Undoer{
+			Validate: validateOp(tracking.UndoUntrack),
+			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
+				value, err := undoPackageUntrack(ctx, s, raw)
+				if err != nil {
+					return ledger.Result{}, mailUndoFailure(err)
+				}
+				return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
+			},
+			Finalize: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage, result ledger.Result) error {
+				if result.State != ledger.Done {
+					return nil
+				}
+				var u tracking.Undo
+				if err := json.Unmarshal(raw, &u); err != nil {
+					return ledger.Refused("package undo payload is invalid")
+				}
+				return tracking.Restore(ctx, tx, u)
+			}}},
+	)
 }
 
 func mailUndoFailure(err error) error {

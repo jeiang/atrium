@@ -66,6 +66,12 @@ func (p *Pipeline) Resolve(ctx context.Context, id int64, outcome string, who Re
 	if prop.Status == Approved {
 		return Resolved{}, ProposalError(fmt.Sprintf("proposal %d is still being applied", id))
 	}
+	if p.Registry != nil && p.Registry.Bind != nil {
+		ctx, err = p.Registry.Bind(ctx, prop.Kind)
+		if err != nil {
+			return Resolved{}, err
+		}
+	}
 	effects, err := p.Ledger.ProposalEffects(ctx, id)
 	if err != nil {
 		return Resolved{}, err

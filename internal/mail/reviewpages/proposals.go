@@ -7,6 +7,7 @@ import (
 	"net/url"
 	"strconv"
 
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -163,7 +164,12 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 		done, err = s.pipeline.ApproveAndApply(ctx, id, selection, proposals.Resolver{Actor: "operator", Source: "ui"})
 	}
 	var refused proposals.ProposalError
-	if errors.As(err, &refused) {
+	var disabled *module.OwnerDisabled
+	if errors.As(err, &refused) || errors.As(err, &disabled) {
+		if done != nil {
+			s.card(w, r, id, toast("error", "It did not finish", stoppedPartway(err, done)))
+			return
+		}
 		s.card(w, r, id, toast("error", "Not approved", err.Error()))
 		return
 	}
@@ -187,7 +193,8 @@ func (s *service) proposalDismiss(w http.ResponseWriter, r *http.Request) {
 	}
 	err := s.pipeline.Dismiss(detached(r), id, status, proposals.Resolver{Actor: "operator", Source: "ui"})
 	var refused proposals.ProposalError
-	if errors.As(err, &refused) {
+	var disabled *module.OwnerDisabled
+	if errors.As(err, &refused) || errors.As(err, &disabled) {
 		s.card(w, r, id, toast("error", "Not dismissed", err.Error()))
 		return
 	}
@@ -206,7 +213,12 @@ func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
 	}
 	outcome, err := s.pipeline.Undo(detached(r), id, proposals.Resolver{Actor: "operator", Source: "ui"})
 	var refused proposals.ProposalError
-	if errors.As(err, &refused) {
+	var disabled *module.OwnerDisabled
+	if errors.As(err, &refused) || errors.As(err, &disabled) {
+		if len(outcome.Outcomes) > 0 || outcome.SyncError != nil {
+			s.card(w, r, id, toast("error", "Undo stopped partway", undoStoppedPartway(err, outcome)))
+			return
+		}
 		s.card(w, r, id, toast("error", "Not undone", err.Error()))
 		return
 	}
@@ -224,6 +236,27 @@ func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.card(w, r, id, toast("error", "Undo did not finish", failed))
+}
+
+func stoppedPartway(err error, done *proposals.Proposal) string {
+	if done.Undoable {
+		return err.Error() + ". Undo what it already did from this card."
+	}
+	return err.Error() + "."
+}
+
+func undoStoppedPartway(err error, outcome proposals.UndoResult) string {
+	put := 0
+	for _, o := range outcome.Outcomes {
+		if o["ok"] == true {
+			put++
+		}
+	}
+	text := fmt.Sprintf("%s. Writes put back before it stopped: %d.", err.Error(), put)
+	if outcome.SyncError != nil {
+		text += " The mailbox index did not refresh: " + *outcome.SyncError
+	}
+	return text
 }
 
 func resolvedToast(outcome string) *tpl.Toast {
@@ -249,7 +282,8 @@ func (s *service) proposalResolve(w http.ResponseWriter, r *http.Request) {
 	outcome, _ := web.Value(web.FormValues(r), "outcome")
 	_, err := s.pipeline.Resolve(detached(r), id, outcome, proposals.Resolver{Actor: "operator", Source: "ui"})
 	var refused proposals.ProposalError
-	if errors.As(err, &refused) {
+	var disabled *module.OwnerDisabled
+	if errors.As(err, &refused) || errors.As(err, &disabled) {
 		s.card(w, r, id, toast("error", "Not settled", err.Error()))
 		return
 	}

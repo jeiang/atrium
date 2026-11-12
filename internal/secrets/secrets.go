@@ -17,14 +17,17 @@ const (
 	LinkKeyFile       = "link_key_file"
 )
 
-func init() {
-	settings.MustRegisterHost(
-		settings.HostDef{Key: ActionLinkKeyFile, Module: "app_keys", Type: settings.String},
-		settings.HostDef{Key: LinkKeyFile, Module: "app_keys", Type: settings.String},
-	)
-	settings.MustRegister(
+func HostSettings() []settings.HostDef {
+	return []settings.HostDef{
+		{Key: ActionLinkKeyFile, Module: "app_keys", Type: settings.String},
+		{Key: LinkKeyFile, Module: "app_keys", Type: settings.String},
+	}
+}
+
+func Settings() []settings.Def {
+	return []settings.Def{
 		settings.Secret(settings.SecretOpts{Generated: true}, settings.Def{Key: ActionLinkKey, Module: "action_links", Type: settings.String, Check: settings.NonEmpty}),
-	)
+	}
 }
 
 var appKeyFiles = map[string]string{

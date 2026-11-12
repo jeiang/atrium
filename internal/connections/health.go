@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"net/http"
 	"strings"
-	"sync"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
@@ -14,27 +13,13 @@ import (
 // Notifier delivers one operator notification for a health state transition.
 type Notifier func(ctx context.Context, d *db.DB, title, body string) error
 
-var (
-	notifierMu sync.Mutex
-	notifier   Notifier
-)
-
-func SetNotifier(n Notifier) {
-	notifierMu.Lock()
-	defer notifierMu.Unlock()
-	notifier = n
-}
-
-func currentNotifier() Notifier {
-	notifierMu.Lock()
-	defer notifierMu.Unlock()
-	return notifier
-}
-
 // announce reports a state change after its write committed. The first
 // observation of a connection is evidence, not a transition, so it is silent.
 func (s *Store) announce(ctx context.Context, id ID, previous, next State, reason string) {
-	n := currentNotifier()
+	var n Notifier
+	if s.reg != nil {
+		n = s.reg.notify
+	}
 	if n == nil || s.d == nil || previous == next || previous == "" || previous == Untested || next == Untested {
 		return
 	}

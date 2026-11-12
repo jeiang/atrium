@@ -1,7 +1,6 @@
 package mediamodule
 
 import (
-	"github.com/jeiang/atrium/internal/assistant/registry"
 	mediatools "github.com/jeiang/atrium/internal/assistant/tools/media"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/media"
@@ -16,13 +15,27 @@ type Module struct {
 	Now func() float64
 }
 
-func (m Module) Register(mc module.Context) module.Registration {
-	return module.Registration{
-		Name: module.Media,
-		Requires: []module.Requirement{
-			module.HostSetting(media.KeyRoot),
-			module.Connection(string(media.KindQbittorrent)),
-		},
+func Requirements() []module.Requirement {
+	return []module.Requirement{
+		module.HostSetting(media.KeyRoot),
+		module.Connection(string(media.KindQbittorrent)),
+	}
+}
+
+func SettingGroups() []settings.Group {
+	return []settings.Group{{Name: "library", Title: "Library", Keys: []string{media.KeyLinkTTL}}}
+}
+
+func ToolDefinitions() []module.ToolDefinition {
+	return mediatools.Definitions()
+}
+
+func (m Module) Declare(mc module.Context) module.Declaration {
+	return module.Declaration{
+		Name:     module.Media,
+		Requires: Requirements(),
+		Settings: media.SettingsDefs(),
+		Host:     media.HostSettings(),
 		Pages: []web.Page{{
 			Module:    pages.Module(pages.Options{Now: m.Now}),
 			Templates: pages.Templates(),
@@ -33,10 +46,15 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Section: "apps", Label: "Library", URL: "/apps/media/library", Icon: "film", Page: "media_library", Order: 30},
 			},
 		}},
-		Settings: []settings.Group{{Name: "library", Title: "Library", Keys: []string{media.KeyLinkTTL}}},
+		Groups:   SettingGroups(),
 		Commands: []*cli.Command{mediacmd.Command(mc.Env, m.Now)},
-		Tools: func(r *registry.Registry) error {
-			return r.Add(mediatools.Tools()...)
+		Tools:    ToolDefinitions(),
+		Effects: func(d module.EffectDeps) module.Effects {
+			return module.Effects{
+				Undo:    mediatools.Undo(d.Ledger, d.Env),
+				Resolve: media.Resolve(d.Ledger),
+			}
 		},
+		Connections: media.Connections(),
 	}
 }

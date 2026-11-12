@@ -6,12 +6,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 )
@@ -38,8 +37,12 @@ var channels = skippable(func(ctx context.Context, d *db.DB, env config.Env, now
 	if err != nil {
 		return nil, err
 	}
-	store := ledger.NewStore(d, now)
-	if err := media.RegisterLedgerUndoer(store, env); err != nil {
+	cfg, err := config.Load(env)
+	if err != nil {
+		return nil, err
+	}
+	store, err := module.SetFrom(ctx).Catalog().Ledger(d, env, imapclient.Opener(cfg), now)
+	if err != nil {
 		return nil, err
 	}
 	result, err := media.Poll(ctx, d, store, env, settings, media.PollOptions{Now: now})
@@ -54,8 +57,12 @@ var sweep = skippable(func(ctx context.Context, d *db.DB, env config.Env, now fu
 	if err != nil {
 		return nil, err
 	}
-	store := ledger.NewStore(d, now)
-	if err := media.RegisterLedgerUndoer(store, env); err != nil {
+	cfg, err := config.Load(env)
+	if err != nil {
+		return nil, err
+	}
+	store, err := module.SetFrom(ctx).Catalog().Ledger(d, env, imapclient.Opener(cfg), now)
+	if err != nil {
 		return nil, err
 	}
 	selected, err := settings.SelectFiles(ctx, store, settings, media.Scope{}, nil)
@@ -104,9 +111,9 @@ func thumbnails(cfg config.Config) job {
 
 func Callables() map[string]worker.Callable {
 	return map[string]worker.Callable{
-		scheduler.MediaChannelsName: callable(channels),
-		scheduler.MediaSweepName:    callable(sweep),
-		scheduler.MediaThumbnailsName: {
+		media.JobChannels: callable(channels),
+		media.JobSweep:    callable(sweep),
+		media.JobThumbnails: {
 			Modules: []string{module.Media},
 			Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
 				_, err := thumbnails(e.Service.Cfg)(ctx, e.Service.DB, e.Service.Env, e.Now)

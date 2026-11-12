@@ -18,6 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -272,19 +273,22 @@ func idExists(ctx context.Context, q db.Querier, project int64, now float64, f F
 	}
 }
 
-func Tool() tool.Tool {
+func Metadata() tool.Tool {
 	return tool.Tool{
 		Name: Name,
 		Description: "Finish with a typed report. Pass an object holding every requested field; use null for a field you " +
 			"could not determine. The report is validated against the run's spec and returns an error listing each bad field.",
 		InputSchema: json.RawMessage(`{"type":"object","properties":{"answer":{"type":"object"}},` +
 			`"required":["answer"],"additionalProperties":false}`),
-		Handler:   handle,
 		Effect:    tool.Read,
 		Annotated: true,
 		Channel:   tool.ChannelNone,
 		Contexts:  tool.Kinds{tool.Sub, tool.Nightly},
 	}
+}
+
+func Definition() module.ToolDefinition {
+	return module.ToolDefinition{Tool: Metadata()}
 }
 
 func Schema(raw json.RawMessage) (json.RawMessage, error) {
@@ -370,7 +374,7 @@ func fieldSchema(field Field) map[string]any {
 	}
 }
 
-func handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func Handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	answer, ok := args["answer"].(map[string]any)
 	if !ok {
 		return nil, tool.Error("answer must be an object")

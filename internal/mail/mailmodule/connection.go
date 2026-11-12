@@ -15,8 +15,8 @@ import (
 	"github.com/jeiang/atrium/internal/mail/smtp"
 )
 
-func init() {
-	connections.Register(connections.Definition{Kind: mailconn.Kind, Validate: validateConnection, Test: testConnection})
+func Connections() []connections.Definition {
+	return []connections.Definition{{Kind: mailconn.Kind, Validate: validateConnection, Test: testConnection}}
 }
 
 func validateConnection(c connections.Candidate) error {

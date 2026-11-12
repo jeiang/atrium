@@ -8,11 +8,9 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/runner"
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/cli"
@@ -24,7 +22,7 @@ import (
 
 func Callables() map[string]worker.Callable {
 	return map[string]worker.Callable{
-		scheduler.CalendarCandidatesName: {
+		calendar.JobCandidates: {
 			Modules: []string{module.Calendar, module.Mail},
 			Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
 				_, limit, err := calendar.CandidateLimits(ctx, e.Service.DB.Read)
@@ -75,7 +73,11 @@ func candidatesCommand(env config.Env, tools registry.Source, now func() float64
 					return cli.Fail(e, err)
 				}
 				open := imapclient.Opener(cfg)
-				r, err := runner.New(tools, toolset.Ledger(d, env, open, now), open)
+				store, err := module.SetFrom(e.Ctx).Catalog().Ledger(d, env, open, now)
+				if err != nil {
+					return cli.Fail(e, err)
+				}
+				r, err := runner.New(tools, store, open)
 				if err != nil {
 					return cli.Fail(e, err)
 				}

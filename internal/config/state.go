@@ -9,13 +9,15 @@ import (
 )
 
 type State struct {
-	mu        sync.RWMutex
-	core      core
-	accounts  []AccountSpec
-	passwords map[string]string
-	settings  *settings.Registry
-	host      Host
-	reconcile func(context.Context, *db.DB, Host) error
+	mu           sync.RWMutex
+	core         core
+	accounts     []AccountSpec
+	passwords    map[string]string
+	settings     *settings.Registry
+	host         Host
+	reconcile    func(context.Context, *db.DB, Host) error
+	credential   AccountCredentialFunc
+	hostAccounts HostAccountsFunc
 }
 
 func NewState(reg *settings.Registry) *State {
@@ -105,7 +107,7 @@ func Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 
 func (s *State) Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 	reg := s.settings
-	host, err := LoadHost(env, HostFile(env))
+	host, err := LoadHost(env, reg, HostFile(env))
 	if err != nil {
 		return err
 	}
@@ -126,7 +128,7 @@ func (s *State) Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 		return err
 	}
 	s.mu.RLock()
-	reconcile := s.reconcile
+	reconcile, hostAccounts := s.reconcile, s.hostAccounts
 	s.mu.RUnlock()
 	if reconcile != nil {
 		if err := reconcile(ctx, d, host); err != nil {

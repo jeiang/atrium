@@ -34,16 +34,19 @@ const (
 	DefaultTMDBImages = "https://image.tmdb.org/t/p/w342"
 )
 
-func init() {
-	settings.MustRegisterHost(
-		settings.HostDef{Key: KeyRoot, Module: module, Type: settings.String},
-		settings.HostDef{Key: KeyMoviesURL, Module: module, Type: settings.String, Check: httpURL},
-		settings.HostDef{Key: KeyTVURL, Module: module, Type: settings.String, Check: httpURL},
-	)
-	settings.MustRegister(
+func SettingsDefs() []settings.Def {
+	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{Key: KeyLinkTTL, Module: module, Type: settings.Int, Default: "43200", Check: settings.Between(60, 30*86400)}),
 		settings.Secret(settings.SecretOpts{Generated: true}, settings.Def{Key: KeyLinkKey, Module: module, Type: settings.String, Check: settings.NonEmpty}),
-	)
+	}
+}
+
+func HostSettings() []settings.HostDef {
+	return []settings.HostDef{
+		{Key: KeyRoot, Module: module, Type: settings.String},
+		{Key: KeyMoviesURL, Module: module, Type: settings.String, Check: httpURL},
+		{Key: KeyTVURL, Module: module, Type: settings.String, Check: httpURL},
+	}
 }
 
 func httpURL(value string) error {

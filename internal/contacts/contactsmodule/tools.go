@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -20,12 +19,21 @@ import (
 
 type Module struct{}
 
-func (Module) Register(mc module.Context) module.Registration {
-	return module.Registration{
+func Requirements() []module.Requirement {
+	return []module.Requirement{module.HostSetting(contacts.DirKey)}
+}
+
+func ToolDefinitions() []module.ToolDefinition {
+	return []module.ToolDefinition{Definition()}
+}
+
+func (Module) Declare(mc module.Context) module.Declaration {
+	return module.Declaration{
 		Name:     module.Contacts,
-		Requires: []module.Requirement{module.HostSetting(contacts.DirKey)},
+		Requires: Requirements(),
+		Host:     contacts.HostSettings(),
 		Commands: []*cli.Command{{Name: "contacts", Commands: []*cli.Command{syncCommand(mc.Env)}}},
-		Tools:    func(r *registry.Registry) error { return r.Add(Tools()...) },
+		Tools:    ToolDefinitions(),
 	}
 }
 
@@ -59,17 +67,30 @@ var contactsSchema = json.RawMessage(`{"type":"object","properties":{"query":{"t
 
 var includeFields = []string{"emails", "phones", "dates"}
 
-func Tools() []tool.Tool {
-	return []tool.Tool{{
+func Metadata() tool.Tool {
+	return tool.Tool{
 		Name:        "contacts_lookup",
 		Description: "Look up people in the operator's address book by name, email, phone or organisation. Returns name and organisation; pass include for emails, phones or dates.",
 		InputSchema: contactsSchema,
-		Handler:     contactsLookup,
 		Effect:      tool.Read,
 		Annotated:   true,
 		Marks:       tool.PII,
 		Contexts:    tool.AllKinds,
-	}}
+	}
+}
+
+func Tool() tool.Tool {
+	t := Metadata()
+	t.Handler = contactsLookup
+	return t
+}
+
+func Definition() module.ToolDefinition {
+	return module.ToolDefinition{Tool: Tool()}
+}
+
+func Tools() []tool.Tool {
+	return []tool.Tool{Tool()}
 }
 
 func contactsLookup(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {

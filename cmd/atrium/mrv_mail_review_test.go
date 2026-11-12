@@ -155,11 +155,12 @@ func mrvMailFixture(t *testing.T, mode string) *mrvMail {
 	m.fake.AddBox("Sent Messages", mailtest.NewBox(5), `\Sent`)
 	h, x := mailtest.RawWith("Statement", "pay@bank.test", "statement-1", "Your statement is ready.")
 	inbox.Add(h, x, []string{`\Seen`}, nil)
-	f.app = newAppWith(f.lookup, f.settings, f.state, nil, func(config.Config) mail.OpenFunc {
+	f.app = newAppWith(f.lookup, func(config.Config) mail.OpenFunc {
 		return func(_ context.Context, opts mail.OpenOptions) (mail.Client, error) {
 			return mail.Gated(m.fake, opts.Q), nil
 		}
 	}, nil, quietLog)
+	f.settings, f.state = f.app.Settings, f.app.State
 	m.app = f.app
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")

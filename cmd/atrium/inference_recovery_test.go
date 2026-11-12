@@ -10,7 +10,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
@@ -22,8 +21,7 @@ type recoveryClock struct{ at float64 }
 func (c *recoveryClock) now() float64 { return c.at }
 
 func recoveryApp(f *fixture, now func() float64) *cli.App {
-	reg := settings.New()
-	return newAppWith(f.lookup, reg, config.NewState(reg), nil, imapclient.Opener, now, quietLog)
+	return newAppWith(f.lookup, imapclient.Opener, now, quietLog)
 }
 
 func recoveryRun(t *testing.T, f *fixture, clock *recoveryClock, text string) (asstView, appRun) {
@@ -75,7 +73,7 @@ func recoveryRefused(t *testing.T, ran appRun) {
 
 func recoveryStatus(t *testing.T, d *db.DB, at float64, loc *time.Location) inference.Status {
 	t.Helper()
-	ctx := settings.With(context.Background(), settings.New())
+	ctx := settings.With(context.Background(), testSettings())
 	status, err := inference.StatusAt(ctx, d.Read, at, loc)
 	if err != nil {
 		t.Fatalf("status at %v: %v", at, err)

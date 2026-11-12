@@ -29,18 +29,14 @@ const (
 
 const modeDefault = config.Shadow
 
-func init() {
+func Settings() []settings.Def {
 	adv := func(key string, kind settings.Type, def string, check func(string) error) settings.Def {
 		return settings.Value(settings.Advanced, settings.Def{Key: key, Module: module, Type: kind, Default: def, Check: check})
 	}
 	ui := func(key string, kind settings.Type, def string, check func(string) error) settings.Def {
 		return settings.Value(settings.UI, settings.Def{Key: key, Module: module, Type: kind, Default: def, Check: check})
 	}
-	settings.MustRegisterHost(
-		settings.HostDef{Key: endpoint.KeyChatURL, Module: module, Type: settings.String},
-		settings.HostDef{Key: endpoint.KeyChatModel, Module: module, Type: settings.String, Default: "qwen", Check: nonBlank},
-	)
-	settings.MustRegister(
+	return []settings.Def{
 		settings.Value(settings.Advanced, settings.Def{Key: KeyMode, Module: module, Type: settings.String, Default: modeDefault, Check: modeCheck}),
 		ui(endpoint.KeyChatURL, settings.String, "", nil),
 		ui(endpoint.KeyChatModel, settings.String, "qwen", nonBlank),
@@ -53,7 +49,14 @@ func init() {
 		ui(KeyLoopsRemindHour, settings.Int, "9", settings.Between(0, 23)),
 		settings.Shown("Default snooze (days)", adv(KeyLoopsSnoozeDefaultDays, settings.Int, "3", atLeast(1))),
 		ui(KeyWatchesCarrierDomains, settings.String, "ups.com,fedex.com,usps.com,dhl.com,usps.gov,dhl.de", domainsCheck),
-	)
+	}
+}
+
+func HostSettings() []settings.HostDef {
+	return []settings.HostDef{
+		{Key: endpoint.KeyChatURL, Module: module, Type: settings.String},
+		{Key: endpoint.KeyChatModel, Module: module, Type: settings.String, Default: "qwen", Check: nonBlank},
+	}
 }
 
 func atLeast(lo int64) func(string) error {

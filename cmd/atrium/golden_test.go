@@ -246,9 +246,7 @@ capabilities = ["api"]
 			return mail.Gated(fakes[opts.Account], opts.Q), nil
 		}
 	}
-	reg := settings.New()
-	st := config.NewState(reg)
-	app := newAppWith(env, reg, st, nil, clients, func() float64 { return data.world.Clock }, quietLog)
+	app := newAppWith(env, clients, func() float64 { return data.world.Clock }, quietLog)
 	app.Stdin = strings.NewReader(stdin)
 	copyFile(t, filepath.Join(golden.Dir(), "world.db"), filepath.Join(dir, "atrium.db"))
 	seedFlagsAt(t, app, filepath.Join(dir, "atrium.db"), allFlagsTrue())
@@ -261,7 +259,7 @@ capabilities = ["api"]
 	if apple := data.environment["ICLOUD_APPLE_ID"]; apple != "" {
 		seedSettingsAt(t, filepath.Join(dir, "atrium.db"), map[string]string{"icloud_apple_id": apple})
 	}
-	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: reg, state: st, fakes: fakes, llm: srv.URL + "/v1"}
+	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: app.Settings, state: app.State, fakes: fakes, llm: srv.URL + "/v1"}
 	fixturesByTest.Store(t, f)
 	fixturesByTest.Store(testKey(t), f)
 	seedNotionVectors(t, filepath.Join(f.dir, "atrium.db"))

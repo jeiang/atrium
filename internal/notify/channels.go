@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 )
 
 const (
@@ -81,6 +82,9 @@ func SetContent(ctx context.Context, q db.Querier, channel, content string) erro
 	}
 	if content != Auto && content != Full && content != Title {
 		return ChannelError("content must be auto, full or title")
+	}
+	if err := ledger.CheckAdmission(ctx); err != nil {
+		return err
 	}
 	if err := EnsureChannels(ctx, q); err != nil {
 		return err

@@ -77,20 +77,22 @@ func PermissionKey(channel, situation int) string {
 	return "permission_" + channelKeys[channel] + "_" + situationKeys[situation]
 }
 
-func init() {
+func Settings() []settings.Def {
 	table := DefaultTable()
+	var out []settings.Def
 	for i := range channelKeys {
 		for s := range situationKeys {
 			choices := []string{"allow", "ask", "deny"}
 			if (i == 2 || i == 3) && (s == 3 || s == 4) {
 				choices = []string{"ask", "deny"}
 			}
-			settings.MustRegister(settings.Value(settings.UI, settings.Def{
+			out = append(out, settings.Value(settings.UI, settings.Def{
 				Key: PermissionKey(i, s), Module: "permissions", Type: settings.Enum,
 				Choices: choices, Default: decisionNames[table[i][s]],
 			}))
 		}
 	}
+	return out
 }
 
 func parseDecision(value string) (Decision, bool) {

@@ -14,7 +14,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 const lockHolderEnv = "ATRIUM_LOCK_TIMEOUT_TEST_HOLDER"
@@ -31,8 +30,7 @@ func TestMain(m *testing.M) {
 		_, _ = bufio.NewReader(os.Stdin).ReadString('\n')
 		os.Exit(0)
 	}
-	reg := settings.New()
-	newApp(config.OS, reg, config.NewState(reg), nil)
+	newApp(config.OS)
 	guardExternalHosts()
 	os.Exit(m.Run())
 }

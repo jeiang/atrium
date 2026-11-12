@@ -17,12 +17,12 @@ type connectionConfig struct {
 	URL string `json:"url"`
 }
 
-func init() {
-	connections.Register(connections.Definition{
+func Connections() []connections.Definition {
+	return []connections.Definition{{
 		Kind:     KindWebfetch,
 		Validate: validateConnection,
 		Test:     testConnection,
-	})
+	}}
 }
 
 func validateConnection(c connections.Candidate) error {

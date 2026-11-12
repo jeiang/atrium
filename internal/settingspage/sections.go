@@ -2,7 +2,6 @@ package settingspage
 
 import (
 	"context"
-	"slices"
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/db"
@@ -28,58 +27,60 @@ type SectionView struct {
 	Data     any                  `json:"data,omitempty"`
 }
 
-var sections []Section
+type Sections []Section
 
-func RegisterSection(s Section) {
-	if slices.ContainsFunc(sections, func(r Section) bool { return r.Name == s.Name }) {
-		return
-	}
-	sections = append(sections, s)
-	Want(s.Module)
-}
-
-func AllSections() []Section { return slices.Clone(sections) }
-
-func SectionNamed(name string) (Section, bool) {
-	for _, s := range AllSections() {
-		if s.Name == name {
-			return s, true
+func (s Sections) Named(name string) (Section, bool) {
+	for _, section := range s {
+		if section.Name == name {
+			return section, true
 		}
 	}
 	return Section{}, false
 }
 
-func LoadSections(ctx context.Context, q db.Querier) ([]SectionView, error) {
+func (s Sections) Load(ctx context.Context, q db.Querier) ([]SectionView, error) {
 	var out []SectionView
-	for _, s := range AllSections() {
-		fields, err := settings.LoadFields(ctx, q, s.Fields)
+	for _, section := range s {
+		fields, err := settings.LoadFields(ctx, q, section.Fields)
 		if err != nil {
 			return nil, err
 		}
 		var data any
-		if s.Data != nil {
-			if data, err = s.Data(ctx, q); err != nil {
+		if section.Data != nil {
+			if data, err = section.Data(ctx, q); err != nil {
 				return nil, err
 			}
 		}
-		out = append(out, SectionView{Module: s.Module, Name: s.Name, Title: s.Title, Template: s.Template, Fields: fields, Data: data})
+		out = append(out, SectionView{Module: section.Module, Name: section.Name, Title: section.Title, Template: section.Template, Fields: fields, Data: data})
 	}
 	return out, nil
 }
 
-func SaveSection(ctx context.Context, d *db.DB, name string, values map[string]string) error {
-	s, ok := SectionNamed(name)
+func (s Sections) Save(ctx context.Context, d *db.DB, name string, values map[string]string) error {
+	section, ok := s.Named(name)
 	if !ok {
 		return UnknownSection(name)
 	}
-	if s.Validate != nil {
-		if err := s.Validate(ctx, d.Read, values); err != nil {
+	if section.Validate != nil {
+		if err := section.Validate(ctx, d.Read, values); err != nil {
 			return err
 		}
 	}
-	return settings.SaveFields(ctx, d, s.Fields, values)
+	return settings.SaveFields(ctx, d, section.Fields, values)
+}
+
+func (s Sections) Modules() map[string]bool {
+	out := make(map[string]bool, len(s))
+	for _, section := range s {
+		out[section.Module] = true
+	}
+	return out
 }
 
 type UnknownSection string
 
 func (e UnknownSection) Error() string { return "unknown section " + strconv.Quote(string(e)) }
+
+type DuplicateSection string
+
+func (e DuplicateSection) Error() string { return "duplicate section " + strconv.Quote(string(e)) }

@@ -2,8 +2,8 @@ package calendar
 
 import "github.com/jeiang/atrium/internal/settingspage"
 
-func init() {
-	settingspage.RegisterSection(settingspage.Section{
+func Sections() []settingspage.Section {
+	return []settingspage.Section{{
 		Name: "calendar", Title: "Calendar", Module: "calendar",
 		Fields: []settingspage.Field{
 			{Key: AccountKey, Label: "Account"},
@@ -13,5 +13,5 @@ func init() {
 			{Key: WorkHoursKey, Label: "Work hours"},
 			{Key: WorkDaysKey, Label: "Work days"},
 		},
-	})
+	}}
 }

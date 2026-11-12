@@ -21,17 +21,21 @@ const (
 	defaultSnoozeChoices = "1,3,7,14"
 )
 
-func init() {
-	settings.MustRegisterHost(settings.HostDef{
-		Key: KeyPublicURL, Module: coreModule, Type: settings.String, Check: checkPublicURL})
-	settings.MustRegister(
+func HostSettings() []settings.HostDef {
+	return []settings.HostDef{
+		{Key: KeyPublicURL, Module: coreModule, Type: settings.String, Check: checkPublicURL},
+	}
+}
+
+func Settings() []settings.Def {
+	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{
 			Key: KeyTZ, Module: coreModule, Type: settings.String, Default: Timezone,
 			Check: checkZone}),
 		settings.Value(settings.UI, settings.Def{
 			Key: KeySnoozeChoices, Label: "Snooze choices (days)", Module: webModule, Type: settings.String, Default: defaultSnoozeChoices,
 			Check: checkSnoozeChoices}),
-	)
+	}
 }
 
 func checkZone(value string) error {

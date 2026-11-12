@@ -32,7 +32,9 @@ import (
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/kb"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -520,6 +522,9 @@ func NeedsOperator(ctx context.Context, q db.Querier, run journal.Run) (bool, er
 }
 
 func (s *Service) claim(ctx context.Context, runID int64) error {
+	if err := ledger.CheckAdmission(ctx); err != nil {
+		return err
+	}
 	ok, err := journal.ClaimResume(ctx, s.DB.Write, runID, journal.NewOwner(), s.now())
 	if err != nil {
 		return err
@@ -531,6 +536,10 @@ func (s *Service) claim(ctx context.Context, runID int64) error {
 }
 
 func (s *Service) StartResume(ctx context.Context, runID int64) error {
+	ctx, err := module.BindOwner(ctx, module.Assistant)
+	if err != nil {
+		return err
+	}
 	if err := s.claim(context.WithoutCancel(ctx), runID); err != nil {
 		return err
 	}
@@ -538,6 +547,13 @@ func (s *Service) StartResume(ctx context.Context, runID int64) error {
 }
 
 func (s *Service) ResumeInterrupted(ctx context.Context, background bool) (int, error) {
+	ctx, err := module.BindOwner(ctx, module.Assistant)
+	if err != nil {
+		return 0, err
+	}
+	if err := ledger.CheckAdmission(ctx); err != nil {
+		return 0, err
+	}
 	if _, err := journal.MarkInterrupted(ctx, s.DB.Write, s.now()); err != nil {
 		return 0, err
 	}
@@ -553,6 +569,9 @@ func (s *Service) ResumeInterrupted(ctx context.Context, background bool) (int, 
 		}
 		if waiting {
 			continue
+		}
+		if err := ledger.CheckAdmission(ctx); err != nil {
+			return resumed, err
 		}
 		ok, err := journal.ClaimResume(ctx, s.DB.Write, run.ID, journal.NewOwner(), s.now())
 		if err != nil {

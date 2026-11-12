@@ -39,7 +39,7 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 		return nil, fmt.Errorf(`config: ANTHROPIC_API_KEY is no longer read; use connections."service/anthropic".credential_files.api_key`)
 	}
 	for _, d := range reg.Defs() {
-		if err := refuseEnvName(env, d.Module, d.Key); err != nil {
+		if err := refuseEnvName(env, reg, d.Module, d.Key); err != nil {
 			return nil, err
 		}
 	}
@@ -47,7 +47,7 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 		if _, ok := reg.Lookup(entry.Key); ok {
 			continue
 		}
-		if err := refuseEnvName(env, entry.Module, entry.Key); err != nil {
+		if err := refuseEnvName(env, reg, entry.Module, entry.Key); err != nil {
 			return nil, err
 		}
 	}
@@ -80,7 +80,7 @@ func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
 	return pins, nil
 }
 
-func refuseEnvName(env Env, module, key string) error {
+func refuseEnvName(env Env, reg *settings.Registry, module, key string) error {
 	name := "ATRIUM_" + strings.ToUpper(module) + "_" + strings.ToUpper(key)
 	fileName := name + strings.ToUpper(fileSuffix)
 	value := strings.TrimSpace(get(env, name))
@@ -92,7 +92,7 @@ func refuseEnvName(env Env, module, key string) error {
 	if known && entry.Module == "db" && entry.Key == "key" {
 		return nil
 	}
-	if settings.HostKey(key) {
+	if reg.HostKey(key) {
 		return nil
 	}
 	destination := "the Connections page"

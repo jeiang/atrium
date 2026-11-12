@@ -73,7 +73,7 @@ func TestDeniedFetchResumesWithARefusal(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	thread := latestThread(t, dir)
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -110,13 +110,90 @@ func TestDeniedFetchResumesWithARefusal(t *testing.T) {
 	}
 }
 
+func TestDisabledAssistantPermissionDismissalDoesNotResume(t *testing.T) {
+	srv, pages := webPages(t)
+	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	warm(t, api)
+	thread := latestThread(t, dir)
+	base, _, stop := startServeApp(t, freshApp(f), &lockedBuffer{})
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
+		t.Fatalf("GET /chat = %d", status)
+	}
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})))
+	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("f2", "web_fetch", map[string]any{"url": srv.URL + "/b"})))
+	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("denied")))
+	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {"read " + srv.URL + "/a then " + srv.URL + "/b"}}); status >= http.StatusBadRequest {
+		t.Fatalf("POST message = %d: %s", status, body)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	proposal, _ := waitParkedPermission(t, d, thread)
+	var runID int64
+	var owner string
+	if err := d.Read.QueryRow("SELECT id, COALESCE(owner, '') FROM runs WHERE thread_id = ? ORDER BY id DESC LIMIT 1", thread).Scan(&runID, &owner); err != nil {
+		t.Fatal(err)
+	}
+	stop()
+	asstSet(t, "assistant_enabled", "false")
+	base, _, stop = startServeApp(t, freshApp(f), &lockedBuffer{})
+	if status, _, _ := fetch(t, client, "GET", base+"/review", nil); status != http.StatusOK {
+		t.Fatalf("GET /review = %d", status)
+	}
+	start := len(api.Requests())
+	if code, body := hxFetch(t, client, http.MethodPost, base+fmt.Sprintf("/proposals/%d/approve", proposal), url.Values{}); code != http.StatusOK || !strings.Contains(body, "the assistant module was disabled; start the action again") {
+		t.Fatalf("disabled approval = %d: %s", code, body)
+	}
+	if code, body := hxFetch(t, client, http.MethodPost, base+fmt.Sprintf("/proposals/%d/dismiss", proposal), url.Values{}); code != http.StatusOK {
+		t.Fatalf("disabled dismissal = %d: %s", code, body)
+	}
+	var state, afterOwner, status string
+	if err := d.Read.QueryRow("SELECT state, COALESCE(owner, '') FROM runs WHERE id = ?", runID).Scan(&state, &afterOwner); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Read.QueryRow("SELECT status FROM proposals WHERE id = ?", proposal).Scan(&status); err != nil {
+		t.Fatal(err)
+	}
+	if state != "parked" || afterOwner != owner || status != "dismissed" {
+		t.Fatalf("run state = %q, owner = %q (was %q), proposal = %q", state, afterOwner, owner, status)
+	}
+	if got := len(api.Requests()); got != start {
+		t.Fatalf("model requests after disabled decisions = %d, want %d", got, start)
+	}
+	if hits := pages.seen(); len(hits) != 1 || hits[0] != "/a" {
+		t.Fatalf("page fetches = %v, want /a only", hits)
+	}
+	stop()
+	asstSet(t, "assistant_enabled", "true")
+	base, _, _ = startServeApp(t, freshApp(f), &lockedBuffer{})
+	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
+		t.Fatalf("GET /chat after enabling = %d", status)
+	}
+	if code, body := hxFetch(t, client, http.MethodPost, fmt.Sprintf("%s/chat/%d/runs/%d/resume", base, thread, runID), url.Values{}); code != http.StatusOK {
+		t.Fatalf("resume after enabling = %d: %s", code, body)
+	}
+	waitRunState(t, d, thread, "done")
+	requests := api.Requests()
+	if len(requests) <= start {
+		t.Fatal("resume did not make a model request")
+	}
+	refusal := toolResultFor(t, requests[len(requests)-1], "f2")
+	if refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "the operator denied this request") {
+		t.Errorf("denied fetch returned %v, want an error result", refusal)
+	}
+}
+
 func TestPhoneLinkCannotApproveAPermissionRequest(t *testing.T) {
 	srv, pages := webPages(t)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	seedSettings(t, map[string]string{policy.EnabledKey: "true", policy.KindsKey: "permission"})
 	warm(t, api)
 	thread := latestThread(t, dir)
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)

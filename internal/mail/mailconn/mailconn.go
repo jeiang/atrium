@@ -65,13 +65,13 @@ func Password(lease *connections.Lease, account string) (string, error) {
 	return config.NormalizePassword(value), nil
 }
 
-func init() {
-	connections.SetAccountSync(&connections.AccountSync{
+func AccountSync() *connections.AccountSync {
+	return &connections.AccountSync{
+		Accounts:  HostAccounts,
 		Validate:  validateHostAccounts,
 		Reconcile: reconcileAccounts,
 		Reload:    reloadAccounts,
-	})
-	config.RegisterHostAccounts(HostAccounts)
+	}
 }
 
 func HostAccounts(host config.Host) ([]config.AccountSpec, map[string]string, error) {

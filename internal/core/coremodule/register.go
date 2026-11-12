@@ -3,6 +3,7 @@ package coremodule
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -10,29 +11,36 @@ import (
 	"github.com/jeiang/atrium/internal/about"
 	"github.com/jeiang/atrium/internal/actionlink"
 	actionlinkpages "github.com/jeiang/atrium/internal/actionlink/pages"
-	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
+	"github.com/jeiang/atrium/internal/auth/oidcconn"
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
+	"github.com/jeiang/atrium/internal/connections/connweb"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
+	dbkey "github.com/jeiang/atrium/internal/db/key"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/kb/kbcmd"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/ledger/ledgercmd"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
-	mailpages "github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/module"
-	_ "github.com/jeiang/atrium/internal/obs/opsmetrics"
+	"github.com/jeiang/atrium/internal/obs/opsmetrics"
+	"github.com/jeiang/atrium/internal/observability"
 	"github.com/jeiang/atrium/internal/ops"
+	"github.com/jeiang/atrium/internal/ops/collectors"
+	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/proposals/proposalscmd"
+	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
@@ -47,7 +55,7 @@ type Module struct {
 	Now     func() float64
 }
 
-func (m Module) Register(mc module.Context) module.Registration {
+func (m Module) Declare(mc module.Context) module.Declaration {
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
 		if err != nil {
@@ -55,43 +63,44 @@ func (m Module) Register(mc module.Context) module.Registration {
 		}
 		return snap.Enabled(name), nil
 	}
-	return module.Registration{
-		Name:      module.Core,
-		Core:      true,
-		Attention: []attention.Source{attentionsources.Proposals()},
+	store := func(d *db.DB, cfg config.Config) *ledger.Store {
+		s, err := mc.Catalog().Ledger(d, mc.Env, m.Clients(cfg), m.Now)
+		if err != nil {
+			panic(err)
+		}
+		return s
+	}
+	return module.Declaration{
+		Name:              module.Core,
+		Core:              true,
+		Settings:          slices.Concat(config.Settings(), dbkey.Settings(), oidc.Settings(), secrets.Settings()),
+		Host:              slices.Concat(config.HostSettings(), secrets.HostSettings(), observability.HostSettings(), ops.HostSettings()),
+		Attention:         AttentionSources(),
+		Metrics:           slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics()),
+		Checks:            slices.Concat(ops.Checks(), passrun.Checks()),
+		Connections:       slices.Concat(connections.Connections(), oidcconn.Connections(), endpoint.Connections()),
+		AccountCredential: connections.AccountCredential(),
 		Pages: []web.Page{
 			{Module: about.Module(m.Version), Templates: about.Templates(), Nav: []web.NavItem{
 				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},
 			}},
-			{Module: mailpages.PauseModule},
-			{Module: reviewpages.Module(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools, Ledger: func(d *db.DB, cfg config.Config) *ledger.Store {
-				return toolset.Ledger(d, mc.Env, m.Clients(cfg), m.Now)
-			}, Enabled: enabled}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Recover: reviewpages.RecoverDrafts, Nav: []web.NavItem{
+			{Module: reviewpages.Module(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
-				{Section: "review", Label: "Loops", URL: "/loops", Icon: "list-checks", Page: "loops", Order: 20},
-				{Section: "review", Label: "Packages", URL: "/watches", Icon: "package", Page: "watches", Order: 30},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 			}},
-			{Start: startOps},
+			{Start: func(ctx context.Context, d *web.Deps) error { return startOps(ctx, d, mc.Catalog()) }},
 			{Module: startEmbed},
 			{Module: actionlinkpages.Module, Templates: actionlinkpages.Templates()},
-			{Nav: []web.NavItem{
+			{Module: web.CoreModule, Nav: []web.NavItem{
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
-			}},
+			}, OIDC: oidcconn.Source()},
+			connweb.Page(),
 		},
-		Settings: []settings.Group{
-			{Name: "sessions", Title: "Sessions", Page: "/settings/auth", Keys: []string{oidc.KeyIdleDays, oidc.KeyMaxDays}},
-		},
+		Groups: SettingGroups(),
 		Commands: []*cli.Command{
-			writescmd.Command(writescmd.Options{Env: mc.Env, Now: m.Now, Store: func(d *db.DB, cfg config.Config) *ledger.Store {
-				return toolset.Ledger(d, mc.Env, m.Clients(cfg), m.Now)
-			}}),
-			ledgercmd.Command(ledgercmd.Options{Env: mc.Env, Now: m.Now, Store: func(d *db.DB, cfg config.Config) *ledger.Store {
-				return toolset.Ledger(d, mc.Env, m.Clients(cfg), m.Now)
-			}}),
-			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: func(d *db.DB, cfg config.Config) *ledger.Store {
-				return toolset.Ledger(d, mc.Env, m.Clients(cfg), m.Now)
-			}}),
+			writescmd.Command(writescmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
+			ledgercmd.Command(ledgercmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
+			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store}),
 			settingscmd.Command(mc.Env, m.Guard),
 			bearer.Command(mc.Env),
 			secretscmd.Command(mc.Env),
@@ -103,10 +112,18 @@ func (m Module) Register(mc module.Context) module.Registration {
 	}
 }
 
+func AttentionSources() []attention.Source { return []attention.Source{attentionsources.Proposals()} }
+
+func SettingGroups() []settings.Group {
+	return []settings.Group{
+		{Name: "sessions", Title: "Sessions", Page: "/settings/auth", Keys: []string{oidc.KeyIdleDays, oidc.KeyMaxDays}},
+	}
+}
+
 var log = logx.Logger("atrium.core")
 
-func startOps(ctx context.Context, d *web.Deps) error {
-	stop, err := ops.Start(ctx, d.DB, d.Env)
+func startOps(ctx context.Context, d *web.Deps, cat *module.Catalog) error {
+	stop, err := ops.Start(ctx, d.DB, d.Env, cat.Metrics(), cat.Checks())
 	if err != nil {
 		log.Error("ops listener did not start", logx.Err, err.Error())
 		return nil

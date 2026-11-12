@@ -72,7 +72,7 @@ func NewStoreIn(reg *Registry, d *db.DB, q db.Querier, cipher Cipher) *Store {
 }
 
 func (s *Store) InTx(ctx context.Context, fn func(*Store) error) error {
-	return s.d.WithTx(ctx, func(tx *sql.Tx) error {
+	return WithTx(ctx, s.d, func(tx *sql.Tx) error {
 		scoped := *s
 		scoped.q = tx
 		return fn(&scoped)

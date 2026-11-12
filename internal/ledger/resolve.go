@@ -30,6 +30,15 @@ func (s *Store) Resolve(ctx context.Context, id int64, r Resolution, who Resolve
 		if err != nil {
 			return err
 		}
+		if s.BindEffect != nil {
+			ctx, err = s.BindEffect(ctx, tx, e)
+			if err != nil {
+				return err
+			}
+		}
+		if err := CheckAdmission(ctx); err != nil {
+			return err
+		}
 		priorState := string(e.State)
 		priorError := e.Error
 		switch e.State {

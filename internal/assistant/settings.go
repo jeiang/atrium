@@ -42,7 +42,7 @@ func contextLimitChoices() []string {
 	return out
 }
 
-func init() {
+func Settings() []settings.Def {
 	def := func(key string, kind settings.Type, surface settings.Surface, value string, check func(string) error) settings.Def {
 		return settings.Value(surface, settings.Def{Key: key, Module: module, Type: kind, Default: value, Check: check})
 	}
@@ -63,7 +63,7 @@ func init() {
 	chat := adv(KeyBudgetChat, settings.Float, "1", settings.Within(0, 1))
 	chat.Peers = Ordered([]string{KeyBudgetUnattended}, nil)
 	chat = settings.Shown("Chat stops at this share of the budget", chat)
-	settings.MustRegister(
+	return []settings.Def{
 		chat,
 		chatModel,
 		chatEffort,
@@ -74,7 +74,7 @@ func init() {
 		settings.Shown("Research run cost cap (USD)", adv(KeySubagentMaxCostUSD, settings.Float, "0.25", settings.Within(0, 2))),
 		settings.Shown("Nightly run cost cap (USD)", adv(KeyDreamingMaxCost, settings.Float, "0.30", settings.Within(0, 10))),
 		settings.Shown("Nightly monthly cap (USD)", adv(KeyDreamingMonthly, settings.Float, "3", settings.Within(0, 100))),
-	)
+	}
 }
 
 func Ordered(below, above []string) func(string, func(string) (string, error)) error {

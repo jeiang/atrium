@@ -93,7 +93,11 @@ func (h handlers) store(ctx context.Context) *connections.Store {
 	if store := connections.DefaultFor(h.d.DB.Read); store != nil {
 		return store
 	}
-	store, err := connections.New(h.d.DB, config.From(ctx).Host(), connections.DefaultRegistry())
+	reg, err := connections.From(ctx)
+	if err != nil {
+		return nil
+	}
+	store, err := connections.New(h.d.DB, config.From(ctx).Host(), reg)
 	if err != nil {
 		return nil
 	}

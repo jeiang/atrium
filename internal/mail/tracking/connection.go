@@ -18,12 +18,12 @@ const (
 	ConnectionID                  = connections.ID("service/ship24")
 )
 
-func init() {
-	connections.Register(connections.Definition{
+func Connections() []connections.Definition {
+	return []connections.Definition{{
 		Kind:     KindShip24,
 		Validate: validateConnection,
 		Test:     testConnection,
-	})
+	}}
 }
 
 func validateConnection(c connections.Candidate) error {

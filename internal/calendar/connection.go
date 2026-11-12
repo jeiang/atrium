@@ -20,8 +20,8 @@ const (
 	CapabilityCardDAV = "carddav"
 )
 
-func init() {
-	connections.Register(connections.Definition{Kind: KindICloud, Validate: validateICloud, Test: testICloud})
+func Connections() []connections.Definition {
+	return []connections.Definition{{Kind: KindICloud, Validate: validateICloud, Test: testICloud}}
 }
 
 func validateICloud(c connections.Candidate) error {

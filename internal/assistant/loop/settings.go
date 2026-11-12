@@ -14,12 +14,12 @@ const (
 	CacheTTLKey = "cache_ttl_chat"
 )
 
-func init() {
-	settings.MustRegister(
+func Settings() []settings.Def {
+	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{
 			Key: CacheTTLKey, Module: "assistant", Type: settings.Enum, Default: prompts.TTL5m,
 			Choices: []string{prompts.TTL5m, prompts.TTL1h}}),
-	)
+	}
 }
 
 func cacheTTL(ctx context.Context, q db.Querier) (string, error) {

@@ -283,9 +283,10 @@ func undo(ctx context.Context, q db.Querier, payload json.RawMessage) (any, erro
 	return nil, ledger.Refused(fmt.Sprintf("unknown task undo %q", head.Op))
 }
 
-func RegisterLedgerUndoers(s *ledger.Store) error {
+func Undo() []ledger.UndoDefinition {
+	var out []ledger.UndoDefinition
 	for _, name := range []string{UndoDelete, UndoRestore} {
-		if err := s.RegisterUndo(name, ledger.Undoer{
+		out = append(out, ledger.UndoDefinition{Operation: name, Undoer: ledger.Undoer{
 			Validate: validateLedgerUndo(name),
 			Local: func(ctx context.Context, tx *sql.Tx, payload json.RawMessage) (ledger.Result, error) {
 				value, err := undo(ctx, tx, payload)
@@ -294,11 +295,9 @@ func RegisterLedgerUndoers(s *ledger.Store) error {
 				}
 				return ledger.Result{State: ledger.Done, After: mustJSON(value)}, nil
 			},
-		}); err != nil {
-			return err
-		}
+		}})
 	}
-	return nil
+	return out
 }
 
 func validateLedgerUndo(name string) func(json.RawMessage) error {

@@ -16,20 +16,11 @@ type HostDef struct {
 	Check    func(value string) error
 }
 
-var hostDefs []HostDef
+func (r *Registry) HostDefs() []HostDef { return HostDefsFrom(r.host) }
 
-func MustRegisterHost(defs ...HostDef) {
+func HostDefsFrom(defs []HostDef) []HostDef {
+	out := make([]HostDef, 0, len(defs)+len(importManifest))
 	for _, d := range defs {
-		if slices.ContainsFunc(hostDefs, func(e HostDef) bool { return e.Key == d.Key }) {
-			panic(DuplicateKey(d.Key))
-		}
-		hostDefs = append(hostDefs, d)
-	}
-}
-
-func HostDefs() []HostDef {
-	out := make([]HostDef, 0, len(hostDefs)+len(importManifest))
-	for _, d := range hostDefs {
 		if ConnectionOwnedHostKey(d.Key) {
 			continue
 		}
@@ -49,8 +40,8 @@ func HostDefs() []HostDef {
 	return out
 }
 
-func HostKey(key string) bool {
-	return slices.ContainsFunc(HostDefs(), func(d HostDef) bool { return d.Key == key })
+func (r *Registry) HostKey(key string) bool {
+	return slices.ContainsFunc(r.HostDefs(), func(d HostDef) bool { return d.Key == key })
 }
 
 func DefaultOf(key string) string {
@@ -61,11 +52,11 @@ func DefaultOf(key string) string {
 	return entry.Default
 }
 
-func HostDefOf(key string) (HostDef, bool) {
+func (r *Registry) HostDefOf(key string) (HostDef, bool) {
 	if ConnectionOwnedHostKey(key) {
 		return HostDef{}, false
 	}
-	for _, d := range hostDefs {
+	for _, d := range r.host {
 		if d.Key == key {
 			return d, true
 		}
@@ -73,8 +64,8 @@ func HostDefOf(key string) (HostDef, bool) {
 	return HostDef{}, false
 }
 
-func ValidateHost(key, value string) error {
-	d, ok := HostDefOf(key)
+func (r *Registry) ValidateHost(key, value string) error {
+	d, ok := r.HostDefOf(key)
 	if !ok {
 		return nil
 	}

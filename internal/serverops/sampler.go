@@ -12,7 +12,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/config"
@@ -24,7 +23,7 @@ const retentionDays = 14
 
 func Callables() map[string]worker.Callable {
 	return map[string]worker.Callable{
-		scheduler.OpsSamplerName: {
+		grafanatools.JobSampler: {
 			Modules: []string{module.Grafana},
 			Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
 				if err := Sample(ctx, e.Service.DB, e.Service.Env, e.Now()); err != nil {

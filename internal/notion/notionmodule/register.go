@@ -14,20 +14,26 @@ type Module struct {
 	Env config.Env
 }
 
-func (m Module) Register(module.Context) module.Registration {
+func SettingGroups() []settings.Group {
+	return []settings.Group{{
+		Name: "wiki", Title: "Wiki",
+		Keys: []string{notion.WikiRootKey, notion.SensitivityPropertyKey, notion.PrivateValueKey, notion.WikiLogTitleKey},
+	}}
+}
+
+func (m Module) Declare(module.Context) module.Declaration {
 	env := m.Env
 	if env == nil {
 		env = config.OS
 	}
-	return module.Registration{
-		Name: module.Notion,
+	return module.Declaration{
+		Name:     module.Notion,
+		Settings: notion.Settings(),
 		Pages: []web.Page{{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Nav: []web.NavItem{
 			{Section: "library", Label: "Wiki", URL: "/library/wiki", Icon: "book-open", Page: "library_wiki", Order: 10},
 		}}},
-		Settings: []settings.Group{{
-			Name: "wiki", Title: "Wiki",
-			Keys: []string{notion.WikiRootKey, notion.SensitivityPropertyKey, notion.PrivateValueKey, notion.WikiLogTitleKey},
-		}},
-		Commands: []*cli.Command{notion.Command(notion.Options{Env: env})},
+		Groups:      SettingGroups(),
+		Commands:    []*cli.Command{notion.Command(notion.Options{Env: env})},
+		Connections: notion.Connections(),
 	}
 }

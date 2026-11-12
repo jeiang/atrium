@@ -89,6 +89,7 @@
 
       ownership = goCheck "ownership" [] ''
         go run ./tools/tableownership
+        ${eachDriver ''GOFLAGS="$GOFLAGS -tags=$tags" go run ./tools/registrationownership''}
       '';
 
       go-test = goCheck "test" [] (testTags "libsqlite3,sqlite_fts5");

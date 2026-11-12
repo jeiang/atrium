@@ -47,6 +47,8 @@ type Service struct {
 	env config.Env
 	now func() time.Time
 
+	source Source
+
 	keyRefetchGap time.Duration
 
 	mu        sync.Mutex

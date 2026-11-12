@@ -16,12 +16,12 @@ type connectionConfig struct {
 	GeocodingURL string `json:"geocoding_url"`
 }
 
-func init() {
-	connections.Register(connections.Definition{
+func Connections() []connections.Definition {
+	return []connections.Definition{{
 		Kind:     KindWeather,
 		Validate: validateConnection,
 		Test:     testConnection,
-	})
+	}}
 }
 
 func validateConnection(c connections.Candidate) error {

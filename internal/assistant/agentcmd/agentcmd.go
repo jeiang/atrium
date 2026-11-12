@@ -10,12 +10,12 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -83,7 +83,12 @@ func bootstrap(ctx context.Context, cfgEnv config.Env, tools registry.Source, no
 		return nil, nil, err
 	}
 	open := imapclient.Opener(cfg)
-	r, err := runner.New(tools, toolset.Ledger(d, cfgEnv, open, func() float64 { return float64(time.Now().UnixNano()) / 1e9 }), open)
+	store, err := module.SetFrom(ctx).Catalog().Ledger(d, cfgEnv, open, func() float64 { return float64(time.Now().UnixNano()) / 1e9 })
+	if err != nil {
+		_ = d.Close()
+		return nil, nil, err
+	}
+	r, err := runner.New(tools, store, open)
 	if err != nil {
 		_ = d.Close()
 		return nil, nil, err

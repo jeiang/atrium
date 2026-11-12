@@ -15,12 +15,12 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
-	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/report"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/subagents"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -68,22 +68,21 @@ type Lookup struct{ runner *loop.Runner }
 
 func New(runner *loop.Runner) *Lookup { return &Lookup{runner: runner} }
 
-func (l *Lookup) Install(reg *registry.Registry) error {
-	return reg.Add(l.Tool())
-}
-
-func (l *Lookup) Tool() tool.Tool {
+func Metadata() tool.Tool {
 	return tool.Tool{
 		Name:        Name,
 		Description: Description,
 		InputSchema: json.RawMessage(schema),
-		Handler:     l.handle,
 		Effect:      tool.Read,
 		Annotated:   true,
 		Channel:     tool.ChannelNone,
 		Marks:       tool.AllMarks,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 	}
+}
+
+func Definition() module.ToolDefinition {
+	return module.ToolDefinition{Tool: Metadata()}
 }
 
 func parse(args tool.Args) (string, string, []report.Field, error) {
@@ -188,7 +187,7 @@ func fieldLines(fields []report.Field) string {
 	return b.String()
 }
 
-func (l *Lookup) handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func (l *Lookup) Handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	source, question, fields, err := parse(args)
 	if err != nil {
 		return nil, err

@@ -70,9 +70,8 @@ func importTestAppHost(t *testing.T, dir string, now float64, host string) *cli.
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_DB_KEY"] = rightKeyHex
 	vars["ATRIUM_HOST_CONFIG"] = host
-	reg := settings.New()
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
-	return newAppWith(config.Map(vars), reg, config.NewState(reg), nil, imapclient.Opener, func() float64 { return now }, quietLog)
+	return newAppWith(config.Map(vars), imapclient.Opener, func() float64 { return now }, quietLog)
 }
 
 func importHostConfig(t *testing.T, dir, anthropicURL, grafanaURL, notionURL string) string {
@@ -1491,7 +1490,7 @@ func TestImportV2BillsMemoryAndRefusesOverBudgetAgentCalls(t *testing.T) {
 	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM usage WHERE request_id = 'prev-1'"); n != 0 {
 		t.Error("the previous month's usage row was carried")
 	}
-	status, err := inference.StatusAt(settings.With(context.Background(), settings.New()), q.Read, clock, loc)
+	status, err := inference.StatusAt(settings.With(context.Background(), testSettings()), q.Read, clock, loc)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1569,9 +1568,8 @@ func TestImportV2UndoesImportedAutomaticActions(t *testing.T) {
 	vars["ATRIUM_DB_KEY"] = rightKeyHex
 	vars["ATRIUM_HOST_CONFIG"] = defaultHostConfig
 	delete(vars, "ATRIUM_DB_KEY_FILE")
-	reg := settings.New()
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
-	app := newAppWith(config.Map(vars), reg, config.NewState(reg), nil,
+	app := newAppWith(config.Map(vars),
 		func(config.Config) mail.OpenFunc { return fake.Open }, nil, quietLog)
 
 	dest := filepath.Join(dir, "atrium.db")
@@ -1913,7 +1911,7 @@ func TestImportV2CarriesTheMailPasswordIntoTheConnectionAndSyncsWithIt(t *testin
 	const appPassword = "imported-app-pass"
 	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_password_icloud', %q, 1762000800, 'fixture')", appPassword))
 
-	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source, "--source-env", importMailPins(t, dir))
 	if got.code != cli.ExitOK {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}

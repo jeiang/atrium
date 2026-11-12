@@ -12,13 +12,13 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 )
 
-func init() {
-	connections.Register(connections.Definition{
+func Connections() []connections.Definition {
+	return []connections.Definition{{
 		Kind:     KindWebPush,
 		Validate: validatePushConnection,
 		Test:     testPushConnection,
 		Silent:   silentPushConnection,
-	})
+	}}
 }
 
 func silentPushConnection(ctx context.Context, lease *connections.Lease, _ []connections.Capability) ([]connections.Result, error) {

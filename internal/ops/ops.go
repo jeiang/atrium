@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"net/http/pprof"
-	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -33,11 +32,29 @@ const (
 
 var log = logx.Logger("atrium.ops")
 
-func init() {
-	settings.MustRegisterHost(
-		settings.HostDef{Key: ListenKey, Module: "core", Type: settings.String, Default: DefaultListen, Check: checkListen},
-		settings.HostDef{Key: PprofKey, Module: "core", Type: settings.Bool, Default: "false"},
-	)
+func HostSettings() []settings.HostDef {
+	return []settings.HostDef{
+		{Key: ListenKey, Module: "core", Type: settings.String, Default: DefaultListen, Check: checkListen},
+		{Key: PprofKey, Module: "core", Type: settings.Bool, Default: "false"},
+	}
+}
+
+func Checks() []Check {
+	return []Check{
+		{Name: "db", Critical: true, Run: func(ctx context.Context, d *db.DB) error {
+			if err := d.Read.PingContext(ctx); err != nil {
+				return err
+			}
+			return db.RefuseFutureSchema(ctx, d.Read)
+		}},
+		{Name: "config", Critical: true, Run: func(ctx context.Context, _ *db.DB) error {
+			if _, err := config.Load(config.EnvFrom(ctx)); err != nil {
+				return err
+			}
+			_, err := config.From(ctx).Location(config.EnvFrom(ctx))
+			return err
+		}},
+	}
 }
 
 func checkListen(value string) error {
@@ -71,34 +88,12 @@ type Check struct {
 	Run      func(ctx context.Context, d *db.DB) error
 }
 
-var registry struct {
-	mu      sync.Mutex
+type server struct {
+	d       *db.DB
+	env     config.Env
+	ctx     context.Context
 	metrics []Metric
 	checks  []Check
-}
-
-func Register(m Metric) {
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
-	registry.metrics = append(registry.metrics, m)
-}
-
-func Ready(c Check) {
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
-	registry.checks = append(registry.checks, c)
-}
-
-func snapshot() ([]Metric, []Check) {
-	registry.mu.Lock()
-	defer registry.mu.Unlock()
-	return slices.Clone(registry.metrics), slices.Clone(registry.checks)
-}
-
-type server struct {
-	d   *db.DB
-	env config.Env
-	ctx context.Context
 
 	mu      sync.Mutex
 	scraped time.Time
@@ -111,10 +106,10 @@ type result struct {
 	err error
 }
 
-func Handler(ctx context.Context, d *db.DB, withPprof bool, env config.Env) http.Handler {
-	s := &server{d: d, env: env, ctx: config.WithEnv(ctx, env), third: map[string]result{}}
+func Handler(ctx context.Context, d *db.DB, withPprof bool, env config.Env, metrics []Metric, checks []Check) http.Handler {
+	s := &server{d: d, env: env, ctx: config.WithEnv(ctx, env), metrics: metrics, checks: checks, third: map[string]result{}}
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /metrics", s.metrics)
+	mux.HandleFunc("GET /metrics", s.serveMetrics)
 	mux.HandleFunc("GET /readyz", s.readyz)
 	if withPprof {
 		mux.HandleFunc("/debug/pprof/", pprof.Index)
@@ -126,13 +121,13 @@ func Handler(ctx context.Context, d *db.DB, withPprof bool, env config.Env) http
 	return mux
 }
 
-func (s *server) metrics(w http.ResponseWriter, r *http.Request) {
+func (s *server) serveMetrics(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	expired := s.body == nil || time.Since(s.scraped) > scrapeTTL
 	body := s.body
 	s.mu.Unlock()
 	if expired {
-		body = append(render(s.ctx, s.d), s.readiness(s.ctx)...)
+		body = append(render(s.ctx, s.d, s.metrics), s.readiness(s.ctx)...)
 		s.mu.Lock()
 		s.body, s.scraped = body, time.Now()
 		s.mu.Unlock()
@@ -142,10 +137,9 @@ func (s *server) metrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *server) readiness(ctx context.Context) []byte {
-	_, checks := snapshot()
 	var b strings.Builder
 	b.WriteString("# HELP atrium_readiness_check_ok 1 when the readiness check passes.\n# TYPE atrium_readiness_check_ok gauge\n")
-	for _, c := range checks {
+	for _, c := range s.checks {
 		ok := 1
 		if s.run(ctx, c) != nil {
 			ok = 0
@@ -155,8 +149,7 @@ func (s *server) readiness(ctx context.Context) []byte {
 	return []byte(b.String())
 }
 
-func render(ctx context.Context, d *db.DB) []byte {
-	metrics, _ := snapshot()
+func render(ctx context.Context, d *db.DB, metrics []Metric) []byte {
 	var b strings.Builder
 	for _, m := range metrics {
 		samples, err := m.Collect(ctx, d.Read)
@@ -191,10 +184,9 @@ const (
 )
 
 func (s *server) readyz(w http.ResponseWriter, r *http.Request) {
-	_, checks := snapshot()
 	state := StateReady
 	out := map[string]string{}
-	for _, c := range checks {
+	for _, c := range s.checks {
 		err := s.run(r.Context(), c)
 		out[c.Name] = "ok"
 		if err == nil {
@@ -234,23 +226,7 @@ func (s *server) run(_ context.Context, c Check) error {
 	return err
 }
 
-func init() {
-	Ready(Check{Name: "db", Critical: true, Run: func(ctx context.Context, d *db.DB) error {
-		if err := d.Read.PingContext(ctx); err != nil {
-			return err
-		}
-		return db.RefuseFutureSchema(ctx, d.Read)
-	}})
-	Ready(Check{Name: "config", Critical: true, Run: func(ctx context.Context, _ *db.DB) error {
-		if _, err := config.Load(config.EnvFrom(ctx)); err != nil {
-			return err
-		}
-		_, err := config.From(ctx).Location(config.EnvFrom(ctx))
-		return err
-	}})
-}
-
-func Start(ctx context.Context, d *db.DB, env config.Env) (stop func(), err error) {
+func Start(ctx context.Context, d *db.DB, env config.Env, metrics []Metric, checks []Check) (stop func(), err error) {
 	addr := config.From(ctx).HostValue(ListenKey)
 	if addr == "" {
 		addr = DefaultListen
@@ -263,7 +239,7 @@ func Start(ctx context.Context, d *db.DB, env config.Env) (stop func(), err erro
 	if err != nil {
 		return nil, fmt.Errorf("ops listener: %w", err)
 	}
-	srv := &http.Server{Handler: Handler(ctx, d, withPprof, env), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: Handler(ctx, d, withPprof, env, metrics, checks), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		if err := srv.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("ops listener stopped", logx.Err, err.Error())

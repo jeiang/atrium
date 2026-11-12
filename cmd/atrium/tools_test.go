@@ -10,6 +10,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/module"
 )
 
 func TestDisabledToolIsNotOffered(t *testing.T) {
@@ -96,6 +97,30 @@ func TestWebSearchAllowedCallers(t *testing.T) {
 	assertServerCallers(t, requests[1], "direct")
 	if got := runSettings(t, "set", "search_web_dynamic_filtering", "true"); got.code != cli.ExitError || !strings.Contains(got.stderr, "compiled constant") {
 		t.Errorf("set search_web_dynamic_filtering: exit %d stderr %q, want the key refused as a compiled constant", got.code, got.stderr)
+	}
+}
+
+func TestWebSearchIsRegisteredOnlyWithAssistant(t *testing.T) {
+	t.Parallel()
+	moduleFixture(t, flagsExcept("", ""))
+	if ran := runApp(t, "agent", "run", "--text", "hi"); ran.code != cli.ExitOK {
+		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
+	}
+	if got := runSettings(t, "get", "tool_web_search_enabled"); got.code != cli.ExitOK {
+		t.Fatalf("tool_web_search_enabled with assistant on: exit %d stderr %q", got.code, got.stderr)
+	}
+	moduleFixture(t, flagsExcept(module.Assistant, "false"))
+	if ran := runApp(t, "calendar", "candidates"); ran.code != cli.ExitOK {
+		t.Fatalf("calendar candidates with assistant off: %d %s", ran.code, ran.stderr)
+	}
+	if got := runSettings(t, "get", "tool_calendar_list_enabled"); got.code != cli.ExitOK {
+		t.Fatalf("tool_calendar_list_enabled with assistant off: exit %d stderr %q", got.code, got.stderr)
+	}
+	if got := runSettings(t, "get", "tool_web_search_enabled"); got.code == cli.ExitOK {
+		t.Errorf("tool_web_search_enabled is registered while assistant is off: %q", got.stdout)
+	}
+	if got := runSettings(t, "get", "tool_research_enabled"); got.code == cli.ExitOK {
+		t.Errorf("tool_research_enabled is registered while assistant is off: %q", got.stdout)
 	}
 }
 

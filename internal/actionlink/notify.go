@@ -12,7 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/proposals"
 )
 
-func init() { proposals.OnCreate = NotifyCreated }
+func ProposalCreated() proposals.CreatedHook { return NotifyCreated }
 
 func NotifyCreated(ctx context.Context, d *db.DB, p *proposals.Proposal) {
 	pol, err := policy.Load(ctx, d.Read)

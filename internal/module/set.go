@@ -2,30 +2,60 @@ package module
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/attention"
-	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 type Set struct {
-	reg  *settings.Registry
-	env  config.Env
-	regs []Registration
-	cur  atomic.Pointer[Snapshot]
+	cat      *Catalog
+	reg      *settings.Registry
+	env      config.Env
+	decls    []Declaration
+	cur      atomic.Pointer[Snapshot]
+	publish  sync.Mutex
+	hooks    sync.Mutex
+	starters []starter
+	failed   map[string]string
 }
+
+type starter struct {
+	owner string
+	start func() error
+}
+
+func (s *Set) Catalog() *Catalog { return s.cat }
 
 type setKey struct{}
 
 func WithSet(ctx context.Context, s *Set) context.Context {
-	return context.WithValue(ctx, setKey{}, s)
+	return settings.WithCommit(context.WithValue(ctx, setKey{}, s), func(ctx context.Context, q db.Querier) (func(bool), error) {
+		s.publish.Lock()
+		snap, err := s.Evaluate(ctx, q)
+		if err != nil {
+			s.publish.Unlock()
+			return nil, err
+		}
+		return func(committed bool) {
+			var ready []starter
+			if committed {
+				ready = s.store(snap)
+			}
+			s.publish.Unlock()
+			s.start(ready)
+		}, nil
+	})
 }
 
 func SetFrom(ctx context.Context) *Set {
@@ -42,36 +72,26 @@ func IsEnabled(ctx context.Context, name string) bool {
 	return snap != nil && snap.Enabled(name)
 }
 
-func NewSet(reg *settings.Registry, st *config.State, env config.Env, mods ...Module) (*Set, error) {
-	s := &Set{reg: reg, env: env}
-	var regs []Registration
-	for _, m := range mods {
-		regs = append(regs, m.Register(Context{Current: s.Current, Evaluate: s.Evaluate, Env: env, Settings: reg, State: st}))
-	}
-	s.regs = regs
-	if err := s.validate(); err != nil {
-		return nil, err
-	}
-	ordered, err := byNeeds(regs)
+func NewSet(cat *Catalog, reg *settings.Registry, env config.Env) (*Set, error) {
+	ordered, err := byNeeds(cat.Declarations())
 	if err != nil {
 		return nil, err
 	}
-	s.regs = ordered
-	return s, nil
+	return &Set{cat: cat, reg: reg, env: env, decls: ordered, failed: map[string]string{}}, nil
 }
 
-func byNeeds(regs []Registration) ([]Registration, error) {
+func byNeeds(decls []Declaration) ([]Declaration, error) {
 	placed := map[string]bool{}
-	var out []Registration
-	remaining := slices.Clone(regs)
+	var out []Declaration
+	remaining := slices.Clone(decls)
 	for len(remaining) > 0 {
-		i := slices.IndexFunc(remaining, func(r Registration) bool {
-			return !slices.ContainsFunc(r.Needs, func(dep string) bool { return !placed[dep] })
+		i := slices.IndexFunc(remaining, func(d Declaration) bool {
+			return !slices.ContainsFunc(d.Needs, func(dep string) bool { return !placed[dep] })
 		})
 		if i < 0 {
 			names := make([]string, len(remaining))
-			for j, r := range remaining {
-				names[j] = r.Name
+			for j, d := range remaining {
+				names[j] = d.Name
 			}
 			return nil, &DependencyCycle{Modules: names}
 		}
@@ -82,153 +102,154 @@ func byNeeds(regs []Registration) ([]Registration, error) {
 	return out, nil
 }
 
-func (s *Set) validate() error {
-	seen := map[string]bool{}
-	for _, r := range s.regs {
-		if r.Name == "" || seen[r.Name] {
-			return DuplicateModule(r.Name)
-		}
-		seen[r.Name] = true
-	}
-	commands := map[string]bool{}
-	for _, r := range s.regs {
-		if r.Core && (len(r.Needs) > 0 || len(r.Requires) > 0) {
-			return &InvalidCore{Module: r.Name}
-		}
-		for _, dep := range r.Needs {
-			if !seen[dep] {
-				return &UnknownDependency{Module: r.Name, Dependency: dep}
-			}
-		}
-		if !r.Core {
-			if _, ok := s.reg.Lookup(FlagKey(r.Name)); !ok {
-				return FlagNotRegistered(FlagKey(r.Name))
-			}
-		}
-		for _, rq := range r.Requires {
-			if rq.Key == "" || rq.Host || rq.Connection {
-				continue
-			}
-			if _, ok := s.reg.Lookup(rq.Key); !ok {
-				return settings.UnknownKey(rq.Key)
-			}
-		}
-		groups := map[string]bool{}
-		for _, g := range r.Settings {
-			if g.Name == "" || g.Title == "" || groups[g.Name] {
-				return &InvalidGroup{Module: r.Name, Group: g.Name}
-			}
-			groups[g.Name] = true
-			for _, key := range g.Keys {
-				def, ok := s.reg.Lookup(key)
-				if !ok {
-					return settings.UnknownKey(key)
-				}
-				if !def.Editable() {
-					return &InvalidGroup{Module: r.Name, Group: g.Name}
-				}
-			}
-		}
-		for _, c := range r.Commands {
-			if commands[c.Name] {
-				return DuplicateCommand(c.Name)
-			}
-			commands[c.Name] = true
-		}
-		for _, p := range r.Pages {
-			if p.Module == nil && p.Start == nil && len(p.Globals) == 0 && p.Templates == nil && len(p.Nav) == 0 {
-				return &InvalidPage{Module: r.Name}
-			}
-		}
-	}
-	for _, r := range s.regs {
-		for path, leaf := range r.Leaves {
-			if !hasPath(r.Commands, strings.Fields(path)) {
-				return &UnknownLeaf{Module: r.Name, Path: path}
-			}
-			if leaf.Always && len(leaf.Needs) > 0 {
-				return &InvalidLeaf{Module: r.Name, Path: path}
-			}
-			for _, name := range leaf.Needs {
-				if !seen[name] {
-					return &UnknownDependency{Module: r.Name, Dependency: name}
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func hasPath(cmds []*cli.Command, path []string) bool {
-	if len(path) == 0 {
-		return false
-	}
-	for _, c := range cmds {
-		if c.Name != path[0] {
-			continue
-		}
-		if len(path) == 1 {
-			return true
-		}
-		return hasPath(c.Commands, path[1:])
-	}
-	return false
-}
-
 type Snapshot struct {
-	set      *Set
-	statuses []Status
-	once     sync.Once
-	registry *registry.Registry
-	regErr   error
+	set         *Set
+	evaluated   []Status
+	statuses    []Status
+	generations map[string]uint64
+	once        sync.Once
+	registry    *registry.Registry
+	regErr      error
 }
 
 func (s *Set) Current() *Snapshot { return s.cur.Load() }
 
 func (s *Set) Refresh(ctx context.Context, q db.Querier) error {
+	s.publish.Lock()
 	snap, err := s.Evaluate(ctx, q)
 	if err != nil {
+		s.publish.Unlock()
 		return err
 	}
-	s.cur.Store(snap)
+	ready := s.store(snap)
+	s.publish.Unlock()
+	s.start(ready)
 	return nil
 }
 
+func (s *Set) store(snap *Snapshot) []starter {
+	prev := s.cur.Swap(snap)
+	for _, st := range snap.statuses {
+		var was Status
+		if prev != nil {
+			was, _ = prev.Status(st.Name)
+		}
+		if st.State == Unavailable && (was.State != Unavailable || was.Err != st.Err) {
+			log.Error("module is unavailable", logx.Module, st.Name, logx.State, string(st.State), logx.Reason, st.Err)
+		}
+	}
+	s.hooks.Lock()
+	defer s.hooks.Unlock()
+	var ready []starter
+	s.starters = slices.DeleteFunc(s.starters, func(st starter) bool {
+		if !snap.startable(st.owner) {
+			return false
+		}
+		ready = append(ready, st)
+		return true
+	})
+	return ready
+}
+
+func (s *Set) start(ready []starter) {
+	for _, st := range ready {
+		err := st.start()
+		s.publish.Lock()
+		s.hooks.Lock()
+		was, failed := s.failed[st.owner]
+		changed := failed
+		if err != nil {
+			log.Error("module start failed", logx.Module, st.owner, logx.Err, err.Error())
+			s.starters = append(s.starters, st)
+			why := "start failed: " + err.Error()
+			s.failed[st.owner], changed = why, why != was
+		} else {
+			delete(s.failed, st.owner)
+		}
+		s.hooks.Unlock()
+		if cur := s.Current(); changed && cur != nil {
+			s.cur.Store(s.snapshot(cur.evaluated))
+		}
+		s.publish.Unlock()
+	}
+}
+
+func (s *Set) OnEnable(owner string, start func() error) error {
+	s.hooks.Lock()
+	if !s.enabled(owner) {
+		s.starters = append(s.starters, starter{owner: owner, start: start})
+		s.hooks.Unlock()
+		return nil
+	}
+	s.hooks.Unlock()
+	return start()
+}
+
 func (s *Set) Evaluate(ctx context.Context, q db.Querier) (*Snapshot, error) {
+	statuses, err := s.evaluated(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	return s.snapshot(statuses), nil
+}
+
+func (s *Set) evaluated(ctx context.Context, q db.Querier) ([]Status, error) {
 	probe := Probe{Settings: s.reg, Q: q, Env: s.env}
-	statuses, _, err := evaluate(ctx, s.regs, func(ctx context.Context, r Registration, states map[string]State) ([]Unmet, bool, error) {
+	statuses, _, err := evaluate(ctx, s.decls, func(ctx context.Context, r Declaration, states map[string]State) ([]Unmet, bool, error) {
 		unmet, err := s.unmet(ctx, probe, r, states)
 		if err != nil {
 			return nil, false, err
 		}
 		found, err := s.reg.Resolve(ctx, q, FlagKey(r.Name))
 		if err != nil {
-			return nil, false, err
+			return nil, false, fmt.Errorf("%s: %w", FlagKey(r.Name), err)
 		}
 		return unmet, found.Value == "true", nil
 	})
-	if err != nil {
-		return nil, err
-	}
-	return &Snapshot{set: s, statuses: statuses}, nil
+	return statuses, err
 }
 
-type check func(ctx context.Context, r Registration, states map[string]State) ([]Unmet, bool, error)
+func (s *Set) snapshot(evaluated []Status) *Snapshot {
+	statuses := slices.Clone(evaluated)
+	s.hooks.Lock()
+	for i, st := range statuses {
+		if why, ok := s.failed[st.Name]; ok && st.State == Enabled {
+			statuses[i].State, statuses[i].Err = Unavailable, why
+		}
+	}
+	s.hooks.Unlock()
+	generations := make(map[string]uint64, len(statuses))
+	current := s.Current()
+	for _, status := range statuses {
+		generation := uint64(1)
+		if current != nil {
+			generation = current.Generation(status.Name)
+			if current.Enabled(status.Name) != (status.State == Enabled) {
+				generation++
+			}
+		}
+		generations[status.Name] = generation
+	}
+	return &Snapshot{set: s, evaluated: evaluated, statuses: statuses, generations: generations}
+}
 
-func evaluate(ctx context.Context, regs []Registration, fn check) ([]Status, map[string]State, error) {
+type check func(ctx context.Context, r Declaration, states map[string]State) ([]Unmet, bool, error)
+
+func evaluate(ctx context.Context, decls []Declaration, fn check) ([]Status, map[string]State, error) {
 	states := map[string]State{}
-	statuses := make([]Status, 0, len(regs))
-	for _, r := range regs {
+	statuses := make([]Status, 0, len(decls))
+	for _, r := range decls {
 		st := Status{Name: r.Name, State: Enabled}
 		if !r.Core {
 			unmet, on, err := fn(ctx, r, states)
-			if err != nil {
-				return nil, nil, err
-			}
-			st.Unmet = unmet
+			var broken *requirementError
 			switch {
+			case errors.As(err, &broken):
+				st.State, st.Err = Unavailable, broken.Error()
+			case err != nil:
+				return nil, nil, &DeclarationError{Module: Core, Field: "evaluation", Err: err}
 			case len(unmet) > 0:
-				st.State = NeedsSettings
+				st.State, st.Unmet = NeedsSettings, unmet
 			case !on:
 				st.State = Off
 			}
@@ -239,14 +260,12 @@ func evaluate(ctx context.Context, regs []Registration, fn check) ([]Status, map
 	return statuses, states, nil
 }
 
-func (s *Set) coreOnly() *Snapshot {
-	statuses, _, _ := evaluate(context.Background(), s.regs, func(context.Context, Registration, map[string]State) ([]Unmet, bool, error) {
-		return nil, false, nil
-	})
-	return &Snapshot{set: s, statuses: statuses}
+func (s Status) Reason() string {
+	if s.Err != "" {
+		return s.Err
+	}
+	return joinReasons(s.Unmet)
 }
-
-func (s Status) Reason() string { return joinReasons(s.Unmet) }
 
 func (n *Snapshot) Status(name string) (Status, bool) {
 	for _, st := range n.statuses {
@@ -259,7 +278,7 @@ func (n *Snapshot) Status(name string) (Status, bool) {
 
 func (n *Snapshot) Attention() []attention.Source {
 	var out []attention.Source
-	for _, r := range n.set.regs {
+	for _, r := range n.set.decls {
 		if r.Core || n.Enabled(r.Name) {
 			out = append(out, r.Attention...)
 		}
@@ -272,6 +291,13 @@ func (n *Snapshot) Enabled(name string) bool {
 	return ok && st.State == Enabled
 }
 
+func (n *Snapshot) startable(name string) bool {
+	i := slices.IndexFunc(n.evaluated, func(st Status) bool { return st.Name == name })
+	return i >= 0 && n.evaluated[i].State == Enabled
+}
+
+func (n *Snapshot) Generation(owner string) uint64 { return n.generations[owner] }
+
 func (n *Snapshot) Registry() (*registry.Registry, error) {
 	n.once.Do(func() { n.registry, n.regErr = n.buildRegistry() })
 	return n.registry, n.regErr
@@ -279,12 +305,45 @@ func (n *Snapshot) Registry() (*registry.Registry, error) {
 
 func (n *Snapshot) buildRegistry() (*registry.Registry, error) {
 	out := registry.New(n.set.reg)
-	for _, r := range n.set.regs {
-		if r.Tools == nil || !n.Enabled(r.Name) {
+	for _, d := range n.set.decls {
+		if !n.Enabled(d.Name) {
 			continue
 		}
-		if err := r.Tools(out); err != nil {
-			return nil, err
+		for _, def := range d.Tools {
+			owner, generation := d.Name, n.Generation(d.Name)
+			out.SetOwner(def.Tool.Name, func(ctx context.Context) error { return Require(ctx, owner, generation) })
+			wrap := func(t tool.Tool) tool.Tool {
+				if t.Handler != nil {
+					handler := t.Handler
+					t.Handler = func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+						if err := Require(ctx, owner, generation); err != nil {
+							return nil, err
+						}
+						ctx = ledger.WithAdmission(ctx, func() error {
+							return Require(ctx, owner, generation)
+						})
+						return handler(ctx, tc, args)
+					}
+				}
+				return t
+			}
+			def.Tool = wrap(def.Tool)
+			var err error
+			if def.Tool.Handler == nil && !def.Tool.Server {
+				err = out.Declare(def.Tool)
+			} else {
+				err = out.Add(def.Tool)
+			}
+			if err != nil {
+				return nil, err
+			}
+			if def.Bind != nil {
+				bind := def.Bind
+				out.Bind(def.Tool.Name, func(ctx context.Context, q db.Querier, t tool.Tool) (tool.Tool, bool, error) {
+					bound, ok, err := bind(ctx, q, t)
+					return wrap(bound), ok, err
+				})
+			}
 		}
 	}
 	if _, err := out.All(); err != nil {
@@ -294,16 +353,23 @@ func (n *Snapshot) buildRegistry() (*registry.Registry, error) {
 }
 
 func (s *Set) Guard(ctx context.Context, q db.Querier, key, value string) error {
-	for _, r := range s.regs {
+	for _, r := range s.decls {
 		if key != FlagKey(r.Name) || value != "true" {
 			continue
 		}
-		snap, err := s.Evaluate(ctx, q)
+		statuses, err := s.evaluated(ctx, q)
 		if err != nil {
 			return err
 		}
-		if st, _ := snap.Status(r.Name); len(st.Unmet) > 0 {
+		var st Status
+		if i := slices.IndexFunc(statuses, func(st Status) bool { return st.Name == r.Name }); i >= 0 {
+			st = statuses[i]
+		}
+		if len(st.Unmet) > 0 {
 			return &NeedsSettingsError{Module: r.Name, Unmet: st.Unmet}
+		}
+		if st.State == Unavailable {
+			return &UnavailableError{Module: r.Name, Err: st.Err}
 		}
 	}
 	return nil

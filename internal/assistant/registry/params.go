@@ -12,7 +12,7 @@ const (
 	webSearchType = "web_search_20260318"
 )
 
-func webSearchTool() tool.Tool {
+func WebSearchTool() tool.Tool {
 	return tool.Tool{
 		Name:        WebSearchName,
 		Description: "Anthropic web search (server tool); pair it with web_fetch to read results.",

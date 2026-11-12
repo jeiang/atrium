@@ -89,8 +89,8 @@ func (s *Store) ConsumeOAuthState(ctx context.Context, state string) (OAuthState
 	return out, nil
 }
 
-func init() {
-	Register(Definition{Kind: KindGoogle, Validate: validateGoogle, Test: testGoogle})
+func Connections() []Definition {
+	return []Definition{{Kind: KindGoogle, Validate: validateGoogle, Test: testGoogle}}
 }
 
 func validateGoogle(c Candidate) error {
@@ -404,7 +404,11 @@ func StoreGoogleGrant(ctx context.Context, d *db.DB, capability, refresh string)
 	if !ok {
 		return fmt.Errorf("google has no %s capability", capability)
 	}
-	s, err := New(d, config.From(ctx).Host(), DefaultRegistry())
+	reg, err := From(ctx)
+	if err != nil {
+		return err
+	}
+	s, err := New(d, config.From(ctx).Host(), reg)
 	if err != nil {
 		return err
 	}

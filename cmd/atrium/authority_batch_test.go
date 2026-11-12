@@ -150,7 +150,7 @@ func TestQueuedMarkedReferenceAppliesToTheRestOfTheBatch(t *testing.T) {
 	setEnv(t, "ATRIUM_HOST_CONFIG", weatherHost(t, dir, forecast.URL+"/v1/forecast", forecast.URL+"/v1/search"))
 	seedSettings(t, map[string]string{weather.KeyLatitude: "10.65", weather.KeyLongitude: "-61.5", weather.KeyLocationName: "Port of Spain"})
 
-	base, _, _ = startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ = startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -276,7 +276,7 @@ func TestApprovedPermissionExecutesOnceAndDoesNotReplay(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	thread := latestThread(t, dir)
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -330,7 +330,7 @@ func TestApprovalDeniedByANewMarkPerformsNothing(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	thread := latestThread(t, dir)
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -506,7 +506,7 @@ func TestParkedBatchKeepsCompletedResultsAndDoesNotReplayThem(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	thread := latestThread(t, dir)
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)

@@ -269,99 +269,96 @@ func recordOf(target string) (int64, bool) {
 	return id, err == nil
 }
 
-func RegisterLedgerResolves(s *ledger.Store) error {
-	if err := s.RegisterResolve(opCreate, func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
-		if r.Outcome != "applied" && r.Outcome != "partial" {
-			return nil
-		}
-		var ev struct {
-			PageID string `json:"page_id"`
-			Hash   string `json:"hash"`
-		}
-		if len(r.Evidence) == 0 || json.Unmarshal(r.Evidence, &ev) != nil || ev.PageID == "" || ev.Hash == "" {
-			return ledger.Refused("resolving an export create needs evidence with page_id and hash")
-		}
-		var action struct {
-			Hash string `json:"hash"`
-		}
-		if err := json.Unmarshal(e.Action, &action); err != nil {
-			return err
-		}
-		if action.Hash != ev.Hash {
-			return ledger.Refused("the evidence hash does not match the attempted export")
-		}
-		recordID, ok := recordOf(e.Target)
-		if !ok {
-			return ledger.Refused("the effect target is not an export record")
-		}
-		if err := savePage(ctx, tx, TargetNotion, recordID, ev.PageID, ev.Hash, s.Now()); err != nil {
-			return err
-		}
-		return s.SetUndo(ctx, tx, e.ID, jsonOf(trashUndo{Op: UndoNotionTrash, PageID: ev.PageID}))
-	}); err != nil {
-		return err
+func notionResolves(s *ledger.Store) []ledger.ResolveDefinition {
+	return []ledger.ResolveDefinition{
+		{Operation: opCreate, Hook: func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
+			if r.Outcome != "applied" && r.Outcome != "partial" {
+				return nil
+			}
+			var ev struct {
+				PageID string `json:"page_id"`
+				Hash   string `json:"hash"`
+			}
+			if len(r.Evidence) == 0 || json.Unmarshal(r.Evidence, &ev) != nil || ev.PageID == "" || ev.Hash == "" {
+				return ledger.Refused("resolving an export create needs evidence with page_id and hash")
+			}
+			var action struct {
+				Hash string `json:"hash"`
+			}
+			if err := json.Unmarshal(e.Action, &action); err != nil {
+				return err
+			}
+			if action.Hash != ev.Hash {
+				return ledger.Refused("the evidence hash does not match the attempted export")
+			}
+			recordID, ok := recordOf(e.Target)
+			if !ok {
+				return ledger.Refused("the effect target is not an export record")
+			}
+			if err := savePage(ctx, tx, TargetNotion, recordID, ev.PageID, ev.Hash, s.Now()); err != nil {
+				return err
+			}
+			return s.SetUndo(ctx, tx, e.ID, jsonOf(trashUndo{Op: UndoNotionTrash, PageID: ev.PageID}))
+		}},
+		{Operation: opContent, Hook: func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
+			if r.Outcome != "applied" && r.Outcome != "partial" {
+				return nil
+			}
+			var action struct {
+				Hash   string `json:"hash"`
+				PageID string `json:"page_id"`
+			}
+			if err := json.Unmarshal(e.Action, &action); err != nil {
+				return err
+			}
+			if action.Hash == "" || action.PageID == "" {
+				return ledger.Refused("resolving an export content step needs the attempted page and hash")
+			}
+			recordID, ok := recordOf(e.Target)
+			if !ok {
+				return ledger.Refused("the effect target is not an export record")
+			}
+			return savePage(ctx, tx, TargetNotion, recordID, action.PageID, action.Hash, s.Now())
+		}},
+		{Operation: opTitle, Hook: func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
+			if r.Outcome != "applied" && r.Outcome != "partial" {
+				return nil
+			}
+			var action struct {
+				Hash   string `json:"hash"`
+				PageID string `json:"page_id"`
+			}
+			if err := json.Unmarshal(e.Action, &action); err != nil {
+				return err
+			}
+			if action.Hash == "" || action.PageID == "" {
+				return ledger.Refused("resolving an export title step needs the attempted page and hash")
+			}
+			recordID, ok := recordOf(e.Target)
+			if !ok {
+				return ledger.Refused("the effect target is not an export record")
+			}
+			done, err := stepAppliedQ(ctx, tx, opContent, e.Target, "hash", action.Hash)
+			if err != nil || !done {
+				return err
+			}
+			return savePage(ctx, tx, TargetNotion, recordID, action.PageID, action.Hash, s.Now())
+		}},
+		{Operation: opTrash, Hook: func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
+			if r.Outcome != "applied" && r.Outcome != "partial" {
+				return nil
+			}
+			recordID, ok := recordOf(e.Target)
+			if !ok {
+				return ledger.Refused("the effect target is not an export record")
+			}
+			return deletePage(ctx, tx, TargetNotion, recordID)
+		}},
 	}
-	if err := s.RegisterResolve(opContent, func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
-		if r.Outcome != "applied" && r.Outcome != "partial" {
-			return nil
-		}
-		var action struct {
-			Hash   string `json:"hash"`
-			PageID string `json:"page_id"`
-		}
-		if err := json.Unmarshal(e.Action, &action); err != nil {
-			return err
-		}
-		if action.Hash == "" || action.PageID == "" {
-			return ledger.Refused("resolving an export content step needs the attempted page and hash")
-		}
-		recordID, ok := recordOf(e.Target)
-		if !ok {
-			return ledger.Refused("the effect target is not an export record")
-		}
-		return savePage(ctx, tx, TargetNotion, recordID, action.PageID, action.Hash, s.Now())
-	}); err != nil {
-		return err
-	}
-	if err := s.RegisterResolve(opTitle, func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
-		if r.Outcome != "applied" && r.Outcome != "partial" {
-			return nil
-		}
-		var action struct {
-			Hash   string `json:"hash"`
-			PageID string `json:"page_id"`
-		}
-		if err := json.Unmarshal(e.Action, &action); err != nil {
-			return err
-		}
-		if action.Hash == "" || action.PageID == "" {
-			return ledger.Refused("resolving an export title step needs the attempted page and hash")
-		}
-		recordID, ok := recordOf(e.Target)
-		if !ok {
-			return ledger.Refused("the effect target is not an export record")
-		}
-		done, err := stepAppliedQ(ctx, tx, opContent, e.Target, "hash", action.Hash)
-		if err != nil || !done {
-			return err
-		}
-		return savePage(ctx, tx, TargetNotion, recordID, action.PageID, action.Hash, s.Now())
-	}); err != nil {
-		return err
-	}
-	if err := s.RegisterResolve(opTrash, func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
-		if r.Outcome != "applied" && r.Outcome != "partial" {
-			return nil
-		}
-		recordID, ok := recordOf(e.Target)
-		if !ok {
-			return ledger.Refused("the effect target is not an export record")
-		}
-		return deletePage(ctx, tx, TargetNotion, recordID)
-	}); err != nil {
-		return err
-	}
-	return s.RegisterUndo(UndoNotionTrash, ledger.Undoer{
+}
+
+func notionUndo(s *ledger.Store) []ledger.UndoDefinition {
+	return []ledger.UndoDefinition{{Operation: UndoNotionTrash, Undoer: ledger.Undoer{
 		Validate: func(raw json.RawMessage) error {
 			var u trashUndo
 			if err := json.Unmarshal(raw, &u); err != nil || u.PageID == "" {
@@ -398,5 +395,13 @@ func RegisterLedgerResolves(s *ledger.Store) error {
 			}
 			return deletePage(ctx, tx, TargetNotion, recordID)
 		},
-	})
+	}}}
+}
+
+func Resolve(s *ledger.Store) []ledger.ResolveDefinition {
+	return append(notionResolves(s), obsidianResolves(s)...)
+}
+
+func Undo(s *ledger.Store) []ledger.UndoDefinition {
+	return append(notionUndo(s), obsidianUndo(s)...)
 }

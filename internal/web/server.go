@@ -46,6 +46,7 @@ type routeRule struct {
 	method  string
 	pattern string
 	access  access
+	owner   string
 }
 
 type SettingsRender func(w http.ResponseWriter, r *http.Request, status int, mutate func(*tpl.Frame))
@@ -59,6 +60,7 @@ type Deps struct {
 	State     *config.State
 	Render    *Renderer
 	Error     func(w http.ResponseWriter, r *http.Request, status int, detail string)
+	NotFound  http.HandlerFunc
 	OnFrame   func(FrameFunc)
 	Stopping  <-chan struct{}
 	OnClose   func(func())
@@ -66,8 +68,11 @@ type Deps struct {
 
 	settingsPages map[string]SettingsRender
 
-	router chi.Router
-	routes *[]routeRule
+	router        chi.Router
+	routes        *[]routeRule
+	owner         string
+	registrations *registrations
+	coreRoutes    func(*Deps)
 }
 
 func (d *Deps) SettingsAt(url string, render SettingsRender) {
@@ -95,7 +100,7 @@ func (d *Deps) Authenticated(method, pattern string, h http.HandlerFunc) {
 
 func (d *Deps) route(method, pattern string, class access, h http.HandlerFunc) {
 	d.router.Method(method, pattern, h)
-	*d.routes = append(*d.routes, routeRule{method: method, pattern: pattern, access: class})
+	*d.routes = append(*d.routes, routeRule{method: method, pattern: pattern, access: class, owner: d.owner})
 }
 
 type Module func(r chi.Router, d *Deps)
@@ -120,22 +125,22 @@ type Options struct {
 }
 
 type Server struct {
-	settings *settings.Registry
-	state    *config.State
-	auth     Policy
-	oidc     *oidc.Service
-	bearers  *bearer.Service
-	db       *db.DB
-	render   *Renderer
-	secure   func(*http.Request) bool
-	handler  http.Handler
-	mux      *chi.Mux
-	errPage  ErrorPage
-	stop     chan struct{}
-	stopOnce sync.Once
-	starting atomic.Bool
-	closers  []func()
-	routes   []routeRule
+	base          context.Context
+	auth          Policy
+	oidc          *oidc.Service
+	bearers       *bearer.Service
+	db            *db.DB
+	render        *Renderer
+	secure        func(*http.Request) bool
+	handler       http.Handler
+	mux           *chi.Mux
+	errPage       ErrorPage
+	stop          chan struct{}
+	stopOnce      sync.Once
+	starting      atomic.Bool
+	closers       []func()
+	routes        []routeRule
+	registrations *registrations
 }
 
 func New(o Options) (*Server, error) {
@@ -164,7 +169,9 @@ func New(o Options) (*Server, error) {
 	if auth.OIDC() && (o.OIDC == nil || o.Render == nil || o.DB == nil) {
 		return nil, errors.New("oidc auth needs a session service, a renderer and a database")
 	}
-	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, settings: o.Settings, state: o.State, db: o.DB}
+	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, base: o.Ctx, db: o.DB}
+	s.registrations = &registrations{seen: map[routeKey]string{}}
+	core := &Registrar{Router: s.mux, owner: "core", state: s.registrations}
 	if o.DB != nil {
 		s.bearers = bearer.New(o.DB, o.OIDC)
 	}
@@ -178,37 +185,39 @@ func New(o Options) (*Server, error) {
 	static := newStaticHandler(Static)
 	s.mux.NotFound(s.notFound)
 	s.mux.MethodNotAllowed(s.methodNotAllowed)
-	s.mux.Get(healthPath, func(w http.ResponseWriter, _ *http.Request) {
+	core.Get(healthPath, func(w http.ResponseWriter, _ *http.Request) {
 		if s.starting.Load() || s.stopped() {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	s.mux.Handle(staticPrefix+"*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	core.Handle(staticPrefix+"*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		static.serve(w, r, func(status int, detail string) { s.Error(w, r, status, detail) })
 	}))
 	home := o.Home
 	if home == "" {
 		home = "/about"
 	}
-	s.mux.Get("/", func(w http.ResponseWriter, r *http.Request) {
+	core.Get("/", func(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, home, http.StatusSeeOther)
 	})
 	s.stop = make(chan struct{})
 	deps := &Deps{
-		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Render: o.Render, Error: s.Error, Stopping: s.stop,
+		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Render: o.Render, Error: s.Error, NotFound: s.missing, Stopping: s.stop,
 		OnFrame: func(FrameFunc) {}, settingsPages: map[string]SettingsRender{},
 		OnClose: func(f func()) { s.closers = append(s.closers, f) },
-		router:  s.mux, routes: &s.routes,
+		router:  core, routes: &s.routes, owner: "core", registrations: s.registrations,
 	}
 	if o.Render != nil {
 		deps.OnFrame = o.Render.OnFrame
 	}
-	deps.API(http.MethodGet, "/me", me)
-	deps.Authenticated(http.MethodGet, authSettingsPath, s.signInPage)
-	deps.Authenticated(http.MethodPost, authSettingsPath+"/tokens", s.tokenIssue)
-	deps.Authenticated(http.MethodPost, authSettingsPath+"/tokens/{id}/revoke", s.tokenRevoke)
+	deps.coreRoutes = func(d *Deps) {
+		d.API(http.MethodGet, "/me", me)
+		d.Authenticated(http.MethodGet, authSettingsPath, s.signInPage)
+		d.Authenticated(http.MethodPost, authSettingsPath+"/tokens", s.tokenIssue)
+		d.Authenticated(http.MethodPost, authSettingsPath+"/tokens/{id}/revoke", s.tokenRevoke)
+	}
 	s.secure = func(r *http.Request) bool {
 		return hasSecureTransport(r, strings.HasPrefix(o.State.PublicURL(o.Env), "https://"))
 	}
@@ -226,6 +235,10 @@ func New(o Options) (*Server, error) {
 	}
 	for _, register := range o.Modules {
 		register(s.mux, deps)
+	}
+	if err := (&Registrar{state: deps.registrations}).Seal(); err != nil {
+		s.Close()
+		return nil, err
 	}
 	guard := newGuard(auth, o.AllowedHosts, o.Trusted, o.Public, s.access)
 	guard.secure = s.secure
@@ -264,19 +277,24 @@ func instrument(next http.Handler) http.Handler {
 }
 
 func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	if s.settings != nil {
-		ctx = settings.With(ctx, s.settings)
+	s.handler.ServeHTTP(w, r.WithContext(baseValues{Context: r.Context(), base: s.base}))
+}
+
+type baseValues struct {
+	context.Context
+	base context.Context
+}
+
+func (b baseValues) Value(key any) any {
+	if v := b.Context.Value(key); v != nil {
+		return v
 	}
-	if s.state != nil {
-		ctx = config.With(ctx, s.state)
-	}
-	s.handler.ServeHTTP(w, r.WithContext(ctx))
+	return b.base.Value(key)
 }
 
 func (s *Server) route(class access, method, pattern string, h http.HandlerFunc) {
-	s.mux.Method(method, pattern, h)
-	s.routes = append(s.routes, routeRule{method: method, pattern: pattern, access: class})
+	(&Registrar{Router: s.mux, owner: "core", state: s.registrations}).Method(method, pattern, h)
+	s.routes = append(s.routes, routeRule{method: method, pattern: pattern, access: class, owner: "core"})
 }
 
 func (s *Server) access(r *http.Request) access {
@@ -335,17 +353,13 @@ func (s *Server) allowed(path string) []string {
 }
 
 func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
-	if isAPI(r) {
-		APIError(w, http.StatusNotFound, "not_found", "Not found.")
-		return
-	}
 	path := r.URL.Path
 	alt := path + "/"
 	if strings.HasSuffix(path, "/") {
 		alt = strings.TrimRight(path, "/")
 	}
-	if alt == "" || alt == path || len(s.allowed(alt)) == 0 {
-		s.Error(w, r, http.StatusNotFound, "Not Found")
+	if isAPI(r) || alt == "" || alt == path || len(s.allowed(alt)) == 0 {
+		s.missing(w, r)
 		return
 	}
 	scheme := "http"
@@ -354,6 +368,14 @@ func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 	}
 	target := url.URL{Scheme: scheme, Host: r.Host, Path: alt, RawQuery: r.URL.RawQuery}
 	http.Redirect(w, r, target.String(), http.StatusTemporaryRedirect)
+}
+
+func (s *Server) missing(w http.ResponseWriter, r *http.Request) {
+	if isAPI(r) {
+		APIError(w, http.StatusNotFound, "not_found", "Not found.")
+		return
+	}
+	s.Error(w, r, http.StatusNotFound, "Not Found")
 }
 
 func (s *Server) methodNotAllowed(w http.ResponseWriter, r *http.Request) {

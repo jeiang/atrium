@@ -32,7 +32,11 @@ var builtinIDs = func() map[string]bool {
 }()
 
 func Reconcile(ctx context.Context, d *db.DB, host config.Host) error {
-	store, err := New(d, host, DefaultRegistry())
+	reg, err := From(ctx)
+	if err != nil {
+		return err
+	}
+	store, err := New(d, host, reg)
 	if err != nil {
 		return err
 	}

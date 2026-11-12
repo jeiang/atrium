@@ -98,6 +98,8 @@ type Filter struct {
 type Mutation func(context.Context, *sql.Tx) error
 
 type Undoer struct {
+	Bind     func(context.Context) (context.Context, error)
+	Deferred bool
 	Validate func(json.RawMessage) error
 	External func(context.Context, json.RawMessage) (Result, error)
 	Local    func(context.Context, *sql.Tx, json.RawMessage) (Result, error)
@@ -107,15 +109,26 @@ type Undoer struct {
 
 type ResolveHook func(context.Context, *sql.Tx, Effect, Resolution) error
 
+type UndoDefinition struct {
+	Operation string
+	Undoer    Undoer
+}
+
+type ResolveDefinition struct {
+	Operation string
+	Hook      ResolveHook
+}
+
 type Store struct {
-	DB       *db.DB
-	now      func() float64
-	mu       sync.RWMutex
-	undoers  map[string]Undoer
-	resolves map[string]ResolveHook
-	liveMu   sync.Mutex
-	live     map[int64]liveTicket
-	stop     chan struct{}
+	BindEffect func(context.Context, db.Querier, Effect) (context.Context, error)
+	DB         *db.DB
+	now        func() float64
+	mu         sync.RWMutex
+	undoers    map[string]Undoer
+	resolves   map[string]ResolveHook
+	liveMu     sync.Mutex
+	live       map[int64]liveTicket
+	stop       chan struct{}
 }
 
 type liveTicket struct {
@@ -148,9 +161,38 @@ func NewStore(d *db.DB, now func() float64) *Store {
 	return &Store{DB: d, now: now, undoers: map[string]Undoer{}, resolves: map[string]ResolveHook{}}
 }
 
+type DuplicateOperation struct{ Operation string }
+
+func (e *DuplicateOperation) Error() string { return "ledger: duplicate operation " + e.Operation }
+
+func NewStoreWith(d *db.DB, now func() float64, build func(*Store) ([]UndoDefinition, []ResolveDefinition, error)) (*Store, error) {
+	s := NewStore(d, now)
+	undo, resolve, err := build(s)
+	if err != nil {
+		return nil, err
+	}
+	for _, def := range undo {
+		if _, ok := s.undoers[def.Operation]; ok {
+			return nil, &DuplicateOperation{Operation: def.Operation}
+		}
+		if err := s.registerUndo(def.Operation, def.Undoer); err != nil {
+			return nil, err
+		}
+	}
+	for _, def := range resolve {
+		if _, ok := s.resolves[def.Operation]; ok {
+			return nil, &DuplicateOperation{Operation: def.Operation}
+		}
+		if err := s.registerResolve(def.Operation, def.Hook); err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
+}
+
 func (s *Store) Now() float64 { return s.now() }
 
-func (s *Store) RegisterUndo(name string, fn Undoer) error {
+func (s *Store) registerUndo(name string, fn Undoer) error {
 	if strings.TrimSpace(name) == "" {
 		return errors.New("ledger: undo registration without a name")
 	}
@@ -170,7 +212,7 @@ func (s *Store) undoer(name string) (Undoer, bool) {
 	return fn, ok
 }
 
-func (s *Store) RegisterResolve(operation string, fn ResolveHook) error {
+func (s *Store) registerResolve(operation string, fn ResolveHook) error {
 	if strings.TrimSpace(operation) == "" {
 		return errors.New("ledger: resolve registration without an operation")
 	}
@@ -207,6 +249,9 @@ func (s *Store) Begin(ctx context.Context, n New, admit Mutation) (Ticket, error
 }
 
 func (s *Store) BeginTx(ctx context.Context, tx *sql.Tx, n New, admit Mutation) (Ticket, error) {
+	if err := CheckAdmission(ctx); err != nil {
+		return Ticket{}, err
+	}
 	if err := ctx.Err(); err != nil {
 		return Ticket{}, err
 	}
@@ -446,6 +491,9 @@ func (s *Store) ApplyLocalTx(ctx context.Context, tx *sql.Tx, n New, apply func(
 }
 
 func (s *Store) applyLocalTx(ctx context.Context, tx *sql.Tx, n New, apply func(context.Context, *sql.Tx) (Result, error)) (int64, error) {
+	if err := CheckAdmission(ctx); err != nil {
+		return 0, err
+	}
 	if err := validateNew(n); err != nil {
 		return 0, err
 	}

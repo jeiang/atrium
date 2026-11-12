@@ -243,8 +243,8 @@ func encode(v any) (json.RawMessage, error) {
 	return b, nil
 }
 
-func RegisterLedgerUndoer(s *ledger.Store) error {
-	return s.RegisterUndo(UndoReminder, ledger.Undoer{
+func Undo() []ledger.UndoDefinition {
+	return []ledger.UndoDefinition{{Operation: UndoReminder, Undoer: ledger.Undoer{
 		Validate: func(raw json.RawMessage) error {
 			var info struct {
 				ID int64 `json:"id"`
@@ -274,10 +274,12 @@ func RegisterLedgerUndoer(s *ledger.Store) error {
 			}
 			return ledger.Result{State: ledger.Done, After: after}, nil
 		},
-	})
+	}}}
 }
 
-func Register(reg *proposals.Registry, r *Reminders, owner string) {
-	reg.Executors[KindReminder] = r.Execute
-	reg.AddKind(proposals.Kind{Name: KindReminder, Module: owner, Label: "Reminder", Icon: "scroll-text"})
+func (r *Reminders) Proposals(owner string) []proposals.Definition {
+	return []proposals.Definition{{
+		Kind:    proposals.Kind{Name: KindReminder, Module: owner, Label: "Reminder", Icon: "scroll-text"},
+		Execute: r.Execute,
+	}}
 }

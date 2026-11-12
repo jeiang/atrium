@@ -22,13 +22,13 @@ var workWeekdays = map[string]time.Weekday{
 	"thu": time.Thursday, "fri": time.Friday, "sat": time.Saturday,
 }
 
-func init() {
-	settings.MustRegister(
+func SlotSettings() []settings.Def {
+	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{Key: WorkHoursKey, Module: "calendar", Type: settings.String, Default: "09:00-17:00",
 			Check: func(v string) error { _, _, err := parseHours(v); return err }}),
 		settings.Value(settings.UI, settings.Def{Key: WorkDaysKey, Module: "calendar", Type: settings.String, Default: "mon,tue,wed,thu,fri",
 			Check: func(v string) error { _, err := parseDays(v); return err }}),
-	)
+	}
 }
 
 func clock(s string) (time.Duration, error) {

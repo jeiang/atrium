@@ -128,57 +128,63 @@ func resolveCorrection(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledge
 	return err
 }
 
-func RegisterLedgerUndoers(s *ledger.Store, open mail.OpenFunc, q db.Querier) error {
-	undoers := []struct {
-		name string
-		fn   func(context.Context, mail.OpenFunc, db.Querier, json.RawMessage) (any, error)
-	}{
-		{OpMoveBack, func(ctx context.Context, open mail.OpenFunc, q db.Querier, raw json.RawMessage) (any, error) {
-			var p MoveBack
-			if err := json.Unmarshal(raw, &p); err != nil {
-				return nil, ledger.Refused("move undo payload is invalid")
-			}
-			return UndoMoveBack(ctx, open, q, p)
-		}},
-		{OpGmailLabels, func(ctx context.Context, open mail.OpenFunc, q db.Querier, raw json.RawMessage) (any, error) {
-			var p GmailLabels
-			if err := json.Unmarshal(raw, &p); err != nil {
-				return nil, ledger.Refused("label undo payload is invalid")
-			}
-			return undoGmailLabels(ctx, open, q, p)
-		}},
-		{OpGmailUntrash, func(ctx context.Context, open mail.OpenFunc, q db.Querier, raw json.RawMessage) (any, error) {
-			var p GmailUntrash
-			if err := json.Unmarshal(raw, &p); err != nil {
-				return nil, ledger.Refused("untrash undo payload is invalid")
-			}
-			return undoGmailUntrash(ctx, open, q, p)
-		}},
-		{OpUnflag, func(ctx context.Context, open mail.OpenFunc, q db.Querier, raw json.RawMessage) (any, error) {
-			var p Unflag
-			if err := json.Unmarshal(raw, &p); err != nil {
-				return nil, ledger.Refused("unflag undo payload is invalid")
-			}
-			return undoUnflag(ctx, open, q, p)
-		}},
-	}
-	for _, u := range undoers {
+var liveUndoers = []struct {
+	name string
+	fn   func(context.Context, mail.OpenFunc, db.Querier, json.RawMessage) (any, error)
+}{
+	{OpMoveBack, func(ctx context.Context, open mail.OpenFunc, q db.Querier, raw json.RawMessage) (any, error) {
+		var p MoveBack
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return nil, ledger.Refused("move undo payload is invalid")
+		}
+		return UndoMoveBack(ctx, open, q, p)
+	}},
+	{OpGmailLabels, func(ctx context.Context, open mail.OpenFunc, q db.Querier, raw json.RawMessage) (any, error) {
+		var p GmailLabels
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return nil, ledger.Refused("label undo payload is invalid")
+		}
+		return undoGmailLabels(ctx, open, q, p)
+	}},
+	{OpGmailUntrash, func(ctx context.Context, open mail.OpenFunc, q db.Querier, raw json.RawMessage) (any, error) {
+		var p GmailUntrash
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return nil, ledger.Refused("untrash undo payload is invalid")
+		}
+		return undoGmailUntrash(ctx, open, q, p)
+	}},
+	{OpUnflag, func(ctx context.Context, open mail.OpenFunc, q db.Querier, raw json.RawMessage) (any, error) {
+		var p Unflag
+		if err := json.Unmarshal(raw, &p); err != nil {
+			return nil, ledger.Refused("unflag undo payload is invalid")
+		}
+		return undoUnflag(ctx, open, q, p)
+	}},
+}
+
+func Undo(open mail.OpenFunc, q db.Querier) []ledger.UndoDefinition {
+	out := make([]ledger.UndoDefinition, 0, len(liveUndoers))
+	for _, u := range liveUndoers {
 		u := u
-		if err := s.RegisterUndo(u.name, ledger.Undoer{
+		out = append(out, ledger.UndoDefinition{Operation: u.name, Undoer: ledger.Undoer{
 			Validate: validateUndo(u.name),
+			Deferred: true,
 			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
 				value, err := u.fn(safety.ApprovedWrites(ctx, "undo"), open, q, raw)
 				return undoResult(value, err)
 			},
 			After: clearCorrection,
-		}); err != nil {
-			return err
-		}
-		if err := s.RegisterResolve(u.name, resolveCorrection); err != nil {
-			return err
-		}
+		}})
 	}
-	return s.RegisterResolve(ledger.LegacyAutoUndo, resolveCorrection)
+	return out
+}
+
+func Resolve() []ledger.ResolveDefinition {
+	out := make([]ledger.ResolveDefinition, 0, len(liveUndoers)+1)
+	for _, u := range liveUndoers {
+		out = append(out, ledger.ResolveDefinition{Operation: u.name, Hook: resolveCorrection})
+	}
+	return append(out, ledger.ResolveDefinition{Operation: ledger.LegacyAutoUndo, Hook: resolveCorrection})
 }
 
 type moveBackResult struct {
@@ -341,12 +347,4 @@ func derefOr0(v *uint32) uint32 {
 		return 0
 	}
 	return *v
-}
-
-func NewStore(d *db.DB, open mail.OpenFunc, now func() float64) *ledger.Store {
-	s := ledger.NewStore(d, now)
-	if err := RegisterLedgerUndoers(s, open, d.Read); err != nil {
-		panic(err)
-	}
-	return s
 }

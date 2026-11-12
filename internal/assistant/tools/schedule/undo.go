@@ -31,9 +31,10 @@ type scheduleRestoreUndo struct {
 	NextDue  *float64 `json:"next_due"`
 }
 
-func RegisterLedgerUndoers(s *ledger.Store) error {
+func Undo() []ledger.UndoDefinition {
+	var out []ledger.UndoDefinition
 	for _, name := range []string{"schedule_delete", "schedule_restore"} {
-		if err := s.RegisterUndo(name, ledger.Undoer{
+		out = append(out, ledger.UndoDefinition{Operation: name, Undoer: ledger.Undoer{
 			Validate: validateScheduleUndo(name),
 			Local: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (ledger.Result, error) {
 				var value any
@@ -48,11 +49,9 @@ func RegisterLedgerUndoers(s *ledger.Store) error {
 				}
 				return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
 			},
-		}); err != nil {
-			return err
-		}
+		}})
 	}
-	return nil
+	return out
 }
 
 func validateScheduleUndo(name string) func(json.RawMessage) error {

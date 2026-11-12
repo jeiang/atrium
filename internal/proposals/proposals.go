@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 const (
@@ -35,7 +36,20 @@ type Kind struct {
 
 type DismissHook func(ctx context.Context, p *Proposal) error
 
+type Builder struct {
+	Description string
+	Build       func(ctx context.Context, tc *tool.Context, payload map[string]any) (*int64, error)
+}
+
+type Definition struct {
+	Kind    Kind
+	Execute Executor
+	Dismiss DismissHook
+	Build   *Builder
+}
+
 type Registry struct {
+	Bind       func(context.Context, string) (context.Context, error)
 	Executors  map[string]Executor
 	Dismissers map[string]DismissHook
 	kinds      []Kind
@@ -43,16 +57,31 @@ type Registry struct {
 	Sync       SyncHook
 }
 
-func NewRegistry() *Registry {
+func newRegistry() *Registry {
 	return &Registry{Executors: map[string]Executor{}, Dismissers: map[string]DismissHook{}, byName: map[string]Kind{}}
 }
 
-func (r *Registry) AddKind(k Kind) {
-	if _, found := r.byName[k.Name]; found {
-		panic("proposals: duplicate kind " + k.Name)
+type DuplicateKind string
+
+func (e DuplicateKind) Error() string { return "proposals: duplicate kind " + string(e) }
+
+func NewRegistryFrom(defs []Definition, sync SyncHook) (*Registry, error) {
+	r := newRegistry()
+	r.Sync = sync
+	for _, def := range defs {
+		if _, ok := r.byName[def.Kind.Name]; ok {
+			return nil, DuplicateKind(def.Kind.Name)
+		}
+		if def.Execute != nil {
+			r.Executors[def.Kind.Name] = def.Execute
+		}
+		if def.Dismiss != nil {
+			r.Dismissers[def.Kind.Name] = def.Dismiss
+		}
+		r.byName[def.Kind.Name] = def.Kind
+		r.kinds = append(r.kinds, def.Kind)
 	}
-	r.byName[k.Name] = k
-	r.kinds = append(r.kinds, k)
+	return r, nil
 }
 
 func (r *Registry) Kinds() []Kind { return r.kinds }
@@ -97,10 +126,31 @@ func Known(ctx context.Context, q Querier, fingerprint string) (bool, error) {
 	return ledger.ProposalBlocked(ctx, q, id)
 }
 
-var OnCreate func(ctx context.Context, d *db.DB, p *Proposal)
+type CreatedHook = func(ctx context.Context, d *db.DB, p *Proposal)
+
+type Hooks struct{ Created CreatedHook }
+
+type ErrNoHooks struct{}
+
+func (ErrNoHooks) Error() string { return "proposals: no hooks in context" }
+
+type hooksKey struct{}
+
+func WithHooks(ctx context.Context, h Hooks) context.Context {
+	return context.WithValue(ctx, hooksKey{}, h)
+}
+
+func HooksFrom(ctx context.Context) (Hooks, bool) {
+	h, ok := ctx.Value(hooksKey{}).(Hooks)
+	return h, ok
+}
 
 func Create(ctx context.Context, d *db.DB, kind string, account *string, title string, payload, preview any,
 	fingerprint string, ts float64) (id int64, created bool, err error) {
+	hooks, ok := HooksFrom(ctx)
+	if !ok {
+		return 0, false, ErrNoHooks{}
+	}
 	body, err := marshalJSON(payload)
 	if err != nil {
 		return 0, false, err
@@ -139,9 +189,9 @@ func Create(ctx context.Context, d *db.DB, kind string, account *string, title s
 		}
 		return err
 	})
-	if err == nil && created && OnCreate != nil {
+	if err == nil && created && hooks.Created != nil {
 		if p, getErr := Get(ctx, d.Read, id); getErr == nil && p != nil {
-			OnCreate(ctx, d, p)
+			hooks.Created(ctx, d, p)
 		}
 	}
 	return id, created, err

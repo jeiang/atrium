@@ -31,6 +31,15 @@ var (
 	searchBound = tool.NewCeiling(20, 1, searchLimitCeiling)
 )
 
+func Definitions() []module.ToolDefinition {
+	tools := Tools()
+	defs := make([]module.ToolDefinition, len(tools))
+	for i, t := range tools {
+		defs[i] = module.ToolDefinition{Tool: t}
+	}
+	return defs
+}
+
 func Tools() []tool.Tool {
 	return []tool.Tool{
 		{

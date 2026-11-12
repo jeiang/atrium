@@ -15,12 +15,12 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/loop"
-	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/subagents"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/textx"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -40,26 +40,21 @@ type Research struct{ runner *loop.Runner }
 
 func New(runner *loop.Runner) *Research { return &Research{runner: runner} }
 
-func (r *Research) Install(reg *registry.Registry) error {
-	if err := reg.Add(r.Tool()); err != nil {
-		return err
-	}
-	reg.Bind(Name, Bind)
-	return nil
-}
-
-func (r *Research) Tool() tool.Tool {
+func Metadata() tool.Tool {
 	return tool.Tool{
 		Name:        Name,
 		Description: Description,
 		InputSchema: json.RawMessage(fmt.Sprintf(schemaFormat, `{"type":"string","description":"Name of an enabled subagent (see Settings › Subagents)."}`)),
-		Handler:     r.handle,
 		Effect:      tool.Read,
 		Annotated:   true,
 		Channel:     tool.ChannelInternet,
 		Marks:       tool.AllMarks,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 	}
+}
+
+func Definition() module.ToolDefinition {
+	return module.ToolDefinition{Tool: Metadata(), Bind: Bind}
 }
 
 func Bind(ctx context.Context, q db.Querier, t tool.Tool) (tool.Tool, bool, error) {
@@ -116,7 +111,7 @@ func sortedURLs(allowed map[string]struct{}) []string {
 	return slices.Sorted(maps.Keys(allowed))
 }
 
-func (r *Research) handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+func (r *Research) Handle(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
 	roleValue, _ := args.Get("role")
 	task, _, err := tool.TextArg(args, "task", true)
 	if err != nil {

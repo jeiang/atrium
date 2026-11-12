@@ -6,14 +6,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant/registry"
-	"github.com/jeiang/atrium/internal/attention"
-	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
-	"github.com/jeiang/atrium/internal/web"
 )
 
 const (
@@ -27,46 +23,6 @@ const (
 	Grafana       = "grafana"
 	Contacts      = "contacts"
 )
-
-var Builtins = []string{Mail, Calendar, Notion, Media, Assistant, Notifications, Grafana, Contacts}
-
-type Module interface {
-	Register(mc Context) Registration
-}
-
-type Context struct {
-	Current  func() *Snapshot
-	Evaluate func(context.Context, db.Querier) (*Snapshot, error)
-	Env      config.Env
-	Settings *settings.Registry
-	State    *config.State
-}
-
-func (c Context) Enabled(name string) bool {
-	snap := c.Current()
-	return snap != nil && snap.Enabled(name)
-}
-
-func (c Context) Tools() (*registry.Registry, error) {
-	snap := c.Current()
-	if snap == nil {
-		return nil, ErrNotEvaluated
-	}
-	return snap.Registry()
-}
-
-type Registration struct {
-	Name      string
-	Core      bool
-	Needs     []string
-	Requires  []Requirement
-	Pages     []web.Page
-	Settings  []settings.Group
-	Commands  []*cli.Command
-	Leaves    map[string]Leaf
-	Tools     func(r *registry.Registry) error
-	Attention []attention.Source
-}
 
 type Leaf struct {
 	Always bool
@@ -95,7 +51,7 @@ func HostSetting(key string) Requirement {
 		if strings.TrimSpace(value) == "" {
 			return key + " is not set", nil
 		}
-		if err := settings.ValidateHost(key, value); err != nil {
+		if err := p.Settings.ValidateHost(key, value); err != nil {
 			return key + " " + err.Error(), nil
 		}
 		return "", nil
@@ -154,6 +110,7 @@ const (
 	Enabled       State = "enabled"
 	Off           State = "off"
 	NeedsSettings State = "needs-settings"
+	Unavailable   State = "unavailable"
 )
 
 type Unmet struct {
@@ -166,6 +123,7 @@ type Status struct {
 	State State
 
 	Unmet []Unmet
+	Err   string
 }
 
 var ErrNotEvaluated = errors.New("module: states are not evaluated yet")
@@ -178,10 +136,10 @@ type DuplicateCommand string
 
 func (e DuplicateCommand) Error() string { return "module: duplicate command " + string(e) }
 
-type FlagNotRegistered string
+type ToolSettingCollision struct{ Module, Key string }
 
-func (e FlagNotRegistered) Error() string {
-	return "module: setting " + string(e) + " is not registered"
+func (e *ToolSettingCollision) Error() string {
+	return "module: " + e.Module + " declares the setting " + e.Key + ", which the tool registry owns"
 }
 
 type UnknownDependency struct {
@@ -226,10 +184,58 @@ func (e *InvalidPage) Error() string {
 	return "module: " + e.Module + " has a page with no Module"
 }
 
-type InvalidCore struct{ Module string }
+type InvalidCore struct{ Module, Reason string }
 
 func (e *InvalidCore) Error() string {
-	return "module: core module " + e.Module + " cannot declare needs or requirements"
+	if e.Module == "" {
+		return "module: " + e.Reason
+	}
+	if e.Reason == "" {
+		return "module: core module " + e.Module + " cannot declare needs or requirements"
+	}
+	return "module: core module " + e.Module + " " + e.Reason
+}
+
+type InvalidDeclaration struct{ Module, Field string }
+
+func (e *InvalidDeclaration) Error() string {
+	if e.Module == "" {
+		return "module: declaration has no " + e.Field
+	}
+	return "module: " + e.Module + " has an invalid " + e.Field
+}
+
+type DeclarationError struct {
+	Module string
+	Field  string
+	Err    error
+}
+
+func (e *DeclarationError) Error() string {
+	return "module: " + e.Module + " " + e.Field + ": " + e.Err.Error()
+}
+
+func (e *DeclarationError) Unwrap() error { return e.Err }
+
+type DuplicateMetric struct{ Name string }
+
+func (e *DuplicateMetric) Error() string { return "module: duplicate metric " + e.Name }
+
+type DuplicateCheck struct{ Name string }
+
+func (e *DuplicateCheck) Error() string { return "module: duplicate check " + e.Name }
+
+type DuplicateTool string
+
+func (e DuplicateTool) Error() string { return "module: duplicate tool " + string(e) }
+
+type DuplicateHook struct {
+	Hook    string
+	Modules []string
+}
+
+func (e *DuplicateHook) Error() string {
+	return "module: " + e.Hook + " is declared by " + strings.Join(e.Modules, " and ")
 }
 
 type NeedsSettingsError struct {
@@ -240,6 +246,21 @@ type NeedsSettingsError struct {
 func (e *NeedsSettingsError) Error() string {
 	return e.Module + " needs settings: " + joinReasons(e.Unmet)
 }
+
+type UnavailableError struct{ Module, Err string }
+
+func (e *UnavailableError) Error() string {
+	return e.Module + " is unavailable: " + e.Err
+}
+
+type requirementError struct {
+	name string
+	err  error
+}
+
+func (e *requirementError) Error() string { return e.name + ": " + e.err.Error() }
+
+func (e *requirementError) Unwrap() error { return e.err }
 
 func joinReasons(unmet []Unmet) string {
 	reasons := make([]string, len(unmet))

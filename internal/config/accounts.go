@@ -56,12 +56,16 @@ var presets = map[string]preset{
 
 var accountID = regexp.MustCompile(`^[a-z][a-z0-9]*(_[a-z0-9]+)*$`)
 
-// HostAccounts derives the accounts declared by host mail connections. The
-// mail owner registers it; a process without the mail owner has no host
+// HostAccountsFunc derives the accounts declared by host mail connections.
+// The mail owner declares it; a process without the mail owner has no host
 // accounts.
-var hostAccounts func(Host) ([]AccountSpec, map[string]string, error)
+type HostAccountsFunc = func(Host) ([]AccountSpec, map[string]string, error)
 
-func RegisterHostAccounts(f func(Host) ([]AccountSpec, map[string]string, error)) { hostAccounts = f }
+func (s *State) SetHostAccounts(f HostAccountsFunc) {
+	s.mu.Lock()
+	s.hostAccounts = f
+	s.mu.Unlock()
+}
 
 // AccountCredential is the stored credential at a connection slot. An empty
 // Source means the slot is absent.
@@ -71,13 +75,15 @@ type AccountCredential struct {
 	FileRef string
 }
 
-// accountCredential reads the credential behind an account's connection. The
-// connections owner registers it; a process without the connections owner
-// reads no stored credential.
-var accountCredential func(context.Context, db.Querier, string, string) (AccountCredential, error)
+type AccountCredentialFunc = func(context.Context, db.Querier, string, string) (AccountCredential, error)
 
-func RegisterAccountCredential(f func(context.Context, db.Querier, string, string) (AccountCredential, error)) {
-	accountCredential = f
+// SetAccountCredential installs the reader for the credential behind an
+// account's connection. A process without the connections owner reads no
+// stored credential.
+func (s *State) SetAccountCredential(f AccountCredentialFunc) {
+	s.mu.Lock()
+	s.credential = f
+	s.mu.Unlock()
 }
 
 func (s *State) Accounts() []AccountSpec {
@@ -172,6 +178,9 @@ func (s *State) loadAccountsFromDB(ctx context.Context, q db.Querier, filePasswo
 	}
 	accounts := make([]AccountSpec, 0, len(stored))
 	passwords := make(map[string]string, len(stored))
+	s.mu.RLock()
+	credential := s.credential
+	s.mu.RUnlock()
 	for _, x := range stored {
 		connection := x.connection.String
 		if connection == "" {
@@ -182,8 +191,8 @@ func (s *State) loadAccountsFromDB(ctx context.Context, q db.Querier, filePasswo
 			prefix = "mail/" + x.id
 		}
 		password := filePasswords[x.id]
-		if accountCredential != nil {
-			c, err := accountCredential(ctx, q, connection, prefix+"/password")
+		if credential != nil {
+			c, err := credential(ctx, q, connection, prefix+"/password")
 			if err != nil {
 				return nil, nil, fmt.Errorf("config: mail account %q credential: %w", x.id, err)
 			}

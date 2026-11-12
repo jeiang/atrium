@@ -69,6 +69,11 @@ behavior-parity target.
   light, dark or system
   theme and the rail state are cookies the server applies on the next
   render.
+- Review and Activity remain available when a capability is disabled, including
+  its historical proposals and effects. Actions on those records require the
+  owning capability to remain enabled for the operation. Draft, loop and package
+  pages belong to mail and are unavailable while mail is off; the pause controls
+  stay available through the CLI, and their web routes return not found.
 - The system prompt and subagent rules are operator-editable settings over
   built-in defaults; the untrusted-data preamble is fixed in code and always
   comes first. Edits apply to every thread's next request until the
@@ -311,8 +316,8 @@ behavior-parity target.
   settings are database rows edited in the application or with `atrium
   settings set`; a value the host file declares for one, including a
   `<name>_enabled` module flag, wins and makes that setting read-only. Each
-  application instance builds its own settings registry (`settings.New()`)
-  and every command reads the same stored operator values. There is no
+  application instance gets its own settings registry from the compiled
+  module declaration catalog, and every command reads the same stored operator values. There is no
   legacy pin file: `ATRIUM_CONFIG` is refused at startup, and so is an
   `ATRIUM_<MODULE>_<KEY>` variable for an operator or tuning key or for a
   connection-owned host key (the refusal names the destination). Provider
@@ -413,8 +418,11 @@ behavior-parity target.
   error to the append-only `effect_resolutions` table (proposal approvals and
   the remaining proposal-action resolutions use the same audit table).
 - Modules are toggled at runtime. The built-in modules are always compiled
-  in. Core (settings, secrets,
-  `db`, `serve`, the About, review and activity pages) is always on; mail,
+  in. One compiled `module.Declaration` catalog supplies the registration
+  path for module pages, commands, tools, settings, connections, hooks,
+  metrics, checks, proposals and effect handlers; module enablement gates
+  the applicable runtime projections. Core (settings, secrets, `db`,
+  `serve`, the About, review and activity pages) is always on; mail,
   calendar, contacts, Notion, media, assistant, notifications and Grafana each
   have a `<name>_enabled` setting. A module flag is an operator setting, and
   the host file may declare it; a declared value wins and makes the flag
@@ -423,15 +431,51 @@ behavior-parity target.
   grafana needs the assistant, calendar candidates need mail
   for their pipeline stage, and mail uses contacts as an optional source
   for its flag rule. iCloud calendars and address books are mirrored by
-  atrium's own read-only CalDAV/CardDAV sync (vdirsyncer is gone). A disabled module registers no pages, tools or
-  nav entries, its commands exit 0 without doing work, its scheduler jobs, the mail pass's calendar-candidate stage and
-  notification sends are skipped (the mail pause controls stay available), and its tables remain. The first start
+  atrium's own read-only CalDAV/CardDAV sync (vdirsyncer is gone). A disabled
+  module's pages return not found and its tools and nav entries are omitted;
+  its commands exit 0 without doing work, its scheduler jobs, the mail pass's
+  calendar-candidate stage and notification sends are skipped (the mail pause
+  controls stay available), and its tables remain.
+  The first start
   after the module wiring adopts a database that already holds operator data
   (settings, secrets, accounts, threads or usage rows): every module whose
   required settings are met is enabled, so a Phase A installation keeps every
   feature; an empty database starts core only. `atrium settings set
   <name>_enabled true` is refused with the unmet reasons. The assistant tool
   registry is built from the enabled modules' tools.
+  Each run and dispatch resolves the current handler-bound tool registry.
+  Pending mutations retain their owner's generation and refuse before recording
+  a write intent if that owner was disabled, including after re-enablement.
+  Started effects finish their ledger settlement; unknown outcomes stay blocked.
+  Dismissing a proposal remains possible while its owner is disabled.
+  Settings transactions publish a new module snapshot only after commit.
+  Routes mount once with their declaration owner and check that snapshot on
+  each request, so changes committed by the running application take effect
+  without remounting or restarting; disabled routes keep the rendered 404
+  page or the API's JSON `not_found` response.
+  The owner route registrar seals before listening and refuses later mounts,
+  including empty subrouter mounts.
+  A core evaluation failure names its owner and aborts startup; no
+  core-only fallback snapshot is published. An optional module whose
+  evaluation fails is unavailable with that error. Module starters run
+  after the publish lock and write connection are released; a failed
+  starter marks its module unavailable with the error, is logged once per
+  failure and is retried at the next publication.
+- Module ownership is checked at build time. `tools/tableownership` keeps
+  each table's SQL inside its owning module, and `tools/registrationownership`
+  keeps every registration in the module catalog: it type-checks the
+  production packages and fails, naming file and line, when an `init`
+  function calls into another package (only the SQLite driver setup in
+  `internal/db/open_cgo.go` and the stopword table in
+  `internal/mail/rebalance/rebalance.go` may), when code outside
+  `internal/module` and `internal/app` builds or fills a registry
+  (settings, connections, proposal kinds, the effect ledger's undo and
+  resolve hooks, the assistant tool registry) or sets a registry's hook
+  fields, when anything assigns an exported package-level function variable
+  under `internal/`, or when an `internal/` package imports `internal/app`.
+  The tool registry may add the enable settings of the tools it registers.
+  `just check-quick` and the `ownership` flake check run both; `just verify`
+  runs the registration check.
 - Observability: `atrium serve` exposes Prometheus metrics and readiness on
   the loopback ops listener (`ops_listen`, `off` disables), and every command
   can export OTLP/HTTP traces when the host sets `otel_traces_endpoint` (empty
@@ -461,6 +505,9 @@ behavior-parity target.
   undo is its own effect row. `atrium effects list|show|resolve|undo` inspects
   and settles effects; `atrium writes` and `atrium live` are domain-filtered
   views of the same rows.
+  Undo and resolve handlers come from the compiled module catalog at every
+  entry point, including mail proposal effects and media effects; the effect
+  state and the relevant write gate still determine whether an undo can run.
 - Mail writes use the shared gate. Shadow mode records decisions without
   automatic mailbox writes; live automatic writes also depend on pause,
   go-live eligibility, verification, caps, and the effect ledger. The mode is
@@ -727,7 +774,7 @@ behavior-parity target.
 - **The day is home.** Five navigation entries: today and threads, Review, Library, Apps (the Media sub-app at `/apps/media`), and Settings. The home brief lists the morning digest lines and names the next event.
 - **Drafts are written, edited and sent in chat.**
 - **Skills are removed.**
-- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its registration (`Settings` on the registration, a label on the setting) and that render and save through one shared path; an external module declares them through the `sdk` package and gets a page at `/settings/{module}`. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Media and Grafana each have a page with their connections and sections, Notion has a page with its wiki settings, its connection is on `/settings/connections`, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
+- **Settings is a page per module.** Implemented: a page list (Assistant, Mail, Connections, Notifications, Sign-in, and Usage under Instance), and setting groups that a module declares in its `module.Declaration` and that render and save through one shared path. A module page opens with the module's state (flags are still set through the CLI, env or Nix) and shows that module's connection records. Calendar, Media and Grafana each have a page with their connections and sections, Notion has a page with its wiki settings, its connection is on `/settings/connections`, and the list marks a module that is off or needs settings. A refused connection test or value answers on the page it was sent from, and Permissions is a group on the Assistant page. Advanced settings stay with Nix, the CLI, or the agent.
 - **Scheduled runs** are managed from chat, with a list in Library. **Projects** are thread groups. **Mail rules** live under Library.
 - **Look A:** warm, Source Serif 4 prose, Inter UI, Basecoat 1.1 with Tailwind tokens.
 - **Notifications:** the in-app inbox is canonical; Web Push now, APNs with a future iOS app.

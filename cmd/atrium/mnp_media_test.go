@@ -518,7 +518,7 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	seedAllFlagsIn(t, dir)
-	base, _, stop, err := startServeAppArgs(t, newTestApp(t, nil), &lockedBuffer{}, "--auth", "proxy", "--allowed-host", "127.0.0.1")
+	base, _, stop, err := startServeAppArgs(t, newTestApp(t), &lockedBuffer{}, "--auth", "proxy", "--allowed-host", "127.0.0.1")
 	if err != nil {
 		t.Fatal(err)
 	}

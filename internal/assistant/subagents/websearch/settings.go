@@ -15,15 +15,15 @@ const (
 	TuningSearchWebMaxSearches = 5
 )
 
-func init() {
+func Settings() []settings.Def {
 	model := settings.Value(settings.UI, settings.Def{
 		Key: KeyModel, Label: "Web search model", Module: "web_search", Type: settings.Enum, Default: pricing.DefaultModel,
 	})
 	model.Choices = pricing.IDs()
-	settings.MustRegister(
+	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{
 			Key: KeyMaxCostUSD, Label: "Web search run cost cap (USD)", Module: "web_search", Type: settings.Float, Default: "0.15", Check: settings.Within(0, 2),
 		}),
 		model,
-	)
+	}
 }

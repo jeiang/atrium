@@ -23,7 +23,6 @@ import (
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/proposals/handlers"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -46,10 +45,7 @@ type Options struct {
 }
 
 func (o Options) store(d *db.DB, cfg config.Config) *ledger.Store {
-	if o.Store != nil {
-		return o.Store(d, cfg)
-	}
-	return ledger.NewStore(d, o.now)
+	return o.Store(d, cfg)
 }
 
 func (o Options) env() config.Env {
@@ -115,16 +111,19 @@ func (x *exec) JSON(value any) {
 }
 
 func (x *exec) registry(store *ledger.Store) *proposals.Registry {
-	registry := proposals.NewRegistry()
 	clients := x.opts.Clients
 	if clients == nil {
 		clients = imapclient.Opener
 	}
 	open := clients(x.Cfg)
-	handlers.Register(registry, handlers.Deps{
+	cat := module.SetFrom(x.Ctx).Catalog()
+	registry, err := cat.Proposals(module.EffectDeps{
 		DB: x.DB, Ledger: store, Open: open,
-		Syncer: &mailsync.Syncer{DB: x.DB, Cfg: x.Cfg, Now: x.opts.Now}, Now: x.opts.Now, Env: x.opts.env(), Registry: x.opts.Tools,
+		Syncer: &mailsync.Syncer{DB: x.DB, Cfg: x.Cfg, Now: x.opts.Now}, Now: x.opts.Now, Env: x.opts.env(), Tools: x.opts.Tools, Approvals: cat.Approvals(),
 	})
+	if err != nil {
+		panic(err)
+	}
 	return registry
 }
 
@@ -218,6 +217,9 @@ func Command(o Options) *cli.Command {
 				}
 				approved, err := x.Pipeline().ApproveAndApply(x.Ctx, int64(*id), chosen, operator)
 				if err != nil {
+					if approved != nil {
+						x.JSON(approved.Dict())
+					}
 					return err
 				}
 				x.JSON(approved.Dict())
@@ -267,6 +269,9 @@ func Command(o Options) *cli.Command {
 			return func(x *exec) error {
 				result, err := x.Pipeline().Undo(x.Ctx, int64(*id), operator)
 				if err != nil {
+					if len(result.Outcomes) > 0 || result.SyncError != nil {
+						x.JSON(result.Dict())
+					}
 					return err
 				}
 				x.JSON(result.Dict())

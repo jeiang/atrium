@@ -9,7 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 )
 
-func init() { config.RegisterAccountCredential(credentialAt) }
+func AccountCredential() config.AccountCredentialFunc { return credentialAt }
 
 func credentialAt(ctx context.Context, q db.Querier, id, slot string) (config.AccountCredential, error) {
 	var (

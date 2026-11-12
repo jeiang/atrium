@@ -22,12 +22,12 @@ type connectionConfig struct {
 	LogsQuery  string `json:"logs_query"`
 }
 
-func init() {
-	connections.Register(connections.Definition{
+func Connections() []connections.Definition {
+	return []connections.Definition{{
 		Kind:     KindGrafana,
 		Validate: validateConnection,
 		Test:     testConnection,
-	})
+	}}
 }
 
 func validateConnection(c connections.Candidate) error {

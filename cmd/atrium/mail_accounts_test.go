@@ -10,8 +10,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/settings"
-
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
@@ -91,8 +89,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 		}
 	}
 	run := func(args ...string) appRun {
-		reg := settings.New()
-		app := newAppWith(testLookupFor(t), reg, config.NewState(reg), nil, clients, nil, quietLog)
+		app := newAppWith(testLookupFor(t), clients, nil, quietLog)
 		var out, errs bytes.Buffer
 		code := app.Run(context.Background(), args, &out, &errs)
 		return appRun{code, out.String(), errs.String()}

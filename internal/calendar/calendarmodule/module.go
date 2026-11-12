@@ -3,9 +3,9 @@ package calendarmodule
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant/registry"
 	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
@@ -18,18 +18,41 @@ import (
 
 type Module struct{}
 
-func (Module) Register(mc module.Context) module.Registration {
+func AttentionSources() []attention.Source {
+	return []attention.Source{attentionsources.Candidates()}
+}
+
+func Requirements() []module.Requirement {
+	return []module.Requirement{{Name: "calendar credentials", Check: credentials}}
+}
+
+func ToolDefinitions() []module.ToolDefinition {
+	return calendartools.Definitions()
+}
+
+func (Module) Declare(mc module.Context) module.Declaration {
 	command := calendarcmd.Command(mc.Env, mc.Tools)
-	return module.Registration{
+	return module.Declaration{
 		Name:      module.Calendar,
-		Attention: []attention.Source{attentionsources.Candidates()},
-		Requires:  []module.Requirement{{Name: "calendar credentials", Check: credentials}},
+		Settings:  slices.Concat(calendar.SettingsDefs(), calendar.SlotSettings()),
+		Host:      calendar.HostSettings(),
+		Sections:  calendar.Sections(),
+		Attention: AttentionSources(),
+		Requires:  Requirements(),
 		Commands:  []*cli.Command{command},
 		Leaves: map[string]module.Leaf{
 			"calendar candidates":  {Needs: []string{module.Mail}},
 			"calendar google-auth": {Always: true},
 		},
-		Tools: func(r *registry.Registry) error { return r.Add(calendartools.Tools()...) },
+		Tools: ToolDefinitions(),
+		Effects: func(d module.EffectDeps) module.Effects {
+			p := &calendar.Proposals{DB: d.DB, Ledger: d.Ledger, Now: d.Now, Env: d.Env}
+			return module.Effects{
+				Proposals: p.Proposals(module.Calendar),
+				Undo:      slices.Concat(p.Undo(), calendartools.Undo(d.Ledger, d.Env)),
+			}
+		},
+		Connections: calendar.Connections(),
 	}
 }
 

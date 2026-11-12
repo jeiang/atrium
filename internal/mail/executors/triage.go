@@ -199,9 +199,14 @@ func (e *Executors) triageSnooze(ctx context.Context, client mail.Client, pid in
 		return 0, e.recordSkipped(ctx, pid, action, "shadow mode: would snooze")
 	}
 	imapName, validity, uid := v.IMAPName, v.UIDValidity, v.UID
+	local := ledger.WithoutAdmission(ctx)
 	if config.From(ctx).Preset(account) == config.Gmail {
-		if _, err := e.relabelItems(ctx, client, pid, account, []mailops.Verified{v}, []string{SnoozedLabel}, []string{mailops.InboxLabel}); err != nil {
+		n, err := e.relabelItems(ctx, client, pid, account, []mailops.Verified{v}, []string{SnoozedLabel}, []string{mailops.InboxLabel})
+		if err != nil {
 			return 0, err
+		}
+		if n == 0 {
+			local = ctx
 		}
 	} else {
 		dest := mail.UTF7Encode(SnoozedLabel)
@@ -227,7 +232,7 @@ func (e *Executors) triageSnooze(ctx context.Context, client mail.Client, pid in
 		}
 		imapName, validity, uid = dest, st.UIDValidity, found[0]
 	}
-	_, err := e.store().ApplyLocal(ctx, e.effect(pid, map[string]any{"op": "snooze", "account": account,
+	_, err := e.store().ApplyLocal(local, e.effect(pid, map[string]any{"op": "snooze", "account": account,
 		"imap_name": imapName, "uidvalidity": validity, "uid": uid, "due_ts": due, "uids": uidList([]uint32{uid})}),
 		func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
 			res, err := tx.ExecContext(ctx, "INSERT INTO snoozes (proposal_id, account, message_id, imap_name, uidvalidity, uid, due_ts, state, created_ts) "+

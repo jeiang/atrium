@@ -319,17 +319,16 @@ func (p *Proposals) Execute(ctx context.Context, prop *proposals.Proposal, _ any
 	return ExecuteResult{Summary: fmt.Sprintf("Added to the %s calendar", target), Calendar: ref.Calendar, UID: ref.UID}, nil
 }
 
-func Register(reg *proposals.Registry, p *Proposals, owner string) {
-	reg.Executors[Kind] = p.Execute
-	reg.Executors[UpdateKind] = p.ExecuteUpdate
-	reg.Executors[RSVPKind] = p.ExecuteRSVP
-	reg.AddKind(proposals.Kind{Name: Kind, Module: owner, Label: "Calendar event", Icon: "calendar"})
-	reg.AddKind(proposals.Kind{Name: UpdateKind, Module: owner, Label: "Event change", Icon: "calendar"})
-	reg.AddKind(proposals.Kind{Name: RSVPKind, Module: owner, Label: "Event reply", Icon: "calendar"})
+func (p *Proposals) Proposals(owner string) []proposals.Definition {
+	return []proposals.Definition{
+		{Kind: proposals.Kind{Name: Kind, Module: owner, Label: "Calendar event", Icon: "calendar"}, Execute: p.Execute},
+		{Kind: proposals.Kind{Name: UpdateKind, Module: owner, Label: "Event change", Icon: "calendar"}, Execute: p.ExecuteUpdate},
+		{Kind: proposals.Kind{Name: RSVPKind, Module: owner, Label: "Event reply", Icon: "calendar"}, Execute: p.ExecuteRSVP},
+	}
 }
 
-func RegisterLedgerUndoer(s *ledger.Store, p *Proposals) error {
-	return s.RegisterUndo(RestoreOp, ledger.Undoer{
+func (p *Proposals) Undo() []ledger.UndoDefinition {
+	return []ledger.UndoDefinition{{Operation: RestoreOp, Undoer: ledger.Undoer{
 		Validate: func(raw json.RawMessage) error {
 			var info undoPlan
 			if err := json.Unmarshal(raw, &info); err != nil || info.Calendar == "" || info.UID == "" {
@@ -355,5 +354,5 @@ func RegisterLedgerUndoer(s *ledger.Store, p *Proposals) error {
 			}
 			return ledger.Result{State: ledger.Done, After: after}, nil
 		},
-	})
+	}}}
 }

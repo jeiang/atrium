@@ -76,14 +76,18 @@ type Executor struct {
 	Registry registry.Source
 }
 
-func (e *Executor) Register(r *proposals.Registry) {
+func (e *Executor) Proposals() []proposals.Definition {
+	var out []proposals.Definition
 	for _, t := range e.Tools {
 		if t.Approval == nil {
 			continue
 		}
-		r.Executors[t.Name] = e.execute(t)
-		r.AddKind(proposals.Kind{Name: t.Name, Module: t.Approval.Module, Label: t.Approval.Label, Icon: t.Approval.Icon, Approval: true})
+		out = append(out, proposals.Definition{
+			Kind:    proposals.Kind{Name: t.Name, Module: t.Approval.Module, Label: t.Approval.Label, Icon: t.Approval.Icon, Approval: true},
+			Execute: e.execute(t),
+		})
 	}
+	return out
 }
 
 func (e *Executor) now() float64 {

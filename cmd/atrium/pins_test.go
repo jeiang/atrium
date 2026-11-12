@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 type pinRow struct {
@@ -157,7 +156,7 @@ func TestRemovedEnvironmentAndFilePinsAreRefused(t *testing.T) {
 		t.Errorf("legacy pin file: exit %d stderr %q", r.code, r.stderr)
 	}
 	setEnv(t, "ATRIUM_CONFIG", "")
-	def, _ := settings.LookupOf("monthly_budget_usd")
+	def, _ := testSettings().Lookup("monthly_budget_usd")
 	if got := pinRowOf(t, runSettings(t, "get", "monthly_budget_usd")); got.Value != def.Default || got.Source != "default" {
 		t.Errorf("operator default after removing the pin file: %+v, want %s", got, def.Default)
 	}
