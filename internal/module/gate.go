@@ -49,8 +49,16 @@ func (s *Set) settingState(ctx context.Context, q db.Querier, name string) (sett
 		return settings.ModuleView{}, err
 	}
 	view := settings.ModuleView{On: held.Result == "", Running: s.enabled(name)}
-	if held.Result == HoldNeeds {
+	switch held.Result {
+	case HoldNeeds:
 		view.Reason = held.Detail
+	case HoldUnavailable:
+		view.Error = held.Detail
+	}
+	if snap := s.Current(); snap != nil {
+		if st, _ := snap.Status(name); st.State == Unavailable {
+			view.Error = st.Err
+		}
 	}
 	source, pinned, err := s.reg.Pinned(FlagKey(name))
 	if pinned {
@@ -65,7 +73,7 @@ func (s *Set) settingMark(name string) string {
 		return ""
 	}
 	switch st, _ := snap.Status(name); st.State {
-	case NeedsSettings:
+	case NeedsSettings, Unavailable:
 		return "warning"
 	case Off:
 		return "off"
@@ -240,14 +248,18 @@ func (s *Set) open(ctx context.Context) (*db.DB, error) {
 
 func (s *Set) Start(ctx context.Context, d *web.Deps) error {
 	if err := s.Seed(ctx, d.DB); err != nil {
-		return err
+		return coreFailure(err)
 	}
 	snap, err := s.Evaluate(ctx, d.DB.Read)
 	if err != nil {
 		return err
 	}
-	s.cur.Store(snap)
+	s.store(snap)
 	return nil
+}
+
+func coreFailure(err error) error {
+	return &DeclarationError{Module: Core, Field: "evaluation", Err: err}
 }
 
 func (s *Set) load(ctx context.Context) (*Snapshot, error) {
@@ -257,12 +269,12 @@ func (s *Set) load(ctx context.Context) (*Snapshot, error) {
 	}
 	defer func() { _ = d.Close() }()
 	if err := s.Seed(ctx, d); err != nil {
-		return nil, err
+		return nil, coreFailure(err)
 	}
 	snap, err := s.Evaluate(ctx, d.Read)
 	if err != nil {
 		return nil, err
 	}
-	s.cur.Store(snap)
+	s.store(snap)
 	return snap, nil
 }

@@ -10,10 +10,11 @@ import (
 )
 
 const (
-	HoldOff    = "off"
-	HoldPinned = "pinned"
-	HoldNeeds  = string(NeedsSettings)
-	HoldDone   = "enabled"
+	HoldOff         = "off"
+	HoldPinned      = "pinned"
+	HoldNeeds       = string(NeedsSettings)
+	HoldUnavailable = string(Unavailable)
+	HoldDone        = "enabled"
 )
 
 type Hold struct {
@@ -50,8 +51,13 @@ func (s *Set) Held(ctx context.Context, q db.Querier, name string) (Hold, error)
 	}
 	err = s.Guard(ctx, q, FlagKey(name), "true")
 	var needs *NeedsSettingsError
-	if errors.As(err, &needs) {
+	var unavailable *UnavailableError
+	switch {
+	case errors.As(err, &needs):
 		h.Result, h.Detail = HoldNeeds, joinReasons(needs.Unmet)
+		return h, nil
+	case errors.As(err, &unavailable):
+		h.Result, h.Detail = HoldUnavailable, unavailable.Err
 		return h, nil
 	}
 	if err != nil {

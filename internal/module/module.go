@@ -110,6 +110,7 @@ const (
 	Enabled       State = "enabled"
 	Off           State = "off"
 	NeedsSettings State = "needs-settings"
+	Unavailable   State = "unavailable"
 )
 
 type Unmet struct {
@@ -122,6 +123,7 @@ type Status struct {
 	State State
 
 	Unmet []Unmet
+	Err   string
 }
 
 var ErrNotEvaluated = errors.New("module: states are not evaluated yet")
@@ -244,6 +246,21 @@ type NeedsSettingsError struct {
 func (e *NeedsSettingsError) Error() string {
 	return e.Module + " needs settings: " + joinReasons(e.Unmet)
 }
+
+type UnavailableError struct{ Module, Err string }
+
+func (e *UnavailableError) Error() string {
+	return e.Module + " is unavailable: " + e.Err
+}
+
+type requirementError struct {
+	name string
+	err  error
+}
+
+func (e *requirementError) Error() string { return e.name + ": " + e.err.Error() }
+
+func (e *requirementError) Unwrap() error { return e.err }
 
 func joinReasons(unmet []Unmet) string {
 	reasons := make([]string, len(unmet))

@@ -62,6 +62,7 @@ type ModuleView struct {
 	On      bool   `json:"on"`
 	Running bool   `json:"running"`
 	Reason  string `json:"reason"`
+	Error   string `json:"error"`
 	Pinned  string `json:"pinned"`
 }
 

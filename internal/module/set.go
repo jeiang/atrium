@@ -2,6 +2,8 @@ package module
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -11,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -38,7 +41,7 @@ func WithSet(ctx context.Context, s *Set) context.Context {
 		}
 		return func(committed bool) {
 			if committed {
-				s.cur.Store(snap)
+				s.store(snap)
 			}
 			s.publish.Unlock()
 		}, nil
@@ -107,8 +110,21 @@ func (s *Set) Refresh(ctx context.Context, q db.Querier) error {
 	if err != nil {
 		return err
 	}
-	s.cur.Store(snap)
+	s.store(snap)
 	return nil
+}
+
+func (s *Set) store(snap *Snapshot) {
+	prev := s.cur.Swap(snap)
+	for _, st := range snap.statuses {
+		var was Status
+		if prev != nil {
+			was, _ = prev.Status(st.Name)
+		}
+		if st.State == Unavailable && (was.State != Unavailable || was.Err != st.Err) {
+			log.Error("module is unavailable", logx.Module, st.Name, logx.State, string(st.State), logx.Reason, st.Err)
+		}
+	}
 }
 
 func (s *Set) Evaluate(ctx context.Context, q db.Querier) (*Snapshot, error) {
@@ -120,7 +136,7 @@ func (s *Set) Evaluate(ctx context.Context, q db.Querier) (*Snapshot, error) {
 		}
 		found, err := s.reg.Resolve(ctx, q, FlagKey(r.Name))
 		if err != nil {
-			return nil, false, err
+			return nil, false, fmt.Errorf("%s: %w", FlagKey(r.Name), err)
 		}
 		return unmet, found.Value == "true", nil
 	})
@@ -151,13 +167,14 @@ func evaluate(ctx context.Context, decls []Declaration, fn check) ([]Status, map
 		st := Status{Name: r.Name, State: Enabled}
 		if !r.Core {
 			unmet, on, err := fn(ctx, r, states)
-			if err != nil {
-				return nil, nil, &DeclarationError{Module: r.Name, Field: "evaluation", Err: err}
-			}
-			st.Unmet = unmet
+			var broken *requirementError
 			switch {
+			case errors.As(err, &broken):
+				st.State, st.Err = Unavailable, broken.Error()
+			case err != nil:
+				return nil, nil, &DeclarationError{Module: Core, Field: "evaluation", Err: err}
 			case len(unmet) > 0:
-				st.State = NeedsSettings
+				st.State, st.Unmet = NeedsSettings, unmet
 			case !on:
 				st.State = Off
 			}
@@ -168,7 +185,12 @@ func evaluate(ctx context.Context, decls []Declaration, fn check) ([]Status, map
 	return statuses, states, nil
 }
 
-func (s Status) Reason() string { return joinReasons(s.Unmet) }
+func (s Status) Reason() string {
+	if s.Err != "" {
+		return s.Err
+	}
+	return joinReasons(s.Unmet)
+}
 
 func (n *Snapshot) Status(name string) (Status, bool) {
 	for _, st := range n.statuses {
@@ -259,8 +281,12 @@ func (s *Set) Guard(ctx context.Context, q db.Querier, key, value string) error 
 		if err != nil {
 			return err
 		}
-		if st, _ := snap.Status(r.Name); len(st.Unmet) > 0 {
+		st, _ := snap.Status(r.Name)
+		if len(st.Unmet) > 0 {
 			return &NeedsSettingsError{Module: r.Name, Unmet: st.Unmet}
+		}
+		if st.State == Unavailable {
+			return &UnavailableError{Module: r.Name, Err: st.Err}
 		}
 	}
 	return nil

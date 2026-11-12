@@ -4,11 +4,15 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"encoding/pem"
 	"net/http"
 	"net/http/cookiejar"
+	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -345,37 +349,126 @@ func TestDisabledModuleKeepsPageAndAPIErrorResponses(t *testing.T) {
 	expectAPI(t, site.do(http.MethodGet, "/api/v1/threads", secret, nil), http.StatusNotFound, "not_found")
 }
 
-func TestBrokenModuleEvaluationRefusesToServe(t *testing.T) {
-	t.Parallel()
-	dir, _, f := moduleFixture(t, allFlagsTrue())
-	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
-	if err != nil {
+func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServe(t *testing.T) {
+	t.Run("optional", func(t *testing.T) {
+		dir, _, _ := moduleFixture(t, allFlagsTrue())
+		d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+		result, err := d.Write.Exec("UPDATE connections SET expires_at = 'broken' WHERE id IN ('service/embedding', 'service/qbittorrent')")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if affected, err := result.RowsAffected(); err != nil || affected != 2 {
+			t.Fatalf("corrupt connection expiry: rows %d, error %v", affected, err)
+		}
+		base, logs := startServeLogged(t, dir)
+		waitFor(t, func() bool { return strings.Count(logs.String(), "module is unavailable") == 2 })
+		for _, name := range []string{"mail", "media"} {
+			if text := logs.String(); !strings.Contains(text, "MODULE="+name+" STATE=unavailable REASON=") || !strings.Contains(text, "expires_at") {
+				t.Fatalf("the unavailable %s module and its reason are not logged: %s", name, text)
+			}
+		}
+		for path, want := range map[string]int{"/triage": http.StatusNotFound, "/apps/media/channels": http.StatusNotFound, "/chat": http.StatusOK, "/about": http.StatusOK} {
+			if status, _, _ := fetch(t, http.DefaultClient, http.MethodGet, base+path, nil); status != want {
+				t.Fatalf("GET %s = %d, want %d", path, status, want)
+			}
+		}
+		status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/settings/media", nil)
+		if status != http.StatusOK || !strings.Contains(body, "Unavailable") || !strings.Contains(body, "data-unavailable") || !strings.Contains(body, "expires_at") || strings.Contains(body, "data-restart") {
+			t.Fatalf("media settings page = %d, want the unavailable state and its reason: %s", status, body)
+		}
+	})
+	t.Run("core", func(t *testing.T) {
+		dir, _, f := moduleFixture(t, allFlagsTrue())
+		d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+		for _, q := range []string{
+			"DROP TRIGGER settings_audit_no_delete",
+			"DELETE FROM settings_audit WHERE key = 'modules_seeded'",
+			"CREATE TRIGGER refuse_module_seed BEFORE INSERT ON settings_audit WHEN NEW.key = 'modules_seeded' BEGIN SELECT RAISE(ABORT, 'module seed refused'); END",
+		} {
+			if _, err := d.Write.Exec(q); err != nil {
+				t.Fatal(err)
+			}
+		}
+		f.app.SetLogSetup(logx.Setup)
+		defer f.app.SetLogSetup(quietLog)
+		base, logs, stop, err := startServeAppOnce(t, f.app, &lockedBuffer{})
+		if stop != nil {
+			stop()
+		}
+		if err == nil || base != "" {
+			t.Fatalf("a core evaluation failure served at %q instead of exiting: %s", base, logs.String())
+		}
+		if !strings.Contains(err.Error(), "serve exited with 1") || !strings.Contains(logs.String(), "module: core evaluation:") || !strings.Contains(logs.String(), "module seed refused") {
+			t.Fatalf("startup failure does not name core and the cause: %v; %s", err, logs.String())
+		}
+	})
+}
+
+func TestBrokenGrafanaConnectionStaysRepairable(t *testing.T) {
+	dir, api, _ := moduleFixture(t, allFlagsTrue())
+	ca := filepath.Join(dir, "grafana-ca.pem")
+	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigEdit(t, dir, "host-grafana-ca.toml", map[string]string{
+		`capabilities = ["viewer"]`: `capabilities = ["viewer"]` + "\ntransport = { ca_file = " + strconv.Quote(ca) + " }",
+	}))
+	set := runAppLogged(t, "settings", "set", "monthly_budget_usd", "150")
+	if set.code != cli.ExitOK {
+		t.Fatalf("unrelated setting with a broken Grafana CA: exit %d stderr %q", set.code, set.stderr)
+	}
+	if strings.Count(set.stderr, "module is unavailable") != 1 || !strings.Contains(set.stderr, "MODULE=grafana") || !strings.Contains(set.stderr, "grafana-ca.pem cannot be read") {
+		t.Fatalf("the unavailable module is not logged once with its reason: %s", set.stderr)
+	}
+	for _, args := range [][]string{
+		{"connections", "list", "--json"},
+		{"secrets", "status"},
+		{"db", "check"},
+	} {
+		if got := runApp(t, args...); got.code != cli.ExitOK {
+			t.Fatalf("%v with a broken Grafana CA: exit %d stderr %q", args, got.code, got.stderr)
+		}
+	}
+	base := startServeIn(t, dir)
+	w := asstBrowse(t, base)
+	d := asstDB(t, dir)
+	offered := func() bool {
+		t.Helper()
+		start := len(api.Requests())
+		api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
+		thread := w.start(map[string]string{"text": "check grafana"})
+		if state, detail := asstSettle(t, d, asstLastRun(t, d, thread)); state != "done" {
+			t.Fatalf("chat run: %s %s", state, detail)
+		}
+		requests := api.Requests()
+		if len(requests) <= start {
+			t.Fatal("chat run made no model request")
+		}
+		tools, _ := requests[len(requests)-1].JSON(t)["tools"].([]any)
+		for _, raw := range tools {
+			if entry, ok := raw.(map[string]any); ok && entry["name"] == "grafana_datasources" {
+				return true
+			}
+		}
+		return false
+	}
+	if offered() {
+		t.Fatal("grafana tools are offered while the Grafana connection is broken")
+	}
+	if got := runApp(t, "settings", "set", module.FlagKey(module.Grafana), "false"); got.code != cli.ExitOK {
+		t.Fatalf("disable the broken module: exit %d stderr %q", got.code, got.stderr)
+	}
+	if got := runApp(t, "settings", "set", module.FlagKey(module.Grafana), "true"); got.code == cli.ExitOK || !strings.Contains(got.stderr, "grafana-ca.pem cannot be read") {
+		t.Fatalf("enabling the broken module: exit %d stderr %q, want a refusal naming the CA file", got.code, got.stderr)
+	}
+	srv := httptest.NewTLSServer(http.NotFoundHandler())
+	cert := srv.Certificate().Raw
+	srv.Close()
+	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: cert}), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	result, err := d.Write.Exec("UPDATE connections SET expires_at = 'broken' WHERE id = 'service/embedding'")
-	if err != nil {
-		_ = d.Close()
-		t.Fatal(err)
+	if got := runApp(t, "settings", "set", module.FlagKey(module.Grafana), "true"); got.code != cli.ExitOK {
+		t.Fatalf("enable the repaired module: exit %d stderr %q", got.code, got.stderr)
 	}
-	affected, err := result.RowsAffected()
-	if err != nil || affected != 1 {
-		_ = d.Close()
-		t.Fatalf("corrupt embedding expiry: rows %d, error %v", affected, err)
-	}
-	if err := d.Close(); err != nil {
-		t.Fatal(err)
-	}
-	f.app.SetLogSetup(logx.Setup)
-	defer f.app.SetLogSetup(quietLog)
-	base, logs, stop, err := startServeAppOnce(t, f.app, &lockedBuffer{})
-	if stop != nil {
-		stop()
-	}
-	if err == nil || base != "" {
-		t.Fatalf("broken module served at %q instead of exiting: %s", base, logs.String())
-	}
-	if !strings.Contains(err.Error(), "serve exited with 1") || !strings.Contains(logs.String(), "module: mail evaluation:") || !strings.Contains(logs.String(), "expires_at") {
-		t.Fatalf("startup failure does not name the owner and broken value: %v; %s", err, logs.String())
+	if !offered() {
+		t.Fatal("grafana tools are not offered after the repair")
 	}
 }
 

@@ -37,7 +37,7 @@ func (s *Set) unmet(ctx context.Context, p Probe, r Declaration, states map[stri
 	for _, rq := range r.Requires {
 		reason, err := rq.Check(ctx, p)
 		if err != nil {
-			return nil, err
+			return nil, &requirementError{name: rq.Name, err: err}
 		}
 		if reason != "" {
 			out = append(out, Unmet{Name: rq.Name, Reason: reason})
