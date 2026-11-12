@@ -22,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/testutil/embedstub"
 	"github.com/jeiang/atrium/internal/testutil/mailscript"
@@ -439,5 +440,116 @@ func TestMailReplayModelClassifiesOnADisposableCopy(t *testing.T) {
 	}
 	if !strings.Contains(model.stderr, "messages replayed: 26") {
 		t.Errorf("model replay summary:\n%s", model.stderr)
+	}
+}
+
+func TestRebalanceNamingDefersOnBudgetAndNamesThroughTheClassifier(t *testing.T) {
+	t.Parallel()
+	ctx := context.Background()
+	f := newFixture(t, loadGoldenData(t), nil, "")
+	d := mustConnect(t, filepath.Join(f.dir, "atrium.db"), db.Key{})
+	exec := func(query string) {
+		t.Helper()
+		if _, err := d.Write.ExecContext(ctx, query); err != nil {
+			t.Fatal(err)
+		}
+	}
+	count := func(query string) int {
+		t.Helper()
+		var n int
+		if err := d.Read.QueryRowContext(ctx, query).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	old := count("SELECT COUNT(*) FROM proposals WHERE kind = 'rebalance_split'")
+	if old == 0 {
+		t.Fatal("the golden world has no split proposals to rebuild")
+	}
+	exec("UPDATE proposals SET fingerprint = fingerprint || ':old' WHERE kind = 'rebalance_split'")
+	exec("INSERT OR REPLACE INTO settings (key, value) VALUES ('monthly_budget_usd', '0.000001')")
+	var mu sync.Mutex
+	var sent []anthropictest.Request
+	f.api.SetOnRequest(func(req anthropictest.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		sent = append(sent, req)
+	})
+	const fresh = "SELECT COUNT(*) FROM proposals WHERE kind = 'rebalance_split' AND fingerprint NOT LIKE '%:old'"
+
+	if code, _, stderr := f.Run(ctx, "proposals", "scan-all"); code != cli.ExitOK {
+		t.Fatalf("scan-all under a refused budget: exit %d stderr %q", code, stderr)
+	}
+	if n := count(fresh); n != 0 {
+		t.Fatalf("a budget refusal staged %d split proposals", n)
+	}
+	mu.Lock()
+	refused := len(sent)
+	mu.Unlock()
+	if refused != 0 {
+		t.Fatalf("a budget refusal sent %d paid requests", refused)
+	}
+	var key string
+	if err := d.Read.QueryRowContext(ctx, "SELECT last_item_key FROM inference_classification_deferrals WHERE last_caller = 'mail_folder_name'").Scan(&key); err != nil {
+		t.Fatalf("no naming deferral recorded: %v", err)
+	}
+	if parts := strings.Split(key, ":"); len(parts) != 3 || parts[0] != "icloud" || len(parts[2]) != 64 {
+		t.Errorf("naming deferral item key = %q, want account:parent:hash", key)
+	}
+
+	if code, _, stderr := f.Run(ctx, "settings", "set", "monthly_budget_usd", "200"); code != cli.ExitOK {
+		t.Fatalf("settings set: exit %d stderr %q", code, stderr)
+	}
+	if code, _, stderr := f.Run(ctx, "proposals", "scan-all"); code != cli.ExitOK {
+		t.Fatalf("scan-all after raising the budget: exit %d stderr %q", code, stderr)
+	}
+	if n := count(fresh); n != old {
+		t.Fatalf("after raising the budget %d split proposals were staged, want %d", n, old)
+	}
+	script := mailscript.Load(t)
+	var payloads strings.Builder
+	rows, err := d.Read.QueryContext(ctx, "SELECT payload FROM proposals WHERE kind = 'rebalance_split' AND fingerprint NOT LIKE '%:old'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for rows.Next() {
+		var payload string
+		if err := rows.Scan(&payload); err != nil {
+			t.Fatal(err)
+		}
+		payloads.WriteString(payload)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	mu.Lock()
+	asked := slices.Clone(sent)
+	mu.Unlock()
+	if len(asked) == 0 {
+		t.Fatal("no folder names were asked for")
+	}
+	for _, req := range asked {
+		body := req.JSON(t)
+		if caller := callerOf(t, body); caller != "name" {
+			t.Fatalf("scan-all sent a %s request", caller)
+		}
+		if body["model"] != pricing.HaikuID || body["max_tokens"] != float64(80) {
+			t.Errorf("naming request model/max_tokens: %v %v", body["model"], body["max_tokens"])
+		}
+		format := body["output_config"].(map[string]any)["format"].(map[string]any)
+		if required := format["schema"].(map[string]any)["required"]; format["type"] != "json_schema" || fmt.Sprint(required) != "[name]" {
+			t.Errorf("naming output format %v requires %v", format["type"], required)
+		}
+		raw, err := script.JSONAnswer([]string{"name"}, userText(body))
+		if err != nil {
+			t.Fatal(err)
+		}
+		var answer struct{ Name string }
+		if err := json.Unmarshal(raw, &answer); err != nil {
+			t.Fatal(err)
+		}
+		if !strings.Contains(payloads.String(), "/"+answer.Name+`"`) {
+			t.Errorf("staged proposals do not use the classified name %q: %s", answer.Name, payloads.String())
+		}
 	}
 }

@@ -11,6 +11,9 @@ import (
 	"github.com/jeiang/atrium/internal/about"
 	"github.com/jeiang/atrium/internal/actionlink"
 	actionlinkpages "github.com/jeiang/atrium/internal/actionlink/pages"
+	"github.com/jeiang/atrium/internal/assistant/classifier"
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
+	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
 	"github.com/jeiang/atrium/internal/auth/bearer"
@@ -56,6 +59,18 @@ type Module struct {
 	Guard   settingscmd.Guard
 	Clients func(config.Config) mail.OpenFunc
 	Now     func() float64
+	Jobs    jobworker.Dependencies
+}
+
+func (m Module) classifier(env config.Env) func(context.Context, *db.DB, config.Config) (*classifier.Service, error) {
+	return func(ctx context.Context, d *db.DB, cfg config.Config) (*classifier.Service, error) {
+		if m.Jobs.Classifier == nil {
+			return nil, errors.New("proposal scans are not bound to a classifier")
+		}
+		svc := service.New(ctx, d, cfg, env, nil)
+		svc.Now = m.Now
+		return m.Jobs.Classifier(ctx, svc)
+	}
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
@@ -106,7 +121,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Commands: []*cli.Command{
 			writescmd.Command(writescmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
 			ledgercmd.Command(ledgercmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
-			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store}),
+			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store, Classifier: m.classifier(mc.Env)}),
 			settingscmd.Command(mc.Env, m.Guard),
 			bearer.Command(mc.Env),
 			secretscmd.Command(mc.Env),

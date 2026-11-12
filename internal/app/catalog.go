@@ -35,7 +35,7 @@ func Builtins(d Dependencies) []module.Builder {
 	holder := &jobworker.Holder{}
 	jobs := jobworker.Dependencies{Service: holder.Service, Classifier: classifierFor, Now: d.Now, Attention: attentionSources}
 	return []module.Builder{
-		coremodule.Module{Version: d.Version, Guard: d.Guard, Clients: d.Clients, Now: d.Now},
+		coremodule.Module{Version: d.Version, Guard: d.Guard, Clients: d.Clients, Now: d.Now, Jobs: jobs},
 		contactsmodule.Module{},
 		mailmodule.Module{Clients: d.Clients, Now: d.Now, Jobs: jobs},
 		calendarmodule.Module{Jobs: jobs},
