@@ -472,6 +472,30 @@ func TestBrokenGrafanaConnectionStaysRepairable(t *testing.T) {
 	}
 }
 
+func TestDisabledModuleRoutesEndInNotFound(t *testing.T) {
+	t.Parallel()
+	flags := allFlagsTrue()
+	flags[module.Media], flags[module.Notifications] = "false", "false"
+	dir, _, _ := moduleFixture(t, flags)
+	base := startServeIn(t, dir)
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	for _, path := range []string{"/media", "/media/", "/media/channels", "/media/file/1/poster.jpg"} {
+		status, body, header := fetch(t, client, http.MethodGet, base+path, nil)
+		if status != http.StatusNotFound || header.Get("Location") != "" || !strings.Contains(body, "Nothing here") {
+			t.Errorf("GET %s with media off = %d Location %q, want a terminal 404 page", path, status, header.Get("Location"))
+		}
+	}
+	issued := runApp(t, "auth", "token", "issue", "--name", "disabled-routes")
+	if issued.code != cli.ExitOK {
+		t.Fatalf("issue API token: %s", issued.stderr)
+	}
+	site := &apiSite{t: t, base: base}
+	secret := strings.TrimSpace(issued.stdout)
+	for _, path := range []string{"/api/v1/inbox", "/api/v1/inbox/"} {
+		expectAPI(t, site.do(http.MethodGet, path, secret, nil), http.StatusNotFound, "not_found")
+	}
+}
+
 func clearModuleEnv(t *testing.T) {
 	t.Helper()
 	for name := range requirementEnv("") {

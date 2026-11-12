@@ -204,7 +204,7 @@ func New(o Options) (*Server, error) {
 	})
 	s.stop = make(chan struct{})
 	deps := &Deps{
-		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Render: o.Render, Error: s.Error, NotFound: s.notFound, Stopping: s.stop,
+		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Render: o.Render, Error: s.Error, NotFound: s.missing, Stopping: s.stop,
 		OnFrame: func(FrameFunc) {}, settingsPages: map[string]SettingsRender{},
 		OnClose: func(f func()) { s.closers = append(s.closers, f) },
 		router:  core, routes: &s.routes, owner: "core", registrations: s.registrations,
@@ -353,17 +353,13 @@ func (s *Server) allowed(path string) []string {
 }
 
 func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
-	if isAPI(r) {
-		APIError(w, http.StatusNotFound, "not_found", "Not found.")
-		return
-	}
 	path := r.URL.Path
 	alt := path + "/"
 	if strings.HasSuffix(path, "/") {
 		alt = strings.TrimRight(path, "/")
 	}
-	if alt == "" || alt == path || len(s.allowed(alt)) == 0 {
-		s.Error(w, r, http.StatusNotFound, "Not Found")
+	if isAPI(r) || alt == "" || alt == path || len(s.allowed(alt)) == 0 {
+		s.missing(w, r)
 		return
 	}
 	scheme := "http"
@@ -372,6 +368,14 @@ func (s *Server) notFound(w http.ResponseWriter, r *http.Request) {
 	}
 	target := url.URL{Scheme: scheme, Host: r.Host, Path: alt, RawQuery: r.URL.RawQuery}
 	http.Redirect(w, r, target.String(), http.StatusTemporaryRedirect)
+}
+
+func (s *Server) missing(w http.ResponseWriter, r *http.Request) {
+	if isAPI(r) {
+		APIError(w, http.StatusNotFound, "not_found", "Not found.")
+		return
+	}
+	s.Error(w, r, http.StatusNotFound, "Not Found")
 }
 
 func (s *Server) methodNotAllowed(w http.ResponseWriter, r *http.Request) {
