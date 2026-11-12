@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/passrun"
 )
@@ -112,4 +113,47 @@ func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 			t.Errorf("notices %d after recovery, want still 1", count())
 		}
 	})
+}
+
+func TestDisabledNotificationsWatchNoStalePasses(t *testing.T) {
+	t.Parallel()
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Notifications, "false"))
+	push, browser := pushRig(t, dir)
+	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
+		t.Fatalf("settings list: %d %s", got.code, got.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	browser.store(t, d)
+	if got := runApp(t, "backup", filepath.Join(dir, "missing", "x.backup")); got.code == cli.ExitOK {
+		t.Fatal("failing backup succeeded")
+	}
+	rows := func(table string) int {
+		t.Helper()
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	opsAddr(t)
+	startServeIn(t, dir)
+	time.Sleep(time.Second)
+	if n := rows("pass_run_alerts"); n != 0 {
+		t.Errorf("%d stale alerts recorded while notifications are off", n)
+	}
+	if n := rows("notifications"); n != 0 {
+		t.Errorf("%d notifications recorded while notifications are off", n)
+	}
+	if n := push.count(); n != 0 {
+		t.Fatalf("%d pushes sent while notifications are off", n)
+	}
+	if got := runApp(t, "settings", "set", module.FlagKey(module.Notifications), "true"); got.code != cli.ExitOK {
+		t.Fatalf("notifications_enabled true: exit %d stderr %q", got.code, got.stderr)
+	}
+	if notice := browser.decrypt(t, push.wait(t, 1).body); !strings.Contains(fmt.Sprint(notice["title"]), "backup is stale") {
+		t.Fatalf("notice %v after enabling notifications, want the backup stale notice", notice)
+	}
+	if n := rows("pass_run_alerts"); n != 1 {
+		t.Errorf("%d stale alerts after enabling notifications, want 1", n)
+	}
 }
