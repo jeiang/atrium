@@ -86,6 +86,7 @@ func endpointAuthorizations(f *fakeOpenAI) []string {
 }
 
 func TestAHostTakeoverCannotMoveAStoredCredentialToAnotherEndpoint(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	a, b := newFakeOpenAI(t), newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
@@ -115,6 +116,7 @@ func TestAHostTakeoverCannotMoveAStoredCredentialToAnotherEndpoint(t *testing.T)
 }
 
 func TestAHostTakeoverWithTheSameEndpointKeepsTheStoredCredential(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	a, b := newFakeOpenAI(t), newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
@@ -142,6 +144,7 @@ func TestAHostTakeoverWithTheSameEndpointKeepsTheStoredCredential(t *testing.T) 
 }
 
 func TestAHostTakeoverWithACredentialFileForEverySlotIsAllowed(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	a, b := newFakeOpenAI(t), newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))

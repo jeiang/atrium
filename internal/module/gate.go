@@ -239,22 +239,10 @@ func skip(path string, st Status, msg string) {
 	log.Info(msg, logx.Module, st.Name, logx.State, string(st.State), logx.Reason, st.Reason(), logx.Command, strings.TrimSpace(path))
 }
 
-// Open loads the configuration, opens the database and boots it. It is the
-// serve command's only path to the application database.
+// Open returns the application database from the opener the application
+// injected. It is the serve command's only path to the application database.
 func (s *Set) Open(ctx context.Context) (*db.DB, config.Config, error) {
-	cfg, err := config.Load(s.env)
-	if err != nil {
-		return nil, config.Config{}, err
-	}
-	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(ctx).DBKey()))
-	if err != nil {
-		return nil, config.Config{}, err
-	}
-	if err := config.Boot(ctx, s.env, d, cfg); err != nil {
-		_ = d.Close()
-		return nil, config.Config{}, err
-	}
-	return d, cfg, nil
+	return s.opener(ctx)
 }
 
 func (s *Set) open(ctx context.Context) (*db.DB, error) {

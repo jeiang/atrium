@@ -15,7 +15,6 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
@@ -24,7 +23,6 @@ import (
 
 func TestAHostMailConnectionAndAnAccountAddedInTheUIBothSync(t *testing.T) {
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, srv.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"home", "icloud", "me@icloud.test", "home-pass", false}))

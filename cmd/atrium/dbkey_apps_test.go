@@ -134,10 +134,11 @@ func (a *keyedApp) budgetRow(k db.Key) (string, error) {
 }
 
 func TestDifferentlyKeyedAppsRoundTripConcurrently(t *testing.T) {
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	t.Parallel()
 	apps := []*keyedApp{
 		newKeyedApp(t, rightKeyHex, filepath.Join(t.TempDir(), "atrium.db")),
 		newKeyedApp(t, otherKeyHex, filepath.Join(t.TempDir(), "atrium.db")),
+		newKeyedApp(t, "", filepath.Join(t.TempDir(), "atrium.db")),
 	}
 	for i, a := range apps {
 		a.budget = []string{"211", "322", "433"}[i]

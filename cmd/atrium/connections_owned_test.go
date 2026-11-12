@@ -19,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
@@ -38,12 +37,12 @@ func connectionRow(t *testing.T, dir, id string) (source string, enabled int, st
 }
 
 func TestImportedConnectionsStayOperatorOwnedAcrossBoots(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	host := filepath.Join(dir, "host.toml")
 	if err := os.WriteFile(host, nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -201,6 +200,7 @@ func TestAUIAAddedMailAccountStaysOperatorOwnedAcrossBoots(t *testing.T) {
 }
 
 func TestARemovedHostConnectionStaysDisabled(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	host := filepath.Join(dir, "host.toml")
@@ -239,6 +239,7 @@ capabilities = ["api"]
 }
 
 func TestARemovedHostBuiltinStaysDisabledAndNeverReachesItsEndpoint(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	embed := newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))

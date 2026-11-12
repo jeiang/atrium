@@ -24,8 +24,8 @@ var keyedOneShots = [][]string{
 }
 
 func TestKeyedOneShotCommandsOpenOnlyTheEncryptedDatabase(t *testing.T) {
+	t.Parallel()
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	path := filepath.Join(dir, "atrium.db")
 	for _, args := range keyedOneShots {

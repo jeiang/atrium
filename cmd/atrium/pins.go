@@ -5,7 +5,6 @@ import (
 	"io"
 
 	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
 	dbkey "github.com/jeiang/atrium/internal/db/key"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -27,7 +26,6 @@ func bootstrap(env config.Env, reg *settings.Registry) func(context.Context, io.
 			return err
 		}
 		config.From(ctx).SetDBKey(k)
-		db.SetDefaultKey(k)
 		return nil
 	}
 }

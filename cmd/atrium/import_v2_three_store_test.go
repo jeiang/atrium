@@ -15,6 +15,7 @@ import (
 )
 
 func TestImportV2ThreeStoresAccountForEveryRowAndPin(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -88,6 +89,7 @@ func TestImportV2ThreeStoresAccountForEveryRowAndPin(t *testing.T) {
 }
 
 func TestImportV2CarriesHistoricalAuditUnchangedAndAppendsImportEntries(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -169,6 +171,7 @@ func TestImportV2CarriesHistoricalAuditUnchangedAndAppendsImportEntries(t *testi
 }
 
 func TestImportV2PinnedSecretNeverEntersTheDatabase(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -224,6 +227,7 @@ func TestImportV2PinnedSecretNeverEntersTheDatabase(t *testing.T) {
 }
 
 func TestImportV2RefusesAnUnknownSecretBeforeCreatingTheDestination(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -245,6 +249,7 @@ func TestImportV2RefusesAnUnknownSecretBeforeCreatingTheDestination(t *testing.T
 }
 
 func TestImportV2ResetsEveryEffectiveLiveMailMode(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	for _, tc := range []struct {
 		name string
@@ -289,6 +294,7 @@ func TestImportV2ResetsEveryEffectiveLiveMailMode(t *testing.T) {
 }
 
 func TestImportV2RefusesAnAmbiguousICloudOverride(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -316,6 +322,7 @@ func TestImportV2RefusesAnAmbiguousICloudOverride(t *testing.T) {
 }
 
 func TestImportV2NamesTheSourceEnvLineWithoutTheValue(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -338,6 +345,7 @@ func TestImportV2NamesTheSourceEnvLineWithoutTheValue(t *testing.T) {
 }
 
 func TestImportV2KeepsFileContentsLiteral(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)

@@ -71,19 +71,25 @@ func newAppWith(env config.Env, clients func(config.Config) mail.OpenFunc, now f
 	st.SetConnectionReconciler(connections.Reconcile)
 	st.SetAccountCredential(cat.AccountCredential())
 	st.SetHostAccounts(cat.HostAccounts())
-	set, err = module.NewSet(cat, reg, env)
+	set, err = module.NewSet(cat, reg, env, func(ctx context.Context) (*db.DB, config.Config, error) {
+		a, err := app.Open(ctx, env, cat)
+		if err != nil {
+			return nil, config.Config{}, err
+		}
+		return a.DB(), a.Config(), nil
+	})
 	if err != nil {
 		panic(err)
 	}
-	app := cli.New("atrium", setup)
-	app.Version = version
-	app.Env = env
-	app.Settings = reg
-	app.State = st
-	app.SetupContext = func(ctx context.Context) context.Context { return cat.Context(module.WithSet(ctx, set)) }
-	app.Bootstrap = bootstrap(env, reg)
-	app.Add(append(append(set.Commands(), connections.Command(env)), web.ServeCommand(set, set.Pages()...))...)
-	return app
+	c := cli.New("atrium", setup)
+	c.Version = version
+	c.Env = env
+	c.Settings = reg
+	c.State = st
+	c.SetupContext = func(ctx context.Context) context.Context { return cat.Context(module.WithSet(ctx, set)) }
+	c.Bootstrap = bootstrap(env, reg)
+	c.Add(append(append(set.Commands(), connections.Command(env)), web.ServeCommand(set, set.Pages()...))...)
+	return c
 }
 
 func budgetStatus(ctx context.Context, q db.Querier, now float64, loc *time.Location) (notify.Budget, error) {

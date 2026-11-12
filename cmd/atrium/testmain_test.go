@@ -364,7 +364,7 @@ func newTestSet(env config.Env) *module.Set {
 	if err != nil {
 		panic(err)
 	}
-	set, err := module.NewSet(cat, cat.Settings(), env)
+	set, err := module.NewSet(cat, cat.Settings(), env, nil)
 	if err != nil {
 		panic(err)
 	}

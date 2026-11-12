@@ -102,6 +102,7 @@ func (f *fakeOpenAI) authorizations() map[string][]string {
 }
 
 func TestEndpointProbeGatesTheMailModuleAndSendsTheKeysOnlyToTheirEndpoints(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	const chatKey = "sk-chat-endpoint-0123456789"
 	const embedKey = "sk-embed-endpoint-0123456789"
@@ -220,6 +221,7 @@ func TestConnectionsTestUsesTheEmbedCAAndAPassingTestReleasesTheMailHold(t *test
 }
 
 func TestConnectionsTestReusesTheStoredEmbeddingBearerWhenTheInputIsBlank(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	embed := newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))

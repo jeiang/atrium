@@ -166,6 +166,7 @@ func TestConnectionsCLIListAndTestUseTheHostTransportAndNeverStoreTheFileValue(t
 }
 
 func TestConnectionsHTTPTestAndSavePreservesThePriorConfigOnFailure(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	gate := &qbitGate{}
 	srv := httptest.NewTLSServer(http.HandlerFunc(gate.handler))
