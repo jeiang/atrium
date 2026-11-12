@@ -25,14 +25,6 @@ import (
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
-func init() { settings.MustRegisterHost(HostSettings()...) }
-
-func HostSettings() []settings.HostDef {
-	return []settings.HostDef{
-		{Key: "web_trusted_proxy_cidrs", Module: "web", Type: settings.String},
-	}
-}
-
 const (
 	defaultHost     = "127.0.0.1"
 	shutdownTimeout = 10 * time.Second
@@ -213,7 +205,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 	if _, err := a.state.Location(a.env); err != nil {
 		return fmt.Errorf("the tz setting is not a time zone: %w", err)
 	}
-	trusted, err := trustedProxies(a.state.Host().Value("web_trusted_proxy_cidrs"), a.trusted)
+	trusted, err := trustedProxies(a.state.Host().Value("trusted_proxy_cidrs"), a.trusted)
 	if err != nil {
 		return err
 	}

@@ -366,18 +366,24 @@ func seedSettingsAt(t *testing.T, path string, kv map[string]string) {
 		if key == "" {
 			continue
 		}
-		if flagKeyOf(key) {
-			if value == "" {
-				value = "false"
-			}
-			if err := reg.Set(ctx, d.Write, key, value); err != nil {
-				t.Fatalf("seed %s: %v", key, err)
-			}
-			continue
+		if flagKeyOf(key) && value == "" {
+			value = "false"
 		}
-		if _, err := d.Write.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value); err != nil {
+		if err := reg.Set(ctx, d.Write, key, value); err != nil {
 			t.Fatalf("seed %s: %v", key, err)
 		}
+	}
+}
+
+func plantSettingRow(t *testing.T, path, key, value string) {
+	t.Helper()
+	d, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	if _, err := d.Write.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value); err != nil {
+		t.Fatalf("plant %s: %v", key, err)
 	}
 }
 

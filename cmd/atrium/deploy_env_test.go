@@ -3,12 +3,14 @@ package main
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/logx"
 )
 
 func TestCanonicalOperatorPinIsRefused(t *testing.T) {
@@ -22,6 +24,38 @@ func TestCanonicalOperatorPinIsRefused(t *testing.T) {
 	pinned := runSettings(t, "get", "mail_mode")
 	if pinned.code != cli.ExitError || !strings.Contains(pinned.stderr, "ATRIUM_MAIL_MAIL_MODE is no longer read") || !strings.Contains(pinned.stderr, "atrium settings set mail_mode") {
 		t.Fatalf("canonical operator pin: exit %d stderr %q", pinned.code, pinned.stderr)
+	}
+}
+
+func TestRetiredSettingEnvironmentVariableWarns(t *testing.T) {
+	dir := t.TempDir()
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	setEnv(t, "ATRIUM_ASSISTANT_NIGHTLY_STALE_MONTHS", "3")
+	var logs bytes.Buffer
+	previous := slog.Default()
+	logx.Setup(&logs)
+	t.Cleanup(func() { slog.SetDefault(previous) })
+	if r := runSettings(t, "list"); r.code != cli.ExitOK {
+		t.Fatalf("settings list with a retired variable: exit %d stderr %q", r.code, r.stderr)
+	}
+	if !strings.Contains(logs.String(), "ignoring a removed setting") || !strings.Contains(logs.String(), "ATRIUM_ASSISTANT_NIGHTLY_STALE_MONTHS") {
+		t.Errorf("the retired variable was not warned about: %q", logs.String())
+	}
+}
+
+func TestFileSpellingOfACutoverKeyNamesTheFileVariable(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+
+	setEnv(t, "ATRIUM_MAIL_MAIL_MODE_FILE", filepath.Join(dir, "mode"))
+	r := runSettings(t, "get", "mail_mode")
+	if r.code != cli.ExitError || !strings.Contains(r.stderr, "ATRIUM_MAIL_MAIL_MODE_FILE is no longer read") || !strings.Contains(r.stderr, "atrium settings set mail_mode") {
+		t.Fatalf("file spelling of a cut-over key: exit %d stderr %q", r.code, r.stderr)
 	}
 }
 

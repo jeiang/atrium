@@ -39,7 +39,6 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `ATRIUM_MEDIA_MEDIA_ROOT` | `media.media_root` |
 | `ATRIUM_MEDIA_MEDIA_TV_URL` | `media.media_tv_url` |
 | `ATRIUM_WEB_TRUSTED_PROXY_CIDRS` | `web.trusted_proxy_cidrs` |
-| `ATRIUM_WEB_WEB_TRUSTED_PROXY_CIDRS` | `web.web_trusted_proxy_cidrs` |
 
 ## Bootstrap
 

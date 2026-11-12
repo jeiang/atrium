@@ -54,9 +54,9 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 	if got := runProcess(t, "notion search alpha", dbEnv(live), keyEnv(rightKeyHex)); got.code != cli.ExitOK {
 		t.Fatalf("creating the encrypted database exited %d: %s", got.code, got.stderr)
 	}
-	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	seedSettingsAt(t, live, map[string]string{module.FlagKey(module.Notion): "true"})
-	setEnv(t, "ATRIUM_DB_KEY", "")
+	if got := runProcess(t, "settings set "+module.FlagKey(module.Notion)+" true", dbEnv(live), keyEnv(rightKeyHex)); got.code != cli.ExitOK {
+		t.Fatalf("enabling notion on the encrypted database exited %d: %s", got.code, got.stderr)
+	}
 	k, err := db.ParseKey(rightKeyHex)
 	if err != nil {
 		t.Fatal(err)

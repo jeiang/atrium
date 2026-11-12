@@ -84,7 +84,6 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | Key | Type | Default | Environment variable |
 | --- | --- | --- | --- |
 | `trusted_proxy_cidrs` | string | none | `ATRIUM_WEB_TRUSTED_PROXY_CIDRS` |
-| `web_trusted_proxy_cidrs` | string | none | `ATRIUM_WEB_WEB_TRUSTED_PROXY_CIDRS` |
 
 ## Operator settings
 
@@ -191,7 +190,7 @@ Operator settings are stored in the database and edited in the application. They
 
 | Key | Type | Default | Class |
 | --- | --- | --- | --- |
-| `mail_mode` | string | `shadow` | bootstrap |
+| `mail_mode` | string | `shadow` | advanced |
 | `mail_ship24_destination_country` | string | none | ui |
 | `mail_ship24_destination_postcode` | string | none | ui |
 | `mail_ship24_monthly_quota` | int | `10` | advanced |

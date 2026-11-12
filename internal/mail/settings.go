@@ -37,7 +37,7 @@ func Settings() []settings.Def {
 		return settings.Value(settings.UI, settings.Def{Key: key, Module: module, Type: kind, Default: def, Check: check})
 	}
 	return []settings.Def{
-		settings.Deploy(settings.Def{Key: KeyMode, Module: module, Type: settings.String, Default: modeDefault, Check: modeCheck}),
+		settings.Value(settings.Advanced, settings.Def{Key: KeyMode, Module: module, Type: settings.String, Default: modeDefault, Check: modeCheck}),
 		ui(endpoint.KeyChatURL, settings.String, "", nil),
 		ui(endpoint.KeyChatModel, settings.String, "qwen", nonBlank),
 		settings.Value(settings.UI, settings.Def{

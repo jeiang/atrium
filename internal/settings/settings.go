@@ -351,6 +351,15 @@ func (e HostOwned) Error() string {
 	return "settings: " + e.Key + " is host configuration and is not editable here; set " + e.Destination + " in the host file"
 }
 
+type AppKeyFile struct {
+	Key  string
+	File string
+}
+
+func (e AppKeyFile) Error() string {
+	return "settings: " + e.Key + " is supplied by " + e.File + "; set or rotate that file instead"
+}
+
 type PinnedError struct {
 	Key    string
 	Source string
