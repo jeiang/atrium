@@ -31,8 +31,10 @@ func watchStale(base context.Context, d *db.DB, env config.Env, stopping <-chan 
 	t := time.NewTicker(staleEvery)
 	defer t.Stop()
 	for ctx.Err() == nil {
-		warn("stale pass check failed", noticeStale(ctx, d, env))
-		warn("budget threshold check failed", noticeBudget(ctx, d, env, stamp(), budget))
+		if Enabled(ctx) {
+			warn("stale pass check failed", noticeStale(ctx, d, env))
+			warn("budget threshold check failed", noticeBudget(ctx, d, env, stamp(), budget))
+		}
 		select {
 		case <-ctx.Done():
 		case <-t.C:

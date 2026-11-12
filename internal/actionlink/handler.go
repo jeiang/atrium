@@ -38,6 +38,7 @@ func Handler(pipeline *proposals.Pipeline, now func() float64) http.HandlerFunc 
 			return
 		}
 		token := chi.URLParam(r, "token")
+		var unfinished *proposals.Proposal
 		err = Redeem(ctx, pipeline.DB.Write, token, now(), func(ctx context.Context, claims Claims) error {
 			prop, err := proposals.Get(ctx, pipeline.DB.Write, claims.ProposalID)
 			if err != nil {
@@ -51,7 +52,10 @@ func Handler(pipeline *proposals.Pipeline, now func() float64) http.HandlerFunc 
 			}
 			who := proposals.Resolver{Actor: "phone", Source: "phone"}
 			if claims.Action == Approve {
-				_, err := pipeline.ApproveAndApply(ctx, prop.ID, nil, who)
+				done, err := pipeline.ApproveAndApply(ctx, prop.ID, nil, who)
+				if err != nil {
+					unfinished = done
+				}
 				return err
 			}
 			return pipeline.Dismiss(ctx, prop.ID, proposals.Dismissed, who)
@@ -65,6 +69,13 @@ func Handler(pipeline *proposals.Pipeline, now func() float64) http.HandlerFunc 
 			http.Error(w, "This link is not valid.", http.StatusBadRequest)
 		case errors.Is(err, ErrRefused):
 			http.Error(w, "This action is not allowed from the phone.", http.StatusForbidden)
+		case err != nil && unfinished != nil:
+			log.Error("action link did not finish", logx.Err, err.Error())
+			text := "The action did not finish: " + err.Error() + ". The proposal is marked failed."
+			if unfinished.Undoable {
+				text += " Undo what it already did from atrium."
+			}
+			http.Error(w, text, http.StatusConflict)
 		case err != nil:
 			log.Error("action link failed", logx.Err, err.Error())
 			http.Error(w, "The action failed.", http.StatusInternalServerError)

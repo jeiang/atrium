@@ -505,8 +505,12 @@ behavior-parity target.
   page or the API's JSON `not_found` response.
   The owner route registrar seals before listening and refuses later mounts,
   including empty subrouter mounts.
-  A module evaluation failure names its owner and aborts startup; no
-  core-only fallback snapshot is published.
+  A core evaluation failure names its owner and aborts startup; no
+  core-only fallback snapshot is published. An optional module whose
+  evaluation fails is unavailable with that error. Module starters run
+  after the publish lock and write connection are released; a failed
+  starter marks its module unavailable with the error, is logged once per
+  failure and is retried at the next publication.
 - Module ownership is checked at build time. `tools/tableownership` keeps
   each table's SQL inside its owning module, and `tools/registrationownership`
   keeps every registration in the module catalog: it type-checks the

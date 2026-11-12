@@ -166,6 +166,10 @@ func (s *service) proposalApprove(w http.ResponseWriter, r *http.Request) {
 	var refused proposals.ProposalError
 	var disabled *module.OwnerDisabled
 	if errors.As(err, &refused) || errors.As(err, &disabled) {
+		if done != nil {
+			s.card(w, r, id, toast("error", "It did not finish", stoppedPartway(err, done)))
+			return
+		}
 		s.card(w, r, id, toast("error", "Not approved", err.Error()))
 		return
 	}
@@ -211,6 +215,10 @@ func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
 	var refused proposals.ProposalError
 	var disabled *module.OwnerDisabled
 	if errors.As(err, &refused) || errors.As(err, &disabled) {
+		if len(outcome.Outcomes) > 0 || outcome.SyncError != nil {
+			s.card(w, r, id, toast("error", "Undo stopped partway", undoStoppedPartway(err, outcome)))
+			return
+		}
 		s.card(w, r, id, toast("error", "Not undone", err.Error()))
 		return
 	}
@@ -228,6 +236,27 @@ func (s *service) proposalUndo(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	s.card(w, r, id, toast("error", "Undo did not finish", failed))
+}
+
+func stoppedPartway(err error, done *proposals.Proposal) string {
+	if done.Undoable {
+		return err.Error() + ". Undo what it already did from this card."
+	}
+	return err.Error() + "."
+}
+
+func undoStoppedPartway(err error, outcome proposals.UndoResult) string {
+	put := 0
+	for _, o := range outcome.Outcomes {
+		if o["ok"] == true {
+			put++
+		}
+	}
+	text := fmt.Sprintf("%s. Writes put back before it stopped: %d.", err.Error(), put)
+	if outcome.SyncError != nil {
+		text += " The mailbox index did not refresh: " + *outcome.SyncError
+	}
+	return text
 }
 
 func resolvedToast(outcome string) *tpl.Toast {
