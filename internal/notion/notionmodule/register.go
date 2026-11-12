@@ -21,17 +21,17 @@ func SettingGroups() []settings.Group {
 	}}
 }
 
-func (m Module) Register(module.Context) module.Registration {
+func (m Module) Declare(module.Context) module.Declaration {
 	env := m.Env
 	if env == nil {
 		env = config.OS
 	}
-	return module.Registration{
+	return module.Declaration{
 		Name: module.Notion,
 		Pages: []web.Page{{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Nav: []web.NavItem{
 			{Section: "library", Label: "Wiki", URL: "/library/wiki", Icon: "book-open", Page: "library_wiki", Order: 10},
 		}}},
-		Settings: SettingGroups(),
+		Groups:   SettingGroups(),
 		Commands: []*cli.Command{notion.Command(notion.Options{Env: env})},
 	}
 }

@@ -22,7 +22,7 @@ type Hold struct {
 }
 
 func (s *Set) flagged(name string) bool {
-	for _, r := range s.regs {
+	for _, r := range s.decls {
 		if r.Name == name {
 			return !r.Core
 		}

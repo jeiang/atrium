@@ -101,7 +101,7 @@ func TestComposerThreadCostCapRefusesTheNextRequest(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	seedSettings(t, map[string]string{assistant.KeyDefaultModel: pricing.HaikuID})
 	warm(t, api)
-	base, _, stop := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, stop := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)

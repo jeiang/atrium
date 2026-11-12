@@ -88,7 +88,7 @@ func TestAHostMailConnectionAndAnAccountAddedInTheUIBothSync(t *testing.T) {
 	}
 
 	reg := settings.New()
-	app := newAppWith(f.lookup, reg, config.NewState(reg), nil, imapclient.Opener, nil, quietLog)
+	app := newAppWith(f.lookup, reg, config.NewState(reg), imapclient.Opener, nil, quietLog)
 	var out, errs bytes.Buffer
 	if code := app.Run(context.Background(), []string{"sync"}, &out, &errs); code != 0 {
 		t.Fatalf("sync: %d %s", code, errs.String())

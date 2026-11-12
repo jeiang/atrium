@@ -32,6 +32,7 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	_ "github.com/jeiang/atrium/internal/obs/opsmetrics"
 	"github.com/jeiang/atrium/internal/ops"
+	_ "github.com/jeiang/atrium/internal/ops/collectors"
 	"github.com/jeiang/atrium/internal/proposals/proposalscmd"
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
 	"github.com/jeiang/atrium/internal/settings"
@@ -47,7 +48,7 @@ type Module struct {
 	Now     func() float64
 }
 
-func (m Module) Register(mc module.Context) module.Registration {
+func (m Module) Declare(mc module.Context) module.Declaration {
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
 		if err != nil {
@@ -55,7 +56,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 		}
 		return snap.Enabled(name), nil
 	}
-	return module.Registration{
+	return module.Declaration{
 		Name:      module.Core,
 		Core:      true,
 		Attention: AttentionSources(),
@@ -79,7 +80,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}},
 		},
-		Settings: SettingGroups(),
+		Groups: SettingGroups(),
 		Commands: []*cli.Command{
 			writescmd.Command(writescmd.Options{Env: mc.Env, Now: m.Now, Store: func(d *db.DB, cfg config.Config) *ledger.Store {
 				return toolset.Ledger(d, mc.Env, m.Clients(cfg), m.Now)

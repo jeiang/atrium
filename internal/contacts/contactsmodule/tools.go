@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -28,19 +27,12 @@ func ToolDefinitions() []module.ToolDefinition {
 	return []module.ToolDefinition{Definition()}
 }
 
-func (Module) Register(mc module.Context) module.Registration {
-	return module.Registration{
+func (Module) Declare(mc module.Context) module.Declaration {
+	return module.Declaration{
 		Name:     module.Contacts,
 		Requires: Requirements(),
 		Commands: []*cli.Command{{Name: "contacts", Commands: []*cli.Command{syncCommand(mc.Env)}}},
-		Tools: func(r *registry.Registry) error {
-			for _, def := range ToolDefinitions() {
-				if err := r.Add(def.Tool); err != nil {
-					return err
-				}
-			}
-			return nil
-		},
+		Tools:    ToolDefinitions(),
 	}
 }
 

@@ -32,7 +32,7 @@ func TestMain(m *testing.M) {
 		os.Exit(0)
 	}
 	reg := settings.New()
-	newApp(config.OS, reg, config.NewState(reg), nil)
+	newApp(config.OS, reg, config.NewState(reg))
 	guardExternalHosts()
 	os.Exit(m.Run())
 }

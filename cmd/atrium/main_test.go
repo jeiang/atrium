@@ -27,7 +27,7 @@ func startServe(t *testing.T) string {
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
-	seedFlagsAt(t, newTestApp(t, nil), filepath.Join(dir, "atrium.db"), allFlagsTrue())
+	seedFlagsAt(t, newTestApp(t), filepath.Join(dir, "atrium.db"), allFlagsTrue())
 	return startServeIn(t, dir)
 }
 
@@ -80,7 +80,7 @@ func startServeOnce(t *testing.T, dir string, logged bool) (string, *lockedBuffe
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
-	app := newTestApp(t, nil)
+	app := newTestApp(t)
 	if f := fixtureFor(t); f != nil {
 		app = f.app
 	}

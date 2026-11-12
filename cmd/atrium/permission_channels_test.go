@@ -73,7 +73,7 @@ func TestDeniedFetchResumesWithARefusal(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	warm(t, api)
 	thread := latestThread(t, dir)
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -116,7 +116,7 @@ func TestPhoneLinkCannotApproveAPermissionRequest(t *testing.T) {
 	seedSettings(t, map[string]string{policy.EnabledKey: "true", policy.KindsKey: "permission"})
 	warm(t, api)
 	thread := latestThread(t, dir)
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)

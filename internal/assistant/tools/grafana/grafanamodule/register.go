@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 
-	"github.com/jeiang/atrium/internal/assistant/registry"
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/module"
@@ -30,18 +29,11 @@ func ToolDefinitions() []module.ToolDefinition {
 	return grafanatools.Definitions()
 }
 
-func (Module) Register(module.Context) module.Registration {
-	return module.Registration{
+func (Module) Declare(module.Context) module.Declaration {
+	return module.Declaration{
 		Name:     module.Grafana,
 		Needs:    []string{module.Assistant},
 		Requires: Requirements(),
-		Tools: func(r *registry.Registry) error {
-			for _, def := range ToolDefinitions() {
-				if err := r.Add(def.Tool); err != nil {
-					return err
-				}
-			}
-			return nil
-		},
+		Tools:    ToolDefinitions(),
 	}
 }

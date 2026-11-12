@@ -12,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
-	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/subagents/websearch"
 	"github.com/jeiang/atrium/internal/assistant/tools/askoperator"
@@ -48,8 +47,8 @@ type Module struct {
 	Callables []map[string]worker.Callable
 }
 
-func (m Module) Register(mc module.Context) module.Registration {
-	return module.Registration{
+func (m Module) Declare(mc module.Context) module.Declaration {
+	return module.Declaration{
 		Name:      module.Assistant,
 		Attention: AttentionSources(mc.Env),
 		Requires:  Requirements(),
@@ -66,9 +65,9 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Group: "Instance", Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 60},
 			},
 		}},
-		Settings: SettingGroups(),
+		Groups:   SettingGroups(),
 		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Callables...), memorycmd.Command(mc.Env, m.Now)},
-		Tools:    addTools,
+		Tools:    ToolDefinitions(),
 	}
 }
 
@@ -112,18 +111,19 @@ func anthropicKey(ctx context.Context, p module.Probe) (string, error) {
 	return "", nil
 }
 
-func addTools(r *registry.Registry) error {
+func ToolDefinitions() []module.ToolDefinition {
+	var defs []module.ToolDefinition
 	for _, tools := range [][]tool.Tool{
 		askoperator.Tools(), attentiontool.Tools(), filetools.Tools(), memorytools.Tools(),
 		webfetch.Tools(), recalltools.Tools(), plantools.Tools(),
 		proposetools.Tools(), scheduletools.Tools(), taskstools.Tools(),
 		kbtools.Tools(), weathertools.Tools(), opstools.Tools(),
 	} {
-		if err := r.Add(tools...); err != nil {
-			return err
+		for _, t := range tools {
+			defs = append(defs, module.ToolDefinition{Tool: t})
 		}
 	}
-	return nil
+	return defs
 }
 
 func runCaps() []string {

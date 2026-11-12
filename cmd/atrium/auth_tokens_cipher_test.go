@@ -23,7 +23,7 @@ func authTokenApp(t *testing.T) *cli.App {
 		t.Fatal("no fixture")
 	}
 	reg := settings.New()
-	return newAppWith(f.lookup, reg, config.NewState(reg), nil, imapclient.Opener, nil, quietLog)
+	return newAppWith(f.lookup, reg, config.NewState(reg), imapclient.Opener, nil, quietLog)
 }
 
 func TestAuthTokenLocalBearerLifecycle(t *testing.T) {

@@ -23,7 +23,7 @@ func (c *recoveryClock) now() float64 { return c.at }
 
 func recoveryApp(f *fixture, now func() float64) *cli.App {
 	reg := settings.New()
-	return newAppWith(f.lookup, reg, config.NewState(reg), nil, imapclient.Opener, now, quietLog)
+	return newAppWith(f.lookup, reg, config.NewState(reg), imapclient.Opener, now, quietLog)
 }
 
 func recoveryRun(t *testing.T, f *fixture, clock *recoveryClock, text string) (asstView, appRun) {

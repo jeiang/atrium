@@ -3,23 +3,21 @@ package module
 import (
 	"context"
 	"slices"
-	"strings"
 	"sync"
 	"sync/atomic"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/attention"
-	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
 type Set struct {
-	reg  *settings.Registry
-	env  config.Env
-	regs []Registration
-	cur  atomic.Pointer[Snapshot]
+	reg   *settings.Registry
+	env   config.Env
+	decls []Declaration
+	cur   atomic.Pointer[Snapshot]
 }
 
 type setKey struct{}
@@ -42,36 +40,26 @@ func IsEnabled(ctx context.Context, name string) bool {
 	return snap != nil && snap.Enabled(name)
 }
 
-func NewSet(reg *settings.Registry, st *config.State, env config.Env, mods ...Module) (*Set, error) {
-	s := &Set{reg: reg, env: env}
-	var regs []Registration
-	for _, m := range mods {
-		regs = append(regs, m.Register(Context{Current: s.Current, Evaluate: s.Evaluate, Env: env, Settings: reg, State: st}))
-	}
-	s.regs = regs
-	if err := s.validate(); err != nil {
-		return nil, err
-	}
-	ordered, err := byNeeds(regs)
+func NewSet(cat *Catalog, reg *settings.Registry, env config.Env) (*Set, error) {
+	ordered, err := byNeeds(cat.Declarations())
 	if err != nil {
 		return nil, err
 	}
-	s.regs = ordered
-	return s, nil
+	return &Set{reg: reg, env: env, decls: ordered}, nil
 }
 
-func byNeeds(regs []Registration) ([]Registration, error) {
+func byNeeds(decls []Declaration) ([]Declaration, error) {
 	placed := map[string]bool{}
-	var out []Registration
-	remaining := slices.Clone(regs)
+	var out []Declaration
+	remaining := slices.Clone(decls)
 	for len(remaining) > 0 {
-		i := slices.IndexFunc(remaining, func(r Registration) bool {
-			return !slices.ContainsFunc(r.Needs, func(dep string) bool { return !placed[dep] })
+		i := slices.IndexFunc(remaining, func(d Declaration) bool {
+			return !slices.ContainsFunc(d.Needs, func(dep string) bool { return !placed[dep] })
 		})
 		if i < 0 {
 			names := make([]string, len(remaining))
-			for j, r := range remaining {
-				names[j] = r.Name
+			for j, d := range remaining {
+				names[j] = d.Name
 			}
 			return nil, &DependencyCycle{Modules: names}
 		}
@@ -80,99 +68,6 @@ func byNeeds(regs []Registration) ([]Registration, error) {
 		remaining = slices.Delete(remaining, i, i+1)
 	}
 	return out, nil
-}
-
-func (s *Set) validate() error {
-	seen := map[string]bool{}
-	for _, r := range s.regs {
-		if r.Name == "" || seen[r.Name] {
-			return DuplicateModule(r.Name)
-		}
-		seen[r.Name] = true
-	}
-	commands := map[string]bool{}
-	for _, r := range s.regs {
-		if r.Core && (len(r.Needs) > 0 || len(r.Requires) > 0) {
-			return &InvalidCore{Module: r.Name}
-		}
-		for _, dep := range r.Needs {
-			if !seen[dep] {
-				return &UnknownDependency{Module: r.Name, Dependency: dep}
-			}
-		}
-		if !r.Core {
-			if _, ok := s.reg.Lookup(FlagKey(r.Name)); !ok {
-				return FlagNotRegistered(FlagKey(r.Name))
-			}
-		}
-		for _, rq := range r.Requires {
-			if rq.Key == "" || rq.Host || rq.Connection {
-				continue
-			}
-			if _, ok := s.reg.Lookup(rq.Key); !ok {
-				return settings.UnknownKey(rq.Key)
-			}
-		}
-		groups := map[string]bool{}
-		for _, g := range r.Settings {
-			if g.Name == "" || g.Title == "" || groups[g.Name] {
-				return &InvalidGroup{Module: r.Name, Group: g.Name}
-			}
-			groups[g.Name] = true
-			for _, key := range g.Keys {
-				def, ok := s.reg.Lookup(key)
-				if !ok {
-					return settings.UnknownKey(key)
-				}
-				if !def.Editable() {
-					return &InvalidGroup{Module: r.Name, Group: g.Name}
-				}
-			}
-		}
-		for _, c := range r.Commands {
-			if commands[c.Name] {
-				return DuplicateCommand(c.Name)
-			}
-			commands[c.Name] = true
-		}
-		for _, p := range r.Pages {
-			if p.Module == nil && p.Start == nil && len(p.Globals) == 0 && p.Templates == nil && len(p.Nav) == 0 {
-				return &InvalidPage{Module: r.Name}
-			}
-		}
-	}
-	for _, r := range s.regs {
-		for path, leaf := range r.Leaves {
-			if !hasPath(r.Commands, strings.Fields(path)) {
-				return &UnknownLeaf{Module: r.Name, Path: path}
-			}
-			if leaf.Always && len(leaf.Needs) > 0 {
-				return &InvalidLeaf{Module: r.Name, Path: path}
-			}
-			for _, name := range leaf.Needs {
-				if !seen[name] {
-					return &UnknownDependency{Module: r.Name, Dependency: name}
-				}
-			}
-		}
-	}
-	return nil
-}
-
-func hasPath(cmds []*cli.Command, path []string) bool {
-	if len(path) == 0 {
-		return false
-	}
-	for _, c := range cmds {
-		if c.Name != path[0] {
-			continue
-		}
-		if len(path) == 1 {
-			return true
-		}
-		return hasPath(c.Commands, path[1:])
-	}
-	return false
 }
 
 type Snapshot struct {
@@ -196,7 +91,7 @@ func (s *Set) Refresh(ctx context.Context, q db.Querier) error {
 
 func (s *Set) Evaluate(ctx context.Context, q db.Querier) (*Snapshot, error) {
 	probe := Probe{Settings: s.reg, Q: q, Env: s.env}
-	statuses, _, err := evaluate(ctx, s.regs, func(ctx context.Context, r Registration, states map[string]State) ([]Unmet, bool, error) {
+	statuses, _, err := evaluate(ctx, s.decls, func(ctx context.Context, r Declaration, states map[string]State) ([]Unmet, bool, error) {
 		unmet, err := s.unmet(ctx, probe, r, states)
 		if err != nil {
 			return nil, false, err
@@ -213,12 +108,12 @@ func (s *Set) Evaluate(ctx context.Context, q db.Querier) (*Snapshot, error) {
 	return &Snapshot{set: s, statuses: statuses}, nil
 }
 
-type check func(ctx context.Context, r Registration, states map[string]State) ([]Unmet, bool, error)
+type check func(ctx context.Context, r Declaration, states map[string]State) ([]Unmet, bool, error)
 
-func evaluate(ctx context.Context, regs []Registration, fn check) ([]Status, map[string]State, error) {
+func evaluate(ctx context.Context, decls []Declaration, fn check) ([]Status, map[string]State, error) {
 	states := map[string]State{}
-	statuses := make([]Status, 0, len(regs))
-	for _, r := range regs {
+	statuses := make([]Status, 0, len(decls))
+	for _, r := range decls {
 		st := Status{Name: r.Name, State: Enabled}
 		if !r.Core {
 			unmet, on, err := fn(ctx, r, states)
@@ -240,7 +135,7 @@ func evaluate(ctx context.Context, regs []Registration, fn check) ([]Status, map
 }
 
 func (s *Set) coreOnly() *Snapshot {
-	statuses, _, _ := evaluate(context.Background(), s.regs, func(context.Context, Registration, map[string]State) ([]Unmet, bool, error) {
+	statuses, _, _ := evaluate(context.Background(), s.decls, func(context.Context, Declaration, map[string]State) ([]Unmet, bool, error) {
 		return nil, false, nil
 	})
 	return &Snapshot{set: s, statuses: statuses}
@@ -259,7 +154,7 @@ func (n *Snapshot) Status(name string) (Status, bool) {
 
 func (n *Snapshot) Attention() []attention.Source {
 	var out []attention.Source
-	for _, r := range n.set.regs {
+	for _, r := range n.set.decls {
 		if r.Core || n.Enabled(r.Name) {
 			out = append(out, r.Attention...)
 		}
@@ -279,12 +174,17 @@ func (n *Snapshot) Registry() (*registry.Registry, error) {
 
 func (n *Snapshot) buildRegistry() (*registry.Registry, error) {
 	out := registry.New(n.set.reg)
-	for _, r := range n.set.regs {
-		if r.Tools == nil || !n.Enabled(r.Name) {
+	for _, d := range n.set.decls {
+		if !n.Enabled(d.Name) {
 			continue
 		}
-		if err := r.Tools(out); err != nil {
-			return nil, err
+		for _, def := range d.Tools {
+			if err := out.Add(def.Tool); err != nil {
+				return nil, err
+			}
+			if def.Bind != nil {
+				out.Bind(def.Tool.Name, def.Bind)
+			}
 		}
 	}
 	if _, err := out.All(); err != nil {
@@ -294,7 +194,7 @@ func (n *Snapshot) buildRegistry() (*registry.Registry, error) {
 }
 
 func (s *Set) Guard(ctx context.Context, q db.Querier, key, value string) error {
-	for _, r := range s.regs {
+	for _, r := range s.decls {
 		if key != FlagKey(r.Name) || value != "true" {
 			continue
 		}

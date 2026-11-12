@@ -6,14 +6,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant/registry"
-	"github.com/jeiang/atrium/internal/attention"
-	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
-	"github.com/jeiang/atrium/internal/web"
 )
 
 const (
@@ -29,44 +25,6 @@ const (
 )
 
 var Builtins = []string{Mail, Calendar, Notion, Media, Assistant, Notifications, Grafana, Contacts}
-
-type Module interface {
-	Register(mc Context) Registration
-}
-
-type Context struct {
-	Current  func() *Snapshot
-	Evaluate func(context.Context, db.Querier) (*Snapshot, error)
-	Env      config.Env
-	Settings *settings.Registry
-	State    *config.State
-}
-
-func (c Context) Enabled(name string) bool {
-	snap := c.Current()
-	return snap != nil && snap.Enabled(name)
-}
-
-func (c Context) Tools() (*registry.Registry, error) {
-	snap := c.Current()
-	if snap == nil {
-		return nil, ErrNotEvaluated
-	}
-	return snap.Registry()
-}
-
-type Registration struct {
-	Name      string
-	Core      bool
-	Needs     []string
-	Requires  []Requirement
-	Pages     []web.Page
-	Settings  []settings.Group
-	Commands  []*cli.Command
-	Leaves    map[string]Leaf
-	Tools     func(r *registry.Registry) error
-	Attention []attention.Source
-}
 
 type Leaf struct {
 	Always bool
@@ -226,11 +184,42 @@ func (e *InvalidPage) Error() string {
 	return "module: " + e.Module + " has a page with no Module"
 }
 
-type InvalidCore struct{ Module string }
+type InvalidCore struct{ Module, Reason string }
 
 func (e *InvalidCore) Error() string {
-	return "module: core module " + e.Module + " cannot declare needs or requirements"
+	if e.Module == "" {
+		return "module: " + e.Reason
+	}
+	if e.Reason == "" {
+		return "module: core module " + e.Module + " cannot declare needs or requirements"
+	}
+	return "module: core module " + e.Module + " " + e.Reason
 }
+
+type InvalidDeclaration struct{ Module, Field string }
+
+func (e *InvalidDeclaration) Error() string {
+	if e.Module == "" {
+		return "module: declaration has no " + e.Field
+	}
+	return "module: " + e.Module + " has an invalid " + e.Field
+}
+
+type DeclarationError struct {
+	Module string
+	Field  string
+	Err    error
+}
+
+func (e *DeclarationError) Error() string {
+	return "module: " + e.Module + " " + e.Field + ": " + e.Err.Error()
+}
+
+func (e *DeclarationError) Unwrap() error { return e.Err }
+
+type DuplicateTool string
+
+func (e DuplicateTool) Error() string { return "module: duplicate tool " + string(e) }
 
 type NeedsSettingsError struct {
 	Module string

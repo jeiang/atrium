@@ -96,7 +96,7 @@ func TestMailReplayReportsStoredDecisionsWithoutExternalCalls(t *testing.T) {
 		vars := maps.Clone(env)
 		vars["ATRIUM_DB"] = path
 		reg := settings.New()
-		return newAppWith(config.Map(vars), reg, config.NewState(reg), nil, clients, nil, quietLog)
+		return newAppWith(config.Map(vars), reg, config.NewState(reg), clients, nil, quietLog)
 	}
 	run := func(app *cli.App, args ...string) appRun {
 		var out, errs bytes.Buffer

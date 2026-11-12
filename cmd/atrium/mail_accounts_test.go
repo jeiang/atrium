@@ -92,7 +92,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 	}
 	run := func(args ...string) appRun {
 		reg := settings.New()
-		app := newAppWith(testLookupFor(t), reg, config.NewState(reg), nil, clients, nil, quietLog)
+		app := newAppWith(testLookupFor(t), reg, config.NewState(reg), clients, nil, quietLog)
 		var out, errs bytes.Buffer
 		code := app.Run(context.Background(), args, &out, &errs)
 		return appRun{code, out.String(), errs.String()}

@@ -248,7 +248,7 @@ capabilities = ["api"]
 	}
 	reg := settings.New()
 	st := config.NewState(reg)
-	app := newAppWith(env, reg, st, nil, clients, func() float64 { return data.world.Clock }, quietLog)
+	app := newAppWith(env, reg, st, clients, func() float64 { return data.world.Clock }, quietLog)
 	app.Stdin = strings.NewReader(stdin)
 	copyFile(t, filepath.Join(golden.Dir(), "world.db"), filepath.Join(dir, "atrium.db"))
 	seedFlagsAt(t, app, filepath.Join(dir, "atrium.db"), allFlagsTrue())

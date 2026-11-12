@@ -3,7 +3,6 @@ package mailmodule
 import (
 	"context"
 
-	"github.com/jeiang/atrium/internal/assistant/registry"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
@@ -56,7 +55,7 @@ func ToolDefinitions() []module.ToolDefinition {
 	return mailtools.Definitions()
 }
 
-func (m Module) Register(mc module.Context) module.Registration {
+func (m Module) Declare(mc module.Context) module.Declaration {
 	mailCmds := mailcmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now}
 	cmds := []*cli.Command{
 		run.SyncCommand(mc.Env, m.Clients),
@@ -71,7 +70,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 	cmds = append(cmds, mailCmds.ScanCommands()...)
 	cmds = append(cmds, mailCmds.RefreshCommands()...)
 	cmds = append(cmds, mailCmds.TrackingCommands()...)
-	return module.Registration{
+	return module.Declaration{
 		Name:      module.Mail,
 		Attention: AttentionSources(),
 		Requires:  Requirements(),
@@ -83,7 +82,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 			}},
 			{Module: accountpages.Module, Templates: accountpages.Templates()},
 		},
-		Settings: SettingGroups(),
+		Groups:   SettingGroups(),
 		Commands: cmds,
 		Leaves: map[string]module.Leaf{
 			"live pause":      {Always: true},
@@ -92,13 +91,6 @@ func (m Module) Register(mc module.Context) module.Registration {
 			"endpoints probe": {Always: true},
 			"replay":          {Always: true},
 		},
-		Tools: func(r *registry.Registry) error {
-			for _, def := range ToolDefinitions() {
-				if err := r.Add(def.Tool); err != nil {
-					return err
-				}
-			}
-			return nil
-		},
+		Tools: ToolDefinitions(),
 	}
 }

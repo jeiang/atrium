@@ -22,7 +22,7 @@ import (
 func mailEffectsFixture(t *testing.T, mode, preset string, fake *mailtest.FakeClient) *mailSafety {
 	t.Helper()
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
-	f.app = newAppWith(f.lookup, f.settings, f.state, nil, func(config.Config) mail.OpenFunc { return fake.Open }, nil, quietLog)
+	f.app = newAppWith(f.lookup, f.settings, f.state, func(config.Config) mail.OpenFunc { return fake.Open }, nil, quietLog)
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
 	seedSettings(t, map[string]string{mail.KeyMode: mode})

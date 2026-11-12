@@ -21,7 +21,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -99,9 +98,9 @@ func latestThread(t *testing.T, dir string) int64 {
 	return id
 }
 
-func freshApp(f *fixture, mods []module.Module) *cli.App {
+func freshApp(f *fixture) *cli.App {
 	reg := settings.New()
-	return newAppWith(f.lookup, reg, config.NewState(reg), mods, imapclient.Opener, nil, quietLog)
+	return newAppWith(f.lookup, reg, config.NewState(reg), imapclient.Opener, nil, quietLog)
 }
 
 func warm(t *testing.T, api *modelLog) int {
@@ -136,14 +135,14 @@ func TestMailReadDropsInternetButKeepsOwnAndNotify(t *testing.T) {
 
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("again")))
 	var out, errs lockedBuffer
-	if code := freshApp(f, nil).Run(context.Background(), []string{"agent", "run", "--thread", fmt.Sprint(thread), "--text", "and again"}, &out, &errs); code != cli.ExitOK {
+	if code := freshApp(f).Run(context.Background(), []string{"agent", "run", "--thread", fmt.Sprint(thread), "--text", "and again"}, &out, &errs); code != cli.ExitOK {
 		t.Fatalf("second process: %d %s", code, errs.String())
 	}
 	requests = api.Requests()
 	assertInternet(t, "in a separate agent run process", requestTools(t, requests[len(requests)-1]), false)
 	assertOwn(t, "in a separate agent run process", requestTools(t, requests[len(requests)-1]), true)
 
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -350,7 +349,7 @@ func TestBranchOfAMarkedThreadIsNotOfferedEgress(t *testing.T) {
 		t.Fatal("thread not marked after the mail read")
 	}
 
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)

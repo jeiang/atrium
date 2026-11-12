@@ -178,7 +178,7 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 		}
 	}
 	reg := settings.New()
-	app := newAppWith(f.lookup, reg, config.NewState(reg), nil, clients, nil, quietLog)
+	app := newAppWith(f.lookup, reg, config.NewState(reg), clients, nil, quietLog)
 	var out, errs bytes.Buffer
 	if code := app.Run(context.Background(), []string{"sync", "--account", "work"}, &out, &errs); code != 0 {
 		t.Fatalf("sync of the added account: %d %s", code, errs.String())

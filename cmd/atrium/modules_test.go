@@ -61,33 +61,26 @@ type appRun struct {
 	stdout, stderr string
 }
 
-func runApp(t *testing.T, args ...string) appRun { return runAppWith(t, nil, args...) }
+func runApp(t *testing.T, args ...string) appRun {
+	var out bytes.Buffer
+	var errs lockedBuffer
+	app := newTestApp(t)
+	if f := fixtureFor(t); f != nil {
+		app = f.app
+	}
+	code := app.Run(context.Background(), args, &out, &errs)
+	return appRun{code, out.String(), errs.String()}
+}
 
 func runAppLogged(t *testing.T, args ...string) appRun {
 	var out bytes.Buffer
 	var errs lockedBuffer
-	app := newTestApp(t, nil)
+	app := newTestApp(t)
 	if f := fixtureFor(t); f != nil {
 		app = f.app
 	}
 	app.SetLogSetup(logx.Setup)
 	defer app.SetLogSetup(quietLog)
-	code := app.Run(context.Background(), args, &out, &errs)
-	return appRun{code, out.String(), errs.String()}
-}
-
-func runAppWith(t *testing.T, mods []module.Module, args ...string) appRun {
-	var out bytes.Buffer
-	var errs lockedBuffer
-	app := newTestApp(t, mods)
-	if f := fixtureFor(t); f != nil {
-		if len(mods) == 0 {
-			app = f.app
-		} else {
-			reg := settings.New()
-			app = newAppWith(f.lookup, reg, config.NewState(reg), mods, imapclient.Opener, nil, quietLog)
-		}
-	}
 	code := app.Run(context.Background(), args, &out, &errs)
 	return appRun{code, out.String(), errs.String()}
 }
@@ -133,11 +126,11 @@ func moduleFixtureAt(t *testing.T, flags map[string]string, now func() float64) 
 	reg := settings.New()
 	st := config.NewState(reg)
 	f = &fixture{t: t, dir: dir, env: env, settings: reg, state: st, flags: flags}
-	f.app = newAppWith(f.lookup, reg, st, nil, imapclient.Opener, now, quietLog)
+	f.app = newAppWith(f.lookup, reg, st, imapclient.Opener, now, quietLog)
 	fixturesByTest.Store(t, f)
 	fixturesByTest.Store(testKey(t), f)
 	seedModuleFlags(t, f, flags)
-	f.app = newAppWith(f.lookup, reg, st, nil, imapclient.Opener, now, quietLog)
+	f.app = newAppWith(f.lookup, reg, st, imapclient.Opener, now, quietLog)
 	return dir, api, f
 }
 

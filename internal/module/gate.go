@@ -26,7 +26,7 @@ func (s *Set) enabled(name string) bool {
 
 func (s *Set) Pages() []web.Page {
 	pages := []web.Page{{Globals: map[string]any{"module_enabled": s.enabled}}}
-	for _, r := range s.regs {
+	for _, r := range s.decls {
 		for _, p := range r.Pages {
 			if p.Module == nil && p.Start == nil && len(p.Nav) == 0 {
 				continue
@@ -74,7 +74,7 @@ func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, sett
 	var groups []settingspage.Group
 	var generic []settingspage.Generic
 	control := settingspage.Control{State: s.settingState, Mark: s.settingMark}
-	for _, r := range s.regs {
+	for _, r := range s.decls {
 		if !r.Core {
 			for _, p := range r.Pages {
 				for _, item := range p.Nav {
@@ -97,7 +97,7 @@ func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, sett
 			}
 		}
 		own := home == "" && !r.Core && settingspage.Wanted(r.Name)
-		for _, g := range r.Settings {
+		for _, g := range r.Groups {
 			g.Module = r.Name
 			at := settingspage.Group{Group: g, URL: g.Page}
 			if g.Page == "" {
@@ -146,7 +146,7 @@ func (s *Set) gatePage(owner string, p web.Page) web.Page {
 
 func (s *Set) Commands() []*cli.Command {
 	var out []*cli.Command
-	for _, r := range s.regs {
+	for _, r := range s.decls {
 		for _, c := range r.Commands {
 			out = append(out, s.gateCommand(r, c, c.Name, Leaf{}))
 		}
@@ -154,7 +154,7 @@ func (s *Set) Commands() []*cli.Command {
 	return out
 }
 
-func (s *Set) gateCommand(r Registration, c *cli.Command, path string, inherited Leaf) *cli.Command {
+func (s *Set) gateCommand(r Declaration, c *cli.Command, path string, inherited Leaf) *cli.Command {
 	rule, ok := r.Leaves[path]
 	if !ok {
 		rule = inherited

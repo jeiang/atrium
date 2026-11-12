@@ -83,9 +83,9 @@ func TestAppKeyFilesSignLinksAcrossRestarts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	_, _, stop := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	_, _, stop := startServeApp(t, freshApp(f), &lockedBuffer{})
 	stop()
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 
 	if code, text, _ := fetch(t, http.DefaultClient, http.MethodGet, base+signed, nil); code != http.StatusOK || text != "movie bytes" {
 		t.Errorf("GET the media link after the restart = %d %q, want the signed file", code, text)
@@ -166,7 +166,7 @@ func TestMediaLinkRefreshKeepsHostKeyPrecedence(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
 	if code, _, _ := fetch(t, client, http.MethodGet, base+"/settings/notifications", nil); code != http.StatusOK {

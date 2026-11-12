@@ -37,7 +37,7 @@ var operatorData = []func(context.Context, db.Querier) (bool, error){
 	inference.HasRows,
 }
 
-func (s *Set) unmet(ctx context.Context, p Probe, r Registration, states map[string]State) ([]Unmet, error) {
+func (s *Set) unmet(ctx context.Context, p Probe, r Declaration, states map[string]State) ([]Unmet, error) {
 	var out []Unmet
 	for _, rq := range r.Requires {
 		reason, err := rq.Check(ctx, p)
@@ -106,7 +106,7 @@ func (s *Set) adoptMissing(ctx context.Context, d *db.DB) error {
 		return err
 	}
 	pending := map[string]bool{}
-	for _, r := range s.regs {
+	for _, r := range s.decls {
 		if r.Core {
 			continue
 		}
@@ -127,7 +127,7 @@ func (s *Set) adoptMissing(ctx context.Context, d *db.DB) error {
 
 func (s *Set) adopt(ctx context.Context, q db.Querier, only map[string]bool) error {
 	probe := Probe{Settings: s.reg, Q: q, Env: s.env}
-	statuses, _, err := evaluate(ctx, s.regs, func(ctx context.Context, r Registration, states map[string]State) ([]Unmet, bool, error) {
+	statuses, _, err := evaluate(ctx, s.decls, func(ctx context.Context, r Declaration, states map[string]State) ([]Unmet, bool, error) {
 		unmet, err := s.unmet(ctx, probe, r, states)
 		return unmet, len(unmet) == 0, err
 	})
@@ -138,7 +138,7 @@ func (s *Set) adopt(ctx context.Context, q db.Querier, only map[string]bool) err
 	for _, st := range statuses {
 		byName[st.Name] = st
 	}
-	for _, r := range s.regs {
+	for _, r := range s.decls {
 		if r.Core {
 			continue
 		}

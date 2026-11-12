@@ -72,7 +72,7 @@ func importTestAppHost(t *testing.T, dir string, now float64, host string) *cli.
 	vars["ATRIUM_HOST_CONFIG"] = host
 	reg := settings.New()
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
-	return newAppWith(config.Map(vars), reg, config.NewState(reg), nil, imapclient.Opener, func() float64 { return now }, quietLog)
+	return newAppWith(config.Map(vars), reg, config.NewState(reg), imapclient.Opener, func() float64 { return now }, quietLog)
 }
 
 func importHostConfig(t *testing.T, dir, anthropicURL, grafanaURL, notionURL string) string {
@@ -1571,7 +1571,7 @@ func TestImportV2UndoesImportedAutomaticActions(t *testing.T) {
 	delete(vars, "ATRIUM_DB_KEY_FILE")
 	reg := settings.New()
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
-	app := newAppWith(config.Map(vars), reg, config.NewState(reg), nil,
+	app := newAppWith(config.Map(vars), reg, config.NewState(reg),
 		func(config.Config) mail.OpenFunc { return fake.Open }, nil, quietLog)
 
 	dest := filepath.Join(dir, "atrium.db")

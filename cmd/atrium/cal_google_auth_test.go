@@ -74,7 +74,7 @@ func calRunGoogleAuth(t *testing.T, redirect func(consent url.Values) url.Values
 	defer cancel()
 	var out, errs lockedBuffer
 	done := make(chan int, 1)
-	app := newTestApp(t, nil)
+	app := newTestApp(t)
 	go func() { done <- app.Run(ctx, []string{"calendar", "google-auth", "--port", "0"}, &out, &errs) }()
 	var consent url.Values
 	if redirect != nil {
@@ -115,7 +115,7 @@ func TestCalendarGoogleAuthExchangesTheCodeWithPKCEAndRefusesAForeignState(t *te
 		setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 		setEnv(t, "ATRIUM_CONFIG", "")
 		var out, errs lockedBuffer
-		app := newTestApp(t, nil)
+		app := newTestApp(t)
 		code := app.Run(context.Background(), []string{"calendar", "google-auth", "--port", "0"}, &out, &errs)
 		if code != cli.ExitError || out.String() != "" || errs.String() != "error: the google/default connection is not configured\n" {
 			t.Fatalf("%d %q %q", code, out.String(), errs.String())

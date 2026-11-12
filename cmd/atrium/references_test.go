@@ -98,7 +98,7 @@ func TestReferenceBringsAThreadVerbatimWithItsMarks(t *testing.T) {
 		others = append(others, latestThread(t, dir))
 	}
 
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)

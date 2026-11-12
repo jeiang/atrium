@@ -194,7 +194,7 @@ func TestSearchWebRunsAnIsolatedChildAndVerifiesCitations(t *testing.T) {
 	if _, ok := normalized["https://example.invalid/x"]; ok {
 		t.Errorf("the dropped citation URL reached the parent allowlist: %v", allowed)
 	}
-	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+	base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		t.Fatal(err)
@@ -316,7 +316,7 @@ func TestSearchWebAsksInAMarkedChat(t *testing.T) {
 		dir, api, f := moduleFixture(t, flagsExcept("", ""))
 		warm(t, api)
 		thread := latestThread(t, dir)
-		base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
+		base, _, _ := startServeApp(t, freshApp(f), &lockedBuffer{})
 		jar, err := cookiejar.New(nil)
 		if err != nil {
 			t.Fatal(err)

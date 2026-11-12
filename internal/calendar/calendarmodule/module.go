@@ -5,7 +5,6 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/jeiang/atrium/internal/assistant/registry"
 	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
@@ -30,9 +29,9 @@ func ToolDefinitions() []module.ToolDefinition {
 	return calendartools.Definitions()
 }
 
-func (Module) Register(mc module.Context) module.Registration {
+func (Module) Declare(mc module.Context) module.Declaration {
 	command := calendarcmd.Command(mc.Env, mc.Tools)
-	return module.Registration{
+	return module.Declaration{
 		Name:      module.Calendar,
 		Attention: AttentionSources(),
 		Requires:  Requirements(),
@@ -41,14 +40,7 @@ func (Module) Register(mc module.Context) module.Registration {
 			"calendar candidates":  {Needs: []string{module.Mail}},
 			"calendar google-auth": {Always: true},
 		},
-		Tools: func(r *registry.Registry) error {
-			for _, def := range ToolDefinitions() {
-				if err := r.Add(def.Tool); err != nil {
-					return err
-				}
-			}
-			return nil
-		},
+		Tools: ToolDefinitions(),
 	}
 }
 
