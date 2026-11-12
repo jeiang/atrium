@@ -238,9 +238,8 @@ func registerRunCaps() []settings.Def {
 	return defs
 }
 
-func init() {
-	settings.MustRegister(registerRunCaps()...)
-	settings.MustRegister(
+func Settings() []settings.Def {
+	return append(registerRunCaps(),
 		settings.Value(settings.UI, settings.Def{
 			Key: BudgetKey, Label: "Monthly budget (USD)", Module: "assistant", Type: settings.Float, Default: "150",
 			Check: settings.Above(0)}),
@@ -252,3 +251,5 @@ func init() {
 			Check: settings.Above(0)}),
 	)
 }
+
+func init() { settings.MustRegister(Settings()...) }

@@ -33,16 +33,18 @@ const (
 	DefaultGeocodingURL = "https://geocoding-api.open-meteo.com/v1/search"
 )
 
-func init() {
+func SettingsDefs() []settings.Def {
 	ui := func(key string, kind settings.Type, def string, check func(string) error) settings.Def {
 		return settings.Value(settings.UI, settings.Def{Key: key, Module: Module, Type: kind, Default: def, Check: check})
 	}
-	settings.MustRegister(
+	return []settings.Def{
 		ui(KeyLocationName, settings.String, "", nil),
 		ui(KeyLatitude, settings.Float, "", settings.Between(-90, 90)),
 		ui(KeyLongitude, settings.Float, "", settings.Between(-180, 180)),
-	)
+	}
 }
+
+func init() { settings.MustRegister(SettingsDefs()...) }
 
 type Settings struct {
 	LocationName string

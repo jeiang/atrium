@@ -38,7 +38,18 @@ func RegisterSection(s Section) {
 	Want(s.Module)
 }
 
-func AllSections() []Section { return slices.Clone(sections) }
+func SectionsFrom(sections []Section) []Section {
+	out := make([]Section, 0, len(sections))
+	for _, s := range sections {
+		if slices.ContainsFunc(out, func(r Section) bool { return r.Name == s.Name }) {
+			continue
+		}
+		out = append(out, s)
+	}
+	return out
+}
+
+func AllSections() []Section { return SectionsFrom(sections) }
 
 func SectionNamed(name string) (Section, bool) {
 	for _, s := range AllSections() {

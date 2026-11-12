@@ -30,11 +30,13 @@ const (
 	lineCap   = 10
 )
 
-func init() {
-	settings.MustRegister(settings.Value(settings.UI, settings.Def{
+func Settings() []settings.Def {
+	return []settings.Def{settings.Value(settings.UI, settings.Def{
 		Key: NotifyKey, Module: "assistant", Type: settings.Bool, Default: "true",
-	}))
+	})}
 }
+
+func init() { settings.MustRegister(Settings()...) }
 
 type dreaming struct {
 	run        int64

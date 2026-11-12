@@ -21,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/textx"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -48,18 +49,27 @@ func (r *Research) Install(reg *registry.Registry) error {
 	return nil
 }
 
-func (r *Research) Tool() tool.Tool {
+func Metadata() tool.Tool {
 	return tool.Tool{
 		Name:        Name,
 		Description: Description,
 		InputSchema: json.RawMessage(fmt.Sprintf(schemaFormat, `{"type":"string","description":"Name of an enabled subagent (see Settings › Subagents)."}`)),
-		Handler:     r.handle,
 		Effect:      tool.Read,
 		Annotated:   true,
 		Channel:     tool.ChannelInternet,
 		Marks:       tool.AllMarks,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 	}
+}
+
+func (r *Research) Tool() tool.Tool {
+	t := Metadata()
+	t.Handler = r.handle
+	return t
+}
+
+func Definition() module.ToolDefinition {
+	return module.ToolDefinition{Tool: Metadata(), Bind: Bind}
 }
 
 func Bind(ctx context.Context, q db.Querier, t tool.Tool) (tool.Tool, bool, error) {

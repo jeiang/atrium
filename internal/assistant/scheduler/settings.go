@@ -24,7 +24,7 @@ const (
 	KeyOpsSamplerSchedule = "agent_schedule_ops_sampler"
 )
 
-func init() {
+func Settings() []settings.Def {
 	adv := func(key string, kind settings.Type, value string, check func(string) error) settings.Def {
 		return settings.Value(settings.Advanced, settings.Def{Key: key, Module: "assistant", Type: kind, Default: value, Check: check})
 	}
@@ -41,8 +41,10 @@ func init() {
 		}
 		defs = append(defs, def)
 	}
-	settings.MustRegister(defs...)
+	return defs
 }
+
+func init() { settings.MustRegister(Settings()...) }
 
 func recurringSchedule(value string) error {
 	spec, err := Parse(value, "UTC")

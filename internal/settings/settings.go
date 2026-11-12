@@ -215,18 +215,6 @@ func LookupOf(key string) (Def, bool) {
 	return Def{}, false
 }
 
-func RangeOf(key string) (int64, int64, bool) {
-	for _, d := range definitions {
-		if d.Key == key {
-			if d.Max <= 0 {
-				return 0, 0, false
-			}
-			return d.Min, d.Max, true
-		}
-	}
-	return 0, 0, false
-}
-
 func (d Def) clone() Def {
 	d.Choices = slices.Clone(d.Choices)
 	return d

@@ -51,8 +51,8 @@ type Module struct {
 func (m Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
 		Name:      module.Assistant,
-		Attention: []attention.Source{attentionsources.Plans(), attentionsources.Questions(), tasks.AttentionSource(), serverops.AttentionSource(mc.Env), dreaming.Attention(mc.Env)},
-		Requires:  []module.Requirement{{Name: "the Anthropic connection", Check: anthropicKey}},
+		Attention: AttentionSources(mc.Env),
+		Requires:  Requirements(),
 		Pages: []web.Page{{
 			Module:    chatpages.Module(chatpages.Options{Tools: mc.Tools}),
 			Templates: chatpages.Templates(),
@@ -66,18 +66,33 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Group: "Instance", Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 60},
 			},
 		}},
-		Settings: []settings.Group{
-			{Name: "spending", Title: "Spending", Keys: append([]string{
-				inference.BudgetKey, inference.ChatKey, inference.UnattendedKey, inference.ThreadCapKey,
-			}, append(runCaps(), assistant.KeySubagentMaxCostUSD, websearch.KeyMaxCostUSD, assistant.KeyDreamingMaxCost,
-				assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
-			{Name: "background", Title: "Background work", Keys: []string{
-				assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, websearch.KeyModel,
-				memory.ModelKey, memory.EffortKey, serverops.KeyCondenser,
-			}},
-		},
+		Settings: SettingGroups(),
 		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Callables...), memorycmd.Command(mc.Env, m.Now)},
 		Tools:    addTools,
+	}
+}
+
+func AttentionSources(env config.Env) []attention.Source {
+	return []attention.Source{
+		attentionsources.Plans(), attentionsources.Questions(), tasks.AttentionSource(),
+		serverops.AttentionSource(env), dreaming.Attention(env),
+	}
+}
+
+func Requirements() []module.Requirement {
+	return []module.Requirement{{Name: "the Anthropic connection", Check: anthropicKey}}
+}
+
+func SettingGroups() []settings.Group {
+	return []settings.Group{
+		{Name: "spending", Title: "Spending", Keys: append([]string{
+			inference.BudgetKey, inference.ChatKey, inference.UnattendedKey, inference.ThreadCapKey,
+		}, append(runCaps(), assistant.KeySubagentMaxCostUSD, websearch.KeyMaxCostUSD, assistant.KeyDreamingMaxCost,
+			assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
+		{Name: "background", Title: "Background work", Keys: []string{
+			assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, websearch.KeyModel,
+			memory.ModelKey, memory.EffortKey, serverops.KeyCondenser,
+		}},
 	}
 }
 

@@ -58,12 +58,16 @@ var Editables = []Editable{
 	{KeySubagent, "Subagent rules", Subagent},
 }
 
-func init() {
+func Settings() []settings.Def {
+	out := make([]settings.Def, 0, len(Editables))
 	for _, e := range Editables {
-		settings.MustRegister(settings.Value(settings.UI, settings.Def{
+		out = append(out, settings.Value(settings.UI, settings.Def{
 			Key: e.Key, Module: "assistant", Type: settings.String, Check: check}))
 	}
+	return out
 }
+
+func init() { settings.MustRegister(Settings()...) }
 
 func check(value string) error {
 	if strings.TrimSpace(value) == "" {

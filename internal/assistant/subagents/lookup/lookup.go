@@ -21,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/subagents"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -72,18 +73,27 @@ func (l *Lookup) Install(reg *registry.Registry) error {
 	return reg.Add(l.Tool())
 }
 
-func (l *Lookup) Tool() tool.Tool {
+func Metadata() tool.Tool {
 	return tool.Tool{
 		Name:        Name,
 		Description: Description,
 		InputSchema: json.RawMessage(schema),
-		Handler:     l.handle,
 		Effect:      tool.Read,
 		Annotated:   true,
 		Channel:     tool.ChannelNone,
 		Marks:       tool.AllMarks,
 		Contexts:    tool.Kinds{tool.Chat, tool.Cron},
 	}
+}
+
+func (l *Lookup) Tool() tool.Tool {
+	t := Metadata()
+	t.Handler = l.handle
+	return t
+}
+
+func Definition() module.ToolDefinition {
+	return module.ToolDefinition{Tool: Metadata()}
 }
 
 func parse(args tool.Args) (string, string, []report.Field, error) {

@@ -19,12 +19,12 @@ type Bound struct {
 	Literal    bool
 }
 
-func NewBound(key, defaultKey string) Bound {
-	min, max, ok := settings.RangeOf(key)
-	if !ok {
+func NewBound(defs *settings.Registry, key, defaultKey string) Bound {
+	d, ok := defs.Lookup(key)
+	if !ok || d.Max <= 0 {
 		panic("tool: setting " + key + " has no range")
 	}
-	return Bound{Key: key, DefaultKey: defaultKey, Min: min, Max: max}
+	return Bound{Key: key, DefaultKey: defaultKey, Min: d.Min, Max: d.Max}
 }
 
 func NewCeiling(def, min, max int64) Bound {

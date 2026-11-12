@@ -40,10 +40,14 @@ var kindLabels = map[string]string{
 	"personal": "Personal",
 }
 
-func init() {
-	settings.MustRegisterHost(settings.HostDef{
-		Key: ObsidianDirKey, Module: "export", Type: settings.String, Check: dirPath})
-	settings.MustRegister(
+func HostSettings() []settings.HostDef {
+	return []settings.HostDef{
+		{Key: ObsidianDirKey, Module: "export", Type: settings.String, Check: dirPath},
+	}
+}
+
+func Settings() []settings.Def {
+	return []settings.Def{
 		settings.Value(settings.UI, settings.Def{
 			Key: NotionEnabledKey, Module: "export", Type: settings.Bool, Default: "false"}),
 		settings.Value(settings.UI, settings.Def{
@@ -56,27 +60,40 @@ func init() {
 			Key: ObsidianKindsKey, Module: "export", Type: settings.String, Default: strings.Join(kindNames, ","), Check: kinds}),
 		settings.Value(settings.UI, settings.Def{
 			Key: ObsidianPrivateKey, Module: "export", Type: settings.String, Check: dirPath}),
-	)
-	settingspage.RegisterSection(settingspage.Section{
-		Name: NotionSection, Title: "Export knowledge to Notion", Module: "export", Template: "export_notion_settings",
-		Fields: []settingspage.Field{
-			{Key: NotionEnabledKey, Label: "Enabled", Bool: true},
-			{Key: NotionParentKey, Label: "Parent page"},
-			{Key: NotionKindsKey, Label: "Include", Multi: true, Choices: kindNames, ChoiceLabels: kindLabels},
-			{Key: NotionPrivateKey, Label: "Include private records"},
+	}
+}
+
+func Sections() []settingspage.Section {
+	return []settingspage.Section{
+		{
+			Name: NotionSection, Title: "Export knowledge to Notion", Module: "export", Template: "export_notion_settings",
+			Fields: []settingspage.Field{
+				{Key: NotionEnabledKey, Label: "Enabled", Bool: true},
+				{Key: NotionParentKey, Label: "Parent page"},
+				{Key: NotionKindsKey, Label: "Include", Multi: true, Choices: kindNames, ChoiceLabels: kindLabels},
+				{Key: NotionPrivateKey, Label: "Include private records"},
+			},
+			Validate: validateNotion,
+			Data:     notionData,
 		},
-		Validate: validateNotion,
-		Data:     notionData,
-	})
-	settingspage.RegisterSection(settingspage.Section{
-		Name: ObsidianSection, Title: "Obsidian export", Module: "export", Template: "export_obsidian_settings",
-		Fields: []settingspage.Field{
-			{Key: ObsidianKindsKey, Label: "Include", Multi: true, Choices: kindNames, ChoiceLabels: kindLabels},
-			{Key: ObsidianPrivateKey, Label: "Include private records"},
+		{
+			Name: ObsidianSection, Title: "Obsidian export", Module: "export", Template: "export_obsidian_settings",
+			Fields: []settingspage.Field{
+				{Key: ObsidianKindsKey, Label: "Include", Multi: true, Choices: kindNames, ChoiceLabels: kindLabels},
+				{Key: ObsidianPrivateKey, Label: "Include private records"},
+			},
+			Validate: validateObsidian,
+			Data:     obsidianData,
 		},
-		Validate: validateObsidian,
-		Data:     obsidianData,
-	})
+	}
+}
+
+func init() {
+	settings.MustRegisterHost(HostSettings()...)
+	settings.MustRegister(Settings()...)
+	for _, section := range Sections() {
+		settingspage.RegisterSection(section)
+	}
 }
 
 type notionStatus struct {
