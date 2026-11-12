@@ -60,6 +60,7 @@ type Deps struct {
 	State     *config.State
 	Render    *Renderer
 	Error     func(w http.ResponseWriter, r *http.Request, status int, detail string)
+	NotFound  http.HandlerFunc
 	OnFrame   func(FrameFunc)
 	Stopping  <-chan struct{}
 	OnClose   func(func())
@@ -203,7 +204,7 @@ func New(o Options) (*Server, error) {
 	})
 	s.stop = make(chan struct{})
 	deps := &Deps{
-		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Render: o.Render, Error: s.Error, Stopping: s.stop,
+		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Render: o.Render, Error: s.Error, NotFound: s.notFound, Stopping: s.stop,
 		OnFrame: func(FrameFunc) {}, settingsPages: map[string]SettingsRender{},
 		OnClose: func(f func()) { s.closers = append(s.closers, f) },
 		router:  core, routes: &s.routes, owner: "core", registrations: s.registrations,

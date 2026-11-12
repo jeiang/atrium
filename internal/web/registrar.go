@@ -105,11 +105,11 @@ func (r *Registrar) Mount(pattern string, h http.Handler) {
 	}
 }
 
-func Owned(owner string, mount Module, middleware func(http.Handler) http.Handler) Module {
+func Owned(owner string, mount Module, middleware func(*Deps, http.Handler) http.Handler) Module {
 	return func(router chi.Router, d *Deps) {
 		registrar := &Registrar{Router: router, owner: owner, state: d.registrations}
 		if middleware != nil {
-			registrar.Router = router.With(middleware)
+			registrar.Router = router.With(func(next http.Handler) http.Handler { return middleware(d, next) })
 		}
 		previousOwner, previousRouter := d.owner, d.router
 		d.owner, d.router = owner, registrar

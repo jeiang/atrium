@@ -438,7 +438,8 @@ behavior-parity target.
   Settings transactions publish a new module snapshot only after commit.
   Routes mount once with their declaration owner and check that snapshot on
   each request, so changes committed by the running application take effect
-  without remounting or restarting; disabled routes answer 404.
+  without remounting or restarting; disabled routes keep the rendered 404
+  page or the API's JSON `not_found` response.
   A module evaluation failure names its owner and aborts startup; no
   core-only fallback snapshot is published.
 - Observability: `atrium serve` exposes Prometheus metrics and readiness on

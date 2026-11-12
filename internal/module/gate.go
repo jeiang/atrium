@@ -130,11 +130,15 @@ func (s *Set) gatePage(owner string, p web.Page) web.Page {
 		}
 	}
 	if p.Module != nil {
-		p.Module = web.Owned(owner, p.Module, func(next http.Handler) http.Handler {
+		p.Module = web.Owned(owner, p.Module, func(d *web.Deps, next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				set := SetFrom(r.Context())
-				if set == nil || set.Current() == nil || !set.Current().Enabled(owner) {
-					http.NotFound(w, r)
+				var snap *Snapshot
+				if set != nil {
+					snap = set.Current()
+				}
+				if snap == nil || !snap.Enabled(owner) {
+					d.NotFound(w, r)
 					return
 				}
 				next.ServeHTTP(w, r)

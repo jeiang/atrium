@@ -326,6 +326,23 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 	})
 }
 
+func TestDisabledModuleKeepsPageAndAPIErrorResponses(t *testing.T) {
+	t.Parallel()
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
+	base := startServeIn(t, dir)
+	status, body, header := fetch(t, http.DefaultClient, http.MethodGet, base+"/library/files", nil)
+	if status != http.StatusNotFound || !strings.HasPrefix(header.Get("Content-Type"), "text/html") || !strings.Contains(body, "Nothing here") {
+		t.Fatalf("disabled module page = %d %s: %.200s", status, header.Get("Content-Type"), body)
+	}
+	issued := runApp(t, "auth", "token", "issue", "--name", "module-errors")
+	if issued.code != cli.ExitOK {
+		t.Fatalf("issue API token: %s", issued.stderr)
+	}
+	site := &apiSite{t: t, base: base}
+	secret := strings.TrimSpace(issued.stdout)
+	expectAPI(t, site.do(http.MethodGet, "/api/v1/threads", secret, nil), http.StatusNotFound, "not_found")
+}
+
 func TestBrokenModuleEvaluationRefusesToServe(t *testing.T) {
 	t.Parallel()
 	dir, _, f := moduleFixture(t, allFlagsTrue())
