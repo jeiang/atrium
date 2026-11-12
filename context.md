@@ -440,6 +440,8 @@ behavior-parity target.
   each request, so changes committed by the running application take effect
   without remounting or restarting; disabled routes keep the rendered 404
   page or the API's JSON `not_found` response.
+  The owner route registrar seals before listening and refuses later mounts,
+  including empty subrouter mounts.
   A module evaluation failure names its owner and aborts startup; no
   core-only fallback snapshot is published.
 - Observability: `atrium serve` exposes Prometheus metrics and readiness on

@@ -92,6 +92,9 @@ func (r *Registrar) Group(fn func(chi.Router)) chi.Router {
 	return child
 }
 func (r *Registrar) Route(pattern string, fn func(chi.Router)) chi.Router {
+	if r.state.sealed {
+		panic(ErrRegistrarSealed)
+	}
 	child := &Registrar{owner: r.owner, prefix: r.prefix + pattern, state: r.state}
 	child.Router = r.Router.Route(pattern, func(router chi.Router) {
 		child.Router = router
@@ -107,6 +110,9 @@ func (r *Registrar) Mount(pattern string, h http.Handler) {
 
 func Owned(owner string, mount Module, middleware func(*Deps, http.Handler) http.Handler) Module {
 	return func(router chi.Router, d *Deps) {
+		if d.registrations.sealed {
+			panic(ErrRegistrarSealed)
+		}
 		registrar := &Registrar{Router: router, owner: owner, state: d.registrations}
 		if middleware != nil {
 			registrar.Router = router.With(func(next http.Handler) http.Handler { return middleware(d, next) })
