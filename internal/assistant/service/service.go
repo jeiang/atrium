@@ -330,7 +330,7 @@ func (s *Service) RunOnce(ctx context.Context, threadID int64, text string, o St
 		return 0, err
 	}
 	if _, err := s.Execute(ctx, runID); err != nil {
-		return 0, err
+		return runID, err
 	}
 	return runID, nil
 }

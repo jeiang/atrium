@@ -445,7 +445,12 @@ behavior-parity target.
   runs one bounded pass, waits for its started work and settlement, and exits
   1 when every eligible occurrence is busy (0 for an idle pass). It has no
   ticker or service notification; declared invocation deadlines still apply.
-  Missing configuration records `skipped_unconfigured`, not success. A claim first takes a
+  Missing configuration records `skipped_unconfigured`, not success. Nightly
+  dreaming creates and associates every child thread in one transaction and
+  prepares every child run before the first executes. A job is settled only
+  from all associated children: a failed child makes it fail, an unprepared
+  association is an error, and an unsettled child keeps the run recoverable
+  and its claim released for recovery. A claim first takes a
   non-blocking lock on `job/<id>` and the job's declared resources; the lock
   files live in `<canonical database path>.locks/`, named by the SHA-256 of
   the resource key and never unlinked, separate from the migration lock.
