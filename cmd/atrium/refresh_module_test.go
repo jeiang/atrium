@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/module"
 )
 
@@ -99,5 +101,15 @@ func TestWebRunnerRefreshesToolsAcrossModuleToggles(t *testing.T) {
 	}
 	if result := findToolResult(t, api.Requests(), "live-enabled-mail"); result == nil || result["is_error"] == true {
 		t.Fatalf("enabled tool result = %v", result)
+	}
+}
+
+func TestRefreshCommandsExitZeroWhileMailIsOff(t *testing.T) {
+	f := newFixture(t, loadGoldenData(t), map[string]string{flagEnv(module.Mail): "false"}, "")
+	for _, argv := range [][]string{{"loops", "refresh"}, {"watches", "refresh"}} {
+		code, stdout, stderr := f.Run(context.Background(), argv...)
+		if code != cli.ExitOK || stdout != "" {
+			t.Errorf("%v with mail off: exit %d stdout %q stderr %q", argv, code, stdout, stderr)
+		}
 	}
 }
