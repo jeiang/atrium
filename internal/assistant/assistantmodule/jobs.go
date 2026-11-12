@@ -4,15 +4,15 @@ import (
 	"context"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/digest"
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
-	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/module"
-	scheddef "github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/tasks/remind"
 )
 
@@ -32,35 +32,36 @@ const weeklyReviewPrompt = "Weekly review for the operator. " + prompts.Untruste
 	"or when a date is only inferred. Finish by calling notify exactly once with a title and a two-line summary " +
 	"of the most important items."
 
-func assistantJob(name, kind, prompt, schedule, setting string, timeout time.Duration, spend scheddef.Spend) scheddef.Definition {
-	return scheddef.Definition{
+func assistantJob(name, kind, prompt, schedule, setting string, timeout time.Duration, spend scheduler.Spend) scheduler.Definition {
+	return scheduler.Definition{
 		Module: module.Assistant, Key: module.Assistant + "/" + name, Name: name, Kind: kind, Prompt: prompt,
 		Schedule: schedule, ScheduleSetting: setting, Timeout: timeout, Spend: spend, Needs: []string{module.Assistant},
 	}
 }
 
-func Jobs(deps worker.Dependencies) []scheddef.Definition {
-	nightly := assistantJob(scheduler.NightlyName, scheduler.JobNightly, "Nightly: gather the last day and write knowledge records (one model run).",
-		"daily 02:30", scheduler.KeyNightlySchedule, 45*time.Minute, scheddef.AlwaysSpends)
-	nightly.Run = deps.Callable(func(ctx context.Context, e worker.Env) (worker.Result, error) {
+func Jobs(deps jobworker.Dependencies) []scheduler.Definition {
+	nightly := assistantJob(assistant.NightlyName, scheduler.JobNightly, "Nightly: gather the last day and write knowledge records (one model run).",
+		"daily 02:30", assistant.KeyNightlySchedule, 45*time.Minute, scheduler.AlwaysSpends)
+	nightly.Run = deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 		runs, err := dreaming.Run(ctx, e.Service, e.Now, e.JobID, e.JobRunID)
-		return worker.Result{Runs: runs}, err
+		return jobworker.Result{Runs: runs}, err
 	})
-	weekly := assistantJob(scheduler.WeeklyReviewName, scheduler.JobBuiltin, weeklyReviewPrompt,
-		"weekly sun 18:00", scheduler.KeyWeeklyReview, 30*time.Minute, scheddef.AlwaysSpends)
+	weekly := assistantJob(assistant.WeeklyReviewName, scheduler.JobBuiltin, weeklyReviewPrompt,
+		"weekly sun 18:00", assistant.KeyWeeklyReview, 30*time.Minute, scheduler.AlwaysSpends)
 	weekly.PromptRun = true
+	weekly.Run = deps.Prompt(weeklyReviewPrompt)
 	weekly.Needs = nil
-	nudges := assistantJob(scheduler.DailyNudgesName, scheduler.JobBuiltin, "Daily: send the attention digest (no model run).",
-		"daily 08:00", scheduler.KeyDailyNudges, 5*time.Minute, scheddef.ModelFree)
-	nudges.Run = deps.Callable(func(ctx context.Context, e worker.Env) (worker.Result, error) {
+	nudges := assistantJob(assistant.DailyNudgesName, scheduler.JobBuiltin, "Daily: send the attention digest (no model run).",
+		"daily 08:00", assistant.KeyDailyNudges, 5*time.Minute, scheduler.ModelFree)
+	nudges.Run = deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 		_, err := digest.Run(ctx, e.Service, e.Now, e.JobRunID, deps.Sources(ctx))
-		return worker.Result{}, err
+		return jobworker.Result{}, err
 	})
-	reminders := assistantJob(scheduler.TaskRemindersName, scheduler.JobBuiltin, "Every 5 minutes: send due task reminders (no model run).",
-		"*/5 * * * *", scheduler.KeyTaskReminders, 5*time.Minute, scheddef.ModelFree)
-	reminders.Run = deps.Callable(func(ctx context.Context, e worker.Env) (worker.Result, error) {
+	reminders := assistantJob(assistant.TaskRemindersName, scheduler.JobBuiltin, "Every 5 minutes: send due task reminders (no model run).",
+		"*/5 * * * *", assistant.KeyTaskReminders, 5*time.Minute, scheduler.ModelFree)
+	reminders.Run = deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 		_, err := remind.Due(ctx, e.Service.DB, e.Service.Env, e.Now())
-		return worker.Result{}, err
+		return jobworker.Result{}, err
 	})
-	return []scheddef.Definition{nightly, weekly, nudges, reminders, memorycmd.Job(deps), export.Job(deps)}
+	return []scheduler.Definition{nightly, weekly, nudges, reminders, memorycmd.Job(deps), export.Job(deps)}
 }

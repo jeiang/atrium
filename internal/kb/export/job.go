@@ -4,21 +4,21 @@ import (
 	"context"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
-	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
+	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/module"
-	scheddef "github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/scheduler"
 )
 
-func Job(deps worker.Dependencies) scheddef.Definition {
-	return scheddef.Definition{
-		Module: module.Assistant, Key: module.Assistant + "/" + scheduler.KnowledgeExportName, Name: scheduler.KnowledgeExportName,
+func Job(deps jobworker.Dependencies) scheduler.Definition {
+	return scheduler.Definition{
+		Module: module.Assistant, Key: module.Assistant + "/" + assistant.KnowledgeExportName, Name: assistant.KnowledgeExportName,
 		Kind: scheduler.JobBuiltin, Prompt: "Daily: project the knowledge base into the configured export targets (no model run).",
-		Schedule: "daily 03:30", ScheduleSetting: scheduler.KeyKnowledgeExport, Timeout: 30 * time.Minute,
-		Spend: scheddef.ModelFree, Needs: []string{module.Assistant},
-		Run: deps.Callable(func(ctx context.Context, e worker.Env) (worker.Result, error) {
+		Schedule: "daily 03:30", ScheduleSetting: assistant.KeyKnowledgeExport, Timeout: 30 * time.Minute,
+		Spend: scheduler.ModelFree, Needs: []string{module.Assistant},
+		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 			_, err := Run(ctx, e.Service.DB, e.Service.Env, e.Now())
-			return worker.Result{}, err
+			return jobworker.Result{}, err
 		}),
 	}
 }

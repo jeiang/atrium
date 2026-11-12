@@ -420,8 +420,17 @@ behavior-parity target.
 - Modules are toggled at runtime. The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,
-  metrics, checks, proposals and effect handlers; module enablement gates
-  the applicable runtime projections. Core (settings, secrets, `db`,
+  metrics, checks, proposals, effect handlers and scheduled jobs; module
+  enablement gates the applicable runtime projections. Each owner declares
+  its built-in jobs (assistant six, calendar candidates, media three, mail
+  package tracking, Grafana ops sampler); compiling the catalog checks their
+  owner, keys, names, schedules and policies and derives the schedule
+  settings from them. The neutral `internal/scheduler` package owns the
+  `jobs` and `job_runs` tables, seeding, claiming, recovery and the tick
+  loop; `internal/assistant/jobworker` supplies the assistant's prompt runs,
+  run accounting, skip notices and recovery lookups. The scheduler seeds
+  every catalog job, and a job whose needed module is off records
+  `skipped_module`. Core (settings, secrets, `db`,
   `serve`, the About, review and activity pages) is always on; mail,
   calendar, contacts, Notion, media, assistant, notifications and Grafana each
   have a `<name>_enabled` setting. A module flag is an operator setting, and
@@ -465,8 +474,9 @@ behavior-parity target.
   `internal/db/open_cgo.go` and the stopword table in
   `internal/mail/rebalance/rebalance.go` may), when code outside
   `internal/module` and `internal/app` builds or fills a registry
-  (settings, connections, proposal kinds, the effect ledger's undo and
-  resolve hooks, the assistant tool registry) or sets a registry's hook
+  (settings, connections, scheduled jobs, proposal kinds, the effect
+  ledger's undo and resolve hooks, the assistant tool registry) or sets a
+  registry's hook
   fields, when anything assigns an exported package-level function variable
   under `internal/`, or when an `internal/` package imports `internal/app`.
   The tool registry may add the enable settings of the tools it registers.

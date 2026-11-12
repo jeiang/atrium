@@ -14,6 +14,7 @@ import (
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settingspage"
 	"github.com/jeiang/atrium/internal/tool"
@@ -61,6 +62,7 @@ type Declaration struct {
 	ProposalCreated   proposals.CreatedHook
 	ConnectionNotice  connections.Notifier
 	Attention         []attention.Source
+	Jobs              []scheduler.Definition
 	Metrics           []ops.Metric
 	Checks            []ops.Check
 }

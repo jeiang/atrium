@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/attention"
@@ -22,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/notify"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -152,7 +152,7 @@ func blockLines(content []json.RawMessage) (string, []block.DigestLine, bool, er
 
 func dreamingOf(ctx context.Context, q db.Querier, now float64) (dreaming, error) {
 	var out dreaming
-	latest, err := scheduler.LatestCompleted(ctx, q, scheduler.NightlyName, now-86400)
+	latest, err := scheduler.LatestCompleted(ctx, q, assistant.NightlyName, now-86400)
 	if err != nil || latest == nil {
 		return out, err
 	}

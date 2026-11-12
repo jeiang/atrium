@@ -67,3 +67,12 @@ func RestoreJob(ctx context.Context, q db.Querier, r Restore) (bool, error) {
 	return db.Changed(q.ExecContext(ctx, "UPDATE jobs SET name = ?, prompt = ?, schedule = ?, state = ?, next_due = ? WHERE id = ?",
 		r.Name, r.Prompt, r.Schedule, r.State, r.NextDue, r.ID))
 }
+
+func JobName(ctx context.Context, q db.Querier, id int64) (string, error) {
+	var name string
+	err := q.QueryRowContext(ctx, "SELECT name FROM jobs WHERE id = ?", id).Scan(&name)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return name, err
+}

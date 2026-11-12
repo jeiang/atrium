@@ -22,20 +22,9 @@ const (
 	ConditionalSpends
 )
 
-type Status string
-
-const (
-	StatusOK            Status = "ok"
-	StatusError         Status = "error"
-	StatusSkippedBudget Status = "skipped_budget"
-	StatusMissed        Status = "missed_coalesced"
-)
-
 type Run struct {
-	JobID    int64
-	JobRunID int64
-	Missed   bool
-	Now      func() float64
+	Claim Claim
+	Now   func() float64
 }
 
 type Result struct {

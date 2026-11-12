@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/approval"
 	"github.com/jeiang/atrium/internal/assistant/digest"
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
@@ -19,8 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/report"
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
-	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/subagents/lookup"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
 	"github.com/jeiang/atrium/internal/assistant/subagents/websearch"
@@ -48,7 +47,6 @@ import (
 	"github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
-	scheddef "github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tasks"
@@ -60,23 +58,24 @@ import (
 type Module struct {
 	ProposeKinds []proposals.Definition
 	Now          func() float64
-	Jobs         []scheddef.Definition
-	Holder       *worker.Holder
+	Jobs         jobworker.Dependencies
+	Holder       *jobworker.Holder
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
 	return module.Declaration{
 		Name: module.Assistant,
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
-			prompts.Settings(), registry.Settings(), scheduler.Settings(m.Jobs), websearch.Settings(), inference.Settings(),
+			prompts.Settings(), registry.Settings(), websearch.Settings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs()),
 		Host:      export.HostSettings(),
 		Sections:  export.Sections(),
 		Attention: AttentionSources(mc.Env),
-		Metrics:   slices.Concat(scheduler.Metrics(), opsmetrics.Metrics()),
+		Metrics:   opsmetrics.Metrics(),
+		Jobs:      Jobs(m.Jobs),
 		Requires:  Requirements(),
 		Pages: []web.Page{{
-			Module:    chatpages.Module(chatpages.Options{Tools: mc.Tools, Jobs: m.Jobs}),
+			Module:    chatpages.Module(chatpages.Options{Tools: mc.Tools}),
 			Templates: chatpages.Templates(),
 			Home:      "/chat",
 			Nav: []web.NavItem{
@@ -89,7 +88,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			},
 		}},
 		Groups:   SettingGroups(),
-		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, agentcmd.Jobs{Definitions: m.Jobs, Holder: m.Holder}), memorycmd.Command(mc.Env, m.Now)},
+		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Holder), memorycmd.Command(mc.Env, m.Now)},
 		Tools:    ToolDefinitions(m.ProposeKinds),
 		Effects: func(d module.EffectDeps) module.Effects {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, MailOpen: d.Open, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}

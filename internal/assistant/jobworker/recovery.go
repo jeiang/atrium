@@ -1,13 +1,13 @@
-package worker
+package jobworker
 
 import (
 	"context"
 	"database/sql"
 	"errors"
 
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
+	"github.com/jeiang/atrium/internal/scheduler"
 )
 
 func Recovery(q db.Querier) scheduler.Recovery {
@@ -45,7 +45,7 @@ func Recovery(q db.Querier) scheduler.Recovery {
 			if err != nil {
 				return nil, err
 			}
-			o := scheduler.Outcome{Status: scheduler.StatusOK, Tokens: tokens, Cost: cost}
+			o := scheduler.Result{Status: scheduler.StatusOK, Tokens: tokens, Cost: cost}
 			switch {
 			case state != "done":
 				o.Status = scheduler.StatusError
@@ -56,7 +56,7 @@ func Recovery(q db.Querier) scheduler.Recovery {
 			case p.Claim.Missed:
 				o.Status = scheduler.StatusMissed
 			}
-			out = append(out, scheduler.RecoveredRun{Claim: p.Claim, Outcome: o, EndedAt: ended, Complete: true})
+			out = append(out, scheduler.RecoveredRun{Claim: p.Claim, Result: o, EndedAt: ended, Complete: true})
 		}
 		return out, nil
 	}

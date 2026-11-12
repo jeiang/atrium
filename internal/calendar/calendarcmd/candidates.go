@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/runner"
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
-	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/calendar"
@@ -20,22 +19,22 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
-	scheddef "github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/scheduler"
 )
 
-func CandidatesJob(deps worker.Dependencies) scheddef.Definition {
-	return scheddef.Definition{
+func CandidatesJob(deps jobworker.Dependencies) scheduler.Definition {
+	return scheduler.Definition{
 		Module: module.Calendar, Key: module.Calendar + "/" + calendar.JobCandidates, Name: calendar.JobCandidates, Kind: scheduler.JobBuiltin,
 		Prompt:   "Hourly: if event candidates are queued, draft calendar event proposals from them (no model run when the queue is empty).",
 		Schedule: "0 * * * *", ScheduleSetting: calendar.KeyScheduleCandidates, Timeout: 30 * time.Minute,
-		Spend: scheddef.ConditionalSpends, Needs: []string{module.Calendar, module.Mail},
-		Run: deps.Callable(func(ctx context.Context, e worker.Env) (worker.Result, error) {
+		Spend: scheduler.ConditionalSpends, Needs: []string{module.Calendar, module.Mail},
+		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 			_, limit, err := calendar.CandidateLimits(ctx, e.Service.DB.Read)
 			if err != nil {
-				return worker.Result{}, err
+				return jobworker.Result{}, err
 			}
 			out, err := candidates.DraftEventProposals(ctx, e.Service.DB, assistantRun(e.Service), limit, e.Now)
-			return worker.Result{RunID: out.RunID}, err
+			return jobworker.Result{RunID: out.RunID}, err
 		}),
 	}
 }

@@ -4,23 +4,22 @@ import (
 	"context"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
-	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
-	scheddef "github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/scheduler"
 )
 
-func TrackingJob(deps worker.Dependencies) scheddef.Definition {
-	return scheddef.Definition{
+func TrackingJob(deps jobworker.Dependencies) scheduler.Definition {
+	return scheduler.Definition{
 		Module: module.Mail, Key: module.Mail + "/" + tracking.JobPackageTracking, Name: tracking.JobPackageTracking, Kind: scheduler.JobBuiltin,
 		Prompt:   "Hourly: refresh active Ship24 package trackers (no model run).",
 		Schedule: "0 * * * *", ScheduleSetting: tracking.KeySchedulePackageTracking, Timeout: 15 * time.Minute,
-		Spend: scheddef.ModelFree, Needs: []string{module.Mail},
-		Run: deps.Callable(func(ctx context.Context, e worker.Env) (worker.Result, error) {
+		Spend: scheduler.ModelFree, Needs: []string{module.Mail},
+		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 			_, err := tracking.Poll(ctx, e.Service.DB, e.Service.Env, e.Now())
-			return worker.Result{}, err
+			return jobworker.Result{}, err
 		}),
 	}
 }

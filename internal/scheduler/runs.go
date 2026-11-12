@@ -5,14 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"time"
 
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/safety"
-	scheddef "github.com/jeiang/atrium/internal/scheduler"
 )
 
 var log = logx.Logger("atrium.agent.scheduler")
@@ -45,15 +40,9 @@ type Skipped struct {
 	Status   Status
 }
 
-func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Location, now float64, owner string, spend func(Job) scheddef.Spend) ([]Claim, []Skipped, error) {
-	paused := safety.IsPaused(cfg.PausePath())
-	overBudget := false
-	if _, err := inference.Check(ctx, d.Read, now, loc, true); err != nil {
-		if !errors.As(err, new(inference.BudgetExceeded)) {
-			return nil, nil, err
-		}
-		overBudget = true
-	}
+type Admit func(Job) Status
+
+func ClaimDue(ctx context.Context, d *db.DB, now float64, owner string, admit Admit) ([]Claim, []Skipped, error) {
 	var claims []Claim
 	var skipped []Skipped
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
@@ -93,11 +82,7 @@ func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Locati
 					log.Warn(fmt.Sprintf("job %d has no next occurrence; disabling it", job.ID), logx.Job, job.ID)
 				}
 			}
-			if paused || (overBudget && spend(job) == scheddef.AlwaysSpends) {
-				status := StatusSkippedBudget
-				if paused {
-					status = StatusSkippedPause
-				}
+			if status := admit(job); status != "" {
 				res, err := tx.ExecContext(ctx, "INSERT INTO job_runs (job_id, due_at, started_at, ended_at, status) VALUES (?, ?, ?, ?, ?)",
 					job.ID, dueAt, now, now, status)
 				if err != nil {
@@ -137,14 +122,6 @@ func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Locati
 	return claims, skipped, nil
 }
 
-type Outcome struct {
-	Status   Status
-	ThreadID *int64
-	Error    *string
-	Tokens   int64
-	Cost     float64
-}
-
 func nextState(following *float64) State {
 	if following == nil {
 		return StateDisabled
@@ -152,7 +129,7 @@ func nextState(following *float64) State {
 	return StateActive
 }
 
-func settle(ctx context.Context, tx *sql.Tx, jobRunID, jobID int64, now float64, o Outcome) error {
+func settle(ctx context.Context, tx *sql.Tx, jobRunID, jobID int64, now float64, o Result) error {
 	res, err := tx.ExecContext(ctx, "UPDATE job_runs SET status = ?, ended_at = ?, thread_id = COALESCE(?, thread_id), error = ?, tokens = ?, cost = ? WHERE id = ? AND status = ?",
 		o.Status, now, o.ThreadID, o.Error, o.Tokens, o.Cost, jobRunID, StatusRunning)
 	if err != nil {
@@ -165,7 +142,7 @@ func settle(ctx context.Context, tx *sql.Tx, jobRunID, jobID int64, now float64,
 	return err
 }
 
-func FinishRun(ctx context.Context, d *db.DB, c Claim, now float64, o Outcome) error {
+func FinishRun(ctx context.Context, d *db.DB, c Claim, now float64, o Result) error {
 	return d.WithTx(ctx, func(tx *sql.Tx) error {
 		return settle(ctx, tx, c.JobRunID, c.Job.ID, now, o)
 	})
@@ -179,7 +156,7 @@ type PendingRun struct {
 
 type RecoveredRun struct {
 	Claim    Claim
-	Outcome  Outcome
+	Result   Result
 	EndedAt  *float64
 	Complete bool
 }
@@ -226,7 +203,7 @@ func Recover(ctx context.Context, d *db.DB, now float64, recover Recovery) error
 			ended = *r.EndedAt
 		}
 		if err := d.WithTx(ctx, func(tx *sql.Tx) error {
-			return settle(ctx, tx, r.Claim.JobRunID, r.Claim.Job.ID, ended, r.Outcome)
+			return settle(ctx, tx, r.Claim.JobRunID, r.Claim.Job.ID, ended, r.Result)
 		}); err != nil {
 			return err
 		}
@@ -247,7 +224,7 @@ func Recover(ctx context.Context, d *db.DB, now float64, recover Recovery) error
 				continue
 			}
 			lost := workerLost
-			if err := settle(ctx, tx, p.Claim.JobRunID, p.Claim.Job.ID, now, Outcome{Status: StatusError, Error: &lost}); err != nil {
+			if err := settle(ctx, tx, p.Claim.JobRunID, p.Claim.Job.ID, now, Result{Status: StatusError, Error: &lost}); err != nil {
 				return err
 			}
 		}

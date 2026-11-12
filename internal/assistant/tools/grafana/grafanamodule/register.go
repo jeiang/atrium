@@ -4,13 +4,17 @@ import (
 	"context"
 	"errors"
 
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/serverops"
 )
 
-type Module struct{}
+type Module struct {
+	Jobs jobworker.Dependencies
+}
 
 func Requirements() []module.Requirement {
 	return []module.Requirement{{
@@ -30,13 +34,14 @@ func ToolDefinitions() []module.ToolDefinition {
 	return grafanatools.Definitions()
 }
 
-func (Module) Declare(module.Context) module.Declaration {
+func (m Module) Declare(module.Context) module.Declaration {
 	return module.Declaration{
 		Name:        module.Grafana,
 		Needs:       []string{module.Assistant},
 		Settings:    serverops.Settings(),
 		Host:        serverops.HostSettingDefs(),
 		Requires:    Requirements(),
+		Jobs:        []scheduler.Definition{serverops.SamplerJob(m.Jobs)},
 		Tools:       ToolDefinitions(),
 		Connections: grafanatools.Connections(),
 	}

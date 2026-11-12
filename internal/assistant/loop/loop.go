@@ -30,6 +30,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/obs"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -371,9 +372,11 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	if now == nil {
 		now = assistant.Now
 	}
-	jobName, err := threads.JobName(ctx, d.Read, thread.ID)
-	if err != nil {
-		return nil, err
+	var jobName string
+	if thread.JobID != nil {
+		if jobName, err = scheduler.JobName(ctx, d.Read, *thread.JobID); err != nil {
+			return nil, err
+		}
 	}
 	writer := progress.NewWriter(d.Write, runID, now)
 	tc := &tool.Context{

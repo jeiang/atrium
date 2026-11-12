@@ -9,39 +9,28 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-	scheddef "github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
-const (
-	NightlyName = "nightly"
-
-	WeeklyReviewName    = "weekly-review"
-	DailyNudgesName     = "daily-nudges"
-	TaskRemindersName   = "task-reminders"
-	MemoryWorkName      = "memory-work"
-	KnowledgeExportName = "knowledge-export"
-)
-
-func Declared(defs []scheddef.Definition, name string) (scheddef.Definition, bool) {
-	i := slices.IndexFunc(defs, func(d scheddef.Definition) bool { return d.Name == name })
+func Declared(defs []Definition, name string) (Definition, bool) {
+	i := slices.IndexFunc(defs, func(d Definition) bool { return d.Name == name })
 	if i < 0 {
-		return scheddef.Definition{}, false
+		return Definition{}, false
 	}
 	return defs[i], true
 }
 
-func SpendOf(defs []scheddef.Definition, job Job) scheddef.Spend {
+func SpendOf(defs []Definition, job Job) Spend {
 	def, _ := Declared(defs, job.Name)
 	return def.Spend
 }
 
-func declaredSchedule(ctx context.Context, q db.Querier, def scheddef.Definition) (string, bool, error) {
+func declaredSchedule(ctx context.Context, q db.Querier, def Definition) (string, bool, error) {
 	found, err := settings.From(ctx).Resolve(ctx, q, def.ScheduleSetting)
 	return found.Value, found.Origin != settings.FromDefault, err
 }
 
-func syncSchedule(ctx context.Context, q db.Querier, def scheddef.Definition, job Job, now float64) error {
+func syncSchedule(ctx context.Context, q db.Querier, def Definition, job Job, now float64) error {
 	schedule, explicit, err := declaredSchedule(ctx, q, def)
 	if err != nil || !explicit || schedule == job.Schedule {
 		return err
@@ -55,7 +44,7 @@ func syncSchedule(ctx context.Context, q db.Querier, def scheddef.Definition, jo
 	return err
 }
 
-func Ensure(ctx context.Context, q db.Querier, defs []scheddef.Definition, tz string, now float64) error {
+func Ensure(ctx context.Context, q db.Querier, defs []Definition, tz string, now float64) error {
 	for _, def := range defs {
 		if def.Kind == JobNightly {
 			if err := ensureSingleton(ctx, q, def, tz, now); err != nil {
@@ -66,7 +55,7 @@ func Ensure(ctx context.Context, q db.Querier, defs []scheddef.Definition, tz st
 	return ensureBuiltins(ctx, q, defs, tz, now)
 }
 
-func ensureBuiltins(ctx context.Context, q db.Querier, defs []scheddef.Definition, tz string, now float64) error {
+func ensureBuiltins(ctx context.Context, q db.Querier, defs []Definition, tz string, now float64) error {
 	rows, err := q.QueryContext(ctx, "SELECT id, name FROM jobs WHERE kind = ?", JobBuiltin)
 	if err != nil {
 		return err
@@ -101,7 +90,7 @@ func ensureBuiltins(ctx context.Context, q db.Querier, defs []scheddef.Definitio
 	return retireBuiltins(ctx, q, defs, existing)
 }
 
-func ensureSingleton(ctx context.Context, q db.Querier, def scheddef.Definition, tz string, now float64) error {
+func ensureSingleton(ctx context.Context, q db.Querier, def Definition, tz string, now float64) error {
 	var id int64
 	err := q.QueryRowContext(ctx, "SELECT id FROM jobs WHERE kind = ?", def.Kind).Scan(&id)
 	if err == nil {
@@ -117,7 +106,7 @@ func ensureSingleton(ctx context.Context, q db.Querier, def scheddef.Definition,
 	return createDeclared(ctx, q, tz, now, def)
 }
 
-func createDeclared(ctx context.Context, q db.Querier, tz string, now float64, def scheddef.Definition) error {
+func createDeclared(ctx context.Context, q db.Querier, tz string, now float64, def Definition) error {
 	schedule, _, err := declaredSchedule(ctx, q, def)
 	if err != nil {
 		return err
@@ -134,7 +123,7 @@ type have struct {
 	name string
 }
 
-func retireBuiltins(ctx context.Context, q db.Querier, defs []scheddef.Definition, existing []have) error {
+func retireBuiltins(ctx context.Context, q db.Querier, defs []Definition, existing []have) error {
 	for _, h := range existing {
 		if _, known := Declared(defs, h.name); known {
 			continue

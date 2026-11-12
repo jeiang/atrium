@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
@@ -13,10 +14,13 @@ import (
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
-type Module struct{}
+type Module struct {
+	Jobs jobworker.Dependencies
+}
 
 func AttentionSources() []attention.Source {
 	return []attention.Source{attentionsources.Candidates()}
@@ -30,7 +34,7 @@ func ToolDefinitions() []module.ToolDefinition {
 	return calendartools.Definitions()
 }
 
-func (Module) Declare(mc module.Context) module.Declaration {
+func (m Module) Declare(mc module.Context) module.Declaration {
 	command := calendarcmd.Command(mc.Env, mc.Tools)
 	return module.Declaration{
 		Name:      module.Calendar,
@@ -38,6 +42,7 @@ func (Module) Declare(mc module.Context) module.Declaration {
 		Host:      calendar.HostSettings(),
 		Sections:  calendar.Sections(),
 		Attention: AttentionSources(),
+		Jobs:      []scheduler.Definition{calendarcmd.CandidatesJob(m.Jobs)},
 		Requires:  Requirements(),
 		Commands:  []*cli.Command{command},
 		Leaves: map[string]module.Leaf{

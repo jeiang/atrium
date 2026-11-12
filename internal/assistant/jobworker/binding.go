@@ -1,4 +1,4 @@
-package worker
+package jobworker
 
 import (
 	"context"
@@ -9,7 +9,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/inference"
-	scheddef "github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/scheduler"
 )
 
 type Dependencies struct {
@@ -39,41 +39,41 @@ func (d Dependencies) Sources(ctx context.Context) []attention.Source {
 	return d.Attention(ctx)
 }
 
-func (d Dependencies) Callable(fn func(context.Context, Env) (Result, error)) func(context.Context, scheddef.Run) (scheddef.Result, error) {
-	return func(ctx context.Context, run scheddef.Run) (scheddef.Result, error) {
+func (d Dependencies) Callable(fn func(context.Context, Env) (Result, error)) func(context.Context, scheduler.Run) (scheduler.Result, error) {
+	return func(ctx context.Context, run scheduler.Run) (scheduler.Result, error) {
 		if d.Service == nil {
-			return scheddef.Result{}, errors.New("scheduled jobs are not bound to an assistant service")
+			return scheduler.Result{}, errors.New("scheduled jobs are not bound to an assistant service")
 		}
 		svc, err := d.Service(ctx)
 		if err != nil {
-			return scheddef.Result{}, err
+			return scheduler.Result{}, err
 		}
 		now := run.Now
 		if now == nil {
 			now = d.Now
 		}
-		result, err := fn(ctx, Env{Service: svc, Now: now, JobID: run.JobID, JobRunID: run.JobRunID})
+		result, err := fn(ctx, Env{Service: svc, Now: now, JobID: run.Claim.Job.ID, JobRunID: run.Claim.JobRunID})
 		if err != nil {
 			if budgetErr := new(inference.BudgetExceeded); errors.As(err, budgetErr) {
-				return scheddef.Result{Status: scheddef.StatusSkippedBudget, Error: new(budgetErr.Error())}, nil
+				return scheduler.Result{Status: scheduler.StatusSkippedBudget, Error: new(budgetErr.Error())}, nil
 			}
-			return scheddef.Result{}, err
+			return scheduler.Result{}, err
 		}
 		runs := result.Runs
 		if len(runs) == 0 && result.RunID != 0 {
 			runs = []int64{result.RunID}
 		}
 		if len(runs) == 0 {
-			if run.Missed {
-				return scheddef.Result{Status: scheddef.StatusMissed}, nil
+			if run.Claim.Missed {
+				return scheduler.Result{Status: scheduler.StatusMissed}, nil
 			}
-			return scheddef.Result{Status: scheddef.StatusOK}, nil
+			return scheduler.Result{Status: scheduler.StatusOK}, nil
 		}
 		first, err := journal.GetRun(ctx, svc.DB.Read, runs[0])
 		if err != nil {
-			return scheddef.Result{}, err
+			return scheduler.Result{}, err
 		}
-		out := scheddef.Result{Status: scheddef.StatusOK}
+		out := scheduler.Result{Status: scheduler.StatusOK}
 		if first != nil {
 			out.ThreadID = &first.ThreadID
 		}
@@ -94,10 +94,10 @@ func (d Dependencies) Callable(fn func(context.Context, Env) (Result, error)) fu
 			out.Cost += cost
 			switch {
 			case r.State != journal.Done && r.Error != nil && inference.IsCapError(*r.Error):
-				out.Status = scheddef.StatusSkippedBudget
+				out.Status = scheduler.StatusSkippedBudget
 				out.Error = r.Error
 			case r.State != journal.Done:
-				out.Status = scheddef.StatusError
+				out.Status = scheduler.StatusError
 				text := r.State
 				if r.Error != nil && *r.Error != "" {
 					text = *r.Error
@@ -105,9 +105,25 @@ func (d Dependencies) Callable(fn func(context.Context, Env) (Result, error)) fu
 				out.Error = &text
 			}
 		}
-		if out.Status == scheddef.StatusOK && run.Missed {
-			out.Status = scheddef.StatusMissed
+		if out.Status == scheduler.StatusOK && run.Claim.Missed {
+			out.Status = scheduler.StatusMissed
 		}
 		return out, nil
+	}
+}
+
+func (d Dependencies) Prompt(text string) func(context.Context, scheduler.Run) (scheduler.Result, error) {
+	return func(ctx context.Context, run scheduler.Run) (scheduler.Result, error) {
+		if d.Service == nil {
+			return scheduler.Result{}, errors.New("scheduled jobs are not bound to an assistant service")
+		}
+		svc, err := d.Service(ctx)
+		if err != nil {
+			return scheduler.Result{}, err
+		}
+		if run.Now == nil {
+			run.Now = d.Now
+		}
+		return prompt(ctx, svc, run, text)
 	}
 }

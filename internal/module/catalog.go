@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settingspage"
 	"github.com/jeiang/atrium/internal/tool"
@@ -29,6 +30,7 @@ type Catalog struct {
 	credential config.AccountCredentialFunc
 	metrics    []ops.Metric
 	checks     []ops.Check
+	jobs       []scheduler.Definition
 }
 
 func (c *Catalog) Declarations() []Declaration { return c.decls }
@@ -44,6 +46,8 @@ func (c *Catalog) SectionModules() map[string]bool { return c.sections.Modules()
 func (c *Catalog) Metrics() []ops.Metric { return slices.Clone(c.metrics) }
 
 func (c *Catalog) Checks() []ops.Check { return slices.Clone(c.checks) }
+
+func (c *Catalog) Jobs() []scheduler.Definition { return scheduler.Clone(c.jobs) }
 
 func (c *Catalog) Connections() *connections.Registry { return c.conns }
 

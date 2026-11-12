@@ -7,15 +7,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
-	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
-	scheddef "github.com/jeiang/atrium/internal/scheduler"
+	"github.com/jeiang/atrium/internal/scheduler"
 )
 
 type job func(ctx context.Context, d *db.DB, env config.Env, now func() float64) (any, error)
@@ -87,14 +86,14 @@ func anys(items []string) []any {
 	return out
 }
 
-func mediaJob(deps worker.Dependencies, name, prompt, schedule, setting string, timeout time.Duration, resource string, run func(worker.Env) job) scheddef.Definition {
-	return scheddef.Definition{
+func mediaJob(deps jobworker.Dependencies, name, prompt, schedule, setting string, timeout time.Duration, resource string, run func(jobworker.Env) job) scheduler.Definition {
+	return scheduler.Definition{
 		Module: module.Media, Key: module.Media + "/" + name, Name: name, Kind: scheduler.JobBuiltin, Prompt: prompt,
-		Schedule: schedule, ScheduleSetting: setting, Timeout: timeout, Spend: scheddef.ModelFree,
+		Schedule: schedule, ScheduleSetting: setting, Timeout: timeout, Spend: scheduler.ModelFree,
 		Resources: []string{resource}, Needs: []string{module.Media},
-		Run: deps.Callable(func(ctx context.Context, e worker.Env) (worker.Result, error) {
+		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 			_, err := run(e)(ctx, e.Service.DB, e.Service.Env, e.Now)
-			return worker.Result{}, err
+			return jobworker.Result{}, err
 		}),
 	}
 }
@@ -114,14 +113,14 @@ func thumbnails(cfg config.Config) job {
 	})
 }
 
-func Jobs(deps worker.Dependencies) []scheddef.Definition {
-	return []scheddef.Definition{
+func Jobs(deps jobworker.Dependencies) []scheduler.Definition {
+	return []scheduler.Definition{
 		mediaJob(deps, media.JobChannels, "Every 30 minutes: poll EZTV for the media channels and add new matches to qBittorrent (no model run).",
-			"*/30 * * * *", media.KeyScheduleChannels, 15*time.Minute, "media-control", func(worker.Env) job { return channels }),
+			"*/30 * * * *", media.KeyScheduleChannels, 15*time.Minute, "media-control", func(jobworker.Env) job { return channels }),
 		mediaJob(deps, media.JobSweep, "Every 10 minutes: select files in new media torrents and remove filed torrents qBittorrent has stopped (no model run).",
-			"*/10 * * * *", media.KeyScheduleSweep, 15*time.Minute, "media-control", func(worker.Env) job { return sweep }),
+			"*/10 * * * *", media.KeyScheduleSweep, 15*time.Minute, "media-control", func(jobworker.Env) job { return sweep }),
 		mediaJob(deps, media.JobThumbnails, "Daily: generate missing episode thumbnails for the media library (no model run).",
-			"daily 04:00", media.KeyScheduleThumbnails, 2*time.Hour, "media-thumbnails", func(e worker.Env) job { return thumbnails(e.Service.Cfg) }),
+			"daily 04:00", media.KeyScheduleThumbnails, 2*time.Hour, "media-thumbnails", func(e jobworker.Env) job { return thumbnails(e.Service.Cfg) }),
 	}
 }
 

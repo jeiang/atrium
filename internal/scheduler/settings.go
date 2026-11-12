@@ -5,21 +5,12 @@ import (
 	"strconv"
 	"time"
 
-	scheddef "github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
-const (
-	KeyMinInterval     = "agent_schedule_min_interval_seconds"
-	KeyNightlySchedule = "agent_schedule_nightly"
-	KeyWeeklyReview    = "agent_schedule_weekly_review"
-	KeyDailyNudges     = "agent_schedule_daily_nudges"
-	KeyTaskReminders   = "agent_schedule_task_reminders"
-	KeyMemoryWork      = "agent_schedule_memory_work"
-	KeyKnowledgeExport = "agent_schedule_knowledge_export"
-)
+const KeyMinInterval = "agent_schedule_min_interval_seconds"
 
-func Settings(defs []scheddef.Definition) []settings.Def {
+func Settings(defs []Definition) []settings.Def {
 	minimum := settings.Value(settings.Advanced, settings.Def{
 		Key: KeyMinInterval, Module: "assistant", Type: settings.Int, Default: "3600",
 		Check: settings.Between(60, 604800),
@@ -31,10 +22,10 @@ func Settings(defs []scheddef.Definition) []settings.Def {
 		}
 	}
 	minimum.Peers = minimumIntervals(gapped)
-	return append([]settings.Def{minimum}, ScheduleSettings(defs)...)
+	return append([]settings.Def{minimum}, scheduleSettings(defs)...)
 }
 
-func ScheduleSettings(defs []scheddef.Definition) []settings.Def {
+func scheduleSettings(defs []Definition) []settings.Def {
 	out := make([]settings.Def, 0, len(defs))
 	for _, def := range defs {
 		s := settings.Value(settings.Advanced, settings.Def{Key: def.ScheduleSetting, Module: "assistant", Type: settings.String, Default: def.Schedule, Check: recurringSchedule})
