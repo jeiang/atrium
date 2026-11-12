@@ -252,25 +252,13 @@ func TestLocalChatKeyFileBindsTheChatEndpoint(t *testing.T) {
 	if err := os.WriteFile(keyPath, []byte(key+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	base, err := os.ReadFile(defaultHostConfig)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := string(base) + fmt.Sprintf(`
-[connections."service/embedding"]
-kind = "service/embedding"
-label = "Embedding"
-config = { url = %q, model = "embeddinggemma" }
-capabilities = ["embeddings"]
-
+	hostPath := hostConfigEdit(t, dir, "host-chat.toml", map[string]string{
+		`config = { url = "http://embed.invalid/v1", model = "embeddinggemma" }`: fmt.Sprintf(`config = { url = %q, model = "embeddinggemma" }`, embed.URL+"/v1"),
+	}, fmt.Sprintf(`
 [mail]
 mail_chat_url = %q
 mail_chat_key_file = %q
-`, embed.URL+"/v1", chat.URL+"/v1", keyPath)
-	hostPath := filepath.Join(dir, "host-chat.toml")
-	if err := os.WriteFile(hostPath, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
+`, chat.URL+"/v1", keyPath))
 	setEnv(t, "ATRIUM_HOST_CONFIG", hostPath)
 	setEnv(t, settingEnv(endpoint.KeyChatURL), "")
 	setEnv(t, settingEnv(endpoint.KeyChatModel), "")
