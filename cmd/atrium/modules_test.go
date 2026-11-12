@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"encoding/pem"
+	"fmt"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -559,6 +560,176 @@ func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 	}
 }
 
+func TestSettingsSavesDuringTheFirstAssistantEnableAllFinish(t *testing.T) {
+	t.Parallel()
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
+	base := startServeIn(t, dir)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, Timeout: time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/auth", nil); status != http.StatusOK {
+		t.Fatalf("GET /settings/auth = %d", status)
+	}
+	const action = "/settings/groups/core/sessions"
+	save := func(n int) (int, error) {
+		req, err := http.NewRequest(http.MethodPost, base+action, strings.NewReader(url.Values{"oidc_session_idle_days": {strconv.Itoa(n%7 + 1)}}.Encode()))
+		if err != nil {
+			return 0, err
+		}
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		for _, c := range jar.Cookies(req.URL) {
+			if c.Name == "atrium_csrf" {
+				req.Header.Set("X-CSRF-Token", c.Value)
+			}
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			return 0, err
+		}
+		_ = resp.Body.Close()
+		return resp.StatusCode, nil
+	}
+	stop := make(chan struct{})
+	failures := make(chan string, 8)
+	started := make(chan struct{}, 8)
+	var savers sync.WaitGroup
+	for w := range 2 {
+		savers.Go(func() {
+			for i := 1; ; i++ {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				status, err := save(w + i)
+				if err != nil || status != http.StatusSeeOther {
+					failures <- fmt.Sprintf("concurrent save = %d: %v", status, err)
+					return
+				}
+				select {
+				case started <- struct{}{}:
+				default:
+				}
+			}
+		})
+	}
+	<-started
+	<-started
+	enabled := make(chan appRun, 1)
+	go func() { enabled <- runApp(t, "settings", "set", module.FlagKey(module.Assistant), "true") }()
+	select {
+	case got := <-enabled:
+		if got.code != cli.ExitOK {
+			t.Fatalf("assistant_enabled true: exit %d stderr %q", got.code, got.stderr)
+		}
+	case <-time.After(time.Minute):
+		t.Fatal("enabling the assistant did not finish while settings saves ran")
+	}
+	close(stop)
+	done := make(chan struct{})
+	go func() { savers.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(time.Minute):
+		t.Fatal("concurrent settings saves did not finish after the assistant was enabled")
+	}
+	close(failures)
+	for failure := range failures {
+		t.Error(failure)
+	}
+	if status, err := save(1); err != nil || status != http.StatusSeeOther {
+		t.Fatalf("a later save = %d: %v", status, err)
+	}
+	if row := runSettings(t, "get", "oidc_session_idle_days").row(t); row.Value == nil || *row.Value != "2" {
+		t.Errorf("oidc_session_idle_days = %+v, want 2", row)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	var jobs int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM jobs").Scan(&jobs); err != nil || jobs == 0 {
+		t.Fatalf("%d scheduler jobs after the first enable: %v", jobs, err)
+	}
+}
+
+func TestFailedAssistantStartIsRetriedAtTheNextPublication(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	if _, err := d.Write.Exec("CREATE TRIGGER jobs_refused BEFORE INSERT ON jobs BEGIN SELECT RAISE(ABORT, 'jobs refused'); END"); err != nil {
+		t.Fatal(err)
+	}
+	base, logs := startServeLogged(t, dir)
+	client := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	jobs := func() int {
+		t.Helper()
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM jobs").Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	set := func(key, value string) {
+		t.Helper()
+		if got := runApp(t, "settings", "set", key, value); got.code != cli.ExitOK {
+			t.Fatalf("settings set %s %s: exit %d stderr %q", key, value, got.code, got.stderr)
+		}
+	}
+	failures := func() int { return strings.Count(logs.String(), "module start failed") }
+	set(module.FlagKey(module.Assistant), "true")
+	if n := failures(); n != 1 {
+		t.Fatalf("%d start failures logged after the first enable, want 1", n)
+	}
+	nav := func() string {
+		t.Helper()
+		status, page, _ := fetch(t, client, http.MethodGet, base+"/settings/auth", nil)
+		if status != http.StatusOK {
+			t.Fatalf("GET /settings/auth = %d", status)
+		}
+		_, rest, found := strings.Cut(page, `href="/settings/assistant"`)
+		if !found {
+			return ""
+		}
+		value, _, _ := strings.Cut(rest, ">")
+		return "link " + strings.TrimSpace(value)
+	}
+	if got := nav(); got != "" {
+		t.Fatalf("the settings nav offers the assistant after a failed start: %q", got)
+	}
+	if text := logs.String(); !strings.Contains(text, "MODULE=assistant") || !strings.Contains(text, "jobs refused") {
+		t.Fatalf("the failed start and its reason are not logged: %s", text)
+	}
+	if status, _, _ := fetch(t, client, http.MethodGet, base+"/library/files", nil); status != http.StatusNotFound {
+		t.Fatalf("GET /library/files after a failed start = %d, want 404", status)
+	}
+	set("thread_cost_cap_usd", "12")
+	if n := failures(); n != 2 {
+		t.Fatalf("%d start failures logged after the retry, want 2", n)
+	}
+	if n := strings.Count(logs.String(), "MODULE=assistant STATE=unavailable"); n != 0 {
+		t.Fatalf("a start failure also logged %d unavailable transitions", n)
+	}
+	if _, err := d.Write.Exec("DROP TRIGGER jobs_refused"); err != nil {
+		t.Fatal(err)
+	}
+	set("thread_cost_cap_usd", "13")
+	if n := failures(); n != 2 {
+		t.Fatalf("%d start failures logged after the repair, want 2", n)
+	}
+	if n := jobs(); n == 0 {
+		t.Fatal("the retried start seeded no scheduler jobs")
+	}
+	if got := nav(); got != `link data-mark="on"` {
+		t.Fatalf("assistant settings nav after the retried start = %q, want an on link", got)
+	}
+	if status, _, _ := fetch(t, client, http.MethodGet, base+"/library/files", nil); status != http.StatusOK {
+		t.Fatalf("GET /library/files after the retried start = %d, want 200", status)
+	}
+	set("thread_cost_cap_usd", "14")
+	if n := failures(); n != 2 {
+		t.Fatalf("%d start failures logged after a later publication, want 2", n)
+	}
+}
+
 func clearModuleEnv(t *testing.T) {
 	t.Helper()
 	for name := range requirementEnv("") {
@@ -827,6 +998,149 @@ func TestMailDisableDuringProposalApproval(t *testing.T) {
 	if len(fake.Boxes["Bills"].Box.Messages) != 1 {
 		t.Fatal("approval after re-enabling did not move the message")
 	}
+}
+
+type midBatch struct {
+	m        *mailSafety
+	fake     *mailtest.FakeClient
+	proposal string
+}
+
+func midBatchFixture(t *testing.T) midBatch {
+	t.Helper()
+	fake := mailtest.NewFakeClient()
+	inbox := fake.AddBox("INBOX", mailtest.NewBox(1))
+	fake.AddBox("Bills", mailtest.NewBox(3))
+	fake.AddBox("Receipts", mailtest.NewBox(4))
+	for _, msg := range [][3]string{
+		{"Bank statement", "statements@bank.test", "mid-batch-1"},
+		{"Shop receipt", "orders@shop.test", "mid-batch-2"},
+	} {
+		h, x := mailtest.RawWith(msg[0], msg[1], msg[2], "Body.")
+		inbox.Add(h, x, []string{`\Seen`}, nil)
+	}
+	m := mailEffectsFixture(t, "live", "icloud", fake)
+	rules := filepath.Join(m.dir, "rules.json")
+	if err := os.WriteFile(rules, []byte(`{"rules":[`+
+		`{"id":"bank","account":"work","action":"file","dest":"Bills","when":[{"field":"from_addr","op":"eq","value":"statements@bank.test"}]},`+
+		`{"id":"shop","account":"work","action":"file","dest":"Receipts","when":[{"field":"from_addr","op":"eq","value":"orders@shop.test"}]}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m.run(t, "rules", "import", rules)
+	m.run(t, "sync")
+	m.run(t, "live", "rebaseline")
+	m.run(t, "live", "backlog")
+	proposal := m.scalar(t, "SELECT CAST(id AS TEXT) FROM proposals WHERE kind = 'inbox_backlog' AND status = 'pending' ORDER BY id DESC LIMIT 1")
+	return midBatch{m: m, fake: fake, proposal: proposal}
+}
+
+func (b midBatch) moved() int {
+	return len(b.fake.Boxes["Bills"].Box.Messages) + len(b.fake.Boxes["Receipts"].Box.Messages)
+}
+
+func (b midBatch) disableAfterWrite(t *testing.T, what string, run func()) {
+	t.Helper()
+	after := len(b.fake.Writes)
+	arrived := make(chan struct{})
+	release := make(chan struct{})
+	var arrivedOnce, releaseOnce sync.Once
+	free := func() { releaseOnce.Do(func() { close(release) }) }
+	defer free()
+	b.fake.StatusHook = func(_ string, count uint32) uint32 {
+		if len(b.fake.Writes) > after {
+			arrivedOnce.Do(func() {
+				close(arrived)
+				<-release
+			})
+		}
+		return count
+	}
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		run()
+	}()
+	select {
+	case <-arrived:
+	case <-time.After(10 * time.Second):
+		t.Fatalf("%s did not reach an IMAP preflight after its first write", what)
+	}
+	asstSet(t, module.FlagKey(module.Mail), "false")
+	free()
+	<-done
+	b.fake.StatusHook = nil
+}
+
+func TestMailDisableMidBatchShowsWhatWasDone(t *testing.T) {
+	t.Run("approve", func(t *testing.T) {
+		b := midBatchFixture(t)
+		var ran appRun
+		b.disableAfterWrite(t, "approval", func() {
+			ran = asstRunApp(b.m.app, context.Background(), "proposals", "approve", b.proposal)
+		})
+		if ran.code == cli.ExitOK || !strings.Contains(ran.stderr, "the mail module was disabled; start the action again") {
+			t.Fatalf("approval disabled mid-batch: %d %q %q", ran.code, ran.stdout, ran.stderr)
+		}
+		var shown map[string]any
+		if err := json.Unmarshal([]byte(ran.stdout), &shown); err != nil || shown["status"] != "failed" || shown["undoable"] != true {
+			t.Fatalf("approval disabled mid-batch printed %q (%v), want the failed proposal with its undo", ran.stdout, err)
+		}
+		if n := b.moved(); n != 1 {
+			t.Fatalf("%d of 2 messages moved, want the first group only", n)
+		}
+	})
+	t.Run("undo", func(t *testing.T) {
+		b := midBatchFixture(t)
+		b.m.run(t, "proposals", "approve", b.proposal)
+		if n := b.moved(); n != 2 {
+			t.Fatalf("%d of 2 messages moved by the approval", n)
+		}
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+		base := startServeIn(t, b.m.dir)
+		fetch(t, client, http.MethodGet, base+"/about", nil)
+		var status int
+		var body string
+		b.disableAfterWrite(t, "undo", func() {
+			status, body = hxFetch(t, client, http.MethodPost, base+"/proposals/"+b.proposal+"/undo", url.Values{})
+		})
+		if status != http.StatusOK || !strings.Contains(body, "Undo stopped partway") || !strings.Contains(body, "Writes put back before it stopped: 1.") {
+			t.Fatalf("undo disabled mid-batch = %d: %s", status, body)
+		}
+		if n := b.moved(); n != 1 {
+			t.Fatalf("%d messages still filed after a partial undo, want 1", n)
+		}
+	})
+	t.Run("api approve", func(t *testing.T) {
+		b := midBatchFixture(t)
+		s := startAPISite(t, b.m.dir, nil)
+		var reply apiReply
+		b.disableAfterWrite(t, "approval", func() {
+			reply = s.do(http.MethodPost, "/api/v1/approvals/"+b.proposal+"/approve", s.token("owner"), nil)
+		})
+		approval, _ := reply.json["approval"].(map[string]any)
+		problem, _ := reply.json["error"].(map[string]any)
+		if reply.status != http.StatusConflict || problem["code"] != "not_approved" || reply.json["outcome"] != "failed" || approval["status"] != "failed" {
+			t.Fatalf("approval disabled mid-batch = %d: %s", reply.status, reply.body)
+		}
+	})
+	t.Run("api undo", func(t *testing.T) {
+		b := midBatchFixture(t)
+		b.m.run(t, "proposals", "approve", b.proposal)
+		s := startAPISite(t, b.m.dir, nil)
+		var reply apiReply
+		b.disableAfterWrite(t, "undo", func() {
+			reply = s.do(http.MethodPost, "/api/v1/undo/proposal:"+b.proposal, s.token("owner"), nil)
+		})
+		outcomes, _ := reply.json["outcomes"].([]any)
+		problem, _ := reply.json["error"].(map[string]any)
+		if reply.status != http.StatusConflict || problem["code"] != "not_undone" || len(outcomes) != 1 || reply.json["entry"] == nil {
+			t.Fatalf("undo disabled mid-batch = %d: %s", reply.status, reply.body)
+		}
+	})
 }
 
 func TestMailUndoRefusedWhileDisabledAndHistoryRemains(t *testing.T) {

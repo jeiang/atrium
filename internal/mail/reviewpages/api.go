@@ -244,6 +244,10 @@ func (s *service) apiApprove(w http.ResponseWriter, r *http.Request) {
 		web.APIError(w, http.StatusUnprocessableEntity, "bad_selection", err.Error())
 		return
 	case errors.As(err, &refused) || errors.As(err, &disabled):
+		if done != nil {
+			web.APIErrorWith(w, http.StatusConflict, "not_approved", err.Error(), map[string]any{"approval": s.approvalOf(done), "outcome": "failed"})
+			return
+		}
 		web.APIError(w, http.StatusConflict, "not_approved", err.Error())
 		return
 	}
@@ -490,6 +494,13 @@ func (s *service) apiUndo(w http.ResponseWriter, r *http.Request) {
 		var refused proposals.ProposalError
 		var disabled *module.OwnerDisabled
 		if errors.As(err, &refused) || errors.As(err, &disabled) {
+			if len(outcome.Outcomes) > 0 || outcome.SyncError != nil {
+				after, gerr := proposals.Get(ctx, s.deps.DB.Read, id)
+				check(gerr)
+				view := outcome.Dict()
+				web.APIErrorWith(w, http.StatusConflict, "not_undone", err.Error(), map[string]any{"entry": undoProposalEntry(after), "outcomes": view.Outcomes, "sync_error": view.SyncError})
+				return
+			}
 			web.APIError(w, http.StatusConflict, "not_undone", err.Error())
 			return
 		}

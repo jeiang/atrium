@@ -28,6 +28,7 @@ type Set struct {
 	hooks    sync.Mutex
 	starters []starter
 	opener   Opener
+	failed   map[string]string
 }
 
 type Opener func(context.Context) (*db.DB, config.Config, error)
@@ -50,10 +51,12 @@ func WithSet(ctx context.Context, s *Set) context.Context {
 			return nil, err
 		}
 		return func(committed bool) {
+			var ready []starter
 			if committed {
-				s.store(snap)
+				ready = s.store(snap)
 			}
 			s.publish.Unlock()
+			s.start(ready)
 		}, nil
 	})
 }
@@ -77,7 +80,7 @@ func NewSet(cat *Catalog, reg *settings.Registry, env config.Env, open Opener) (
 	if err != nil {
 		return nil, err
 	}
-	return &Set{cat: cat, reg: reg, env: env, decls: ordered, opener: open}, nil
+	return &Set{cat: cat, reg: reg, env: env, decls: ordered, opener: open, failed: map[string]string{}}, nil
 }
 
 func byNeeds(decls []Declaration) ([]Declaration, error) {
@@ -104,6 +107,7 @@ func byNeeds(decls []Declaration) ([]Declaration, error) {
 
 type Snapshot struct {
 	set         *Set
+	evaluated   []Status
 	statuses    []Status
 	generations map[string]uint64
 	once        sync.Once
@@ -115,16 +119,18 @@ func (s *Set) Current() *Snapshot { return s.cur.Load() }
 
 func (s *Set) Refresh(ctx context.Context, q db.Querier) error {
 	s.publish.Lock()
-	defer s.publish.Unlock()
 	snap, err := s.Evaluate(ctx, q)
 	if err != nil {
+		s.publish.Unlock()
 		return err
 	}
-	s.store(snap)
+	ready := s.store(snap)
+	s.publish.Unlock()
+	s.start(ready)
 	return nil
 }
 
-func (s *Set) store(snap *Snapshot) {
+func (s *Set) store(snap *Snapshot) []starter {
 	prev := s.cur.Swap(snap)
 	for _, st := range snap.statuses {
 		var was Status
@@ -136,19 +142,38 @@ func (s *Set) store(snap *Snapshot) {
 		}
 	}
 	s.hooks.Lock()
+	defer s.hooks.Unlock()
 	var ready []starter
 	s.starters = slices.DeleteFunc(s.starters, func(st starter) bool {
-		if !snap.Enabled(st.owner) {
+		if !snap.startable(st.owner) {
 			return false
 		}
 		ready = append(ready, st)
 		return true
 	})
-	s.hooks.Unlock()
+	return ready
+}
+
+func (s *Set) start(ready []starter) {
 	for _, st := range ready {
-		if err := st.start(); err != nil {
+		err := st.start()
+		s.publish.Lock()
+		s.hooks.Lock()
+		was, failed := s.failed[st.owner]
+		changed := failed
+		if err != nil {
 			log.Error("module start failed", logx.Module, st.owner, logx.Err, err.Error())
+			s.starters = append(s.starters, st)
+			why := "start failed: " + err.Error()
+			s.failed[st.owner], changed = why, why != was
+		} else {
+			delete(s.failed, st.owner)
 		}
+		s.hooks.Unlock()
+		if cur := s.Current(); changed && cur != nil {
+			s.cur.Store(s.snapshot(cur.evaluated))
+		}
+		s.publish.Unlock()
 	}
 }
 
@@ -164,6 +189,14 @@ func (s *Set) OnEnable(owner string, start func() error) error {
 }
 
 func (s *Set) Evaluate(ctx context.Context, q db.Querier) (*Snapshot, error) {
+	statuses, err := s.evaluated(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	return s.snapshot(statuses), nil
+}
+
+func (s *Set) evaluated(ctx context.Context, q db.Querier) ([]Status, error) {
 	probe := Probe{Settings: s.reg, Q: q, Env: s.env}
 	statuses, _, err := evaluate(ctx, s.decls, func(ctx context.Context, r Declaration, states map[string]State) ([]Unmet, bool, error) {
 		unmet, err := s.unmet(ctx, probe, r, states)
@@ -176,9 +209,18 @@ func (s *Set) Evaluate(ctx context.Context, q db.Querier) (*Snapshot, error) {
 		}
 		return unmet, found.Value == "true", nil
 	})
-	if err != nil {
-		return nil, err
+	return statuses, err
+}
+
+func (s *Set) snapshot(evaluated []Status) *Snapshot {
+	statuses := slices.Clone(evaluated)
+	s.hooks.Lock()
+	for i, st := range statuses {
+		if why, ok := s.failed[st.Name]; ok && st.State == Enabled {
+			statuses[i].State, statuses[i].Err = Unavailable, why
+		}
 	}
+	s.hooks.Unlock()
 	generations := make(map[string]uint64, len(statuses))
 	current := s.Current()
 	for _, status := range statuses {
@@ -191,7 +233,7 @@ func (s *Set) Evaluate(ctx context.Context, q db.Querier) (*Snapshot, error) {
 		}
 		generations[status.Name] = generation
 	}
-	return &Snapshot{set: s, statuses: statuses, generations: generations}, nil
+	return &Snapshot{set: s, evaluated: evaluated, statuses: statuses, generations: generations}
 }
 
 type check func(ctx context.Context, r Declaration, states map[string]State) ([]Unmet, bool, error)
@@ -250,6 +292,11 @@ func (n *Snapshot) Attention() []attention.Source {
 func (n *Snapshot) Enabled(name string) bool {
 	st, ok := n.Status(name)
 	return ok && st.State == Enabled
+}
+
+func (n *Snapshot) startable(name string) bool {
+	i := slices.IndexFunc(n.evaluated, func(st Status) bool { return st.Name == name })
+	return i >= 0 && n.evaluated[i].State == Enabled
 }
 
 func (n *Snapshot) Generation(owner string) uint64 { return n.generations[owner] }
@@ -313,11 +360,14 @@ func (s *Set) Guard(ctx context.Context, q db.Querier, key, value string) error 
 		if key != FlagKey(r.Name) || value != "true" {
 			continue
 		}
-		snap, err := s.Evaluate(ctx, q)
+		statuses, err := s.evaluated(ctx, q)
 		if err != nil {
 			return err
 		}
-		st, _ := snap.Status(r.Name)
+		var st Status
+		if i := slices.IndexFunc(statuses, func(st Status) bool { return st.Name == r.Name }); i >= 0 {
+			st = statuses[i]
+		}
 		if len(st.Unmet) > 0 {
 			return &NeedsSettingsError{Module: r.Name, Unmet: st.Unmet}
 		}

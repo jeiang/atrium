@@ -217,6 +217,9 @@ func Command(o Options) *cli.Command {
 				}
 				approved, err := x.Pipeline().ApproveAndApply(x.Ctx, int64(*id), chosen, operator)
 				if err != nil {
+					if approved != nil {
+						x.JSON(approved.Dict())
+					}
 					return err
 				}
 				x.JSON(approved.Dict())
@@ -266,6 +269,9 @@ func Command(o Options) *cli.Command {
 			return func(x *exec) error {
 				result, err := x.Pipeline().Undo(x.Ctx, int64(*id), operator)
 				if err != nil {
+					if len(result.Outcomes) > 0 || result.SyncError != nil {
+						x.JSON(result.Dict())
+					}
 					return err
 				}
 				x.JSON(result.Dict())

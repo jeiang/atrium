@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"strconv"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 
@@ -63,12 +64,26 @@ func Module(phone Section, budget BudgetStatus) web.Module {
 }
 
 func serve(d *web.Deps, phone Section, budget BudgetStatus) {
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		watchStale(d.Ctx, d.DB, d.Env, d.Stopping, budget)
-	}()
-	d.OnClose(func() { <-done })
+	var work sync.WaitGroup
+	var mu sync.Mutex
+	stopped := false
+	start := func() error {
+		mu.Lock()
+		defer mu.Unlock()
+		if !stopped {
+			work.Go(func() { watchStale(d.Ctx, d.DB, d.Env, d.Stopping, budget) })
+		}
+		return nil
+	}
+	d.OnClose(func() {
+		mu.Lock()
+		stopped = true
+		mu.Unlock()
+		work.Wait()
+	})
+	if err := moduleowner.SetFrom(d.Ctx).OnEnable(moduleowner.Notifications, start); err != nil {
+		panic(err)
+	}
 	h := handlers{d, phone}
 	d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
 		labels, err := failingDevices(ctx, d.DB.Read)
