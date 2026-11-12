@@ -13,6 +13,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 	"unicode/utf8"
 
 	"github.com/felixge/httpsnoop"
@@ -73,6 +74,21 @@ type Deps struct {
 	owner         string
 	registrations *registrations
 	coreRoutes    func(*Deps)
+}
+
+const drainTimeout = 15 * time.Second
+
+func (d *Deps) DrainOnClose(drain func(context.Context) error) {
+	if d.OnClose == nil {
+		return
+	}
+	d.OnClose(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), drainTimeout)
+		defer cancel()
+		if err := drain(ctx); err != nil {
+			log.Warn("could not drain work before closing the database", logx.Err, err.Error())
+		}
+	})
 }
 
 func (d *Deps) SettingsAt(url string, render SettingsRender) {

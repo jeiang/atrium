@@ -66,6 +66,7 @@ type Service struct {
 	Inference *inference.Service
 
 	base   context.Context
+	cancel context.CancelFunc
 	mu     *sync.Mutex
 	wg     *sync.WaitGroup
 	closed bool
@@ -74,7 +75,8 @@ type Service struct {
 var ErrClosed = errors.New("service: closed")
 
 func New(ctx context.Context, d *db.DB, cfg config.Config, env config.Env, runner *loop.Runner) *Service {
-	s := &Service{DB: d, Cfg: cfg, Env: env, Runner: runner, base: ctx, mu: &sync.Mutex{}, wg: &sync.WaitGroup{}}
+	base, cancel := context.WithCancel(ctx)
+	s := &Service{DB: d, Cfg: cfg, Env: env, Runner: runner, base: base, cancel: cancel, mu: &sync.Mutex{}, wg: &sync.WaitGroup{}}
 	s.Inference = inference.New(d, func() float64 { return s.now() }, scopes{})
 	return s
 }
@@ -126,11 +128,34 @@ func (s *Service) CheckCatalog(ctx context.Context) {
 	}
 }
 
-func (s *Service) Close() {
+func (s *Service) StopAdmission() {
 	s.mu.Lock()
 	s.closed = true
 	s.mu.Unlock()
+}
+
+func (s *Service) Close() {
+	s.StopAdmission()
 	s.wg.Wait()
+}
+
+func (s *Service) Drain(ctx context.Context) error {
+	s.StopAdmission()
+	joined := make(chan struct{})
+	go func() {
+		s.wg.Wait()
+		close(joined)
+	}()
+	select {
+	case <-joined:
+		return nil
+	case <-ctx.Done():
+	}
+	if s.cancel != nil {
+		s.cancel()
+	}
+	<-joined
+	return fmt.Errorf("service: canceled running work at the drain deadline: %w", context.Cause(ctx))
 }
 
 func (s *Service) now() float64 {

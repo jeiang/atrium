@@ -101,17 +101,15 @@ func Module(o Options) web.Module {
 			work.Go(func() { svc.CheckCatalog(base) })
 			return nil
 		}
-		shutdown := func() {
+		d.DrainOnClose(func(ctx context.Context) error {
 			mu.Lock()
 			stopped = true
 			mu.Unlock()
-			svc.Close()
+			err := svc.Drain(ctx)
 			cancel()
 			work.Wait()
-		}
-		if d.OnClose != nil {
-			d.OnClose(shutdown)
-		}
+			return errors.Join(err, store.Drain(ctx))
+		})
 		p := &pages{deps: d, svc: svc, now: assistant.Now, ledger: run.Ledger}
 		d.OnFrame(p.sidebar)
 		if err := module.SetFrom(d.Ctx).OnEnable(module.Assistant, start); err != nil {

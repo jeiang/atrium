@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/jsonx"
+	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
@@ -97,9 +98,16 @@ func bootstrap(ctx context.Context, cfgEnv config.Env, tools registry.Source, no
 	svc.Now = clock(now)
 	return svc, func() {
 		svc.Close()
+		drain, stop := context.WithTimeout(context.Background(), drainTimeout)
+		defer stop()
+		if err := store.Drain(drain); err != nil {
+			logx.Logger("atrium.agent").Warn("could not drain effect renewal before closing the database", logx.Err, err.Error())
+		}
 		_ = d.Close()
 	}, nil
 }
+
+const drainTimeout = 15 * time.Second
 
 func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64, text, kind, toolChoice string, explicitKind bool, now func() float64) error {
 	ctx := env.Ctx
