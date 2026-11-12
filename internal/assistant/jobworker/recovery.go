@@ -74,20 +74,36 @@ func recoverThreads(ctx context.Context, svc *service.Service, run scheduler.Run
 	return outcome(ctx, q, runs, run.Claim.Missed)
 }
 
-func abandon(ctx context.Context, svc *service.Service, run scheduler.Run, threads []int64, reason string) error {
+func jobTree(ctx context.Context, svc *service.Service, run scheduler.Run, threads []int64) ([]int64, error) {
 	runs, _, err := jobRuns(ctx, svc.DB.Read, run, threads)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	var tree []int64
 	for _, id := range runs {
 		ids, err := journal.RunDescendants(ctx, svc.DB.Read, id)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		tree = append(tree, ids...)
 	}
+	return tree, nil
+}
+
+func abandon(ctx context.Context, svc *service.Service, run scheduler.Run, threads []int64, reason string) error {
+	tree, err := jobTree(ctx, svc, run, threads)
+	if err != nil {
+		return err
+	}
 	return journal.FailUnsettled(ctx, svc.DB.Write, tree, run.Now(), reason, journal.ProcessPrefix())
+}
+
+func release(ctx context.Context, svc *service.Service, run scheduler.Run, threads []int64) error {
+	tree, err := jobTree(ctx, svc, run, threads)
+	if err != nil {
+		return err
+	}
+	return journal.InterruptRuns(ctx, svc.DB.Write, tree, run.Now(), journal.ProcessPrefix())
 }
 
 func outcome(ctx context.Context, q db.Querier, runs []int64, missed bool) (scheduler.Result, error) {

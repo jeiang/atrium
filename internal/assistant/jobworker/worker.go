@@ -47,6 +47,9 @@ func New(svc *service.Service, jobs []scheduler.Definition, enabled func(string)
 		Abandon: func(ctx context.Context, run scheduler.Run, threads []int64, reason string) error {
 			return abandon(ctx, svc, run, threads, reason)
 		},
+		Release: func(ctx context.Context, run scheduler.Run, threads []int64) error {
+			return release(ctx, svc, run, threads)
+		},
 		Resume: func(ctx context.Context) (int, error) {
 			claimed, err := scheduler.ClaimedThreads(ctx, svc.DB.Read)
 			if err != nil {

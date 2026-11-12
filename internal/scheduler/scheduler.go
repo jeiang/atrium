@@ -30,6 +30,7 @@ type Dependencies struct {
 	Gate    func(context.Context, float64) (Gate, error)
 	Recover Recovery
 	Abandon func(context.Context, Run, []int64, string) error
+	Release func(context.Context, Run, []int64) error
 	Resume  func(context.Context) (int, error)
 	Idle    func(context.Context) bool
 	Notice  func(context.Context, Skipped, float64) error
@@ -252,6 +253,9 @@ func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Co
 		return
 	case err != nil && interrupted(ctx, err):
 		log.Info(fmt.Sprintf("job %d interrupted; its run resumes on restart", id), logx.Job, id)
+		if err := s.handOver(done, claim); err != nil {
+			log.Error(fmt.Sprintf("job %d: interrupting its runs failed", id), logx.Job, id, logx.Err, err)
+		}
 		s.settle(done, claim, s.release(done, claim))
 		return
 	case err != nil && errors.Is(context.Cause(limited), errTimedOut):
@@ -283,6 +287,17 @@ func (s *Scheduler) abandon(ctx context.Context, claim Claim, reason string) err
 		return err
 	}
 	return s.deps.Abandon(ctx, Run{Claim: claim, Now: s.now}, threads, reason)
+}
+
+func (s *Scheduler) handOver(ctx context.Context, claim Claim) error {
+	if s.deps.Release == nil {
+		return nil
+	}
+	threads, err := JobRunThreads(ctx, s.db.Read, claim.JobRunID)
+	if err != nil || len(threads) == 0 {
+		return err
+	}
+	return s.deps.Release(ctx, Run{Claim: claim, Now: s.now}, threads)
 }
 
 func (s *Scheduler) settle(ctx context.Context, claim Claim, err error) {
