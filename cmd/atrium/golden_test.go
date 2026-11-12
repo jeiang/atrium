@@ -152,6 +152,7 @@ type fixture struct {
 	flags    map[string]string
 	fakes    map[string]*mailtest.FakeClient
 	embedURL string
+	api      *anthropictest.Server
 }
 
 func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin string) *fixture {
@@ -266,7 +267,7 @@ capabilities = ["api"]
 	if apple := data.environment["ICLOUD_APPLE_ID"]; apple != "" {
 		seedSettingsWith(t, appKey(t, env), filepath.Join(dir, "atrium.db"), map[string]string{"icloud_apple_id": apple})
 	}
-	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: app.Settings, state: app.State, fakes: fakes, embedURL: embed.URL + "/v1"}
+	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: app.Settings, state: app.State, fakes: fakes, embedURL: embed.URL + "/v1", api: api}
 	fixturesByTest.Store(t, f)
 	fixturesByTest.Store(testKey(t), f)
 	seedNotionVectors(t, filepath.Join(f.dir, "atrium.db"), appKey(t, env))

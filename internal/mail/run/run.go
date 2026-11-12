@@ -2,17 +2,21 @@ package run
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/calendar/candidates"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/applier"
+	"github.com/jeiang/atrium/internal/mail/classify"
 	"github.com/jeiang/atrium/internal/mail/flags"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/openloops"
@@ -54,6 +58,8 @@ func SelectAccounts(ctx context.Context, requested string) ([]string, error) {
 	return out, nil
 }
 
+type Classifier func(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, now func() float64) (*classifier.Service, error)
+
 type Extra struct {
 	Name string
 	Run  func(ctx context.Context) (any, error)
@@ -69,11 +75,12 @@ type Pass struct {
 	Registry *proposals.Registry
 	Router   *router.Router
 	Applier  *applier.Applier
-	Events   func(ctx context.Context, account string) (invites, candidates int, err error)
+	Classify *classify.Service
+	Events   func(ctx context.Context, account string, paid *classify.Deferral) (invites, candidates int, err error)
 	Extras   []Extra
 }
 
-func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open mail.OpenFunc, now func() float64) (*Pass, error) {
+func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open mail.OpenFunc, now func() float64, judge *classify.Service) (*Pass, error) {
 	if now == nil {
 		now = mail.WallClock
 	}
@@ -98,11 +105,12 @@ func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open 
 		Registry: registry,
 		Router:   &router.Router{DB: d, Now: now},
 		Applier:  applier.New(l, open, syncer),
-		Events: func(ctx context.Context, account string) (int, int, error) {
+		Classify: judge,
+		Events: func(ctx context.Context, account string, paid *classify.Deferral) (int, int, error) {
 			if !module.IsEnabled(ctx, module.Calendar) {
 				return 0, 0, nil
 			}
-			return candidates.ScanAccount(ctx, d, cfg, account, nil, env, now)
+			return candidates.ScanAccount(ctx, d, cfg, account, judge, paid, env, now)
 		},
 	}
 	p.Extras = []Extra{
@@ -116,7 +124,7 @@ func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open 
 	return p, nil
 }
 
-func Open(ctx context.Context, env config.Env, cfg config.Config, open mail.OpenFunc, now func() float64) (*Pass, func(), error) {
+func Open(ctx context.Context, env config.Env, cfg config.Config, open mail.OpenFunc, now func() float64, classifiers Classifier) (*Pass, func(), error) {
 	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(ctx).DBKey()))
 	if err != nil {
 		return nil, nil, err
@@ -125,7 +133,15 @@ func Open(ctx context.Context, env config.Env, cfg config.Config, open mail.Open
 		_ = d.Close()
 		return nil, nil, err
 	}
-	p, err := New(ctx, env, d, cfg, open, now)
+	if now == nil {
+		now = mail.WallClock
+	}
+	c, err := classifiers(ctx, env, d, cfg, now)
+	if err != nil {
+		_ = d.Close()
+		return nil, nil, err
+	}
+	p, err := New(ctx, env, d, cfg, open, now, classify.New(c))
 	if err != nil {
 		_ = d.Close()
 		return nil, nil, err
@@ -173,6 +189,7 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 		return err
 	}
 	var failed []string
+	paid := &classify.Deferral{}
 	for _, account := range accounts {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -181,14 +198,18 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 		if err != nil {
 			return err
 		}
-		flagged, err := flags.FlagAccount(ctx, p.DB, account, nil, p.Now)
+		flagged, err := flags.FlagAccount(ctx, p.DB, account, p.Classify, paid, p.Now)
 		if err != nil {
 			return err
 		}
 		log.Info("account routed", "account", account, "routed", routed, "flagged", flagged)
-		if invites, candidates, err := p.Events(ctx, account); err != nil {
+		invites, candidates, err := p.Events(ctx, account, paid)
+		switch {
+		case errors.Is(err, httpx.ErrPayload):
 			log.Error("event scan failed", "account", account, logx.Err, err.Error())
-		} else {
+		case err != nil:
+			return err
+		default:
 			log.Info("event scan done", "account", account, "invites", invites, "candidates", candidates)
 		}
 		applied, deleted, err := p.Applier.ApplyAll(ctx, account)
@@ -259,12 +280,12 @@ func (p *Pass) checkpoint(ctx context.Context) {
 	}
 }
 
-func Sync(ctx context.Context, env config.Env, cfg config.Config, requested string, open mail.OpenFunc) ([]string, error) {
+func Sync(ctx context.Context, env config.Env, cfg config.Config, requested string, open mail.OpenFunc, classifiers Classifier) ([]string, error) {
 	accounts, err := SelectAccounts(ctx, requested)
 	if err != nil {
 		return nil, err
 	}
-	pass, release, err := Open(ctx, env, cfg, open, nil)
+	pass, release, err := Open(ctx, env, cfg, open, nil, classifiers)
 	if err != nil {
 		return nil, err
 	}

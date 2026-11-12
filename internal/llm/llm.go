@@ -23,44 +23,7 @@ const FolderSystem = "You file email into mail folders for the mailbox owner. Yo
 	"Pick the folder where this message belongs, following how similar messages and the same sender were filed. " +
 	`If you cannot tell, answer folder="` + Uncertain + `". confident=true only if you are sure of the folder.`
 
-const FlagSystem = "You triage the mailbox owner's email and decide whether to flag it. Flag when a person (not an automated " +
-	"sender) asks the owner something or needs their action, or there is a concrete deadline or payment due, or a " +
-	"real fraud / sign-in / account-security event. Never flag statements, receipts, newsletters, promotions, or " +
-	"routine notifications. Answer the JSON fields: person_asking (a human, not an automated sender, asks the owner " +
-	"something or needs their action), deadline_or_payment_due (concrete deadline or payment due), security_event " +
-	"(real fraud, sign-in or account-security event), and flag (final decision per the policy)."
-
-const EventSystem = "You scan the mailbox owner's email for calendar events. has_event=true only when the message mentions a " +
-	"specific event the owner themself would attend or must block time for (appointment, meeting, flight, " +
-	"reservation, class, delivery window) with a concrete date or time. Newsletters, promotions, generic " +
-	"deadlines, past events and events of other people are has_event=false."
-
-var flagFields = [...]string{"person_asking", "deadline_or_payment_due", "security_event", "flag"}
-
 var boolean = map[string]any{"type": "boolean"}
-
-func flagSchema() map[string]any {
-	props := make(map[string]any, len(flagFields))
-	for _, k := range flagFields {
-		props[k] = boolean
-	}
-	return map[string]any{
-		"type":                 "object",
-		"properties":           props,
-		"required":             flagFields[:],
-		"additionalProperties": false,
-	}
-}
-
-var (
-	flagSchemaValue = flagSchema()
-	eventSchema     = map[string]any{
-		"type":                 "object",
-		"properties":           map[string]any{"has_event": boolean},
-		"required":             []string{"has_event"},
-		"additionalProperties": false,
-	}
-)
 
 func folderSchema(folders []string) map[string]any {
 	return map[string]any{
@@ -114,10 +77,6 @@ func FolderPrompt(ctx context.Context, catalog string, neighbors []Neighbor, m M
 	return "Allowed folders:\n" + catalog + "\n\nSimilar filed messages (folder in brackets):\n" + strings.Join(similar, "\n") + "\n\n" +
 		"Message to file:\nSubject: " + m.Subject + "\nFrom: " + m.FromName + " <" + m.FromAddr + ">\n" +
 		"Body:\n" + textutil.Clip(body, endpoint.From(ctx).LLMBodyChars)
-}
-
-func messagePrompt(ctx context.Context, m Message, body string) string {
-	return "From: " + m.FromName + " <" + m.FromAddr + ">\nSubject: " + m.Subject + "\nBody:\n" + textutil.Clip(body, endpoint.From(ctx).LLMBodyChars)
 }
 
 type chatRequest struct {
@@ -215,37 +174,4 @@ func JudgeFolder(ctx context.Context, url string, folders []string, catalog stri
 		return "", false, err
 	}
 	return answer.Folder, answer.Confident, nil
-}
-
-type Flags struct {
-	PersonAsking         bool `json:"person_asking"`
-	DeadlineOrPaymentDue bool `json:"deadline_or_payment_due"`
-	SecurityEvent        bool `json:"security_event"`
-	Flag                 bool `json:"flag"`
-}
-
-func JudgeFlag(ctx context.Context, url string, m Message, body string) (Flags, error) {
-	raw, err := ChatJSON(ctx, url, FlagSystem, messagePrompt(ctx, m, body), flagSchemaValue, 0)
-	if err != nil {
-		return Flags{}, err
-	}
-	var flags Flags
-	if err := decode(raw, &flags); err != nil {
-		return Flags{}, err
-	}
-	return flags, nil
-}
-
-func JudgeEvent(ctx context.Context, url string, m Message, body string) (bool, error) {
-	raw, err := ChatJSON(ctx, url, EventSystem, messagePrompt(ctx, m, body), eventSchema, 0)
-	if err != nil {
-		return false, err
-	}
-	var answer struct {
-		HasEvent bool `json:"has_event"`
-	}
-	if err := decode(raw, &answer); err != nil {
-		return false, err
-	}
-	return answer.HasEvent, nil
 }

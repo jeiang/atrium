@@ -12,12 +12,9 @@ import (
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/endpoint"
-	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/classify"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/mime"
 )
@@ -35,8 +32,6 @@ const (
 )
 
 var calendarTypes = map[string]bool{"text/calendar": true, "application/ics": true}
-
-type Judge func(ctx context.Context, url string, m llm.Message, body string) (bool, error)
 
 func set(ctx context.Context, d *db.DB, messageID int64, status Status, reason string, now float64) error {
 	_, err := d.Write.ExecContext(ctx, "INSERT OR REPLACE INTO event_candidates (message_id, reason, status, ts) VALUES (?, ?, ?, ?)",
@@ -174,10 +169,7 @@ func proposeInvites(ctx context.Context, p *calendar.Proposals, r row, invites [
 	return made, nil
 }
 
-func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account string, judge Judge, env config.Env, now func() float64) (proposed, flagged int, err error) {
-	if judge == nil {
-		judge = llm.JudgeEvent
-	}
+func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account string, judge *classify.Service, paid *classify.Deferral, env config.Env, now func() float64) (proposed, flagged int, err error) {
 	if env == nil {
 		env = config.OS
 	}
@@ -188,16 +180,7 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 	if err != nil {
 		return 0, 0, err
 	}
-	chatURL, err := endpoint.ChatURL(ctx, d.Read)
-	if err != nil {
-		return 0, 0, err
-	}
-	ctx, err = embed.WithModels(ctx, d.Read)
-	if err != nil {
-		return 0, 0, err
-	}
 	proposals := &calendar.Proposals{DB: d, Now: now, Env: env}
-	available := true
 	for _, r := range rows {
 		invites, err := rowInvites(cfg, r, time.Unix(0, int64(now()*1e9)))
 		if err != nil {
@@ -214,18 +197,16 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 			}
 			continue
 		}
-		if !available {
+		if paid.Stopped() {
 			continue
 		}
 		body, err := message.Body(ctx, d.Read, r.id)
 		if err != nil {
 			return proposed, flagged, err
 		}
-		hasEvent, err := judge(ctx, chatURL, llm.Message{Subject: r.subject, FromName: r.fromName, FromAddr: r.fromAddr}, body)
-		var unavailable *httpx.ServiceUnavailable
-		if errors.As(err, &unavailable) {
-			log.Warn(fmt.Sprintf("chat unavailable, deferring event scan: %s", unavailable))
-			available = false
+		hasEvent, err := judge.JudgeEvent(ctx, classify.MessageItem(account, r.id),
+			classify.Message{Subject: r.subject, FromName: r.fromName, FromAddr: r.fromAddr}, body)
+		if paid.Note(err) {
 			continue
 		}
 		if err != nil {
@@ -233,7 +214,7 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 		}
 		status, reason := StatusNone, ""
 		if hasEvent {
-			status, reason = StatusQueued, "local model flagged an event"
+			status, reason = StatusQueued, "model flagged an event"
 			flagged++
 		}
 		if err := set(ctx, d, r.id, status, reason, now()); err != nil {

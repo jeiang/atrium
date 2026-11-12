@@ -33,15 +33,18 @@ func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
 		}
 		_ = json.NewDecoder(req.Body).Decode(&body)
 		answer := `{"person_asking":false,"deadline_or_payment_due":false,"security_event":false,"flag":false}`
-		switch required := body.ResponseFormat.JSONSchema.Schema.Required; {
-		case slices.Contains(required, "folder"):
+		if slices.Contains(body.ResponseFormat.JSONSchema.Schema.Required, "folder") {
 			answer = `{"folder":"uncertain","confident":false}`
-		case slices.Contains(required, "has_event"):
-			answer = `{"has_event":"false"}`
 		}
 		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": answer}}}})
 	}))
 	t.Cleanup(chat.Close)
+	f.api.AnswerJSON(func(required []string, _ string) (json.RawMessage, error) {
+		if slices.Contains(required, "has_event") {
+			return json.RawMessage(`{"has_event":"false"}`), nil
+		}
+		return json.RawMessage(`{"person_asking":false,"deadline_or_payment_due":false,"security_event":false,"flag":false}`), nil
+	})
 	embed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		var body struct {
 			Input []string `json:"input"`
