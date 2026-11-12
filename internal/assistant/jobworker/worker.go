@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -18,11 +19,12 @@ import (
 )
 
 type Env struct {
-	Service  *service.Service
-	Now      func() float64
-	JobID    int64
-	JobRunID int64
-	Claim    scheduler.Claim
+	Service    *service.Service
+	Classifier func(context.Context) (*classifier.Service, error)
+	Now        func() float64
+	JobID      int64
+	JobRunID   int64
+	Claim      scheduler.Claim
 }
 
 type Result struct {
