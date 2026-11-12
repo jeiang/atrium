@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -49,7 +50,10 @@ func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
+	hostPath, _ := f.lookup("ATRIUM_HOST_CONFIG")
+	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigFrom(t, hostPath, f.dir, "host-judge.toml", map[string]string{
+		fmt.Sprintf(`config = { url = %q, model = "embeddinggemma" }`, f.llm): fmt.Sprintf(`config = { url = %q, model = "embeddinggemma" }`, srv.URL+"/v1"),
+	}))
 
 	seed, err := db.Connect(filepath.Join(f.dir, "atrium.db"))
 	if err != nil {

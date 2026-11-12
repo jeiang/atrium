@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"maps"
 	"net/http"
@@ -23,6 +24,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
+	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/golden"
 	"github.com/jeiang/atrium/internal/testutil/llmstub"
@@ -169,9 +171,11 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	for k, v := range extraEnv {
 		vars[k] = v
 	}
+	mode := vars["ATRIUM_MODE"]
+	qbitURL := vars["QBITTORRENT_URL"]
 	for phaseA, canonical := range map[string]string{
-		"ATRIUM_MODE": "ATRIUM_MAIL_MAIL_MODE", "ATRIUM_CHAT_URL": "ATRIUM_MAIL_MAIL_CHAT_URL",
-		"ATRIUM_MEDIA_ROOT": "ATRIUM_MEDIA_MEDIA_ROOT", "QBITTORRENT_URL": "ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL",
+		"ATRIUM_CHAT_URL": "ATRIUM_MAIL_MAIL_CHAT_URL",
+		"ATRIUM_MEDIA_ROOT": "ATRIUM_MEDIA_MEDIA_ROOT",
 		"ATRIUM_MEDIA_MOVIES_URL": "ATRIUM_MEDIA_MEDIA_MOVIES_URL", "ATRIUM_MEDIA_TV_URL": "ATRIUM_MEDIA_MEDIA_TV_URL",
 		"ATRIUM_CONTACTS_DIR": "ATRIUM_CONTACTS_CONTACTS_DIR",
 	} {
@@ -180,6 +184,8 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 		}
 		delete(vars, phaseA)
 	}
+	delete(vars, "ATRIUM_MODE")
+	delete(vars, "QBITTORRENT_URL")
 	accounts := []mailAccount{
 		{"icloud", "icloud", vars["ICLOUD_MAIL_USERNAME"], vars["ICLOUD_APP_PASSWORD"], false},
 		{"gmail", "gmail", vars["GMAIL_ADDRESS"], vars["GMAIL_APP_PASSWORD"], false},
@@ -194,7 +200,24 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 		anthropicKey = ""
 	}
 	vars["ATRIUM_HOST_CONFIG"] = accountsFileEmbedding(t, dir, srv.URL+"/v1", anthropicKey, accounts...)
-	for _, name := range []string{"ATRIUM_TZ", "ATRIUM_PUBLIC_URL", "ICLOUD_APPLE_ID", "ICLOUD_MAIL_USERNAME", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD"} {
+	if qbitURL != "" {
+		hostPath := vars["ATRIUM_HOST_CONFIG"]
+		raw, err := os.ReadFile(hostPath)
+		if err != nil {
+			t.Fatal(err)
+		}
+		body := string(raw) + fmt.Sprintf(`
+[connections."service/qbittorrent"]
+kind = "service/qbittorrent"
+label = "qBittorrent"
+config = { url = %q }
+capabilities = ["api"]
+`, qbitURL)
+		if err := os.WriteFile(hostPath, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, name := range []string{"ATRIUM_TZ", "ATRIUM_PUBLIC_URL", "ATRIUM_NOTION_WIKI_ROOT", "ICLOUD_APPLE_ID", "ICLOUD_MAIL_USERNAME", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD"} {
 		delete(vars, name)
 	}
 	env := config.Map(vars)
@@ -210,6 +233,12 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	app.Stdin = strings.NewReader(stdin)
 	copyFile(t, filepath.Join(golden.Dir(), "world.db"), filepath.Join(dir, "atrium.db"))
 	seedFlagsAt(t, app, filepath.Join(dir, "atrium.db"), allFlagsTrue())
+	if mode != "" {
+		seedSettingsAt(t, filepath.Join(dir, "atrium.db"), map[string]string{mail.KeyMode: mode})
+	}
+	if wikiRoot := data.environment["ATRIUM_NOTION_WIKI_ROOT"]; wikiRoot != "" {
+		seedSettingsAt(t, filepath.Join(dir, "atrium.db"), map[string]string{notion.WikiRootKey: wikiRoot})
+	}
 	if apple := data.environment["ICLOUD_APPLE_ID"]; apple != "" {
 		seedSettingsAt(t, filepath.Join(dir, "atrium.db"), map[string]string{"icloud_apple_id": apple})
 	}

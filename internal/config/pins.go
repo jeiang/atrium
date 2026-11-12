@@ -88,7 +88,7 @@ func refuseEnvName(env Env, module, key string) error {
 	if known && entry.Module == "db" && entry.Key == "key" {
 		return nil
 	}
-	if _, hosted := settings.HostDefOf(key); hosted && (!known || entry.Class == settings.ImportHost) {
+	if _, hosted := settings.HostDefOf(key); hosted {
 		return nil
 	}
 	destination := "the Connections page"

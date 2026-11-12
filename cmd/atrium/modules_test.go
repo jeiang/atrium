@@ -127,6 +127,9 @@ func moduleFixtureAt(t *testing.T, flags map[string]string, now func() float64) 
 	for name, value := range moduleEnv(dir) {
 		env[name] = value
 	}
+	if key, ok := varsFor(t).lookup("ATRIUM_DB_KEY"); ok {
+		env["ATRIUM_DB_KEY"] = key
+	}
 	reg := settings.New()
 	st := config.NewState(reg)
 	f = &fixture{t: t, dir: dir, env: env, settings: reg, state: st, flags: flags}

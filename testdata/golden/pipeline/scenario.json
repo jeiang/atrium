@@ -24,8 +24,6 @@
     "ATRIUM_CHAT_URL": "http://llm.invalid/v1",
     "ATRIUM_CONTACTS_DIR": "state/contacts",
     "ATRIUM_DB": "state/atrium.db",
-    "ATRIUM_EMBED_URL": "http://embed.invalid/v1",
-    "ATRIUM_MEDIA_LINK_KEY": "golden-link-key",
     "ATRIUM_MEDIA_MOVIES_URL": "http://movies.test",
     "ATRIUM_MEDIA_ROOT": "state/media",
     "ATRIUM_MEDIA_TV_URL": "http://tv.test",

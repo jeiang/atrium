@@ -7,7 +7,6 @@ import (
 	"strings"
 	"testing"
 
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/serverops"
@@ -19,7 +18,6 @@ func condenserFixture(t *testing.T, fake *fakeOpsGrafana, chat *fakeOpenAI) (str
 	t.Cleanup(srv.Close)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", grafanaHost(t, dir, srv.URL))
-	setEnv(t, hostEnv("grafana", grafanatools.KeyMetricsUID), "metrics")
 	setEnv(t, settingEnv(serverops.KeyHosts), "node-a")
 	setEnv(t, settingEnv(endpoint.KeyChatURL), chat.URL+"/v1")
 	setEnv(t, settingEnv(endpoint.KeyChatModel), "qwen")

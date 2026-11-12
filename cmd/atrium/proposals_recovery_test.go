@@ -29,6 +29,7 @@ func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoabl
 	if err := db.Migrate(ctx, seed, path); err != nil {
 		t.Fatal(err)
 	}
+	seedSettingsAt(t, path, allFlagSettings())
 	now := float64(time.Now().UnixNano()) / 1e9
 	for _, rule := range []string{"stale", "recent", "norow", "norowrecent"} {
 		if _, err := seed.Write.Exec("INSERT INTO rules (position, id, action, dest, conditions) VALUES (?, ?, 'file', 'Bills', '[]')", len(rule), rule); err != nil {

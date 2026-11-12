@@ -38,7 +38,10 @@ func connectionRow(t *testing.T, dir, id string) (source string, enabled int, st
 }
 
 func TestImportedConnectionsStayOperatorOwnedAcrossBoots(t *testing.T) {
-	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	dir := t.TempDir()
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	host := filepath.Join(dir, "host.toml")
@@ -81,6 +84,7 @@ func TestImportedConnectionsStayOperatorOwnedAcrossBoots(t *testing.T) {
 	if got := runApp(t, "db", "import-v2", source); got.code != cli.ExitOK {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
+	seedAllFlags(t)
 
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
 	if _, err := d.Write.ExecContext(context.Background(),
@@ -128,9 +132,8 @@ func TestImportedConnectionsStayOperatorOwnedAcrossBoots(t *testing.T) {
 }
 
 func TestAUIAAddedMailAccountStaysOperatorOwnedAcrossBoots(t *testing.T) {
+	requireCipher(t)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	host := filepath.Join(dir, "host.toml")
 	if err := os.WriteFile(host, nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -198,9 +201,8 @@ func TestAUIAAddedMailAccountStaysOperatorOwnedAcrossBoots(t *testing.T) {
 }
 
 func TestARemovedHostConnectionStaysDisabled(t *testing.T) {
+	requireCipher(t)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	host := filepath.Join(dir, "host.toml")
 	write := func(body string) {
 		if err := os.WriteFile(host, []byte(body), 0o600); err != nil {
@@ -240,8 +242,6 @@ func TestARemovedHostBuiltinStaysDisabledAndNeverReachesItsEndpoint(t *testing.T
 	requireCipher(t)
 	embed := newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
-	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	unsetEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL")
 	plain := filepath.Join(dir, "host-plain.toml")
 	if err := os.WriteFile(plain, []byte(hostConfigBodyWith("", defaultWebPushConnection, filepath.Join(testRoot, "host", "anthropic.key"))), 0o600); err != nil {

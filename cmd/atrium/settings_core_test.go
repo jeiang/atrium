@@ -21,7 +21,7 @@ func TestCoreSettingsRejectBadValuesAndDriveTheWebLayer(t *testing.T) {
 	for _, tc := range []struct{ key, value, want string }{
 		{"tz", "Mars/Olympus", "must be an IANA time zone"},
 		{"snooze_choices", "1,x", "must be comma-separated"},
-		{"media_qbittorrent_url", "http://127.0.0.1:8081", "is host configuration and is not editable here"},
+		{"media_qbittorrent_url", "http://127.0.0.1:8081", `use connections."service/qbittorrent".config.url`},
 	} {
 		got := runSettings(t, "set", tc.key, tc.value)
 		if got.code != cli.ExitError || got.stdout != "" || !strings.Contains(got.stderr, tc.want) {

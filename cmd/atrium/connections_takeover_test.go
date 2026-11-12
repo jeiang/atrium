@@ -11,7 +11,6 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 )
 
@@ -67,8 +66,6 @@ func TestAHostTakeoverCannotMoveAStoredCredentialToAnotherEndpoint(t *testing.T)
 	requireCipher(t)
 	a, b := newFakeOpenAI(t), newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
-	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	unsetEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL")
 	setEnv(t, "ATRIUM_HOST_CONFIG", plainHostConfig(t, dir))
 	operatorEmbedding(t, dir, a.URL+"/v1", "token-a")
@@ -98,8 +95,6 @@ func TestAHostTakeoverWithTheSameEndpointKeepsTheStoredCredential(t *testing.T) 
 	requireCipher(t)
 	a, b := newFakeOpenAI(t), newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
-	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	unsetEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL")
 	setEnv(t, "ATRIUM_HOST_CONFIG", plainHostConfig(t, dir))
 	operatorEmbedding(t, dir, a.URL+"/v1", "token-a")
@@ -127,8 +122,6 @@ func TestAHostTakeoverWithACredentialFileForEverySlotIsAllowed(t *testing.T) {
 	requireCipher(t)
 	a, b := newFakeOpenAI(t), newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
-	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	unsetEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL")
 	setEnv(t, "ATRIUM_HOST_CONFIG", plainHostConfig(t, dir))
 	operatorEmbedding(t, dir, a.URL+"/v1", "token-a")

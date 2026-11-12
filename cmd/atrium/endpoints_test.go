@@ -107,7 +107,9 @@ func TestEndpointProbeGatesTheMailModuleAndSendsTheKeysOnlyToTheirEndpoints(t *t
 	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
 	setEnv(t, settingEnv(endpoint.KeyChatURL), chat.URL+"/v1")
-	setEnv(t, settingEnv(endpoint.KeyChatKey), chatKey)
+	if set := runSecrets(t, chatKey+"\n", "set", endpoint.KeyChatKey); set.code != cli.ExitOK {
+		t.Fatalf("store the chat key: exit %d stderr %q", set.code, set.stderr)
+	}
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", embedKey))
 
 	ok := runApp(t, "endpoints", "probe")

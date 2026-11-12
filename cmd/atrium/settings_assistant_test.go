@@ -39,9 +39,10 @@ func TestAssistantSettingOrderingAndBuiltinSchedules(t *testing.T) {
 	refused("budget_unattended_share must be at most budget_chat_share (0.5)", "set", "budget_unattended_share", "0.9")
 	refused("budget_unattended_share must be at most budget_chat_share (0.5)", "unset", "budget_unattended_share")
 
-	setEnv(t, "ATRIUM_ASSISTANT_BUDGET_CHAT_SHARE", "0.3")
+	accepted("set", "budget_unattended_share", "0.2")
+	accepted("set", "budget_chat_share", "0.3")
 	refused("budget_unattended_share must be at most budget_chat_share (0.3)", "set", "budget_unattended_share", "0.35")
-	setEnv(t, "ATRIUM_ASSISTANT_BUDGET_CHAT_SHARE", "")
+	accepted("set", "budget_chat_share", "0.5")
 
 	for _, gone := range []string{"agent_clear_share", "agent_compact_share", "agent_preflight_share", "prompt_summary"} {
 		if r := runSettings(t, "set", gone, "0.9"); r.code != cli.ExitUsage || !strings.Contains(r.stderr, `unknown key "`+gone+`"`) {

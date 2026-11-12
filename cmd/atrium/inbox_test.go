@@ -14,6 +14,9 @@ import (
 func TestInboxListsNotificationsAndSettingsKeepsOnlyChannels(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	seedAllFlags(t)
 	base := startServeIn(t, dir)
 	jar, err := cookiejar.New(nil)
 	if err != nil {

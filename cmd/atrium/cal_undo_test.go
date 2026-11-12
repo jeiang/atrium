@@ -33,6 +33,7 @@ func TestProposalUndoIsRefusedWhileAnUndoRunsOrAfterAPartialUndo(t *testing.T) {
 	if err := db.Migrate(ctx, seed, path); err != nil {
 		t.Fatal(err)
 	}
+	seedSettingsAt(t, path, allFlagSettings())
 	now := float64(time.Now().UnixNano()) / 1e9
 	applied := func(name string, undo ledger.State, text *string) int64 {
 		id, _, err := proposals.Create(ctx, seed, "deletion_rule", nil, name, map[string]any{}, map[string]any{}, name, now-100)
@@ -257,6 +258,7 @@ func TestProposalsResolveRefusesAMixedDirectionOutcomeWithoutCommitting(t *testi
 	if err := db.Migrate(ctx, seed, path); err != nil {
 		t.Fatal(err)
 	}
+	seedSettingsAt(t, path, allFlagSettings())
 	now := float64(time.Now().UnixNano()) / 1e9
 	id, _, err := proposals.Create(ctx, seed, "deletion_rule", nil, "mixed", map[string]any{}, map[string]any{}, "mixed", now-100)
 	if err != nil {

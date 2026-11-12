@@ -36,6 +36,7 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 	if err := db.Migrate(ctx, seed, path); err != nil {
 		t.Fatal(err)
 	}
+	seedSettingsAt(t, path, allFlagSettings())
 	now := float64(time.Now().UnixNano()) / 1e9
 	for i, account := range []string{"icloud", "gmail"} {
 		if _, err := seed.Write.Exec("INSERT OR IGNORE INTO accounts (name, kind) VALUES (?, ?)", account, account); err != nil {
@@ -287,6 +288,7 @@ func TestBlockedProposalWithoutErrorTextShowsOutcomeUnknownAndResolves(t *testin
 	if err := db.Migrate(ctx, seed, path); err != nil {
 		t.Fatal(err)
 	}
+	seedSettingsAt(t, path, allFlagSettings())
 	now := float64(time.Now().UnixNano()) / 1e9
 	pid, _, err := proposals.Create(ctx, seed, "deletion_rule", nil, "silent", map[string]any{}, map[string]any{}, "silent", now-5000)
 	if err != nil {

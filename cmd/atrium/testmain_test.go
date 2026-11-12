@@ -313,6 +313,19 @@ func seedSettings(t *testing.T, kv map[string]string) {
 	seedSettingsAt(t, path, kv)
 }
 
+func allFlagSettings() map[string]string {
+	flags := map[string]string{}
+	for _, name := range moduleNames {
+		flags[module.FlagKey(name)] = "true"
+	}
+	return flags
+}
+
+func seedAllFlags(t *testing.T) {
+	t.Helper()
+	seedSettings(t, allFlagSettings())
+}
+
 func seedSettingsAt(t *testing.T, path string, kv map[string]string) {
 	t.Helper()
 	d, err := db.Connect(path)
@@ -440,11 +453,24 @@ func mediaHost(t *testing.T, dir, qbit, eztv, tmdb, tmdbImages string) string {
 
 func grafanaHost(t *testing.T, dir, url string) string {
 	t.Helper()
+	return grafanaHostWith(t, dir, url, "metrics", "", "")
+}
+
+func grafanaHostWith(t *testing.T, dir, url, metricsUID, logsUID, logsType string) string {
+	t.Helper()
 	raw, err := os.ReadFile(defaultHostConfig)
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := strings.Replace(string(raw), `config = { url = "http://grafana.invalid" }`, `config = { url = `+strconv.Quote(url)+`, metrics_uid = "metrics" }`, 1)
+	config := `config = { url = ` + strconv.Quote(url) + `, metrics_uid = ` + strconv.Quote(metricsUID)
+	if logsUID != "" {
+		config += `, logs_uid = ` + strconv.Quote(logsUID)
+	}
+	if logsType != "" {
+		config += `, logs_type = ` + strconv.Quote(logsType)
+	}
+	config += ` }`
+	body := strings.Replace(string(raw), `config = { url = "http://grafana.invalid" }`, config, 1)
 	path := filepath.Join(dir, "host-grafana.toml")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)

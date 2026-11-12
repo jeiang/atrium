@@ -30,6 +30,7 @@ func TestOperatorResolvesAForwardInterruptedAction(t *testing.T) {
 	if err := db.Migrate(ctx, seed, path); err != nil {
 		t.Fatal(err)
 	}
+	seedSettingsAt(t, path, allFlagSettings())
 	now := float64(time.Now().UnixNano()) / 1e9
 	seq := 0
 	action := func(text string) int64 {

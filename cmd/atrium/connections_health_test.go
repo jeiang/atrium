@@ -21,7 +21,6 @@ import (
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/module"
 
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 )
 
 func grafanaHealthServer(t *testing.T) (*httptest.Server, *atomic.Int32) {
@@ -61,7 +60,6 @@ func TestConnectionHealthNotifiesOncePerTransitionAndDisconnectKeepsData(t *test
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, srv.URL, "http://anthropic.invalid"))
-	setEnv(t, settingEnv(grafanatools.KeyURL), srv.URL)
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
 
@@ -129,7 +127,6 @@ func TestOpsMetricsReportAConnectionStateBeforeAndAfterAFailingTest(t *testing.T
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, srv.URL, "http://anthropic.invalid"))
-	setEnv(t, settingEnv(grafanatools.KeyURL), srv.URL)
 	ops := opsAddr(t)
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
@@ -274,7 +271,6 @@ func TestConcurrentConnectionTestsRecordOneNotification(t *testing.T) {
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, srv.URL, "http://anthropic.invalid"))
-	setEnv(t, settingEnv(grafanatools.KeyURL), srv.URL)
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
 	defer s.stop()

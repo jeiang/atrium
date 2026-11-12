@@ -16,7 +16,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -251,7 +250,7 @@ func TestGrafanaResultTaintsTheThread(t *testing.T) {
 	}))
 	t.Cleanup(grafana.Close)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(grafanatools.KeyURL), grafana.URL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", grafanaHost(t, dir, grafana.URL))
 	start := warm(t, api)
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("g1", "grafana_search_dashboards", map[string]any{"query": "atrium"})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("listed")))

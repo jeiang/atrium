@@ -49,7 +49,6 @@ func TestMediaUnknownAddBlocksWebAndPoll(t *testing.T) {
 	dir := t.TempDir()
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
-	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
 	magnet := mediaMagnet(hash, "Lanterns.S01E01")
 	eztv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"torrents": []map[string]any{{
@@ -58,7 +57,7 @@ func TestMediaUnknownAddBlocksWebAndPoll(t *testing.T) {
 		}}})
 	}))
 	t.Cleanup(eztv.Close)
-	setEnv(t, settingEnv(media.KeyEZTVURL), eztv.URL+"/api/get-torrents")
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, eztv.URL+"/api/get-torrents", "", ""))
 
 	qb.dropOnce("torrents/add")
 	b := mnpNewBrowser(t, startServeIn(t, dir))
