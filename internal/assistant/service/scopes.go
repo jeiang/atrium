@@ -36,5 +36,5 @@ func (scopes) ThreadTree(ctx context.Context, q db.Querier, threadID int64) (inf
 	if err != nil {
 		return inference.ThreadScope{}, err
 	}
-	return inference.ThreadScope{RootID: tree.RootID, CapUSD: tree.CapUSD, IDs: tree.IDs}, nil
+	return inference.ThreadScope{RootID: tree.RootID, CapUSD: tree.CapUSD, IDs: tree.IDs, AccountingOnly: tree.Kind == threads.Classification}, nil
 }

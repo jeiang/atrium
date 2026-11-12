@@ -408,8 +408,19 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		if got := runImportApp(t, app, "settings", "set", "tz", "UTC"); got.code != cli.ExitOK {
 			t.Fatalf("settings set: exit %d stderr %q", got.code, got.stderr)
 		}
+		dest, err := db.Connect(filepath.Join(target, "atrium.db"), db.WithKey(importKey(t)))
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, err = dest.Write.ExecContext(context.Background(),
+			"INSERT INTO inference_classification_deferrals (month_start, first_at, last_at, last_caller, last_item_key) VALUES (1, 1, 1, 'mail_flag', 'a:b')")
+		_ = dest.Close()
+		if err != nil {
+			t.Fatal(err)
+		}
 		got := runImportApp(t, app, "db", "import-v2", source)
-		if got.code == cli.ExitOK || !strings.Contains(got.stderr, "already holds rows") || !strings.Contains(got.stderr, "settings=1") {
+		if got.code == cli.ExitOK || !strings.Contains(got.stderr, "already holds rows") || !strings.Contains(got.stderr, "settings=1") ||
+			!strings.Contains(got.stderr, "inference_classification_deferrals=1") {
 			t.Fatalf("import into a populated destination: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 		}
 	})
@@ -1037,6 +1048,9 @@ func TestImportV2KeepsEmbedAndChatAccountsFromClaimingTheEndpointHealth(t *testi
 	}
 	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'integration_health'"); n != 0 {
 		t.Error("the destination still has an integration_health table")
+	}
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM inference_classification_deferrals"); n != 0 {
+		t.Errorf("the import wrote %d classification deferrals, want none", n)
 	}
 	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM endpoint_probes WHERE kind = 'embed'"); n != 0 {
 		t.Error("the embed probe stayed in the endpoint_probes table")

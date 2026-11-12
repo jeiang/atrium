@@ -67,6 +67,8 @@ type ThreadScope struct {
 	RootID int64
 	CapUSD *float64
 	IDs    []int64
+
+	AccountingOnly bool
 }
 
 type Scopes interface {
@@ -251,19 +253,24 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, r Request, p prepared, 
 	if err != nil {
 		return err
 	}
-	spent, limit, own, err := threadCapN(ctx, tx, tree)
-	if err != nil {
-		return err
+	if tree.AccountingOnly != (classOf(r) == Classification) {
+		return errors.New("inference: classification requests run only on classification accounting threads")
 	}
-	if spent+p.reservation > limit {
-		remedy := "raise " + ThreadCapKey + " to continue"
-		if own {
-			remedy = "this is the cost cap chosen when the thread was created; start a new thread to continue"
+	if !tree.AccountingOnly {
+		spent, limit, own, err := threadCapN(ctx, tx, tree)
+		if err != nil {
+			return err
 		}
-		return BudgetExceeded{
-			Text: fmt.Sprintf("thread cost cap: the next request would reserve $%s, with $%s of $%s already committed in this thread and its subagents; %s",
-				strconvUSD(usdOf(p.reservation)), strconvUSD(usdOf(spent)), strconvUSD(usdOf(limit)), remedy),
-			Reason: ReasonThread, Class: classOf(r), NextMonth: NextMonthStart(now, loc),
+		if spent+p.reservation > limit {
+			remedy := "raise " + ThreadCapKey + " to continue"
+			if own {
+				remedy = "this is the cost cap chosen when the thread was created; start a new thread to continue"
+			}
+			return BudgetExceeded{
+				Text: fmt.Sprintf("thread cost cap: the next request would reserve $%s, with $%s of $%s already committed in this thread and its subagents; %s",
+					strconvUSD(usdOf(p.reservation)), strconvUSD(usdOf(spent)), strconvUSD(usdOf(limit)), remedy),
+				Reason: ReasonThread, Class: classOf(r), NextMonth: NextMonthStart(now, loc),
+			}
 		}
 	}
 	budget, err := MonthlyBudget(ctx, tx)
@@ -340,6 +347,8 @@ func prepare(r Request) (prepared, error) {
 		if err := classificationShape(model.ID, r); err != nil {
 			return prepared{}, err
 		}
+	} else if r.Params.OutputConfig != nil && r.Params.OutputConfig.Format != nil {
+		return prepared{}, errors.New("inference: only classification may request a fixed output format")
 	}
 	prompt := r.EstimatedPromptTokens
 	if prompt <= 0 {
@@ -347,21 +356,12 @@ func prepare(r Request) (prepared, error) {
 		if err != nil {
 			return prepared{}, err
 		}
-	} else if r.Params.OutputConfig != nil && r.Params.OutputConfig.Format != nil {
-		return prepared{}, errors.New("inference: only classification may request a fixed output format")
 	}
 	reservation, err := reservationNUSD(model.ID, prompt, r.Params.MaxTokens, searches, cacheTTLOf(r))
 	if err != nil {
 		return prepared{}, err
 	}
 	return prepared{model: model.ID, maxTokens: r.Params.MaxTokens, searches: searches, promptTokens: prompt, reservation: reservation}, nil
-}
-
-func classOf(r Request) Class {
-	if r.Class == "" {
-		return Interactive
-	}
-	return r.Class
 }
 
 func classificationShape(model string, r Request) error {
@@ -392,6 +392,13 @@ func classificationShape(model string, r Request) error {
 		return errors.New("inference: classification output schema is not in wire form")
 	}
 	return nil
+}
+
+func classOf(r Request) Class {
+	if r.Class == "" {
+		return Interactive
+	}
+	return r.Class
 }
 
 func sourceOf(r Request) string {
@@ -437,13 +444,6 @@ func estimatePrompt(p anthropic.Params) (int64, error) {
 		}
 		fixed["tools"] = list
 	}
-	total := tokens.EstimateValue(fixed)
-	for _, raw := range p.Messages {
-		var message struct {
-			Content json.RawMessage `json:"content"`
-		}
-		if err := json.Unmarshal(raw, &message); err != nil {
-			return 0, err
 	if p.OutputConfig != nil && p.OutputConfig.Format != nil {
 		schema, err := jsonx.Loads(p.OutputConfig.Format.Schema)
 		if err != nil {
@@ -451,6 +451,13 @@ func estimatePrompt(p anthropic.Params) (int64, error) {
 		}
 		fixed["output_config"] = map[string]any{"format": map[string]any{"type": p.OutputConfig.Format.Type, "schema": schema}}
 	}
+	total := tokens.EstimateValue(fixed)
+	for _, raw := range p.Messages {
+		var message struct {
+			Content json.RawMessage `json:"content"`
+		}
+		if err := json.Unmarshal(raw, &message); err != nil {
+			return 0, err
 		}
 		if len(message.Content) == 0 {
 			continue
