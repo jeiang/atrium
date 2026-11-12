@@ -457,6 +457,21 @@ behavior-parity target.
   including empty subrouter mounts.
   A module evaluation failure names its owner and aborts startup; no
   core-only fallback snapshot is published.
+- Module ownership is checked at build time. `tools/tableownership` keeps
+  each table's SQL inside its owning module, and `tools/registrationownership`
+  keeps every registration in the module catalog: it type-checks the
+  production packages and fails, naming file and line, when an `init`
+  function calls into another package (only the SQLite driver setup in
+  `internal/db/open_cgo.go` and the stopword table in
+  `internal/mail/rebalance/rebalance.go` may), when code outside
+  `internal/module` and `internal/app` builds or fills a registry
+  (settings, connections, proposal kinds, the effect ledger's undo and
+  resolve hooks, the assistant tool registry) or sets a registry's hook
+  fields, when anything assigns an exported package-level function variable
+  under `internal/`, or when an `internal/` package imports `internal/app`.
+  The tool registry may add the enable settings of the tools it registers.
+  `just check-quick` and the `ownership` flake check run both; `just verify`
+  runs the registration check.
 - Observability: `atrium serve` exposes Prometheus metrics and readiness on
   the loopback ops listener (`ops_listen`, `off` disables), and every command
   can export OTLP/HTTP traces when the host sets `otel_traces_endpoint` (empty

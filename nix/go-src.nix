@@ -9,6 +9,7 @@
       (root + "/internal")
       (root + "/tools/settingsgen")
       (root + "/tools/tableownership")
+      (root + "/tools/registrationownership")
       (root + "/docs/config")
       (root + "/docs/tools.md")
       (root + "/docs/integrations.md")
