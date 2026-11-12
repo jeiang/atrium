@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/inference"
@@ -60,6 +61,8 @@ func (e *Deferred) Error() string {
 
 func (e *Deferred) Unwrap() error { return e.Cause }
 
+func (c Caller) Source() string { return "classifier:" + string(c) }
+
 type Service struct {
 	db     *db.DB
 	ledger *inference.Service
@@ -86,7 +89,7 @@ func (s *Service) Classify(ctx context.Context, r Request) (json.RawMessage, err
 	}
 	if s.client == nil {
 		return nil, &Deferred{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonUnavailable,
-			Cause: errors.New("the Anthropic connection is not configured")}
+			Cause: config.NotConfigured("the Anthropic connection is not configured")}
 	}
 	limits, err := def.caps(ctx, s.db.Read)
 	if err != nil {
@@ -115,7 +118,7 @@ func (s *Service) run(ctx context.Context, r Request, runID, threadID int64, wir
 			return nil, "storage", err
 		}
 	}
-	source := "classifier:" + string(r.Caller)
+	source := r.Caller.Source()
 	attempt, err := s.ledger.Reserve(ctx, inference.Request{
 		AttemptKey: inference.NewAttemptKey(source),
 		RunID:      runID,

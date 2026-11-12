@@ -118,7 +118,7 @@ func SettingGroups() []settings.Group {
 			websearch.KeyMaxCostUSD, assistant.KeyDreamingMaxCost, assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
 		{Name: "background", Title: "Background work", Keys: []string{
 			assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, websearch.KeyModel,
-			memory.ModelKey, memory.EffortKey, serverops.KeyCondenser,
+			memory.ModelKey, memory.EffortKey,
 		}},
 	}
 }

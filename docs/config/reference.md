@@ -132,8 +132,6 @@ Operator settings are stored in the database and edited in the application. They
 | `max_run_cost_usd_opus_5_5` | float | `10` | ui |
 | `max_run_cost_usd_sonnet_5_5` | float | `6` | ui |
 | `monthly_budget_usd` | float | `150` | ui |
-| `ops_condenser` | enum (haiku, local) | `haiku` | ui |
-| `ops_condenser_model` | string | none | advanced |
 | `ops_worker_max_run_usd` | float | `0.10` | ui |
 | `ops_worker_monthly_usd` | float | `5` | ui |
 | `prompt_subagent` | string | none | ui |

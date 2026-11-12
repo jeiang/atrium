@@ -628,7 +628,7 @@ behavior-parity target.
   `web_search` is offered only to that child (chat and cron offer
   `search_web` when the thread's `web_search` option is on), and it is
   excluded from the operator's subagent tool pool.
-- The `ops-sampler` built-in job runs every 15 minutes with no model call.
+- The `ops-sampler` built-in job runs every 15 minutes; sampling makes no model call.
   It reads the configured `ops_hosts` through the Grafana metrics
   datasource and the alerts endpoint, records typed samples in
   `ops_samples` (up, cpu_pct, mem_pct, disk_root_pct, failed_units,
@@ -639,20 +639,29 @@ behavior-parity target.
   with `{{host}}` and optionally `{{selector}}`, validated on save, and
   `ops_hosts` accepts address-shaped ids only. When a fact changes state, crosses
   the 90% memory or disk threshold, or its firing alert set changes, and
-  the change set differs from the last worker run's, it starts one worker
-  run in the persistent `Ops` thread with the typed change set and quoted
-  alert names; the worker files findings in `ops_findings` (marks from the
-  thread) and the sampler resolves a finding once its fact is back to
-  normal; resolved findings are pruned after 30 days. Findings of severity
-  warning or critical appear in the attention view and on Needs you; the
-  worker has no notify, people or internet tool and never restarts or
-  changes a host. `ops_condenser` (default `haiku`) chooses how findings are
-  produced: `haiku` starts the worker run; `local` makes one JSON-schema
-  chat call to the `mail_chat_url` endpoint with `ops_condenser_model`
-  (empty uses `mail_chat_model`) and `ops_condenser_max_tokens` (default
-  2,000), files the validated findings, and records no Anthropic usage. A
-  local failure ends the sampler run with an error and retries on the next
-  pass without falling back to Haiku.
+  the change set differs from the last one recorded in the persistent `Ops`
+  thread, it makes one fixed-schema Haiku classification request (no
+  tools, no thinking, one message, `output_config.format` json_schema) with
+  the typed change set, quoted alert names and the last 24 hours of
+  samples for those facts. The request is admitted by the inference ledger
+  on a `classification` accounting thread (role
+  `classification:ops_condenser`, never listed with chats or searched as
+  memory) under the Haiku run cap lowered to `ops_worker_max_run_usd`
+  (default $0.10), the `ops_worker_monthly_usd` source cap (default $5,
+  counting reserved, unknown and settled `classifier:ops_condenser` spend)
+  and the monthly budget; the thread cost cap does not apply. Validated
+  findings for facts in the change set go to `ops_findings` (marks from the
+  `Ops` thread); others are dropped. A refusal, provider failure or reply
+  that breaks the schema writes no finding and records the change as
+  pending; the next pass with no new change retries it once. A monthly
+  budget refusal also records a classification deferral and raises the
+  core `classification_budget` attention item pointing at
+  `/settings/usage`, which clears once the budget has room; a source cap
+  refusal records no deferral. The sampler resolves a finding once its
+  fact is back to normal; resolved findings are pruned after 30 days.
+  Findings of severity warning or critical appear in the attention view
+  and on Needs you. No worker run starts automatically and nothing
+  restarts or changes a host.
 - The Notion page view is read-only: the Edit and Link buttons are gone,
   and old `notion_link` and `notion_edit` proposals stay readable and
   dismissable. Approvals are only for external or costly actions.

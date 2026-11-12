@@ -3,8 +3,10 @@ package serverops
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -64,19 +66,12 @@ func budgetItem(ctx context.Context, q db.Querier, now float64, env config.Env) 
 	if err := set.Err(); err != nil {
 		return nil, err
 	}
-	if set.Text(KeyCondenser) == CondenserLocal {
-		return nil, nil
-	}
 	budget := set.Float(KeyWorkerMonthlyUSD)
-	threadID, err := WorkerThreadID(ctx, q)
-	if err != nil || threadID == 0 {
-		return nil, err
-	}
 	loc, err := config.From(ctx).Location(env)
 	if err != nil {
 		return nil, err
 	}
-	spend, err := inference.ThreadMonthToDate(ctx, q, threadID, now, loc)
+	spend, err := MonthSpend(ctx, q, now, loc)
 	if err != nil {
 		return nil, err
 	}
@@ -88,4 +83,8 @@ func budgetItem(ctx context.Context, q db.Querier, now float64, env config.Env) 
 		Detail: fmt.Sprintf("$%.2f of $%.2f this month", spend, budget),
 		Group:  attention.NeedsDecision,
 	}, nil
+}
+
+func MonthSpend(ctx context.Context, q db.Querier, now float64, loc *time.Location) (float64, error) {
+	return inference.SourceMonthCommitted(ctx, q, classifier.Ops.Source(), now, loc)
 }

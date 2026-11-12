@@ -12,7 +12,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -287,21 +286,15 @@ func status(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	threadID, err := serverops.WorkerThreadID(ctx, tc.DB.Read)
+	spend, err := serverops.MonthSpend(ctx, tc.DB.Read, tc.Now(), loc)
 	if err != nil {
 		return nil, err
-	}
-	spend := 0.0
-	if threadID != 0 {
-		if spend, err = inference.ThreadMonthToDate(ctx, tc.DB.Read, threadID, tc.Now(), loc); err != nil {
-			return nil, err
-		}
 	}
 	if err := set.Err(); err != nil {
 		return nil, err
 	}
 	return map[string]any{
-		"last_sample": last, "hosts": hosts, "findings": findings, "mode": set.Text(serverops.KeyCondenser),
+		"last_sample": last, "hosts": hosts, "findings": findings,
 		"spend_usd": spend, "budget_usd": set.Float(serverops.KeyWorkerMonthlyUSD),
 	}, nil
 }

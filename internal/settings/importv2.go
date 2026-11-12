@@ -162,9 +162,6 @@ var importManifest = []ImportEntry{
 	{Module: "assistant", Key: "monthly_budget_usd", Class: ImportOperator, Action: ImportCarry, Target: "settings.monthly_budget_usd", Default: "150", Type: Float, Choices: nil, Cutover: false},
 	{Module: "assistant", Key: "open_meteo_ca_file", Class: ImportHost, Action: ImportDropHost, Target: "service/weather.transport.ca_file", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "assistant", Key: "open_meteo_proxy", Class: ImportHost, Action: ImportDropHost, Target: "service/weather.transport.proxy", Default: "", Type: String, Choices: nil, Cutover: false},
-	{Module: "assistant", Key: "ops_condenser", Class: ImportOperator, Action: ImportCarry, Target: "settings.ops_condenser", Default: "haiku", Type: Enum, Choices: []string{"haiku", "local"}, Cutover: false},
-	{Module: "assistant", Key: "ops_condenser_max_tokens", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/serverops/tuning.go:TuningOpsCondenserMaxTokens", Default: "2000", Type: Int, Choices: nil, Cutover: false},
-	{Module: "assistant", Key: "ops_condenser_model", Class: ImportOperator, Action: ImportCarry, Target: "settings.ops_condenser_model", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "assistant", Key: "ops_worker_max_run_usd", Class: ImportOperator, Action: ImportCarry, Target: "settings.ops_worker_max_run_usd", Default: "0.10", Type: Float, Choices: nil, Cutover: false},
 	{Module: "assistant", Key: "ops_worker_monthly_usd", Class: ImportOperator, Action: ImportCarry, Target: "settings.ops_worker_monthly_usd", Default: "5", Type: Float, Choices: nil, Cutover: false},
 	{Module: "assistant", Key: "prompt_subagent", Class: ImportOperator, Action: ImportCarry, Target: "settings.prompt_subagent", Default: "", Type: String, Choices: nil, Cutover: false},
@@ -476,7 +473,6 @@ var runtimeCutover = []string{
 	"weather_hourly_hours",
 	"weather_open_meteo_url",
 	"weather_timeout_seconds",
-	"ops_condenser_max_tokens",
 	"doom_loop_threshold",
 	"max_steps_chat",
 	"max_steps_cron",
@@ -681,11 +677,14 @@ func Manifest() []ImportEntry {
 }
 
 var retiredImport = map[string]ImportEntry{
-	"money_since":        {Key: "money_since", Class: ImportOperator, Action: ImportDrop, Target: "retired"},
-	"oidc_access_group":  {Key: "oidc_access_group", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_groups"},
-	"oidc_admin_group":   {Key: "oidc_admin_group", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_groups"},
-	"oidc_admin_emails":  {Key: "oidc_admin_emails", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_emails"},
-	"oidc_admin_domains": {Key: "oidc_admin_domains", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_domains"},
+	"ops_condenser":            {Key: "ops_condenser", Module: "assistant", Class: ImportOperator, Action: ImportDrop, Target: "retired; server-ops findings use fixed-schema Haiku classification"},
+	"ops_condenser_max_tokens": {Key: "ops_condenser_max_tokens", Module: "assistant", Class: ImportOperator, Action: ImportDrop, Target: "retired; server-ops findings use fixed-schema Haiku classification"},
+	"ops_condenser_model":      {Key: "ops_condenser_model", Module: "assistant", Class: ImportOperator, Action: ImportDrop, Target: "retired; server-ops findings use fixed-schema Haiku classification"},
+	"money_since":              {Key: "money_since", Class: ImportOperator, Action: ImportDrop, Target: "retired"},
+	"oidc_access_group":        {Key: "oidc_access_group", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_groups"},
+	"oidc_admin_group":         {Key: "oidc_admin_group", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_groups"},
+	"oidc_admin_emails":        {Key: "oidc_admin_emails", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_emails"},
+	"oidc_admin_domains":       {Key: "oidc_admin_domains", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_domains"},
 }
 
 func RemovedHostKey(key string) (string, bool) {

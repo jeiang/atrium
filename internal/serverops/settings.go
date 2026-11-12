@@ -22,13 +22,6 @@ const (
 	KeyQueryFailedUnit  = "ops_query_failed_units"
 	KeyWorkerMonthlyUSD = classifier.OpsMonthlyCapKey
 	KeyWorkerMaxRunUSD  = classifier.OpsRunCapKey
-	KeyCondenser        = "ops_condenser"
-	KeyCondenserModel   = "ops_condenser_model"
-)
-
-const (
-	CondenserHaiku = "haiku"
-	CondenserLocal = "local"
 )
 
 const (
@@ -191,13 +184,6 @@ func Settings() []settings.Def {
 		settings.Value(settings.UI, settings.Def{
 			Key: KeyWorkerMaxRunUSD, Label: "Server-ops run cost cap (USD)", Module: "assistant", Type: settings.Float, Default: "0.10",
 			Check: settings.Between(0, 10000),
-		}),
-		settings.Value(settings.UI, settings.Def{
-			Key: KeyCondenser, Label: "Server-ops findings written by", Module: "assistant", Type: settings.Enum,
-			Choices: []string{CondenserHaiku, CondenserLocal}, Default: CondenserHaiku,
-		}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyCondenserModel, Module: "assistant", Type: settings.String,
 		}),
 	}
 }
