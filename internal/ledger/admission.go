@@ -19,6 +19,10 @@ func WithAdmission(ctx context.Context, check func() error) context.Context {
 	return context.WithValue(ctx, admissionKey{}, check)
 }
 
+func WithoutAdmission(ctx context.Context) context.Context {
+	return context.WithValue(ctx, admissionKey{}, func() error { return nil })
+}
+
 func CheckAdmission(ctx context.Context) error {
 	if check, ok := ctx.Value(admissionKey{}).(func() error); ok {
 		return check()
