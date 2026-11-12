@@ -1,6 +1,9 @@
 package application
 
-import "reflect"
+import (
+	"reflect"
+	"strings"
+)
 
 type Name string
 
@@ -38,6 +41,7 @@ type Definition struct {
 	Authority []Authority
 	Effect    Effect
 	Audit     bool
+	AuditSet  bool
 	Input     reflect.Type
 	Output    reflect.Type
 }
@@ -49,6 +53,7 @@ func Describe[I, O any](name Name, kind Kind, authority []Authority, effect Effe
 		Authority: authority,
 		Effect:    effect,
 		Audit:     audit,
+		AuditSet:  true,
 		Input:     reflect.TypeFor[I](),
 		Output:    reflect.TypeFor[O](),
 	}
@@ -66,7 +71,14 @@ const (
 )
 
 type Binding struct {
-	Kind   BindingKind
-	Target string
-	Uses   []Name
+	Kind      BindingKind
+	Target    string
+	Uses      []Name
+	Composite bool
+}
+
+func Route(target string) (method, pattern string, ok bool) {
+	method, pattern, ok = strings.Cut(target, " ")
+	ok = ok && method != "" && method == strings.ToUpper(method) && strings.HasPrefix(pattern, "/") && !strings.ContainsAny(pattern, " \t")
+	return method, pattern, ok
 }

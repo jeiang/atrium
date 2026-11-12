@@ -116,7 +116,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			r := &openloops.Reminders{DB: d.DB, Ledger: d.Ledger, Now: d.Now}
 			effects := module.Effects{
 				Proposals: slices.Concat(e.Proposals(module.Mail), r.Proposals(module.Mail)),
-				Undo:      slices.Concat(e.Undo(), mailtools.Undo(d.Ledger, d.Open), live.Undo(d.Open, d.DB.Read), openloops.Undo()),
+				Undo:      slices.Concat(e.Undo(), mailtools.Undo(d.Ledger, d.Open), live.Undo(d.Open, d.DB), openloops.Undo()),
 				Resolve:   live.Resolve(),
 			}
 			if d.Syncer != nil {

@@ -265,11 +265,11 @@ func (p *pages) chatNew(w http.ResponseWriter, r *http.Request) {
 	check(err)
 	attached, ok := p.attach(w, r, thread, uploads)
 	if !ok {
-		check(p.svc.DeleteThread(ctx, threadID))
+		check(p.svc().DeleteThread(ctx, threadID))
 		return
 	}
 	if text != "" {
-		_, err := p.svc.StartRun(ctx, threadID, text, service.Start{Kind: threads.Chat, Operator: true, Files: append(attached, refs...)})
+		_, err := p.svc().StartRun(ctx, threadID, text, service.Start{Kind: threads.Chat, Operator: true, Files: append(attached, refs...)})
 		if p.refused(w, r, err) {
 			return
 		}
@@ -382,7 +382,7 @@ func (p *pages) chatDelete(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if p.refused(w, r, p.svc.DeleteThread(detached(r), threadID)) {
+	if p.refused(w, r, p.svc().DeleteThread(detached(r), threadID)) {
 		return
 	}
 	if web.IsPartial(r) {
