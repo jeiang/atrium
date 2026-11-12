@@ -209,6 +209,9 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 		if paid.Note(err) {
 			continue
 		}
+		if _, unanswered := classify.Unanswered(err); unanswered {
+			continue
+		}
 		if err != nil {
 			return proposed, flagged, err
 		}

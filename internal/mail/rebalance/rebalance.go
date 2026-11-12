@@ -20,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailops"
@@ -610,10 +609,12 @@ func SuggestName(c *classifier.Service) Namer {
 		name := ""
 		raw, err := c.Classify(ctx, classifier.Request{Caller: classifier.FolderName, Item: item, System: NameSystem, User: prompt, Schema: schema})
 		var deferred *classifier.Deferred
+		var unanswered *classifier.Unanswered
 		switch {
 		case budgetDeferred(err):
 			return "", err
-		case errors.As(err, &deferred) || errors.Is(err, httpx.ErrPayload):
+		case errors.As(err, &deferred) || errors.As(err, &unanswered):
+			log.Warn(fmt.Sprintf("rebalance: no model name for %s, using the fallback name: %v", item.Key, err))
 		case err != nil:
 			return "", err
 		default:

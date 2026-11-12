@@ -81,3 +81,15 @@ func (d *Deferral) Note(err error) bool {
 	}
 	return true
 }
+
+func Unanswered(err error) (final, ok bool) {
+	var unanswered *classifier.Unanswered
+	if !errors.As(err, &unanswered) {
+		return false, false
+	}
+	if unanswered.Reason != classifier.ReasonExhausted {
+		log.Warn("paid classification gave no usable answer for this message; the pass continues",
+			"caller", string(unanswered.Caller), "item", unanswered.ItemKey, "reason", unanswered.Reason, "final", unanswered.Final)
+	}
+	return unanswered.Final, true
+}

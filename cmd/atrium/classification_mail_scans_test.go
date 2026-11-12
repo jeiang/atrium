@@ -445,21 +445,25 @@ func TestMailPassMalformedFlagReplyMakesNoDecision(t *testing.T) {
 	a := r.targets[0]
 	flags[a.subject] = `{"person_asking":"yes","deadline_or_payment_due":false,"security_event":false,"flag":true}`
 
-	code, stderr := r.sync(t)
-	if code == cli.ExitOK {
-		t.Fatalf("sync with a malformed flag reply succeeded: stderr %q", stderr)
+	if code, stderr := r.sync(t); code != cli.ExitOK {
+		t.Fatalf("sync with a malformed flag reply failed: exit %d stderr %q", code, stderr)
 	}
-	if got := r.flag(t, a.id); got.present {
-		t.Errorf("a malformed reply produced a flag decision: %+v", got)
+	if got := r.flag(t, a.id); !got.present || got.llm.Valid || got.asking.Valid {
+		t.Errorf("a malformed reply produced a model flag judgment: %+v", got)
+	}
+	for _, m := range r.targets[1:] {
+		if got := r.flag(t, m.id); !got.llm.Valid {
+			t.Errorf("message %q after the malformed reply was not judged: %+v", m.subject, got)
+		}
 	}
 	for _, m := range r.targets {
-		if got := r.event(t, m.id); got != "" {
-			t.Errorf("message %q has an event status %q after the malformed reply", m.subject, got)
+		if got := r.event(t, m.id); got == "" {
+			t.Errorf("message %q has no event judgment after the malformed flag reply", m.subject)
 		}
 	}
 	var charged int
-	if err := r.d.Read.QueryRow("SELECT COUNT(*) FROM usage WHERE source = 'classifier:mail_flag' AND state = 'settled'").Scan(&charged); err != nil || charged != 1 {
-		t.Errorf("settled usage for the malformed reply: %d %v", charged, err)
+	if err := r.d.Read.QueryRow("SELECT COUNT(*) FROM usage WHERE source = 'classifier:mail_flag' AND state = 'settled'").Scan(&charged); err != nil || charged != len(r.targets) {
+		t.Errorf("settled flag usage with one malformed reply: %d %v, want one charge per message", charged, err)
 	}
 	r.noMailWrites(t)
 	r.noLocalJudgments(t)

@@ -106,9 +106,14 @@ func Run(ctx context.Context, d *db.DB, now float64, spec Spec) (Result, error) 
 			return result, err
 		}
 		found, err := spec.Judge(ctx, row, body)
+		final, unanswered := classify.Unanswered(err)
 		switch {
 		case spec.Paid.Note(err):
 			continue
+		case unanswered && !final:
+			continue
+		case unanswered:
+			found = 0
 		case errors.Is(err, httpx.ErrPayload) || errors.Is(err, httpx.ErrMissing) || errors.Is(err, httpx.ErrShape):
 			log.Warn(fmt.Sprintf("message %d: unusable %s answer: %s", row.ID, spec.Kind, httpx.Message(err)))
 			found = 0

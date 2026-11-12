@@ -72,6 +72,8 @@ func folderPrompt(ctx context.Context, catalog string, neighbors []Neighbor, m M
 		"Body:\n" + textutil.Clip(body, endpoint.From(ctx).LLMBodyChars)
 }
 
+func Askable(folder string) bool { return !strings.EqualFold(folder, Uncertain) }
+
 func (s *Service) JudgeFolder(ctx context.Context, item classifier.Item, folders []string, catalog string, neighbors []Neighbor, m Message, body string) (string, bool, error) {
 	schema, err := folderSchema(folders)
 	if err != nil {

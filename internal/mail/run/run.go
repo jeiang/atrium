@@ -229,6 +229,7 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 			failed = append(failed, account)
 		}
 	}
+	var errs []error
 	for _, extra := range p.Extras {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -236,6 +237,9 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 		result, err := extra.Run(ctx, paid)
 		if err != nil {
 			log.Error("refresh failed", "name", extra.Name, logx.Err, err.Error())
+			if !modelOutcome(err) {
+				errs = append(errs, fmt.Errorf("%s refresh: %w", extra.Name, err))
+			}
 			continue
 		}
 		log.Info("refreshed", "name", extra.Name, "result", result)
@@ -244,9 +248,15 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 		return err
 	}
 	if len(failed) > 0 {
-		return fmt.Errorf("the live pass failed for %s", strings.Join(failed, ", "))
+		errs = append([]error{fmt.Errorf("the live pass failed for %s", strings.Join(failed, ", "))}, errs...)
 	}
-	return nil
+	return errors.Join(errs...)
+}
+
+func modelOutcome(err error) bool {
+	var deferred *classifier.Deferred
+	var unanswered *classifier.Unanswered
+	return errors.Is(err, httpx.ErrPayload) || errors.As(err, &deferred) || errors.As(err, &unanswered)
 }
 
 const checkpointWait = time.Second

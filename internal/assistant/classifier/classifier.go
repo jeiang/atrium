@@ -2,6 +2,7 @@ package classifier
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -14,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/jsonx"
 )
@@ -29,7 +29,11 @@ const (
 	ReasonRefusal     = "refusal"
 	ReasonTruncated   = "truncated"
 	ReasonStop        = "unexpected_stop"
+	ReasonMalformed   = "malformed_output"
+	ReasonExhausted   = "exhausted"
 )
+
+const MaxItemFailures = 2
 
 const finishTimeout = 5 * time.Second
 
@@ -61,6 +65,24 @@ func (e *Deferred) Error() string {
 
 func (e *Deferred) Unwrap() error { return e.Cause }
 
+type Unanswered struct {
+	Caller  Caller
+	ItemKey string
+	Reason  string
+	Final   bool
+	Cause   error
+}
+
+func (e *Unanswered) Error() string {
+	text := fmt.Sprintf("classifier: %s item %s unanswered: %s", e.Caller, e.ItemKey, e.Reason)
+	if e.Cause != nil {
+		text += ": " + e.Cause.Error()
+	}
+	return text
+}
+
+func (e *Unanswered) Unwrap() error { return e.Cause }
+
 func (c Caller) Source() string { return "classifier:" + string(c) }
 
 type Service struct {
@@ -86,6 +108,19 @@ func (s *Service) Classify(ctx context.Context, r Request) (json.RawMessage, err
 	if err != nil {
 		return nil, err
 	}
+	if def.reuse {
+		kept, err := s.kept(ctx, r)
+		if err != nil || kept != nil {
+			return kept, err
+		}
+	}
+	failures, err := s.itemFailures(ctx, r)
+	if err != nil {
+		return nil, err
+	}
+	if failures >= MaxItemFailures {
+		return nil, &Unanswered{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonExhausted, Final: true}
+	}
 	if s.client == nil {
 		return nil, &Deferred{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonUnavailable,
 			Cause: config.NotConfigured("the Anthropic connection is not configured")}
@@ -99,6 +134,16 @@ func (s *Service) Classify(ctx context.Context, r Request) (json.RawMessage, err
 		return nil, err
 	}
 	out, reason, err := s.run(ctx, r, runID, threadID, wire, def.maxTokens, limits)
+	if err == nil && def.reuse {
+		if _, keepErr := journal.AppendMessage(ctx, s.db, threadID, &runID, "assistant",
+			[]json.RawMessage{json.RawMessage(jsonx.Dumps(map[string]any{"type": "text", "text": string(out)}))}, s.now(), nil); keepErr != nil {
+			out, reason, err = nil, "storage", keepErr
+		}
+	}
+	var unanswered *Unanswered
+	if errors.As(err, &unanswered) {
+		unanswered.Final = failures+1 >= MaxItemFailures
+	}
 	state := journal.Done
 	if err != nil {
 		state = journal.Failed
@@ -106,9 +151,48 @@ func (s *Service) Classify(ctx context.Context, r Request) (json.RawMessage, err
 	finishCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), finishTimeout)
 	defer cancel()
 	if finishErr := journal.FinishClassification(finishCtx, s.db.Write, runID, state, s.now(), reason); finishErr != nil {
-		return nil, errors.Join(err, finishErr)
+		return nil, fmt.Errorf("classifier: %s item %s: closing the accounting run: %w", r.Caller, r.Item.Key, finishErr)
 	}
 	return out, err
+}
+
+const classificationRuns = "FROM runs r JOIN threads t ON t.id = r.thread_id " +
+	"WHERE t.kind = 'classification' AND t.role = ? AND r.kind = 'classification' AND r.state = ? " +
+	"AND json_extract(r.limits_json, '$.item_key') = ?"
+
+func (s *Service) itemFailures(ctx context.Context, r Request) (int, error) {
+	var n int
+	err := s.db.Read.QueryRowContext(ctx, "SELECT COUNT(*) "+classificationRuns+" AND r.error IN (?, ?, ?, ?)",
+		"classification:"+string(r.Caller), journal.Failed, r.Item.Key, ReasonRefusal, ReasonTruncated, ReasonStop, ReasonMalformed).Scan(&n)
+	return n, err
+}
+
+func (s *Service) kept(ctx context.Context, r Request) (json.RawMessage, error) {
+	rows, err := s.db.Read.QueryContext(ctx, "SELECT m.content_json FROM thread_messages m JOIN runs r ON r.id = m.run_id "+
+		strings.TrimPrefix(classificationRuns, "FROM runs r ")+" AND m.role = 'assistant' ORDER BY m.id DESC",
+		"classification:"+string(r.Caller), journal.Done, r.Item.Key)
+	if err != nil {
+		return nil, err
+	}
+	stored, err := db.Collect(rows, func(rows *sql.Rows) (string, error) {
+		var content string
+		err := rows.Scan(&content)
+		return content, err
+	})
+	if err != nil {
+		return nil, err
+	}
+	for _, content := range stored {
+		var blocks []json.RawMessage
+		if json.Unmarshal([]byte(content), &blocks) != nil {
+			continue
+		}
+		text, err := onlyText(blocks)
+		if err == nil && anthropic.ValidateJSONOutput(r.Schema, json.RawMessage(text)) == nil {
+			return json.RawMessage(text), nil
+		}
+	}
+	return nil, nil
 }
 
 func (s *Service) run(ctx context.Context, r Request, runID, threadID int64, wire json.RawMessage, maxTokens int64, limits caps) (json.RawMessage, string, error) {
@@ -161,18 +245,18 @@ func (s *Service) run(ctx context.Context, r Request, runID, threadID int64, wir
 	switch msg.StopReason {
 	case "end_turn":
 	case "refusal":
-		return nil, ReasonRefusal, &Deferred{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonRefusal}
+		return nil, ReasonRefusal, &Unanswered{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonRefusal}
 	case "max_tokens":
-		return nil, ReasonTruncated, &Deferred{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonTruncated}
+		return nil, ReasonTruncated, &Unanswered{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonTruncated}
 	default:
-		return nil, ReasonStop, &Deferred{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonStop}
+		return nil, ReasonStop, &Unanswered{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonStop}
 	}
 	text, err := onlyText(msg.Content)
 	if err == nil {
 		err = anthropic.ValidateJSONOutput(r.Schema, json.RawMessage(text))
 	}
 	if err != nil {
-		return nil, "malformed_output", fmt.Errorf("classifier: %s: %w: %w", r.Caller, httpx.ErrPayload, err)
+		return nil, ReasonMalformed, &Unanswered{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonMalformed, Cause: err}
 	}
 	return json.RawMessage(text), "", nil
 }
