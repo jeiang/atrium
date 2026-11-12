@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -28,14 +27,13 @@ const (
 )
 
 var (
-	errUnbound = errors.New("the assistant live-run service is not open in this process")
+	errUnbound = errors.New("the application is not open in this context")
 )
 
 type Bindings struct {
 	env   config.Env
 	tools registry.Source
 	now   func() float64
-	live  atomic.Pointer[App]
 }
 
 func NewBindings(env config.Env, tools registry.Source, now func() float64) *Bindings {
@@ -45,56 +43,70 @@ func NewBindings(env config.Env, tools registry.Source, now func() float64) *Bin
 type liveRun struct {
 	store   *ledger.Store
 	svc     *service.Service
-	base    context.Context
 	cancel  context.CancelFunc
-	mu      sync.Mutex
-	stopped bool
-	work    sync.WaitGroup
+	checked atomic.Bool
 }
 
 type appKey struct{}
 
-func (b *Bindings) open(ctx context.Context) (*App, error) {
+func bound(ctx context.Context) (*App, error) {
+	if a, ok := ctx.Value(appKey{}).(*App); ok {
+		return a, nil
+	}
+	return nil, errUnbound
+}
+
+func (b *Bindings) open(ctx context.Context) (*App, context.Context, error) {
 	set := module.SetFrom(ctx)
 	if set == nil {
-		return nil, module.ErrNotEvaluated
+		return nil, nil, module.ErrNotEvaluated
 	}
 	a, err := Open(ctx, b.env, set.Catalog())
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	if b.live.CompareAndSwap(nil, a) {
-		a.unbind = func() { b.live.CompareAndSwap(a, nil) }
-	}
-	return a, nil
+	return a, context.WithValue(ctx, appKey{}, a), nil
 }
 
 func (b *Bindings) Assistant(ctx context.Context) (*service.Service, error) {
-	if a, ok := ctx.Value(appKey{}).(*App); ok {
-		return a.Assistant(), nil
-	}
-	if b == nil {
-		return nil, errUnbound
-	}
-	a := b.live.Load()
-	if a == nil || a.Assistant() == nil {
-		return nil, errUnbound
+	a, err := bound(ctx)
+	if err != nil {
+		return nil, err
 	}
 	return a.Assistant(), nil
+}
+
+func (b *Bindings) Resources(ctx context.Context) (*db.DB, config.Config, error) {
+	a, err := bound(ctx)
+	if err != nil {
+		return nil, config.Config{}, err
+	}
+	return a.db, a.config, nil
+}
+
+func (b *Bindings) StartAssistant(ctx context.Context) error {
+	a, err := bound(ctx)
+	if err != nil {
+		return err
+	}
+	if a.live == nil {
+		return errUnbound
+	}
+	return a.startAssistant(ctx)
 }
 
 func (b *Bindings) OpenAssistant(ctx context.Context) (context.Context, *service.Service, func(), error) {
 	if b == nil {
 		return nil, nil, nil, errUnbound
 	}
-	a, err := b.open(ctx)
+	a, ctx, err := b.open(ctx)
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	if err := a.bindLive(ctx, b.tools, b.now); err != nil {
 		return nil, nil, nil, errors.Join(err, a.Close())
 	}
-	return context.WithValue(ctx, appKey{}, a), a.Assistant(), func() {
+	return ctx, a.Assistant(), func() {
 		if err := a.Close(); err != nil {
 			log.Warn("could not drain the application before closing the database", logx.Err, err.Error())
 		}
@@ -108,17 +120,17 @@ type serveBoot struct {
 }
 
 func (s *serveBoot) Open(ctx context.Context) (context.Context, *db.DB, config.Config, func() error, error) {
-	a, err := s.b.open(ctx)
+	a, ctx, err := s.b.open(ctx)
 	if err != nil {
 		return nil, nil, config.Config{}, nil, err
 	}
-	return context.WithValue(ctx, appKey{}, a), a.DB(), a.Config(), a.Close, nil
+	return ctx, a.DB(), a.Config(), a.Close, nil
 }
 
-func (s *serveBoot) Start(ctx context.Context, d *web.Deps) error {
-	a, ok := ctx.Value(appKey{}).(*App)
-	if !ok {
-		return errUnbound
+func (s *serveBoot) Start(ctx context.Context, d *web.Deps, services bool) error {
+	a, err := bound(ctx)
+	if err != nil {
+		return err
 	}
 	set := module.SetFrom(ctx)
 	if err := set.Start(ctx, d); err != nil {
@@ -136,7 +148,7 @@ func (s *serveBoot) Start(ctx context.Context, d *web.Deps) error {
 		}
 		return err
 	}
-	return set.OnEnable(module.Assistant, a.startAssistant)
+	return a.serve(ctx, set, services)
 }
 
 func (a *App) bindLive(ctx context.Context, tools registry.Source, now func() float64) error {
@@ -155,7 +167,7 @@ func (a *App) bindLive(ctx context.Context, tools registry.Source, now func() fl
 	if svc.Now == nil {
 		svc.Now = assistant.Now
 	}
-	a.live = &liveRun{store: store, svc: svc, base: base, cancel: cancel}
+	a.live = &liveRun{store: store, svc: svc, cancel: cancel}
 	return nil
 }
 
@@ -166,35 +178,31 @@ func (a *App) Assistant() *service.Service {
 	return a.live.svc
 }
 
-func (a *App) startAssistant() error {
-	l := a.live
-	l.mu.Lock()
-	defer l.mu.Unlock()
-	if l.stopped {
-		return nil
-	}
-	tz := config.From(l.base).TZName(a.env)
+func (a *App) startAssistant(ctx context.Context) error {
+	tz := config.From(ctx).TZName(a.env)
 	jobs := a.catalog.Jobs()
 	stamp := assistant.Now()
-	if err := a.db.WithTx(l.base, func(tx *sql.Tx) error {
-		return scheduler.Ensure(l.base, tx, jobs, tz, stamp)
-	}); err != nil && !errors.Is(err, context.Canceled) {
+	if err := a.db.WithTx(ctx, func(tx *sql.Tx) error {
+		return scheduler.Ensure(ctx, tx, jobs, tz, stamp)
+	}); err != nil {
 		return err
 	}
-	l.work.Go(func() { l.svc.CheckCatalog(l.base) })
+	if a.live.checked.CompareAndSwap(false, true) {
+		a.live.svc.CheckCatalog(ctx)
+	}
 	return nil
 }
 
 func (l *liveRun) drain() error {
-	l.mu.Lock()
-	l.stopped = true
-	l.mu.Unlock()
 	work, stopWork := context.WithTimeout(context.Background(), workDrainTimeout)
 	defer stopWork()
 	err := l.svc.Drain(work)
 	l.cancel()
-	l.work.Wait()
+	return err
+}
+
+func (l *liveRun) drainStore() error {
 	final, stopFinal := context.WithTimeout(context.Background(), ledgerDrainTimeout)
 	defer stopFinal()
-	return errors.Join(err, l.store.Drain(final))
+	return l.store.Drain(final)
 }

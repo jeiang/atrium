@@ -21,7 +21,7 @@ func Require(ctx context.Context, owner string, generation uint64) error {
 		return &OwnerDisabled{Module: owner}
 	}
 	n := s.Current()
-	if n == nil || !n.Enabled(owner) || n.Generation(owner) != generation {
+	if n == nil || s.halting(owner) || !n.Enabled(owner) || n.Generation(owner) != generation {
 		return &OwnerDisabled{Module: owner}
 	}
 	return nil

@@ -111,14 +111,18 @@
     assert builtins.all (name: builtins.all (line: lib.hasInfix line (unitText name)) sharedLines) appUnits;
     assert builtins.length (builtins.filter (lib.hasPrefix "LoadCredential=") cfg.runProperties) == builtins.length credentialLines; true;
     backupAbsentByDefault = assert !(defaults.config.systemd.units ? "atrium-backup.service" || defaults.config.systemd.units ? "atrium-backup.timer"); true;
-    notifyUnits = ["atrium-web.service" "atrium-watch.service" "atrium-agent-scheduler.service"];
+    notifyUnits = ["atrium-web.service" "atrium-watch.service"];
+    schedulerInServe = assert !(nixos.config.systemd.units ? "atrium-agent-scheduler.service");
+    assert !(defaults.config.systemd.units ? "atrium-agent-scheduler.service");
+    assert !(lib.hasInfix "--no-services" (unitText "atrium-web.service"));
+    assert !(nixos.config.systemd.units ? "atrium-web-local.service") || lib.hasInfix "--no-services" (unitText "atrium-web-local.service"); true;
     notifyOnLongRunning = let
       notifying = name: let t = unitText name; in lib.hasInfix "Type=notify" t && lib.hasInfix "WatchdogSec=" t;
     in
       assert builtins.all notifying notifyUnits;
       assert !(builtins.any notifying ["atrium-sync.service" "atrium-scan.service" "atrium-notion-sync.service" "atrium-backup.service"]); true;
     vaultExport = let
-      scheduler = unitText "atrium-agent-scheduler.service";
+      scheduler = unitText "atrium-web.service";
     in
       assert cfg.renderedHost.export.export_obsidian_dir == "/var/lib/atrium-vault";
       assert lib.hasInfix "ReadWritePaths=/var/lib/atrium-vault" scheduler;
@@ -149,7 +153,7 @@
           touch $out
         '';
 
-        module = assert exampleEvaluates && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && connectionRefused && credentialsMatch && backupAbsentByDefault && notifyOnLongRunning && vaultExport && hostConfig;
+        module = assert exampleEvaluates && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && connectionRefused && credentialsMatch && backupAbsentByDefault && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig;
           pkgs.linkFarm "atrium-units" (map (name: {
               inherit name;
               path = unit name;

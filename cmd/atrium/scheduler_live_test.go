@@ -96,7 +96,7 @@ func TestAgentTickLeavesAnotherProcessLiveRunOnTheJobThread(t *testing.T) {
 	}
 	ownRun := asstLastRun(t, d, thread)
 
-	w := asstBrowse(t, startServeIn(t, dir))
+	w := asstBrowse(t, startWebOnlyIn(t, dir))
 	api.Push(asstReply("reviewed in serve"))
 	code, body, _ := w.post(fmt.Sprintf("/chat/%d/runs/%d/resume", thread, ownRun), url.Values{}, true)
 	w.want(code, http.StatusOK, body)

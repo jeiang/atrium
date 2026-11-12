@@ -32,7 +32,7 @@ func runScheduler(env *cli.Env, open Open, enabled func(module string) bool) err
 	defer closeApp()
 	notifier := sdnotify.New(func(name string) string { v, _ := env.Env(name); return v })
 	beat := sdnotify.NewHeartbeat()
-	s := jobworker.New(svc, module.SetFrom(ctx).Catalog().Jobs(), enabled, beat.Beat)
+	s := jobworker.New(svc, module.SetFrom(ctx).Catalog().Jobs(), jobworker.Options{Enabled: enabled, Beat: beat.Beat})
 	notifier.Ready()
 	notifier.Status("scheduling")
 	stopWatchdog := notifier.Watch(ctx, beat)

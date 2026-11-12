@@ -19,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/sdnotify"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -28,41 +27,7 @@ import (
 const (
 	defaultHost     = "127.0.0.1"
 	shutdownTimeout = 10 * time.Second
-	recoverInterval = time.Minute
 )
-
-func recoverProposals(ctx context.Context, d *db.DB) error {
-	n, err := proposals.RecoverStuck(ctx, d, float64(time.Now().UnixNano())/1e9)
-	if n > 0 {
-		log.Warn("recovered interrupted approved proposals", "count", n)
-	}
-	return err
-}
-
-type Recover func(context.Context, *db.DB, config.Config) error
-
-func recoverEvery(ctx context.Context, d *db.DB, cfg config.Config, recovers []Recover) {
-	t := time.NewTicker(recoverInterval)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-			if err := db.Ready(ctx, d); err != nil && ctx.Err() == nil {
-				log.Error("database refresh failed", logx.Err, err.Error())
-			}
-			if err := recoverProposals(ctx, d); err != nil && ctx.Err() == nil {
-				log.Error("proposal recovery failed", logx.Err, err.Error())
-			}
-			for _, run := range recovers {
-				if err := run(ctx, d, cfg); err != nil && ctx.Err() == nil {
-					log.Error("recovery failed", logx.Err, err.Error())
-				}
-			}
-		}
-	}
-}
 
 type NavItem = tpl.NavItem
 
@@ -72,9 +37,7 @@ type Page struct {
 	Globals   map[string]any
 	Public    func(config.Config, config.Env, *db.DB, *settings.Registry) func(*http.Request) bool
 	Home      string
-	Start     func(context.Context, *Deps) error
 	Nav       []tpl.NavItem
-	Recover   Recover
 	OIDC      oidc.Source
 }
 
@@ -85,7 +48,7 @@ type Resource struct {
 
 type Boot interface {
 	Open(context.Context) (context.Context, *db.DB, config.Config, func() error, error)
-	Start(context.Context, *Deps) error
+	Start(ctx context.Context, d *Deps, services bool) error
 }
 
 func ServeCommand(boot Boot, pages ...Page) *cli.Command {
@@ -97,8 +60,9 @@ func ServeCommand(boot Boot, pages ...Page) *cli.Command {
 			modes := args.Repeated("auth", cli.Opt{Choices: authModes[:], Help: "authentication mode; repeatable (proxy and oidc combine; default proxy)"})
 			hosts := args.Repeated("allowed-host", cli.Opt{Help: "accepted Host header; repeatable (proxy mode requires one, or ATRIUM_PUBLIC_HOST)"})
 			trusted := args.Repeated("trusted-proxy", cli.Opt{Help: "socket peer CIDR allowed to set CF-Connecting-IP; repeatable"})
+			noServices := args.Bool("no-services", cli.Opt{Help: "serve the web UI only; another serve process runs the scheduler and background services"})
 			return func(env *cli.Env) int {
-				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, trusted: *trusted, pages: pages, env: env.Env, boot: boot})
+				return serve(env, serveArgs{host: *host, port: *port, auth: *modes, hosts: *hosts, trusted: *trusted, pages: pages, env: env.Env, boot: boot, services: !*noServices})
 			}
 		},
 	}
@@ -115,6 +79,7 @@ type serveArgs struct {
 	settings *settings.Registry
 	state    *config.State
 	boot     Boot
+	services bool
 }
 
 func publicHosts(given []string, env config.Env) []string {
@@ -194,30 +159,6 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 	if err != nil {
 		return err
 	}
-	var recovers []Recover
-	for _, p := range a.pages {
-		if p.Recover != nil {
-			recovers = append(recovers, p.Recover)
-		}
-	}
-	for _, run := range recovers {
-		if err := run(ctx, d, cfg); err != nil {
-			return err
-		}
-	}
-	if err := recoverProposals(ctx, d); err != nil {
-		return err
-	}
-	recovering, stopRecovering := context.WithCancel(ctx)
-	recovered := make(chan struct{})
-	go func() {
-		defer close(recovered)
-		recoverEvery(recovering, d, cfg, recovers)
-	}()
-	defer func() {
-		stopRecovering()
-		<-recovered
-	}()
 	var modules []Module
 	var templates []fs.FS
 	globals := map[string]any{}
@@ -256,17 +197,7 @@ func run(ctx context.Context, a serveArgs, hosts []string, policy Policy) error 
 		return err
 	}
 	srv, err := New(Options{Ctx: ctx, Cfg: cfg, Env: a.env, DB: d, Settings: a.settings, State: a.state, Auth: a.auth, Policy: &policy, AllowedHosts: hosts, Trusted: trusted, Public: anyPublic(public), Render: render, Modules: modules, OIDC: sessions, Home: home, OnReady: func(deps *Deps) error {
-		if err := a.boot.Start(ctx, deps); err != nil {
-			return err
-		}
-		for _, p := range a.pages {
-			if p.Start != nil {
-				if err := p.Start(ctx, deps); err != nil {
-					return err
-				}
-			}
-		}
-		return nil
+		return a.boot.Start(ctx, deps, a.services)
 	}})
 	if err != nil {
 		return err

@@ -20,7 +20,7 @@ type App struct {
 	state   *config.State
 	catalog *module.Catalog
 	live    *liveRun
-	unbind  func()
+	rt      *services
 }
 
 func Open(ctx context.Context, env config.Env, cat *module.Catalog) (*App, error) {
@@ -52,12 +52,18 @@ func (a *App) State() *config.State { return a.state }
 func (a *App) Catalog() *module.Catalog { return a.catalog }
 
 func (a *App) Close() error {
-	if a.unbind != nil {
-		a.unbind()
-	}
 	var err error
+	if a.rt != nil {
+		err = a.rt.drainOwners()
+	}
 	if a.live != nil {
-		err = a.live.drain()
+		err = errors.Join(err, a.live.drain())
+	}
+	if a.rt != nil {
+		err = errors.Join(err, a.rt.drainScheduler())
+	}
+	if a.live != nil {
+		err = errors.Join(err, a.live.drainStore())
 	}
 	return errors.Join(err, a.db.Close())
 }

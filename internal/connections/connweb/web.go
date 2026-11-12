@@ -12,7 +12,9 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
@@ -73,30 +75,16 @@ func Module(r chi.Router, d *web.Deps) {
 	d.Authenticated(http.MethodGet, googlePath+"/callback", h.googleCallback)
 	d.Authenticated(http.MethodPost, googlePath+"/paste", h.googlePaste)
 	d.Authenticated(http.MethodPost, googlePath+"/test", h.googleTest)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		watch(d)
-	}()
-	d.OnClose(func() { <-done })
 }
 
-func watch(d *web.Deps) {
-	ctx, cancel := context.WithCancel(d.Ctx)
-	defer cancel()
-	go func() {
-		<-d.Stopping
-		cancel()
-	}()
-	reg, err := connections.From(d.Ctx)
+func Watch(ctx context.Context, d *db.DB) error {
+	reg, err := connections.From(ctx)
 	if err != nil {
-		log.Warn("connection health check failed", logx.Err, err.Error())
-		return
+		return err
 	}
-	store, err := connections.New(d.DB, d.State.Host(), reg)
+	store, err := connections.New(d, config.From(ctx).Host(), reg)
 	if err != nil {
-		log.Warn("connection health check failed", logx.Err, err.Error())
-		return
+		return err
 	}
 	if err := store.CheckStale(ctx); err != nil && ctx.Err() == nil {
 		log.Warn("connection health check failed", logx.Err, err.Error())
@@ -106,7 +94,7 @@ func watch(d *web.Deps) {
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return ctx.Err()
 		case <-t.C:
 			if err := store.CheckAll(ctx); err != nil && ctx.Err() == nil {
 				log.Warn("connection health check failed", logx.Err, err.Error())

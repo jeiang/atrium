@@ -539,9 +539,7 @@ func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 		t.Fatalf("%d scheduler jobs seeded while the assistant is off", n)
 	}
 	toggle("true")
-	if n := jobs(); n == 0 {
-		t.Fatal("enabling the assistant seeded no scheduler jobs")
-	}
+	waitFor(t, func() bool { return jobs() > 0 })
 	waitFor(t, func() bool { return api.ModelLists() > 0 })
 	if n := api.ModelLists(); n != 1 {
 		t.Fatalf("%d model catalog requests after enabling the assistant, want 1", n)
@@ -652,7 +650,7 @@ func TestSettingsSavesDuringTheFirstAssistantEnableAllFinish(t *testing.T) {
 	}
 }
 
-func TestFailedAssistantStartIsRetriedAtTheNextPublication(t *testing.T) {
+func TestFailedAssistantStartRestartsAfterBackoff(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	if _, err := d.Write.Exec("CREATE TRIGGER jobs_refused BEFORE INSERT ON jobs BEGIN SELECT RAISE(ABORT, 'jobs refused'); END"); err != nil {
@@ -668,65 +666,28 @@ func TestFailedAssistantStartIsRetriedAtTheNextPublication(t *testing.T) {
 		}
 		return n
 	}
-	set := func(key, value string) {
-		t.Helper()
-		if got := runApp(t, "settings", "set", key, value); got.code != cli.ExitOK {
-			t.Fatalf("settings set %s %s: exit %d stderr %q", key, value, got.code, got.stderr)
-		}
+	if got := runApp(t, "settings", "set", module.FlagKey(module.Assistant), "true"); got.code != cli.ExitOK {
+		t.Fatalf("settings set: exit %d stderr %q", got.code, got.stderr)
 	}
-	failures := func() int { return strings.Count(logs.String(), "module start failed") }
-	set(module.FlagKey(module.Assistant), "true")
-	if n := failures(); n != 1 {
-		t.Fatalf("%d start failures logged after the first enable, want 1", n)
-	}
-	nav := func() string {
-		t.Helper()
-		status, page, _ := fetch(t, client, http.MethodGet, base+"/settings/auth", nil)
-		if status != http.StatusOK {
-			t.Fatalf("GET /settings/auth = %d", status)
-		}
-		_, rest, found := strings.Cut(page, `href="/settings/assistant"`)
-		if !found {
-			return ""
-		}
-		value, _, _ := strings.Cut(rest, ">")
-		return "link " + strings.TrimSpace(value)
-	}
-	if got := nav(); got != "" {
-		t.Fatalf("the settings nav offers the assistant after a failed start: %q", got)
-	}
-	if text := logs.String(); !strings.Contains(text, "MODULE=assistant") || !strings.Contains(text, "jobs refused") {
+	failures := func() int { return strings.Count(logs.String(), "service assistant failed; restarting") }
+	waitFor(t, func() bool { return failures() >= 2 })
+	if text := logs.String(); !strings.Contains(text, "jobs refused") {
 		t.Fatalf("the failed start and its reason are not logged: %s", text)
 	}
-	if status, _, _ := fetch(t, client, http.MethodGet, base+"/library/files", nil); status != http.StatusNotFound {
-		t.Fatalf("GET /library/files after a failed start = %d, want 404", status)
-	}
-	set("thread_cost_cap_usd", "12")
-	if n := failures(); n != 2 {
-		t.Fatalf("%d start failures logged after the retry, want 2", n)
-	}
 	if n := strings.Count(logs.String(), "MODULE=assistant STATE=unavailable"); n != 0 {
-		t.Fatalf("a start failure also logged %d unavailable transitions", n)
+		t.Fatalf("a failing assistant service marked the module unavailable %d times", n)
+	}
+	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/assistant", nil); status != http.StatusOK {
+		t.Fatalf("GET /settings/assistant while its service restarts = %d, want 200", status)
 	}
 	if _, err := d.Write.Exec("DROP TRIGGER jobs_refused"); err != nil {
 		t.Fatal(err)
 	}
-	set("thread_cost_cap_usd", "13")
-	if n := failures(); n != 2 {
-		t.Fatalf("%d start failures logged after the repair, want 2", n)
-	}
-	if n := jobs(); n == 0 {
-		t.Fatal("the retried start seeded no scheduler jobs")
-	}
-	if got := nav(); got != `link data-mark="on"` {
-		t.Fatalf("assistant settings nav after the retried start = %q, want an on link", got)
-	}
-	if status, _, _ := fetch(t, client, http.MethodGet, base+"/library/files", nil); status != http.StatusOK {
-		t.Fatalf("GET /library/files after the retried start = %d, want 200", status)
-	}
-	set("thread_cost_cap_usd", "14")
-	if n := failures(); n != 2 {
-		t.Fatalf("%d start failures logged after a later publication, want 2", n)
+	waitFor(t, func() bool { return jobs() > 0 })
+	settled := failures()
+	time.Sleep(3 * time.Second)
+	if n := failures(); n != settled {
+		t.Fatalf("the assistant service kept failing after the repair: %d failures, then %d", settled, n)
 	}
 }
 

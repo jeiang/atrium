@@ -20,7 +20,7 @@ func tickCommand(open Open, enabled func(string) bool) *cli.Command {
 			ctx, svc, closeApp, err := open(ctx)
 			if err == nil {
 				defer closeApp()
-				s := jobworker.New(svc, module.SetFrom(ctx).Catalog().Jobs(), enabled, nil)
+				s := jobworker.New(svc, module.SetFrom(ctx).Catalog().Jobs(), jobworker.Options{Enabled: enabled})
 				err = s.Once(ctx)
 			}
 			if errors.Is(err, scheduler.ErrAllBusy) {

@@ -64,7 +64,6 @@ type Deps struct {
 	NotFound  http.HandlerFunc
 	OnFrame   func(FrameFunc)
 	Stopping  <-chan struct{}
-	OnClose   func(func())
 	ResumeRun func(ctx context.Context, runID int64) error
 
 	settingsPages map[string]SettingsRender
@@ -74,15 +73,16 @@ type Deps struct {
 	owner         string
 	registrations *registrations
 	coreRoutes    func(*Deps)
+	onClose       func(func())
 }
 
 const drainTimeout = 15 * time.Second
 
 func (d *Deps) DrainOnClose(drain func(context.Context) error) {
-	if d.OnClose == nil {
+	if d.onClose == nil {
 		return
 	}
-	d.OnClose(func() {
+	d.onClose(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), drainTimeout)
 		defer cancel()
 		if err := drain(ctx); err != nil {
@@ -222,7 +222,7 @@ func New(o Options) (*Server, error) {
 	deps := &Deps{
 		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Render: o.Render, Error: s.Error, NotFound: s.missing, Stopping: s.stop,
 		OnFrame: func(FrameFunc) {}, settingsPages: map[string]SettingsRender{},
-		OnClose: func(f func()) { s.closers = append(s.closers, f) },
+		onClose: func(f func()) { s.closers = append(s.closers, f) },
 		router:  core, routes: &s.routes, owner: "core", registrations: s.registrations,
 	}
 	if o.Render != nil {

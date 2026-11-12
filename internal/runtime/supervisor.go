@@ -88,6 +88,7 @@ func (s *Supervisor) loop(ctx context.Context, def ServiceDefinition, st *state)
 	attempt := 0
 	for {
 		started := time.Now()
+		log.Info(fmt.Sprintf("service %s started", def.Name))
 		err := s.instance(ctx, def, st)
 		if ctx.Err() != nil {
 			st.set(StatusStopped)

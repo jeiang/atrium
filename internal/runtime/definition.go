@@ -37,6 +37,11 @@ func (b Backoff) validate() error {
 	return nil
 }
 
+func Validate(defs []ServiceDefinition) error {
+	_, err := validate(defs)
+	return err
+}
+
 func validate(defs []ServiceDefinition) ([]ServiceDefinition, error) {
 	out := make([]ServiceDefinition, 0, len(defs))
 	seen := map[string]bool{}

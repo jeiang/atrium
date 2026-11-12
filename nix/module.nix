@@ -274,6 +274,7 @@
     host,
     port,
     auth,
+    services ? true,
     environment ? {},
   }: let
     needsHost = auth != "local";
@@ -283,8 +284,9 @@
     path = mediaPath;
     serviceConfig =
       mediaWriter
+      // exportWriter
       // {
-        ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} ${authArgs auth}" + lib.optionalString needsHost " --allowed-host ${cfg.web.allowedHost}";
+        ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} ${authArgs auth}" + lib.optionalString needsHost " --allowed-host ${cfg.web.allowedHost}" + lib.optionalString (!services) " --no-services";
         Type = "notify";
         WatchdogSec = "1min";
         TimeoutStartSec = writeTimeout;
@@ -314,23 +316,6 @@
           Restart = "on-failure";
           RestartSec = 10;
         };
-        wantedBy = ["multi-user.target"];
-      };
-
-      atrium-agent-scheduler = {
-        description = "Run atrium's scheduled and nightly agent jobs";
-        path = mediaPath;
-        serviceConfig =
-          mediaWriter
-          // exportWriter
-          // {
-            ExecStart = "${lib.getExe cfg.package} agent scheduler";
-            Type = "notify";
-            WatchdogSec = "10min";
-            TimeoutStartSec = writeTimeout;
-            Restart = "on-failure";
-            RestartSec = 10;
-          };
         wantedBy = ["multi-user.target"];
       };
 
@@ -428,6 +413,7 @@
         host = "127.0.0.1";
         port = cfg.web.local.port;
         auth = "local";
+        services = false;
         environment = {ATRIUM_CORE_OPS_LISTEN = "off";};
       };
     };
@@ -646,7 +632,7 @@ in {
       obsidianDirectory = mkOption {
         type = types.nullOr types.str;
         default = null;
-        description = "Folder that receives the generated Obsidian vault; the scheduler unit writes it and the operator syncs it. The one source for export.export_obsidian_dir and its ReadWritePaths grant.";
+        description = "Folder that receives the generated Obsidian vault; the web unit runs the export job that writes it, and the operator syncs it. The one source for export.export_obsidian_dir and its ReadWritePaths grant.";
       };
     };
 
@@ -656,7 +642,7 @@ in {
       group = mkOption {
         type = types.str;
         default = "media";
-        description = "Group that owns the media tree; the web and scheduler units write through it with umask 0002.";
+        description = "Group that owns the media tree; the web unit writes through it with umask 0002.";
       };
     };
 

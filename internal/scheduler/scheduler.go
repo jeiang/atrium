@@ -36,6 +36,7 @@ type Dependencies struct {
 	Notice  func(context.Context, Skipped, float64) error
 	RunCron func(context.Context, Run) (Result, error)
 	Enabled func(string) bool
+	Active  func() bool
 	Beat    func()
 }
 
@@ -378,15 +379,8 @@ func (s *Scheduler) Cycle(ctx context.Context) error {
 	if err := db.Ready(ctx, s.db); err != nil {
 		return err
 	}
-	if err := s.recoverRuns(ctx); err != nil {
+	if err := s.Recover(ctx); err != nil {
 		return err
-	}
-	resumed, err := s.deps.Resume(ctx)
-	if err != nil {
-		return err
-	}
-	if resumed > 0 {
-		s.dirty.Store(true)
 	}
 	if err := s.Tick(ctx); err != nil {
 		return err
@@ -395,19 +389,38 @@ func (s *Scheduler) Cycle(ctx context.Context) error {
 	return nil
 }
 
+func (s *Scheduler) Recover(ctx context.Context) error {
+	if err := s.recoverRuns(ctx); err != nil {
+		return err
+	}
+	resumed, err := s.deps.Resume(ctx)
+	if resumed > 0 {
+		s.dirty.Store(true)
+	}
+	return err
+}
+
 func (s *Scheduler) Run(ctx context.Context) {
 	log.Info(fmt.Sprintf("scheduler %s started", s.deps.Owner))
 	defer s.wg.Wait()
 	for ctx.Err() == nil {
 		s.beat()
+		if s.deps.Active != nil && !s.deps.Active() {
+			s.wait(ctx)
+			continue
+		}
 		if err := s.safeCycle(ctx); err != nil && ctx.Err() == nil {
 			log.Error("scheduler tick failed", logx.Err, err)
 		}
 		s.beat()
-		select {
-		case <-ctx.Done():
-		case <-time.After(s.interval):
-		}
+		s.wait(ctx)
+	}
+}
+
+func (s *Scheduler) wait(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+	case <-time.After(s.interval):
 	}
 }
 

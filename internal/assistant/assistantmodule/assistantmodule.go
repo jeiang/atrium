@@ -1,6 +1,7 @@
 package assistantmodule
 
 import (
+	"context"
 	"slices"
 
 	"github.com/jeiang/atrium/internal/assistant"
@@ -44,6 +45,7 @@ import (
 	"github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tasks"
@@ -57,6 +59,7 @@ type Module struct {
 	Now          func() float64
 	Jobs         jobworker.Dependencies
 	Open         agentcmd.Open
+	Start        func(context.Context) error
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
@@ -70,6 +73,12 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Attention: AttentionSources(mc.Env),
 		Metrics:   opsmetrics.Metrics(),
 		Jobs:      Jobs(m.Jobs),
+		Services: []runtime.ServiceDefinition{{Name: "assistant", Run: func(ctx context.Context, _ *runtime.Services) error {
+			if err := m.Start(ctx); err != nil {
+				return err
+			}
+			return module.Idle(ctx)
+		}}},
 		Pages: []web.Page{{
 			Module:    chatpages.Module(chatpages.Options{Service: m.Jobs.Service}),
 			Templates: chatpages.Templates(),

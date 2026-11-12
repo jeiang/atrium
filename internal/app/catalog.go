@@ -35,14 +35,14 @@ type Dependencies struct {
 func Builtins(d Dependencies) []module.Builder {
 	jobs := jobworker.Dependencies{Service: d.Bindings.Assistant, Now: d.Now, Attention: attentionSources}
 	return []module.Builder{
-		coremodule.Module{Version: d.Version, Guard: d.Guard, Clients: d.Clients, Now: d.Now},
+		coremodule.Module{Version: d.Version, Guard: d.Guard, Clients: d.Clients, Now: d.Now, Resources: d.Bindings.Resources},
 		contactsmodule.Module{},
 		mailmodule.Module{Clients: d.Clients, Now: d.Now, Jobs: jobs},
 		calendarmodule.Module{Jobs: jobs},
 		notionmodule.Module{Env: d.Env},
 		mediamodule.Module{Now: d.Now, Jobs: jobs},
-		assistantmodule.Module{Now: d.Now, ProposeKinds: mailtools.Proposals(), Open: d.Bindings.OpenAssistant, Jobs: jobs},
-		notifymodule.Module{Budget: d.Budget},
+		assistantmodule.Module{Now: d.Now, ProposeKinds: mailtools.Proposals(), Open: d.Bindings.OpenAssistant, Jobs: jobs, Start: d.Bindings.StartAssistant},
+		notifymodule.Module{Budget: d.Budget, Resources: d.Bindings.Resources},
 		grafanamodule.Module{Jobs: jobs},
 	}
 }

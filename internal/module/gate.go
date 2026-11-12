@@ -29,7 +29,7 @@ func (s *Set) Pages() []web.Page {
 	pages := []web.Page{{Globals: map[string]any{"module_enabled": s.enabled}}}
 	for _, r := range s.decls {
 		for _, p := range r.Pages {
-			if p.Module == nil && p.Start == nil && len(p.Nav) == 0 {
+			if p.Module == nil && len(p.Nav) == 0 {
 				continue
 			}
 			if !r.Core {
@@ -256,7 +256,7 @@ func (s *Set) Start(ctx context.Context, d *web.Deps) error {
 	if err != nil {
 		return err
 	}
-	s.start(s.store(snap))
+	s.publishFirst(snap)
 	return nil
 }
 
@@ -277,6 +277,6 @@ func (s *Set) load(ctx context.Context) (*Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.start(s.store(snap))
+	s.publishFirst(snap)
 	return snap, nil
 }
