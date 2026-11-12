@@ -23,7 +23,7 @@ const lookupCard = "BEGIN:VCARD\r\nVERSION:3.0\r\nUID:alice\r\nFN:Alice Example\
 func seedLookupMail(t *testing.T, dir string) int64 {
 	t.Helper()
 	path := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, path)
+	d := mustConnect(t, path, db.Key{})
 	t.Cleanup(func() { _ = d.Close() })
 	if err := db.Migrate(context.Background(), d, path); err != nil {
 		t.Fatal(err)
@@ -174,7 +174,7 @@ func TestLookupTextFieldKeepsUntrusted(t *testing.T) {
 	if refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "not allowed in this thread by the permission table") {
 		t.Errorf("web_fetch after an untrusted lookup returned %v, want a refusal", refusal)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var proposals int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposals WHERE kind = 'permission'").Scan(&proposals); err != nil || proposals != 0 {
@@ -252,7 +252,7 @@ func TestContactNameLookupKeepsTheInternetOpen(t *testing.T) {
 		t.Fatal(err)
 	}
 	start := warm(t, api)
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	now := float64(time.Now().Unix())
 	res, err := d.Write.Exec("INSERT INTO threads (kind, effort, created_at, updated_at, allowed_urls) VALUES ('chat', 'medium', ?, ?, ?)",
 		now, now, fmt.Sprintf(`[%q]`, srv.URL+"/b"))

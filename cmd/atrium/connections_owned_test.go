@@ -19,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
@@ -28,7 +27,7 @@ import (
 
 func connectionRow(t *testing.T, dir, id string) (source string, enabled int, state, configJSON string) {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	if err := d.Read.QueryRow("SELECT config_source, enabled, state, config_json FROM connections WHERE id = ?", id).
 		Scan(&source, &enabled, &state, &configJSON); err != nil {
@@ -38,12 +37,12 @@ func connectionRow(t *testing.T, dir, id string) (source string, enabled int, st
 }
 
 func TestImportedConnectionsStayOperatorOwnedAcrossBoots(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	host := filepath.Join(dir, "host.toml")
 	if err := os.WriteFile(host, nil, 0o600); err != nil {
 		t.Fatal(err)
@@ -86,7 +85,7 @@ func TestImportedConnectionsStayOperatorOwnedAcrossBoots(t *testing.T) {
 	}
 	seedAllFlags(t)
 
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	if _, err := d.Write.ExecContext(context.Background(),
 		"UPDATE connections SET config_json = ? WHERE id = 'service/notion'",
 		fmt.Sprintf(`{"api":%q}`, notion.URL)); err != nil {
@@ -185,7 +184,7 @@ func TestAUIAAddedMailAccountStaysOperatorOwnedAcrossBoots(t *testing.T) {
 	if !strings.Contains(configJSON, "me@work.test") {
 		t.Errorf("the UI mail account config changed: %s", configJSON)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	var password string
 	if err := d.Read.QueryRow("SELECT value FROM connection_credentials WHERE connection_id = 'mail/work' AND slot = 'mail/work/password'").Scan(&password); err != nil {
 		t.Fatalf("the UI mail account password: %v", err)
@@ -201,6 +200,7 @@ func TestAUIAAddedMailAccountStaysOperatorOwnedAcrossBoots(t *testing.T) {
 }
 
 func TestARemovedHostConnectionStaysDisabled(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	host := filepath.Join(dir, "host.toml")
@@ -229,7 +229,7 @@ capabilities = ["api"]
 	if _, enabled, state, _ := connectionRow(t, dir, "service/notion"); enabled != 0 || state != "disabled" {
 		t.Fatalf("the removed connection is enabled=%d state=%s", enabled, state)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	_, err := connections.OpenRead(context.Background(), d.Read, config.Host{}, connections.ID("service/notion"))
 	var disabled connections.DisabledConnection
@@ -239,6 +239,7 @@ capabilities = ["api"]
 }
 
 func TestARemovedHostBuiltinStaysDisabledAndNeverReachesItsEndpoint(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	embed := newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
@@ -272,7 +273,7 @@ func TestARemovedHostBuiltinStaysDisabledAndNeverReachesItsEndpoint(t *testing.T
 	if source, enabled, state, _ := connectionRow(t, dir, "service/embedding"); source != "host" || enabled != 0 || state != "disabled" {
 		t.Fatalf("the removed built-in is %s/%d/%s", source, enabled, state)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	_, err := connections.OpenRead(context.Background(), d.Read, config.Host{}, connections.ID("service/embedding"))
 	var disabled connections.DisabledConnection

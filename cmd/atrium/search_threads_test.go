@@ -8,11 +8,12 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func toolResultContents(t *testing.T, dir string) []string {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	rows, err := d.Read.Query("SELECT content_json FROM thread_messages WHERE thread_id = 1 AND role = 'user' ORDER BY seq")
 	if err != nil {
 		t.Fatal(err)
@@ -45,7 +46,7 @@ func TestSearchThreadsFindsSummariesAcrossThreads(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("INSERT INTO projects (id, name, effort, context_limit, created_at, updated_at) VALUES (1, 'one', 'low', 100000, 0, 0), (2, 'two', 'low', 100000, 0, 0)"); err != nil {
 		t.Fatal(err)
 	}

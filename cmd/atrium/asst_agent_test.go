@@ -66,7 +66,7 @@ func asstSet(t *testing.T, key, value string) {
 
 func asstDB(t *testing.T, dir string) *db.DB {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	t.Cleanup(func() { _ = d.Close() })
 	return d
 }

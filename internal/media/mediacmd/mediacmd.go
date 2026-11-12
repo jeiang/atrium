@@ -140,7 +140,7 @@ func handler(cfgEnv config.Env, run job, clock func() float64) func(*cli.Args) c
 			if err != nil {
 				return cli.Fail(env, err)
 			}
-			d, err := db.Connect(cfg.DBPath)
+			d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(env.Ctx).DBKey()))
 			if err != nil {
 				return cli.Fail(env, err)
 			}

@@ -50,73 +50,91 @@ func TestCLISignalExitCodes(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			dir := t.TempDir()
-			addrFile := filepath.Join(dir, "serve-addr")
-			cmd := cliExitProcessArgs(t, []string{"serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local"})
-			cmd.Env = append(envWithout(cmd.Env, "ATRIUM_SERVE_ADDR_FILE="), "ATRIUM_DB="+filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR="+filepath.Join(dir, "cache"), "ATRIUM_PUBLIC_HOST=", "ATRIUM_SERVE_ADDR_FILE="+addrFile)
-			var stdout, stderr lockedBuffer
-			cmd.Stdout, cmd.Stderr = &stdout, &stderr
-			if err := cmd.Start(); err != nil {
-				t.Fatal(err)
+			serve := serveCLIProcess(t, t.TempDir())
+			if code := serve.stop(t, tc.sig); code != cli.ExitOK {
+				t.Fatalf("serve after %s exited with code %d, want 0; stderr %q", tc.sig, code, serve.stderr.String())
 			}
-			done := make(chan error, 1)
-			go func() { done <- cmd.Wait() }()
-			var waitErr error
-			waited := false
-			wait := func() error {
-				if !waited {
-					waitErr = <-done
-					waited = true
-				}
-				return waitErr
-			}
-			t.Cleanup(func() {
-				if !waited {
-					_ = cmd.Process.Kill()
-				}
-				_ = wait()
-			})
-			address := ""
-			deadline := time.Now().Add(30 * time.Second)
-			for address == "" {
-				if raw, err := os.ReadFile(addrFile); err == nil {
-					if addr := strings.TrimSpace(string(raw)); addr != "" {
-						if _, _, err := net.SplitHostPort(addr); err == nil {
-							address = addr
-						}
-					}
-				}
-				if address != "" {
-					break
-				}
-				select {
-				case err := <-done:
-					waitErr, waited = err, true
-					t.Fatalf("serve exited before reporting its address: %v, stderr %q", err, stderr.String())
-				default:
-				}
-				if time.Now().After(deadline) {
-					t.Fatalf("serve did not report its address, stderr %q", stderr.String())
-				}
-				time.Sleep(10 * time.Millisecond)
-			}
-			conn, err := net.DialTimeout("tcp", address, 100*time.Millisecond)
-			if err != nil {
-				t.Fatalf("serve did not accept connections at %s: %v, stderr %q", address, err, stderr.String())
-			}
-			_ = conn.Close()
-			if err := cmd.Process.Signal(tc.sig); err != nil {
-				t.Fatal(err)
-			}
-			err = wait()
-			if code := exitCode(err); code != cli.ExitOK {
-				t.Fatalf("serve after %s exited with %v (code %d), want 0; stderr %q", tc.sig, err, code, stderr.String())
-			}
-			if strings.Contains(stderr.String(), "Traceback") {
-				t.Errorf("stderr contains a traceback: %q", stderr.String())
+			if strings.Contains(serve.stderr.String(), "Traceback") {
+				t.Errorf("stderr contains a traceback: %q", serve.stderr.String())
 			}
 		})
 	}
+}
+
+type serveProcess struct {
+	addr   string
+	stderr *lockedBuffer
+	cmd    *exec.Cmd
+	done   chan error
+	waited bool
+	err    error
+}
+
+func serveCLIProcess(t *testing.T, dir string) *serveProcess {
+	t.Helper()
+	addrFile := filepath.Join(dir, "serve-addr")
+	cmd := cliExitProcessArgs(t, []string{"serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local"})
+	cmd.Env = append(envWithout(cmd.Env, "ATRIUM_SERVE_ADDR_FILE="), "ATRIUM_DB="+filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR="+filepath.Join(dir, "cache"), "ATRIUM_PUBLIC_HOST=", "ATRIUM_SERVE_ADDR_FILE="+addrFile)
+	return startServeProcess(t, cmd, addrFile)
+}
+
+func startServeProcess(t *testing.T, cmd *exec.Cmd, addrFile string) *serveProcess {
+	t.Helper()
+	p := &serveProcess{stderr: &lockedBuffer{}, cmd: cmd, done: make(chan error, 1)}
+	cmd.Stdout, cmd.Stderr = &lockedBuffer{}, p.stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	go func() { p.done <- cmd.Wait() }()
+	t.Cleanup(func() {
+		if !p.waited {
+			_ = cmd.Process.Kill()
+		}
+		_ = p.wait()
+	})
+	deadline := time.Now().Add(30 * time.Second)
+	for p.addr == "" {
+		if raw, err := os.ReadFile(addrFile); err == nil {
+			if addr := strings.TrimSpace(string(raw)); addr != "" {
+				if _, _, err := net.SplitHostPort(addr); err == nil {
+					p.addr = addr
+					break
+				}
+			}
+		}
+		select {
+		case err := <-p.done:
+			p.err, p.waited = err, true
+			t.Fatalf("serve exited before reporting its address: %v, stderr %q", err, p.stderr.String())
+		default:
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("serve did not report its address, stderr %q", p.stderr.String())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	conn, err := net.DialTimeout("tcp", p.addr, 100*time.Millisecond)
+	if err != nil {
+		t.Fatalf("serve did not accept connections at %s: %v, stderr %q", p.addr, err, p.stderr.String())
+	}
+	_ = conn.Close()
+	return p
+}
+
+func (p *serveProcess) wait() error {
+	if !p.waited {
+		p.err = <-p.done
+		p.waited = true
+	}
+	return p.err
+}
+
+func (p *serveProcess) stop(t *testing.T, sig os.Signal) int {
+	t.Helper()
+	if err := p.cmd.Process.Signal(sig); err != nil {
+		t.Fatal(err)
+	}
+	return exitCode(p.wait())
 }
 
 func cliExitProcess(t *testing.T, args string) *exec.Cmd {

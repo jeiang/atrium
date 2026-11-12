@@ -34,7 +34,7 @@ func TestMailAccountAddLeavesNothingWhenTheTestFails(t *testing.T) {
 	if code, body := add("work", "wrong-pass"); code != http.StatusUnprocessableEntity {
 		t.Fatalf("add with a rejected password = %d: %.300s", code, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	for _, query := range []string{
 		"SELECT COUNT(*) FROM mail_accounts WHERE id = 'work'",
 		"SELECT COUNT(*) FROM connections WHERE id = 'mail/work'",

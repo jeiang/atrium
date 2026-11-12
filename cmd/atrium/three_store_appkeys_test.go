@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/actionlink/policy"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/settings"
 )
@@ -57,7 +58,7 @@ func TestAppKeyFilesSignLinksAcrossRestarts(t *testing.T) {
 		t.Fatalf("enable phone actions: exit %d stderr %q", got.code, got.stderr)
 	}
 
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("INSERT INTO proposals (id, kind, status, created_ts, title, fingerprint) VALUES (1, 'reminder', 'pending', 0, 'Remind me', 'fp-1')"); err != nil {
 		t.Fatal(err)
 	}
@@ -145,7 +146,7 @@ func TestMediaLinkRefreshKeepsHostKeyPrecedence(t *testing.T) {
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
 		t.Fatalf("settings list: exit %d stderr %q", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('link_key', ?, 1, 'fixture')", staleKey); err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [ $# -eq 0 ]; then
+  echo "usage: tools/e2e-loopback COMMAND [ARG...]" >&2
+  exit 2
+fi
+here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+
+checks='
+fail() { echo "e2e-loopback: $*" >&2; exit 1; }
+refused() {
+  local out
+  if out=$(bash -c "exec 3<>/dev/tcp/$1" 2>&1); then
+    fail "connected to $1"
+  fi
+  case $out in
+    *"$2"*) echo "e2e-loopback: $1 refused: $2" >&2 ;;
+    *) fail "connecting to $1 did not fail with \"$2\": $out" ;;
+  esac
+}
+'
+
+case "$(uname -s)" in
+  Linux)
+    namespace='
+uid=$1 gid=$2
+shift 2
+ip link set lo up || fail "cannot bring loopback up"
+up=$(ip -o link show up | cut -d: -f2 | tr -d " " | tr "\n" " ")
+[ "$up" = "lo " ] || fail "interfaces up besides loopback: $up"
+addrs=$(ip -o addr show | awk "\$2 != \"lo\"")
+[ -z "$addrs" ] || fail "addresses outside loopback: $addrs"
+routes=$({ ip -4 route show table all; ip -6 route show table all; } | grep -Ev "(^| )dev lo( |$)" || true)
+[ -z "$routes" ] || fail "routes outside loopback: $routes"
+refused 192.0.2.1/9 "Network is unreachable"
+refused 2001:db8::1/9 "Network is unreachable"
+echo "e2e-loopback: linux network namespace, loopback only" >&2
+exec unshare --user --map-user="$uid" --map-group="$gid" -- env ATRIUM_E2E_CONTAINMENT=linux-netns "$@"
+'
+    exec unshare --user --map-root-user --net -- bash -c "$checks$namespace" e2e-loopback "$(id -u)" "$(id -g)" "$@"
+    ;;
+  Darwin)
+    sandbox='
+refused 192.0.2.1/9 "Operation not permitted"
+refused 2001:db8::1/9 "Operation not permitted"
+echo "e2e-loopback: darwin sandbox, loopback only" >&2
+ATRIUM_E2E_CONTAINMENT=darwin-sandbox exec "$@"
+'
+    exec /usr/bin/sandbox-exec -f "$here/e2e-loopback.sb" bash -c "$checks$sandbox" e2e-loopback "$@"
+    ;;
+  *)
+    echo "e2e-loopback: no loopback containment for $(uname -s)" >&2
+    exit 1
+    ;;
+esac

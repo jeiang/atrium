@@ -42,7 +42,7 @@ func openDB(ctx context.Context, cfgEnv config.Env) (*db.DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	d, err := db.Connect(cfg.DBPath)
+	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(ctx).DBKey()))
 	if err != nil {
 		return nil, err
 	}

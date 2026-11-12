@@ -75,7 +75,7 @@ func TestAuthTokenLocalBearerLifecycle(t *testing.T) {
 	if ok := api.do(http.MethodGet, "/api/v1/me", short, nil); ok.status != http.StatusOK {
 		t.Fatalf("the expiring token is refused before its expiry: %d %s", ok.status, ok.body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec("UPDATE auth_bearers SET expires_at = ? WHERE name = 'short'", float64(time.Now().Add(-time.Minute).Unix())); err != nil {
 		t.Fatal(err)
@@ -105,7 +105,7 @@ func TestAuthTokenRevocationBeatsAWarmOIDCCache(t *testing.T) {
 	if len(rows) != 1 || rows[0][2] != "oidc" {
 		t.Fatalf("the validated JWT is not listed as an enrolled token:\n%s", listed.stdout)
 	}
-	d := mustConnect(t, filepath.Join(s.dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(s.dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	var subject string
 	if err := d.Read.QueryRow("SELECT subject FROM auth_bearers WHERE id = ?", rows[0][0]).Scan(&subject); err != nil || subject != "sub-owner" {

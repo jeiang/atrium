@@ -70,7 +70,6 @@ func importTestAppHost(t *testing.T, dir string, now float64, host string) *cli.
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_DB_KEY"] = rightKeyHex
 	vars["ATRIUM_HOST_CONFIG"] = host
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	return newAppWith(config.Map(vars), imapclient.Opener, func() float64 { return now }, quietLog)
 }
 
@@ -178,6 +177,7 @@ func copyV2Fixture(t *testing.T, dir string) string {
 }
 
 func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -332,7 +332,7 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		t.Errorf("the imported copy replays differently from the v2 baseline:\ngot:\n%s\nwant:\n%s", replay.stdout, baseline)
 	}
 
-	w, err := db.Connect(dest)
+	w, err := db.Connect(dest, db.WithKey(importKey(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -469,6 +469,7 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 }
 
 func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -693,7 +694,6 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 	}
 
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	host := fmt.Sprintf(`[connections."service/tmdb"]
 kind = "service/tmdb"
 label = "TMDB"
@@ -790,6 +790,7 @@ func TestImportV2CarriesTheWebPushConnectionAndUsesItsVAPIDKey(t *testing.T) {
 }
 
 func TestImportV2CarriesTheEmbeddingConnectionAndItsKey(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -867,6 +868,7 @@ func TestImportV2CarriesTheEmbeddingConnectionAndItsKey(t *testing.T) {
 }
 
 func TestImportV2CarriesTheShip24ConnectionAndPollsWithTheCompiledWindow(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -942,6 +944,7 @@ func TestImportV2CarriesTheShip24ConnectionAndPollsWithTheCompiledWindow(t *test
 }
 
 func TestImportV2HoldsMailOnlyForAMatchingEmbeddingFingerprint(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	embed := newFakeOpenAI(t)
 	const key = "sk-embed-fingerprint-0123456789"
@@ -996,6 +999,7 @@ func TestImportV2HoldsMailOnlyForAMatchingEmbeddingFingerprint(t *testing.T) {
 }
 
 func TestImportV2KeepsEmbedAndChatAccountsFromClaimingTheEndpointHealth(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -1059,6 +1063,7 @@ func editImportSource(t *testing.T, path, statement string) {
 }
 
 func TestImportV2MapsAutoActionsToEffects(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -1146,6 +1151,7 @@ func TestImportV2MapsAutoActionsToEffects(t *testing.T) {
 }
 
 func TestImportV2MapsAgentWritesToEffects(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -1239,6 +1245,7 @@ func TestImportV2MapsAgentWritesToEffects(t *testing.T) {
 }
 
 func TestImportV2MapsProposalStatesToEffects(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -1418,7 +1425,6 @@ func TestImportV2MapsProposalStatesToEffects(t *testing.T) {
 	}
 
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	base := startServeIn(t, dir)
 	status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/review", nil)
 	if status != http.StatusOK {
@@ -1435,6 +1441,7 @@ func TestImportV2MapsProposalStatesToEffects(t *testing.T) {
 }
 
 func TestImportV2BillsMemoryAndRefusesOverBudgetAgentCalls(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	loc, err := time.LoadLocation("America/Port_of_Spain")
 	if err != nil {
@@ -1519,6 +1526,7 @@ func TestImportV2BillsMemoryAndRefusesOverBudgetAgentCalls(t *testing.T) {
 }
 
 func TestImportV2UndoesImportedAutomaticActions(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -1568,7 +1576,6 @@ func TestImportV2UndoesImportedAutomaticActions(t *testing.T) {
 	vars["ATRIUM_DB_KEY"] = rightKeyHex
 	vars["ATRIUM_HOST_CONFIG"] = defaultHostConfig
 	delete(vars, "ATRIUM_DB_KEY_FILE")
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	app := newAppWith(config.Map(vars),
 		func(config.Config) mail.OpenFunc { return fake.Open }, nil, quietLog)
 
@@ -1632,6 +1639,7 @@ func TestImportV2UndoesImportedAutomaticActions(t *testing.T) {
 }
 
 func TestImportV2ResolvingAnImportedUndoClearsTheCorrection(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -1680,6 +1688,7 @@ func TestImportV2ResolvingAnImportedUndoClearsTheCorrection(t *testing.T) {
 }
 
 func TestImportV2MapsUnresolvedAgentClaimsToWriterKeys(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -1752,6 +1761,7 @@ func TestImportV2MapsUnresolvedAgentClaimsToWriterKeys(t *testing.T) {
 }
 
 func TestImportV2DropsAnUnknownSettingWithoutItsValue(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -1787,6 +1797,7 @@ func TestImportV2DropsAnUnknownSettingWithoutItsValue(t *testing.T) {
 }
 
 func TestImportV2ResetsLiveMailToShadowAndAccountsEverySetting(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -1920,7 +1931,7 @@ func TestImportV2CarriesTheMailPasswordIntoTheConnectionAndSyncsWithIt(t *testin
 	}
 
 	dest := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, dest)
+	d := mustConnect(t, dest, importKey(t))
 	defer func() { _ = d.Close() }()
 	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM secrets WHERE name = 'mail_password_icloud'"); n != 0 {
 		t.Errorf("%d mail password secrets stayed in the secrets table", n)
@@ -1978,7 +1989,6 @@ S: {t} OK
 	id, _ := res.LastInsertId()
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	setEnv(t, "ATRIUM_HOST_CONFIG", importHostConfig(t, dir, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9"))
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	base := startServeIn(t, dir)
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
@@ -2022,6 +2032,7 @@ S: {t} OK
 	}
 }
 func TestImportV2UnionsOIDCSelectorsAndDropsLoginState(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -2129,6 +2140,7 @@ func TestImportV2UnionsOIDCSelectorsAndDropsLoginState(t *testing.T) {
 }
 
 func TestImportV2RefusesAPinnedRemovedSelector(t *testing.T) {
+	t.Parallel()
 	dir := t.TempDir()
 	base, err := os.ReadFile(importHostConfig(t, dir, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9"))
 	if err != nil {
@@ -2189,7 +2201,7 @@ func TestImportV2RefusesAnEmptyHostCredentialWithoutLosingTheDatabasePassword(t 
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 	dest := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, dest)
+	d := mustConnect(t, dest, importKey(t))
 	defer func() { _ = d.Close() }()
 	if got := importValue(t, d.Read, "SELECT source FROM connection_credentials WHERE connection_id = 'mail/icloud' AND slot = 'mail/icloud/password'"); got != "database" {
 		t.Fatalf("the imported credential source is %q", got)
@@ -2251,7 +2263,7 @@ func TestImportV2KeepsHostPinningAndRefusesARemovedAccount(t *testing.T) {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 	dest := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, dest)
+	d := mustConnect(t, dest, importKey(t))
 	defer func() { _ = d.Close() }()
 	if got := importValue(t, d.Read, "SELECT pinned FROM mail_accounts WHERE id = 'icloud'"); got != "1" {
 		t.Fatalf("the imported host account pin is %q", got)
@@ -2310,7 +2322,6 @@ func TestImportV2KeepsHostPinningAndRefusesARemovedAccount(t *testing.T) {
 	}
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	setEnv(t, "ATRIUM_HOST_CONFIG", removed)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	base := startServeIn(t, dir)
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
@@ -2345,7 +2356,7 @@ func TestImportV2CarriesAStoredPasswordForAXOAUTH2Account(t *testing.T) {
 	}
 
 	dest := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, dest)
+	d := mustConnect(t, dest, importKey(t))
 	defer func() { _ = d.Close() }()
 	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM secrets WHERE name = 'mail_password_work'"); n != 0 {
 		t.Errorf("%d work password secrets stayed in the secrets table", n)
@@ -2383,6 +2394,7 @@ S: {t} OK
 	}
 }
 func TestImportV2KeepsTheEmbeddingFingerprintWithLegacyHealth(t *testing.T) {
+	t.Parallel()
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
@@ -2490,7 +2502,7 @@ func TestImportV2IntoADeploymentThatDeclaresTheSameMailAccountAndServices(t *tes
 	}
 
 	dest := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, dest)
+	d := mustConnect(t, dest, importKey(t))
 	defer func() { _ = d.Close() }()
 	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM mail_accounts WHERE id = 'icloud'"); n != 1 {
 		t.Errorf("%d icloud account rows after import into a declaring host", n)

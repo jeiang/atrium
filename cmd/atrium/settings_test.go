@@ -161,7 +161,7 @@ func TestRemovedSettingsDoNotBlockStartup(t *testing.T) {
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('agent_profile_key_chars', '99')"); err != nil {
 		t.Fatal(err)
 	}

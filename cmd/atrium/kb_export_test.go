@@ -227,7 +227,7 @@ func exportFixture(t *testing.T, fake *exportNotion) (string, *fixture, *db.DB) 
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	return dir, f, d
 }
 
@@ -764,7 +764,7 @@ func obsidianFixture(t *testing.T) (string, *fixture, *db.DB) {
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	return dir, f, d
 }
 

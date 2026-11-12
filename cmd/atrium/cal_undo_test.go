@@ -73,7 +73,7 @@ func TestProposalUndoIsRefusedWhileAnUndoRunsOrAfterAPartialUndo(t *testing.T) {
 		t.Fatalf("undo after a partial undo = %d %q %q, want a refusal", got.code, got.stdout, got.stderr)
 	}
 
-	check := mustConnect(t, path)
+	check := mustConnect(t, path, db.Key{})
 	defer func() { _ = check.Close() }()
 	for _, pid := range []int64{running, partial} {
 		var undos int
@@ -149,7 +149,7 @@ func TestCalendarDeleteUndoRecreatesTheEventAndRecordsIt(t *testing.T) {
 	if got := runApp(t, "proposals", "approve", created); got.code != cli.ExitOK {
 		t.Fatalf("approve create: %d %q %q", got.code, got.stdout, got.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var uid string
 	if err := d.Read.QueryRow("SELECT uid FROM agent_events WHERE deleted_ts IS NULL").Scan(&uid); err != nil {
 		t.Fatal(err)
@@ -209,7 +209,7 @@ func TestCalendarCreateUndoKeepsTheEventTrackedWhenTheDeleteFails(t *testing.T) 
 	if got := runApp(t, "proposals", "approve", created); got.code != cli.ExitOK {
 		t.Fatalf("approve create: %d %q %q", got.code, got.stdout, got.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var uid string
 	if err := d.Read.QueryRow("SELECT uid FROM agent_events WHERE deleted_ts IS NULL").Scan(&uid); err != nil {
 		t.Fatal(err)
@@ -288,7 +288,7 @@ func TestProposalsResolveRefusesAMixedDirectionOutcomeWithoutCommitting(t *testi
 			t.Fatalf("resolve --outcome %s = %q, want a direction refusal", outcome, got.stderr)
 		}
 	}
-	check := mustConnect(t, path)
+	check := mustConnect(t, path, db.Key{})
 	defer func() { _ = check.Close() }()
 	var states int
 	if err := check.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE proposal_id = ? AND state = 'unknown'", id).Scan(&states); err != nil {

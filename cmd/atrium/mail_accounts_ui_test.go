@@ -17,7 +17,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
@@ -26,7 +25,6 @@ import (
 
 func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T) {
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, srv.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"home", "icloud", "me@icloud.test", "home-pass", false}))
@@ -91,7 +89,7 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 		code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/mail"+path, form)
 		return code, body
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	count := func(query string, args ...any) int {
 		t.Helper()
 		var n int

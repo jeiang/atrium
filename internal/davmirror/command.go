@@ -21,7 +21,7 @@ func SyncCommand(help, pass string, sync func(ctx context.Context, d *db.DB) (St
 				if err != nil {
 					return cli.Fail(env, err)
 				}
-				d, err := db.Connect(cfg.DBPath)
+				d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(env.Ctx).DBKey()))
 				if err != nil {
 					return cli.Fail(env, err)
 				}

@@ -99,7 +99,7 @@ func TestDreamingWritesFromACleanThreadUnmarked(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "I prefer green tea"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	source := chatThread(t, d)
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w1", "kb_write", map[string]any{
 		"title": "Tea", "body": "Prefers green tea.", "source": map[string]any{"thread_id": source},
@@ -149,7 +149,7 @@ func TestDreamingMailFactsWaitForConfirm(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "the plumber is coming on Friday"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	source := chatThread(t, d)
 	if _, err := d.Write.Exec("UPDATE threads SET marks = ?, tainted_at = ? WHERE id = ?", 5, float64(time.Now().Unix()), source); err != nil {
 		t.Fatal(err)
@@ -178,7 +178,7 @@ func TestDreamingRefusesUnreadSourcesAndConfirmedEdits(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "I prefer green tea"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	source := chatThread(t, d)
 	if _, err := d.Write.Exec("INSERT INTO kb_records (title, body, scope, writer, confirmed_at, created_at, updated_at) VALUES ('Pinned fact', 'old', 'personal', 'operator', 1, 1, 1)"); err != nil {
 		t.Fatal(err)
@@ -226,7 +226,7 @@ func TestDreamingStopsAtItsCaps(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "I prefer green tea"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	set := func(key, value string) {
 		t.Helper()
 		if _, err := d.Write.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value); err != nil {
@@ -270,7 +270,7 @@ func TestDreamingSkipsPrivateProjectThreads(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "public fact"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	if _, err := d.Write.Exec("INSERT INTO projects (name, instructions, effort, context_limit, private, archived, created_at, updated_at) VALUES ('Secret', '', 'low', 90000, 1, 0, 1, 1)"); err != nil {
 		t.Fatal(err)
 	}
@@ -306,7 +306,7 @@ func TestDreamingMonthlyCapRaisesAttention(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "hi"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	if _, err := d.Write.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", assistant.KeyDreamingMonthly, "0.000001"); err != nil {
 		t.Fatal(err)
 	}
@@ -334,7 +334,7 @@ func TestUndoneWriteBecomesALesson(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "add a task"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	source := chatThread(t, d)
 	if _, err := d.Write.Exec("INSERT INTO effects (id, created_at, lease_at, token, origin, operation, operation_key, direction, thread_id, target, action_json, before_json, after_json, undo_json, state, settled_at) VALUES (9301, ?, ?, 'dream-9301', 'agent', 'task_add', 'dream-9301', 'forward', ?, 'task:1', '{}', '{}', '{}', '{}', 'done', ?)", float64(time.Now().Unix())-60, float64(time.Now().Unix())-60, source, float64(time.Now().Unix())-60); err != nil {
 		t.Fatal(err)

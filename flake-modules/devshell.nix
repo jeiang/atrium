@@ -24,18 +24,20 @@
     formatter = config.treefmt.build.wrapper;
 
     devShells.default = pkgs.mkShell {
-      packages = [
-        config.treefmt.build.wrapper
-        go
-        pkgs.git
-        pkgs.just
-        pkgs.statix
-        pkgs.golangci-lint
-        pkgs.govulncheck
-        pkgs.go-licenses
-        pkgs.pkg-config
-        pkgs.tailwindcss_4
-      ];
+      packages =
+        [
+          config.treefmt.build.wrapper
+          go
+          pkgs.git
+          pkgs.just
+          pkgs.statix
+          pkgs.golangci-lint
+          pkgs.govulncheck
+          pkgs.go-licenses
+          pkgs.pkg-config
+          pkgs.tailwindcss_4
+        ]
+        ++ pkgs.lib.optionals pkgs.stdenv.hostPlatform.isLinux [pkgs.util-linux pkgs.iproute2];
       env =
         {
           ATRIUM_DEV_SHELL = "1";

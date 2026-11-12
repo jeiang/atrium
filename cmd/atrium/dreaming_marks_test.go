@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestDreamingSplitsMarkedAndUnmarkedThreads(t *testing.T) {
@@ -15,7 +16,7 @@ func TestDreamingSplitsMarkedAndUnmarkedThreads(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "I prefer green tea"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	unmarked := chatThread(t, d)
 	now := float64(time.Now().Unix())
 	if _, err := d.Write.Exec("INSERT INTO threads (kind, title, effort, model, context_limit, marks, tainted_at, created_at, updated_at) VALUES ('chat', 'marked chat', 'low', 'claude-haiku-5-5', 90000, 5, ?, ?, ?)", now, now, now); err != nil {
@@ -111,7 +112,7 @@ func TestDreamingSignalsFollowTheirThreadMarks(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "I prefer green tea"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	now := float64(time.Now().Unix())
 	if _, err := d.Write.Exec("INSERT INTO threads (kind, title, effort, model, context_limit, marks, tainted_at, created_at, updated_at) VALUES ('chat', 'signal origin', 'low', 'claude-haiku-5-5', 90000, 5, ?, ?, ?)", now, now, now); err != nil {
 		t.Fatal(err)
@@ -183,7 +184,7 @@ func TestDreamingSignalsSkipPrivateProjects(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "public fact"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	now := float64(time.Now().Unix())
 	if _, err := d.Write.Exec("INSERT INTO projects (name, instructions, effort, context_limit, private, archived, created_at, updated_at) VALUES ('Secret', '', 'low', 90000, 1, 0, 1, 1)"); err != nil {
 		t.Fatal(err)
@@ -252,7 +253,7 @@ func TestDreamingRecordIndexFollowsVisibility(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "I prefer green tea"); ran.code != cli.ExitOK {
 		t.Fatalf("chat run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	now := float64(time.Now().Unix())
 	if _, err := d.Write.Exec("INSERT INTO threads (kind, title, effort, model, context_limit, marks, tainted_at, created_at, updated_at) VALUES ('chat', 'marked chat', 'low', 'claude-haiku-5-5', 90000, 5, ?, ?, ?)", now, now, now); err != nil {
 		t.Fatal(err)

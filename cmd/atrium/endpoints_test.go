@@ -102,6 +102,7 @@ func (f *fakeOpenAI) authorizations() map[string][]string {
 }
 
 func TestEndpointProbeGatesTheMailModuleAndSendsTheKeysOnlyToTheirEndpoints(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	const chatKey = "sk-chat-endpoint-0123456789"
 	const embedKey = "sk-embed-endpoint-0123456789"
@@ -220,6 +221,7 @@ func TestConnectionsTestUsesTheEmbedCAAndAPassingTestReleasesTheMailHold(t *test
 }
 
 func TestConnectionsTestReusesTheStoredEmbeddingBearerWhenTheInputIsBlank(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	embed := newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
@@ -319,7 +321,7 @@ func TestLocalChatStoredEndpointStillDrivesTheChatProbe(t *testing.T) {
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
 		t.Fatalf("settings list: exit %d stderr %q", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	seedSetting(t, d, endpoint.KeyChatURL, chat.URL+"/v1")
 	seedSetting(t, d, endpoint.KeyChatModel, "stored-chat-model")
 	got := runApp(t, "endpoints", "probe")

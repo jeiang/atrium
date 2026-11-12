@@ -37,7 +37,7 @@ func TestPrivateProjectSummariesStayOutOfOtherReaders(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	setup := []string{
 		"INSERT INTO projects (id, name, effort, context_limit, private, created_at, updated_at) VALUES (1, 'Household', 'low', 100000, 1, 0, 0), (2, 'Studio', 'low', 100000, 0, 0, 0)",
@@ -118,7 +118,7 @@ func TestPrivateProjectPinnedFactsStayOutOfOtherPrompts(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	setup := []string{
 		"INSERT INTO projects (id, name, effort, context_limit, private, created_at, updated_at) VALUES (1, 'Household', 'low', 100000, 1, 0, 0), (2, 'Studio', 'low', 100000, 0, 0, 0)",

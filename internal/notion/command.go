@@ -51,7 +51,7 @@ func run(env *cli.Env, o Options, fn func(context.Context, *db.DB, config.Config
 	if err != nil {
 		return cli.Fail(env, err)
 	}
-	d, err := db.Connect(cfg.DBPath)
+	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(env.Ctx).DBKey()))
 	if err != nil {
 		return cli.Fail(env, err)
 	}

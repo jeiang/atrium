@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/notion"
 )
@@ -61,7 +62,7 @@ func TestKnowledgeImportIsIdempotent(t *testing.T) {
 	if code, stdout, stderr := kbImportRun(t, importSeed, "db", "shell"); code != 0 {
 		t.Fatalf("seed: %d %s %s", code, stdout, stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 
 	code, stdout, stderr := kbImportRun(t, "", "kb", "import", "--dry-run")
@@ -204,7 +205,7 @@ INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url
 	if code, stdout, stderr := kbImportRun(t, seed, "db", "shell"); code != 0 {
 		t.Fatalf("seed: %d %s %s", code, stdout, stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 
 	code, stdout, stderr := kbImportRun(t, "", "kb", "import")
@@ -306,7 +307,7 @@ INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url
 	if code, stdout, stderr := kbImportRun(t, seed, "db", "shell"); code != 0 {
 		t.Fatalf("seed: %d %s %s", code, stdout, stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 
 	code, stdout, stderr := kbImportRun(t, "", "kb", "import")

@@ -118,7 +118,6 @@ func keyedMailFixture(t *testing.T) (string, string) {
 	t.Helper()
 	requireCipher(t)
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
-	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")

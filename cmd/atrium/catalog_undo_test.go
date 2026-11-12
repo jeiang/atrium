@@ -13,6 +13,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 )
 
@@ -36,7 +37,7 @@ func TestCatalogMailExecutorUndoCLIWebParity(t *testing.T) {
 					t.Fatalf("pause: %d %s", got.code, got.stderr)
 				}
 			}
-			d := mustConnect(t, filepath.Join(m.dir, "atrium.db"))
+			d := mustConnect(t, filepath.Join(m.dir, "atrium.db"), db.Key{})
 			defer func() { _ = d.Close() }()
 			now := float64(time.Now().Unix())
 			seed := func(name string) string {
@@ -97,7 +98,7 @@ func TestCatalogMediaUndoThroughCLI(t *testing.T) {
 	b := mnpNewBrowser(t, startServeIn(t, dir))
 	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
 	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {mediaMagnet(hash, "Catalog.Undo")}, "mode": {"media"}}, http.StatusOK)
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	id := mediaEffectID(t, d, "media_add_magnet", hash, "done")
 	if got := runApp(t, "effects", "undo", fmt.Sprint(id)); got.code != cli.ExitOK {
@@ -145,7 +146,7 @@ func TestCatalogProposeHidesDisabledMailTriage(t *testing.T) {
 	if !strings.Contains(string(b), `"is_error":true`) {
 		t.Fatalf("tool refusal missing: %s", b)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var n int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposals WHERE kind = 'mail_triage'").Scan(&n); err != nil || n != 0 {

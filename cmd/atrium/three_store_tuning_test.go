@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/passrun"
 )
 
@@ -91,7 +92,7 @@ func TestPoisonedTuningRowsCannotChangeHTTPBehavior(t *testing.T) {
 	if got := runSettings(t, "list"); got.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", got.code, got.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	for _, row := range [][2]string{
 		{"body_cap_bytes", "1024"},
 		{"chat_thread_limit", "1"},
@@ -155,7 +156,7 @@ func TestPoisonedRetentionRowCannotChangePassPruning(t *testing.T) {
 	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", got.code, got.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('pass_run_retention_days', '1')"); err != nil {
 		t.Fatal(err)
 	}
