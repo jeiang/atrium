@@ -1,9 +1,14 @@
 # Integrations
 
 Every connection is configured on the Integrations settings page or the
-Connections page (`/settings/connections`) and tested there. A secret is stored write-only in an encrypted database; the host may
-pin it instead through `secretFiles`. The matrix is the support summary; the
-sections below cover the console work atrium cannot do for you.
+Connections page (`/settings/connections`) and tested there. A provider
+credential is stored write-only in an encrypted database or supplied by the
+connection's `credential_files` entry in the host configuration; there is no
+environment pin for a secret. The only environment secret inputs left are the
+database key (`ATRIUM_DB_KEY`/`ATRIUM_DB_KEY_FILE`) and the two app key files
+(`app_keys.action_link_key_file` and `app_keys.link_key_file`), which the
+NixOS module's `secretFiles` option renders. The matrix is the support
+summary; the sections below cover the console work atrium cannot do for you.
 
 ## Support matrix
 
@@ -27,7 +32,7 @@ sections below cover the console work atrium cannot do for you.
 Google Calendar and Gmail use a Web-application OAuth client that each
 instance registers itself. The wizard on the Connections page stores the
 client ID and secret, performs one consent per capability, and keeps the
-refresh token as a secret that can be pinned with its `*_file` variable.
+refresh token as a write-only secret in the database.
 
 | Account | Gmail IMAP and SMTP | Calendar | Notes |
 |---|---|---|---|
@@ -118,7 +123,7 @@ export overwrites its own pages on every run and trashes the page of a record
 that is retracted or leaves the export set; edits made in Notion are lost. A
 write with an unknown outcome blocks the export until it is resolved. The
 **Obsidian export** section writes a vault folder instead (`export_obsidian_dir`,
-normally pinned by the host); its private switch stores the folder path in
+normally declared by the host); its private switch stores the folder path in
 `export_obsidian_private_to`.
 
 ## Grafana
@@ -138,8 +143,9 @@ may carry an expiry.
 
 - Rotate the key in the Console and paste the new one on the Integrations
   page; the old key stops working.
-- The key is stored encrypted and can be pinned with `secretFiles`; a pinned
-  key cannot be changed from the UI.
+- The key is stored encrypted in the `service/anthropic` connection, or the
+  host supplies it through `credential_files.api_key`; a key from the host
+  file cannot be changed from the UI.
 - An Admin API key can list members, workspaces and usage cost, but cannot
   mint keys. Atrium does not use one yet.
 - Subscription OAuth is not allowed for third-party products; only the
@@ -176,7 +182,7 @@ Weather forecasts and place lookup need no credential. Set the location
 `weather_location_name`) on the Open-Meteo record on the Connections page;
 the `weather` tool reads it, or geocodes a place named in the call. Latitude
 must be between -90 and 90 and longitude between -180 and 180, and a value
-pinned from the host is shown read-only. The tool fetches only
+the host file declares is shown read-only. The tool fetches only
 the configured Open-Meteo hosts, and the request carries no operator data
 beyond the coordinates.
 
@@ -184,8 +190,8 @@ beyond the coordinates.
 
 Ship24 supplies live package tracking for packages the operator registers
 with the `track_package` tool. Create an API key in the Ship24 dashboard and
-paste it on the Connections page, or pin `mail_ship24_api_key` from the
-host. The free plan registers 10 shipments a month; the
+paste it on the Connections page, or declare `credential_files.api_key` on
+the `service/ship24` connection in the host configuration. The free plan registers 10 shipments a month; the
 `mail_ship24_monthly_quota` setting (default 10) refuses further
 registrations once the month's count is exhausted. Atrium polls the active
 trackers hourly and stops polling delivered packages. There is no webhook

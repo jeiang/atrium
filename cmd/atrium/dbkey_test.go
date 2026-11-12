@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/module"
 )
 
 const (
@@ -46,15 +47,6 @@ func writeKey(t *testing.T, dir, name, hex string) string {
 	return path
 }
 
-func writeConfig(t *testing.T, dir, body string) string {
-	t.Helper()
-	path := filepath.Join(dir, "bad.toml")
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return path
-}
-
 func isPlaintextSQLite(t *testing.T, path string) bool {
 	t.Helper()
 	raw, err := os.ReadFile(path)
@@ -77,7 +69,7 @@ func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{map[string]any{"index": 0, "embedding": vector}}})
 	}))
 	defer embedder.Close()
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", embedder.URL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", embedHost(t, dir, embedder.URL+"/v1"))
 	rightFile := writeKey(t, dir, "right.key", rightKeyHex)
 	keyEnv := func(hex string) string { return "ATRIUM_DB_KEY=" + hex }
 	encrypted := filepath.Join(dir, "encrypted.db")
@@ -88,6 +80,9 @@ func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 	if created.code != cli.ExitOK || isPlaintextSQLite(t, encrypted) {
 		t.Fatalf("keyed command on a fresh database exited %d, stderr %q, plaintext header %v; want 0 and an encrypted file", created.code, created.stderr, isPlaintextSQLite(t, encrypted))
 	}
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	seedSettingsAt(t, encrypted, map[string]string{module.FlagKey(module.Notion): "true"})
+	setEnv(t, "ATRIUM_DB_KEY", "")
 
 	k, err := db.ParseKey(rightKeyHex)
 	if err != nil {
@@ -117,7 +112,7 @@ func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 	if knn.code != cli.ExitOK || knn.stdout != hit {
 		t.Errorf("KNN search on the keyed database exited %d with stdout %q, stderr %q; want 0 and %q", knn.code, knn.stdout, knn.stderr, hit)
 	}
-	fts := runProcess(t, "notion search alpha", dbEnv(encrypted), keyEnv(rightKeyHex), "ATRIUM_MAIL_MAIL_EMBED_URL=http://127.0.0.1:1")
+	fts := runProcess(t, "notion search alpha", dbEnv(encrypted), keyEnv(rightKeyHex), "ATRIUM_HOST_CONFIG="+embedHostNamed(t, dir, "host-embed-dead.toml", "http://127.0.0.1:1/v1"))
 	if fts.code != cli.ExitOK || fts.stdout != hit {
 		t.Errorf("FTS search on the keyed database exited %d with stdout %q, stderr %q; want 0 and %q", fts.code, fts.stdout, fts.stderr, hit)
 	}
@@ -137,17 +132,16 @@ func TestDatabaseKeyCreatesEncryptedDatabaseAndGuardsEveryOpen(t *testing.T) {
 	if err := os.WriteFile(configFile, []byte("[db]\nkey_file = \""+rightFile+"\"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if got := runProcess(t, "notion search zzz", dbEnv(encrypted), "ATRIUM_CONFIG="+configFile); got.code != cli.ExitOK || got.stdout != hit {
-		t.Errorf("db.key_file from ATRIUM_CONFIG exited %d with stdout %q, stderr %q; want 0 and %q", got.code, got.stdout, got.stderr, hit)
+	if got := runProcess(t, "notion search zzz", dbEnv(encrypted), "ATRIUM_CONFIG="+configFile); got.code != cli.ExitError ||
+		!strings.Contains(got.stderr, "ATRIUM_CONFIG is no longer read") || strings.Contains(got.stderr, rightKeyHex) {
+		t.Errorf("ATRIUM_CONFIG naming the key file exited %d with stdout %q, stderr %q; want the removal refusal and no key material", got.code, got.stdout, got.stderr)
 	}
 
 	for name, env := range map[string][]string{
-		"a missing ATRIUM_DB_KEY_FILE":   {"ATRIUM_DB_KEY_FILE=" + filepath.Join(dir, "missing.key")},
-		"ATRIUM_DB_KEY and its _FILE":    {keyEnv(rightKeyHex), "ATRIUM_DB_KEY_FILE=" + rightFile},
-		"key_file_file in ATRIUM_CONFIG": {"ATRIUM_CONFIG=" + writeConfig(t, dir, "[db]\nkey_file_file = \""+rightFile+"\"\n")},
-		"a path in ATRIUM_DB_KEY":        {keyEnv(rightFile)},
-		"a short key in ATRIUM_DB_KEY":   {keyEnv(rightKeyHex[:63])},
-		"a literal key in ATRIUM_CONFIG": {"ATRIUM_CONFIG=" + writeConfig(t, dir, "[db]\nkey = \""+rightKeyHex+"\"\n")},
+		"a missing ATRIUM_DB_KEY_FILE": {"ATRIUM_DB_KEY_FILE=" + filepath.Join(dir, "missing.key")},
+		"ATRIUM_DB_KEY and its _FILE":  {keyEnv(rightKeyHex), "ATRIUM_DB_KEY_FILE=" + rightFile},
+		"a path in ATRIUM_DB_KEY":      {keyEnv(rightFile)},
+		"a short key in ATRIUM_DB_KEY": {keyEnv(rightKeyHex[:63])},
 	} {
 		got := runProcess(t, "notion search zzz", append([]string{dbEnv(encrypted)}, env...)...)
 		if got.code != cli.ExitError || got.stdout != "" || strings.Contains(got.stderr, rightKeyHex) || strings.Contains(got.stderr, rightKeyHex[:63]) {

@@ -161,20 +161,13 @@ func seedFlagsAt(t *testing.T, app *cli.App, path string, flags map[string]strin
 	if code := app.Run(context.Background(), []string{"settings", "list"}, &out, &errs); code != cli.ExitOK {
 		t.Fatalf("settings list before seeding module flags: exit %d stderr %q", code, errs.String())
 	}
-	d, err := db.Connect(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = d.Close() }()
+	kv := map[string]string{}
 	for _, name := range moduleNames {
-		value, ok := flags[name]
-		if !ok {
-			continue
-		}
-		if _, err := d.Write.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", module.FlagKey(name), value); err != nil {
-			t.Fatal(err)
+		if value, ok := flags[name]; ok {
+			kv[module.FlagKey(name)] = value
 		}
 	}
+	seedSettingsAt(t, path, kv)
 }
 
 func flagsExcept(name string, value string) map[string]string {

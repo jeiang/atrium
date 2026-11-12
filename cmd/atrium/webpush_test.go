@@ -480,7 +480,9 @@ func writeHostFile(t *testing.T, dir, name, body string) string {
 
 func webPushHostConfig(t *testing.T, dir, ca, vapid string) string {
 	t.Helper()
-	return writeHostFile(t, dir, "webpush-host.toml", hostConfigBody(webPushConnectionTable(ca, vapid)))
+	return hostConfigEdit(t, dir, "webpush-host.toml", map[string]string{
+		defaultWebPushConnection: webPushConnectionTable(ca, vapid),
+	})
 }
 
 func webPushOnlyHostConfig(t *testing.T, dir, ca, vapid string) string {

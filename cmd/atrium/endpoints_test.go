@@ -102,7 +102,7 @@ func (f *fakeOpenAI) authorizations() map[string][]string {
 }
 
 func TestEndpointProbeGatesTheMailModuleAndSendsTheKeysOnlyToTheirEndpoints(t *testing.T) {
-	t.Parallel()
+	requireCipher(t)
 	const chatKey = "sk-chat-endpoint-0123456789"
 	const embedKey = "sk-embed-endpoint-0123456789"
 	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)

@@ -168,17 +168,16 @@ func TestRemovedSettingsDoNotBlockStartup(t *testing.T) {
 	}
 	_ = d.Close()
 
-	setEnv(t, "ATRIUM_CONFIG", writeSettingsConfig(t, dir, "[assistant]\nnightly_stale_months = 3\n[notion]\nnotion_link_max_tokens = 200\n"))
 	setEnv(t, "ATRIUM_ASSISTANT_AGENT_PROFILE_VALUE_CHARS", "500")
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
-		t.Fatalf("settings list with removed pins: %d %s", ran.code, ran.stderr)
+		t.Fatalf("settings list with a removed row and a removed pin: %d %s", ran.code, ran.stderr)
 	}
-	if strings.Contains(runApp(t, "settings", "list").stdout, "nightly_stale_months") {
+	if strings.Contains(runApp(t, "settings", "list").stdout, "agent_profile_key_chars") {
 		t.Error("a removed setting is still listed")
 	}
 
-	setEnv(t, "ATRIUM_CONFIG", writeSettingsConfig(t, dir, "[assistant]\nnot_a_setting = 1\n"))
-	if ran := runApp(t, "settings", "list"); ran.code == cli.ExitOK || !strings.Contains(ran.stderr, `unknown key "assistant.not_a_setting"`) {
-		t.Errorf("unknown key = exit %d stderr %q, want a startup error", ran.code, ran.stderr)
+	setEnv(t, "ATRIUM_CONFIG", writeSettingsConfig(t, dir, "[assistant]\nnightly_stale_months = 3\n[notion]\nnotion_link_max_tokens = 200\n"))
+	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitError || !strings.Contains(ran.stderr, "ATRIUM_CONFIG is no longer read") {
+		t.Errorf("ATRIUM_CONFIG = exit %d stderr %q, want the removal refusal", ran.code, ran.stderr)
 	}
 }

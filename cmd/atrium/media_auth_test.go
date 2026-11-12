@@ -8,7 +8,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-
 )
 
 type fakeQbit struct {
