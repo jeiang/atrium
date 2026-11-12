@@ -51,6 +51,7 @@ func TestTuningKeysAreAbsentFromSettings(t *testing.T) {
 		}
 	}
 
+	seedAllFlags(t)
 	base := startServeIn(t, dir)
 	jar, err := cookiejar.New(nil)
 	if err != nil {

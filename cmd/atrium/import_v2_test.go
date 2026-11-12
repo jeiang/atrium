@@ -31,7 +31,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -117,6 +116,32 @@ func runImportApp(t *testing.T, app *cli.App, args ...string) appRun {
 	var out, errs bytes.Buffer
 	code := app.Run(context.Background(), args, &out, &errs)
 	return appRun{code, out.String(), errs.String()}
+}
+
+func importSourceEnv(t *testing.T, dir string, pins map[string]string) string {
+	t.Helper()
+	names := make([]string, 0, len(pins))
+	for name := range pins {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	var body strings.Builder
+	for _, name := range names {
+		body.WriteString(name + "=" + pins[name] + "\n")
+	}
+	path := filepath.Join(dir, "v2.env")
+	if err := os.WriteFile(path, []byte(body.String()), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func importMailPins(t *testing.T, dir string) string {
+	t.Helper()
+	return importSourceEnv(t, dir, map[string]string{
+		"ATRIUM_CORE_MAIL_ENABLED":   "true",
+		"ATRIUM_MAIL_MAIL_EMBED_URL": "http://embed.invalid/v1",
+	})
 }
 
 func importCount(t *testing.T, q db.Querier, query string, args ...any) int64 {
@@ -551,7 +576,11 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 		('media_eztv_url', %[3]q)`, tmdbFake.URL+"/3", tmdbImages.URL, eztvFake.URL))
 	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('media_tmdb_token', 'tmdb-imported-token', 1762000800, 'fixture')")
 
-	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	mediaPins := importSourceEnv(t, dir, map[string]string{
+		"ATRIUM_CORE_MEDIA_ENABLED":             "true",
+		"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL":    "http://qbittorrent.invalid",
+	})
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source, "--source-env", mediaPins)
 	if got.code != cli.ExitOK {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
@@ -617,7 +646,6 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 	}
 
 	setEnv(t, anthropic.BaseURLEnv, api.URL)
-	setEnv(t, settingEnv(grafanatools.KeyURL), grafana.URL)
 	ran := runImportApp(t, importTestAppWithHost(t, dir, clock, api.URL, grafana.URL, notionFake.URL), "agent", "run", "--text", "list the datasources")
 	if ran.code != cli.ExitOK {
 		t.Fatalf("agent run: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
@@ -775,7 +803,6 @@ func TestImportV2CarriesTheEmbeddingConnectionAndItsKey(t *testing.T) {
 		('mail_embed_batch', '1')`, url))
 	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_embed_key', %q, 1762000800, 'fixture')", key))
 	editImportSource(t, source, "INSERT INTO endpoint_probes (kind, fingerprint, ok, reason, dimension, models, probed_at) VALUES ('embed', 'stale0000000000', 0, 'the old endpoint refused the key', 0, '[]', 1762000800)")
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", url)
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", chat.URL+"/v1")
 	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
 	if got.code != cli.ExitOK {
@@ -871,9 +898,7 @@ func TestImportV2CarriesTheShip24ConnectionAndPollsWithTheCompiledWindow(t *test
 	editImportSource(t, source, fmt.Sprintf(`INSERT INTO packages (id, carrier, tracking_number, status, status_text, source_message_id, last_message_id, updated_ts, first_seen, dismissed, aggregator, tracker_id, tracker_registered_ts, last_sync_ts, last_event_hash, last_event, last_event_ts, notified_status)
 		VALUES (3, 'ups', '1Z999AA10123456784', 'in_transit', 'In transit', 0, 0, %f, %f, 0, 'ship24', 'trk_1', %f, %f, '', '', 0, '')`,
 		clock-10*86400, clock-20*86400, clock-20*86400, clock-10*86400))
-	setEnv(t, "ATRIUM_MAIL_MAIL_SHIP24_URL", ship24.URL)
-
-	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source, "--source-env", importMailPins(t, dir))
 	if got.code != cli.ExitOK {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
@@ -939,7 +964,6 @@ func TestImportV2HoldsMailOnlyForAMatchingEmbeddingFingerprint(t *testing.T) {
 				('mail_embed_model', 'embeddinggemma')`, url))
 			editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_embed_key', %q, 1762000800, 'fixture')", key))
 			editImportSource(t, source, fmt.Sprintf("INSERT INTO endpoint_probes (kind, fingerprint, ok, reason, dimension, models, probed_at) VALUES ('embed', %q, 0, 'the endpoint refused the key', 0, '[]', 1762000800)", tc.fingerprint))
-			setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", url)
 			setEnv(t, flagEnv(module.Mail), "")
 
 			if got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source); got.code != cli.ExitOK {
@@ -986,7 +1010,6 @@ func TestImportV2KeepsEmbedAndChatAccountsFromClaimingTheEndpointHealth(t *testi
 		('chat', 'Chat', 'gmail', 'chat@example.test', 1, 0, 'password', 1762000800)`)
 	editImportSource(t, source, "INSERT INTO integration_health (name, state, reason, checked_at, expires_at) VALUES ('mail_embed', 'failing', 'the embed endpoint refused', 1762000800, NULL)")
 	editImportSource(t, source, "INSERT INTO integration_health (name, state, reason, checked_at, expires_at) VALUES ('mail_chat', 'failing', 'the chat endpoint refused', 1762000800, NULL)")
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", url)
 
 	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
 	if got.code != cli.ExitOK {
@@ -1631,7 +1654,7 @@ func TestImportV2ResolvingAnImportedUndoClearsTheCorrection(t *testing.T) {
 	}
 
 	app := importTestApp(t, dir, clock)
-	if got := runImportApp(t, app, "db", "import-v2", source); got.code != cli.ExitOK {
+	if got := runImportApp(t, app, "db", "import-v2", source, "--source-env", importMailPins(t, dir)); got.code != cli.ExitOK {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 	dest := filepath.Join(dir, "atrium.db")
@@ -2118,7 +2141,7 @@ func TestImportV2RefusesAPinnedRemovedSelector(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := runImportApp(t, importTestAppHost(t, dir, 1, host), "connections", "list")
-	if got.code == cli.ExitOK || !strings.Contains(got.stderr, "use host.auth.oidc_access_groups") {
+	if got.code == cli.ExitOK || !strings.Contains(got.stderr, "auth.oidc_admin_group") || !strings.Contains(got.stderr, "host.auth.oidc_access_groups") {
 		t.Fatalf("removed selector: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 }
@@ -2225,7 +2248,7 @@ func TestImportV2KeepsHostPinningAndRefusesARemovedAccount(t *testing.T) {
 	}
 	host := importHostConfigMail(t, dir, hostPass, "operator@icloud.invalid")
 
-	got := runImportApp(t, importTestAppHost(t, dir, clock, host), "db", "import-v2", source)
+	got := runImportApp(t, importTestAppHost(t, dir, clock, host), "db", "import-v2", source, "--source-env", importMailPins(t, dir))
 	if got.code != cli.ExitOK {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
@@ -2312,7 +2335,7 @@ func TestImportV2CarriesAStoredPasswordForAXOAUTH2Account(t *testing.T) {
 	editImportSource(t, source, `INSERT INTO mail_accounts (id, label, preset, login, enabled, pinned, auth_method, created_at) VALUES ('work', 'Work', 'gmail', 'me@work.test', 1, 0, 'xoauth2', 1762000800)`)
 	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_password_work', %q, 1762000800, 'fixture')", appPassword))
 
-	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source, "--source-env", importMailPins(t, dir))
 	if got.code != cli.ExitOK {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
@@ -2375,7 +2398,6 @@ func TestImportV2KeepsTheEmbeddingFingerprintWithLegacyHealth(t *testing.T) {
 	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_embed_key', %q, 1762000800, 'fixture')", key))
 	editImportSource(t, source, fmt.Sprintf("INSERT INTO endpoint_probes (kind, fingerprint, ok, reason, dimension, models, probed_at) VALUES ('embed', %q, 0, 'the endpoint refused the key', 0, '[]', 1762000800)", matching))
 	editImportSource(t, source, "INSERT INTO integration_health (name, state, reason, checked_at, expires_at) VALUES ('mail_embed', 'ok', 'the legacy check passed', 1762000800, NULL)")
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", url)
 	setEnv(t, flagEnv(module.Mail), "")
 
 	if got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source); got.code != cli.ExitOK {
@@ -2457,7 +2479,7 @@ func TestImportV2IntoADeploymentThatDeclaresTheSameMailAccountAndServices(t *tes
 	}
 	host, anthropicKey, grafanaKey := importDeploymentHost(t, dir, hostPass, "host@icloud.invalid")
 
-	got := runImportApp(t, importTestAppHost(t, dir, clock, host), "db", "import-v2", source)
+	got := runImportApp(t, importTestAppHost(t, dir, clock, host), "db", "import-v2", source, "--source-env", importMailPins(t, dir))
 	if got.code != cli.ExitOK {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}

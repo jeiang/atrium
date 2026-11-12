@@ -125,6 +125,7 @@ func TestUnpinnedHostWritesAreRefused(t *testing.T) {
 		}
 	}
 
+	seedAllFlags(t)
 	w := asstBrowse(t, startServeIn(t, dir))
 	status, page, _ := w.get("/settings/export", false)
 	if status != http.StatusOK {

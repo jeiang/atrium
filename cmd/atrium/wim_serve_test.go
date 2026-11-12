@@ -25,6 +25,7 @@ func wimServeIn(t *testing.T, dir string, args ...string) (string, func()) {
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	seedAllFlags(t)
 	base, _, stop, err := startServeAppArgs(t, newTestApp(t, nil), &lockedBuffer{}, args...)
 	if err != nil {
 		t.Fatal(err)

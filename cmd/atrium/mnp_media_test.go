@@ -366,6 +366,7 @@ func TestMnpMediaWebWritesOnlyTouchMediaTorrents(t *testing.T) {
 	qb.put(mnpTorrent{hash: plain, name: "plain.thing", state: "stoppedDL", content: "plain.thing",
 		files: []mnpFile{{0, "c.mkv", 0}, {1, "c.txt", 1}}})
 
+	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
 	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK, name, "Ready to file (1)")
 	b.want(http.MethodGet, "/apps/media/torrents", nil, http.StatusOK, "Dune.2021")
@@ -442,6 +443,7 @@ func TestMnpMediaChannelFirstPollPrimesWithoutDownloading(t *testing.T) {
 	qb, qbURL := mnpNewQbit(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, eztv.URL+"/api/get-torrents", "", ""))
 
+	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
 	b.want(http.MethodGet, "/apps/media/channels", nil, http.StatusOK, "No channels")
 	b.want(http.MethodPost, "/apps/media/channels", url.Values{"name": {"Lanterns"}, "imdb": {"tt1234567"}, "pattern": {"1080p"}}, http.StatusOK,
@@ -511,10 +513,11 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 	if err := os.WriteFile(keyFile, []byte(key+"\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "host-appkeys.toml", "[app_keys]\nlink_key_file = "+strconv.Quote(keyFile)+"\n"))
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "host-appkeys.toml", "[app_keys]\nlink_key_file = "+strconv.Quote(keyFile)+"\n"+defaultQbitConnection))
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	seedAllFlagsIn(t, dir)
 	base, _, stop, err := startServeAppArgs(t, newTestApp(t, nil), &lockedBuffer{}, "--auth", "proxy", "--allowed-host", "127.0.0.1")
 	if err != nil {
 		t.Fatal(err)

@@ -326,6 +326,13 @@ func seedAllFlags(t *testing.T) {
 	seedSettings(t, allFlagSettings())
 }
 
+func seedAllFlagsIn(t *testing.T, dir string) {
+	t.Helper()
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	seedAllFlags(t)
+}
+
 func seedSettingsAt(t *testing.T, path string, kv map[string]string) {
 	t.Helper()
 	d, err := db.Connect(path)

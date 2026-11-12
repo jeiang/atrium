@@ -60,6 +60,7 @@ func TestMediaUnknownAddBlocksWebAndPoll(t *testing.T) {
 	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, eztv.URL+"/api/get-torrents", "", ""))
 
 	qb.dropOnce("torrents/add")
+	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
 	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
 	if code, body := b.do(http.MethodPost, "/apps/media/add", url.Values{"magnet": {magnet}, "mode": {"media"}}); code != http.StatusBadGateway {
@@ -112,6 +113,7 @@ func TestMediaSelectionFailureKeepsTheAddAndBlocksTheRepeat(t *testing.T) {
 		files: []mnpFile{{0, "Dune.2021.mkv", 0}, {1, "Dune.2021.nfo", 1}}})
 	qb.dropOnce("torrents/filePrio")
 
+	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
 	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
 	b.want(http.MethodPost, "/apps/media/add", url.Values{"magnet": {mediaMagnet(fresh, "Lanterns.S01E09")}, "mode": {"media"}},
@@ -200,6 +202,7 @@ func TestMediaFilingPlanIsInspectableAndUndoable(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
 	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
 	form := url.Values{"id": {hash}, "action": {"file"}, "kind": {"tv"}, "title": {"Lanterns"}, "year": {"2026"},
@@ -255,6 +258,7 @@ func TestMediaFilingUndoRefusesAChangedDestination(t *testing.T) {
 	mnpWrite(t, src, []byte("movie bytes"))
 	item := media.Import + "/" + name
 
+	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
 	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
 	form := url.Values{"id": {item}, "action": {"file"}, "kind": {"movie"}, "title": {"Movie"}, "year": {"2020"}}

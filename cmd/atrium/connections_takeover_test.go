@@ -35,6 +35,15 @@ func operatorEmbedding(t *testing.T, dir, endpoint, token string) {
 	s.stop()
 }
 
+func operatorOwnedEmbedding(t *testing.T, dir string) {
+	t.Helper()
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	defer func() { _ = d.Close() }()
+	if _, err := d.Write.Exec("UPDATE connections SET config_source = 'operator' WHERE id = 'service/embedding'"); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func embeddingRow(t *testing.T, dir string) (revision int64, configJSON, credentialSource, credentialValue string) {
 	t.Helper()
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
@@ -67,6 +76,7 @@ func TestAHostTakeoverCannotMoveAStoredCredentialToAnotherEndpoint(t *testing.T)
 	a, b := newFakeOpenAI(t), newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
 	unsetEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL")
+	operatorOwnedEmbedding(t, dir)
 	setEnv(t, "ATRIUM_HOST_CONFIG", plainHostConfig(t, dir))
 	operatorEmbedding(t, dir, a.URL+"/v1", "token-a")
 	revision, configJSON, source, value := embeddingRow(t, dir)
@@ -96,6 +106,7 @@ func TestAHostTakeoverWithTheSameEndpointKeepsTheStoredCredential(t *testing.T) 
 	a, b := newFakeOpenAI(t), newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
 	unsetEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL")
+	operatorOwnedEmbedding(t, dir)
 	setEnv(t, "ATRIUM_HOST_CONFIG", plainHostConfig(t, dir))
 	operatorEmbedding(t, dir, a.URL+"/v1", "token-a")
 
@@ -123,6 +134,7 @@ func TestAHostTakeoverWithACredentialFileForEverySlotIsAllowed(t *testing.T) {
 	a, b := newFakeOpenAI(t), newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
 	unsetEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL")
+	operatorOwnedEmbedding(t, dir)
 	setEnv(t, "ATRIUM_HOST_CONFIG", plainHostConfig(t, dir))
 	operatorEmbedding(t, dir, a.URL+"/v1", "token-a")
 
