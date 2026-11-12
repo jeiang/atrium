@@ -756,6 +756,16 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 func TestMailPauseUnavailableWhileMailIsOff(t *testing.T) {
 	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, "false"))
+	paused := func() bool {
+		got := runApp(t, "live", "status")
+		return got.code == cli.ExitOK && strings.Contains(got.stdout, `"paused": true`)
+	}
+	if got := runApp(t, "live", "pause"); got.code != cli.ExitOK || !paused() {
+		t.Fatalf("live pause while mail is off: exit %d stderr %q, paused %v", got.code, got.stderr, paused())
+	}
+	if got := runApp(t, "live", "resume"); got.code != cli.ExitOK || paused() {
+		t.Fatalf("live resume while mail is off: exit %d stderr %q", got.code, got.stderr)
+	}
 	base := startServeIn(t, dir)
 	jar, err := cookiejar.New(nil)
 	if err != nil {

@@ -71,8 +71,9 @@ behavior-parity target.
   render.
 - Review and Activity remain available when a capability is disabled, including
   its historical proposals and effects. Actions on those records require the
-  owning capability to remain enabled for the operation. Draft, loop, package
-  and pause pages belong to mail and are unavailable while mail is off.
+  owning capability to remain enabled for the operation. Draft, loop and package
+  pages belong to mail and are unavailable while mail is off; the pause controls
+  stay available through the CLI, and their web routes return not found.
 - The system prompt and subagent rules are operator-editable settings over
   built-in defaults; the untrusted-data preamble is fixed in code and always
   comes first. Edits apply to every thread's next request until the
@@ -433,7 +434,8 @@ behavior-parity target.
   atrium's own read-only CalDAV/CardDAV sync (vdirsyncer is gone). A disabled
   module's pages return not found and its tools and nav entries are omitted;
   its commands exit 0 without doing work, its scheduler jobs, the mail pass's
-  calendar-candidate stage and notification sends are skipped, and its tables remain.
+  calendar-candidate stage and notification sends are skipped (the mail pause
+  controls stay available), and its tables remain.
   The first start
   after the module wiring adopts a database that already holds operator data
   (settings, secrets, accounts, threads or usage rows): every module whose
@@ -445,8 +447,7 @@ behavior-parity target.
   Pending mutations retain their owner's generation and refuse before recording
   a write intent if that owner was disabled, including after re-enablement.
   Started effects finish their ledger settlement; unknown outcomes stay blocked.
-  Permission dismissal remains available while assistant is off without resuming
-  its parked run.
+  Dismissing a proposal remains possible while its owner is disabled.
   Settings transactions publish a new module snapshot only after commit.
   Routes mount once with their declaration owner and check that snapshot on
   each request, so changes committed by the running application take effect
