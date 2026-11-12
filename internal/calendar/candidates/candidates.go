@@ -209,7 +209,12 @@ func ScanAccount(ctx context.Context, d *db.DB, cfg config.Config, account strin
 		if paid.Note(err) {
 			continue
 		}
-		if _, unanswered := classify.Unanswered(err); unanswered {
+		if final, unanswered := classify.Unanswered(err); unanswered {
+			if final {
+				if err := set(ctx, d, r.id, StatusNone, "model gave no usable answer", now()); err != nil {
+					return proposed, flagged, err
+				}
+			}
 			continue
 		}
 		if err != nil {

@@ -31,9 +31,12 @@ const (
 	ReasonStop        = "unexpected_stop"
 	ReasonMalformed   = "malformed_output"
 	ReasonExhausted   = "exhausted"
+	ReasonRetryLater  = "retry_later"
 )
 
 const MaxItemFailures = 2
+
+const RetrySpacing = time.Hour
 
 const finishTimeout = 5 * time.Second
 
@@ -114,12 +117,15 @@ func (s *Service) Classify(ctx context.Context, r Request) (json.RawMessage, err
 			return kept, err
 		}
 	}
-	failures, err := s.itemFailures(ctx, r)
+	failures, last, err := s.itemFailures(ctx, r)
 	if err != nil {
 		return nil, err
 	}
 	if failures >= MaxItemFailures {
 		return nil, &Unanswered{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonExhausted, Final: true}
+	}
+	if failures > 0 && s.now()-last < RetrySpacing.Seconds() {
+		return nil, &Unanswered{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonRetryLater}
 	}
 	if s.client == nil {
 		return nil, &Deferred{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonUnavailable,
@@ -160,11 +166,12 @@ const classificationRuns = "FROM runs r JOIN threads t ON t.id = r.thread_id " +
 	"WHERE t.kind = 'classification' AND t.role = ? AND r.kind = 'classification' AND r.state = ? " +
 	"AND json_extract(r.limits_json, '$.item_key') = ?"
 
-func (s *Service) itemFailures(ctx context.Context, r Request) (int, error) {
+func (s *Service) itemFailures(ctx context.Context, r Request) (int, float64, error) {
 	var n int
-	err := s.db.Read.QueryRowContext(ctx, "SELECT COUNT(*) "+classificationRuns+" AND r.error IN (?, ?, ?, ?)",
-		"classification:"+string(r.Caller), journal.Failed, r.Item.Key, ReasonRefusal, ReasonTruncated, ReasonStop, ReasonMalformed).Scan(&n)
-	return n, err
+	var last float64
+	err := s.db.Read.QueryRowContext(ctx, "SELECT COUNT(*), COALESCE(MAX(r.started_at), 0) "+classificationRuns+" AND r.error IN (?, ?, ?, ?)",
+		"classification:"+string(r.Caller), journal.Failed, r.Item.Key, ReasonRefusal, ReasonTruncated, ReasonStop, ReasonMalformed).Scan(&n, &last)
+	return n, last, err
 }
 
 func (s *Service) kept(ctx context.Context, r Request) (json.RawMessage, error) {

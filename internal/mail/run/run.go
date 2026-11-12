@@ -79,6 +79,8 @@ type Pass struct {
 	Classify   *classify.Service
 	Events     func(ctx context.Context, account string, paid *classify.Deferral) (invites, candidates int, err error)
 	Extras     []Extra
+	resolve    func(ctx context.Context) (*classifier.Service, error)
+	resolved   bool
 }
 
 func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open mail.OpenFunc, now func() float64, c *classifier.Service) (*Pass, error) {
@@ -96,35 +98,39 @@ func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open 
 		return nil, err
 	}
 	l := &live.Live{DB: d, Cfg: cfg, Store: store, Open: open, Registry: registry, Now: now}
-	judge := classify.New(c)
 	p := &Pass{
-		DB:         d,
-		Cfg:        cfg,
-		Open:       open,
-		Now:        now,
-		Syncer:     syncer,
-		Live:       l,
-		Registry:   registry,
-		Router:     &router.Router{DB: d, Now: now, Classifier: judge},
-		Applier:    applier.New(l, open, syncer),
-		Classifier: c,
-		Classify:   judge,
-		Events: func(ctx context.Context, account string, paid *classify.Deferral) (int, int, error) {
-			if !module.IsEnabled(ctx, module.Calendar) {
-				return 0, 0, nil
-			}
-			return candidates.ScanAccount(ctx, d, cfg, account, judge, paid, env, now)
-		},
+		DB:       d,
+		Cfg:      cfg,
+		Open:     open,
+		Now:      now,
+		Syncer:   syncer,
+		Live:     l,
+		Registry: registry,
+		Router:   &router.Router{DB: d, Now: now},
+		Applier:  applier.New(l, open, syncer),
+	}
+	p.use(c)
+	p.Events = func(ctx context.Context, account string, paid *classify.Deferral) (int, int, error) {
+		if !module.IsEnabled(ctx, module.Calendar) {
+			return 0, 0, nil
+		}
+		return candidates.ScanAccount(ctx, d, cfg, account, p.Classify, paid, env, now)
 	}
 	p.Extras = []Extra{
 		{"open loops", func(ctx context.Context, paid *classify.Deferral) (any, error) {
-			return openloops.Refresh(ctx, d, now(), openloops.Options{Env: env, Classifier: c, Paid: paid, Clock: now, CacheDir: cfg.CacheDir})
+			return openloops.Refresh(ctx, d, now(), openloops.Options{Env: env, Classifier: p.Classifier, Paid: paid, Clock: now, CacheDir: cfg.CacheDir})
 		}},
 		{"watches", func(ctx context.Context, paid *classify.Deferral) (any, error) {
-			return watches.Refresh(ctx, d, now(), watches.Options{Classifier: c, Paid: paid, Clock: now, Env: env})
+			return watches.Refresh(ctx, d, now(), watches.Options{Classifier: p.Classifier, Paid: paid, Clock: now, Env: env})
 		}},
 	}
 	return p, nil
+}
+
+func (p *Pass) use(c *classifier.Service) {
+	p.Classifier = c
+	p.Classify = classify.New(c)
+	p.Router.Classifier = p.Classify
 }
 
 func Open(ctx context.Context, env config.Env, cfg config.Config, open mail.OpenFunc, now func() float64, classifiers Classifier) (*Pass, func(), error) {
@@ -139,7 +145,10 @@ func Open(ctx context.Context, env config.Env, cfg config.Config, open mail.Open
 	if now == nil {
 		now = mail.WallClock
 	}
-	c, err := classifiers(ctx, env, d, cfg, now)
+	resolve := func(ctx context.Context) (*classifier.Service, error) {
+		return classifiers(ctx, env, d, cfg, now)
+	}
+	c, err := resolve(ctx)
 	if err != nil {
 		_ = d.Close()
 		return nil, nil, err
@@ -149,6 +158,7 @@ func Open(ctx context.Context, env config.Env, cfg config.Config, open mail.Open
 		_ = d.Close()
 		return nil, nil, err
 	}
+	p.resolve, p.resolved = resolve, true
 	return p, func() { _ = d.Close() }, nil
 }
 
@@ -171,6 +181,14 @@ func (p *Pass) SyncAll(ctx context.Context) error {
 }
 
 func (p *Pass) Process(ctx context.Context, accounts []string) error {
+	if p.resolve != nil && !p.resolved {
+		c, err := p.resolve(ctx)
+		if err != nil {
+			return err
+		}
+		p.use(c)
+	}
+	p.resolved = false
 	mode, err := mail.Mode(ctx, p.DB.Read)
 	if err != nil {
 		return err

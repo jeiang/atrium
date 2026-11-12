@@ -6,10 +6,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
@@ -25,6 +27,8 @@ var stopReplies = []struct {
 		return anthropictest.Reply("max_tokens", anthropictest.Text(`{"`))
 	}},
 }
+
+const ageFailures = "UPDATE runs SET started_at = started_at - 7200 WHERE kind = 'classification' AND state = 'failed'"
 
 var accountingTables = map[string]bool{"runs": true, "threads": true, "thread_messages": true, "usage": true, "inference_classification_deferrals": true}
 
@@ -180,18 +184,26 @@ func TestMailPassStopReasonsArePerMessageOutcomes(t *testing.T) {
 				if afterFirst == 0 {
 					t.Errorf("the %s pass stopped paid work after the %s reply", caller, stop.name)
 				}
-				r.syncAll(t)
-				r.syncAll(t)
-				r.syncAll(t)
-
-				asked := 0
-				for _, s := range r.requests(t) {
-					if scanCaller(s.caller) == caller && userText(s.body) == bad {
-						asked++
+				asked := func() int {
+					n := 0
+					for _, s := range r.requests(t) {
+						if scanCaller(s.caller) == caller && userText(s.body) == bad {
+							n++
+						}
 					}
+					return n
 				}
-				if asked != 2 {
-					t.Errorf("the %s item was asked %d times over four passes, want 2", stop.name, asked)
+				r.syncAll(t)
+				if n := asked(); n != 1 {
+					t.Errorf("the %s item was asked %d times within the retry spacing, want 1", stop.name, n)
+				}
+				if _, err := r.d.Write.Exec(ageFailures); err != nil {
+					t.Fatal(err)
+				}
+				r.syncAll(t)
+				r.syncAll(t)
+				if n := asked(); n != 2 {
+					t.Errorf("the %s item was asked %d times over four passes, want 2", stop.name, n)
 				}
 				failed := r.failedItems(t, stop.reason)
 				if len(failed) != 1 {
@@ -214,8 +226,11 @@ func TestMailPassStopReasonsArePerMessageOutcomes(t *testing.T) {
 						t.Errorf("the unanswered message has a model flag judgment: %+v", got)
 					}
 				case "event":
-					if got := r.event(t, id); got != "" {
-						t.Errorf("the unanswered message has an event status %q", got)
+					if got := r.event(t, id); got != "none" {
+						t.Errorf("the unanswered message has event status %q, want none", got)
+					}
+					if n := r.count(t, "SELECT COUNT(*) FROM event_candidates WHERE message_id = ? AND reason = 'model gave no usable answer'", id); n != 1 {
+						t.Errorf("the unanswered message has %d event rows with the no-answer reason, want 1", n)
 					}
 				default:
 					if n := r.count(t, "SELECT COUNT(*) FROM mail_scans WHERE kind = ? AND message_id = ? AND found = 0", caller, id); n != 1 {
@@ -261,9 +276,12 @@ func TestMailRefusedFlagDoesNotStopOtherMessagesOrAccounts(t *testing.T) {
 	if got := r.flag(t, lateID); !got.llm.Valid {
 		t.Errorf("unread mail in another account has no model flag judgment: %+v", got)
 	}
-	for range 3 {
-		r.syncAll(t)
+	r.syncAll(t)
+	if _, err := r.d.Write.Exec(ageFailures); err != nil {
+		t.Fatal(err)
 	}
+	r.syncAll(t)
+	r.syncAll(t)
 	asked := 0
 	for _, s := range r.requests(t) {
 		if s.caller == "flag" && s.subject == a.subject {
@@ -298,9 +316,13 @@ func TestMailFolderStopReasonsFallBackAfterTwoCharges(t *testing.T) {
 			if n := r.decisions(t, first.id); n != 0 {
 				t.Fatalf("the first %s reply produced %d decisions", stop.name, n)
 			}
-			for range 3 {
-				r.run(t, "sync")
+			r.run(t, "sync")
+			if n := r.decisions(t, first.id); n != 0 {
+				t.Fatalf("the message was decided within the retry spacing: %d decisions", n)
 			}
+			r.exec(t, ageFailures)
+			r.run(t, "sync")
+			r.run(t, "sync")
 			if stage, action, dest := r.decision(t, first.id); stage != "fallback" || action != "file" || dest != "Misc" {
 				t.Errorf("after two charged failures the message routed %s/%s/%s, want fallback/file/Misc", stage, action, dest)
 			}
@@ -525,4 +547,111 @@ func TestRebalanceNamingKeepsPaidNamesAndFallsBackOnProviderFailure(t *testing.T
 			t.Errorf("%d naming runs succeeded against a failing provider", n)
 		}
 	})
+}
+
+func TestMailPassFinalEventOutcomesLeaveThePendingWindow(t *testing.T) {
+	t.Parallel()
+	r := newMailClassifierRig(t, nil)
+	if _, err := r.d.Write.Exec("UPDATE messages SET seen = 0, sent = 0, in_inbox = 1, gone_at = NULL " +
+		"WHERE id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 55)"); err != nil {
+		t.Fatal(err)
+	}
+	var lateID int64
+	var late string
+	if err := r.d.Read.QueryRow("SELECT id, subject FROM messages WHERE id = (SELECT MAX(id) FROM "+
+		"(SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 55))").Scan(&lateID, &late); err != nil {
+		t.Fatal(err)
+	}
+	r.mu.Lock()
+	r.hook = func(req anthropictest.Request) {
+		if body := req.JSON(t); callerOf(t, body) == "event" && subjectIn(body) != late {
+			r.f.api.PushJSON(anthropictest.Refusal("cyber", "declined"))
+		}
+	}
+	r.mu.Unlock()
+
+	r.syncAll(t)
+	if _, err := r.d.Write.Exec(ageFailures); err != nil {
+		t.Fatal(err)
+	}
+	r.syncAll(t)
+	r.syncAll(t)
+	if got := r.event(t, lateID); got == "" {
+		t.Errorf("the later unread message has no event judgment behind %d refused ones", 54)
+	}
+	if n := r.count(t, "SELECT COUNT(*) FROM event_candidates WHERE status = 'none' AND reason = 'model gave no usable answer'"); n < 50 {
+		t.Errorf("%d refused messages left the pending window, want at least 50", n)
+	}
+}
+
+func TestMailWatchPicksUpAReenabledAnthropicConnectionAtTheNextPass(t *testing.T) {
+	t.Parallel()
+	r := newMailClassifierRig(t, nil)
+	if _, err := r.d.Write.Exec("UPDATE connections SET enabled = 0 WHERE kind = 'service/anthropic'"); err != nil {
+		t.Fatal(err)
+	}
+	const fresh = "Fresh mail before the assistant is back"
+	h, x := mailtest.RawWith(fresh, "someone@elsewhere.test", "fresh-back", "Hello.")
+	r.f.fakes["icloud"].Boxes["INBOX"].Box.Add(h, x, nil, nil)
+	r.f.fakes["icloud"].Idle = true
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	done := make(chan int, 1)
+	go func() {
+		code, _, _ := r.f.Run(ctx, "watch", "--account", "icloud")
+		done <- code
+	}()
+	waitFor := func(what string, ok func() bool) {
+		t.Helper()
+		for !ok() {
+			if ctx.Err() != nil {
+				t.Fatalf("watch never %s", what)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+	}
+	waitFor("synced the new mail", func() bool {
+		return r.count(t, "SELECT COUNT(*) FROM messages WHERE account = 'icloud' AND subject = ?", fresh) == 1
+	})
+	if sent := r.requests(t); len(sent) != 0 {
+		t.Fatalf("a disabled connection sent %d paid requests", len(sent))
+	}
+	if _, err := r.d.Write.Exec("UPDATE connections SET enabled = 1 WHERE kind = 'service/anthropic'"); err != nil {
+		t.Fatal(err)
+	}
+	waitFor("asked a paid classification after the connection was re-enabled", func() bool { return len(r.requests(t)) > 0 })
+	cancel()
+	<-done
+}
+
+func TestMailPassWithAnUnbuildableAnthropicTransportRunsFreeStages(t *testing.T) {
+	t.Parallel()
+	r := newMailClassifierRig(t, nil)
+	hostPath, _ := r.f.lookup("ATRIUM_HOST_CONFIG")
+	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigFrom(t, hostPath, r.f.dir, "host-broken-ca.toml", map[string]string{
+		`kind = "service/anthropic"`: `kind = "service/anthropic"` + "\ntransport = { ca_file = " + strconv.Quote(filepath.Join(r.f.dir, "missing-ca.pem")) + " }",
+	}))
+	const fresh = "Fresh mail while the transport is broken"
+	h, x := mailtest.RawWith(fresh, "someone@elsewhere.test", "fresh-transport", "Hello.")
+	r.f.fakes["icloud"].Boxes["INBOX"].Box.Add(h, x, nil, nil)
+
+	code, _, stderr := r.f.runLogged(context.Background(), "sync", "--account", "icloud")
+	if code != cli.ExitOK {
+		t.Fatalf("sync with an unbuildable transport: exit %d stderr %q", code, stderr)
+	}
+	if n := strings.Count(stderr, "paid classification waits: the Anthropic connection transport cannot be built"); n != 1 {
+		t.Errorf("%d transport warnings, want 1: %q", n, stderr)
+	}
+	if n := r.count(t, "SELECT COUNT(*) FROM messages WHERE account = 'icloud' AND subject = ?", fresh); n != 1 {
+		t.Errorf("sync fetched %d copies of the new mail, want 1", n)
+	}
+	for _, m := range r.targets {
+		if got := r.flag(t, m.id); !got.present || got.llm.Valid {
+			t.Errorf("message %q flag row with an unbuildable transport: %+v", m.subject, got)
+		}
+	}
+	if sent := r.requests(t); len(sent) != 0 {
+		t.Errorf("an unbuildable transport sent %d paid requests", len(sent))
+	}
 }
