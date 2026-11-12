@@ -130,7 +130,7 @@ func EchoFields(ctx context.Context, fields []FieldView, values map[string]strin
 }
 
 func SaveFields(ctx context.Context, d *db.DB, fields []Field, values map[string]string) error {
-	return d.WithTx(ctx, func(tx *sql.Tx) error {
+	return WithTx(ctx, d, func(tx *sql.Tx) error {
 		reg := From(ctx)
 		for _, f := range fields {
 			value, present := values[f.Key]

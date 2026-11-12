@@ -5,8 +5,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/chi/v5"
-
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -33,12 +31,16 @@ func (s *Set) Pages() []web.Page {
 			}
 			if !r.Core {
 				p = s.gatePage(r.Name, p)
+			} else if p.Module != nil {
+				p.Module = web.Owned(r.Name, p.Module, nil)
 			}
 			pages = append(pages, p)
 		}
 	}
 	groups, generic, control := s.settingPages()
-	return append(pages, settingspage.Page(groups, generic, control, s.cat.Sections()))
+	settingsPage := settingspage.Page(groups, generic, control, s.cat.Sections())
+	settingsPage.Module = web.Owned(Core, settingsPage.Module, nil)
+	return append(pages, settingsPage)
 }
 
 func (s *Set) settingState(ctx context.Context, q db.Querier, name string) (settings.ModuleView, error) {
@@ -127,11 +129,17 @@ func (s *Set) gatePage(owner string, p web.Page) web.Page {
 			p.Nav[i].Module = owner
 		}
 	}
-	inner := p.Module
-	p.Module = func(r chi.Router, d *web.Deps) {
-		if s.Current().Enabled(owner) {
-			inner(r, d)
-		}
+	if p.Module != nil {
+		p.Module = web.Owned(owner, p.Module, func(next http.Handler) http.Handler {
+			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				set := SetFrom(r.Context())
+				if set == nil || set.Current() == nil || !set.Current().Enabled(owner) {
+					http.NotFound(w, r)
+					return
+				}
+				next.ServeHTTP(w, r)
+			})
+		})
 	}
 	if public := p.Public; public != nil {
 		p.Public = func(cfg config.Config, env config.Env, d *db.DB, reg *settings.Registry) func(*http.Request) bool {

@@ -14,11 +14,12 @@ import (
 )
 
 type Set struct {
-	cat   *Catalog
-	reg   *settings.Registry
-	env   config.Env
-	decls []Declaration
-	cur   atomic.Pointer[Snapshot]
+	cat     *Catalog
+	reg     *settings.Registry
+	env     config.Env
+	decls   []Declaration
+	cur     atomic.Pointer[Snapshot]
+	publish sync.Mutex
 }
 
 func (s *Set) Catalog() *Catalog { return s.cat }
@@ -26,7 +27,20 @@ func (s *Set) Catalog() *Catalog { return s.cat }
 type setKey struct{}
 
 func WithSet(ctx context.Context, s *Set) context.Context {
-	return context.WithValue(ctx, setKey{}, s)
+	return settings.WithCommit(context.WithValue(ctx, setKey{}, s), func(ctx context.Context, q db.Querier) (func(bool), error) {
+		s.publish.Lock()
+		snap, err := s.Evaluate(ctx, q)
+		if err != nil {
+			s.publish.Unlock()
+			return nil, err
+		}
+		return func(committed bool) {
+			if committed {
+				s.cur.Store(snap)
+			}
+			s.publish.Unlock()
+		}, nil
+	})
 }
 
 func SetFrom(ctx context.Context) *Set {

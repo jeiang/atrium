@@ -271,6 +271,59 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 			}
 		})
 	}
+	t.Run("live routes and security", func(t *testing.T) {
+		_, _, f := moduleFixture(t, flagsExcept(module.Media, "false"))
+		base, _, _, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "proxy", "--allowed-host", "127.0.0.1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := func(method, path string, authenticated bool) int {
+			t.Helper()
+			req, err := http.NewRequest(method, base+path, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if authenticated {
+				req.Header.Set("Remote-Groups", "atrium_access")
+			}
+			resp, err := http.DefaultClient.Do(req)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = resp.Body.Close() }()
+			return resp.StatusCode
+		}
+		if got := request(http.MethodGet, "/apps/media/channels", true); got != http.StatusNotFound {
+			t.Fatalf("disabled route = %d", got)
+		}
+		if got := runApp(t, "settings", "set", module.FlagKey(module.Media), "invalid"); got.code == cli.ExitOK {
+			t.Fatal("invalid module flag was accepted")
+		}
+		if got := request(http.MethodGet, "/apps/media/channels", true); got != http.StatusNotFound {
+			t.Fatalf("refused setting changed the live route = %d", got)
+		}
+		for _, enabled := range []string{"true", "false", "true"} {
+			if got := runApp(t, "settings", "set", module.FlagKey(module.Media), enabled); got.code != cli.ExitOK {
+				t.Fatalf("toggle %s: %s", enabled, got.stderr)
+			}
+			want := http.StatusOK
+			if enabled == "false" {
+				want = http.StatusNotFound
+			}
+			if got := request(http.MethodGet, "/apps/media/channels", true); got != want {
+				t.Fatalf("live route after %s = %d, want %d", enabled, got, want)
+			}
+			if got := request(http.MethodGet, "/about", true); got != http.StatusOK {
+				t.Fatalf("core route after %s = %d", enabled, got)
+			}
+		}
+		if got := request(http.MethodGet, "/apps/media/channels", false); got != http.StatusForbidden {
+			t.Fatalf("newly enabled route without authentication = %d", got)
+		}
+		if got := request(http.MethodPost, "/apps/media/channels", true); got != http.StatusForbidden {
+			t.Fatalf("newly enabled route without CSRF = %d", got)
+		}
+	})
 }
 
 func clearModuleEnv(t *testing.T) {

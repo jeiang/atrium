@@ -435,6 +435,10 @@ behavior-parity target.
   feature; an empty database starts core only. `atrium settings set
   <name>_enabled true` is refused with the unmet reasons. The assistant tool
   registry is built from the enabled modules' tools.
+  Settings transactions publish a new module snapshot only after commit.
+  Routes mount once with their declaration owner and check that snapshot on
+  each request, so changes committed by the running application take effect
+  without remounting or restarting; disabled routes answer 404.
 - Observability: `atrium serve` exposes Prometheus metrics and readiness on
   the loopback ops listener (`ops_listen`, `off` disables), and every command
   can export OTLP/HTTP traces when the host sets `otel_traces_endpoint` (empty

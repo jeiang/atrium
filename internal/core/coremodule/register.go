@@ -20,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
+	"github.com/jeiang/atrium/internal/connections/connweb"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
 	dbkey "github.com/jeiang/atrium/internal/db/key"
@@ -94,9 +95,10 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Start: func(ctx context.Context, d *web.Deps) error { return startOps(ctx, d, mc.Catalog()) }},
 			{Module: startEmbed},
 			{Module: actionlinkpages.Module, Templates: actionlinkpages.Templates()},
-			{Nav: []web.NavItem{
+			{Module: web.CoreModule, Nav: []web.NavItem{
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}},
+			connweb.Page(),
 		},
 		Groups: SettingGroups(),
 		Commands: []*cli.Command{

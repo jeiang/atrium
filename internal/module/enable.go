@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 const (
@@ -62,7 +63,7 @@ func (s *Set) Held(ctx context.Context, q db.Querier, name string) (Hold, error)
 
 func (s *Set) Enable(ctx context.Context, d *db.DB, name string) (Hold, error) {
 	var h Hold
-	err := d.WithTx(ctx, func(tx *sql.Tx) error {
+	err := settings.WithTx(WithSet(ctx, s), d, func(tx *sql.Tx) error {
 		var err error
 		if h, err = s.Held(ctx, tx, name); err != nil || h.Result != HoldOff {
 			return err

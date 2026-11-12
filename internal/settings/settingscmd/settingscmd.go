@@ -77,7 +77,7 @@ func (s *service) set(a *cli.Args) cli.Handler {
 	return func(e *cli.Env) int {
 		return s.keyed(e, *key, func(d *db.DB, _ *settings.Store) error {
 			ctx := audit.With(e.Ctx, actor, audit.CLI)
-			return d.WithTx(ctx, func(tx *sql.Tx) error {
+			return settings.WithTx(ctx, d, func(tx *sql.Tx) error {
 				if s.guard != nil {
 					if err := s.guard(ctx, tx, *key, *value); err != nil {
 						return &Refused{Err: err}
@@ -94,7 +94,7 @@ func (s *service) unset(a *cli.Args) cli.Handler {
 	return func(e *cli.Env) int {
 		return s.keyed(e, *key, func(d *db.DB, _ *settings.Store) error {
 			ctx := audit.With(e.Ctx, actor, audit.CLI)
-			return d.WithTx(ctx, func(tx *sql.Tx) error { return settings.From(ctx).Unset(ctx, tx, *key) })
+			return settings.WithTx(ctx, d, func(tx *sql.Tx) error { return settings.From(ctx).Unset(ctx, tx, *key) })
 		})
 	}
 }
