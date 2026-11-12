@@ -599,7 +599,12 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any,
 		}
 		var refused interface{ MutationRefused() }
 		if errors.As(err, &refused) {
-			return nil, err
+			p.sync(settle, prop)
+			refreshed, gerr := Get(settle, p.DB.Write, id)
+			if gerr != nil {
+				return nil, gerr
+			}
+			return refreshed, err
 		}
 		p.sync(ctx, prop)
 		return Get(settle, p.DB.Write, id)
@@ -686,6 +691,7 @@ func (p *Pipeline) Undo(ctx context.Context, id int64, who Resolver) (UndoResult
 		if err != nil {
 			var refused interface{ MutationRefused() }
 			if errors.As(err, &refused) {
+				out.SyncError = p.sync(settle, prop)
 				return out, err
 			}
 			out.Outcomes = append(out.Outcomes, map[string]any{"action": e.ID, "ok": false, "error": err.Error()})
