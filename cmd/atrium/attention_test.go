@@ -76,7 +76,7 @@ func TestAttentionToolOrdersGroupsSnoozesAndDropsDisabledModules(t *testing.T) {
 	if !strings.Contains(body, "Call the dentist") {
 		t.Fatalf("snooze did not expire")
 	}
-	setEnv(t, flagEnv("mail"), "false")
+	seedSettings(t, map[string]string{"mail_enabled": "false"})
 	body = run()
 	for _, gone := range []string{"Re: lease", "Dinner?", "Send invoice", "In transit"} {
 		if strings.Contains(body, gone) {

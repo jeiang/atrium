@@ -114,15 +114,16 @@ func strictIMAPRig(t *testing.T, creds map[string]string, fakes map[string]*mail
 	}))
 }
 
-func keyedMailFixture(t *testing.T) string {
+func keyedMailFixture(t *testing.T) (string, string) {
 	t.Helper()
-	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	requireCipher(t)
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
-	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "shadow")
-	return dir
+	seedSettings(t, map[string]string{mail.KeyMode: "shadow"})
+	return dir, srv.URL + "/v1"
 }
 
 func mailCount(t *testing.T, d *db.DB, query string, args ...any) int {

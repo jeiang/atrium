@@ -163,9 +163,8 @@ func mrvMailFixture(t *testing.T, mode string) *mrvMail {
 	m.app = f.app
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
-	setEnv(t, settingEnv(mail.KeyMode), mode)
-	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir, mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
+	seedSettings(t, map[string]string{mail.KeyMode: mode})
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, srv.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
 	return m
 }
 
@@ -257,7 +256,7 @@ func TestMrvMailCorrectionHonorsShadowPauseAndUndoesLive(t *testing.T) {
 	}
 	stop()
 
-	setEnv(t, settingEnv(mail.KeyMode), "live")
+	seedSettings(t, map[string]string{mail.KeyMode: "live"})
 	for _, args := range [][]string{{"live", "rebaseline"}, {"live", "pause"}} {
 		if got := runApp(t, args...); got.code != cli.ExitOK {
 			t.Fatalf("%v: %d %s", args, got.code, got.stderr)

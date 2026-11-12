@@ -14,8 +14,8 @@ import (
 )
 
 func TestMailAccountUpdateTestsTheSubmittedLogin(t *testing.T) {
-	dir := keyedMailFixture(t)
-	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir))
+	dir, embed := keyedMailFixture(t)
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, embed, filepath.Join(testRoot, "host", "anthropic.key")))
 	fake := mailtest.NewFakeClient()
 	fake.AddBox("INBOX", mailtest.NewBox(1))
 	creds := map[string]string{"me@work.test": "work-pass", "me@other.test": "other-pass"}

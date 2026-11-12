@@ -21,9 +21,8 @@ func TestMailTriageProposalArchivesThroughTheCLI(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
-	setEnv(t, settingEnv(mail.KeyMode), "live")
-	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir, mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
+	seedSettings(t, map[string]string{mail.KeyMode: "live"})
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, srv.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
 
 	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
 	if err != nil {

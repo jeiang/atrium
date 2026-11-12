@@ -26,11 +26,6 @@ const (
 )
 
 func init() {
-	settings.MustRegisterHost(
-		settings.HostDef{Key: KeyAccessGroups, Module: module, Type: settings.String, Default: DefaultAccessGroups, Check: settings.NonEmpty},
-		settings.HostDef{Key: KeyAccessEmails, Module: module, Type: settings.String},
-		settings.HostDef{Key: KeyAccessDomains, Module: module, Type: settings.String},
-	)
 	settings.MustRegister(
 		settings.Value(settings.UI, settings.Def{Key: KeyIdleDays, Label: "Sign out after idle (days)", Module: module, Type: settings.Int, Default: "7", Check: settings.Between(1, 365)}),
 		settings.Value(settings.UI, settings.Def{Key: KeyMaxDays, Label: "Sign out after (days)", Module: module, Type: settings.Int, Default: "30", Check: settings.Between(1, 365)}),

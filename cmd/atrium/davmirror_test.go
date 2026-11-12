@@ -134,14 +134,14 @@ func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothi
 		t.Errorf("caldav failed rows = %d, want 1", failed)
 	}
 
-	setEnv(t, settingEnv(calendar.AppleIDKey), "")
+	seedSettings(t, map[string]string{calendar.AppleIDKey: ""})
 	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir,
 		mailAccount{"work", "icloud", "work@icloud.invalid", "wrong", false},
 		mailAccount{"home", "icloud", "operator@icloud.invalid", davPassword, false}))
 	if got := runAppLogged(t, "calendar", "sync"); !strings.Contains(got.stderr, "needs-settings") || !strings.Contains(got.stderr, "several iCloud mail accounts; set calendar_account") {
 		t.Fatalf("sync with two iCloud accounts and no calendar_account was not held for settings: %d %q", got.code, got.stderr)
 	}
-	setEnv(t, settingEnv(calendar.AccountKey), "home")
+	seedSettings(t, map[string]string{calendar.AccountKey: "home"})
 	if got := runApp(t, "calendar", "sync"); got.code != cli.ExitOK {
 		t.Fatalf("calendar sync: %d %q", got.code, got.stderr)
 	}

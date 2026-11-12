@@ -11,7 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 )
 
-func TestCanonicalPinsPin(t *testing.T) {
+func TestCanonicalOperatorPinIsRefused(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
@@ -20,12 +20,8 @@ func TestCanonicalPinsPin(t *testing.T) {
 
 	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "live")
 	pinned := runSettings(t, "get", "mail_mode")
-	got := pinned.row(t)
-	if pinned.code != cli.ExitOK || got.Value == nil || *got.Value != "live" || got.Source == nil || *got.Source != "pin" {
-		t.Fatalf("canonical pin: exit %d row %+v", pinned.code, got)
-	}
-	if strings.Contains(pinned.stderr, "ATRIUM_MODE") {
-		t.Errorf("canonical pin warned: %q", pinned.stderr)
+	if pinned.code != cli.ExitError || !strings.Contains(pinned.stderr, "ATRIUM_MAIL_MAIL_MODE is no longer read") || !strings.Contains(pinned.stderr, "atrium settings set mail_mode") {
+		t.Fatalf("canonical operator pin: exit %d stderr %q", pinned.code, pinned.stderr)
 	}
 }
 

@@ -82,7 +82,7 @@ func runError(t *testing.T, dir, where string, args ...any) string {
 
 func TestSubagentSpendCountsTowardTheParentRunCap(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(assistant.KeyDefaultModel), pricing.HaikuID)
+	seedSettings(t, map[string]string{assistant.KeyDefaultModel: pricing.HaikuID})
 	setEnv(t, settingEnv(inference.RunCapKey(pricing.HaikuID)), "0.05")
 	over := anthropictest.Usage{Input: 1000, Output: 120_000}
 

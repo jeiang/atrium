@@ -171,7 +171,7 @@ func TestMailReadDropsInternetButKeepsOwnAndNotify(t *testing.T) {
 
 func TestUntrustedOutputAloneKeepsEgress(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	fakeOpenMeteo(t)
+	fakeOpenMeteo(t, dir)
 	start := warm(t, api)
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w1", "weather", map[string]any{})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
@@ -295,7 +295,7 @@ func replayedSignatures(t *testing.T, r anthropictest.Request) []string {
 
 func TestThinkingIsReplayedOnlyIntoTheContextItWasSignedIn(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	fakeOpenMeteo(t)
+	fakeOpenMeteo(t, dir)
 	start := warm(t, api)
 	message := seedMail(t, dir)
 	api.Push(

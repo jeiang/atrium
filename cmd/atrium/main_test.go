@@ -23,7 +23,12 @@ import (
 
 func startServe(t *testing.T) string {
 	t.Helper()
-	return startServeIn(t, t.TempDir())
+	dir := t.TempDir()
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	seedFlagsAt(t, newTestApp(t, nil), filepath.Join(dir, "atrium.db"), allFlagsTrue())
+	return startServeIn(t, dir)
 }
 
 type lockedBuffer struct {

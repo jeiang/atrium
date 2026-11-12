@@ -5,6 +5,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -72,50 +73,25 @@ func TestSecretsCommandsStoreWriteOnlyAndRefuseFlaggedSecretsOnPlaintext(t *test
 		t.Errorf("secrets rows after delete = %d, %v; want 0", rows, err)
 	}
 
-	setEnv(t, "ATRIUM_ACTION_LINKS_ACTION_LINK_KEY", "pinned-value")
-	if _, err := d.Write.Exec("INSERT INTO secrets (name, value, set_at, set_by) VALUES (?, 'stale', 1.0, 'cli')", secrets.ActionLinkKey); err != nil {
-		t.Fatal(err)
-	}
-	pinned := runSecrets(t, value, "set", secrets.ActionLinkKey)
-	if pinned.code != cli.ExitError || !strings.Contains(pinned.stderr, "pinned by env ATRIUM_ACTION_LINKS_ACTION_LINK_KEY") || strings.Contains(pinned.stderr, value) {
-		t.Errorf("set on a pinned secret: exit %d stderr %q", pinned.code, pinned.stderr)
-	}
-	if st := runSecrets(t, "", "status"); !strings.Contains(st.stdout, "action_link_key: pinned\n") {
-		t.Errorf("status = %q, want action_link_key pinned", st.stdout)
-	}
-	if del := runSecrets(t, "", "delete", secrets.ActionLinkKey); del.code != cli.ExitOK || del.stdout != "action_link_key: pinned\n" {
-		t.Errorf("delete of a stale row under a pin: exit %d stdout %q stderr %q", del.code, del.stdout, del.stderr)
-	}
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM secrets").Scan(&rows); err != nil || rows != 0 {
-		t.Errorf("secrets rows after pinned delete = %d, %v; want 0", rows, err)
-	}
 }
 
-func TestEmptyPinnedLinkKeyIsRefused(t *testing.T) {
+func TestEmptyAppKeyFileIsRefusedAtStartup(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	setEnv(t, "ATRIUM_CONFIG", "")
-	setEnv(t, "ATRIUM_MEDIA_LINK_KEY", "")
 	for name, body := range map[string]string{"empty": "", "blank": " \n\t\n"} {
 		path := filepath.Join(dir, name+".key")
 		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		setEnv(t, "ATRIUM_MEDIA_LINK_KEY_FILE", path)
-		if r := runSecrets(t, "", "status"); r.code != cli.ExitError || !strings.Contains(r.stderr, "ATRIUM_MEDIA_LINK_KEY_FILE") || r.stdout != "" {
-			t.Errorf("%s file: exit %d stdout %q stderr %q", name, r.code, r.stdout, r.stderr)
-		}
-		toml := filepath.Join(dir, name+".toml")
-		if err := os.WriteFile(toml, []byte("[media]\nlink_key_file = \""+path+"\"\n"), 0o600); err != nil {
+		host := filepath.Join(dir, name+".toml")
+		if err := os.WriteFile(host, []byte("[app_keys]\nlink_key_file = "+strconv.Quote(path)+"\n"), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		setEnv(t, "ATRIUM_MEDIA_LINK_KEY_FILE", "")
-		setEnv(t, "ATRIUM_CONFIG", toml)
-		if r := runSecrets(t, "", "status"); r.code != cli.ExitError || !strings.Contains(r.stderr, "media.link_key_file") || r.stdout != "" {
-			t.Errorf("%s config file: exit %d stdout %q stderr %q", name, r.code, r.stdout, r.stderr)
+		setEnv(t, "ATRIUM_HOST_CONFIG", host)
+		if r := runSecrets(t, "", "status"); r.code != cli.ExitError || !strings.Contains(r.stderr, "link_key_file") || r.stdout != "" {
+			t.Errorf("%s file: exit %d stdout %q stderr %q", name, r.code, r.stdout, r.stderr)
 		}
-		setEnv(t, "ATRIUM_CONFIG", "")
 	}
 }

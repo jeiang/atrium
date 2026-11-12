@@ -39,10 +39,6 @@ func init() {
 		settings.HostDef{Key: KeyRoot, Module: module, Type: settings.String},
 		settings.HostDef{Key: KeyMoviesURL, Module: module, Type: settings.String, Check: httpURL},
 		settings.HostDef{Key: KeyTVURL, Module: module, Type: settings.String, Check: httpURL},
-		settings.HostDef{Key: KeyEZTVURL, Module: module, Type: settings.String, Default: DefaultEZTVURL, Check: requiredHTTPURL},
-		settings.HostDef{Key: KeyTMDBURL, Module: module, Type: settings.String, Default: DefaultTMDBAPI, Check: requiredHTTPURL},
-		settings.HostDef{Key: KeyTMDBImagesURL, Module: module, Type: settings.String, Default: DefaultTMDBImages, Check: requiredHTTPURL},
-		settings.HostDef{Key: KeyQbitURL, Module: module, Type: settings.String, Check: httpURL},
 	)
 	settings.MustRegister(
 		settings.Value(settings.UI, settings.Def{Key: KeyLinkTTL, Module: module, Type: settings.Int, Default: "43200", Check: settings.Between(60, 30*86400)}),

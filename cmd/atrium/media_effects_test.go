@@ -49,7 +49,7 @@ func TestMediaUnknownAddBlocksWebAndPoll(t *testing.T) {
 	dir := t.TempDir()
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
-	setEnv(t, settingEnv(media.KeyQbitURL), qbURL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
 	magnet := mediaMagnet(hash, "Lanterns.S01E01")
 	eztv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"torrents": []map[string]any{{
@@ -108,7 +108,7 @@ func TestMediaSelectionFailureKeepsTheAddAndBlocksTheRepeat(t *testing.T) {
 	dir := t.TempDir()
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
-	setEnv(t, settingEnv(media.KeyQbitURL), qbURL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
 	qb.put(mnpTorrent{hash: busy, name: "Dune.2021", tags: []string{media.TagMedia}, state: "stoppedDL", content: "Dune.2021",
 		files: []mnpFile{{0, "Dune.2021.mkv", 0}, {1, "Dune.2021.nfo", 1}}})
 	qb.dropOnce("torrents/filePrio")
@@ -150,7 +150,7 @@ func TestMediaSweepDeleteDropDoesNotRepeat(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
-	setEnv(t, settingEnv(media.KeyQbitURL), qbURL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
 	qb.put(mnpTorrent{hash: hash, name: "Filed.Show", tags: []string{media.TagMedia, media.TagFiled}, state: media.StoppedUP, progress: 1})
 	qb.dropOnce("torrents/delete")
 
@@ -189,7 +189,7 @@ func TestMediaFilingPlanIsInspectableAndUndoable(t *testing.T) {
 	dir := t.TempDir()
 	root := mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
-	setEnv(t, settingEnv(media.KeyQbitURL), qbURL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
 	content := filepath.Join(root, "downloads", name)
 	mnpWrite(t, filepath.Join(content, "Lanterns.S01E01.mkv"), []byte("one"))
 	mnpWrite(t, filepath.Join(content, "Lanterns.S01E02.mkv"), []byte("two"))
@@ -251,7 +251,7 @@ func TestMediaFilingUndoRefusesAChangedDestination(t *testing.T) {
 	dir := t.TempDir()
 	root := mnpMediaRoot(t, dir)
 	_, qbURL := mnpNewQbit(t)
-	setEnv(t, settingEnv(media.KeyQbitURL), qbURL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
 	src := filepath.Join(root, "import", name, name+".mkv")
 	mnpWrite(t, src, []byte("movie bytes"))
 	item := media.Import + "/" + name
@@ -292,7 +292,7 @@ func TestApprovedMediaAddIsUndoneWithItsProposal(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
-	setEnv(t, settingEnv(media.KeyQbitURL), qbURL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
 	id := proposalID(t, toolResult(t, "media_add_magnet", map[string]any{"magnet": mediaMagnet(hash, "Lanterns.S01E10")}))
 	if adds := qb.count("add"); adds != 0 {
 		t.Fatalf("asking reached qBittorrent: %d adds", adds)
@@ -333,7 +333,7 @@ func TestRecoveredProposalWithRecordedWorkCannotBeApprovedAgain(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	mnpMediaRoot(t, dir)
 	qb, qbURL := mnpNewQbit(t)
-	setEnv(t, settingEnv(media.KeyQbitURL), qbURL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
 	id := proposalID(t, toolResult(t, "media_add_magnet", map[string]any{"magnet": mediaMagnet(hash, "Lanterns.S01E11")}))
 	if got := runApp(t, "proposals", "approve", id); got.code != cli.ExitOK {
 		t.Fatalf("approve: %d %q %q", got.code, got.stdout, got.stderr)

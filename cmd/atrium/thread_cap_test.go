@@ -39,7 +39,7 @@ func agentRun(t *testing.T, args ...string) runView {
 func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(loop.CacheTTLKey), "5m")
+	seedSettings(t, map[string]string{loop.CacheTTLKey: "5m"})
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("first")))
 	first := agentRun(t, "--text", "hello")
 	if first.State != "done" {
@@ -47,7 +47,7 @@ func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 	}
 	thread := strconv.FormatInt(first.ThreadID, 10)
 
-	setEnv(t, settingEnv(inference.ThreadCapKey), "0.000001")
+	seedSettings(t, map[string]string{inference.ThreadCapKey: "0.000001"})
 	sent := len(api.Requests())
 	refused := agentRun(t, "--thread", thread, "--text", "again")
 	if refused.State != "failed" || refused.Error == nil || !strings.Contains(*refused.Error, "thread cost cap") || len(api.Requests()) != sent {
@@ -80,12 +80,12 @@ func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 		return float64(n) / inference.NanoUSD
 	}
 	spent := threadSpend()
-	setEnv(t, settingEnv(inference.ThreadCapKey), fmt.Sprintf("%.8f", spent+reservation()*1.5))
+	seedSettings(t, map[string]string{inference.ThreadCapKey: fmt.Sprintf("%.8f", spent+reservation()*1.5)})
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("second")))
 	if ran := agentRun(t, "--thread", thread, "--text", "one"); ran.State != "done" {
 		t.Fatalf("run under the thread cap: %+v", ran)
 	}
-	setEnv(t, settingEnv(inference.ThreadCapKey), fmt.Sprintf("%.8f", reservation()+threadSpend()/2))
+	seedSettings(t, map[string]string{inference.ThreadCapKey: fmt.Sprintf("%.8f", reservation()+threadSpend()/2)})
 	sent = len(api.Requests())
 	if held := agentRun(t, "--thread", thread, "--text", "two"); held.State != "failed" || held.Error == nil ||
 		!strings.Contains(*held.Error, inference.ThreadCapKey) || len(api.Requests()) != sent {
@@ -99,7 +99,7 @@ func TestThreadCostCapCountsEveryRunOfTheThread(t *testing.T) {
 
 func TestComposerThreadCostCapRefusesTheNextRequest(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(assistant.KeyDefaultModel), pricing.HaikuID)
+	seedSettings(t, map[string]string{assistant.KeyDefaultModel: pricing.HaikuID})
 	warm(t, api)
 	base, _, stop := startServeApp(t, freshApp(f, nil), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)

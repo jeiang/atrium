@@ -25,9 +25,8 @@ func mailEffectsFixture(t *testing.T, mode, preset string, fake *mailtest.FakeCl
 	f.app = newAppWith(f.lookup, f.settings, f.state, nil, func(config.Config) mail.OpenFunc { return fake.Open }, nil, quietLog)
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", "http://127.0.0.1:1/v1")
-	setEnv(t, settingEnv(mail.KeyMode), mode)
-	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir, mailAccount{"work", preset, "atrium.test@example.test", "app-pass", false}))
+	seedSettings(t, map[string]string{mail.KeyMode: mode})
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, "http://127.0.0.1:1/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"work", preset, "atrium.test@example.test", "app-pass", false}))
 	return &mailSafety{dir: dir, app: f.app, fake: fake, path: filepath.Join(dir, "atrium.db")}
 }
 
@@ -214,7 +213,7 @@ func TestMailAutomaticPartialMoveUndoesOnlyTheCopiedMessages(t *testing.T) {
 	inbox := fake.AddBox("INBOX", mailtest.NewBox(1))
 	fake.AddBox("Bills", mailtest.NewBox(3))
 	m := mailEffectsFixture(t, "live", "icloud", fake)
-	setEnv(t, settingEnv(mail.KeyWriteCap), strconv.Itoa(mail.TuningMailopsBatch+1))
+	seedSettings(t, map[string]string{mail.KeyWriteCap: strconv.Itoa(mail.TuningMailopsBatch + 1)})
 	m.ruleFor(t, "work", "Bills", "statements@bank.test")
 	m.run(t, "sync")
 	var uids []uint32

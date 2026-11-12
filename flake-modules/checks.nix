@@ -74,6 +74,7 @@
       };
       secretFiles = {
         "action_links.action_link_key" = "/run/secrets/action-link-key";
+        "media.link_key" = "/run/secrets/media-link-key";
       };
       database.keyFile = "/run/secrets/db-key";
       web.allowedHost = "atrium.example.org";
@@ -87,17 +88,18 @@
 
     exampleEvaluates = assert failing nixos == [] && failing defaults == []; true;
     hostKeyRefused = assert refusedWith "unknown key core.not_a_key" {host.core.not_a_key = true;}; true;
-    operatorKeyRefused = assert refusedWith "operator setting assistant.monthly_budget_usd" {host.assistant.monthly_budget_usd = 1;}; true;
+    operatorKeyRefused = assert refusedWith "atrium settings set monthly_budget_usd" {host.assistant.monthly_budget_usd = 1;}; true;
     tuningKeyRefused = assert refusedWith "compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsChat" {host.assistant.max_steps_chat = 1;}; true;
-    cutoverHostRefused = assert refusedWith "host configuration service/embedding host credential bearer" {host.mail.mail_embed_key = "/run/x";}; true;
+    cutoverHostRefused = assert refusedWith "connections.\"service/embedding\".credential_files.bearer" {host.mail.mail_embed_key = "/run/x";}; true;
     databaseKeyRefused = assert refusedWith "services.atrium.database.keyFile" {host.db.key_file = "/run/x";}; true;
-    secretRefused = assert refusedWith "services.atrium.database.keyFile" {secretFiles."db.key" = "/run/x";}; assert refusedWith "connection field service/qbittorrent credential api_key" {secretFiles."media.media_qbittorrent_api_key" = "/run/x";}; assert refusedWith "connection field service/notion credential token" {secretFiles."notion.notion_token" = "/run/x";}; assert refusedWith "host configuration" {secretFiles."auth.oidc_client_secret" = "/run/x";}; assert refusedWith "is not a secret setting" {secretFiles."assistant.monthly_budget_usd" = "/run/x";}; true;
+    secretRefused = assert refusedWith "services.atrium.database.keyFile" {secretFiles."db.key" = "/run/x";}; assert refusedWith "connections.\"service/qbittorrent\".credential_files.api_key" {secretFiles."media.media_qbittorrent_api_key" = "/run/x";}; assert refusedWith "connections.\"service/notion\".credential_files.token" {secretFiles."notion.notion_token" = "/run/x";}; assert refusedWith "connections.\"service/anthropic\".credential_files.api_key" {secretFiles."anthropic.anthropic_api_key" = "/run/x";}; assert refusedWith "connections.\"service/oidc\".credential_files.client_secret" {secretFiles."auth.oidc_client_secret" = "/run/x";}; assert refusedWith "atrium settings set monthly_budget_usd" {secretFiles."assistant.monthly_budget_usd" = "/run/x";}; true;
     connectionRefused = assert refusedWith "needs a kind" {connections."service/x" = {kind = "";};}; true;
     cfg = nixos.config.services.atrium;
     unitText = name: nixos.config.systemd.units.${name}.text;
     appUnits = builtins.filter (lib.hasSuffix ".service") cfg.unitNames;
     credentialLines = [
       "LoadCredential=action_links.action_link_key:/run/secrets/action-link-key"
+      "LoadCredential=media.link_key:/run/secrets/media-link-key"
       "LoadCredential=connection-service-notion-token:/run/secrets/notion-token"
       "LoadCredential=db-key:/run/secrets/db-key"
       "LoadCredential=connection-service-qbittorrent-api_key:/run/secrets/qbittorrent-api-key"
@@ -123,6 +125,9 @@
       assert lib.hasInfix "ReadWritePaths=/var/lib/media" scheduler;
       assert !(defaults.config.services.atrium.renderedHost ? export); true;
     hostConfig = assert cfg.renderedHost.core.public_url == "https://atrium.example.org";
+    assert cfg.renderedHost.app_keys.action_link_key_file == "\${CREDENTIALS_DIRECTORY}/action_links.action_link_key";
+    assert cfg.renderedHost.app_keys.link_key_file == "\${CREDENTIALS_DIRECTORY}/media.link_key";
+    assert !(cfg.renderedHost ? db);
     assert cfg.renderedHost.connections."service/qbittorrent".config.url == "http://127.0.0.1:8081";
     assert cfg.renderedHost.connections."service/qbittorrent".credential_files.api_key == "\${CREDENTIALS_DIRECTORY}/connection-service-qbittorrent-api_key";
     assert cfg.renderedHost.connections."mail/icloud".config.preset == "icloud";
@@ -134,7 +139,6 @@
     unit = name: pkgs.writeText name (builtins.unsafeDiscardStringContext nixos.config.systemd.units.${name}.text);
     inherit (cfg) unitNames;
     configFile = (pkgs.formats.toml {}).generate "atrium-host.toml" cfg.renderedHost;
-    pinsFile = (pkgs.formats.toml {}).generate "atrium.toml" cfg.renderedPins;
   in {
     checks =
       {
@@ -187,10 +191,11 @@
         module-config = pkgs.runCommand "atrium-module-config" {nativeBuildInputs = [self'.packages.atrium pkgs.gnugrep];} ''
           set -euo pipefail
           export HOME=$TMPDIR ATRIUM_DB=$TMPDIR/atrium.db ATRIUM_CACHE_DIR=$TMPDIR/cache
-          export ATRIUM_HOST_CONFIG=${configFile} ATRIUM_CONFIG=${pinsFile} ATRIUM_INITIAL_TZ=UTC
+          export ATRIUM_HOST_CONFIG=${configFile} ATRIUM_INITIAL_TZ=UTC
           export CREDENTIALS_DIRECTORY=$TMPDIR/credentials
           mkdir -p "$CREDENTIALS_DIRECTORY"
           head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/action_links.action_link_key"
+          head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/media.link_key"
           printf 'notion-token\n' >"$CREDENTIALS_DIRECTORY/connection-service-notion-token"
           head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/db-key"
           printf 'qbt-key\n' >"$CREDENTIALS_DIRECTORY/connection-service-qbittorrent-api_key"
@@ -203,6 +208,26 @@
           atrium settings get tz | grep -q '"value": "Europe/Berlin"'
           if atrium settings set public_url https://other.example >/dev/null 2>&1; then
             echo "a host setting was editable" >&2
+            exit 1
+          fi
+          if ANTHROPIC_API_KEY=sk-test atrium settings list >/dev/null 2>&1; then
+            echo "a raw Anthropic key was accepted" >&2
+            exit 1
+          fi
+          if ATRIUM_MAIL_MAIL_CHAT_KEY=secret atrium settings list >/dev/null 2>&1; then
+            echo "a raw chat key was accepted" >&2
+            exit 1
+          fi
+          if ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD=5 atrium settings list >/dev/null 2>&1; then
+            echo "an operator environment pin was accepted" >&2
+            exit 1
+          fi
+          if ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL=http://q.invalid atrium settings list >/dev/null 2>&1; then
+            echo "a connection host input was accepted" >&2
+            exit 1
+          fi
+          if ATRIUM_CONFIG=/run/atrium.toml atrium settings list >/dev/null 2>&1; then
+            echo "a legacy pin file was accepted" >&2
             exit 1
           fi
           atrium connections list | grep -q 'service/qbittorrent'

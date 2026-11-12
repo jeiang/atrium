@@ -144,7 +144,9 @@ type fixture struct {
 	settings *settings.Registry
 	state    *config.State
 	base     string
+	flags    map[string]string
 	fakes    map[string]*mailtest.FakeClient
+	llm      string
 }
 
 func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin string) *fixture {
@@ -158,22 +160,17 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	for k, v := range data.environment {
 		vars[k] = v
 	}
-	vars["ATRIUM_CALENDAR_ICLOUD_APPLE_ID"] = vars["ICLOUD_APPLE_ID"]
 	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_CONTACTS_DIR"] = filepath.Join(dir, "contacts")
 	vars["ATRIUM_MEDIA_ROOT"] = filepath.Join(dir, "media")
 	vars["ATRIUM_CHAT_URL"] = srv.URL + "/v1"
-	vars["ATRIUM_EMBED_URL"] = srv.URL + "/v1"
 	vars[calendar.CalDAVEnv] = caldavURL
-	for _, name := range moduleNames {
-		vars["ATRIUM_CORE_"+strings.ToUpper(name)+"_ENABLED"] = "true"
-	}
 	for k, v := range extraEnv {
 		vars[k] = v
 	}
 	for phaseA, canonical := range map[string]string{
-		"ATRIUM_MODE": "ATRIUM_MAIL_MAIL_MODE", "ATRIUM_CHAT_URL": "ATRIUM_MAIL_MAIL_CHAT_URL", "ATRIUM_EMBED_URL": "ATRIUM_MAIL_MAIL_EMBED_URL",
+		"ATRIUM_MODE": "ATRIUM_MAIL_MAIL_MODE", "ATRIUM_CHAT_URL": "ATRIUM_MAIL_MAIL_CHAT_URL",
 		"ATRIUM_MEDIA_ROOT": "ATRIUM_MEDIA_MEDIA_ROOT", "QBITTORRENT_URL": "ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL",
 		"ATRIUM_MEDIA_MOVIES_URL": "ATRIUM_MEDIA_MEDIA_MOVIES_URL", "ATRIUM_MEDIA_TV_URL": "ATRIUM_MEDIA_MEDIA_TV_URL",
 		"ATRIUM_CONTACTS_DIR": "ATRIUM_CONTACTS_CONTACTS_DIR",
@@ -196,7 +193,7 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	if value, ok := extraEnv["ANTHROPIC_API_KEY"]; ok && value == "" {
 		anthropicKey = ""
 	}
-	vars["ATRIUM_HOST_CONFIG"] = accountsFileWith(t, dir, anthropicKey, accounts...)
+	vars["ATRIUM_HOST_CONFIG"] = accountsFileEmbedding(t, dir, srv.URL+"/v1", anthropicKey, accounts...)
 	for _, name := range []string{"ATRIUM_TZ", "ATRIUM_PUBLIC_URL", "ICLOUD_APPLE_ID", "ICLOUD_MAIL_USERNAME", "GMAIL_ADDRESS", "GMAIL_APP_PASSWORD"} {
 		delete(vars, name)
 	}
@@ -212,7 +209,11 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	app := newAppWith(env, reg, st, nil, clients, func() float64 { return data.world.Clock }, quietLog)
 	app.Stdin = strings.NewReader(stdin)
 	copyFile(t, filepath.Join(golden.Dir(), "world.db"), filepath.Join(dir, "atrium.db"))
-	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: reg, state: st, fakes: fakes}
+	seedFlagsAt(t, app, filepath.Join(dir, "atrium.db"), allFlagsTrue())
+	if apple := data.environment["ICLOUD_APPLE_ID"]; apple != "" {
+		seedSettingsAt(t, filepath.Join(dir, "atrium.db"), map[string]string{"icloud_apple_id": apple})
+	}
+	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: reg, state: st, fakes: fakes, llm: srv.URL + "/v1"}
 	fixturesByTest.Store(t, f)
 	fixturesByTest.Store(testKey(t), f)
 	seedNotionVectors(t, filepath.Join(f.dir, "atrium.db"))

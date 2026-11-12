@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 )
@@ -59,11 +58,10 @@ func TestConnectionTestsSaveOnlyWorkingCredentialsAndNeverRenderThem(t *testing.
 	}))
 	t.Cleanup(grafana.Close)
 
-	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, grafana.URL, api.URL))
-	setEnv(t, settingEnv(grafanatools.KeyURL), grafana.URL)
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
 

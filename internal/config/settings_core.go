@@ -91,35 +91,12 @@ func loadCore(ctx context.Context, q db.Querier) (core, error) {
 	return c, nil
 }
 
-func pinned(reg *settings.Registry, env Env, key string) (string, bool) {
-	if value, _, ok := reg.Pin(key); ok {
-		return value, true
-	}
-	if def, ok := reg.Lookup(key); ok {
-		if value := stripped(env, EnvName(def)); value != "" {
-			return value, true
-		}
-	}
-	return "", false
-}
-
-func (s *State) coreValue(env Env, key string) (string, bool) {
-	if value, ok := pinned(s.settings, env, key); ok {
-		return value, true
-	}
+func (s *State) TZName(env Env) string {
 	s.mu.RLock()
 	c := s.core
 	s.mu.RUnlock()
-	switch key {
-	case KeyTZ:
-		return c.tz, c.tz != ""
-	}
-	return "", false
-}
-
-func (s *State) TZName(env Env) string {
-	if value, ok := s.coreValue(env, KeyTZ); ok {
-		return value
+	if c.tz != "" {
+		return c.tz
 	}
 	return Timezone
 }

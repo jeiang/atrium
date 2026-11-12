@@ -24,14 +24,13 @@ import (
 )
 
 func TestAHostMailConnectionAndAnAccountAddedInTheUIBothSync(t *testing.T) {
-	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
-	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir, mailAccount{"home", "icloud", "me@icloud.test", "home-pass", false}))
+	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	srv := llmstub.Server(t, nil)
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, srv.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"home", "icloud", "me@icloud.test", "home-pass", false}))
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
-	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "shadow")
+	seedSettings(t, map[string]string{mail.KeyMode: "shadow"})
 
 	fakes := map[string]*mailtest.FakeClient{"home": mailtest.NewFakeClient(), "work": mailtest.NewFakeClient()}
 	fakes["work"].Gmail = true

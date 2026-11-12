@@ -34,7 +34,6 @@ func TestMailModeAndWriteCapFollowTheRegistryLive(t *testing.T) {
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	setEnv(t, "ATRIUM_CONFIG", "")
-	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "")
 
 	if mode, code, stderr := liveMode(t); code != cli.ExitOK || mode != "shadow" {
 		t.Fatalf("default: mode %q exit %d %q", mode, code, stderr)
@@ -52,20 +51,20 @@ func TestMailModeAndWriteCapFollowTheRegistryLive(t *testing.T) {
 		t.Errorf("a refused write changed the mode to %q", mode)
 	}
 
-	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "live")
+	seedSettings(t, map[string]string{"mail_mode": "live"})
 	if mode, _, _ := liveMode(t); mode != "live" {
-		t.Errorf("env pin live not read: %q", mode)
+		t.Errorf("stored mode live not read: %q", mode)
 	}
-	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "shadow")
+	seedSettings(t, map[string]string{"mail_mode": "shadow"})
 	if mode, _, _ := liveMode(t); mode != "shadow" {
-		t.Errorf("env pin shadow not read: %q", mode)
+		t.Errorf("stored mode shadow not read: %q", mode)
 	}
 	if r := runSettings(t, "unset", "mail_mode"); r.code != cli.ExitError {
 		t.Errorf("unset mail_mode: exit %d, want a refusal", r.code)
 	}
 
-	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "bogus")
+	seedSettings(t, map[string]string{"mail_mode": "bogus"})
 	if _, code, stderr := liveMode(t); code != cli.ExitError || !strings.Contains(stderr, `must be one of ("shadow", "live"), got "bogus"`) {
-		t.Errorf("invalid pin: exit %d stderr %q", code, stderr)
+		t.Errorf("invalid stored mode: exit %d stderr %q", code, stderr)
 	}
 }

@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/jeiang/atrium/internal/media"
 )
 
 func TestIntegrationClientsUseTheConnectionTransportAndAFailedRequestChecksAtOnce(t *testing.T) {
@@ -28,7 +27,7 @@ func TestIntegrationClientsUseTheConnectionTransportAndAFailedRequestChecksAtOnc
 	t.Cleanup(srv.Close)
 
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(media.KeyQbitURL), srv.URL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", qbitHost(t, dir, srv.URL))
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
 	if state := connectionState(t, dir, "service/qbittorrent"); state == "" {
@@ -43,7 +42,7 @@ func TestIntegrationClientsUseTheConnectionTransportAndAFailedRequestChecksAtOnc
 	if err := os.WriteFile(ca, pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: srv.Certificate().Raw}), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	setEnv(t, "ATRIUM_MEDIA_QBITTORRENT_CA_FILE", ca)
+	setEnv(t, "ATRIUM_HOST_CONFIG", qbitHostWithCA(t, dir, srv.URL, ca))
 	s.start()
 	if code, body := s.conn("/test", url.Values{"id": {"service/qbittorrent"}, "api_key": {"qbt_good"}}); code != http.StatusOK {
 		t.Fatalf("qBittorrent Test with its CA: %d %s", code, body)

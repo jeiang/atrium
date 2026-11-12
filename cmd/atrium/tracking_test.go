@@ -191,7 +191,7 @@ func TestTrackPackageRegistersAndRespectsTheQuota(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
 	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
-	setEnv(t, settingEnv(tracking.KeyMonthlyQuota), "1")
+	seedSettings(t, map[string]string{tracking.KeyMonthlyQuota: "1"})
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
@@ -351,7 +351,7 @@ func TestTrackPackageUnknownOutcomeStaysBlocked(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
 	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
-	setEnv(t, settingEnv(tracking.KeyMonthlyQuota), "10")
+	seedSettings(t, map[string]string{tracking.KeyMonthlyQuota: "10"})
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
@@ -392,7 +392,7 @@ func TestTrackPackageQuotaSurvivesUndo(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
 	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
-	setEnv(t, settingEnv(tracking.KeyMonthlyQuota), "1")
+	seedSettings(t, map[string]string{tracking.KeyMonthlyQuota: "1"})
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
@@ -525,7 +525,7 @@ func TestTrackingIdentityBlocksASecondPackageRow(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
 	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
-	setEnv(t, settingEnv(tracking.KeyMonthlyQuota), "10")
+	seedSettings(t, map[string]string{tracking.KeyMonthlyQuota: "10"})
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
@@ -607,7 +607,7 @@ func TestTrackPackageDoesNotReplayTheTrackerCreationOnARedirect(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(fake.handler))
 	t.Cleanup(srv.Close)
 	setEnv(t, "ATRIUM_HOST_CONFIG", ship24Host(t, dir, srv.URL+"/public/v1", "good"))
-	setEnv(t, settingEnv(tracking.KeyMonthlyQuota), "10")
+	seedSettings(t, map[string]string{tracking.KeyMonthlyQuota: "10"})
 	if warm := runApp(t, "agent", "run", "--text", "warm"); warm.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", warm.code, warm.stderr)
 	}
