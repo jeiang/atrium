@@ -35,6 +35,12 @@
         pkgs.go-licenses
         pkgs.pkg-config
         pkgs.tailwindcss_4
+        # Editor language servers
+        pkgs.gopls
+        pkgs.nixd
+        pkgs.typescript-language-server
+        pkgs.tailwindcss-language-server
+        pkgs.bash-language-server
       ];
       env =
         {
