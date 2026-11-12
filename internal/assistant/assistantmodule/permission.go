@@ -3,6 +3,7 @@ package assistantmodule
 import (
 	"context"
 	"encoding/json"
+	"errors"
 
 	"github.com/jeiang/atrium/internal/assistant/permission"
 	"github.com/jeiang/atrium/internal/module"
@@ -30,7 +31,12 @@ func permissionProposals(resume func(context.Context, int64) error) []proposals.
 			if err := json.Unmarshal(p.Payload, &payload); err != nil {
 				return err
 			}
-			return resume(ctx, payload.RunID)
+			err := resume(ctx, payload.RunID)
+			var disabled *module.OwnerDisabled
+			if errors.As(err, &disabled) && disabled.Module == module.Assistant {
+				return nil
+			}
+			return err
 		},
 	}}
 }

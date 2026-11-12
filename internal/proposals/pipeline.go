@@ -226,6 +226,12 @@ func Get(ctx context.Context, q Querier, id int64) (*Proposal, error) {
 	return p, nil
 }
 
+func KindOf(ctx context.Context, q Querier, id int64) (string, error) {
+	var kind string
+	err := q.QueryRowContext(ctx, "SELECT kind FROM proposals WHERE id = ?", id).Scan(&kind)
+	return kind, err
+}
+
 func blockedIDs(ctx context.Context, q Querier) ([]int64, error) {
 	return ledger.BlockedProposalIDs(ctx, q)
 }
@@ -537,6 +543,12 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any,
 	if prop == nil {
 		return nil, ProposalError(fmt.Sprintf("unknown proposal %d", id))
 	}
+	if p.Registry != nil && p.Registry.Bind != nil {
+		ctx, err = p.Registry.Bind(ctx, prop.Kind)
+		if err != nil {
+			return nil, err
+		}
+	}
 	on, err := p.enabled(ctx, prop.Kind)
 	if err != nil {
 		return nil, err
@@ -585,6 +597,10 @@ func (p *Pipeline) ApproveAndApply(ctx context.Context, id int64, selection any,
 		if n, _ := res.RowsAffected(); n == 0 {
 			return nil, ErrSettledMeanwhile
 		}
+		var refused interface{ MutationRefused() }
+		if errors.As(err, &refused) {
+			return nil, err
+		}
 		p.sync(ctx, prop)
 		return Get(settle, p.DB.Write, id)
 	}
@@ -632,6 +648,12 @@ func (p *Pipeline) Undo(ctx context.Context, id int64, who Resolver) (UndoResult
 		return UndoResult{}, err
 	}
 	if prop != nil {
+		if p.Registry != nil && p.Registry.Bind != nil {
+			ctx, err = p.Registry.Bind(ctx, prop.Kind)
+			if err != nil {
+				return UndoResult{}, err
+			}
+		}
 		on, err := p.enabled(ctx, prop.Kind)
 		if err != nil {
 			return UndoResult{}, err
@@ -662,6 +684,10 @@ func (p *Pipeline) Undo(ctx context.Context, id int64, who Resolver) (UndoResult
 		}
 		undo, err := p.Ledger.Undo(ctx, e.ID, ledger.Resolver{Actor: who.Actor, Source: who.Source})
 		if err != nil {
+			var refused interface{ MutationRefused() }
+			if errors.As(err, &refused) {
+				return out, err
+			}
 			out.Outcomes = append(out.Outcomes, map[string]any{"action": e.ID, "ok": false, "error": err.Error()})
 			complete = false
 			break

@@ -55,9 +55,17 @@ func (e LeaseLost) Error() string { return string(e) }
 
 type Runner struct {
 	Registry *registry.Registry
+	Source   registry.Source
 	Ledger   *ledger.Store
 	MailOpen mail.OpenFunc
 	Profile  func(ctx context.Context, q db.Querier, projectID int64) (string, error)
+}
+
+func (r *Runner) currentRegistry() (*registry.Registry, error) {
+	if r.Source != nil {
+		return r.Source()
+	}
+	return r.Registry, nil
 }
 
 type Options struct {
@@ -116,10 +124,15 @@ func (s *state) admit(ctx context.Context) (registry.Set, error) {
 		return registry.Set{}, err
 	}
 	marks := auth.Effective()
-	set, err := s.r.Registry.Admit(ctx, s.kind, auth.Role, auth.WebSearch, marks, s.admission.allow, s.d.Read)
+	reg, err := s.r.currentRegistry()
 	if err != nil {
 		return registry.Set{}, err
 	}
+	set, err := reg.Admit(ctx, s.kind, auth.Role, auth.WebSearch, marks, s.admission.allow, s.d.Read)
+	if err != nil {
+		return registry.Set{}, err
+	}
+	s.x.registry = reg
 	return set, s.offer(ctx, set, marks)
 }
 
@@ -153,12 +166,19 @@ func (s *state) readmit(ctx context.Context) error {
 		return err
 	}
 	marks := auth.Effective()
-	if marks.Set == s.marks.Set {
-		return nil
-	}
-	set, err := s.r.Registry.Admit(ctx, s.kind, auth.Role, auth.WebSearch, marks, s.admission.allow, s.d.Read)
+	reg, err := s.r.currentRegistry()
 	if err != nil {
 		return err
+	}
+	set, err := reg.Admit(ctx, s.kind, auth.Role, auth.WebSearch, marks, s.admission.allow, s.d.Read)
+	if err != nil {
+		return err
+	}
+	s.x.registry = reg
+	for _, t := range s.offered.Dispatch {
+		if !reg.Has(t.Name) {
+			return s.offer(ctx, set, marks)
+		}
 	}
 	if narrows(s.offered, set) {
 		s.use(set, marks)
@@ -363,7 +383,7 @@ func (r *Runner) prepare(ctx context.Context, d *db.DB, cfg config.Config, env c
 	s := &state{
 		r: r, d: d, client: client, now: now, run: *found, thread: *thread, kind: kind, contextLimit: contextLimit,
 		writer: writer, env: env, steps: steps, stepsKey: maxStepsKey(kind), doomThreshold: doomThreshold, inference: o.Inference, ttl: ttl, jobName: jobName,
-		x: &dispatcher{d: d, tc: tc, now: now, tuning: tuning, withdrawn: map[string]struct{}{}, registry: r.Registry, allow: allow},
+		x: &dispatcher{d: d, tc: tc, now: now, tuning: tuning, withdrawn: map[string]struct{}{}, registry: r.Registry, source: r.currentRegistry, allow: allow},
 		admission: admission{
 			allow: allow, model: model.ID, cc: prompts.PrefixCacheControl(kind, ttl), extra: extra,
 			webSearchMaxUses: webSearchMaxUses, dynamicFiltering: dynamicFiltering, report: o.Limits.Report,

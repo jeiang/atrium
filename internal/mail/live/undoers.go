@@ -168,6 +168,7 @@ func Undo(open mail.OpenFunc, q db.Querier) []ledger.UndoDefinition {
 		u := u
 		out = append(out, ledger.UndoDefinition{Operation: u.name, Undoer: ledger.Undoer{
 			Validate: validateUndo(u.name),
+			Deferred: true,
 			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
 				value, err := u.fn(safety.ApprovedWrites(ctx, "undo"), open, q, raw)
 				return undoResult(value, err)

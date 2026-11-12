@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 )
 
 func (s *Store) Undo(ctx context.Context, id int64, who Resolver) (Effect, error) {
@@ -24,14 +25,40 @@ func (s *Store) Undo(ctx context.Context, id int64, who Resolver) (Effect, error
 	if err != nil {
 		return Effect{}, err
 	}
+	if fn.Bind != nil {
+		ctx, err = fn.Bind(ctx)
+		if err != nil {
+			return Effect{}, err
+		}
+	}
 	if fn.Local != nil {
 		return s.undoLocal(ctx, id, fn, payload)
 	}
-	ticket, err := s.reserveUndo(ctx, id, payload)
-	if err != nil {
-		return Effect{}, err
+	var ticket Ticket
+	var startErr error
+	var start sync.Once
+	begin := func() error {
+		start.Do(func() { ticket, startErr = s.reserveUndo(ctx, id, payload) })
+		return startErr
 	}
-	result, err := fn.External(ctx, payload)
+	if !fn.Deferred {
+		if err := begin(); err != nil {
+			return Effect{}, err
+		}
+	}
+	executeCtx := context.WithValue(ctx, writeStartKey{}, begin)
+	result, err := fn.External(executeCtx, payload)
+	if ticket.ID == 0 {
+		if startErr != nil {
+			return Effect{}, startErr
+		}
+		if err != nil {
+			return Effect{}, err
+		}
+		if err := begin(); err != nil {
+			return Effect{}, err
+		}
+	}
 	settleCtx := context.WithoutCancel(ctx)
 	if err != nil {
 		var refused Refused
@@ -168,6 +195,9 @@ func (s *Store) reserveUndo(ctx context.Context, id int64, payload json.RawMessa
 }
 
 func (s *Store) reserveUndoTx(ctx context.Context, tx *sql.Tx, id int64, payload json.RawMessage) (Ticket, error) {
+	if err := CheckAdmission(ctx); err != nil {
+		return Ticket{}, err
+	}
 	forward, err := scanEffect(tx.QueryRowContext(ctx, effectSelect+" WHERE e.id = ?", id))
 	if errors.Is(err, sql.ErrNoRows) {
 		return Ticket{}, &NotFound{ID: id}

@@ -93,6 +93,7 @@ type dispatcher struct {
 	guard     func(ctx context.Context) error
 	drain     func(ctx context.Context) error
 	registry  *registry.Registry
+	source    registry.Source
 	allow     registry.Allow
 	lost      context.Context
 	abort     context.CancelFunc
@@ -121,12 +122,24 @@ func (x *dispatcher) invoke(ctx context.Context, use ToolUse) (errText *string, 
 	if err := x.drain(ctx); err != nil {
 		return nil, nil, err
 	}
+	if x.registry != nil {
+		if err := x.registry.CheckOwner(ctx, use.Name); err != nil {
+			return fail(err.Error())
+		}
+	}
 	auth, err := threads.ReadAuthority(ctx, x.d.Read, x.tc.ThreadID)
 	if err != nil {
 		return nil, nil, err
 	}
 	args := tool.Args(raw)
-	authorized, decision, err := x.registry.Authorize(ctx, x.d.Read, x.tc.Kind, auth.Role, auth.WebSearch, auth.Effective(), x.allow, use.Name, args)
+	reg := x.registry
+	if x.source != nil {
+		reg, err = x.source()
+		if err != nil {
+			return nil, nil, err
+		}
+	}
+	authorized, decision, err := reg.Authorize(ctx, x.d.Read, x.tc.Kind, auth.Role, auth.WebSearch, auth.Effective(), x.allow, use.Name, args)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -180,6 +193,10 @@ func (x *dispatcher) invoke(ctx context.Context, use ToolUse) (errText *string, 
 	var park *tool.Park
 	if errors.As(err, &park) {
 		return nil, nil, park
+	}
+	var refused interface{ MutationRefused() }
+	if errors.As(err, &refused) {
+		return fail(err.Error())
 	}
 	if text, ok := toolErrorText(err); ok {
 		return fail(text)

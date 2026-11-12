@@ -10,7 +10,9 @@ import (
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/tool"
 )
 
 type Set struct {
@@ -88,16 +90,19 @@ func byNeeds(decls []Declaration) ([]Declaration, error) {
 }
 
 type Snapshot struct {
-	set      *Set
-	statuses []Status
-	once     sync.Once
-	registry *registry.Registry
-	regErr   error
+	set         *Set
+	statuses    []Status
+	generations map[string]uint64
+	once        sync.Once
+	registry    *registry.Registry
+	regErr      error
 }
 
 func (s *Set) Current() *Snapshot { return s.cur.Load() }
 
 func (s *Set) Refresh(ctx context.Context, q db.Querier) error {
+	s.publish.Lock()
+	defer s.publish.Unlock()
 	snap, err := s.Evaluate(ctx, q)
 	if err != nil {
 		return err
@@ -122,7 +127,19 @@ func (s *Set) Evaluate(ctx context.Context, q db.Querier) (*Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	return &Snapshot{set: s, statuses: statuses}, nil
+	generations := make(map[string]uint64, len(statuses))
+	current := s.Current()
+	for _, status := range statuses {
+		generation := uint64(1)
+		if current != nil {
+			generation = current.Generation(status.Name)
+			if current.Enabled(status.Name) != (status.State == Enabled) {
+				generation++
+			}
+		}
+		generations[status.Name] = generation
+	}
+	return &Snapshot{set: s, statuses: statuses, generations: generations}, nil
 }
 
 type check func(ctx context.Context, r Declaration, states map[string]State) ([]Unmet, bool, error)
@@ -177,6 +194,8 @@ func (n *Snapshot) Enabled(name string) bool {
 	return ok && st.State == Enabled
 }
 
+func (n *Snapshot) Generation(owner string) uint64 { return n.generations[owner] }
+
 func (n *Snapshot) Registry() (*registry.Registry, error) {
 	n.once.Do(func() { n.registry, n.regErr = n.buildRegistry() })
 	return n.registry, n.regErr
@@ -189,6 +208,24 @@ func (n *Snapshot) buildRegistry() (*registry.Registry, error) {
 			continue
 		}
 		for _, def := range d.Tools {
+			owner, generation := d.Name, n.Generation(d.Name)
+			out.SetOwner(def.Tool.Name, func(ctx context.Context) error { return Require(ctx, owner, generation) })
+			wrap := func(t tool.Tool) tool.Tool {
+				if t.Handler != nil {
+					handler := t.Handler
+					t.Handler = func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
+						if err := Require(ctx, owner, generation); err != nil {
+							return nil, err
+						}
+						ctx = ledger.WithAdmission(ctx, func() error {
+							return Require(ctx, owner, generation)
+						})
+						return handler(ctx, tc, args)
+					}
+				}
+				return t
+			}
+			def.Tool = wrap(def.Tool)
 			var err error
 			if def.Tool.Handler == nil && !def.Tool.Server {
 				err = out.Declare(def.Tool)
@@ -199,7 +236,11 @@ func (n *Snapshot) buildRegistry() (*registry.Registry, error) {
 				return nil, err
 			}
 			if def.Bind != nil {
-				out.Bind(def.Tool.Name, def.Bind)
+				bind := def.Bind
+				out.Bind(def.Tool.Name, func(ctx context.Context, q db.Querier, t tool.Tool) (tool.Tool, bool, error) {
+					bound, ok, err := bind(ctx, q, t)
+					return wrap(bound), ok, err
+				})
 			}
 		}
 	}

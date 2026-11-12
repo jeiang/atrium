@@ -984,6 +984,7 @@ func (e *Executors) Undo() []ledger.UndoDefinition {
 		u := u
 		out = append(out, ledger.UndoDefinition{Operation: u.name, Undoer: ledger.Undoer{
 			Validate: validatePlan(u.name),
+			Deferred: true,
 			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
 				value, err := u.fn(ctx, raw)
 				if err != nil {

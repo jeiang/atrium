@@ -49,6 +49,7 @@ type Definition struct {
 }
 
 type Registry struct {
+	Bind       func(context.Context, string) (context.Context, error)
 	Executors  map[string]Executor
 	Dismissers map[string]DismissHook
 	kinds      []Kind

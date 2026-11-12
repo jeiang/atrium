@@ -35,9 +35,33 @@ type Registry struct {
 	pending  []tool.Tool
 	binders  map[string]Binder
 	settings *settings.Registry
+	owners   map[string]func(context.Context) error
 }
 
 type Source func() (*Registry, error)
+
+func (r *Registry) Has(name string) bool { return r.known(name) }
+
+func (r *Registry) SetOwner(name string, check func(context.Context) error) {
+	if r.owners == nil {
+		r.owners = make(map[string]func(context.Context) error)
+	}
+	r.owners[name] = check
+}
+
+func (r *Registry) CheckOwner(ctx context.Context, name string) error {
+	if check := r.owners[name]; check != nil {
+		return check(ctx)
+	}
+	return nil
+}
+
+func (r *Registry) Clone() *Registry {
+	clone := *r
+	clone.tools = slices.Clone(r.tools)
+	clone.pending = slices.Clone(r.pending)
+	return &clone
+}
 
 func New(reg *settings.Registry) *Registry {
 	return &Registry{binders: map[string]Binder{}, settings: reg}

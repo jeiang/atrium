@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/safety"
 )
 
@@ -171,7 +172,10 @@ func (g gate) check(ctx context.Context, action, target string) error {
 	if g.q != nil {
 		mode = func(ctx context.Context) (string, error) { return Mode(ctx, g.q) }
 	}
-	return safety.WriteGate(ctx, mode, action, target)
+	if err := safety.WriteGate(ctx, mode, action, target); err != nil {
+		return err
+	}
+	return ledger.BeforeWrite(ctx)
 }
 
 func (g gate) Connect(ctx context.Context) error { return g.conn.Connect(ctx) }

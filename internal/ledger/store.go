@@ -98,6 +98,8 @@ type Filter struct {
 type Mutation func(context.Context, *sql.Tx) error
 
 type Undoer struct {
+	Bind     func(context.Context) (context.Context, error)
+	Deferred bool
 	Validate func(json.RawMessage) error
 	External func(context.Context, json.RawMessage) (Result, error)
 	Local    func(context.Context, *sql.Tx, json.RawMessage) (Result, error)
@@ -118,14 +120,15 @@ type ResolveDefinition struct {
 }
 
 type Store struct {
-	DB       *db.DB
-	now      func() float64
-	mu       sync.RWMutex
-	undoers  map[string]Undoer
-	resolves map[string]ResolveHook
-	liveMu   sync.Mutex
-	live     map[int64]liveTicket
-	stop     chan struct{}
+	BindEffect func(context.Context, db.Querier, Effect) (context.Context, error)
+	DB         *db.DB
+	now        func() float64
+	mu         sync.RWMutex
+	undoers    map[string]Undoer
+	resolves   map[string]ResolveHook
+	liveMu     sync.Mutex
+	live       map[int64]liveTicket
+	stop       chan struct{}
 }
 
 type liveTicket struct {
@@ -246,6 +249,9 @@ func (s *Store) Begin(ctx context.Context, n New, admit Mutation) (Ticket, error
 }
 
 func (s *Store) BeginTx(ctx context.Context, tx *sql.Tx, n New, admit Mutation) (Ticket, error) {
+	if err := CheckAdmission(ctx); err != nil {
+		return Ticket{}, err
+	}
 	if err := ctx.Err(); err != nil {
 		return Ticket{}, err
 	}
@@ -485,6 +491,9 @@ func (s *Store) ApplyLocalTx(ctx context.Context, tx *sql.Tx, n New, apply func(
 }
 
 func (s *Store) applyLocalTx(ctx context.Context, tx *sql.Tx, n New, apply func(context.Context, *sql.Tx) (Result, error)) (int64, error) {
+	if err := CheckAdmission(ctx); err != nil {
+		return 0, err
+	}
 	if err := validateNew(n); err != nil {
 		return 0, err
 	}
