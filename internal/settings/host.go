@@ -27,9 +27,11 @@ func MustRegisterHost(defs ...HostDef) {
 	}
 }
 
-func HostDefs() []HostDef {
-	out := make([]HostDef, 0, len(hostDefs)+len(importManifest))
-	for _, d := range hostDefs {
+func HostDefs() []HostDef { return HostDefsFrom(hostDefs) }
+
+func HostDefsFrom(defs []HostDef) []HostDef {
+	out := make([]HostDef, 0, len(defs)+len(importManifest))
+	for _, d := range defs {
 		if ConnectionOwnedHostKey(d.Key) {
 			continue
 		}

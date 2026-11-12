@@ -120,9 +120,11 @@ type Registry struct {
 
 var definitions []Def
 
-func New() *Registry {
-	r := &Registry{defs: make(map[string]Def, len(definitions))}
-	for _, d := range definitions {
+func New() *Registry { return NewFrom(definitions) }
+
+func NewFrom(defs []Def) *Registry {
+	r := &Registry{defs: make(map[string]Def, len(defs))}
+	for _, d := range defs {
 		r.defs[d.Key] = d
 	}
 	return r

@@ -34,10 +34,35 @@ const (
 var log = logx.Logger("atrium.ops")
 
 func init() {
-	settings.MustRegisterHost(
-		settings.HostDef{Key: ListenKey, Module: "core", Type: settings.String, Default: DefaultListen, Check: checkListen},
-		settings.HostDef{Key: PprofKey, Module: "core", Type: settings.Bool, Default: "false"},
-	)
+	settings.MustRegisterHost(HostSettings()...)
+	for _, c := range Checks() {
+		Ready(c)
+	}
+}
+
+func HostSettings() []settings.HostDef {
+	return []settings.HostDef{
+		{Key: ListenKey, Module: "core", Type: settings.String, Default: DefaultListen, Check: checkListen},
+		{Key: PprofKey, Module: "core", Type: settings.Bool, Default: "false"},
+	}
+}
+
+func Checks() []Check {
+	return []Check{
+		{Name: "db", Critical: true, Run: func(ctx context.Context, d *db.DB) error {
+			if err := d.Read.PingContext(ctx); err != nil {
+				return err
+			}
+			return db.RefuseFutureSchema(ctx, d.Read)
+		}},
+		{Name: "config", Critical: true, Run: func(ctx context.Context, _ *db.DB) error {
+			if _, err := config.Load(config.EnvFrom(ctx)); err != nil {
+				return err
+			}
+			_, err := config.From(ctx).Location(config.EnvFrom(ctx))
+			return err
+		}},
+	}
 }
 
 func checkListen(value string) error {
@@ -232,22 +257,6 @@ func (s *server) run(_ context.Context, c Check) error {
 		s.mu.Unlock()
 	}
 	return err
-}
-
-func init() {
-	Ready(Check{Name: "db", Critical: true, Run: func(ctx context.Context, d *db.DB) error {
-		if err := d.Read.PingContext(ctx); err != nil {
-			return err
-		}
-		return db.RefuseFutureSchema(ctx, d.Read)
-	}})
-	Ready(Check{Name: "config", Critical: true, Run: func(ctx context.Context, _ *db.DB) error {
-		if _, err := config.Load(config.EnvFrom(ctx)); err != nil {
-			return err
-		}
-		_, err := config.From(ctx).Location(config.EnvFrom(ctx))
-		return err
-	}})
 }
 
 func Start(ctx context.Context, d *db.DB, env config.Env) (stop func(), err error) {

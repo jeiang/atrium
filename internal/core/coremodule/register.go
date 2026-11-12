@@ -58,7 +58,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 	return module.Registration{
 		Name:      module.Core,
 		Core:      true,
-		Attention: []attention.Source{attentionsources.Proposals()},
+		Attention: AttentionSources(),
 		Pages: []web.Page{
 			{Module: about.Module(m.Version), Templates: about.Templates(), Nav: []web.NavItem{
 				{Label: "About", URL: "/about", Icon: "file-text", Page: "about", Footer: true, Order: 10},
@@ -79,9 +79,7 @@ func (m Module) Register(mc module.Context) module.Registration {
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}},
 		},
-		Settings: []settings.Group{
-			{Name: "sessions", Title: "Sessions", Page: "/settings/auth", Keys: []string{oidc.KeyIdleDays, oidc.KeyMaxDays}},
-		},
+		Settings: SettingGroups(),
 		Commands: []*cli.Command{
 			writescmd.Command(writescmd.Options{Env: mc.Env, Now: m.Now, Store: func(d *db.DB, cfg config.Config) *ledger.Store {
 				return toolset.Ledger(d, mc.Env, m.Clients(cfg), m.Now)
@@ -100,6 +98,14 @@ func (m Module) Register(mc module.Context) module.Registration {
 			backup.BackupCommand(),
 			backup.RestoreCommand(),
 		},
+	}
+}
+
+func AttentionSources() []attention.Source { return []attention.Source{attentionsources.Proposals()} }
+
+func SettingGroups() []settings.Group {
+	return []settings.Group{
+		{Name: "sessions", Title: "Sessions", Page: "/settings/auth", Keys: []string{oidc.KeyIdleDays, oidc.KeyMaxDays}},
 	}
 }
 

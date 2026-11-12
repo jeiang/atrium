@@ -25,9 +25,12 @@ import (
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
-func init() {
-	settings.MustRegisterHost(settings.HostDef{
-		Key: "web_trusted_proxy_cidrs", Module: "web", Type: settings.String})
+func init() { settings.MustRegisterHost(HostSettings()...) }
+
+func HostSettings() []settings.HostDef {
+	return []settings.HostDef{
+		{Key: "web_trusted_proxy_cidrs", Module: "web", Type: settings.String},
+	}
 }
 
 const (
@@ -80,6 +83,11 @@ type Page struct {
 	Start     func(context.Context, *Deps) error
 	Nav       []tpl.NavItem
 	Recover   Recover
+}
+
+type Resource struct {
+	Name  string
+	Mount Module
 }
 
 // Boot opens the application database and starts the modules that own it.
