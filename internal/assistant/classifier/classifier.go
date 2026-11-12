@@ -124,7 +124,7 @@ func (s *Service) Classify(ctx context.Context, r Request) (json.RawMessage, err
 	if failures >= MaxItemFailures {
 		return nil, &Unanswered{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonExhausted, Final: true}
 	}
-	if failures > 0 && s.now()-last < RetrySpacing.Seconds() {
+	if failures > 0 && !def.ops && s.now()-last < RetrySpacing.Seconds() {
 		return nil, &Unanswered{Caller: r.Caller, ItemKey: r.Item.Key, Reason: ReasonRetryLater}
 	}
 	if s.client == nil {
