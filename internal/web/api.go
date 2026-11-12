@@ -28,9 +28,12 @@ const (
 )
 
 type apiError struct {
-	Code    string       `json:"code"`
-	Message string       `json:"message"`
-	Fields  []FieldError `json:"fields,omitempty"`
+	Code         string       `json:"code"`
+	Message      string       `json:"message"`
+	Fields       []FieldError `json:"fields,omitempty"`
+	EffectIDs    []int64      `json:"effect_ids,omitempty"`
+	RetryAfter   int64        `json:"retry_after,omitempty"`
+	DiagnosticID string       `json:"diagnostic_id,omitempty"`
 }
 
 func isAPI(r *http.Request) bool {
