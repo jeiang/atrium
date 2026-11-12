@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"mime"
 	"net/http"
 	"strconv"
@@ -118,6 +119,12 @@ func JSON(w http.ResponseWriter, status int, v any) {
 
 func APIError(w http.ResponseWriter, status int, code, message string, fields ...FieldError) {
 	JSON(w, status, map[string]apiError{"error": {Code: code, Message: message, Fields: fields}})
+}
+
+func APIErrorWith(w http.ResponseWriter, status int, code, message string, extra map[string]any) {
+	body := map[string]any{"error": apiError{Code: code, Message: message}}
+	maps.Copy(body, extra)
+	JSON(w, status, body)
 }
 
 func DecodeJSON(w http.ResponseWriter, r *http.Request, v any) bool {
