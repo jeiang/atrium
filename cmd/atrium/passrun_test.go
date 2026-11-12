@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/passrun"
 )
@@ -21,7 +22,7 @@ func TestPassesRecordOutcomesAndPruneByRetention(t *testing.T) {
 	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", got.code, got.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	old := float64(time.Now().Add(-91 * 24 * time.Hour).Unix())
 	if _, err := d.Write.Exec("INSERT INTO pass_runs (job, started_at, finished_at, outcome) VALUES ('scan', ?, ?, 'ok')", old, old); err != nil {
 		t.Fatal(err)
@@ -57,7 +58,7 @@ func TestFailedPassIsStaleOnMetricsAndReadinessAndNoticedOnce(t *testing.T) {
 	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", got.code, got.stderr)
 	}
-	browser.store(t, mustConnect(t, filepath.Join(dir, "atrium.db")))
+	browser.store(t, mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{}))
 	if got := runApp(t, "backup", filepath.Join(dir, "missing", "x.backup")); got.code == cli.ExitOK {
 		t.Fatal("failing backup succeeded")
 	}

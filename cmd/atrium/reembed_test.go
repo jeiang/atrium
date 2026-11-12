@@ -155,7 +155,7 @@ func goldenEmbedFixture(t *testing.T, fake *fakeEmbedder, model string) (dir, pa
 	if err := os.WriteFile(path, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	seedNotionVectors(t, path)
+	seedNotionVectors(t, path, db.Key{})
 	seedPendingMessage(t, path)
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, fake.URL+"/v1", model, ""))
 	return dir, path

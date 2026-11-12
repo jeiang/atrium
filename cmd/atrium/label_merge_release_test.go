@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 )
 
@@ -17,7 +18,7 @@ func TestLabelMergeReleasesTheDeletionWhenTheFolderBecameNonEmpty(t *testing.T) 
 	if code, _, stderr := f.Run(context.Background(), "gmail-labels", "scan"); code != cli.ExitOK {
 		t.Fatalf("gmail-labels scan: exit %d stderr %q", code, stderr)
 	}
-	d := mustConnect(t, filepath.Join(f.dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(f.dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var pid int64
 	var payload string

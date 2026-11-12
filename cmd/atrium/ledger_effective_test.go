@@ -20,7 +20,7 @@ func effectiveFixture(t *testing.T) (string, *db.DB) {
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
 		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	t.Cleanup(func() { _ = d.Close() })
 	return dir, d
 }

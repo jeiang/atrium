@@ -13,6 +13,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
@@ -27,7 +28,7 @@ func TestTaskRemindersDeliverOnceThroughTheScheduler(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	base, _, stopServe := startServeStoppable(t, dir)
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}

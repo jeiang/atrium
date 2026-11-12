@@ -25,7 +25,7 @@ func kbEmbedFixture(t *testing.T) (string, *fakeEmbedder, *modelLog, *db.DB) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	fake := newFakeEmbedder(t)
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, fake.URL+"/v1", "embeddinggemma", ""))
-	return dir, fake, api, mustConnect(t, filepath.Join(dir, "atrium.db"))
+	return dir, fake, api, mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 }
 
 func createLedger(t *testing.T, dir string, fake *fakeEmbedder, body string) (int64, *asstWeb) {

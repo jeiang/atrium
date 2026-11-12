@@ -90,7 +90,7 @@ func TestDeniedFetchResumesWithARefusal(t *testing.T) {
 	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {text}}); status >= http.StatusBadRequest {
 		t.Fatalf("POST message = %d: %s", status, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	proposal, _ := waitParkedPermission(t, d, thread)
 	if hits := pages.seen(); len(hits) != 1 || hits[0] != "/a" {
@@ -130,7 +130,7 @@ func TestDisabledAssistantPermissionDismissalDoesNotResume(t *testing.T) {
 	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {"read " + srv.URL + "/a then " + srv.URL + "/b"}}); status >= http.StatusBadRequest {
 		t.Fatalf("POST message = %d: %s", status, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	proposal, _ := waitParkedPermission(t, d, thread)
 	var runID int64
@@ -209,7 +209,7 @@ func TestPhoneLinkCannotApproveAPermissionRequest(t *testing.T) {
 	if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {text}}); status >= http.StatusBadRequest {
 		t.Fatalf("POST message = %d: %s", status, body)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	proposal, fingerprint := waitParkedPermission(t, d, thread)
 	ctx := settings.With(context.Background(), f.settings)
@@ -268,7 +268,7 @@ func TestContactIdentifiersBlockTheInternetButKeepTasksAndNotify(t *testing.T) {
 	if refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "web_fetch is not allowed in this thread by the permission table") {
 		t.Errorf("web_fetch after a pii read returned %v, want a refusal", refusal)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	if marks := threadMarkSet(t, dir, latestThread(t, dir)); marks != int64(tool.PII) {
 		t.Errorf("thread marks = %d, want pii", marks)
@@ -314,7 +314,7 @@ func TestTaskWrittenFromAMarkedThreadMarksItsReader(t *testing.T) {
 	if after := requestTools(t, api.Requests()[start+1]); !slices.Contains(after, "web_fetch") {
 		t.Errorf("web_fetch not offered after listing an inherited task: %v", after)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	waitRunState(t, d, reader, "parked")
 	if id, _ := permissionProposal(t, d); id == 0 {
@@ -337,7 +337,7 @@ func TestScheduleFromAMarkedThreadStartsMarked(t *testing.T) {
 	if marks := threadMarkSet(t, dir, writer); marks != int64(tool.Messages) {
 		t.Fatalf("writer marks = %d, want messages", marks)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var job int64
 	if err := d.Read.QueryRow("SELECT id FROM jobs WHERE name = 'Room check'").Scan(&job); err != nil {
@@ -399,7 +399,7 @@ func TestScheduledRunAfterMailReadNotifiesButCannotFetch(t *testing.T) {
 	if marks := threadMarkSet(t, dir, writer); marks == 0 {
 		t.Fatal("the writer thread is unmarked after a mail read")
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var job int64
 	if err := d.Read.QueryRow("SELECT id FROM jobs WHERE name = 'Mail check'").Scan(&job); err != nil {

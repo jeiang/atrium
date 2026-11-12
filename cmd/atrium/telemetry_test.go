@@ -143,7 +143,7 @@ func TestTelemetryExportsSpansAndMetricsWithoutContent(t *testing.T) {
 	setEnv(t, settingEnv(observability.TracesEndpointKey), receiver.URL+"/insert/opentelemetry/v1/traces")
 
 	dbPath := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, dbPath)
+	d := mustConnect(t, dbPath, db.Key{})
 	if err := db.Migrate(context.Background(), d, dbPath); err != nil {
 		t.Fatal(err)
 	}

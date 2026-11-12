@@ -45,7 +45,7 @@ func grafanaHealthServer(t *testing.T) (*httptest.Server, *atomic.Int32) {
 func connectionNotices(t *testing.T, dir, label string) int {
 	t.Helper()
 	var n int
-	if err := mustConnect(t, filepath.Join(dir, "atrium.db")).Read.QueryRow(
+	if err := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t)).Read.QueryRow(
 		"SELECT COUNT(*) FROM notifications WHERE title LIKE ?", "atrium: "+label+" %").Scan(&n); err != nil {
 		t.Fatal(err)
 	}
@@ -170,7 +170,7 @@ func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
 		t.Fatalf("mail tools before the outage: %v", names)
 	}
 
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	if _, err := d.Write.Exec("INSERT INTO accounts (name, kind) VALUES ('icloud', 'icloud')"); err != nil {
 		t.Fatal(err)
 	}

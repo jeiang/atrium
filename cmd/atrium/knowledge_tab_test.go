@@ -43,7 +43,7 @@ func TestKnowledgeTabConfirmRetractAndPurge(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
@@ -151,7 +151,7 @@ func TestPinnedConfirmedFactReachesThePrompt(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()

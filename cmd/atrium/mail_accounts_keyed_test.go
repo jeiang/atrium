@@ -91,7 +91,7 @@ func TestAHostMailConnectionAndAnAccountAddedInTheUIBothSync(t *testing.T) {
 	if code := app.Run(context.Background(), []string{"sync"}, &out, &errs); code != 0 {
 		t.Fatalf("sync: %d %s", code, errs.String())
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	for account, want := range map[string]int{"home": 1, "work": 1} {
 		var n int

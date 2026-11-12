@@ -9,6 +9,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestMemoryViewReplacesCompaction(t *testing.T) {
@@ -16,7 +17,7 @@ func TestMemoryViewReplacesCompaction(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("UPDATE threads SET context_limit = 90000 WHERE id = 1"); err != nil {
 		t.Fatal(err)
 	}

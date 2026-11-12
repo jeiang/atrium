@@ -91,7 +91,7 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 		code, body, _ := fetch(t, client, http.MethodPost, base+"/settings/mail"+path, form)
 		return code, body
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	count := func(query string, args ...any) int {
 		t.Helper()
 		var n int

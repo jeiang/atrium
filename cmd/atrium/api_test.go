@@ -21,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/auth/oidc/oidctest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 const apiClient = "atrium-ios"
@@ -446,7 +447,7 @@ func TestAPIChatSendStreamsTheRun(t *testing.T) {
 		t.Fatalf("replay: %d %s %v", replayed.status, replayed.body, replayed.header)
 	}
 	expectAPI(t, s.do(http.MethodPost, path, owner, map[string]any{"text": "different"}, "Idempotency-Key", "k-1"), http.StatusUnprocessableEntity, "idempotency_mismatch")
-	d := mustConnect(t, filepath.Join(s.dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(s.dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var runs int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM runs WHERE thread_id = ?", threadID).Scan(&runs); err != nil || runs != 2 {

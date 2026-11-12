@@ -251,18 +251,18 @@ capabilities = ["api"]
 	copyFile(t, filepath.Join(golden.Dir(), "world.db"), filepath.Join(dir, "atrium.db"))
 	seedFlagsAt(t, app, filepath.Join(dir, "atrium.db"), allFlagsTrue())
 	if mode != "" {
-		seedSettingsAt(t, filepath.Join(dir, "atrium.db"), map[string]string{mail.KeyMode: mode})
+		seedSettingsWith(t, appKey(t, env), filepath.Join(dir, "atrium.db"), map[string]string{mail.KeyMode: mode})
 	}
 	if wikiRoot := data.environment["ATRIUM_NOTION_WIKI_ROOT"]; wikiRoot != "" {
-		seedSettingsAt(t, filepath.Join(dir, "atrium.db"), map[string]string{notion.WikiRootKey: wikiRoot})
+		seedSettingsWith(t, appKey(t, env), filepath.Join(dir, "atrium.db"), map[string]string{notion.WikiRootKey: wikiRoot})
 	}
 	if apple := data.environment["ICLOUD_APPLE_ID"]; apple != "" {
-		seedSettingsAt(t, filepath.Join(dir, "atrium.db"), map[string]string{"icloud_apple_id": apple})
+		seedSettingsWith(t, appKey(t, env), filepath.Join(dir, "atrium.db"), map[string]string{"icloud_apple_id": apple})
 	}
 	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: app.Settings, state: app.State, fakes: fakes, llm: srv.URL + "/v1"}
 	fixturesByTest.Store(t, f)
 	fixturesByTest.Store(testKey(t), f)
-	seedNotionVectors(t, filepath.Join(f.dir, "atrium.db"))
+	seedNotionVectors(t, filepath.Join(f.dir, "atrium.db"), appKey(t, env))
 	if code, _, stderr := f.Run(context.Background(), "reindex"); code != cli.ExitOK {
 		t.Fatalf("embed the seeded world: exit %d stderr %q", code, stderr)
 	}
@@ -349,13 +349,13 @@ func copyFile(t *testing.T, from, to string) {
 	}
 }
 
-func seedNotionVectors(t *testing.T, path string) {
+func seedNotionVectors(t *testing.T, path string, key db.Key) {
 	t.Helper()
 	var vectors []notionVector
 	if err := json.Unmarshal(golden.ReadFile(t, ".", "notion_vec.json"), &vectors); err != nil {
 		t.Fatal(err)
 	}
-	d, err := db.Connect(path)
+	d, err := db.Connect(path, db.WithKey(key))
 	if err != nil {
 		t.Fatal(err)
 	}

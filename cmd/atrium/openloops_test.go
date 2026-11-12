@@ -69,7 +69,7 @@ func TestLoopsRefreshSkipsBulkAndOtherRecipients(t *testing.T) {
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
 		t.Fatalf("initialize database: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("INSERT INTO accounts (name, kind) VALUES ('test', 'icloud')"); err != nil {
 		t.Fatal(err)
 	}

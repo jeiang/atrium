@@ -74,7 +74,7 @@ func TestAPIApprovesUndoesAndSendsThroughTheSameGates(t *testing.T) {
 	}
 	s := startAPISite(t, dir, nil)
 	owner := s.token("owner")
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 
 	pending := s.do(http.MethodGet, "/api/v1/pending", owner, nil)

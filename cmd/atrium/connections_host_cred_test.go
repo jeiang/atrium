@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestHostCredentialFileReplacesADatabaseCredential(t *testing.T) {
@@ -26,7 +27,7 @@ func TestHostCredentialFileReplacesADatabaseCredential(t *testing.T) {
 	if ran := runApp(t, "connections", "list"); ran.code != cli.ExitOK {
 		t.Fatalf("connections list: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	if _, err := d.Write.Exec("INSERT INTO connection_credentials (connection_id, slot, source, value, set_at, set_by) "+
 		"VALUES ('service/qbittorrent', 'api_key', 'database', 'qbt_db_stale', ?, 'operator')", float64(time.Now().Unix())); err != nil {

@@ -63,7 +63,7 @@ func assertOwn(t *testing.T, label string, names []string, offered bool) {
 func seedMail(t *testing.T, dir string) int64 {
 	t.Helper()
 	path := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, path)
+	d := mustConnect(t, path, db.Key{})
 	t.Cleanup(func() { _ = d.Close() })
 	if err := db.Migrate(context.Background(), d, path); err != nil {
 		t.Fatal(err)
@@ -87,7 +87,7 @@ func seedMail(t *testing.T, dir string) int64 {
 
 func latestThread(t *testing.T, dir string) int64 {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var id int64
 	if err := d.Read.QueryRow("SELECT MAX(id) FROM threads").Scan(&id); err != nil {
@@ -200,7 +200,7 @@ func TestUntrustedOutputAloneKeepsEgress(t *testing.T) {
 
 func threadMarkSet(t *testing.T, dir string, thread int64) int64 {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var marks int64
 	if err := d.Read.QueryRow("SELECT marks FROM threads WHERE id = ?", thread).Scan(&marks); err != nil {
@@ -211,7 +211,7 @@ func threadMarkSet(t *testing.T, dir string, thread int64) int64 {
 
 func threadTainted(t *testing.T, dir string, thread int64) bool {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var tainted bool
 	if err := d.Read.QueryRow("SELECT tainted_at IS NOT NULL FROM threads WHERE id = ?", thread).Scan(&tainted); err != nil {
@@ -355,7 +355,7 @@ func TestBranchOfAMarkedThreadIsNotOfferedEgress(t *testing.T) {
 	if status, _, _ := fetch(t, client, "GET", base+"/chat", nil); status != http.StatusOK {
 		t.Fatalf("GET /chat = %d", status)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var seq int64
 	if err := d.Read.QueryRow("SELECT MIN(seq) FROM thread_messages WHERE thread_id = ? AND superseded = 0", thread).Scan(&seq); err != nil {
 		t.Fatalf("first message of thread %d: %v", thread, err)
@@ -386,7 +386,7 @@ func TestBranchOfAMarkedThreadIsNotOfferedEgress(t *testing.T) {
 func TestEmptyMailSearchLeavesTheThreadUnmarked(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	path := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, path)
+	d := mustConnect(t, path, db.Key{})
 	if err := db.Migrate(context.Background(), d, path); err != nil {
 		t.Fatal(err)
 	}

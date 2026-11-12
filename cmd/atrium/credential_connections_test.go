@@ -68,7 +68,7 @@ func TestConnectionTestsSaveOnlyWorkingCredentialsAndNeverRenderThem(t *testing.
 	stored := func(id, slot string) bool {
 		t.Helper()
 		var n int
-		if err := mustConnect(t, filepath.Join(dir, "atrium.db")).Read.QueryRow(
+		if err := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t)).Read.QueryRow(
 			"SELECT COUNT(*) FROM connection_credentials WHERE connection_id = ? AND slot = ?", id, slot).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
@@ -130,7 +130,7 @@ func TestGrafanaConnectionNeedsAViewerToken(t *testing.T) {
 		t.Fatalf("connections test without a token: exit %d stdout %q stderr %q", ran.code, ran.stdout, ran.stderr)
 	}
 	var state string
-	if err := mustConnect(t, filepath.Join(dir, "atrium.db")).Read.QueryRow(
+	if err := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t)).Read.QueryRow(
 		"SELECT state FROM connections WHERE id = 'service/grafana'").Scan(&state); err != nil {
 		t.Fatal(err)
 	}

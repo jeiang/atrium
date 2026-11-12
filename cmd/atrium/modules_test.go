@@ -164,7 +164,7 @@ func seedFlagsAt(t *testing.T, app *cli.App, path string, flags map[string]strin
 			kv[module.FlagKey(name)] = value
 		}
 	}
-	seedSettingsAt(t, path, kv)
+	seedSettingsWith(t, appKey(t, app.Env), path, kv)
 }
 
 func flagsExcept(name string, value string) map[string]string {
@@ -196,7 +196,7 @@ func offeredTools(t *testing.T, api *modelLog, ran appRun) []string {
 
 func tableExists(t *testing.T, dir, table string) bool {
 	t.Helper()
-	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
+	d, err := db.Connect(filepath.Join(dir, "atrium.db"), db.WithKey(keyFor(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +352,7 @@ func TestDisabledModuleKeepsPageAndAPIErrorResponses(t *testing.T) {
 func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServe(t *testing.T) {
 	t.Run("optional", func(t *testing.T) {
 		dir, _, _ := moduleFixture(t, allFlagsTrue())
-		d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+		d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 		result, err := d.Write.Exec("UPDATE connections SET expires_at = 'broken' WHERE id IN ('service/embedding', 'service/qbittorrent')")
 		if err != nil {
 			t.Fatal(err)
@@ -379,7 +379,7 @@ func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServ
 	})
 	t.Run("core", func(t *testing.T) {
 		dir, _, f := moduleFixture(t, allFlagsTrue())
-		d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+		d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 		for _, q := range []string{
 			"DROP TRIGGER settings_audit_no_delete",
 			"DELETE FROM settings_audit WHERE key = 'modules_seeded'",
@@ -499,7 +499,7 @@ func TestDisabledModuleRoutesEndInNotFound(t *testing.T) {
 func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	now := float64(time.Now().Unix())
 	if _, err := d.Write.Exec("INSERT INTO threads (kind, title, effort, created_at, updated_at) VALUES ('chat', 'Lifecycle thread', 'low', ?, ?)", now, now); err != nil {
 		t.Fatal(err)

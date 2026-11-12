@@ -23,7 +23,7 @@ func condenserFixture(t *testing.T, fake *fakeOpsGrafana, chat *fakeOpenAI) (str
 	setEnv(t, settingEnv(endpoint.KeyChatModel), "qwen")
 	seedSettings(t, map[string]string{serverops.KeyCondenser: serverops.CondenserLocal})
 	warm(t, api)
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	t.Cleanup(func() { _ = d.Close() })
 	runOpsSampler(t, f, d, samplesAtLeast(t, d, 6))
 	return dir, api, f, d

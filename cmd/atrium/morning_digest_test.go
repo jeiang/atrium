@@ -68,7 +68,7 @@ func TestMorningDigestPostsToTodayAndPushes(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	browser.store(t, d)
 	now := float64(time.Now().Unix())
 	exec := func(query string, args ...any) {
@@ -128,7 +128,7 @@ func TestDigestStaysQuietWhenNothingToAct(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	before := push.count()
 	runJob(t, f, d, "daily-nudges")
 	var n int

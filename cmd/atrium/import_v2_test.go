@@ -332,7 +332,7 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		t.Errorf("the imported copy replays differently from the v2 baseline:\ngot:\n%s\nwant:\n%s", replay.stdout, baseline)
 	}
 
-	w, err := db.Connect(dest)
+	w, err := db.Connect(dest, db.WithKey(importKey(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -1920,7 +1920,7 @@ func TestImportV2CarriesTheMailPasswordIntoTheConnectionAndSyncsWithIt(t *testin
 	}
 
 	dest := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, dest)
+	d := mustConnect(t, dest, importKey(t))
 	defer func() { _ = d.Close() }()
 	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM secrets WHERE name = 'mail_password_icloud'"); n != 0 {
 		t.Errorf("%d mail password secrets stayed in the secrets table", n)
@@ -2189,7 +2189,7 @@ func TestImportV2RefusesAnEmptyHostCredentialWithoutLosingTheDatabasePassword(t 
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 	dest := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, dest)
+	d := mustConnect(t, dest, importKey(t))
 	defer func() { _ = d.Close() }()
 	if got := importValue(t, d.Read, "SELECT source FROM connection_credentials WHERE connection_id = 'mail/icloud' AND slot = 'mail/icloud/password'"); got != "database" {
 		t.Fatalf("the imported credential source is %q", got)
@@ -2251,7 +2251,7 @@ func TestImportV2KeepsHostPinningAndRefusesARemovedAccount(t *testing.T) {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 	dest := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, dest)
+	d := mustConnect(t, dest, importKey(t))
 	defer func() { _ = d.Close() }()
 	if got := importValue(t, d.Read, "SELECT pinned FROM mail_accounts WHERE id = 'icloud'"); got != "1" {
 		t.Fatalf("the imported host account pin is %q", got)
@@ -2345,7 +2345,7 @@ func TestImportV2CarriesAStoredPasswordForAXOAUTH2Account(t *testing.T) {
 	}
 
 	dest := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, dest)
+	d := mustConnect(t, dest, importKey(t))
 	defer func() { _ = d.Close() }()
 	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM secrets WHERE name = 'mail_password_work'"); n != 0 {
 		t.Errorf("%d work password secrets stayed in the secrets table", n)
@@ -2490,7 +2490,7 @@ func TestImportV2IntoADeploymentThatDeclaresTheSameMailAccountAndServices(t *tes
 	}
 
 	dest := filepath.Join(dir, "atrium.db")
-	d := mustConnect(t, dest)
+	d := mustConnect(t, dest, importKey(t))
 	defer func() { _ = d.Close() }()
 	if n := importCount(t, d.Read, "SELECT COUNT(*) FROM mail_accounts WHERE id = 'icloud'"); n != 1 {
 		t.Errorf("%d icloud account rows after import into a declaring host", n)

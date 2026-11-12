@@ -12,6 +12,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/proposals"
 )
 
@@ -25,7 +26,7 @@ func TestTaskAddUndoAndRegistryMatrix(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--thread", "1", "--text", "add a task"); ran.code != cli.ExitOK {
 		t.Fatalf("task_add run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var taskID int64
 	if err := d.Read.QueryRow("SELECT id FROM tasks WHERE title = 'Call the dentist'").Scan(&taskID); err != nil {
 		t.Fatal(err)
@@ -100,7 +101,7 @@ func TestReminderProposalCreatesATaskAndUndoRemovesIt(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	ctx := testProposalContext()
 	now := float64(time.Now().Unix())
 	payload := map[string]any{"text": "Pay the rent", "remind_at": now + 3600, "tz": "UTC", "message_id": 1}

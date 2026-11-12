@@ -223,7 +223,7 @@ func TestNotionConnectionTestSavesOnlyASharedToken(t *testing.T) {
 	stored := func() bool {
 		t.Helper()
 		var n int
-		if err := mustConnect(t, filepath.Join(dir, "atrium.db")).Read.
+		if err := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t)).Read.
 			QueryRow("SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/notion' AND slot = 'token'").Scan(&n); err != nil {
 			t.Fatal(err)
 		}

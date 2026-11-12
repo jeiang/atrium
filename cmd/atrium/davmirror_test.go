@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/contacts"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/tool"
@@ -30,7 +31,7 @@ const (
 
 func passRows(t *testing.T, dir, job string) (ok, failed int, message string) {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if err := d.Read.QueryRow("SELECT COUNT(*) FILTER (WHERE outcome = 'ok'), COUNT(*) FILTER (WHERE outcome = 'failed'), "+
 		"COALESCE((SELECT message FROM pass_runs WHERE job = ? ORDER BY id DESC LIMIT 1), '') FROM pass_runs WHERE job = ?", job, job).Scan(&ok, &failed, &message); err != nil {
 		t.Fatal(err)

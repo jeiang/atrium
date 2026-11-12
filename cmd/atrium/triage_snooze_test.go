@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/executors"
 	"github.com/jeiang/atrium/internal/mail/mailops"
@@ -26,7 +27,7 @@ func TestMailTriageSnoozeRecordsReturnWhenMailIsDisabledAfterMove(t *testing.T) 
 	m.run(t, "sync")
 	id := m.messageID(t, "Snoozed receipt")
 
-	d := mustConnect(t, m.path)
+	d := mustConnect(t, m.path, db.Key{})
 	snaps, err := mailops.Snapshots(context.Background(), d.Read, []int64{id})
 	if err != nil || len(snaps) != 1 {
 		t.Fatalf("snapshot of the message: %v (%d)", err, len(snaps))

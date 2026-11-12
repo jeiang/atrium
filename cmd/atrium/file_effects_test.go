@@ -9,6 +9,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestFileWriteUndoRemovesOnlyTheParentsItCreated(t *testing.T) {
@@ -32,7 +33,7 @@ func TestFileWriteUndoRemovesOnlyTheParentsItCreated(t *testing.T) {
 	if data, err := os.ReadFile(note); err != nil || string(data) != "hello" {
 		t.Fatalf("note.txt = %q, %v", data, err)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var id int64
 	if err := d.Read.QueryRow("SELECT id FROM effects WHERE direction = 'forward' AND operation = 'file_write' AND state = 'done' ORDER BY id DESC LIMIT 1").Scan(&id); err != nil {

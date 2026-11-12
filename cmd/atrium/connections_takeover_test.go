@@ -37,7 +37,7 @@ func operatorEmbedding(t *testing.T, dir, endpoint, token string) {
 
 func operatorBoot(t *testing.T, dir string) {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	if _, err := d.Write.Exec("DELETE FROM connections WHERE id = 'service/embedding'"); err != nil {
 		_ = d.Close()
 		t.Fatalf("clearing the fixture embedding row: %v", err)
@@ -47,7 +47,7 @@ func operatorBoot(t *testing.T, dir string) {
 	if listed := runApp(t, "connections", "list"); listed.code != cli.ExitOK {
 		t.Fatalf("materializing the operator embedding: exit %d stdout %q stderr %q", listed.code, listed.stdout, listed.stderr)
 	}
-	d = mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d = mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	var source string
 	if err := d.Read.QueryRow("SELECT config_source FROM connections WHERE id = 'service/embedding'").Scan(&source); err != nil {
@@ -60,7 +60,7 @@ func operatorBoot(t *testing.T, dir string) {
 
 func embeddingRow(t *testing.T, dir string) (revision int64, configJSON, credentialSource, credentialValue string) {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	if err := d.Read.QueryRow("SELECT revision, config_json FROM connections WHERE id = 'service/embedding'").
 		Scan(&revision, &configJSON); err != nil {

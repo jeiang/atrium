@@ -102,7 +102,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 	setEnv(t, key, path)
 
 	counts := func() map[string]int {
-		d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+		d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 		rows, err := d.Read.Query("SELECT m.account || ':' || a.kind, COUNT(*) FROM messages m JOIN accounts a ON a.name = m.account GROUP BY m.account")
 		if err != nil {
 			t.Fatal(err)

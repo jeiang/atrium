@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/contacts"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -169,7 +170,7 @@ func TestSearchWebRunsAnIsolatedChildAndVerifiesCitations(t *testing.T) {
 	if marks := threadMarkSet(t, dir, parent); marks != int64(tool.Untrusted) {
 		t.Errorf("parent marks = %d, want untrusted", marks)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var raw string
 	if err := d.Read.QueryRow("SELECT allowed_urls FROM threads WHERE id = ?", parent).Scan(&raw); err != nil {
@@ -275,7 +276,7 @@ func TestSearchWebAsksInAMarkedChat(t *testing.T) {
 		if refusal["is_error"] != true || !strings.Contains(fmt.Sprint(refusal["content"]), "not allowed in this thread by the permission table") {
 			t.Errorf("search_web after mail returned %v, want a refusal", refusal)
 		}
-		d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+		d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 		defer func() { _ = d.Close() }()
 		var proposals int
 		if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposals WHERE kind = 'permission'").Scan(&proposals); err != nil || proposals != 0 {
@@ -337,7 +338,7 @@ func TestSearchWebAsksInAMarkedChat(t *testing.T) {
 		if status, body, _ := fetch(t, client, "POST", fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {"search the web for the warm thread"}}); status >= http.StatusBadRequest {
 			t.Fatalf("POST message = %d: %s", status, body)
 		}
-		d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+		d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 		defer func() { _ = d.Close() }()
 		proposal, _ := waitParkedPermission(t, d, thread)
 		code, card := hxFetch(t, client, http.MethodGet, base+fmt.Sprintf("/proposals/%d/card", proposal), nil)
@@ -379,7 +380,7 @@ func TestChatNoLongerSeesServerWebSearch(t *testing.T) {
 	if strings.Contains(ran.stdout, `"name": "web"`) {
 		t.Errorf("the retired web role is still listed: %s", ran.stdout)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var n int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM subagents WHERE name = 'web' AND builtin = 1").Scan(&n); err != nil || n != 0 {

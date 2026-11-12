@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func lastUserText(t *testing.T, r anthropictest.Request) string {
@@ -38,7 +39,7 @@ func lastUserText(t *testing.T, r anthropictest.Request) string {
 
 func threadMessages(t *testing.T, dir string, thread int64) int {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var n int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM thread_messages WHERE thread_id = ? AND superseded = 0", thread).Scan(&n); err != nil {
@@ -49,7 +50,7 @@ func threadMessages(t *testing.T, dir string, thread int64) int {
 
 func waitIdle(t *testing.T, dir string, thread int64) {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	deadline := time.Now().Add(20 * time.Second)
 	for {
@@ -167,7 +168,7 @@ func TestReferenceBringsAThreadVerbatimWithItsMarks(t *testing.T) {
 		t.Errorf("a refused message stored %d messages, want %d", after-count, 0)
 	}
 	var stored int
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM thread_messages WHERE thread_id = ? AND content_json LIKE '%\"type\":\"reference\"%'", reader).Scan(&stored); err != nil {
 		t.Fatal(err)
 	}
