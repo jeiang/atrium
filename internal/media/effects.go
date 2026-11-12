@@ -362,20 +362,34 @@ func fileResolve(_ context.Context, _ *sql.Tx, e ledger.Effect, r ledger.Resolut
 	return nil
 }
 
+func Undo(s *ledger.Store, env config.Env) []ledger.UndoDefinition {
+	return []ledger.UndoDefinition{
+		{Operation: UndoTorrent, Undoer: undoTorrent(s, env)},
+		{Operation: UndoFilePlace, Undoer: ledger.Undoer{
+			Validate: validateOp(UndoFilePlace),
+			External: undoFilePlace,
+		}},
+	}
+}
+
+func Resolve(s *ledger.Store) []ledger.ResolveDefinition {
+	return []ledger.ResolveDefinition{
+		{Operation: OpAddMagnet, Hook: addResolve(s)},
+		{Operation: OpAddFile, Hook: addResolve(s)},
+		{Operation: OpFile, Hook: fileResolve},
+	}
+}
+
 func RegisterLedgerUndoer(s *ledger.Store, env config.Env) error {
-	if err := s.RegisterUndo(UndoTorrent, undoTorrent(s, env)); err != nil {
-		return err
-	}
-	if err := s.RegisterUndo(UndoFilePlace, ledger.Undoer{
-		Validate: validateOp(UndoFilePlace),
-		External: undoFilePlace,
-	}); err != nil {
-		return err
-	}
-	for _, operation := range []string{OpAddMagnet, OpAddFile} {
-		if err := s.RegisterResolve(operation, addResolve(s)); err != nil {
+	for _, d := range Undo(s, env) {
+		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
 			return err
 		}
 	}
-	return s.RegisterResolve(OpFile, fileResolve)
+	for _, d := range Resolve(s) {
+		if err := s.RegisterResolve(d.Operation, d.Hook); err != nil {
+			return err
+		}
+	}
+	return nil
 }

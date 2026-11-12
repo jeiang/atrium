@@ -96,30 +96,36 @@ func undoChannelRestore(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (a
 	return map[string]any{"restored": u.Row.ID}, nil
 }
 
+func Undo(s *ledger.Store, env config.Env) []ledger.UndoDefinition {
+	return append(media.Undo(s, env),
+		ledger.UndoDefinition{Operation: UndoChannelDelete, Undoer: ledger.Undoer{
+			Validate: validateOp(UndoChannelDelete),
+			Local: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (ledger.Result, error) {
+				value, err := undoChannelDelete(ctx, tx, raw)
+				if err != nil {
+					return ledger.Result{}, err
+				}
+				return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
+			},
+		}},
+		ledger.UndoDefinition{Operation: UndoChannelRestore, Undoer: ledger.Undoer{
+			Validate: validateOp(UndoChannelRestore),
+			Local: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (ledger.Result, error) {
+				value, err := undoChannelRestore(ctx, tx, raw)
+				if err != nil {
+					return ledger.Result{}, err
+				}
+				return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
+			},
+		}},
+	)
+}
+
 func RegisterLedgerUndoer(s *ledger.Store, env config.Env) error {
-	if err := media.RegisterLedgerUndoer(s, env); err != nil {
-		return err
+	for _, d := range Undo(s, env) {
+		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
+			return err
+		}
 	}
-	if err := s.RegisterUndo(UndoChannelDelete, ledger.Undoer{
-		Validate: validateOp(UndoChannelDelete),
-		Local: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (ledger.Result, error) {
-			value, err := undoChannelDelete(ctx, tx, raw)
-			if err != nil {
-				return ledger.Result{}, err
-			}
-			return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
-		},
-	}); err != nil {
-		return err
-	}
-	return s.RegisterUndo(UndoChannelRestore, ledger.Undoer{
-		Validate: validateOp(UndoChannelRestore),
-		Local: func(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (ledger.Result, error) {
-			value, err := undoChannelRestore(ctx, tx, raw)
-			if err != nil {
-				return ledger.Result{}, err
-			}
-			return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
-		},
-	})
+	return nil
 }

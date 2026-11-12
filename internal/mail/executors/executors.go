@@ -972,16 +972,17 @@ func validatePlan(name string) func(json.RawMessage) error {
 	}
 }
 
-func RegisterUndoers(s *ledger.Store, e *Executors) error {
+func (e *Executors) Undo() []ledger.UndoDefinition {
 	external := []struct {
 		name string
 		fn   func(context.Context, json.RawMessage) (any, error)
 	}{
 		{OpDeleteFolder, e.UndoDeleteFolder},
 	}
+	var out []ledger.UndoDefinition
 	for _, u := range external {
 		u := u
-		if err := s.RegisterUndo(u.name, ledger.Undoer{
+		out = append(out, ledger.UndoDefinition{Operation: u.name, Undoer: ledger.Undoer{
 			Validate: validatePlan(u.name),
 			External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
 				value, err := u.fn(ctx, raw)
@@ -994,14 +995,21 @@ func RegisterUndoers(s *ledger.Store, e *Executors) error {
 				}
 				return ledger.Result{State: ledger.Done, After: jsonOf(value)}, nil
 			},
-		}); err != nil {
+		}})
+	}
+	return append(out,
+		ledger.UndoDefinition{Operation: OpRuleDelete, Undoer: ledger.Undoer{Validate: validatePlan(OpRuleDelete), Local: e.UndoRuleDelete}},
+		ledger.UndoDefinition{Operation: OpCancelSnooze, Undoer: ledger.Undoer{Validate: validatePlan(OpCancelSnooze), Local: e.UndoCancelSnooze}},
+	)
+}
+
+func RegisterUndoers(s *ledger.Store, e *Executors) error {
+	for _, d := range e.Undo() {
+		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
 			return err
 		}
 	}
-	if err := s.RegisterUndo(OpRuleDelete, ledger.Undoer{Validate: validatePlan(OpRuleDelete), Local: e.UndoRuleDelete}); err != nil {
-		return err
-	}
-	return s.RegisterUndo(OpCancelSnooze, ledger.Undoer{Validate: validatePlan(OpCancelSnooze), Local: e.UndoCancelSnooze})
+	return nil
 }
 
 func SyncAfter(syncer *mailsync.Syncer, open mail.OpenFunc) proposals.SyncHook {
@@ -1016,19 +1024,21 @@ func SyncAfter(syncer *mailsync.Syncer, open mail.OpenFunc) proposals.SyncHook {
 	}
 }
 
+func (e *Executors) Proposals(owner string) []proposals.Definition {
+	return []proposals.Definition{
+		{Kind: proposals.Kind{Name: RebalanceSplit, Module: owner, Label: "Split folder", Icon: "split", Picker: true, Groups: true}, Execute: e.ExecuteMoves},
+		{Kind: proposals.Kind{Name: RebalanceMerge, Module: owner, Label: "Merge folders", Icon: "merge", Picker: true, Group: true}, Execute: e.ExecuteMoves},
+		{Kind: proposals.Kind{Name: DeletionRule, Module: owner, Label: "Deletion rule", Icon: "trash-2", Picker: true, Messages: true, CountKey: "backlog"}, Execute: e.ExecuteDeletion},
+		{Kind: proposals.Kind{Name: GmailLabelMerge, Module: owner, Label: "Merge labels", Icon: "tag", Picker: true, Messages: true, CountKey: "from_count"}, Execute: e.ExecuteLabelMerge},
+		{Kind: proposals.Kind{Name: InboxBacklog, Module: owner, Label: "Inbox backlog", Icon: "inbox", Picker: true, Groups: true}, Execute: e.ExecuteMoves},
+		{Kind: proposals.Kind{Name: MailTriage, Module: owner, Label: "Mail triage", Icon: "inbox", Picker: true, Messages: true, CountKey: "count"}, Execute: e.ExecuteTriage},
+	}
+}
+
 func Register(r *proposals.Registry, e *Executors, syncer *mailsync.Syncer, owner string) {
-	r.Executors[RebalanceSplit] = e.ExecuteMoves
-	r.Executors[RebalanceMerge] = e.ExecuteMoves
-	r.Executors[DeletionRule] = e.ExecuteDeletion
-	r.Executors[GmailLabelMerge] = e.ExecuteLabelMerge
-	r.Executors[InboxBacklog] = e.ExecuteMoves
-	r.Executors[MailTriage] = e.ExecuteTriage
-	r.AddKind(proposals.Kind{Name: RebalanceSplit, Module: owner, Label: "Split folder", Icon: "split", Picker: true, Groups: true})
-	r.AddKind(proposals.Kind{Name: RebalanceMerge, Module: owner, Label: "Merge folders", Icon: "merge", Picker: true, Group: true})
-	r.AddKind(proposals.Kind{Name: DeletionRule, Module: owner, Label: "Deletion rule", Icon: "trash-2", Picker: true, Messages: true, CountKey: "backlog"})
-	r.AddKind(proposals.Kind{Name: GmailLabelMerge, Module: owner, Label: "Merge labels", Icon: "tag", Picker: true, Messages: true, CountKey: "from_count"})
-	r.AddKind(proposals.Kind{Name: InboxBacklog, Module: owner, Label: "Inbox backlog", Icon: "inbox", Picker: true, Groups: true})
-	r.AddKind(proposals.Kind{Name: MailTriage, Module: owner, Label: "Mail triage", Icon: "inbox", Picker: true, Messages: true, CountKey: "count"})
+	for _, d := range e.Proposals(owner) {
+		r.Add(d)
+	}
 	if err := RegisterUndoers(e.store(), e); err != nil {
 		panic(err)
 	}

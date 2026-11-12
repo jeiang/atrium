@@ -351,11 +351,20 @@ func undoRecreate(store *ledger.Store, env config.Env) ledger.Undoer {
 	}
 }
 
-func RegisterLedgerUndoers(s *ledger.Store, env config.Env) error {
-	if err := s.RegisterUndo("calendar_delete", undoDelete(s, env)); err != nil {
-		return err
+func Undo(store *ledger.Store, env config.Env) []ledger.UndoDefinition {
+	return []ledger.UndoDefinition{
+		{Operation: "calendar_delete", Undoer: undoDelete(store, env)},
+		{Operation: "calendar_recreate", Undoer: undoRecreate(store, env)},
 	}
-	return s.RegisterUndo("calendar_recreate", undoRecreate(s, env))
+}
+
+func RegisterLedgerUndoers(s *ledger.Store, env config.Env) error {
+	for _, d := range Undo(s, env) {
+		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func schema(properties string, required string) json.RawMessage {
