@@ -69,13 +69,6 @@ func (r *Reader) resolve(key string) settings.Resolved {
 
 func (r *Reader) Text(key string) string { return r.resolve(key).Value }
 
-func (r *Reader) Host(key string) string {
-	if r.err != nil {
-		return ""
-	}
-	return config.HostValueFrom(r.ctx, key)
-}
-
 func (r *Reader) Int(key string) int {
 	found := r.resolve(key)
 	if r.err != nil {
@@ -150,7 +143,7 @@ func New(kind, url, model, key string) Endpoint {
 
 func Endpoints(ctx context.Context, q Querier) ([]Endpoint, error) {
 	r := Read(ctx, q)
-	chat := r.Host(KeyChatModel)
+	chat := r.Text(KeyChatModel)
 	if r.Err() != nil {
 		return nil, r.Err()
 	}
@@ -224,7 +217,8 @@ func EmbedURL(ctx context.Context, q Querier, activeURL string) (string, error) 
 }
 
 func urlOf(ctx context.Context, q Querier, key string) (string, error) {
-	return strings.TrimRight(config.From(ctx).HostValue(key), "/"), nil
+	found, err := settings.From(ctx).Resolve(ctx, readOnly{q}, key)
+	return strings.TrimRight(found.Value, "/"), err
 }
 
 type Active struct {
@@ -235,7 +229,7 @@ type Active struct {
 func WithModels(ctx context.Context, q Querier, active Active) (context.Context, error) {
 	r := Read(ctx, q)
 	s := Settings{
-		ChatModel:      r.Host(KeyChatModel),
+		ChatModel:      r.Text(KeyChatModel),
 		EmbedModel:     EmbedModel,
 		LLMBodyChars:   TuningLlmBodyChars,
 		EmbedBodyChars: TuningMailEmbedBodyChars,

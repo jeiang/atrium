@@ -42,6 +42,8 @@ func init() {
 	)
 	settings.MustRegister(
 		settings.Deploy(settings.Def{Key: KeyMode, Module: module, Type: settings.String, Default: modeDefault, Check: modeCheck}),
+		ui(endpoint.KeyChatURL, settings.String, "", nil),
+		ui(endpoint.KeyChatModel, settings.String, "qwen", nonBlank),
 		settings.Value(settings.UI, settings.Def{
 			Key: KeyWriteCap, Label: "Automatic write cap", Module: module, Type: settings.Int, Default: "100",
 			Check: settings.Between(1, 1000)}),
