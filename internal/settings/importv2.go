@@ -677,14 +677,26 @@ func Manifest() []ImportEntry {
 }
 
 var retiredImport = map[string]ImportEntry{
-	"ops_condenser":            {Key: "ops_condenser", Module: "assistant", Class: ImportOperator, Action: ImportDrop, Target: "retired; server-ops findings use fixed-schema Haiku classification"},
-	"ops_condenser_max_tokens": {Key: "ops_condenser_max_tokens", Module: "assistant", Class: ImportOperator, Action: ImportDrop, Target: "retired; server-ops findings use fixed-schema Haiku classification"},
-	"ops_condenser_model":      {Key: "ops_condenser_model", Module: "assistant", Class: ImportOperator, Action: ImportDrop, Target: "retired; server-ops findings use fixed-schema Haiku classification"},
+	"ops_condenser":            {Key: "ops_condenser", Module: "assistant", Class: ImportOperator, Action: ImportDrop, Target: opsCondenserReplacement},
+	"ops_condenser_max_tokens": {Key: "ops_condenser_max_tokens", Module: "assistant", Class: ImportOperator, Action: ImportDrop, Target: opsCondenserReplacement},
+	"ops_condenser_model":      {Key: "ops_condenser_model", Module: "assistant", Class: ImportOperator, Action: ImportDrop, Target: opsCondenserReplacement},
 	"money_since":              {Key: "money_since", Class: ImportOperator, Action: ImportDrop, Target: "retired"},
 	"oidc_access_group":        {Key: "oidc_access_group", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_groups"},
 	"oidc_admin_group":         {Key: "oidc_admin_group", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_groups"},
 	"oidc_admin_emails":        {Key: "oidc_admin_emails", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_emails"},
 	"oidc_admin_domains":       {Key: "oidc_admin_domains", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_domains"},
+}
+
+const opsCondenserReplacement = "the ops_worker_monthly_usd and ops_worker_max_run_usd settings; server-ops findings use fixed-schema Haiku classification"
+
+func RemovedOperatorInputs() []ImportEntry {
+	var out []ImportEntry
+	for _, key := range slices.Sorted(maps.Keys(retiredImport)) {
+		if e := retiredImport[key]; e.Class == ImportOperator && e.Module != "" {
+			out = append(out, e)
+		}
+	}
+	return out
 }
 
 func RemovedHostKey(key string) (string, bool) {

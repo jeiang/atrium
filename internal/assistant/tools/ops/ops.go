@@ -294,7 +294,7 @@ func status(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 		return nil, err
 	}
 	return map[string]any{
-		"last_sample": last, "hosts": hosts, "findings": findings,
+		"mode": "fixed-schema-haiku", "last_sample": last, "hosts": hosts, "findings": findings,
 		"spend_usd": spend, "budget_usd": set.Float(serverops.KeyWorkerMonthlyUSD),
 	}, nil
 }

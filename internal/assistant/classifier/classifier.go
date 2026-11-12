@@ -68,11 +68,10 @@ type Service struct {
 	ledger *inference.Service
 	client *anthropic.Client
 	now    func() float64
-	loc    *time.Location
 }
 
-func New(d *db.DB, ledger *inference.Service, client *anthropic.Client, now func() float64, loc *time.Location) *Service {
-	return &Service{db: d, ledger: ledger, client: client, now: now, loc: loc}
+func New(d *db.DB, ledger *inference.Service, client *anthropic.Client, now func() float64) *Service {
+	return &Service{db: d, ledger: ledger, client: client, now: now}
 }
 
 func (s *Service) Classify(ctx context.Context, r Request) (json.RawMessage, error) {
@@ -183,7 +182,11 @@ func (s *Service) refused(ctx context.Context, r Request, refused inference.Budg
 	switch refused.Reason {
 	case inference.ReasonMonthly:
 		reason = ReasonBudget
-		if err := s.ledger.RecordClassificationDeferral(ctx, inference.MonthStart(s.now(), s.loc), string(r.Caller), r.Item.Key); err != nil {
+		loc, err := inference.Location(ctx, s.db.Read)
+		if err != nil {
+			return nil, "storage", err
+		}
+		if err := s.ledger.RecordClassificationDeferral(ctx, inference.MonthStart(s.now(), loc), string(r.Caller), r.Item.Key); err != nil {
 			return nil, "storage", err
 		}
 	case inference.ReasonSourceMonth:

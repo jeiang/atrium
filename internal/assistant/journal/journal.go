@@ -302,6 +302,18 @@ func FinishClassification(ctx context.Context, q db.Querier, runID int64, state 
 	return nil
 }
 
+func LatestClassificationError(ctx context.Context, q db.Querier, caller string, since float64) (string, error) {
+	var reason string
+	err := q.QueryRowContext(ctx,
+		"SELECT COALESCE(r.error, '') FROM runs r JOIN threads t ON t.id = r.thread_id "+
+			"WHERE t.kind = ? AND t.role = ? AND r.kind = ? AND r.state IN (?, ?) AND r.started_at >= ? ORDER BY r.id DESC LIMIT 1",
+		classificationKind, classificationKind+":"+caller, classificationKind, Done, Failed, since).Scan(&reason)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return reason, err
+}
+
 func classificationCaller(caller string) error {
 	if caller == "" || len(caller) > classificationText {
 		return fmt.Errorf("journal: invalid classification caller %q", caller)
@@ -363,6 +375,15 @@ func RenewLease(ctx context.Context, q db.Querier, runID int64, owner string, no
 }
 
 func MarkInterrupted(ctx context.Context, q db.Querier, now float64) (int64, error) {
+	lease, err := leaseSeconds(ctx, q)
+	if err != nil {
+		return 0, err
+	}
+	if _, err := q.ExecContext(ctx,
+		"UPDATE runs SET state = ?, error = 'crashed', ended_at = ? WHERE state = ? AND kind = ? AND started_at < ?",
+		Failed, now, Accounting, classificationKind, now-lease); err != nil {
+		return 0, err
+	}
 	res, err := q.ExecContext(ctx,
 		"UPDATE runs SET state = ?, owner = NULL, lease_until = NULL WHERE state = ? AND (lease_until IS NULL OR lease_until < ?)",
 		Interrupted, Running, now)

@@ -1105,7 +1105,7 @@
     "auth.oidc_scopes": "connections.\"service/oidc\".config.scopes",
     "auth.oidc_session_idle_days": "atrium settings set oidc_session_idle_days",
     "auth.oidc_session_max_days": "atrium settings set oidc_session_max_days",
-    "auth.oidc_wizard_key": "atrium settings set oidc_wizard_key",
+    "auth.oidc_wizard_key": "retired",
     "calendar.calendar_account": "atrium settings set calendar_account",
     "calendar.calendar_dir": "services.atrium.stateDir",
     "calendar.candidate_draft_limit": "the compiled constant internal/calendar/tuning.go:TuningCandidateDraftLimit",

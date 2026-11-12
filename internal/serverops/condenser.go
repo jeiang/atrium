@@ -100,7 +100,7 @@ func condense(ctx context.Context, e jobworker.Env, threadID int64, now float64,
 		} else {
 			log.Error("ops condenser call failed", logx.Job, e.JobID, logx.Err, err)
 		}
-		if perr := recordPending(ctx, e, threadID, now, changes); perr != nil {
+		if perr := recordPending(ctx, e, threadID, now, changes, charged(err)); perr != nil {
 			return errors.Join(fmt.Errorf("ops condenser: %w", err), perr)
 		}
 		return fmt.Errorf("ops condenser: %w", err)
@@ -109,7 +109,7 @@ func condense(ctx context.Context, e jobworker.Env, threadID int64, now float64,
 		Findings []condenserFinding `json:"findings"`
 	}
 	if err := json.Unmarshal(raw, &reply); err != nil {
-		if perr := recordPending(ctx, e, threadID, now, changes); perr != nil {
+		if perr := recordPending(ctx, e, threadID, now, changes, true); perr != nil {
 			return errors.Join(fmt.Errorf("ops condenser: %w: %w", httpx.ErrPayload, err), perr)
 		}
 		return fmt.Errorf("ops condenser: %w: %w", httpx.ErrPayload, err)
@@ -156,17 +156,37 @@ func condense(ctx context.Context, e jobworker.Env, threadID int64, now float64,
 	return nil
 }
 
-func recordPending(ctx context.Context, e jobworker.Env, threadID int64, now float64, changes []change) error {
+func charged(err error) bool {
+	var deferred *classifier.Deferred
+	if errors.As(err, &deferred) {
+		switch deferred.Reason {
+		case classifier.ReasonRefusal, classifier.ReasonTruncated, classifier.ReasonStop:
+			return true
+		}
+		return false
+	}
+	return errors.Is(err, httpx.ErrPayload)
+}
+
+func recordPending(ctx context.Context, e jobworker.Env, threadID int64, now float64, changes []change, paid bool) error {
 	ctx = context.WithoutCancel(ctx)
 	d := e.Service.DB
 	last, err := lastDelta(ctx, d.Read, threadID)
 	if err != nil {
 		return err
 	}
-	if last != nil && last.Pending && fingerprint(last.Changes) == fingerprint(changes) {
+	same := last != nil && last.Pending && fingerprint(last.Changes) == fingerprint(changes)
+	next := delta{Changes: changes, Pending: true}
+	if same {
+		next.Charged = last.Charged
+	}
+	if paid {
+		next.Charged++
+	}
+	if same && last.Charged == next.Charged {
 		return nil
 	}
-	text, marks := deltaMessage(changes, true)
+	text, marks := deltaMessage(next)
 	block, err := json.Marshal(map[string]any{"type": "text", "text": text})
 	if err != nil {
 		return err
