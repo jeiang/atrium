@@ -108,6 +108,10 @@ func (s *Supervisor) loop(ctx context.Context, def ServiceDefinition, st *state)
 			return
 		case <-timer.C:
 		}
+		if ctx.Err() != nil {
+			st.set(StatusStopped)
+			return
+		}
 	}
 }
 
@@ -165,7 +169,14 @@ func guard(fn func() error) (err error) {
 func (s *Services) Go(ctx context.Context, name string, fn func(context.Context) error) {
 	s.wg.Go(func() {
 		err := guard(func() error { return fn(ctx) })
-		if err == nil || ctx.Err() != nil {
+		if err == nil {
+			return
+		}
+		if ctx.Err() != nil {
+			var p *PanicError
+			if errors.As(err, &p) {
+				log.Error(fmt.Sprintf("service %s child %s panicked after cancel", s.name, name), logx.Err, p.Error()+"\n"+p.Stack)
+			}
 			return
 		}
 		s.cancel(fmt.Errorf("%s: %w", name, err))

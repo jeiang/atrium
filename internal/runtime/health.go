@@ -3,6 +3,7 @@ package runtime
 import (
 	"errors"
 	"maps"
+	"slices"
 	"sync"
 	"time"
 )
@@ -17,16 +18,17 @@ const (
 )
 
 type ServiceHealth struct {
-	Name        string
-	Critical    bool
-	Status      Status
-	Since       time.Time
-	Restarts    int
-	LastError   string
-	Stack       string
-	NextAttempt time.Time
-	Heartbeats  map[string]time.Time
-	Stalled     bool
+	Name         string
+	Critical     bool
+	Status       Status
+	Since        time.Time
+	Restarts     int
+	LastError    string
+	Stack        string
+	NextAttempt  time.Time
+	Heartbeats   map[string]time.Time
+	Stalled      bool
+	StalledLoops []string
 }
 
 type Health struct {
@@ -90,13 +92,16 @@ func (st *state) snapshot(now time.Time) ServiceHealth {
 	h := ServiceHealth{Name: st.name, Critical: st.critical, Status: st.status, Since: st.since, Restarts: st.restarts,
 		LastError: st.lastErr, Stack: st.stack, NextAttempt: st.next, Heartbeats: maps.Clone(st.beats)}
 	if st.stall > 0 && st.status == StatusRunning {
-		last := st.since
-		for _, at := range st.beats {
-			if at.After(last) {
-				last = at
+		if len(st.beats) == 0 {
+			h.Stalled = now.Sub(st.since) > st.stall
+		}
+		for name, at := range st.beats {
+			if now.Sub(at) > st.stall {
+				h.StalledLoops = append(h.StalledLoops, name)
 			}
 		}
-		h.Stalled = now.Sub(last) > st.stall
+		slices.Sort(h.StalledLoops)
+		h.Stalled = h.Stalled || len(h.StalledLoops) > 0
 	}
 	return h
 }

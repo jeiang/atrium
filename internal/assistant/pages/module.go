@@ -54,10 +54,11 @@ type pages struct {
 }
 
 const (
-	emptyMessage    = "Type a message first."
-	archived        = "archived"
-	streamPoll      = 300 * time.Millisecond
-	streamKeepAlive = 15 * time.Second
+	emptyMessage       = "Type a message first."
+	archived           = "archived"
+	streamPoll         = 300 * time.Millisecond
+	streamKeepAlive    = 15 * time.Second
+	ledgerDrainTimeout = 5 * time.Second
 )
 
 func Module(o Options) web.Module {
@@ -108,7 +109,9 @@ func Module(o Options) web.Module {
 			err := svc.Drain(ctx)
 			cancel()
 			work.Wait()
-			return errors.Join(err, store.Drain(ctx))
+			final, stop := context.WithTimeout(context.WithoutCancel(ctx), ledgerDrainTimeout)
+			defer stop()
+			return errors.Join(err, store.Drain(final))
 		})
 		p := &pages{deps: d, svc: svc, now: assistant.Now, ledger: run.Ledger}
 		d.OnFrame(p.sidebar)

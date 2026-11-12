@@ -134,6 +134,8 @@ type Store struct {
 	running    int
 	changed    chan struct{}
 	drained    bool
+	renewCtx   context.Context
+	cancel     context.CancelFunc
 }
 
 type liveTicket struct {
@@ -143,9 +145,10 @@ type liveTicket struct {
 }
 
 type keepAlive struct {
-	once sync.Once
-	quit chan struct{}
-	done chan struct{}
+	once    sync.Once
+	tickets []Ticket
+	quit    chan struct{}
+	done    chan struct{}
 }
 
 func (k *keepAlive) halt() { k.once.Do(func() { close(k.quit) }) }
@@ -329,13 +332,13 @@ func (s *Store) Renew(ctx context.Context, tickets []Ticket) {
 	for _, t := range tickets {
 		err := s.Heartbeat(ctx, t)
 		var settled *SettledMeanwhile
-		if err != nil && !errors.As(err, &settled) {
+		if err != nil && ctx.Err() == nil && !errors.As(err, &settled) {
 			logx.Logger("atrium.ledger").Warn(fmt.Sprintf("could not renew the lease on effect %d", t.ID), logx.Err, err.Error())
 		}
 	}
 }
 
-func (s *Store) KeepAlive(ctx context.Context, tickets []Ticket) func() {
+func (s *Store) KeepAlive(_ context.Context, tickets []Ticket) func() {
 	if len(tickets) == 0 {
 		return func() {}
 	}
@@ -344,14 +347,14 @@ func (s *Store) KeepAlive(ctx context.Context, tickets []Ticket) func() {
 		s.liveMu.Unlock()
 		return func() {}
 	}
-	k := &keepAlive{quit: make(chan struct{}), done: make(chan struct{})}
+	k := &keepAlive{tickets: tickets, quit: make(chan struct{}), done: make(chan struct{})}
 	if s.keeps == nil {
 		s.keeps = map[*keepAlive]struct{}{}
 	}
 	s.keeps[k] = struct{}{}
 	s.running++
+	ctx := s.renewContext()
 	s.liveMu.Unlock()
-	ctx = context.WithoutCancel(ctx)
 	go func() {
 		defer close(k.done)
 		defer s.exited(func() { delete(s.keeps, k) })
@@ -374,27 +377,52 @@ func (s *Store) KeepAlive(ctx context.Context, tickets []Ticket) func() {
 
 func (s *Store) Drain(ctx context.Context) error {
 	s.liveMu.Lock()
-	unsettled := len(s.live) + len(s.keeps)
+	unsettled := map[int64]bool{}
+	for id := range s.live {
+		unsettled[id] = true
+	}
+	for k := range s.keeps {
+		for _, t := range k.tickets {
+			unsettled[t.ID] = true
+		}
+	}
 	s.drained = true
 	s.halt()
 	s.liveMu.Unlock()
-	if unsettled > 0 {
-		logx.Logger("atrium.ledger").Info(fmt.Sprintf("stopped renewing %d unsettled effect leases; recovery marks them unknown once they expire", unsettled))
+	if len(unsettled) > 0 {
+		logx.Logger("atrium.ledger").Info(fmt.Sprintf("stopped renewing %d unsettled effect leases; recovery marks them unknown once they expire", len(unsettled)))
 	}
+	var err error
 	for {
 		s.liveMu.Lock()
 		if s.running == 0 {
 			s.liveMu.Unlock()
-			return nil
+			return err
+		}
+		if err == nil && ctx.Err() != nil {
+			err = fmt.Errorf("ledger: effect renewal outlived the drain deadline and was interrupted: %w", context.Cause(ctx))
+			if s.cancel != nil {
+				s.cancel()
+			}
 		}
 		changed := s.waitChange()
 		s.liveMu.Unlock()
+		if err != nil {
+			<-changed
+			continue
+		}
 		select {
 		case <-changed:
 		case <-ctx.Done():
-			return fmt.Errorf("ledger: effect renewal did not stop before the drain deadline: %w", context.Cause(ctx))
 		}
 	}
+}
+
+func (s *Store) renewContext() context.Context {
+	if s.renewCtx == nil {
+		s.renewCtx, s.cancel = context.WithCancel(context.Background())
+	}
+	return s.renewCtx
 }
 
 func (s *Store) halt() {
@@ -509,6 +537,7 @@ func (s *Store) renewLive(stop chan struct{}) {
 		}
 		tickets = append(tickets, t.ticket)
 	}
+	ctx := s.renewContext()
 	s.liveMu.Unlock()
 	for _, id := range expired {
 		s.untrack(id)
@@ -519,13 +548,13 @@ func (s *Store) renewLive(stop chan struct{}) {
 			return
 		default:
 		}
-		err := s.Heartbeat(context.Background(), t)
+		err := s.Heartbeat(ctx, t)
 		var settled *SettledMeanwhile
 		if errors.As(err, &settled) {
 			s.untrack(t.ID)
 			continue
 		}
-		if err != nil {
+		if err != nil && ctx.Err() == nil {
 			logx.Logger("atrium.ledger").Warn(fmt.Sprintf("could not renew the lease on effect %d", t.ID), logx.Err, err.Error())
 		}
 	}

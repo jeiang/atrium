@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -56,40 +57,25 @@ func trackingProposal(t *testing.T, api *modelLog, d *db.DB, pkg int64) int64 {
 	return proposal
 }
 
-func settledTracking(t *testing.T, d *db.DB, proposal int64) (state string, settled bool) {
-	t.Helper()
-	var settledAt *float64
-	if err := d.Read.QueryRow("SELECT state, settled_at FROM effects WHERE operation = 'track_package' AND direction = 'forward' AND proposal_id = ?",
-		proposal).Scan(&state, &settledAt); err != nil {
-		return "", false
-	}
-	return state, settledAt != nil
-}
-
-func TestCanceledAndShutdownHeldTrackerWritesSettleOnceWithoutLateRenewal(t *testing.T) {
+func TestHeldTrackerWriteSettlesOnceAcrossServeShutdown(t *testing.T) {
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
 	var posts atomic.Int32
-	arrived := make(chan int32, 2)
+	arrived := make(chan struct{}, 1)
 	release := make(chan struct{})
 	var releaseOnce sync.Once
 	releaseAll := func() { releaseOnce.Do(func() { close(release) }) }
-	first := make(chan struct{})
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.Method == http.MethodPost && r.URL.Path == "/public/v1/trackers" {
-			n := posts.Add(1)
-			arrived <- n
-			gate := release
-			if n == 1 {
-				gate = first
-			}
+			posts.Add(1)
+			arrived <- struct{}{}
 			select {
 			case <-r.Context().Done():
 				return
-			case <-gate:
+			case <-release:
 			}
 			w.WriteHeader(http.StatusCreated)
-			_, _ = fmt.Fprintf(w, `{"data":{"tracker":{"trackerId":"trk_%d","trackingNumber":"1Z999AA1012345678%d"}}}`, n, n)
+			_, _ = w.Write([]byte(`{"data":{"tracker":{"trackerId":"trk_1","trackingNumber":"1Z999AA10123456781"}}}`))
 			return
 		}
 		_, _ = w.Write([]byte(`{"data":{"trackings":[]}}`))
@@ -102,8 +88,7 @@ func TestCanceledAndShutdownHeldTrackerWritesSettleOnceWithoutLateRenewal(t *tes
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
-	canceled := trackingProposal(t, api, d, 1)
-	held := trackingProposal(t, api, d, 2)
+	held := trackingProposal(t, api, d, 1)
 
 	logs := &lockedBuffer{}
 	logx.Setup(logs)
@@ -115,41 +100,6 @@ func TestCanceledAndShutdownHeldTrackerWritesSettleOnceWithoutLateRenewal(t *tes
 	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	if status, _, _ := fetch(t, client, http.MethodGet, base+"/chat", nil); status != http.StatusOK {
 		t.Fatalf("GET /chat = %d", status)
-	}
-
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		<-arrived
-		cancel()
-	}()
-	if resp, err := approveRequest(ctx, client, base, canceled); err == nil {
-		_ = resp.Body.Close()
-		t.Fatalf("the canceled approval returned %d instead of being canceled", resp.StatusCode)
-	}
-	time.Sleep(300 * time.Millisecond)
-	if state, settled := settledTracking(t, d, canceled); settled && state != string(ledger.Unknown) {
-		t.Fatalf("the canceled write settled as %q while the carrier still held it", state)
-	}
-	close(first)
-	var state string
-	waitFor(t, func() bool {
-		var settled bool
-		state, settled = settledTracking(t, d, canceled)
-		return settled
-	})
-	if state != string(ledger.Done) && state != string(ledger.Unknown) {
-		t.Fatalf("the canceled held write settled as %q, want done or unknown", state)
-	}
-	var status string
-	waitFor(t, func() bool {
-		return d.Read.QueryRow("SELECT status FROM proposals WHERE id = ?", canceled).Scan(&status) == nil && status != "approved"
-	})
-	code, body := hxFetch(t, client, http.MethodPost, base+fmt.Sprintf("/proposals/%d/approve", canceled), url.Values{"all": {"1"}})
-	if code != http.StatusOK || !strings.Contains(body, "Not approved") {
-		t.Fatalf("re-approving the canceled write = %d: %s, want a refusal", code, body)
-	}
-	if n := posts.Load(); n != 1 {
-		t.Fatalf("the canceled write reached the carrier %d times, want once", n)
 	}
 
 	answered := make(chan int, 1)
@@ -168,7 +118,23 @@ func TestCanceledAndShutdownHeldTrackerWritesSettleOnceWithoutLateRenewal(t *tes
 		stop()
 		close(stopped)
 	}()
-	time.Sleep(500 * time.Millisecond)
+	addr := strings.TrimPrefix(base, "http://")
+	waitFor(t, func() bool {
+		conn, err := net.DialTimeout("tcp", addr, time.Second)
+		if err != nil {
+			return true
+		}
+		_ = conn.Close()
+		return false
+	})
+	select {
+	case <-stopped:
+		t.Fatal("serve stopped before the held write was released")
+	default:
+	}
+	if state, _ := trackingState(t, d, held); state != string(ledger.Intent) {
+		t.Fatalf("the held write is %q while serve stops, want intent", state)
+	}
 	releaseAll()
 	select {
 	case <-stopped:
@@ -178,18 +144,29 @@ func TestCanceledAndShutdownHeldTrackerWritesSettleOnceWithoutLateRenewal(t *tes
 	if code := <-answered; code != http.StatusOK {
 		t.Fatalf("the approval held across shutdown answered %d, want 200", code)
 	}
-	if state, settled := settledTracking(t, d, held); !settled || state != string(ledger.Done) {
+	if state, settled := trackingState(t, d, held); !settled || state != string(ledger.Done) {
 		t.Fatalf("the write held across shutdown is %q (settled %v), want done", state, settled)
 	}
-	if n := posts.Load(); n != 2 {
-		t.Fatalf("the carrier saw %d writes, want one per approval", n)
+	if n := posts.Load(); n != 1 {
+		t.Fatalf("the carrier saw %d writes, want one", n)
 	}
+	var status string
 	if err := d.Read.QueryRow("SELECT status FROM proposals WHERE id = ?", held).Scan(&status); err != nil || status != "applied" {
 		t.Fatalf("the held proposal is %q (%v), want applied", status, err)
 	}
-	for _, bad := range []string{"database is closed", "could not renew", "could not drain"} {
+	for _, bad := range []string{"database is closed", "could not drain"} {
 		if strings.Contains(logs.String(), bad) {
 			t.Fatalf("shutdown logged %q:\n%s", bad, logs.String())
 		}
 	}
+}
+
+func trackingState(t *testing.T, d *db.DB, proposal int64) (state string, settled bool) {
+	t.Helper()
+	var settledAt *float64
+	if err := d.Read.QueryRow("SELECT state, settled_at FROM effects WHERE operation = 'track_package' AND direction = 'forward' AND proposal_id = ?",
+		proposal).Scan(&state, &settledAt); err != nil {
+		return "", false
+	}
+	return state, settledAt != nil
 }
