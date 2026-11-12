@@ -37,7 +37,6 @@ var owners = map[string]string{
 	"embed_kb_":                          "embed",
 	"embed_message_":                     "embed",
 	"embed_notion_":                      "embed",
-	"endpoint_probes":                    "mail",
 	"event_candidates":                   "calendar",
 	"events":                             "mail",
 	"export_pages":                       "kb",

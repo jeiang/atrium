@@ -790,7 +790,7 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	clearModuleEnv(t)
 	for _, tc := range []struct{ module, reason string }{
-		{module.Mail, "mail_chat_url is not set"},
+		{module.Mail, "the embedding connection is not configured"},
 		{module.Calendar, "iCloud CalDAV login or Google Calendar credentials"},
 		{module.Media, "media_root is not set"},
 		{module.Assistant, "the Anthropic connection has no API key"},

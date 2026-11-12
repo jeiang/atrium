@@ -1,6 +1,6 @@
 {
   "cbtt_html": "<html><body><div class=\"table_date\">2026-10-14</div><table class=\"rate_table\"><tr><th>Currency</th><th>Buying</th><th>Selling</th></tr><tr><td>United States Dollar</td><td>6.7200</td><td>6.7900</td></tr></table></body></html>",
-  "chat": "mail classification replies come from llm_script.json: the request's JSON schema required keys pick the default whose keys match, the user prompt's first 'Subject: ' line picks a by_subject override merged onto that default; the local chat endpoint and the Anthropic fixed-JSON fake read the same script, and an unknown key structure fails the test",
+  "chat": "mail classification replies come from llm_script.json: the request's JSON schema required keys pick the default whose keys match, the user prompt's first 'Subject: ' line picks a by_subject override merged onto that default; the Anthropic fixed-JSON fake reads the script, and an unknown key structure fails the test",
   "clocks": {
     "approve": 1792095600.0,
     "arrive": 1792090800.0,

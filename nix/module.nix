@@ -295,8 +295,8 @@
   };
 
   unitBase = {
-    after = ["network-online.target"] ++ cfg.modelServerUnits;
-    wants = ["network-online.target"] ++ cfg.modelServerUnits;
+    after = ["network-online.target"] ++ cfg.embeddingServerUnits;
+    wants = ["network-online.target"] ++ cfg.embeddingServerUnits;
     environment = appEnvironment;
     serviceConfig = hardening;
   };
@@ -440,6 +440,10 @@
       ++ map (name: "${name}.timer") (builtins.attrNames timers)
     );
 in {
+  imports = [
+    (lib.mkRemovedOptionModule ["services" "atrium" "modelServerUnits"] "use services.atrium.embeddingServerUnits for the service/embedding server; the local chat server is retired and mail classification uses the service/anthropic connection under monthly_budget_usd")
+  ];
+
   options.services.atrium = {
     enable = mkEnableOption "atrium";
 
@@ -481,7 +485,7 @@ in {
     host = mkOption {
       inherit (toml) type;
       default = {};
-      example = lib.literalExpression ''{ core.public_url = "https://atrium.example.org"; mail.mail_chat_url = "http://127.0.0.1:8187/v1"; }'';
+      example = lib.literalExpression ''{ core.public_url = "https://atrium.example.org"; media.media_root = "/var/lib/media"; }'';
       description = "Host configuration, one table per module, rendered to the file named by ATRIUM_HOST_CONFIG. Only host keys from ${reference} are accepted; operator and tuning keys fail evaluation with their destination. Host values are read-only in the application.";
     };
 
@@ -594,11 +598,11 @@ in {
       description = "EnvironmentFile= paths read by every unit and atrium-run.";
     };
 
-    modelServerUnits = mkOption {
+    embeddingServerUnits = mkOption {
       type = types.listOf types.str;
       default = [];
-      example = ["atrium-llm.service" "atrium-embed.service"];
-      description = "Units serving the mail chat and embed endpoints; the app units start after and want them.";
+      example = ["atrium-embed.service"];
+      description = "Units serving the service/embedding endpoint; the app units start after and want them.";
     };
 
     web = {

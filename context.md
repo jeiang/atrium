@@ -253,17 +253,16 @@ behavior-parity target.
   default $0.30 per night, and `dreaming_monthly_usd`, default $3 per
   calendar month). A server fallback is shown in the thread
   and its tokens are recorded as a separate usage row priced at the model
-  that served them. Mail classification uses the chat endpoint and
-  embeddings use the `service/embedding` connection; both are
-  OpenAI-compatible, local or hosted, with a CA bundle and proxy, and the
-  chat endpoint takes an optional Bearer key while the embedding connection
-  takes a host-file bearer. The endpoint package carries the resolved chat
-  and embed model, compiled body-character and batch constants and the
-  dimension through the request context. `atrium endpoints probe` and each
-  connection's Test record whether they work, and mail is held in
-  needs-settings only while an explicit Test of the current embedding
-  configuration fails; automatic health checks and runtime failures update
-  the connection's health without changing that hold. Connected content sent to a hosted model leaves
+  that served them. Mail classification is fixed-schema Haiku through the
+  `service/anthropic` connection under `monthly_budget_usd`; there is no local
+  chat endpoint. Embeddings use the `service/embedding` connection, an
+  OpenAI-compatible endpoint, local or hosted, with a CA bundle, proxy and
+  host-file bearer. The endpoint package carries the resolved embed model,
+  compiled body-character and batch constants and the dimension through the
+  request context. Each connection's Test records whether it works, and mail
+  is held in needs-settings only while an explicit Test of the current
+  embedding configuration fails; automatic health checks and runtime failures
+  update the connection's health without changing that hold. Connected content sent to a hosted model leaves
   the host; privacy does not mean that inference is necessarily local.
   The embedding index records its embedder and dimension; changing the
   embedder re-embeds in the background under `atrium serve` and swaps the
@@ -392,7 +391,8 @@ behavior-parity target.
   state (re-synced), knowledge and Notion
   vectors (rebuilt), notifications, auth sessions, pending sign-ins and login links, OAuth
   handshakes, action links, the mail event log, ops
-  data, endpoint probes, integration health, nightly observations,
+  data, endpoint probes (removed with the chat endpoint; the embed probe
+  moves to `service/embedding`), integration health, nightly observations,
   `db_key_history` (old backups are read with the old key),
   `module_migrations` and the source's `schema_migrations`. References to
   uncarried rows are nulled (`thread_messages.run_id`, `usage.run_id`,
@@ -560,8 +560,8 @@ behavior-parity target.
   span is active; logs still reach VictoriaLogs through journald, with no
   OTLP log pipeline. The metrics include LLM tokens and cost by model and run
   kind, run steps and duration, tool calls and duration, mail sync counts,
-  queue depths, integration health, notification delivery, action links and
-  endpoint probes. The host owns the scrape job and the traces endpoint.
+  queue depths, integration health, notification delivery and action links.
+  The host owns the scrape job and the traces endpoint.
 - The host owns external services, reverse proxy authentication,
   persistence, and backups. Updating this repository does not update the
   host's pinned application input.

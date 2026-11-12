@@ -16,7 +16,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/testutil/embedstub"
-	"github.com/jeiang/atrium/internal/testutil/mailscript"
 )
 
 type mailAccount struct {
@@ -59,11 +58,9 @@ func accountsFileEmbedding(t *testing.T, dir, embedURL, anthropicKey string, acc
 func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	chat := mailscript.NewOpenAI(t, mailscript.Load(t), nil).Serve()
 	embed := embedstub.Server(t)
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", chat.URL+"/v1")
 	seedSettings(t, map[string]string{mail.KeyMode: "shadow", module.FlagKey(module.Mail): "true"})
 
 	home := mailtest.NewFakeClient()

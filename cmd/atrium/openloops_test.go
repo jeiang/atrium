@@ -13,7 +13,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/testutil/embedstub"
 	"github.com/jeiang/atrium/internal/testutil/mailscript"
 )
@@ -68,13 +67,6 @@ func TestLoopsRefreshSkipsBulkAndOtherRecipients(t *testing.T) {
 		}
 		return script.JSONAnswer(required, user)
 	})
-	chat := mailscript.NewOpenAI(t, script, func(feature string, _ []byte) bool {
-		if feature == "commitments" {
-			t.Errorf("the local chat server got a commitment scan")
-		}
-		return true
-	}).Serve()
-	setEnv(t, settingEnv(endpoint.KeyChatURL), chat.URL+"/v1")
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, embedstub.Server(t).URL+"/v1", "embeddinggemma", ""))
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
 		t.Fatalf("initialize database: %d %s", ran.code, ran.stderr)

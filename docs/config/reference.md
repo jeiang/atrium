@@ -61,16 +61,6 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `ops_query_mem` | string | `(1 - node_memory_MemAvailable_bytes{{{selector}},instance=~"{{host}}(:.*)?"} / node_memory_MemTotal_bytes{{{selector}},instance=~"{{host}}(:.*)?"}) * 100` | `ATRIUM_GRAFANA_OPS_QUERY_MEM` |
 | `ops_query_up` | string | `up{{{selector}},instance=~"{{host}}(:.*)?"}` | `ATRIUM_GRAFANA_OPS_QUERY_UP` |
 
-### mail
-
-| Key | Type | Default | Environment variable |
-| --- | --- | --- | --- |
-| `mail_chat_ca_file` | string | none | `ATRIUM_MAIL_MAIL_CHAT_CA_FILE` |
-| `mail_chat_key` | string | none | `ATRIUM_MAIL_MAIL_CHAT_KEY_FILE` |
-| `mail_chat_model` | string | `qwen` | `ATRIUM_MAIL_MAIL_CHAT_MODEL` |
-| `mail_chat_proxy` | string | none | `ATRIUM_MAIL_MAIL_CHAT_PROXY` |
-| `mail_chat_url` | string | none | `ATRIUM_MAIL_MAIL_CHAT_URL` |
-
 ### media
 
 | Key | Type | Default | Environment variable |

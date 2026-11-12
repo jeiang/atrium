@@ -891,7 +891,7 @@ func TestImportV2CarriesTheEmbeddingConnectionAndItsKey(t *testing.T) {
 	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
 	dir := t.TempDir()
 	source := copyV2Fixture(t, dir)
-	embed, chat := newFakeOpenAI(t), newFakeOpenAI(t)
+	embed := newFakeOpenAI(t)
 	const key = "sk-embed-imported-0123456789"
 	url := embed.URL + "/v1"
 	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
@@ -900,7 +900,6 @@ func TestImportV2CarriesTheEmbeddingConnectionAndItsKey(t *testing.T) {
 		('mail_embed_batch', '1')`, url))
 	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_embed_key', %q, 1762000800, 'fixture')", key))
 	editImportSource(t, source, "INSERT INTO endpoint_probes (kind, fingerprint, ok, reason, dimension, models, probed_at) VALUES ('embed', 'stale0000000000', 0, 'the old endpoint refused the key', 0, '[]', 1762000800)")
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", chat.URL+"/v1")
 	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
 	if got.code != cli.ExitOK {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
@@ -947,18 +946,6 @@ func TestImportV2CarriesTheEmbeddingConnectionAndItsKey(t *testing.T) {
 		for _, value := range values {
 			if value != "Bearer "+key {
 				t.Errorf("embedding %s used %q, want the imported bearer", path, value)
-			}
-		}
-	}
-
-	probed := runImportApp(t, importTestApp(t, dir, clock), "endpoints", "probe")
-	if probed.code != cli.ExitOK {
-		t.Fatalf("endpoints probe: exit %d stdout %q stderr %q", probed.code, probed.stdout, probed.stderr)
-	}
-	for path, values := range chat.authorizations() {
-		for _, value := range values {
-			if strings.Contains(value, key) {
-				t.Errorf("chat %s received the embedding bearer", path)
 			}
 		}
 	}
@@ -1117,7 +1104,7 @@ func TestImportV2KeepsEmbedAndChatAccountsFromClaimingTheEndpointHealth(t *testi
 	}
 	for _, want := range []string{
 		"ambiguous-health mail_embed: the name is both the embedding endpoint and a mail account; the account is untested",
-		"drop-unknown-health mail_chat: the local chat endpoint keeps its probe in endpoint_probes",
+		"integration_health: drop-removed mail_chat health reason=Haiku-classification",
 	} {
 		if !strings.Contains(got.stdout, want) {
 			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
@@ -1142,8 +1129,8 @@ func TestImportV2KeepsEmbedAndChatAccountsFromClaimingTheEndpointHealth(t *testi
 	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM inference_classification_deferrals"); n != 0 {
 		t.Errorf("the import wrote %d classification deferrals, want none", n)
 	}
-	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM endpoint_probes WHERE kind = 'embed'"); n != 0 {
-		t.Error("the embed probe stayed in the endpoint_probes table")
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'endpoint_probes'"); n != 0 {
+		t.Error("the destination still has an endpoint_probes table")
 	}
 	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM mail_accounts WHERE id IN ('embed', 'chat')"); n != 2 {
 		t.Errorf("%d colliding accounts carried, want both", n)
@@ -2664,5 +2651,86 @@ S: {t} OK
 	}
 	if strings.Contains(synced.stdout+synced.stderr, "host-pass") {
 		t.Error("sync printed the mail password")
+	}
+}
+
+func TestImportV2DropsTheRemovedChatEndpointAndMovesTheEmbedProbe(t *testing.T) {
+	t.Parallel()
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	const chatSecret = "sk-chat-import-sentinel-0123456789"
+	const replacement = "the service/anthropic connection and monthly_budget_usd; mail classification uses fixed-schema Haiku"
+	embed := newFakeOpenAI(t)
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO settings (key, value) VALUES
+		('mail_embed_url', %q),
+		('mail_embed_model', 'embeddinggemma'),
+		('mail_chat_url', 'http://chat.local:8080/v1'),
+		('mail_chat_model', 'qwen-operator'),
+		('mail_chat_max_tokens', '120'),
+		('mail_chat_ca_file', '/operator/chat-ca.pem'),
+		('mail_chat_proxy', 'http://proxy.local:3128')`, embed.URL+"/v1"))
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('mail_chat_key', %q, 1762000800, 'fixture')", chatSecret))
+	editImportSource(t, source, `INSERT INTO endpoint_probes (kind, fingerprint, ok, reason, dimension, models, probed_at) VALUES
+		('chat', 'chat000000000000', 1, '', NULL, '["qwen"]', 1762000800),
+		('embed', 'embed00000000000', 1, '', 768, '["embeddinggemma"]', 1762000800)`)
+	editImportSource(t, source, "INSERT INTO settings_audit (ts, key, old_value, new_value, secret, actor, source) VALUES (1762000700, 'mail_chat_model', 'qwen', 'qwen-operator', 0, 'operator', 'cli')")
+	before := fileDigest(t, source)
+	configPath := filepath.Join(dir, "v2.toml")
+	if err := os.WriteFile(configPath, []byte("[mail]\nmail_chat_url = \"http://chat.pinned:8080/v1\"\nmail_chat_proxy = \"http://proxy.pinned:3128\"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source, "--source-config", configPath)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if after := fileDigest(t, source); after != before {
+		t.Errorf("the import changed the source: %s -> %s", before, after)
+	}
+	for _, want := range []string{
+		"setting mail_chat_url: dropped -> " + replacement + " from pin config " + configPath + " mail.mail_chat_url",
+		"setting mail_chat_model: dropped -> " + replacement,
+		"setting mail_chat_max_tokens: dropped -> " + replacement,
+		"setting mail_chat_ca_file: dropped -> " + replacement,
+		"setting mail_chat_proxy: dropped -> " + replacement + " from pin config " + configPath + " mail.mail_chat_proxy",
+		"secret mail_chat_key: dropped -> " + replacement + " (value not kept)",
+		"endpoint_probes: dropped 2 (the chat endpoint is removed; the embed probe moves to connection service/embedding)",
+		"endpoint_probes: drop-removed chat probe: 1 row reason=Haiku-classification",
+		"endpoint_probes: the embed probe moved to connection service/embedding",
+		"unmapped_operator_choices=0",
+	} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+	for _, leaked := range []string{chatSecret, "qwen-operator", "chat.local", "chat.pinned", "proxy.pinned", "local_chat", "credential-file-binding mail_chat"} {
+		if strings.Contains(got.stdout+got.stderr, leaked) {
+			t.Errorf("the report contains %q:\n%s", leaked, got.stdout)
+		}
+	}
+
+	q, err := db.Connect(filepath.Join(dir, "atrium.db"), db.WithKey(importKey(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM settings WHERE key LIKE 'mail_chat_%'"); n != 0 {
+		t.Errorf("%d chat endpoint settings were carried", n)
+	}
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM secrets WHERE name = 'mail_chat_key'"); n != 0 {
+		t.Error("the chat key was carried")
+	}
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'endpoint_probes'"); n != 0 {
+		t.Error("the destination has an endpoint_probes table")
+	}
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM settings_audit WHERE key = 'mail_chat_model' AND ts = 1762000700 AND new_value = 'qwen-operator'"); n != 1 {
+		t.Errorf("the historical chat audit row was not kept: %d", n)
+	}
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM inference_classification_deferrals"); n != 0 {
+		t.Errorf("the import wrote %d classification deferrals, want none", n)
+	}
+	if results := importValue(t, q.Read, "SELECT results_json FROM connections WHERE id = 'service/embedding'"); !strings.Contains(results, "embed00000000000") {
+		t.Errorf("the embed probe did not move to the embedding connection: %s", results)
 	}
 }

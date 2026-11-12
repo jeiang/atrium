@@ -27,37 +27,17 @@ type mailClassifierRig struct {
 	f       *fixture
 	d       *db.DB
 	targets []classifiedMail
-	chat    *chatFeatures
 
 	mu   sync.Mutex
 	sent []anthropictest.Request
 	hook func(anthropictest.Request)
 }
 
-type chatFeatures struct {
-	mu   sync.Mutex
-	seen []string
-}
-
-func (c *chatFeatures) features() []string {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return slices.Clone(c.seen)
-}
-
 func newMailClassifierRig(t *testing.T, answer func(required []string, user string) (json.RawMessage, error)) *mailClassifierRig {
 	t.Helper()
 	f := newFixture(t, loadGoldenData(t), map[string]string{"ATRIUM_MODE": "shadow"}, "")
 	script := mailscript.Load(t)
-	chat := &chatFeatures{}
-	server := mailscript.NewOpenAI(t, script, func(feature string, _ []byte) bool {
-		chat.mu.Lock()
-		defer chat.mu.Unlock()
-		chat.seen = append(chat.seen, feature)
-		return true
-	}).Serve()
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", server.URL+"/v1")
-	r := &mailClassifierRig{f: f, d: mustConnect(t, filepath.Join(f.dir, "atrium.db"), keyFor(t)), chat: chat}
+	r := &mailClassifierRig{f: f, d: mustConnect(t, filepath.Join(f.dir, "atrium.db"), keyFor(t))}
 	for _, q := range []string{
 		"UPDATE messages SET seen = 0, sent = 0, in_inbox = 1, gone_at = NULL WHERE account = 'icloud' AND id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 3)",
 		"DELETE FROM flag_decisions WHERE message_id IN (SELECT id FROM messages WHERE account = 'icloud' ORDER BY id LIMIT 3)",
@@ -203,15 +183,6 @@ func (r *mailClassifierRig) event(t *testing.T, id int64) string {
 	return status
 }
 
-func (r *mailClassifierRig) noLocalJudgments(t *testing.T) {
-	t.Helper()
-	for _, feature := range r.chat.features() {
-		if feature == "flag" || feature == "event" {
-			t.Fatalf("the local chat server answered a %s judgment: %v", feature, r.chat.features())
-		}
-	}
-}
-
 func (r *mailClassifierRig) noMailWrites(t *testing.T) {
 	t.Helper()
 	if writes := r.f.fakes["icloud"].Writes; len(writes) != 0 {
@@ -304,7 +275,6 @@ func TestMailPassFlagsAndEventsThroughTheClassifier(t *testing.T) {
 	if err := r.d.Read.QueryRow("SELECT COUNT(*) FROM usage WHERE source IN ('classifier:mail_flag', 'classifier:mail_event') AND state = 'settled'").Scan(&settled); err != nil || settled < 6 {
 		t.Errorf("settled classifier usage rows: %d %v", settled, err)
 	}
-	r.noLocalJudgments(t)
 	r.noMailWrites(t)
 
 	before := len(r.requests(t))
@@ -384,7 +354,6 @@ func TestMailPassBudgetRefusalDefersPaidStagesUntilRaised(t *testing.T) {
 		t.Errorf("the package regex found nothing after the paid stages stopped")
 	}
 	r.noMailWrites(t)
-	r.noLocalJudgments(t)
 
 	r.mu.Lock()
 	r.hook = nil
@@ -462,5 +431,4 @@ func TestMailPassMalformedFlagReplyMakesNoDecision(t *testing.T) {
 		t.Errorf("settled usage for the malformed reply: %d %v", charged, err)
 	}
 	r.noMailWrites(t)
-	r.noLocalJudgments(t)
 }

@@ -21,24 +21,6 @@ func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
 	t.Parallel()
 	data := loadGoldenData(t)
 	f := newFixture(t, data, nil, "")
-	chat := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		var body struct {
-			ResponseFormat struct {
-				JSONSchema struct {
-					Schema struct {
-						Required []string `json:"required"`
-					} `json:"schema"`
-				} `json:"json_schema"`
-			} `json:"response_format"`
-		}
-		_ = json.NewDecoder(req.Body).Decode(&body)
-		answer := `{"person_asking":false,"deadline_or_payment_due":false,"security_event":false,"flag":false}`
-		if slices.Contains(body.ResponseFormat.JSONSchema.Schema.Required, "folder") {
-			answer = `{"folder":"uncertain","confident":false}`
-		}
-		_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": answer}}}})
-	}))
-	t.Cleanup(chat.Close)
 	f.api.AnswerJSON(func(required []string, _ string) (json.RawMessage, error) {
 		if slices.Contains(required, "has_event") {
 			return json.RawMessage(`{"has_event":"false"}`), nil
@@ -59,7 +41,6 @@ func TestAMailPassRejectsANonBooleanJudgeAnswer(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": vectors})
 	}))
 	t.Cleanup(embed.Close)
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", chat.URL+"/v1")
 	hostPath, _ := f.lookup("ATRIUM_HOST_CONFIG")
 	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigFrom(t, hostPath, f.dir, "host-judge.toml", map[string]string{
 		fmt.Sprintf(`config = { url = %q, model = "embeddinggemma" }`, f.embedURL): fmt.Sprintf(`config = { url = %q, model = "embeddinggemma" }`, embed.URL+"/v1"),

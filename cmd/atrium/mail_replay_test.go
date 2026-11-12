@@ -24,7 +24,6 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/testutil/embedstub"
-	"github.com/jeiang/atrium/internal/testutil/mailscript"
 )
 
 type replayLine struct {
@@ -80,13 +79,10 @@ func TestMailReplayReportsStoredDecisionsWithoutExternalCalls(t *testing.T) {
 			return nil, errors.New("replay opened IMAP")
 		}
 	}
-	chatScript := mailscript.NewOpenAI(t, mailscript.Load(t), nil)
-	chat := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		chatCalls.Add(1)
-		chatScript.ServeHTTP(w, r)
-	}))
-	t.Cleanup(chat.Close)
 	embed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/chat/completions") {
+			chatCalls.Add(1)
+		}
 		embedCalls.Add(1)
 		embedstub.Handler(w, r)
 	}))
@@ -94,7 +90,6 @@ func TestMailReplayReportsStoredDecisionsWithoutExternalCalls(t *testing.T) {
 	api := anthropictest.New(t)
 	api.SetOnRequest(func(anthropictest.Request) { anthropicCalls.Add(1) })
 	env := f.snapshotEnv()
-	env["ATRIUM_MAIL_MAIL_CHAT_URL"] = chat.URL + "/v1"
 	env[anthropic.BaseURLEnv] = api.URL
 	env["ATRIUM_HOST_CONFIG"] = hostConfigFrom(t, env["ATRIUM_HOST_CONFIG"], f.dir, "host-replay.toml", map[string]string{
 		`url = ` + strconv.Quote(f.embedURL): `url = ` + strconv.Quote(embed.URL+"/v1"),

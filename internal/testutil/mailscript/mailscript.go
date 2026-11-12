@@ -3,10 +3,7 @@ package mailscript
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"maps"
-	"net/http"
-	"net/http/httptest"
 	"slices"
 	"strings"
 	"testing"
@@ -89,69 +86,4 @@ func (s *Script) Answer(required []string, user string) (string, json.RawMessage
 func (s *Script) JSONAnswer(required []string, user string) (json.RawMessage, error) {
 	_, answer, err := s.Answer(required, user)
 	return answer, err
-}
-
-type OpenAI struct {
-	t       testing.TB
-	script  *Script
-	inspect func(feature string, body []byte) bool
-}
-
-func NewOpenAI(t testing.TB, script *Script, inspect func(feature string, body []byte) bool) *OpenAI {
-	return &OpenAI{t: t, script: script, inspect: inspect}
-}
-
-func (o *OpenAI) Serve() *httptest.Server {
-	o.t.Helper()
-	srv := httptest.NewServer(o)
-	o.t.Cleanup(srv.Close)
-	return srv
-}
-
-func (o *OpenAI) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost || !strings.HasSuffix(r.URL.Path, "/chat/completions") {
-		o.t.Errorf("mailscript: unexpected %s %s", r.Method, r.URL.Path)
-		http.Error(w, "mailscript serves only /chat/completions", http.StatusNotFound)
-		return
-	}
-	body, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	var req struct {
-		Messages []struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"messages"`
-		ResponseFormat struct {
-			Type       string `json:"type"`
-			JSONSchema struct {
-				Schema struct {
-					Required []string `json:"required"`
-				} `json:"schema"`
-			} `json:"json_schema"`
-		} `json:"response_format"`
-	}
-	if err := json.Unmarshal(body, &req); err != nil {
-		o.t.Errorf("mailscript: request body: %v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if len(req.Messages) != 2 || req.Messages[0].Role != "system" || req.Messages[1].Role != "user" || req.ResponseFormat.Type != "json_schema" {
-		o.t.Errorf("mailscript: request is not one system and one user message with a JSON schema: %s", body)
-		http.Error(w, "unknown request shape", http.StatusBadRequest)
-		return
-	}
-	feature, answer, err := o.script.Answer(req.ResponseFormat.JSONSchema.Schema.Required, req.Messages[1].Content)
-	if err != nil {
-		o.t.Errorf("%v", err)
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
-	}
-	if o.inspect != nil && !o.inspect(feature, body) {
-		http.Error(w, "unexpected", http.StatusBadRequest)
-		return
-	}
-	_ = json.NewEncoder(w).Encode(map[string]any{"choices": []any{map[string]any{"message": map[string]any{"content": string(answer)}}}})
 }

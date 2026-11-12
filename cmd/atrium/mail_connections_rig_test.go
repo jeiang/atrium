@@ -19,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/testutil/embedstub"
-	"github.com/jeiang/atrium/internal/testutil/mailscript"
 )
 
 type strictSMTP struct {
@@ -120,8 +119,6 @@ func keyedMailFixture(t *testing.T) (string, string) {
 	requireCipher(t)
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	chat := mailscript.NewOpenAI(t, mailscript.Load(t), nil).Serve()
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", chat.URL+"/v1")
 	seedSettings(t, map[string]string{mail.KeyMode: "shadow"})
 	return dir, embedstub.Server(t).URL + "/v1"
 }

@@ -198,21 +198,20 @@ var importTables = []tablePlan{
 	{table: "events", action: drop, why: "the mail event log is not carried"},
 	{table: "pass_runs", action: drop, why: "ops pass history is not carried"},
 	{table: "pass_run_alerts", action: drop, why: "ops pass history is not carried"},
-	{table: "endpoint_probes", action: carry, run: func(im *importer) (int64, error) {
-		n, err := im.copy("endpoint_probes", "kind = ?", []any{"chat"}, nil, nil, nil, false)
-		if err != nil {
-			return n, err
+	{table: "endpoint_probes", action: drop, why: "the chat endpoint is removed; the embed probe moves to connection service/embedding", run: func(im *importer) (int64, error) {
+		var chat, moved int64
+		if err := im.src.QueryRowContext(im.ctx, "SELECT COUNT(*) FILTER (WHERE kind = 'chat'), COUNT(*) FILTER (WHERE kind = 'embed') FROM endpoint_probes").Scan(&chat, &moved); err != nil {
+			return 0, err
 		}
-		var moved int64
-		if err := im.src.QueryRowContext(im.ctx, "SELECT COUNT(*) FROM endpoint_probes WHERE kind = 'embed'").Scan(&moved); err != nil {
-			return n, err
+		if chat > 0 {
+			im.notes = append(im.notes, fmt.Sprintf("drop-removed chat probe: %d row reason=Haiku-classification", chat))
 		}
 		if moved > 0 {
 			im.notes = append(im.notes, "the embed probe moved to connection service/embedding")
 		}
-		return n, nil
+		return im.countSource("endpoint_probes")
 	}},
-	{table: "integration_health", action: drop, why: "connection health lives in the connections table; chat health lives in endpoint_probes", note: "drop-unknown-health mail_chat: the local chat endpoint keeps its probe in endpoint_probes"},
+	{table: "integration_health", action: drop, why: "connection health lives in the connections table", note: "drop-removed mail_chat health reason=Haiku-classification"},
 	{table: "ops_samples", action: drop, why: "ops samples are not carried"},
 	{table: "ops_findings", action: drop, why: "ops findings are not carried"},
 	{table: "nightly_observations", action: drop, why: "nightly observations are not carried"},
@@ -490,6 +489,13 @@ func (im *importer) accountSecrets(consumed []string, pins *sourcePins) ([]strin
 		var name, value string
 		if err := rows.Scan(&name, &value); err != nil {
 			return nil, err
+		}
+		if entry, ok := settings.ImportEntryFor(name); ok && entry.Action == settings.ImportDrop {
+			if _, err := im.tx.ExecContext(im.ctx, "DELETE FROM secrets WHERE name = ?", name); err != nil {
+				return nil, err
+			}
+			lines = append(lines, "secret "+name+": dropped -> "+entry.Target+" (value not kept)")
+			continue
 		}
 		if _, pinned := pins.m[name]; pinned {
 			if _, err := im.tx.ExecContext(im.ctx, "DELETE FROM secrets WHERE name = ?", name); err != nil {
@@ -1127,11 +1133,11 @@ func (im *importer) apply(plan tablePlan) (int64, error) {
 	if plan.action == fresh {
 		return im.countRows(plan.table)
 	}
-	if plan.action == drop {
-		return im.countSource(plan.table)
-	}
 	if plan.run != nil {
 		return plan.run(im)
+	}
+	if plan.action == drop {
+		return im.countSource(plan.table)
 	}
 	return im.copy(plan.table, plan.where, plan.args, plan.null, plan.skip, plan.set, plan.ignore)
 }

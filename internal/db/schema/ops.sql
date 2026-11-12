@@ -11,15 +11,6 @@ CREATE TABLE IF NOT EXISTS pass_run_alerts (
     job TEXT PRIMARY KEY,
     notified_at REAL NOT NULL
 );
-CREATE TABLE IF NOT EXISTS endpoint_probes (
-    kind TEXT PRIMARY KEY CHECK (kind IN ('chat', 'embed')),
-    fingerprint TEXT NOT NULL,
-    ok INTEGER NOT NULL,
-    reason TEXT NOT NULL DEFAULT '',
-    dimension INTEGER,
-    models TEXT NOT NULL DEFAULT '[]',
-    probed_at REAL NOT NULL
-);
 CREATE TABLE IF NOT EXISTS ops_samples (
     id INTEGER PRIMARY KEY,
     ts REAL NOT NULL,

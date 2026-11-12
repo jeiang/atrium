@@ -25,7 +25,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/testutil/embedstub"
 	"github.com/jeiang/atrium/internal/testutil/imapscript"
-	"github.com/jeiang/atrium/internal/testutil/mailscript"
 )
 
 type mrvMail struct {
@@ -164,9 +163,7 @@ func mrvMailFixture(t *testing.T, mode string) *mrvMail {
 	}, nil, quietLog)
 	f.settings, f.state = f.app.Settings, f.app.State
 	m.app = f.app
-	chat := mailscript.NewOpenAI(t, mailscript.Load(t), nil).Serve()
 	embed := embedstub.Server(t)
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", chat.URL+"/v1")
 	seedSettings(t, map[string]string{mail.KeyMode: mode})
 	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, embed.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
 	return m

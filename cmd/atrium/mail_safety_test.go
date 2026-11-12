@@ -38,9 +38,7 @@ func mailSafetyFixture(t *testing.T, mode string) *mailSafety {
 	fake.AddBox("Sent Messages", mailtest.NewBox(5), `\Sent`)
 	f.app = newAppWith(f.lookup, func(config.Config) mail.OpenFunc { return fake.Open }, nil, quietLog)
 	f.settings, f.state = f.app.Settings, f.app.State
-	chat := mailscript.NewOpenAI(t, mailscript.Load(t), nil).Serve()
 	api.AnswerJSON(mailscript.Load(t).JSONAnswer)
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", chat.URL+"/v1")
 	seedSettings(t, map[string]string{mail.KeyMode: mode})
 	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, "http://127.0.0.1:1/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
 	return &mailSafety{dir: dir, app: f.app, api: api, fake: fake, path: filepath.Join(dir, "atrium.db")}

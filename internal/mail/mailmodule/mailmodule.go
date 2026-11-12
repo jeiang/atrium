@@ -53,12 +53,11 @@ func AttentionSources() []attention.Source {
 
 func Requirements() []module.Requirement {
 	return []module.Requirement{
-		module.Setting(endpoint.KeyChatURL),
 		{Name: "service/embedding", Check: func(ctx context.Context, p module.Probe) (string, error) {
 			return endpoint.EmbeddingConfigured(ctx, p.Q)
 		}},
-		{Name: "endpoint probes", Check: func(ctx context.Context, p module.Probe) (string, error) {
-			return mail.ProbeFailures(ctx, p.Q)
+		{Name: "service/embedding test", Check: func(ctx context.Context, p module.Probe) (string, error) {
+			return mail.EmbeddingTestFailure(ctx, p.Q)
 		}},
 	}
 }
@@ -86,7 +85,6 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		mailCmds.ShadowReportCommand(),
 		mailCmds.ReindexCommand(),
 		mailCmds.LiveCommand(),
-		mailCmds.EndpointsCommand(),
 		mailCmds.ReplayCommand(),
 	}
 	cmds = append(cmds, mailCmds.ScanCommands()...)
@@ -94,7 +92,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	cmds = append(cmds, mailCmds.TrackingCommands()...)
 	return module.Declaration{
 		Name:      module.Mail,
-		Settings:  slices.Concat(mail.Settings(), endpoint.SettingsDefs(), tracking.SettingsDefs()),
+		Settings:  slices.Concat(mail.Settings(), tracking.SettingsDefs()),
 		Host:      mail.HostSettings(),
 		Attention: AttentionSources(),
 		Jobs:      []scheduler.Definition{mailcmd.TrackingJob(m.Jobs)},
@@ -115,11 +113,10 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Groups:   SettingGroups(),
 		Commands: cmds,
 		Leaves: map[string]module.Leaf{
-			"live pause":      {Always: true},
-			"live resume":     {Always: true},
-			"live status":     {Always: true},
-			"endpoints probe": {Always: true},
-			"replay":          {Always: true},
+			"live pause":  {Always: true},
+			"live resume": {Always: true},
+			"live status": {Always: true},
+			"replay":      {Always: true},
 		},
 		Tools:        ToolDefinitions(),
 		ProposeKinds: mailtools.Proposals(),

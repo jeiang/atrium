@@ -39,24 +39,15 @@ type routedMail struct {
 type routingRig struct {
 	*mailSafety
 	targets []routedMail
-	local   *chatFeatures
 }
 
 func newRoutingRig(t *testing.T, mode string, answer func(required []string, user string) (json.RawMessage, error), subjects ...string) *routingRig {
 	t.Helper()
 	m := mailSafetyFixture(t, mode)
-	local := &chatFeatures{}
-	server := mailscript.NewOpenAI(t, mailscript.Load(t), func(feature string, _ []byte) bool {
-		local.mu.Lock()
-		defer local.mu.Unlock()
-		local.seen = append(local.seen, feature)
-		return true
-	}).Serve()
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", server.URL+"/v1")
 	if answer != nil {
 		m.api.AnswerJSON(answer)
 	}
-	r := &routingRig{mailSafety: m, local: local}
+	r := &routingRig{mailSafety: m}
 	for i, subject := range subjects {
 		r.targets = append(r.targets, routedMail{subject: subject,
 			uid: m.add("INBOX", subject, fmt.Sprintf("orders%d@shop%d.test", i, i), fmt.Sprintf("target%d", i), "Thanks for your order.")})
@@ -97,13 +88,6 @@ func (r *routingRig) folderRequests(t *testing.T) []map[string]any {
 func (r *routingRig) decisions(t *testing.T, id int64) int {
 	t.Helper()
 	return r.count(t, "SELECT COUNT(*) FROM decisions WHERE message_id = ?", id)
-}
-
-func (r *routingRig) noLocalFolderJudgment(t *testing.T) {
-	t.Helper()
-	if features := r.local.features(); slices.Contains(features, "folder") {
-		t.Fatalf("the local chat server answered a folder judgment: %v", features)
-	}
 }
 
 func folderAnswers(t *testing.T, folders map[string]string) func([]string, string) (json.RawMessage, error) {
@@ -171,7 +155,6 @@ func TestMailPassRoutesThroughTheClassifier(t *testing.T) {
 	if n := r.count(t, "SELECT COUNT(*) FROM usage WHERE source = 'classifier:mail_folder' AND state = 'settled'"); n != 1 {
 		t.Errorf("settled folder classification usage rows = %d, want 1", n)
 	}
-	r.noLocalFolderJudgment(t)
 
 	r.run(t, "sync")
 	if n := len(r.folderRequests(t)); n != 1 {
@@ -199,7 +182,6 @@ func TestMailPassRefusesAFolderOutsideTheCatalog(t *testing.T) {
 	if n := r.count(t, "SELECT COUNT(*) FROM effects WHERE origin = 'mail_auto'"); n != 0 {
 		t.Fatalf("the refused folder recorded %d automatic actions", n)
 	}
-	r.noLocalFolderJudgment(t)
 }
 
 func TestMailPassUncertainFolderKeepsTheFallback(t *testing.T) {
@@ -269,7 +251,6 @@ func TestMailPassFolderBudgetRefusalDefersUntilRaised(t *testing.T) {
 	if got := r.verbs(); len(got) != 0 {
 		t.Fatalf("shadow routing wrote to IMAP: %v", got)
 	}
-	r.noLocalFolderJudgment(t)
 }
 
 func TestMailClassifiedRouteKeepsTheLiveGate(t *testing.T) {

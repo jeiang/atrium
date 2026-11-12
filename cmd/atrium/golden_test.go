@@ -161,7 +161,6 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	copyTree(t, filepath.Join(golden.Dir(), "state", "cache"), filepath.Join(dir, "cache"))
 	copyTree(t, filepath.Join(golden.Dir(), "state", "contacts"), filepath.Join(dir, "contacts"))
 	script := mailscript.Load(t)
-	chat := mailscript.NewOpenAI(t, script, nil).Serve()
 	embed := embedstub.Server(t)
 	api := anthropictest.New(t)
 	api.AnswerJSON(script.JSONAnswer)
@@ -174,7 +173,6 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_CONTACTS_DIR"] = filepath.Join(dir, "contacts")
 	vars["ATRIUM_MEDIA_ROOT"] = filepath.Join(dir, "media")
-	vars["ATRIUM_MAIL_MAIL_CHAT_URL"] = chat.URL + "/v1"
 	vars[anthropic.BaseURLEnv] = api.URL
 	vars[calendar.CalDAVEnv] = caldavURL
 	for k, v := range extraEnv {
