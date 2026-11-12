@@ -68,6 +68,7 @@ type Server struct {
 	jsonScript []Response
 	requests   []Request
 	served     int
+	jsonAnswer func(required []string, user string) (json.RawMessage, error)
 }
 
 func New(t testing.TB, script ...Response) *Server {
@@ -110,6 +111,12 @@ func (s *Server) JSONRemaining() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return len(s.jsonScript)
+}
+
+func (s *Server) AnswerJSON(answer func(required []string, user string) (json.RawMessage, error)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.jsonAnswer = answer
 }
 
 func (s *Server) RequestHook() func(Request) {
@@ -222,14 +229,26 @@ func (s *Server) messages(w http.ResponseWriter, r *http.Request, req Request) {
 		queue, name = &s.jsonScript, "scripted fixed JSON"
 	}
 	s.mu.Lock()
-	if len(*queue) == 0 {
+	var resp Response
+	switch {
+	case len(*queue) > 0:
+		resp = (*queue)[0]
+		*queue = (*queue)[1:]
+	case queue == &s.jsonScript && s.jsonAnswer != nil:
+		raw, err := answerFixedJSON(s.jsonAnswer, req.Body)
+		if err != nil {
+			s.mu.Unlock()
+			s.t.Errorf("anthropictest: %v", err)
+			fail(w, http.StatusBadRequest, ErrorBody("invalid_request_error", err.Error()))
+			return
+		}
+		resp = Reply("end_turn", Text(string(raw)))
+	default:
 		s.mu.Unlock()
 		s.t.Errorf("anthropictest: no %s response left", name)
 		fail(w, http.StatusInternalServerError, ErrorBody("api_error", "no "+name+" response left"))
 		return
 	}
-	resp := (*queue)[0]
-	*queue = (*queue)[1:]
 	s.served++
 	id := resp.ID
 	if id == "" {
@@ -442,4 +461,34 @@ func fixedJSONRequest(body []byte) error {
 		return fmt.Errorf("schema is not in wire form")
 	}
 	return nil
+}
+
+func answerFixedJSON(answer func(required []string, user string) (json.RawMessage, error), body []byte) (json.RawMessage, error) {
+	var req struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"messages"`
+		OutputConfig struct {
+			Format struct {
+				Schema struct {
+					Required []string `json:"required"`
+				} `json:"schema"`
+			} `json:"format"`
+		} `json:"output_config"`
+	}
+	if err := json.Unmarshal(body, &req); err != nil {
+		return nil, err
+	}
+	if len(req.Messages) != 1 || req.Messages[0].Role != "user" {
+		return nil, fmt.Errorf("fixed JSON request is not one plain user message")
+	}
+	raw, err := answer(req.OutputConfig.Format.Schema.Required, req.Messages[0].Content)
+	if err != nil {
+		return nil, err
+	}
+	if !json.Valid(raw) {
+		return nil, fmt.Errorf("answer for %v is not JSON", req.OutputConfig.Format.Schema.Required)
+	}
+	return raw, nil
 }
