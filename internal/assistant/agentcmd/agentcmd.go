@@ -35,7 +35,7 @@ func threadKind(run string) threads.Kind {
 }
 
 func Command(env config.Env, tools registry.Source, enabled func(module string) bool, now func() float64, holder *jobworker.Holder) *cli.Command {
-	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(env, tools, enabled, holder), runCommand(env, tools, now), subagentsCommand(env, tools, now)}}
+	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(env, tools, enabled, holder), tickCommand(env, tools, enabled, holder), runCommand(env, tools, now), subagentsCommand(env, tools, now)}}
 }
 
 func clock(now func() float64) func() float64 {

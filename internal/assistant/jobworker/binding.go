@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/attention"
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/scheduler"
 )
@@ -52,8 +53,12 @@ func (d Dependencies) Callable(fn func(context.Context, Env) (Result, error)) fu
 		if now == nil {
 			now = d.Now
 		}
-		result, err := fn(ctx, Env{Service: svc, Now: now, JobID: run.Claim.Job.ID, JobRunID: run.Claim.JobRunID})
+		result, err := fn(ctx, Env{Service: svc, Now: now, JobID: run.Claim.Job.ID, JobRunID: run.Claim.JobRunID, Claim: run.Claim})
 		if err != nil {
+			var missing config.NotConfigured
+			if errors.As(err, &missing) {
+				return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new(missing.Error())}, nil
+			}
 			if budgetErr := new(inference.BudgetExceeded); errors.As(err, budgetErr) {
 				return scheduler.Result{Status: scheduler.StatusSkippedBudget, Error: new(budgetErr.Error())}, nil
 			}

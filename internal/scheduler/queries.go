@@ -28,8 +28,8 @@ type Restore struct {
 var ErrClaimLost = errors.New("scheduler: the job claim was lost")
 
 func AttachThread(ctx context.Context, q db.Querier, c Claim, threadID int64) error {
-	ok, err := db.Changed(q.ExecContext(ctx, "UPDATE job_runs SET thread_id = COALESCE(thread_id, ?) WHERE id = ? AND job_id = ? AND status = ?",
-		threadID, c.JobRunID, c.Job.ID, StatusRunning))
+	ok, err := db.Changed(q.ExecContext(ctx, "UPDATE job_runs SET thread_id = COALESCE(thread_id, ?) WHERE id = ? AND job_id = ? AND status = ? AND owner = ?",
+		threadID, c.JobRunID, c.Job.ID, StatusRunning, c.Owner))
 	if err != nil {
 		return err
 	}

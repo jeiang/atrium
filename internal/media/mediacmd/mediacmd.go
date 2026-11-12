@@ -92,7 +92,10 @@ func mediaJob(deps jobworker.Dependencies, name, prompt, schedule, setting strin
 		Schedule: schedule, ScheduleSetting: setting, Timeout: timeout, Spend: scheduler.ModelFree,
 		Resources: []string{resource}, Needs: []string{module.Media},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
-			_, err := run(e)(ctx, e.Service.DB, e.Service.Env, e.Now)
+			out, err := run(e)(ctx, e.Service.DB, e.Service.Env, e.Now)
+			if skipped, ok := out.(map[string]any); ok && skipped["skipped"] != nil {
+				return jobworker.Result{}, config.NotConfigured(fmt.Sprint(skipped["skipped"]))
+			}
 			return jobworker.Result{}, err
 		}),
 	}

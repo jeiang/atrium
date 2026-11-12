@@ -43,10 +43,12 @@ type Scheduler struct {
 	deps     Dependencies
 	interval time.Duration
 
-	wg     sync.WaitGroup
-	active atomic.Int64
-	dirty  atomic.Bool
-	claims atomic.Int64
+	wg      sync.WaitGroup
+	active  atomic.Int64
+	dirty   atomic.Bool
+	claims  atomic.Int64
+	busy    atomic.Int64
+	started atomic.Int64
 }
 
 func New(d *db.DB, jobs []Definition, deps Dependencies) *Scheduler {
@@ -101,12 +103,16 @@ func (s *Scheduler) Tick(ctx context.Context) error {
 		resources := claimResources(s.jobs, job)
 		locks, err := db.TryResourceLocks(s.deps.DBPath, resources)
 		if errors.As(err, new(*db.LockBusy)) {
+			s.busy.Add(1)
 			continue
 		}
 		if err != nil {
 			return err
 		}
 		claim, skip, err := claimJob(ctx, s.db, job.ID, resources, stamp, s.owner(), admit)
+		if claim == nil && skip == nil && err == nil {
+			s.busy.Add(1)
+		}
 		if err != nil || claim == nil {
 			_ = locks.Close()
 		}
@@ -114,6 +120,7 @@ func (s *Scheduler) Tick(ctx context.Context) error {
 			return err
 		}
 		if skip != nil {
+			s.started.Add(1)
 			s.dirty.Store(true)
 			if err := s.deps.Notice(ctx, *skip, stamp); err != nil {
 				log.Error("skip notice failed", logx.Job, skip.Job.ID, logx.Err, err)
@@ -136,6 +143,7 @@ func (s *Scheduler) recoverRuns(ctx context.Context) error {
 		resources := claimResources(s.jobs, p.job)
 		locks, err := db.TryResourceLocks(s.deps.DBPath, resources)
 		if errors.As(err, new(*db.LockBusy)) {
+			s.busy.Add(1)
 			continue
 		}
 		if err != nil {
@@ -169,6 +177,7 @@ func (s *Scheduler) recovery(ctx context.Context, run Run) (Result, error) {
 
 func (s *Scheduler) start(ctx context.Context, claim Claim, locks *db.LockSet, fn func(context.Context, Run) (Result, error)) {
 	s.dirty.Store(true)
+	s.started.Add(1)
 	s.active.Add(1)
 	s.wg.Go(func() {
 		defer s.finished(ctx)
@@ -202,6 +211,12 @@ func (s *Scheduler) work(job Job) func(context.Context, Run) (Result, error) {
 }
 
 func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Context, Run) (Result, error)) {
+	timeout := 2 * time.Hour
+	if def, ok := Declared(s.jobs, claim.Job); ok {
+		timeout = def.Timeout
+	}
+	ctx, stopWork := context.WithTimeout(ctx, timeout)
+	defer stopWork()
 	work, cancel := context.WithCancelCause(ctx)
 	defer cancel(nil)
 	var lost atomic.Bool
@@ -279,6 +294,11 @@ func (s *Scheduler) renew(ctx context.Context, claim Claim, stop <-chan struct{}
 		case <-ticker.C:
 		}
 		attempt, cancel := context.WithTimeout(ctx, interval)
+		if s.now() >= expires {
+			cancel()
+			lose()
+			return
+		}
 		until, err := s.Renew(attempt, claim)
 		cancel()
 		switch {
@@ -296,6 +316,26 @@ func (s *Scheduler) renew(ctx context.Context, claim Claim, stop <-chan struct{}
 			log.Warn(fmt.Sprintf("job %d: renewing its claim failed; retrying", id), logx.Job, id, logx.Err, err)
 		}
 	}
+}
+
+var ErrAllBusy = errors.New("scheduler: every due job is busy")
+
+func (s *Scheduler) Once(ctx context.Context) error {
+	var running int64
+	if err := s.db.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE r.status = ? AND j.lease_until >= ?", StatusRunning, s.now()).Scan(&running); err != nil {
+		return err
+	}
+	before := s.started.Load()
+	err := s.Cycle(ctx)
+	s.wg.Wait()
+	s.checkpoint(context.WithoutCancel(ctx))
+	if err != nil {
+		return err
+	}
+	if s.started.Load() == before && (running > 0 || s.busy.Load() > 0) {
+		return ErrAllBusy
+	}
+	return ctx.Err()
 }
 
 func (s *Scheduler) Cycle(ctx context.Context) error {

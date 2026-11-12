@@ -441,7 +441,11 @@ behavior-parity target.
   `declaration_key` (`<module>/<name>`), never by name, and a cron job has
   none. Re-enabling a job sets `activated_at`. A run records the threads it
   opened in `job_run_threads`; attaching a thread requires the run to be
-  running (`ErrClaimLost` otherwise). A claim first takes a
+  running and owned by the claimant (`ErrClaimLost` otherwise). `agent tick`
+  runs one bounded pass, waits for its started work and settlement, and exits
+  1 when every eligible occurrence is busy (0 for an idle pass). It has no
+  ticker or service notification; declared invocation deadlines still apply.
+  Missing configuration records `skipped_unconfigured`, not success. A claim first takes a
   non-blocking lock on `job/<id>` and the job's declared resources; the lock
   files live in `<canonical database path>.locks/`, named by the SHA-256 of
   the resource key and never unlinked, separate from the migration lock.

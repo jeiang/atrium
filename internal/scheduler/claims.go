@@ -208,8 +208,8 @@ func (s *Scheduler) Renew(ctx context.Context, c Claim) (float64, error) {
 	now := s.now()
 	until := leaseUntil(now)
 	err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
-		ok, err := db.Changed(tx.ExecContext(ctx, "UPDATE jobs SET lease_until = ? WHERE id = ? AND lease_owner = ? AND last_run_id = ?",
-			until, c.Job.ID, c.Owner, c.JobRunID))
+		ok, err := db.Changed(tx.ExecContext(ctx, "UPDATE jobs SET lease_until = ? WHERE id = ? AND lease_owner = ? AND last_run_id = ? AND lease_until >= ?",
+			until, c.Job.ID, c.Owner, c.JobRunID, now))
 		if err != nil {
 			return err
 		}

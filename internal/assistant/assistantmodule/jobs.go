@@ -43,7 +43,7 @@ func Jobs(deps jobworker.Dependencies) []scheduler.Definition {
 	nightly := assistantJob(assistant.NightlyName, scheduler.JobNightly, "Nightly: gather the last day and write knowledge records (one model run).",
 		"daily 02:30", assistant.KeyNightlySchedule, 45*time.Minute, scheduler.AlwaysSpends)
 	nightly.Run = deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
-		runs, err := dreaming.Run(ctx, e.Service, e.Now, e.JobID, e.JobRunID)
+		runs, err := dreaming.Run(ctx, e.Service, e.Now, e.Claim)
 		return jobworker.Result{Runs: runs}, err
 	})
 	weekly := assistantJob(assistant.WeeklyReviewName, scheduler.JobBuiltin, weeklyReviewPrompt,

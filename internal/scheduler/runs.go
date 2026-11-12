@@ -7,14 +7,15 @@ var log = logx.Logger("atrium.agent.scheduler")
 type Status string
 
 const (
-	StatusRunning       Status = "running"
-	StatusOK            Status = "ok"
-	StatusError         Status = "error"
-	StatusSkippedBudget Status = "skipped_budget"
-	StatusSkippedPause  Status = "skipped_pause"
-	StatusSkippedModule Status = "skipped_module"
-	StatusMissed        Status = "missed_coalesced"
-	workerLost                 = "worker lost"
+	StatusRunning             Status = "running"
+	StatusOK                  Status = "ok"
+	StatusError               Status = "error"
+	StatusSkippedBudget       Status = "skipped_budget"
+	StatusSkippedPause        Status = "skipped_pause"
+	StatusSkippedModule       Status = "skipped_module"
+	StatusSkippedUnconfigured Status = "skipped_unconfigured"
+	StatusMissed              Status = "missed_coalesced"
+	workerLost                       = "worker lost"
 )
 
 func (s Status) Terminal() bool { return s != StatusRunning }

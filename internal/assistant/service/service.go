@@ -300,7 +300,7 @@ func (s *Service) Execute(ctx context.Context, runID int64) (*journal.Run, error
 		if err := journal.FinishRun(ctx, s.DB.Write, runID, journal.Failed, s.now(), new(nc.Error())); err != nil {
 			return nil, err
 		}
-		return journal.GetRun(ctx, s.DB.Read, runID)
+		return nil, nc
 	}
 	if err != nil {
 		return nil, err

@@ -61,7 +61,8 @@ type signal struct {
 	marks  tool.Marks
 }
 
-func Run(ctx context.Context, svc *service.Service, now func() float64, jobID, jobRunID int64) ([]int64, error) {
+func Run(ctx context.Context, svc *service.Service, now func() float64, claim scheduler.Claim) ([]int64, error) {
+	jobID := claim.Job.ID
 	stamp := now()
 	loc, err := config.From(ctx).Location(svc.Env)
 	if err != nil {
@@ -117,7 +118,7 @@ func Run(ctx context.Context, svc *service.Service, now func() float64, jobID, j
 			return runIDs, err
 		}
 		if first {
-			if err := scheduler.AttachThread(ctx, svc.DB.Write, scheduler.Claim{Job: scheduler.Job{ID: jobID}, JobRunID: jobRunID}, id); err != nil {
+			if err := scheduler.AttachThread(ctx, svc.DB.Write, claim, id); err != nil {
 				return runIDs, err
 			}
 			first = false

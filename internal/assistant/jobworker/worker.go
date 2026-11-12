@@ -22,6 +22,7 @@ type Env struct {
 	Now      func() float64
 	JobID    int64
 	JobRunID int64
+	Claim    scheduler.Claim
 }
 
 type Result struct {
@@ -163,6 +164,10 @@ func prompt(ctx context.Context, svc *service.Service, run scheduler.Run, text s
 }
 
 func refused(threadID *int64, err error) (scheduler.Result, error) {
+	var missing config.NotConfigured
+	if errors.As(err, &missing) {
+		return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, ThreadID: threadID, Error: new(missing.Error())}, nil
+	}
 	if budgetErr := new(inference.BudgetExceeded); errors.As(err, budgetErr) {
 		return scheduler.Result{Status: scheduler.StatusSkippedBudget, ThreadID: threadID, Error: new(budgetErr.Error())}, nil
 	}
