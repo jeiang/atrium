@@ -20,15 +20,17 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
-	"github.com/jeiang/atrium/internal/testutil/llmstub"
+	"github.com/jeiang/atrium/internal/testutil/embedstub"
+	"github.com/jeiang/atrium/internal/testutil/mailscript"
 )
 
 func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T) {
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
-	srv := llmstub.Server(t, nil)
-	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, srv.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"home", "icloud", "me@icloud.test", "home-pass", false}))
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
+	chat := mailscript.NewOpenAI(t, mailscript.Load(t), nil).Serve()
+	embed := embedstub.Server(t)
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, embed.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"home", "icloud", "me@icloud.test", "home-pass", false}))
+	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", chat.URL+"/v1")
 	seedSettings(t, map[string]string{mail.KeyMode: "shadow"})
 
 	work := mailtest.NewFakeClient()

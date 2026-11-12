@@ -16,7 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
-	"github.com/jeiang/atrium/internal/testutil/llmstub"
+	"github.com/jeiang/atrium/internal/testutil/mailscript"
 )
 
 func mailEffectsFixture(t *testing.T, mode, preset string, fake *mailtest.FakeClient) *mailSafety {
@@ -24,8 +24,8 @@ func mailEffectsFixture(t *testing.T, mode, preset string, fake *mailtest.FakeCl
 	dir, _, f := moduleFixture(t, flagsExcept("", ""))
 	f.app = newAppWith(f.lookup, func(config.Config) mail.OpenFunc { return fake.Open }, nil, quietLog)
 	f.settings, f.state = f.app.Settings, f.app.State
-	srv := llmstub.Server(t, nil)
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
+	chat := mailscript.NewOpenAI(t, mailscript.Load(t), nil).Serve()
+	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", chat.URL+"/v1")
 	seedSettings(t, map[string]string{mail.KeyMode: mode})
 	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, "http://127.0.0.1:1/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"work", preset, "atrium.test@example.test", "app-pass", false}))
 	return &mailSafety{dir: dir, app: f.app, fake: fake, path: filepath.Join(dir, "atrium.db")}

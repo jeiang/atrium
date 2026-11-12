@@ -12,7 +12,8 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
-	"github.com/jeiang/atrium/internal/testutil/llmstub"
+	"github.com/jeiang/atrium/internal/testutil/embedstub"
+	"github.com/jeiang/atrium/internal/testutil/mailscript"
 )
 
 const loopDay = 86400.0
@@ -56,16 +57,16 @@ func TestLoopsRefreshSkipsBulkAndOtherRecipients(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	var mu sync.Mutex
 	var bodies []string
-	srv := llmstub.Server(t, func(feature string, body []byte) bool {
+	chat := mailscript.NewOpenAI(t, mailscript.Load(t), func(feature string, body []byte) bool {
 		if feature == "commitments" {
 			mu.Lock()
 			bodies = append(bodies, string(body))
 			mu.Unlock()
 		}
 		return true
-	})
-	setEnv(t, settingEnv(endpoint.KeyChatURL), srv.URL+"/v1")
-	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, srv.URL+"/v1", "embeddinggemma", ""))
+	}).Serve()
+	setEnv(t, settingEnv(endpoint.KeyChatURL), chat.URL+"/v1")
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, embedstub.Server(t).URL+"/v1", "embeddinggemma", ""))
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
 		t.Fatalf("initialize database: %d %s", ran.code, ran.stderr)
 	}

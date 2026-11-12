@@ -15,7 +15,8 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/testutil/llmstub"
+	"github.com/jeiang/atrium/internal/testutil/embedstub"
+	"github.com/jeiang/atrium/internal/testutil/mailscript"
 )
 
 type mailAccount struct {
@@ -58,10 +59,11 @@ func accountsFileEmbedding(t *testing.T, dir, embedURL, anthropicKey string, acc
 func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
-	srv := llmstub.Server(t, nil)
+	chat := mailscript.NewOpenAI(t, mailscript.Load(t), nil).Serve()
+	embed := embedstub.Server(t)
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
-	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
+	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", chat.URL+"/v1")
 	seedSettings(t, map[string]string{mail.KeyMode: "shadow", module.FlagKey(module.Mail): "true"})
 
 	home := mailtest.NewFakeClient()
@@ -95,7 +97,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 		return appRun{code, out.String(), errs.String()}
 	}
 	key := "ATRIUM_HOST_CONFIG"
-	path := accountsFileEmbedding(t, dir, srv.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"),
+	path := accountsFileEmbedding(t, dir, embed.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"),
 		mailAccount{"home", "icloud", "me@icloud.test", "home pass", false},
 		mailAccount{"work", "gmail", "me@work.test", "work-pass", false},
 		mailAccount{"off", "gmail", "off@gmail.test", "off-pass", true})
@@ -138,7 +140,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 		}
 	}
 
-	setEnv(t, key, accountsFileEmbedding(t, t.TempDir(), srv.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"home", "icloud", "me@icloud.test", "home pass", false}))
+	setEnv(t, key, accountsFileEmbedding(t, t.TempDir(), embed.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"home", "icloud", "me@icloud.test", "home pass", false}))
 	opened = map[string]int{}
 	if got := run("sync"); got.code != 0 || opened["work"] != 0 {
 		t.Fatalf("sync after removing work: %+v, opened %v", got, opened)
