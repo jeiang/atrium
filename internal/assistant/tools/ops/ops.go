@@ -271,7 +271,7 @@ func status(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
 	}
 	set := assistant.Read(ctx, tc.DB.Read)
 	hosts := []any{}
-	for _, host := range serverops.SplitHosts(set.Text(serverops.KeyHosts)) {
+	for _, host := range serverops.HostValues(ctx).Hosts {
 		item := map[string]any{"host": host}
 		for _, key := range []string{"up", "cpu_pct", "mem_pct", "disk_root_pct", "failed_units", "alerts_firing"} {
 			if value, ok := latest[host][key]; ok {

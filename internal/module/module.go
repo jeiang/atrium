@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
@@ -81,9 +82,42 @@ type Probe struct {
 type Check func(ctx context.Context, p Probe) (reason string, err error)
 
 type Requirement struct {
-	Name  string
-	Key   string
-	Check Check
+	Name       string
+	Key        string
+	Host       bool
+	Connection bool
+	Check      Check
+}
+
+func HostSetting(key string) Requirement {
+	return Requirement{Name: key, Key: key, Host: true, Check: func(ctx context.Context, p Probe) (string, error) {
+		value := config.From(ctx).HostValue(key)
+		if strings.TrimSpace(value) == "" {
+			return key + " is not set", nil
+		}
+		if err := settings.ValidateHost(key, value); err != nil {
+			return key + " " + err.Error(), nil
+		}
+		return "", nil
+	}}
+}
+
+func Connection(id string) Requirement {
+	return Requirement{Name: id, Key: id, Connection: true, Check: func(ctx context.Context, p Probe) (string, error) {
+		lease, err := connections.OpenRead(ctx, p.Q, config.From(ctx).Host(), connections.ID(id))
+		if err != nil {
+			var unknown connections.UnknownID
+			if errors.As(err, &unknown) {
+				return "the " + id + " connection is not configured", nil
+			}
+			return "", err
+		}
+		defer lease.Close()
+		if _, err := lease.Endpoint("url"); err != nil {
+			return err.Error(), nil
+		}
+		return "", nil
+	}}
 }
 
 func Setting(key string) Requirement {

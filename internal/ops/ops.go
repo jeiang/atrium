@@ -34,9 +34,9 @@ const (
 var log = logx.Logger("atrium.ops")
 
 func init() {
-	settings.MustRegister(
-		settings.Deploy(settings.Def{Key: ListenKey, Module: "core", Type: settings.String, Default: DefaultListen, Check: checkListen}),
-		settings.Deploy(settings.Def{Key: PprofKey, Module: "core", Type: settings.Bool, Default: "false"}),
+	settings.MustRegisterHost(
+		settings.HostDef{Key: ListenKey, Module: "core", Type: settings.String, Default: DefaultListen, Check: checkListen},
+		settings.HostDef{Key: PprofKey, Module: "core", Type: settings.Bool, Default: "false"},
 	)
 }
 
@@ -251,22 +251,19 @@ func init() {
 }
 
 func Start(ctx context.Context, d *db.DB, env config.Env) (stop func(), err error) {
-	addr, err := settings.From(ctx).Resolve(ctx, d.Read, ListenKey)
-	if err != nil {
-		return nil, err
+	addr := config.From(ctx).HostValue(ListenKey)
+	if addr == "" {
+		addr = DefaultListen
 	}
-	if addr.Value == Off {
+	if addr == Off {
 		return func() {}, nil
 	}
-	withPprof, err := settings.From(ctx).Resolve(ctx, d.Read, PprofKey)
-	if err != nil {
-		return nil, err
-	}
-	l, err := net.Listen("tcp", addr.Value)
+	withPprof := config.From(ctx).HostValue(PprofKey) == "true"
+	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return nil, fmt.Errorf("ops listener: %w", err)
 	}
-	srv := &http.Server{Handler: Handler(ctx, d, withPprof.Value == "true", env), ReadHeaderTimeout: 10 * time.Second}
+	srv := &http.Server{Handler: Handler(ctx, d, withPprof, env), ReadHeaderTimeout: 10 * time.Second}
 	go func() {
 		if err := srv.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			log.Error("ops listener stopped", logx.Err, err.Error())

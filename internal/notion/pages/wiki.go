@@ -24,8 +24,7 @@ type wikiData struct {
 func (s *service) wiki(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	query := web.QueryValue(r.URL.Query(), "q")
-	limit, err := config.From(ctx).Limit(ctx, s.deps.DB.Read, config.KeyPageSize)
-	check(err)
+	limit := config.TuningWebPageSize
 	found, err := notion.ListPages(ctx, s.deps.DB.Read, query, limit)
 	check(err)
 	rows := make([]wikiRow, len(found))

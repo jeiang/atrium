@@ -130,8 +130,7 @@ func (p *pages) listing(w http.ResponseWriter, r *http.Request, q, view string) 
 		match, err = textsearch.FTSQuery(q)
 		check(err)
 	}
-	limit, err := config.From(r.Context()).Limit(r.Context(), p.deps.DB.Read, config.KeyChatThreadLimit)
-	check(err)
+	limit := config.TuningChatThreadLimit
 	found, err := threads.ListThreads(r.Context(), p.deps.DB.Read, threads.ListOpts{Match: match, Limit: limit, Archived: view == archived})
 	check(err)
 	check(fillThreadCosts(r.Context(), p.deps.DB.Read, found))

@@ -30,14 +30,14 @@
 {{end}}
 
 {{define "export_obsidian_settings"}}{{$csrf := .CSRF}}{{$s := .Section}}{{$d := $s.Data}}
-{{$dir := ""}}{{$dirPinned := false}}{{$private := ""}}{{$privatePinned := false}}{{$kinds := list}}
-{{range $f := .Fields}}{{if eq $f.Key "export_obsidian_dir"}}{{$dir = $f.Value}}{{$dirPinned = $f.Pinned}}{{end}}{{if eq $f.Key "export_obsidian_kinds"}}{{$kinds = $f.Options}}{{end}}{{if eq $f.Key "export_obsidian_private_to"}}{{$private = $f.Value}}{{$privatePinned = $f.Pinned}}{{end}}{{end}}
+{{$dir := ""}}{{$private := ""}}{{$privatePinned := false}}{{$kinds := list}}
+{{with $d}}{{$dir = .Folder}}{{end}}
+{{range $f := .Fields}}{{if eq $f.Key "export_obsidian_kinds"}}{{$kinds = $f.Options}}{{end}}{{if eq $f.Key "export_obsidian_private_to"}}{{$private = $f.Value}}{{$privatePinned = $f.Pinned}}{{end}}{{end}}
 <form method="post" action="{{.Action}}" class="set-rows" autocomplete="off">
   <input type="hidden" name="csrf_token" value="{{$csrf}}">{{with opt . "Back" ""}}<input type="hidden" name="back" value="{{.}}">{{end}}
   <div role="group" class="set-row">
     <label for="export_obsidian_dir">Folder</label>
-    {{if $dirPinned}}<code id="export_obsidian_dir" class="set-pinned" data-pinned>{{icon "lock"}}{{$dir}}</code>
-    {{else}}<input id="export_obsidian_dir" name="export_obsidian_dir" type="text" class="input sm:w-80" value="{{$dir}}" autocomplete="off" spellcheck="false">{{end}}
+    <code id="export_obsidian_dir" class="set-pinned" data-pinned>{{icon "lock"}}{{$dir}}</code>
   </div>
   <div role="group" class="set-row" aria-label="Include">
     <span>Include</span>

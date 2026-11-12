@@ -1,11 +1,13 @@
 package serverops
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"regexp"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -53,6 +55,27 @@ var (
 	selectorRe = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*\s*(?:=|!=|=~|!~)\s*"(?:[^"\\{}\n\r]|\\.)*"` +
 		`(?:\s*,\s*[A-Za-z_][A-Za-z0-9_]*\s*(?:=|!=|=~|!~)\s*"(?:[^"\\{}\n\r]|\\.)*")*$`)
 )
+
+type HostSettings struct {
+	Hosts    []string
+	Selector string
+	Queries  map[string]string
+}
+
+func HostValues(ctx context.Context) HostSettings {
+	value := config.From(ctx).HostValue
+	return HostSettings{
+		Hosts:    SplitHosts(value(KeyHosts)),
+		Selector: value(KeyLabelSelector),
+		Queries: map[string]string{
+			MetricUp:          value(KeyQueryUp),
+			MetricCPU:         value(KeyQueryCPU),
+			MetricMemory:      value(KeyQueryMemory),
+			MetricDisk:        value(KeyQueryDisk),
+			MetricFailedUnits: value(KeyQueryFailedUnit),
+		},
+	}
+}
 
 func checkHosts(value string) error {
 	for _, host := range SplitHosts(value) {
@@ -147,28 +170,16 @@ func balanced(expr string) bool {
 }
 
 func init() {
+	settings.MustRegisterHost(
+		settings.HostDef{Key: KeyHosts, Module: "grafana", Type: settings.String, Check: checkHosts},
+		settings.HostDef{Key: KeyLabelSelector, Module: "grafana", Type: settings.String, Default: defaultLabelSelector, Check: checkSelector},
+		settings.HostDef{Key: KeyQueryUp, Module: "grafana", Type: settings.String, Default: defaultQueryUp, Check: checkQuery},
+		settings.HostDef{Key: KeyQueryCPU, Module: "grafana", Type: settings.String, Default: defaultQueryCPU, Check: checkQuery},
+		settings.HostDef{Key: KeyQueryMemory, Module: "grafana", Type: settings.String, Default: defaultQueryMemory, Check: checkQuery},
+		settings.HostDef{Key: KeyQueryDisk, Module: "grafana", Type: settings.String, Default: defaultQueryDisk, Check: checkQuery},
+		settings.HostDef{Key: KeyQueryFailedUnit, Module: "grafana", Type: settings.String, Default: defaultQueryFailedUnit, Check: checkQuery},
+	)
 	settings.MustRegister(
-		settings.Value(settings.UI, settings.Def{
-			Key: KeyHosts, Module: "grafana", Type: settings.String, Check: checkHosts,
-		}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyLabelSelector, Module: "grafana", Type: settings.String, Default: defaultLabelSelector, Check: checkSelector,
-		}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyQueryUp, Module: "grafana", Type: settings.String, Default: defaultQueryUp, Check: checkQuery,
-		}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyQueryCPU, Module: "grafana", Type: settings.String, Default: defaultQueryCPU, Check: checkQuery,
-		}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyQueryMemory, Module: "grafana", Type: settings.String, Default: defaultQueryMemory, Check: checkQuery,
-		}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyQueryDisk, Module: "grafana", Type: settings.String, Default: defaultQueryDisk, Check: checkQuery,
-		}),
-		settings.Value(settings.Advanced, settings.Def{
-			Key: KeyQueryFailedUnit, Module: "grafana", Type: settings.String, Default: defaultQueryFailedUnit, Check: checkQuery,
-		}),
 		settings.Value(settings.UI, settings.Def{
 			Key: KeyWorkerMonthlyUSD, Label: "Server-ops monthly cap (USD)", Module: "assistant", Type: settings.Float, Default: "5",
 			Check: settings.Between(0, 10000),

@@ -50,7 +50,7 @@ func (r *Registry) Resolve(ctx context.Context, q db.Querier, key string) (Resol
 		}
 	}
 	out := Resolved{Key: key, Value: d.Default, Origin: FromDefault}
-	if d.IsSecret() || q == nil {
+	if d.IsSecret() || q == nil || !DBBacked(key) {
 		return out, nil
 	}
 	value, ok, err := instanceValue(ctx, q, key)
@@ -87,7 +87,7 @@ func (r *Registry) writable(key string) (Def, error) {
 		return Def{}, err
 	}
 	if HostOwnedKey(key) {
-		return Def{}, HostOwned(key)
+		return Def{}, hostOwned(key)
 	}
 	if pins != nil {
 		if _, source, ok := pins.Pin(key); ok {
@@ -184,6 +184,9 @@ func (r *Registry) Seed(ctx context.Context, q db.Querier, key, value string) (b
 	d, _, err := r.lookup(key)
 	if err != nil {
 		return false, err
+	}
+	if HostOwnedKey(key) {
+		return false, hostOwned(key)
 	}
 	if !d.Editable() {
 		return false, &NotEditable{Key: key}

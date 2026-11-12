@@ -182,7 +182,9 @@ behavior-parity target.
   be enabled. A link is valid for 12 hours, one use, with at most 20 links
   minted per hour; `POST /actions/{token}` redeems it without a session, and
   the resolution is recorded with source `phone` and shown as "approved via
-  phone" in `/activity`. Rotating the generated `action_link_key` invalidates
+  phone" in `/activity`. The host file may bind `app_keys.action_link_key_file`;
+  its bytes sign and verify links and are never copied into the database.
+  Rotating the generated `action_link_key` invalidates
   outstanding links; the phone action section of the Notifications settings
   tab shows the outstanding count and rotates the key.
 - Mail synchronization, routing, flagging, and filing are application
@@ -296,13 +298,21 @@ behavior-parity target.
   page cache; every other connection uses a 2 MiB cache, and all use
   in-memory temporary storage and a 64 MiB journal size limit.
 - Deployment configuration and credentials come from the host and its
-  environment files. Each application instance builds its own settings
-  registry (`settings.New()`); an `ATRIUM_<MODULE>_<KEY>` variable or
-  configuration-file value pins a setting, otherwise a value
-  stored in the database applies, and every command reads the same stored
-  values. Settings not shown on a settings page are set through the CLI,
-  env or Nix; saving a working integration turns its module on, and the
-  settings audit rows show on the Done page.
+  environment files. Settings have three owners. Host keys are read only from
+  the host file and its `ATRIUM_<MODULE>_<KEY>` variables, never from the
+  database: a database row with a host key is ignored, and `atrium settings
+  set`/`unset` and the Settings pages refuse it with its host destination.
+  Twelve tuning values (body cap, page and preview sizes, run history, HTTP
+  timeout, calendar event, occurrence and candidate limits, contacts results
+  and pass-run retention) are compiled constants, not settings. Operator
+  settings are database rows edited in the application or with `atrium
+  settings set`; a value the host file declares for one, including a
+  `<name>_enabled` module flag, wins and makes that setting read-only. Each
+  application instance builds its own settings registry (`settings.New()`),
+  every command reads the same stored operator values, and legacy
+  `ATRIUM_CONFIG` pins still apply to operator settings. Saving a working
+  integration turns its module on, and the settings audit rows show on the
+  Done page.
   Secrets set through `atrium secrets` are stored write-only in the database
   and are never read back or shown; stored API keys and tokens are refused on a plaintext
   database. A database key (`db.key_file` in the configuration file,
@@ -324,7 +334,10 @@ behavior-parity target.
   a message naming `atrium db import-v2`. `atrium db import-v2 <path>`
   copies a v2 database at schema version 11 into the configured database,
   which must be a fresh v3 database (created through the normal boot path
-  when absent); the source is opened read-only and never written. It
+  when absent); the source is opened read-only and never written.
+  `--source-config` names the v2 `ATRIUM_CONFIG` file and `--source-env` a
+  `NAME=VALUE` file, and their pins decide the effective source value before
+  a shadowed row. It
   refuses a source that already has the v3 marker, is not at version 11,
   has an embedding index rebuild in progress, or has a v2 mail or agent
   write in flight (a held row with no error, a proposal action with a live
@@ -338,8 +351,16 @@ behavior-parity target.
   snoozes, drafts, scans, commitments, open loops and overrides, packages
   and their events, watch dismissals, rebalance and event candidates), the active
   generation's message vectors and index row (URL, model and dimension
-  kept), settings, secrets (the row is readable only with the same
-  database key, since the database encrypts it), notification channels,
+  kept), settings and secrets (a secret row is readable only with the same
+  database key, since the database encrypts it; every source setting row
+  gets an action:
+  carried, dropped, renamed, moved to a host key or a compiled constant, or
+  reset for cutover; a shadowed row yields to its effective source pin;
+  unknown public rows are dropped by key name and an unknown nonempty secret
+  refuses the import by name), the `settings_audit` history (ids,
+  timestamps, keys, old and new values, secret marker, actor and source
+  unchanged, carried before the sanitized import entries), notification
+  channels,
   push subscriptions and attention snoozes, knowledge records (their
   `embedded_hash` cleared so vectors rebuild), projects, threads with their
   messages, files, plans and queue, agent profile, skills, operator-edited
@@ -357,7 +378,7 @@ behavior-parity target.
   `context_projections`, `job_runs`), memory (rebuilt), Notion and wiki
   state (re-synced), knowledge and Notion
   vectors (rebuilt), notifications, auth sessions, pending sign-ins and login links, OAuth
-  handshakes, action links, the settings audit, the mail event log, ops
+  handshakes, action links, the mail event log, ops
   data, endpoint probes, integration health, nightly observations,
   `db_key_history` (old backups are read with the old key),
   `module_migrations` and the source's `schema_migrations`. References to
@@ -365,10 +386,11 @@ behavior-parity target.
   the imported effect's run id, `threads.parent_run_id`, `jobs.last_run_id`,
   `kb_records.source_run_id`, `thread_files.run_id`, `thread_plans.run_id`,
   `thread_queue.run_id`). The importer prints one line per table with its
-  carried, rebuilt or dropped row count and one line per setting with its
-  action (carried, dropped, renamed, moved to a host key or a tuning
-  constant, or reset for cutover); a setting this build does not know
-  refuses the import and is named. v1 data reaches v3 through v2: the v2
+  carried, rebuilt or dropped row count, one line per setting with its
+  action (carried, dropped, renamed, moved to a host key or a compiled
+  constant, or reset for cutover), one line per effective source pin and per
+  secret, and a totals line ending in `unmapped_operator_choices=0`; a
+  nonzero count fails the import. v1 data reaches v3 through v2: the v2
   binary imports it first.
   `taint_private` and `taint_web` are dormant: no longer
   read or written, and kept because dropping them would rewrite the table.
@@ -386,7 +408,9 @@ behavior-parity target.
   in. Core (settings, secrets,
   `db`, `serve`, the About, review and activity pages) is always on; mail,
   calendar, contacts, Notion, media, assistant, notifications and Grafana each
-  have a `<name>_enabled` setting. A module is on only when its flag is true
+  have a `<name>_enabled` setting. A module flag is an operator setting, and
+  the host file may declare it; a declared value wins and makes the flag
+  read-only. A module is on only when its flag is true
   and its required settings are met (an `needs-settings` state otherwise);
   grafana needs the assistant, calendar candidates need mail
   for their pipeline stage, and mail uses contacts as an optional source
@@ -402,7 +426,7 @@ behavior-parity target.
   registry is built from the enabled modules' tools.
 - Observability: `atrium serve` exposes Prometheus metrics and readiness on
   the loopback ops listener (`ops_listen`, `off` disables), and every command
-  can export OTLP/HTTP traces when `otel_traces_endpoint` is pinned (empty
+  can export OTLP/HTTP traces when the host sets `otel_traces_endpoint` (empty
   disables; `OTEL_SDK_DISABLED=true` overrides). Spans cover HTTP requests,
   agent runs and steps, Anthropic requests, tool calls, mail sync, embedding
   calls, integration checks, notification delivery and database transactions;
@@ -644,8 +668,9 @@ behavior-parity target.
   regardless of forwarded address headers. There is no flag that serves
   without authentication on a non-loopback address. Public media file access requires an expiring signed
   link and still checks Host. The link signing key is a generated secret held in
-  the database (pinnable by the deployment); a legacy `media-link.key` file is
-  moved into it on first use. In-process token buckets, owned by each server
+  the database, or the host file's `app_keys.link_key_file`, whose bytes are
+  used directly and never copied into the database; a legacy `media-link.key`
+  file is moved into the database on first use. In-process token buckets, owned by each server
   instance, bound public requests: 10 sign-in requests a minute per client
   address, 120 API requests a minute per address and 60 a minute per bearer
   token. A refusal is `429` with `Retry-After` and `no-store` and changes

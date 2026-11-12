@@ -1,6 +1,9 @@
 package settings
 
-import "slices"
+import (
+	"slices"
+	"strings"
+)
 
 type HostDef struct {
 	Key      string
@@ -10,27 +13,56 @@ type HostDef struct {
 	Choices  []string
 	Secret   bool
 	EnvAlias string
+	Check    func(value string) error
+}
+
+var hostDefs []HostDef
+
+func MustRegisterHost(defs ...HostDef) {
+	for _, d := range defs {
+		if slices.ContainsFunc(hostDefs, func(e HostDef) bool { return e.Key == d.Key }) {
+			panic(DuplicateKey(d.Key))
+		}
+		hostDefs = append(hostDefs, d)
+	}
 }
 
 func HostDefs() []HostDef {
-	var out []HostDef
+	out := make([]HostDef, 0, len(hostDefs)+len(importManifest))
+	for _, d := range hostDefs {
+		d.Choices = slices.Clone(d.Choices)
+		out = append(out, d)
+	}
 	for _, e := range importManifest {
 		if e.Class != ImportHost || e.Action == ImportRename || e.Module == "db" && e.Key == "key" {
 			continue
 		}
-		def, ok := LookupOf(e.Key)
-		out = append(out, HostDef{
-			Key: e.Key, Module: e.Module, Type: e.Type, Default: e.Default,
-			Choices: slices.Clone(e.Choices), Secret: ok && def.IsSecret(),
-		})
+		if slices.ContainsFunc(out, func(d HostDef) bool { return d.Key == e.Key }) {
+			continue
+		}
+		out = append(out, HostDef{Key: e.Key, Module: e.Module, Type: e.Type, Default: e.Default, Choices: slices.Clone(e.Choices), Secret: e.Secret})
 	}
+	slices.SortFunc(out, func(a, b HostDef) int { return strings.Compare(a.Key, b.Key) })
 	return out
 }
 
+func HostDefOf(key string) (HostDef, bool) {
+	for _, d := range hostDefs {
+		if d.Key == key {
+			return d, true
+		}
+	}
+	return HostDef{}, false
+}
+
 func ValidateHost(key, value string) error {
-	def, ok := LookupOf(key)
+	d, ok := HostDefOf(key)
 	if !ok {
 		return nil
 	}
-	return def.validate(value)
+	return d.validate(value)
+}
+
+func (d HostDef) validate(value string) error {
+	return validateTyped(d.Type, d.Choices, d.Check, value)
 }

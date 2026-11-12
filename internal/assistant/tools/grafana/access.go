@@ -10,7 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 type Access struct {
@@ -27,10 +26,6 @@ const (
 	KeyURL   = "grafana_url"
 	KeyToken = "grafana_viewer_token"
 )
-
-func init() {
-	settings.MustRegister(settings.Deploy(settings.Def{Key: KeyURL, Module: "grafana", Type: settings.String}))
-}
 
 func Load(ctx context.Context, q db.Querier) (Access, error) {
 	lease, err := connections.OpenRead(ctx, q, config.From(ctx).Host(), connections.ID(KindGrafana))

@@ -7,6 +7,7 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/notionid"
@@ -40,6 +41,8 @@ var kindLabels = map[string]string{
 }
 
 func init() {
+	settings.MustRegisterHost(settings.HostDef{
+		Key: ObsidianDirKey, Module: "export", Type: settings.String, Check: dirPath})
 	settings.MustRegister(
 		settings.Value(settings.UI, settings.Def{
 			Key: NotionEnabledKey, Module: "export", Type: settings.Bool, Default: "false"}),
@@ -49,8 +52,6 @@ func init() {
 			Key: NotionKindsKey, Module: "export", Type: settings.String, Default: strings.Join(kindNames, ","), Check: kinds}),
 		settings.Value(settings.UI, settings.Def{
 			Key: NotionPrivateKey, Module: "export", Type: settings.String, Check: pageID}),
-		settings.Value(settings.UI, settings.Def{
-			Key: ObsidianDirKey, Module: "export", Type: settings.String, Check: dirPath}),
 		settings.Value(settings.UI, settings.Def{
 			Key: ObsidianKindsKey, Module: "export", Type: settings.String, Default: strings.Join(kindNames, ","), Check: kinds}),
 		settings.Value(settings.UI, settings.Def{
@@ -70,7 +71,6 @@ func init() {
 	settingspage.RegisterSection(settingspage.Section{
 		Name: ObsidianSection, Title: "Obsidian export", Module: "export", Template: "export_obsidian_settings",
 		Fields: []settingspage.Field{
-			{Key: ObsidianDirKey, Label: "Folder"},
 			{Key: ObsidianKindsKey, Label: "Include", Multi: true, Choices: kindNames, ChoiceLabels: kindLabels},
 			{Key: ObsidianPrivateKey, Label: "Include private records"},
 		},
@@ -86,7 +86,8 @@ type notionStatus struct {
 }
 
 type obsidianStatus struct {
-	Last float64
+	Last   float64
+	Folder string
 }
 
 func notionData(ctx context.Context, q db.Querier) (any, error) {
@@ -111,7 +112,7 @@ func obsidianData(ctx context.Context, q db.Querier) (any, error) {
 	if err := q.QueryRowContext(ctx, "SELECT COALESCE(MAX(updated_at), 0) FROM export_pages WHERE target = ?", TargetObsidian).Scan(&last); err != nil {
 		return nil, err
 	}
-	return obsidianStatus{Last: last}, nil
+	return obsidianStatus{Last: last, Folder: strings.TrimSpace(config.From(ctx).HostValue(ObsidianDirKey))}, nil
 }
 
 func notionURL(id string) string {
@@ -189,6 +190,9 @@ func validateObsidian(ctx context.Context, q db.Querier, values map[string]strin
 func effective(ctx context.Context, q db.Querier, values map[string]string, key string) (string, bool, error) {
 	if value, ok := values[key]; ok {
 		return value, false, nil
+	}
+	if _, hosted := settings.HostDefOf(key); hosted {
+		return strings.TrimSpace(config.From(ctx).HostValue(key)), true, nil
 	}
 	found, err := settings.From(ctx).Resolve(ctx, q, key)
 	if err != nil {

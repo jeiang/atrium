@@ -35,14 +35,16 @@ const (
 )
 
 func init() {
+	settings.MustRegisterHost(
+		settings.HostDef{Key: KeyRoot, Module: module, Type: settings.String},
+		settings.HostDef{Key: KeyMoviesURL, Module: module, Type: settings.String, Check: httpURL},
+		settings.HostDef{Key: KeyTVURL, Module: module, Type: settings.String, Check: httpURL},
+		settings.HostDef{Key: KeyEZTVURL, Module: module, Type: settings.String, Default: DefaultEZTVURL, Check: requiredHTTPURL},
+		settings.HostDef{Key: KeyTMDBURL, Module: module, Type: settings.String, Default: DefaultTMDBAPI, Check: requiredHTTPURL},
+		settings.HostDef{Key: KeyTMDBImagesURL, Module: module, Type: settings.String, Default: DefaultTMDBImages, Check: requiredHTTPURL},
+		settings.HostDef{Key: KeyQbitURL, Module: module, Type: settings.String, Check: httpURL},
+	)
 	settings.MustRegister(
-		settings.Deploy(settings.Def{Key: KeyRoot, Module: module, Type: settings.String}),
-		settings.Deploy(settings.Def{Key: KeyQbitURL, Module: module, Type: settings.String, Check: httpURL}),
-		settings.Deploy(settings.Def{Key: KeyMoviesURL, Module: module, Type: settings.String, Check: httpURL}),
-		settings.Deploy(settings.Def{Key: KeyTVURL, Module: module, Type: settings.String, Check: httpURL}),
-		settings.Deploy(settings.Def{Key: KeyEZTVURL, Module: module, Type: settings.String, Default: DefaultEZTVURL, Check: requiredHTTPURL}),
-		settings.Deploy(settings.Def{Key: KeyTMDBURL, Module: module, Type: settings.String, Default: DefaultTMDBAPI, Check: requiredHTTPURL}),
-		settings.Deploy(settings.Def{Key: KeyTMDBImagesURL, Module: module, Type: settings.String, Default: DefaultTMDBImages, Check: requiredHTTPURL}),
 		settings.Value(settings.UI, settings.Def{Key: KeyLinkTTL, Module: module, Type: settings.Int, Default: "43200", Check: settings.Between(60, 30*86400)}),
 		settings.Secret(settings.SecretOpts{Generated: true}, settings.Def{Key: KeyLinkKey, Module: module, Type: settings.String, Check: settings.NonEmpty}),
 	)
@@ -127,8 +129,6 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		failure = err
 		return found
 	}
-	text := func(key string) string { return strings.TrimSpace(resolve(key).Value) }
-	link := func(key string) string { return strings.TrimRight(text(key), "/") }
 	whole := func(key string) int64 {
 		found := resolve(key)
 		if failure != nil {
@@ -138,8 +138,9 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		failure = err
 		return n
 	}
-	out.Root = link(KeyRoot)
-	out.MoviesURL, out.TVURL = link(KeyMoviesURL), link(KeyTVURL)
+	out.Root = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyRoot)), "/")
+	out.MoviesURL = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyMoviesURL)), "/")
+	out.TVURL = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyTVURL)), "/")
 	out.LinkTTL = whole(KeyLinkTTL)
 	if failure != nil {
 		return Settings{}, failure
@@ -211,7 +212,7 @@ func (s Settings) TMDB() *TMDB {
 
 func (s Settings) NeedRoot() (string, error) {
 	if s.Root == "" {
-		return "", config.NotConfigured("media_root is not set; pin it with ATRIUM_MEDIA_MEDIA_ROOT")
+		return "", config.NotConfigured("media_root is not set; set media.media_root in the host file")
 	}
 	return s.Root, nil
 }

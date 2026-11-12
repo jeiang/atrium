@@ -4,7 +4,9 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"maps"
 	"slices"
+	"strings"
 
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
@@ -39,10 +41,34 @@ type ImportEntry struct {
 	Choices []string
 	Cutover bool
 	Runtime bool
+	Secret  bool
+	Note    string
+}
+
+type ImportPin struct {
+	Value  string
+	Source string
+}
+
+type ImportSummary struct {
+	Carried          int
+	Renamed          int
+	DropHost         int
+	DropTuning       int
+	Dropped          int
+	ResetShadow      int
+	DropUnknown      int
+	UnmappedOperator int
+}
+
+func (s ImportSummary) Lines() []string {
+	return []string{fmt.Sprintf(
+		"import totals: carried=%d renamed=%d drop-host=%d drop-tuning=%d dropped=%d reset-for-cutover=%d drop-unknown=%d unmapped_operator_choices=%d",
+		s.Carried, s.Renamed, s.DropHost, s.DropTuning, s.Dropped, s.ResetShadow, s.DropUnknown, s.UnmappedOperator)}
 }
 
 var importManifest = []ImportEntry{
-	{Module: "action_links", Key: "action_link_key", Class: ImportOperator, Action: ImportCarry, Target: "secrets.action_link_key", Default: "", Type: String, Choices: nil, Cutover: false},
+	{Module: "action_links", Key: "action_link_key", Class: ImportOperator, Action: ImportCarry, Target: "secrets.action_link_key", Default: "", Type: String, Choices: nil, Cutover: false, Secret: true},
 	{Module: "action_links", Key: "phone_actions_enabled", Class: ImportOperator, Action: ImportCarry, Target: "settings.phone_actions_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false},
 	{Module: "action_links", Key: "phone_actions_kinds", Class: ImportOperator, Action: ImportCarry, Target: "settings.phone_actions_kinds", Default: "reminder,triage_label,triage_archive,triage_snooze,memory,profile", Type: String, Choices: nil, Cutover: false},
 	{Module: "anthropic", Key: "anthropic_api_key", Class: ImportOperator, Action: ImportRename, Target: "service/anthropic credential api_key", Default: "", Type: String, Choices: nil, Cutover: false},
@@ -165,7 +191,7 @@ var importManifest = []ImportEntry{
 	{Module: "auth", Key: "oidc_scopes", Class: ImportHost, Action: ImportDropHost, Target: "host.auth.oidc_scopes", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "auth", Key: "oidc_session_idle_days", Class: ImportOperator, Action: ImportCarry, Target: "settings.oidc_session_idle_days", Default: "7", Type: Int, Choices: nil, Cutover: false},
 	{Module: "auth", Key: "oidc_session_max_days", Class: ImportOperator, Action: ImportCarry, Target: "settings.oidc_session_max_days", Default: "30", Type: Int, Choices: nil, Cutover: false},
-	{Module: "auth", Key: "oidc_wizard_key", Class: ImportOperator, Action: ImportDrop, Target: "retired", Default: "", Type: String, Choices: nil, Cutover: false},
+	{Module: "auth", Key: "oidc_wizard_key", Class: ImportOperator, Action: ImportDrop, Target: "retired", Default: "", Type: String, Choices: nil, Cutover: false, Secret: true},
 	{Module: "calendar", Key: "calendar_account", Class: ImportOperator, Action: ImportCarry, Target: "settings.calendar_account", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "calendar", Key: "calendar_dir", Class: ImportHost, Action: ImportDropHost, Target: "host.calendar.calendar_dir", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "calendar", Key: "candidate_draft_limit", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/calendar/tuning.go:TuningCandidateDraftLimit", Default: "10", Type: Int, Choices: nil, Cutover: false},
@@ -182,22 +208,22 @@ var importManifest = []ImportEntry{
 	{Module: "calendar", Key: "work_hours", Class: ImportOperator, Action: ImportCarry, Target: "settings.work_hours", Default: "09:00-17:00", Type: String, Choices: nil, Cutover: false},
 	{Module: "contacts", Key: "contacts_dir", Class: ImportHost, Action: ImportDropHost, Target: "host.contacts.contacts_dir", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "contacts", Key: "contacts_max_results", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/contacts/tuning.go:TuningContactsMaxResults", Default: "10", Type: Int, Choices: nil, Cutover: false},
-	{Module: "core", Key: "assistant_enabled", Class: ImportHost, Action: ImportDropHost, Target: "host.core.assistant_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false},
-	{Module: "core", Key: "calendar_enabled", Class: ImportHost, Action: ImportDropHost, Target: "host.core.calendar_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false},
-	{Module: "core", Key: "contacts_enabled", Class: ImportHost, Action: ImportDropHost, Target: "host.core.contacts_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false},
-	{Module: "core", Key: "grafana_enabled", Class: ImportHost, Action: ImportDropHost, Target: "host.core.grafana_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false},
+	{Module: "core", Key: "assistant_enabled", Class: ImportOperator, Action: ImportCarry, Target: "settings.assistant_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false, Note: "module flag stays an operator setting"},
+	{Module: "core", Key: "calendar_enabled", Class: ImportOperator, Action: ImportCarry, Target: "settings.calendar_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false, Note: "module flag stays an operator setting"},
+	{Module: "core", Key: "contacts_enabled", Class: ImportOperator, Action: ImportCarry, Target: "settings.contacts_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false, Note: "module flag stays an operator setting"},
+	{Module: "core", Key: "grafana_enabled", Class: ImportOperator, Action: ImportCarry, Target: "settings.grafana_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false, Note: "module flag stays an operator setting"},
 	{Module: "core", Key: "http_timeout_seconds", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/config/tuning.go:TuningHttpTimeoutSeconds", Default: "600", Type: Int, Choices: nil, Cutover: false},
-	{Module: "core", Key: "mail_enabled", Class: ImportHost, Action: ImportDropHost, Target: "host.core.mail_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false},
-	{Module: "core", Key: "media_enabled", Class: ImportHost, Action: ImportDropHost, Target: "host.core.media_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false},
-	{Module: "core", Key: "notifications_enabled", Class: ImportHost, Action: ImportDropHost, Target: "host.core.notifications_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false},
-	{Module: "core", Key: "notion_enabled", Class: ImportHost, Action: ImportDropHost, Target: "host.core.notion_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false},
+	{Module: "core", Key: "mail_enabled", Class: ImportOperator, Action: ImportCarry, Target: "settings.mail_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false, Note: "module flag stays an operator setting"},
+	{Module: "core", Key: "media_enabled", Class: ImportOperator, Action: ImportCarry, Target: "settings.media_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false, Note: "module flag stays an operator setting"},
+	{Module: "core", Key: "notifications_enabled", Class: ImportOperator, Action: ImportCarry, Target: "settings.notifications_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false, Note: "module flag stays an operator setting"},
+	{Module: "core", Key: "notion_enabled", Class: ImportOperator, Action: ImportCarry, Target: "settings.notion_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false, Note: "module flag stays an operator setting"},
 	{Module: "core", Key: "ops_listen", Class: ImportHost, Action: ImportDropHost, Target: "host.core.ops_listen", Default: "127.0.0.1:9180", Type: String, Choices: nil, Cutover: false},
 	{Module: "core", Key: "ops_pprof", Class: ImportHost, Action: ImportDropHost, Target: "host.core.ops_pprof", Default: "false", Type: Bool, Choices: nil, Cutover: false},
 	{Module: "core", Key: "otel_traces_endpoint", Class: ImportHost, Action: ImportDropHost, Target: "host.core.otel_traces_endpoint", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "core", Key: "pass_run_retention_days", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/passrun/tuning.go:TuningPassRunRetentionDays", Default: "90", Type: Int, Choices: nil, Cutover: false},
 	{Module: "core", Key: "public_url", Class: ImportHost, Action: ImportDropHost, Target: "host.core.public_url", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "core", Key: "tz", Class: ImportOperator, Action: ImportCarry, Target: "settings.tz", Default: "America/Port_of_Spain", Type: String, Choices: nil, Cutover: false},
-	{Module: "db", Key: "key", Class: ImportHost, Action: ImportDropHost, Target: "host.db.key", Default: "", Type: String, Choices: nil, Cutover: false},
+	{Module: "db", Key: "key", Class: ImportHost, Action: ImportDropHost, Target: "host.db.key", Default: "", Type: String, Choices: nil, Cutover: false, Secret: true},
 	{Module: "export", Key: "export_notion_enabled", Class: ImportOperator, Action: ImportCarry, Target: "settings.export_notion_enabled", Default: "false", Type: Bool, Choices: nil, Cutover: false},
 	{Module: "export", Key: "export_notion_kinds", Class: ImportOperator, Action: ImportCarry, Target: "settings.export_notion_kinds", Default: "pii,messages,personal", Type: String, Choices: nil, Cutover: false},
 	{Module: "export", Key: "export_notion_parent", Class: ImportOperator, Action: ImportCarry, Target: "settings.export_notion_parent", Default: "", Type: String, Choices: nil, Cutover: false},
@@ -244,12 +270,12 @@ var importManifest = []ImportEntry{
 	{Module: "mail", Key: "mail_backoff_max_seconds", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/mail/tuning.go:TuningMailBackoffMaxSeconds", Default: "300", Type: Int, Choices: nil, Cutover: true},
 	{Module: "mail", Key: "mail_backoff_start_seconds", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/mail/tuning.go:TuningMailBackoffStartSeconds", Default: "5", Type: Int, Choices: nil, Cutover: true},
 	{Module: "mail", Key: "mail_body_cap_bytes", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/mail/tuning.go:TuningMailBodyCapBytes", Default: "65536", Type: Int, Choices: nil, Cutover: true},
-	{Module: "mail", Key: "mail_chat_ca_file", Class: ImportHost, Action: ImportDropHost, Target: "host.local_chat.ca_file", Default: "", Type: String, Choices: nil, Cutover: false},
-	{Module: "mail", Key: "mail_chat_key", Class: ImportHost, Action: ImportCarry, Target: "settings.mail_chat_key", Default: "", Type: String, Choices: nil, Cutover: false},
+	{Module: "mail", Key: "mail_chat_ca_file", Class: ImportHost, Action: ImportDropHost, Target: "host.local_chat.ca_file", Default: "", Type: String, Choices: nil, Cutover: false, Note: "local-chat exception; no chat connection is created"},
+	{Module: "mail", Key: "mail_chat_key", Class: ImportHost, Action: ImportCarry, Target: "settings.mail_chat_key", Default: "", Type: String, Choices: nil, Cutover: false, Secret: true, Note: "local-chat exception; no chat connection is created"},
 	{Module: "mail", Key: "mail_chat_max_tokens", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/endpoint/tuning.go:TuningMailChatMaxTokens", Default: "80", Type: Int, Choices: nil, Cutover: true},
-	{Module: "mail", Key: "mail_chat_model", Class: ImportHost, Action: ImportDropHost, Target: "host.local_chat.model", Default: "qwen", Type: String, Choices: nil, Cutover: false},
-	{Module: "mail", Key: "mail_chat_proxy", Class: ImportHost, Action: ImportDropHost, Target: "host.local_chat.proxy", Default: "", Type: String, Choices: nil, Cutover: false},
-	{Module: "mail", Key: "mail_chat_url", Class: ImportHost, Action: ImportDropHost, Target: "host.local_chat.url", Default: "", Type: String, Choices: nil, Cutover: false},
+	{Module: "mail", Key: "mail_chat_model", Class: ImportHost, Action: ImportDropHost, Target: "host.local_chat.model", Default: "qwen", Type: String, Choices: nil, Cutover: false, Note: "local-chat exception; no chat connection is created"},
+	{Module: "mail", Key: "mail_chat_proxy", Class: ImportHost, Action: ImportDropHost, Target: "host.local_chat.proxy", Default: "", Type: String, Choices: nil, Cutover: false, Note: "local-chat exception; no chat connection is created"},
+	{Module: "mail", Key: "mail_chat_url", Class: ImportHost, Action: ImportDropHost, Target: "host.local_chat.url", Default: "", Type: String, Choices: nil, Cutover: false, Note: "local-chat exception; no chat connection is created"},
 	{Module: "mail", Key: "mail_embed_batch", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/endpoint/tuning.go:TuningMailEmbedBatch", Default: "16", Type: Int, Choices: nil, Cutover: true},
 	{Module: "mail", Key: "mail_embed_body_chars", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/endpoint/tuning.go:TuningMailEmbedBodyChars", Default: "1500", Type: Int, Choices: nil, Cutover: true},
 	{Module: "mail", Key: "mail_embed_ca_file", Class: ImportHost, Action: ImportDropHost, Target: "service/embedding.transport.ca_file", Default: "", Type: String, Choices: nil, Cutover: true},
@@ -319,7 +345,7 @@ var importManifest = []ImportEntry{
 	{Module: "mail", Key: "watches_stale_package_days", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/mail/tuning.go:TuningWatchesStalePackageDays", Default: "60", Type: Int, Choices: nil, Cutover: true},
 	{Module: "mail", Key: "write_attempts", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/mail/tuning.go:TuningWriteAttempts", Default: "3", Type: Int, Choices: nil, Cutover: true},
 	{Module: "mail", Key: "write_cap", Class: ImportOperator, Action: ImportCarry, Target: "settings.write_cap", Default: "100", Type: Int, Choices: nil, Cutover: false},
-	{Module: "media", Key: "link_key", Class: ImportOperator, Action: ImportCarry, Target: "secrets.link_key", Default: "", Type: String, Choices: nil, Cutover: false},
+	{Module: "media", Key: "link_key", Class: ImportOperator, Action: ImportCarry, Target: "secrets.link_key", Default: "", Type: String, Choices: nil, Cutover: false, Secret: true},
 	{Module: "media", Key: "media_artwork_miss_ttl_seconds", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/media/tuning.go:TuningMediaArtworkMissTtlSeconds", Default: "604800", Type: Int, Choices: nil, Cutover: false},
 	{Module: "media", Key: "media_artwork_show_search_limit", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/media/tuning.go:TuningMediaArtworkShowSearchLimit", Default: "5", Type: Int, Choices: nil, Cutover: false},
 	{Module: "media", Key: "media_channel_name_chars", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/media/tuning.go:TuningMediaChannelNameChars", Default: "120", Type: Int, Choices: nil, Cutover: false},
@@ -656,10 +682,10 @@ func Manifest() []ImportEntry {
 
 var retiredImport = map[string]ImportEntry{
 	"money_since":        {Key: "money_since", Class: ImportOperator, Action: ImportDrop, Target: "retired"},
-	"oidc_access_group":  {Key: "oidc_access_group", Module: "auth", Class: ImportOperator, Action: ImportDrop, Target: "host.auth.oidc_access_groups"},
-	"oidc_admin_group":   {Key: "oidc_admin_group", Module: "auth", Class: ImportOperator, Action: ImportDrop, Target: "host.auth.oidc_access_groups"},
-	"oidc_admin_emails":  {Key: "oidc_admin_emails", Module: "auth", Class: ImportOperator, Action: ImportDrop, Target: "host.auth.oidc_access_emails"},
-	"oidc_admin_domains": {Key: "oidc_admin_domains", Module: "auth", Class: ImportOperator, Action: ImportDrop, Target: "host.auth.oidc_access_domains"},
+	"oidc_access_group":  {Key: "oidc_access_group", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_groups"},
+	"oidc_admin_group":   {Key: "oidc_admin_group", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_groups"},
+	"oidc_admin_emails":  {Key: "oidc_admin_emails", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_emails"},
+	"oidc_admin_domains": {Key: "oidc_admin_domains", Module: "auth", Class: ImportHost, Action: ImportDrop, Target: "host.auth.oidc_access_domains"},
 }
 
 func RemovedHostKey(key string) (string, bool) {
@@ -683,10 +709,18 @@ func ImportEntryFor(key string) (ImportEntry, bool) {
 	return ImportEntry{}, false
 }
 
-func ImportV2(ctx context.Context, tx *sql.Tx, src *sql.DB) ([]string, error) {
+func ImportSecretName(name string) bool {
+	entry, ok := ImportEntryFor(name)
+	if !ok {
+		return false
+	}
+	return entry.Secret || entry.Action == ImportRename && strings.Contains(entry.Target, "credential")
+}
+
+func ImportV2(ctx context.Context, tx *sql.Tx, src *sql.DB, pins map[string]ImportPin) ([]string, ImportSummary, error) {
 	rows, err := src.QueryContext(ctx, "SELECT key, value FROM settings ORDER BY key")
 	if err != nil {
-		return nil, err
+		return nil, ImportSummary{}, err
 	}
 	type row struct{ key, value string }
 	var found []row
@@ -694,47 +728,199 @@ func ImportV2(ctx context.Context, tx *sql.Tx, src *sql.DB) ([]string, error) {
 		var r row
 		if err := rows.Scan(&r.key, &r.value); err != nil {
 			_ = rows.Close()
-			return nil, err
+			return nil, ImportSummary{}, err
 		}
 		found = append(found, r)
 	}
 	if err := rows.Close(); err != nil {
-		return nil, err
+		return nil, ImportSummary{}, err
 	}
 	ctx = audit.With(ctx, "import", audit.Migration)
 	var lines []string
+	var summary ImportSummary
+	seen := make(map[string]bool, len(found))
 	for _, r := range found {
+		seen[r.key] = true
 		entry, ok := ImportEntryFor(r.key)
 		if !ok {
-			return nil, fmt.Errorf("db import-v2: the source has a setting this build does not know: %s; nothing was imported", r.key)
+			if _, err := tx.ExecContext(ctx, "DELETE FROM settings WHERE key = ?", r.key); err != nil {
+				return nil, summary, err
+			}
+			lines = append(lines, "setting "+r.key+": drop-unknown")
+			summary.DropUnknown++
+			continue
+		}
+		pin, pinned := pins[r.key]
+		if ImportSecretName(r.key) && pinned {
+			if _, err := tx.ExecContext(ctx, "DELETE FROM settings WHERE key = ?", r.key); err != nil {
+				return nil, summary, err
+			}
+			if err := audit.Record(ctx, tx, audit.Entry{Key: r.key, Secret: true}); err != nil {
+				return nil, summary, err
+			}
+			lines = append(lines, "setting "+r.key+": drop-shadowed-row (the effective pin wins)")
+			lines = append(lines, "pin "+r.key+": credential-file-binding "+entry.Target)
+			summary.Dropped++
+			continue
+		}
+		effective := r.value
+		if pinned {
+			effective = pin.Value
 		}
 		switch {
-		case r.key == "mail_mode" && r.value == "live":
+		case r.key == "mail_mode" && effective == "live":
 			if _, err := tx.ExecContext(ctx, "UPDATE settings SET value = 'shadow' WHERE key = 'mail_mode'"); err != nil {
-				return nil, err
+				return nil, summary, err
 			}
 			old, next := "live", "shadow"
 			if err := audit.Record(ctx, tx, audit.Entry{Key: "mail_mode", Old: &old, New: &next}); err != nil {
-				return nil, err
+				return nil, summary, err
 			}
 			lines = append(lines, "setting mail_mode: reset-for-cutover live -> shadow")
-		case entry.Cutover && (entry.Action == ImportDropHost || entry.Action == ImportDropTuning || entry.Action == ImportRename):
-			if _, err := tx.ExecContext(ctx, "DELETE FROM settings WHERE key = ?", r.key); err != nil {
-				return nil, err
+			summary.ResetShadow++
+		case entry.Action == ImportCarry:
+			line := "setting " + r.key + ": carried -> " + entry.Target
+			if pinned {
+				if _, err := tx.ExecContext(ctx, "UPDATE settings SET value = ? WHERE key = ?", pin.Value, r.key); err != nil {
+					return nil, summary, err
+				}
+				line += " from pin " + pin.Source
 			}
-			line := fmt.Sprintf("setting %s: %s -> %s", r.key, entry.Action, entry.Target)
-			if entry.Action == ImportDropTuning && r.value != entry.Default {
-				line += fmt.Sprintf("; source value %s differs from the compiled default %s", r.value, entry.Default)
+			if entry.Note != "" {
+				line += "; " + entry.Note
 			}
 			lines = append(lines, line)
+			summary.Carried++
+		case entry.Action == ImportRename:
+			if _, err := tx.ExecContext(ctx, "DELETE FROM settings WHERE key = ?", r.key); err != nil {
+				return nil, summary, err
+			}
+			line := "setting " + r.key + ": renamed -> " + entry.Target
+			if pinned {
+				line += " from pin " + pin.Source
+			}
+			lines = append(lines, line)
+			summary.Renamed++
 		case entry.Action == ImportDrop:
 			if _, err := tx.ExecContext(ctx, "DELETE FROM settings WHERE key = ?", r.key); err != nil {
-				return nil, err
+				return nil, summary, err
 			}
-			lines = append(lines, fmt.Sprintf("setting %s: dropped -> %s", r.key, entry.Target))
+			line := "setting " + r.key + ": dropped -> " + entry.Target
+			if entry.Secret {
+				line += " (transient state; value not kept)"
+				if err := audit.Record(ctx, tx, audit.Entry{Key: r.key, Secret: true}); err != nil {
+					return nil, summary, err
+				}
+			}
+			if entry.Class == ImportHost {
+				line += hostRequirement(entry, r.value, pin, pinned)
+			}
+			lines = append(lines, line)
+			summary.Dropped++
+		case entry.Action == ImportDropHost:
+			if _, err := tx.ExecContext(ctx, "DELETE FROM settings WHERE key = ?", r.key); err != nil {
+				return nil, summary, err
+			}
+			line := "setting " + r.key + ": drop-host -> " + entry.Target + hostRequirement(entry, r.value, pin, pinned)
+			if entry.Note != "" {
+				line += "; " + entry.Note
+			}
+			lines = append(lines, line)
+			summary.DropHost++
+		case entry.Action == ImportDropTuning:
+			if _, err := tx.ExecContext(ctx, "DELETE FROM settings WHERE key = ?", r.key); err != nil {
+				return nil, summary, err
+			}
+			lines = append(lines, tuningLine("setting "+r.key+": drop-tuning -> "+entry.Target, entry, r.value, pin, pinned))
+			summary.DropTuning++
 		default:
-			lines = append(lines, fmt.Sprintf("setting %s: carried -> %s", r.key, entry.Target))
+			lines = append(lines, "setting "+r.key+": unmapped-operator-choice -> "+entry.Target)
+			summary.UnmappedOperator++
 		}
 	}
-	return lines, nil
+	for _, key := range slices.Sorted(maps.Keys(pins)) {
+		if seen[key] {
+			continue
+		}
+		pin := pins[key]
+		entry, ok := ImportEntryFor(key)
+		if !ok {
+			lines = append(lines, "pin "+key+": unknown-host-requirement")
+			continue
+		}
+		if ImportSecretName(key) {
+			lines = append(lines, "pin "+key+": credential-file-binding "+entry.Target)
+			continue
+		}
+		switch entry.Action {
+		case ImportCarry:
+			value := pin.Value
+			if key == "mail_mode" && value == "live" {
+				value = "shadow"
+				if _, err := tx.ExecContext(ctx, "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value); err != nil {
+					return nil, summary, err
+				}
+				old, next := "live", "shadow"
+				if err := audit.Record(ctx, tx, audit.Entry{Key: key, Old: &old, New: &next}); err != nil {
+					return nil, summary, err
+				}
+				lines = append(lines, "pin "+key+": reset-for-cutover live -> shadow from pin "+pin.Source)
+				summary.ResetShadow++
+				continue
+			}
+			if _, err := tx.ExecContext(ctx, "INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value", key, value); err != nil {
+				return nil, summary, err
+			}
+			line := "pin " + key + ": carried -> " + entry.Target + " from pin " + pin.Source
+			if entry.Note != "" {
+				line += "; " + entry.Note
+			}
+			lines = append(lines, line)
+			summary.Carried++
+		case ImportRename:
+			lines = append(lines, "pin "+key+": renamed -> "+entry.Target+" from pin "+pin.Source)
+			summary.Renamed++
+		case ImportDrop:
+			lines = append(lines, "pin "+key+": dropped -> "+entry.Target)
+			summary.Dropped++
+		case ImportDropHost:
+			lines = append(lines, "pin "+key+": drop-host -> "+entry.Target+hostRequirement(entry, "", pin, true))
+			summary.DropHost++
+		case ImportDropTuning:
+			lines = append(lines, tuningLine("pin "+key+": drop-tuning -> "+entry.Target, entry, "", pin, true))
+			summary.DropTuning++
+		default:
+			lines = append(lines, "pin "+key+": unmapped-operator-choice -> "+entry.Target)
+			summary.UnmappedOperator++
+		}
+	}
+	if summary.UnmappedOperator != 0 {
+		return nil, summary, fmt.Errorf("db import-v2: %d operator choices have no import action; nothing was imported", summary.UnmappedOperator)
+	}
+	return lines, summary, nil
+}
+
+func hostRequirement(entry ImportEntry, stored string, pin ImportPin, pinned bool) string {
+	if entry.Secret {
+		return "; host requirement " + entry.Target + " (secret; value not printed)"
+	}
+	value, origin := stored, "settings"
+	if pinned {
+		value, origin = pin.Value, "pin "+pin.Source
+	}
+	if value == "" {
+		value = "unset"
+	}
+	return "; host requirement " + entry.Target + " = " + value + " (" + origin + ")"
+}
+
+func tuningLine(prefix string, entry ImportEntry, stored string, pin ImportPin, pinned bool) string {
+	value, origin := stored, "source"
+	if pinned {
+		value, origin = pin.Value, "pin "+pin.Source
+	}
+	if value == entry.Default {
+		return prefix
+	}
+	return prefix + "; " + origin + " value " + value + " differs from the compiled default " + entry.Default + " (changed-from-default)"
 }

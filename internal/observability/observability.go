@@ -23,9 +23,9 @@ import (
 const TracesEndpointKey = "otel_traces_endpoint"
 
 func init() {
-	settings.MustRegister(settings.Deploy(settings.Def{
+	settings.MustRegisterHost(settings.HostDef{
 		Key: TracesEndpointKey, Module: "core", Type: settings.String, Default: "", Check: checkEndpoint,
-	}))
+	})
 }
 
 func checkEndpoint(value string) error {
@@ -40,16 +40,13 @@ func checkEndpoint(value string) error {
 }
 
 func Start(ctx context.Context, env config.Env) (func(context.Context), error) {
-	endpoint, err := settings.From(ctx).Resolve(ctx, nil, TracesEndpointKey)
-	if err != nil {
-		return nil, err
-	}
-	if endpoint.Value == "" || disabled(env) {
+	endpoint := config.From(ctx).HostValue(TracesEndpointKey)
+	if endpoint == "" || disabled(env) {
 		otel.SetTracerProvider(noop.NewTracerProvider())
 		return func(context.Context) {}, nil
 	}
 	exporter, err := otlptracehttp.New(ctx,
-		otlptracehttp.WithEndpointURL(endpoint.Value),
+		otlptracehttp.WithEndpointURL(endpoint),
 		otlptracehttp.WithCompression(otlptracehttp.GzipCompression),
 	)
 	if err != nil {

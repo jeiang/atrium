@@ -21,9 +21,12 @@ const (
 )
 
 func init() {
+	hosts := make([]settings.HostDef, 0, len(Builtins))
 	for _, name := range Builtins {
 		settings.MustRegister(FlagDef(name))
+		hosts = append(hosts, settings.HostDef{Key: FlagKey(name), Module: Core, Type: settings.Bool, Default: "false"})
 	}
+	settings.MustRegisterHost(hosts...)
 }
 
 var operatorData = []func(context.Context, db.Querier) (bool, error){

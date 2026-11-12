@@ -41,17 +41,7 @@ func init() {
 		ui(KeyLocationName, settings.String, "", nil),
 		ui(KeyLatitude, settings.Float, "", settings.Between(-90, 90)),
 		ui(KeyLongitude, settings.Float, "", settings.Between(-180, 180)),
-		settings.Deploy(settings.Def{Key: KeyForecastURL, Module: Module, Type: settings.String, Default: DefaultForecastURL, Check: httpURL}),
-		settings.Deploy(settings.Def{Key: KeyGeocodingURL, Module: Module, Type: settings.String, Default: DefaultGeocodingURL, Check: httpURL}),
 	)
-}
-
-func httpURL(value string) error {
-	u, err := url.Parse(strings.TrimSpace(value))
-	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
-		return settings.Invalid("must be an http or https URL")
-	}
-	return nil
 }
 
 type Settings struct {
@@ -62,6 +52,18 @@ type Settings struct {
 	ForecastURL  string
 	GeocodingURL string
 	HTTP         *http.Client
+}
+
+func httpURL(value string) error {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return nil
+	}
+	u, err := url.Parse(value)
+	if err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" {
+		return settings.Invalid("must be an http or https URL")
+	}
+	return nil
 }
 
 func Load(ctx context.Context, q db.Querier) (Settings, error) {

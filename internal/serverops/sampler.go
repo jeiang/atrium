@@ -12,7 +12,6 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
@@ -38,19 +37,8 @@ func Callables() map[string]worker.Callable {
 }
 
 func Sample(ctx context.Context, d *db.DB, env config.Env, now float64) error {
-	set := assistant.Read(ctx, d.Read)
-	hosts := SplitHosts(set.Text(KeyHosts))
-	selector := set.Text(KeyLabelSelector)
-	queries := map[string]string{
-		MetricUp:          set.Text(KeyQueryUp),
-		MetricCPU:         set.Text(KeyQueryCPU),
-		MetricMemory:      set.Text(KeyQueryMemory),
-		MetricDisk:        set.Text(KeyQueryDisk),
-		MetricFailedUnits: set.Text(KeyQueryFailedUnit),
-	}
-	if err := set.Err(); err != nil {
-		return err
-	}
+	host := HostValues(ctx)
+	hosts, selector, queries := host.Hosts, host.Selector, host.Queries
 	if len(hosts) == 0 {
 		return nil
 	}

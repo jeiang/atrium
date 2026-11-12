@@ -34,6 +34,12 @@ func (s *State) Host() Host {
 	return s.host
 }
 
+func (s *State) HostValue(key string) string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.host.Values[key]
+}
+
 type stateKey struct{}
 
 type envKey struct{}
@@ -52,6 +58,21 @@ func EnvFrom(ctx context.Context) Env {
 
 func With(ctx context.Context, s *State) context.Context {
 	return context.WithValue(ctx, stateKey{}, s)
+}
+
+func SetHostFrom(ctx context.Context, h Host) {
+	if s, ok := ctx.Value(stateKey{}).(*State); ok && s != nil {
+		s.mu.Lock()
+		s.host = h
+		s.mu.Unlock()
+	}
+}
+
+func HostValueFrom(ctx context.Context, key string) string {
+	if s, ok := ctx.Value(stateKey{}).(*State); ok && s != nil {
+		return s.HostValue(key)
+	}
+	return ""
 }
 
 func From(ctx context.Context) *State {

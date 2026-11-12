@@ -117,7 +117,7 @@ func TestConnectionTestsSaveOnlyWorkingCredentialsAndNeverRenderThem(t *testing.
 		t.Error("the settings page rendered a stored credential")
 	}
 
-	if got := runApp(t, "settings", "get", "anthropic_api_key"); got.code != cli.ExitUsage || !strings.Contains(got.stderr, "unknown key") {
+	if got := runApp(t, "settings", "get", "anthropic_api_key"); got.code != cli.ExitError || !strings.Contains(got.stderr, "service/anthropic credential api_key") {
 		t.Errorf("settings get of the retired Anthropic secret: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 }

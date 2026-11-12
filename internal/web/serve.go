@@ -25,6 +25,11 @@ import (
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
+func init() {
+	settings.MustRegisterHost(settings.HostDef{
+		Key: "web_trusted_proxy_cidrs", Module: "web", Type: settings.String})
+}
+
 const (
 	defaultHost     = "127.0.0.1"
 	shutdownTimeout = 10 * time.Second

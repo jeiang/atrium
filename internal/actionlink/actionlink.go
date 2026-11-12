@@ -41,6 +41,11 @@ type Claims struct {
 }
 
 func Key(ctx context.Context, q db.Querier) ([]byte, error) {
+	if raw, ok, err := secrets.FileKey(ctx, secrets.ActionLinkKeyFile); err != nil {
+		return nil, err
+	} else if ok {
+		return hex.DecodeString(string(raw))
+	}
 	store := secrets.NewIn(settings.From(ctx), nil, q, nil)
 	raw, err := store.Value(ctx, secrets.ActionLinkKey)
 	if err != nil {
@@ -56,6 +61,11 @@ func Key(ctx context.Context, q db.Querier) ([]byte, error) {
 }
 
 func Rotate(ctx context.Context, q db.Querier) error {
+	if _, ok, err := secrets.FileKey(ctx, secrets.ActionLinkKeyFile); err != nil {
+		return err
+	} else if ok {
+		return errors.New("action link key: app_keys.action_link_key_file is configured; rotate that file instead")
+	}
 	store := secrets.NewIn(settings.From(ctx), nil, q, nil)
 	var buf [32]byte
 	if _, err := rand.Read(buf[:]); err != nil {

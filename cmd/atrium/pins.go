@@ -10,11 +10,12 @@ import (
 )
 
 func bootstrap(env config.Env, reg *settings.Registry) func(context.Context, io.Writer) error {
-	return func(_ context.Context, _ io.Writer) error {
+	return func(ctx context.Context, _ io.Writer) error {
 		host, err := config.LoadHost(env, config.HostFile(env))
 		if err != nil {
 			return err
 		}
+		config.SetHostFrom(ctx, host)
 		pins, err := config.LoadPins(env, reg)
 		if err != nil {
 			return err

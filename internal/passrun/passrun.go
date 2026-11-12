@@ -8,12 +8,9 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 const (
-	RetentionKey = "pass_run_retention_days"
-
 	Sync       = "sync"
 	NotionSync = "notion-sync"
 	Scan       = "scan"
@@ -36,12 +33,6 @@ var MaxAge = map[string]time.Duration{
 
 var log = logx.Logger("atrium.passrun")
 
-func init() {
-	settings.MustRegister(settings.Value(settings.Advanced, settings.Def{
-		Key: RetentionKey, Module: "core", Type: settings.Int, Default: "90",
-		Check: settings.Between(1, 3650)}))
-}
-
 func now() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 
 func Track(ctx context.Context, d *db.DB, job string, fn func() error) error {
@@ -57,20 +48,12 @@ func Record(ctx context.Context, d *db.DB, job string, started float64, failure 
 		outcome, message = Failed, logx.Scrub(failure.Error())
 	}
 	err := d.WithTx(ctx, func(tx *sql.Tx) error {
-		days, err := settings.From(ctx).Resolve(ctx, tx, RetentionKey)
-		if err != nil {
-			return err
-		}
-		n, err := days.Int()
-		if err != nil {
-			return err
-		}
 		finished := now()
 		if _, err := tx.ExecContext(ctx, "INSERT INTO pass_runs (job, started_at, finished_at, outcome, message) VALUES (?, ?, ?, ?, ?)",
 			job, started, finished, outcome, message); err != nil {
 			return err
 		}
-		_, err = tx.ExecContext(ctx, "DELETE FROM pass_runs WHERE started_at < ?", finished-float64(n)*86400)
+		_, err := tx.ExecContext(ctx, "DELETE FROM pass_runs WHERE started_at < ?", finished-float64(TuningPassRunRetentionDays)*86400)
 		return err
 	})
 	if err != nil {
