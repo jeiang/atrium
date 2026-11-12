@@ -35,7 +35,7 @@ func runScheduler(env *cli.Env, open Open, enabled func(module string) bool) err
 	s := jobworker.New(svc, module.SetFrom(ctx).Catalog().Jobs(), jobworker.Options{Enabled: enabled, Beat: beat.Beat})
 	notifier.Ready()
 	notifier.Status("scheduling")
-	stopWatchdog := notifier.Watch(ctx, beat)
+	stopWatchdog := notifier.Watch(ctx, func() bool { return beat.Fresh(notifier.Interval() * 2) })
 	defer stopWatchdog()
 	go func() {
 		<-ctx.Done()

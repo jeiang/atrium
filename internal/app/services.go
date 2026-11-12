@@ -9,7 +9,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/scheduler"
 )
@@ -20,15 +19,14 @@ const (
 )
 
 type services struct {
-	ctx     context.Context
-	set     *module.Set
-	mu      sync.Mutex
-	owners  map[string]*runtime.Supervisor
-	work    map[string]*ownedWork
-	sched   *runtime.Supervisor
-	closed  bool
-	unhook  func()
-	stopOps func()
+	ctx    context.Context
+	set    *module.Set
+	mu     sync.Mutex
+	owners map[string]*runtime.Supervisor
+	work   map[string]*ownedWork
+	sched  *runtime.Supervisor
+	closed bool
+	unhook func()
 }
 
 type ownedWork struct {
@@ -37,21 +35,12 @@ type ownedWork struct {
 	wg     sync.WaitGroup
 }
 
-func (a *App) serve(ctx context.Context, set *module.Set, background bool) error {
+func (a *App) serve(ctx context.Context, set *module.Set) error {
 	if err := set.Current().Recover(ctx, a.db, a.config); err != nil {
 		return err
 	}
-	rt := &services{ctx: ctx, set: set, owners: map[string]*runtime.Supervisor{}, work: map[string]*ownedWork{}, stopOps: func() {}}
+	rt := &services{ctx: ctx, set: set, owners: map[string]*runtime.Supervisor{}, work: map[string]*ownedWork{}}
 	a.rt = rt
-	stop, err := ops.Start(ctx, a.db, a.env, a.catalog.Metrics(), a.catalog.Checks())
-	if err != nil {
-		log.Error("ops listener did not start", logx.Err, err.Error())
-	} else {
-		rt.stopOps = stop
-	}
-	if !background {
-		return nil
-	}
 	if set.Current().Enabled(module.Assistant) {
 		if err := a.scheduler(nil).Recover(ctx); err != nil {
 			return err
@@ -158,7 +147,6 @@ func (rt *services) drainOwners() error {
 	if rt.unhook != nil {
 		rt.unhook()
 	}
-	rt.stopOps()
 	rt.mu.Lock()
 	rt.closed = true
 	owners := make([]string, 0, len(rt.owners))

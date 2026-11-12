@@ -237,27 +237,3 @@ func TestServeRefusesEncryptionUntilItStops(t *testing.T) {
 		t.Errorf("db encrypt after serve exited %d, stdout %q, stderr %q", got.code, got.stdout, got.stderr)
 	}
 }
-
-func TestWebOnlyServeCoexistsWithoutTakingTheServeLock(t *testing.T) {
-	t.Parallel()
-	dir := t.TempDir()
-	lockedServeEnv(t, dir, rightKeyHex)
-	serve := startLockedServe(t, dir)
-	addrFile := filepath.Join(t.TempDir(), "web-addr")
-	cmd := cliExitProcessArgs(t, []string{"serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local", "--no-services"})
-	cmd.Env = append(envWithout(cmd.Env, "ATRIUM_SERVE_ADDR_FILE="), "ATRIUM_SERVE_ADDR_FILE="+addrFile)
-	web := startServeProcess(t, cmd, addrFile)
-	if got := runProcess(t, "db rekey --new-key-file "+writeKey(t, t.TempDir(), "next.key", otherKeyHex)); got.code != cli.ExitError || !strings.Contains(got.stderr, inUse) {
-		t.Errorf("db rekey with both serves running exited %d, stderr %q", got.code, got.stderr)
-	}
-	if code := serve.stop(t, syscall.SIGTERM); code != cli.ExitOK {
-		t.Fatalf("full serve exited %d; stderr %q", code, serve.stderr.String())
-	}
-	again := startLockedServe(t, dir)
-	if code := again.stop(t, syscall.SIGTERM); code != cli.ExitOK {
-		t.Errorf("full serve beside the web-only serve exited %d; stderr %q", code, again.stderr.String())
-	}
-	if code := web.stop(t, syscall.SIGTERM); code != cli.ExitOK {
-		t.Errorf("web-only serve exited %d; stderr %q", code, web.stderr.String())
-	}
-}

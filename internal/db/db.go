@@ -65,11 +65,10 @@ func (d *DB) Checkpoint(ctx context.Context, wait time.Duration) (Checkpoint, er
 }
 
 type DB struct {
-	Write        *sql.DB
-	Read         *sql.DB
-	KNN          *sql.DB
-	encrypted    bool
-	deferToServe bool
+	Write     *sql.DB
+	Read      *sql.DB
+	KNN       *sql.DB
+	encrypted bool
 }
 
 func (d *DB) Encrypted() bool { return d.encrypted }
@@ -109,7 +108,7 @@ func connect(path string, opts []Option) (*DB, error) {
 	}
 	r := newReader(readDSN, pragmas, smallCacheKiB)
 	k := newKNN(readDSN, pragmas)
-	return &DB{Write: w, Read: r, KNN: k, encrypted: !key.IsZero(), deferToServe: o.deferToServe}, nil
+	return &DB{Write: w, Read: r, KNN: k, encrypted: !key.IsZero()}, nil
 }
 
 func (d *DB) Close() error {

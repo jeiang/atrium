@@ -3,7 +3,6 @@ package ops
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"net"
 	"net/http"
@@ -226,29 +225,18 @@ func (s *server) run(_ context.Context, c Check) error {
 	return err
 }
 
-func Start(ctx context.Context, d *db.DB, env config.Env, metrics []Metric, checks []Check) (stop func(), err error) {
+func Address(ctx context.Context) string {
 	addr := config.From(ctx).HostValue(ListenKey)
 	if addr == "" {
 		addr = DefaultListen
 	}
 	if addr == Off {
-		return func() {}, nil
+		return ""
 	}
+	return addr
+}
+
+func Server(ctx context.Context, d *db.DB, env config.Env, metrics []Metric, checks []Check) *http.Server {
 	withPprof := config.From(ctx).HostValue(PprofKey) == "true"
-	l, err := net.Listen("tcp", addr)
-	if err != nil {
-		return nil, fmt.Errorf("ops listener: %w", err)
-	}
-	srv := &http.Server{Handler: Handler(ctx, d, withPprof, env, metrics, checks), ReadHeaderTimeout: 10 * time.Second}
-	go func() {
-		if err := srv.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			log.Error("ops listener stopped", logx.Err, err.Error())
-		}
-	}()
-	log.Info("ops listening", "addr", l.Addr().String())
-	return func() {
-		stop, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		_ = srv.Shutdown(stop)
-	}, nil
+	return &http.Server{Handler: Handler(ctx, d, withPprof, env, metrics, checks), ReadHeaderTimeout: 10 * time.Second}
 }

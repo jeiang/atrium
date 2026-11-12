@@ -90,8 +90,15 @@ func (n *Notifier) RunWatchdog(ctx context.Context, alive func() bool) {
 	}
 }
 
-func (n *Notifier) Watch(ctx context.Context, h *Heartbeat) context.CancelFunc {
+func (n *Notifier) Watch(ctx context.Context, alive func() bool) (stop func()) {
 	ctx, cancel := context.WithCancel(ctx)
-	go n.RunWatchdog(ctx, func() bool { return h.Fresh(n.interval * 2) })
-	return cancel
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		n.RunWatchdog(ctx, alive)
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
 }

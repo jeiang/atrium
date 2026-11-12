@@ -17,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/web"
 )
 
 var version = "dev"
@@ -90,7 +89,7 @@ func newAppWith(env config.Env, clients func(config.Config) mail.OpenFunc, now f
 	c.State = st
 	c.SetupContext = func(ctx context.Context) context.Context { return cat.Context(module.WithSet(ctx, set)) }
 	c.Bootstrap = bootstrap(env, reg)
-	c.Add(append(append(set.Commands(), connections.Command(env)), web.ServeCommand(bind.ServeBoot(), set.Pages()...))...)
+	c.Add(append(append(set.Commands(), connections.Command(env)), bind.ServeCommand(set.Pages()...))...)
 	return c
 }
 

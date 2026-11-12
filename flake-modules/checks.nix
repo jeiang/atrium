@@ -115,7 +115,11 @@
     schedulerInServe = assert !(nixos.config.systemd.units ? "atrium-agent-scheduler.service");
     assert !(defaults.config.systemd.units ? "atrium-agent-scheduler.service");
     assert !(lib.hasInfix "--no-services" (unitText "atrium-web.service"));
-    assert !(nixos.config.systemd.units ? "atrium-web-local.service") || lib.hasInfix "--no-services" (unitText "atrium-web-local.service"); true;
+    assert !(nixos.config.systemd.units ? "atrium-web-local.service");
+    assert !(defaults.config.systemd.units ? "atrium-web-local.service");
+    assert lib.hasInfix "--emergency-host 127.0.0.1 --emergency-port 8481" (unitText "atrium-web.service");
+    assert lib.hasInfix "--emergency-host 127.0.0.1 --emergency-port 8481" defaults.config.systemd.units."atrium-web.service".text;
+    assert !(lib.hasInfix "ATRIUM_CORE_OPS_LISTEN=off" (unitText "atrium-web.service")); true;
     notifyOnLongRunning = let
       notifying = name: let t = unitText name; in lib.hasInfix "Type=notify" t && lib.hasInfix "WatchdogSec=" t;
     in

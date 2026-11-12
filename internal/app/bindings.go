@@ -18,7 +18,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
-	"github.com/jeiang/atrium/internal/web"
 )
 
 const (
@@ -111,48 +110,6 @@ func (b *Bindings) OpenAssistant(ctx context.Context) (context.Context, *service
 			log.Warn("could not drain the application before closing the database", logx.Err, err.Error())
 		}
 	}, nil
-}
-
-func (b *Bindings) ServeBoot() web.Boot { return &serveBoot{b: b} }
-
-type serveBoot struct {
-	b *Bindings
-}
-
-func (s *serveBoot) Open(ctx context.Context, services bool) (context.Context, *db.DB, config.Config, func() error, error) {
-	mode := WebOnly
-	if services {
-		mode = Resident
-	}
-	a, ctx, err := s.b.open(ctx, mode)
-	if err != nil {
-		return nil, nil, config.Config{}, nil, err
-	}
-	return ctx, a.DB(), a.Config(), a.Close, nil
-}
-
-func (s *serveBoot) Start(ctx context.Context, d *web.Deps, services bool) error {
-	a, err := bound(ctx)
-	if err != nil {
-		return err
-	}
-	set := module.SetFrom(ctx)
-	if err := set.Start(ctx, d); err != nil {
-		return err
-	}
-	if err := a.bindLive(ctx, s.b.tools, s.b.now); err != nil {
-		return err
-	}
-	svc := a.Assistant()
-	d.ResumeRun = func(ctx context.Context, runID int64) error {
-		err := svc.StartResume(ctx, runID)
-		var notInterrupted service.NotInterrupted
-		if errors.As(err, &notInterrupted) {
-			return nil
-		}
-		return err
-	}
-	return a.serve(ctx, set, services)
 }
 
 func (a *App) bindLive(ctx context.Context, tools registry.Source, now func() float64) error {

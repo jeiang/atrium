@@ -99,7 +99,8 @@ func Authorize(ctx context.Context, o AuthOptions) (string, error) {
 		default:
 		}
 	})}
-	go func() { _ = srv.Serve(listener) }()
+	serveDone := make(chan error, 1)
+	go func() { serveDone <- srv.Serve(listener) }()
 	redirect := fmt.Sprintf("http://127.0.0.1:%d", listener.Addr().(*net.TCPAddr).Port)
 	verifier := tokenURLSafe(64)
 	digest := sha256.Sum256([]byte(verifier))
@@ -110,6 +111,9 @@ func Authorize(ctx context.Context, o AuthOptions) (string, error) {
 	closeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), time.Second)
 	_ = srv.Shutdown(closeCtx)
 	cancel()
+	if serveErr := <-serveDone; !errors.Is(serveErr, http.ErrServerClosed) {
+		err = errors.Join(err, remote(serveErr))
+	}
 	if err != nil {
 		return "", err
 	}

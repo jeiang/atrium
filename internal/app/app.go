@@ -17,7 +17,6 @@ type Mode int
 const (
 	OneShot Mode = iota
 	Resident
-	WebOnly
 )
 
 type App struct {
@@ -39,17 +38,13 @@ func Open(ctx context.Context, env config.Env, cat *module.Catalog, mode Mode) (
 	}
 	st := config.From(ctx)
 	k := st.DBKey()
-	opts := []db.Option{db.WithKey(k)}
 	var exclusion *db.ServeLock
-	switch mode {
-	case Resident:
+	if mode == Resident {
 		if exclusion, err = db.TryServeLock(ctx, cfg.DBPath); err != nil {
 			return nil, err
 		}
-	case WebOnly:
-		opts = append(opts, db.DeferMigrationsToServe())
 	}
-	d, err := db.Connect(cfg.DBPath, opts...)
+	d, err := db.Connect(cfg.DBPath, db.WithKey(k))
 	if err != nil {
 		return nil, errors.Join(err, exclusion.Close())
 	}

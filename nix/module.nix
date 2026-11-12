@@ -274,19 +274,17 @@
     host,
     port,
     auth,
-    services ? true,
-    environment ? {},
   }: let
     needsHost = auth != "local";
   in {
     inherit description;
-    environment = appEnvironment // environment // lib.optionalAttrs needsHost {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;};
+    environment = appEnvironment // lib.optionalAttrs needsHost {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;};
     path = mediaPath;
     serviceConfig =
       mediaWriter
       // exportWriter
       // {
-        ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} ${authArgs auth}" + lib.optionalString needsHost " --allowed-host ${cfg.web.allowedHost}" + lib.optionalString (!services) " --no-services";
+        ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} ${authArgs auth}" + lib.optionalString needsHost " --allowed-host ${cfg.web.allowedHost}" + lib.optionalString cfg.web.local.enable " --emergency-host 127.0.0.1 --emergency-port ${toString cfg.web.local.port}";
         Type = "notify";
         WatchdogSec = "1min";
         TimeoutStartSec = writeTimeout;
@@ -405,16 +403,6 @@
             Persistent = true;
           };
         };
-      };
-    }
-    // lib.optionalAttrs cfg.web.local.enable {
-      atrium-web-local = webUnit {
-        description = "atrium web UI (loopback, no proxy auth)";
-        host = "127.0.0.1";
-        port = cfg.web.local.port;
-        auth = "local";
-        services = false;
-        environment = {ATRIUM_CORE_OPS_LISTEN = "off";};
       };
     };
 
@@ -617,13 +605,13 @@ in {
         enable = mkOption {
           type = types.bool;
           default = true;
-          description = "Run the loopback listener with --auth local for emergency access over an SSH tunnel.";
+          description = "Serve the emergency listener on 127.0.0.1 from the atrium-web process (serve --emergency-port), trusting every loopback request like --auth local, for access over an SSH tunnel.";
         };
 
         port = mkOption {
           type = types.port;
           default = 8481;
-          description = "Port of the loopback listener.";
+          description = "Port of the emergency listener on 127.0.0.1; it must differ from services.atrium.port.";
         };
       };
     };
@@ -760,6 +748,10 @@ in {
       {
         assertion = cfg.web.auth != "local" || lib.hasPrefix "127." cfg.web.host || builtins.elem cfg.web.host ["::1" "[::1]"];
         message = "services.atrium.web.auth = \"local\" needs a numeric loopback services.atrium.web.host such as 127.0.0.1 or ::1";
+      }
+      {
+        assertion = !cfg.web.local.enable || cfg.web.local.port != cfg.port;
+        message = "services.atrium.web.local.port must differ from services.atrium.port; both listeners run in atrium-web";
       }
     ];
 
