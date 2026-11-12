@@ -48,6 +48,7 @@ import (
 	"github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
+	scheddef "github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tasks"
@@ -59,14 +60,15 @@ import (
 type Module struct {
 	ProposeKinds []proposals.Definition
 	Now          func() float64
-	Callables    []map[string]worker.Callable
+	Jobs         []scheddef.Definition
+	Holder       *worker.Holder
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
 	return module.Declaration{
 		Name: module.Assistant,
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
-			prompts.Settings(), registry.Settings(), scheduler.Settings(), websearch.Settings(), inference.Settings(),
+			prompts.Settings(), registry.Settings(), scheduler.Settings(m.Jobs), websearch.Settings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs()),
 		Host:      export.HostSettings(),
 		Sections:  export.Sections(),
@@ -74,7 +76,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Metrics:   slices.Concat(scheduler.Metrics(), opsmetrics.Metrics()),
 		Requires:  Requirements(),
 		Pages: []web.Page{{
-			Module:    chatpages.Module(chatpages.Options{Tools: mc.Tools}),
+			Module:    chatpages.Module(chatpages.Options{Tools: mc.Tools, Jobs: m.Jobs}),
 			Templates: chatpages.Templates(),
 			Home:      "/chat",
 			Nav: []web.NavItem{
@@ -87,7 +89,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			},
 		}},
 		Groups:   SettingGroups(),
-		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Callables...), memorycmd.Command(mc.Env, m.Now)},
+		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, agentcmd.Jobs{Definitions: m.Jobs, Holder: m.Holder}), memorycmd.Command(mc.Env, m.Now)},
 		Tools:    ToolDefinitions(m.ProposeKinds),
 		Effects: func(d module.EffectDeps) module.Effects {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, MailOpen: d.Open, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}

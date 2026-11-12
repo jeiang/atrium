@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/safety"
+	scheddef "github.com/jeiang/atrium/internal/scheduler"
 )
 
 var log = logx.Logger("atrium.agent.scheduler")
@@ -44,7 +45,7 @@ type Skipped struct {
 	Status   Status
 }
 
-func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Location, now float64, owner string) ([]Claim, []Skipped, error) {
+func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Location, now float64, owner string, spend func(Job) scheddef.Spend) ([]Claim, []Skipped, error) {
 	paused := safety.IsPaused(cfg.PausePath())
 	overBudget := false
 	if _, err := inference.Check(ctx, d.Read, now, loc, true); err != nil {
@@ -92,7 +93,7 @@ func ClaimDue(ctx context.Context, d *db.DB, cfg config.Config, loc *time.Locati
 					log.Warn(fmt.Sprintf("job %d has no next occurrence; disabling it", job.ID), logx.Job, job.ID)
 				}
 			}
-			if paused || (overBudget && SpendPolicy(job) == AlwaysSpends) {
+			if paused || (overBudget && spend(job) == scheddef.AlwaysSpends) {
 				status := StatusSkippedBudget
 				if paused {
 					status = StatusSkippedPause

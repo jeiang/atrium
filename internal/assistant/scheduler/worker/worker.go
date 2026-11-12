@@ -20,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/notify"
+	scheddef "github.com/jeiang/atrium/internal/scheduler"
 )
 
 var log = logx.Logger("atrium.agent.scheduler")
@@ -36,27 +37,22 @@ type Result struct {
 	Runs  []int64
 }
 
-type Callable struct {
-	Modules []string
-	Run     func(ctx context.Context, e Env) (Result, error)
-}
-
 type Worker struct {
-	Service   *service.Service
-	Callables map[string]Callable
-	Interval  time.Duration
-	Owner     string
-	Beat      func()
-	Enabled   func(string) bool
+	Service  *service.Service
+	Jobs     []scheddef.Definition
+	Interval time.Duration
+	Owner    string
+	Beat     func()
+	Enabled  func(string) bool
 
 	wg     sync.WaitGroup
 	active atomic.Int64
 	dirty  atomic.Bool
 }
 
-func New(ctx context.Context, svc *service.Service, callables map[string]Callable, enabled func(string) bool) (*Worker, error) {
+func New(ctx context.Context, svc *service.Service, jobs []scheddef.Definition, enabled func(string) bool) (*Worker, error) {
 	tick := scheduler.TuningAgentSchedulerTickSeconds
-	return &Worker{Service: svc, Callables: callables, Interval: time.Duration(tick) * time.Second, Owner: journal.NewOwner(), Enabled: enabled}, nil
+	return &Worker{Service: svc, Jobs: jobs, Interval: time.Duration(tick) * time.Second, Owner: journal.NewOwner(), Enabled: enabled}, nil
 }
 
 func (w *Worker) now() float64 {
@@ -81,12 +77,14 @@ func (w *Worker) Tick(ctx context.Context) error {
 		return err
 	}
 	err = d.WithTx(ctx, func(tx *sql.Tx) error {
-		return scheduler.Ensure(ctx, tx, tz, stamp)
+		return scheduler.Ensure(ctx, tx, w.Jobs, tz, stamp)
 	})
 	if err != nil {
 		return err
 	}
-	claims, skipped, err := scheduler.ClaimDue(ctx, d, w.Service.Cfg, loc, stamp, w.Owner)
+	claims, skipped, err := scheduler.ClaimDue(ctx, d, w.Service.Cfg, loc, stamp, w.Owner, func(job scheduler.Job) scheddef.Spend {
+		return scheduler.SpendOf(w.Jobs, job)
+	})
 	if err != nil {
 		return err
 	}
@@ -163,21 +161,18 @@ func (w *Worker) ExecuteClaim(ctx context.Context, claim scheduler.Claim) (statu
 		}
 	}()
 	job := claim.Job
-	if call, isCallable := w.callable(job); isCallable {
-		if call.Run == nil {
+	def, declared := scheduler.Declared(w.Jobs, job.Name)
+	if declared && !def.PromptRun {
+		if def.Run == nil {
 			return w.failedRun(ctx, claim, nil, fmt.Errorf("no callable registered for %s", job.Name))
 		}
-		return w.executeCallable(ctx, claim, call)
+		return w.executeDeclared(ctx, claim, def)
 	}
-	return w.executePrompt(ctx, claim)
-}
-
-func (w *Worker) callable(job scheduler.Job) (Callable, bool) {
-	spec, ok := scheduler.BuiltinFor(job.Name)
-	if !ok || spec.Run != scheduler.CallableRun {
-		return Callable{}, false
+	prompt := job.Prompt
+	if declared {
+		prompt = def.Prompt
 	}
-	return w.Callables[job.Name], true
+	return w.executePrompt(ctx, claim, prompt)
 }
 
 func (w *Worker) finish(ctx context.Context, claim scheduler.Claim, o scheduler.Outcome) error {
@@ -222,12 +217,9 @@ func (w *Worker) settle(ctx context.Context, claim scheduler.Claim, runID int64,
 	return o.Status, w.finish(ctx, claim, o)
 }
 
-func (w *Worker) executePrompt(ctx context.Context, claim scheduler.Claim) scheduler.Status {
+func (w *Worker) executePrompt(ctx context.Context, claim scheduler.Claim, prompt string) scheduler.Status {
 	job, d := claim.Job, w.Service.DB
-	kind, prompt := threads.Cron, job.Prompt
-	if spec, ok := scheduler.BuiltinFor(job.Name); ok && spec.Run == scheduler.PromptRun {
-		prompt = spec.Prompt
-	}
+	kind := threads.Cron
 	operator := job.Kind == scheduler.JobCron && job.PromptBy != nil && *job.PromptBy == scheduler.Operator
 	var threadID *int64
 	runID, err := func() (int64, error) {
@@ -262,46 +254,6 @@ func (w *Worker) executePrompt(ctx context.Context, claim scheduler.Claim) sched
 	return status
 }
 
-func (w *Worker) settleRuns(ctx context.Context, claim scheduler.Claim, runs []int64, threadID *int64) (scheduler.Status, error) {
-	d := w.Service.DB
-	var tokens int64
-	var cost float64
-	status := scheduler.StatusOK
-	var failure *string
-	for _, runID := range runs {
-		run, err := journal.GetRun(ctx, d.Read, runID)
-		if err != nil {
-			return "", err
-		}
-		n, err := inference.RunTokens(ctx, d.Read, runID)
-		if err != nil {
-			return "", err
-		}
-		c, err := inference.RunCost(ctx, d.Read, runID)
-		if err != nil {
-			return "", err
-		}
-		tokens += n
-		cost += c
-		switch {
-		case run.State != journal.Done && run.Error != nil && inference.IsCapError(*run.Error):
-			status = scheduler.StatusSkippedBudget
-			failure = run.Error
-		case run.State != journal.Done:
-			status = scheduler.StatusError
-			text := run.State
-			if run.Error != nil && *run.Error != "" {
-				text = *run.Error
-			}
-			failure = &text
-		}
-	}
-	if status == scheduler.StatusOK && claim.Missed {
-		status = scheduler.StatusMissed
-	}
-	return status, w.finish(ctx, claim, scheduler.Outcome{Status: status, ThreadID: threadID, Tokens: tokens, Cost: cost, Error: failure})
-}
-
 func (w *Worker) failedRun(ctx context.Context, claim scheduler.Claim, threadID *int64, err error) scheduler.Status {
 	if interrupted(ctx, err) {
 		log.Info(fmt.Sprintf("job %d interrupted; its run resumes on restart", claim.Job.ID), logx.Job, claim.Job.ID)
@@ -316,39 +268,19 @@ func (w *Worker) failedRun(ctx context.Context, claim scheduler.Claim, threadID 
 	return scheduler.StatusError
 }
 
-func (w *Worker) executeCallable(ctx context.Context, claim scheduler.Claim, call Callable) scheduler.Status {
-	for _, m := range call.Modules {
+func (w *Worker) executeDeclared(ctx context.Context, claim scheduler.Claim, def scheddef.Definition) scheduler.Status {
+	for _, m := range def.Needs {
 		if w.Enabled != nil && !w.Enabled(m) {
 			_ = w.finish(ctx, claim, scheduler.Outcome{Status: scheduler.StatusSkippedModule})
 			return scheduler.StatusSkippedModule
 		}
 	}
-	result, err := call.Run(ctx, Env{Service: w.Service, Now: w.now, JobID: claim.Job.ID, JobRunID: claim.JobRunID})
+	result, err := def.Run(ctx, scheddef.Run{JobID: claim.Job.ID, JobRunID: claim.JobRunID, Missed: claim.Missed, Now: w.now})
 	if err != nil {
-		return w.failedRun(ctx, claim, nil, err)
+		return w.failedRun(ctx, claim, result.ThreadID, err)
 	}
-	runs := result.Runs
-	if len(runs) == 0 && result.RunID != 0 {
-		runs = []int64{result.RunID}
-	}
-	if len(runs) == 0 {
-		status := scheduler.StatusOK
-		if claim.Missed {
-			status = scheduler.StatusMissed
-		}
-		_ = w.finish(ctx, claim, scheduler.Outcome{Status: status})
-		return status
-	}
-	var threadID *int64
-	if run, err := journal.GetRun(ctx, w.Service.DB.Read, runs[0]); err != nil {
-		return w.failedRun(ctx, claim, nil, err)
-	} else if run != nil {
-		threadID = &run.ThreadID
-	}
-	status, err := w.settleRuns(ctx, claim, runs, threadID)
-	if err != nil {
-		return w.failedRun(ctx, claim, threadID, err)
-	}
+	status := scheduler.Status(result.Status)
+	_ = w.finish(ctx, claim, scheduler.Outcome{Status: status, ThreadID: result.ThreadID, Error: result.Error, Tokens: result.Tokens, Cost: result.Cost})
 	return status
 }
 

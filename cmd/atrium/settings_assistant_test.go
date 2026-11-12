@@ -2,7 +2,9 @@ package main
 
 import (
 	"net/http"
+	"net/url"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -60,5 +62,34 @@ func TestAssistantSettingOrderingAndBuiltinSchedules(t *testing.T) {
 	_, page, _ = fetch(t, http.DefaultClient, "GET", base+"/scheduled", nil)
 	if !strings.Contains(page, "*/10 * * * *") || strings.Contains(page, "*/20 * * * *") {
 		t.Errorf("GET /scheduled must not sync builtin schedules; the scheduler worker does: %.800s", page)
+	}
+}
+
+func TestOwnerScheduleSettingRoundTripsThroughTheScheduledPage(t *testing.T) {
+	dir := t.TempDir()
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
+	setEnv(t, "ATRIUM_CONFIG", "")
+
+	if r := runSettings(t, "set", "agent_schedule_package_tracking", "*/45 * * * *"); r.code != cli.ExitOK {
+		t.Fatalf("set the tracking schedule: exit %d stderr %q", r.code, r.stderr)
+	}
+	w := asstBrowse(t, startServeIn(t, dir))
+	code, page, _ := w.get("/scheduled", false)
+	w.want(code, http.StatusOK, page, "package-tracking", "*/45 * * * *", "calendar-candidates", "ops-sampler", "media-thumbnails")
+
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	var id, n int64
+	if err := d.Read.QueryRow("SELECT id FROM jobs WHERE name = 'package-tracking' AND kind = 'builtin'").Scan(&id); err != nil {
+		t.Fatalf("the package-tracking job: %v", err)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM jobs WHERE kind IN ('builtin', 'nightly')").Scan(&n); err != nil || n != 12 {
+		t.Fatalf("%d built-in jobs (%v), want 12", n, err)
+	}
+	code, body, _ := w.post("/scheduled/"+strconv.FormatInt(id, 10)+"/schedule", url.Values{"schedule": {"*/50 * * * *"}}, true)
+	w.want(code, http.StatusOK, body, "*/50 * * * *")
+	if row := runSettings(t, "get", "agent_schedule_package_tracking").row(t); row.Value == nil || *row.Value != "*/50 * * * *" {
+		t.Errorf("agent_schedule_package_tracking = %+v, want the schedule edited on the page", row)
 	}
 }

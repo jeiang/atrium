@@ -27,6 +27,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/numx"
+	scheddef "github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -44,6 +45,7 @@ func Templates() fs.FS {
 
 type Options struct {
 	Tools registry.Source
+	Jobs  []scheddef.Definition
 }
 
 type pages struct {
@@ -51,6 +53,7 @@ type pages struct {
 	svc    *service.Service
 	now    func() float64
 	ledger *ledger.Store
+	jobs   []scheddef.Definition
 }
 
 const (
@@ -94,7 +97,7 @@ func Module(o Options) web.Module {
 			tz := config.From(base).TZName(d.Env)
 			stamp := assistant.Now()
 			if err := d.DB.WithTx(base, func(tx *sql.Tx) error {
-				return scheduler.Ensure(base, tx, tz, stamp)
+				return scheduler.Ensure(base, tx, o.Jobs, tz, stamp)
 			}); err != nil && !errors.Is(err, context.Canceled) {
 				return err
 			}
@@ -112,7 +115,7 @@ func Module(o Options) web.Module {
 		if d.OnClose != nil {
 			d.OnClose(shutdown)
 		}
-		p := &pages{deps: d, svc: svc, now: assistant.Now, ledger: run.Ledger}
+		p := &pages{deps: d, svc: svc, now: assistant.Now, ledger: run.Ledger, jobs: o.Jobs}
 		d.OnFrame(p.sidebar)
 		if err := module.SetFrom(d.Ctx).OnEnable(module.Assistant, start); err != nil {
 			panic(err)

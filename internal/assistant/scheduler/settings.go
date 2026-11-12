@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"time"
 
+	scheddef "github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 )
 
@@ -18,24 +19,31 @@ const (
 	KeyKnowledgeExport = "agent_schedule_knowledge_export"
 )
 
-func Settings() []settings.Def {
-	adv := func(key string, kind settings.Type, value string, check func(string) error) settings.Def {
-		return settings.Value(settings.Advanced, settings.Def{Key: key, Module: "assistant", Type: kind, Default: value, Check: check})
-	}
+func Settings(defs []scheddef.Definition) []settings.Def {
 	minimum := settings.Value(settings.Advanced, settings.Def{
 		Key: KeyMinInterval, Module: "assistant", Type: settings.Int, Default: "3600",
 		Check: settings.Between(60, 604800),
 	})
-	minimum.Peers = minimumIntervals
-	defs := []settings.Def{minimum}
-	for _, b := range Builtins {
-		def := adv(b.Setting, settings.String, b.Default, recurringSchedule)
-		if b.Run == PromptRun {
-			def.Peers = minimumGap
+	var gapped []string
+	for _, def := range defs {
+		if def.PromptRun {
+			gapped = append(gapped, def.ScheduleSetting)
 		}
-		defs = append(defs, def)
 	}
-	return defs
+	minimum.Peers = minimumIntervals(gapped)
+	return append([]settings.Def{minimum}, ScheduleSettings(defs)...)
+}
+
+func ScheduleSettings(defs []scheddef.Definition) []settings.Def {
+	out := make([]settings.Def, 0, len(defs))
+	for _, def := range defs {
+		s := settings.Value(settings.Advanced, settings.Def{Key: def.ScheduleSetting, Module: "assistant", Type: settings.String, Default: def.Schedule, Check: recurringSchedule})
+		if def.PromptRun {
+			s.Peers = minimumGap
+		}
+		out = append(out, s)
+	}
+	return out
 }
 
 func recurringSchedule(value string) error {
@@ -68,26 +76,25 @@ func minimumGap(value string, peer func(string) (string, error)) error {
 	return nil
 }
 
-func minimumIntervals(value string, peer func(string) (string, error)) error {
-	floor, err := strconv.Atoi(value)
-	if err != nil {
-		return settings.Invalid("must be a number")
-	}
-	for _, b := range Builtins {
-		if b.Run != PromptRun {
-			continue
-		}
-		text, err := peer(b.Setting)
+func minimumIntervals(keys []string) func(string, func(string) (string, error)) error {
+	return func(value string, peer func(string) (string, error)) error {
+		floor, err := strconv.Atoi(value)
 		if err != nil {
-			return err
+			return settings.Invalid("must be a number")
 		}
-		spec, err := Parse(text, "UTC")
-		if err != nil {
-			return settings.Invalid(err.Error())
+		for _, key := range keys {
+			text, err := peer(key)
+			if err != nil {
+				return err
+			}
+			spec, err := Parse(text, "UTC")
+			if err != nil {
+				return settings.Invalid(err.Error())
+			}
+			if gap, ok := spec.MinGap(float64(time.Now().Unix())); ok && gap < float64(floor) {
+				return settings.Invalid(fmt.Sprintf("%s must run at least %s seconds apart", key, value))
+			}
 		}
-		if gap, ok := spec.MinGap(float64(time.Now().Unix())); ok && gap < float64(floor) {
-			return settings.Invalid(fmt.Sprintf("%s must run at least %s seconds apart", b.Setting, value))
-		}
+		return nil
 	}
-	return nil
 }

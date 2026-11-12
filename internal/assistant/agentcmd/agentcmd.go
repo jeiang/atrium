@@ -7,7 +7,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/runner"
-	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/cli"
@@ -34,8 +33,8 @@ func threadKind(run string) threads.Kind {
 	return threads.Kind(run)
 }
 
-func Command(env config.Env, tools registry.Source, enabled func(module string) bool, now func() float64, jobs ...map[string]worker.Callable) *cli.Command {
-	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(env, tools, enabled, jobs...), runCommand(env, tools, now), subagentsCommand(env, tools, now)}}
+func Command(env config.Env, tools registry.Source, enabled func(module string) bool, now func() float64, jobs Jobs) *cli.Command {
+	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(env, tools, enabled, jobs), runCommand(env, tools, now), subagentsCommand(env, tools, now)}}
 }
 
 func clock(now func() float64) func() float64 {
