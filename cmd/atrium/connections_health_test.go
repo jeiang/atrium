@@ -20,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/module"
-
 )
 
 func grafanaHealthServer(t *testing.T) (*httptest.Server, *atomic.Int32) {

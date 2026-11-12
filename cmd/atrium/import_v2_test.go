@@ -577,8 +577,8 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 	editImportSource(t, source, "INSERT INTO secrets (name, value, set_at, set_by) VALUES ('media_tmdb_token', 'tmdb-imported-token', 1762000800, 'fixture')")
 
 	mediaPins := importSourceEnv(t, dir, map[string]string{
-		"ATRIUM_CORE_MEDIA_ENABLED":             "true",
-		"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL":    "http://qbittorrent.invalid",
+		"ATRIUM_CORE_MEDIA_ENABLED":          "true",
+		"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL": "http://qbittorrent.invalid",
 	})
 	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source, "--source-env", mediaPins)
 	if got.code != cli.ExitOK {

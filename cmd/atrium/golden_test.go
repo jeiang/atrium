@@ -175,8 +175,8 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	qbitURL := vars["QBITTORRENT_URL"]
 	eztvURL := vars["EZTV_URL"]
 	for phaseA, canonical := range map[string]string{
-		"ATRIUM_CHAT_URL": "ATRIUM_MAIL_MAIL_CHAT_URL",
-		"ATRIUM_MEDIA_ROOT": "ATRIUM_MEDIA_MEDIA_ROOT",
+		"ATRIUM_CHAT_URL":         "ATRIUM_MAIL_MAIL_CHAT_URL",
+		"ATRIUM_MEDIA_ROOT":       "ATRIUM_MEDIA_MEDIA_ROOT",
 		"ATRIUM_MEDIA_MOVIES_URL": "ATRIUM_MEDIA_MEDIA_MOVIES_URL", "ATRIUM_MEDIA_TV_URL": "ATRIUM_MEDIA_MEDIA_TV_URL",
 		"ATRIUM_CONTACTS_DIR": "ATRIUM_CONTACTS_CONTACTS_DIR",
 	} {

@@ -15,8 +15,8 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/module"
 )
 
 const (

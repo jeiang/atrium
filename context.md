@@ -145,8 +145,9 @@ behavior-parity target.
   `full`) or only the title `atrium` (`title`). ntfy is removed; the
   `ntfy_channels` table stays and only its `content` column is read.
 - Web Push devices subscribe from the Notifications settings page. The VAPID
-  key is a generated secret (`webpush_vapid_private_key`, pinnable) and the
-  subject comes from `webpush_subject`, edited on the Notifications page,
+  key is a generated secret (`webpush_vapid_private_key`) or the
+  `service/webpush` connection's `credential_files.vapid_private` host file,
+  and the subject comes from `webpush_subject`, edited on the Notifications page,
   which the notifications module requires. A push carries the title, a body of at most 240 characters, a
   URL path and, for phone actions, the action links; it is encrypted per
   RFC 8291 and sent only over HTTPS to public addresses. A 404 or 410
@@ -205,7 +206,9 @@ behavior-parity target.
   setting) and editable like effort and context; other run kinds use Haiku.
   A run records and sends its thread's model, usage is priced from the model
   on each usage row, and a model outside the catalog fails closed. The API key is
-  a write-only secret setting (the `ANTHROPIC_API_KEY` variable pins it). The
+  a write-only secret setting on the `service/anthropic` connection, or the
+  connection's `credential_files.api_key` host file; `ANTHROPIC_API_KEY` is
+  refused at startup. The
   monthly budget defaults to $150 with scheduled runs paused at 80% and chat at
   95%; the last 5% is reserved for classification. Every paid model call,
   memory summaries included, reserves its full cold prompt plus the request's
@@ -276,13 +279,13 @@ behavior-parity target.
   configured location or a named place, fetched over the shared transport.
   The record carries the editable location fields (`weather_latitude`,
   `weather_longitude` and `weather_location_name`), validated in range and
-  read-only when pinned. The Integrations page also has a Google OAuth wizard:
+  read-only when the host file declares them. The Integrations page also has a Google OAuth wizard:
   the Cloud console steps, a Web-application client ID and secret, consent
   per capability (Calendar or Gmail) with PKCE and a paste-back fallback, and
   a Testing-mode warning about 7-day refresh tokens. The state and verifier
   live in `oauth_states` for ten minutes; the refresh token is stored as a
-  secret (`google_calendar_refresh_token` or `google_gmail_refresh_token`),
-  pinnable with its `*_file` variable; Test exchanges it, and a 400 or 401
+  secret (`google_calendar_refresh_token` or `google_gmail_refresh_token`);
+  Test exchanges it, and a 400 or 401
   marks the integration needs-reauth.
 - SQLite holds application records, configuration stored by the application,
   and assistant history. Uploaded files live beside the database under
@@ -308,15 +311,20 @@ behavior-parity target.
   settings are database rows edited in the application or with `atrium
   settings set`; a value the host file declares for one, including a
   `<name>_enabled` module flag, wins and makes that setting read-only. Each
-  application instance builds its own settings registry (`settings.New()`),
-  every command reads the same stored operator values, and legacy
-  `ATRIUM_CONFIG` pins still apply to operator settings. Saving a working
-  integration turns its module on, and the settings audit rows show on the
-  Done page.
+  application instance builds its own settings registry (`settings.New()`)
+  and every command reads the same stored operator values. There is no
+  legacy pin file: `ATRIUM_CONFIG` is refused at startup, and so is an
+  `ATRIUM_<MODULE>_<KEY>` variable for an operator or tuning key or for a
+  connection-owned host key (the refusal names the destination). Provider
+  credentials come only from connection records: the Connections page, a
+  connection `credential_files` entry in the host file, or `atrium secrets`.
+  The only app key inputs are `app_keys.action_link_key_file` and
+  `app_keys.link_key_file`. Saving a working integration turns its module on,
+  and the settings audit rows show on the Done page.
   Secrets set through `atrium secrets` are stored write-only in the database
   and are never read back or shown; stored API keys and tokens are refused on a plaintext
-  database. A database key (`db.key_file` in the configuration file,
-  `ATRIUM_DB_KEY`, `ATRIUM_DB_KEY_FILE`, or the `db_key` systemd credential) makes every command
+  database. A database key (`ATRIUM_DB_KEY`, `ATRIUM_DB_KEY_FILE`, or the
+  `db_key` systemd credential) makes every command
   open the database encrypted; a fresh database is created encrypted, and a
   plaintext or wrong-key mismatch refuses to start. Without a key the
   database stays plaintext. `atrium db encrypt` converts a stopped
