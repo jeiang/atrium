@@ -186,20 +186,6 @@ func Resolve() []ledger.ResolveDefinition {
 	return append(out, ledger.ResolveDefinition{Operation: ledger.LegacyAutoUndo, Hook: resolveCorrection})
 }
 
-func RegisterLedgerUndoers(s *ledger.Store, open mail.OpenFunc, q db.Querier) error {
-	for _, d := range Undo(open, q) {
-		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
-			return err
-		}
-	}
-	for _, d := range Resolve() {
-		if err := s.RegisterResolve(d.Operation, d.Hook); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 type moveBackResult struct {
 	Restored int `json:"restored"`
 	Missing  int `json:"missing"`
@@ -360,12 +346,4 @@ func derefOr0(v *uint32) uint32 {
 		return 0
 	}
 	return *v
-}
-
-func NewStore(d *db.DB, open mail.OpenFunc, now func() float64) *ledger.Store {
-	s := ledger.NewStore(d, now)
-	if err := RegisterLedgerUndoers(s, open, d.Read); err != nil {
-		panic(err)
-	}
-	return s
 }

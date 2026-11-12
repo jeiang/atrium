@@ -56,26 +56,31 @@ type Registry struct {
 	Sync       SyncHook
 }
 
-func NewRegistry() *Registry {
+func newRegistry() *Registry {
 	return &Registry{Executors: map[string]Executor{}, Dismissers: map[string]DismissHook{}, byName: map[string]Kind{}}
 }
 
-func (r *Registry) AddKind(k Kind) {
-	if _, found := r.byName[k.Name]; found {
-		panic("proposals: duplicate kind " + k.Name)
-	}
-	r.byName[k.Name] = k
-	r.kinds = append(r.kinds, k)
-}
+type DuplicateKind string
 
-func (r *Registry) Add(d Definition) {
-	if d.Execute != nil {
-		r.Executors[d.Kind.Name] = d.Execute
+func (e DuplicateKind) Error() string { return "proposals: duplicate kind " + string(e) }
+
+func NewRegistryFrom(defs []Definition, sync SyncHook) (*Registry, error) {
+	r := newRegistry()
+	r.Sync = sync
+	for _, def := range defs {
+		if _, ok := r.byName[def.Kind.Name]; ok {
+			return nil, DuplicateKind(def.Kind.Name)
+		}
+		if def.Execute != nil {
+			r.Executors[def.Kind.Name] = def.Execute
+		}
+		if def.Dismiss != nil {
+			r.Dismissers[def.Kind.Name] = def.Dismiss
+		}
+		r.byName[def.Kind.Name] = def.Kind
+		r.kinds = append(r.kinds, def.Kind)
 	}
-	if d.Dismiss != nil {
-		r.Dismissers[d.Kind.Name] = d.Dismiss
-	}
-	r.AddKind(d.Kind)
+	return r, nil
 }
 
 func (r *Registry) Kinds() []Kind { return r.kinds }

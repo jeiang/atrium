@@ -18,12 +18,12 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/assistant/toolset"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -61,7 +61,11 @@ const (
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
 		open := imapclient.Opener(d.Cfg)
-		run, err := runner.New(o.Tools, toolset.Ledger(d.DB, d.Env, open, assistant.Now), open)
+		store, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, open, assistant.Now)
+		if err != nil {
+			panic(err)
+		}
+		run, err := runner.New(o.Tools, store, open)
 		if err != nil {
 			panic(err)
 		}

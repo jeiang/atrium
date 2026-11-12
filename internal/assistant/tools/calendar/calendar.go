@@ -358,15 +358,6 @@ func Undo(store *ledger.Store, env config.Env) []ledger.UndoDefinition {
 	}
 }
 
-func RegisterLedgerUndoers(s *ledger.Store, env config.Env) error {
-	for _, d := range Undo(s, env) {
-		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func schema(properties string, required string) json.RawMessage {
 	return json.RawMessage(fmt.Sprintf(`{"type":"object","properties":{%s},"required":%s,"additionalProperties":false}`, properties, required))
 }

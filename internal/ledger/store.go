@@ -158,9 +158,38 @@ func NewStore(d *db.DB, now func() float64) *Store {
 	return &Store{DB: d, now: now, undoers: map[string]Undoer{}, resolves: map[string]ResolveHook{}}
 }
 
+type DuplicateOperation struct{ Operation string }
+
+func (e *DuplicateOperation) Error() string { return "ledger: duplicate operation " + e.Operation }
+
+func NewStoreWith(d *db.DB, now func() float64, build func(*Store) ([]UndoDefinition, []ResolveDefinition, error)) (*Store, error) {
+	s := NewStore(d, now)
+	undo, resolve, err := build(s)
+	if err != nil {
+		return nil, err
+	}
+	for _, def := range undo {
+		if _, ok := s.undoers[def.Operation]; ok {
+			return nil, &DuplicateOperation{Operation: def.Operation}
+		}
+		if err := s.registerUndo(def.Operation, def.Undoer); err != nil {
+			return nil, err
+		}
+	}
+	for _, def := range resolve {
+		if _, ok := s.resolves[def.Operation]; ok {
+			return nil, &DuplicateOperation{Operation: def.Operation}
+		}
+		if err := s.registerResolve(def.Operation, def.Hook); err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
+}
+
 func (s *Store) Now() float64 { return s.now() }
 
-func (s *Store) RegisterUndo(name string, fn Undoer) error {
+func (s *Store) registerUndo(name string, fn Undoer) error {
 	if strings.TrimSpace(name) == "" {
 		return errors.New("ledger: undo registration without a name")
 	}
@@ -180,7 +209,7 @@ func (s *Store) undoer(name string) (Undoer, bool) {
 	return fn, ok
 }
 
-func (s *Store) RegisterResolve(operation string, fn ResolveHook) error {
+func (s *Store) registerResolve(operation string, fn ResolveHook) error {
 	if strings.TrimSpace(operation) == "" {
 		return errors.New("ledger: resolve registration without an operation")
 	}

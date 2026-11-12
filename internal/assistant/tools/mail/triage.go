@@ -9,31 +9,23 @@ import (
 	"strings"
 	"time"
 
-	proposetools "github.com/jeiang/atrium/internal/assistant/tools/propose"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/executors"
 	"github.com/jeiang/atrium/internal/mail/mailops"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
 func Proposals() []proposals.Definition {
 	return []proposals.Definition{{
-		Kind: proposals.Kind{Name: executors.MailTriage},
+		Kind: proposals.Kind{Name: executors.MailTriage, Module: module.Mail},
 		Build: &proposals.Builder{
 			Description: "{items: [{id, action, label?, due?}]}: propose archive, label or snooze for a batch of messages; one proposal per run",
 			Build:       proposeTriage,
 		},
 	}}
-}
-
-func RegisterProposalKinds() {
-	for _, d := range Proposals() {
-		if d.Build != nil {
-			proposetools.Register(d.Kind.Name, d.Build.Description, d.Build.Build)
-		}
-	}
 }
 
 type triageRequest struct {

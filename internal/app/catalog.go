@@ -6,6 +6,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/assistantmodule"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/tools/grafana/grafanamodule"
+	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	"github.com/jeiang/atrium/internal/calendar/calendarcmd"
 	"github.com/jeiang/atrium/internal/calendar/calendarmodule"
 	"github.com/jeiang/atrium/internal/config"
@@ -42,7 +43,7 @@ func Builtins(d Dependencies) []module.Builder {
 		calendarmodule.Module{},
 		notionmodule.Module{Env: d.Env},
 		mediamodule.Module{Now: d.Now},
-		assistantmodule.Module{Now: d.Now, Callables: []map[string]worker.Callable{calendarcmd.Callables(), mediacmd.Callables(), mailcmd.Callables(), kbcallables.Callables(), serverops.Callables()}},
+		assistantmodule.Module{Now: d.Now, ProposeKinds: mailtools.Proposals(), Callables: []map[string]worker.Callable{calendarcmd.Callables(), mediacmd.Callables(), mailcmd.Callables(), kbcallables.Callables(), serverops.Callables()}},
 		notifymodule.Module{Budget: d.Budget},
 		grafanamodule.Module{},
 	}

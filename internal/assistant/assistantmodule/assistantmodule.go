@@ -8,6 +8,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
 	"github.com/jeiang/atrium/internal/assistant/anthropicconn"
+	"github.com/jeiang/atrium/internal/assistant/approval"
 	"github.com/jeiang/atrium/internal/assistant/digest"
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
 	"github.com/jeiang/atrium/internal/assistant/loop"
@@ -43,8 +44,10 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/inference/opsmetrics"
+	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tasks"
@@ -54,8 +57,9 @@ import (
 )
 
 type Module struct {
-	Now       func() float64
-	Callables []map[string]worker.Callable
+	ProposeKinds []proposals.Definition
+	Now          func() float64
+	Callables    []map[string]worker.Callable
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
@@ -82,9 +86,17 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Group: "Instance", Label: "Usage", URL: "/settings/usage", Page: "usage", Settings: true, Order: 60},
 			},
 		}},
-		Groups:      SettingGroups(),
-		Commands:    []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Callables...), memorycmd.Command(mc.Env, m.Now)},
-		Tools:       ToolDefinitions(),
+		Groups:   SettingGroups(),
+		Commands: []*cli.Command{agentcmd.Command(mc.Env, mc.Tools, mc.Enabled, m.Now, m.Callables...), memorycmd.Command(mc.Env, m.Now)},
+		Tools:    ToolDefinitions(m.ProposeKinds),
+		Effects: func(d module.EffectDeps) module.Effects {
+			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, MailOpen: d.Open, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
+			return module.Effects{
+				Proposals: slices.Concat(a.Proposals(), permissionProposals(d.Resume)),
+				Undo:      slices.Concat(filetools.Undo(), kb.Undo(), taskstools.Undo(), scheduletools.Undo(), serverops.Undo(), export.Undo(d.Ledger)),
+				Resolve:   export.Resolve(d.Ledger),
+			}
+		},
 		Connections: slices.Concat(anthropicconn.Connections(), webfetch.Connections(), weather.Connections()),
 	}
 }
@@ -129,12 +141,12 @@ func anthropicKey(ctx context.Context, p module.Probe) (string, error) {
 	return "", nil
 }
 
-func ToolDefinitions() []module.ToolDefinition {
-	defs := []module.ToolDefinition{{Tool: registry.WebSearchTool()}}
+func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
+	defs := []module.ToolDefinition{{Tool: registry.WebSearchTool()}, proposetools.Definition(kinds)}
 	for _, tools := range [][]tool.Tool{
 		askoperator.Tools(), attentiontool.Tools(), filetools.Tools(), memorytools.Tools(),
 		webfetch.Tools(), recalltools.Tools(), plantools.Tools(),
-		proposetools.Tools(), scheduletools.Tools(), taskstools.Tools(),
+		scheduletools.Tools(), taskstools.Tools(),
 		kbtools.Tools(), weathertools.Tools(), opstools.Tools(),
 	} {
 		for _, t := range tools {

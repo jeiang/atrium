@@ -22,7 +22,6 @@ import (
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/proposals/handlers"
 )
 
 var log = logx.Logger("atrium.run")
@@ -74,14 +73,21 @@ type Pass struct {
 	Extras   []Extra
 }
 
-func New(env config.Env, d *db.DB, cfg config.Config, open mail.OpenFunc, now func() float64) *Pass {
+func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open mail.OpenFunc, now func() float64) (*Pass, error) {
 	if now == nil {
 		now = mail.WallClock
 	}
 	syncer := &mailsync.Syncer{DB: d, Cfg: cfg, Now: now}
-	registry := proposals.NewRegistry()
-	handlers.Register(registry, handlers.Deps{DB: d, Open: open, Syncer: syncer, Now: now, Env: env})
-	l := &live.Live{DB: d, Cfg: cfg, Store: live.NewStore(d, open, now), Open: open, Registry: registry, Now: now}
+	cat := module.SetFrom(ctx).Catalog()
+	store, err := cat.Ledger(d, env, open, now)
+	if err != nil {
+		return nil, err
+	}
+	registry, err := cat.Proposals(module.EffectDeps{DB: d, Ledger: store, Open: open, Syncer: syncer, Now: now, Env: env, Approvals: cat.Approvals()})
+	if err != nil {
+		return nil, err
+	}
+	l := &live.Live{DB: d, Cfg: cfg, Store: store, Open: open, Registry: registry, Now: now}
 	p := &Pass{
 		DB:       d,
 		Cfg:      cfg,
@@ -107,7 +113,7 @@ func New(env config.Env, d *db.DB, cfg config.Config, open mail.OpenFunc, now fu
 			return watches.Refresh(ctx, d, now(), watches.Options{Env: env, Clock: now})
 		}},
 	}
-	return p
+	return p, nil
 }
 
 func Open(ctx context.Context, env config.Env, cfg config.Config, open mail.OpenFunc, now func() float64) (*Pass, func(), error) {
@@ -119,7 +125,12 @@ func Open(ctx context.Context, env config.Env, cfg config.Config, open mail.Open
 		_ = d.Close()
 		return nil, nil, err
 	}
-	return New(env, d, cfg, open, now), func() { _ = d.Close() }, nil
+	p, err := New(ctx, env, d, cfg, open, now)
+	if err != nil {
+		_ = d.Close()
+		return nil, nil, err
+	}
+	return p, func() { _ = d.Close() }, nil
 }
 
 func (p *Pass) SyncOne(ctx context.Context, account string) error {

@@ -405,12 +405,3 @@ func Resolve(s *ledger.Store) []ledger.ResolveDefinition {
 func Undo(s *ledger.Store) []ledger.UndoDefinition {
 	return append(notionUndo(s), obsidianUndo(s)...)
 }
-
-func RegisterLedgerResolves(s *ledger.Store) error {
-	for _, d := range Resolve(s) {
-		if err := s.RegisterResolve(d.Operation, d.Hook); err != nil {
-			return err
-		}
-	}
-	return nil
-}

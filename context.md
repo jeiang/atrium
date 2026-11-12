@@ -461,6 +461,9 @@ behavior-parity target.
   undo is its own effect row. `atrium effects list|show|resolve|undo` inspects
   and settles effects; `atrium writes` and `atrium live` are domain-filtered
   views of the same rows.
+  Undo and resolve handlers come from the compiled module catalog at every
+  entry point, including mail proposal effects and media effects; the effect
+  state and the relevant write gate still determine whether an undo can run.
 - Mail writes use the shared gate. Shadow mode records decisions without
   automatic mailbox writes; live automatic writes also depend on pause,
   go-live eligibility, verification, caps, and the effect ledger. The mode is

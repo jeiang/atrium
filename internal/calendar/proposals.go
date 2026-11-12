@@ -327,12 +327,6 @@ func (p *Proposals) Proposals(owner string) []proposals.Definition {
 	}
 }
 
-func Register(reg *proposals.Registry, p *Proposals, owner string) {
-	for _, d := range p.Proposals(owner) {
-		reg.Add(d)
-	}
-}
-
 func (p *Proposals) Undo() []ledger.UndoDefinition {
 	return []ledger.UndoDefinition{{Operation: RestoreOp, Undoer: ledger.Undoer{
 		Validate: func(raw json.RawMessage) error {
@@ -361,13 +355,4 @@ func (p *Proposals) Undo() []ledger.UndoDefinition {
 			return ledger.Result{State: ledger.Done, After: after}, nil
 		},
 	}}}
-}
-
-func RegisterLedgerUndoer(s *ledger.Store, p *Proposals) error {
-	for _, d := range p.Undo() {
-		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
-			return err
-		}
-	}
-	return nil
 }

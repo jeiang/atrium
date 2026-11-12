@@ -21,6 +21,8 @@ type Set struct {
 	cur   atomic.Pointer[Snapshot]
 }
 
+func (s *Set) Catalog() *Catalog { return s.cat }
+
 type setKey struct{}
 
 func WithSet(ctx context.Context, s *Set) context.Context {

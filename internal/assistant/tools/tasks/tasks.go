@@ -300,15 +300,6 @@ func Undo() []ledger.UndoDefinition {
 	return out
 }
 
-func RegisterLedgerUndoers(s *ledger.Store) error {
-	for _, d := range Undo() {
-		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func validateLedgerUndo(name string) func(json.RawMessage) error {
 	return func(payload json.RawMessage) error {
 		var head struct {

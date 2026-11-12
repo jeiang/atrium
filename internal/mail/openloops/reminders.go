@@ -277,24 +277,9 @@ func Undo() []ledger.UndoDefinition {
 	}}}
 }
 
-func RegisterLedgerUndoer(s *ledger.Store) error {
-	for _, d := range Undo() {
-		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func (r *Reminders) Proposals(owner string) []proposals.Definition {
 	return []proposals.Definition{{
 		Kind:    proposals.Kind{Name: KindReminder, Module: owner, Label: "Reminder", Icon: "scroll-text"},
 		Execute: r.Execute,
 	}}
-}
-
-func Register(reg *proposals.Registry, r *Reminders, owner string) {
-	for _, d := range r.Proposals(owner) {
-		reg.Add(d)
-	}
 }

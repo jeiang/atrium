@@ -120,15 +120,6 @@ func Undo(s *ledger.Store, open mail.OpenFunc) []ledger.UndoDefinition {
 	)
 }
 
-func RegisterLedgerUndoer(s *ledger.Store, open mail.OpenFunc) error {
-	for _, d := range Undo(s, open) {
-		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func mailUndoFailure(err error) error {
 	var missing config.NotConfigured
 	if errors.As(err, &missing) {

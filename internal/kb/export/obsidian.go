@@ -67,8 +67,8 @@ func runObsidian(ctx context.Context, d *db.DB, env config.Env, now float64) (Re
 		})
 	}
 	entries = append(entries, pageEntry{recordID: 0, page: render.Index(indexEntries(records, loc)), path: "index.md"})
-	store := ledger.NewStore(d, nil)
-	if err := RegisterLedgerObsidian(store); err != nil {
+	store, err := exportLedger(ctx, d, env)
+	if err != nil {
 		return Result{}, err
 	}
 	return syncObsidian(ctx, store, now, dir, entries)
@@ -396,15 +396,6 @@ func obsidianUndo(s *ledger.Store) []ledger.UndoDefinition {
 			return err
 		},
 	}}}
-}
-
-func RegisterLedgerObsidian(s *ledger.Store) error {
-	for _, d := range Undo(s) {
-		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func slug(title string) string {

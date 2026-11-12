@@ -21,8 +21,8 @@ import (
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/proposals/handlers"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -54,7 +54,6 @@ func RecoverDrafts(ctx context.Context, d *db.DB, cfg config.Config) error {
 
 type Options struct {
 	Clients func(config.Config) mail.OpenFunc
-	Ledger  func(*db.DB, config.Config) *ledger.Store
 	Enabled func(context.Context, db.Querier, string) (bool, error)
 	Tools   registry.Source
 }
@@ -79,18 +78,21 @@ func Module(o Options) web.Module {
 			open = o.Clients(d.Cfg)
 		}
 		now := wallClock
-		registry := proposals.NewRegistry()
 		syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: now}
-		effects := ledger.NewStore(d.DB, now)
-		if o.Ledger != nil {
-			effects = o.Ledger(d.DB, d.Cfg)
+		cat := module.SetFrom(d.Ctx).Catalog()
+		effects, err := cat.Ledger(d.DB, d.Env, open, now)
+		if err != nil {
+			panic(err)
 		}
-		handlers.Register(registry, handlers.Deps{DB: d.DB, Ledger: effects, Open: open, Syncer: syncer, Now: now, Env: d.Env, Registry: o.Tools, Resume: func(ctx context.Context, runID int64) error {
+		registry, err := cat.Proposals(module.EffectDeps{DB: d.DB, Ledger: effects, Open: open, Syncer: syncer, Now: now, Env: d.Env, Tools: o.Tools, Approvals: cat.Approvals(), Resume: func(ctx context.Context, runID int64) error {
 			if d.ResumeRun == nil {
 				return proposals.ProposalError("the assistant module is not running")
 			}
 			return d.ResumeRun(ctx, runID)
 		}})
+		if err != nil {
+			panic(err)
+		}
 		s := &service{
 			deps:     d,
 			now:      now,

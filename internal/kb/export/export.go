@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/kb/render"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notion"
 	"github.com/jeiang/atrium/internal/notionid"
@@ -116,8 +117,19 @@ func runNotion(ctx context.Context, d *db.DB, env config.Env, now float64) (Resu
 		return out, err
 	}
 	defer client.Close()
-	store := ledger.NewStore(d, nil)
+	store, err := exportLedger(ctx, d, env)
+	if err != nil {
+		return out, err
+	}
 	return syncNotion(ctx, store, now, client, parent, entries)
+}
+
+func exportLedger(ctx context.Context, d *db.DB, env config.Env) (*ledger.Store, error) {
+	cfg, err := config.Load(env)
+	if err != nil {
+		return nil, err
+	}
+	return module.SetFrom(ctx).Catalog().Ledger(d, env, imapclient.Opener(cfg), nil)
 }
 
 func threadTitles(ctx context.Context, q db.Querier, records []kb.ExportRecord) (map[int64]string, error) {

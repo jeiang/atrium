@@ -120,12 +120,3 @@ func Undo(s *ledger.Store, env config.Env) []ledger.UndoDefinition {
 		}},
 	)
 }
-
-func RegisterLedgerUndoer(s *ledger.Store, env config.Env) error {
-	for _, d := range Undo(s, env) {
-		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
-			return err
-		}
-	}
-	return nil
-}

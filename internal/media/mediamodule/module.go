@@ -46,9 +46,15 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Section: "apps", Label: "Library", URL: "/apps/media/library", Icon: "film", Page: "media_library", Order: 30},
 			},
 		}},
-		Groups:      SettingGroups(),
-		Commands:    []*cli.Command{mediacmd.Command(mc.Env, m.Now)},
-		Tools:       ToolDefinitions(),
+		Groups:   SettingGroups(),
+		Commands: []*cli.Command{mediacmd.Command(mc.Env, m.Now)},
+		Tools:    ToolDefinitions(),
+		Effects: func(d module.EffectDeps) module.Effects {
+			return module.Effects{
+				Undo:    mediatools.Undo(d.Ledger, d.Env),
+				Resolve: media.Resolve(d.Ledger),
+			}
+		},
 		Connections: media.Connections(),
 	}
 }

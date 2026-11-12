@@ -44,7 +44,14 @@ func (Module) Declare(mc module.Context) module.Declaration {
 			"calendar candidates":  {Needs: []string{module.Mail}},
 			"calendar google-auth": {Always: true},
 		},
-		Tools:       ToolDefinitions(),
+		Tools: ToolDefinitions(),
+		Effects: func(d module.EffectDeps) module.Effects {
+			p := &calendar.Proposals{DB: d.DB, Ledger: d.Ledger, Now: d.Now, Env: d.Env}
+			return module.Effects{
+				Proposals: p.Proposals(module.Calendar),
+				Undo:      slices.Concat(p.Undo(), calendartools.Undo(d.Ledger, d.Env)),
+			}
+		},
 		Connections: calendar.Connections(),
 	}
 }

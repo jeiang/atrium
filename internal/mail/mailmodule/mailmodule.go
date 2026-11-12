@@ -12,8 +12,11 @@ import (
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/accountpages"
+	"github.com/jeiang/atrium/internal/mail/executors"
+	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/mailcmd"
 	"github.com/jeiang/atrium/internal/mail/mailconn"
+	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/tracking"
@@ -95,7 +98,21 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			"endpoints probe": {Always: true},
 			"replay":          {Always: true},
 		},
-		Tools:       ToolDefinitions(),
+		Tools:        ToolDefinitions(),
+		ProposeKinds: mailtools.Proposals(),
+		Effects: func(d module.EffectDeps) module.Effects {
+			e := &executors.Executors{DB: d.DB, Ledger: d.Ledger, Open: d.Open, Now: d.Now}
+			r := &openloops.Reminders{DB: d.DB, Ledger: d.Ledger, Now: d.Now}
+			effects := module.Effects{
+				Proposals: slices.Concat(e.Proposals(module.Mail), r.Proposals(module.Mail)),
+				Undo:      slices.Concat(e.Undo(), mailtools.Undo(d.Ledger, d.Open), live.Undo(d.Open, d.DB.Read), openloops.Undo()),
+				Resolve:   live.Resolve(),
+			}
+			if d.Syncer != nil {
+				effects.Sync = executors.SyncAfter(d.Syncer, d.Open)
+			}
+			return effects
+		},
 		Connections: slices.Concat(Connections(), tracking.Connections()),
 		AccountSync: mailconn.AccountSync(),
 	}

@@ -13,7 +13,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
-	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -318,8 +317,6 @@ func liveFindings(ctx context.Context, q db.Querier) ([]any, error) {
 	}
 	return out, nil
 }
-
-func RegisterLedgerUndoer(s *ledger.Store) error { return serverops.RegisterLedgerUndoer(s) }
 
 func Tools() []tool.Tool {
 	return []tool.Tool{

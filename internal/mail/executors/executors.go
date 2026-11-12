@@ -1003,15 +1003,6 @@ func (e *Executors) Undo() []ledger.UndoDefinition {
 	)
 }
 
-func RegisterUndoers(s *ledger.Store, e *Executors) error {
-	for _, d := range e.Undo() {
-		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func SyncAfter(syncer *mailsync.Syncer, open mail.OpenFunc) proposals.SyncHook {
 	return func(ctx context.Context, account string) error {
 		lock, err := db.Exclusive(ctx, syncer.Cfg.DBPath, db.ShortLockWait)
@@ -1033,14 +1024,4 @@ func (e *Executors) Proposals(owner string) []proposals.Definition {
 		{Kind: proposals.Kind{Name: InboxBacklog, Module: owner, Label: "Inbox backlog", Icon: "inbox", Picker: true, Groups: true}, Execute: e.ExecuteMoves},
 		{Kind: proposals.Kind{Name: MailTriage, Module: owner, Label: "Mail triage", Icon: "inbox", Picker: true, Messages: true, CountKey: "count"}, Execute: e.ExecuteTriage},
 	}
-}
-
-func Register(r *proposals.Registry, e *Executors, syncer *mailsync.Syncer, owner string) {
-	for _, d := range e.Proposals(owner) {
-		r.Add(d)
-	}
-	if err := RegisterUndoers(e.store(), e); err != nil {
-		panic(err)
-	}
-	r.Sync = SyncAfter(syncer, e.Open)
 }

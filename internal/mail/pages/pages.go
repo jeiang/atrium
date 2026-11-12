@@ -18,8 +18,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/mail/rules"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
-	"github.com/jeiang/atrium/internal/proposals"
-	"github.com/jeiang/atrium/internal/proposals/handlers"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -77,9 +76,16 @@ func wallClock() float64 { return float64(time.Now().UnixNano()) / 1e9 }
 func Module(r chi.Router, d *web.Deps) {
 	open := imapclient.Opener(d.Cfg)
 	syncer := &mailsync.Syncer{DB: d.DB, Cfg: d.Cfg, Now: wallClock}
-	registry := proposals.NewRegistry()
-	handlers.Register(registry, handlers.Deps{DB: d.DB, Open: open, Syncer: syncer, Now: wallClock, Env: d.Env})
-	l := &live.Live{DB: d.DB, Cfg: d.Cfg, Store: live.NewStore(d.DB, open, wallClock), Open: open, Registry: registry, Now: wallClock}
+	cat := module.SetFrom(d.Ctx).Catalog()
+	store, err := cat.Ledger(d.DB, d.Env, open, wallClock)
+	if err != nil {
+		panic(err)
+	}
+	registry, err := cat.Proposals(module.EffectDeps{DB: d.DB, Ledger: store, Env: d.Env, Open: open, Syncer: syncer, Now: wallClock, Approvals: cat.Approvals()})
+	if err != nil {
+		panic(err)
+	}
+	l := &live.Live{DB: d.DB, Cfg: d.Cfg, Store: store, Open: open, Registry: registry, Now: wallClock}
 	s := &service{deps: d, now: wallClock, live: l, applier: applier.New(l, open, syncer), drafts: &drafts.Store{DB: d.DB, Cfg: d.Cfg}}
 
 	r.Get("/messages/{message_id}", s.messagePage)

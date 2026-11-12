@@ -10,7 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 )
@@ -37,8 +37,12 @@ var channels = skippable(func(ctx context.Context, d *db.DB, env config.Env, now
 	if err != nil {
 		return nil, err
 	}
-	store := ledger.NewStore(d, now)
-	if err := media.RegisterLedgerUndoer(store, env); err != nil {
+	cfg, err := config.Load(env)
+	if err != nil {
+		return nil, err
+	}
+	store, err := module.SetFrom(ctx).Catalog().Ledger(d, env, imapclient.Opener(cfg), now)
+	if err != nil {
 		return nil, err
 	}
 	result, err := media.Poll(ctx, d, store, env, settings, media.PollOptions{Now: now})
@@ -53,8 +57,12 @@ var sweep = skippable(func(ctx context.Context, d *db.DB, env config.Env, now fu
 	if err != nil {
 		return nil, err
 	}
-	store := ledger.NewStore(d, now)
-	if err := media.RegisterLedgerUndoer(store, env); err != nil {
+	cfg, err := config.Load(env)
+	if err != nil {
+		return nil, err
+	}
+	store, err := module.SetFrom(ctx).Catalog().Ledger(d, env, imapclient.Opener(cfg), now)
+	if err != nil {
 		return nil, err
 	}
 	selected, err := settings.SelectFiles(ctx, store, settings, media.Scope{}, nil)

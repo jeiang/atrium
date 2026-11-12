@@ -379,17 +379,3 @@ func Resolve(s *ledger.Store) []ledger.ResolveDefinition {
 		{Operation: OpFile, Hook: fileResolve},
 	}
 }
-
-func RegisterLedgerUndoer(s *ledger.Store, env config.Env) error {
-	for _, d := range Undo(s, env) {
-		if err := s.RegisterUndo(d.Operation, d.Undoer); err != nil {
-			return err
-		}
-	}
-	for _, d := range Resolve(s) {
-		if err := s.RegisterResolve(d.Operation, d.Hook); err != nil {
-			return err
-		}
-	}
-	return nil
-}

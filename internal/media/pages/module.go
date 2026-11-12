@@ -11,7 +11,9 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -60,8 +62,8 @@ func Module(o Options) web.Module {
 		if now == nil {
 			now = media.Now
 		}
-		effects := ledger.NewStore(d.DB, now)
-		if err := media.RegisterLedgerUndoer(effects, d.Env); err != nil {
+		effects, err := module.SetFrom(d.Ctx).Catalog().Ledger(d.DB, d.Env, imapclient.Opener(d.Cfg), now)
+		if err != nil {
 			panic(err)
 		}
 		s := &service{deps: d, now: now, links: media.NewLinks(d.Settings, d.DB, d.Cfg.MediaLinkKeyPath()), effects: effects}

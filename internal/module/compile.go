@@ -59,6 +59,18 @@ func Compile(decls []Declaration) (*Catalog, error) {
 	if err != nil {
 		return nil, err
 	}
+	kinds := map[string]bool{}
+	for _, d := range decls {
+		for _, k := range d.ProposeKinds {
+			if strings.TrimSpace(k.Kind.Name) == "" || k.Build == nil || k.Build.Build == nil {
+				return nil, &InvalidDeclaration{Module: d.Name, Field: "propose kinds"}
+			}
+			if kinds[k.Kind.Name] {
+				return nil, proposals.DuplicateKind(k.Kind.Name)
+			}
+			kinds[k.Kind.Name] = true
+		}
+	}
 	commands := map[string]bool{}
 	sectionNames := map[string]bool{}
 	var sections []settingspage.Section

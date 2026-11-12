@@ -90,12 +90,6 @@ func (e *Executor) Proposals() []proposals.Definition {
 	return out
 }
 
-func (e *Executor) Register(r *proposals.Registry) {
-	for _, d := range e.Proposals() {
-		r.Add(d)
-	}
-}
-
 func (e *Executor) now() float64 {
 	if e.Now != nil {
 		return e.Now()
