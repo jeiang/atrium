@@ -54,7 +54,7 @@ INSERT INTO wiki_pages (page_id, title, aliases, in_trash) VALUES
 
 func TestKnowledgeImportIsIdempotent(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(notion.WikiRootKey), "00000000-0000-0000-0000-000000000001")
+	seedSettings(t, map[string]string{notion.WikiRootKey: "00000000-0000-0000-0000-000000000001"})
 	if ran := runApp(t, "settings", "list"); ran.code != 0 {
 		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
 	}
@@ -190,7 +190,7 @@ func TestKnowledgeImportIsIdempotent(t *testing.T) {
 
 func TestKnowledgeImportTreatsUniformPrivacyAsDefault(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(notion.WikiRootKey), "00000000-0000-0000-0000-000000000001")
+	seedSettings(t, map[string]string{notion.WikiRootKey: "00000000-0000-0000-0000-000000000001"})
 	if ran := runApp(t, "settings", "list"); ran.code != 0 {
 		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
 	}
@@ -266,7 +266,7 @@ INSERT INTO notion_pages (id, parent_id, title, markdown, private, in_trash, url
 
 func TestKnowledgeImportCleansNotionMarkup(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(notion.WikiRootKey), "00000000-0000-0000-0000-000000000001")
+	seedSettings(t, map[string]string{notion.WikiRootKey: "00000000-0000-0000-0000-000000000001"})
 	if ran := runApp(t, "settings", "list"); ran.code != 0 {
 		t.Fatalf("settings list: %d %s", ran.code, ran.stderr)
 	}

@@ -26,6 +26,7 @@ func startSettingsServe(t *testing.T, values map[string]string) string {
 			t.Fatalf("settings set %s: %d %s", key, ran.code, ran.stderr)
 		}
 	}
+	seedFlagsAt(t, newTestApp(t, nil), filepath.Join(dir, "atrium.db"), allFlagsTrue())
 	return startServeIn(t, dir)
 }
 

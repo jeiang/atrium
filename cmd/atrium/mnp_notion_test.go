@@ -116,6 +116,7 @@ func mnpNotionSite(t *testing.T, fake *mnpNotion, wikiRoot string) (*mnpBrowser,
 	t.Cleanup(srv.Close)
 	setEnv(t, settingEnv(notion.WikiRootKey), wikiRoot)
 	dir := t.TempDir()
+	seedAllFlagsIn(t, dir)
 	b := mnpNewBrowser(t, startServeIn(t, dir))
 	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
 	if err != nil {

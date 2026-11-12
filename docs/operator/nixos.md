@@ -2,7 +2,7 @@
 
 The flake's `nixosModules.default` defines `services.atrium`. All options below sit under that prefix. Nothing is created unless `services.atrium.enable` is true.
 
-The module has a small set of typed deployment options. Host configuration goes in `host`, host connections in `connections`, and secret settings in `secretFiles`; all use the keys of the [configuration reference](../config/reference.md). Host keys are read only from the host file and its environment, never from the database. Twelve tuning values are compiled constants, not settings. Operator preferences are not host configuration: set them in the application, where they are stored in the database and audited, except the `<name>_enabled` module flags, which the host may also declare; a declared flag wins and is read-only. A cut-over operator or tuning key in `host` fails evaluation with its destination.
+The module has a small set of typed deployment options. Host configuration goes in `host`, host connections in `connections`, and app signing key files in `secretFiles`; all use the keys of the [configuration reference](../config/reference.md). Host keys are read only from the host file and its environment, never from the database. Twelve tuning values are compiled constants, not settings. Operator preferences are not host configuration: set them in the application, where they are stored in the database and audited, except the `<name>_enabled` module flags, which the host may also declare; a declared flag wins and is read-only. A cut-over operator or tuning key in `host` fails evaluation with its destination. The mail mode is one of those operator settings: change it with `atrium settings set mail_mode shadow|live`, so `host.mail.mail_mode` fails evaluation with that command.
 
 ## Core
 
@@ -18,7 +18,7 @@ The module has a small set of typed deployment options. Host configuration goes 
 | `host` | TOML table per module | `{}` | Host configuration, rendered to the file named by `ATRIUM_HOST_CONFIG`. Only host keys from the configuration reference are accepted; operator and tuning keys, and derived keys such as `export.export_obsidian_dir`, fail evaluation with their destination, except the `<name>_enabled` module flags, which are operator settings the host may declare. Host values are read-only in the application, and a database row with a host key is ignored. |
 | `connections` | attribute set of connection | `{}` | Host-owned connections by id. Each has `kind`, optional `label`, `config`, `transport`, `capabilities` and `credentialFiles` (slot to host file). Each file is delivered through `LoadCredential`; secret values never enter the Nix store. The kind must be one the application registers. |
 | `mailAccounts` | attribute set of mail account | `{}` | Mail accounts by id, rendered as `mail/<id>` connections of kind `mail` with the `imap` and `smtp` capabilities and the password as a host-file credential. Each has `preset` (`icloud` or `gmail`), `login`, `passwordFile`, and optional `label` and `enabled`. The password file is delivered through `LoadCredential`; the id keys the account's cached mail, so keep it stable. |
-| `secretFiles` | attribute set of string | `{}` | Secret settings as `"<module>.<key>" = "<host file>"`, delivered through systemd `LoadCredential` and pinned as `<key>_file`. Connection credentials belong in `connections.<id>.credentialFiles`; host secret inputs belong in `host.<module>.<key>_file`; the database key belongs in `database.keyFile`. The app signing keys are host inputs `host.app_keys.action_link_key_file` and `host.app_keys.link_key_file`; their bytes sign and verify links and are never copied into the database. |
+| `secretFiles` | attribute set of string | `{}` | App signing key files as `"<module>.<key>" = "<host file>"`, delivered through systemd `LoadCredential` and rendered as `host.app_keys.<key>_file`. Only `action_links.action_link_key` and `media.link_key` are accepted; their bytes sign and verify links and are never copied into the database. Connection credentials belong in `connections.<id>.credentialFiles`, host secret inputs in `host.<module>.<key>_file`, and the database key in `database.keyFile`. Any other key fails evaluation with its destination. |
 | `database.keyFile` | null or string | `null` | Host file holding the database key, delivered as the `db-key` credential and `ATRIUM_DB_KEY_FILE`. |
 | `initialTimezone` | null or string | `time.timeZone` | Time zone stored as the operator `tz` value when a fresh database has none. A stored or imported value wins, and the operator can change it afterwards. |
 | `environmentFiles` | list of string | `[]` | `EnvironmentFile=` paths read by every unit and by `atrium-run`; no application credential needs one. The TMDB read token is a connection credential in `connections."service/tmdb".credentialFiles.read_token`; the Grafana token is a connection credential until its owner is cut over; the Notion token is a connection credential in `connections."service/notion".credentialFiles.token`. Calendar and contacts reuse an iCloud mail account for their CalDAV and CardDAV login. |
@@ -62,15 +62,15 @@ These options are removed; setting one now fails evaluation as an unknown option
 - `publicUrl` → `host.core.public_url`
 - `timeZone` → `initialTimezone`; the operator `tz` value is editable after bootstrap
 - `icloudAppleId` → the Settings page
-- `extraEnvironment` → `host` and `secretFiles`
+- `extraEnvironment` → `host`, `connections` and `secretFiles` (app signing keys only); raw secret environment variables are refused at startup
 - `web.port` → `port`
 - `web.oidc.enable` → `web.auth = "proxy+oidc"` (or `"oidc"` for OIDC only)
 - `media.root`, `media.moviesUrl`, `media.tvUrl` → `host.media.*`; qBittorrent, TMDB and EZTV are `connections."service/{qbittorrent,tmdb,eztv}"`
-- `grafanaUrl` → `host.grafana.grafana_url`
+- `grafanaUrl` → `connections."service/grafana".config.url`
 - `secretFiles."db.key"` → `database.keyFile`
 - `vdirsyncer` options and the `stateDir/vdirsyncer/` directory → `stateDir/mirrors/`; the old directory is not read and the mirrors re-sync.
 
-The earlier unprefixed environment variables (`ATRIUM_MODE`, `ATRIUM_TZ`, `ATRIUM_PUBLIC_URL` and the others listed in [Settings and secrets](behavior.md#settings-and-secrets)) are not read and do not pin anything.
+The earlier unprefixed environment variables (`ATRIUM_MODE`, `ATRIUM_TZ`, `ATRIUM_PUBLIC_URL` and the others listed in [Settings and secrets](behavior.md#settings-and-secrets)) are not read and do not pin anything. `ATRIUM_CONFIG` and its pin file are gone; a startup that still sets it, an operator or tuning `ATRIUM_<MODULE>_<KEY>` variable, a raw secret variable such as `ANTHROPIC_API_KEY`, or a connection-owned host key such as `ATRIUM_GRAFANA_GRAFANA_URL` is refused with the destination to use instead.
 
 ## Web listeners
 

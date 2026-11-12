@@ -13,7 +13,6 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 )
@@ -59,11 +58,10 @@ func TestConnectionTestsSaveOnlyWorkingCredentialsAndNeverRenderThem(t *testing.
 	}))
 	t.Cleanup(grafana.Close)
 
-	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	t.Cleanup(func() { db.SetDefaultKey(db.Key{}) })
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
 	setEnv(t, "ATRIUM_HOST_CONFIG", servicesHostConfig(t, dir, grafana.URL, api.URL))
-	setEnv(t, settingEnv(grafanatools.KeyURL), grafana.URL)
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
 
@@ -117,7 +115,9 @@ func TestConnectionTestsSaveOnlyWorkingCredentialsAndNeverRenderThem(t *testing.
 		t.Error("the settings page rendered a stored credential")
 	}
 
-	if got := runApp(t, "settings", "get", "anthropic_api_key"); got.code != cli.ExitError || !strings.Contains(got.stderr, "service/anthropic credential api_key") {
+	if got := runApp(t, "settings", "get", "anthropic_api_key"); got.code != cli.ExitError ||
+		!strings.Contains(got.stderr, "anthropic_api_key") ||
+		!strings.Contains(got.stderr, `connections."service/anthropic".credential_files.api_key`) {
 		t.Errorf("settings get of the retired Anthropic secret: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
 	}
 }

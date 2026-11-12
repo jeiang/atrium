@@ -16,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/testutil/llmstub"
 )
 
@@ -31,8 +32,17 @@ func accountsFile(t *testing.T, dir string, accounts ...mailAccount) string {
 
 func accountsFileWith(t *testing.T, dir, anthropicKey string, accounts ...mailAccount) string {
 	t.Helper()
+	return accountsFileEmbedding(t, dir, "", anthropicKey, accounts...)
+}
+
+func accountsFileEmbedding(t *testing.T, dir, embedURL, anthropicKey string, accounts ...mailAccount) string {
+	t.Helper()
+	embedding := ""
+	if embedURL != "" {
+		embedding = embeddingTable(embedURL)
+	}
 	var b strings.Builder
-	b.WriteString(hostConfigBodyWith("", defaultWebPushConnection, anthropicKey))
+	b.WriteString(hostConfigBodyWith(embedding, defaultWebPushConnection, anthropicKey))
 	for _, a := range accounts {
 		secret := filepath.Join(dir, a.id+".password")
 		if err := os.WriteFile(secret, []byte(a.password+"\n"), 0o600); err != nil {
@@ -54,8 +64,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
-	setEnv(t, "ATRIUM_MAIL_MAIL_MODE", "shadow")
+	seedSettings(t, map[string]string{mail.KeyMode: "shadow", module.FlagKey(module.Mail): "true"})
 
 	home := mailtest.NewFakeClient()
 	inbox := home.AddBox("INBOX", mailtest.NewBox(7))
@@ -89,7 +98,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 		return appRun{code, out.String(), errs.String()}
 	}
 	key := "ATRIUM_HOST_CONFIG"
-	path := accountsFile(t, dir,
+	path := accountsFileEmbedding(t, dir, srv.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"),
 		mailAccount{"home", "icloud", "me@icloud.test", "home pass", false},
 		mailAccount{"work", "gmail", "me@work.test", "work-pass", false},
 		mailAccount{"off", "gmail", "off@gmail.test", "off-pass", true})
@@ -132,7 +141,7 @@ func TestMailAccountsFileDefinesWhichAccountsSyncAndRemovalKeepsMail(t *testing.
 		}
 	}
 
-	setEnv(t, key, accountsFile(t, t.TempDir(), mailAccount{"home", "icloud", "me@icloud.test", "home pass", false}))
+	setEnv(t, key, accountsFileEmbedding(t, t.TempDir(), srv.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"home", "icloud", "me@icloud.test", "home pass", false}))
 	opened = map[string]int{}
 	if got := run("sync"); got.code != 0 || opened["work"] != 0 {
 		t.Fatalf("sync after removing work: %+v, opened %v", got, opened)
@@ -168,4 +177,14 @@ func insertMailAccount(t *testing.T, d *db.DB, id, preset, login, method string)
 			t.Fatal(err)
 		}
 	}
+}
+
+func embeddingTable(url string) string {
+	return fmt.Sprintf(`[connections."service/embedding"]
+kind = "service/embedding"
+label = "Embedding"
+config = { url = %q, model = "embeddinggemma" }
+capabilities = ["embeddings"]
+
+`, url)
 }

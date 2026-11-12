@@ -30,11 +30,14 @@ func MustRegisterHost(defs ...HostDef) {
 func HostDefs() []HostDef {
 	out := make([]HostDef, 0, len(hostDefs)+len(importManifest))
 	for _, d := range hostDefs {
+		if ConnectionOwnedHostKey(d.Key) {
+			continue
+		}
 		d.Choices = slices.Clone(d.Choices)
 		out = append(out, d)
 	}
 	for _, e := range importManifest {
-		if e.Class != ImportHost || e.Action == ImportRename || e.Module == "db" && e.Key == "key" {
+		if e.Class != ImportHost || e.Action == ImportRename || e.Module == "db" && e.Key == "key" || ConnectionOwnedHostKey(e.Key) {
 			continue
 		}
 		if slices.ContainsFunc(out, func(d HostDef) bool { return d.Key == e.Key }) {
@@ -46,7 +49,22 @@ func HostDefs() []HostDef {
 	return out
 }
 
+func HostKey(key string) bool {
+	return slices.ContainsFunc(HostDefs(), func(d HostDef) bool { return d.Key == key })
+}
+
+func DefaultOf(key string) string {
+	entry, ok := ImportEntryFor(key)
+	if !ok {
+		return ""
+	}
+	return entry.Default
+}
+
 func HostDefOf(key string) (HostDef, bool) {
+	if ConnectionOwnedHostKey(key) {
+		return HostDef{}, false
+	}
 	for _, d := range hostDefs {
 		if d.Key == key {
 			return d, true

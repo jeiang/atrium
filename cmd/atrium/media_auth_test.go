@@ -8,8 +8,6 @@ import (
 	"strings"
 	"sync"
 	"testing"
-
-	"github.com/jeiang/atrium/internal/media"
 )
 
 type fakeQbit struct {
@@ -108,12 +106,8 @@ func TestMediaCredentialsTestThroughConnectionsAndAuthenticateEveryRequest(t *te
 	}))
 	t.Cleanup(eztv.Close)
 
-	setEnv(t, settingEnv(media.KeyTMDBURL), tmdbSrv.URL+"/3")
-	setEnv(t, settingEnv(media.KeyTMDBImagesURL), images.URL)
-	setEnv(t, settingEnv(media.KeyEZTVURL), eztv.URL)
-
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(media.KeyQbitURL), qbSrv.URL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbSrv.URL, eztv.URL, tmdbSrv.URL+"/3", images.URL))
 	s := &connectionSite{t: t, dir: dir}
 	s.start()
 

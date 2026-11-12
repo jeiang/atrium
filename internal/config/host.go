@@ -54,17 +54,17 @@ func HostFile(env Env) string { return stripped(env, HostConfigEnv) }
 
 func refuseRemovedSelectors(env Env) error {
 	for _, key := range []string{"oidc_access_group", "oidc_admin_group", "oidc_admin_emails", "oidc_admin_domains"} {
-		replacement, removed := settings.RemovedHostKey(key)
+		entry, removed := settings.ImportEntryFor(key)
 		if !removed {
 			continue
 		}
+		destination := settings.Destination(entry)
 		name := "ATRIUM_AUTH_" + strings.ToUpper(key)
-		want := "ATRIUM_AUTH_" + strings.ToUpper(strings.TrimPrefix(replacement, "host.auth."))
 		if _, ok := env(name); ok {
-			return fmt.Errorf("config: %s was removed; use %s", name, want)
+			return fmt.Errorf("config: %s was removed; use %s", name, destination)
 		}
 		if _, ok := env(name + "_FILE"); ok {
-			return fmt.Errorf("config: %s was removed; use %s", name+"_FILE", want+"_FILE")
+			return fmt.Errorf("config: %s was removed; use %s", name+"_FILE", destination)
 		}
 	}
 	return nil
@@ -90,31 +90,56 @@ func LoadHost(env Env, filename string) (Host, error) {
 		}
 	}
 	h.deriveHostConnections()
+	if err := h.validateAppKeys(); err != nil {
+		return Host{}, err
+	}
 	return h, nil
 }
 
-func (h *Host) readEnv(env Env, d settings.HostDef) error {
-	name := "ATRIUM_" + strings.ToUpper(d.Module) + "_" + strings.ToUpper(d.Key)
-	value := strings.TrimSpace(get(env, name))
-	path, fileSet := env(name + "_FILE")
-	if d.Secret {
-		if fileSet {
-			if value != "" {
-				return fmt.Errorf("config: %s and %s_FILE are both set; set only one", name, name)
-			}
-			raw, err := os.ReadFile(path)
-			if err != nil {
-				return fmt.Errorf("config: %s_FILE: %w", name, err)
-			}
-			value = strings.TrimSpace(string(raw))
-		}
-	} else if fileSet {
-		if value != "" {
-			return fmt.Errorf("config: %s and %s_FILE are both set; set only one", name, name)
+func (h *Host) validateAppKeys() error {
+	for _, key := range []string{"action_link_key_file", "link_key_file"} {
+		path := strings.TrimSpace(h.Values[key])
+		if path == "" {
+			continue
 		}
 		raw, err := os.ReadFile(path)
 		if err != nil {
-			return fmt.Errorf("config: %s_FILE: %w", name, err)
+			return fmt.Errorf("config: app_keys.%s: %w", key, err)
+		}
+		if strings.TrimSpace(string(raw)) == "" {
+			return fmt.Errorf("config: app_keys.%s: %s is empty", key, path)
+		}
+	}
+	return nil
+}
+
+func (h *Host) readEnv(env Env, d settings.HostDef) error {
+	if err := refuseEnvName(env, d.Module, d.Key); err != nil {
+		return err
+	}
+	name := "ATRIUM_" + strings.ToUpper(d.Module) + "_" + strings.ToUpper(d.Key)
+	fileName := name + strings.ToUpper(fileSuffix)
+	value := strings.TrimSpace(get(env, name))
+	path, fileSet := env(fileName)
+	if d.Secret {
+		if value != "" {
+			return fmt.Errorf("config: %s is a secret; set %s", name, fileName)
+		}
+		if !fileSet {
+			return nil
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("config: %s: %w", fileName, err)
+		}
+		value = strings.TrimSpace(string(raw))
+	} else if fileSet {
+		if value != "" {
+			return fmt.Errorf("config: %s and %s are both set; set only one", name, fileName)
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("config: %s: %w", fileName, err)
 		}
 		value = strings.TrimSpace(string(raw))
 	}
@@ -209,23 +234,14 @@ func hostKeyOf(keys map[string]settings.HostDef, name string) (d settings.HostDe
 }
 
 func hostKeyRefusal(path, module, name string) error {
-	if replacement, removed := settings.RemovedHostKey(name); removed {
-		return fmt.Errorf("config: %s: %s.%s was removed; use %s", path, module, name, replacement)
-	}
 	entry, ok := settings.ImportEntryFor(name)
 	if !ok || entry.Module != module {
 		return nil
 	}
-	switch {
-	case entry.Module == "db" && entry.Key == "key":
+	if entry.Module == "db" && entry.Key == "key" {
 		return fmt.Errorf("config: %s: db.key is the database key; use ATRIUM_DB_KEY_FILE", path)
-	case entry.Class == settings.ImportHost:
-		return fmt.Errorf("config: %s: %s.%s is now the connection field %s; declare it under [connections]", path, module, name, entry.Target)
-	case entry.Class == settings.ImportTuning:
-		return fmt.Errorf("config: %s: %s.%s is a compiled constant %s", path, module, name, entry.Target)
-	default:
-		return fmt.Errorf("config: %s: %s.%s is not host configuration; use %s", path, module, name, settings.CutoverDestination(entry))
 	}
+	return fmt.Errorf("config: %s: %s.%s is not host configuration; use %s", path, module, name, settings.Destination(entry))
 }
 
 func (h *Host) readConnections(env Env, path string, raw any) error {
@@ -378,111 +394,41 @@ func validateHostValue(d settings.HostDef, value string) error {
 }
 
 func (h *Host) deriveHostConnections() {
-	if _, ok := h.Connections["service/qbittorrent"]; !ok {
-		if url := h.Values["media_qbittorrent_url"]; url != "" {
-			c := HostConnection{
-				Kind:         "service/qbittorrent",
-				Label:        "qBittorrent",
-				Config:       map[string]string{"url": url},
-				Transport:    map[string]string{},
-				Capabilities: []string{"api"},
-			}
-			if v := h.Values["qbittorrent_ca_file"]; v != "" {
-				c.Transport["ca_file"] = v
-			}
-			if v := h.Values["qbittorrent_proxy"]; v != "" {
-				c.Transport["proxy"] = v
-			}
-			h.Connections["service/qbittorrent"] = c
-		}
-	}
 	h.deriveService("service/anthropic", "Anthropic", map[string]string{
 		"url": "https://api.anthropic.com",
-	}, map[string]string{
-		"ca_file": h.Values["anthropic_ca_file"],
-		"proxy":   h.Values["anthropic_proxy"],
-	}, []string{"models"}, false)
-	if h.Values["grafana_url"] != "" {
-		h.deriveService("service/grafana", "Grafana", map[string]string{
-			"url":         h.Values["grafana_url"],
-			"metrics_uid": h.Values["grafana_metrics_uid"],
-			"logs_uid":    h.Values["grafana_logs_uid"],
-			"logs_type":   h.Values["grafana_logs_type"],
-			"logs_query":  h.Values["grafana_logs_query"],
-		}, map[string]string{
-			"ca_file": h.Values["grafana_ca_file"],
-			"proxy":   h.Values["grafana_proxy"],
-		}, []string{"viewer"}, true)
-	}
-	weather := h.explicit("weather_open_meteo_url", "weather_geocoding_url", "open_meteo_ca_file", "open_meteo_proxy")
-	if _, declared := h.Connections["service/weather"]; declared || weather {
+	}, nil, []string{"models"}, false)
+	if _, declared := h.Connections["service/weather"]; declared {
 		h.deriveService("service/weather", "Open-Meteo", map[string]string{
-			"url":           h.Values["weather_open_meteo_url"],
-			"geocoding_url": h.Values["weather_geocoding_url"],
-		}, map[string]string{
-			"ca_file": h.Values["open_meteo_ca_file"],
-			"proxy":   h.Values["open_meteo_proxy"],
-		}, []string{"forecast", "geocoding"}, weather)
+			"url":           settings.DefaultOf("weather_open_meteo_url"),
+			"geocoding_url": settings.DefaultOf("weather_geocoding_url"),
+		}, nil, []string{"forecast", "geocoding"}, false)
 	}
 	if _, declared := h.Connections["service/webfetch"]; declared {
 		h.deriveService("service/webfetch", "Web fetch", map[string]string{
 			"url": "https://example.com/",
 		}, nil, []string{"egress"}, false)
 	}
-	if _, declared := h.Connections["service/tmdb"]; !declared && h.explicit("media_tmdb_url", "media_tmdb_images_url", "tmdb_ca_file", "tmdb_proxy") {
+	if _, declared := h.Connections["service/tmdb"]; declared {
 		h.deriveService("service/tmdb", "TMDB", map[string]string{
-			"url":        h.Values["media_tmdb_url"],
-			"images_url": h.Values["media_tmdb_images_url"],
-		}, map[string]string{
-			"ca_file": h.Values["tmdb_ca_file"],
-			"proxy":   h.Values["tmdb_proxy"],
-		}, []string{"api", "images"}, false)
+			"url":        settings.DefaultOf("media_tmdb_url"),
+			"images_url": settings.DefaultOf("media_tmdb_images_url"),
+		}, nil, []string{"api", "images"}, false)
 	}
-	if _, declared := h.Connections["service/eztv"]; !declared && h.explicit("media_eztv_url") {
+	if _, declared := h.Connections["service/eztv"]; declared {
 		h.deriveService("service/eztv", "EZTV", map[string]string{
-			"url": h.Values["media_eztv_url"],
+			"url": settings.DefaultOf("media_eztv_url"),
 		}, nil, []string{"indexer"}, false)
 	}
-	if _, declared := h.Connections["service/embedding"]; declared || h.explicit("mail_embed_url", "mail_embed_model", "mail_embed_ca_file", "mail_embed_proxy") {
+	if _, declared := h.Connections["service/embedding"]; declared {
 		h.deriveService("service/embedding", "Embedding", map[string]string{
-			"url":   h.Values["mail_embed_url"],
-			"model": h.Values["mail_embed_model"],
-		}, map[string]string{
-			"ca_file": h.Values["mail_embed_ca_file"],
-			"proxy":   h.Values["mail_embed_proxy"],
-		}, []string{"embeddings"}, false)
+			"model": settings.DefaultOf("mail_embed_model"),
+		}, nil, []string{"embeddings"}, false)
 	}
-	h.deriveService("service/ship24", "Ship24", map[string]string{
-		"url": h.Values["mail_ship24_url"],
-	}, map[string]string{
-		"ca_file": h.Values["ship24_ca_file"],
-		"proxy":   h.Values["ship24_proxy"],
-	}, []string{"api"}, false)
-	h.deriveService("service/oidc", "Sign-in", map[string]string{
-		"preset":         h.Values["oidc_preset"],
-		"issuer":         h.Values["oidc_issuer"],
-		"client_id":      h.Values["oidc_client_id"],
-		"api_client_id":  h.Values["oidc_api_client_id"],
-		"scopes":         h.Values["oidc_scopes"],
-		"groups_claim":   h.Values["oidc_groups_claim"],
-		"access_groups":  h.Values["oidc_access_groups"],
-		"access_emails":  h.Values["oidc_access_emails"],
-		"access_domains": h.Values["oidc_access_domains"],
-	}, nil, []string{"discovery", "client_auth"}, false)
-	if ca := h.Values["webpush_ca_file"]; ca != "" {
-		h.deriveService("service/webpush", "Web push", map[string]string{
-			"subject": h.Values["webpush_subject"],
-		}, map[string]string{"ca_file": ca}, []string{"delivery"}, false)
+	if _, declared := h.Connections["service/ship24"]; declared {
+		h.deriveService("service/ship24", "Ship24", map[string]string{
+			"url": settings.DefaultOf("mail_ship24_url"),
+		}, nil, []string{"api"}, false)
 	}
-}
-
-func (h *Host) explicit(keys ...string) bool {
-	for _, key := range keys {
-		if h.Sources[key] != "" {
-			return true
-		}
-	}
-	return false
 }
 
 func (h *Host) deriveService(id, label string, config, transport map[string]string, capabilities []string, override bool) {

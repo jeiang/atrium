@@ -9,22 +9,23 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic"
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
-	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 var moduleNames = module.Builtins
@@ -79,6 +80,22 @@ kind = "service/webpush"
 label = "Web push"
 config = { subject = "mailto:ops@example.test" }
 capabilities = ["delivery"]
+`
+
+const defaultEmbeddingConnection = `
+[connections."service/embedding"]
+kind = "service/embedding"
+label = "Embedding"
+config = { url = "http://embed.invalid/v1", model = "embeddinggemma" }
+capabilities = ["embeddings"]
+`
+
+const defaultQbitConnection = `
+[connections."service/qbittorrent"]
+kind = "service/qbittorrent"
+label = "qBittorrent"
+config = { url = "http://qbittorrent.invalid" }
+capabilities = ["api"]
 `
 
 func hostConfigBody(webpush string) string {
@@ -177,7 +194,7 @@ var defaultHostConfig = func() string {
 		panic("cannot write the default host credentials")
 	}
 	path := filepath.Join(dir, "host.toml")
-	body := hostConfigBody(defaultWebPushConnection) + mailConnection("icloud", "icloud", "operator@icloud.invalid", defaultMailPassword, true)
+	body := hostConfigBodyWith(defaultEmbeddingConnection, defaultWebPushConnection, anthropicKey) + defaultQbitConnection + mailConnection("icloud", "icloud", "operator@icloud.invalid", defaultMailPassword, true)
 	if os.WriteFile(path, []byte(body), 0o600) != nil {
 		panic("cannot write the default host configuration")
 	}
@@ -188,9 +205,6 @@ var testEnv = func() map[string]string {
 	env := requirementEnv(filepath.Join(testRoot, "media"))
 	env[anthropic.BaseURLEnv] = "http://127.0.0.1:9"
 	env[settingEnv(ops.ListenKey)] = "127.0.0.1:0"
-	for _, name := range moduleNames {
-		env[flagEnv(name)] = "true"
-	}
 	return env
 }()
 
@@ -284,6 +298,238 @@ func setEnv(t *testing.T, name, value string) {
 	})
 }
 
+func seedSettings(t *testing.T, kv map[string]string) {
+	t.Helper()
+	if got := runSettings(t, "list"); got.code != cli.ExitOK {
+		t.Fatalf("settings list before seeding: exit %d stderr %q", got.code, got.stderr)
+	}
+	lookup := testLookupFor(t)
+	if f := fixtureFor(t); f != nil {
+		lookup = f.lookup
+	}
+	path, _ := lookup("ATRIUM_DB")
+	if path == "" {
+		t.Fatal("seeding settings needs ATRIUM_DB")
+	}
+	seedSettingsAt(t, path, kv)
+}
+
+func allFlagSettings() map[string]string {
+	flags := map[string]string{}
+	for _, name := range moduleNames {
+		flags[module.FlagKey(name)] = "true"
+	}
+	return flags
+}
+
+func seedAllFlags(t *testing.T) {
+	t.Helper()
+	seedSettings(t, allFlagSettings())
+}
+
+func seedAllFlagsIn(t *testing.T, dir string) {
+	t.Helper()
+	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
+	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
+	seedAllFlags(t)
+}
+
+func flagKeyOf(key string) bool {
+	for _, name := range moduleNames {
+		if key == module.FlagKey(name) {
+			return true
+		}
+	}
+	return false
+}
+
+func seedSettingsAt(t *testing.T, path string, kv map[string]string) {
+	t.Helper()
+	env := testLookupFor(t)
+	reg := settings.New()
+	st := config.NewState(reg)
+	ctx := config.With(context.Background(), st)
+	ctx = settings.With(ctx, reg)
+	if err := bootstrap(env, reg)(ctx, io.Discard); err != nil {
+		t.Fatalf("seed bootstrap: %v", err)
+	}
+	d, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	if err := newSet(env, reg, st, nil, imapclient.Opener, nil).Seed(ctx, d); err != nil {
+		t.Fatalf("seed modules: %v", err)
+	}
+	ctx = audit.With(ctx, "fixture", audit.UI)
+	for key, value := range kv {
+		if key == "" {
+			continue
+		}
+		if flagKeyOf(key) && value == "" {
+			value = "false"
+		}
+		if err := reg.Set(ctx, d.Write, key, value); err != nil {
+			t.Fatalf("seed %s: %v", key, err)
+		}
+	}
+}
+
+func plantSettingRow(t *testing.T, path, key, value string) {
+	t.Helper()
+	d, err := db.Connect(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	if _, err := d.Write.Exec("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)", key, value); err != nil {
+		t.Fatalf("plant %s: %v", key, err)
+	}
+}
+
+func hostConfigEdit(t *testing.T, dir, name string, edits map[string]string, tables ...string) string {
+	t.Helper()
+	return hostConfigFrom(t, defaultHostConfig, dir, name, edits, tables...)
+}
+
+func hostConfigFrom(t *testing.T, src, dir, name string, edits map[string]string, tables ...string) string {
+	t.Helper()
+	raw, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw)
+	for old, next := range edits {
+		if !strings.Contains(body, old) {
+			t.Fatalf("host config has no %q to replace", old)
+		}
+		body = strings.Replace(body, old, next, 1)
+	}
+	for _, table := range tables {
+		body += table
+	}
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func hostConfigAppend(t *testing.T, src, dir, name string, tables ...string) string {
+	t.Helper()
+	raw, err := os.ReadFile(src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := string(raw) + strings.Join(tables, "")
+	path := filepath.Join(dir, name)
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
+func qbitHost(t *testing.T, dir, url string) string {
+	t.Helper()
+	return hostConfigEdit(t, dir, "host-qbit.toml", map[string]string{
+		`config = { url = "http://qbittorrent.invalid" }`: `config = { url = ` + strconv.Quote(url) + ` }`,
+	})
+}
+
+func qbitHostWithCA(t *testing.T, dir, url, ca string) string {
+	t.Helper()
+	return hostConfigEdit(t, dir, "host-qbit-ca.toml", map[string]string{
+		`config = { url = "http://qbittorrent.invalid" }`: `config = { url = ` + strconv.Quote(url) + ` }`,
+		`capabilities = ["api"]`:                          `capabilities = ["api"]` + "\ntransport = { ca_file = " + strconv.Quote(ca) + " }",
+	})
+}
+
+func embedHost(t *testing.T, dir, url string) string {
+	t.Helper()
+	return embedHostNamed(t, dir, "host-embed.toml", url)
+}
+
+func embedHostNamed(t *testing.T, dir, name, url string) string {
+	t.Helper()
+	return hostConfigEdit(t, dir, name, map[string]string{
+		`config = { url = "http://embed.invalid/v1", model = "embeddinggemma" }`: `config = { url = ` + strconv.Quote(url) + `, model = "embeddinggemma" }`,
+	})
+}
+
+func weatherHost(t *testing.T, dir, forecast, geocoding string) string {
+	t.Helper()
+	return hostConfigEdit(t, dir, "host-weather.toml", nil, fmt.Sprintf(`
+[connections."service/weather"]
+kind = "service/weather"
+label = "Weather"
+config = { url = %q, geocoding_url = %q }
+capabilities = ["forecast", "geocoding"]
+`, forecast, geocoding))
+}
+
+func eztvTable(url string) string {
+	return fmt.Sprintf(`
+[connections."service/eztv"]
+kind = "service/eztv"
+label = "EZTV"
+config = { url = %q }
+capabilities = ["api"]
+`, url)
+}
+
+func tmdbTable(url, imagesURL string) string {
+	return fmt.Sprintf(`
+[connections."service/tmdb"]
+kind = "service/tmdb"
+label = "TMDB"
+config = { url = %q, images_url = %q }
+capabilities = ["api"]
+`, url, imagesURL)
+}
+
+func mediaHost(t *testing.T, dir, qbit, eztv, tmdb, tmdbImages string) string {
+	t.Helper()
+	edits := map[string]string{}
+	if qbit != "" {
+		edits[`config = { url = "http://qbittorrent.invalid" }`] = `config = { url = ` + strconv.Quote(qbit) + ` }`
+	}
+	var tables []string
+	if eztv != "" {
+		tables = append(tables, eztvTable(eztv))
+	}
+	if tmdb != "" {
+		tables = append(tables, tmdbTable(tmdb, tmdbImages))
+	}
+	return hostConfigEdit(t, dir, "host-media.toml", edits, tables...)
+}
+
+func grafanaHost(t *testing.T, dir, url string) string {
+	t.Helper()
+	return grafanaHostWith(t, dir, url, "metrics", "", "")
+}
+
+func grafanaHostWith(t *testing.T, dir, url, metricsUID, logsUID, logsType string) string {
+	t.Helper()
+	raw, err := os.ReadFile(defaultHostConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := `config = { url = ` + strconv.Quote(url) + `, metrics_uid = ` + strconv.Quote(metricsUID)
+	if logsUID != "" {
+		config += `, logs_uid = ` + strconv.Quote(logsUID)
+	}
+	if logsType != "" {
+		config += `, logs_type = ` + strconv.Quote(logsType)
+	}
+	config += ` }`
+	body := strings.Replace(string(raw), `config = { url = "http://grafana.invalid" }`, config, 1)
+	path := filepath.Join(dir, "host-grafana.toml")
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	return path
+}
+
 func moduleEnv(dir string) map[string]string {
 	return map[string]string{
 		settingEnv(media.KeyRoot):   filepath.Join(dir, "media"),
@@ -295,12 +541,8 @@ func requirementEnv(mediaRoot string) map[string]string {
 	return map[string]string{
 		settingEnv(endpoint.KeyChatURL): "http://chat.invalid/v1",
 		settingEnv(media.KeyRoot):       mediaRoot,
-		settingEnv(media.KeyQbitURL):    "http://qbittorrent.invalid",
-		settingEnv(calendar.AppleIDKey): "operator@icloud.invalid",
 		settingEnv(contacts.DirKey):     mediaRoot + "-contacts",
 		"ATRIUM_HOST_CONFIG":            defaultHostConfig,
-		"ATRIUM_MAIL_MAIL_EMBED_URL":    "http://embed.invalid/v1",
-		settingEnv(grafanatools.KeyURL): "http://grafana.invalid",
 	}
 }
 
@@ -308,9 +550,6 @@ func init() {
 	defaults := requirementEnv(filepath.Join(testRoot, "media"))
 	defaults[anthropic.BaseURLEnv] = "http://127.0.0.1:9"
 	defaults[settingEnv(ops.ListenKey)] = "127.0.0.1:0"
-	for _, name := range moduleNames {
-		defaults[flagEnv(name)] = "true"
-	}
 	for name, value := range defaults {
 		if _, set := os.LookupEnv(name); !set {
 			_ = os.Setenv(name, value)

@@ -2,14 +2,9 @@ package config
 
 import (
 	"fmt"
-	"maps"
 	"os"
 	"regexp"
-	"slices"
-	"strconv"
 	"strings"
-
-	"github.com/BurntSushi/toml"
 
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings"
@@ -18,6 +13,7 @@ import (
 const (
 	ConfigEnv  = "ATRIUM_CONFIG"
 	fileSuffix = "_file"
+	dbKeyEnv   = "ATRIUM_DB_KEY"
 )
 
 var interpolation = regexp.MustCompile(`\$\{([A-Za-z_][A-Za-z0-9_]*)\}`)
@@ -35,206 +31,105 @@ func EnvName(d settings.Def) string {
 	return "ATRIUM_" + strings.ToUpper(d.Module) + "_" + strings.ToUpper(d.Key)
 }
 
-func TOMLName(d settings.Def) string { return d.Module + "." + d.Key }
-
 func LoadPins(env Env, reg *settings.Registry) (*Pins, error) {
-	defs := reg.Defs()
-	pins := &Pins{m: map[string]pin{}}
-	if path := stripped(env, ConfigEnv); path != "" {
-		if err := pins.readFile(env, reg, defs, path); err != nil {
-			return nil, err
-		}
+	if stripped(env, ConfigEnv) != "" {
+		return nil, fmt.Errorf("config: %s is no longer read; host values come from %s, connection credentials from connections.<id>.credential_files.<slot>, and app keys from app_keys.action_link_key_file or app_keys.link_key_file", ConfigEnv, HostConfigEnv)
 	}
-	for _, d := range defs {
-		entry, known := settings.ImportEntryFor(d.Key)
-		if known && entry.Class == settings.ImportHost && (d.Module != "db" || d.Key != "key") {
-			continue
-		}
-		if known && entry.Runtime {
-			if err := refuseCutoverEnv(env, entry); err != nil {
-				return nil, err
-			}
-			continue
-		}
-		found, ok, err := pinFromEnv(env, reg, d)
-		if err != nil {
+	if strings.TrimSpace(get(env, "ANTHROPIC_API_KEY")) != "" {
+		return nil, fmt.Errorf(`config: ANTHROPIC_API_KEY is no longer read; use connections."service/anthropic".credential_files.api_key`)
+	}
+	for _, d := range reg.Defs() {
+		if err := refuseEnvName(env, d.Module, d.Key); err != nil {
 			return nil, err
-		}
-		if ok {
-			pins.m[d.Key] = found
 		}
 	}
 	for _, entry := range settings.Manifest() {
-		if !entry.Runtime || entry.Class == settings.ImportHost {
-			continue
-		}
 		if _, ok := reg.Lookup(entry.Key); ok {
 			continue
 		}
-		if err := refuseCutoverEnv(env, entry); err != nil {
+		if err := refuseEnvName(env, entry.Module, entry.Key); err != nil {
 			return nil, err
 		}
 	}
 	for _, retired := range settings.Retired {
 		name := retired.EnvName()
-		if strings.TrimSpace(get(env, name)) != "" || strings.TrimSpace(get(env, name+strings.ToUpper(fileSuffix))) != "" {
-			logx.Logger("atrium.config").Warn("ignoring a removed setting", "key", retired.Module+"."+retired.Key, "source", "env "+name)
+		if strings.TrimSpace(get(env, name)) == "" && strings.TrimSpace(get(env, name+strings.ToUpper(fileSuffix))) == "" {
+			continue
 		}
+		if retiredSecret(retired.Key) {
+			return nil, fmt.Errorf("config: %s was removed; it has no replacement", name)
+		}
+		logx.Logger("atrium.config").Warn("ignoring a removed setting", "key", retired.Module+"."+retired.Key, "source", "env "+name)
 	}
+	pins := &Pins{m: map[string]pin{}}
+	d, ok := reg.Lookup("key")
+	if !ok {
+		return pins, nil
+	}
+	value, source, found, err := readEnvValue(env, dbKeyEnv)
+	if err != nil {
+		return nil, err
+	}
+	if !found {
+		return pins, nil
+	}
+	if err := reg.Validate(d.Key, value); err != nil {
+		return nil, fmt.Errorf("config: %s: %w", source, err)
+	}
+	pins.m[d.Key] = pin{value: value, source: source}
 	return pins, nil
 }
 
-func refuseCutoverEnv(env Env, entry settings.ImportEntry) error {
-	name := "ATRIUM_" + strings.ToUpper(entry.Module) + "_" + strings.ToUpper(entry.Key)
-	if strings.TrimSpace(get(env, name)) != "" || strings.TrimSpace(get(env, name+"_FILE")) != "" {
-		return fmt.Errorf("config: %s is cut over and no longer a setting; use %s", entry.Module+"."+entry.Key, settings.CutoverDestination(entry))
+func refuseEnvName(env Env, module, key string) error {
+	name := "ATRIUM_" + strings.ToUpper(module) + "_" + strings.ToUpper(key)
+	fileName := name + strings.ToUpper(fileSuffix)
+	value := strings.TrimSpace(get(env, name))
+	file := strings.TrimSpace(get(env, fileName))
+	if value == "" && file == "" {
+		return nil
 	}
-	return nil
+	entry, known := settings.ImportEntryFor(key)
+	if known && entry.Module == "db" && entry.Key == "key" {
+		return nil
+	}
+	if settings.HostKey(key) {
+		return nil
+	}
+	destination := "the Connections page"
+	if known {
+		destination = settings.Destination(entry)
+	}
+	set := name
+	if value == "" {
+		set = fileName
+	}
+	return fmt.Errorf("config: %s is no longer read; use %s", set, destination)
 }
 
-func pinFromEnv(env Env, reg *settings.Registry, d settings.Def) (pin, bool, error) {
-	names := []string{EnvName(d)}
-	if d.EnvAlias != "" {
-		names = append(names, d.EnvAlias)
+func retiredSecret(key string) bool {
+	switch key {
+	case "anthropic_admin_key", "openai_admin_key":
+		return true
 	}
-	var found []pin
-	var used []string
-	for _, name := range names {
-		value := strings.TrimSpace(get(env, name))
-		fileName := name + strings.ToUpper(fileSuffix)
-		if path, set := env(fileName); set {
-			if value != "" {
-				return pin{}, false, fmt.Errorf("config: %s and %s are both set; set only one", name, fileName)
-			}
-			raw, err := os.ReadFile(path)
-			if err != nil {
-				return pin{}, false, fmt.Errorf("config: %s: %w", fileName, err)
-			}
-			value, name = strings.TrimSpace(string(raw)), fileName
-			if err := reg.Validate(d.Key, value); err != nil {
-				return pin{}, false, fmt.Errorf("config: %s: %w", name, err)
-			}
-			found, used = append(found, pin{value, "env " + name}), append(used, name)
-			continue
-		}
-		if value == "" {
-			continue
-		}
-		if err := reg.Validate(d.Key, value); err != nil {
-			return pin{}, false, fmt.Errorf("config: %s: %w", name, err)
-		}
-		found, used = append(found, pin{value, "env " + name}), append(used, name)
-	}
-	switch len(found) {
-	case 0:
-		return pin{}, false, nil
-	case 1:
-		return found[0], true, nil
-	}
-	return pin{}, false, fmt.Errorf("config: %s and %s are both set; set only one", used[0], used[1])
+	return false
 }
 
-func (p *Pins) readFile(env Env, reg *settings.Registry, defs []settings.Def, path string) error {
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return fmt.Errorf("config: %s: %w", ConfigEnv, err)
-	}
-	var doc map[string]any
-	if err := toml.Unmarshal(raw, &doc); err != nil {
-		return fmt.Errorf("config: %s: %w", path, err)
-	}
-	modules := map[string]map[string]settings.Def{}
-	for _, d := range defs {
-		if modules[d.Module] == nil {
-			modules[d.Module] = map[string]settings.Def{}
+func readEnvValue(env Env, name string) (value, source string, found bool, err error) {
+	direct := strings.TrimSpace(get(env, name))
+	fileName := name + strings.ToUpper(fileSuffix)
+	path, fileSet := env(fileName)
+	if fileSet {
+		if direct != "" {
+			return "", "", false, fmt.Errorf("config: %s and %s are both set; set only one", name, fileName)
 		}
-		modules[d.Module][d.Key] = d
-	}
-	for _, module := range slices.Sorted(maps.Keys(doc)) {
-		keys, known := modules[module]
-		table, isTable := doc[module].(map[string]any)
-		if !known || !isTable {
-			return fmt.Errorf("config: %s: unknown key %q", path, module)
-		}
-		for _, name := range slices.Sorted(maps.Keys(table)) {
-			dotted := module + "." + name
-			if entry, known := settings.ImportEntryFor(name); known && entry.Module == module && entry.Runtime {
-				return fmt.Errorf("config: %s: %q is cut over and no longer a setting; use %s", path, dotted, settings.CutoverDestination(entry))
-			}
-			d, isFile, ok := keyOf(keys, name)
-			if !ok {
-				if retired, gone := settings.RetiredAt(module, name); gone {
-					logx.Logger("atrium.config").Warn("ignoring a removed setting", "key", retired.Module+"."+retired.Key, "source", path)
-					continue
-				}
-				return fmt.Errorf("config: %s: unknown key %q", path, dotted)
-			}
-			if err := p.add(env, reg, d, path, dotted, isFile, table[name]); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
-}
-
-func keyOf(keys map[string]settings.Def, name string) (d settings.Def, isFile, ok bool) {
-	if d, ok = keys[name]; ok {
-		return d, false, true
-	}
-	if base, cut := strings.CutSuffix(name, fileSuffix); cut {
-		d, ok = keys[base]
-		return d, true, ok
-	}
-	return d, false, false
-}
-
-func (p *Pins) add(env Env, reg *settings.Registry, d settings.Def, path, dotted string, isFile bool, raw any) error {
-	if d.IsSecret() && !isFile {
-		return fmt.Errorf("config: %s: %q is a secret; set %s%s, %s or %s%s", path, dotted, TOMLName(d), fileSuffix, EnvName(d), EnvName(d), strings.ToUpper(fileSuffix))
-	}
-	if _, dup := p.m[d.Key]; dup {
-		return fmt.Errorf("config: %s: %q is set both directly and through %s%s", path, TOMLName(d), TOMLName(d), fileSuffix)
-	}
-	value, err := scalar(env, dotted, raw)
-	if err != nil {
-		return err
-	}
-	if isFile {
-		secret, err := os.ReadFile(value)
+		raw, err := os.ReadFile(path)
 		if err != nil {
-			return fmt.Errorf("config: %s: %w", dotted, err)
+			return "", "", false, fmt.Errorf("config: %s: %w", fileName, err)
 		}
-		value = strings.TrimSpace(string(secret))
+		return strings.TrimSpace(string(raw)), "env " + fileName, true, nil
 	}
-	if err := reg.Validate(d.Key, value); err != nil {
-		return fmt.Errorf("config: %s: %w", dotted, err)
+	if direct == "" {
+		return "", "", false, nil
 	}
-	p.m[d.Key] = pin{value, "config " + path + " " + dotted}
-	return nil
-}
-
-func scalar(env Env, dotted string, raw any) (string, error) {
-	switch v := raw.(type) {
-	case string:
-		var missing string
-		out := interpolation.ReplaceAllStringFunc(v, func(m string) string {
-			name := m[2 : len(m)-1]
-			value, ok := env(name)
-			if !ok && missing == "" {
-				missing = name
-			}
-			return value
-		})
-		if missing != "" {
-			return "", fmt.Errorf("config: %s: environment variable %s is not set", dotted, missing)
-		}
-		return out, nil
-	case bool:
-		return strconv.FormatBool(v), nil
-	case int64:
-		return strconv.FormatInt(v, 10), nil
-	case float64:
-		return strconv.FormatFloat(v, 'g', -1, 64), nil
-	}
-	return "", fmt.Errorf("config: %s: must be a string, number or boolean", dotted)
+	return direct, "env " + name, true, nil
 }

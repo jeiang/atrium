@@ -27,6 +27,19 @@ func init() {
 	)
 }
 
+var appKeyFiles = map[string]string{
+	ActionLinkKey: ActionLinkKeyFile,
+	"link_key":    LinkKeyFile,
+}
+
+func FileBinding(ctx context.Context, name string) (string, bool) {
+	file, ok := appKeyFiles[name]
+	if !ok || strings.TrimSpace(config.HostValueFrom(ctx, file)) == "" {
+		return "", false
+	}
+	return "app_keys." + file, true
+}
+
 func FileKey(ctx context.Context, key string) ([]byte, bool, error) {
 	path := strings.TrimSpace(config.HostValueFrom(ctx, key))
 	if path == "" {

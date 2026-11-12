@@ -3,6 +3,7 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -10,8 +11,8 @@ import (
 )
 
 func TestMailConnectionTestNormalizesAGroupedAppPassword(t *testing.T) {
-	dir := keyedMailFixture(t)
-	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir, mailAccount{"home", "icloud", "me@home.test", "aaaa bbbb cccc dddd", false}))
+	dir, embed := keyedMailFixture(t)
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, embed, filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"home", "icloud", "me@home.test", "aaaa bbbb cccc dddd", false}))
 	fake := mailtest.NewFakeClient()
 	fake.AddBox("INBOX", mailtest.NewBox(1))
 	strictIMAPRig(t, map[string]string{"me@home.test": "aaaabbbbccccdddd"}, map[string]*mailtest.FakeClient{"home": fake})

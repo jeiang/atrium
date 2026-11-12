@@ -113,8 +113,7 @@ func TestDeniedFetchResumesWithARefusal(t *testing.T) {
 func TestPhoneLinkCannotApproveAPermissionRequest(t *testing.T) {
 	srv, pages := webPages(t)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(policy.EnabledKey), "true")
-	setEnv(t, settingEnv(policy.KindsKey), "permission")
+	seedSettings(t, map[string]string{policy.EnabledKey: "true", policy.KindsKey: "permission"})
 	warm(t, api)
 	thread := latestThread(t, dir)
 	base, _, _ := startServeApp(t, freshApp(f, nil), &lockedBuffer{})

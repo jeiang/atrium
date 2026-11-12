@@ -43,7 +43,7 @@ func TestWeatherLocationSettingsSaveAndRefuseOutOfRangeValues(t *testing.T) {
 func TestWeatherConnectionTestCoversForecastAndGeocoding(t *testing.T) {
 	t.Parallel()
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	fakeOpenMeteo(t)
+	fakeOpenMeteo(t, dir)
 	tested := runApp(t, "connections", "test", "service/weather")
 	if tested.code != cli.ExitOK || !strings.Contains(tested.stdout, "ok") {
 		t.Fatalf("connections test service/weather: exit %d stdout %q stderr %q", tested.code, tested.stdout, tested.stderr)
@@ -60,8 +60,7 @@ func TestWeatherConnectionTestReportsAFailedRequest(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(weather.KeyForecastURL), srv.URL+"/v1/forecast")
-	setEnv(t, settingEnv(weather.KeyGeocodingURL), srv.URL+"/v1/search")
+	setEnv(t, "ATRIUM_HOST_CONFIG", weatherHost(t, dir, srv.URL+"/v1/forecast", srv.URL+"/v1/search"))
 	tested := runApp(t, "connections", "test", "service/weather")
 	if tested.code == cli.ExitOK || !strings.Contains(tested.stdout+tested.stderr, "failing") {
 		t.Fatalf("a failing weather endpoint reported success: exit %d stdout %q stderr %q", tested.code, tested.stdout, tested.stderr)

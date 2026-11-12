@@ -17,17 +17,7 @@ func CutoverEntry(key string) (ImportEntry, bool) {
 }
 
 func CutoverDestination(entry ImportEntry) string {
-	switch entry.Class {
-	case ImportTuning:
-		return "the compiled constant " + entry.Target
-	case ImportHost:
-		return "host configuration " + entry.Target
-	default:
-		if entry.Action == ImportRename {
-			return "the connection field " + entry.Target
-		}
-		return "the operator setting " + entry.Module + "." + entry.Key + " stored in the database"
-	}
+	return Destination(entry)
 }
 
 func LocalChatKey(key string) bool {

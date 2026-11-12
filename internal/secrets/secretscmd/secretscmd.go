@@ -9,6 +9,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
@@ -43,6 +44,9 @@ func (s *service) set(a *cli.Args) cli.Handler {
 		})
 		if known != cli.ExitOK {
 			return known
+		}
+		if file, bound := secrets.FileBinding(e.Ctx, *name); bound {
+			return failure(e, settings.AppKeyFile{Key: *name, File: file})
 		}
 		raw, err := io.ReadAll(io.LimitReader(e.Stdin, maxValue+1))
 		if err != nil {
@@ -92,6 +96,10 @@ func write(e *cli.Env, st *settings.Store, name string, act func(context.Context
 }
 
 func report(e *cli.Env, st *settings.Store, name string) int {
+	if _, bound := secrets.FileBinding(e.Ctx, name); bound {
+		_, _ = fmt.Fprintf(e.Stdout, "%s: file\n", name)
+		return cli.ExitOK
+	}
 	status, err := st.Status(e.Ctx, name)
 	if err != nil {
 		return failure(e, err)
@@ -107,11 +115,12 @@ func failure(e *cli.Env, err error) int {
 	var empty settings.EmptyValue
 	var pinOnly settings.PinOnly
 	var host settings.HostOwned
+	var file settings.AppKeyFile
 	var unknown settings.UnknownKey
 	switch {
 	case errors.As(err, &unknown), errors.As(err, &notSecret):
 		return e.UsageError("%v", err)
-	case errors.As(err, &pinned), errors.As(err, &encrypted), errors.As(err, &empty), errors.As(err, &pinOnly), errors.As(err, &host):
+	case errors.As(err, &pinned), errors.As(err, &encrypted), errors.As(err, &empty), errors.As(err, &pinOnly), errors.As(err, &host), errors.As(err, &file):
 		_, _ = fmt.Fprintf(e.Stderr, "error: %v\n", err)
 		return cli.ExitError
 	}

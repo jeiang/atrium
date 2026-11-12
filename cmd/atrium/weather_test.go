@@ -15,7 +15,7 @@ import (
 
 func TestWeatherToolReturnsAForecast(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
-	fakeOpenMeteo(t)
+	fakeOpenMeteo(t, dir)
 
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("w1", "weather", map[string]any{})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("done")))
@@ -59,7 +59,7 @@ func TestWeatherToolReturnsAForecast(t *testing.T) {
 	}
 }
 
-func fakeOpenMeteo(t *testing.T) {
+func fakeOpenMeteo(t *testing.T, dir string) {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -87,9 +87,6 @@ func fakeOpenMeteo(t *testing.T) {
 		}
 	}))
 	t.Cleanup(srv.Close)
-	setEnv(t, settingEnv(weather.KeyForecastURL), srv.URL+"/v1/forecast")
-	setEnv(t, settingEnv(weather.KeyGeocodingURL), srv.URL+"/v1/search")
-	setEnv(t, settingEnv(weather.KeyLatitude), "10.65")
-	setEnv(t, settingEnv(weather.KeyLongitude), "-61.5")
-	setEnv(t, settingEnv(weather.KeyLocationName), "Port of Spain")
+	setEnv(t, "ATRIUM_HOST_CONFIG", weatherHost(t, dir, srv.URL+"/v1/forecast", srv.URL+"/v1/search"))
+	seedSettings(t, map[string]string{weather.KeyLatitude: "10.65", weather.KeyLongitude: "-61.5", weather.KeyLocationName: "Port of Spain"})
 }

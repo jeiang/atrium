@@ -89,7 +89,9 @@ func TestMailReplayReportsStoredDecisionsWithoutExternalCalls(t *testing.T) {
 	})
 	env := f.snapshotEnv()
 	env["ATRIUM_MAIL_MAIL_CHAT_URL"] = srv.URL + "/v1"
-	env["ATRIUM_MAIL_MAIL_EMBED_URL"] = srv.URL + "/v1"
+	env["ATRIUM_HOST_CONFIG"] = hostConfigFrom(t, env["ATRIUM_HOST_CONFIG"], f.dir, "host-replay.toml", map[string]string{
+		`url = ` + strconv.Quote(f.llm): `url = ` + strconv.Quote(srv.URL+"/v1"),
+	})
 	appFor := func(path string) *cli.App {
 		vars := maps.Clone(env)
 		vars["ATRIUM_DB"] = path

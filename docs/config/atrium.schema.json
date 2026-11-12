@@ -14,128 +14,6 @@
       },
       "type": "object"
     },
-    "assistant": {
-      "additionalProperties": false,
-      "properties": {
-        "anthropic_ca_file": {
-          "type": "string"
-        },
-        "anthropic_proxy": {
-          "type": "string"
-        },
-        "anthropic_proxy_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "open_meteo_ca_file": {
-          "type": "string"
-        },
-        "open_meteo_proxy": {
-          "type": "string"
-        },
-        "open_meteo_proxy_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "weather_geocoding_url": {
-          "default": "https://geocoding-api.open-meteo.com/v1/search",
-          "type": "string"
-        },
-        "weather_geocoding_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "weather_open_meteo_url": {
-          "default": "https://api.open-meteo.com/v1/forecast",
-          "type": "string"
-        },
-        "weather_open_meteo_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "auth": {
-      "additionalProperties": false,
-      "properties": {
-        "oidc_access_domains": {
-          "type": "string"
-        },
-        "oidc_access_domains_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_access_emails": {
-          "type": "string"
-        },
-        "oidc_access_emails_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_access_groups": {
-          "default": "atrium_access,atrium_admin",
-          "type": "string"
-        },
-        "oidc_access_groups_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_api_client_id": {
-          "type": "string"
-        },
-        "oidc_api_client_id_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_client_id": {
-          "type": "string"
-        },
-        "oidc_client_id_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_groups_claim": {
-          "type": "string"
-        },
-        "oidc_groups_claim_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_issuer": {
-          "type": "string"
-        },
-        "oidc_issuer_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_preset": {
-          "default": "generic",
-          "enum": [
-            "generic",
-            "pocket_id",
-            "authelia",
-            "authentik",
-            "keycloak",
-            "google",
-            "entra"
-          ],
-          "type": "string"
-        },
-        "oidc_preset_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "oidc_scopes": {
-          "type": "string"
-        },
-        "oidc_scopes_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
     "calendar": {
       "additionalProperties": false,
       "properties": {
@@ -347,56 +225,6 @@
     "grafana": {
       "additionalProperties": false,
       "properties": {
-        "grafana_ca_file": {
-          "type": "string"
-        },
-        "grafana_logs_query": {
-          "type": "string"
-        },
-        "grafana_logs_query_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "grafana_logs_type": {
-          "default": "loki",
-          "enum": [
-            "loki",
-            "victorialogs"
-          ],
-          "type": "string"
-        },
-        "grafana_logs_type_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "grafana_logs_uid": {
-          "type": "string"
-        },
-        "grafana_logs_uid_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "grafana_metrics_uid": {
-          "type": "string"
-        },
-        "grafana_metrics_uid_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "grafana_proxy": {
-          "type": "string"
-        },
-        "grafana_proxy_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "grafana_url": {
-          "type": "string"
-        },
-        "grafana_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "ops_hosts": {
           "type": "string"
         },
@@ -458,9 +286,6 @@
     "mail": {
       "additionalProperties": false,
       "properties": {
-        "mail_accounts_file": {
-          "type": "string"
-        },
         "mail_chat_ca_file": {
           "type": "string"
         },
@@ -489,49 +314,6 @@
         "mail_chat_url_file": {
           "description": "path of a file holding the value",
           "type": "string"
-        },
-        "mail_embed_ca_file": {
-          "type": "string"
-        },
-        "mail_embed_model": {
-          "default": "embeddinggemma",
-          "type": "string"
-        },
-        "mail_embed_model_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_embed_proxy": {
-          "type": "string"
-        },
-        "mail_embed_proxy_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_embed_url": {
-          "type": "string"
-        },
-        "mail_embed_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_ship24_url": {
-          "default": "https://api.ship24.com/public/v1",
-          "type": "string"
-        },
-        "mail_ship24_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "ship24_ca_file": {
-          "type": "string"
-        },
-        "ship24_proxy": {
-          "type": "string"
-        },
-        "ship24_proxy_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
         }
       },
       "type": "object"
@@ -539,25 +321,10 @@
     "media": {
       "additionalProperties": false,
       "properties": {
-        "media_eztv_url": {
-          "default": "https://eztvx.to/api/get-torrents",
-          "type": "string"
-        },
-        "media_eztv_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "media_movies_url": {
           "type": "string"
         },
         "media_movies_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_qbittorrent_url": {
-          "type": "string"
-        },
-        "media_qbittorrent_url_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
@@ -568,71 +335,10 @@
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "media_tmdb_images_url": {
-          "default": "https://image.tmdb.org/t/p/w342",
-          "type": "string"
-        },
-        "media_tmdb_images_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "media_tmdb_url": {
-          "default": "https://api.themoviedb.org/3",
-          "type": "string"
-        },
-        "media_tmdb_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
         "media_tv_url": {
           "type": "string"
         },
         "media_tv_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "qbittorrent_ca_file": {
-          "type": "string"
-        },
-        "qbittorrent_proxy": {
-          "type": "string"
-        },
-        "qbittorrent_proxy_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "tmdb_ca_file": {
-          "type": "string"
-        },
-        "tmdb_proxy": {
-          "type": "string"
-        },
-        "tmdb_proxy_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "notify": {
-      "additionalProperties": false,
-      "properties": {
-        "webpush_ca_file": {
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
-    "notion": {
-      "additionalProperties": false,
-      "properties": {
-        "notion_ca_file": {
-          "type": "string"
-        },
-        "notion_proxy": {
-          "type": "string"
-        },
-        "notion_proxy_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
@@ -646,13 +352,6 @@
           "type": "string"
         },
         "trusted_proxy_cidrs_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "web_trusted_proxy_cidrs": {
-          "type": "string"
-        },
-        "web_trusted_proxy_cidrs_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
@@ -1043,7 +742,6 @@
     "web.trusted_proxy_cidrs": "host",
     "web.web_page_size": "tuning",
     "web.web_run_history": "tuning",
-    "web.web_trusted_proxy_cidrs": "host",
     "web_search.search_web_dynamic_filtering": "tuning",
     "web_search.search_web_max_cost_usd": "operator",
     "web_search.search_web_max_searches": "tuning",
@@ -1291,13 +989,13 @@
     "mail.mail_accounts_file": "services.atrium.mailAccounts"
   },
   "x-atrium-destinations": {
-    "action_links.action_link_key": "the operator setting action_links.action_link_key stored in the database",
-    "action_links.phone_actions_enabled": "the operator setting action_links.phone_actions_enabled stored in the database",
-    "action_links.phone_actions_kinds": "the operator setting action_links.phone_actions_kinds stored in the database",
-    "anthropic.anthropic_api_key": "the connection field service/anthropic credential api_key",
-    "assistant.agent_effort_cron": "the operator setting assistant.agent_effort_cron stored in the database",
-    "assistant.agent_effort_nightly": "the operator setting assistant.agent_effort_nightly stored in the database",
-    "assistant.agent_effort_subagent": "the operator setting assistant.agent_effort_subagent stored in the database",
+    "action_links.action_link_key": "the app key file app_keys.action_link_key_file",
+    "action_links.phone_actions_enabled": "atrium settings set phone_actions_enabled",
+    "action_links.phone_actions_kinds": "atrium settings set phone_actions_kinds",
+    "anthropic.anthropic_api_key": "connections.\"service/anthropic\".credential_files.api_key",
+    "assistant.agent_effort_cron": "atrium settings set agent_effort_cron",
+    "assistant.agent_effort_nightly": "atrium settings set agent_effort_nightly",
+    "assistant.agent_effort_subagent": "atrium settings set agent_effort_subagent",
     "assistant.agent_file_cap_bytes": "the compiled constant internal/assistant/tuning.go:TuningAgentFileCapBytes",
     "assistant.agent_file_name_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentFileNameChars",
     "assistant.agent_grafana_cell_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentGrafanaCellChars",
@@ -1328,20 +1026,20 @@
     "assistant.agent_recall_max_page_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentRecallMaxPageChars",
     "assistant.agent_recall_page_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentRecallPageChars",
     "assistant.agent_ref_tokens": "the compiled constant internal/assistant/tuning.go:TuningAgentRefTokens",
-    "assistant.agent_schedule_calendar_candidates": "the operator setting assistant.agent_schedule_calendar_candidates stored in the database",
-    "assistant.agent_schedule_daily_nudges": "the operator setting assistant.agent_schedule_daily_nudges stored in the database",
-    "assistant.agent_schedule_knowledge_export": "the operator setting assistant.agent_schedule_knowledge_export stored in the database",
+    "assistant.agent_schedule_calendar_candidates": "atrium settings set agent_schedule_calendar_candidates",
+    "assistant.agent_schedule_daily_nudges": "atrium settings set agent_schedule_daily_nudges",
+    "assistant.agent_schedule_knowledge_export": "atrium settings set agent_schedule_knowledge_export",
     "assistant.agent_schedule_max_active_jobs": "the compiled constant internal/assistant/scheduler/tuning.go:TuningAgentScheduleMaxActiveJobs",
-    "assistant.agent_schedule_media_channels": "the operator setting assistant.agent_schedule_media_channels stored in the database",
-    "assistant.agent_schedule_media_sweep": "the operator setting assistant.agent_schedule_media_sweep stored in the database",
-    "assistant.agent_schedule_media_thumbnails": "the operator setting assistant.agent_schedule_media_thumbnails stored in the database",
-    "assistant.agent_schedule_memory_work": "the operator setting assistant.agent_schedule_memory_work stored in the database",
-    "assistant.agent_schedule_min_interval_seconds": "the operator setting assistant.agent_schedule_min_interval_seconds stored in the database",
-    "assistant.agent_schedule_nightly": "the operator setting assistant.agent_schedule_nightly stored in the database",
-    "assistant.agent_schedule_ops_sampler": "the operator setting assistant.agent_schedule_ops_sampler stored in the database",
-    "assistant.agent_schedule_package_tracking": "the operator setting assistant.agent_schedule_package_tracking stored in the database",
-    "assistant.agent_schedule_task_reminders": "the operator setting assistant.agent_schedule_task_reminders stored in the database",
-    "assistant.agent_schedule_weekly_review": "the operator setting assistant.agent_schedule_weekly_review stored in the database",
+    "assistant.agent_schedule_media_channels": "atrium settings set agent_schedule_media_channels",
+    "assistant.agent_schedule_media_sweep": "atrium settings set agent_schedule_media_sweep",
+    "assistant.agent_schedule_media_thumbnails": "atrium settings set agent_schedule_media_thumbnails",
+    "assistant.agent_schedule_memory_work": "atrium settings set agent_schedule_memory_work",
+    "assistant.agent_schedule_min_interval_seconds": "atrium settings set agent_schedule_min_interval_seconds",
+    "assistant.agent_schedule_nightly": "atrium settings set agent_schedule_nightly",
+    "assistant.agent_schedule_ops_sampler": "atrium settings set agent_schedule_ops_sampler",
+    "assistant.agent_schedule_package_tracking": "atrium settings set agent_schedule_package_tracking",
+    "assistant.agent_schedule_task_reminders": "atrium settings set agent_schedule_task_reminders",
+    "assistant.agent_schedule_weekly_review": "atrium settings set agent_schedule_weekly_review",
     "assistant.agent_scheduler_lease_seconds": "the compiled constant internal/assistant/scheduler/tuning.go:TuningAgentSchedulerLeaseSeconds",
     "assistant.agent_scheduler_missed_grace_seconds": "the compiled constant internal/assistant/scheduler/tuning.go:TuningAgentSchedulerMissedGraceSeconds",
     "assistant.agent_scheduler_tick_seconds": "the compiled constant internal/assistant/scheduler/tuning.go:TuningAgentSchedulerTickSeconds",
@@ -1350,7 +1048,7 @@
     "assistant.agent_subagent_description_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentSubagentDescriptionChars",
     "assistant.agent_subagent_digest_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentSubagentDigestChars",
     "assistant.agent_subagent_max_concurrent": "the compiled constant internal/assistant/tuning.go:TuningAgentSubagentMaxConcurrent",
-    "assistant.agent_subagent_max_cost_usd": "the operator setting assistant.agent_subagent_max_cost_usd stored in the database",
+    "assistant.agent_subagent_max_cost_usd": "atrium settings set agent_subagent_max_cost_usd",
     "assistant.agent_subagent_max_steps": "the compiled constant internal/assistant/tuning.go:TuningAgentSubagentMaxSteps",
     "assistant.agent_subagent_prompt_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentSubagentPromptChars",
     "assistant.agent_subagent_task_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentSubagentTaskChars",
@@ -1363,102 +1061,102 @@
     "assistant.agent_webfetch_user_agent": "the compiled constant internal/assistant/tuning.go:TuningAgentWebfetchUserAgent",
     "assistant.agent_workspace_plan_item_chars": "the compiled constant internal/assistant/tuning.go:TuningAgentWorkspacePlanItemChars",
     "assistant.agent_workspace_plan_items": "the compiled constant internal/assistant/tuning.go:TuningAgentWorkspacePlanItems",
-    "assistant.anthropic_ca_file": "host configuration service/anthropic.transport.ca_file",
-    "assistant.anthropic_proxy": "host configuration service/anthropic.transport.proxy",
-    "assistant.budget_chat_share": "the operator setting assistant.budget_chat_share stored in the database",
-    "assistant.budget_unattended_share": "the operator setting assistant.budget_unattended_share stored in the database",
-    "assistant.cache_ttl_chat": "the operator setting assistant.cache_ttl_chat stored in the database",
-    "assistant.default_context_limit": "the operator setting assistant.default_context_limit stored in the database",
-    "assistant.default_effort": "the operator setting assistant.default_effort stored in the database",
-    "assistant.default_model": "the operator setting assistant.default_model stored in the database",
-    "assistant.digest_notify": "the operator setting assistant.digest_notify stored in the database",
+    "assistant.anthropic_ca_file": "connections.\"service/anthropic\".transport.ca_file",
+    "assistant.anthropic_proxy": "connections.\"service/anthropic\".transport.proxy",
+    "assistant.budget_chat_share": "atrium settings set budget_chat_share",
+    "assistant.budget_unattended_share": "atrium settings set budget_unattended_share",
+    "assistant.cache_ttl_chat": "atrium settings set cache_ttl_chat",
+    "assistant.default_context_limit": "atrium settings set default_context_limit",
+    "assistant.default_effort": "atrium settings set default_effort",
+    "assistant.default_model": "atrium settings set default_model",
+    "assistant.digest_notify": "atrium settings set digest_notify",
     "assistant.doom_loop_threshold": "the compiled constant internal/assistant/loop/tuning.go:TuningDoomLoopThreshold",
-    "assistant.dreaming_max_cost_usd": "the operator setting assistant.dreaming_max_cost_usd stored in the database",
-    "assistant.dreaming_monthly_usd": "the operator setting assistant.dreaming_monthly_usd stored in the database",
-    "assistant.max_run_cost_usd_haiku_5_5": "the operator setting assistant.max_run_cost_usd_haiku_5_5 stored in the database",
-    "assistant.max_run_cost_usd_opus_5_5": "the operator setting assistant.max_run_cost_usd_opus_5_5 stored in the database",
-    "assistant.max_run_cost_usd_sonnet_5_5": "the operator setting assistant.max_run_cost_usd_sonnet_5_5 stored in the database",
+    "assistant.dreaming_max_cost_usd": "atrium settings set dreaming_max_cost_usd",
+    "assistant.dreaming_monthly_usd": "atrium settings set dreaming_monthly_usd",
+    "assistant.max_run_cost_usd_haiku_5_5": "atrium settings set max_run_cost_usd_haiku_5_5",
+    "assistant.max_run_cost_usd_opus_5_5": "atrium settings set max_run_cost_usd_opus_5_5",
+    "assistant.max_run_cost_usd_sonnet_5_5": "atrium settings set max_run_cost_usd_sonnet_5_5",
     "assistant.max_steps_chat": "the compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsChat",
     "assistant.max_steps_cron": "the compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsCron",
     "assistant.max_steps_nightly": "the compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsNightly",
     "assistant.max_steps_worker": "the compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsWorker",
-    "assistant.monthly_budget_usd": "the operator setting assistant.monthly_budget_usd stored in the database",
-    "assistant.open_meteo_ca_file": "host configuration service/weather.transport.ca_file",
-    "assistant.open_meteo_proxy": "host configuration service/weather.transport.proxy",
-    "assistant.ops_condenser": "the operator setting assistant.ops_condenser stored in the database",
+    "assistant.monthly_budget_usd": "atrium settings set monthly_budget_usd",
+    "assistant.open_meteo_ca_file": "connections.\"service/weather\".transport.ca_file",
+    "assistant.open_meteo_proxy": "connections.\"service/weather\".transport.proxy",
+    "assistant.ops_condenser": "atrium settings set ops_condenser",
     "assistant.ops_condenser_max_tokens": "the compiled constant internal/serverops/tuning.go:TuningOpsCondenserMaxTokens",
-    "assistant.ops_condenser_model": "the operator setting assistant.ops_condenser_model stored in the database",
-    "assistant.ops_worker_max_run_usd": "the operator setting assistant.ops_worker_max_run_usd stored in the database",
-    "assistant.ops_worker_monthly_usd": "the operator setting assistant.ops_worker_monthly_usd stored in the database",
-    "assistant.prompt_subagent": "the operator setting assistant.prompt_subagent stored in the database",
-    "assistant.prompt_system": "the operator setting assistant.prompt_system stored in the database",
-    "assistant.thread_cost_cap_usd": "the operator setting assistant.thread_cost_cap_usd stored in the database",
+    "assistant.ops_condenser_model": "atrium settings set ops_condenser_model",
+    "assistant.ops_worker_max_run_usd": "atrium settings set ops_worker_max_run_usd",
+    "assistant.ops_worker_monthly_usd": "atrium settings set ops_worker_monthly_usd",
+    "assistant.prompt_subagent": "atrium settings set prompt_subagent",
+    "assistant.prompt_system": "atrium settings set prompt_system",
+    "assistant.thread_cost_cap_usd": "atrium settings set thread_cost_cap_usd",
     "assistant.weather_forecast_days": "the compiled constant internal/weather/tuning.go:TuningWeatherForecastDays",
-    "assistant.weather_geocoding_url": "host configuration service/weather.config.geocoding_url",
+    "assistant.weather_geocoding_url": "connections.\"service/weather\".config.geocoding_url",
     "assistant.weather_hourly_hours": "the compiled constant internal/weather/tuning.go:TuningWeatherHourlyHours",
-    "assistant.weather_latitude": "the operator setting assistant.weather_latitude stored in the database",
-    "assistant.weather_location_name": "the operator setting assistant.weather_location_name stored in the database",
-    "assistant.weather_longitude": "the operator setting assistant.weather_longitude stored in the database",
-    "assistant.weather_open_meteo_url": "host configuration service/weather.config.forecast_url",
+    "assistant.weather_latitude": "atrium settings set weather_latitude",
+    "assistant.weather_location_name": "atrium settings set weather_location_name",
+    "assistant.weather_longitude": "atrium settings set weather_longitude",
+    "assistant.weather_open_meteo_url": "connections.\"service/weather\".config.url",
     "assistant.weather_timeout_seconds": "the compiled constant internal/weather/tuning.go:TuningWeatherTimeoutSeconds",
-    "auth.oidc_access_domains": "host configuration host.auth.oidc_access_domains",
-    "auth.oidc_access_emails": "host configuration host.auth.oidc_access_emails",
-    "auth.oidc_access_groups": "host configuration host.auth.oidc_access_groups",
-    "auth.oidc_api_client_id": "host configuration host.auth.oidc_api_client_id",
-    "auth.oidc_client_id": "host configuration host.auth.oidc_client_id",
-    "auth.oidc_client_secret": "host configuration service/oidc host credential client_secret",
-    "auth.oidc_groups_claim": "host configuration host.auth.oidc_groups_claim",
-    "auth.oidc_issuer": "host configuration host.auth.oidc_issuer",
-    "auth.oidc_preset": "host configuration host.auth.oidc_preset",
+    "auth.oidc_access_domains": "connections.\"service/oidc\".config.access_domains",
+    "auth.oidc_access_emails": "connections.\"service/oidc\".config.access_emails",
+    "auth.oidc_access_groups": "connections.\"service/oidc\".config.access_groups",
+    "auth.oidc_api_client_id": "connections.\"service/oidc\".config.api_client_id",
+    "auth.oidc_client_id": "connections.\"service/oidc\".config.client_id",
+    "auth.oidc_client_secret": "connections.\"service/oidc\".credential_files.client_secret",
+    "auth.oidc_groups_claim": "connections.\"service/oidc\".config.groups_claim",
+    "auth.oidc_issuer": "connections.\"service/oidc\".config.issuer",
+    "auth.oidc_preset": "connections.\"service/oidc\".config.preset",
     "auth.oidc_recheck_minutes": "the compiled constant internal/auth/oidc/tuning.go:TuningOidcRecheckMinutes",
-    "auth.oidc_scopes": "host configuration host.auth.oidc_scopes",
-    "auth.oidc_session_idle_days": "the operator setting auth.oidc_session_idle_days stored in the database",
-    "auth.oidc_session_max_days": "the operator setting auth.oidc_session_max_days stored in the database",
-    "auth.oidc_wizard_key": "the operator setting auth.oidc_wizard_key stored in the database",
-    "calendar.calendar_account": "the operator setting calendar.calendar_account stored in the database",
+    "auth.oidc_scopes": "connections.\"service/oidc\".config.scopes",
+    "auth.oidc_session_idle_days": "atrium settings set oidc_session_idle_days",
+    "auth.oidc_session_max_days": "atrium settings set oidc_session_max_days",
+    "auth.oidc_wizard_key": "atrium settings set oidc_wizard_key",
+    "calendar.calendar_account": "atrium settings set calendar_account",
     "calendar.calendar_dir": "services.atrium.stateDir",
     "calendar.candidate_draft_limit": "the compiled constant internal/calendar/tuning.go:TuningCandidateDraftLimit",
     "calendar.candidate_scan_limit": "the compiled constant internal/calendar/tuning.go:TuningCandidateScanLimit",
-    "calendar.default_event_minutes": "the operator setting calendar.default_event_minutes stored in the database",
-    "calendar.google_calendar_refresh_token": "the connection field google/default credential oauth/calendar/refresh",
-    "calendar.google_client_id": "the connection field google/default.config.client_id",
-    "calendar.google_oauth_client_secret": "the connection field google/default credential oauth/client_secret",
-    "calendar.icloud_apple_id": "the connection field icloud/\u003caccount\u003e caldav/carddav config.apple_id",
-    "calendar.icloud_calendar": "the operator setting calendar.icloud_calendar stored in the database",
+    "calendar.default_event_minutes": "atrium settings set default_event_minutes",
+    "calendar.google_calendar_refresh_token": "connections.\"google/default\".credential_files.oauth/calendar/refresh",
+    "calendar.google_client_id": "connections.\"google/default\".config.client_id",
+    "calendar.google_oauth_client_secret": "connections.\"google/default\".credential_files.oauth/client_secret",
+    "calendar.icloud_apple_id": "connections.\"icloud/\u003caccount\u003e caldav/carddav config\".apple_id",
+    "calendar.icloud_calendar": "atrium settings set icloud_calendar",
     "calendar.max_events": "the compiled constant internal/calendar/tuning.go:TuningMaxEvents",
     "calendar.max_occurrences": "the compiled constant internal/calendar/tuning.go:TuningMaxOccurrences",
-    "calendar.work_days": "the operator setting calendar.work_days stored in the database",
-    "calendar.work_hours": "the operator setting calendar.work_hours stored in the database",
+    "calendar.work_days": "atrium settings set work_days",
+    "calendar.work_hours": "atrium settings set work_hours",
     "contacts.contacts_dir": "services.atrium.stateDir",
     "contacts.contacts_max_results": "the compiled constant internal/contacts/tuning.go:TuningContactsMaxResults",
-    "core.assistant_enabled": "the operator setting core.assistant_enabled stored in the database",
-    "core.calendar_enabled": "the operator setting core.calendar_enabled stored in the database",
-    "core.contacts_enabled": "the operator setting core.contacts_enabled stored in the database",
-    "core.grafana_enabled": "the operator setting core.grafana_enabled stored in the database",
+    "core.assistant_enabled": "atrium settings set assistant_enabled",
+    "core.calendar_enabled": "atrium settings set calendar_enabled",
+    "core.contacts_enabled": "atrium settings set contacts_enabled",
+    "core.grafana_enabled": "atrium settings set grafana_enabled",
     "core.http_timeout_seconds": "the compiled constant internal/config/tuning.go:TuningHttpTimeoutSeconds",
-    "core.mail_enabled": "the operator setting core.mail_enabled stored in the database",
-    "core.media_enabled": "the operator setting core.media_enabled stored in the database",
-    "core.notifications_enabled": "the operator setting core.notifications_enabled stored in the database",
-    "core.notion_enabled": "the operator setting core.notion_enabled stored in the database",
+    "core.mail_enabled": "atrium settings set mail_enabled",
+    "core.media_enabled": "atrium settings set media_enabled",
+    "core.notifications_enabled": "atrium settings set notifications_enabled",
+    "core.notion_enabled": "atrium settings set notion_enabled",
     "core.otel_traces_endpoint": "services.atrium.observability.tracesEndpoint",
     "core.pass_run_retention_days": "the compiled constant internal/passrun/tuning.go:TuningPassRunRetentionDays",
-    "core.tz": "the operator setting core.tz stored in the database",
+    "core.tz": "atrium settings set tz",
     "db.key": "services.atrium.database.keyFile",
-    "export.export_notion_enabled": "the operator setting export.export_notion_enabled stored in the database",
-    "export.export_notion_kinds": "the operator setting export.export_notion_kinds stored in the database",
-    "export.export_notion_parent": "the operator setting export.export_notion_parent stored in the database",
-    "export.export_notion_private_to": "the operator setting export.export_notion_private_to stored in the database",
+    "export.export_notion_enabled": "atrium settings set export_notion_enabled",
+    "export.export_notion_kinds": "atrium settings set export_notion_kinds",
+    "export.export_notion_parent": "atrium settings set export_notion_parent",
+    "export.export_notion_private_to": "atrium settings set export_notion_private_to",
     "export.export_obsidian_dir": "services.atrium.knowledgeExport.obsidianDirectory",
-    "export.export_obsidian_kinds": "the operator setting export.export_obsidian_kinds stored in the database",
-    "export.export_obsidian_private_to": "the operator setting export.export_obsidian_private_to stored in the database",
-    "grafana.grafana_ca_file": "host configuration service/grafana.transport.ca_file",
-    "grafana.grafana_logs_query": "host configuration host.grafana.grafana_logs_query",
-    "grafana.grafana_logs_type": "host configuration host.grafana.grafana_logs_type",
-    "grafana.grafana_logs_uid": "host configuration host.grafana.grafana_logs_uid",
-    "grafana.grafana_metrics_uid": "host configuration host.grafana.grafana_metrics_uid",
-    "grafana.grafana_proxy": "host configuration service/grafana.transport.proxy",
-    "grafana.grafana_url": "host configuration service/grafana.config.url",
-    "grafana.grafana_viewer_token": "the connection field service/grafana credential viewer_token",
+    "export.export_obsidian_kinds": "atrium settings set export_obsidian_kinds",
+    "export.export_obsidian_private_to": "atrium settings set export_obsidian_private_to",
+    "grafana.grafana_ca_file": "connections.\"service/grafana\".transport.ca_file",
+    "grafana.grafana_logs_query": "connections.\"service/grafana\".config.logs_query",
+    "grafana.grafana_logs_type": "connections.\"service/grafana\".config.logs_type",
+    "grafana.grafana_logs_uid": "connections.\"service/grafana\".config.logs_uid",
+    "grafana.grafana_metrics_uid": "connections.\"service/grafana\".config.metrics_uid",
+    "grafana.grafana_proxy": "connections.\"service/grafana\".transport.proxy",
+    "grafana.grafana_url": "connections.\"service/grafana\".config.url",
+    "grafana.grafana_viewer_token": "connections.\"service/grafana\".credential_files.viewer_token",
     "mail.birthdays_default_days": "the compiled constant internal/mail/tuning.go:TuningBirthdaysDefaultDays",
     "mail.birthdays_max_days": "the compiled constant internal/mail/tuning.go:TuningBirthdaysMaxDays",
     "mail.deletion_interval_seconds": "the compiled constant internal/mail/tuning.go:TuningDeletionIntervalSeconds",
@@ -1472,7 +1170,7 @@
     "mail.gmail_labels_max_messages": "the compiled constant internal/mail/tuning.go:TuningGmailLabelsMaxMessages",
     "mail.gmail_labels_min_overlap": "the compiled constant internal/mail/tuning.go:TuningGmailLabelsMinOverlap",
     "mail.gmail_labels_min_target_messages": "the compiled constant internal/mail/tuning.go:TuningGmailLabelsMinTargetMessages",
-    "mail.google_gmail_refresh_token": "the connection field google/default credential oauth/gmail/refresh",
+    "mail.google_gmail_refresh_token": "connections.\"google/default\".credential_files.oauth/gmail/refresh",
     "mail.knn_k": "the compiled constant internal/mail/tuning.go:TuningKnnK",
     "mail.knn_max": "the compiled constant internal/mail/tuning.go:TuningKnnMax",
     "mail.knn_min_share": "the compiled constant internal/mail/tuning.go:TuningKnnMinShare",
@@ -1486,16 +1184,16 @@
     "mail.mail_chat_max_tokens": "the compiled constant internal/endpoint/tuning.go:TuningMailChatMaxTokens",
     "mail.mail_embed_batch": "the compiled constant internal/endpoint/tuning.go:TuningMailEmbedBatch",
     "mail.mail_embed_body_chars": "the compiled constant internal/endpoint/tuning.go:TuningMailEmbedBodyChars",
-    "mail.mail_embed_ca_file": "host configuration service/embedding.transport.ca_file",
-    "mail.mail_embed_key": "host configuration service/embedding host credential bearer",
-    "mail.mail_embed_model": "host configuration service/embedding.config.model",
-    "mail.mail_embed_proxy": "host configuration service/embedding.transport.proxy",
-    "mail.mail_embed_url": "host configuration service/embedding.config.url",
+    "mail.mail_embed_ca_file": "connections.\"service/embedding\".transport.ca_file",
+    "mail.mail_embed_key": "connections.\"service/embedding\".credential_files.bearer",
+    "mail.mail_embed_model": "connections.\"service/embedding\".config.model",
+    "mail.mail_embed_proxy": "connections.\"service/embedding\".transport.proxy",
+    "mail.mail_embed_url": "connections.\"service/embedding\".config.url",
     "mail.mail_fetch_batch": "the compiled constant internal/mail/tuning.go:TuningMailFetchBatch",
     "mail.mail_flag_batch": "the compiled constant internal/mail/tuning.go:TuningMailFlagBatch",
     "mail.mail_fts_body_chars": "the compiled constant internal/mail/tuning.go:TuningMailFtsBodyChars",
     "mail.mail_idle_settle_seconds": "the compiled constant internal/mail/tuning.go:TuningMailIdleSettleSeconds",
-    "mail.mail_mode": "the operator setting mail.mail_mode stored in the database",
+    "mail.mail_mode": "atrium settings set mail_mode",
     "mail.mail_scan_sample_subjects": "the compiled constant internal/mail/tuning.go:TuningMailScanSampleSubjects",
     "mail.mail_scan_top_labels": "the compiled constant internal/mail/tuning.go:TuningMailScanTopLabels",
     "mail.mail_search_branch_limit": "the compiled constant internal/mail/tuning.go:TuningMailSearchBranchLimit",
@@ -1503,24 +1201,24 @@
     "mail.mail_search_rrf_k": "the compiled constant internal/mail/tuning.go:TuningMailSearchRrfK",
     "mail.mail_search_snippet_chars": "the compiled constant internal/mail/tuning.go:TuningMailSearchSnippetChars",
     "mail.mail_search_snippet_tokens": "the compiled constant internal/mail/tuning.go:TuningMailSearchSnippetTokens",
-    "mail.mail_ship24_api_key": "the connection field service/ship24 credential api_key",
-    "mail.mail_ship24_destination_country": "the operator setting mail.mail_ship24_destination_country stored in the database",
-    "mail.mail_ship24_destination_postcode": "the operator setting mail.mail_ship24_destination_postcode stored in the database",
-    "mail.mail_ship24_monthly_quota": "the operator setting mail.mail_ship24_monthly_quota stored in the database",
+    "mail.mail_ship24_api_key": "connections.\"service/ship24\".credential_files.api_key",
+    "mail.mail_ship24_destination_country": "atrium settings set mail_ship24_destination_country",
+    "mail.mail_ship24_destination_postcode": "atrium settings set mail_ship24_destination_postcode",
+    "mail.mail_ship24_monthly_quota": "atrium settings set mail_ship24_monthly_quota",
     "mail.mail_ship24_poll_days": "the compiled constant internal/mail/tracking/tuning.go:TuningMailShip24PollDays",
     "mail.mail_ship24_poll_limit": "the compiled constant internal/mail/tracking/tuning.go:TuningMailShip24PollLimit",
     "mail.mail_ship24_timeout_seconds": "the compiled constant internal/mail/tracking/tuning.go:TuningMailShip24TimeoutSeconds",
-    "mail.mail_ship24_url": "host configuration service/ship24.config.url",
+    "mail.mail_ship24_url": "connections.\"service/ship24\".config.url",
     "mail.mailops_batch": "the compiled constant internal/mail/tuning.go:TuningMailopsBatch",
     "mail.openloops_commitment_scan_limit": "the compiled constant internal/mail/tuning.go:TuningOpenloopsCommitmentScanLimit",
     "mail.openloops_commitment_window_days": "the compiled constant internal/mail/tuning.go:TuningOpenloopsCommitmentWindowDays",
     "mail.openloops_commitments_per_message": "the compiled constant internal/mail/tuning.go:TuningOpenloopsCommitmentsPerMessage",
     "mail.openloops_owe_max_age_days": "the compiled constant internal/mail/tuning.go:TuningOpenloopsOweMaxAgeDays",
-    "mail.openloops_remind_ahead_days": "the operator setting mail.openloops_remind_ahead_days stored in the database",
-    "mail.openloops_remind_hour": "the operator setting mail.openloops_remind_hour stored in the database",
+    "mail.openloops_remind_ahead_days": "atrium settings set openloops_remind_ahead_days",
+    "mail.openloops_remind_hour": "atrium settings set openloops_remind_hour",
     "mail.openloops_remind_overdue_days": "the compiled constant internal/mail/tuning.go:TuningOpenloopsRemindOverdueDays",
-    "mail.openloops_snooze_default_days": "the operator setting mail.openloops_snooze_default_days stored in the database",
-    "mail.openloops_waiting_after_days": "the operator setting mail.openloops_waiting_after_days stored in the database",
+    "mail.openloops_snooze_default_days": "atrium settings set openloops_snooze_default_days",
+    "mail.openloops_waiting_after_days": "atrium settings set openloops_waiting_after_days",
     "mail.openloops_waiting_max_age_days": "the compiled constant internal/mail/tuning.go:TuningOpenloopsWaitingMaxAgeDays",
     "mail.openloops_window_days": "the compiled constant internal/mail/tuning.go:TuningOpenloopsWindowDays",
     "mail.rebalance_cluster_iterations": "the compiled constant internal/mail/tuning.go:TuningRebalanceClusterIterations",
@@ -1542,18 +1240,18 @@
     "mail.rule_min_n": "the compiled constant internal/mail/tuning.go:TuningRuleMinN",
     "mail.rule_min_purity": "the compiled constant internal/mail/tuning.go:TuningRuleMinPurity",
     "mail.sent_backfill_days": "the compiled constant internal/mail/tuning.go:TuningSentBackfillDays",
-    "mail.ship24_ca_file": "host configuration service/ship24.transport.ca_file",
-    "mail.ship24_proxy": "host configuration service/ship24.transport.proxy",
+    "mail.ship24_ca_file": "connections.\"service/ship24\".transport.ca_file",
+    "mail.ship24_proxy": "connections.\"service/ship24\".transport.proxy",
     "mail.triage_top_dests": "the compiled constant internal/mail/tuning.go:TuningTriageTopDests",
-    "mail.uncertain_dest": "the operator setting mail.uncertain_dest stored in the database",
+    "mail.uncertain_dest": "atrium settings set uncertain_dest",
     "mail.watches_body_chars": "the compiled constant internal/mail/tuning.go:TuningWatchesBodyChars",
-    "mail.watches_carrier_domains": "the operator setting mail.watches_carrier_domains stored in the database",
+    "mail.watches_carrier_domains": "atrium settings set watches_carrier_domains",
     "mail.watches_package_window_days": "the compiled constant internal/mail/tuning.go:TuningWatchesPackageWindowDays",
     "mail.watches_scan_limit": "the compiled constant internal/mail/tuning.go:TuningWatchesScanLimit",
     "mail.watches_stale_package_days": "the compiled constant internal/mail/tuning.go:TuningWatchesStalePackageDays",
     "mail.write_attempts": "the compiled constant internal/mail/tuning.go:TuningWriteAttempts",
-    "mail.write_cap": "the operator setting mail.write_cap stored in the database",
-    "media.link_key": "the operator setting media.link_key stored in the database",
+    "mail.write_cap": "atrium settings set write_cap",
+    "media.link_key": "the app key file app_keys.link_key_file",
     "media.media_artwork_miss_ttl_seconds": "the compiled constant internal/media/tuning.go:TuningMediaArtworkMissTtlSeconds",
     "media.media_artwork_show_search_limit": "the compiled constant internal/media/tuning.go:TuningMediaArtworkShowSearchLimit",
     "media.media_channel_name_chars": "the compiled constant internal/media/tuning.go:TuningMediaChannelNameChars",
@@ -1562,99 +1260,99 @@
     "media.media_child_limit": "the compiled constant internal/media/tuning.go:TuningMediaChildLimit",
     "media.media_eztv_limit": "the compiled constant internal/media/tuning.go:TuningMediaEztvLimit",
     "media.media_eztv_timeout_seconds": "the compiled constant internal/media/tuning.go:TuningMediaEztvTimeoutSeconds",
-    "media.media_eztv_url": "host configuration service/eztv.config.url",
+    "media.media_eztv_url": "connections.\"service/eztv\".config.url",
     "media.media_ffmpeg_nice": "the compiled constant internal/media/tuning.go:TuningMediaFfmpegNice",
     "media.media_ffmpeg_timeout_seconds": "the compiled constant internal/media/tuning.go:TuningMediaFfmpegTimeoutSeconds",
-    "media.media_link_ttl_seconds": "the operator setting media.media_link_ttl_seconds stored in the database",
-    "media.media_qbittorrent_api_key": "the connection field service/qbittorrent credential api_key",
+    "media.media_link_ttl_seconds": "atrium settings set media_link_ttl_seconds",
+    "media.media_qbittorrent_api_key": "connections.\"service/qbittorrent\".credential_files.api_key",
     "media.media_qbittorrent_timeout_seconds": "the compiled constant internal/media/tuning.go:TuningMediaQbittorrentTimeoutSeconds",
-    "media.media_qbittorrent_url": "host configuration service/qbittorrent.config.url",
+    "media.media_qbittorrent_url": "connections.\"service/qbittorrent\".config.url",
     "media.media_search_limit": "the compiled constant internal/media/tuning.go:TuningMediaSearchLimit",
     "media.media_subtitle_extensions": "the compiled constant internal/media/tuning.go:TuningMediaSubtitleExtensions",
     "media.media_thumbnail_pass_limit": "the compiled constant internal/media/tuning.go:TuningMediaThumbnailPassLimit",
     "media.media_thumbnail_position": "the compiled constant internal/media/tuning.go:TuningMediaThumbnailPosition",
     "media.media_thumbnail_width": "the compiled constant internal/media/tuning.go:TuningMediaThumbnailWidth",
-    "media.media_tmdb_images_url": "host configuration service/tmdb.config.images_url",
+    "media.media_tmdb_images_url": "connections.\"service/tmdb\".config.images_url",
     "media.media_tmdb_search_limit": "the compiled constant internal/media/tuning.go:TuningMediaTmdbSearchLimit",
     "media.media_tmdb_timeout_seconds": "the compiled constant internal/media/tuning.go:TuningMediaTmdbTimeoutSeconds",
-    "media.media_tmdb_token": "the connection field service/tmdb credential read_token",
-    "media.media_tmdb_url": "host configuration service/tmdb.config.url",
+    "media.media_tmdb_token": "connections.\"service/tmdb\".credential_files.read_token",
+    "media.media_tmdb_url": "connections.\"service/tmdb\".config.url",
     "media.media_torrent_upload_bytes": "the compiled constant internal/media/tuning.go:TuningMediaTorrentUploadBytes",
     "media.media_video_extensions": "the compiled constant internal/media/tuning.go:TuningMediaVideoExtensions",
-    "media.qbittorrent_ca_file": "host configuration service/qbittorrent.transport.ca_file",
-    "media.qbittorrent_proxy": "host configuration service/qbittorrent.transport.proxy",
-    "media.tmdb_ca_file": "host configuration service/tmdb.transport.ca_file",
-    "media.tmdb_proxy": "host configuration service/tmdb.transport.proxy",
+    "media.qbittorrent_ca_file": "connections.\"service/qbittorrent\".transport.ca_file",
+    "media.qbittorrent_proxy": "connections.\"service/qbittorrent\".transport.proxy",
+    "media.tmdb_ca_file": "connections.\"service/tmdb\".transport.ca_file",
+    "media.tmdb_proxy": "connections.\"service/tmdb\".transport.proxy",
     "memory.memory_concurrency": "the compiled constant internal/assistant/memory/tuning.go:TuningMemoryConcurrency",
-    "memory.memory_effort": "the operator setting memory.memory_effort stored in the database",
-    "memory.memory_model": "the operator setting memory.memory_model stored in the database",
+    "memory.memory_effort": "atrium settings set memory_effort",
+    "memory.memory_model": "atrium settings set memory_model",
     "memory.memory_node_bytes": "the compiled constant internal/assistant/memory/tuning.go:TuningMemoryNodeBytes",
     "memory.memory_tail_messages": "the compiled constant internal/assistant/memory/tuning.go:TuningMemoryTailMessages",
-    "memory.memory_verbatim_tokens": "the operator setting memory.memory_verbatim_tokens stored in the database",
+    "memory.memory_verbatim_tokens": "atrium settings set memory_verbatim_tokens",
     "memory.memory_view_high": "the compiled constant internal/assistant/memory/tuning.go:TuningMemoryViewHigh",
     "memory.memory_view_low": "the compiled constant internal/assistant/memory/tuning.go:TuningMemoryViewLow",
     "notify.notify_body_chars": "the compiled constant internal/notify/tuning.go:TuningNotifyBodyChars",
-    "notify.notify_nightly_cap": "the operator setting notify.notify_nightly_cap stored in the database",
-    "notify.notify_per_run_cap": "the operator setting notify.notify_per_run_cap stored in the database",
+    "notify.notify_nightly_cap": "atrium settings set notify_nightly_cap",
+    "notify.notify_per_run_cap": "atrium settings set notify_per_run_cap",
     "notify.notify_title_chars": "the compiled constant internal/notify/tuning.go:TuningNotifyTitleChars",
-    "notify.webpush_ca_file": "host configuration service/webpush.transport.ca_file",
-    "notify.webpush_subject": "the connection field service/webpush.config.subject",
-    "notify.webpush_vapid_private_key": "the connection field service/webpush credential vapid_private",
+    "notify.webpush_ca_file": "connections.\"service/webpush\".transport.ca_file",
+    "notify.webpush_subject": "connections.\"service/webpush\".config.subject",
+    "notify.webpush_vapid_private_key": "connections.\"service/webpush\".credential_files.vapid_private",
     "notion.notion_block_depth": "the compiled constant internal/notion/tuning.go:TuningNotionBlockDepth",
     "notion.notion_branch_limit": "the compiled constant internal/notion/tuning.go:TuningNotionBranchLimit",
-    "notion.notion_ca_file": "host configuration service/notion.transport.ca_file",
+    "notion.notion_ca_file": "connections.\"service/notion\".transport.ca_file",
     "notion.notion_head_source_chars": "the compiled constant internal/notion/tuning.go:TuningNotionHeadSourceChars",
     "notion.notion_label_chars": "the compiled constant internal/notion/tuning.go:TuningNotionLabelChars",
     "notion.notion_max_aliases": "the compiled constant internal/notion/tuning.go:TuningNotionMaxAliases",
     "notion.notion_max_retries": "the compiled constant internal/notion/tuning.go:TuningNotionMaxRetries",
     "notion.notion_max_sources": "the compiled constant internal/notion/tuning.go:TuningNotionMaxSources",
     "notion.notion_page_size": "the compiled constant internal/notion/tuning.go:TuningNotionPageSize",
-    "notion.notion_private_value": "the operator setting notion.notion_private_value stored in the database",
-    "notion.notion_proxy": "host configuration service/notion.transport.proxy",
+    "notion.notion_private_value": "atrium settings set notion_private_value",
+    "notion.notion_proxy": "connections.\"service/notion\".transport.proxy",
     "notion.notion_related_limit": "the compiled constant internal/notion/tuning.go:TuningNotionRelatedLimit",
     "notion.notion_retry_after_default_seconds": "the compiled constant internal/notion/tuning.go:TuningNotionRetryAfterDefaultSeconds",
     "notion.notion_retry_after_max_seconds": "the compiled constant internal/notion/tuning.go:TuningNotionRetryAfterMaxSeconds",
     "notion.notion_snippet_chars": "the compiled constant internal/notion/tuning.go:TuningNotionSnippetChars",
     "notion.notion_timeout_seconds": "the compiled constant internal/notion/tuning.go:TuningNotionTimeoutSeconds",
-    "notion.notion_token": "the connection field service/notion credential token",
-    "notion.sensitivity_property": "the operator setting notion.sensitivity_property stored in the database",
-    "notion.wiki_log_title": "the operator setting notion.wiki_log_title stored in the database",
-    "notion.wiki_root": "the operator setting notion.wiki_root stored in the database",
-    "permissions.permission_internet_clean": "the operator setting permissions.permission_internet_clean stored in the database",
-    "permissions.permission_internet_kinds": "the operator setting permissions.permission_internet_kinds stored in the database",
-    "permissions.permission_internet_pii": "the operator setting permissions.permission_internet_pii stored in the database",
-    "permissions.permission_internet_untrusted_isolated": "the operator setting permissions.permission_internet_untrusted_isolated stored in the database",
-    "permissions.permission_internet_untrusted_kinds": "the operator setting permissions.permission_internet_untrusted_kinds stored in the database",
-    "permissions.permission_internet_untrusted_knowledge": "the operator setting permissions.permission_internet_untrusted_knowledge stored in the database",
-    "permissions.permission_notify_clean": "the operator setting permissions.permission_notify_clean stored in the database",
-    "permissions.permission_notify_kinds": "the operator setting permissions.permission_notify_kinds stored in the database",
-    "permissions.permission_notify_pii": "the operator setting permissions.permission_notify_pii stored in the database",
-    "permissions.permission_notify_untrusted_isolated": "the operator setting permissions.permission_notify_untrusted_isolated stored in the database",
-    "permissions.permission_notify_untrusted_kinds": "the operator setting permissions.permission_notify_untrusted_kinds stored in the database",
-    "permissions.permission_notify_untrusted_knowledge": "the operator setting permissions.permission_notify_untrusted_knowledge stored in the database",
-    "permissions.permission_own_clean": "the operator setting permissions.permission_own_clean stored in the database",
-    "permissions.permission_own_kinds": "the operator setting permissions.permission_own_kinds stored in the database",
-    "permissions.permission_own_pii": "the operator setting permissions.permission_own_pii stored in the database",
-    "permissions.permission_own_untrusted_isolated": "the operator setting permissions.permission_own_untrusted_isolated stored in the database",
-    "permissions.permission_own_untrusted_kinds": "the operator setting permissions.permission_own_untrusted_kinds stored in the database",
-    "permissions.permission_own_untrusted_knowledge": "the operator setting permissions.permission_own_untrusted_knowledge stored in the database",
-    "permissions.permission_people_clean": "the operator setting permissions.permission_people_clean stored in the database",
-    "permissions.permission_people_kinds": "the operator setting permissions.permission_people_kinds stored in the database",
-    "permissions.permission_people_pii": "the operator setting permissions.permission_people_pii stored in the database",
-    "permissions.permission_people_untrusted_isolated": "the operator setting permissions.permission_people_untrusted_isolated stored in the database",
-    "permissions.permission_people_untrusted_kinds": "the operator setting permissions.permission_people_untrusted_kinds stored in the database",
-    "permissions.permission_people_untrusted_knowledge": "the operator setting permissions.permission_people_untrusted_knowledge stored in the database",
+    "notion.notion_token": "connections.\"service/notion\".credential_files.token",
+    "notion.sensitivity_property": "atrium settings set sensitivity_property",
+    "notion.wiki_log_title": "atrium settings set wiki_log_title",
+    "notion.wiki_root": "atrium settings set wiki_root",
+    "permissions.permission_internet_clean": "atrium settings set permission_internet_clean",
+    "permissions.permission_internet_kinds": "atrium settings set permission_internet_kinds",
+    "permissions.permission_internet_pii": "atrium settings set permission_internet_pii",
+    "permissions.permission_internet_untrusted_isolated": "atrium settings set permission_internet_untrusted_isolated",
+    "permissions.permission_internet_untrusted_kinds": "atrium settings set permission_internet_untrusted_kinds",
+    "permissions.permission_internet_untrusted_knowledge": "atrium settings set permission_internet_untrusted_knowledge",
+    "permissions.permission_notify_clean": "atrium settings set permission_notify_clean",
+    "permissions.permission_notify_kinds": "atrium settings set permission_notify_kinds",
+    "permissions.permission_notify_pii": "atrium settings set permission_notify_pii",
+    "permissions.permission_notify_untrusted_isolated": "atrium settings set permission_notify_untrusted_isolated",
+    "permissions.permission_notify_untrusted_kinds": "atrium settings set permission_notify_untrusted_kinds",
+    "permissions.permission_notify_untrusted_knowledge": "atrium settings set permission_notify_untrusted_knowledge",
+    "permissions.permission_own_clean": "atrium settings set permission_own_clean",
+    "permissions.permission_own_kinds": "atrium settings set permission_own_kinds",
+    "permissions.permission_own_pii": "atrium settings set permission_own_pii",
+    "permissions.permission_own_untrusted_isolated": "atrium settings set permission_own_untrusted_isolated",
+    "permissions.permission_own_untrusted_kinds": "atrium settings set permission_own_untrusted_kinds",
+    "permissions.permission_own_untrusted_knowledge": "atrium settings set permission_own_untrusted_knowledge",
+    "permissions.permission_people_clean": "atrium settings set permission_people_clean",
+    "permissions.permission_people_kinds": "atrium settings set permission_people_kinds",
+    "permissions.permission_people_pii": "atrium settings set permission_people_pii",
+    "permissions.permission_people_untrusted_isolated": "atrium settings set permission_people_untrusted_isolated",
+    "permissions.permission_people_untrusted_kinds": "atrium settings set permission_people_untrusted_kinds",
+    "permissions.permission_people_untrusted_knowledge": "atrium settings set permission_people_untrusted_knowledge",
     "web.body_cap_bytes": "the compiled constant internal/config/tuning.go:TuningBodyCapBytes",
     "web.chat_thread_limit": "the compiled constant internal/config/tuning.go:TuningChatThreadLimit",
     "web.preview_bytes": "the compiled constant internal/config/tuning.go:TuningPreviewBytes",
-    "web.snooze_choices": "the operator setting web.snooze_choices stored in the database",
+    "web.snooze_choices": "atrium settings set snooze_choices",
     "web.web_page_size": "the compiled constant internal/config/tuning.go:TuningWebPageSize",
     "web.web_run_history": "the compiled constant internal/config/tuning.go:TuningWebRunHistory",
     "web_search.search_web_dynamic_filtering": "the compiled constant internal/assistant/registry/tuning.go:TuningSearchWebDynamicFiltering",
-    "web_search.search_web_max_cost_usd": "the operator setting web_search.search_web_max_cost_usd stored in the database",
+    "web_search.search_web_max_cost_usd": "atrium settings set search_web_max_cost_usd",
     "web_search.search_web_max_searches": "the compiled constant internal/assistant/subagents/websearch/tuning.go:TuningSearchWebMaxSearches",
     "web_search.search_web_max_steps": "the compiled constant internal/assistant/subagents/websearch/tuning.go:TuningSearchWebMaxSteps",
-    "web_search.search_web_model": "the operator setting web_search.search_web_model stored in the database"
+    "web_search.search_web_model": "atrium settings set search_web_model"
   },
   "x-atrium-secret": [
     "action_links.action_link_key",

@@ -28,9 +28,8 @@ func newFolderFixture(t *testing.T, mode string) folderFixture {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", srv.URL+"/v1")
-	setEnv(t, settingEnv(mail.KeyMode), mode)
-	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFile(t, dir, mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
+	seedSettings(t, map[string]string{mail.KeyMode: mode})
+	setEnv(t, "ATRIUM_HOST_CONFIG", accountsFileEmbedding(t, dir, srv.URL+"/v1", filepath.Join(testRoot, "host", "anthropic.key"), mailAccount{"icloud", "icloud", "atrium.test@icloud.com", "app-pass", false}))
 	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
 	if err != nil {
 		t.Fatal(err)
@@ -368,7 +367,7 @@ S: {t} OK DELETE completed
 	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'mail_folder_create' AND direction = 'forward'").Scan(&id); err != nil {
 		t.Fatal(err)
 	}
-	setEnv(t, settingEnv(mail.KeyMode), "shadow")
+	seedSettings(t, map[string]string{mail.KeyMode: "shadow"})
 	base := startServeIn(t, fx.dir)
 	jar, err := cookiejar.New(nil)
 	if err != nil {

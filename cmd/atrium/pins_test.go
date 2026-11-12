@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/settings"
 )
 
 type pinRow struct {
@@ -104,8 +105,8 @@ func TestHostConfigurationIsReadOnlyAndWinsOverTheDatabase(t *testing.T) {
 	}
 
 	for name, c := range map[string]struct{ body, want string }{
-		"secret direct": {"[auth]\noidc_client_secret = \"x\"\n", "is now the connection field service/oidc host credential client_secret"},
-		"operator key":  {"[assistant]\nmonthly_budget_usd = 1\n", "not host configuration; use the operator setting assistant.monthly_budget_usd"},
+		"secret direct": {"[auth]\noidc_client_secret = \"x\"\n", `connections."service/oidc".credential_files.client_secret`},
+		"operator key":  {"[assistant]\nmonthly_budget_usd = 1\n", "atrium settings set monthly_budget_usd"},
 		"tuning key":    {"[assistant]\nmax_steps_chat = 10\n", "compiled constant internal/assistant/loop/tuning.go:TuningMaxStepsChat"},
 		"database key":  {"[db]\nkey = \"00\"\n", "use ATRIUM_DB_KEY_FILE"},
 		"unknown key":   {"[core]\nnot_a_key = 1\n", "unknown host key \"core.not_a_key\""},
@@ -123,38 +124,41 @@ func TestHostConfigurationIsReadOnlyAndWinsOverTheDatabase(t *testing.T) {
 	}
 }
 
-func TestCutoverOperatorAndTuningPinsAreRefused(t *testing.T) {
+func TestRemovedEnvironmentAndFilePinsAreRefused(t *testing.T) {
 	t.Parallel()
 	dir, _ := hostSettings(t)
 
 	for name, c := range map[string]struct {
 		env  map[string]string
-		file string
 		want string
 	}{
-		"credential env":  {env: map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_API_KEY": "qbt"}, want: "connection field service/qbittorrent credential api_key"},
-		"credential file": {file: "[media]\nmedia_qbittorrent_api_key = \"qbt\"\n", want: "connection field service/qbittorrent credential api_key"},
-		"tuning config":   {file: "[media]\nmedia_qbittorrent_timeout_seconds = 30\n", want: "compiled constant internal/media/tuning.go:TuningMediaQbittorrentTimeoutSeconds"},
-		"tuning env":      {env: map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_TIMEOUT_SECONDS": "30"}, want: "compiled constant internal/media/tuning.go:TuningMediaQbittorrentTimeoutSeconds"},
+		"credential env": {env: map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_API_KEY": "qbt"}, want: `connections."service/qbittorrent".credential_files.api_key`},
+		"credential file env": {env: map[string]string{"ATRIUM_AUTH_OIDC_CLIENT_SECRET_FILE": writeFile(t, dir, "oidc-client-secret", "client-secret-value\n")},
+			want: `connections."service/oidc".credential_files.client_secret`},
+		"tuning env":    {env: map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_TIMEOUT_SECONDS": "30"}, want: "compiled constant internal/media/tuning.go:TuningMediaQbittorrentTimeoutSeconds"},
+		"operator env":  {env: map[string]string{"ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD": "120"}, want: "atrium settings set monthly_budget_usd"},
+		"host env":      {env: map[string]string{"ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL": "http://q.invalid"}, want: `connections."service/qbittorrent".config.url`},
+		"anthropic env": {env: map[string]string{"ANTHROPIC_API_KEY": "sk-test"}, want: `connections."service/anthropic".credential_files.api_key`},
 	} {
 		for key, value := range c.env {
 			setEnv(t, key, value)
 		}
-		if c.file != "" {
-			setEnv(t, "ATRIUM_CONFIG", writeFile(t, dir, "cutover.toml", c.file))
-		}
 		r := runSettings(t, "get", "tz")
-		if r.code != cli.ExitError || !strings.Contains(r.stderr, "cut over") || !strings.Contains(r.stderr, c.want) {
+		if r.code != cli.ExitError || !strings.Contains(r.stderr, "no longer read") || !strings.Contains(r.stderr, c.want) {
 			t.Errorf("%s: exit %d stderr %q, want %q", name, r.code, r.stderr, c.want)
 		}
 		for key := range c.env {
 			setEnv(t, key, "")
 		}
-		setEnv(t, "ATRIUM_CONFIG", "")
 	}
 
 	setEnv(t, "ATRIUM_CONFIG", writeFile(t, dir, "staged.toml", "[assistant]\nmonthly_budget_usd = 120\n"))
-	if got := pinRowOf(t, runSettings(t, "get", "monthly_budget_usd")); got.Value != "120" || got.Source != "pin" {
-		t.Errorf("a non-cutover operator pin: %+v", got)
+	if r := runSettings(t, "get", "tz"); r.code != cli.ExitError || !strings.Contains(r.stderr, "ATRIUM_CONFIG is no longer read") {
+		t.Errorf("legacy pin file: exit %d stderr %q", r.code, r.stderr)
+	}
+	setEnv(t, "ATRIUM_CONFIG", "")
+	def, _ := settings.LookupOf("monthly_budget_usd")
+	if got := pinRowOf(t, runSettings(t, "get", "monthly_budget_usd")); got.Value != def.Default || got.Source != "default" {
+		t.Errorf("operator default after removing the pin file: %+v, want %s", got, def.Default)
 	}
 }

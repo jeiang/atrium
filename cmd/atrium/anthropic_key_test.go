@@ -27,7 +27,6 @@ func TestStartupWarnsForACatalogModelTheModelsAPIOmits(t *testing.T) {
 	srv.Models = []string{"claude-haiku-5-5", "claude-sonnet-5-5"}
 	dir, _, _ := moduleFixture(t, flagsExcept("assistant", "true"))
 	setEnv(t, anthropic.BaseURLEnv, srv.URL)
-	setEnv(t, "ANTHROPIC_API_KEY", anthropictest.APIKey)
 	base, logs := startServeLogged(t, dir)
 	waitForLog(t, logs, "claude-opus-5-5")
 	text := logs.String()

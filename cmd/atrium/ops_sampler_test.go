@@ -16,7 +16,6 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/serverops"
@@ -170,8 +169,7 @@ func TestOpsSamplerWritesSamplesAndNoKnowledge(t *testing.T) {
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(grafanatools.KeyURL), srv.URL)
-	setEnv(t, hostEnv("grafana", grafanatools.KeyMetricsUID), "metrics")
+	setEnv(t, "ATRIUM_HOST_CONFIG", grafanaHost(t, dir, srv.URL))
 	setEnv(t, settingEnv(serverops.KeyHosts), "node-a")
 	warm(t, api)
 	requests := len(api.Requests())
@@ -266,8 +264,7 @@ func TestOpsSamplerNeverWritesToGrafana(t *testing.T) {
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(grafanatools.KeyURL), srv.URL)
-	setEnv(t, hostEnv("grafana", grafanatools.KeyMetricsUID), "metrics")
+	setEnv(t, "ATRIUM_HOST_CONFIG", grafanaHost(t, dir, srv.URL))
 	setEnv(t, settingEnv(serverops.KeyHosts), "node-a")
 	warm(t, api)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))

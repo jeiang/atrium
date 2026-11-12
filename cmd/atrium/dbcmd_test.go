@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	dbkey "github.com/jeiang/atrium/internal/db/key"
 	"github.com/jeiang/atrium/internal/embed"
+	"github.com/jeiang/atrium/internal/module"
 )
 
 const thirdKeyHex = "0123456789abcdeffedcba98765432100123456789abcdeffedcba9876543210"
@@ -44,7 +45,7 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 		_ = json.NewEncoder(w).Encode(map[string]any{"data": []any{map[string]any{"index": 0, "embedding": vector}}})
 	}))
 	defer embedder.Close()
-	setEnv(t, "ATRIUM_MAIL_MAIL_EMBED_URL", embedder.URL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", embedHost(t, dir, embedder.URL+"/v1"))
 	keyEnv := func(hex string) string { return "ATRIUM_DB_KEY=" + hex }
 	dbEnv := func(path string) string { return "ATRIUM_DB=" + path }
 	const hit = "Alpha page\thttps://notion.example/p1\n"
@@ -52,6 +53,9 @@ func TestDatabaseCommandsRekeyBackupCheckAndShellOnEncryptedDatabase(t *testing.
 
 	if got := runProcess(t, "notion search alpha", dbEnv(live), keyEnv(rightKeyHex)); got.code != cli.ExitOK {
 		t.Fatalf("creating the encrypted database exited %d: %s", got.code, got.stderr)
+	}
+	if got := runProcess(t, "settings set "+module.FlagKey(module.Notion)+" true", dbEnv(live), keyEnv(rightKeyHex)); got.code != cli.ExitOK {
+		t.Fatalf("enabling notion on the encrypted database exited %d: %s", got.code, got.stderr)
 	}
 	k, err := db.ParseKey(rightKeyHex)
 	if err != nil {

@@ -61,8 +61,7 @@ func TestConnectionOwnedURLRowCannotRedirectTheSampler(t *testing.T) {
 	srv := httptest.NewServer(fake)
 	t.Cleanup(srv.Close)
 	dir, api, f := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(grafanatools.KeyURL), srv.URL)
-	setEnv(t, hostEnv("grafana", grafanatools.KeyMetricsUID), "metrics")
+	setEnv(t, "ATRIUM_HOST_CONFIG", grafanaHost(t, dir, srv.URL))
 	setEnv(t, settingEnv(serverops.KeyHosts), "node-a")
 	warm(t, api)
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
@@ -76,17 +75,26 @@ func TestConnectionOwnedURLRowCannotRedirectTheSampler(t *testing.T) {
 
 func TestHostDeclaredModuleFlagWinsAndIsReadOnly(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, "true"))
+	raw, err := os.ReadFile(defaultHostConfig)
+	if err != nil {
+		t.Fatal(err)
+	}
+	host := filepath.Join(dir, "host-flag.toml")
+	if err := os.WriteFile(host, append(raw, []byte("\n[core]\nmail_enabled = true\n")...), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	setEnv(t, "ATRIUM_HOST_CONFIG", host)
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
 		t.Fatalf("settings list: exit %d stderr %q", ran.code, ran.stderr)
 	}
 	path := filepath.Join(dir, "atrium.db")
 	seedSetting(t, mustConnect(t, path), module.FlagKey(module.Mail), "false")
 
-	if got := pinRowOf(t, runSettings(t, "get", module.FlagKey(module.Mail))); got.Value != "true" || got.PinSource != "env ATRIUM_CORE_MAIL_ENABLED" {
+	if got := pinRowOf(t, runSettings(t, "get", module.FlagKey(module.Mail))); got.Value != "true" || !strings.Contains(got.PinSource, "host") {
 		t.Errorf("a database row overrode the host module flag: %+v", got)
 	}
 	got := runSettings(t, "set", module.FlagKey(module.Mail), "false")
-	if got.code != cli.ExitError || !strings.Contains(got.stderr, "pinned by env ATRIUM_CORE_MAIL_ENABLED") {
+	if got.code != cli.ExitError || !strings.Contains(got.stderr, "pinned by host") {
 		t.Errorf("setting a host-declared flag: exit %d stderr %q", got.code, got.stderr)
 	}
 	if value, ok := storedSetting(t, path, module.FlagKey(module.Mail)); !ok || value != "false" {
@@ -117,6 +125,7 @@ func TestUnpinnedHostWritesAreRefused(t *testing.T) {
 		}
 	}
 
+	seedAllFlags(t)
 	w := asstBrowse(t, startServeIn(t, dir))
 	status, page, _ := w.get("/settings/export", false)
 	if status != http.StatusOK {

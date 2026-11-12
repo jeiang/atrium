@@ -22,16 +22,12 @@
     name = lib.concatStringsSep "." (builtins.tail parts);
   };
 
-  classes = schema."x-atrium-classes" or {};
   destinations = schema."x-atrium-destinations" or {};
-  cutover = schema."x-atrium-cutover" or [];
-  secretKeys = schema."x-atrium-secret" or [];
 
-  secretPins = lib.foldl' lib.recursiveUpdate {} (lib.mapAttrsToList (key: _: let
-    k = splitKey key;
-  in {${k.table}."${k.name}_file" = "\${CREDENTIALS_DIRECTORY}/${key}";})
-  cfg.secretFiles);
-  legacyConfigFile = toml.generate "atrium.toml" secretPins;
+  appKeyFiles = {
+    "action_links.action_link_key" = "app_keys.action_link_key_file";
+    "media.link_key" = "app_keys.link_key_file";
+  };
 
   accountCredential = id: "mail-account-${id}";
   connectionCredential = id: slot: "connection-${lib.replaceStrings ["/" "."] ["-" "-"] id}-${lib.replaceStrings ["/" "."] ["-" "-"] slot}";
@@ -70,6 +66,11 @@
     table)
   cfg.host;
 
+  appKeyHost = lib.foldl' lib.recursiveUpdate {} (lib.mapAttrsToList (key: _: let
+    k = splitKey appKeyFiles.${key};
+  in {${k.table}."${k.name}" = "\${CREDENTIALS_DIRECTORY}/${key}";})
+  (lib.filterAttrs (key: _: appKeyFiles ? ${key}) cfg.secretFiles));
+
   renderedHost = lib.recursiveUpdate hostValues (
     {
       calendar.calendar_dir = "${mirrorDir}/calendars";
@@ -79,6 +80,7 @@
     // lib.optionalAttrs (cfg.web.trustedProxyCidrs != []) {web.trusted_proxy_cidrs = lib.concatStringsSep "," cfg.web.trustedProxyCidrs;}
     // lib.optionalAttrs (cfg.knowledgeExport.obsidianDirectory != null) {export.export_obsidian_dir = cfg.knowledgeExport.obsidianDirectory;}
     // lib.optionalAttrs (cfg.connections != {} || cfg.mailAccounts != {}) {connections = renderedConnections;}
+    // appKeyHost
   );
   hostConfigFile = toml.generate "atrium-host.toml" renderedHost;
 
@@ -103,7 +105,6 @@
       ATRIUM_CACHE_DIR = "${cacheDir}/messages";
       ATRIUM_HOST_CONFIG = "${hostConfigFile}";
     }
-    // lib.optionalAttrs (cfg.secretFiles != {}) {ATRIUM_CONFIG = "${legacyConfigFile}";}
     // lib.optionalAttrs (cfg.initialTimezone != null) {ATRIUM_INITIAL_TZ = cfg.initialTimezone;}
     // lib.optionalAttrs (cfg.database.keyFile != null) {ATRIUM_DB_KEY_FILE = "\${CREDENTIALS_DIRECTORY}/db-key";};
 
@@ -169,23 +170,24 @@
 
   secretFileErrors = lib.flatten (lib.mapAttrsToList (key: _: let
     parts = lib.splitString "." key;
-    module = builtins.head parts;
-    name = lib.concatStringsSep "." (builtins.tail parts);
-    class = classes.${key} or null;
     destination = destinations.${key} or null;
   in
     if builtins.length parts != 2
     then ["services.atrium.secretFiles keys are <module>.<key>"]
+    else if appKeyFiles ? ${key}
+    then []
     else if key == "db.key"
     then ["services.atrium.secretFiles.\"db.key\" is the database key; use services.atrium.database.keyFile"]
-    else if class == "host"
-    then ["services.atrium.secretFiles.\"${key}\" is host configuration; use services.atrium.host.${module}.${name}_file"]
-    else if builtins.elem key cutover
-    then ["services.atrium.secretFiles.\"${key}\" is cut over; use ${destination}"]
-    else if !(builtins.elem key secretKeys)
-    then ["services.atrium.secretFiles.\"${key}\" is not a secret setting"]
-    else [])
+    else if destination != null
+    then ["services.atrium.secretFiles.\"${key}\" is ${destination}"]
+    else ["services.atrium.secretFiles.\"${key}\" is not an app key file; the app key files are ${lib.concatStringsSep " and " (lib.attrNames appKeyFiles)}"])
   cfg.secretFiles);
+
+  appKeyConflicts = lib.flatten (lib.mapAttrsToList (key: _: let
+    k = splitKey appKeyFiles.${key};
+  in
+    lib.optional ((cfg.host.${k.table} or {}) ? ${k.name}) "services.atrium.secretFiles.\"${key}\" and services.atrium.host.${k.table}.${k.name} are both set; set only one")
+  (lib.filterAttrs (key: _: appKeyFiles ? ${key}) cfg.secretFiles));
 
   connectionErrors = lib.flatten (lib.mapAttrsToList (id: c:
     lib.optional (id == "") "services.atrium.connections has an empty id"
@@ -571,7 +573,7 @@ in {
       type = types.attrsOf types.str;
       default = {};
       example = {"action_links.action_link_key" = "/run/secrets/action-link-key";};
-      description = "Secret settings as <module>.<key> = host file, delivered to every unit and atrium-run through systemd LoadCredential and pinned as <key>_file. Connection credentials belong in connections.<id>.credentialFiles and host secret inputs in host.<module>.<key>_file.";
+      description = "App signing key files as <module>.<key> = host file, delivered to every unit and atrium-run through systemd LoadCredential and rendered as host app_keys.<key>_file. Only action_links.action_link_key and media.link_key are accepted; connection credentials belong in connections.<id>.credentialFiles, host secret inputs in host.<module>.<key>_file, and the database key in database.keyFile.";
     };
 
     database.keyFile = mkOption {
@@ -733,14 +735,6 @@ in {
       default = renderedHost;
       description = "The host configuration written to the file named by ATRIUM_HOST_CONFIG, derived values and connection tables included.";
     };
-
-    renderedPins = mkOption {
-      type = types.attrs;
-      internal = true;
-      readOnly = true;
-      default = secretPins;
-      description = "Legacy secret pins written to the file named by ATRIUM_CONFIG.";
-    };
   };
 
   config = mkIf cfg.enable {
@@ -752,6 +746,10 @@ in {
       {
         assertion = secretFileErrors == [];
         message = lib.concatStringsSep "; " secretFileErrors;
+      }
+      {
+        assertion = appKeyConflicts == [];
+        message = lib.concatStringsSep "; " appKeyConflicts;
       }
       {
         assertion = connectionErrors == [];

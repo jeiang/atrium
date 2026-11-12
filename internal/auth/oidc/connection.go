@@ -96,6 +96,7 @@ func ParseConnectionConfig(raw json.RawMessage) (connectionValues, error) {
 		}
 	}
 	var v connectionValues
+	groups := false
 	for key, value := range m {
 		value = strings.TrimSpace(value)
 		switch key {
@@ -113,6 +114,7 @@ func ParseConnectionConfig(raw json.RawMessage) (connectionValues, error) {
 			v.GroupsClaim = value
 		case cfgAccessGroups:
 			v.AccessGroups = value
+			groups = true
 		case cfgAccessEmails:
 			v.AccessEmails = value
 		case cfgAccessDomains:
@@ -126,6 +128,9 @@ func ParseConnectionConfig(raw json.RawMessage) (connectionValues, error) {
 		default:
 			return connectionValues{}, fmt.Errorf("oidc config has no %s field", key)
 		}
+	}
+	if !groups {
+		v.AccessGroups = DefaultAccessGroups
 	}
 	return v, nil
 }

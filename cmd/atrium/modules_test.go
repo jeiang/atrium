@@ -122,23 +122,52 @@ func moduleFixtureAt(t *testing.T, flags map[string]string, now func() float64) 
 		"ATRIUM_CACHE_DIR":   filepath.Join(dir, "cache"),
 		"ATRIUM_PUBLIC_HOST": "",
 		"ATRIUM_CONFIG":      "",
-		"ATRIUM_CORE_TZ":     "America/Port_of_Spain",
-		"ANTHROPIC_API_KEY":  anthropictest.APIKey,
 		anthropic.BaseURLEnv: api.URL,
 	}
 	for name, value := range moduleEnv(dir) {
 		env[name] = value
 	}
-	for _, name := range moduleNames {
-		env[flagEnv(name)] = flags[name]
+	if key, ok := varsFor(t).lookup("ATRIUM_DB_KEY"); ok {
+		env["ATRIUM_DB_KEY"] = key
 	}
 	reg := settings.New()
 	st := config.NewState(reg)
-	f = &fixture{t: t, dir: dir, env: env, settings: reg, state: st}
+	f = &fixture{t: t, dir: dir, env: env, settings: reg, state: st, flags: flags}
 	f.app = newAppWith(f.lookup, reg, st, nil, imapclient.Opener, now, quietLog)
 	fixturesByTest.Store(t, f)
 	fixturesByTest.Store(testKey(t), f)
+	seedModuleFlags(t, f, flags)
+	f.app = newAppWith(f.lookup, reg, st, nil, imapclient.Opener, now, quietLog)
 	return dir, api, f
+}
+
+func seedModuleFlags(t *testing.T, f *fixture, flags map[string]string) {
+	t.Helper()
+	path, _ := f.lookup("ATRIUM_DB")
+	seedFlagsAt(t, f.app, path, flags)
+}
+
+func allFlagsTrue() map[string]string {
+	flags := map[string]string{}
+	for _, name := range moduleNames {
+		flags[name] = "true"
+	}
+	return flags
+}
+
+func seedFlagsAt(t *testing.T, app *cli.App, path string, flags map[string]string) {
+	t.Helper()
+	var out, errs bytes.Buffer
+	if code := app.Run(context.Background(), []string{"settings", "list"}, &out, &errs); code != cli.ExitOK {
+		t.Fatalf("settings list before seeding module flags: exit %d stderr %q", code, errs.String())
+	}
+	kv := map[string]string{}
+	for _, name := range moduleNames {
+		if value, ok := flags[name]; ok {
+			kv[module.FlagKey(name)] = value
+		}
+	}
+	seedSettingsAt(t, path, kv)
 }
 
 func flagsExcept(name string, value string) map[string]string {
@@ -409,7 +438,8 @@ func TestMailPassScansEventCandidatesOnlyWhileCalendarIsOn(t *testing.T) {
 	t.Parallel()
 	data := loadGoldenData(t)
 	candidates := func(flag string) int {
-		f := newFixture(t, data, map[string]string{flagEnv(module.Calendar): flag}, "")
+		f := newFixture(t, data, nil, "")
+		seedFlagsAt(t, f.app, filepath.Join(f.dir, "atrium.db"), map[string]string{module.Calendar: flag})
 		seed, err := db.Connect(filepath.Join(f.dir, "atrium.db"))
 		if err != nil {
 			t.Fatal(err)

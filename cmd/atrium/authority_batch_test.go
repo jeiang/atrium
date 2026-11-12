@@ -16,7 +16,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/tool"
 	"github.com/jeiang/atrium/internal/weather"
 )
@@ -148,11 +147,8 @@ func TestQueuedMarkedReferenceAppliesToTheRestOfTheBatch(t *testing.T) {
 		_, _ = w.Write([]byte(forecastJSON))
 	}))
 	t.Cleanup(forecast.Close)
-	setEnv(t, settingEnv(weather.KeyForecastURL), forecast.URL+"/v1/forecast")
-	setEnv(t, settingEnv(weather.KeyGeocodingURL), forecast.URL+"/v1/search")
-	setEnv(t, settingEnv(weather.KeyLatitude), "10.65")
-	setEnv(t, settingEnv(weather.KeyLongitude), "-61.5")
-	setEnv(t, settingEnv(weather.KeyLocationName), "Port of Spain")
+	setEnv(t, "ATRIUM_HOST_CONFIG", weatherHost(t, dir, forecast.URL+"/v1/forecast", forecast.URL+"/v1/search"))
+	seedSettings(t, map[string]string{weather.KeyLatitude: "10.65", weather.KeyLongitude: "-61.5", weather.KeyLocationName: "Port of Spain"})
 
 	base, _, _ = startServeApp(t, freshApp(f, nil), &lockedBuffer{})
 	jar, err := cookiejar.New(nil)
@@ -566,7 +562,7 @@ func TestCLIApprovalReauthorizesTheCurrentPermissions(t *testing.T) {
 	qb, qbURL := mnpNewQbit(t)
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	mnpMediaRoot(t, dir)
-	setEnv(t, settingEnv(media.KeyQbitURL), qbURL)
+	setEnv(t, "ATRIUM_HOST_CONFIG", qbitHost(t, dir, qbURL))
 	start := warm(t, api)
 	const hash = "dddddddddddddddddddddddddddddddddddddddd"
 	magnet := mediaMagnet(hash, "Lanterns.S01E12")

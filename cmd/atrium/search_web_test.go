@@ -389,7 +389,7 @@ func TestChatNoLongerSeesServerWebSearch(t *testing.T) {
 
 func TestSearchWebStopsAtItsCostCap(t *testing.T) {
 	_, api, _ := moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, settingEnv(websearch.KeyMaxCostUSD), "0.0001")
+	seedSettings(t, map[string]string{websearch.KeyMaxCostUSD: "0.0001"})
 	start := warm(t, api)
 	api.Push(
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("s1", "search_web", map[string]any{"query": "atrium"})),

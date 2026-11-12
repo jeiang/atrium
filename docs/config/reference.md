@@ -14,31 +14,6 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 | `action_link_key_file` | string | none | `ATRIUM_APP_KEYS_ACTION_LINK_KEY_FILE` |
 | `link_key_file` | string | none | `ATRIUM_APP_KEYS_LINK_KEY_FILE` |
 
-### assistant
-
-| Key | Type | Default | Environment variable |
-| --- | --- | --- | --- |
-| `anthropic_ca_file` | string | none | `ATRIUM_ASSISTANT_ANTHROPIC_CA_FILE` |
-| `anthropic_proxy` | string | none | `ATRIUM_ASSISTANT_ANTHROPIC_PROXY` |
-| `open_meteo_ca_file` | string | none | `ATRIUM_ASSISTANT_OPEN_METEO_CA_FILE` |
-| `open_meteo_proxy` | string | none | `ATRIUM_ASSISTANT_OPEN_METEO_PROXY` |
-| `weather_geocoding_url` | string | `https://geocoding-api.open-meteo.com/v1/search` | `ATRIUM_ASSISTANT_WEATHER_GEOCODING_URL` |
-| `weather_open_meteo_url` | string | `https://api.open-meteo.com/v1/forecast` | `ATRIUM_ASSISTANT_WEATHER_OPEN_METEO_URL` |
-
-### auth
-
-| Key | Type | Default | Environment variable |
-| --- | --- | --- | --- |
-| `oidc_access_domains` | string | none | `ATRIUM_AUTH_OIDC_ACCESS_DOMAINS` |
-| `oidc_access_emails` | string | none | `ATRIUM_AUTH_OIDC_ACCESS_EMAILS` |
-| `oidc_access_groups` | string | `atrium_access,atrium_admin` | `ATRIUM_AUTH_OIDC_ACCESS_GROUPS` |
-| `oidc_api_client_id` | string | none | `ATRIUM_AUTH_OIDC_API_CLIENT_ID` |
-| `oidc_client_id` | string | none | `ATRIUM_AUTH_OIDC_CLIENT_ID` |
-| `oidc_groups_claim` | string | none | `ATRIUM_AUTH_OIDC_GROUPS_CLAIM` |
-| `oidc_issuer` | string | none | `ATRIUM_AUTH_OIDC_ISSUER` |
-| `oidc_preset` | enum (generic, pocket_id, authelia, authentik, keycloak, google, entra) | `generic` | `ATRIUM_AUTH_OIDC_PRESET` |
-| `oidc_scopes` | string | none | `ATRIUM_AUTH_OIDC_SCOPES` |
-
 ### calendar
 
 | Key | Type | Default | Environment variable |
@@ -78,13 +53,6 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 
 | Key | Type | Default | Environment variable |
 | --- | --- | --- | --- |
-| `grafana_ca_file` | string | none | `ATRIUM_GRAFANA_GRAFANA_CA_FILE` |
-| `grafana_logs_query` | string | none | `ATRIUM_GRAFANA_GRAFANA_LOGS_QUERY` |
-| `grafana_logs_type` | enum (loki, victorialogs) | `loki` | `ATRIUM_GRAFANA_GRAFANA_LOGS_TYPE` |
-| `grafana_logs_uid` | string | none | `ATRIUM_GRAFANA_GRAFANA_LOGS_UID` |
-| `grafana_metrics_uid` | string | none | `ATRIUM_GRAFANA_GRAFANA_METRICS_UID` |
-| `grafana_proxy` | string | none | `ATRIUM_GRAFANA_GRAFANA_PROXY` |
-| `grafana_url` | string | none | `ATRIUM_GRAFANA_GRAFANA_URL` |
 | `ops_hosts` | string | none | `ATRIUM_GRAFANA_OPS_HOSTS` |
 | `ops_label_selector` | string | `job="node"` | `ATRIUM_GRAFANA_OPS_LABEL_SELECTOR` |
 | `ops_query_cpu` | string | `100 - (avg by(instance) (rate(node_cpu_seconds_total{mode="idle",{{selector}},instance=~"{{host}}(:.*)?"}[5m])) * 100)` | `ATRIUM_GRAFANA_OPS_QUERY_CPU` |
@@ -97,55 +65,25 @@ The file named by `ATRIUM_HOST_CONFIG` is TOML with one table per module and an 
 
 | Key | Type | Default | Environment variable |
 | --- | --- | --- | --- |
-| `mail_accounts_file` | string | none | `ATRIUM_MAIL_MAIL_ACCOUNTS_FILE` |
 | `mail_chat_ca_file` | string | none | `ATRIUM_MAIL_MAIL_CHAT_CA_FILE` |
 | `mail_chat_key` | string | none | `ATRIUM_MAIL_MAIL_CHAT_KEY_FILE` |
 | `mail_chat_model` | string | `qwen` | `ATRIUM_MAIL_MAIL_CHAT_MODEL` |
 | `mail_chat_proxy` | string | none | `ATRIUM_MAIL_MAIL_CHAT_PROXY` |
 | `mail_chat_url` | string | none | `ATRIUM_MAIL_MAIL_CHAT_URL` |
-| `mail_embed_ca_file` | string | none | `ATRIUM_MAIL_MAIL_EMBED_CA_FILE` |
-| `mail_embed_model` | string | `embeddinggemma` | `ATRIUM_MAIL_MAIL_EMBED_MODEL` |
-| `mail_embed_proxy` | string | none | `ATRIUM_MAIL_MAIL_EMBED_PROXY` |
-| `mail_embed_url` | string | none | `ATRIUM_MAIL_MAIL_EMBED_URL` |
-| `mail_ship24_url` | string | `https://api.ship24.com/public/v1` | `ATRIUM_MAIL_MAIL_SHIP24_URL` |
-| `ship24_ca_file` | string | none | `ATRIUM_MAIL_SHIP24_CA_FILE` |
-| `ship24_proxy` | string | none | `ATRIUM_MAIL_SHIP24_PROXY` |
 
 ### media
 
 | Key | Type | Default | Environment variable |
 | --- | --- | --- | --- |
-| `media_eztv_url` | string | `https://eztvx.to/api/get-torrents` | `ATRIUM_MEDIA_MEDIA_EZTV_URL` |
 | `media_movies_url` | string | none | `ATRIUM_MEDIA_MEDIA_MOVIES_URL` |
-| `media_qbittorrent_url` | string | none | `ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL` |
 | `media_root` | string | none | `ATRIUM_MEDIA_MEDIA_ROOT` |
-| `media_tmdb_images_url` | string | `https://image.tmdb.org/t/p/w342` | `ATRIUM_MEDIA_MEDIA_TMDB_IMAGES_URL` |
-| `media_tmdb_url` | string | `https://api.themoviedb.org/3` | `ATRIUM_MEDIA_MEDIA_TMDB_URL` |
 | `media_tv_url` | string | none | `ATRIUM_MEDIA_MEDIA_TV_URL` |
-| `qbittorrent_ca_file` | string | none | `ATRIUM_MEDIA_QBITTORRENT_CA_FILE` |
-| `qbittorrent_proxy` | string | none | `ATRIUM_MEDIA_QBITTORRENT_PROXY` |
-| `tmdb_ca_file` | string | none | `ATRIUM_MEDIA_TMDB_CA_FILE` |
-| `tmdb_proxy` | string | none | `ATRIUM_MEDIA_TMDB_PROXY` |
-
-### notify
-
-| Key | Type | Default | Environment variable |
-| --- | --- | --- | --- |
-| `webpush_ca_file` | string | none | `ATRIUM_NOTIFY_WEBPUSH_CA_FILE` |
-
-### notion
-
-| Key | Type | Default | Environment variable |
-| --- | --- | --- | --- |
-| `notion_ca_file` | string | none | `ATRIUM_NOTION_NOTION_CA_FILE` |
-| `notion_proxy` | string | none | `ATRIUM_NOTION_NOTION_PROXY` |
 
 ### web
 
 | Key | Type | Default | Environment variable |
 | --- | --- | --- | --- |
 | `trusted_proxy_cidrs` | string | none | `ATRIUM_WEB_TRUSTED_PROXY_CIDRS` |
-| `web_trusted_proxy_cidrs` | string | none | `ATRIUM_WEB_WEB_TRUSTED_PROXY_CIDRS` |
 
 ## Operator settings
 
@@ -252,7 +190,7 @@ Operator settings are stored in the database and edited in the application. They
 
 | Key | Type | Default | Class |
 | --- | --- | --- | --- |
-| `mail_mode` | string | `shadow` | bootstrap |
+| `mail_mode` | string | `shadow` | advanced |
 | `mail_ship24_destination_country` | string | none | ui |
 | `mail_ship24_destination_postcode` | string | none | ui |
 | `mail_ship24_monthly_quota` | int | `10` | advanced |

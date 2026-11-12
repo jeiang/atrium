@@ -47,22 +47,18 @@ func Reconcile(ctx context.Context, d *db.DB, host config.Host) error {
 }
 
 func materialize(ctx context.Context, store *Store) error {
-	defaults := map[string]string{}
-	for _, d := range settings.HostDefs() {
-		defaults[d.Key] = d.Default
-	}
 	configs := map[ID]map[string]string{
 		"service/weather": {
-			"url":           defaults["weather_open_meteo_url"],
-			"geocoding_url": defaults["weather_geocoding_url"],
+			"url":           settings.DefaultOf("weather_open_meteo_url"),
+			"geocoding_url": settings.DefaultOf("weather_geocoding_url"),
 		},
 		"service/webfetch": {"url": "https://example.com/"},
 		"service/tmdb": {
-			"url":        defaults["media_tmdb_url"],
-			"images_url": defaults["media_tmdb_images_url"],
+			"url":        settings.DefaultOf("media_tmdb_url"),
+			"images_url": settings.DefaultOf("media_tmdb_images_url"),
 		},
-		"service/eztv":      {"url": defaults["media_eztv_url"]},
-		"service/embedding": {"model": defaults["mail_embed_model"]},
+		"service/eztv":      {"url": settings.DefaultOf("media_eztv_url")},
+		"service/embedding": {"model": settings.DefaultOf("mail_embed_model")},
 	}
 	for _, b := range builtinConnections {
 		if err := store.Ensure(ctx, b.id, b.kind, b.label, configs[b.id], b.caps); err != nil {

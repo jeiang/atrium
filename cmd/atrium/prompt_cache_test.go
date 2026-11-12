@@ -75,7 +75,7 @@ func TestChatStepsReadTheCachedPrefixAndSeeTheTailVerbatim(t *testing.T) {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	thread := latestThread(t, dir)
-	setEnv(t, settingEnv(memory.VerbatimTokensKey), "0")
+	seedSettings(t, map[string]string{memory.VerbatimTokensKey: "0"})
 
 	long := strings.TrimSpace(strings.Repeat("The operator explains one more constraint in detail. ", 60))
 	items := make([]map[string]any, 20)
