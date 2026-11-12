@@ -568,11 +568,11 @@ func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {
 	var mu sync.Mutex
 	var apiKeys []string
 	var authorizations []string
-	api.OnRequest = func(request anthropictest.Request) {
+	api.SetOnRequest(func(request anthropictest.Request) {
 		mu.Lock()
 		apiKeys = append(apiKeys, request.Header.Get("X-Api-Key"))
 		mu.Unlock()
-	}
+	})
 	grafana := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		mu.Lock()
 		authorizations = append(authorizations, r.Header.Get("Authorization"))

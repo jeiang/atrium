@@ -41,13 +41,13 @@ func holdNth(t *testing.T, api *modelLog, n int64) func() {
 	release := func() { once.Do(func() { close(gate) }) }
 	t.Cleanup(release)
 	var seen atomic.Int64
-	prev := api.OnRequest
-	api.OnRequest = func(r anthropictest.Request) {
+	prev := api.RequestHook()
+	api.SetOnRequest(func(r anthropictest.Request) {
 		prev(r)
 		if seen.Add(1) == n {
 			<-gate
 		}
-	}
+	})
 	return release
 }
 

@@ -75,11 +75,11 @@ func TestSelfDiagnoseQueriesMetricsAndLogsInTheConfiguredDialect(t *testing.T) {
 				anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "atrium_self_diagnose", map[string]any{"scope": "both", "minutes": 30})),
 				anthropictest.Reply("end_turn", anthropictest.Text("healthy")),
 			)}
-			api.OnRequest = func(r anthropictest.Request) {
+			api.SetOnRequest(func(r anthropictest.Request) {
 				api.mu.Lock()
 				defer api.mu.Unlock()
 				api.seen = append(api.seen, r)
-			}
+			})
 			setEnv(t, anthropic.BaseURLEnv, api.URL)
 
 			ran := runApp(t, "agent", "run", "--text", "how are you doing?", "--kind", "chat")

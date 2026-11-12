@@ -28,11 +28,11 @@ func TestWebRunnerRefreshesToolsAcrossModuleToggles(t *testing.T) {
 	release := make(chan struct{})
 	var once, releaseOnce sync.Once
 	defer releaseOnce.Do(func() { close(release) })
-	previous := api.OnRequest
-	api.OnRequest = func(r anthropictest.Request) {
+	previous := api.RequestHook()
+	api.SetOnRequest(func(r anthropictest.Request) {
 		previous(r)
 		once.Do(func() { close(arrived); <-release })
-	}
+	})
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("live-disabled-mail", "mail_read", map[string]any{"message_id": message})), anthropictest.Reply("end_turn", anthropictest.Text("refused")))
 	thread := w.start(map[string]string{"text": "read my mail"})
 	select {
@@ -56,7 +56,7 @@ func TestWebRunnerRefreshesToolsAcrossModuleToggles(t *testing.T) {
 	if state, detail := asstSettle(t, d, asstLastRun(t, d, thread)); state != "done" {
 		t.Fatalf("disabled run: %s %s", state, detail)
 	}
-	api.OnRequest = previous
+	api.SetOnRequest(previous)
 	result := findToolResult(t, api.Requests(), "live-disabled-mail")
 	encoded, err := json.Marshal(result)
 	if err != nil || result["is_error"] != true || !strings.Contains(string(encoded), "the mail module was disabled; start the action again") {

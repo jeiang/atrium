@@ -108,13 +108,13 @@ func weeklyLeaseOf(t *testing.T, d *db.DB) weeklyLease {
 
 func paceRequests(api *modelLog, held int, each time.Duration) {
 	var seen atomic.Int64
-	prev := api.OnRequest
-	api.OnRequest = func(r anthropictest.Request) {
+	prev := api.RequestHook()
+	api.SetOnRequest(func(r anthropictest.Request) {
 		prev(r)
 		if seen.Add(1) <= int64(held) {
 			time.Sleep(each)
 		}
-	}
+	})
 }
 
 func taskListCalls(n int) []anthropictest.Response {
@@ -273,13 +273,13 @@ func TestSchedulerResumesAnInterruptedJobRunUnderANewClaim(t *testing.T) {
 	releaseFirst := func() { releaseOnce.Do(func() { close(release) }) }
 	t.Cleanup(releaseFirst)
 	var first atomic.Bool
-	logRequest := api.OnRequest
-	api.OnRequest = func(r anthropictest.Request) {
+	logRequest := api.RequestHook()
+	api.SetOnRequest(func(r anthropictest.Request) {
 		logRequest(r)
 		if first.CompareAndSwap(false, true) {
 			<-release
 		}
-	}
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan appRun, 1)

@@ -56,7 +56,7 @@ func TestInferenceConcurrentAdmissionSendsOneRequest(t *testing.T) {
 	release := make(chan struct{})
 	arrived := make(chan struct{})
 	var once sync.Once
-	api.OnRequest = func(r anthropictest.Request) {
+	api.SetOnRequest(func(r anthropictest.Request) {
 		api.mu.Lock()
 		api.seen = append(api.seen, r)
 		api.mu.Unlock()
@@ -64,7 +64,7 @@ func TestInferenceConcurrentAdmissionSendsOneRequest(t *testing.T) {
 			close(arrived)
 			<-release
 		})
-	}
+	})
 
 	first := make(chan appRun, 1)
 	second := make(chan appRun, 1)
