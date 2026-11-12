@@ -276,6 +276,9 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source, so
 	if err != nil {
 		return nil, err
 	}
+	if _, _, err := sourceICloudSelection(ctx, src, pins); err != nil {
+		return nil, err
+	}
 	if err := refuseDestination(ctx, cfg.DBPath, key); err != nil {
 		return nil, err
 	}
@@ -828,52 +831,84 @@ func sourceHealth(ctx context.Context, src *sql.DB, name string) (string, string
 	return state, reason, checked, expiry, true, nil
 }
 
-func sourceICloud(ctx context.Context, src *sql.DB, pins *sourcePins) ([]connections.ImportService, []string, error) {
-	values, err := sourceSettings(ctx, src, pins, []string{"icloud_apple_id", "calendar_account"})
-	if err != nil {
-		return nil, nil, err
-	}
+type icloudAccount struct{ id, login string }
+
+func sourceICloudAccounts(ctx context.Context, src *sql.DB) ([]icloudAccount, error) {
 	rows, err := src.QueryContext(ctx, "SELECT id, login FROM mail_accounts WHERE preset = 'icloud' AND enabled = 1 ORDER BY id")
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	type account struct{ id, login string }
-	var accounts []account
+	defer func() { _ = rows.Close() }()
+	var accounts []icloudAccount
 	for rows.Next() {
-		var a account
+		var a icloudAccount
 		if err := rows.Scan(&a.id, &a.login); err != nil {
-			_ = rows.Close()
-			return nil, nil, err
+			return nil, err
 		}
 		accounts = append(accounts, a)
 	}
-	if err := rows.Close(); err != nil {
-		return nil, nil, err
+	return accounts, rows.Err()
+}
+
+func sourceICloudSelection(ctx context.Context, src *sql.DB, pins *sourcePins) (string, []icloudAccount, error) {
+	values, err := sourceSettings(ctx, src, pins, []string{"icloud_apple_id", "calendar_account"})
+	if err != nil {
+		return "", nil, err
+	}
+	enabled, err := sourceICloudAccounts(ctx, src)
+	if err != nil {
+		return "", nil, err
 	}
 	selected := strings.TrimSpace(values["calendar_account"])
+	accounts := enabled
 	if selected != "" {
-		var found []account
-		for _, a := range accounts {
+		accounts = nil
+		for _, a := range enabled {
 			if a.id == selected {
-				found = append(found, a)
+				accounts = append(accounts, a)
 			}
 		}
-		accounts = found
+	}
+	appleID := values["icloud_apple_id"]
+	if appleID != "" && len(accounts) != 1 {
+		return "", nil, icloudSelectionError(enabled, selected)
+	}
+	return appleID, accounts, nil
+}
+
+func icloudSelectionError(enabled []icloudAccount, selected string) error {
+	ids := make([]string, 0, len(enabled))
+	for _, a := range enabled {
+		ids = append(ids, a.id)
+	}
+	choice := "enable exactly one iCloud account"
+	if len(ids) > 0 {
+		choice = "set calendar_account to one of: " + strings.Join(ids, ", ")
+	}
+	if selected != "" {
+		return fmt.Errorf("db import-v2: calendar.icloud_apple_id is set but calendar_account %q does not select exactly one enabled iCloud account; %s", selected, choice)
+	}
+	return fmt.Errorf("db import-v2: calendar.icloud_apple_id is set but cannot be placed on exactly one iCloud account; %s", choice)
+}
+
+func sourceICloud(ctx context.Context, src *sql.DB, pins *sourcePins) ([]connections.ImportService, []string, error) {
+	appleID, accounts, err := sourceICloudSelection(ctx, src, pins)
+	if err != nil {
+		return nil, nil, err
 	}
 	if len(accounts) > 1 {
 		return nil, []string{"icloud: unresolved-selection; set calendar_account to one of the enabled iCloud accounts"}, nil
 	}
 	var services []connections.ImportService
-	var notes []string
 	for _, a := range accounts {
 		service := connections.ImportService{
 			ID: "icloud/" + a.id, Kind: string(calendar.KindICloud), Label: "iCloud " + a.id, Source: connections.SourceOperator,
-			Config:       map[string]string{"apple_id": values["icloud_apple_id"]},
+			Config:       map[string]string{"apple_id": appleID},
 			Capabilities: []string{calendar.CapabilityCalDAV, calendar.CapabilityCardDAV},
 		}
 		services = append(services, service)
 	}
-	return services, notes, nil
+	return services, nil, nil
 }
 
 func sourceMailAccounts(ctx context.Context, src *sql.DB, pins *sourcePins) ([]connections.ImportService, []string, []string, error) {
