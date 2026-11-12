@@ -42,9 +42,15 @@ func New(svc *service.Service, jobs []scheduler.Definition, enabled func(string)
 		Zone:    func(ctx context.Context) string { return config.From(ctx).TZName(svc.Env) },
 		Owner:   journal.NewOwner(),
 		Gate:    func(ctx context.Context, at float64) (scheduler.Gate, error) { return gate(ctx, svc, at) },
-		Recover: Recovery(svc.DB.Read),
-		Resume:  func(ctx context.Context) (int, error) { return svc.ResumeInterrupted(ctx, true) },
-		Idle:    func(ctx context.Context) bool { return idle(ctx, svc) },
+		Recover: recovery(svc),
+		Resume: func(ctx context.Context) (int, error) {
+			claimed, err := scheduler.ClaimedThreads(ctx, svc.DB.Read)
+			if err != nil {
+				return 0, err
+			}
+			return svc.ResumeInterrupted(ctx, true, claimed)
+		},
+		Idle: func(ctx context.Context) bool { return idle(ctx, svc) },
 		Notice: func(ctx context.Context, skip scheduler.Skipped, at float64) error {
 			return notifySkipped(ctx, svc, skip, at)
 		},

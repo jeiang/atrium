@@ -546,7 +546,7 @@ func (s *Service) StartResume(ctx context.Context, runID int64) error {
 	return s.inBackground(runID)
 }
 
-func (s *Service) ResumeInterrupted(ctx context.Context, background bool) (int, error) {
+func (s *Service) ResumeInterrupted(ctx context.Context, background bool, claimed map[int64]bool) (int, error) {
 	ctx, err := module.BindOwner(ctx, module.Assistant)
 	if err != nil {
 		return 0, err
@@ -561,6 +561,31 @@ func (s *Service) ResumeInterrupted(ctx context.Context, background bool) (int, 
 	if err != nil {
 		return 0, err
 	}
+	found = slices.DeleteFunc(found, func(r journal.Run) bool { return claimed[r.ThreadID] })
+	return s.resume(ctx, found, background)
+}
+
+func (s *Service) ResumeThreads(ctx context.Context, threads []int64) error {
+	ctx, err := module.BindOwner(ctx, module.Assistant)
+	if err != nil {
+		return err
+	}
+	if err := ledger.CheckAdmission(ctx); err != nil {
+		return err
+	}
+	if err := journal.InterruptThreads(ctx, s.DB.Write, threads); err != nil {
+		return err
+	}
+	found, err := journal.InterruptedRuns(ctx, s.DB.Read)
+	if err != nil {
+		return err
+	}
+	found = slices.DeleteFunc(found, func(r journal.Run) bool { return !slices.Contains(threads, r.ThreadID) })
+	_, err = s.resume(ctx, found, false)
+	return err
+}
+
+func (s *Service) resume(ctx context.Context, found []journal.Run, background bool) (int, error) {
 	resumed := 0
 	for _, run := range found {
 		waiting, err := NeedsOperator(ctx, s.DB.Read, run)

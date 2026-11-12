@@ -11,8 +11,11 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 )
+
+type Recovery func(context.Context, Run, []int64) (Result, error)
 
 type Gate struct {
 	Paused     bool
@@ -43,6 +46,7 @@ type Scheduler struct {
 	wg     sync.WaitGroup
 	active atomic.Int64
 	dirty  atomic.Bool
+	claims atomic.Int64
 }
 
 func New(d *db.DB, jobs []Definition, deps Dependencies) *Scheduler {
@@ -72,6 +76,10 @@ func (s *Scheduler) admit(gate Gate) Admit {
 	}
 }
 
+func (s *Scheduler) owner() string {
+	return fmt.Sprintf("%s/%d", s.deps.Owner, s.claims.Add(1))
+}
+
 func (s *Scheduler) Tick(ctx context.Context) error {
 	stamp := s.now()
 	tz := s.deps.Zone(ctx)
@@ -90,14 +98,15 @@ func (s *Scheduler) Tick(ctx context.Context) error {
 	}
 	admit := s.admit(gate)
 	for _, job := range due {
-		locks, err := db.TryResourceLocks(s.deps.DBPath, claimResources(s.jobs, job))
+		resources := claimResources(s.jobs, job)
+		locks, err := db.TryResourceLocks(s.deps.DBPath, resources)
 		if errors.As(err, new(*db.LockBusy)) {
 			continue
 		}
 		if err != nil {
 			return err
 		}
-		claim, skip, err := claimJob(ctx, s.db, job.ID, stamp, s.deps.Owner, admit)
+		claim, skip, err := claimJob(ctx, s.db, job.ID, resources, stamp, s.owner(), admit)
 		if err != nil || claim == nil {
 			_ = locks.Close()
 		}
@@ -110,18 +119,62 @@ func (s *Scheduler) Tick(ctx context.Context) error {
 				log.Error("skip notice failed", logx.Job, skip.Job.ID, logx.Err, err)
 			}
 		}
-		if claim == nil {
-			continue
+		if claim != nil {
+			s.start(ctx, *claim, locks, s.work(claim.Job))
 		}
-		s.dirty.Store(true)
-		s.active.Add(1)
-		s.wg.Go(func() {
-			defer s.finished(ctx)
-			defer func() { _ = locks.Close() }()
-			s.execute(ctx, *claim)
-		})
 	}
 	return nil
+}
+
+func (s *Scheduler) recoverRuns(ctx context.Context) error {
+	now := s.now()
+	expired, err := expiredRuns(ctx, s.db.Read, now)
+	if err != nil {
+		return err
+	}
+	for _, p := range expired {
+		resources := claimResources(s.jobs, p.job)
+		locks, err := db.TryResourceLocks(s.deps.DBPath, resources)
+		if errors.As(err, new(*db.LockBusy)) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		claim, err := takeOver(ctx, s.db, p, resources, now, s.owner())
+		if err != nil || claim == nil {
+			_ = locks.Close()
+		}
+		if err != nil {
+			return err
+		}
+		if claim != nil {
+			s.start(ctx, *claim, locks, s.recovery)
+		}
+	}
+	return nil
+}
+
+func (s *Scheduler) recovery(ctx context.Context, run Run) (Result, error) {
+	threads, err := JobRunThreads(ctx, s.db.Read, run.Claim.JobRunID)
+	if err != nil {
+		return Result{}, err
+	}
+	if len(threads) == 0 {
+		lost := workerLost
+		return Result{Status: StatusError, Error: &lost}, nil
+	}
+	return s.deps.Recover(ctx, run, threads)
+}
+
+func (s *Scheduler) start(ctx context.Context, claim Claim, locks *db.LockSet, fn func(context.Context, Run) (Result, error)) {
+	s.dirty.Store(true)
+	s.active.Add(1)
+	s.wg.Go(func() {
+		defer s.finished(ctx)
+		defer func() { _ = locks.Close() }()
+		s.execute(ctx, claim, fn)
+	})
 }
 
 func (s *Scheduler) finished(ctx context.Context) {
@@ -130,63 +183,126 @@ func (s *Scheduler) finished(ctx context.Context) {
 	s.checkpoint(ctx)
 }
 
-func (s *Scheduler) execute(ctx context.Context, claim Claim) {
+func (s *Scheduler) work(job Job) func(context.Context, Run) (Result, error) {
+	def, declared := Declared(s.jobs, job)
+	if !declared && !job.Fixed() {
+		return s.deps.RunCron
+	}
+	if def.Run == nil {
+		return func(context.Context, Run) (Result, error) {
+			return Result{}, fmt.Errorf("no callable registered for %s", job.Name)
+		}
+	}
+	for _, m := range def.Needs {
+		if s.deps.Enabled != nil && !s.deps.Enabled(m) {
+			return func(context.Context, Run) (Result, error) { return Result{Status: StatusSkippedModule}, nil }
+		}
+	}
+	return def.Run
+}
+
+func (s *Scheduler) execute(ctx context.Context, claim Claim, fn func(context.Context, Run) (Result, error)) {
+	work, cancel := context.WithCancelCause(ctx)
+	defer cancel(nil)
+	var lost atomic.Bool
+	lose := func() {
+		lost.Store(true)
+		cancel(ErrClaimLost)
+	}
+	work = ledger.WithAdmission(work, func() error {
+		if lost.Load() {
+			return ErrClaimLost
+		}
+		return nil
+	})
+	stop := make(chan struct{})
+	renewing := make(chan struct{})
+	go func() {
+		defer close(renewing)
+		s.renew(context.WithoutCancel(ctx), claim, stop, lose)
+	}()
+	result, err := s.call(work, claim, fn)
+	close(stop)
+	<-renewing
+	done, stopDone := context.WithTimeout(context.WithoutCancel(ctx), time.Duration(TuningAgentSchedulerLeaseSeconds)*time.Second)
+	defer stopDone()
+	id := claim.Job.ID
+	switch {
+	case lost.Load():
+		log.Warn(fmt.Sprintf("job %d lost its claim; it stopped and leaves the run to its successor", id), logx.Job, id)
+		return
+	case err != nil && interrupted(ctx, err):
+		log.Info(fmt.Sprintf("job %d interrupted; its run resumes on restart", id), logx.Job, id)
+		s.settle(done, claim, s.release(done, claim))
+		return
+	case err != nil:
+		log.Error(fmt.Sprintf("job %d crashed", id), logx.Job, id, logx.Err, err)
+		result = Result{Status: StatusError, ThreadID: result.ThreadID, Error: new(err.Error())}
+	case result.Status == StatusRunning:
+		s.settle(done, claim, s.release(done, claim))
+		return
+	}
+	s.settle(done, claim, s.Finish(done, claim, result))
+}
+
+func (s *Scheduler) settle(ctx context.Context, claim Claim, err error) {
+	id := claim.Job.ID
+	switch {
+	case errors.Is(err, ErrClaimLost):
+		log.Warn(fmt.Sprintf("job %d lost its claim before settling; its successor owns the run", id), logx.Job, id)
+	case err != nil:
+		log.Error(fmt.Sprintf("job %d: recording the run failed", id), logx.Job, id, logx.Err, err)
+	}
+}
+
+func (s *Scheduler) call(ctx context.Context, claim Claim, fn func(context.Context, Run) (Result, error)) (result Result, err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			text := fmt.Sprintf("panic: %v", p)
 			log.Error(fmt.Sprintf("job %d crashed", claim.Job.ID), logx.Job, claim.Job.ID, logx.Err, text+"\n"+string(debug.Stack()))
-			s.finish(context.WithoutCancel(ctx), claim, Result{Status: StatusError, Error: &text})
+			result, err = Result{}, errors.New(text)
 		}
 	}()
-	job := claim.Job
-	run := Run{Claim: claim, Now: s.now}
-	def, declared := Declared(s.jobs, job)
-	if !declared && !job.Fixed() {
-		s.record(ctx, claim, s.deps.RunCron, run)
-		return
-	}
-	if def.Run == nil {
-		s.failed(ctx, claim, nil, fmt.Errorf("no callable registered for %s", job.Name))
-		return
-	}
-	for _, m := range def.Needs {
-		if s.deps.Enabled != nil && !s.deps.Enabled(m) {
-			s.finish(ctx, claim, Result{Status: StatusSkippedModule})
+	return fn(ctx, Run{Claim: claim, Now: s.now})
+}
+
+func (s *Scheduler) renew(ctx context.Context, claim Claim, stop <-chan struct{}, lose func()) {
+	interval := time.Duration(TuningAgentSchedulerRenewSeconds) * time.Second
+	expires := claim.until
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	id := claim.Job.ID
+	for {
+		select {
+		case <-stop:
 			return
+		case <-ticker.C:
+		}
+		attempt, cancel := context.WithTimeout(ctx, interval)
+		until, err := s.Renew(attempt, claim)
+		cancel()
+		switch {
+		case err == nil:
+			expires = until
+		case errors.Is(err, ErrClaimLost):
+			log.Warn(fmt.Sprintf("job %d: another invocation took over its claim", id), logx.Job, id)
+			lose()
+			return
+		case s.now() >= expires:
+			log.Error(fmt.Sprintf("job %d: its claim expired before it could be renewed", id), logx.Job, id, logx.Err, err)
+			lose()
+			return
+		default:
+			log.Warn(fmt.Sprintf("job %d: renewing its claim failed; retrying", id), logx.Job, id, logx.Err, err)
 		}
 	}
-	s.record(ctx, claim, def.Run, run)
-}
-
-func (s *Scheduler) record(ctx context.Context, claim Claim, fn func(context.Context, Run) (Result, error), run Run) {
-	result, err := fn(ctx, run)
-	if err != nil {
-		s.failed(ctx, claim, result.ThreadID, err)
-		return
-	}
-	s.finish(ctx, claim, result)
-}
-
-func (s *Scheduler) finish(ctx context.Context, claim Claim, r Result) {
-	if err := FinishRun(ctx, s.db, claim, s.now(), r); err != nil {
-		log.Error(fmt.Sprintf("job %d: recording the run failed", claim.Job.ID), logx.Job, claim.Job.ID, logx.Err, err)
-	}
-}
-
-func (s *Scheduler) failed(ctx context.Context, claim Claim, threadID *int64, err error) {
-	if interrupted(ctx, err) {
-		log.Info(fmt.Sprintf("job %d interrupted; its run resumes on restart", claim.Job.ID), logx.Job, claim.Job.ID)
-		return
-	}
-	log.Error(fmt.Sprintf("job %d crashed", claim.Job.ID), logx.Job, claim.Job.ID, logx.Err, err)
-	s.finish(ctx, claim, Result{Status: StatusError, ThreadID: threadID, Error: new(err.Error())})
 }
 
 func (s *Scheduler) Cycle(ctx context.Context) error {
 	if err := db.Ready(ctx, s.db); err != nil {
 		return err
 	}
-	if err := Recover(ctx, s.db, s.deps.DBPath, s.now(), s.deps.Recover); err != nil {
+	if err := s.recoverRuns(ctx); err != nil {
 		return err
 	}
 	resumed, err := s.deps.Resume(ctx)

@@ -243,6 +243,19 @@ func MarkInterrupted(ctx context.Context, q db.Querier, now float64) (int64, err
 	return res.RowsAffected()
 }
 
+func InterruptThreads(ctx context.Context, q db.Querier, threads []int64) error {
+	if len(threads) == 0 {
+		return nil
+	}
+	args := []any{Interrupted, Running}
+	for _, id := range threads {
+		args = append(args, id)
+	}
+	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = NULL, lease_until = NULL WHERE state = ? AND thread_id IN (?"+
+		strings.Repeat(", ?", len(threads)-1)+")", args...)
+	return err
+}
+
 func ClaimResume(ctx context.Context, q db.Querier, runID int64, owner string, now float64) (bool, error) {
 	lease, err := leaseSeconds(ctx, q)
 	if err != nil {

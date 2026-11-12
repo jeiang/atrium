@@ -57,7 +57,7 @@ func TestScheduledHistoryKeepsRunThreadsAndTheDigestReportsTheNightlyOutcome(t *
 
 	now := float64(time.Now().UnixMicro()) / 1e6
 	asstExec(t, d, "UPDATE job_runs SET status = 'running', ended_at = NULL, tokens = 0, cost = 0 WHERE id = ?", weeklyRun)
-	asstExec(t, d, "UPDATE jobs SET lease_owner = 'gone', lease_until = ? WHERE id = ?", now+3600, weeklyJob)
+	asstExec(t, d, "UPDATE jobs SET lease_owner = 'gone', lease_until = ? WHERE id = ?", now-1, weeklyJob)
 	var nightlyJob int64
 	if err := d.Read.QueryRow("SELECT id FROM jobs WHERE name = 'nightly'").Scan(&nightlyJob); err != nil {
 		t.Fatal(err)

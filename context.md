@@ -445,6 +445,21 @@ behavior-parity target.
   non-blocking lock on `job/<id>` and the job's declared resources; the lock
   files live in `<canonical database path>.locks/`, named by the SHA-256 of
   the resource key and never unlinked, separate from the migration lock.
+  The claim transaction records a per-claim owner on the job, the running
+  run and a `job_resource_leases` row for every resource (sorted raw keys,
+  `job/<id>` included); the lease lasts 90 seconds and the running job
+  renews it every 20 seconds in one transaction that checks the job's
+  `(lease_owner, last_run_id)`, the run's owner and every resource row and
+  advances the run's `heartbeat_at`. Any mismatch, or a lease that expires
+  before a renewal succeeds, is `ErrClaimLost`: the job's context is
+  cancelled and ledger admission refuses its next effect. `Finish` and the
+  release on interruption use the same fence, so a claimant that lost its
+  claim never settles or clears its successor's run. A run whose lease has
+  expired is taken over under the same locks with a new owner, which fences
+  the old one; the assistant recovery adapter then force-interrupts the
+  run's threads, resumes them synchronously and settles the run from their
+  outcome (no threads is `worker lost`). The global interrupted-run resume
+  skips threads of running job runs.
   The scheduler seeds every catalog job, cancels a keyed job no longer
   declared, and a job whose needed module is off
   records `skipped_module`. Core (settings, secrets, `db`,
