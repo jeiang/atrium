@@ -188,6 +188,15 @@ func TestMailRoutingRecordsEachStage(t *testing.T) {
 				{"Bills", "Filed 8", "f8@filler8.test", "f8"},
 				{"Bills", "Filed 9", "f9@filler9.test", "f9"},
 				{"Bills", "Filed 10", "f10@filler10.test", "f10"},
+				{"Receipts", "Kept 1", "k1@keeper1.test", "k1"},
+				{"Receipts", "Kept 2", "k2@keeper2.test", "k2"},
+				{"Receipts", "Kept 3", "k3@keeper3.test", "k3"},
+				{"Receipts", "Kept 4", "k4@keeper4.test", "k4"},
+				{"Receipts", "Kept 5", "k5@keeper5.test", "k5"},
+				{"Receipts", "Kept 6", "k6@keeper6.test", "k6"},
+				{"Receipts", "Kept 7", "k7@keeper7.test", "k7"},
+				{"Receipts", "Kept 8", "k8@keeper8.test", "k8"},
+				{"Receipts", "Kept 9", "k9@keeper9.test", "k9"},
 			},
 			prepare: func(t *testing.T, m *mailSafety, id int64) {
 				m.embed(t, id, m.messageID(t, "Statement 8"), m.messageID(t, "Receipt 7"))

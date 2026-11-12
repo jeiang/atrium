@@ -105,7 +105,7 @@ func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open 
 		Syncer:     syncer,
 		Live:       l,
 		Registry:   registry,
-		Router:     &router.Router{DB: d, Now: now},
+		Router:     &router.Router{DB: d, Now: now, Classifier: judge},
 		Applier:    applier.New(l, open, syncer),
 		Classifier: c,
 		Classify:   judge,
@@ -197,7 +197,7 @@ func (p *Pass) Process(ctx context.Context, accounts []string) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		routed, err := p.Router.RouteAccount(ctx, account)
+		routed, err := p.Router.RouteAccount(ctx, account, paid)
 		if err != nil {
 			return err
 		}

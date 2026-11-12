@@ -4,7 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -13,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	dbkey "github.com/jeiang/atrium/internal/db/key"
+	"github.com/jeiang/atrium/internal/mail/classify"
 	"github.com/jeiang/atrium/internal/mail/replay"
 	"github.com/jeiang/atrium/internal/mail/router"
 	"github.com/jeiang/atrium/internal/settings"
@@ -24,12 +28,13 @@ func (o Options) ReplayCommand() *cli.Command {
 		Setup: func(a *cli.Args) cli.Handler {
 			account := a.String("account", "", cli.Opt{Help: "replay only this account"})
 			limit := a.Int("limit", 0, cli.Opt{Help: "replay at most this many messages"})
-			return func(env *cli.Env) int { return o.replay(env, *account, *limit) }
+			model := a.Bool("model", cli.Opt{Help: "ask the paid classifier at the model stage, on a disposable copy of the database"})
+			return func(env *cli.Env) int { return o.replay(env, *account, *limit, *model) }
 		},
 	}
 }
 
-func (o Options) replay(env *cli.Env, account string, limit int) int {
+func (o Options) replay(env *cli.Env, account string, limit int, model bool) int {
 	if limit < 0 {
 		return env.UsageError("argument --limit: must be a whole number of at least 0")
 	}
@@ -66,7 +71,13 @@ func (o Options) replay(env *cli.Env, account string, limit int) int {
 			return env.UsageError("argument --account: invalid choice %q (choose from %s)", account, strings.Join(names, ", "))
 		}
 	}
-	result, err := replay.Run(env.Ctx, q, replay.Options{Account: account, Limit: limit})
+	opts := replay.Options{Account: account, Limit: limit, Model: model}
+	var result replay.Result
+	if model {
+		result, err = o.replayModel(env.Ctx, cfg, q, key, opts)
+	} else {
+		result, err = replay.Run(env.Ctx, q, opts, nil)
+	}
 	if err != nil {
 		return cli.Fail(env, err)
 	}
@@ -82,6 +93,31 @@ func (o Options) replay(env *cli.Env, account string, limit int) int {
 	}
 	_, _ = fmt.Fprint(env.Stderr, replaySummary(result.Summary))
 	return cli.ExitOK
+}
+
+func (o Options) replayModel(ctx context.Context, cfg config.Config, source *sql.DB, key db.Key, opts replay.Options) (_ replay.Result, err error) {
+	if o.Classifiers == nil {
+		return replay.Result{}, errors.New("replay --model: no classifier is bound")
+	}
+	dir, err := os.MkdirTemp("", "atrium-replay-")
+	if err != nil {
+		return replay.Result{}, err
+	}
+	defer func() { err = errors.Join(err, os.RemoveAll(dir)) }()
+	path := filepath.Join(dir, "replay.db")
+	if err := db.Backup(ctx, source, path, key); err != nil {
+		return replay.Result{}, err
+	}
+	d, err := db.Connect(path, db.WithKey(key))
+	if err != nil {
+		return replay.Result{}, err
+	}
+	defer func() { err = errors.Join(err, d.Close()) }()
+	c, err := o.Classifiers(ctx, o.env(), d, cfg, o.Now)
+	if err != nil {
+		return replay.Result{}, err
+	}
+	return replay.Run(ctx, d.Read, opts, classify.New(c))
 }
 
 func addStoredAccounts(ctx context.Context, state *config.State, q db.Querier) error {

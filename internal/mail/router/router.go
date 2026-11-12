@@ -12,17 +12,13 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/llm"
-	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/classify"
 	"github.com/jeiang/atrium/internal/mail/corrections"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/rules"
 )
-
-var log = logx.Logger("atrium.router")
 
 var Stages = [...]string{"correction", "operator", "learned", "knn", "llm", "fallback"}
 
@@ -36,12 +32,11 @@ type Decision struct {
 }
 
 type LLMContext struct {
-	URL       string
 	Folders   []string
 	Catalog   string
 	Available bool
-	Down      bool
 	NoModel   bool
+	Paid      *classify.Deferral
 }
 
 const ActionAsk = "ask"
@@ -72,8 +67,9 @@ func ReadTuning(ctx context.Context, q Querier, account string) (Tuning, error) 
 }
 
 type Router struct {
-	DB  *db.DB
-	Now func() float64
+	DB         *db.DB
+	Now        func() float64
+	Classifier *classify.Service
 }
 
 func (r *Router) now() float64 {
@@ -191,7 +187,7 @@ func Vote(neighbors []Neighbor) (folder string, share float64, ok bool) {
 	return folder, scores[folder] / total, true
 }
 
-func NewLLMContext(ctx context.Context, q Querier, account, url string, folderMin int) (LLMContext, error) {
+func NewLLMContext(ctx context.Context, q Querier, account string, folderMin int, paid *classify.Deferral) (LLMContext, error) {
 	rows, err := q.QueryContext(ctx,
 		"SELECT folder FROM filed_messages WHERE account = ? GROUP BY folder HAVING COUNT(*) >= ? ORDER BY folder",
 		account, folderMin)
@@ -207,7 +203,7 @@ func NewLLMContext(ctx context.Context, q Querier, account, url string, folderMi
 		return LLMContext{}, err
 	}
 	if len(folders) == 0 {
-		return LLMContext{URL: url, Folders: []string{}}, nil
+		return LLMContext{Folders: []string{}, Paid: paid}, nil
 	}
 	args := []any{account}
 	for _, f := range folders {
@@ -220,15 +216,15 @@ func NewLLMContext(ctx context.Context, q Querier, account, url string, folderMi
 	if err != nil {
 		return LLMContext{}, err
 	}
-	senders, err := db.Collect(rows, func(r *sql.Rows) (llm.FolderSender, error) {
-		var s llm.FolderSender
+	senders, err := db.Collect(rows, func(r *sql.Rows) (classify.FolderSender, error) {
+		var s classify.FolderSender
 		err := r.Scan(&s.Folder, &s.FromDomain, &s.N)
 		return s, err
 	})
 	if err != nil {
 		return LLMContext{}, err
 	}
-	return LLMContext{URL: url, Folders: folders, Catalog: llm.FolderCatalog(ctx, senders), Available: true}, nil
+	return LLMContext{Folders: folders, Catalog: classify.FolderCatalog(ctx, senders), Available: true, Paid: paid}, nil
 }
 
 func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleList []rules.Rule, lc *LLMContext, t Tuning) (*Decision, error) {
@@ -269,7 +265,7 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 		return &Decision{Stage: "knn", Action: string(rules.ActionFile), Dest: new(folder), Key: new("vote"), Confidence: new(share)}, nil
 	}
 	if len(neighbors) > 0 && lc.Available {
-		if lc.Down {
+		if lc.Paid.Stopped() {
 			return nil, nil
 		}
 		if lc.NoModel {
@@ -279,16 +275,19 @@ func (r *Router) Decide(ctx context.Context, q Querier, m *rules.Message, ruleLi
 		if err != nil {
 			return nil, err
 		}
-		near := make([]llm.Neighbor, min(t.LLMNeighbors, len(neighbors)))
+		near := make([]classify.Neighbor, min(t.LLMNeighbors, len(neighbors)))
 		for i := range near {
-			near[i] = llm.Neighbor{Folder: neighbors[i].Folder, FromDomain: neighbors[i].FromDomain, Subject: neighbors[i].Subject}
+			near[i] = classify.Neighbor{Folder: neighbors[i].Folder, FromDomain: neighbors[i].FromDomain, Subject: neighbors[i].Subject}
 		}
-		folder, confident, err := llm.JudgeFolder(ctx, lc.URL, lc.Folders, lc.Catalog, near,
-			llm.Message{Subject: m.Subject, FromName: m.FromName, FromAddr: m.FromAddr}, body)
+		folder, confident, err := r.Classifier.JudgeFolder(ctx, classify.MessageItem(m.Account, m.ID), lc.Folders, lc.Catalog, near,
+			classify.Message{Subject: m.Subject, FromName: m.FromName, FromAddr: m.FromAddr}, body)
+		if lc.Paid.Note(err) {
+			return nil, nil
+		}
 		if err != nil {
 			return nil, err
 		}
-		if folder != llm.Uncertain {
+		if folder != classify.Uncertain {
 			return &Decision{Stage: "llm", Action: string(rules.ActionFile), Dest: new(folder), Key: new("chat"), Detail: map[string]any{"confident": confident}}, nil
 		}
 	}
@@ -305,7 +304,7 @@ func (r *Router) Record(ctx context.Context, m *rules.Message, d *Decision) erro
 	})
 }
 
-func (r *Router) RouteAccount(ctx context.Context, account string) (int, error) {
+func (r *Router) RouteAccount(ctx context.Context, account string, paid *classify.Deferral) (int, error) {
 	pending, err := Eligible(ctx, r.DB.Read, account)
 	if err != nil || len(pending) == 0 {
 		return 0, err
@@ -318,15 +317,11 @@ func (r *Router) RouteAccount(ctx context.Context, account string) (int, error) 
 	if err != nil {
 		return 0, err
 	}
-	chatURL, err := endpoint.ChatURL(ctx, r.DB.Read)
-	if err != nil {
-		return 0, err
-	}
 	tune, err := ReadTuning(ctx, r.DB.Read, account)
 	if err != nil {
 		return 0, err
 	}
-	lc, err := NewLLMContext(ctx, r.DB.Read, account, chatURL, tune.FolderMin)
+	lc, err := NewLLMContext(ctx, r.DB.Read, account, tune.FolderMin, paid)
 	if err != nil {
 		return 0, err
 	}
@@ -334,12 +329,6 @@ func (r *Router) RouteAccount(ctx context.Context, account string) (int, error) 
 	for i := range pending {
 		m := &pending[i]
 		d, err := r.Decide(ctx, r.DB.KNN, m, ruleList, &lc, tune)
-		var unavailable *httpx.ServiceUnavailable
-		if errors.As(err, &unavailable) {
-			log.Warn(fmt.Sprintf("chat unavailable, deferring %s: %s", account, unavailable))
-			lc.Down = true
-			continue
-		}
 		if err != nil {
 			return decided, err
 		}
