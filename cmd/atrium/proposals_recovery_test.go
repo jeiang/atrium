@@ -21,7 +21,7 @@ func TestServeRecoversOnlyAnIdleApprovedProposalAndKeepsItsSettledBatchesUndoabl
 	dir := t.TempDir()
 	path := filepath.Join(dir, "atrium.db")
 	setEnv(t, "ATRIUM_DB", path)
-	ctx := settings.With(context.Background(), settings.New())
+	ctx := settings.With(context.Background(), testSettings())
 	seed, err := db.Connect(path)
 	if err != nil {
 		t.Fatal(err)

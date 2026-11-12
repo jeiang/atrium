@@ -22,8 +22,6 @@ import (
 
 const TracesEndpointKey = "otel_traces_endpoint"
 
-func init() { settings.MustRegisterHost(HostSettings()...) }
-
 func HostSettings() []settings.HostDef {
 	return []settings.HostDef{
 		{Key: TracesEndpointKey, Module: "core", Type: settings.String, Default: "", Check: checkEndpoint},

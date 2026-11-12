@@ -3,6 +3,7 @@ package calendarmodule
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 
 	calendartools "github.com/jeiang/atrium/internal/assistant/tools/calendar"
@@ -33,6 +34,8 @@ func (Module) Declare(mc module.Context) module.Declaration {
 	command := calendarcmd.Command(mc.Env, mc.Tools)
 	return module.Declaration{
 		Name:      module.Calendar,
+		Settings:  slices.Concat(calendar.SettingsDefs(), calendar.SlotSettings()),
+		Host:      calendar.HostSettings(),
 		Attention: AttentionSources(),
 		Requires:  Requirements(),
 		Commands:  []*cli.Command{command},

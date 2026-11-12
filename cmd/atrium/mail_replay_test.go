@@ -20,7 +20,6 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/llmstub"
 )
 
@@ -95,8 +94,7 @@ func TestMailReplayReportsStoredDecisionsWithoutExternalCalls(t *testing.T) {
 	appFor := func(path string) *cli.App {
 		vars := maps.Clone(env)
 		vars["ATRIUM_DB"] = path
-		reg := settings.New()
-		return newAppWith(config.Map(vars), reg, config.NewState(reg), clients, nil, quietLog)
+		return newAppWith(config.Map(vars), clients, nil, quietLog)
 	}
 	run := func(app *cli.App, args ...string) appRun {
 		var out, errs bytes.Buffer

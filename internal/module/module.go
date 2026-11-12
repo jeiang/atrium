@@ -24,8 +24,6 @@ const (
 	Contacts      = "contacts"
 )
 
-var Builtins = []string{Mail, Calendar, Notion, Media, Assistant, Notifications, Grafana, Contacts}
-
 type Leaf struct {
 	Always bool
 	Needs  []string
@@ -53,7 +51,7 @@ func HostSetting(key string) Requirement {
 		if strings.TrimSpace(value) == "" {
 			return key + " is not set", nil
 		}
-		if err := settings.ValidateHost(key, value); err != nil {
+		if err := p.Settings.ValidateHost(key, value); err != nil {
 			return key + " " + err.Error(), nil
 		}
 		return "", nil
@@ -136,10 +134,10 @@ type DuplicateCommand string
 
 func (e DuplicateCommand) Error() string { return "module: duplicate command " + string(e) }
 
-type FlagNotRegistered string
+type ToolSettingCollision struct{ Module, Key string }
 
-func (e FlagNotRegistered) Error() string {
-	return "module: setting " + string(e) + " is not registered"
+func (e *ToolSettingCollision) Error() string {
+	return "module: " + e.Module + " declares the setting " + e.Key + ", which the tool registry owns"
 }
 
 type UnknownDependency struct {

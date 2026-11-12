@@ -54,8 +54,6 @@ func SettingsDefs() []settings.Def {
 	}
 }
 
-func init() { settings.MustRegister(SettingsDefs()...) }
-
 func countryCheck(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {

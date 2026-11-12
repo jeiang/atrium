@@ -267,7 +267,7 @@ func TestWimServeMarksAStuckSendingDraftUnknownAndReportsItsLifecycle(t *testing
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Migrate(settings.With(context.Background(), settings.New()), seed, path); err != nil {
+	if err := db.Migrate(settings.With(context.Background(), testSettings()), seed, path); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := seed.Write.Exec("INSERT INTO drafts (thread_id, account, to_addrs, subject, body, status, created_at, updated_at) VALUES (NULL, 'gmail', 'a@x.test', 's', 'b', 'sending', 1000, 1000)"); err != nil {

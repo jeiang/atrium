@@ -27,7 +27,8 @@ func (m Module) Declare(module.Context) module.Declaration {
 		env = config.OS
 	}
 	return module.Declaration{
-		Name: module.Notion,
+		Name:     module.Notion,
+		Settings: notion.Settings(),
 		Pages: []web.Page{{Module: pages.Module(pages.Options{}), Templates: pages.Templates(), Nav: []web.NavItem{
 			{Section: "library", Label: "Wiki", URL: "/library/wiki", Icon: "book-open", Page: "library_wiki", Order: 10},
 		}}},

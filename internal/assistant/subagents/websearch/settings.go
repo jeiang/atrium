@@ -27,5 +27,3 @@ func Settings() []settings.Def {
 		model,
 	}
 }
-
-func init() { settings.MustRegister(Settings()...) }

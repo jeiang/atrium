@@ -49,11 +49,6 @@ func HostSettings() []settings.HostDef {
 	}
 }
 
-func init() {
-	settings.MustRegisterHost(HostSettings()...)
-	settings.MustRegister(SettingsDefs()...)
-}
-
 func httpURL(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {

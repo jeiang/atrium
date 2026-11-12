@@ -34,7 +34,6 @@ const (
 var log = logx.Logger("atrium.ops")
 
 func init() {
-	settings.MustRegisterHost(HostSettings()...)
 	for _, c := range Checks() {
 		Ready(c)
 	}

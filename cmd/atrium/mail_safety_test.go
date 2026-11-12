@@ -35,7 +35,8 @@ func mailSafetyFixture(t *testing.T, mode string) *mailSafety {
 	fake.AddBox("Receipts", mailtest.NewBox(4))
 	fake.AddBox("Deleted Messages", mailtest.NewBox(9), `\Trash`)
 	fake.AddBox("Sent Messages", mailtest.NewBox(5), `\Sent`)
-	f.app = newAppWith(f.lookup, f.settings, f.state, func(config.Config) mail.OpenFunc { return fake.Open }, nil, quietLog)
+	f.app = newAppWith(f.lookup, func(config.Config) mail.OpenFunc { return fake.Open }, nil, quietLog)
+	f.settings, f.state = f.app.Settings, f.app.State
 	srv := llmstub.Server(t, nil)
 	setEnv(t, "ATRIUM_MAIL_MAIL_CHAT_URL", srv.URL+"/v1")
 	seedSettings(t, map[string]string{mail.KeyMode: mode})

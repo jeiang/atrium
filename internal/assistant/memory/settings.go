@@ -29,8 +29,6 @@ func Settings() []settings.Def {
 	}
 }
 
-func init() { settings.MustRegister(Settings()...) }
-
 func VerbatimTokens(ctx context.Context, q db.Querier) (int64, error) {
 	found, err := settings.From(ctx).Resolve(ctx, q, VerbatimTokensKey)
 	if err != nil {

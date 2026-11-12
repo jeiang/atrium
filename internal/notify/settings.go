@@ -26,8 +26,6 @@ func Settings() []settings.Def {
 	}
 }
 
-func init() { settings.MustRegister(Settings()...) }
-
 func Enabled(ctx context.Context) bool {
 	return modules.IsEnabled(ctx, modules.Notifications)
 }

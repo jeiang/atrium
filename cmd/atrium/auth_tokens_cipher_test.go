@@ -11,9 +11,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/auth/oidc/oidctest"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 func authTokenApp(t *testing.T) *cli.App {
@@ -22,8 +20,7 @@ func authTokenApp(t *testing.T) *cli.App {
 	if f == nil {
 		t.Fatal("no fixture")
 	}
-	reg := settings.New()
-	return newAppWith(f.lookup, reg, config.NewState(reg), imapclient.Opener, nil, quietLog)
+	return newAppWith(f.lookup, imapclient.Opener, nil, quietLog)
 }
 
 func TestAuthTokenLocalBearerLifecycle(t *testing.T) {

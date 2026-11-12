@@ -57,7 +57,7 @@ func Run(ctx context.Context, d *db.DB, env config.Env, now float64) (Result, er
 }
 
 func readSetting(ctx context.Context, d *db.DB, key string) (string, error) {
-	if _, hosted := settings.HostDefOf(key); hosted {
+	if _, hosted := settings.From(ctx).HostDefOf(key); hosted {
 		return config.From(ctx).HostValue(key), nil
 	}
 	found, err := settings.From(ctx).Resolve(ctx, d.Read, key)

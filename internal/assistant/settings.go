@@ -77,8 +77,6 @@ func Settings() []settings.Def {
 	}
 }
 
-func init() { settings.MustRegister(Settings()...) }
-
 func Ordered(below, above []string) func(string, func(string) (string, error)) error {
 	return func(value string, peer func(key string) (string, error)) error {
 		own, err := numx.ParseFloat(value)

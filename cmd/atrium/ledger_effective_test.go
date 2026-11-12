@@ -29,7 +29,7 @@ func effectiveFixture(t *testing.T) (string, *db.DB) {
 
 func effectiveProposal(t *testing.T, d *db.DB, name string, now float64) int64 {
 	t.Helper()
-	ctx := settings.With(context.Background(), settings.New())
+	ctx := settings.With(context.Background(), testSettings())
 	id, _, err := proposals.Create(ctx, d, "deletion_rule", nil, "Add a task", map[string]any{}, map[string]any{}, name, now)
 	if err != nil {
 		t.Fatal(err)

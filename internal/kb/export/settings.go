@@ -89,8 +89,6 @@ func Sections() []settingspage.Section {
 }
 
 func init() {
-	settings.MustRegisterHost(HostSettings()...)
-	settings.MustRegister(Settings()...)
 	for _, section := range Sections() {
 		settingspage.RegisterSection(section)
 	}
@@ -208,7 +206,7 @@ func effective(ctx context.Context, q db.Querier, values map[string]string, key 
 	if value, ok := values[key]; ok {
 		return value, false, nil
 	}
-	if _, hosted := settings.HostDefOf(key); hosted {
+	if _, hosted := settings.From(ctx).HostDefOf(key); hosted {
 		return strings.TrimSpace(config.From(ctx).HostValue(key)), true, nil
 	}
 	found, err := settings.From(ctx).Resolve(ctx, q, key)

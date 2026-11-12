@@ -32,8 +32,6 @@ func Settings() []settings.Def {
 	}
 }
 
-func init() { settings.MustRegister(Settings()...) }
-
 type Policy struct {
 	Enabled bool
 	Kinds   map[string]bool

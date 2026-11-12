@@ -59,11 +59,6 @@ func HostSettings() []settings.HostDef {
 	}
 }
 
-func init() {
-	settings.MustRegisterHost(HostSettings()...)
-	settings.MustRegister(Settings()...)
-}
-
 func atLeast(lo int64) func(string) error {
 	return func(value string) error {
 		n, ok := numx.ParseInt(value)

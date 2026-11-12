@@ -7,8 +7,6 @@ import (
 
 const settingKey = "key"
 
-func init() { settings.MustRegister(Settings()...) }
-
 func Settings() []settings.Def {
 	return []settings.Def{settings.Secret(settings.SecretOpts{PinOnly: true}, settings.Def{
 		Key: settingKey, Module: "db", Type: settings.String, Check: func(value string) error {

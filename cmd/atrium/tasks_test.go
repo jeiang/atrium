@@ -103,7 +103,7 @@ func TestReminderProposalCreatesATaskAndUndoRemovesIt(t *testing.T) {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
-	ctx := settings.With(context.Background(), settings.New())
+	ctx := settings.With(context.Background(), testSettings())
 	now := float64(time.Now().Unix())
 	payload := map[string]any{"text": "Pay the rent", "remind_at": now + 3600, "tz": "UTC", "message_id": 1}
 	id, _, err := proposals.Create(ctx, d, "reminder", nil, "Pay the rent", payload, payload, "fp-reminder", now)

@@ -17,11 +17,6 @@ const (
 	LinkKeyFile       = "link_key_file"
 )
 
-func init() {
-	settings.MustRegisterHost(HostSettings()...)
-	settings.MustRegister(Settings()...)
-}
-
 func HostSettings() []settings.HostDef {
 	return []settings.HostDef{
 		{Key: ActionLinkKeyFile, Module: "app_keys", Type: settings.String},

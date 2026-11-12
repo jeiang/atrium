@@ -17,12 +17,10 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 type moduleCase struct {
@@ -123,14 +121,14 @@ func moduleFixtureAt(t *testing.T, flags map[string]string, now func() float64) 
 	if key, ok := varsFor(t).lookup("ATRIUM_DB_KEY"); ok {
 		env["ATRIUM_DB_KEY"] = key
 	}
-	reg := settings.New()
-	st := config.NewState(reg)
-	f = &fixture{t: t, dir: dir, env: env, settings: reg, state: st, flags: flags}
-	f.app = newAppWith(f.lookup, reg, st, imapclient.Opener, now, quietLog)
+	f = &fixture{t: t, dir: dir, env: env, flags: flags}
+	f.app = newAppWith(f.lookup, imapclient.Opener, now, quietLog)
+	f.settings, f.state = f.app.Settings, f.app.State
 	fixturesByTest.Store(t, f)
 	fixturesByTest.Store(testKey(t), f)
 	seedModuleFlags(t, f, flags)
-	f.app = newAppWith(f.lookup, reg, st, imapclient.Opener, now, quietLog)
+	f.app = newAppWith(f.lookup, imapclient.Opener, now, quietLog)
+	f.settings, f.state = f.app.Settings, f.app.State
 	return dir, api, f
 }
 

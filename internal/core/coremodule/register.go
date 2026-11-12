@@ -3,6 +3,7 @@ package coremodule
 import (
 	"context"
 	"errors"
+	"slices"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -20,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
+	dbkey "github.com/jeiang/atrium/internal/db/key"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/kb/kbcmd"
@@ -31,9 +33,11 @@ import (
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	"github.com/jeiang/atrium/internal/module"
 	_ "github.com/jeiang/atrium/internal/obs/opsmetrics"
+	"github.com/jeiang/atrium/internal/observability"
 	"github.com/jeiang/atrium/internal/ops"
 	_ "github.com/jeiang/atrium/internal/ops/collectors"
 	"github.com/jeiang/atrium/internal/proposals/proposalscmd"
+	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
@@ -59,6 +63,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	return module.Declaration{
 		Name:      module.Core,
 		Core:      true,
+		Settings:  slices.Concat(config.Settings(), dbkey.Settings(), oidc.Settings(), secrets.Settings()),
+		Host:      slices.Concat(config.HostSettings(), secrets.HostSettings(), observability.HostSettings(), ops.HostSettings()),
 		Attention: AttentionSources(),
 		Pages: []web.Page{
 			{Module: about.Module(m.Version), Templates: about.Templates(), Nav: []web.NavItem{

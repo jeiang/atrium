@@ -1,6 +1,7 @@
 package module
 
 import (
+	"errors"
 	"slices"
 	"strings"
 
@@ -9,7 +10,6 @@ import (
 )
 
 func Compile(decls []Declaration) (*Catalog, error) {
-	reg := settings.New()
 	byName := make(map[string]Declaration, len(decls))
 	for _, d := range decls {
 		if strings.TrimSpace(d.Name) == "" {
@@ -49,13 +49,12 @@ func Compile(decls []Declaration) (*Catalog, error) {
 	if _, err := byNeeds(decls); err != nil {
 		return nil, err
 	}
+	reg, err := compileSettings(decls)
+	if err != nil {
+		return nil, err
+	}
 	commands := map[string]bool{}
 	for _, d := range decls {
-		if !d.Core {
-			if _, ok := reg.Lookup(FlagKey(d.Name)); !ok {
-				return nil, FlagNotRegistered(FlagKey(d.Name))
-			}
-		}
 		for _, rq := range d.Requires {
 			if rq.Key == "" || rq.Host || rq.Connection {
 				continue
@@ -118,9 +117,45 @@ func Compile(decls []Declaration) (*Catalog, error) {
 				return nil, &DeclarationError{Module: d.Name, Field: "tools", Err: DuplicateTool(def.Tool.Name)}
 			}
 			tools[def.Tool.Name] = true
+			if _, ok := reg.Lookup("tool_" + def.Tool.Name + "_enabled"); ok {
+				return nil, &ToolSettingCollision{Module: d.Name, Key: "tool_" + def.Tool.Name + "_enabled"}
+			}
 		}
 	}
-	return &Catalog{decls: slices.Clone(decls), optional: optional}, nil
+	return &Catalog{decls: slices.Clone(decls), optional: optional, settings: reg}, nil
+}
+
+func compileSettings(decls []Declaration) (*settings.Registry, error) {
+	defs := make([]settings.Def, 0, len(decls))
+	hosts := make([]settings.HostDef, 0, len(decls))
+	owner := make(map[string]string, len(decls))
+	for _, d := range decls {
+		if _, err := settings.Compile(d.Settings, d.Host); err != nil {
+			return nil, &DeclarationError{Module: d.Name, Field: "settings", Err: err}
+		}
+		for _, def := range d.Settings {
+			owner[def.Key] = d.Name
+		}
+		for _, def := range d.Host {
+			owner[def.Key] = d.Name
+		}
+		defs = append(defs, d.Settings...)
+		hosts = append(hosts, d.Host...)
+		if d.Core {
+			continue
+		}
+		defs = append(defs, FlagDef(d.Name))
+		hosts = append(hosts, FlagHostDef(d.Name))
+	}
+	reg, err := settings.Compile(defs, hosts)
+	if err != nil {
+		var dup settings.DuplicateKey
+		if errors.As(err, &dup) {
+			return nil, &DeclarationError{Module: owner[string(dup)], Field: "settings", Err: err}
+		}
+		return nil, err
+	}
+	return reg, nil
 }
 
 func hasPath(cmds []*cli.Command, path []string) bool {

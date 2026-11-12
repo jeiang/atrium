@@ -251,5 +251,3 @@ func Settings() []settings.Def {
 			Check: settings.Above(0)}),
 	)
 }
-
-func init() { settings.MustRegister(Settings()...) }

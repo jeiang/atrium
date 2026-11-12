@@ -28,7 +28,7 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 	setEnv(t, "ATRIUM_DB", path)
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
-	ctx := settings.With(context.Background(), settings.New())
+	ctx := settings.With(context.Background(), testSettings())
 	seed, err := db.Connect(path)
 	if err != nil {
 		t.Fatal(err)
@@ -280,7 +280,7 @@ func TestBlockedProposalWithoutErrorTextShowsOutcomeUnknownAndResolves(t *testin
 	setEnv(t, "ATRIUM_DB", path)
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
-	ctx := settings.With(context.Background(), settings.New())
+	ctx := settings.With(context.Background(), testSettings())
 	seed, err := db.Connect(path)
 	if err != nil {
 		t.Fatal(err)

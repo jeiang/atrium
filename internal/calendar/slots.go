@@ -31,8 +31,6 @@ func SlotSettings() []settings.Def {
 	}
 }
 
-func init() { settings.MustRegister(SlotSettings()...) }
-
 func clock(s string) (time.Duration, error) {
 	t, err := time.Parse("15:04", strings.TrimSpace(s))
 	if err != nil {

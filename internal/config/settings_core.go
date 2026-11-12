@@ -21,11 +21,6 @@ const (
 	defaultSnoozeChoices = "1,3,7,14"
 )
 
-func init() {
-	settings.MustRegisterHost(HostSettings()...)
-	settings.MustRegister(Settings()...)
-}
-
 func HostSettings() []settings.HostDef {
 	return []settings.HostDef{
 		{Key: KeyPublicURL, Module: coreModule, Type: settings.String, Check: checkPublicURL},

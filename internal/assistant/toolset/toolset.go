@@ -81,7 +81,7 @@ func Approvals() []tool.Tool {
 // assistant module builds the live registry from the same packages; this
 // entry point exists so the catalog generator can see the whole set.
 func Registry() (*registry.Registry, error) {
-	r := registry.New(settings.New())
+	r := registry.New(settings.NewFrom(nil))
 	for _, group := range [][]tool.Tool{
 		askoperatortools.Tools(),
 		attentiontool.Tools(),

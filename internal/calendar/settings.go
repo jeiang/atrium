@@ -37,11 +37,6 @@ func HostSettings() []settings.HostDef {
 	}
 }
 
-func init() {
-	settings.MustRegisterHost(HostSettings()...)
-	settings.MustRegister(SettingsDefs()...)
-}
-
 type Settings struct {
 	AppleID        string
 	Account        string

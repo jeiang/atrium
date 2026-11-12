@@ -17,11 +17,9 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbtest"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -99,8 +97,7 @@ func latestThread(t *testing.T, dir string) int64 {
 }
 
 func freshApp(f *fixture) *cli.App {
-	reg := settings.New()
-	return newAppWith(f.lookup, reg, config.NewState(reg), imapclient.Opener, nil, quietLog)
+	return newAppWith(f.lookup, imapclient.Opener, nil, quietLog)
 }
 
 func warm(t *testing.T, api *modelLog) int {

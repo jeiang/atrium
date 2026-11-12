@@ -7,6 +7,7 @@ import (
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/serverops"
 )
 
 type Module struct{}
@@ -33,6 +34,8 @@ func (Module) Declare(module.Context) module.Declaration {
 	return module.Declaration{
 		Name:     module.Grafana,
 		Needs:    []string{module.Assistant},
+		Settings: serverops.Settings(),
+		Host:     serverops.HostSettingDefs(),
 		Requires: Requirements(),
 		Tools:    ToolDefinitions(),
 	}

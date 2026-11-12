@@ -31,6 +31,7 @@ func (Module) Declare(mc module.Context) module.Declaration {
 	return module.Declaration{
 		Name:     module.Contacts,
 		Requires: Requirements(),
+		Host:     contacts.HostSettings(),
 		Commands: []*cli.Command{{Name: "contacts", Commands: []*cli.Command{syncCommand(mc.Env)}}},
 		Tools:    ToolDefinitions(),
 	}

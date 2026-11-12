@@ -19,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/testutil/llmstub"
 )
 
@@ -87,8 +86,7 @@ func TestAHostMailConnectionAndAnAccountAddedInTheUIBothSync(t *testing.T) {
 		t.Fatalf("add: %d %.300s", code, body)
 	}
 
-	reg := settings.New()
-	app := newAppWith(f.lookup, reg, config.NewState(reg), imapclient.Opener, nil, quietLog)
+	app := newAppWith(f.lookup, imapclient.Opener, nil, quietLog)
 	var out, errs bytes.Buffer
 	if code := app.Run(context.Background(), []string{"sync"}, &out, &errs); code != 0 {
 		t.Fatalf("sync: %d %s", code, errs.String())

@@ -3,15 +3,21 @@ package assistantmodule
 import (
 	"context"
 	"errors"
+	"slices"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
 	"github.com/jeiang/atrium/internal/assistant/anthropicconn"
+	"github.com/jeiang/atrium/internal/assistant/digest"
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
+	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/memory"
 	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	chatpages "github.com/jeiang/atrium/internal/assistant/pages"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/assistant/prompts"
+	"github.com/jeiang/atrium/internal/assistant/registry"
+	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/subagents/websearch"
 	"github.com/jeiang/atrium/internal/assistant/tools/askoperator"
@@ -34,11 +40,13 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/inference"
 	_ "github.com/jeiang/atrium/internal/inference/opsmetrics"
+	"github.com/jeiang/atrium/internal/kb/export"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tasks"
 	"github.com/jeiang/atrium/internal/tool"
+	"github.com/jeiang/atrium/internal/weather"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -49,7 +57,11 @@ type Module struct {
 
 func (m Module) Declare(mc module.Context) module.Declaration {
 	return module.Declaration{
-		Name:      module.Assistant,
+		Name: module.Assistant,
+		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
+			prompts.Settings(), registry.Settings(), scheduler.Settings(), websearch.Settings(), inference.Settings(),
+			export.Settings(), weather.SettingsDefs()),
+		Host:      export.HostSettings(),
 		Attention: AttentionSources(mc.Env),
 		Requires:  Requirements(),
 		Pages: []web.Page{{

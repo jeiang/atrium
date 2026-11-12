@@ -19,7 +19,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -27,18 +26,16 @@ var version = "dev"
 
 func main() {
 	ctx, stop := cli.SignalContext(context.Background())
-	reg := settings.New()
-	code := newApp(config.OS, reg, config.NewState(reg)).Run(ctx, os.Args[1:], os.Stdout, os.Stderr)
+	code := newApp(config.OS).Run(ctx, os.Args[1:], os.Stdout, os.Stderr)
 	stop()
 	os.Exit(code)
 }
 
-func newApp(env config.Env, reg *settings.Registry, st *config.State) *cli.App {
-	return newAppWith(env, reg, st, imapclient.Opener, nil, logx.Setup)
+func newApp(env config.Env) *cli.App {
+	return newAppWith(env, imapclient.Opener, nil, logx.Setup)
 }
 
-func newAppWith(env config.Env, reg *settings.Registry, st *config.State, clients func(config.Config) mail.OpenFunc, now func() float64, setup func(io.Writer)) *cli.App {
-	st.SetConnectionReconciler(connections.Reconcile)
+func newAppWith(env config.Env, clients func(config.Config) mail.OpenFunc, now func() float64, setup func(io.Writer)) *cli.App {
 	var set *module.Set
 	var cat *module.Catalog
 	mc := module.Context{
@@ -71,6 +68,9 @@ func newAppWith(env config.Env, reg *settings.Registry, st *config.State, client
 	if err != nil {
 		panic(err)
 	}
+	reg := cat.Settings()
+	st := config.NewState(reg)
+	st.SetConnectionReconciler(connections.Reconcile)
 	set, err = module.NewSet(cat, reg, env)
 	if err != nil {
 		panic(err)

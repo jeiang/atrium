@@ -38,8 +38,6 @@ func Settings() []settings.Def {
 	return defs
 }
 
-func init() { settings.MustRegister(Settings()...) }
-
 func recurringSchedule(value string) error {
 	spec, err := Parse(value, "UTC")
 	if err != nil {

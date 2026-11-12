@@ -34,6 +34,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	return module.Declaration{
 		Name:     module.Media,
 		Requires: Requirements(),
+		Settings: media.SettingsDefs(),
+		Host:     media.HostSettings(),
 		Pages: []web.Page{{
 			Module:    pages.Module(pages.Options{Now: m.Now}),
 			Templates: pages.Templates(),

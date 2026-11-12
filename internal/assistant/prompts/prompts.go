@@ -67,8 +67,6 @@ func Settings() []settings.Def {
 	return out
 }
 
-func init() { settings.MustRegister(Settings()...) }
-
 func check(value string) error {
 	if strings.TrimSpace(value) == "" {
 		return settings.Invalid("must not be blank")

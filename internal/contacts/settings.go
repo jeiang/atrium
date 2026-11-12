@@ -21,8 +21,6 @@ func HostSettings() []settings.HostDef {
 	}
 }
 
-func init() { settings.MustRegisterHost(HostSettings()...) }
-
 type State uint8
 
 const (

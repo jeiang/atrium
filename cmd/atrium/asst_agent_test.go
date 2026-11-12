@@ -19,12 +19,10 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
-	"github.com/jeiang/atrium/internal/settings"
 )
 
 type asstView struct {
@@ -90,8 +88,7 @@ func asstExec(t *testing.T, d *db.DB, query string, args ...any) {
 }
 
 func asstApp(f *fixture) *cli.App {
-	reg := settings.New()
-	return newAppWith(f.lookup, reg, config.NewState(reg), imapclient.Opener, nil, quietLog)
+	return newAppWith(f.lookup, imapclient.Opener, nil, quietLog)
 }
 
 func asstRunApp(app *cli.App, ctx context.Context, args ...string) appRun {

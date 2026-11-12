@@ -115,12 +115,9 @@ type PinSource interface {
 type Registry struct {
 	mu   sync.RWMutex
 	defs map[string]Def
+	host []HostDef
 	pins PinSource
 }
-
-var definitions []Def
-
-func New() *Registry { return NewFrom(definitions) }
 
 func NewFrom(defs []Def) *Registry {
 	r := &Registry{defs: make(map[string]Def, len(defs))}
@@ -130,16 +127,35 @@ func NewFrom(defs []Def) *Registry {
 	return r
 }
 
-func MustRegister(defs ...Def) {
+func Compile(defs []Def, host []HostDef) (*Registry, error) {
+	r := &Registry{defs: make(map[string]Def, len(defs)), host: slices.Clone(host)}
 	for _, d := range defs {
-		if slices.ContainsFunc(definitions, func(e Def) bool { return e.Key == d.Key }) {
-			panic(DuplicateKey(d.Key))
+		if _, dup := r.defs[d.Key]; dup {
+			return nil, DuplicateKey(d.Key)
 		}
 		if err := d.valid(); err != nil {
-			panic(err)
+			return nil, err
 		}
-		definitions = append(definitions, d)
+		r.defs[d.Key] = d
 	}
+	seen := make(map[string]bool, len(host))
+	for _, d := range host {
+		if seen[d.Key] {
+			return nil, DuplicateKey(d.Key)
+		}
+		seen[d.Key] = true
+	}
+	return r, nil
+}
+
+func (r *Registry) Clone() *Registry {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	out := &Registry{defs: make(map[string]Def, len(r.defs)), host: slices.Clone(r.host)}
+	for key, d := range r.defs {
+		out.defs[key] = d.clone()
+	}
+	return out
 }
 
 func (r *Registry) Register(defs ...Def) error {
@@ -204,15 +220,6 @@ func (r *Registry) Lookup(key string) (Def, bool) {
 	defer r.mu.RUnlock()
 	d, ok := r.defs[key]
 	return d.clone(), ok
-}
-
-func LookupOf(key string) (Def, bool) {
-	for _, d := range definitions {
-		if d.Key == key {
-			return d.clone(), true
-		}
-	}
-	return Def{}, false
 }
 
 func (d Def) clone() Def {

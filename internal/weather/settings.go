@@ -44,8 +44,6 @@ func SettingsDefs() []settings.Def {
 	}
 }
 
-func init() { settings.MustRegister(SettingsDefs()...) }
-
 type Settings struct {
 	LocationName string
 	Latitude     float64

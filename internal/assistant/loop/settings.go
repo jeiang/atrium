@@ -22,8 +22,6 @@ func Settings() []settings.Def {
 	}
 }
 
-func init() { settings.MustRegister(Settings()...) }
-
 func cacheTTL(ctx context.Context, q db.Querier) (string, error) {
 	found, err := settings.From(ctx).Resolve(ctx, q, CacheTTLKey)
 	return found.Value, err

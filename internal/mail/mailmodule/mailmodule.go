@@ -2,6 +2,7 @@ package mailmodule
 
 import (
 	"context"
+	"slices"
 
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	"github.com/jeiang/atrium/internal/attention"
@@ -72,6 +73,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	cmds = append(cmds, mailCmds.TrackingCommands()...)
 	return module.Declaration{
 		Name:      module.Mail,
+		Settings:  slices.Concat(mail.Settings(), endpoint.SettingsDefs(), tracking.SettingsDefs()),
+		Host:      mail.HostSettings(),
 		Attention: AttentionSources(),
 		Requires:  Requirements(),
 		Pages: []web.Page{

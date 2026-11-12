@@ -36,8 +36,6 @@ func Settings() []settings.Def {
 	})}
 }
 
-func init() { settings.MustRegister(Settings()...) }
-
 type dreaming struct {
 	run        int64
 	new        int

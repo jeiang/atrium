@@ -200,8 +200,3 @@ func Settings() []settings.Def {
 		}),
 	}
 }
-
-func init() {
-	settings.MustRegisterHost(HostSettingDefs()...)
-	settings.MustRegister(Settings()...)
-}

@@ -95,8 +95,6 @@ func Settings() []settings.Def {
 	return out
 }
 
-func init() { settings.MustRegister(Settings()...) }
-
 func parseDecision(value string) (Decision, bool) {
 	switch value {
 	case "allow":
