@@ -14,6 +14,7 @@ import (
 )
 
 type Set struct {
+	cat   *Catalog
 	reg   *settings.Registry
 	env   config.Env
 	decls []Declaration
@@ -45,7 +46,7 @@ func NewSet(cat *Catalog, reg *settings.Registry, env config.Env) (*Set, error) 
 	if err != nil {
 		return nil, err
 	}
-	return &Set{reg: reg, env: env, decls: ordered}, nil
+	return &Set{cat: cat, reg: reg, env: env, decls: ordered}, nil
 }
 
 func byNeeds(decls []Declaration) ([]Declaration, error) {

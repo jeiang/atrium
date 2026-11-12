@@ -37,7 +37,8 @@ func (s *Set) Pages() []web.Page {
 			pages = append(pages, p)
 		}
 	}
-	return append(pages, settingspage.Page(s.settingPages()))
+	groups, generic, control := s.settingPages()
+	return append(pages, settingspage.Page(groups, generic, control, s.cat.Sections()))
 }
 
 func (s *Set) settingState(ctx context.Context, q db.Querier, name string) (settings.ModuleView, error) {
@@ -96,7 +97,7 @@ func (s *Set) settingPages() ([]settingspage.Group, []settingspage.Generic, sett
 				}
 			}
 		}
-		own := home == "" && !r.Core && settingspage.Wanted(r.Name)
+		own := home == "" && !r.Core && s.cat.SectionModules()[r.Name]
 		for _, g := range r.Groups {
 			g.Module = r.Name
 			at := settingspage.Group{Group: g, URL: g.Page}

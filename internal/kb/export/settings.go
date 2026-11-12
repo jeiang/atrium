@@ -88,12 +88,6 @@ func Sections() []settingspage.Section {
 	}
 }
 
-func init() {
-	for _, section := range Sections() {
-		settingspage.RegisterSection(section)
-	}
-}
-
 type notionStatus struct {
 	Last    float64
 	Blocked int64

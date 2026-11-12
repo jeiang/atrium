@@ -62,6 +62,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			prompts.Settings(), registry.Settings(), scheduler.Settings(), websearch.Settings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs()),
 		Host:      export.HostSettings(),
+		Sections:  export.Sections(),
 		Attention: AttentionSources(mc.Env),
 		Requires:  Requirements(),
 		Pages: []web.Page{{

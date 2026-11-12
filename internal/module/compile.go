@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settingspage"
 )
 
 func Compile(decls []Declaration) (*Catalog, error) {
@@ -54,6 +55,17 @@ func Compile(decls []Declaration) (*Catalog, error) {
 		return nil, err
 	}
 	commands := map[string]bool{}
+	sectionNames := map[string]bool{}
+	var sections []settingspage.Section
+	for _, d := range decls {
+		for _, section := range d.Sections {
+			if strings.TrimSpace(section.Name) == "" || sectionNames[section.Name] {
+				return nil, &DeclarationError{Module: d.Name, Field: "sections", Err: settingspage.DuplicateSection(section.Name)}
+			}
+			sectionNames[section.Name] = true
+			sections = append(sections, section)
+		}
+	}
 	for _, d := range decls {
 		for _, rq := range d.Requires {
 			if rq.Key == "" || rq.Host || rq.Connection {
@@ -122,7 +134,7 @@ func Compile(decls []Declaration) (*Catalog, error) {
 			}
 		}
 	}
-	return &Catalog{decls: slices.Clone(decls), optional: optional, settings: reg}, nil
+	return &Catalog{decls: slices.Clone(decls), optional: optional, settings: reg, sections: sections}, nil
 }
 
 func compileSettings(decls []Declaration) (*settings.Registry, error) {

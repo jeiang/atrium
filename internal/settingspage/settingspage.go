@@ -38,12 +38,6 @@ type Module struct {
 	URL  string
 }
 
-var wanted = map[string]bool{}
-
-func Want(module string) { wanted[module] = true }
-
-func Wanted(module string) bool { return wanted[module] }
-
 type Control struct {
 	Modules []Module
 	Mark    func(name string) string
@@ -63,28 +57,29 @@ type connectionsView struct {
 }
 
 type handlers struct {
-	d       *web.Deps
-	groups  []Group
-	generic []Generic
-	control Control
+	d        *web.Deps
+	groups   []Group
+	generic  []Generic
+	control  Control
+	sections Sections
 }
 
 func title(module string) string {
 	return strings.ToUpper(module[:1]) + module[1:]
 }
 
-func Page(groups []Group, generic []Generic, control Control) web.Page {
+func Page(groups []Group, generic []Generic, control Control, sections Sections) web.Page {
 	files, err := fs.Sub(assets, "templates")
 	if err != nil {
 		panic(err)
 	}
-	generic = withSections(groups, generic)
+	generic = withSections(groups, generic, sections)
 	nav := make([]tpl.NavItem, len(generic))
 	for i, g := range generic {
 		nav[i] = tpl.NavItem{Label: title(g.Module), URL: g.URL, Page: g.Tab, Settings: true, Order: 45}
 	}
 	return web.Page{Templates: files, Nav: nav, Module: func(r chi.Router, d *web.Deps) {
-		h := handlers{d: d, groups: groups, generic: generic, control: control}
+		h := handlers{d: d, groups: groups, generic: generic, control: control, sections: sections}
 		d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
 			if f.Page != "settings" {
 				return nil
@@ -113,12 +108,12 @@ func Page(groups []Group, generic []Generic, control Control) web.Page {
 			if err != nil {
 				return err
 			}
-			sections, err := h.sections(ctx, f.Path, f.Saved)
+			view, err := h.sectionViews(ctx, f.Path, f.Saved)
 			if err != nil {
 				return err
 			}
-			if len(sections.Sections) > 0 {
-				f.Connections = sections
+			if len(view.Sections) > 0 {
+				f.Connections = view
 			}
 			return nil
 		})
@@ -136,7 +131,7 @@ func Page(groups []Group, generic []Generic, control Control) web.Page {
 	}}
 }
 
-func withSections(groups []Group, generic []Generic) []Generic {
+func withSections(groups []Group, generic []Generic, sections Sections) []Generic {
 	seen := map[string]bool{}
 	for _, g := range groups {
 		seen[g.URL] = true
@@ -144,7 +139,7 @@ func withSections(groups []Group, generic []Generic) []Generic {
 	for _, g := range generic {
 		seen[g.URL] = true
 	}
-	for _, section := range AllSections() {
+	for _, section := range sections {
 		url := "/settings/" + section.Module
 		if seen[url] {
 			continue
@@ -247,12 +242,12 @@ func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusSeeOther)
 }
 
-func (h handlers) sections(ctx context.Context, path, saved string) (connectionsView, error) {
+func (h handlers) sectionViews(ctx context.Context, path, saved string) (connectionsView, error) {
 	owner, ok := strings.CutPrefix(path, "/settings/")
 	if !ok || strings.Contains(owner, "/") {
 		return connectionsView{}, nil
 	}
-	all, err := LoadSections(ctx, h.d.DB.Read)
+	all, err := h.sections.Load(ctx, h.d.DB.Read)
 	if err != nil {
 		return connectionsView{}, err
 	}
@@ -293,7 +288,7 @@ func fieldValues(fields []settings.Field, form url.Values) map[string]string {
 
 func (h handlers) saveSection(w http.ResponseWriter, r *http.Request) {
 	name := chi.URLParam(r, "name")
-	s, ok := SectionNamed(name)
+	s, ok := h.sections.Named(name)
 	if !ok {
 		http.NotFound(w, r)
 		return
@@ -301,7 +296,7 @@ func (h handlers) saveSection(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
 	values := fieldValues(s.Fields, form)
 	ctx := audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
-	err := SaveSection(ctx, h.d.DB, name, values)
+	err := h.sections.Save(ctx, h.d.DB, name, values)
 	if err != nil {
 		var unknown UnknownSection
 		var invalid settings.Invalid
@@ -316,7 +311,7 @@ func (h handlers) saveSection(w http.ResponseWriter, r *http.Request) {
 			http.NotFound(w, r)
 		case errors.As(err, &invalid), errors.As(err, &pinned), errors.As(err, &host), errors.As(err, &scope),
 			errors.As(err, &encryption), errors.As(err, &empty), errors.As(err, &field):
-			view, loadErr := h.sections(ctx, "/settings/"+s.Module, "")
+			view, loadErr := h.sectionViews(ctx, "/settings/"+s.Module, "")
 			if loadErr != nil {
 				panic(loadErr)
 			}
@@ -338,7 +333,7 @@ func (h handlers) saveSection(w http.ResponseWriter, r *http.Request) {
 		}
 		return
 	}
-	view, err := h.sections(ctx, "/settings/"+s.Module, "connection."+name)
+	view, err := h.sectionViews(ctx, "/settings/"+s.Module, "connection."+name)
 	if err != nil {
 		panic(err)
 	}

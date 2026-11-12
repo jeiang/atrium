@@ -36,6 +36,7 @@ func (Module) Declare(mc module.Context) module.Declaration {
 		Name:      module.Calendar,
 		Settings:  slices.Concat(calendar.SettingsDefs(), calendar.SlotSettings()),
 		Host:      calendar.HostSettings(),
+		Sections:  calendar.Sections(),
 		Attention: AttentionSources(),
 		Requires:  Requirements(),
 		Commands:  []*cli.Command{command},

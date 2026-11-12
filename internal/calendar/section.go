@@ -15,9 +15,3 @@ func Sections() []settingspage.Section {
 		},
 	}}
 }
-
-func init() {
-	for _, section := range Sections() {
-		settingspage.RegisterSection(section)
-	}
-}
