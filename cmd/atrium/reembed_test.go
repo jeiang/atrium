@@ -168,6 +168,7 @@ func seedPendingMessage(t *testing.T, path string) {
 		t.Fatal(err)
 	}
 	defer func() { _ = d.Close() }()
+	asstExec(t, d, "UPDATE jobs SET next_due = NULL")
 	dbtest.AddMessage(t, d, 900000, "a pending message for the re-embedding build", map[string]any{
 		"subject": "Pending re-embedding message", "from_addr": "seed@x.test",
 	})
