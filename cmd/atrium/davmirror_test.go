@@ -57,11 +57,11 @@ func lookup(t *testing.T, query string) string {
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "contacts_lookup", map[string]any{"query": query, "include": []any{"emails"}})),
 		anthropictest.Reply("end_turn", anthropictest.Text("done")),
 	)}
-	api.OnRequest = func(r anthropictest.Request) {
+	api.SetOnRequest(func(r anthropictest.Request) {
 		api.mu.Lock()
 		defer api.mu.Unlock()
 		api.seen = append(api.seen, r)
-	}
+	})
 	setEnv(t, anthropic.BaseURLEnv, api.URL)
 	if ran := runApp(t, "agent", "run", "--text", "who is "+query, "--kind", "chat"); ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)

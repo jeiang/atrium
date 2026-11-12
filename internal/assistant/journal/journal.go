@@ -11,7 +11,9 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
@@ -51,10 +53,31 @@ func leaseSeconds(_ context.Context, _ db.Querier) (float64, error) {
 }
 
 func NewOwner() string {
-	host, _ := os.Hostname()
 	suffix := make([]byte, 4)
 	_, _ = rand.Read(suffix)
-	return fmt.Sprintf("%s:%d:%s", host, os.Getpid(), hex.EncodeToString(suffix))
+	return ProcessPrefix() + hex.EncodeToString(suffix)
+}
+
+func ProcessPrefix() string {
+	host, _ := os.Hostname()
+	return fmt.Sprintf("%s:%d:", host, os.Getpid())
+}
+
+func DeadProcess(owner string) string {
+	host, rest, ok := strings.Cut(owner, ":")
+	if !ok {
+		return ""
+	}
+	pidText, _, ok := strings.Cut(rest, ":")
+	if !ok {
+		return ""
+	}
+	pid, err := strconv.Atoi(pidText)
+	self, _ := os.Hostname()
+	if err != nil || pid <= 0 || host != self || pid == os.Getpid() || !errors.Is(syscall.Kill(pid, 0), syscall.ESRCH) {
+		return ""
+	}
+	return host + ":" + pidText + ":"
 }
 
 type Run struct {
@@ -241,6 +264,33 @@ func MarkInterrupted(ctx context.Context, q db.Querier, now float64) (int64, err
 		return 0, err
 	}
 	return res.RowsAffected()
+}
+
+func InterruptRuns(ctx context.Context, q db.Querier, runs []int64, now float64, dead string) error {
+	if len(runs) == 0 {
+		return nil
+	}
+	args := []any{Interrupted, Running, now, dead, dead, dead}
+	for _, id := range runs {
+		args = append(args, id)
+	}
+	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = NULL, lease_until = NULL WHERE state = ? "+
+		"AND (lease_until IS NULL OR lease_until < ? OR (? <> '' AND substr(COALESCE(owner, ''), 1, length(?)) = ?)) AND id IN (?"+
+		strings.Repeat(", ?", len(runs)-1)+")", args...)
+	return err
+}
+
+func FailUnsettled(ctx context.Context, q db.Querier, runs []int64, now float64, text, self string) error {
+	if len(runs) == 0 {
+		return nil
+	}
+	args := []any{Failed, text, now, Running, Interrupted, self, self}
+	for _, id := range runs {
+		args = append(args, id)
+	}
+	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ?, error = ?, ended_at = ?, owner = NULL, lease_until = NULL WHERE state IN (?, ?) "+
+		"AND (owner IS NULL OR substr(owner, 1, length(?)) = ?) AND id IN (?"+strings.Repeat(", ?", len(runs)-1)+")", args...)
+	return err
 }
 
 func ClaimResume(ctx context.Context, q db.Querier, runID int64, owner string, now float64) (bool, error) {

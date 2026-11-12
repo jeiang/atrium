@@ -20,7 +20,6 @@ type ListedRun struct {
 	Cost      float64  `json:"cost"`
 	JobName   string   `json:"job_name"`
 	JobKind   string   `json:"job_kind"`
-	RunID     *int64   `json:"run_id"`
 }
 
 func ListRuns(ctx context.Context, q db.Querier, jobID int64, limit int) ([]ListedRun, error) {
@@ -29,8 +28,7 @@ func ListRuns(ctx context.Context, q db.Querier, jobID int64, limit int) ([]List
 		where, args = "WHERE r.job_id = ? ", []any{jobID, limit}
 	}
 	rows, err := q.QueryContext(ctx,
-		"SELECT r.id, r.job_id, r.thread_id, r.due_at, r.started_at, r.ended_at, r.status, r.error, r.tokens, r.cost, "+
-			"j.name, j.kind, (SELECT id FROM runs x WHERE x.thread_id = r.thread_id ORDER BY id DESC LIMIT 1) "+
+		"SELECT r.id, r.job_id, r.thread_id, r.due_at, r.started_at, r.ended_at, r.status, r.error, r.tokens, r.cost, j.name, j.kind "+
 			"FROM job_runs r JOIN jobs j ON j.id = r.job_id "+where+"ORDER BY r.id DESC LIMIT ?", args...)
 	if err != nil {
 		return nil, err
@@ -38,6 +36,6 @@ func ListRuns(ctx context.Context, q db.Querier, jobID int64, limit int) ([]List
 	return db.Collect(rows, func(r *sql.Rows) (ListedRun, error) {
 		var run ListedRun
 		return run, r.Scan(&run.ID, &run.JobID, &run.ThreadID, &run.DueAt, &run.StartedAt, &run.EndedAt, &run.Status, &run.Error,
-			&run.Tokens, &run.Cost, &run.JobName, &run.JobKind, &run.RunID)
+			&run.Tokens, &run.Cost, &run.JobName, &run.JobKind)
 	})
 }

@@ -1,6 +1,7 @@
 package mediamodule
 
 import (
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	mediatools "github.com/jeiang/atrium/internal/assistant/tools/media"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/media"
@@ -12,7 +13,8 @@ import (
 )
 
 type Module struct {
-	Now func() float64
+	Now  func() float64
+	Jobs jobworker.Dependencies
 }
 
 func Requirements() []module.Requirement {
@@ -34,6 +36,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	return module.Declaration{
 		Name:     module.Media,
 		Requires: Requirements(),
+		Jobs:     mediacmd.Jobs(m.Jobs),
 		Settings: media.SettingsDefs(),
 		Host:     media.HostSettings(),
 		Pages: []web.Page{{

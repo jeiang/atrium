@@ -398,7 +398,14 @@ behavior-parity target.
   uncarried rows are nulled (`thread_messages.run_id`, `usage.run_id`,
   the imported effect's run id, `threads.parent_run_id`, `jobs.last_run_id`,
   `kb_records.source_run_id`, `thread_files.run_id`, `thread_plans.run_id`,
-  `thread_queue.run_id`). The importer prints one line per table with its
+  `thread_queue.run_id`). Jobs are converted: a cron job belongs to
+  `assistant` with no key; a nightly or built-in job takes the owner and
+  `declaration_key` of the catalog job with its name, keeps its schedule,
+  state and prompt override, loses any v2 lease, and is dropped
+  (`drop-retired-job`) when no catalog job has that name; a stored schedule
+  setting then replaces the carried schedule and recomputes `next_due`.
+  `job_run_threads` and `job_resource_leases` start empty, and a source that
+  already has either table is refused. The importer prints one line per table with its
   carried, rebuilt or dropped row count, one line per setting with its
   action (carried, dropped, renamed, moved to a host key or a compiled
   constant, or reset for cutover), one line per effective source pin and per
@@ -420,8 +427,72 @@ behavior-parity target.
 - Modules are toggled at runtime. The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,
-  metrics, checks, proposals and effect handlers; module enablement gates
-  the applicable runtime projections. Core (settings, secrets, `db`,
+  metrics, checks, proposals, effect handlers and scheduled jobs; module
+  enablement gates the applicable runtime projections. Each owner declares
+  its built-in jobs (assistant six, calendar candidates, media three, mail
+  package tracking, Grafana ops sampler); compiling the catalog checks their
+  owner, keys, names, schedules and policies and derives the schedule
+  settings from them. The neutral `internal/scheduler` package owns the
+  `jobs`, `job_runs`, `job_run_threads` and `job_resource_leases` tables,
+  seeding, claiming, recovery and the tick
+  loop; `internal/assistant/jobworker` supplies the assistant's prompt runs,
+  run accounting, skip notices and recovery lookups. A job row records its
+  owning `module`; a declared job is matched by its unique
+  `declaration_key` (`<module>/<name>`), never by name, and a cron job has
+  none. Re-enabling a job sets `activated_at`. A run records the threads it
+  opened in `job_run_threads`; attaching a thread requires the run to be
+  running and owned by the claimant (`ErrClaimLost` otherwise). `agent tick`
+  runs one bounded pass, waits for its started work and settlement, and exits
+  0 when it finished work or nothing was due, 75 (`cli.ExitTempFail`) when a
+  due job lost its lock to another invocation and nothing started, and 1 on
+  an error. It has no
+  ticker or service notification; declared invocation deadlines still apply.
+  A job that reaches its own declared timeout fails its unsettled runs and
+  ends `error` ("timed out after …"); only shutdown or cancellation releases
+  it for resume.
+  Missing configuration records `skipped_unconfigured`, not success. Nightly
+  dreaming creates and associates every child thread in one transaction and
+  prepares every child run with no spend allowance before the first
+  executes; immediately before a child runs, on the first pass or in
+  recovery, it receives the nightly and dreaming-monthly allowance that
+  remains, and a child with none is failed with a cap error. A job is settled only
+  from all associated children: a failed child makes it fail, an unprepared
+  association is an error, and an unsettled child keeps the run recoverable
+  and its claim released for recovery. A child's run is the first top-level
+  run on its thread started under the job run; later operator runs on the
+  thread never settle the job. A claim first takes a
+  non-blocking lock on `job/<id>` and the job's declared resources; the lock
+  files live in `<canonical database path>.locks/`, named by the SHA-256 of
+  the resource key and never unlinked, separate from the migration lock.
+  The claim transaction records a per-claim owner on the job, the running
+  run and a `job_resource_leases` row for every resource (sorted raw keys,
+  `job/<id>` included); the lease lasts 90 seconds and the running job
+  renews it every 20 seconds in one transaction that checks the job's
+  `(lease_owner, last_run_id)`, the run's owner and every resource row and
+  advances the run's `heartbeat_at`. Any mismatch, or a lease that expires
+  before a renewal succeeds, is `ErrClaimLost`: the job's context is
+  cancelled and ledger admission refuses its next effect. `Finish` and the
+  release on interruption use the same fence, so a claimant that lost its
+  claim never settles or clears its successor's run. A run whose lease has
+  expired is taken over under the same locks with a new owner, which fences
+  the old one; the assistant recovery adapter then interrupts only those of
+  the job's runs whose own journal lease expired or whose owner is the
+  previous claimant's process when that process is gone, resumes them
+  synchronously and settles the run from their outcome (no threads is
+  `worker lost`). A run another live process executes, such as one the
+  operator approved and `serve` resumed, stays running and the job stays
+  released until it ends. The global interrupted-run resume
+  skips threads of running job runs.
+  Accepted limits: a claimant stopped (SIGSTOP) past its lease and then
+  continued learns of the takeover only at its next 20-second renewal and may
+  send one more model request first; its lock still excludes any successor
+  while it lives. Lock identity is the canonical path after resolving
+  symlinks, so a hard link or bind mount of the same database gets separate
+  lock files and only the database lease fences it; `serve` refuses hard
+  links at start in slice 3c.
+  The scheduler seeds every catalog job, cancels a keyed job no longer
+  declared, and a job whose needed module is off
+  records `skipped_module`. Core (settings, secrets, `db`,
   `serve`, the About, review and activity pages) is always on; mail,
   calendar, contacts, Notion, media, assistant, notifications and Grafana each
   have a `<name>_enabled` setting. A module flag is an operator setting, and
@@ -469,8 +540,9 @@ behavior-parity target.
   `internal/db/open_cgo.go` and the stopword table in
   `internal/mail/rebalance/rebalance.go` may), when code outside
   `internal/module` and `internal/app` builds or fills a registry
-  (settings, connections, proposal kinds, the effect ledger's undo and
-  resolve hooks, the assistant tool registry) or sets a registry's hook
+  (settings, connections, scheduled jobs, proposal kinds, the effect
+  ledger's undo and resolve hooks, the assistant tool registry) or sets a
+  registry's hook
   fields, when anything assigns an exported package-level function variable
   under `internal/`, or when an `internal/` package imports `internal/app`.
   The tool registry may add the enable settings of the tools it registers.

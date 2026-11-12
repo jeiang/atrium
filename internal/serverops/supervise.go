@@ -11,10 +11,10 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
-	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
@@ -62,7 +62,7 @@ func workerThread(ctx context.Context, d *db.DB, now float64) (int64, error) {
 	return threads.Create(ctx, d.Write, now, threads.Spec{Kind: threads.Worker, Title: &title, Role: &role})
 }
 
-func Supervise(ctx context.Context, e worker.Env) error {
+func Supervise(ctx context.Context, e jobworker.Env) error {
 	d := e.Service.DB
 	now := e.Now()
 	set := assistant.Read(ctx, d.Read)

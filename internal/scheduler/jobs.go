@@ -16,6 +16,7 @@ const (
 	JobCron    = "cron"
 	JobNightly = "nightly"
 	JobBuiltin = "builtin"
+	cronOwner  = "assistant"
 )
 
 type State string
@@ -44,6 +45,9 @@ type Job struct {
 	CreatedAt       float64
 	LastRunID       *int64
 	PromptBy        *string
+	Module          string
+	DeclarationKey  *string
+	ActivatedAt     float64
 }
 
 func (j Job) Fixed() bool { return j.Kind == JobNightly || j.Kind == JobBuiltin }
@@ -59,11 +63,12 @@ type ListedJob struct {
 }
 
 const jobColumns = "id, name, prompt, schedule, tz, kind, state, next_due, lease_owner, lease_until, " +
-	"created_by, created_in_thread, created_at, last_run_id, prompt_by"
+	"created_by, created_in_thread, created_at, last_run_id, prompt_by, module, declaration_key, activated_at"
 
 func (j *Job) fields() []any {
 	return []any{&j.ID, &j.Name, &j.Prompt, &j.Schedule, &j.TZ, &j.Kind, &j.State, &j.NextDue,
-		&j.LeaseOwner, &j.LeaseUntil, &j.CreatedBy, &j.CreatedInThread, &j.CreatedAt, &j.LastRunID, &j.PromptBy}
+		&j.LeaseOwner, &j.LeaseUntil, &j.CreatedBy, &j.CreatedInThread, &j.CreatedAt, &j.LastRunID, &j.PromptBy,
+		&j.Module, &j.DeclarationKey, &j.ActivatedAt}
 }
 
 func nullable(s string) *string {
@@ -119,6 +124,8 @@ type NewJob struct {
 	ThreadID  *int64
 	Kind      string
 	PromptBy  string
+	Module    string
+	Key       string
 }
 
 func CreateJob(ctx context.Context, q db.Querier, n NewJob) (int64, error) {
@@ -132,6 +139,14 @@ func CreateJob(ctx context.Context, q db.Querier, n NewJob) (int64, error) {
 	if n.Kind == "" {
 		n.Kind = JobCron
 	}
+	switch {
+	case n.Kind == JobCron && (n.Key != "" || (n.Module != "" && n.Module != cronOwner)):
+		return 0, Error("a cron schedule belongs to the assistant and has no declaration key")
+	case n.Kind == JobCron:
+		n.Module = cronOwner
+	case n.Key == "" || n.Module == "":
+		return 0, Error("a declared job needs its owner module and declaration key")
+	}
 	bypass := n.CreatedBy == Operator
 	_, due, err := Validate(ctx, q, n.Schedule, n.TZ, n.Now, !bypass)
 	if err != nil {
@@ -143,9 +158,10 @@ func CreateJob(ctx context.Context, q db.Querier, n NewJob) (int64, error) {
 		}
 	}
 	res, err := q.ExecContext(ctx,
-		"INSERT INTO jobs (name, prompt, schedule, tz, kind, state, next_due, created_by, created_in_thread, created_at, prompt_by) "+
-			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		name, prompt, strings.TrimSpace(n.Schedule), n.TZ, n.Kind, StateActive, due, n.CreatedBy, n.ThreadID, n.Now, nullable(n.PromptBy))
+		"INSERT INTO jobs (name, prompt, schedule, tz, kind, state, next_due, created_by, created_in_thread, created_at, prompt_by, module, declaration_key, activated_at) "+
+			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		name, prompt, strings.TrimSpace(n.Schedule), n.TZ, n.Kind, StateActive, due, n.CreatedBy, n.ThreadID, n.Now, nullable(n.PromptBy),
+		n.Module, nullable(n.Key), n.Now)
 	if err != nil {
 		return 0, err
 	}
@@ -218,6 +234,9 @@ func UpdateJob(ctx context.Context, q db.Querier, id int64, now float64, u JobUp
 	}
 	if u.Enabled != nil {
 		set("state", state)
+		if enabling {
+			set("activated_at", now)
+		}
 		if enabling && !bypass && job.Kind == JobCron {
 			if err := atCap(ctx, q); err != nil {
 				return nil, err

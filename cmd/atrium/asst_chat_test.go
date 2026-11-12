@@ -198,11 +198,11 @@ func asstHold(t *testing.T, api *modelLog) func() {
 	var once sync.Once
 	release := func() { once.Do(func() { close(gate) }) }
 	t.Cleanup(release)
-	prev := api.OnRequest
-	api.OnRequest = func(r anthropictest.Request) {
+	prev := api.RequestHook()
+	api.SetOnRequest(func(r anthropictest.Request) {
 		prev(r)
 		<-gate
-	}
+	})
 	return release
 }
 
