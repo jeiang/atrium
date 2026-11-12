@@ -496,6 +496,69 @@ func TestDisabledModuleRoutesEndInNotFound(t *testing.T) {
 	}
 }
 
+func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
+	t.Parallel()
+	dir, api, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	now := float64(time.Now().Unix())
+	if _, err := d.Write.Exec("INSERT INTO threads (kind, title, effort, created_at, updated_at) VALUES ('chat', 'Lifecycle thread', 'low', ?, ?)", now, now); err != nil {
+		t.Fatal(err)
+	}
+	jobs := func() int {
+		t.Helper()
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM jobs").Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	base := startServeIn(t, dir)
+	about := func() string {
+		t.Helper()
+		status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/about", nil)
+		if status != http.StatusOK {
+			t.Fatalf("GET /about = %d", status)
+		}
+		return body
+	}
+	toggle := func(value string) {
+		t.Helper()
+		if got := runApp(t, "settings", "set", module.FlagKey(module.Assistant), value); got.code != cli.ExitOK {
+			t.Fatalf("assistant_enabled %s: exit %d stderr %q", value, got.code, got.stderr)
+		}
+	}
+	if body := about(); strings.Contains(body, "Lifecycle thread") || strings.Contains(body, "sb-thread") {
+		t.Fatal("/about shows the assistant thread sidebar while the assistant is off")
+	}
+	time.Sleep(time.Second)
+	if n := api.ModelLists(); n != 0 {
+		t.Fatalf("%d model catalog requests while the assistant is off", n)
+	}
+	if n := jobs(); n != 0 {
+		t.Fatalf("%d scheduler jobs seeded while the assistant is off", n)
+	}
+	toggle("true")
+	if n := jobs(); n == 0 {
+		t.Fatal("enabling the assistant seeded no scheduler jobs")
+	}
+	waitFor(t, func() bool { return api.ModelLists() > 0 })
+	if n := api.ModelLists(); n != 1 {
+		t.Fatalf("%d model catalog requests after enabling the assistant, want 1", n)
+	}
+	if body := about(); !strings.Contains(body, "Lifecycle thread") {
+		t.Fatal("/about has no thread sidebar after enabling the assistant")
+	}
+	toggle("false")
+	if body := about(); strings.Contains(body, "Lifecycle thread") {
+		t.Fatal("/about still shows the thread sidebar after disabling the assistant")
+	}
+	toggle("true")
+	time.Sleep(time.Second)
+	if n := api.ModelLists(); n != 1 {
+		t.Fatalf("%d model catalog requests after enabling the assistant twice, want 1", n)
+	}
+}
+
 func clearModuleEnv(t *testing.T) {
 	t.Helper()
 	for name := range requirementEnv("") {

@@ -8,6 +8,7 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -81,26 +82,39 @@ func Module(o Options) web.Module {
 			}
 			return err
 		}
-		checked := make(chan struct{})
-		go func() {
-			defer close(checked)
-			svc.CheckCatalog(base)
-		}()
+		var work sync.WaitGroup
+		var mu sync.Mutex
+		stopped := false
+		start := func() error {
+			mu.Lock()
+			defer mu.Unlock()
+			if stopped {
+				return nil
+			}
+			tz := config.From(base).TZName(d.Env)
+			stamp := assistant.Now()
+			if err := d.DB.WithTx(base, func(tx *sql.Tx) error {
+				return scheduler.Ensure(base, tx, tz, stamp)
+			}); err != nil && !errors.Is(err, context.Canceled) {
+				return err
+			}
+			work.Go(func() { svc.CheckCatalog(base) })
+			return nil
+		}
 		shutdown := func() {
+			mu.Lock()
+			stopped = true
+			mu.Unlock()
 			svc.Close()
 			cancel()
-			<-checked
+			work.Wait()
 		}
 		if d.OnClose != nil {
 			d.OnClose(shutdown)
 		}
 		p := &pages{deps: d, svc: svc, now: assistant.Now, ledger: run.Ledger}
 		d.OnFrame(p.sidebar)
-		tz := config.From(base).TZName(d.Env)
-		stamp := assistant.Now()
-		if err := d.DB.WithTx(base, func(tx *sql.Tx) error {
-			return scheduler.Ensure(base, tx, tz, stamp)
-		}); err != nil && !errors.Is(err, context.Canceled) {
+		if err := module.SetFrom(d.Ctx).OnEnable(module.Assistant, start); err != nil {
 			panic(err)
 		}
 

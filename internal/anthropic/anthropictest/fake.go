@@ -60,6 +60,7 @@ type Server struct {
 	FileDeleteStatus int
 	Models           []string
 	Disconnect       atomic.Bool
+	modelLists       atomic.Int64
 
 	mu       sync.Mutex
 	script   []Response
@@ -85,6 +86,10 @@ func (s *Server) Requests() []Request {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return append([]Request(nil), s.requests...)
+}
+
+func (s *Server) ModelLists() int64 {
+	return s.modelLists.Load()
 }
 
 func (s *Server) Remaining() int {
@@ -132,6 +137,9 @@ func (r *recorder) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func (s *Server) serve(w http.ResponseWriter, r *http.Request) {
 	body, _ := io.ReadAll(r.Body)
+	if r.Method == http.MethodGet && r.URL.Path == "/v1/models" {
+		s.modelLists.Add(1)
+	}
 	switch {
 	case r.Method == http.MethodPost && r.URL.Path == "/v1/messages":
 		s.messages(w, r, Request{r.Method, r.URL.Path, r.URL.RawQuery, r.Header.Clone(), body})

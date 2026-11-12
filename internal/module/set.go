@@ -19,12 +19,19 @@ import (
 )
 
 type Set struct {
-	cat     *Catalog
-	reg     *settings.Registry
-	env     config.Env
-	decls   []Declaration
-	cur     atomic.Pointer[Snapshot]
-	publish sync.Mutex
+	cat      *Catalog
+	reg      *settings.Registry
+	env      config.Env
+	decls    []Declaration
+	cur      atomic.Pointer[Snapshot]
+	publish  sync.Mutex
+	hooks    sync.Mutex
+	starters []starter
+}
+
+type starter struct {
+	owner string
+	start func() error
 }
 
 func (s *Set) Catalog() *Catalog { return s.cat }
@@ -125,6 +132,32 @@ func (s *Set) store(snap *Snapshot) {
 			log.Error("module is unavailable", logx.Module, st.Name, logx.State, string(st.State), logx.Reason, st.Err)
 		}
 	}
+	s.hooks.Lock()
+	var ready []starter
+	s.starters = slices.DeleteFunc(s.starters, func(st starter) bool {
+		if !snap.Enabled(st.owner) {
+			return false
+		}
+		ready = append(ready, st)
+		return true
+	})
+	s.hooks.Unlock()
+	for _, st := range ready {
+		if err := st.start(); err != nil {
+			log.Error("module start failed", logx.Module, st.owner, logx.Err, err.Error())
+		}
+	}
+}
+
+func (s *Set) OnEnable(owner string, start func() error) error {
+	s.hooks.Lock()
+	if !s.enabled(owner) {
+		s.starters = append(s.starters, starter{owner: owner, start: start})
+		s.hooks.Unlock()
+		return nil
+	}
+	s.hooks.Unlock()
+	return start()
 }
 
 func (s *Set) Evaluate(ctx context.Context, q db.Querier) (*Snapshot, error) {

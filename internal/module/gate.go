@@ -5,6 +5,8 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -13,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settingspage"
 	"github.com/jeiang/atrium/internal/web"
+	"github.com/jeiang/atrium/internal/web/tpl"
 )
 
 var log = logx.Logger("atrium.module")
@@ -138,7 +141,20 @@ func (s *Set) gatePage(owner string, p web.Page) web.Page {
 		}
 	}
 	if p.Module != nil {
-		p.Module = web.Owned(owner, p.Module, func(d *web.Deps, next http.Handler) http.Handler {
+		mount := p.Module
+		p.Module = web.Owned(owner, func(r chi.Router, d *web.Deps) {
+			onFrame := d.OnFrame
+			d.OnFrame = func(fn web.FrameFunc) {
+				onFrame(func(ctx context.Context, f *tpl.Frame) error {
+					if !s.enabled(owner) {
+						return nil
+					}
+					return fn(ctx, f)
+				})
+			}
+			defer func() { d.OnFrame = onFrame }()
+			mount(r, d)
+		}, func(d *web.Deps, next http.Handler) http.Handler {
 			return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				set := SetFrom(r.Context())
 				var snap *Snapshot
