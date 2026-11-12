@@ -364,24 +364,52 @@ func newTestSet(env config.Env) *module.Set {
 	if err != nil {
 		panic(err)
 	}
-	set, err := module.NewSet(cat, cat.Settings(), env)
+	set, err := module.NewSet(cat, cat.Settings(), env, nil)
 	if err != nil {
 		panic(err)
 	}
 	return set
 }
 
-func seedSettingsAt(t *testing.T, path string, kv map[string]string) {
+func appEnv(t *testing.T) config.Env {
+	if f := fixtureFor(t); f != nil {
+		return f.lookup
+	}
+	return testLookupFor(t)
+}
+
+func bootedState(t *testing.T, env config.Env) (context.Context, *settings.Registry, *config.State) {
 	t.Helper()
-	env := testLookupFor(t)
 	reg := testSettings()
 	st := config.NewState(reg)
-	ctx := config.With(context.Background(), st)
-	ctx = settings.With(ctx, reg)
+	ctx := settings.With(config.With(context.Background(), st), reg)
 	if err := bootstrap(env, reg)(ctx, io.Discard); err != nil {
-		t.Fatalf("seed bootstrap: %v", err)
+		t.Fatalf("bootstrap: %v", err)
 	}
-	d, err := db.Connect(path)
+	return ctx, reg, st
+}
+
+func appKey(t *testing.T, env config.Env) db.Key {
+	t.Helper()
+	_, _, st := bootedState(t, env)
+	return st.DBKey()
+}
+
+func keyFor(t *testing.T) db.Key {
+	t.Helper()
+	return appKey(t, appEnv(t))
+}
+
+func seedSettingsAt(t *testing.T, path string, kv map[string]string) {
+	t.Helper()
+	seedSettingsWith(t, keyFor(t), path, kv)
+}
+
+func seedSettingsWith(t *testing.T, dbKey db.Key, path string, kv map[string]string) {
+	t.Helper()
+	env := testLookupFor(t)
+	ctx, reg, _ := bootedState(t, env)
+	d, err := db.Connect(path, db.WithKey(dbKey))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -405,7 +433,7 @@ func seedSettingsAt(t *testing.T, path string, kv map[string]string) {
 
 func plantSettingRow(t *testing.T, path, key, value string) {
 	t.Helper()
-	d, err := db.Connect(path)
+	d, err := db.Connect(path, db.WithKey(keyFor(t)))
 	if err != nil {
 		t.Fatal(err)
 	}

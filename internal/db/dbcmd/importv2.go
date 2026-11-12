@@ -28,8 +28,10 @@ import (
 	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/notion"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/weather"
 )
@@ -43,6 +45,7 @@ const (
 	rebuild
 	convert
 	drop
+	fresh
 )
 
 func (a importAction) String() string {
@@ -53,6 +56,8 @@ func (a importAction) String() string {
 		return "rebuilt"
 	case convert:
 		return "converted"
+	case fresh:
+		return "kept empty"
 	default:
 		return "dropped"
 	}
@@ -119,7 +124,9 @@ var importTables = []tablePlan{
 	{table: "agent_profile", action: carry},
 	{table: "skills", action: carry},
 	{table: "subagents", action: carry, where: "builtin = 0", ignore: true, why: "built-in definitions are reseeded"},
-	{table: "jobs", action: carry, null: []string{"last_run_id"}},
+	{table: "jobs", action: convert, why: "declared jobs are keyed by owner; leases and run links are cleared", run: func(im *importer) (int64, error) {
+		return im.jobs()
+	}},
 	{table: "threads", action: carry, null: []string{"parent_run_id", "parent_thread_id"}, run: func(im *importer) (int64, error) {
 		return im.carryThreads()
 	}},
@@ -186,6 +193,8 @@ var importTables = []tablePlan{
 		return im.carryAudit()
 	}},
 	{table: "job_runs", action: drop, why: "job history is not carried; the jobs are"},
+	{table: "job_run_threads", action: fresh, why: "new in v3; job history is not carried"},
+	{table: "job_resource_leases", action: fresh, why: "new in v3; no claim survives an import"},
 	{table: "events", action: drop, why: "the mail event log is not carried"},
 	{table: "pass_runs", action: drop, why: "ops pass history is not carried"},
 	{table: "pass_run_alerts", action: drop, why: "ops pass history is not carried"},
@@ -320,6 +329,11 @@ func importV2(ctx context.Context, env config.Env, cfg config.Config, source, so
 			return err
 		}
 		lines = append(lines, settingLines...)
+		scheduleLines, err := scheduler.FinalizeImportedSchedules(ctx, tx, jobDefinitions(ctx), now)
+		if err != nil {
+			return err
+		}
+		lines = append(lines, scheduleLines...)
 		for _, name := range pins.unknown {
 			lines = append(lines, "pin "+name+": unknown-host-requirement")
 		}
@@ -1069,7 +1083,11 @@ func planTables(names []string, active embed.Index) ([]tablePlan, error) {
 			strings.Join(unknown, ", "))
 	}
 	for _, plan := range importTables {
-		if !present[plan.table] {
+		switch {
+		case plan.action == fresh && present[plan.table]:
+			return nil, fmt.Errorf("db import-v2: the source has a %s table; it is not a v2 database at version %d",
+				plan.table, v2Version)
+		case plan.action != fresh && !present[plan.table]:
 			return nil, fmt.Errorf("db import-v2: the source has no %s table; it is not a v2 database at version %d",
 				plan.table, v2Version)
 		}
@@ -1106,6 +1124,9 @@ func isShadow(name string, vecParents map[string]bool) bool {
 }
 
 func (im *importer) apply(plan tablePlan) (int64, error) {
+	if plan.action == fresh {
+		return im.countRows(plan.table)
+	}
 	if plan.action == drop {
 		return im.countSource(plan.table)
 	}
@@ -1518,7 +1539,7 @@ func refuseDestination(ctx context.Context, path string, key db.Key) error {
 	}
 	var counts []string
 	for _, plan := range importTables {
-		if plan.action != carry || plan.table == "mail_accounts" || plan.table == "subagents" {
+		if (plan.action != carry && plan.action != fresh && plan.table != "jobs") || plan.table == "mail_accounts" || plan.table == "subagents" {
 			continue
 		}
 		var n int64
@@ -1615,4 +1636,21 @@ func sameFile(a, b string) bool {
 		return false
 	}
 	return os.SameFile(leftInfo, rightInfo)
+}
+
+func jobDefinitions(ctx context.Context) []scheduler.Definition {
+	set := module.SetFrom(ctx)
+	if set == nil {
+		return nil
+	}
+	return set.Catalog().Jobs()
+}
+
+func (im *importer) jobs() (int64, error) {
+	if module.SetFrom(im.ctx) == nil {
+		return 0, errors.New("no module catalog is bound; declared jobs cannot be matched")
+	}
+	n, notes, err := scheduler.ImportJobs(im.ctx, im.src, im.tx, jobDefinitions(im.ctx), im.now)
+	im.notes = append(im.notes, notes...)
+	return n, err
 }

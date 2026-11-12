@@ -64,7 +64,7 @@ func TestConnectionOwnedURLRowCannotRedirectTheSampler(t *testing.T) {
 	setEnv(t, "ATRIUM_HOST_CONFIG", grafanaHost(t, dir, srv.URL))
 	setEnv(t, settingEnv(serverops.KeyHosts), "node-a")
 	warm(t, api)
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	seedSetting(t, d, grafanatools.KeyURL, "http://127.0.0.1:1")
 	runOpsSampler(t, f, d, samplesExist(t, d))
@@ -88,7 +88,7 @@ func TestHostDeclaredModuleFlagWinsAndIsReadOnly(t *testing.T) {
 		t.Fatalf("settings list: exit %d stderr %q", ran.code, ran.stderr)
 	}
 	path := filepath.Join(dir, "atrium.db")
-	seedSetting(t, mustConnect(t, path), module.FlagKey(module.Mail), "false")
+	seedSetting(t, mustConnect(t, path, db.Key{}), module.FlagKey(module.Mail), "false")
 
 	if got := pinRowOf(t, runSettings(t, "get", module.FlagKey(module.Mail))); got.Value != "true" || !strings.Contains(got.PinSource, "host") {
 		t.Errorf("a database row overrode the host module flag: %+v", got)

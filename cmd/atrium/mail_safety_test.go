@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/contacts"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
@@ -60,7 +61,7 @@ func (m *mailSafety) run(t *testing.T, args ...string) appRun {
 
 func (m *mailSafety) exec(t *testing.T, query string, args ...any) {
 	t.Helper()
-	d := mustConnect(t, m.path)
+	d := mustConnect(t, m.path, db.Key{})
 	if _, err := d.Write.Exec(query, args...); err != nil {
 		t.Fatalf("%s: %v", query, err)
 	}
@@ -68,7 +69,7 @@ func (m *mailSafety) exec(t *testing.T, query string, args ...any) {
 
 func (m *mailSafety) scalar(t *testing.T, query string, args ...any) string {
 	t.Helper()
-	d := mustConnect(t, m.path)
+	d := mustConnect(t, m.path, db.Key{})
 	var out *string
 	if err := d.Read.QueryRow(query, args...).Scan(&out); err != nil {
 		t.Fatalf("%s: %v", query, err)
@@ -82,7 +83,7 @@ func (m *mailSafety) scalar(t *testing.T, query string, args ...any) string {
 func (m *mailSafety) messageID(t *testing.T, subject string) int64 {
 	t.Helper()
 	var id int64
-	d := mustConnect(t, m.path)
+	d := mustConnect(t, m.path, db.Key{})
 	if err := d.Read.QueryRow("SELECT id FROM messages WHERE subject = ?", subject).Scan(&id); err != nil {
 		t.Fatalf("message %q: %v", subject, err)
 	}
@@ -91,7 +92,7 @@ func (m *mailSafety) messageID(t *testing.T, subject string) int64 {
 
 func (m *mailSafety) decision(t *testing.T, messageID int64) (stage, action, dest string) {
 	t.Helper()
-	d := mustConnect(t, m.path)
+	d := mustConnect(t, m.path, db.Key{})
 	var target *string
 	if err := d.Read.QueryRow("SELECT stage, action, dest FROM decisions WHERE message_id = ? ORDER BY id DESC LIMIT 1", messageID).
 		Scan(&stage, &action, &target); err != nil {
@@ -243,7 +244,7 @@ func (m *mailSafety) rule(t *testing.T, dest, from string) {
 
 func (m *mailSafety) count(t *testing.T, query string, args ...any) int {
 	t.Helper()
-	d := mustConnect(t, m.path)
+	d := mustConnect(t, m.path, db.Key{})
 	var n int
 	if err := d.Read.QueryRow(query, args...).Scan(&n); err != nil {
 		t.Fatalf("%s: %v", query, err)

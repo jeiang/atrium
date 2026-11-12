@@ -148,7 +148,7 @@ func TestConnectionsCLIListAndTestUseTheHostTransportAndNeverStoreTheFileValue(t
 		t.Fatalf("connection state = %q", got)
 	}
 
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	var value, fileRef *string
 	if err := d.Read.QueryRow("SELECT value, file_ref FROM connection_credentials WHERE connection_id = 'service/qbittorrent' AND slot = 'api_key'").Scan(&value, &fileRef); err != nil {
 		t.Fatal(err)
@@ -166,6 +166,7 @@ func TestConnectionsCLIListAndTestUseTheHostTransportAndNeverStoreTheFileValue(t
 }
 
 func TestConnectionsHTTPTestAndSavePreservesThePriorConfigOnFailure(t *testing.T) {
+	t.Parallel()
 	requireCipher(t)
 	gate := &qbitGate{}
 	srv := httptest.NewTLSServer(http.HandlerFunc(gate.handler))
@@ -192,7 +193,7 @@ func TestConnectionsHTTPTestAndSavePreservesThePriorConfigOnFailure(t *testing.T
 	if got := connectionState(t, dir, "service/qbittorrent"); got != "ok" {
 		t.Fatalf("a failed candidate replaced the working state: %q", got)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	var value string
 	if err := d.Read.QueryRow("SELECT value FROM connection_credentials WHERE connection_id = 'service/qbittorrent' AND slot = 'api_key'").Scan(&value); err != nil {
 		t.Fatal(err)
@@ -216,7 +217,7 @@ func TestConnectionsStaleTestCannotOverwriteARotation(t *testing.T) {
 	done := make(chan appRun, 1)
 	go func() { done <- runApp(t, "connections", "test", "service/qbittorrent") }()
 	<-gate.started
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	if _, err := d.Write.Exec("UPDATE connections SET revision = revision + 1 WHERE id = 'service/qbittorrent'"); err != nil {
 		t.Fatal(err)
 	}
@@ -250,7 +251,7 @@ func TestConnectionsRefuseToStoreACredentialInAPlaintextDatabase(t *testing.T) {
 		t.Fatalf("a credential save into a plaintext database: %d %.300s", code, body)
 	}
 	var n int
-	if err := mustConnect(t, filepath.Join(dir, "atrium.db")).Read.QueryRow(
+	if err := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t)).Read.QueryRow(
 		"SELECT COUNT(*) FROM connection_credentials WHERE connection_id = 'service/qbittorrent' AND slot = 'api_key'").Scan(&n); err != nil {
 		t.Fatal(err)
 	}

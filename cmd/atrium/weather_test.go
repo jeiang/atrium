@@ -10,6 +10,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/weather"
 )
 
@@ -26,7 +27,7 @@ func TestWeatherToolReturnsAForecast(t *testing.T) {
 	if ran.code != cli.ExitOK {
 		t.Fatalf("weather run: exit %d stderr %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var content string
 	if err := d.Read.QueryRow(

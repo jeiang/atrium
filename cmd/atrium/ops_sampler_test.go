@@ -173,7 +173,7 @@ func TestOpsSamplerWritesSamplesAndNoKnowledge(t *testing.T) {
 	setEnv(t, settingEnv(serverops.KeyHosts), "node-a")
 	warm(t, api)
 	requests := len(api.Requests())
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	runOpsSampler(t, f, d, samplesExist(t, d))
 	if len(api.Requests()) != requests {
@@ -267,7 +267,7 @@ func TestOpsSamplerNeverWritesToGrafana(t *testing.T) {
 	setEnv(t, "ATRIUM_HOST_CONFIG", grafanaHost(t, dir, srv.URL))
 	setEnv(t, settingEnv(serverops.KeyHosts), "node-a")
 	warm(t, api)
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	runOpsSampler(t, f, d, samplesExist(t, d))
 	for _, request := range fake.seen() {

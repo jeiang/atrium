@@ -71,7 +71,7 @@ func (s *connectionSite) conn(path string, form url.Values) (int, string) {
 
 func connectionState(t *testing.T, dir, id string) string {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	var state string
 	if err := d.Read.QueryRow("SELECT state FROM connections WHERE id = ?", id).Scan(&state); err != nil {
 		return ""

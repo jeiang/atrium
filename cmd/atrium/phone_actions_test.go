@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/actionlink/policy"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 const phoneKind = "media_channel_add"
@@ -134,7 +135,7 @@ func TestPhoneNotificationActionLinksRefuseReplayAlterationRotationDisallowedKin
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	push, browser := pushRig(t, dir)
 	s := newPhoneSite(t, dir, api)
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	t.Cleanup(func() { _ = d.Close() })
 	if code, _ := s.post("/settings/notifications/push/subscriptions", browser.form()); code != http.StatusOK {
 		t.Fatalf("subscribe = %d", code)

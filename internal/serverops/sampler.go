@@ -10,28 +10,31 @@ import (
 	"slices"
 	"sort"
 	"strings"
+	"time"
 	"unicode"
 
-	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/scheduler"
 )
 
 const retentionDays = 14
 
-func Callables() map[string]worker.Callable {
-	return map[string]worker.Callable{
-		grafanatools.JobSampler: {
-			Modules: []string{module.Grafana},
-			Run: func(ctx context.Context, e worker.Env) (worker.Result, error) {
-				if err := Sample(ctx, e.Service.DB, e.Service.Env, e.Now()); err != nil {
-					return worker.Result{}, err
-				}
-				return worker.Result{}, Supervise(ctx, e)
-			},
-		},
+func SamplerJob(deps jobworker.Dependencies) scheduler.Definition {
+	return scheduler.Definition{
+		Module: module.Grafana, Key: module.Grafana + "/" + grafanatools.JobSampler, Name: grafanatools.JobSampler, Kind: scheduler.JobBuiltin,
+		Prompt:   "Every 15 minutes: sample host metrics and firing alerts into ops samples (no model run).",
+		Schedule: "*/15 * * * *", ScheduleSetting: grafanatools.KeyScheduleSampler, Timeout: 5 * time.Minute,
+		Spend: scheduler.ModelFree, Needs: []string{module.Grafana},
+		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
+			if err := Sample(ctx, e.Service.DB, e.Service.Env, e.Now()); err != nil {
+				return jobworker.Result{}, err
+			}
+			return jobworker.Result{}, Supervise(ctx, e)
+		}),
 	}
 }
 

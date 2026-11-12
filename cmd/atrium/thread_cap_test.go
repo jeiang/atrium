@@ -134,7 +134,7 @@ func TestComposerThreadCostCapRefusesTheNextRequest(t *testing.T) {
 
 func runDone(t *testing.T, dir string, thread int64) bool {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var n int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM runs WHERE thread_id = ? AND state = 'done'", thread).Scan(&n); err != nil {

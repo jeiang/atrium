@@ -21,6 +21,7 @@ import (
 	"github.com/jeiang/atrium/internal/kb"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/timex"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -60,7 +61,8 @@ type signal struct {
 	marks  tool.Marks
 }
 
-func Run(ctx context.Context, svc *service.Service, now func() float64, jobID, jobRunID int64) ([]int64, error) {
+func Run(ctx context.Context, svc *service.Service, now func() float64, claim scheduler.Claim) ([]int64, error) {
+	jobID := claim.Job.ID
 	stamp := now()
 	loc, err := config.From(ctx).Location(svc.Env)
 	if err != nil {
@@ -93,54 +95,136 @@ func Run(ctx context.Context, svc *service.Service, now func() float64, jobID, j
 	if len(data.threads) == 0 {
 		return nil, nil
 	}
-	var runIDs []int64
-	first := true
-	for _, group := range split(data) {
-		tonight, err := nightlySpend(ctx, svc.DB.Read, stamp, loc)
+	groups := split(data)
+	for i := range groups {
+		if groups[i].records, err = recordIndex(ctx, svc.DB.Read, stamp, groups[i].marks); err != nil {
+			return nil, err
+		}
+	}
+	ids := make([]int64, len(groups))
+	if err := svc.DB.WithTx(ctx, func(tx *sql.Tx) error {
+		for i, group := range groups {
+			title := "dreaming " + localDate(stamp, loc)
+			if group.marks != 0 {
+				title += " (marked)"
+			}
+			id, err := threads.Create(ctx, tx, stamp, threads.Spec{
+				Kind: threads.Nightly, Title: &title, JobID: &jobID, ContextLimit: int64(90_000),
+				Marks: threads.Marks{At: markAt(group.marks, stamp), Set: group.marks},
+			})
+			if err != nil {
+				return err
+			}
+			if err := scheduler.AttachThread(ctx, tx, claim, id); err != nil {
+				return err
+			}
+			ids[i] = id
+		}
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	zero := 0.0
+	runIDs := make([]int64, 0, len(groups))
+	for i, group := range groups {
+		limits := journal.Limits{AllowedTools: allowedTools, MaxCostUSD: &zero, SystemExtra: new(systemExtra), Sources: sourcesOf(group)}
+		runID, err := svc.Prepare(ctx, ids[i], prompt(group, stamp, loc), stamp, service.Start{Kind: threads.Nightly, Limits: limits})
+		if err != nil {
+			for _, prepared := range runIDs {
+				if ferr := journal.FinishRun(context.WithoutCancel(ctx), svc.DB.Write, prepared, journal.Failed, now(), new(err.Error())); ferr != nil {
+					return runIDs, errors.Join(err, ferr)
+				}
+			}
+			return runIDs, err
+		}
+		runIDs = append(runIDs, runID)
+	}
+	for i, runID := range runIDs {
+		ok, err := admit(ctx, svc, stamp, now(), runID)
 		if err != nil {
 			return runIDs, err
 		}
-		left := nightlyCap - tonight
-		if left <= 0 {
-			break
+		if !ok {
+			continue
 		}
-		title := "dreaming " + localDate(stamp, loc)
-		if group.marks != 0 {
-			title += " (marked)"
-		}
-		id, err := threads.Create(ctx, svc.DB.Write, stamp, threads.Spec{
-			Kind: threads.Nightly, Title: &title, JobID: &jobID, ContextLimit: int64(90_000),
-			Marks: threads.Marks{At: markAt(group.marks, stamp), Set: group.marks},
-		})
-		if err != nil {
+		if run, err := journal.GetRun(ctx, svc.DB.Read, runID); err != nil {
 			return runIDs, err
-		}
-		if first {
-			if _, err := svc.DB.Write.ExecContext(ctx, "UPDATE job_runs SET thread_id = ? WHERE id = ?", id, jobRunID); err != nil {
+		} else if run != nil && run.State == journal.Interrupted {
+			if _, err := journal.ClaimResume(ctx, svc.DB.Write, runID, journal.NewOwner(), now()); err != nil {
 				return runIDs, err
 			}
-			first = false
 		}
-		records, err := recordIndex(ctx, svc.DB.Read, stamp, group.marks)
-		if err != nil {
+		if _, err := svc.Execute(ctx, runID); err != nil {
+			if ctx.Err() == nil {
+				for _, rest := range runIDs[i:] {
+					child, gerr := journal.GetRun(context.WithoutCancel(ctx), svc.DB.Read, rest)
+					if gerr != nil {
+						return runIDs, errors.Join(err, gerr)
+					}
+					if child == nil || child.State == journal.Done || child.State == journal.Failed {
+						continue
+					}
+					if ferr := journal.FinishRun(context.WithoutCancel(ctx), svc.DB.Write, rest, journal.Failed, now(), new(err.Error())); ferr != nil {
+						return runIDs, errors.Join(err, ferr)
+					}
+				}
+			}
 			return runIDs, err
-		}
-		group.records = records
-		limits := journal.Limits{
-			AllowedTools: allowedTools,
-			MaxCostUSD:   &left,
-			SystemExtra:  new(systemExtra),
-			Sources:      sourcesOf(group),
-		}
-		runID, err := svc.RunOnce(ctx, id, prompt(group, stamp, loc), service.Start{Kind: threads.Nightly, Limits: limits})
-		if err != nil && runID == 0 {
-			return runIDs, err
-		}
-		if runID != 0 {
-			runIDs = append(runIDs, runID)
 		}
 	}
 	return runIDs, nil
+}
+
+func Admit(ctx context.Context, svc *service.Service, run journal.Run) (bool, error) {
+	stamp := float64(time.Now().UnixMicro()) / 1e6
+	if svc.Now != nil {
+		stamp = svc.Now()
+	}
+	return admit(ctx, svc, run.StartedAt, stamp, run.ID)
+}
+
+func admit(ctx context.Context, svc *service.Service, night, stamp float64, runID int64) (bool, error) {
+	loc, err := config.From(ctx).Location(svc.Env)
+	if err != nil {
+		return false, err
+	}
+	q := svc.DB.Read
+	r := assistant.Read(ctx, q)
+	nightlyCap, monthlyCap := r.Float(assistant.KeyDreamingMaxCost), r.Float(assistant.KeyDreamingMonthly)
+	if err := r.Err(); err != nil {
+		return false, err
+	}
+	tonight, err := nightlySpend(ctx, q, night, loc)
+	if err != nil {
+		return false, err
+	}
+	month, err := monthlySpend(ctx, q, night, loc)
+	if err != nil {
+		return false, err
+	}
+	left := min(nightlyCap-tonight, monthlyCap-month)
+	if left <= 0 {
+		text := fmt.Sprintf("run cost ceiling reached: dreaming caps (tonight $%.2f of $%.2f, this month $%.2f of $%.2f)", tonight, nightlyCap, month, monthlyCap)
+		return false, journal.FinishRun(context.WithoutCancel(ctx), svc.DB.Write, runID, journal.Failed, stamp, &text)
+	}
+	tree, err := journal.RunDescendants(ctx, q, runID)
+	if err != nil {
+		return false, err
+	}
+	allowance := left
+	for _, id := range tree {
+		cost, err := inference.RunCost(ctx, q, id)
+		if err != nil {
+			return false, err
+		}
+		allowance += cost
+	}
+	limits, err := journal.LimitsOf(ctx, q, runID)
+	if err != nil {
+		return false, err
+	}
+	limits.MaxCostUSD = &allowance
+	return true, journal.SetLimits(ctx, svc.DB.Write, runID, limits)
 }
 
 func split(data gathered) []gathered {

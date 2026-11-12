@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestMemoryBackfillIsIdempotentAndRefusesAfterDone(t *testing.T) {
@@ -14,7 +15,7 @@ func TestMemoryBackfillIsIdempotentAndRefusesAfterDone(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("INSERT INTO threads (id, kind, title, effort, created_at, updated_at) VALUES (2, 'chat', 'older', 'low', 0, 0)"); err != nil {
 		t.Fatal(err)
 	}

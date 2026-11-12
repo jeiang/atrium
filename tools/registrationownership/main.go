@@ -32,6 +32,7 @@ var registryObjects = []string{
 	module + "/internal/settings.NewFrom",
 	module + "/internal/settings.Registry.Register",
 	module + "/internal/connections.Compile",
+	module + "/internal/scheduler.Compile",
 	module + "/internal/proposals.NewRegistryFrom",
 	module + "/internal/ledger.NewStoreWith",
 	module + "/internal/assistant/registry.New",

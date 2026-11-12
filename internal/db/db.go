@@ -173,6 +173,30 @@ func Exclusive(ctx context.Context, path string, wait time.Duration) (*Lock, err
 	if err != nil {
 		return nil, err
 	}
+	if err := hold(ctx, f, lock, wait); err != nil {
+		_ = f.Close()
+		return nil, err
+	}
+	return &Lock{f: f}, nil
+}
+
+func tryFlock(f *os.File) (bool, error) {
+	for {
+		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		switch {
+		case err == nil:
+			return true, nil
+		case errors.Is(err, syscall.EINTR):
+			continue
+		case errors.Is(err, syscall.EWOULDBLOCK), errors.Is(err, syscall.EAGAIN):
+			return false, nil
+		default:
+			return false, fmt.Errorf("db: flock %s: %w", f.Name(), err)
+		}
+	}
+}
+
+func hold(ctx context.Context, f *os.File, lock string, wait time.Duration) error {
 	ticker := time.NewTicker(lockPollInterval)
 	defer ticker.Stop()
 	started := time.Now()
@@ -185,30 +209,21 @@ func Exclusive(ctx context.Context, path string, wait time.Duration) (*Lock, err
 	}
 	for {
 		if err := ctx.Err(); err != nil {
-			_ = f.Close()
-			return nil, err
+			return err
 		}
 		if wait == 0 && !logged && time.Since(started) >= lockLogAfter {
 			log.InfoContext(ctx, "waiting for "+lock)
 			logged = true
 		}
-		err = syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
+		ok, err := tryFlock(f)
 		switch {
-		case err == nil:
-			if err := ctx.Err(); err != nil {
-				_ = f.Close()
-				return nil, err
-			}
-			return &Lock{f: f}, nil
-		case errors.Is(err, syscall.EINTR):
-			continue
-		case !errors.Is(err, syscall.EWOULDBLOCK) && !errors.Is(err, syscall.EAGAIN):
-			_ = f.Close()
-			return nil, fmt.Errorf("db: flock %s: %w", lock, err)
+		case err != nil:
+			return err
+		case ok:
+			return ctx.Err()
 		case wait > 0 && timeout == nil:
-			_ = f.Close()
 			ExclusiveTimeouts.Add(1)
-			return nil, &LockTimeout{Path: lock, Timeout: wait}
+			return &LockTimeout{Path: lock, Timeout: wait}
 		default:
 			if !waited {
 				waited = true
@@ -216,8 +231,7 @@ func Exclusive(ctx context.Context, path string, wait time.Duration) (*Lock, err
 			}
 			select {
 			case <-ctx.Done():
-				_ = f.Close()
-				return nil, ctx.Err()
+				return ctx.Err()
 			case <-timeout:
 				timeout = nil
 			case <-ticker.C:

@@ -20,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
 	"github.com/jeiang/atrium/internal/testutil/imapscript"
@@ -212,7 +213,7 @@ func mrvDo(t *testing.T, client *http.Client, method, target string, form url.Va
 
 func mrvScalar(t *testing.T, path, query string, args ...any) string {
 	t.Helper()
-	d := mustConnect(t, path)
+	d := mustConnect(t, path, db.Key{})
 	defer func() { _ = d.Close() }()
 	var out *string
 	if err := d.Read.QueryRow(query, args...).Scan(&out); err != nil {
@@ -523,7 +524,7 @@ func TestMrvUndoingAssistantWritesRestoresAndRefusesWhenChangedSince(t *testing.
 		return string(data)
 	}
 	profile := func() string {
-		d := mustConnect(t, dbPath)
+		d := mustConnect(t, dbPath, db.Key{})
 		defer func() { _ = d.Close() }()
 		var value string
 		var retracted *float64

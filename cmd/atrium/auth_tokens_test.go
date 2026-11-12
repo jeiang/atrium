@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 var tokenHashShape = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -90,7 +91,7 @@ func TestAuthTokensIssueListAndRevokeThroughTheCLI(t *testing.T) {
 		t.Fatalf("the expiring token has no expiry: %v", laptop)
 	}
 
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
 	var hash string
 	if err := d.Read.QueryRow("SELECT token_hash FROM auth_bearers WHERE id = 1").Scan(&hash); err != nil {

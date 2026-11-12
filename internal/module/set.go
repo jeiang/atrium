@@ -27,8 +27,11 @@ type Set struct {
 	publish  sync.Mutex
 	hooks    sync.Mutex
 	starters []starter
+	opener   Opener
 	failed   map[string]string
 }
+
+type Opener func(context.Context) (*db.DB, config.Config, error)
 
 type starter struct {
 	owner string
@@ -72,12 +75,12 @@ func IsEnabled(ctx context.Context, name string) bool {
 	return snap != nil && snap.Enabled(name)
 }
 
-func NewSet(cat *Catalog, reg *settings.Registry, env config.Env) (*Set, error) {
+func NewSet(cat *Catalog, reg *settings.Registry, env config.Env, open Opener) (*Set, error) {
 	ordered, err := byNeeds(cat.Declarations())
 	if err != nil {
 		return nil, err
 	}
-	return &Set{cat: cat, reg: reg, env: env, decls: ordered, failed: map[string]string{}}, nil
+	return &Set{cat: cat, reg: reg, env: env, decls: ordered, opener: open, failed: map[string]string{}}, nil
 }
 
 func byNeeds(decls []Declaration) ([]Declaration, error) {

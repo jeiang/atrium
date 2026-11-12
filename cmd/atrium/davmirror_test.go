@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/contacts"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/tool"
@@ -30,7 +31,7 @@ const (
 
 func passRows(t *testing.T, dir, job string) (ok, failed int, message string) {
 	t.Helper()
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if err := d.Read.QueryRow("SELECT COUNT(*) FILTER (WHERE outcome = 'ok'), COUNT(*) FILTER (WHERE outcome = 'failed'), "+
 		"COALESCE((SELECT message FROM pass_runs WHERE job = ? ORDER BY id DESC LIMIT 1), '') FROM pass_runs WHERE job = ?", job, job).Scan(&ok, &failed, &message); err != nil {
 		t.Fatal(err)
@@ -56,11 +57,11 @@ func lookup(t *testing.T, query string) string {
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "contacts_lookup", map[string]any{"query": query, "include": []any{"emails"}})),
 		anthropictest.Reply("end_turn", anthropictest.Text("done")),
 	)}
-	api.OnRequest = func(r anthropictest.Request) {
+	api.SetOnRequest(func(r anthropictest.Request) {
 		api.mu.Lock()
 		defer api.mu.Unlock()
 		api.seen = append(api.seen, r)
-	}
+	})
 	setEnv(t, anthropic.BaseURLEnv, api.URL)
 	if ran := runApp(t, "agent", "run", "--text", "who is "+query, "--kind", "chat"); ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)

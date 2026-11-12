@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestMemoryWorkSummarizesTheTree(t *testing.T) {
@@ -22,7 +23,7 @@ func TestMemoryWorkSummarizesTheTree(t *testing.T) {
 			t.Fatalf("chat run %d: %d %s", i, ran.code, ran.stderr)
 		}
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var before float64
 	if err := d.Read.QueryRow("SELECT COALESCE(SUM(cost_usd), 0) FROM usage WHERE kind <> 'memory'").Scan(&before); err != nil {
 		t.Fatal(err)
@@ -97,7 +98,7 @@ func TestMemoryWorkRetriesLongAnswersAndFallsBack(t *testing.T) {
 			t.Fatalf("memory work: %d %s", ran.code, ran.stderr)
 		}
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var short, fallback int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM memory_nodes WHERE thread_id = 1 AND state = 'summary' AND text = 'short'").Scan(&short); err != nil {
 		t.Fatal(err)
@@ -118,7 +119,7 @@ func TestMemoryWorkRefusesUnderTheRunCap(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	if _, err := d.Write.Exec("INSERT INTO settings (key, value) VALUES ('max_run_cost_usd_haiku_5_5', '0.0001')"); err != nil {
 		t.Fatal(err)
 	}

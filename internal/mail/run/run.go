@@ -117,7 +117,7 @@ func New(ctx context.Context, env config.Env, d *db.DB, cfg config.Config, open 
 }
 
 func Open(ctx context.Context, env config.Env, cfg config.Config, open mail.OpenFunc, now func() float64) (*Pass, func(), error) {
-	d, err := db.Connect(cfg.DBPath)
+	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(ctx).DBKey()))
 	if err != nil {
 		return nil, nil, err
 	}

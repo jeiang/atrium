@@ -11,6 +11,7 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settingspage"
 )
@@ -55,7 +56,11 @@ func Compile(decls []Declaration) (*Catalog, error) {
 	if _, err := byNeeds(decls); err != nil {
 		return nil, err
 	}
-	reg, err := compileSettings(decls)
+	jobs, err := compileJobs(decls, byName)
+	if err != nil {
+		return nil, err
+	}
+	reg, err := compileSettings(decls, jobs)
 	if err != nil {
 		return nil, err
 	}
@@ -184,7 +189,33 @@ func Compile(decls []Declaration) (*Catalog, error) {
 		return nil, err
 	}
 	return &Catalog{decls: slices.Clone(decls), optional: optional, settings: reg, sections: sections,
-		conns: conns, hooks: hooks, credential: credential, metrics: allMetrics, checks: allChecks}, nil
+		conns: conns, hooks: hooks, credential: credential, metrics: allMetrics, checks: allChecks, jobs: jobs}, nil
+}
+
+func compileJobs(decls []Declaration, byName map[string]Declaration) ([]scheduler.Definition, error) {
+	var jobs []scheduler.Definition
+	for _, d := range decls {
+		for _, job := range d.Jobs {
+			if job.Module != d.Name {
+				return nil, &DeclarationError{Module: d.Name, Field: "jobs", Err: &scheduler.InvalidJob{Key: job.Key, Reason: "is owned by " + job.Module}}
+			}
+			for _, dep := range job.Needs {
+				if _, ok := byName[dep]; !ok {
+					return nil, &UnknownDependency{Module: d.Name, Dependency: dep}
+				}
+			}
+			jobs = append(jobs, job)
+		}
+	}
+	compiled, err := scheduler.Compile(jobs)
+	if err != nil {
+		var bad *scheduler.InvalidJob
+		if errors.As(err, &bad) {
+			return nil, &DeclarationError{Module: bad.Module, Field: "jobs", Err: err}
+		}
+		return nil, err
+	}
+	return compiled, nil
 }
 
 func compileConnections(decls []Declaration) (*connections.Registry, proposals.Hooks, config.AccountCredentialFunc, error) {
@@ -233,7 +264,7 @@ func compileConnections(decls []Declaration) (*connections.Registry, proposals.H
 	return reg, proposals.Hooks{Created: created}, credential, nil
 }
 
-func compileSettings(decls []Declaration) (*settings.Registry, error) {
+func compileSettings(decls []Declaration, jobs []scheduler.Definition) (*settings.Registry, error) {
 	defs := make([]settings.Def, 0, len(decls))
 	hosts := make([]settings.HostDef, 0, len(decls))
 	owner := make(map[string]string, len(decls))
@@ -254,6 +285,12 @@ func compileSettings(decls []Declaration) (*settings.Registry, error) {
 		}
 		defs = append(defs, FlagDef(d.Name))
 		hosts = append(hosts, FlagHostDef(d.Name))
+	}
+	if len(jobs) > 0 {
+		for _, def := range scheduler.Settings(jobs) {
+			owner[def.Key] = def.Module
+			defs = append(defs, def)
+		}
 	}
 	reg, err := settings.Compile(defs, hosts)
 	if err != nil {

@@ -14,6 +14,7 @@ import (
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/calendar/caldavtest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func toolResult(t *testing.T, name string, input map[string]any) string {
@@ -22,11 +23,11 @@ func toolResult(t *testing.T, name string, input map[string]any) string {
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", name, input)),
 		anthropictest.Reply("end_turn", anthropictest.Text("done")),
 	)}
-	api.OnRequest = func(r anthropictest.Request) {
+	api.SetOnRequest(func(r anthropictest.Request) {
 		api.mu.Lock()
 		defer api.mu.Unlock()
 		api.seen = append(api.seen, r)
-	}
+	})
 	setEnv(t, anthropic.BaseURLEnv, api.URL)
 	if ran := runApp(t, "agent", "run", "--text", "please", "--kind", "chat"); ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s", ran.code, ran.stderr)
@@ -35,7 +36,7 @@ func toolResult(t *testing.T, name string, input map[string]any) string {
 	if len(requests) != 2 {
 		t.Fatalf("%d model requests, want 2", len(requests))
 	}
-	d := mustConnect(t, filepath.Join(fixtureFor(t).dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(fixtureFor(t).dir, "atrium.db"), db.Key{})
 	var raw string
 	if err := d.Read.QueryRow("SELECT content_json FROM thread_messages WHERE thread_id = (SELECT MAX(id) FROM threads) AND role = 'user' AND content_json LIKE '%tool_result%' ORDER BY seq DESC LIMIT 1").Scan(&raw); err != nil {
 		t.Fatalf("tool result: %v", err)
@@ -271,7 +272,7 @@ func TestCalendarUnknownWriteStaysBlocked(t *testing.T) {
 	if srv.PutAttempts != 1 {
 		t.Fatalf("the blocked proposal retried the remote write: %d attempts", srv.PutAttempts)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	var state string
 	if err := d.Read.QueryRow("SELECT state FROM effects WHERE proposal_id = ? AND direction = 'forward' ORDER BY id DESC LIMIT 1", update).Scan(&state); err != nil {
 		t.Fatal(err)
@@ -293,7 +294,7 @@ func TestCalendarCreateUnknownWriteBlocksUntilResolved(t *testing.T) {
 	if got := runApp(t, "proposals", "approve", id); got.code == cli.ExitOK {
 		t.Fatalf("approve with a failing remote write exited 0: %q", got.stdout)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	unknown := func() int {
 		t.Helper()
 		var n int

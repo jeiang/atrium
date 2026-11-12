@@ -110,11 +110,11 @@ func moduleFixtureAt(t *testing.T, flags map[string]string, now func() float64) 
 	t.Helper()
 	dir = t.TempDir()
 	api = &modelLog{Server: anthropictest.New(t, anthropictest.Reply("end_turn", anthropictest.Text("hi")))}
-	api.OnRequest = func(r anthropictest.Request) {
+	api.SetOnRequest(func(r anthropictest.Request) {
 		api.mu.Lock()
 		defer api.mu.Unlock()
 		api.seen = append(api.seen, r)
-	}
+	})
 	env := map[string]string{
 		"ATRIUM_DB":          filepath.Join(dir, "atrium.db"),
 		"ATRIUM_CACHE_DIR":   filepath.Join(dir, "cache"),
@@ -165,7 +165,7 @@ func seedFlagsAt(t *testing.T, app *cli.App, path string, flags map[string]strin
 			kv[module.FlagKey(name)] = value
 		}
 	}
-	seedSettingsAt(t, path, kv)
+	seedSettingsWith(t, appKey(t, app.Env), path, kv)
 }
 
 func flagsExcept(name string, value string) map[string]string {
@@ -197,7 +197,7 @@ func offeredTools(t *testing.T, api *modelLog, ran appRun) []string {
 
 func tableExists(t *testing.T, dir, table string) bool {
 	t.Helper()
-	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
+	d, err := db.Connect(filepath.Join(dir, "atrium.db"), db.WithKey(keyFor(t)))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -353,7 +353,7 @@ func TestDisabledModuleKeepsPageAndAPIErrorResponses(t *testing.T) {
 func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServe(t *testing.T) {
 	t.Run("optional", func(t *testing.T) {
 		dir, _, _ := moduleFixture(t, allFlagsTrue())
-		d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+		d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 		result, err := d.Write.Exec("UPDATE connections SET expires_at = 'broken' WHERE id IN ('service/embedding', 'service/qbittorrent')")
 		if err != nil {
 			t.Fatal(err)
@@ -380,7 +380,7 @@ func TestOptionalModuleEvaluationFailureIsUnavailableAndCoreFailureRefusesToServ
 	})
 	t.Run("core", func(t *testing.T) {
 		dir, _, f := moduleFixture(t, allFlagsTrue())
-		d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+		d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 		for _, q := range []string{
 			"DROP TRIGGER settings_audit_no_delete",
 			"DELETE FROM settings_audit WHERE key = 'modules_seeded'",
@@ -542,7 +542,7 @@ func TestUsageAndBudgetStayReachableWithTheAssistantOff(t *testing.T) {
 func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	now := float64(time.Now().Unix())
 	if _, err := d.Write.Exec("INSERT INTO threads (kind, title, effort, created_at, updated_at) VALUES ('chat', 'Lifecycle thread', 'low', ?, ?)", now, now); err != nil {
 		t.Fatal(err)
@@ -687,7 +687,7 @@ func TestSettingsSavesDuringTheFirstAssistantEnableAllFinish(t *testing.T) {
 	if row := runSettings(t, "get", "oidc_session_idle_days").row(t); row.Value == nil || *row.Value != "2" {
 		t.Errorf("oidc_session_idle_days = %+v, want 2", row)
 	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	var jobs int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM jobs").Scan(&jobs); err != nil || jobs == 0 {
 		t.Fatalf("%d scheduler jobs after the first enable: %v", jobs, err)
@@ -696,7 +696,7 @@ func TestSettingsSavesDuringTheFirstAssistantEnableAllFinish(t *testing.T) {
 
 func TestFailedAssistantStartIsRetriedAtTheNextPublication(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"))
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	if _, err := d.Write.Exec("CREATE TRIGGER jobs_refused BEFORE INSERT ON jobs BEGIN SELECT RAISE(ABORT, 'jobs refused'); END"); err != nil {
 		t.Fatal(err)
 	}
@@ -1275,14 +1275,14 @@ func TestMailToolRefusesRunStartedBeforeDisable(t *testing.T) {
 	var once sync.Once
 	var releaseOnce sync.Once
 	defer releaseOnce.Do(func() { close(release) })
-	previous := api.OnRequest
-	api.OnRequest = func(r anthropictest.Request) {
+	previous := api.RequestHook()
+	api.SetOnRequest(func(r anthropictest.Request) {
 		previous(r)
 		once.Do(func() {
 			close(arrived)
 			<-release
 		})
-	}
+	})
 	result := make(chan appRun, 1)
 	go func() { result <- asstRunApp(f.app, context.Background(), "agent", "run", "--text", "read my mail") }()
 	select {
@@ -1293,7 +1293,7 @@ func TestMailToolRefusesRunStartedBeforeDisable(t *testing.T) {
 	asstSet(t, module.FlagKey(module.Mail), "false")
 	releaseOnce.Do(func() { close(release) })
 	ran := <-result
-	api.OnRequest = previous
+	api.SetOnRequest(previous)
 	if ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s %s", ran.code, ran.stdout, ran.stderr)
 	}

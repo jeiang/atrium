@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 )
 
 func TestTaskAttentionSource(t *testing.T) {
@@ -14,7 +15,7 @@ func TestTaskAttentionSource(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	d := mustConnect(t, dir+"/atrium.db")
+	d := mustConnect(t, dir+"/atrium.db", db.Key{})
 	now := float64(time.Now().Unix())
 	due := time.Now().AddDate(0, 0, -1).Format("2006-01-02")
 	res, err := d.Write.Exec("INSERT INTO tasks (title, due, status, priority, created_ts, updated_ts) VALUES ('Pay the invoice', ?, 'open', 'high', ?, ?)", due, now, now)
