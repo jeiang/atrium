@@ -1104,7 +1104,7 @@ func TestImportV2KeepsEmbedAndChatAccountsFromClaimingTheEndpointHealth(t *testi
 	}
 	for _, want := range []string{
 		"ambiguous-health mail_embed: the name is both the embedding endpoint and a mail account; the account is untested",
-		"integration_health: drop-removed mail_chat health reason=Haiku-classification",
+		"integration_health: drop-removed mail_chat health: 1 row reason=Haiku-classification",
 	} {
 		if !strings.Contains(got.stdout, want) {
 			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
@@ -2497,8 +2497,12 @@ func TestImportV2KeepsTheEmbeddingFingerprintWithLegacyHealth(t *testing.T) {
 	editImportSource(t, source, "INSERT INTO integration_health (name, state, reason, checked_at, expires_at) VALUES ('mail_embed', 'ok', 'the legacy check passed', 1762000800, NULL)")
 	setEnv(t, flagEnv(module.Mail), "")
 
-	if got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source); got.code != cli.ExitOK {
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
 		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if strings.Contains(got.stdout, "mail_chat health") {
+		t.Errorf("the report claims dropped mail_chat health without such a row:\n%s", got.stdout)
 	}
 	dest := filepath.Join(dir, "atrium.db")
 	q, err := db.Connect(dest, db.WithKey(importKey(t)))

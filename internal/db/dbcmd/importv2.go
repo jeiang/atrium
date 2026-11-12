@@ -211,7 +211,16 @@ var importTables = []tablePlan{
 		}
 		return im.countSource("endpoint_probes")
 	}},
-	{table: "integration_health", action: drop, why: "connection health lives in the connections table", note: "drop-removed mail_chat health reason=Haiku-classification"},
+	{table: "integration_health", action: drop, why: "connection health lives in the connections table", run: func(im *importer) (int64, error) {
+		var chat int64
+		if err := im.src.QueryRowContext(im.ctx, "SELECT COUNT(*) FROM integration_health WHERE name = 'mail_chat'").Scan(&chat); err != nil {
+			return 0, err
+		}
+		if chat > 0 {
+			im.notes = append(im.notes, fmt.Sprintf("drop-removed mail_chat health: %d row reason=Haiku-classification", chat))
+		}
+		return im.countSource("integration_health")
+	}},
 	{table: "ops_samples", action: drop, why: "ops samples are not carried"},
 	{table: "ops_findings", action: drop, why: "ops findings are not carried"},
 	{table: "nightly_observations", action: drop, why: "nightly observations are not carried"},
