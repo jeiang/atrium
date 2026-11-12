@@ -15,3 +15,15 @@ CREATE TABLE IF NOT EXISTS tasks (
 );
 CREATE INDEX IF NOT EXISTS tasks_status ON tasks (status, remind_at);
 CREATE INDEX IF NOT EXISTS tasks_remind ON tasks (remind_at);
+CREATE TRIGGER IF NOT EXISTS tasks_read_insert AFTER INSERT ON tasks BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('tasks',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS tasks_read_update AFTER UPDATE ON tasks BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('tasks',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS tasks_read_delete AFTER DELETE ON tasks BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('tasks',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;

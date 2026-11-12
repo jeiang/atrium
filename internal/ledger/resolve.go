@@ -17,9 +17,9 @@ func (s *Store) Resolve(ctx context.Context, id int64, r Resolution, who Resolve
 		return Effect{}, Refused("a resolution needs an actor")
 	}
 	switch who.Source {
-	case "cli", "ui", "phone", "import":
+	case "cli", "ui", "api", "tool", "job", "phone", "import":
 	default:
-		return Effect{}, Refused("a resolution source must be cli, ui, phone or import")
+		return Effect{}, Refused("a resolution source must be cli, ui, api, tool, job, phone or import")
 	}
 	now := s.now()
 	err := s.DB.WithTx(ctx, func(tx *sql.Tx) error {
@@ -137,9 +137,9 @@ func AuditProposal(ctx context.Context, x db.Querier, ts float64, who Resolver, 
 		return Refused("a resolution needs an actor")
 	}
 	switch who.Source {
-	case "cli", "ui", "phone", "import":
+	case "cli", "ui", "api", "tool", "job", "phone", "import":
 	default:
-		return Refused("a resolution source must be cli, ui, phone or import")
+		return Refused("a resolution source must be cli, ui, api, tool, job, phone or import")
 	}
 	if strings.TrimSpace(outcome) == "" {
 		return Refused("an approval audit needs an outcome")

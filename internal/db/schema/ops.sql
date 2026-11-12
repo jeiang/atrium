@@ -46,3 +46,63 @@ CREATE TABLE IF NOT EXISTS ops_findings (
 );
 CREATE INDEX IF NOT EXISTS ops_findings_open ON ops_findings (resolved_at, created_at);
 CREATE INDEX IF NOT EXISTS ops_findings_fact ON ops_findings (fact, resolved_at);
+CREATE TRIGGER IF NOT EXISTS endpoint_probes_read_insert AFTER INSERT ON endpoint_probes BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS endpoint_probes_read_update AFTER UPDATE ON endpoint_probes BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS endpoint_probes_read_delete AFTER DELETE ON endpoint_probes BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS pass_run_alerts_read_insert AFTER INSERT ON pass_run_alerts BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('notify',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS pass_run_alerts_read_update AFTER UPDATE ON pass_run_alerts BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('notify',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS pass_run_alerts_read_delete AFTER DELETE ON pass_run_alerts BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('notify',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS ops_samples_read_insert AFTER INSERT ON ops_samples BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('ops',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS ops_samples_read_update AFTER UPDATE ON ops_samples BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('ops',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS ops_samples_read_delete AFTER DELETE ON ops_samples BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('ops',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS ops_findings_read_insert AFTER INSERT ON ops_findings BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('ops',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS ops_findings_read_update AFTER UPDATE ON ops_findings BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('ops',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS ops_findings_read_delete AFTER DELETE ON ops_findings BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('ops',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS pass_runs_read_insert AFTER INSERT ON pass_runs BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('ops',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS pass_runs_read_update AFTER UPDATE ON pass_runs BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('ops',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS pass_runs_read_delete AFTER DELETE ON pass_runs BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('ops',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;

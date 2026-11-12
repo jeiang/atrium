@@ -70,6 +70,7 @@ var owners = map[string]string{
 	"notion_pages":            "notion",
 	"notion_sources":          "notion",
 	"notion_state":            "notion",
+	"operation_audit":         "application",
 	"ntfy_channels":           "notify",
 	"oauth_states":            "connections",
 	"open_loops":              "mail",
@@ -82,6 +83,7 @@ var owners = map[string]string{
 	"projects":                "assistant",
 	"proposals":               "proposals",
 	"push_subscriptions":      "notify",
+	"read_revisions":          "application",
 	"rebalance_candidates":    "mail",
 	"rules":                   "mail",
 	"run_events":              "assistant",
@@ -106,6 +108,111 @@ var owners = map[string]string{
 	"watch_dismissed":         "mail",
 	"wiki_pages":              "notion",
 }
+
+var invalidates = map[string]string{
+	"accounts":                "mail",
+	"action_links":            "notify",
+	"agent_events":            "calendar",
+	"agent_profile":           "knowledge",
+	"attention_snoozes":       "attention",
+	"auth_bearers":            "auth",
+	"auth_logins":             "auth",
+	"auth_sessions":           "auth",
+	"commitments":             "mail",
+	"connection_capabilities": "connections",
+	"connection_credentials":  "connections",
+	"connections":             "connections",
+	"context_ledger":          "assistant",
+	"context_projections":     "assistant",
+	"corrections":             "mail",
+	"decisions":               "mail",
+	"drafts":                  "mail",
+	"effect_import_refs":      "effects",
+	"effect_resolutions":      "effects",
+	"effect_resources":        "effects",
+	"effects":                 "effects",
+	"endpoint_probes":         "mail",
+	"event_candidates":        "calendar",
+	"events":                  "mail",
+	"export_pages":            "knowledge",
+	"flag_decisions":          "mail",
+	"job_run_threads":         "jobs",
+	"job_runs":                "jobs",
+	"jobs":                    "jobs",
+	"kb_records":              "knowledge",
+	"live_baseline":           "mail",
+	"live_state":              "mail",
+	"loop_overrides":          "mail",
+	"mail_accounts":           "mail",
+	"mail_scans":              "mail",
+	"mailboxes":               "mail",
+	"media_channels":          "media",
+	"media_seen":              "media",
+	"media_state":             "media",
+	"memory_jobs":             "assistant",
+	"memory_nodes":            "assistant",
+	"memory_state":            "assistant",
+	"memory_views":            "assistant",
+	"messages":                "mail",
+	"nightly_observations":    "assistant",
+	"notifications":           "notify",
+	"notion_pages":            "notion",
+	"notion_sources":          "notion",
+	"notion_state":            "notion",
+	"ntfy_channels":           "notify",
+	"oauth_states":            "connections",
+	"open_loops":              "mail",
+	"ops_findings":            "ops",
+	"ops_samples":             "ops",
+	"package_events":          "mail",
+	"packages":                "mail",
+	"pass_run_alerts":         "notify",
+	"pass_runs":               "ops",
+	"projects":                "assistant",
+	"proposals":               "review",
+	"push_subscriptions":      "notify",
+	"rebalance_candidates":    "mail",
+	"rules":                   "mail",
+	"run_events":              "assistant",
+	"runs":                    "assistant",
+	"secrets":                 "settings",
+	"settings":                "settings",
+	"settings_audit":          "settings",
+	"snoozes":                 "mail",
+	"subagents":               "assistant",
+	"tasks":                   "tasks",
+	"thread_files":            "assistant",
+	"thread_messages":         "assistant",
+	"thread_plans":            "assistant",
+	"thread_queue":            "assistant",
+	"threads":                 "assistant",
+	"tool_calls":              "assistant",
+	"tool_results":            "assistant",
+	"usage":                   "assistant",
+	"watch_dismissed":         "mail",
+	"wiki_pages":              "notion",
+}
+
+var revisionExempt = map[string]string{
+	"db_key_history":      "database key lineage, read by no application operation",
+	"effect_claims":       "runtime bookkeeping",
+	"embed_index":         "derived index rows",
+	"embed_kb_":           "vector index",
+	"embed_message_":      "vector index",
+	"embed_notion_":       "vector index",
+	"job_resource_leases": "runtime bookkeeping",
+	"kb_fts":              "full-text index",
+	"memory_fts":          "full-text index",
+	"message_fts":         "full-text index",
+	"notion_fts":          "full-text index",
+	"operation_audit":     "the operation audit itself",
+	"read_revisions":      "the revision counters themselves",
+	"schema_migrations":   "runtime bookkeeping",
+	"skills":              "read by no application operation",
+	"thread_fts":          "full-text index",
+}
+
+var readTrigger = regexp.MustCompile(`CREATE\s+TRIGGER\s+IF\s+NOT\s+EXISTS\s+([A-Za-z0-9_]+)_read_(insert|update|delete)\s+AFTER\s+(INSERT|UPDATE|DELETE)\b[^;]*?\bON\s+([A-Za-z0-9_]+)\b[^;]*?INSERT\s+INTO\s+read_revisions\(scope,value\)\s+VALUES\('([a-z]+)',1\)`)
 
 var vectorPrefixes = []string{"embed_message_", "embed_notion_", "embed_kb_"}
 
@@ -155,14 +262,19 @@ func checkSchema(root string) error {
 		return err
 	}
 	files = append(files, filepath.Join(root, "internal", "db", "migrate.go"))
+	var schema strings.Builder
 	for _, path := range files {
 		body, err := os.ReadFile(path)
 		if err != nil {
 			return err
 		}
+		schema.Write(body)
 		for _, m := range createTable.FindAllStringSubmatch(string(body), -1) {
 			names[normalize(m[1])] = true
 		}
+	}
+	if err := checkRevisions(names, schema.String()); err != nil {
+		return err
 	}
 	var missing []string
 	for name := range names {
@@ -173,6 +285,43 @@ func checkSchema(root string) error {
 	if len(missing) > 0 {
 		sort.Strings(missing)
 		return fmt.Errorf("tables created in the schema without an owner: %s", strings.Join(missing, ", "))
+	}
+	return nil
+}
+
+func checkRevisions(names map[string]bool, schema string) error {
+	var problems []string
+	for name := range names {
+		_, covered := invalidates[name]
+		_, exempt := revisionExempt[name]
+		if covered == exempt {
+			problems = append(problems, name+" needs exactly one of a revision scope or a revision exemption")
+		}
+	}
+	for name := range invalidates {
+		if !names[name] {
+			problems = append(problems, name+" has a revision scope but no table")
+		}
+	}
+	found := map[string]bool{}
+	for _, m := range readTrigger.FindAllStringSubmatch(schema, -1) {
+		table, op, event, on, scope := m[1], m[2], m[3], m[4], m[5]
+		if table != on || strings.ToUpper(op) != event || invalidates[table] != scope || found[table+"/"+op] {
+			problems = append(problems, fmt.Sprintf("trigger %s_read_%s on %s writes scope %q; want one per operation on its own table with scope %q", table, op, on, scope, invalidates[table]))
+			continue
+		}
+		found[table+"/"+op] = true
+	}
+	for name := range invalidates {
+		for _, op := range []string{"insert", "update", "delete"} {
+			if !found[name+"/"+op] {
+				problems = append(problems, "missing revision trigger "+name+"_read_"+op)
+			}
+		}
+	}
+	if len(problems) > 0 {
+		sort.Strings(problems)
+		return fmt.Errorf("revision triggers: %s", strings.Join(problems, "; "))
 	}
 	return nil
 }
