@@ -528,8 +528,8 @@ func TestAsstSchedulerResumesAnInterruptedRunAndTheOriginalLoopStandsDown(t *tes
 	releaseOriginal := func() { releaseOnce.Do(func() { close(release) }) }
 	t.Cleanup(releaseOriginal)
 	var first atomic.Bool
-	logRequest := api.OnRequest
-	api.OnRequest = func(r anthropictest.Request) {
+	logRequest := api.RequestHook()
+	api.SetOnRequest(func(r anthropictest.Request) {
 		logRequest(r)
 		hold := first.CompareAndSwap(false, true)
 		select {
@@ -539,7 +539,7 @@ func TestAsstSchedulerResumesAnInterruptedRunAndTheOriginalLoopStandsDown(t *tes
 		if hold {
 			<-release
 		}
-	}
+	})
 
 	runDone := make(chan appRun, 1)
 	go func() {

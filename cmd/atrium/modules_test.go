@@ -110,11 +110,11 @@ func moduleFixtureAt(t *testing.T, flags map[string]string, now func() float64) 
 	t.Helper()
 	dir = t.TempDir()
 	api = &modelLog{Server: anthropictest.New(t, anthropictest.Reply("end_turn", anthropictest.Text("hi")))}
-	api.OnRequest = func(r anthropictest.Request) {
+	api.SetOnRequest(func(r anthropictest.Request) {
 		api.mu.Lock()
 		defer api.mu.Unlock()
 		api.seen = append(api.seen, r)
-	}
+	})
 	env := map[string]string{
 		"ATRIUM_DB":          filepath.Join(dir, "atrium.db"),
 		"ATRIUM_CACHE_DIR":   filepath.Join(dir, "cache"),
@@ -1233,14 +1233,14 @@ func TestMailToolRefusesRunStartedBeforeDisable(t *testing.T) {
 	var once sync.Once
 	var releaseOnce sync.Once
 	defer releaseOnce.Do(func() { close(release) })
-	previous := api.OnRequest
-	api.OnRequest = func(r anthropictest.Request) {
+	previous := api.RequestHook()
+	api.SetOnRequest(func(r anthropictest.Request) {
 		previous(r)
 		once.Do(func() {
 			close(arrived)
 			<-release
 		})
-	}
+	})
 	result := make(chan appRun, 1)
 	go func() { result <- asstRunApp(f.app, context.Background(), "agent", "run", "--text", "read my mail") }()
 	select {
@@ -1251,7 +1251,7 @@ func TestMailToolRefusesRunStartedBeforeDisable(t *testing.T) {
 	asstSet(t, module.FlagKey(module.Mail), "false")
 	releaseOnce.Do(func() { close(release) })
 	ran := <-result
-	api.OnRequest = previous
+	api.SetOnRequest(previous)
 	if ran.code != cli.ExitOK {
 		t.Fatalf("agent run: %d %s %s", ran.code, ran.stdout, ran.stderr)
 	}

@@ -10,9 +10,9 @@ import (
 
 	"regexp"
 
-	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/textx"
 	"github.com/jeiang/atrium/internal/timex"
 )
@@ -344,11 +344,15 @@ func Validate(ctx context.Context, q db.Querier, text, tz string, now float64, e
 		return Spec{}, 0, Error(errNeverFires)
 	}
 	if enforceMin && s.Recurring() {
-		r := assistant.Read(ctx, q)
-		minInterval := r.Int(KeyMinInterval)
-		if err := r.Err(); err != nil {
+		found, err := settings.From(ctx).Resolve(ctx, q, KeyMinInterval)
+		if err != nil {
 			return Spec{}, 0, err
 		}
+		n, err := found.Int()
+		if err != nil {
+			return Spec{}, 0, err
+		}
+		minInterval := int(n)
 		if gap, ok := s.MinGap(now); ok && gap < float64(minInterval) {
 			return Spec{}, 0, Error("recurring schedules must be at least " + describeInterval(minInterval) + " apart")
 		}

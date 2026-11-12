@@ -4,6 +4,7 @@ import (
 	"context"
 	"slices"
 
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	mailtools "github.com/jeiang/atrium/internal/assistant/tools/mail"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
@@ -22,6 +23,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -29,6 +31,7 @@ import (
 type Module struct {
 	Clients func(config.Config) mail.OpenFunc
 	Now     func() float64
+	Jobs    jobworker.Dependencies
 }
 
 func AttentionSources() []attention.Source {
@@ -81,6 +84,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Settings:  slices.Concat(mail.Settings(), endpoint.SettingsDefs(), tracking.SettingsDefs()),
 		Host:      mail.HostSettings(),
 		Attention: AttentionSources(),
+		Jobs:      []scheduler.Definition{mailcmd.TrackingJob(m.Jobs)},
 		Requires:  Requirements(),
 		Pages: []web.Page{
 			{Module: pages.Module, Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{

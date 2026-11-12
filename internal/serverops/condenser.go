@@ -11,8 +11,8 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
@@ -68,7 +68,7 @@ func condenserSchema() map[string]any {
 	}
 }
 
-func condense(ctx context.Context, e worker.Env, threadID int64, now float64, loc *time.Location, changes []change, text string, marks tool.Marks) error {
+func condense(ctx context.Context, e jobworker.Env, threadID int64, now float64, loc *time.Location, changes []change, text string, marks tool.Marks) error {
 	d := e.Service.DB
 	set := assistant.Read(ctx, d.Read)
 	model := set.Text(KeyCondenserModel)
@@ -160,7 +160,7 @@ func condense(ctx context.Context, e worker.Env, threadID int64, now float64, lo
 	return nil
 }
 
-func recordPending(ctx context.Context, e worker.Env, threadID int64, now float64, changes []change) {
+func recordPending(ctx context.Context, e jobworker.Env, threadID int64, now float64, changes []change) {
 	ctx = context.WithoutCancel(ctx)
 	d := e.Service.DB
 	last, err := lastDelta(ctx, d.Read, threadID)

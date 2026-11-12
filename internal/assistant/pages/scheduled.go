@@ -9,8 +9,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/assistant/scheduler"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/timex"
@@ -44,6 +44,7 @@ type RunView struct {
 	Cost        float64 `json:"cost"`
 	Error       *string `json:"error"`
 	ThreadID    *int64  `json:"thread_id"`
+	Hint        string  `json:"-"`
 }
 
 type ScheduledData struct {
@@ -77,7 +78,11 @@ func runView(run scheduler.ListedRun, zone *time.Location) RunView {
 	if run.StartedAt != nil && *run.StartedAt != 0 {
 		at = *run.StartedAt
 	}
-	return RunView{JobName: run.JobName, Status: run.Status, StartedText: stamp(&at, zone), Cost: run.Cost, Error: run.Error, ThreadID: run.ThreadID}
+	hint := run.Status
+	if strings.HasPrefix(hint, "skipped_") && (run.Tokens > 0 || run.Cost > 0) {
+		hint += "_partial"
+	}
+	return RunView{JobName: run.JobName, Status: run.Status, StartedText: stamp(&at, zone), Cost: run.Cost, Error: run.Error, ThreadID: run.ThreadID, Hint: hint}
 }
 
 func runViews(runs []scheduler.ListedRun, zone *time.Location) []RunView {
@@ -178,8 +183,8 @@ func (p *pages) scheduleEdit(w http.ResponseWriter, r *http.Request) {
 		if schedule == "" {
 			return scheduler.Error("schedule is empty")
 		}
-		if builtin, known := scheduler.BuiltinFor(job.Name); known {
-			if err := settings.From(ctx).Set(ctx, tx, builtin.Setting, schedule); err != nil {
+		if def, known := scheduler.Declared(p.jobs, *job); known {
+			if err := settings.From(ctx).Set(ctx, tx, def.ScheduleSetting, schedule); err != nil {
 				return err
 			}
 		}

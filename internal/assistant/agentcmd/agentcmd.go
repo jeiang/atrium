@@ -2,12 +2,13 @@ package agentcmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/runner"
-	"github.com/jeiang/atrium/internal/assistant/scheduler/worker"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/cli"
@@ -34,8 +35,8 @@ func threadKind(run string) threads.Kind {
 	return threads.Kind(run)
 }
 
-func Command(env config.Env, tools registry.Source, enabled func(module string) bool, now func() float64, jobs ...map[string]worker.Callable) *cli.Command {
-	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(env, tools, enabled, jobs...), runCommand(env, tools, now), subagentsCommand(env, tools, now)}}
+func Command(env config.Env, tools registry.Source, enabled func(module string) bool, now func() float64, holder *jobworker.Holder) *cli.Command {
+	return &cli.Command{Name: "agent", Commands: []*cli.Command{schedulerCommand(env, tools, enabled, holder), tickCommand(env, tools, enabled, holder), runCommand(env, tools, now), subagentsCommand(env, tools, now)}}
 }
 
 func clock(now func() float64) func() float64 {
@@ -131,14 +132,16 @@ func run(env *cli.Env, cfgEnv config.Env, tools registry.Source, threadID *int64
 	if toolChoice != "" {
 		start.Limits.ToolChoice = &toolChoice
 	}
-	runID, err := svc.RunOnce(ctx, *threadID, text, start)
-	if err != nil {
-		return err
+	runID, runErr := svc.RunOnce(ctx, *threadID, text, start)
+	if runID == 0 || runErr != nil && !errors.As(runErr, new(config.NotConfigured)) {
+		return runErr
 	}
 	out, err := service.RunDict(ctx, svc.DB.Read, runID)
 	if err != nil {
 		return err
 	}
-	_, err = fmt.Fprintln(env.Stdout, jsonx.Dumps(out, jsonx.Opts{Indent: 2}))
-	return err
+	if _, err := fmt.Fprintln(env.Stdout, jsonx.Dumps(out, jsonx.Opts{Indent: 2})); err != nil {
+		return err
+	}
+	return runErr
 }

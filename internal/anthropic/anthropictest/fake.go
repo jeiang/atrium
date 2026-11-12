@@ -98,6 +98,18 @@ func (s *Server) Remaining() int {
 	return len(s.script)
 }
 
+func (s *Server) RequestHook() func(Request) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.OnRequest
+}
+
+func (s *Server) SetOnRequest(hook func(Request)) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.OnRequest = hook
+}
+
 func (s *Server) Env() config.Env {
 	return config.Map(map[string]string{"ANTHROPIC_API_KEY": APIKey, anthropic.BaseURLEnv: s.URL})
 }
@@ -171,8 +183,8 @@ func (s *Server) deleteFile(w http.ResponseWriter, id string) {
 }
 
 func (s *Server) messages(w http.ResponseWriter, r *http.Request, req Request) {
-	if s.OnRequest != nil {
-		s.OnRequest(req)
+	if hook := s.RequestHook(); hook != nil {
+		hook(req)
 	}
 	if s.Disconnect.Load() {
 		s.hijackClose(w)

@@ -68,6 +68,13 @@ func TestDailyNudgesDigestPostsWithoutAModel(t *testing.T) {
 	requests := len(api.Requests())
 	cancel, done = start()
 	first := browser.decrypt(t, push.wait(t, 1).body)
+	waitFor(t, func() bool {
+		var running int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM job_runs WHERE status = 'running'").Scan(&running); err != nil {
+			t.Fatal(err)
+		}
+		return running == 0
+	})
 	cancel()
 	<-done
 	if len(api.Requests()) != requests {
