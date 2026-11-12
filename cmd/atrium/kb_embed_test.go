@@ -28,8 +28,15 @@ func kbEmbedFixture(t *testing.T) (string, *fakeEmbedder, *modelLog, *db.DB) {
 	return dir, fake, api, mustConnect(t, filepath.Join(dir, "atrium.db"))
 }
 
-func createLedger(t *testing.T, dir string, body string) (int64, *asstWeb) {
+func createLedger(t *testing.T, dir string, fake *fakeEmbedder, body string) (int64, *asstWeb) {
 	t.Helper()
+	fake.setGate(func(ctx context.Context, texts []string) {
+		if len(texts) == 1 && (texts[0] == "atrium probe" || strings.HasPrefix(texts[0], "task: search result")) {
+			return
+		}
+		<-ctx.Done()
+	})
+	defer fake.setGate(nil)
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
 	w := asstBrowse(t, base)
@@ -62,7 +69,7 @@ func documentHash(t *testing.T, d *db.DB, id int64) string {
 
 func TestKnowledgeEditDuringEmbeddingKeepsTheRecordPending(t *testing.T) {
 	dir, fake, _, d := kbEmbedFixture(t)
-	id, _ := createLedger(t, dir, "old body "+ledgerMarker)
+	id, _ := createLedger(t, dir, fake, "old body "+ledgerMarker)
 
 	var mu sync.Mutex
 	calls := 0
@@ -134,7 +141,7 @@ func TestKnowledgeRetractDuringEmbeddingLeavesNoVector(t *testing.T) {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	id, _ := createLedger(t, dir, "old body "+ledgerMarker)
+	id, _ := createLedger(t, dir, fake, "old body "+ledgerMarker)
 
 	first := make(chan string, 1)
 	second := make(chan string, 1)
@@ -208,7 +215,7 @@ func TestKnowledgeRetractDuringEmbeddingLeavesNoVector(t *testing.T) {
 
 func TestKnowledgeEditAfterEmbeddingRequeuesTheRecord(t *testing.T) {
 	dir, fake, _, d := kbEmbedFixture(t)
-	id, _ := createLedger(t, dir, "old body "+ledgerMarker)
+	id, _ := createLedger(t, dir, fake, "old body "+ledgerMarker)
 
 	base, _, stop := startServeStoppable(t, dir)
 	w := asstBrowse(t, base)
