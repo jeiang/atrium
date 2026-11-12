@@ -1207,9 +1207,21 @@ func (im *importer) copyFTS(table string, columns []string) (int64, error) {
 }
 
 func (im *importer) carryAudit() (int64, error) {
-	var base int64
-	if err := im.tx.QueryRowContext(im.ctx, "SELECT COALESCE(MAX(id), 0) FROM settings_audit").Scan(&base); err != nil {
+	var sourceMax, sourceCount int64
+	if err := im.src.QueryRowContext(im.ctx, "SELECT COALESCE(MAX(id), 0), COUNT(*) FROM settings_audit").Scan(&sourceMax, &sourceCount); err != nil {
 		return 0, err
+	}
+	if sourceCount == 0 {
+		return 0, nil
+	}
+	var destMax int64
+	if err := im.tx.QueryRowContext(im.ctx, "SELECT COALESCE(MAX(id), 0) FROM settings_audit").Scan(&destMax); err != nil {
+		return 0, err
+	}
+	if destMax > 0 {
+		if err := im.renumberAudit(sourceMax, destMax); err != nil {
+			return 0, err
+		}
 	}
 	rows, err := im.src.QueryContext(im.ctx,
 		"SELECT id, ts, key, old_value, new_value, secret, actor, source FROM settings_audit ORDER BY id")
@@ -1234,12 +1246,42 @@ func (im *importer) carryAudit() (int64, error) {
 		}
 		if _, err := im.tx.ExecContext(im.ctx,
 			"INSERT INTO settings_audit (id, ts, key, old_value, new_value, secret, actor, source) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-			id+base, ts, key, old, next, secret, actor, source); err != nil {
+			id, ts, key, old, next, secret, actor, source); err != nil {
 			return n, err
 		}
 		n++
 	}
 	return n, rows.Err()
+}
+
+func (im *importer) renumberAudit(sourceMax, destMax int64) error {
+	offset := sourceMax + destMax
+	for _, statement := range []string{
+		"DROP TRIGGER IF EXISTS settings_audit_no_update",
+		"DROP TRIGGER IF EXISTS settings_audit_no_delete",
+	} {
+		if _, err := im.tx.ExecContext(im.ctx, statement); err != nil {
+			return err
+		}
+	}
+	if _, err := im.tx.ExecContext(im.ctx, "UPDATE settings_audit SET id = id + ?", offset); err != nil {
+		return err
+	}
+	if _, err := im.tx.ExecContext(im.ctx, "INSERT INTO sqlite_sequence (name, seq) SELECT 'settings_audit', ? WHERE NOT EXISTS (SELECT 1 FROM sqlite_sequence WHERE name = 'settings_audit')", destMax+offset); err != nil {
+		return err
+	}
+	if _, err := im.tx.ExecContext(im.ctx, "UPDATE sqlite_sequence SET seq = ? WHERE name = 'settings_audit'", destMax+offset); err != nil {
+		return err
+	}
+	for _, statement := range []string{
+		"CREATE TRIGGER IF NOT EXISTS settings_audit_no_update BEFORE UPDATE ON settings_audit BEGIN SELECT RAISE(ABORT, 'settings_audit is append-only'); END",
+		"CREATE TRIGGER IF NOT EXISTS settings_audit_no_delete BEFORE DELETE ON settings_audit BEGIN SELECT RAISE(ABORT, 'settings_audit is append-only'); END",
+	} {
+		if _, err := im.tx.ExecContext(im.ctx, statement); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (im *importer) carryThreads() (int64, error) {
