@@ -439,6 +439,8 @@ behavior-parity target.
   Routes mount once with their declaration owner and check that snapshot on
   each request, so changes committed by the running application take effect
   without remounting or restarting; disabled routes answer 404.
+  A module evaluation failure names its owner and aborts startup; no
+  core-only fallback snapshot is published.
 - Observability: `atrium serve` exposes Prometheus metrics and readiness on
   the loopback ops listener (`ops_listen`, `off` disables), and every command
   can export OTLP/HTTP traces when the host sets `otel_traces_endpoint` (empty

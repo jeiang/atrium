@@ -326,6 +326,40 @@ func TestModuleTogglesThroughTheApplication(t *testing.T) {
 	})
 }
 
+func TestBrokenModuleEvaluationRefusesToServe(t *testing.T) {
+	t.Parallel()
+	dir, _, f := moduleFixture(t, allFlagsTrue())
+	d, err := db.Connect(filepath.Join(dir, "atrium.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := d.Write.Exec("UPDATE connections SET expires_at = 'broken' WHERE id = 'service/embedding'")
+	if err != nil {
+		_ = d.Close()
+		t.Fatal(err)
+	}
+	affected, err := result.RowsAffected()
+	if err != nil || affected != 1 {
+		_ = d.Close()
+		t.Fatalf("corrupt embedding expiry: rows %d, error %v", affected, err)
+	}
+	if err := d.Close(); err != nil {
+		t.Fatal(err)
+	}
+	f.app.SetLogSetup(logx.Setup)
+	defer f.app.SetLogSetup(quietLog)
+	base, logs, stop, err := startServeAppOnce(t, f.app, &lockedBuffer{})
+	if stop != nil {
+		stop()
+	}
+	if err == nil || base != "" {
+		t.Fatalf("broken module served at %q instead of exiting: %s", base, logs.String())
+	}
+	if !strings.Contains(err.Error(), "serve exited with 1") || !strings.Contains(logs.String(), "module: mail evaluation:") || !strings.Contains(logs.String(), "expires_at") {
+		t.Fatalf("startup failure does not name the owner and broken value: %v; %s", err, logs.String())
+	}
+}
+
 func clearModuleEnv(t *testing.T) {
 	t.Helper()
 	for name := range requirementEnv("") {

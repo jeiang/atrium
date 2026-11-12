@@ -234,19 +234,13 @@ func (s *Set) open(ctx context.Context) (*db.DB, error) {
 	return d, err
 }
 
-// Start seeds the module flags and evaluates the one startup snapshot. A
-// failure to evaluate leaves the process serving core only, matching the
-// behaviour the module gate has always had.
 func (s *Set) Start(ctx context.Context, d *web.Deps) error {
 	if err := s.Seed(ctx, d.DB); err != nil {
-		log.Error("module evaluation failed, serving core only", logx.Err, err.Error())
-		s.cur.Store(s.coreOnly())
-		return nil
+		return err
 	}
 	snap, err := s.Evaluate(ctx, d.DB.Read)
 	if err != nil {
-		log.Error("module evaluation failed, serving core only", logx.Err, err.Error())
-		snap = s.coreOnly()
+		return err
 	}
 	s.cur.Store(snap)
 	return nil

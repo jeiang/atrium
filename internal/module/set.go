@@ -135,7 +135,7 @@ func evaluate(ctx context.Context, decls []Declaration, fn check) ([]Status, map
 		if !r.Core {
 			unmet, on, err := fn(ctx, r, states)
 			if err != nil {
-				return nil, nil, err
+				return nil, nil, &DeclarationError{Module: r.Name, Field: "evaluation", Err: err}
 			}
 			st.Unmet = unmet
 			switch {
@@ -149,13 +149,6 @@ func evaluate(ctx context.Context, decls []Declaration, fn check) ([]Status, map
 		statuses = append(statuses, st)
 	}
 	return statuses, states, nil
-}
-
-func (s *Set) coreOnly() *Snapshot {
-	statuses, _, _ := evaluate(context.Background(), s.decls, func(context.Context, Declaration, map[string]State) ([]Unmet, bool, error) {
-		return nil, false, nil
-	})
-	return &Snapshot{set: s, statuses: statuses}
 }
 
 func (s Status) Reason() string { return joinReasons(s.Unmet) }
