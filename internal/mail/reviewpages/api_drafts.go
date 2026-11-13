@@ -1,0 +1,210 @@
+package reviewpages
+
+import (
+	"context"
+	"errors"
+	"reflect"
+	"strconv"
+	"strings"
+
+	"github.com/jeiang/atrium/internal/api"
+	"github.com/jeiang/atrium/internal/application"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
+	"github.com/jeiang/atrium/internal/mail/drafts"
+	"github.com/jeiang/atrium/internal/module"
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
+	"github.com/jeiang/atrium/internal/web"
+)
+
+type DraftRequest struct {
+	ID int64 `path:"draft_id" json:"-"`
+}
+type DraftUpdateRequest struct {
+	ID       int64   `path:"draft_id" json:"-"`
+	Account  *string `json:"account"`
+	To       *string `json:"to"`
+	Cc       *string `json:"cc"`
+	Subject  *string `json:"subject"`
+	Body     *string `json:"body"`
+	Revision *int64  `json:"revision"`
+	IfMatch  string  `header:"If-Match" json:"-"`
+}
+type DraftSendRequest struct {
+	ID       int64  `path:"draft_id" json:"-"`
+	Revision *int64 `json:"revision"`
+	IfMatch  string `header:"If-Match" json:"-"`
+}
+type DraftResolveRequest struct {
+	ID      int64  `path:"draft_id" json:"-"`
+	Outcome string `json:"outcome" api:"enum=sent|draft"`
+}
+type DraftResponse struct {
+	Draft apiDraft `json:"draft"`
+}
+type DraftSendResponse struct {
+	Draft      apiDraft `json:"draft"`
+	Filed      string   `json:"filed"`
+	FiledError string   `json:"filed_error,omitempty"`
+	Refused    []string `json:"refused"`
+}
+type DraftsRequest struct {
+	Status drafts.Status `query:"status" json:"-" api:"enum=draft|unknown|sent|discarded|sending"`
+	Cursor api.Cursor    `query:"cursor" json:"-"`
+	Limit  api.Limit     `query:"limit" json:"-"`
+}
+type DraftsResponse struct {
+	Items      []apiDraft `json:"items"`
+	NextCursor *string    `json:"next_cursor" api:"nullable"`
+}
+
+func draftRevision(body *int64, header string) (*int64, error) {
+	if header == "" {
+		return body, nil
+	}
+	raw := strings.TrimPrefix(header, "W/")
+	n, err := strconv.ParseInt(strings.Trim(raw, "\""), 10, 64)
+	if err != nil || n < 1 || (body != nil && *body != n) {
+		return nil, &application.Error{Code: application.Invalid, Message: "If-Match must match the draft revision", Fields: []application.Field{{Name: "revision", Code: "invalid", Message: "Conflicting or invalid revision"}}}
+	}
+	return &n, nil
+}
+func draftFailure(err error, reason string) error {
+	if err == nil {
+		return nil
+	}
+	e := *application.Classify(err)
+	var disabled *module.OwnerDisabled
+	if errors.As(err, &disabled) {
+		e.Code, e.Reason = application.Conflict, "module_disabled"
+		return &e
+	}
+	if reason != "" {
+		e.Code, e.Reason = application.Conflict, reason
+	}
+	return &e
+}
+func DraftAPIBindings() []application.Binding { return (*service)(nil).draftAPIBindings(nil) }
+func (s *service) draftAPIBindings(d *web.Deps) []application.Binding {
+	shape := func(t reflect.Type) application.APIShape { return application.APIShape{Area: "drafts", Response: t} }
+	return []application.Binding{
+		api.Query(d, mailapp.DescribeDraft(), shape(reflect.TypeFor[apiDraft]()), "GET /drafts/{draft_id}", func(ctx context.Context, in DraftRequest) (application.Read[apiDraft], error) {
+			r, err := s.mail.Draft(ctx, mailapp.DraftInput{ID: in.ID})
+			out := application.Read[apiDraft]{Revision: r.Revision}
+			if err == nil {
+				out.Data = s.currentDraft(ctx, in.ID)
+			}
+			return out, err
+		}),
+		api.Query(d, mailapp.DescribeDrafts(), shape(reflect.TypeFor[DraftsResponse]()), "GET /drafts", func(ctx context.Context, in DraftsRequest) (application.Read[DraftsResponse], error) {
+			var offset int
+			if in.Cursor.Set() {
+				if err := in.Cursor.Last(&offset); err != nil {
+					return application.Read[DraftsResponse]{}, err
+				}
+			}
+			if offset < 0 || offset > int(^uint(0)>>1)-101 {
+				return application.Read[DraftsResponse]{}, &application.Error{Code: application.BadCursor, Message: "Invalid cursor"}
+			}
+			r, err := s.mail.Drafts(ctx, mailapp.DraftsInput{Status: in.Status, Offset: offset, Limit: int(in.Limit) + 1})
+			out := DraftsResponse{Items: []apiDraft{}}
+			if err != nil {
+				return application.Read[DraftsResponse]{}, err
+			}
+			cards := r.Data.Cards
+			if len(cards) > int(in.Limit) {
+				cards = cards[:int(in.Limit)]
+				out.NextCursor = in.Cursor.Next(offset + len(cards))
+			}
+			wire := make([]reviewapp.DraftCard, len(cards))
+			for i, c := range cards {
+				wire[i] = reviewapp.DraftCard{Row: c.Row, Unexpected: c.Unexpected}
+			}
+			out.Items = draftsOf(wire, reviewapp.AccountConfigured(ctx))
+			return application.Read[DraftsResponse]{Revision: r.Revision, Data: out}, nil
+		}),
+		api.Command(d, mailapp.DescribeDraftUpdate(), shape(reflect.TypeFor[apiDraft]()), "PATCH /drafts/{draft_id}", func(ctx context.Context, in DraftUpdateRequest) (application.Change[apiDraft], error) {
+			rev, err := draftRevision(in.Revision, in.IfMatch)
+			if err != nil {
+				return application.Change[apiDraft]{}, err
+			}
+			fields := mailapp.DraftFields{Account: in.Account, Subject: in.Subject, Body: in.Body}
+			if in.To != nil {
+				fields.To = &mailapp.Recipients{Text: *in.To}
+			}
+			if in.Cc != nil {
+				fields.Cc = &mailapp.Recipients{Text: *in.Cc}
+			}
+			r, err := s.mail.DraftUpdate(ctx, mailapp.DraftUpdateInput{ID: in.ID, Revision: rev, Fields: fields})
+			out := application.Change[apiDraft]{AuditID: r.AuditID, EffectIDs: r.EffectIDs}
+			if err != nil {
+				e := *application.Classify(err)
+				if e.Code == application.Conflict {
+					e.Reason = "stale"
+				}
+				if e.Code == application.Invalid {
+					e.Reason = "invalid_draft"
+				}
+				return out, draftFailure(&e, "")
+			}
+			out.Data = s.currentDraft(ctx, in.ID)
+			return out, nil
+		}),
+		api.Command(d, mailapp.DescribeDraftSend(), shape(reflect.TypeFor[DraftSendResponse]()), "POST /drafts/{draft_id}/send", func(ctx context.Context, in DraftSendRequest) (application.Change[DraftSendResponse], error) {
+			rev, err := draftRevision(in.Revision, in.IfMatch)
+			if err != nil {
+				return application.Change[DraftSendResponse]{}, err
+			}
+			if rev == nil {
+				return application.Change[DraftSendResponse]{}, &application.Error{Code: application.Invalid, Message: "revision is required.", Fields: []application.Field{{Name: "revision", Code: "missing", Message: "Field required"}}}
+			}
+			if _, err := s.mail.Draft(ctx, mailapp.DraftInput{ID: in.ID}); err != nil {
+				return application.Change[DraftSendResponse]{}, err
+			}
+			r, err := s.mail.DraftSend(ctx, mailapp.DraftSendInput{ID: in.ID, Revision: *rev})
+			out := application.Change[DraftSendResponse]{AuditID: r.AuditID, EffectIDs: r.EffectIDs}
+			if err != nil {
+				reason := "not_sent"
+				var unknown drafts.OutcomeUnknown
+				if errors.As(err, &unknown) {
+					reason = "send_outcome_unknown"
+				} else if current, e := s.drafts.Get(ctx, in.ID); e == nil && current != nil && current.Status == drafts.Draft && current.Revision != *rev {
+					reason = "stale"
+				}
+				return out, draftFailure(err, reason)
+			}
+			result := r.Data.Sent
+			refused := make([]string, len(result.Refused))
+			for i, v := range result.Refused {
+				refused[i] = v.Addr
+			}
+			out.Data = DraftSendResponse{Draft: s.currentDraft(ctx, in.ID), Filed: filedCode(result.Filed), FiledError: result.FiledError, Refused: refused}
+			return out, nil
+		}),
+		api.Command(d, mailapp.DescribeDraftDiscard(), application.APIShape{Area: "drafts", Body: application.BodyNone, Response: reflect.TypeFor[DraftResponse]()}, "POST /drafts/{draft_id}/discard", func(ctx context.Context, in DraftRequest) (application.Change[DraftResponse], error) {
+			r, err := s.mail.DraftDiscard(ctx, mailapp.DraftInput{ID: in.ID})
+			out := application.Change[DraftResponse]{AuditID: r.AuditID}
+			if err != nil {
+				e := application.Classify(err)
+				reason := ""
+				if e.Code == application.Invalid || e.Code == application.Conflict || e.Code == application.Refused {
+					reason = "not_discarded"
+				}
+				return out, draftFailure(err, reason)
+			}
+			out.Data.Draft = s.currentDraft(ctx, in.ID)
+			return out, nil
+		}),
+		api.Command(d, mailapp.DescribeDraftResolve(), shape(reflect.TypeFor[DraftResponse]()), "POST /drafts/{draft_id}/resolve", func(ctx context.Context, in DraftResolveRequest) (application.Change[DraftResponse], error) {
+			if _, err := s.mail.Draft(ctx, mailapp.DraftInput{ID: in.ID}); err != nil {
+				return application.Change[DraftResponse]{}, err
+			}
+			r, err := s.mail.DraftResolve(ctx, mailapp.DraftResolveInput{ID: in.ID, Outcome: in.Outcome})
+			out := application.Change[DraftResponse]{AuditID: r.AuditID, EffectIDs: r.EffectIDs}
+			if err != nil {
+				return out, draftFailure(err, "not_resolved")
+			}
+			out.Data.Draft = s.currentDraft(ctx, in.ID)
+			return out, nil
+		}),
+	}
+}

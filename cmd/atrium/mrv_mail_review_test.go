@@ -402,9 +402,12 @@ func (f *mrvSMTP) handle(c net.Conn) {
 			}
 			f.mu.Lock()
 			f.datas = append(f.datas, body.String())
-			drop := f.mode == "drop"
+			drop, hang := f.mode == "drop", f.mode == "hang"
 			f.mu.Unlock()
-			if drop {
+			if hang {
+				_, _ = io.Copy(io.Discard, r)
+			}
+			if drop || hang {
 				return
 			}
 			write("250 queued")

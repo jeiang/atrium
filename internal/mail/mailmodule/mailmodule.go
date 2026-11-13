@@ -119,6 +119,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations = append(operations, passOps...)
 	bindings = append(bindings, passBindings...)
 	bindings = append(bindings, mailAPIRoutes(nil)...)
+	bindings = append(bindings, mailWorkRoutes(nil, m)...)
+	bindings = append(bindings, reviewpages.DraftAPIBindings()...)
 	return module.Declaration{
 		Name:        module.Mail,
 		Operations:  operations,
@@ -131,7 +133,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		ServiceSets: m.watchServices(mc.Env),
 		Requires:    Requirements(),
 		Pages: []web.Page{
-			{Module: func(_ chi.Router, d *web.Deps) { mailAPIRoutes(d) }},
+			{Module: func(_ chi.Router, d *web.Deps) { mailAPIRoutes(d); mailWorkRoutes(d, m) }},
 			{Module: pages.Module(mailPageService), Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
 				{Section: "review", Label: "Mail decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 40},
 				{Section: "library", Label: "Mail rules", URL: "/rules", Icon: "scroll-text", Page: "rules", Order: 30},

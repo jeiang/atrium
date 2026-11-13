@@ -137,6 +137,8 @@ internal/mail/pages/views.go	github.com/jeiang/atrium/internal/mail/message
 internal/mail/pages/views.go	github.com/jeiang/atrium/internal/mail/triage
 internal/mail/reviewpages/api.go	github.com/jeiang/atrium/internal/ledger
 internal/mail/reviewpages/api.go	github.com/jeiang/atrium/internal/mail/drafts
+internal/mail/reviewpages/api_drafts.go	github.com/jeiang/atrium/internal/api
+internal/mail/reviewpages/api_drafts.go	github.com/jeiang/atrium/internal/mail/drafts
 internal/mail/reviewpages/drafts.go	github.com/jeiang/atrium/internal/mail/drafts
 internal/mail/reviewpages/loops.go	github.com/jeiang/atrium/internal/mail/openloops
 internal/mail/reviewpages/module.go	github.com/jeiang/atrium/internal/actionlink

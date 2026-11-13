@@ -54,7 +54,7 @@ func DescribePackages() application.Definition {
 	return application.Describe[PackagesInput, PackagesResult](PackagesName, application.Query, []application.Authority{application.Operator, application.Agent}, application.NoEffect, false)
 }
 func DescribeUpcomingBirthdays() application.Definition {
-	return application.Describe[UpcomingBirthdaysInput, UpcomingBirthdaysResult](UpcomingBirthdaysName, application.Query, []application.Authority{application.Agent}, application.NoEffect, false)
+	return application.Describe[UpcomingBirthdaysInput, UpcomingBirthdaysResult](UpcomingBirthdaysName, application.Query, []application.Authority{application.Operator, application.Agent}, application.NoEffect, false)
 }
 func DescribePackageDismiss() application.Definition {
 	return application.Describe[PackageInput, struct{}](PackageDismissName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)

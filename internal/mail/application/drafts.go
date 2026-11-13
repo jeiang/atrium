@@ -32,7 +32,10 @@ type DraftCard struct {
 	Row        drafts.Row
 	Unexpected []string
 }
-type DraftsInput struct{ Status drafts.Status }
+type DraftsInput struct {
+	Status        drafts.Status
+	Offset, Limit int
+}
 type DraftInput struct {
 	ID        int64
 	Submitted *DraftFields
@@ -101,7 +104,11 @@ func (s *Service) Drafts(ctx context.Context, in DraftsInput) (application.Read[
 	}
 	rev, err := s.snapshot(ctx, DraftsName, in, func(q db.Querier) error {
 		st := s.draftStore(q)
-		rows, err := st.List(ctx, in.Status, DraftLimit)
+		limit := in.Limit
+		if limit == 0 {
+			limit = DraftLimit
+		}
+		rows, err := st.ListPage(ctx, in.Status, in.Offset, limit)
 		if err != nil {
 			return err
 		}
