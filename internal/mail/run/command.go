@@ -14,15 +14,17 @@ import (
 
 type runner func(ctx context.Context, env config.Env, cfg config.Config, requested string, open mail.OpenFunc) error
 
-func SyncCommand(env config.Env, clients func(config.Config) mail.OpenFunc) *cli.Command {
+func SyncCommand(env config.Env, clients func(config.Config) mail.OpenFunc, classifiers Classifier) *cli.Command {
 	return command(env, "sync", clients, func(ctx context.Context, env config.Env, cfg config.Config, requested string, open mail.OpenFunc) error {
-		_, err := Sync(ctx, env, cfg, requested, open)
+		_, err := Sync(ctx, env, cfg, requested, open, classifiers)
 		return err
 	})
 }
 
-func WatchCommand(env config.Env, clients func(config.Config) mail.OpenFunc) *cli.Command {
-	return command(env, "watch", clients, Watch)
+func WatchCommand(env config.Env, clients func(config.Config) mail.OpenFunc, classifiers Classifier) *cli.Command {
+	return command(env, "watch", clients, func(ctx context.Context, env config.Env, cfg config.Config, requested string, open mail.OpenFunc) error {
+		return Watch(ctx, env, cfg, requested, open, classifiers)
+	})
 }
 
 func command(cfgEnv config.Env, name string, clients func(config.Config) mail.OpenFunc, run runner) *cli.Command {

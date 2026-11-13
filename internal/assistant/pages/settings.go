@@ -10,8 +10,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
@@ -30,15 +28,6 @@ type AssistantData struct {
 	Channels      []string        `json:"channels"`
 	Rows          []PermissionRow `json:"rows"`
 	Refused       string          `json:"refused"`
-}
-
-type UsageData struct {
-	Budget       inference.Status      `json:"budget"`
-	Summary      inference.Summary     `json:"summary"`
-	Memory       inference.Summary     `json:"memory"`
-	Subscription inference.Summary     `json:"subscription"`
-	ByKind       []inference.KindRow   `json:"by_kind"`
-	ByThread     []inference.ThreadRow `json:"by_thread"`
 }
 
 type PermissionRow struct {
@@ -87,7 +76,6 @@ func (p *pages) settingsRoutes(r chi.Router) {
 		p.assistantPage(w, r, status, AssistantData{}, mutate)
 	})
 	p.deps.Authenticated(http.MethodPost, "/settings/permissions", p.permissionsSave)
-	p.deps.Authenticated(http.MethodGet, "/settings/usage", p.usagePage)
 }
 
 func (p *pages) settings(w http.ResponseWriter, r *http.Request, status int, name string, data any, toast *tpl.Toast) {
@@ -138,38 +126,4 @@ func (p *pages) assistantSave(w http.ResponseWriter, r *http.Request) {
 func settingsRedirect(w http.ResponseWriter, location string) {
 	w.Header().Set("Location", location)
 	w.WriteHeader(http.StatusSeeOther)
-}
-
-func (p *pages) usagePage(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-	loc, err := config.From(ctx).Location(p.deps.Env)
-	check(err)
-	now := p.now()
-	statusAt, err := inference.StatusAt(ctx, p.deps.DB.Read, now, loc)
-	check(err)
-	summary, err := inference.MonthSummary(ctx, p.deps.DB.Read, now, loc)
-	check(err)
-	byKind, err := inference.ByKind(ctx, p.deps.DB.Read, now, loc)
-	check(err)
-	byThread, err := inference.ByThread(ctx, p.deps.DB.Read, now, loc, inference.DefaultThreadLimit)
-	check(err)
-	ids := make([]int64, len(byThread))
-	for i := range byThread {
-		ids[i] = byThread[i].ThreadID
-	}
-	titles, err := threads.Titles(ctx, p.deps.DB.Read, ids)
-	check(err)
-	kinds, err := threads.KindsOf(ctx, p.deps.DB.Read, ids)
-	check(err)
-	for i := range byThread {
-		if title, ok := titles[byThread[i].ThreadID]; ok {
-			byThread[i].Title = &title
-		}
-		byThread[i].Kind = string(kinds[byThread[i].ThreadID])
-	}
-	memory, err := inference.MemorySummary(ctx, p.deps.DB.Read, now, loc)
-	check(err)
-	subscription, err := inference.SubscriptionSummary(ctx, p.deps.DB.Read, now, loc)
-	check(err)
-	p.settings(w, r, http.StatusOK, "usage.gohtml", UsageData{Budget: statusAt, Summary: summary, Memory: memory, Subscription: subscription, ByKind: byKind, ByThread: byThread}, nil)
 }

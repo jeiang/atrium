@@ -32,11 +32,12 @@ import (
 type Kind string
 
 const (
-	Chat     Kind = "chat"
-	Cron     Kind = "cron"
-	Nightly  Kind = "nightly"
-	Subagent Kind = "subagent"
-	Worker   Kind = "worker"
+	Chat           Kind = "chat"
+	Cron           Kind = "cron"
+	Nightly        Kind = "nightly"
+	Subagent       Kind = "subagent"
+	Worker         Kind = "worker"
+	Classification Kind = "classification"
 )
 
 func ParseKind(value string) (Kind, bool) {

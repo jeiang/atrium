@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -11,8 +13,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
-	"github.com/jeiang/atrium/internal/testutil/llmstub"
+	"github.com/jeiang/atrium/internal/testutil/embedstub"
+	"github.com/jeiang/atrium/internal/testutil/mailscript"
 )
 
 const loopDay = 86400.0
@@ -53,19 +55,19 @@ func seedLoopMail(t *testing.T, d *db.DB, cacheDir string, m seededLoopMail) {
 }
 
 func TestLoopsRefreshSkipsBulkAndOtherRecipients(t *testing.T) {
-	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	var mu sync.Mutex
 	var bodies []string
-	srv := llmstub.Server(t, func(feature string, body []byte) bool {
-		if feature == "commitments" {
+	script := mailscript.Load(t)
+	api.AnswerJSON(func(required []string, user string) (json.RawMessage, error) {
+		if slices.Equal(required, []string{"commitments"}) {
 			mu.Lock()
-			bodies = append(bodies, string(body))
+			bodies = append(bodies, user)
 			mu.Unlock()
 		}
-		return true
+		return script.JSONAnswer(required, user)
 	})
-	setEnv(t, settingEnv(endpoint.KeyChatURL), srv.URL+"/v1")
-	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, srv.URL+"/v1", "embeddinggemma", ""))
+	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHost(t, dir, embedstub.Server(t).URL+"/v1", "embeddinggemma", ""))
 	if ran := runApp(t, "settings", "list"); ran.code != cli.ExitOK {
 		t.Fatalf("initialize database: %d %s", ran.code, ran.stderr)
 	}
@@ -116,6 +118,22 @@ func TestLoopsRefreshSkipsBulkAndOtherRecipients(t *testing.T) {
 		uid: 8, ageDays: 1, subject: "Bcc uncached", from: "friend@example.test", fromDomain: "example.test",
 		toAddrs: `["other@example.test"]`, esp: "[]", noRaw: true,
 	})
+	if ran := runApp(t, "settings", "set", "monthly_budget_usd", "0.000001"); ran.code != cli.ExitOK {
+		t.Fatalf("lower the budget: %d %s", ran.code, ran.stderr)
+	}
+	if ran := runApp(t, "loops", "refresh"); ran.code != cli.ExitOK {
+		t.Fatalf("loops refresh over budget: %d %s", ran.code, ran.stderr)
+	}
+	var deferred int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM mail_scans WHERE kind = 'commitments'").Scan(&deferred); err != nil {
+		t.Fatal(err)
+	}
+	if n := len(api.Requests()); n != 0 || deferred != 0 {
+		t.Fatalf("over budget: %d paid requests, %d commitment markers", n, deferred)
+	}
+	if ran := runApp(t, "settings", "set", "monthly_budget_usd", "200"); ran.code != cli.ExitOK {
+		t.Fatalf("raise the budget: %d %s", ran.code, ran.stderr)
+	}
 	if ran := runApp(t, "loops", "refresh"); ran.code != cli.ExitOK {
 		t.Fatalf("loops refresh: %d %s", ran.code, ran.stderr)
 	}
@@ -148,10 +166,17 @@ func TestLoopsRefreshSkipsBulkAndOtherRecipients(t *testing.T) {
 		t.Fatalf("commitment prompts = %d, want 4", len(bodies))
 	}
 	for _, body := range bodies {
-		for _, want := range []string{"owner@example.test", "ignore items meant for other recipients"} {
-			if !strings.Contains(body, want) {
-				t.Fatalf("commitment prompt misses %q: %s", want, body)
-			}
+		if !strings.Contains(body, "owner@example.test") {
+			t.Fatalf("commitment prompt misses the owner: %s", body)
 		}
+	}
+	systems := 0
+	for _, req := range api.Requests() {
+		if strings.Contains(fmt.Sprint(req.JSON(t)["system"]), "ignore items meant for other recipients") {
+			systems++
+		}
+	}
+	if systems != 4 {
+		t.Fatalf("commitment requests with the commitment instructions = %d, want 4", systems)
 	}
 }

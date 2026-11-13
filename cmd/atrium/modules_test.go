@@ -497,6 +497,48 @@ func TestDisabledModuleRoutesEndInNotFound(t *testing.T) {
 	}
 }
 
+func TestUsageAndBudgetStayReachableWithTheAssistantOff(t *testing.T) {
+	t.Parallel()
+	dir, _, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
+	base := startServeIn(t, dir)
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, Timeout: time.Minute, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/usage", nil)
+	if status != http.StatusOK || !strings.Contains(body, "Monthly budget") || !strings.Contains(body, `action="/settings/groups/core/budget"`) {
+		t.Fatalf("GET /settings/usage with the assistant off = %d, want the usage page with the budget form: %.800s", status, body)
+	}
+	if status, _, _ := fetch(t, client, http.MethodGet, base+"/settings/assistant", nil); status != http.StatusNotFound {
+		t.Errorf("GET /settings/assistant with the assistant off = %d, want 404", status)
+	}
+	req, err := http.NewRequest(http.MethodPost, base+"/settings/groups/core/budget", strings.NewReader(url.Values{"monthly_budget_usd": {"150"}}.Encode()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	for _, c := range jar.Cookies(req.URL) {
+		if c.Name == "atrium_csrf" {
+			req.Header.Set("X-CSRF-Token", c.Value)
+		}
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = resp.Body.Close()
+	if resp.StatusCode != http.StatusSeeOther || resp.Header.Get("Location") != "/settings/usage?saved=core.budget" {
+		t.Fatalf("save the budget with the assistant off = %d Location %q", resp.StatusCode, resp.Header.Get("Location"))
+	}
+	if row := runSettings(t, "get", "monthly_budget_usd").row(t); row.Value == nil || *row.Value != "150" {
+		t.Errorf("monthly_budget_usd after the save = %v, want 150", row.Value)
+	}
+	if status, body, _ := fetch(t, client, http.MethodGet, base+"/settings/usage", nil); status != http.StatusOK || !strings.Contains(body, "of $150 used") {
+		t.Errorf("GET /settings/usage after the save = %d, want the $150 budget: %.800s", status, body)
+	}
+}
+
 func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 	t.Parallel()
 	dir, api, _ := moduleFixture(t, flagsExcept(module.Assistant, "false"))
@@ -728,7 +770,7 @@ func TestEnablingAModuleWithUnmetRequirementsIsRefusedWithTheReason(t *testing.T
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")
 	clearModuleEnv(t)
 	for _, tc := range []struct{ module, reason string }{
-		{module.Mail, "mail_chat_url is not set"},
+		{module.Mail, "the embedding connection is not configured"},
 		{module.Calendar, "iCloud CalDAV login or Google Calendar credentials"},
 		{module.Media, "media_root is not set"},
 		{module.Contacts, "contacts_dir is not set"},

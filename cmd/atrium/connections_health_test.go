@@ -17,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db/dbtest"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/module"
 )
 
@@ -154,9 +153,8 @@ func TestOpsMetricsReportAConnectionStateBeforeAndAfterAFailingTest(t *testing.T
 }
 
 func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
-	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)
+	embed := newFakeOpenAI(t)
 	dir, api, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
-	setEnv(t, settingEnv(endpoint.KeyChatURL), chat.URL+"/v1")
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
 
 	if got := runApp(t, "connections", "test", "service/embedding"); got.code != cli.ExitOK || !strings.Contains(got.stdout, "ok") {
@@ -223,9 +221,8 @@ func TestAutomaticEmbeddingFailureDoesNotHoldMail(t *testing.T) {
 func TestAnExplicitEmbeddingFailureHoldsMailUntilAnExplicitTestPasses(t *testing.T) {
 	t.Parallel()
 	requireCipher(t)
-	chat, embed := newFakeOpenAI(t), newFakeOpenAI(t)
+	embed := newFakeOpenAI(t)
 	dir, _, _ := moduleFixture(t, flagsExcept(module.Mail, ""))
-	setEnv(t, settingEnv(endpoint.KeyChatURL), chat.URL+"/v1")
 	setEnv(t, "ATRIUM_HOST_CONFIG", embeddingHostWith(t, dir, embed.URL+"/v1", "embeddinggemma", "", ""))
 
 	embed.setStatus(http.StatusInternalServerError)

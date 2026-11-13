@@ -320,41 +320,6 @@
       },
       "type": "object"
     },
-    "mail": {
-      "additionalProperties": false,
-      "properties": {
-        "mail_chat_ca_file": {
-          "type": "string"
-        },
-        "mail_chat_key_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_chat_model": {
-          "default": "qwen",
-          "type": "string"
-        },
-        "mail_chat_model_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_chat_proxy": {
-          "type": "string"
-        },
-        "mail_chat_proxy_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        },
-        "mail_chat_url": {
-          "type": "string"
-        },
-        "mail_chat_url_file": {
-          "description": "path of a file holding the value",
-          "type": "string"
-        }
-      },
-      "type": "object"
-    },
     "media": {
       "additionalProperties": false,
       "properties": {
@@ -495,9 +460,6 @@
     "assistant.monthly_budget_usd": "operator",
     "assistant.open_meteo_ca_file": "host",
     "assistant.open_meteo_proxy": "host",
-    "assistant.ops_condenser": "operator",
-    "assistant.ops_condenser_max_tokens": "tuning",
-    "assistant.ops_condenser_model": "operator",
     "assistant.ops_worker_max_run_usd": "operator",
     "assistant.ops_worker_monthly_usd": "operator",
     "assistant.prompt_subagent": "operator",
@@ -607,12 +569,6 @@
     "mail.mail_backoff_max_seconds": "tuning",
     "mail.mail_backoff_start_seconds": "tuning",
     "mail.mail_body_cap_bytes": "tuning",
-    "mail.mail_chat_ca_file": "host",
-    "mail.mail_chat_key": "host",
-    "mail.mail_chat_max_tokens": "tuning",
-    "mail.mail_chat_model": "host",
-    "mail.mail_chat_proxy": "host",
-    "mail.mail_chat_url": "host",
     "mail.mail_embed_batch": "tuning",
     "mail.mail_embed_body_chars": "tuning",
     "mail.mail_embed_ca_file": "host",
@@ -851,7 +807,6 @@
     "assistant.max_steps_worker",
     "assistant.open_meteo_ca_file",
     "assistant.open_meteo_proxy",
-    "assistant.ops_condenser_max_tokens",
     "assistant.weather_forecast_days",
     "assistant.weather_geocoding_url",
     "assistant.weather_hourly_hours",
@@ -902,7 +857,6 @@
     "mail.mail_backoff_max_seconds",
     "mail.mail_backoff_start_seconds",
     "mail.mail_body_cap_bytes",
-    "mail.mail_chat_max_tokens",
     "mail.mail_embed_batch",
     "mail.mail_embed_body_chars",
     "mail.mail_embed_ca_file",
@@ -1124,9 +1078,9 @@
     "assistant.monthly_budget_usd": "atrium settings set monthly_budget_usd",
     "assistant.open_meteo_ca_file": "connections.\"service/weather\".transport.ca_file",
     "assistant.open_meteo_proxy": "connections.\"service/weather\".transport.proxy",
-    "assistant.ops_condenser": "atrium settings set ops_condenser",
-    "assistant.ops_condenser_max_tokens": "the compiled constant internal/serverops/tuning.go:TuningOpsCondenserMaxTokens",
-    "assistant.ops_condenser_model": "atrium settings set ops_condenser_model",
+    "assistant.ops_condenser": "the ops_worker_monthly_usd and ops_worker_max_run_usd settings; server-ops findings use fixed-schema Haiku classification",
+    "assistant.ops_condenser_max_tokens": "the ops_worker_monthly_usd and ops_worker_max_run_usd settings; server-ops findings use fixed-schema Haiku classification",
+    "assistant.ops_condenser_model": "the ops_worker_monthly_usd and ops_worker_max_run_usd settings; server-ops findings use fixed-schema Haiku classification",
     "assistant.ops_worker_max_run_usd": "atrium settings set ops_worker_max_run_usd",
     "assistant.ops_worker_monthly_usd": "atrium settings set ops_worker_monthly_usd",
     "assistant.prompt_subagent": "atrium settings set prompt_subagent",
@@ -1153,7 +1107,7 @@
     "auth.oidc_scopes": "connections.\"service/oidc\".config.scopes",
     "auth.oidc_session_idle_days": "atrium settings set oidc_session_idle_days",
     "auth.oidc_session_max_days": "atrium settings set oidc_session_max_days",
-    "auth.oidc_wizard_key": "atrium settings set oidc_wizard_key",
+    "auth.oidc_wizard_key": "retired",
     "calendar.calendar_account": "atrium settings set calendar_account",
     "calendar.calendar_dir": "services.atrium.stateDir",
     "calendar.candidate_draft_limit": "the compiled constant internal/calendar/tuning.go:TuningCandidateDraftLimit",
@@ -1222,7 +1176,12 @@
     "mail.mail_backoff_max_seconds": "the compiled constant internal/mail/tuning.go:TuningMailBackoffMaxSeconds",
     "mail.mail_backoff_start_seconds": "the compiled constant internal/mail/tuning.go:TuningMailBackoffStartSeconds",
     "mail.mail_body_cap_bytes": "the compiled constant internal/mail/tuning.go:TuningMailBodyCapBytes",
-    "mail.mail_chat_max_tokens": "the compiled constant internal/endpoint/tuning.go:TuningMailChatMaxTokens",
+    "mail.mail_chat_ca_file": "the service/anthropic connection and monthly_budget_usd; mail classification uses fixed-schema Haiku",
+    "mail.mail_chat_key": "the service/anthropic connection and monthly_budget_usd; mail classification uses fixed-schema Haiku",
+    "mail.mail_chat_max_tokens": "the service/anthropic connection and monthly_budget_usd; mail classification uses fixed-schema Haiku",
+    "mail.mail_chat_model": "the service/anthropic connection and monthly_budget_usd; mail classification uses fixed-schema Haiku",
+    "mail.mail_chat_proxy": "the service/anthropic connection and monthly_budget_usd; mail classification uses fixed-schema Haiku",
+    "mail.mail_chat_url": "the service/anthropic connection and monthly_budget_usd; mail classification uses fixed-schema Haiku",
     "mail.mail_embed_batch": "the compiled constant internal/endpoint/tuning.go:TuningMailEmbedBatch",
     "mail.mail_embed_body_chars": "the compiled constant internal/endpoint/tuning.go:TuningMailEmbedBodyChars",
     "mail.mail_embed_ca_file": "connections.\"service/embedding\".transport.ca_file",
@@ -1398,7 +1357,6 @@
   "x-atrium-secret": [
     "action_links.action_link_key",
     "db.key",
-    "mail.mail_chat_key",
     "media.link_key"
   ]
 }

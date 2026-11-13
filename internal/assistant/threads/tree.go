@@ -13,16 +13,18 @@ type Tree struct {
 	RootID int64
 	CapUSD *float64
 	IDs    []int64
+	Kind   Kind
 }
 
 func ThreadTree(ctx context.Context, q db.Querier, threadID int64) (Tree, error) {
 	var root int64
 	var capUSD *float64
+	var kind Kind
 	err := q.QueryRowContext(ctx,
 		"WITH RECURSIVE up(id, parent) AS (SELECT id, parent_thread_id FROM threads WHERE id = ? "+
 			"UNION SELECT t.id, t.parent_thread_id FROM threads t JOIN up ON t.id = up.parent), "+
 			"root(id) AS (SELECT id FROM up WHERE parent IS NULL) "+
-			"SELECT id, cost_cap_usd FROM threads WHERE id = (SELECT id FROM root)", threadID).Scan(&root, &capUSD)
+			"SELECT id, cost_cap_usd, kind FROM threads WHERE id = (SELECT id FROM root)", threadID).Scan(&root, &capUSD, &kind)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Tree{}, fmt.Errorf("threads: thread %d has no root", threadID)
 	}
@@ -41,7 +43,7 @@ func ThreadTree(ctx context.Context, q db.Querier, threadID int64) (Tree, error)
 	if err != nil {
 		return Tree{}, err
 	}
-	return Tree{RootID: root, CapUSD: capUSD, IDs: ids}, nil
+	return Tree{RootID: root, CapUSD: capUSD, IDs: ids, Kind: kind}, nil
 }
 
 func ByKind(ctx context.Context, q db.Querier, kind Kind) ([]int64, error) {

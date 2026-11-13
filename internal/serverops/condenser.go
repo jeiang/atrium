@@ -2,23 +2,23 @@ package serverops
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant"
+	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/journal"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
-	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -68,55 +68,51 @@ func condenserSchema() map[string]any {
 	}
 }
 
+func itemKey(changes []change) string {
+	sum := sha256.Sum256([]byte(fingerprint(changes)))
+	return "ops:" + hex.EncodeToString(sum[:])
+}
+
 func condense(ctx context.Context, e jobworker.Env, threadID int64, now float64, loc *time.Location, changes []change, text string, marks tool.Marks) error {
 	d := e.Service.DB
-	set := assistant.Read(ctx, d.Read)
-	model := set.Text(KeyCondenserModel)
-	if model == "" {
-		model = endpoint.Read(ctx, d.Read).Text(endpoint.KeyChatModel)
-	}
-	maxTokens := TuningOpsCondenserMaxTokens
-	if err := set.Err(); err != nil {
-		return err
-	}
-	url, err := endpoint.ChatURL(ctx, d.Read)
+	c, err := e.Classifier(ctx)
 	if err != nil {
 		return err
 	}
-	if url == "" {
-		return config.NotConfigured(endpoint.KeyChatURL + " must be set")
-	}
-	endpoints, err := endpoint.Endpoints(ctx, d.Read)
-	if err != nil {
-		return err
-	}
-	ctx, err = endpoint.WithEndpoints(ctx, d.Read, endpoints)
-	if err != nil {
-		return err
-	}
-	ctx = endpoint.With(ctx, endpoint.Settings{ChatModel: model, MaxTokens: maxTokens})
 	samples, err := recentSamples(ctx, d.Read, now, loc, changes)
+	if err != nil {
+		return err
+	}
+	schema, err := json.Marshal(condenserSchema())
 	if err != nil {
 		return err
 	}
 	user := text + "\n\nSamples (last 24 hours, oldest first):\n" + samples
 	start := time.Now()
-	raw, err := llm.ChatJSON(ctx, url, CondenserSystem, user, condenserSchema(), maxTokens)
+	raw, err := c.Classify(ctx, classifier.Request{
+		Caller: classifier.Ops, Item: classifier.Item{Key: itemKey(changes)},
+		System: CondenserSystem, User: user, Schema: schema,
+	})
 	if err != nil {
-		log.Error("ops condenser call failed", logx.Job, e.JobID, logx.Model, model, logx.Err, err)
-		recordPending(ctx, e, threadID, now, changes)
+		var deferred *classifier.Deferred
+		if errors.As(err, &deferred) {
+			log.Warn("ops condenser deferred", logx.Job, e.JobID, logx.Err, err)
+		} else {
+			log.Error("ops condenser call failed", logx.Job, e.JobID, logx.Err, err)
+		}
+		if perr := recordPending(ctx, e, threadID, now, changes, charged(err)); perr != nil {
+			return errors.Join(fmt.Errorf("ops condenser: %w", err), perr)
+		}
 		return fmt.Errorf("ops condenser: %w", err)
 	}
 	var reply struct {
 		Findings []condenserFinding `json:"findings"`
 	}
 	if err := json.Unmarshal(raw, &reply); err != nil {
-		log.Error("ops condenser reply is not the expected schema", logx.Job, e.JobID, logx.Model, model, logx.Err, err)
-		recordPending(ctx, e, threadID, now, changes)
+		if perr := recordPending(ctx, e, threadID, now, changes, true); perr != nil {
+			return errors.Join(fmt.Errorf("ops condenser: %w: %w", httpx.ErrPayload, err), perr)
+		}
 		return fmt.Errorf("ops condenser: %w: %w", httpx.ErrPayload, err)
-	}
-	if len(reply.Findings) > maxCondenserFindings {
-		reply.Findings = reply.Findings[:maxCondenserFindings]
 	}
 	deltaFacts := make([]string, len(changes))
 	for i, c := range changes {
@@ -156,28 +152,46 @@ func condense(ctx context.Context, e jobworker.Env, threadID int64, now float64,
 		return err
 	}
 	log.Info(fmt.Sprintf("ops condenser filed %d findings (%d dropped)", len(valid), dropped),
-		logx.Job, e.JobID, logx.Model, model, "duration_ms", time.Since(start).Milliseconds())
+		logx.Job, e.JobID, "duration_ms", time.Since(start).Milliseconds())
 	return nil
 }
 
-func recordPending(ctx context.Context, e jobworker.Env, threadID int64, now float64, changes []change) {
+func charged(err error) bool {
+	var deferred *classifier.Deferred
+	if errors.As(err, &deferred) {
+		switch deferred.Reason {
+		case classifier.ReasonRefusal, classifier.ReasonTruncated, classifier.ReasonStop:
+			return true
+		}
+		return false
+	}
+	return errors.Is(err, httpx.ErrPayload)
+}
+
+func recordPending(ctx context.Context, e jobworker.Env, threadID int64, now float64, changes []change, paid bool) error {
 	ctx = context.WithoutCancel(ctx)
 	d := e.Service.DB
 	last, err := lastDelta(ctx, d.Read, threadID)
 	if err != nil {
-		log.Error("ops condenser pending record failed", logx.Job, e.JobID, logx.Err, err)
-		return
+		return err
 	}
-	if last != nil && last.Pending && fingerprint(last.Changes) == fingerprint(changes) {
-		return
+	same := last != nil && last.Pending && fingerprint(last.Changes) == fingerprint(changes)
+	next := delta{Changes: changes, Pending: true}
+	if same {
+		next.Charged = last.Charged
 	}
-	text, marks := deltaMessage(changes, true)
+	if paid {
+		next.Charged++
+	}
+	if same && last.Charged == next.Charged {
+		return nil
+	}
+	text, marks := deltaMessage(next)
 	block, err := json.Marshal(map[string]any{"type": "text", "text": text})
 	if err != nil {
-		log.Error("ops condenser pending record failed", logx.Job, e.JobID, logx.Err, err)
-		return
+		return err
 	}
-	err = d.WithTx(ctx, func(tx *sql.Tx) error {
+	return d.WithTx(ctx, func(tx *sql.Tx) error {
 		if marks != 0 {
 			if err := threads.AddMarks(ctx, tx, threadID, now, marks); err != nil {
 				return err
@@ -186,9 +200,6 @@ func recordPending(ctx context.Context, e jobworker.Env, threadID int64, now flo
 		_, err := journal.AppendMessageTx(ctx, tx, threadID, nil, "user", []json.RawMessage{block}, now, nil)
 		return err
 	})
-	if err != nil {
-		log.Error("ops condenser pending record failed", logx.Job, e.JobID, logx.Err, err)
-	}
 }
 
 func recentSamples(ctx context.Context, q db.Querier, now float64, loc *time.Location, changes []change) (string, error) {

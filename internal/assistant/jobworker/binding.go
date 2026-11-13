@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/config"
@@ -13,9 +14,10 @@ import (
 )
 
 type Dependencies struct {
-	Service   func(context.Context) (*service.Service, error)
-	Now       func() float64
-	Attention func(context.Context) []attention.Source
+	Service    func(context.Context) (*service.Service, error)
+	Classifier func(context.Context, *service.Service) (*classifier.Service, error)
+	Now        func() float64
+	Attention  func(context.Context) []attention.Source
 }
 
 func (d Dependencies) Sources(ctx context.Context) []attention.Source {
@@ -38,7 +40,13 @@ func (d Dependencies) Callable(fn func(context.Context, Env) (Result, error)) fu
 		if now == nil {
 			now = d.Now
 		}
-		result, err := fn(ctx, Env{Service: svc, Now: now, JobID: run.Claim.Job.ID, JobRunID: run.Claim.JobRunID, Claim: run.Claim})
+		classify := func(ctx context.Context) (*classifier.Service, error) {
+			if d.Classifier == nil {
+				return nil, errors.New("scheduled jobs are not bound to a classifier")
+			}
+			return d.Classifier(ctx, svc)
+		}
+		result, err := fn(ctx, Env{Service: svc, Classifier: classify, Now: now, JobID: run.Claim.Job.ID, JobRunID: run.Claim.JobRunID, Claim: run.Claim})
 		runs := result.Runs
 		if len(runs) == 0 && result.RunID != 0 {
 			runs = []int64{result.RunID}

@@ -9,7 +9,6 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
@@ -80,39 +79,6 @@ func Metrics() []ops.Metric {
 	add(gauge("atrium_action_links_used_total", "Phone action links redeemed since the database was created.", func(ctx context.Context, q db.Querier) ([]ops.Sample, error) {
 		n, err := counts.Used(ctx, q)
 		return one(float64(n)), err
-	}))
-	add(gauge("atrium_endpoint_probe_ok", "1 when the last probe of a chat or embed endpoint succeeded.", func(ctx context.Context, q db.Querier) ([]ops.Sample, error) {
-		probes, err := mail.Probes(ctx, q)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]ops.Sample, 0, len(probes))
-		for _, probe := range probes {
-			out = append(out, ops.Sample{Labels: [][2]string{{"kind", probe.Kind}}, Value: float64(probe.OK)})
-		}
-		return out, nil
-	}))
-	add(gauge("atrium_endpoint_probe_timestamp_seconds", "Time of the last chat or embed endpoint probe.", func(ctx context.Context, q db.Querier) ([]ops.Sample, error) {
-		probes, err := mail.Probes(ctx, q)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]ops.Sample, 0, len(probes))
-		for _, probe := range probes {
-			out = append(out, ops.Sample{Labels: [][2]string{{"kind", probe.Kind}}, Value: probe.ProbedAt})
-		}
-		return out, nil
-	}))
-	add(gauge("atrium_endpoint_probe_dimension", "Embedding dimension reported by the last embed endpoint probe.", func(ctx context.Context, q db.Querier) ([]ops.Sample, error) {
-		probes, err := mail.Probes(ctx, q)
-		if err != nil {
-			return nil, err
-		}
-		out := make([]ops.Sample, 0, len(probes))
-		for _, probe := range probes {
-			out = append(out, ops.Sample{Labels: [][2]string{{"kind", probe.Kind}}, Value: float64(probe.Dimension)})
-		}
-		return out, nil
 	}))
 	add(gauge("atrium_notifications_undelivered", "Recorded notifications that were not delivered.", func(ctx context.Context, q db.Querier) ([]ops.Sample, error) {
 		n, err := notifycounts.Undelivered(ctx, q)

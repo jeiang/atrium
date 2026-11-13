@@ -1,6 +1,7 @@
 package inference
 
 import (
+	"bytes"
 	"context"
 	"crypto/rand"
 	"database/sql"
@@ -8,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -54,6 +56,7 @@ type Request struct {
 	Params     anthropic.Params
 
 	EstimatedPromptTokens int64
+	SourceMonthlyCapUSD   *float64
 }
 
 type RunScope struct {
@@ -66,6 +69,8 @@ type ThreadScope struct {
 	RootID int64
 	CapUSD *float64
 	IDs    []int64
+
+	AccountingOnly bool
 }
 
 type Scopes interface {
@@ -250,19 +255,37 @@ func (s *Service) admit(ctx context.Context, tx *sql.Tx, r Request, p prepared, 
 	if err != nil {
 		return err
 	}
-	spent, limit, own, err := threadCapN(ctx, tx, tree)
-	if err != nil {
-		return err
+	if tree.AccountingOnly != (classOf(r) == Classification) {
+		return errors.New("inference: classification requests run only on classification accounting threads")
 	}
-	if spent+p.reservation > limit {
-		remedy := "raise " + ThreadCapKey + " to continue"
-		if own {
-			remedy = "this is the cost cap chosen when the thread was created; start a new thread to continue"
+	if !tree.AccountingOnly {
+		spent, limit, own, err := threadCapN(ctx, tx, tree)
+		if err != nil {
+			return err
 		}
-		return BudgetExceeded{
-			Text: fmt.Sprintf("thread cost cap: the next request would reserve $%s, with $%s of $%s already committed in this thread and its subagents; %s",
-				strconvUSD(usdOf(p.reservation)), strconvUSD(usdOf(spent)), strconvUSD(usdOf(limit)), remedy),
-			Reason: ReasonThread, Class: classOf(r), NextMonth: NextMonthStart(now, loc),
+		if spent+p.reservation > limit {
+			remedy := "raise " + ThreadCapKey + " to continue"
+			if own {
+				remedy = "this is the cost cap chosen when the thread was created; start a new thread to continue"
+			}
+			return BudgetExceeded{
+				Text: fmt.Sprintf("thread cost cap: the next request would reserve $%s, with $%s of $%s already committed in this thread and its subagents; %s",
+					strconvUSD(usdOf(p.reservation)), strconvUSD(usdOf(spent)), strconvUSD(usdOf(limit)), remedy),
+				Reason: ReasonThread, Class: classOf(r), NextMonth: NextMonthStart(now, loc),
+			}
+		}
+	}
+	if r.SourceMonthlyCapUSD != nil {
+		spent, err := sourceMonthN(ctx, tx, sourceOf(r), month, now)
+		if err != nil {
+			return err
+		}
+		if spent+p.reservation > nanoUSD(*r.SourceMonthlyCapUSD) {
+			return BudgetExceeded{
+				Text: fmt.Sprintf("%s monthly cap: the next request would reserve $%s, with $%s of $%s already committed this month",
+					sourceOf(r), strconvUSD(usdOf(p.reservation)), strconvUSD(usdOf(spent)), strconvUSD(*r.SourceMonthlyCapUSD)),
+				Reason: ReasonSourceMonth, Class: classOf(r), NextMonth: NextMonthStart(now, loc),
+			}
 		}
 	}
 	budget, err := MonthlyBudget(ctx, tx)
@@ -326,6 +349,9 @@ func prepare(r Request) (prepared, error) {
 	if len(r.Params.Messages) == 0 {
 		return prepared{}, errors.New("inference: a reservation needs at least one message")
 	}
+	if c := r.SourceMonthlyCapUSD; c != nil && (math.IsNaN(*c) || math.IsInf(*c, 0) || *c < 0) {
+		return prepared{}, errors.New("inference: a source monthly cap must be a nonnegative amount")
+	}
 	switch r.CacheTTL {
 	case "", prompts.TTL5m, prompts.TTL1h:
 	default:
@@ -336,12 +362,11 @@ func prepare(r Request) (prepared, error) {
 		return prepared{}, err
 	}
 	if classOf(r) == Classification {
-		if model.ID != pricing.HaikuID {
-			return prepared{}, errors.New("inference: classification requires the Haiku model")
+		if err := classificationShape(model.ID, r); err != nil {
+			return prepared{}, err
 		}
-		if len(r.Params.Tools) > 0 {
-			return prepared{}, errors.New("inference: classification may not use tools")
-		}
+	} else if r.Params.OutputConfig != nil && r.Params.OutputConfig.Format != nil {
+		return prepared{}, errors.New("inference: only classification may request a fixed output format")
 	}
 	prompt := r.EstimatedPromptTokens
 	if prompt <= 0 {
@@ -355,6 +380,36 @@ func prepare(r Request) (prepared, error) {
 		return prepared{}, err
 	}
 	return prepared{model: model.ID, maxTokens: r.Params.MaxTokens, searches: searches, promptTokens: prompt, reservation: reservation}, nil
+}
+
+func classificationShape(model string, r Request) error {
+	p := r.Params
+	switch {
+	case model != pricing.HaikuID:
+		return errors.New("inference: classification requires the Haiku model")
+	case len(p.Tools) > 0:
+		return errors.New("inference: classification may not use tools")
+	case p.Thinking != nil:
+		return errors.New("inference: classification may not use thinking")
+	case p.ToolChoice != nil:
+		return errors.New("inference: classification may not set a tool choice")
+	case len(p.ContextManagement) > 0:
+		return errors.New("inference: classification may not use context management")
+	case len(p.Messages) != 1:
+		return errors.New("inference: classification sends exactly one message")
+	case r.EstimatedPromptTokens > 0:
+		return errors.New("inference: classification prompts are estimated by the ledger")
+	case p.OutputConfig == nil || p.OutputConfig.Format == nil || p.OutputConfig.Format.Type != anthropic.FormatJSONSchema:
+		return errors.New("inference: classification requires a fixed JSON schema output format")
+	}
+	wire, err := anthropic.JSONOutputSchema(p.OutputConfig.Format.Schema)
+	if err != nil {
+		return fmt.Errorf("inference: classification: %w", err)
+	}
+	if !bytes.Equal(wire, p.OutputConfig.Format.Schema) {
+		return errors.New("inference: classification output schema is not in wire form")
+	}
+	return nil
 }
 
 func classOf(r Request) Class {
@@ -406,6 +461,13 @@ func estimatePrompt(p anthropic.Params) (int64, error) {
 			list[i] = value
 		}
 		fixed["tools"] = list
+	}
+	if p.OutputConfig != nil && p.OutputConfig.Format != nil {
+		schema, err := jsonx.Loads(p.OutputConfig.Format.Schema)
+		if err != nil {
+			return 0, err
+		}
+		fixed["output_config"] = map[string]any{"format": map[string]any{"type": p.OutputConfig.Format.Type, "schema": schema}}
 	}
 	total := tokens.EstimateValue(fixed)
 	for _, raw := range p.Messages {

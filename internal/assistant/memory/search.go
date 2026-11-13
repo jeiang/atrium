@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/textsearch"
 	"github.com/jeiang/atrium/internal/tool"
@@ -31,7 +32,7 @@ type Hit struct {
 const searchSQL = "SELECT n.thread_id, t.title, t.kind, COALESCE(t.project_id, 0), n.src_from_seq, n.src_to_seq, n.state, n.text, n.created_at, t.marks " +
 	"FROM memory_fts f JOIN memory_nodes n ON n.thread_id = f.thread_id AND n.level = f.level AND n.idx = f.idx " +
 	"JOIN threads t ON t.id = n.thread_id LEFT JOIN projects p ON p.id = t.project_id " +
-	"WHERE memory_fts MATCH ? AND n.state IN (?, ?, ?) AND t.deleted_at IS NULL " +
+	"WHERE memory_fts MATCH ? AND n.state IN (?, ?, ?) AND t.deleted_at IS NULL AND t.kind <> '" + string(threads.Classification) + "' " +
 	"AND (t.project_id IS NULL OR (p.id IS NOT NULL AND (p.private = 0 OR t.project_id = (SELECT project_id FROM threads WHERE id = ?))))"
 
 func Search(ctx context.Context, q db.Querier, reader int64, f SearchFilter) ([]Hit, error) {

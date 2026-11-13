@@ -30,6 +30,7 @@
     <span class="text-xs text-muted-foreground">{{$s.ToolCalls}} tool calls · {{printf "%.1f" (fdiv $s.WallMS 1000.0)}}s in requests{{if $s.Partial}} · {{$s.Partial}} partial{{end}}{{if $s.Unpriced}} · {{$s.Unpriced}} unpriced{{end}}</span>
   </div>
 </section>
+{{template "settings_groups" .}}
 
 <section class="flex flex-col gap-2" aria-labelledby="by-kind">
   <h2 id="by-kind" class="text-sm font-medium">By kind</h2>

@@ -10,14 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/assistant/classifier"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/embed"
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/jsonx"
-	"github.com/jeiang/atrium/internal/llm"
 	"github.com/jeiang/atrium/internal/mail"
+	mailclassify "github.com/jeiang/atrium/internal/mail/classify"
 	"github.com/jeiang/atrium/internal/mail/mailscan"
 	"github.com/jeiang/atrium/internal/textx"
 	"github.com/jeiang/atrium/internal/timex"
@@ -32,26 +32,9 @@ const CommitmentSystem = "You read one email for its owner and list explicit com
 	"marketing, receipts, shipping notices, notifications and automated mail, and skip vague pleasantries ('let's catch " +
 	"up'). Return an empty list when there is nothing."
 
-var CommitmentSchema = map[string]any{
-	"type": "object",
-	"properties": map[string]any{
-		"commitments": map[string]any{
-			"type": "array",
-			"items": map[string]any{
-				"type": "object",
-				"properties": map[string]any{
-					"text":  map[string]any{"type": "string"},
-					"owner": map[string]any{"type": "string", "enum": []string{"me", "them"}},
-					"due":   map[string]any{"type": []string{"string", "null"}},
-				},
-				"required":             []string{"text", "owner", "due"},
-				"additionalProperties": false,
-			},
-		},
-	},
-	"required":             []string{"commitments"},
-	"additionalProperties": false,
-}
+var commitmentSchema = json.RawMessage(`{"type":"object","properties":{"commitments":{"type":"array","items":{"type":"object",` +
+	`"properties":{"text":{"type":"string"},"owner":{"type":"string","enum":["me","them"]},"due":{"type":["string","null"]}},` +
+	`"required":["text","owner","due"],"additionalProperties":false}}},"required":["commitments"],"additionalProperties":false}`)
 
 func DueDate(value any) (string, bool) {
 	text, isStr := value.(string)
@@ -66,9 +49,7 @@ func DueDate(value any) (string, bool) {
 	return fmt.Sprintf("%04d-%02d-%02d", year, month, day), true
 }
 
-type Judge func(ctx context.Context, env config.Env, url string, m Message, body string) (any, error)
-
-func JudgeCommitments(ctx context.Context, env config.Env, url string, m Message, body string) (any, error) {
+func JudgeCommitments(ctx context.Context, env config.Env, c *classifier.Service, m Message, body string) (any, error) {
 	direction := "received by the mailbox owner"
 	if m.Sent {
 		direction = "sent by the mailbox owner"
@@ -88,8 +69,9 @@ func JudgeCommitments(ctx context.Context, env config.Env, url string, m Message
 		owners = "unknown"
 	}
 	user := fmt.Sprintf("The mailbox owner is: %s\nThis message was %s on %s.\nFrom: %s <%s>\nRecipients: %s\nSubject: %s\nBody:\n%s",
-		owners, direction, sentOn, m.FromName, m.FromAddr, strings.Join(to, ", "), m.Subject, textx.Clip(body, llm.BodyChars(ctx)))
-	raw, err := llm.ChatJSON(ctx, url, CommitmentSystem, user, CommitmentSchema, 500)
+		owners, direction, sentOn, m.FromName, m.FromAddr, strings.Join(to, ", "), m.Subject, textx.Clip(body, endpoint.TuningLlmBodyChars))
+	raw, err := c.Classify(ctx, classifier.Request{Caller: classifier.Commitments, Item: mailclassify.MessageItem(m.Account, m.ID),
+		System: CommitmentSystem, User: user, Schema: commitmentSchema})
 	if err != nil {
 		return nil, err
 	}
@@ -128,21 +110,10 @@ func commitmentItems(found any, perMail int) ([]any, error) {
 	return nil, fmt.Errorf("%w: %s is not a list", httpx.ErrShape, fmt.Sprintf("%T", found))
 }
 
-func ScanCommitments(ctx context.Context, d *db.DB, cacheDir string, env config.Env, now float64, judge Judge) (int64, error) {
-	if judge == nil {
-		judge = JudgeCommitments
-	}
+func ScanCommitments(ctx context.Context, d *db.DB, cacheDir string, env config.Env, now float64, c *classifier.Service, paid *mailclassify.Deferral) (int64, error) {
 	window := mail.TuningOpenloopsCommitmentWindowDays
 	perMail := mail.TuningOpenloopsCommitmentsPerMessage
 	limit := mail.TuningOpenloopsCommitmentScanLimit
-	chatURL, err := endpoint.ChatURL(ctx, d.Read)
-	if err != nil {
-		return 0, err
-	}
-	ctx, err = embed.WithModels(ctx, d.Read)
-	if err != nil {
-		return 0, err
-	}
 	selves, err := selfAddresses(ctx, d.Read)
 	if err != nil {
 		return 0, err
@@ -154,7 +125,7 @@ func ScanCommitments(ctx context.Context, d *db.DB, cacheDir string, env config.
 	slices.Sort(owners)
 	g := newGate(cacheDir, selves)
 	result, err := mailscan.Run(ctx, d, now, mailscan.Spec{
-		Kind: "commitments", Hint: "1", WindowDays: window, FetchLimit: limit * 4, Limit: limit,
+		Kind: "commitments", Hint: "1", WindowDays: window, FetchLimit: limit * 4, Limit: limit, Paid: paid,
 		Eligible: func(m mailscan.Message) (bool, error) {
 			draft, err := IsDraft(m.Labels, m.Flags)
 			if err != nil || draft {
@@ -164,9 +135,12 @@ func ScanCommitments(ctx context.Context, d *db.DB, cacheDir string, env config.
 			return g.wanted(&msg)
 		},
 		Judge: func(ctx context.Context, row mailscan.Message, body string) (int, error) {
+			if err := paid.Err(); err != nil {
+				return 0, err
+			}
 			msg := messageOf(row)
 			msg.Owners = owners
-			found, err := judge(ctx, env, chatURL, msg, body)
+			found, err := JudgeCommitments(ctx, env, c, msg, body)
 			if err != nil {
 				return 0, err
 			}

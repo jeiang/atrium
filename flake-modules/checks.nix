@@ -27,11 +27,10 @@
       };
     nixos = host {
       environmentFiles = ["/run/secrets/atrium.env"];
-      modelServerUnits = ["llama.service"];
+      embeddingServerUnits = ["llama-embed.service"];
       host = {
         core.public_url = "https://atrium.example.org";
         core.ops_listen = "127.0.0.1:9180";
-        mail.mail_chat_url = "http://127.0.0.1:8187/v1";
         media.media_root = "/var/lib/media";
       };
       connections = {
@@ -93,6 +92,8 @@
     cutoverHostRefused = assert refusedWith "connections.\"service/embedding\".credential_files.bearer" {host.mail.mail_embed_key = "/run/x";}; true;
     databaseKeyRefused = assert refusedWith "services.atrium.database.keyFile" {host.db.key_file = "/run/x";}; true;
     secretRefused = assert refusedWith "services.atrium.database.keyFile" {secretFiles."db.key" = "/run/x";}; assert refusedWith "connections.\"service/qbittorrent\".credential_files.api_key" {secretFiles."media.media_qbittorrent_api_key" = "/run/x";}; assert refusedWith "connections.\"service/notion\".credential_files.token" {secretFiles."notion.notion_token" = "/run/x";}; assert refusedWith "connections.\"service/anthropic\".credential_files.api_key" {secretFiles."anthropic.anthropic_api_key" = "/run/x";}; assert refusedWith "connections.\"service/oidc\".credential_files.client_secret" {secretFiles."auth.oidc_client_secret" = "/run/x";}; assert refusedWith "atrium settings set monthly_budget_usd" {secretFiles."assistant.monthly_budget_usd" = "/run/x";}; true;
+    chatEndpointRefused = assert refusedWith "services.atrium.modelServerUnits" {modelServerUnits = ["llama.service"];}; assert refusedWith "mail.mail_chat_url is the service/anthropic connection" {host.mail.mail_chat_url = "http://127.0.0.1:8187/v1";}; assert refusedWith "mail.mail_chat_key is the service/anthropic connection" {host.mail.mail_chat_key_file = "/run/x";}; assert refusedWith "secretFiles.\"mail.mail_chat_key\" is the service/anthropic connection" {secretFiles."mail.mail_chat_key" = "/run/x";}; true;
+    embeddingDependencyKept = assert builtins.all (name: let t = unitText name; in lib.hasInfix "After=" t && lib.hasInfix "llama-embed.service" t) appUnits; true;
     opsPortRefused = assert refusedWith "services.atrium.host.core.ops_listen must use a port other than" {web.local.port = 9180;}; assert refusedWith "services.atrium.host.core.ops_listen must use a port other than" {host.core.ops_listen = "127.0.0.1:8480";}; assert !(refusedWith "services.atrium.host.core.ops_listen" {host.core.ops_listen = "off";}); true;
     connectionRefused = assert refusedWith "needs a kind" {connections."service/x" = {kind = "";};}; true;
     backupOptionsRefused = let
@@ -207,7 +208,7 @@
           touch $out
         '';
 
-        module = assert exampleEvaluates && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && connectionRefused && backupOptionsRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig;
+        module = assert exampleEvaluates && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && backupOptionsRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig;
           pkgs.linkFarm "atrium-units" (map (name: {
               inherit name;
               path = unit name;
@@ -272,8 +273,8 @@
             echo "a raw Anthropic key was accepted" >&2
             exit 1
           fi
-          if ATRIUM_MAIL_MAIL_CHAT_KEY=secret atrium settings list >/dev/null 2>&1; then
-            echo "a raw chat key was accepted" >&2
+          if ATRIUM_MAIL_MAIL_CHAT_KEY_FILE=/run/x atrium settings list >/dev/null 2>&1; then
+            echo "a removed chat key binding was accepted" >&2
             exit 1
           fi
           if ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD=5 atrium settings list >/dev/null 2>&1; then

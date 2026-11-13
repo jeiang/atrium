@@ -148,6 +148,13 @@ CREATE INDEX IF NOT EXISTS usage_run ON usage(run_id);
 CREATE INDEX IF NOT EXISTS usage_month ON usage(month, budget_class);
 CREATE INDEX IF NOT EXISTS usage_pending ON usage(expires_at)
     WHERE state IN ('reserved','unknown');
+CREATE TABLE IF NOT EXISTS inference_classification_deferrals (
+    month_start REAL PRIMARY KEY,
+    first_at REAL NOT NULL,
+    last_at REAL NOT NULL,
+    last_caller TEXT NOT NULL,
+    last_item_key TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS context_ledger (
     id INTEGER PRIMARY KEY,
     run_id INTEGER NOT NULL REFERENCES runs(id),
@@ -233,6 +240,18 @@ CREATE TRIGGER IF NOT EXISTS usage_read_update AFTER UPDATE ON usage BEGIN
     ON CONFLICT(scope) DO UPDATE SET value=value+1;
 END;
 CREATE TRIGGER IF NOT EXISTS usage_read_delete AFTER DELETE ON usage BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS inference_classification_deferrals_read_insert AFTER INSERT ON inference_classification_deferrals BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS inference_classification_deferrals_read_update AFTER UPDATE ON inference_classification_deferrals BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS inference_classification_deferrals_read_delete AFTER DELETE ON inference_classification_deferrals BEGIN
     INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
     ON CONFLICT(scope) DO UPDATE SET value=value+1;
 END;

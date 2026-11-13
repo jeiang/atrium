@@ -9,6 +9,7 @@ import (
 	"errors"
 	"maps"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -16,11 +17,13 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/anthropic"
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail"
-	"github.com/jeiang/atrium/internal/testutil/llmstub"
+	"github.com/jeiang/atrium/internal/testutil/embedstub"
 )
 
 type replayLine struct {
@@ -69,27 +72,27 @@ func TestMailReplayReportsStoredDecisionsWithoutExternalCalls(t *testing.T) {
 	dbPath := filepath.Join(f.dir, "atrium.db")
 	before := fileDigest(t, dbPath)
 
-	var imapOpens, embedCalls, chatCalls atomic.Int64
+	var imapOpens, embedCalls, chatCalls, anthropicCalls atomic.Int64
 	clients := func(config.Config) mail.OpenFunc {
 		return func(context.Context, mail.OpenOptions) (mail.Client, error) {
 			imapOpens.Add(1)
 			return nil, errors.New("replay opened IMAP")
 		}
 	}
-	srv := llmstub.Server(t, func(string, []byte) bool { return true })
-	inner := srv.Config.Handler
-	srv.Config.Handler = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if strings.HasSuffix(r.URL.Path, "/embeddings") {
-			embedCalls.Add(1)
-		} else {
+	embed := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/chat/completions") {
 			chatCalls.Add(1)
 		}
-		inner.ServeHTTP(w, r)
-	})
+		embedCalls.Add(1)
+		embedstub.Handler(w, r)
+	}))
+	t.Cleanup(embed.Close)
+	api := anthropictest.New(t)
+	api.SetOnRequest(func(anthropictest.Request) { anthropicCalls.Add(1) })
 	env := f.snapshotEnv()
-	env["ATRIUM_MAIL_MAIL_CHAT_URL"] = srv.URL + "/v1"
+	env[anthropic.BaseURLEnv] = api.URL
 	env["ATRIUM_HOST_CONFIG"] = hostConfigFrom(t, env["ATRIUM_HOST_CONFIG"], f.dir, "host-replay.toml", map[string]string{
-		`url = ` + strconv.Quote(f.llm): `url = ` + strconv.Quote(srv.URL+"/v1"),
+		`url = ` + strconv.Quote(f.embedURL): `url = ` + strconv.Quote(embed.URL+"/v1"),
 	})
 	appFor := func(path string) *cli.App {
 		vars := maps.Clone(env)
@@ -125,6 +128,9 @@ func TestMailReplayReportsStoredDecisionsWithoutExternalCalls(t *testing.T) {
 	}
 	if n := chatCalls.Load(); n != 0 {
 		t.Errorf("replay called the chat endpoint %d times", n)
+	}
+	if n := anthropicCalls.Load(); n != 0 {
+		t.Errorf("replay called Anthropic %d times", n)
 	}
 
 	lines := parseReplay(t, first.stdout)
