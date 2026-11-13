@@ -37,15 +37,7 @@ internal/assistant/pages/chat.go	github.com/jeiang/atrium/internal/config
 internal/assistant/pages/events.go	github.com/jeiang/atrium/internal/assistant/journal
 internal/assistant/pages/events.go	github.com/jeiang/atrium/internal/assistant/progress
 internal/assistant/pages/files.go	github.com/jeiang/atrium/internal/assistant/files
-internal/assistant/pages/files.go	github.com/jeiang/atrium/internal/assistant/projects
-internal/assistant/pages/files.go	github.com/jeiang/atrium/internal/assistant/threads
-internal/assistant/pages/files.go	github.com/jeiang/atrium/internal/config
-internal/assistant/pages/files.go	github.com/jeiang/atrium/internal/db
-internal/assistant/pages/files.go	github.com/jeiang/atrium/internal/httpx
 internal/assistant/pages/home.go	github.com/jeiang/atrium/internal/assistant/threads
-internal/assistant/pages/library.go	database/sql
-internal/assistant/pages/library.go	github.com/jeiang/atrium/internal/config
-internal/assistant/pages/library.go	github.com/jeiang/atrium/internal/db
 internal/assistant/pages/module.go	github.com/jeiang/atrium/internal/assistant
 internal/assistant/pages/module.go	github.com/jeiang/atrium/internal/assistant/references
 internal/assistant/pages/module.go	github.com/jeiang/atrium/internal/assistant/service
@@ -105,9 +97,6 @@ internal/assistant/subagents/websearch/websearch.go	github.com/jeiang/atrium/int
 internal/assistant/subagents/websearch/websearch.go	github.com/jeiang/atrium/internal/inference
 internal/assistant/tools/attention/attention.go	github.com/jeiang/atrium/internal/attention
 internal/assistant/tools/calendar/calendar.go	github.com/jeiang/atrium/internal/assistant/approval
-internal/assistant/tools/files/files.go	github.com/jeiang/atrium/internal/assistant/files
-internal/assistant/tools/files/files.go	github.com/jeiang/atrium/internal/assistant/threads
-internal/assistant/tools/files/files.go	github.com/jeiang/atrium/internal/ledger
 internal/assistant/tools/grafana/access.go	github.com/jeiang/atrium/internal/config
 internal/assistant/tools/grafana/access.go	github.com/jeiang/atrium/internal/connections
 internal/assistant/tools/grafana/access.go	github.com/jeiang/atrium/internal/db

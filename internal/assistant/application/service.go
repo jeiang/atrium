@@ -11,14 +11,17 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/ledger"
 )
 
 type Service struct {
-	db    *db.DB
-	state *state.Store
-	now   func() float64
-	env   config.Env
-	runs  func() *service.Service
+	db       *db.DB
+	state    *state.Store
+	now      func() float64
+	env      config.Env
+	runs     func() *service.Service
+	filesDir string
+	ledger   *ledger.Store
 }
 
 func New(d *db.DB, env config.Env, now func() float64) *Service {

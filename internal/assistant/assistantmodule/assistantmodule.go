@@ -4,6 +4,8 @@ import (
 	"context"
 	"slices"
 
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
+
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/agentcmd"
 	"github.com/jeiang/atrium/internal/assistant/anthropicconn"
@@ -69,10 +71,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	taskOps, taskBindings := taskOperations()
 	projectOps, projectBindings := projectOperations()
 	threadOps, threadBindings := threadOperations()
+	fileOps, fileBindings := fileOperations()
 	return module.Declaration{
 		Name:       module.Assistant,
-		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps),
-		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings),
+		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps),
+		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings),
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
 			prompts.Settings(), registry.Settings(), websearch.Settings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs()),
@@ -108,7 +111,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, MailOpen: d.Open, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
 			return module.Effects{
 				Proposals: slices.Concat(a.Proposals(), permissionProposals(d.Resume)),
-				Undo:      slices.Concat(filetools.Undo(), kb.Undo(), tasksapp.Undo(), scheduletools.Undo(), serverops.Undo(), export.Undo(d.Ledger)),
+				Undo:      slices.Concat(asstapp.FileUndo(), kb.Undo(), tasksapp.Undo(), scheduletools.Undo(), serverops.Undo(), export.Undo(d.Ledger)),
 				Resolve:   export.Resolve(d.Ledger),
 			}
 		},
@@ -139,7 +142,7 @@ func SettingGroups() []settings.Group {
 func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
 	defs := []module.ToolDefinition{{Tool: registry.WebSearchTool()}, proposetools.Definition(kinds)}
 	for _, tools := range [][]tool.Tool{
-		askoperator.Tools(), attentiontool.Tools(), filetools.Tools(), memorytools.Tools(),
+		askoperator.Tools(), attentiontool.Tools(), filetools.Tools(fileToolService), memorytools.Tools(),
 		webfetch.Tools(), recalltools.Tools(), plantools.Tools(),
 		scheduletools.Tools(), taskstools.Tools(taskToolService),
 		kbtools.Tools(knowledgeToolService), weathertools.Tools(), opstools.Tools(),

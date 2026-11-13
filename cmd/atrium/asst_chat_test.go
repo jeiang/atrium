@@ -10,6 +10,7 @@ import (
 	"net/http/cookiejar"
 	"net/textproto"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -812,5 +813,63 @@ func TestBranchKeepsRunOptions(t *testing.T) {
 	}
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.thread.branch' AND outcome = 'ok' AND target = ?", fmt.Sprintf("thread:%d", child)); n != 1 {
 		t.Fatalf("%d branch audits for the child, want 1", n)
+	}
+}
+
+func TestProjectFilesStayInTheirProjectAndAreAudited(t *testing.T) {
+	t.Parallel()
+	_, _, d, w := asstServe(t)
+	project := func(name string) string {
+		code, body, h := w.post("/projects", url.Values{"name": {name}, "effort": {"high"}, "context_limit": {"200000"}}, false)
+		if code != http.StatusSeeOther {
+			t.Fatalf("create project %s: %d %s", name, code, body)
+		}
+		return strings.TrimSuffix(strings.TrimPrefix(h.Get("Location"), "/projects/"), "/edit")
+	}
+	home, other := project("Home"), project("Other")
+	code, body, _ := w.upload("/projects/"+home+"/files", nil, []asstFile{{"plan.txt", "text/plain", []byte("the plan")}}, true)
+	if code != http.StatusOK {
+		t.Fatalf("upload: %d %s", code, body)
+	}
+	var fileID int64
+	var stored string
+	if err := d.Read.QueryRow("SELECT id, path FROM thread_files WHERE project_id = ?", home).Scan(&fileID, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if code, body, _ := w.get(fmt.Sprintf("/projects/%s/files/%d/download", home, fileID), false); code != http.StatusOK || body != "the plan" {
+		t.Fatalf("own project download: %d %q", code, body)
+	}
+	for _, path := range []string{
+		fmt.Sprintf("/projects/%s/files/%d/download", other, fileID),
+		fmt.Sprintf("/projects/%s/files/%d/download", home, fileID+1000),
+		fmt.Sprintf("/chat/1/files/%d/download", fileID),
+	} {
+		if code, _, _ := w.get(path, false); code != http.StatusNotFound {
+			t.Errorf("GET %s: %d, want 404", path, code)
+		}
+	}
+	if code, _, _ := w.post(fmt.Sprintf("/projects/%s/files/%d/delete", other, fileID), url.Values{}, true); code != http.StatusNotFound {
+		t.Fatalf("delete through another project: %d, want 404", code)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM thread_files WHERE id = ?", fileID); n != 1 {
+		t.Fatalf("a foreign delete removed the file row")
+	}
+	if code, body, _ := w.post(fmt.Sprintf("/projects/%s/files/%d/delete", home, fileID), url.Values{}, true); code != http.StatusOK {
+		t.Fatalf("delete: %d %s", code, body)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM thread_files WHERE id = ?", fileID); n != 0 {
+		t.Errorf("the deleted file row remains")
+	}
+	if _, err := os.Stat(stored); !os.IsNotExist(err) {
+		t.Errorf("the deleted file remains on disk: %v", err)
+	}
+	for _, want := range []struct{ operation, outcome, project string }{
+		{"assistant.project-file.upload", "ok", home},
+		{"assistant.project-file.delete", "not_found", other},
+		{"assistant.project-file.delete", "ok", home},
+	} {
+		if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = ? AND outcome = ? AND target = ?", want.operation, want.outcome, "project:"+want.project); n != 1 {
+			t.Errorf("%s %s audits for project %s: %d, want 1", want.operation, want.outcome, want.project, n)
+		}
 	}
 }

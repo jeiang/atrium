@@ -284,6 +284,10 @@ behavior-parity target.
   web search and cost cap. Regenerate and resume are refused like a send
   when the module is off or the Anthropic connection is missing; stopping
   in an unknown thread answers 404 on the chat page as in the API.
+  Project file uploads and deletes, and agent `file_write`, each write one
+  `operation_audit` row (`assistant.project-file.upload|delete`,
+  `assistant.file.write` naming its effect); a project upload over the body
+  cap is refused with 422 before the project is looked up.
   The catalog also records whether a model accepts a forced `tool_choice`
   (`any` or a named tool): only Haiku does, and the loop sends the request
   to Sonnet and Opus without it. The loop ends a run with a clear thread
