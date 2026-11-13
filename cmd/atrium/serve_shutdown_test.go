@@ -399,16 +399,45 @@ func TestSchedulerTickAndServeStopCleanlyWhenCanceledDuringStartup(t *testing.T)
 
 func TestServeExitsZeroOnSIGTERMBeforeItIsReady(t *testing.T) {
 	t.Parallel()
-	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	d := asstDB(t, dir)
-	conn, err := d.Write.Conn(context.Background())
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer func() { _ = conn.Close() }()
-	if _, err := conn.ExecContext(context.Background(), "BEGIN IMMEDIATE"); err != nil {
-		t.Fatal(err)
-	}
+	t.Run("SQLite write lock", func(t *testing.T) {
+		t.Parallel()
+		dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+		d := asstDB(t, dir)
+		conn, err := d.Write.Conn(context.Background())
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = conn.Close() }()
+		// The statement releases the write gate when it ends, so serve waits in SQLite.
+		if _, err := conn.ExecContext(context.Background(), "BEGIN IMMEDIATE"); err != nil {
+			t.Fatal(err)
+		}
+		serveStopsBeforeReady(t, dir)
+		if _, err := conn.ExecContext(context.Background(), "ROLLBACK"); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("write gate", func(t *testing.T) {
+		t.Parallel()
+		dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+		path, err := db.CanonicalPath(filepath.Join(dir, "atrium.db"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		gate, err := os.OpenFile(path+".write.lock", os.O_RDONLY|os.O_CREATE, 0o600)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = gate.Close() }()
+		if err := syscall.Flock(int(gate.Fd()), syscall.LOCK_EX); err != nil {
+			t.Fatal(err)
+		}
+		serveStopsBeforeReady(t, dir)
+	})
+}
+
+func serveStopsBeforeReady(t *testing.T, dir string) {
+	t.Helper()
 	addrFile := filepath.Join(dir, "serve-addr")
 	if _, err := os.Stat(filepath.Join(dir, "atrium.db.serve.lock")); !os.IsNotExist(err) {
 		t.Fatalf("a serve lock exists before serve started: %v", err)
@@ -442,9 +471,6 @@ func TestServeExitsZeroOnSIGTERMBeforeItIsReady(t *testing.T) {
 	case <-time.After(15 * time.Second):
 		_ = cmd.Process.Kill()
 		t.Fatalf("serve kept waiting on the database after SIGTERM, stderr %q", stderr.String())
-	}
-	if _, err := conn.ExecContext(context.Background(), "ROLLBACK"); err != nil {
-		t.Fatal(err)
 	}
 }
 
