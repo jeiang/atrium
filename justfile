@@ -5,7 +5,7 @@ default:
   @just --list
 
 verify:
-  {{dev}} bash -c 'go vet ./... && go build ./... && go run ./cmd/toolsdocs check && go run ./tools/registrationownership && go run ./tools/adapterboundary'
+  {{dev}} bash -c 'go vet ./... && go build ./... && go run ./cmd/toolsdocs check && go run ./tools/registrationownership && go run ./tools/adapterboundary && go run ./cmd/atrium catalog openapi --check docs/api'
 
 tools-docs:
   {{dev}} go run ./cmd/toolsdocs

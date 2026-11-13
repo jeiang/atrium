@@ -119,9 +119,9 @@ type seqCursor struct {
 
 func (p *pages) apiRoutes(d *web.Deps) {
 	d.API(http.MethodGet, "/threads", p.apiThreads)
-	d.API(http.MethodPost, "/threads", bindAssistant(web.Idempotent(p.apiNewThread)).ServeHTTP)
+	d.API(http.MethodPost, "/threads", bindAssistant(http.HandlerFunc(p.apiNewThread)).ServeHTTP)
 	d.API(http.MethodGet, "/threads/{thread_id}", p.apiTranscript)
-	d.API(http.MethodPost, "/threads/{thread_id}/messages", bindAssistant(web.Idempotent(p.apiMessage)).ServeHTTP)
+	d.API(http.MethodPost, "/threads/{thread_id}/messages", bindAssistant(http.HandlerFunc(p.apiMessage)).ServeHTTP)
 	d.API(http.MethodPost, "/threads/{thread_id}/stop", bindAssistant(http.HandlerFunc(p.apiStop)).ServeHTTP)
 	d.API(http.MethodPost, "/threads/{thread_id}/answer", bindAssistant(http.HandlerFunc(p.apiAnswer)).ServeHTTP)
 	d.API(http.MethodGet, "/threads/{thread_id}/runs/{run_id}/events", p.apiEvents)

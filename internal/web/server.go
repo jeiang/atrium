@@ -74,6 +74,7 @@ type Deps struct {
 
 	settingsPages map[string]SettingsRender
 
+	commands      func(pattern string, next http.Handler) http.Handler
 	router        chi.Router
 	routes        *[]routeRule
 	owner         string
@@ -146,6 +147,7 @@ type Options struct {
 	Policy       *Policy
 	OnReady      func(*Deps) error
 	Bindings     map[string][]application.Binding
+	Commands     func(pattern string, next http.Handler) http.Handler
 }
 
 type Server struct {
@@ -230,14 +232,13 @@ func New(o Options) (*Server, error) {
 	deps := &Deps{
 		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Render: o.Render, Error: s.Error, NotFound: s.missing, Stopping: s.stop,
 		OnFrame: func(FrameFunc) {}, settingsPages: map[string]SettingsRender{},
-		onClose: func(f func() error) { s.closers = append(s.closers, f) },
-		router:  core, routes: &s.routes, owner: "core", registrations: s.registrations,
+		onClose:  func(f func() error) { s.closers = append(s.closers, f) },
+		commands: o.Commands, router: core, routes: &s.routes, owner: "core", registrations: s.registrations,
 	}
 	if o.Render != nil {
 		deps.OnFrame = o.Render.OnFrame
 	}
 	deps.coreRoutes = func(d *Deps) {
-		d.API(http.MethodGet, "/me", me)
 		d.Authenticated(http.MethodGet, authSettingsPath, s.signInPage)
 		d.Authenticated(http.MethodPost, authSettingsPath+"/tokens", s.tokenIssue)
 		d.Authenticated(http.MethodPost, authSettingsPath+"/tokens/{id}/revoke", s.tokenRevoke)

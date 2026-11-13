@@ -289,7 +289,7 @@ func TestAPIRefusesRequestsWithoutAValidBearer(t *testing.T) {
 	owner := s.token("owner")
 
 	me := s.do(http.MethodGet, "/api/v1/me", owner, nil)
-	if me.status != http.StatusOK || me.json["subject"] != "sub-owner" || me.json["email"] != "owner@example.com" || me.json["name"] != "owner" || me.header.Get("Cache-Control") != "no-store" {
+	if me.status != http.StatusOK || me.json["subject"] != "sub-owner" || me.json["email"] != "owner@example.com" || me.json["name"] != "owner" || me.header.Get("Cache-Control") != "private, no-cache" {
 		t.Fatalf("me: %d %s %v", me.status, me.body, me.header)
 	}
 	if _, ok := me.json["admin"]; ok {
@@ -360,6 +360,45 @@ func TestAPIRefusesRequestsWithoutAValidBearer(t *testing.T) {
 	s.idp.RevokeAll = true
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/me", s.token("owner"), nil), http.StatusUnauthorized, "invalid_token")
 	s.idp.RevokeAll = false
+}
+
+func TestMeConditionalAndErrorMembers(t *testing.T) {
+	s := newAPISite(t)
+	owner := s.token("owner")
+	me := s.do(http.MethodGet, "/api/v1/me", owner, nil)
+	if me.status != http.StatusOK || me.json["subject"] != "sub-owner" || me.json["email"] != "owner@example.com" || me.json["name"] != "owner" || me.json["api_version"] != float64(1) || len(me.json) != 4 {
+		t.Fatalf("me: %d %s", me.status, me.body)
+	}
+	tag := me.header.Get("ETag")
+	if !strings.HasPrefix(tag, `W/"`) || me.header.Get("Cache-Control") != "private, no-cache" {
+		t.Fatalf("me headers: %v", me.header)
+	}
+	if again := s.do(http.MethodGet, "/api/v1/me", owner, nil, "If-None-Match", tag); again.status != http.StatusNotModified || again.body != "" {
+		t.Fatalf("conditional me: %d %q", again.status, again.body)
+	}
+	if guest := s.do(http.MethodGet, "/api/v1/me", s.token("guest"), nil, "If-None-Match", tag); guest.status != http.StatusOK || guest.json["subject"] != "sub-guest" || guest.header.Get("ETag") == tag {
+		t.Fatalf("guest conditional me: %d %s %v", guest.status, guest.body, guest.header)
+	}
+	if conditional := s.do(http.MethodGet, "/api/v1/me", "", nil, "If-None-Match", tag); conditional.status != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated conditional me: %d %s", conditional.status, conditional.body)
+	}
+
+	none := s.do(http.MethodGet, "/api/v1/me", "", nil)
+	expectAPI(t, none, http.StatusUnauthorized, "unauthenticated")
+	e, _ := none.json["error"].(map[string]any)
+	if e["status"] != float64(http.StatusUnauthorized) || e["type"] != "urn:atrium:problem:unauthenticated" || e["instance"] == "" || e["instance"] != none.header.Get("Atrium-Request-Id") {
+		t.Fatalf("error members: %s %v", none.body, none.header)
+	}
+	other := s.do(http.MethodGet, "/api/v1/me", "", nil)
+	if o, _ := other.json["error"].(map[string]any); o["instance"] == e["instance"] {
+		t.Fatalf("two requests share instance %v", e["instance"])
+	}
+	refused := s.do(http.MethodGet, "/api/v1/me", s.token("stranger"), nil)
+	expectAPI(t, refused, http.StatusForbidden, "forbidden")
+	if r, _ := refused.json["error"].(map[string]any); r["status"] != float64(http.StatusForbidden) || r["type"] != "urn:atrium:problem:forbidden" {
+		t.Fatalf("forbidden members: %s", refused.body)
+	}
+	expectAPI(t, s.do(http.MethodGet, "/api/v1/me", owner, "{}"), http.StatusBadRequest, "bad_request")
 }
 
 func TestAPILocalTokensWorkWithoutOIDC(t *testing.T) {

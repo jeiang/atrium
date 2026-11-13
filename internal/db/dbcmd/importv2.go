@@ -199,6 +199,7 @@ var importTables = []tablePlan{
 	{table: "job_run_threads", action: fresh, why: "new in v3; job history is not carried"},
 	{table: "job_resource_leases", action: fresh, why: "new in v3; no claim survives an import"},
 	{table: "operation_audit", action: fresh, why: "new in v3; no operation history is made up from imported rows"},
+	{table: "commands", action: fresh, why: "new in v3; no command history is carried"},
 	{table: "events", action: drop, why: "the mail event log is not carried"},
 	{table: "pass_runs", action: drop, why: "ops pass history is not carried"},
 	{table: "pass_run_alerts", action: drop, why: "ops pass history is not carried"},
