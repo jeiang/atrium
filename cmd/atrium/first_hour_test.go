@@ -85,8 +85,12 @@ func TestFirstHourKeyedOIDCBootstrap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := runProcess(t, "db check", "ATRIUM_DB_KEY_FILE="); got.code == cli.ExitOK {
-		t.Fatal("db check without the key succeeded")
+	cmd := cliExitProcess(t, "db check")
+	cmd.Env = envWithout(cmd.Env, "ATRIUM_DB_KEY_FILE=")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if code := exitCode(cmd.Run()); code == cli.ExitOK || !strings.Contains(stderr.String(), "database file is encrypted but no key is configured") {
+		t.Fatalf("unkeyed check exit = %d, stderr = %q", code, stderr.String())
 	}
 	after, err := os.ReadFile(path)
 	if err != nil {
@@ -96,10 +100,18 @@ func TestFirstHourKeyedOIDCBootstrap(t *testing.T) {
 		t.Fatal("unkeyed db check changed the encrypted database")
 	}
 	missing := filepath.Join(dir, "missing.db")
-	if got := runProcess(t, "db check", "ATRIUM_DB="+missing, "ATRIUM_DB_KEY_FILE="); got.code == cli.ExitOK {
-		t.Fatal("db check of a missing database succeeded")
+	if got := runProcess(t, "db check", "ATRIUM_DB="+missing); got.code == cli.ExitOK || !strings.Contains(got.stderr, "no such file") {
+		t.Fatalf("keyed missing database check exit = %d, stderr = %q", got.code, got.stderr)
 	}
 	if _, err := os.Stat(missing); !os.IsNotExist(err) {
 		t.Fatal("db check created a database or failed to preserve its absence")
+	}
+	missing = filepath.Join(dir, "unreadable-key.db")
+	got := runProcess(t, "serve --host 127.0.0.1 --port 0 --auth local", "ATRIUM_DB="+missing, "ATRIUM_DB_KEY_FILE="+filepath.Join(dir, "absent-key"))
+	if got.code != cli.ExitConfig || !strings.Contains(got.stderr, "ATRIUM_DB_KEY_FILE") {
+		t.Fatalf("unreadable key serve exit = %d, stderr = %q", got.code, got.stderr)
+	}
+	if _, err := os.Stat(missing); !os.IsNotExist(err) {
+		t.Fatal("serve with an unreadable configured key created a database")
 	}
 }

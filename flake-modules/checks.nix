@@ -291,13 +291,32 @@
       "LoadCredential=connection-service-oidc-client_secret:/run/secrets/oidc-client-secret"
       "LoadCredential=connection-service-media-agent-bearer:/run/secrets/media-agent-bearer"
     ];
-    sharedLines = credentialLines ++ ["EnvironmentFile=/run/secrets/atrium.env" "User=atrium" "Group=atrium" "StateDirectory=atrium"];
+    sharedLines =
+      credentialLines
+      ++ [
+        "EnvironmentFile=/run/secrets/atrium.env"
+        "User=atrium"
+        "Group=atrium"
+        "StateDirectory=atrium"
+        "StateDirectoryMode=0750"
+        "UMask=0027"
+        "NoNewPrivileges=true"
+        "ProtectSystem=strict"
+        "ProtectHome=true"
+        "PrivateTmp=true"
+        "ProtectKernelModules=true"
+        "ProtectKernelLogs=true"
+        "ProtectClock=true"
+        "RestrictSUIDSGID=true"
+        "LockPersonality=true"
+        "ReadWritePaths=/var/lib/atrium-vault"
+        "ReadWritePaths=/var/backups/atrium"
+      ];
     credentialsMatch = assert builtins.all (line: builtins.elem line cfg.runProperties) sharedLines;
-    assert builtins.all (name: builtins.all (line: lib.hasInfix line (unitText name)) sharedLines) appUnits;
+    assert builtins.all (name: hasLines name sharedLines) appUnits;
     assert builtins.length (builtins.filter (lib.hasPrefix "LoadCredential=") cfg.runProperties) == builtins.length credentialLines; true;
     defaultAuth = assert defaults.config.services.atrium.web.auth == "oidc";
-    assert lib.hasInfix "--auth oidc" defaults.config.systemd.units."atrium.service".text;
-    assert !(lib.hasInfix "--auth proxy" defaults.config.systemd.units."atrium.service".text);
+    assert builtins.any (lib.hasInfix "services.atrium.web.allowedHost") (failing (host {}));
     assert builtins.all (mode: let
       system = host {
         web = {
@@ -306,9 +325,14 @@
           host = "127.0.0.1";
         };
       };
-      text = system.config.systemd.units."atrium.service".text;
+      command = system.config.systemd.services.atrium.serviceConfig.ExecStart;
+      expected =
+        "${lib.getExe system.config.services.atrium.package} serve --host 127.0.0.1 --port 8480 "
+        + lib.concatMapStringsSep " " (auth: "--auth ${auth}") (lib.splitString "+" mode)
+        + lib.optionalString (mode != "local") " --allowed-host atrium.example.org"
+        + " --emergency-host 127.0.0.1 --emergency-port 8481";
     in
-      builtins.all (auth: lib.hasInfix "--auth ${auth}" text) (lib.splitString "+" mode)) ["proxy" "proxy+oidc" "local"]; true;
+      command == expected) ["oidc" "proxy" "proxy+oidc" "local"]; true;
     backupInServe = let
       defaultHost = defaults.config.services.atrium.renderedHost;
       web = unitText "atrium.service";
@@ -471,6 +495,25 @@
     configFile = (pkgs.formats.toml {}).generate "atrium-host.toml" cfg.renderedHost;
     runWrapper = lib.findFirst (package: lib.getName package == "atrium-run") null nixos.config.environment.systemPackages;
     agentConfigFile = (pkgs.formats.toml {}).generate "atrium-media-agent.toml" cfg.renderedMediaAgent;
+    keyFixture = builtins.toFile "test-only-db-key" "11223344556677889900aabbccddeeff11223344556677889900aabbccddeeff\n";
+    secretHost = host {
+      database.keyFile = keyFixture;
+      web.allowedHost = "atrium.example.org";
+    };
+    secretWrapper = lib.findFirst (package: lib.getName package == "atrium-run") null secretHost.config.environment.systemPackages;
+    secretUnit = pkgs.writeText "secret-unit" secretHost.config.systemd.units."atrium.service".text;
+    secretConfig = (pkgs.formats.toml {}).generate "secret-host.toml" secretHost.config.services.atrium.renderedHost;
+    expectedRunArgv = pkgs.writeText "atrium-run-argv" (lib.concatStringsSep "\n" (
+        ["--pipe" "--wait" "--collect" "--quiet" "--expand-environment=no"]
+        ++ map (property: "--property=${property}") cfg.runProperties
+        ++ lib.mapAttrsToList (name: value: "--setenv=${name}=${value}") (builtins.removeAttrs nixos.config.systemd.services.atrium.environment ["ATRIUM_PUBLIC_HOST" "ATRIUM_DB_KEY_FILE" "PATH"])
+        ++ ["--" (lib.getExe cfg.package) "settings" "set" "a b" "'quoted'" "\${HOME} $$ $X"]
+      )
+      + "\n");
+    keyedRuntime =
+      if pkgs.stdenv.hostPlatform.isLinux
+      then pkgs.callPackage ../nix/module-keyed-test.nix {inherit self;}
+      else null;
   in {
     checks =
       {
@@ -524,7 +567,7 @@
       }
       // lib.optionalAttrs (self'.packages ? atrium) {
         module-config = assert defaultAuth && credentialsMatch;
-          pkgs.runCommand "atrium-module-config" {nativeBuildInputs = [self'.packages.atrium pkgs.gnugrep pkgs.gnused pkgs.openssl];} ''
+          pkgs.runCommand "atrium-module-config" {nativeBuildInputs = [self'.packages.atrium pkgs.gnugrep pkgs.gnused pkgs.openssl pkgs.diffutils];} ''
             set -euo pipefail
             export HOME=$TMPDIR ATRIUM_DB=$TMPDIR/atrium.db ATRIUM_CACHE_DIR=$TMPDIR/cache
             export ATRIUM_HOST_CONFIG=${configFile} ATRIUM_INITIAL_TZ=UTC
@@ -538,13 +581,26 @@
             printf 'app-password\n' >"$CREDENTIALS_DIRECTORY/mail-account-icloud"
             printf 'oidc-secret\n' >"$CREDENTIALS_DIRECTORY/connection-service-oidc-client_secret"
             head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/connection-service-media-agent-bearer"
-            grep -Fq -- '--property=LoadCredential=db-key:/run/secrets/db-key' ${runWrapper}/bin/atrium-run
-            grep -Fq -- '--setenv=ATRIUM_DB_KEY_FILE=\''${CREDENTIALS_DIRECTORY}/db-key' ${runWrapper}/bin/atrium-run
-            grep -Fq 'ATRIUM_DB_KEY_FILE=''${CREDENTIALS_DIRECTORY}/db-key' ${unit "atrium.service"}
-            if grep -Fq -f "$CREDENTIALS_DIRECTORY/db-key" ${configFile} ${unit "atrium.service"} ${runWrapper}/bin/atrium-run; then
-              echo "database key bytes were rendered" >&2
+            ${lib.optionalString (keyedRuntime != null) "test -e ${keyedRuntime}"}
+            if grep -Fq -- '--setenv=ATRIUM_DB_KEY_FILE=' ${runWrapper}/bin/atrium-run; then
+              echo "transient credential path must be resolved inside the unit" >&2
               exit 1
             fi
+            grep -Fq 'ATRIUM_DB_KEY_FILE=%d/db-key' ${unit "atrium.service"}
+            if grep -Fq -f ${keyFixture} ${secretConfig} ${secretUnit} ${secretWrapper}/bin/atrium-run; then
+              echo "database key file content was rendered" >&2
+              exit 1
+            fi
+            mkdir -p "$TMPDIR/bin"
+            cat >"$TMPDIR/bin/systemd-run" <<'STUB'
+            #!${pkgs.runtimeShell}
+            printf '%s\n' "$@"
+            STUB
+            chmod +x "$TMPDIR/bin/systemd-run"
+            PATH="$TMPDIR/bin:$PATH" ${runWrapper}/bin/atrium-run settings set 'a b' "'quoted'" \
+              ${lib.escapeShellArg "\${HOME} $$ $X"} >"$TMPDIR/argv"
+            diff -u ${expectedRunArgv} "$TMPDIR/argv"
+            export ATRIUM_DB_KEY_FILE="$CREDENTIALS_DIRECTORY/db-key"
             atrium settings list >/dev/null
             atrium settings get public_url | grep -q '"value": "https://atrium.example.org"'
             atrium settings get tz | grep -q '"value": "UTC"'
