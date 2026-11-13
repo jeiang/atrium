@@ -22,9 +22,15 @@
     },
     {
       "area": "devices",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "notifications.channel-content",
+        "notifications.configuration",
+        "notifications.subscribe",
+        "notifications.test",
+        "notifications.unsubscribe"
+      ],
+      "required": 5,
+      "bound": 5
     },
     {
       "area": "drafts",
@@ -54,9 +60,13 @@
     },
     {
       "area": "inbox",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "notifications.inbox",
+        "notifications.mark",
+        "notifications.resend"
+      ],
+      "required": 3,
+      "bound": 3
     },
     {
       "area": "integrations",
@@ -84,9 +94,12 @@
     },
     {
       "area": "permissions",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "notifications.phone-policy",
+        "notifications.revoke-links"
+      ],
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "projects",
@@ -180,6 +193,6 @@
       "bound": 0
     }
   ],
-  "total_required": 166,
-  "total_bound": 39
+  "total_required": 167,
+  "total_bound": 49
 }

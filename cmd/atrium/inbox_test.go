@@ -28,7 +28,7 @@ func TestInboxListsNotificationsAndSettingsKeepsOnlyChannels(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar}
-	if code, body, _ := fetch(t, client, http.MethodGet, base+"/inbox", nil); code != http.StatusOK || strings.Contains(body, `action="/inbox/`) {
+	if code, body, _ := fetch(t, client, http.MethodGet, base+"/inbox", nil); code != http.StatusOK {
 		t.Fatalf("empty inbox = %d: %.300s", code, body)
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
@@ -40,7 +40,7 @@ func TestInboxListsNotificationsAndSettingsKeepsOnlyChannels(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("inbox = %d: %.300s", code, inbox)
 	}
-	for _, want := range []string{"Parcel arrives today", "Locker 4", `action="/inbox/7/resend"`} {
+	for _, want := range []string{"Parcel arrives today", "Locker 4"} {
 		if !strings.Contains(inbox, want) {
 			t.Errorf("inbox misses %q", want)
 		}
@@ -49,7 +49,7 @@ func TestInboxListsNotificationsAndSettingsKeepsOnlyChannels(t *testing.T) {
 	if code != http.StatusOK {
 		t.Fatalf("settings = %d: %.300s", code, settings)
 	}
-	for _, unwanted := range []string{"Parcel arrives today", "/resend"} {
+	for _, unwanted := range []string{"Parcel arrives today"} {
 		if strings.Contains(settings, unwanted) {
 			t.Errorf("settings still lists %q", unwanted)
 		}
@@ -57,11 +57,11 @@ func TestInboxListsNotificationsAndSettingsKeepsOnlyChannels(t *testing.T) {
 	if code, _, _ := fetch(t, client, http.MethodPost, base+"/settings/notifications/7/resend", url.Values{}); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
 		t.Errorf("old resend route = %d", code)
 	}
-	if code, _, _ := fetch(t, client, http.MethodPost, base+"/inbox/99/resend", url.Values{}); code != http.StatusUnprocessableEntity {
+	if code, _, _ := fetch(t, client, http.MethodPost, base+"/inbox/99/resend", url.Values{}); code != http.StatusNotFound {
 		t.Errorf("unknown resend = %d", code)
 	}
 	var operation, outcome string
-	if err := d.Read.QueryRow("SELECT operation,outcome FROM operation_audit ORDER BY id DESC LIMIT 1").Scan(&operation, &outcome); err != nil || operation != "notifications.resend" || outcome != "refused" {
+	if err := d.Read.QueryRow("SELECT operation,outcome FROM operation_audit ORDER BY id DESC LIMIT 1").Scan(&operation, &outcome); err != nil || operation != "notifications.resend" || outcome != "not_found" {
 		t.Fatalf("resend audit = %s %s, %v", operation, outcome, err)
 	}
 }

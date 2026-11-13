@@ -9,10 +9,11 @@ import (
 const IdentityName application.Name = "auth.identity"
 
 type Principal struct {
-	Source  string `json:"-"`
-	Subject string `json:"subject"`
-	Email   string `json:"email"`
-	Name    string `json:"name"`
+	BearerID int64  `json:"-"`
+	Source   string `json:"-"`
+	Subject  string `json:"subject"`
+	Email    string `json:"email"`
+	Name     string `json:"name"`
 }
 
 type principalKey struct{}

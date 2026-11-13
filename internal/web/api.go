@@ -289,6 +289,7 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, cap)
 	}
+	who.BearerID = tok.ID
 	ctx := withStreamAccess(withAPIIdentity(r.Context(), who), "bearer:"+tokenKey(token), func(ctx context.Context) error {
 		_, err := g.bearers.Authenticate(ctx, token)
 		return err
