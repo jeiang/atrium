@@ -9,9 +9,12 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 )
 
-func NotModified(w http.ResponseWriter, r *http.Request, revision application.Revision) bool {
+func FragmentNotModified(w http.ResponseWriter, r *http.Request, revision application.Revision) bool {
 	w.Header().Add("Vary", "HX-Request")
-	context := fmt.Sprintf("%s\x00%s\x00%t", revision, CSRFToken(r.Context()), IsPartial(r))
+	if !IsPartial(r) {
+		return false
+	}
+	context := fmt.Sprintf("%s\x00%s", revision, CSRFToken(r.Context()))
 	return conditional(w, r, fmt.Sprintf(`W/"%x"`, sha256.Sum256([]byte(context))))
 }
 

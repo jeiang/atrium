@@ -2,17 +2,18 @@ package main
 
 import (
 	"context"
+	"io"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"net/url"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
@@ -286,13 +287,35 @@ func TestApprovalSourceAndInvalidSelection(t *testing.T) {
 	if code, _, _ := fetch(t, client, http.MethodGet, base+"/chat", nil); code != http.StatusOK {
 		t.Fatalf("GET /chat = %d", code)
 	}
+	pending := regexp.MustCompile(`id="pending-count"[^>]*>(\d*)`)
+	badge := func() string {
+		t.Helper()
+		req, err := http.NewRequest(http.MethodGet, base+"/library/knowledge", nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("If-None-Match", "*")
+		resp, err := client.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = resp.Body.Close() }()
+		body, err := io.ReadAll(resp.Body)
+		found := pending.FindSubmatch(body)
+		if err != nil || resp.StatusCode != http.StatusOK || resp.Header.Get("ETag") != "" || found == nil {
+			t.Fatalf("revalidated knowledge page = %d etag %q: %v %.300s", resp.StatusCode, resp.Header.Get("ETag"), err, body)
+		}
+		return string(found[1])
+	}
+	if got := badge(); got != "2" {
+		t.Fatalf("review badge before the approval = %q, want 2", got)
+	}
 	if code, body := hxFetch(t, client, http.MethodPost, base+"/proposals/"+viaHTML+"/approve", url.Values{"all": {"1"}}); code != http.StatusOK || !strings.Contains(body, `data-status="applied"`) {
 		t.Fatalf("HTML approve: %d\n%s", code, body)
 	}
-	waitUntil(t, 10*time.Second, "the connection-health service audit", func() bool {
-		var n int
-		return d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'connections.observe-health' AND actor = 'service:connection-health' AND source = 'job'").Scan(&n) == nil && n > 0
-	})
+	if got := badge(); got != "1" {
+		t.Fatalf("review badge after the approval = %q, want 1", got)
+	}
 	stop()
 
 	s := startAPISite(t, dir, nil)

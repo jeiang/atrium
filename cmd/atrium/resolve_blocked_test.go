@@ -137,8 +137,10 @@ func TestOperatorResolvesBlockedWritesAndTheFollowUpTreatsThemAsSettled(t *testi
 	if got := runApp(t, "proposals", "resolve", id(undoHeld)); got.code == cli.ExitOK || !strings.Contains(got.stderr, "blocked undo") {
 		t.Fatalf("resolve of a blocked undo without an outcome = %d %q, want a refusal", got.code, got.stderr)
 	}
-	if got := runApp(t, "proposals", "resolve", "99999"); got.code == cli.ExitOK {
-		t.Fatalf("resolve of an unknown proposal exited %d", got.code)
+	for _, verb := range []string{"resolve", "dismiss"} {
+		if got := runApp(t, "proposals", verb, "99999"); got.code != cli.ExitError || got.stderr != "error: unknown proposal 99999\n" {
+			t.Fatalf("%s of an unknown proposal = %d %q", verb, got.code, got.stderr)
+		}
 	}
 	if got := runApp(t, "proposals", "resolve", id(viaCLI), "--outcome", "applied"); got.code != cli.ExitOK {
 		t.Fatalf("proposals resolve = %d %q", got.code, got.stderr)

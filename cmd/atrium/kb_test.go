@@ -351,17 +351,20 @@ func TestKnowledgeListRevision(t *testing.T) {
 	defer stop()
 	w := asstBrowse(t, base)
 
-	code, body, header := w.get("/library/knowledge", false)
+	code, body, header := w.get("/library/knowledge", true)
 	empty := header.Get("ETag")
 	if code != http.StatusOK || !strings.HasPrefix(empty, `W/"`) {
 		t.Fatalf("empty list = %d etag %q: %.300s", code, empty, body)
 	}
-	if code, body, _ = w.get("/library/knowledge", false, "If-None-Match", empty); code != http.StatusNotModified || body != "" {
+	if code, body, _ = w.get("/library/knowledge", true, "If-None-Match", empty); code != http.StatusNotModified || body != "" {
 		t.Fatalf("unchanged list with its etag = %d: %.300s", code, body)
+	}
+	if code, body, header = w.get("/library/knowledge", false, "If-None-Match", empty); code != http.StatusOK || header.Get("ETag") != "" {
+		t.Fatalf("full list page with the fragment etag = %d etag %q: %.300s", code, header.Get("ETag"), body)
 	}
 
 	knowledgeCreate(t, w, url.Values{"title": {"Gate code"}, "body": {"The gate code is 2231."}, "scope": {"work"}})
-	code, body, header = w.get("/library/knowledge", false, "If-None-Match", empty)
+	code, body, header = w.get("/library/knowledge", true, "If-None-Match", empty)
 	if code != http.StatusOK || !strings.Contains(body, "Gate code") {
 		t.Fatalf("list after a create with the old etag = %d: %.300s", code, body)
 	}
@@ -383,21 +386,23 @@ func TestKnowledgeRevisionCookieReset(t *testing.T) {
 	base, _, stop := startServeStoppable(t, dir)
 	defer stop()
 	a := asstBrowse(t, base)
-	_, oldPage, header := a.get("/library/knowledge/profile", false)
+	_, oldPage, _ := a.get("/library/knowledge/profile", false)
+	_, _, header := a.get("/library/knowledge", true)
 	b := asstBrowse(t, base)
 	b.client.Jar, _ = cookiejar.New(nil)
 	b.token = ""
-	code, page, fresh := b.get("/library/knowledge/profile", false, "If-None-Match", header.Get("ETag"))
-	if code != http.StatusOK || fresh.Get("ETag") == header.Get("ETag") {
-		t.Fatalf("reset cookie conditional GET = %d, etag %q", code, fresh.Get("ETag"))
+	code, _, fresh := b.get("/library/knowledge", true, "If-None-Match", header.Get("ETag"))
+	if code != http.StatusOK || fresh.Get("ETag") == "" || fresh.Get("ETag") == header.Get("ETag") {
+		t.Fatalf("reset cookie conditional fragment GET = %d, etag %q", code, fresh.Get("ETag"))
+	}
+	code, page, _ := b.get("/library/knowledge/profile", false)
+	if code != http.StatusOK {
+		t.Fatalf("reset cookie profile = %d", code)
 	}
 	tokenPattern := regexp.MustCompile(`name="csrf_token" value="([^"]+)"`)
 	oldToken, newToken := tokenPattern.FindStringSubmatch(oldPage), tokenPattern.FindStringSubmatch(page)
 	if len(oldToken) != 2 || len(newToken) != 2 || oldToken[1] == newToken[1] {
 		t.Fatal("reset page did not render a fresh form token")
-	}
-	if code, _, fragment := a.get("/library/knowledge/profile", true, "If-None-Match", header.Get("ETag")); code != http.StatusOK || fragment.Get("ETag") == header.Get("ETag") {
-		t.Fatalf("fragment reused full-page validator: %d", code)
 	}
 	code, page, _ = b.post("/library/knowledge/new", url.Values{
 		"csrf_token": {newToken[1]}, "title": {"Fresh token"}, "body": {"Saved with a native form."}, "scope": {"personal"},

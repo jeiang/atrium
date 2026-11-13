@@ -248,7 +248,7 @@ func Command(o Options) *cli.Command {
 			forever := a.Bool("forever", cli.Opt{})
 			return func(x *exec) error {
 				if _, err := x.review().Dismiss(x.Ctx, reviewapp.DismissInput{ProposalID: int64(*id), Suppress: *forever}); err != nil {
-					return err
+					return recorded(err, fmt.Sprintf("unknown proposal %d", *id))
 				}
 				x.JSON(dismissView{ID: int64(*id), Dismissed: true})
 				return nil
@@ -260,7 +260,7 @@ func Command(o Options) *cli.Command {
 			return func(x *exec) error {
 				resolved, err := x.review().Resolve(x.Ctx, reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.ProposalTarget, ID: int64(*id)}, Outcome: *outcome})
 				if err != nil {
-					return err
+					return recorded(err, fmt.Sprintf("unknown proposal %d", *id))
 				}
 				settled := make([]any, len(resolved.Data.Proposal.Settled))
 				for i, n := range resolved.Data.Proposal.Settled {

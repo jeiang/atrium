@@ -105,7 +105,7 @@ func (p *pages) knowledgeList(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	if web.NotModified(w, r, read.Revision) {
+	if web.FragmentNotModified(w, r, read.Revision) {
 		return
 	}
 	data := knowledgeListOf(read.Data)
@@ -213,9 +213,6 @@ func (p *pages) knowledgeRecord(w http.ResponseWriter, r *http.Request) {
 	read, err := p.knowledge().Detail(r.Context(), kbapp.DetailInput{ID: id})
 	if err != nil {
 		p.knowledgeDetailFail(w, r, err)
-		return
-	}
-	if web.NotModified(w, r, read.Revision) {
 		return
 	}
 	p.knowledgeRecordPage(w, r, http.StatusOK, read.Data, nil)
@@ -375,12 +372,7 @@ func (p *pages) knowledgeProfilePage(w http.ResponseWriter, r *http.Request, sta
 }
 
 func (p *pages) knowledgeProfile(w http.ResponseWriter, r *http.Request) {
-	read, err := p.knowledge().Profile(r.Context())
-	check(err)
-	if web.NotModified(w, r, read.Revision) {
-		return
-	}
-	p.render(w, r, http.StatusOK, knowledgeFrame, "knowledge_profile.gohtml", knowledgeProfileData{Profile: read.Data}, nil)
+	p.knowledgeProfilePage(w, r, http.StatusOK, nil)
 }
 
 func (p *pages) knowledgeProfileAdd(w http.ResponseWriter, r *http.Request) {
