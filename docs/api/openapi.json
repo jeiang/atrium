@@ -986,11 +986,59 @@
         ],
         "type": "object"
       },
+      "ApplicationReadCoremoduleActivityPage": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleActivityPage"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
       "ApplicationReadCoremoduleConnections": {
         "additionalProperties": false,
         "properties": {
           "data": {
             "$ref": "#/components/schemas/CoremoduleConnections"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadCoremoduleProposalDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleProposalDetail"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadCoremoduleProposalsPage": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleProposalsPage"
           },
           "revision": {
             "type": "string"
@@ -1055,54 +1103,6 @@
         "properties": {
           "data": {
             "$ref": "#/components/schemas/NotionResult"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "ApplicationReadReviewpagesActivityPage": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/ReviewpagesActivityPage"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "ApplicationReadReviewpagesProposalDetail": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/ReviewpagesProposalDetail"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "ApplicationReadReviewpagesProposalsPage": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/ReviewpagesProposalsPage"
           },
           "revision": {
             "type": "string"
@@ -2520,6 +2520,145 @@
         ],
         "type": "object"
       },
+      "CoremoduleActionPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationArg"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "const": "action",
+            "type": "string"
+          },
+          "label": {
+            "type": "string"
+          },
+          "module": {
+            "type": "string"
+          },
+          "preview": {},
+          "proposal_kind": {
+            "type": "string"
+          },
+          "result": {}
+        },
+        "required": [
+          "kind",
+          "proposal_kind",
+          "module",
+          "label",
+          "args",
+          "preview",
+          "result"
+        ],
+        "type": "object"
+      },
+      "CoremoduleActivityItem": {
+        "additionalProperties": false,
+        "properties": {
+          "actor": {
+            "type": "string"
+          },
+          "category": {
+            "type": "string"
+          },
+          "command_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "effective_outcome": {
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "operation": {
+            "type": "string"
+          },
+          "origin": {
+            "type": "string"
+          },
+          "outcome": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "format": "int64",
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "ts": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "source",
+          "id",
+          "category",
+          "ts",
+          "operation",
+          "actor",
+          "origin",
+          "outcome",
+          "effective_outcome",
+          "target",
+          "effect_ids"
+        ],
+        "type": "object"
+      },
+      "CoremoduleActivityPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CoremoduleActivityItem"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items"
+        ],
+        "type": "object"
+      },
       "CoremoduleBackupRequest": {
         "additionalProperties": false,
         "properties": {
@@ -2652,6 +2791,228 @@
           "email",
           "name",
           "api_version"
+        ],
+        "type": "object"
+      },
+      "CoremodulePermissionPayload": {
+        "additionalProperties": false,
+        "properties": {
+          "args": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationArg"
+            },
+            "type": "array"
+          },
+          "kind": {
+            "const": "permission",
+            "type": "string"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "format": "int64",
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "thread_id": {
+            "anyOf": [
+              {
+                "format": "int64",
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "kind",
+          "args"
+        ],
+        "type": "object"
+      },
+      "CoremoduleProposalDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "applied_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "blocked": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "number"
+          },
+          "decided_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "link_thread_id": {
+            "anyOf": [
+              {
+                "format": "int64",
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "payload": {
+            "$ref": "#/components/schemas/CoremoduleProposalPayload"
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "undoable": {
+            "type": "boolean"
+          },
+          "undone_at": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "title",
+          "created_at",
+          "undoable",
+          "blocked",
+          "payload",
+          "actions"
+        ],
+        "type": "object"
+      },
+      "CoremoduleProposalItem": {
+        "additionalProperties": false,
+        "properties": {
+          "account": {
+            "type": "string"
+          },
+          "actions": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "title": {
+            "type": "string"
+          },
+          "undoable": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "status",
+          "title",
+          "undoable",
+          "actions"
+        ],
+        "type": "object"
+      },
+      "CoremoduleProposalPayload": {
+        "discriminator": {
+          "mapping": {
+            "action": "#/components/schemas/CoremoduleActionPayload",
+            "permission": "#/components/schemas/CoremodulePermissionPayload"
+          },
+          "propertyName": "kind"
+        },
+        "oneOf": [
+          {
+            "$ref": "#/components/schemas/CoremoduleActionPayload"
+          },
+          {
+            "$ref": "#/components/schemas/CoremodulePermissionPayload"
+          }
+        ]
+      },
+      "CoremoduleProposalsPage": {
+        "additionalProperties": false,
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/CoremoduleProposalItem"
+            },
+            "type": "array"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "items"
         ],
         "type": "object"
       },
@@ -3699,367 +4060,6 @@
         ],
         "type": "object"
       },
-      "ReviewpagesActionPayload": {
-        "additionalProperties": false,
-        "properties": {
-          "args": {
-            "items": {
-              "$ref": "#/components/schemas/ApplicationArg"
-            },
-            "type": "array"
-          },
-          "kind": {
-            "const": "action",
-            "type": "string"
-          },
-          "label": {
-            "type": "string"
-          },
-          "module": {
-            "type": "string"
-          },
-          "preview": {},
-          "proposal_kind": {
-            "type": "string"
-          },
-          "result": {}
-        },
-        "required": [
-          "kind",
-          "proposal_kind",
-          "module",
-          "label",
-          "args",
-          "preview",
-          "result"
-        ],
-        "type": "object"
-      },
-      "ReviewpagesActivityItem": {
-        "additionalProperties": false,
-        "properties": {
-          "actor": {
-            "type": "string"
-          },
-          "category": {
-            "type": "string"
-          },
-          "command_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          },
-          "effective_outcome": {
-            "type": "string"
-          },
-          "id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "operation": {
-            "type": "string"
-          },
-          "origin": {
-            "type": "string"
-          },
-          "outcome": {
-            "type": "string"
-          },
-          "source": {
-            "type": "string"
-          },
-          "target": {
-            "type": "string"
-          },
-          "thread_id": {
-            "anyOf": [
-              {
-                "format": "int64",
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "ts": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "source",
-          "id",
-          "category",
-          "ts",
-          "operation",
-          "actor",
-          "origin",
-          "outcome",
-          "effective_outcome",
-          "target",
-          "effect_ids"
-        ],
-        "type": "object"
-      },
-      "ReviewpagesActivityPage": {
-        "additionalProperties": false,
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/ReviewpagesActivityItem"
-            },
-            "type": "array"
-          },
-          "next_cursor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "items"
-        ],
-        "type": "object"
-      },
-      "ReviewpagesPermissionPayload": {
-        "additionalProperties": false,
-        "properties": {
-          "args": {
-            "items": {
-              "$ref": "#/components/schemas/ApplicationArg"
-            },
-            "type": "array"
-          },
-          "kind": {
-            "const": "permission",
-            "type": "string"
-          },
-          "run_id": {
-            "anyOf": [
-              {
-                "format": "int64",
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "thread_id": {
-            "anyOf": [
-              {
-                "format": "int64",
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "kind",
-          "args"
-        ],
-        "type": "object"
-      },
-      "ReviewpagesProposalDetail": {
-        "additionalProperties": false,
-        "properties": {
-          "account": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "actions": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "applied_at": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "blocked": {
-            "type": "boolean"
-          },
-          "created_at": {
-            "type": "number"
-          },
-          "decided_at": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "link_thread_id": {
-            "anyOf": [
-              {
-                "format": "int64",
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          },
-          "payload": {
-            "$ref": "#/components/schemas/ReviewpagesProposalPayload"
-          },
-          "status": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "undoable": {
-            "type": "boolean"
-          },
-          "undone_at": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "status",
-          "title",
-          "created_at",
-          "undoable",
-          "blocked",
-          "payload",
-          "actions"
-        ],
-        "type": "object"
-      },
-      "ReviewpagesProposalItem": {
-        "additionalProperties": false,
-        "properties": {
-          "account": {
-            "type": "string"
-          },
-          "actions": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "title": {
-            "type": "string"
-          },
-          "undoable": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "status",
-          "title",
-          "undoable",
-          "actions"
-        ],
-        "type": "object"
-      },
-      "ReviewpagesProposalPayload": {
-        "discriminator": {
-          "mapping": {
-            "action": "#/components/schemas/ReviewpagesActionPayload",
-            "permission": "#/components/schemas/ReviewpagesPermissionPayload"
-          },
-          "propertyName": "kind"
-        },
-        "oneOf": [
-          {
-            "$ref": "#/components/schemas/ReviewpagesActionPayload"
-          },
-          {
-            "$ref": "#/components/schemas/ReviewpagesPermissionPayload"
-          }
-        ]
-      },
-      "ReviewpagesProposalsPage": {
-        "additionalProperties": false,
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/ReviewpagesProposalItem"
-            },
-            "type": "array"
-          },
-          "next_cursor": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
-          }
-        },
-        "required": [
-          "items"
-        ],
-        "type": "object"
-      },
       "ReviewpagesapiApproval": {
         "additionalProperties": false,
         "properties": {
@@ -4501,7 +4501,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApplicationReadReviewpagesActivityPage"
+                  "$ref": "#/components/schemas/ApplicationReadCoremoduleActivityPage"
                 }
               }
             },
@@ -11044,7 +11044,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApplicationReadReviewpagesProposalsPage"
+                  "$ref": "#/components/schemas/ApplicationReadCoremoduleProposalsPage"
                 }
               }
             },
@@ -11185,7 +11185,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ApplicationReadReviewpagesProposalDetail"
+                  "$ref": "#/components/schemas/ApplicationReadCoremoduleProposalDetail"
                 }
               }
             },

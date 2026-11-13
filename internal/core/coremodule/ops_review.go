@@ -8,7 +8,7 @@ import (
 
 func reviewOperations() ([]application.Definition, []application.Binding) {
 	uses := func(name application.Name) []application.Name { return []application.Name{name} }
-	return append(reviewapp.Describe(), reviewapp.DescribePermissions()...), append(append(reviewpages.APIReadBindings(), reviewpages.APIResourceBindings()...), []application.Binding{
+	return append(reviewapp.Describe(), reviewapp.DescribePermissions()...), append(append(reviewpages.APIReadBindings(), reviewRoutes(nil, nil)...), []application.Binding{
 		{Kind: application.HTML, Target: "GET /review", Uses: uses(reviewapp.PendingName)},
 		{Kind: application.HTML, Target: "GET /review/strip", Uses: uses(reviewapp.PendingName)},
 

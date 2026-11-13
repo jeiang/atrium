@@ -175,57 +175,32 @@ func (s *Service) Activity(ctx context.Context, in ActivityInput) (application.R
 	})
 }
 
-func (s *Service) operationEntries(ctx context.Context, hidePrivate bool, limit int) ([]ActivityEntry, error) {
-	query := "SELECT id, ts, operation, actor, source, thread_id, run_id, outcome, target, details_json, command_id FROM operation_audit"
-	if hidePrivate {
-		query += " WHERE thread_id IS NULL OR thread_id NOT IN (" + privateThreadsSQL + ")"
-	}
-	rows, err := s.db.Read.QueryContext(ctx, query+" ORDER BY ts DESC, id DESC LIMIT ?", limit)
+func (s *Service) operationEntries(ctx context.Context, private map[int64]bool, limit int) ([]ActivityEntry, error) {
+	rows, err := s.state.RecentAudit(ctx, limit)
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = rows.Close() }()
 	var out []ActivityEntry
-	for rows.Next() {
-		var (
-			e       ActivityEntry
-			op      OperationActivity
-			details string
-		)
-		if err := rows.Scan(&e.ID, &e.TS, &op.Name, &op.Actor, &op.Source, &op.ThreadID, &op.RunID, &op.Outcome, &op.Target, &details, &op.CommandID); err != nil {
-			return nil, err
+	for _, r := range rows {
+		if r.ThreadID != nil && private[*r.ThreadID] {
+			continue
 		}
 		var linked struct {
 			EffectIDs []int64 `json:"effect_ids"`
 		}
-		_ = json.Unmarshal([]byte(details), &linked)
-		op.EffectIDs = linked.EffectIDs
-		if op.EffectIDs == nil {
-			op.EffectIDs = []int64{}
+		_ = json.Unmarshal([]byte(r.DetailsJSON), &linked)
+		if linked.EffectIDs == nil {
+			linked.EffectIDs = []int64{}
 		}
-		e.Source, e.Category, e.Operation = SourceOperation, CategoryOperations, &op
-		out = append(out, e)
+		out = append(out, ActivityEntry{
+			Source: SourceOperation, ID: r.ID, Category: CategoryOperations, TS: r.TS,
+			Operation: &OperationActivity{
+				Name: r.Operation, Actor: r.Actor, Source: r.Source, Outcome: r.Outcome, Target: r.Target,
+				ThreadID: r.ThreadID, RunID: r.RunID, CommandID: r.CommandID, EffectIDs: linked.EffectIDs,
+			},
+		})
 	}
-	return out, rows.Err()
-}
-
-var privateThreadsSQL = "SELECT id FROM threads WHERE project_id IN (" + projects.PrivateIDsSQL() + ")"
-
-func (s *Service) privateThreads(ctx context.Context) (map[int64]bool, error) {
-	rows, err := s.db.Read.QueryContext(ctx, privateThreadsSQL)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	out := map[int64]bool{}
-	for rows.Next() {
-		var id int64
-		if err := rows.Scan(&id); err != nil {
-			return nil, err
-		}
-		out[id] = true
-	}
-	return out, rows.Err()
+	return out, nil
 }
 
 var writeCategoryPrefixes = []struct{ Prefix, Category string }{
@@ -294,19 +269,19 @@ func (s *Service) timeline(ctx context.Context, in ActivityInput, limit, offset 
 	category := in.Category
 	want := offset + limit + 1
 	var entries []ActivityEntry
+	var private map[int64]bool
+	if in.HidePrivate {
+		var err error
+		if private, err = projects.PrivateThreadIDs(ctx, q); err != nil {
+			return nil, 0, err
+		}
+	}
 	if in.Operations && category == "" {
-		found, err := s.operationEntries(ctx, in.HidePrivate, want)
+		found, err := s.operationEntries(ctx, private, want)
 		if err != nil {
 			return nil, 0, err
 		}
 		entries = append(entries, found...)
-	}
-	var private map[int64]bool
-	if in.HidePrivate {
-		var err error
-		if private, err = s.privateThreads(ctx); err != nil {
-			return nil, 0, err
-		}
 	}
 	if category == "" || category == CategoryMail {
 		actions, err := s.live.List(ctx, "", "", want, 0)

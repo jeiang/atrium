@@ -7,6 +7,8 @@ import (
 	"slices"
 	"time"
 
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
+
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/about"
@@ -137,7 +139,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			{Module: usagepages.Module(), Templates: usagepages.Templates(), Nav: []web.NavItem{
 				{Group: "Instance", Label: "Usage", URL: usagepages.URL, Page: "usage", Settings: true, Order: 60},
 			}},
-			{Module: reviewpages.Module(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Nav: []web.NavItem{
+			{Module: reviewpages.Module(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled, Routes: func(d *web.Deps, svc *reviewapp.Service) {
+				reviewRoutes(d, func() *reviewapp.Service { return svc })
+			}}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 			}},

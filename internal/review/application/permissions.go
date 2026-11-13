@@ -94,7 +94,8 @@ func (s *Service) Permissions(ctx context.Context, in PermissionsInput) (applica
 				})
 			}
 		}
-		err := s.db.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM proposals WHERE kind = ? AND status = ?", permission.Kind, proposals.Pending).Scan(&out.PendingRequests)
+		var err error
+		out.PendingRequests, err = proposals.CountPendingKind(ctx, s.db.Read, permission.Kind)
 		return out, err
 	}, nil)
 }
