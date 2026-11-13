@@ -100,7 +100,7 @@ func remove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) 
 	}
 	change, err := service(tc).RequestDelete(ctx, calapp.DeleteInput{UID: uid, ThreadID: tc.ThreadID, RunID: tc.RunID, ProposalID: tc.ProposalID})
 	if err != nil {
-		return nil, tool.Fail(err)
+		return nil, tool.Error(application.Classify(err).Error())
 	}
 	return map[string]any{"deleted": change.Data.Deleted, "calendar": change.Data.Calendar}, nil
 }

@@ -83,6 +83,9 @@ func (s *Service) proposals() *calendar.Proposals {
 
 func (s *Service) proposed(ctx context.Context, name application.Name, id int64, created bool, err error) (application.Change[Proposed], error) {
 	if err != nil {
+		if created {
+			return application.Change[Proposed]{}, s.fail(ctx, name, fmt.Sprintf("proposal:%d", id), map[string]any{"proposal_id": id}, err)
+		}
 		return application.Change[Proposed]{}, s.fail(ctx, name, "", map[string]any{}, err)
 	}
 	if !created {

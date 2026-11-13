@@ -109,6 +109,46 @@ func TestContactsSyncMirrorsTheAddressBookForLookup(t *testing.T) {
 	if ok, _, _ := passRows(t, dir, passrun.CardDAV); ok != 4 {
 		t.Errorf("carddav pass rows ok=%d, want 4", ok)
 	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	var audits int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'contacts.sync' AND outcome = 'ok' AND actor = 'operator' AND source = 'cli'").Scan(&audits); err != nil {
+		t.Fatal(err)
+	}
+	if audits != 4 {
+		t.Fatalf("contacts sync wrote %d operator/cli success audits, want 4", audits)
+	}
+}
+
+func TestContactsSyncSkipsOffAndUnconfiguredWithoutAuditing(t *testing.T) {
+	for _, tc := range []struct {
+		name, enabled string
+	}{
+		{"off", "false"},
+		{"unconfigured", "true"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir, _, _ := moduleFixture(t, flagsExcept("contacts", tc.enabled))
+			contactsDir := ""
+			if tc.name == "off" {
+				contactsDir = filepath.Join(dir, "contacts")
+			}
+			setEnv(t, settingEnv(contacts.DirKey), contactsDir)
+			got := runApp(t, "contacts", "sync")
+			if got.code != cli.ExitOK || got.stdout != "" {
+				t.Fatalf("contacts sync = %d: %s", got.code, got.stderr)
+			}
+			d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+			defer func() { _ = d.Close() }()
+			var audits int
+			if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'contacts.sync'").Scan(&audits); err != nil {
+				t.Fatal(err)
+			}
+			if audits != 0 {
+				t.Fatalf("skipped contacts sync wrote %d audits", audits)
+			}
+		})
+	}
 }
 
 func TestCalendarSyncSignsInWithTheICloudMailAccountAndBadCredentialsChangeNothing(t *testing.T) {

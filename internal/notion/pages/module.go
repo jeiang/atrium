@@ -8,7 +8,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/application"
 	notionapp "github.com/jeiang/atrium/internal/notion/application"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -64,5 +63,5 @@ func (s *service) fragment(w http.ResponseWriter, r *http.Request, status int, n
 }
 
 func (s *service) fail(w http.ResponseWriter, r *http.Request, err error) {
-	web.Fail(w, r, err, func(status int) { s.deps.Error(w, r, status, application.Classify(err).Error()) })
+	web.Fail(w, r, err, func(status int) { s.deps.Error(w, r, status, http.StatusText(status)) })
 }
