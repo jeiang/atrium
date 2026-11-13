@@ -15,6 +15,7 @@ import (
 
 const (
 	Heartbeat         = 15 * time.Second
+	Idle              = time.Second
 	WriteDeadline     = 10 * time.Second
 	StreamsPerSubject = 4
 	StreamsPerServer  = 16
@@ -119,8 +120,10 @@ func Serve(ctx context.Context, w http.ResponseWriter, q db.Querier, s Stream, l
 	last := s.After
 	ticker := time.NewTicker(Heartbeat)
 	defer ticker.Stop()
+	idle := time.NewTicker(Idle)
+	defer idle.Stop()
 	for {
-		paused := ""
+		paused, seen, running := "", int64(0), ""
 		for {
 			b, err := Read(ctx, q, s.RunID, last, 100)
 			if err != nil {
@@ -129,6 +132,7 @@ func Serve(ctx context.Context, w http.ResponseWriter, q db.Querier, s Stream, l
 			if last < b.RetainedAfter {
 				return nil
 			}
+			seen = b.Next
 			for _, e := range b.Events {
 				frame, err := Frame(e)
 				if err != nil {
@@ -159,22 +163,36 @@ func Serve(ctx context.Context, w http.ResponseWriter, q db.Querier, s Stream, l
 				return err
 			}
 			if active {
+				running = state
 				break
 			}
 			paused = state
 		}
-		select {
-		case <-ctx.Done():
-			return nil
-		case <-live.Stopping:
-			return nil
-		case <-wake:
-		case <-ticker.C:
-			if live.Check(ctx) != nil {
+	wait:
+		for {
+			select {
+			case <-ctx.Done():
 				return nil
-			}
-			if err := write(": heartbeat\n\n"); err != nil {
+			case <-live.Stopping:
 				return nil
+			case <-wake:
+				break wait
+			case <-ticker.C:
+				if live.Check(ctx) != nil {
+					return nil
+				}
+				if err := write(": heartbeat\n\n"); err != nil {
+					return nil
+				}
+				break wait
+			case <-idle.C:
+				moved, err := Moved(ctx, q, s.RunID, seen, running)
+				if err != nil {
+					return err
+				}
+				if moved {
+					break wait
+				}
 			}
 		}
 	}

@@ -130,6 +130,12 @@ func Read(ctx context.Context, q db.Querier, runID, after int64, limit int) (Bat
 	return b, err
 }
 
+func Moved(ctx context.Context, q db.Querier, runID, seen int64, state string) (bool, error) {
+	var moved bool
+	err := q.QueryRowContext(ctx, "SELECT COALESCE((SELECT next_seq-1 FROM run_streams WHERE run_id=?),0)<>? OR COALESCE((SELECT state FROM runs WHERE id=?),'')<>?", runID, seen, runID, state).Scan(&moved)
+	return moved, err
+}
+
 var subscriptions = struct {
 	sync.Mutex
 	listeners map[chan struct{}]struct{}

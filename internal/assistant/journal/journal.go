@@ -402,6 +402,7 @@ func MarkInterrupted(ctx context.Context, q db.Querier, now float64) (int64, err
 	if err != nil {
 		return 0, err
 	}
+	progress.Notify()
 	return res.RowsAffected()
 }
 
@@ -416,6 +417,9 @@ func InterruptRuns(ctx context.Context, q db.Querier, runs []int64, now float64,
 	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = NULL, lease_until = NULL WHERE state = ? "+
 		"AND (lease_until IS NULL OR lease_until < ? OR (? <> '' AND substr(COALESCE(owner, ''), 1, length(?)) = ?)) AND id IN (?"+
 		strings.Repeat(", ?", len(runs)-1)+")", args...)
+	if err == nil {
+		progress.Notify()
+	}
 	return err
 }
 
@@ -451,8 +455,12 @@ func ClaimResume(ctx context.Context, q db.Querier, runID int64, owner string, n
 	if err != nil {
 		return false, err
 	}
-	return db.Changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = ?, lease_until = ? WHERE id = ? AND state IN (?, ?)",
+	claimed, err := db.Changed(q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = ?, lease_until = ? WHERE id = ? AND state IN (?, ?)",
 		Running, owner, now+lease, runID, Interrupted, Parked))
+	if claimed {
+		progress.Notify()
+	}
+	return claimed, err
 }
 
 func InterruptedRuns(ctx context.Context, q db.Querier) ([]Run, error) {
@@ -855,5 +863,8 @@ func ToolCallsForThread(ctx context.Context, q db.Querier, threadID int64) ([]To
 // answers the pending question.
 func ParkRun(ctx context.Context, q db.Querier, runID int64, now float64) error {
 	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ?, owner = NULL, lease_until = NULL, ended_at = ? WHERE id = ?", Parked, now, runID)
+	if err == nil {
+		progress.Notify()
+	}
 	return err
 }
