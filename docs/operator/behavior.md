@@ -27,6 +27,8 @@ This page states what atrium does and refuses to do today. It describes current 
 - `atrium media-agent --config FILE` serves rooted movies/TV files independently of the main database. Every control request requires an allowed Host and bearer token (at least 32 bytes). Token and TLS file paths must be absolute. Non-loopback listeners require TLS and explicit allowed peer CIDRs; wildcard and IPv4-mapped listeners are refused.
 - The listener admits at most 256 connections and checks peer CIDRs before reading headers or negotiating TLS. Headers are limited to 16 KiB; ranges with more than 16 parts are ignored. Content errors use JSON problem bodies.
 - SIGTERM and SIGINT drain the agent; SIGHUP drains and exits non-zero, so it is not a reload operation. State and cache directories use mode 0700. The main application still uses its existing media filesystem implementation until the agent cutover.
+- The agent also prepares and executes receipt-keyed filing plans: torrents hardlink from downloads; imports rename into the library without replacing existing destinations. Cross-device placement is refused, with no copy fallback. Configured library-group readability and directory permissions are enforced without changing download inodes.
+- Preparation writes nothing. Filing stores durable intent before each mutation. Reusing a receipt key returns its recorded result, including failed, partial and unknown outcomes; it never repeats unfinished steps after a restart. Keep the state directory permanently: its receipts are recovery evidence, not an expendable cache. Undo derives guarded inverse steps from the forward receipt; cleanup is explicitly non-undoable and refuses remaining videos.
 
 ## Web interface
 

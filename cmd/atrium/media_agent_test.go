@@ -30,6 +30,8 @@ import (
 const mediaAgentHost = "media-agent.test"
 
 type mediaAgentOpts struct {
+	group   string
+	tv      string
 	control string
 	extra   string
 	env     []string
@@ -56,6 +58,28 @@ func writeMediaAgentConfig(t *testing.T, dir string, opts mediaAgentOpts) (strin
 		roots[name] = filepath.Join(dir, "library", name)
 		if err := os.MkdirAll(roots[name], 0o755); err != nil {
 			t.Fatal(err)
+		}
+	}
+	if opts.tv != "" {
+		roots["tv"] = opts.tv
+	}
+	if opts.group != "" {
+		for _, root := range roots {
+			err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+				if err != nil {
+					return err
+				}
+				if err := os.Lchown(p, -1, os.Getgid()); err != nil {
+					return err
+				}
+				if d.IsDir() {
+					return os.Chmod(p, 0o775)
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
 		}
 	}
 	tokenPath := filepath.Join(dir, "token")
@@ -85,6 +109,9 @@ tv = "` + roots["tv"] + `"
 downloads = "` + roots["downloads"] + `"
 import = "` + roots["import"] + `"
 ` + opts.extra
+	if opts.group != "" {
+		cfg = "group = " + strconv.Quote(opts.group) + "\n" + cfg
+	}
 	path := filepath.Join(dir, "agent.toml")
 	if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {
 		t.Fatal(err)
@@ -261,7 +288,7 @@ func TestMediaAgentStartsWithoutAnyDatabase(t *testing.T) {
 	if err := json.Unmarshal(body, &h); err != nil {
 		t.Fatal(err)
 	}
-	if h.Protocol != 1 || !h.Ready || h.ReasonCode != "" || !slices.Equal(h.Capabilities, []string{"stream"}) {
+	if h.Protocol != 1 || !h.Ready || h.ReasonCode != "" || !slices.Equal(h.Capabilities, []string{"file", "stream"}) {
 		t.Fatalf("health = %+v", h)
 	}
 	if !regexp.MustCompile(`^[0-9a-f]{32}$`).MatchString(h.AgentID) || !regexp.MustCompile(`^[0-9a-f]{64}$`).MatchString(h.RootRevision) {

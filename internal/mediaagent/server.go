@@ -27,16 +27,22 @@ const (
 )
 
 type Agent struct {
-	cfg      Config
-	roots    *roots
-	state    *state
-	token    [sha256.Size]byte
-	tls      *tls.Config
-	hosts    map[string]bool
-	peers    []netip.Prefix
-	draining atomic.Bool
-	inflight sync.WaitGroup
-	settled  atomic.Bool
+	cfg        Config
+	roots      *roots
+	state      *state
+	token      [sha256.Size]byte
+	tls        *tls.Config
+	hosts      map[string]bool
+	peers      []netip.Prefix
+	draining   atomic.Bool
+	inflight   sync.WaitGroup
+	settled    atomic.Bool
+	gid        int
+	receiptMu  sync.Mutex
+	mutationMu sync.Mutex
+	receipts   map[string]*receipt
+	imports    importSnapshots
+	filings    sync.WaitGroup
 }
 
 func New(c Config) (*Agent, error) {
@@ -46,6 +52,13 @@ func New(c Config) (*Agent, error) {
 	}
 	a := &Agent{cfg: c, token: sha256.Sum256(token), hosts: map[string]bool{}, peers: c.Control.AllowedPeers}
 	clear(token)
+	a.gid = -1
+	if c.Group != "" {
+		a.gid, err = lookupGroup(c.Group)
+		if err != nil {
+			return nil, err
+		}
+	}
 	for _, h := range c.Control.AllowedHosts {
 		a.hosts[h] = true
 	}
@@ -63,14 +76,20 @@ func New(c Config) (*Agent, error) {
 		_ = a.state.close()
 		return nil, err
 	}
+	if err := a.loadReceipts(); err != nil {
+		a.roots.close()
+		_ = a.state.close()
+		return nil, err
+	}
 	a.settled.Store(true)
 	return a, nil
 }
 
 func (a *Agent) Close() error {
-	if a.settled.Load() {
-		a.roots.close()
+	if !a.settled.Load() {
+		return nil
 	}
+	a.roots.close()
 	return a.state.close()
 }
 
@@ -114,6 +133,7 @@ func (a *Agent) Serve(ctx context.Context, ln net.Listener, stopping func()) err
 	done := make(chan struct{})
 	go func() {
 		a.inflight.Wait()
+		a.filings.Wait()
 		close(done)
 	}()
 	select {
@@ -154,7 +174,9 @@ func (a *Agent) Handler() http.Handler {
 				a.serveFile(w, r)
 			}
 		default:
-			problem(w, http.StatusNotFound, protocol.CodeNotFound, "no such endpoint")
+			if !a.filingRoutes(w, r) {
+				problem(w, http.StatusNotFound, protocol.CodeNotFound, "no such endpoint")
+			}
 		}
 	})
 }
@@ -202,7 +224,7 @@ func (a *Agent) serveHealth(w http.ResponseWriter) {
 		Protocol:     protocol.Version,
 		AgentID:      a.state.agentID,
 		RootRevision: a.roots.revision,
-		Capabilities: []string{protocol.CapabilityStream},
+		Capabilities: []string{protocol.CapabilityFile, protocol.CapabilityStream},
 		Ready:        true,
 	}
 	switch {
