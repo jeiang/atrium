@@ -854,6 +854,7 @@ behavior-parity target.
   host's `web.trusted_proxy_cidrs` list, in which case exactly one valid
   `CF-Connecting-IP` names it; other forwarded headers are ignored.
 - The Sign-in settings tab shows the OIDC connection and session settings, and issues, lists and revokes API bearer tokens.
+  Issue and revoke write one `operation_audit` row each (`auth.bearer-issue`, `auth.bearer-revoke`; token id and kind only, never the secret); an invalid name or expiry answers 422.
 - `/api/v1` is a JSON API for a native client, available in every listener.
   It accepts nothing but a bearer token: a locally issued `atr_` token, or,
   when `oidc_api_client_id` names the client, an RFC 9068 access token from

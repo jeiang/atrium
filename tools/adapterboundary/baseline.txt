@@ -515,9 +515,6 @@ internal/settingspage/settingspage.go	github.com/jeiang/atrium/internal/db
 internal/settingspage/settingspage.go	github.com/jeiang/atrium/internal/settings
 internal/web/api.go	github.com/jeiang/atrium/internal/auth/bearer
 internal/web/api.go	github.com/jeiang/atrium/internal/auth/oidc
-internal/web/auth_routes.go	github.com/jeiang/atrium/internal/auth/oidc
-internal/web/auth_settings.go	github.com/jeiang/atrium/internal/auth/bearer
-internal/web/auth_settings.go	github.com/jeiang/atrium/internal/settings/audit
 internal/web/server.go	github.com/jeiang/atrium/internal/auth/bearer
 internal/web/server.go	github.com/jeiang/atrium/internal/auth/oidc
 internal/web/server.go	github.com/jeiang/atrium/internal/config

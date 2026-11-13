@@ -63,7 +63,11 @@ func New(d *db.DB, oidc *oidc.Service) *Service {
 	return &Service{d: d, oidc: oidc, now: time.Now}
 }
 
-func (s *Service) Issue(ctx context.Context, name string, expiresAt *time.Time) (Issued, error) {
+type IssueCommit func(context.Context, *sql.Tx, Token) error
+
+type RevokeCommit func(ctx context.Context, tx *sql.Tx, changed bool) error
+
+func (s *Service) Issue(ctx context.Context, name string, expiresAt *time.Time, commit IssueCommit) (Issued, error) {
 	name = strings.TrimSpace(name)
 	if name == "" || utf8.RuneCountInString(name) > maxName {
 		return Issued{}, ErrName
@@ -96,7 +100,7 @@ func (s *Service) Issue(ctx context.Context, name string, expiresAt *time.Time) 
 			return err
 		}
 		tok = Token{ID: id, Kind: kindLocal, Name: name, CreatedAt: now, ExpiresAt: expires}
-		return nil
+		return commit(ctx, tx, tok)
 	})
 	if err != nil {
 		return Issued{}, err
@@ -126,7 +130,7 @@ func (s *Service) List(ctx context.Context) ([]Token, error) {
 	})
 }
 
-func (s *Service) Revoke(ctx context.Context, id int64) error {
+func (s *Service) Revoke(ctx context.Context, id int64, commit RevokeCommit) error {
 	if id < 1 {
 		return ErrNotFound
 	}
@@ -141,16 +145,17 @@ func (s *Service) Revoke(ctx context.Context, id int64) error {
 		if err != nil {
 			return err
 		}
-		if n > 0 {
-			found = true
-			return nil
+		if n == 0 {
+			var exists int
+			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM auth_bearers WHERE id = ?", id).Scan(&exists); err != nil {
+				return err
+			}
+			if exists == 0 {
+				return nil
+			}
 		}
-		var exists int
-		if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM auth_bearers WHERE id = ?", id).Scan(&exists); err != nil {
-			return err
-		}
-		found = exists > 0
-		return nil
+		found = true
+		return commit(ctx, tx, n > 0)
 	})
 	if err != nil {
 		return err
