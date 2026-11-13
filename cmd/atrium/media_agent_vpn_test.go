@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"errors"
 	"io"
 	"log/slog"
@@ -245,9 +244,9 @@ func TestRemovedMediaRootHostKeyIsIgnoredWithAWarning(t *testing.T) {
 		t.Fatal(err)
 	}
 	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "host-media-root.toml", string(raw)+"\n[media]\nmedia_root = \"/var/lib/media\"\n"))
-	var logs bytes.Buffer
+	logs := &lockedBuffer{}
 	previous := slog.Default()
-	logx.Setup(&logs)
+	logx.Setup(logs)
 	t.Cleanup(func() { slog.SetDefault(previous) })
 	if got := runApp(t, "settings", "list"); got.code != cli.ExitOK {
 		t.Fatalf("settings list with media_root: exit %d stderr %q", got.code, got.stderr)
