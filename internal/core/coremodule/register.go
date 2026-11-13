@@ -9,6 +9,8 @@ import (
 
 	"github.com/jeiang/atrium/internal/about"
 	"github.com/jeiang/atrium/internal/actionlink"
+	"github.com/jeiang/atrium/internal/application"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/attention"
@@ -92,6 +94,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, connectionOps...), append(bindings, connectionBindings...)
 	maintenanceOps, maintenanceBindings := maintenanceOperations()
 	operations, bindings = append(operations, maintenanceOps...), append(bindings, maintenanceBindings...)
+	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
 	maintenance := maintenanceapp.New(mc.Env, m.Now)
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {

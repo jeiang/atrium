@@ -53,6 +53,5 @@ func memoryOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.Tool, Target: "zoom", Uses: uses(asstapp.MemoryZoomName)},
 			{Kind: application.Tool, Target: "search_threads", Uses: uses(asstapp.MemorySearchName)},
 			{Kind: application.Tool, Target: "recall", Uses: uses(asstapp.ResultRecallName)},
-			{Kind: application.HTML, Target: "GET /settings/usage", Uses: uses(asstapp.UsageName)},
 		}
 }

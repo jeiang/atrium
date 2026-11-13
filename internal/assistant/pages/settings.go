@@ -132,4 +132,3 @@ func settingsRedirect(w http.ResponseWriter, location string) {
 	w.Header().Set("Location", location)
 	w.WriteHeader(http.StatusSeeOther)
 }
-

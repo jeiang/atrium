@@ -81,7 +81,6 @@ func workerFinding(t *testing.T, d *db.DB, fact string) (id int64, resolved bool
 	return id, resolvedAt != nil, true
 }
 
-
 func TestQuietPassMakesNoModelCall(t *testing.T) {
 	fake := &fakeOpsGrafana{up: 1}
 	srv := httptest.NewServer(fake)

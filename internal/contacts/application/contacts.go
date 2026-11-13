@@ -3,12 +3,13 @@ package application
 import (
 	"context"
 	"errors"
+	"slices"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/scheduler"
-	"slices"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
