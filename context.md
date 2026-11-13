@@ -557,7 +557,8 @@ behavior-parity target.
   (`calendar sync` and the CalDAV job) and candidate drafting (`calendar
   candidates` and its job) run as `calendar.sync` and
   `calendar.draft-candidates`, one `operation_audit` row per pass (`noop`
-  for an empty candidate queue); the drafting run starts through
+  for an empty candidate queue; a sync that is not configured or changed
+  no file writes none); the drafting run starts through
   `assistant.thread.start`, so a missing key or exhausted budget is refused
   before a thread exists. Nightly dreaming, the daily digest and every
   scheduled prompt run (weekly review and cron jobs) run as
@@ -585,7 +586,10 @@ behavior-parity target.
   and never contributes to scheduled backoff. Manual successes do not
   reset scheduled backoff, and priming preserves a pending retry.
   A manual invocation that loses its claim exits nonzero.
-  Missing configuration records `skipped_unconfigured`, not success.
+  Missing configuration records `skipped_unconfigured`, not success;
+  consecutive unattended threadless unconfigured skips with the same error
+  coalesce into the newest run's row, which keeps the first start time, so
+  an audit row never names a later run of another job.
   The Notion mirror is the model-free `notion/notion-sync` serve job
   (15-minute interval, 3-minute initial delay, 15-minute timeout, cancel
   on shutdown). Its CLI shares the `notion-sync` resource and claim;
@@ -784,7 +788,11 @@ behavior-parity target.
   It reads the configured `ops_hosts` through the Grafana metrics
   datasource and the alerts endpoint, records typed samples in
   `ops_samples` (up, cpu_pct, mem_pct, disk_root_pct, failed_units,
-  alerts_firing; 14-day retention). The label selector and the five
+  alerts_firing; 14-day retention). A host whose reads fail is skipped for
+  that pass: the other hosts' samples are written together, retention and
+  supervision still run, and the `ops.sample` audit is `partial` with the
+  failing host count. A pass with no hosts or no Grafana configuration
+  writes no audit row. The label selector and the five
   queries are settings (`ops_label_selector`, `ops_query_up`,
   `ops_query_cpu`, `ops_query_mem`, `ops_query_disk`,
   `ops_query_failed_units`); each query is a single-line PromQL template
