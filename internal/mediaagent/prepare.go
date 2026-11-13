@@ -90,7 +90,7 @@ func (a *Agent) prepare(req protocol.PrepareRequest) (protocol.PrepareResponse, 
 			return protocol.PrepareResponse{}, err
 		}
 		for _, f := range files {
-			if keptVideo(f.Path.Rel) {
+			if keptVideo(f.Path.Rel, f.Identity.Size) {
 				return protocol.PrepareResponse{}, refusal(protocol.CodeDestinationExists)
 			}
 			if err := a.checkSourceGroup(f.Path); err != nil {

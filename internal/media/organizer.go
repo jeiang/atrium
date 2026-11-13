@@ -82,11 +82,10 @@ func (t Tuning) fill(ctx context.Context, agent *agentclient.Client, item *Item)
 	}
 	item.Files, item.Subs, item.Sizes = []string{}, []string{}, map[string]int64{}
 	for _, f := range src.Files {
-		name := path.Base(f.Path.Rel)
 		switch {
-		case t.IsVideo(name):
+		case t.IsVideo(f.Path.Rel, f.Identity.Size):
 			item.Files = append(item.Files, f.Path.Rel)
-		case t.IsSubtitle(name):
+		case t.IsSubtitle(path.Base(f.Path.Rel)):
 			item.Subs = append(item.Subs, f.Path.Rel)
 		}
 		item.Sizes[f.Path.Rel] = f.Identity.Size
@@ -395,7 +394,13 @@ func Sweep(ctx context.Context, store *ledger.Store, set Settings) (SweepResult,
 	return out, nil
 }
 
-func (t Tuning) wanted(name string) bool { return t.IsVideo(name) || t.IsSubtitle(name) }
+func (t Tuning) wanted(f TorrentFile) bool {
+	size := int64(-1)
+	if f.Size != nil {
+		size = *f.Size
+	}
+	return t.IsVideo(f.Name, size) || t.IsSubtitle(path.Base(f.Name))
+}
 
 func (t Tuning) SelectFiles(ctx context.Context, store *ledger.Store, set Settings, scope Scope, torrents []Torrent) ([]string, error) {
 	done := []string{}
@@ -437,13 +442,13 @@ func (t Tuning) selectOne(ctx context.Context, store *ledger.Store, set Settings
 	if err != nil || len(files) == 0 {
 		return false, err
 	}
-	if slices.ContainsFunc(files, func(f TorrentFile) bool { return t.wanted(f.Name) }) {
+	if slices.ContainsFunc(files, func(f TorrentFile) bool { return t.wanted(f) }) {
 		var keep, skip []int
 		for _, f := range files {
 			switch {
-			case t.wanted(f.Name) && f.Priority == PrioritySkip:
+			case t.wanted(f) && f.Priority == PrioritySkip:
 				keep = append(keep, f.Index)
-			case !t.wanted(f.Name) && f.Priority != PrioritySkip:
+			case !t.wanted(f) && f.Priority != PrioritySkip:
 				skip = append(skip, f.Index)
 			}
 		}

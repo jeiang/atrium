@@ -10,7 +10,6 @@ import (
 	"net/http"
 	"net/url"
 	"path"
-	"regexp"
 	"strings"
 	"time"
 
@@ -27,10 +26,8 @@ var videoTypes = map[string]string{
 	".wmv": "video/x-ms-wmv",
 }
 
-var sampleName = regexp.MustCompile(`(?i)\bsample\b`)
-
-func keptVideo(rel string) bool {
-	return videoTypes[strings.ToLower(path.Ext(rel))] != "" && !sampleName.MatchString(path.Base(rel))
+func keptVideo(rel string, size int64) bool {
+	return videoTypes[strings.ToLower(path.Ext(rel))] != "" && !protocol.Sample(rel, size)
 }
 
 func (a *Agent) serveFile(w http.ResponseWriter, r *http.Request) {

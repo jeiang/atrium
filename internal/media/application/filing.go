@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"path"
 	"strings"
 	"time"
 
@@ -269,7 +268,7 @@ func (s *Service) cleanupImport(ctx context.Context, at located) {
 		return
 	}
 	for _, f := range src.Files {
-		if at.set.IsVideo(path.Base(f.Path.Rel)) {
+		if at.set.IsVideo(f.Path.Rel, f.Identity.Size) {
 			return
 		}
 	}

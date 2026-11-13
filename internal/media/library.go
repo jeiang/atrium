@@ -73,7 +73,7 @@ func dirsOf(snap Snapshot, root, parent string) []string {
 func (t Tuning) videosOf(snap Snapshot, root, parent string) []File {
 	out := []File{}
 	for _, n := range snap.list(root, parent) {
-		if name := path.Base(n.Rel); !n.Dir && t.IsVideo(name) {
+		if name := path.Base(n.Rel); !n.Dir && t.IsVideo(n.Rel, n.Size) {
 			out = append(out, File{Rel: root + "/" + n.Rel, Name: name, Size: n.Size})
 		}
 	}

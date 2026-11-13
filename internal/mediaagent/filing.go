@@ -60,7 +60,7 @@ func (a *Agent) validatePlan(p protocol.FilingPlan, undo bool) error {
 			return ErrUnsafePath
 		}
 		if p.SourceKind == protocol.SourceImportCleanup {
-			if s.Kind == protocol.StepUnlink && keptVideo(s.Destination.Rel) {
+			if s.Kind == protocol.StepUnlink && keptVideo(s.Destination.Rel, s.Expect.Size) {
 				return refusal(protocol.CodeDestinationExists)
 			}
 			item := protocol.Path{Root: protocol.RootImport, Rel: strings.Split(s.Destination.Rel, "/")[0]}
@@ -69,7 +69,7 @@ func (a *Agent) validatePlan(p protocol.FilingPlan, undo bool) error {
 				return err
 			}
 			for _, f := range files {
-				if keptVideo(f.Path.Rel) {
+				if keptVideo(f.Path.Rel, f.Identity.Size) {
 					return refusal(protocol.CodeDestinationExists)
 				}
 			}
