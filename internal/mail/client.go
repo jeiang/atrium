@@ -152,15 +152,21 @@ type OpenOptions struct {
 	Account  string
 	Q        db.Querier
 	ReadOnly bool
+	// SentOnly opens a session for the operator-send Sent copy. It does not take the mail-pass
+	// lock: a pass never writes Sent (a protected folder), so the APPEND conflicts with nothing a
+	// pass does. Every write except APPEND to the operator-send mailbox is refused.
+	SentOnly bool
 }
 
 type OpenFunc func(ctx context.Context, opts OpenOptions) (Client, error)
 
 var ErrReadOnly = errors.New("mail: write on a read-only IMAP session")
 
+var ErrSentOnly = errors.New("mail: a Sent-copy session only appends to the operator-send mailbox")
+
 func Gated(ctx context.Context, opts OpenOptions, dial func() (Conn, error)) (Client, error) {
 	var lock *db.LockSet
-	if !opts.ReadOnly {
+	if !opts.ReadOnly && !opts.SentOnly {
 		path := config.From(ctx).DBPath()
 		if path == "" {
 			return nil, errors.New("mail: no database path for the " + PassResource + " lock")
@@ -175,7 +181,7 @@ func Gated(ctx context.Context, opts OpenOptions, dial func() (Conn, error)) (Cl
 		_ = lock.Close()
 		return nil, err
 	}
-	return gate{conn: conn, q: opts.Q, readOnly: opts.ReadOnly, lock: lock}, nil
+	return gate{conn: conn, q: opts.Q, readOnly: opts.ReadOnly, sentOnly: opts.SentOnly, lock: lock}, nil
 }
 
 func (g gate) Settings() db.Querier { return g.q }
@@ -184,6 +190,7 @@ type gate struct {
 	conn     Conn
 	q        db.Querier
 	readOnly bool
+	sentOnly bool
 	lock     *db.LockSet
 }
 
@@ -195,6 +202,11 @@ func (g gate) check(ctx context.Context, action, target string) error {
 	}
 	if g.readOnly {
 		return ErrReadOnly
+	}
+	if g.sentOnly {
+		if sent, ok := safety.OperatorSendTarget(ctx); !ok || action != ActionAppend || target != sent {
+			return ErrSentOnly
+		}
 	}
 	var mode safety.ModeFunc
 	if g.q != nil {

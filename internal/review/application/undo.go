@@ -8,6 +8,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/module"
@@ -68,6 +69,9 @@ func (s *Service) knownAction(ctx context.Context, id int64) error {
 }
 
 func mailRefusal(err error) *application.Error {
+	if errors.As(err, new(*db.LockBusy)) {
+		return &application.Error{Code: application.Unavailable, Message: err.Error() + "; try again shortly"}
+	}
 	var refused live.UndoError
 	var disabled *module.OwnerDisabled
 	if errors.As(err, &refused) || errors.As(err, &disabled) {

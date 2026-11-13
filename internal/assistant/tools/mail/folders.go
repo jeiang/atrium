@@ -170,6 +170,9 @@ func mailFolderCreate(ctx context.Context, tc *tool.Context, args tool.Args) (an
 	}
 	created := false
 	err = mailops.Session(ctx, open, tc.DB.Read, account, func(client mail.Client) error {
+		if mailWritesPaused(tc) {
+			return mailops.Error("mail writes were paused while waiting for the mail lock; resume with 'atrium live resume' and retry")
+		}
 		existing, protected, err := resolveFolder(ctx, client, name)
 		if err != nil {
 			return err
@@ -290,6 +293,9 @@ func mailMove(ctx context.Context, tc *tool.Context, args tool.Args) (any, error
 	moved := 0
 	var skipped []mailops.Skip
 	err = mailops.Session(ctx, open, tc.DB.Read, account, func(client mail.Client) error {
+		if mailWritesPaused(tc) {
+			return mailops.Error("mail writes were paused while waiting for the mail lock; resume with 'atrium live resume' and retry")
+		}
 		imapName, protected, err := resolveFolder(ctx, client, folder)
 		if err != nil {
 			return err
