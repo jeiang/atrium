@@ -13,7 +13,7 @@ import (
 	"testing"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
-	"github.com/jeiang/atrium/internal/assistant/subagents/websearch"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/contacts"
@@ -172,6 +172,9 @@ func TestSearchWebRunsAnIsolatedChildAndVerifiesCitations(t *testing.T) {
 	}
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
 	defer func() { _ = d.Close() }()
+	if got := operationAudits(t, d, "assistant.search-web"); len(got) != 1 || !strings.HasPrefix(got[0], fmt.Sprintf("ok thread:%d ", int64(childID))) {
+		t.Errorf("search_web audits: %q", got)
+	}
 	var raw string
 	if err := d.Read.QueryRow("SELECT allowed_urls FROM threads WHERE id = ?", parent).Scan(&raw); err != nil {
 		t.Fatal(err)
@@ -390,7 +393,7 @@ func TestChatNoLongerSeesServerWebSearch(t *testing.T) {
 
 func TestSearchWebStopsAtItsCostCap(t *testing.T) {
 	_, api, _ := moduleFixture(t, flagsExcept("", ""))
-	seedSettings(t, map[string]string{websearch.KeyMaxCostUSD: "0.0001"})
+	seedSettings(t, map[string]string{asstapp.KeySearchWebMaxCostUSD: "0.0001"})
 	start := warm(t, api)
 	api.Push(
 		anthropictest.Reply("tool_use", anthropictest.ToolUse("s1", "search_web", map[string]any{"query": "atrium"})),

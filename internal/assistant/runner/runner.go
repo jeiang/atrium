@@ -5,9 +5,11 @@ import (
 	"errors"
 	"sync"
 
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/loop"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/report"
+	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/subagents/lookup"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
 	"github.com/jeiang/atrium/internal/assistant/subagents/websearch"
@@ -19,9 +21,17 @@ import (
 
 func New(tools registry.Source, store *ledger.Store, open mail.OpenFunc) (*loop.Runner, error) {
 	r := &loop.Runner{Ledger: store, MailOpen: open, Profile: kb.ProfileBlock}
-	rs := research.New(r)
-	lk := lookup.New(r)
-	ws := websearch.New(r)
+	child := func(ctx context.Context, tc *tool.Context) *asstapp.Service {
+		return asstapp.New(tc.DB, tc.Env, tc.Now).WithRuns(func() *service.Service {
+			svc := service.New(ctx, tc.DB, tc.Cfg, tc.Env, r)
+			svc.Client = tc.Client
+			svc.Now = tc.Now
+			return svc
+		})
+	}
+	rs := research.New(child)
+	lk := lookup.New(child)
+	ws := websearch.New(child)
 	var mu sync.Mutex
 	var source, bound *registry.Registry
 	r.Source = func() (*registry.Registry, error) {

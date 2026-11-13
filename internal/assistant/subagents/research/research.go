@@ -2,24 +2,18 @@ package research
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"maps"
 	"math/big"
 	"slices"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/journal"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/loop"
-	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/subagents"
-	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/textx"
 	"github.com/jeiang/atrium/internal/tool"
@@ -36,9 +30,11 @@ const schemaFormat = `{"type":"object","properties":{"role":%s,"task":{"type":"s
 	`"context_ids":{"type":"array","items":{"type":["string","integer"]},"maxItems":20}},` +
 	`"required":["role","task"],"additionalProperties":false}`
 
-type Research struct{ runner *loop.Runner }
+type Service func(context.Context, *tool.Context) *asstapp.Service
 
-func New(runner *loop.Runner) *Research { return &Research{runner: runner} }
+type Research struct{ svc Service }
+
+func New(svc Service) *Research { return &Research{svc: svc} }
 
 func Metadata() tool.Tool {
 	return tool.Tool{
@@ -117,118 +113,16 @@ func (r *Research) Handle(ctx context.Context, tc *tool.Context, args tool.Args)
 	if err != nil {
 		return nil, err
 	}
-	maxTask, maxIDs := assistant.TuningAgentSubagentTaskChars, assistant.TuningAgentSubagentContextIDs
-	if utf8.RuneCountInString(task) > maxTask {
-		return nil, tool.Error(fmt.Sprintf("task is longer than %d characters", maxTask))
-	}
-	ids, err := cleanIDs(args, maxIDs)
+	ids, err := cleanIDs(args, assistant.TuningAgentSubagentContextIDs)
 	if err != nil {
 		return nil, err
 	}
-	text := taskText(task, ids)
-	var agent *subagents.Agent
-	role, isString := roleValue.(string)
-	if isString {
-		if agent, err = subagents.Get(ctx, tc.DB.Read, role); err != nil {
-			return nil, err
-		}
-	}
-	if agent == nil || !agent.Enabled {
-		enabled, err := subagents.Enabled(ctx, tc.DB.Read)
-		if err != nil {
-			return nil, err
-		}
-		names := make([]string, len(enabled))
-		for i, a := range enabled {
-			names[i] = a.Name
-		}
-		return nil, tool.Error("role must be one of: " + strings.Join(names, ", "))
-	}
-	now := tc.Now
-	if now == nil {
-		now = assistant.Now
-	}
-	maxConcurrent := assistant.TuningAgentSubagentMaxConcurrent
-	if err := subagents.Slots.Acquire(ctx, maxConcurrent); err != nil {
-		return nil, err
-	}
-	defer subagents.Slots.Release()
-	var child int64
-	title := role + ": " + threads.TitleFrom(task)
-	auth, err := threads.ReadAuthority(ctx, tc.DB.Read, tc.ThreadID)
+	role, _ := roleValue.(string)
+	done, err := r.svc(ctx, tc).Research(ctx, asstapp.ResearchInput{ThreadID: tc.ThreadID, RunID: tc.RunID, Role: role, Task: task,
+		ContextIDs: ids, AllowedURLs: sortedURLs(tc.AllowedURLs)})
 	if err != nil {
-		return nil, err
+		return nil, asstapp.ToolError(err)
 	}
-	if err := tc.DB.WithTx(ctx, func(tx *sql.Tx) (err error) {
-		child, err = subagents.CreateChild(ctx, tx, tc.ThreadID, tc.RunID, *agent, title, auth.ProjectID, auth.Effective(), now())
-		return err
-	}); err != nil {
-		return nil, err
-	}
-	if slices.Contains(agent.Tools, "web_fetch") {
-		if err := threads.AddAllowedURLs(ctx, tc.DB, child, sortedURLs(tc.AllowedURLs)); err != nil {
-			return nil, err
-		}
-	}
-	if err := r.runChild(ctx, tc, child, text, role, *agent); err != nil {
-		return nil, err
-	}
-	marks, err := threads.ReadMarks(ctx, tc.DB.Read, child)
-	if err != nil {
-		return nil, err
-	}
-	if err := threads.AddMarks(context.WithoutCancel(ctx), tc.DB.Write, tc.ThreadID, now(), marks.Set|tool.Untrusted); err != nil {
-		return nil, err
-	}
-	runs, err := journal.RunsOf(ctx, tc.DB.Read, child)
-	if err != nil {
-		return nil, err
-	}
-	if len(runs) == 0 {
-		return nil, fmt.Errorf("research: child thread %d has no run", child)
-	}
-	run := runs[len(runs)-1]
-	digest, err := subagents.DigestOf(ctx, tc.DB.Read, child)
-	if err != nil {
-		return nil, err
-	}
-	if run.State != journal.Done {
-		partial := ""
-		if digest != "" {
-			partial = "\nPartial digest:\n" + digest
-		}
-		reason := run.State
-		if run.Error != nil && *run.Error != "" {
-			reason = *run.Error
-		}
-		return nil, tool.Error(fmt.Sprintf("%s research stopped: %s (child thread %d)%s", role, reason, child, partial))
-	}
-	return tool.Marked{Value: map[string]any{"untrusted": true, "role": role, "child_thread_id": child, "digest": digest}, Marks: marks.Set | tool.Untrusted}, nil
-}
-
-func (r *Research) runChild(ctx context.Context, tc *tool.Context, child int64, text, role string, agent subagents.Agent) error {
-	set := assistant.Read(ctx, tc.DB.Read)
-	maxSteps, maxCost := assistant.TuningAgentSubagentMaxSteps, set.Float(assistant.KeySubagentMaxCostUSD)
-	if err := set.Err(); err != nil {
-		return err
-	}
-	svc := service.New(ctx, tc.DB, tc.Cfg, tc.Env, r.runner)
-	svc.Client = tc.Client
-	svc.Now = tc.Now
-	parent := tc.RunID
-	extra, err := subagents.SystemAddendum(ctx, tc.DB.Read, agent)
-	if err != nil {
-		return err
-	}
-	steps, cost := int64(maxSteps), maxCost
-	_, err = svc.RunOnce(ctx, child, text, service.Start{
-		Kind:        threads.Subagent,
-		ParentRunID: &parent,
-		Limits:      journal.Limits{MaxSteps: &steps, MaxCostUSD: &cost, SystemExtra: &extra, AllowedTools: agent.Tools},
-	})
-	var exceeded inference.BudgetExceeded
-	if errors.As(err, &exceeded) {
-		return tool.Error(fmt.Sprintf("%s research not started: %s", role, exceeded))
-	}
-	return err
+	out := done.Data
+	return tool.Marked{Value: map[string]any{"untrusted": true, "role": out.Role, "child_thread_id": out.ChildThreadID, "digest": out.Digest}, Marks: out.Marks}, nil
 }

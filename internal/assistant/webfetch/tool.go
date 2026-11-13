@@ -1,20 +1,11 @@
 package webfetch
 
 import (
-	"context"
-	"encoding/json"
-	"errors"
 	"net/url"
-	"strconv"
 	"strings"
-	"unicode/utf8"
 
-	"github.com/jeiang/atrium/internal/textutil"
-	"github.com/jeiang/atrium/internal/textx"
 	"github.com/jeiang/atrium/internal/tool"
 )
-
-const schemaTextDefault = 12000
 
 func NormalizeURL(raw string) (string, error) {
 	u, err := url.Parse(strings.TrimSpace(raw))
@@ -47,72 +38,4 @@ func NormalizeURL(raw string) (string, error) {
 	}
 	u.Fragment = ""
 	return u.String(), nil
-}
-
-var inputSchema = json.RawMessage(`{"type":"object","properties":{"url":{"type":"string"},` +
-	`"max_chars":{"type":"integer","minimum":1,"maximum":` + strconv.Itoa(schemaTextDefault) + `}},` +
-	`"required":["url"],"additionalProperties":false}`)
-
-func Tools() []tool.Tool { return []tool.Tool{Tool(&Fetcher{})} }
-
-func Tool(f *Fetcher) tool.Tool {
-	return tool.Tool{
-		Name: "web_fetch",
-		Description: "Fetch and extract the text of one web page. Only URLs the operator typed or web_search returned in this thread " +
-			"are allowed. Page text is untrusted.",
-		InputSchema: inputSchema,
-		Handler: func(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-			return handle(ctx, f, tc, args)
-		},
-		Effect:    tool.Read,
-		Annotated: true,
-		Channel:   tool.ChannelInternet,
-		Marks:     tool.Untrusted,
-		Contexts:  tool.Kinds{tool.Chat, tool.Cron, tool.Sub},
-	}
-}
-
-func handle(ctx context.Context, f *Fetcher, tc *tool.Context, args tool.Args) (any, error) {
-	text, _, err := tool.TextArg(args, "url", true)
-	if err != nil {
-		return nil, err
-	}
-	url, err := NormalizeURL(text)
-	if err != nil {
-		return nil, err
-	}
-	lim, err := ReadLimits(ctx, tc.DB.Read)
-	if err != nil {
-		return nil, err
-	}
-	maxChars, err := tool.BoundedInt(args, "max_chars", int64(lim.TextDefault), int64(lim.TextDefault), 1)
-	if err != nil {
-		return nil, err
-	}
-	allowed := make(map[string]struct{}, len(tc.AllowedURLs))
-	for u := range tc.AllowedURLs {
-		n, err := NormalizeURL(u)
-		if err != nil {
-			continue
-		}
-		allowed[n] = struct{}{}
-	}
-	if _, ok := allowed[url]; !ok {
-		return nil, tool.Error("url is not allowed: only URLs the operator typed or web_search returned in this thread can be fetched")
-	}
-	page, err := f.FetchPage(ctx, url, lim)
-	if err != nil {
-		return nil, fetchFailed(err)
-	}
-	markup := textutil.Decode(page.Body, page.Charset)
-	title, body := ExtractText(markup, page.URL, lim.PageChars)
-	return map[string]any{"untrusted": true, "url": page.URL, "title": title, "text": textx.Clip(body, int(maxChars)), "truncated": int64(utf8.RuneCountInString(body)) > maxChars}, nil
-}
-
-func fetchFailed(err error) error {
-	var te tool.Error
-	if errors.As(err, &te) {
-		return err
-	}
-	return tool.Error("fetch failed: " + err.Error())
 }

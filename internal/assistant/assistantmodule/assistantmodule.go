@@ -36,6 +36,7 @@ import (
 	scheduletools "github.com/jeiang/atrium/internal/assistant/tools/schedule"
 	taskstools "github.com/jeiang/atrium/internal/assistant/tools/tasks"
 	weathertools "github.com/jeiang/atrium/internal/assistant/tools/weather"
+	webfetchtools "github.com/jeiang/atrium/internal/assistant/tools/webfetch"
 	"github.com/jeiang/atrium/internal/assistant/webfetch"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
@@ -74,13 +75,14 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	fileOps, fileBindings := fileOperations()
 	scheduleOps, scheduleBindings := scheduleOperations()
 	memoryOps, memoryBindings := memoryOperations()
+	researchOps, researchBindings := researchOperations()
 	agentOps, agentBindings := agentOperations()
 	return module.Declaration{
 		Name:       module.Assistant,
-		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps),
-		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings),
+		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps),
+		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings),
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
-			prompts.Settings(), registry.Settings(), websearch.Settings(), inference.Settings(),
+			prompts.Settings(), registry.Settings(), asstapp.SearchWebSettings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs()),
 		Host:      export.HostSettings(),
 		Sections:  export.Sections(),
@@ -133,10 +135,10 @@ func SettingGroups() []settings.Group {
 	return []settings.Group{
 		{Name: "spending", Title: "Spending", Keys: append([]string{
 			inference.BudgetKey, inference.ChatKey, inference.UnattendedKey, inference.ThreadCapKey,
-		}, append(runCaps(), assistant.KeySubagentMaxCostUSD, websearch.KeyMaxCostUSD, assistant.KeyDreamingMaxCost,
+		}, append(runCaps(), assistant.KeySubagentMaxCostUSD, asstapp.KeySearchWebMaxCostUSD, assistant.KeyDreamingMaxCost,
 			assistant.KeyDreamingMonthly, serverops.KeyWorkerMaxRunUSD, serverops.KeyWorkerMonthlyUSD)...)},
 		{Name: "background", Title: "Background work", Keys: []string{
-			assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, websearch.KeyModel,
+			assistant.KeyEffortCron, assistant.KeyEffortNightly, assistant.KeyEffortSubagent, asstapp.KeySearchWebModel,
 			memory.ModelKey, memory.EffortKey, serverops.KeyCondenser,
 		}},
 	}
@@ -146,9 +148,9 @@ func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
 	defs := []module.ToolDefinition{{Tool: registry.WebSearchTool()}, proposetools.Definition(kinds)}
 	for _, tools := range [][]tool.Tool{
 		askoperator.Tools(memoryToolService), attentiontool.Tools(), filetools.Tools(fileToolService), memorytools.Tools(memoryToolService),
-		webfetch.Tools(), recalltools.Tools(memoryToolService), plantools.Tools(memoryToolService),
+		webfetchtools.Tools(memoryToolService), recalltools.Tools(memoryToolService), plantools.Tools(memoryToolService),
 		scheduletools.Tools(scheduleToolService), taskstools.Tools(taskToolService),
-		kbtools.Tools(knowledgeToolService), weathertools.Tools(), opstools.Tools(),
+		kbtools.Tools(knowledgeToolService), weathertools.Tools(memoryToolService), opstools.Tools(),
 	} {
 		for _, t := range tools {
 			defs = append(defs, module.ToolDefinition{Tool: t})
