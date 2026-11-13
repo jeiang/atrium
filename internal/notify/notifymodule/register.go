@@ -39,7 +39,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := notificationOperations()
 	factory := func(d *web.Deps) *notifyapp.Service {
 		_ = notify.EnsurePush(audit.With(d.Ctx, "notifications-bootstrap", audit.Job), d.DB)
-		return notifyapp.New(d.DB)
+		return notifyapp.New(d.DB).WithPresenter(actionlink.Present)
 	}
 	return module.Declaration{
 		Operations: operations, Bindings: bindings,

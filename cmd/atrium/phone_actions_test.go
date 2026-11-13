@@ -21,10 +21,17 @@ const phoneKind = "media_channel_add"
 
 type phoneSite struct {
 	t      *testing.T
+	dir    string
 	base   string
 	client *http.Client
 	api    *modelLog
 	runs   int
+	stop   func()
+}
+
+func (s *phoneSite) restart() {
+	s.t.Helper()
+	s.base, _, s.stop = startServeStoppable(s.t, s.dir)
 }
 
 func newPhoneSite(t *testing.T, dir string, api *modelLog) *phoneSite {
@@ -32,9 +39,9 @@ func newPhoneSite(t *testing.T, dir string, api *modelLog) *phoneSite {
 	if ran := runApp(t, "agent", "run", "--text", "warm"); ran.code != cli.ExitOK {
 		t.Fatalf("warm run: %d %s", ran.code, ran.stderr)
 	}
-	base, _, _ := startServeStoppable(t, dir)
+	base, _, stop := startServeStoppable(t, dir)
 	jar, _ := cookiejar.New(nil)
-	return &phoneSite{t: t, base: base, client: &http.Client{Jar: jar}, api: api}
+	return &phoneSite{t: t, dir: dir, base: base, client: &http.Client{Jar: jar}, api: api, stop: stop}
 }
 
 func (s *phoneSite) page() string {

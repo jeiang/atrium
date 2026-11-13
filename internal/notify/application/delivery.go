@@ -17,7 +17,7 @@ type Message = notify.Message
 func PushLabel(userAgent string) string { return notify.PushLabel(userAgent) }
 
 type ChannelContentInput struct{ Name, Content string }
-type SubscribeInput struct{ Endpoint, P256DH, Auth, Label string }
+type SubscribeInput struct{ Transport, Endpoint, P256DH, Auth, Label string }
 type UnsubscribeInput struct {
 	Endpoint string
 	DeviceID *int64
@@ -42,7 +42,13 @@ func (s *Service) ChannelContent(ctx context.Context, in ChannelContentInput) (a
 	return application.Change[Empty]{AuditID: id}, err
 }
 func (s *Service) Subscribe(ctx context.Context, in SubscribeInput) (application.Change[Empty], error) {
-	id, err := s.mutate(ctx, SubscribeName, "push-device", func(tx *sql.Tx) error { return notify.Subscribe(ctx, tx, in.Endpoint, in.P256DH, in.Auth, in.Label) })
+	if in.Transport == "" {
+		in.Transport = notify.TransportWebPush
+	}
+	id, err := s.mutate(ctx, SubscribeName, "push-device", func(tx *sql.Tx) error {
+		_, err := notify.RegisterDevice(ctx, tx, notify.RegisterDeviceInput{Transport: in.Transport, Endpoint: in.Endpoint, P256DH: in.P256DH, Auth: in.Auth, Label: in.Label})
+		return err
+	})
 	return application.Change[Empty]{AuditID: id}, err
 }
 func (s *Service) Unsubscribe(ctx context.Context, in UnsubscribeInput) (application.Change[Empty], error) {
@@ -70,7 +76,7 @@ func (s *Service) Test(ctx context.Context, _ Empty) (application.Change[TestRes
 	return application.Change[TestResult]{Data: TestResult{Sent: n, Failure: failure, Outcome: outcome}, AuditID: id}, err
 }
 func (s *Service) Resend(ctx context.Context, in ResendInput) (application.Change[Delivery], error) {
-	sent, err := notify.Resend(ctx, s.db, in.ID)
+	sent, err := notify.Resend(ctx, s.db, in.ID, s.present)
 	outcome := "delivered"
 	if !sent.Delivered {
 		outcome = "not_delivered"

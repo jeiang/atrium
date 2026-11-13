@@ -18,11 +18,17 @@ import (
 )
 
 type Service struct {
-	db    *db.DB
-	state *state.Store
+	db      *db.DB
+	state   *state.Store
+	present notify.Presenter
 }
 
 func New(d *db.DB) *Service { return &Service{db: d, state: state.New(d)} }
+
+func (s *Service) WithPresenter(present notify.Presenter) *Service {
+	s.present = present
+	return s
+}
 
 type Notification = notify.Notification
 type Channel = notify.Channel
@@ -77,6 +83,10 @@ func (s *Service) finish(ctx context.Context, name application.Name, target stri
 		var pinned *settings.PinnedError
 		var disabled *module.OwnerDisabled
 		var te tool.Error
+		var unsupported notify.UnsupportedTransport
+		if errors.As(err, &unsupported) {
+			err = &application.Error{Code: application.Invalid, Message: err.Error(), Fields: []application.Field{{Name: "transport", Code: "unsupported_transport", Message: err.Error()}}, Cause: err}
+		}
 		if errors.As(err, &channel) || errors.As(err, &push) || errors.As(err, &pinned) || errors.As(err, &disabled) || errors.As(err, &te) {
 			outcome = state.Refused
 			err = &application.Error{Code: application.Refused, Message: err.Error(), Cause: err}

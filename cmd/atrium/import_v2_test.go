@@ -235,7 +235,7 @@ func TestImportV2CarriesTheDatabaseAndReplayMatches(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = q.Close() }()
-	for _, table := range []string{"agent_writes", "proposal_actions", "write_resolutions"} {
+	for _, table := range []string{"agent_writes", "proposal_actions", "write_resolutions", "push_subscriptions"} {
 		if n := importCount(t, q, "SELECT COUNT(*) FROM sqlite_schema WHERE type = 'table' AND name = ?", table); n != 0 {
 			t.Errorf("retired table %s survives the import", table)
 		}
@@ -1010,6 +1010,66 @@ func TestImportV2CarriesTheWebPushConnectionAndUsesItsVAPIDKey(t *testing.T) {
 	checkVAPID(t, sent.header, public, push.URL)
 	if payload := browser.decrypt(t, sent.body); payload["title"] != "atrium test" {
 		t.Errorf("diagnostic payload %v", payload)
+	}
+}
+
+func TestImportV2CarriesPushDevices(t *testing.T) {
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	vapid, err := ecdh.P256().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	scalar := base64.RawURLEncoding.EncodeToString(vapid.Bytes())
+	editImportSource(t, source, "INSERT INTO settings (key, value) VALUES ('webpush_subject', 'mailto:ops@example.test')")
+	editImportSource(t, source, fmt.Sprintf("INSERT INTO secrets (name, value, set_at, set_by) VALUES ('webpush_vapid_private_key', %q, 1762000800, 'fixture')", scalar))
+	push := newFakePush(t)
+	device, err := ecdh.P256().GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p256dh := base64.RawURLEncoding.EncodeToString(device.PublicKey().Bytes())
+	auth := base64.RawURLEncoding.EncodeToString(make([]byte, 16))
+	editImportSource(t, source, fmt.Sprintf(`INSERT INTO push_subscriptions (id, endpoint, p256dh, auth, label, created_ts, last_ok_ts, failure_count, last_error) VALUES
+		(7, '%[1]s/push/healthy', '%[2]s', '%[3]s', 'Phone', 1762000000, 1762000500, 0, NULL),
+		(9, '%[1]s/push/gone', '%[2]s', '%[3]s', 'Old laptop', 1761000000, NULL, 2, 'web push 410'),
+		(12, '%[1]s/push/broken', 'not-a-key', '%[3]s', 'Broken', 1761000000, NULL, 0, NULL)`, push.URL, p256dh, auth))
+
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if !strings.Contains(got.stdout, "push_subscriptions row 12 rejected: p256dh") {
+		t.Errorf("the report does not reject the malformed device:\n%s", got.stdout)
+	}
+	if strings.Contains(got.stdout+got.stderr, auth) || strings.Contains(got.stdout+got.stderr, scalar) {
+		t.Error("the import printed push key material")
+	}
+	if push.count() != 0 {
+		t.Fatalf("the import sent %d push requests", push.count())
+	}
+	q, err := db.Connect(filepath.Join(dir, "atrium.db"), db.WithKey(importKey(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	for _, want := range []struct {
+		id                   int64
+		label, endpoint, err string
+		failures             int64
+	}{{7, "Phone", push.URL + "/push/healthy", "", 0}, {9, "Old laptop", push.URL + "/push/gone", "web push 410", 2}} {
+		if n := importCount(t, q.Read, `SELECT COUNT(*) FROM notification_devices d JOIN webpush_devices w ON w.device_id = d.id
+			WHERE d.id = ? AND d.transport = 'webpush' AND d.label = ? AND w.endpoint = ? AND COALESCE(d.last_error, '') = ? AND d.failure_count = ? AND w.p256dh = ? AND w.auth = ?`,
+			want.id, want.label, want.endpoint, want.err, want.failures, p256dh, auth); n != 1 {
+			t.Errorf("device %d was not carried intact", want.id)
+		}
+	}
+	if n := importCount(t, q.Read, "SELECT COUNT(*) FROM notification_devices"); n != 2 {
+		t.Errorf("%d devices carried, want 2", n)
+	}
+	if stored := importValue(t, q.Read, "SELECT value FROM connection_credentials WHERE connection_id = 'service/webpush' AND slot = 'vapid_private'"); stored != scalar {
+		t.Error("the import changed the VAPID key")
 	}
 }
 
