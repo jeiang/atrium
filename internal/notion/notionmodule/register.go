@@ -2,9 +2,9 @@ package notionmodule
 
 import (
 	"context"
-	"errors"
-
 	"time"
+
+	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/cli"
@@ -38,14 +38,14 @@ func (m Module) Declare(module.Context) module.Declaration {
 	if env == nil {
 		env = config.OS
 	}
-	operations, bindings := wikiOperations()
+	operations, bindings := m.wikiOperations()
 	return module.Declaration{
 		Name:     module.Notion,
 		Settings: notion.Settings(),
 		Jobs:     []scheduler.Definition{syncJob(m.Jobs)},
 		Pages: []web.Page{{Module: pages.Module(pages.Options{Service: func(d *web.Deps) *notionapp.Service { return notionapp.New(d.DB, "", nil) }}), Templates: pages.Templates(), Nav: []web.NavItem{
 			{Section: "library", Label: "Wiki", URL: "/library/wiki", Icon: "book-open", Page: "library_wiki", Order: 10},
-		}}},
+		}}, {Module: func(_ chi.Router, d *web.Deps) { m.wikiRoutes(d) }}},
 		Groups:      SettingGroups(),
 		Commands:    []*cli.Command{notion.Command(notion.Options{Env: env, Search: search, Sync: func(ctx context.Context, d *db.DB, dir string) (any, error) { return sync(ctx, d, dir, env) }})},
 		Connections: notion.Connections(),
@@ -60,24 +60,15 @@ func search(ctx context.Context, d *db.DB, query string, private bool, limit int
 }
 
 func sync(ctx context.Context, d *db.DB, lockDir string, env config.Env) (any, error) {
-	var out any
-	var syncErr error
 	cfg, err := config.Load(env)
 	if err != nil {
 		return nil, err
 	}
-	_, err = module.Invoke(ctx, d, cfg, module.Notion+"/"+passrun.NotionSync, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
-		change, runErr := notionapp.New(d, lockDir, nil).Sync(ctx, notionapp.SyncInput{})
-		out, syncErr = change.Data, runErr
-		if missing, ok := errors.AsType[config.NotConfigured](runErr); ok {
-			return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new(missing.Error())}, nil
-		}
-		return scheduler.Result{}, runErr
+	change, err := lockedSync(ctx, d, lockDir, func(fn func(context.Context, scheduler.Run) (scheduler.Result, error)) error {
+		_, err := module.Invoke(ctx, d, cfg, module.Notion+"/"+passrun.NotionSync, db.ShortLockWait, fn)
+		return err
 	})
-	if err == nil {
-		err = syncErr
-	}
-	return out, err
+	return change.Data, err
 }
 
 func syncJob(deps jobworker.Dependencies) scheduler.Definition {

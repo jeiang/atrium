@@ -167,11 +167,15 @@
     },
     {
       "area": "wiki",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "wiki.detail",
+        "wiki.search",
+        "wiki.sync"
+      ],
+      "required": 3,
+      "bound": 3
     }
   ],
   "total_required": 154,
-  "total_bound": 31
+  "total_bound": 34
 }
