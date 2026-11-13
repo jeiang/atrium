@@ -61,9 +61,12 @@ func testMediaAgent(ctx context.Context, lease *connections.Lease, caps []connec
 	return out, nil
 }
 
-func (s Settings) Agent() (*agentclient.Client, error) {
+func (s Settings) Agent(capability string) (*agentclient.Client, error) {
 	if s.AgentLease == nil {
 		return nil, config.NotConfigured("the media agent connection is not configured")
+	}
+	if !slices.ContainsFunc(s.AgentLease.Capabilities(), func(c connections.Capability) bool { return c.Name == capability && c.Enabled }) {
+		return nil, &LibraryUnavailable{Cause: errors.New("the media agent " + capability + " capability is not enabled")}
 	}
 	client, err := agentclient.New(s.AgentLease)
 	if err != nil {
@@ -72,7 +75,7 @@ func (s Settings) Agent() (*agentclient.Client, error) {
 	if s.QbitStore != nil {
 		lease, store := s.AgentLease, s.QbitStore
 		client.Observe = func(ctx context.Context, state connections.State, reason string) {
-			_ = store.Observe(context.WithoutCancel(ctx), lease.ID(), lease.Revision(), connections.Result{Capability: "file", State: state, Reason: reason})
+			_ = store.Observe(context.WithoutCancel(ctx), lease.ID(), lease.Revision(), connections.Result{Capability: capability, State: state, Reason: reason})
 		}
 	}
 	return client, nil

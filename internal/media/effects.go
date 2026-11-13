@@ -304,7 +304,7 @@ func undoAgent(store *ledger.Store, env config.Env) ledger.Undoer {
 			if err != nil {
 				return ledger.Result{}, err
 			}
-			agent, err := settings.Agent()
+			agent, err := settings.Agent(protocol.CapabilityFile)
 			if err != nil {
 				return ledger.Result{}, ledger.Refused(err.Error())
 			}

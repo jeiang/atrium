@@ -432,3 +432,50 @@ func TestLegacyFilingUndoIsRefused(t *testing.T) {
 		t.Fatalf("the refused legacy undo touched the file: %q %v", body, err)
 	}
 }
+
+func TestDisabledStreamCapabilityStopsRelays(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	agent := startMediaAgent(t, mediaAgentOpts{main: true, dir: dir})
+	rel := "movies/Dune (2021)/Dune (2021).mkv"
+	mnpWrite(t, filepath.Join(filepath.Dir(agent.roots["movies"]), rel), []byte("dune"))
+	connection := strings.Replace(agentConnectionTOML(agent.base, filepath.Join(agent.dir, "token")), `["file", "stream"]`, `["file"]`, 1)
+	base := signedAgentServeWith(t, dir, connection)
+	resp, body := signedGet(t, http.MethodGet, base+mnpSign("proxy-link-key", rel, 4_000_000_000), nil)
+	if resp.StatusCode != http.StatusServiceUnavailable || strings.Contains(body, "dune") {
+		t.Fatalf("relay with stream disabled = %d %q", resp.StatusCode, body)
+	}
+}
+
+func TestDisabledFileCapabilityStopsFiling(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	_, qbURL := mnpNewQbit(t)
+	_, root := agentLibrary(t, dir, qbURL)
+	movie := filepath.Join(root, "import", "Movie.2020", "Movie.2020.mkv")
+	mnpWrite(t, movie, []byte("movie bytes"))
+	host := filepath.Join(dir, "host-agent.toml")
+	raw, err := os.ReadFile(host)
+	if err != nil || strings.Count(string(raw), `capabilities = ["file", "stream"]`) != 1 {
+		t.Fatalf("host config %v", err)
+	}
+	if err := os.WriteFile(host, []byte(strings.Replace(string(raw), `capabilities = ["file", "stream"]`, `capabilities = ["stream"]`, 1)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	seedAllFlagsIn(t, dir)
+	b := mnpNewBrowser(t, startServeIn(t, dir))
+	if body := b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK); !strings.Contains(body, "the media library is unavailable") {
+		t.Fatalf("the queue does not show the unavailable agent: %s", body)
+	}
+	if code, body := b.do(http.MethodPost, "/apps/media/file", url.Values{"id": {media.Import + "/Movie.2020"}, "action": {"file"}, "kind": {"movie"}, "title": {"Movie"}, "year": {"2020"}}); code != http.StatusUnprocessableEntity || !strings.Contains(body, "the media library is unavailable") {
+		t.Fatalf("filing with file disabled = %d %s", code, body)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+	if n := mediaEffectCount(t, d, media.OpFile, media.Import+"/Movie.2020"); n != 0 {
+		t.Fatalf("filing with file disabled recorded %d effects", n)
+	}
+	if _, err := os.Stat(movie); err != nil {
+		t.Fatalf("filing with file disabled moved the import: %v", err)
+	}
+}

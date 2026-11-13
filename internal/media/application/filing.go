@@ -328,7 +328,7 @@ func (s *Service) find(ctx context.Context, id string) (located, error) {
 	if at.qb, err = set.Qbit(); err != nil {
 		return at, classify(err)
 	}
-	if at.agent, err = set.Agent(); err != nil {
+	if at.agent, err = set.Agent(protocol.CapabilityFile); err != nil {
 		return at, classify(err)
 	}
 	if at.item, err = set.Find(ctx, at.qb, at.agent, set.DownloadPrefix, id); err != nil {
@@ -387,7 +387,7 @@ func (s *Service) InspectFiling(ctx context.Context, in InspectFilingInput) (app
 	if err != nil {
 		return application.Read[FilingInspection]{}, err
 	}
-	agent, err := set.Agent()
+	agent, err := set.Agent(protocol.CapabilityFile)
 	if err != nil {
 		return application.Read[FilingInspection]{}, classify(err)
 	}

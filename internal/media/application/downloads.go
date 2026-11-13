@@ -5,6 +5,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/mediaagent/protocol"
 )
 
 const (
@@ -65,7 +66,7 @@ func (s *Service) queue(ctx context.Context, set media.Settings, out *Downloads)
 	if err != nil {
 		return err.Error(), nil
 	}
-	agent, err := set.Agent()
+	agent, err := set.Agent(protocol.CapabilityFile)
 	if err != nil {
 		return err.Error(), nil
 	}

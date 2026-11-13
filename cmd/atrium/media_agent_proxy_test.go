@@ -27,12 +27,17 @@ func withAgentConnection(body, base, token string) string {
 
 func signedAgentServe(t *testing.T, dir, agentBase, token string) string {
 	t.Helper()
+	return signedAgentServeWith(t, dir, agentConnectionTOML(agentBase, token))
+}
+
+func signedAgentServeWith(t *testing.T, dir, connection string) string {
+	t.Helper()
 	keyFile := filepath.Join(dir, "link.key")
 	if err := os.WriteFile(keyFile, []byte("proxy-link-key\n"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	setEnv(t, settingEnv(config.KeyPublicURL), "https://atrium.test")
-	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "host-agent.toml", "[app_keys]\nlink_key_file = "+strconv.Quote(keyFile)+"\n"+defaultQbitConnection+agentConnectionTOML(agentBase, token)))
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "host-agent.toml", "[app_keys]\nlink_key_file = "+strconv.Quote(keyFile)+"\n"+defaultQbitConnection+connection))
 	setEnv(t, "ATRIUM_DB", filepath.Join(dir, "atrium.db"))
 	setEnv(t, "ATRIUM_CACHE_DIR", filepath.Join(dir, "cache"))
 	setEnv(t, "ATRIUM_PUBLIC_HOST", "")

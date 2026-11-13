@@ -5,7 +5,6 @@ import (
 	"errors"
 	"io"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 
@@ -127,7 +126,7 @@ func DescribeFile() application.Definition {
 }
 
 func (s *Service) snapshot(ctx context.Context, set media.Settings) (media.Snapshot, error) {
-	client, err := set.Agent()
+	client, err := set.Agent(protocol.CapabilityFile)
 	if err != nil {
 		if errors.As(err, new(config.NotConfigured)) {
 			return media.Snapshot{}, err
@@ -253,42 +252,6 @@ func (s *Service) LibraryDetail(ctx context.Context, in LibraryDetailInput) (app
 	return application.Read[LibraryDetail]{Revision: rev, Data: out}, nil
 }
 
-func open(path, contentType string) *FileStream {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil
-	}
-	info, err := f.Stat()
-	if err != nil {
-		_ = f.Close()
-		return nil
-	}
-	return &FileStream{ReadSeekCloser: f, Name: info.Name(), ModTime: info.ModTime(), ContentType: contentType}
-}
-
-func (s *Service) Art(ctx context.Context, in ArtInput) (*FileStream, error) {
-	set, err := s.settings(ctx)
-	if err != nil {
-		return nil, err
-	}
-	art := media.NewArtwork(s.d.CacheDir, set.TMDB(), set.Tuning)
-	var path string
-	var ok bool
-	switch in.Kind {
-	case media.KindMovie, media.KindShow, media.KindSeason:
-		if strings.Contains(in.Name, "/") {
-			return nil, notFound("not found")
-		}
-		path, ok = art.Poster(ctx, in.Kind, in.Name, in.Season)
-	default:
-		return nil, notFound("not found")
-	}
-	if !ok {
-		return nil, nil
-	}
-	return open(path, "image/jpeg"), nil
-}
-
 func relay(resp *http.Response) *FileRelay {
 	h := make(http.Header)
 	for _, name := range []string{"Accept-Ranges", "Content-Range", "Content-Length", "Content-Type", "ETag", "Last-Modified", "Content-Disposition"} {
@@ -322,7 +285,7 @@ func (s *Service) Thumbnail(ctx context.Context, in ThumbnailInput) (*FileRelay,
 	if err != nil {
 		return nil, err
 	}
-	client, err := set.Agent()
+	client, err := set.Agent(protocol.CapabilityStream)
 	if err != nil {
 		return nil, classify(err)
 	}
@@ -355,18 +318,45 @@ func (s *Service) File(ctx context.Context, in FileInput) (*FileRelay, error) {
 	if err != nil {
 		return nil, err
 	}
-	client, err := set.Agent()
+	client, err := set.Agent(protocol.CapabilityStream)
 	if err != nil {
 		return nil, classify(err)
 	}
+	ctx, cancel := context.WithCancel(ctx)
 	resp, err := client.Stream(ctx, agentclient.StreamRequest{
 		Resource: "file", Path: protocol.Path{Root: root, Rel: rel}, Method: in.Method,
 		Range: in.Range, IfRange: in.IfRange, IfNoneMatch: in.IfNoneMatch, IfModifiedSince: in.IfModifiedSince,
 	})
 	if err != nil {
+		cancel()
 		return nil, &application.Error{Code: application.Unavailable, Message: "the media agent is unavailable", Cause: err}
 	}
-	return relay(resp), nil
+	out := relay(resp)
+	idle := time.AfterFunc(streamIdle, cancel)
+	idle.Stop()
+	out.Body = &idleBody{body: resp.Body, idle: idle, cancel: cancel}
+	return out, nil
+}
+
+const streamIdle = time.Minute
+
+type idleBody struct {
+	body   io.ReadCloser
+	idle   *time.Timer
+	cancel context.CancelFunc
+}
+
+func (b *idleBody) Read(p []byte) (int, error) {
+	b.idle.Reset(streamIdle)
+	n, err := b.body.Read(p)
+	b.idle.Stop()
+	return n, err
+}
+
+func (b *idleBody) Close() error {
+	b.idle.Stop()
+	b.cancel()
+	return b.body.Close()
 }
 
 func (s *Service) RefreshCatalogue(ctx context.Context) error {
@@ -374,7 +364,7 @@ func (s *Service) RefreshCatalogue(ctx context.Context) error {
 	defer tick.Stop()
 	for {
 		if set, err := s.settings(ctx); err == nil {
-			if client, err := set.Agent(); err == nil {
+			if client, err := set.Agent(protocol.CapabilityFile); err == nil {
 				if err := s.d.Catalogue.Refresh(ctx, client); err != nil && ctx.Err() == nil {
 					logx.Logger("media").Warn("media catalogue refresh failed", logx.Err, err)
 				}

@@ -105,7 +105,7 @@ func (s *Service) thumbnails(ctx context.Context) (Thumbnails, error) {
 	if err != nil {
 		return Thumbnails{}, classify(err)
 	}
-	client, err := set.Agent()
+	client, err := set.Agent(protocol.CapabilityFile)
 	if err != nil {
 		return Thumbnails{}, classify(err)
 	}
