@@ -129,6 +129,7 @@ func TestSchedulesUsageAPI(t *testing.T) {
 		t.Fatalf("missing fields: %s", invalid.body)
 	}
 	expectAPI(t, s.do(http.MethodPatch, jobURL, token, map[string]any{"prompt": "Do something else"}), 400, "bad_request")
+	expectAPI(t, s.do(http.MethodPatch, jobURL, token, map[string]any{}), 422, "invalid")
 	expectAPI(t, s.do(http.MethodPut, jobURL+"/enabled", token, map[string]any{}), 422, "invalid")
 
 	for _, enabled := range []bool{false, false, true, true} {
@@ -162,6 +163,26 @@ func TestSchedulesUsageAPI(t *testing.T) {
 		t.Fatalf("cancelled schedule still listed: %v", row)
 	}
 	expectAPI(t, s.do(http.MethodDelete, jobURL, token, nil), 404, "not_found")
+	if history := s.do(http.MethodGet, jobURL+"/runs?limit=100", token, nil); len(apiItems(t, history)) != 100 {
+		t.Fatalf("cancelled job lost its history: %s", history.body)
+	}
+	if history := s.do(http.MethodGet, jobURL+"/runs?limit=100&cursor="+runCursor, token, nil); len(apiItems(t, history)) != 5 {
+		t.Fatalf("cancelled job lost its older history: %s", history.body)
+	}
+	otherURL := "/api/v1/schedules/" + strconv.FormatInt(other, 10)
+	if cancelled := s.do(http.MethodDelete, otherURL, token, nil); cancelled.status != 204 {
+		t.Fatalf("cancel empty job: %d %s", cancelled.status, cancelled.body)
+	}
+	if history := s.do(http.MethodGet, otherURL+"/runs", token, nil); len(apiItems(t, history)) != 0 {
+		t.Fatalf("cancelled empty job history: %s", history.body)
+	}
+	asstExec(t, d, "DELETE FROM job_runs WHERE job_id = ?", job)
+	if history := s.do(http.MethodGet, jobURL+"/runs?limit=100&cursor="+runCursor, token, nil); len(apiItems(t, history)) != 0 {
+		t.Fatalf("empty history with a cursor: %s", history.body)
+	}
+	asstExec(t, d, "DELETE FROM jobs WHERE id = ?", job)
+	expectAPI(t, s.do(http.MethodGet, jobURL+"/runs", token, nil), 404, "not_found")
+	expectAPI(t, s.do(http.MethodGet, jobURL+"/runs?limit=100&cursor="+runCursor, token, nil), 404, "not_found")
 
 	usage := s.do(http.MethodGet, "/api/v1/usage", token, nil)
 	if usage.status != 200 {
@@ -201,6 +222,20 @@ func TestSchedulesUsageAPI(t *testing.T) {
 	if len(model.Requests()) != requests {
 		t.Fatalf("memory refusals called the model: %d -> %d", requests, len(model.Requests()))
 	}
+}
+
+func TestSubagentAPI(t *testing.T) {
+	dir, model, f := moduleFixture(t, flagsExcept("", ""))
+	warm(t, model)
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	token := localAPIToken(t, "subagent-api")
+	base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	s := &apiSite{t: t, base: base}
 
 	agents := s.do(http.MethodGet, "/api/v1/subagents", token, nil)
 	baseline := len(apiItems(t, agents))
@@ -221,15 +256,34 @@ func TestSchedulesUsageAPI(t *testing.T) {
 		t.Fatalf("subagent disable: %d %s", disabled.status, disabled.body)
 	}
 	expectAPI(t, s.do(http.MethodPut, "/api/v1/subagents/nobody/enabled", token, map[string]any{"enabled": true}), 404, "not_found")
+	expectAPI(t, s.do(http.MethodPut, "/api/v1/subagents/api-helper/enabled", token, map[string]any{}), 422, "invalid")
 	if deleted := s.do(http.MethodDelete, "/api/v1/subagents/api-helper", token, nil); deleted.status != 204 {
 		t.Fatalf("subagent delete: %d %s", deleted.status, deleted.body)
 	}
 	expectAPI(t, s.do(http.MethodDelete, "/api/v1/subagents/api-helper", token, nil), 404, "not_found")
+	checkedBuiltin := false
 	for _, item := range apiItems(t, agents) {
 		row := item.(map[string]any)
 		if row["builtin"] == true {
+			checkedBuiltin = true
 			expectAPI(t, s.do(http.MethodDelete, "/api/v1/subagents/"+row["name"].(string), token, nil), 409, "refused")
+			name := row["name"].(string)
+			var beforeDescription, beforePrompt, beforeEffort, beforeTools string
+			if err := d.Read.QueryRow("SELECT description, prompt, effort, tools_json FROM subagents WHERE name = ?", name).Scan(&beforeDescription, &beforePrompt, &beforeEffort, &beforeTools); err != nil {
+				t.Fatal(err)
+			}
+			expectAPI(t, s.do(http.MethodPut, "/api/v1/subagents/"+name, token, map[string]any{"description": "Changed", "prompt": "Changed", "effort": "high", "tools": []string{"web_fetch"}}), 409, "refused")
+			var description, prompt, effort, tools string
+			if err := d.Read.QueryRow("SELECT description, prompt, effort, tools_json FROM subagents WHERE name = ?", name).Scan(&description, &prompt, &effort, &tools); err != nil {
+				t.Fatal(err)
+			}
+			if description != beforeDescription || prompt != beforePrompt || effort != beforeEffort || tools != beforeTools {
+				t.Fatal("refused API save changed the built-in subagent")
+			}
 			break
 		}
+	}
+	if !checkedBuiltin {
+		t.Fatal("no built-in subagent was exercised")
 	}
 }

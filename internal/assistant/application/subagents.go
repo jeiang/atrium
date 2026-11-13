@@ -40,6 +40,7 @@ type SubagentSetInput struct {
 	Prompt      *string
 	Effort      *string
 	Tools       []string
+	CustomOnly  bool
 }
 
 type SubagentEnabledInput struct {
@@ -129,6 +130,9 @@ func (s *Service) SubagentSet(ctx context.Context, in SubagentSetInput) (applica
 		existing, err := subagents.Get(ctx, tx, in.Name)
 		if err != nil {
 			return Subagent{}, err
+		}
+		if in.CustomOnly && existing != nil && existing.Builtin {
+			return Subagent{}, &application.Error{Code: application.Refused, Message: "Built-in subagents cannot be changed through the API."}
 		}
 		def := subagents.Definition{Name: in.Name, Effort: pricing.Medium, Tools: in.Tools, Enabled: true}
 		if existing != nil {

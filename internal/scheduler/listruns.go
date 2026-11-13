@@ -23,6 +23,12 @@ type ListedRun struct {
 	JobKind   string   `json:"job_kind"`
 }
 
+func JobExists(ctx context.Context, q db.Querier, id int64) (bool, error) {
+	var exists bool
+	err := q.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM jobs WHERE id = ?)", id).Scan(&exists)
+	return exists, err
+}
+
 func ListRuns(ctx context.Context, q db.Querier, jobID, before int64, limit int) ([]ListedRun, error) {
 	var conds []string
 	var args []any

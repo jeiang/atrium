@@ -1262,9 +1262,6 @@
             "type": "integer"
           }
         },
-        "required": [
-          "queued"
-        ],
         "type": "object"
       },
       "AssistantmoduleapiMessageRequest": {
@@ -1547,6 +1544,9 @@
             "type": "boolean"
           }
         },
+        "required": [
+          "enabled"
+        ],
         "type": "object"
       },
       "AssistantmoduleapiSchedulePatch": {
@@ -1556,6 +1556,9 @@
             "type": "string"
           }
         },
+        "required": [
+          "schedule"
+        ],
         "type": "object"
       },
       "AssistantmoduleapiSchedules": {
@@ -1725,6 +1728,9 @@
             "type": "boolean"
           }
         },
+        "required": [
+          "enabled"
+        ],
         "type": "object"
       },
       "AssistantmoduleapiSubagentSet": {
@@ -10197,7 +10203,7 @@
     },
     "/search": {
       "get": {
-        "operationId": "assistant.thread.list",
+        "operationId": "assistant.search",
         "parameters": [
           {
             "in": "query",

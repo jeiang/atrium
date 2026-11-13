@@ -78,6 +78,7 @@ func TestSearchAPI(t *testing.T) {
 		t.Fatalf("project narrowing widened: %s", none.body)
 	}
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/search?q=heron&limit=100&cursor="+cursor, token, nil), 400, "bad_cursor")
+	expectAPI(t, s.do(http.MethodGet, "/api/v1/threads?q=kestrel&limit=100&cursor="+cursor, token, nil), 400, "bad_cursor")
 	empty := s.do(http.MethodGet, "/api/v1/search?q=%20", token, nil)
 	expectAPI(t, empty, 422, "invalid")
 	if empty.json["error"].(map[string]any)["fields"] == nil {

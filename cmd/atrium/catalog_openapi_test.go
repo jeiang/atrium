@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -49,6 +50,11 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 			OperationID string `json:"operationId"`
 			Area        string `json:"x-atrium-area"`
 		} `json:"paths"`
+		Components struct {
+			Schemas map[string]struct {
+				Required []string `json:"required"`
+			} `json:"schemas"`
+		} `json:"components"`
 	}
 	if err := json.Unmarshal(first, &doc); err != nil {
 		t.Fatal(err)
@@ -56,6 +62,21 @@ func TestCatalogOpenAPIGeneratesAndChecks(t *testing.T) {
 	me := doc.Paths["/me"]["get"]
 	if doc.OpenAPI != "3.1.0" || len(doc.Servers) != 1 || doc.Servers[0].URL != "/api/v1" || me.OperationID != "auth.identity" || me.Area != "settings" {
 		t.Fatalf("openapi.json: version %q servers %+v /me %+v", doc.OpenAPI, doc.Servers, me)
+	}
+	if search, threads := doc.Paths["/search"]["get"].OperationID, doc.Paths["/threads"]["get"].OperationID; search != "assistant.search" || threads != "assistant.thread.list" || search == threads {
+		t.Fatalf("search/thread operation ids collide or changed: %q / %q", search, threads)
+	}
+	for schema, field := range map[string]string{
+		"AssistantmoduleapiSchedulePatch":   "schedule",
+		"AssistantmoduleapiScheduleEnabled": "enabled",
+		"AssistantmoduleapiSubagentEnabled": "enabled",
+	} {
+		if !slices.Contains(doc.Components.Schemas[schema].Required, field) {
+			t.Errorf("%s does not require %s", schema, field)
+		}
+	}
+	if slices.Contains(doc.Components.Schemas["AssistantmoduleapiMemoryWork"].Required, "queued") {
+		t.Error("memory work incorrectly requires queued")
 	}
 	var reach struct {
 		Areas []struct {

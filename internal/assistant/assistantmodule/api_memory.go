@@ -48,7 +48,7 @@ type apiMemoryEstimate struct {
 
 type apiMemoryWork struct {
 	ThreadID *int64 `json:"thread_id"`
-	Queued   bool   `json:"queued"`
+	Queued   bool   `json:"queued,omitempty"`
 }
 
 type apiMemoryBackfill struct {
@@ -74,7 +74,7 @@ type apiSubagentSet struct {
 
 type apiSubagentEnabled struct {
 	Name    string `path:"name" json:"-"`
-	Enabled *bool  `json:"enabled"`
+	Enabled *bool  `json:"enabled" api:"required"`
 }
 
 func memoryTreeOut(tree asstapp.MemoryTree) apiMemoryTree {
@@ -165,7 +165,7 @@ func subagentAPIBindings(p *apiPages) []application.Binding {
 			}),
 		apiCommand(p, asstapp.DescribeSubagentSet(), settings(application.Invalid, application.Refused), "PUT /subagents/{name}",
 			func(ctx context.Context, svc *asstapp.Service, in apiSubagentSet) (application.Change[asstapp.Subagent], error) {
-				return tooled(svc).SubagentSet(ctx, asstapp.SubagentSetInput{Name: in.Name, Description: in.Description, Prompt: in.Prompt, Effort: in.Effort, Tools: in.Tools})
+				return tooled(svc).SubagentSet(ctx, asstapp.SubagentSetInput{Name: in.Name, Description: in.Description, Prompt: in.Prompt, Effort: in.Effort, Tools: in.Tools, CustomOnly: true})
 			}),
 		apiCommand(p, asstapp.DescribeSubagentEnabled(), settings(application.Invalid, application.NotFound, application.Refused), "PUT /subagents/{name}/enabled",
 			func(ctx context.Context, svc *asstapp.Service, in apiSubagentEnabled) (application.Change[asstapp.Subagent], error) {

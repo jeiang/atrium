@@ -268,6 +268,15 @@ func (s *Service) ScheduleHistory(ctx context.Context, in ScheduleHistoryInput) 
 	}
 	out := []ScheduleRun{}
 	rev, err := s.snapshot(ctx, string(ScheduleHistoryName), scheduleScopes, in, func(q db.Querier) error {
+		if in.JobID != 0 {
+			exists, err := scheduler.JobExists(ctx, q, in.JobID)
+			if err != nil {
+				return err
+			}
+			if !exists {
+				return notFound("Unknown schedule.")
+			}
+		}
 		runs, err := scheduler.ListRuns(ctx, q, in.JobID, in.Before, limit)
 		for _, run := range runs {
 			out = append(out, scheduleRunOf(run, zone))

@@ -150,9 +150,11 @@
     },
     {
       "area": "search",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "assistant.search"
+      ],
+      "required": 1,
+      "bound": 1
     },
     {
       "area": "settings",
@@ -212,6 +214,6 @@
       "bound": 0
     }
   ],
-  "total_required": 168,
-  "total_bound": 65
+  "total_required": 169,
+  "total_bound": 66
 }

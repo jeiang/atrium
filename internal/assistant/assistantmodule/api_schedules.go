@@ -34,12 +34,12 @@ type apiScheduleRuns struct {
 
 type apiSchedulePatch struct {
 	JobID    int64   `path:"job_id" api:"min=1" json:"-"`
-	Schedule *string `json:"schedule"`
+	Schedule *string `json:"schedule" api:"required"`
 }
 
 type apiScheduleEnabled struct {
 	JobID   int64 `path:"job_id" api:"min=1" json:"-"`
-	Enabled *bool `json:"enabled"`
+	Enabled *bool `json:"enabled" api:"required"`
 }
 
 type apiScheduleChanged struct {
@@ -73,19 +73,6 @@ func pageAfter[T any, K cmp.Ordered](items []T, key func(T) K, cursor api.Cursor
 
 func scheduleChanged(value asstapp.ScheduleChanged) apiScheduleChanged {
 	return apiScheduleChanged{ID: value.ID, Enabled: value.Enabled}
-}
-
-func scheduleKnown(ctx context.Context, svc *asstapp.Service, id int64) error {
-	read, err := svc.ScheduleList(ctx, asstapp.ScheduleListInput{})
-	if err != nil {
-		return err
-	}
-	for _, job := range read.Data.Jobs {
-		if job.ID == id {
-			return nil
-		}
-	}
-	return &application.Error{Code: application.NotFound, Message: "Unknown schedule."}
 }
 
 func scheduleAPIBindings(p *apiPages) []application.Binding {
@@ -122,11 +109,6 @@ func scheduleAPIBindings(p *apiPages) []application.Binding {
 				read, err := svc.ScheduleHistory(ctx, asstapp.ScheduleHistoryInput{JobID: in.JobID, Before: before, Limit: int(in.Limit) + 1})
 				if err != nil {
 					return application.Read[web.List[asstapp.ScheduleRun]]{}, err
-				}
-				if len(read.Data) == 0 && before == 0 {
-					if err := scheduleKnown(ctx, svc, in.JobID); err != nil {
-						return application.Read[web.List[asstapp.ScheduleRun]]{}, err
-					}
 				}
 				out := web.List[asstapp.ScheduleRun]{Items: read.Data}
 				if len(out.Items) > int(in.Limit) {

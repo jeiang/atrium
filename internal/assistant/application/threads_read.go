@@ -30,6 +30,7 @@ import (
 
 const (
 	ThreadListName       application.Name = "assistant.thread.list"
+	SearchName           application.Name = "assistant.search"
 	ThreadTranscriptName application.Name = "assistant.thread.transcript"
 	ThreadWorkName       application.Name = "assistant.thread.work"
 	ThreadHistoryName    application.Name = "assistant.thread.history"
@@ -157,6 +158,15 @@ func describeRead[I, O any](name application.Name) application.Definition {
 
 func DescribeThreadList() application.Definition {
 	return describeRead[ThreadListInput, ThreadList](ThreadListName)
+}
+
+func DescribeSearch() application.Definition {
+	return describeRead[ThreadListInput, ThreadList](SearchName)
+}
+
+func (s *Service) Search(ctx context.Context, in ThreadListInput) (application.Read[ThreadList], error) {
+	in.Strict = true
+	return s.ThreadList(ctx, in)
 }
 
 func DescribeThreadTranscript() application.Definition {

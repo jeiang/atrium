@@ -83,14 +83,14 @@ func searchAPIBindings(p *apiPages) []application.Binding {
 		d = p.deps
 	}
 	return []application.Binding{
-		apiQuery(p, asstapp.DescribeThreadList(), application.APIShape{Area: "search", Errors: errs(application.Invalid)}, "GET /search",
+		apiQuery(p, asstapp.DescribeSearch(), application.APIShape{Area: "search", Errors: errs(application.Invalid)}, "GET /search",
 			func(ctx context.Context, svc *asstapp.Service, in apiSearchRequest) (application.Read[web.List[apiSearchHit]], error) {
 				q := strings.TrimSpace(in.Q)
 				if q == "" || utf8.RuneCountInString(q) > searchQueryMax {
 					return application.Read[web.List[apiSearchHit]]{}, &application.Error{Code: application.Invalid, Message: "q must be 1 to 200 characters.",
 						Fields: []application.Field{{Name: "q", Code: "invalid", Message: "Give a search of 1 to 200 characters."}}}
 				}
-				list := asstapp.ThreadListInput{Q: q, Limit: int(in.Limit), Archived: in.View == "archived", ProjectID: in.ProjectID, Strict: true}
+				list := asstapp.ThreadListInput{Q: q, Limit: int(in.Limit), Archived: in.View == "archived", ProjectID: in.ProjectID}
 				if in.Cursor.Set() {
 					var key threads.ListKey
 					if err := in.Cursor.Last(&key); err != nil {
@@ -98,7 +98,7 @@ func searchAPIBindings(p *apiPages) []application.Binding {
 					}
 					list.After = &key
 				}
-				read, err := svc.ThreadList(ctx, list)
+				read, err := svc.Search(ctx, list)
 				return readAs(read, err, func(v asstapp.ThreadList) web.List[apiSearchHit] {
 					out := web.List[apiSearchHit]{Items: []apiSearchHit{}}
 					if v.Next != nil {

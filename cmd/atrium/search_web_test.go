@@ -336,8 +336,8 @@ func TestSearchWebAsksInAMarkedChat(t *testing.T) {
 		defer func() { _ = d.Close() }()
 		proposal, _ := waitParkedPermission(t, d, thread)
 		code, card := hxFetch(t, client, http.MethodGet, base+fmt.Sprintf("/proposals/%d/card", proposal), nil)
-		if code != http.StatusOK {
-			t.Fatalf("GET the card = %d\n%s", code, card)
+		if code != http.StatusOK || !strings.Contains(card, "the warm thread") || !strings.Contains(card, "what did it say?") {
+			t.Fatalf("GET the card does not disclose the outgoing query and question = %d\n%s", code, card)
 		}
 		if code, body := hxFetch(t, client, http.MethodPost, base+fmt.Sprintf("/proposals/%d/approve", proposal), url.Values{"all": {"1"}}); code != http.StatusOK {
 			t.Fatalf("approve = %d\n%s", code, body)
