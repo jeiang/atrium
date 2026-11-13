@@ -162,6 +162,7 @@ type Site struct {
 	State    *config.State
 	Pages    []Page
 	Start    func(*Deps) error
+	Drain    func(func(context.Context) error)
 }
 
 func (p Plan) Build(site Site) (public, emergency *Server, err error) {
@@ -202,7 +203,7 @@ func (p Plan) Build(site Site) (public, emergency *Server, err error) {
 		if err != nil {
 			return nil, err
 		}
-		srv, err := New(Options{Ctx: site.Ctx, Cfg: site.Cfg, Env: site.Env, DB: site.DB, Settings: site.Settings, State: site.State, Policy: &e.policy, AllowedHosts: e.hosts, Trusted: trusted, Public: anyPublic(checks), Render: render, Modules: modules, OIDC: sessions, Home: home, Bindings: bindings, OnReady: start})
+		srv, err := New(Options{Ctx: site.Ctx, Cfg: site.Cfg, Env: site.Env, DB: site.DB, Settings: site.Settings, State: site.State, Policy: &e.policy, AllowedHosts: e.hosts, Trusted: trusted, Public: anyPublic(checks), Render: render, Modules: modules, OIDC: sessions, Home: home, Bindings: bindings, OnReady: start, Drain: site.Drain})
 		if err != nil {
 			return nil, err
 		}

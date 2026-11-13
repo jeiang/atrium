@@ -306,20 +306,6 @@
   };
 
   units = {
-    atrium-watch = {
-      description = "Watch the atrium mailboxes for new mail";
-      serviceConfig = {
-        ExecStart = "${lib.getExe cfg.package} watch";
-        Type = "notify";
-        WatchdogSec = writeTimeout;
-        TimeoutStartSec = writeTimeout;
-        TimeoutStopSec = writeTimeout;
-        Restart = "on-failure";
-        RestartSec = 10;
-      };
-      wantedBy = ["multi-user.target"];
-    };
-
     atrium-web = webUnit {
       description = "atrium web UI";
       inherit (cfg.web) host auth;

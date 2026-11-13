@@ -92,13 +92,14 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	cmds = append(cmds, mailCmds.RefreshCommands()...)
 	cmds = append(cmds, mailCmds.TrackingCommands()...)
 	return module.Declaration{
-		Name:      module.Mail,
-		Recover:   reviewpages.RecoverDrafts,
-		Settings:  slices.Concat(mail.Settings(), tracking.SettingsDefs()),
-		Host:      mail.HostSettings(),
-		Attention: AttentionSources(),
-		Jobs:      []scheduler.Definition{mailcmd.TrackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
-		Requires:  Requirements(),
+		Name:        module.Mail,
+		Recover:     reviewpages.RecoverDrafts,
+		Settings:    slices.Concat(mail.Settings(), tracking.SettingsDefs()),
+		Host:        mail.HostSettings(),
+		Attention:   AttentionSources(),
+		Jobs:        []scheduler.Definition{mailcmd.TrackingJob(m.Jobs), m.syncJob(mc.Env), m.scanJob(mc.Env)},
+		ServiceSets: m.watchServices(mc.Env),
+		Requires:    Requirements(),
 		Pages: []web.Page{
 			{Module: pages.Module, Templates: pages.Templates(), Globals: pages.Globals(), Nav: []web.NavItem{
 				{Section: "review", Label: "Mail decisions", URL: "/triage", Icon: "route", Page: "triage", Order: 40},

@@ -39,11 +39,11 @@ func mailJobDue(t *testing.T, d *db.DB, key string) *float64 {
 	return due
 }
 
-func serveWithSyncDue(t *testing.T, m *mailSafety, d *db.DB) int {
+func serveWatching(t *testing.T, dir string, d *db.DB, fakes ...*mailtest.FakeClient) {
 	t.Helper()
 	before := schedulerRuns(t, d, passrun.Sync)
 	started := float64(time.Now().Unix())
-	startServeIn(t, m.dir)
+	startServeIn(t, dir)
 	waitUntil(t, 30*time.Second, "serve to prime the mail sync job", func() bool {
 		due := mailJobDue(t, d, run.SyncJobKey)
 		return due != nil && *due >= started
@@ -54,8 +54,26 @@ func serveWithSyncDue(t *testing.T, m *mailSafety, d *db.DB) int {
 	if n := schedulerRuns(t, d, passrun.Sync); n != before {
 		t.Fatalf("%d mail sync job runs at serve start, want the %d manual ones", n, before)
 	}
+	waitWatching(t, fakes...)
+}
+
+func waitWatching(t *testing.T, fakes ...*mailtest.FakeClient) {
+	t.Helper()
+	waitUntil(t, 60*time.Second, "every account watch to finish its first pass and idle", func() bool {
+		for _, f := range fakes {
+			if f.Idling() == 0 {
+				return false
+			}
+		}
+		return true
+	})
+}
+
+func syncDue(t *testing.T, d *db.DB) int {
+	t.Helper()
+	manual := schedulerRuns(t, d, passrun.Sync)
 	asstExec(t, d, "UPDATE jobs SET next_due = ? WHERE declaration_key = ?", float64(time.Now().Unix())-1, run.SyncJobKey)
-	return before
+	return manual
 }
 
 func mailJobRuns(t *testing.T, d *db.DB, name string) []string {
@@ -107,9 +125,10 @@ func TestServeSyncJobFilesMailOnce(t *testing.T) {
 		m := mailSafetyFixture(t, "live")
 		d := mustConnect(t, m.path, keyFor(t))
 		declareJobsAndParkThem(t, d)
+		serveWatching(t, m.dir, d, m.fake)
 		id := m.correctionPending(t)
 		okBefore, _, _ := passRows(t, m.dir, passrun.Sync)
-		manual := serveWithSyncDue(t, m, d)
+		manual := syncDue(t, d)
 		waitUntil(t, 60*time.Second, "the scheduled mail sync run", scheduledRunEnded(d, passrun.Sync, manual))
 		if status, text := schedulerStatus(t, d, passrun.Sync); status != "ok" {
 			t.Fatalf("mail sync job status %s: %s", status, text)
@@ -142,6 +161,7 @@ func TestManualSyncWaitsForTheServeSyncPass(t *testing.T) {
 	m := mailSafetyFixture(t, "live")
 	d := mustConnect(t, m.path, keyFor(t))
 	declareJobsAndParkThem(t, d)
+	serveWatching(t, m.dir, d, m.fake)
 	m.correctionPending(t)
 	okBefore, _, _ := passRows(t, m.dir, passrun.Sync)
 	entered, release := make(chan struct{}), make(chan struct{})
@@ -159,7 +179,7 @@ func TestManualSyncWaitsForTheServeSyncPass(t *testing.T) {
 			close(release)
 		}
 	})
-	manual := serveWithSyncDue(t, m, d)
+	manual := syncDue(t, d)
 	select {
 	case <-entered:
 	case <-time.After(60 * time.Second):
@@ -255,6 +275,7 @@ func TestPostEffectSyncInsideAPassDoesNotDeadlock(t *testing.T) {
 	if proposal == "<nil>" {
 		t.Fatal("no pending inbox_backlog proposal")
 	}
+	serveWatching(t, m.dir, d, fake)
 	entered, release := make(chan struct{}), make(chan struct{})
 	var armed atomic.Bool
 	armed.Store(true)
@@ -270,7 +291,7 @@ func TestPostEffectSyncInsideAPassDoesNotDeadlock(t *testing.T) {
 			close(release)
 		}
 	})
-	manual := serveWithSyncDue(t, m, d)
+	manual := syncDue(t, d)
 	select {
 	case <-entered:
 	case <-time.After(60 * time.Second):

@@ -133,10 +133,12 @@ func (s *State) UseAccounts(list []AccountSpec, passwords map[string]string) (re
 	previousAccounts, previousPasswords := s.accounts, s.passwords
 	s.accounts, s.passwords = list, passwords
 	s.mu.Unlock()
+	s.accountsChanged()
 	return func() {
 		s.mu.Lock()
 		s.accounts, s.passwords = previousAccounts, previousPasswords
 		s.mu.Unlock()
+		s.accountsChanged()
 	}
 }
 
@@ -153,7 +155,35 @@ func (s *State) LoadStoredAccounts(ctx context.Context, q db.Querier) error {
 	s.mu.Lock()
 	s.accounts, s.passwords = accounts, passwords
 	s.mu.Unlock()
+	s.accountsChanged()
 	return nil
+}
+
+func (s *State) OnAccounts(fn func()) (remove func()) {
+	key := &fn
+	s.mu.Lock()
+	if s.hooks == nil {
+		s.hooks = map[*func()]struct{}{}
+	}
+	s.hooks[key] = struct{}{}
+	s.mu.Unlock()
+	return func() {
+		s.mu.Lock()
+		delete(s.hooks, key)
+		s.mu.Unlock()
+	}
+}
+
+func (s *State) accountsChanged() {
+	s.mu.RLock()
+	hooks := make([]func(), 0, len(s.hooks))
+	for fn := range s.hooks {
+		hooks = append(hooks, *fn)
+	}
+	s.mu.RUnlock()
+	for _, fn := range hooks {
+		fn()
+	}
 }
 
 func (s *State) loadAccountsFromDB(ctx context.Context, q db.Querier, filePasswords map[string]string) ([]AccountSpec, map[string]string, error) {

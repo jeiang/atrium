@@ -19,6 +19,7 @@ type State struct {
 	credential   AccountCredentialFunc
 	hostAccounts HostAccountsFunc
 	dbKey        db.Key
+	hooks        map[*func()]struct{}
 }
 
 func NewState(reg *settings.Registry) *State {
@@ -176,5 +177,6 @@ func (s *State) Boot(ctx context.Context, env Env, d *db.DB, cfg Config) error {
 	s.mu.Lock()
 	s.core, s.accounts, s.passwords = c, accounts, passwords
 	s.mu.Unlock()
+	s.accountsChanged()
 	return nil
 }

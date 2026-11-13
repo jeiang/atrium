@@ -159,9 +159,9 @@
       assert cfg.renderedHost.core.backup_keep_days == 14;
       assert cfg.renderedHost.core.backup_schedule == "daily 03:00";
       assert builtins.all (dir: lib.hasInfix "ReadWritePaths=${dir}" web) ["/var/lib/media" "/var/lib/atrium-vault" "/var/backups/atrium"]; true;
-    notifyUnits = ["atrium-web.service" "atrium-watch.service"];
+    notifyUnits = ["atrium-web.service"];
     schedulerInServe = assert !(nixos.config.systemd.units ? "atrium-agent-scheduler.service");
-    assert !(builtins.any (name: nixos.config.systemd.units ? ${name} || defaults.config.systemd.units ? ${name}) ["atrium-dav-sync.service" "atrium-dav-sync.timer" "atrium-notion-sync.service" "atrium-notion-sync.timer" "atrium-sync.service" "atrium-sync.timer" "atrium-scan.service" "atrium-scan.timer"]);
+    assert !(builtins.any (name: nixos.config.systemd.units ? ${name} || defaults.config.systemd.units ? ${name}) ["atrium-dav-sync.service" "atrium-dav-sync.timer" "atrium-notion-sync.service" "atrium-notion-sync.timer" "atrium-sync.service" "atrium-sync.timer" "atrium-scan.service" "atrium-scan.timer" "atrium-watch.service"]);
     assert !(defaults.config.systemd.units ? "atrium-agent-scheduler.service");
     assert !(lib.hasInfix "--no-services" (unitText "atrium-web.service"));
     assert !(nixos.config.systemd.units ? "atrium-web-local.service");

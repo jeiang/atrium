@@ -78,7 +78,7 @@ func (a *App) Serve(ctx context.Context, o ListenOptions) error {
 	}
 	drain, startDrain := context.WithCancel(ctx)
 	defer startDrain()
-	public, emergency, err := o.Plan.Build(web.Site{Ctx: a.work, Cfg: a.config, Env: a.env, DB: a.db, Settings: settings.From(ctx), State: a.state, Pages: o.Pages, Start: func(d *web.Deps) error {
+	public, emergency, err := o.Plan.Build(web.Site{Ctx: a.work, Cfg: a.config, Env: a.env, DB: a.db, Settings: settings.From(ctx), State: a.state, Pages: o.Pages, Drain: a.drainOnStop, Start: func(d *web.Deps) error {
 		return a.start(drain, d, o.Tools, o.Now)
 	}})
 	if err != nil {

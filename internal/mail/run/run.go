@@ -305,7 +305,7 @@ func (p *Pass) Locked(waitCtx, workCtx context.Context, accounts []string) error
 		return err
 	}
 	defer func() { _ = lock.Close() }()
-	workCtx, cancel := context.WithTimeout(workCtx, passDeadline)
+	workCtx, cancel := context.WithTimeout(db.WithHeld(workCtx, lock), passDeadline)
 	defer cancel()
 	defer p.checkpoint(workCtx)
 	for _, account := range accounts {

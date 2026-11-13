@@ -304,6 +304,15 @@ func (n *Snapshot) ServicesOf(owner string) []runtime.ServiceDefinition {
 	return nil
 }
 
+func (n *Snapshot) ServiceSetsOf(owner string) func(context.Context) ([]SetService, error) {
+	for _, d := range n.set.decls {
+		if d.Name == owner && n.Enabled(owner) {
+			return d.ServiceSets
+		}
+	}
+	return nil
+}
+
 func (n *Snapshot) Services() []runtime.ServiceDefinition {
 	var out []runtime.ServiceDefinition
 	for _, d := range n.set.decls {

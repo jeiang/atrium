@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	netmail "net/mail"
 	"slices"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jeiang/atrium/internal/mail"
@@ -108,6 +110,9 @@ type FakeClient struct {
 	StatusHook   func(imapName string, messages uint32) uint32
 	Idle         bool
 
+	idle      sync.Mutex
+	idlers    int
+	signals   chan error
 	Selected  string
 	RW        string
 	Connected bool
@@ -307,7 +312,58 @@ func (c fakeConn) UIDFetch(_ context.Context, uids mail.UIDSet, req mail.FetchRe
 	return out, nil
 }
 
-func (c fakeConn) IdleChanges(context.Context, time.Duration) (bool, error) { return c.f.Idle, nil }
+func (c fakeConn) IdleChanges(ctx context.Context, wait time.Duration) (bool, error) {
+	if c.f.Idle {
+		return true, nil
+	}
+	signals := c.f.idleSignals()
+	c.f.idle.Lock()
+	c.f.idlers++
+	c.f.idle.Unlock()
+	defer func() {
+		c.f.idle.Lock()
+		c.f.idlers--
+		c.f.idle.Unlock()
+	}()
+	t := time.NewTimer(wait)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return false, nil
+	case <-t.C:
+		return false, nil
+	case err := <-signals:
+		return err == nil, err
+	}
+}
+
+func (f *FakeClient) idleSignals() chan error {
+	f.idle.Lock()
+	defer f.idle.Unlock()
+	if f.signals == nil {
+		f.signals = make(chan error)
+	}
+	return f.signals
+}
+
+func (f *FakeClient) Idling() int {
+	f.idle.Lock()
+	defer f.idle.Unlock()
+	return f.idlers
+}
+
+func (f *FakeClient) Wake(ctx context.Context) error { return f.signal(ctx, nil) }
+
+func (f *FakeClient) DropIdle(ctx context.Context) error { return f.signal(ctx, io.ErrUnexpectedEOF) }
+
+func (f *FakeClient) signal(ctx context.Context, err error) error {
+	select {
+	case f.idleSignals() <- err:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
 
 func (c fakeConn) Noop(context.Context) error {
 	c.f.Noops++

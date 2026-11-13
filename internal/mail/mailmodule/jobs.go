@@ -67,3 +67,22 @@ func (m Module) scanJob(env config.Env) scheduler.Definition {
 		},
 	}
 }
+
+func (m Module) watchServices(env config.Env) func(context.Context) ([]module.SetService, error) {
+	return func(ctx context.Context) ([]module.SetService, error) {
+		d, cfg, err := m.Resources(ctx)
+		if err != nil {
+			return nil, err
+		}
+		accounts, err := run.SelectAccounts(ctx, "")
+		if err != nil {
+			return nil, err
+		}
+		w := &run.Watcher{Env: env, Cfg: cfg, DB: d, Open: m.Clients(cfg), Classifiers: m.classifiers}
+		out := make([]module.SetService, 0, len(accounts))
+		for _, account := range accounts {
+			out = append(out, module.SetService{Service: w.AccountService(account), Revision: run.AccountRevision(ctx, account)})
+		}
+		return out, nil
+	}
+}

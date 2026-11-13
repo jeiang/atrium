@@ -2,9 +2,6 @@ package main
 
 import (
 	"context"
-	"net/http"
-	"net/http/cookiejar"
-	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -227,19 +224,9 @@ S: {t} OK DELETE completed
 		t.Fatalf("move after = %s", afters[1])
 	}
 
-	base := startServeIn(t, fx.dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, body, _ := fetch(t, client, "GET", base+"/activity", nil); status != http.StatusOK {
-		t.Fatalf("GET /activity = %d %s", status, body)
-	}
 	for _, id := range []int64{ids[1], ids[0]} {
-		status, body, _ := fetch(t, client, "POST", base+"/activity/effect/"+strconv.FormatInt(id, 10)+"/undo", url.Values{})
-		if status != http.StatusSeeOther {
-			t.Fatalf("undo write %d = %d %s", id, status, body)
+		if undone := runApp(t, "writes", "undo", strconv.FormatInt(id, 10)); undone.code != cli.ExitOK {
+			t.Fatalf("undo write %d = %d %s", id, undone.code, undone.stderr)
 		}
 	}
 	for _, id := range ids {
@@ -367,17 +354,8 @@ S: {t} OK DELETE completed
 		t.Fatal(err)
 	}
 	seedSettings(t, map[string]string{mail.KeyMode: "shadow"})
-	base := startServeIn(t, fx.dir)
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, body, _ := fetch(t, client, "GET", base+"/activity", nil); status != http.StatusOK {
-		t.Fatalf("GET /activity = %d %s", status, body)
-	}
-	if status, body, _ := fetch(t, client, "POST", base+"/activity/effect/"+strconv.FormatInt(id, 10)+"/undo", url.Values{}); status != http.StatusSeeOther {
-		t.Fatalf("undo in shadow mode = %d %s", status, body)
+	if undone := runApp(t, "writes", "undo", strconv.FormatInt(id, 10)); undone.code != cli.ExitOK {
+		t.Fatalf("undo in shadow mode = %d %s", undone.code, undone.stderr)
 	}
 	var undone *int64
 	if err := d.Read.QueryRow("SELECT undone_by FROM effects WHERE id = ?", id).Scan(&undone); err != nil {
