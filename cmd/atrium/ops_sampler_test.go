@@ -210,6 +210,9 @@ func TestOpsSamplerWritesSamplesAndNoKnowledge(t *testing.T) {
 		}
 		return old == 0
 	})
+	if audits := operationAudits(t, d, "ops.sample"); len(audits) < 2 || !strings.HasPrefix(audits[0], "ok ops_samples ") || !strings.HasPrefix(audits[len(audits)-1], "ok ops_samples ") {
+		t.Errorf("ops.sample audits = %q, want an ok row per pass", audits)
+	}
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("k1", "kb_search", map[string]any{"query": "node-a"})))
 	api.Push(anthropictest.Reply("end_turn", anthropictest.Text("found")))
 	if ran := runApp(t, "agent", "run", "--text", "what is the host doing"); ran.code != cli.ExitOK {

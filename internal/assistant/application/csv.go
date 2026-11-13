@@ -1,4 +1,4 @@
-package pages
+package application
 
 import (
 	"errors"

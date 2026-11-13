@@ -92,7 +92,8 @@ func (s *Service) Branch(ctx context.Context, threadID, seq int64) (int64, error
 	}
 	child, err := threads.Create(ctx, s.DB.Write, s.now(), threads.Spec{
 		Kind: threads.Chat, Title: source.Title, ProjectID: source.ProjectID,
-		Model: source.Model, Effort: source.Effort, ContextLimit: limit,
+		Model: source.Model, Effort: source.Effort, ContextLimit: limit, Thinking: source.Thinking,
+		WebSearch: new(bool(source.WebSearch)), CostCapUSD: source.CostCapUSD,
 		AllowedURLs: source.AllowedURLs, BranchedFromThreadID: &threadID, BranchedFromSeq: &seq,
 		Marks: marks,
 	})

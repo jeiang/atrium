@@ -271,8 +271,30 @@ behavior-parity target.
   its subagent threads, lowered by the cost cap chosen in the composer when
   the thread was created. A run's spend includes its subagent runs, and every
   subagent request is also checked against each parent run's cap. An
-  Anthropic spend-cap 429 stops the run as a budget stop. The
-  catalog also records whether a model accepts a forced `tool_choice`
+  Anthropic spend-cap 429 stops the run as a budget stop.
+  Starting a thread and sending a message go through one pipeline for the
+  chat page, `/api/v1` and `atrium agent run`: the assistant module must be
+  on and the Anthropic connection configured before a run starts (else
+  the start is refused with no thread, the API answering 409
+  `not_configured`), the monthly budget is checked before the thread is
+  created, and a refused start leaves no thread behind in any interface: a
+  refusal after the thread row exists removes the row only while it has no
+  run, message, queued message or child, otherwise the thread stays.
+  References in the message are resolved against the new thread, also for
+  API starts and `agent run`; `agent run` never queues behind an active run,
+  and `agent run --text` with only whitespace exits 2.
+  A branch keeps the source thread's model, effort, context limit, thinking,
+  web search and cost cap. Regenerate, resume and answer are refused like a
+  send when the module is off or the Anthropic connection is missing, before
+  a question is consumed; send, edit and regenerate check the thread first
+  (unknown 404, subagent thread `read_only_thread`) and then the connection.
+  Stopping in an unknown thread answers 404 on the chat page as in the API.
+  An action that changed state and then failed is audited `failed`.
+  Project file uploads and deletes, and agent `file_write`, each write one
+  `operation_audit` row (`assistant.project-file.upload|delete`,
+  `assistant.file.write` naming its effect); a project upload over the body
+  cap is refused with 422 before the project is looked up.
+  The catalog also records whether a model accepts a forced `tool_choice`
   (`any` or a named tool): only Haiku does, and the loop sends the request
   to Sonnet and Opus without it. The loop ends a run with a clear thread
   message and run error on refusal (with the `stop_details` category),
@@ -327,10 +349,7 @@ behavior-parity target.
   and assistant history. Uploaded files live beside the database under
   `files/`; the Notion wiki also has external state. The database alone is
   not a complete backup; `atrium backup` archives the database and `files/`,
-  and `atrium restore` (with a `--verify` dry run) restores them. The
-  module's optional `atrium-backup` timer prunes `*.backup` files in its
-  directory after each successful run, keeping the newest `backup.keep`
-  (default 5) plus any from the last `backup.keepDays` (default 14) days.
+  and `atrium restore` (with a `--verify` dry run) restores them.
   `atrium backup` and `atrium db backup` write one `operation_audit` row
   (`maintenance.backup`, `maintenance.db-backup`; destination, encryption and
   file count only) to the source database, including refused destinations; a
@@ -349,6 +368,14 @@ behavior-parity target.
   The outcome is `failed` if any statement failed. Backup, restore and shell
   audits are skipped on a database without `operation_audit`, and the import
   freshness check ignores `maintenance.*` audit rows.
+  The persistent serve job `core/backup` (host keys `core.backup_directory`,
+  `core.backup_schedule` default `daily 03:00`, `core.backup_keep` default
+  5, `core.backup_keep_days` default 14; resource `backup`, 2 h, drained on
+  shutdown) writes `atrium-<UTC>.backup` and, after a successful archive,
+  prunes `atrium-*.backup` beyond the newest keep that are older than
+  keep_days. No directory means `skipped_unconfigured`. `atrium backup`
+  shares the job's claim. NixOS `backup.schedule` replaced `onCalendar`;
+  there is no backup unit.
   Rebuildable message and media caches are separate.
 - Database connections: one write connection, a read pool, and one
   dedicated KNN reader (semantic search and mail routing) with a 192 MiB
@@ -538,9 +565,21 @@ behavior-parity target.
   an error. It has no
   ticker or service notification; declared invocation deadlines still apply.
   A job that reaches its own declared timeout fails its unsettled runs and
-  ends `error` ("timed out after …"); only shutdown or cancellation releases
-  it for resume.
-  Missing configuration records `skipped_unconfigured`, not success. Nightly
+  ends `error` ("timed out after …"); scheduled shutdown or cancellation
+  releases it for resume. An interrupted assistant job waits as
+  `skipped_module` with no end timestamp while its dependencies are off;
+  its threads remain reserved to that job and resume only under a claim.
+  Consecutive threadless disabled-module skips coalesce into one row.
+  Manual interruption ends `error` ("interrupted"), releases the claim,
+  and never contributes to scheduled backoff. Manual successes do not
+  reset scheduled backoff, and priming preserves a pending retry.
+  A manual invocation that loses its claim exits nonzero.
+  Missing configuration records `skipped_unconfigured`, not success.
+  The Notion mirror is the model-free `notion/notion-sync` serve job
+  (15-minute interval, 3-minute initial delay, 15-minute timeout, cancel
+  on shutdown). Its CLI shares the `notion-sync` resource and claim;
+  unconfigured skips record no pass row. The former systemd service and
+  timer are removed when this job is activated. Nightly
   dreaming creates and associates every child thread in one transaction and
   prepares every child run with no spend allowance before the first
   executes; immediately before a child runs, on the first pass or in
@@ -664,6 +703,9 @@ behavior-parity target.
 - The host owns external services, reverse proxy authentication,
   persistence, and backups. Updating this repository does not update the
   host's pinned application input.
+
+- A standalone `atrium media-agent --config FILE` process now provides authenticated rooted streaming without opening the main database. Listener peers are checked before TLS/headers, connections are capped at 256, headers at 16 KiB, and ranges at 16 parts (larger range sets are ignored). Root/state/cache overlap is checked on resolved paths and filesystem identities. SIGHUP drains and exits non-zero. This does not yet move main-side media filesystem work or deploy an agent service.
+- The media agent now supports read-only source/import/directory metadata and preparation, durable receipt-keyed filing, progress and inspection, and receipt-derived undo. Torrent plans hardlink downloads; import plans use exclusive rename; cleanup refuses remaining videos and is non-undoable. Mutations are globally serialized, preserve library-group permissions, and never copy across devices or replace destinations. Crash recovery only inspects receipts; identical replay returns the terminal result and never resumes. Main-side integration and the service unit remain pending.
 
 ## Current authority boundaries
 
@@ -938,14 +980,21 @@ behavior-parity target.
   feed of direct writes and undoable approvals with undo, and draft get,
   edit, send, discard and resolve. Every write calls the same pipeline,
   drafts store and writes registry as the Review pages, so approval scope,
-  the ledger, the send revision check and the mail gate are unchanged. POST
-  to create a thread, send a message, approve or send a draft honours an
-  `Idempotency-Key` header for ten minutes in memory. `GET /pending`,
-  `/undo`, `/effects` and `/effects/{id}` return a weak `ETag` with
+  the ledger, the send revision check and the mail gate are unchanged. Every
+  unsafe request is a durable command (`Atrium-Command-Id`,
+  `GET /api/v1/commands/{id}`); an `Idempotency-Key` is shared across
+  bearers and replays the stored result for 24 hours after the command ends,
+  bodies and fingerprints are kept only for keyed requests, retryable
+  `408`/`429`/`5xx` outcomes free the key unless an effect was recorded, and
+  rows are pruned 30 days after they end (operator behavior has the codes).
+  `GET /pending`, `/undo`, `/effects` and `/effects/{id}` return a weak
+  `ETag` with
   `Cache-Control: private, no-cache` and answer `If-None-Match` with 304
   when nothing they show changed; the effects revision also covers each
   shown effect's lease times and blocked flags, so a lease renewal or a
-  stuck undo crossing its threshold is never hidden by a 304. These reads
+  stuck undo crossing its threshold is never hidden by a 304. `GET /threads`
+  and `/threads/{id}` answer the same way; each transcript page (`limit`,
+  `cursor`) has its own tag, and a new message, run or card changes it. These reads
   and the Review pages, `atrium proposals list`, `atrium effects list|show`
   and `atrium writes list` go through the `review.*` operations in
   `internal/review/application`.

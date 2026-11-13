@@ -43,9 +43,12 @@ type Definition struct {
 	Prompt          string
 	PromptRun       bool
 	Schedule        string
+	Every           time.Duration
 	ScheduleSetting string
+	ScheduleHost    string
 	InitialDelay    time.Duration
 	Persistent      bool
+	RunsWhilePaused bool
 	Overlap         bool
 	Timeout         time.Duration
 	Spend           Spend

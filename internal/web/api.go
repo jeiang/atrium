@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -12,15 +13,16 @@ import (
 	"strconv"
 	"strings"
 
-	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
 )
 
 const (
-	APIPrefix    = "/api/v1"
-	SourceBearer = "bearer"
+	APIPrefix       = "/api/v1"
+	SourceBearer    = "bearer"
+	RequestIDHeader = "Atrium-Request-Id"
+	ProblemPrefix   = "urn:atrium:problem:"
 
 	apiPrefix = "/api/"
 	jsonType  = "application/json"
@@ -34,24 +36,18 @@ type apiError struct {
 	EffectIDs    []int64      `json:"effect_ids,omitempty"`
 	RetryAfter   int64        `json:"retry_after,omitempty"`
 	DiagnosticID string       `json:"diagnostic_id,omitempty"`
+	Type         string       `json:"type,omitempty"`
+	Status       int          `json:"status,omitempty"`
+	Instance     string       `json:"instance,omitempty"`
+	CommandID    string       `json:"command_id,omitempty"`
+}
+
+func newAPIError(w http.ResponseWriter, status int, code, message string) apiError {
+	return apiError{Code: code, Message: message, Type: ProblemPrefix + code, Status: status, Instance: w.Header().Get(RequestIDHeader)}
 }
 
 func isAPI(r *http.Request) bool {
 	return strings.HasPrefix(r.URL.Path, apiPrefix) || r.URL.Path == strings.TrimSuffix(apiPrefix, "/")
-}
-
-type meBody struct {
-	authapp.Principal
-	APIVersion int `json:"api_version"`
-}
-
-func me(w http.ResponseWriter, r *http.Request) {
-	read, err := authapp.Identity(r.Context())
-	if err != nil {
-		APIFail(w, err)
-		return
-	}
-	JSON(w, http.StatusOK, meBody{Principal: read.Data, APIVersion: 1})
 }
 
 const (
@@ -124,11 +120,19 @@ func JSON(w http.ResponseWriter, status int, v any) {
 }
 
 func APIError(w http.ResponseWriter, status int, code, message string, fields ...FieldError) {
-	JSON(w, status, map[string]apiError{"error": {Code: code, Message: message, Fields: fields}})
+	body := newAPIError(w, status, code, message)
+	body.Fields = fields
+	JSON(w, status, map[string]apiError{"error": body})
+}
+
+func CommandError(w http.ResponseWriter, status int, code, message, commandID string) {
+	body := newAPIError(w, status, code, message)
+	body.CommandID = commandID
+	JSON(w, status, map[string]apiError{"error": body})
 }
 
 func APIErrorWith(w http.ResponseWriter, status int, code, message string, extra map[string]any) {
-	body := map[string]any{"error": apiError{Code: code, Message: message}}
+	body := map[string]any{"error": newAPIError(w, status, code, message)}
 	maps.Copy(body, extra)
 	JSON(w, status, body)
 }
@@ -170,6 +174,9 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, v any, optional bool) bo
 }
 
 func (d *Deps) API(method, pattern string, h http.HandlerFunc) {
+	if d.commands != nil && isUnsafe(method) {
+		h = d.commands(APIPrefix+pattern, h).ServeHTTP
+	}
 	d.route(method, APIPrefix+pattern, accessDefault, h)
 }
 
@@ -183,6 +190,7 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 	h := w.Header()
 	setSecurityHeaders(h)
 	h.Set("Cache-Control", "no-store")
+	h.Set(RequestIDHeader, rand.Text())
 	token, ok := bearerToken(r)
 	addr, addrOK := g.clientAddr(r)
 	if !addrOK {
@@ -248,6 +256,6 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, int64(limit))
 	}
-	ctx := withIdempotency(withAPIIdentity(r.Context(), who), g.idem)
+	ctx := withAPIIdentity(r.Context(), who)
 	next.ServeHTTP(w, r.WithContext(ctx))
 }

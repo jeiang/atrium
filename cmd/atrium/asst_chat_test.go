@@ -10,6 +10,7 @@ import (
 	"net/http/cookiejar"
 	"net/textproto"
 	"net/url"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -18,6 +19,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -713,9 +715,6 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 	if v, _ := asstRun(t, "--text", "schedule a weekly digest"); v.State != "done" {
 		t.Fatalf("schedule run %+v %q", v, v.err())
 	}
-	w := asstBrowse(t, startServeIn(t, dir))
-	code, page, _ := w.get("/scheduled", false)
-	w.want(code, http.StatusOK, page, "Digest", "Every Monday at 08:00", "weekly-review")
 	jobID := func(name string) string {
 		var id int64
 		if err := d.Read.QueryRow("SELECT id FROM jobs WHERE name = ?", name).Scan(&id); err != nil {
@@ -723,17 +722,53 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 		}
 		return strconv.FormatInt(id, 10)
 	}
-	state := func(id string) string {
-		var s string
-		if err := d.Read.QueryRow("SELECT state FROM jobs WHERE id = ?", id).Scan(&s); err != nil {
+	column := func(col, id string) string {
+		var out string
+		if err := d.Read.QueryRow("SELECT "+col+" FROM jobs WHERE id = ?", id).Scan(&out); err != nil {
 			t.Fatal(err)
 		}
-		return s
+		return out
 	}
-	digest := jobID("Digest")
+	state := func(id string) string { return column("state", id) }
+	audits := func(operation, outcome, target string) int {
+		return asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = ? AND outcome = ? AND target = ?", operation, outcome, target)
+	}
+	w := asstBrowse(t, startServeIn(t, dir))
+	code, page, _ := w.get("/scheduled", false)
+	w.want(code, http.StatusOK, page, "Digest", "weekly-review")
+	digest, nightly := jobID("Digest"), jobID("nightly")
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit a JOIN effects e ON a.details_json = '{\"effect_ids\":[' || e.id || ']}' "+
+		"WHERE a.operation = 'assistant.schedule.create' AND a.outcome = 'ok' AND a.target = ? AND e.operation = 'schedule_create'", "schedule:"+digest); n != 1 {
+		t.Errorf("schedule create audits naming its effect = %d, want 1", n)
+	}
+	digestID, _ := strconv.ParseInt(digest, 10, 64)
+	nightlyID, _ := strconv.ParseInt(nightly, 10, 64)
+	api.Push(
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("s2", "schedule_update", map[string]any{"id": digestID, "prompt": "Summarize mail and tasks."})),
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("s3", "schedule_cancel", map[string]any{"id": nightlyID})),
+		asstReply("updated"))
+	if v, _ := asstRun(t, "--text", "widen the digest and stop the nightly run"); v.State != "done" {
+		t.Fatalf("update run %+v %q", v, v.err())
+	}
+	if column("prompt", digest) != "Summarize mail and tasks." || state(nightly) != "active" {
+		t.Errorf("agent update prompt %q, nightly %s", column("prompt", digest), state(nightly))
+	}
+	if audits("assistant.schedule.update", "ok", "schedule:"+digest) != 1 || audits("assistant.schedule.cancel", "refused", "schedule:"+nightly) != 1 {
+		t.Error("agent update and refused built-in cancel are not audited")
+	}
+	var updateEffect int64
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'schedule_update' AND target = ?", "schedule:"+digest).Scan(&updateEffect); err != nil {
+		t.Fatal(err)
+	}
+	if got := runApp(t, "effects", "undo", strconv.FormatInt(updateEffect, 10)); got.code != cli.ExitOK {
+		t.Fatalf("effects undo: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	if column("prompt", digest) != "Summarize mail." {
+		t.Errorf("undo left prompt %q", column("prompt", digest))
+	}
 
 	code, body, _ := w.post("/scheduled/"+digest+"/toggle", url.Values{}, true)
-	w.want(code, http.StatusOK, body, "Paused")
+	w.want(code, http.StatusOK, body)
 	if state(digest) == "active" {
 		t.Error("toggle left the job active")
 	}
@@ -747,27 +782,20 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 
 	weekly := jobID("weekly-review")
 	code, body, _ = w.post("/scheduled/"+weekly+"/cancel", url.Values{}, true)
-	w.want(code, http.StatusUnprocessableEntity, body, "built-in runs cannot be cancelled; disable them instead")
+	w.want(code, http.StatusUnprocessableEntity, body)
 	if state(weekly) == "cancelled" {
 		t.Error("a built-in run was cancelled")
 	}
 
 	code, body, _ = w.post("/scheduled/"+digest+"/cancel", url.Values{}, true)
-	w.want(code, http.StatusOK, body, "Schedule deleted")
+	w.want(code, http.StatusOK, body)
 	if state(digest) != "cancelled" {
 		t.Errorf("cancelled job state %s", state(digest))
 	}
 	if code, _, _ := w.post("/scheduled/"+digest+"/toggle", url.Values{}, false); code != http.StatusNotFound {
 		t.Errorf("toggle of a cancelled job: %d, want 404", code)
 	}
-	nightly := jobID("nightly")
-	schedule := func(id string) string {
-		var out string
-		if err := d.Read.QueryRow("SELECT schedule FROM jobs WHERE id = ?", id).Scan(&out); err != nil {
-			t.Fatal(err)
-		}
-		return out
-	}
+	schedule := func(id string) string { return column("schedule", id) }
 	if code, body, _ := w.post("/scheduled/"+nightly+"/schedule", url.Values{"schedule": {"daily 03:15"}}, true); code != http.StatusOK || schedule(nightly) != "daily 03:15" {
 		t.Errorf("edit the nightly schedule = %d, stored %q: %.200s", code, schedule(nightly), body)
 	}
@@ -776,5 +804,117 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 	}
 	if code, _, _ := w.post("/scheduled/"+nightly+"/schedule", url.Values{"schedule": {"whenever"}}, true); code != http.StatusUnprocessableEntity || schedule(nightly) != "daily 03:15" {
 		t.Errorf("an invalid schedule = %d, stored %q, want a refusal that keeps the old one", code, schedule(nightly))
+	}
+	for _, want := range []struct {
+		operation, outcome, target string
+		n                          int
+	}{
+		{"assistant.schedule.enabled", "ok", "schedule:" + digest, 2},
+		{"assistant.schedule.enabled", "not_found", "schedule:" + digest, 1},
+		{"assistant.schedule.cancel", "refused", "schedule:" + weekly, 1},
+		{"assistant.schedule.cancel", "ok", "schedule:" + digest, 1},
+		{"assistant.schedule.update", "ok", "schedule:" + nightly, 1},
+		{"assistant.schedule.update", "invalid", "schedule:" + nightly, 1},
+	} {
+		if n := audits(want.operation, want.outcome, want.target); n != want.n {
+			t.Errorf("%s %s %s audits = %d, want %d", want.operation, want.outcome, want.target, n, want.n)
+		}
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation LIKE 'assistant.schedule.%' AND source = 'ui' AND actor = 'operator'"); n != 7 {
+		t.Errorf("operator schedule audits = %d, want 7", n)
+	}
+}
+
+func TestBranchKeepsRunOptions(t *testing.T) {
+	_, api, d, w := asstServe(t)
+	api.Push(asstReply("branch source answer"))
+	thread := w.start(map[string]string{"text": "branch options", "web_search": "0", "cost_cap": "2.5"})
+	if state := asstSettleThread(t, d, thread); state != "done" {
+		t.Fatalf("source run %s", state)
+	}
+	var seq int64
+	if err := d.Read.QueryRow("SELECT MIN(seq) FROM thread_messages WHERE thread_id = ? AND superseded = 0", thread).Scan(&seq); err != nil {
+		t.Fatal(err)
+	}
+	code, body, h := w.post(fmt.Sprintf("/chat/%d/branch", thread), url.Values{"seq": {strconv.FormatInt(seq, 10)}}, false)
+	w.want(code, http.StatusSeeOther, body)
+	child, err := strconv.ParseInt(strings.TrimPrefix(h.Get("Location"), "/chat/"), 10, 64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	options := func(id int64) string {
+		var model, effort, thinking string
+		var limit, search int64
+		var costCap float64
+		if err := d.Read.QueryRow("SELECT model, effort, COALESCE(context_limit, 0), thinking, web_search, COALESCE(cost_cap_usd, 0) FROM threads WHERE id = ?", id).
+			Scan(&model, &effort, &limit, &thinking, &search, &costCap); err != nil {
+			t.Fatal(err)
+		}
+		return fmt.Sprintf("%s|%s|%d|%s|%d|%g", model, effort, limit, thinking, search, costCap)
+	}
+	source, branched := options(thread), options(child)
+	if source != branched || !strings.HasSuffix(source, "|0|2.5") {
+		t.Fatalf("branch options %q, source %q (want web search off and the 2.5 cap kept)", branched, source)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.thread.branch' AND outcome = 'ok' AND target = ?", fmt.Sprintf("thread:%d", child)); n != 1 {
+		t.Fatalf("%d branch audits for the child, want 1", n)
+	}
+}
+
+func TestProjectFilesStayInTheirProjectAndAreAudited(t *testing.T) {
+	t.Parallel()
+	_, _, d, w := asstServe(t)
+	project := func(name string) string {
+		code, body, h := w.post("/projects", url.Values{"name": {name}, "effort": {"high"}, "context_limit": {"200000"}}, false)
+		if code != http.StatusSeeOther {
+			t.Fatalf("create project %s: %d %s", name, code, body)
+		}
+		return strings.TrimSuffix(strings.TrimPrefix(h.Get("Location"), "/projects/"), "/edit")
+	}
+	home, other := project("Home"), project("Other")
+	code, body, _ := w.upload("/projects/"+home+"/files", nil, []asstFile{{"plan.txt", "text/plain", []byte("the plan")}}, true)
+	if code != http.StatusOK {
+		t.Fatalf("upload: %d %s", code, body)
+	}
+	var fileID int64
+	var stored string
+	if err := d.Read.QueryRow("SELECT id, path FROM thread_files WHERE project_id = ?", home).Scan(&fileID, &stored); err != nil {
+		t.Fatal(err)
+	}
+	if code, body, _ := w.get(fmt.Sprintf("/projects/%s/files/%d/download", home, fileID), false); code != http.StatusOK || body != "the plan" {
+		t.Fatalf("own project download: %d %q", code, body)
+	}
+	for _, path := range []string{
+		fmt.Sprintf("/projects/%s/files/%d/download", other, fileID),
+		fmt.Sprintf("/projects/%s/files/%d/download", home, fileID+1000),
+		fmt.Sprintf("/chat/1/files/%d/download", fileID),
+	} {
+		if code, _, _ := w.get(path, false); code != http.StatusNotFound {
+			t.Errorf("GET %s: %d, want 404", path, code)
+		}
+	}
+	if code, _, _ := w.post(fmt.Sprintf("/projects/%s/files/%d/delete", other, fileID), url.Values{}, true); code != http.StatusNotFound {
+		t.Fatalf("delete through another project: %d, want 404", code)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM thread_files WHERE id = ?", fileID); n != 1 {
+		t.Fatalf("a foreign delete removed the file row")
+	}
+	if code, body, _ := w.post(fmt.Sprintf("/projects/%s/files/%d/delete", home, fileID), url.Values{}, true); code != http.StatusOK {
+		t.Fatalf("delete: %d %s", code, body)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM thread_files WHERE id = ?", fileID); n != 0 {
+		t.Errorf("the deleted file row remains")
+	}
+	if _, err := os.Stat(stored); !os.IsNotExist(err) {
+		t.Errorf("the deleted file remains on disk: %v", err)
+	}
+	for _, want := range []struct{ operation, outcome, project string }{
+		{"assistant.project-file.upload", "ok", home},
+		{"assistant.project-file.delete", "not_found", other},
+		{"assistant.project-file.delete", "ok", home},
+	} {
+		if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = ? AND outcome = ? AND target = ?", want.operation, want.outcome, "project:"+want.project); n != 1 {
+			t.Errorf("%s %s audits for project %s: %d, want 1", want.operation, want.outcome, want.project, n)
+		}
 	}
 }

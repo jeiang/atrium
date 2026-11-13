@@ -8,9 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/inference"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -26,15 +24,6 @@ func Templates() fs.FS {
 		panic(err)
 	}
 	return files
-}
-
-type Data struct {
-	Budget       inference.Status      `json:"budget"`
-	Summary      inference.Summary     `json:"summary"`
-	Memory       inference.Summary     `json:"memory"`
-	Subscription inference.Summary     `json:"subscription"`
-	ByKind       []inference.KindRow   `json:"by_kind"`
-	ByThread     []inference.ThreadRow `json:"by_thread"`
 }
 
 func Module() web.Module {
@@ -56,42 +45,10 @@ func Module() web.Module {
 	}
 }
 
-func load(r *http.Request, d *web.Deps, now float64) Data {
-	ctx := r.Context()
-	loc, err := config.From(ctx).Location(d.Env)
-	must(err)
-	var out Data
-	out.Budget, err = inference.StatusAt(ctx, d.DB.Read, now, loc)
-	must(err)
-	out.Summary, err = inference.MonthSummary(ctx, d.DB.Read, now, loc)
-	must(err)
-	out.ByKind, err = inference.ByKind(ctx, d.DB.Read, now, loc)
-	must(err)
-	out.ByThread, err = inference.ByThread(ctx, d.DB.Read, now, loc, inference.DefaultThreadLimit)
-	must(err)
-	ids := make([]int64, len(out.ByThread))
-	for i := range out.ByThread {
-		ids[i] = out.ByThread[i].ThreadID
-	}
-	titles, err := threads.Titles(ctx, d.DB.Read, ids)
-	must(err)
-	kinds, err := threads.KindsOf(ctx, d.DB.Read, ids)
-	must(err)
-	for i := range out.ByThread {
-		if title, ok := titles[out.ByThread[i].ThreadID]; ok {
-			out.ByThread[i].Title = &title
-		}
-		out.ByThread[i].Kind = string(kinds[out.ByThread[i].ThreadID])
-	}
-	out.Memory, err = inference.MemorySummary(ctx, d.DB.Read, now, loc)
-	must(err)
-	out.Subscription, err = inference.SubscriptionSummary(ctx, d.DB.Read, now, loc)
-	must(err)
-	return out
-}
-
-func must(err error) {
+func load(r *http.Request, d *web.Deps, now float64) asstapp.Usage {
+	read, err := asstapp.New(d.DB, d.Env, func() float64 { return now }).Usage(r.Context(), asstapp.UsageInput{})
 	if err != nil {
 		panic(err)
 	}
+	return read.Data
 }

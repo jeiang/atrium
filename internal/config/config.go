@@ -40,7 +40,6 @@ const (
 	FilesDir                = "files"
 	MediaLinkKeyFile        = "media-link.key"
 	MediaCacheSubdir        = "media"
-	NotionLockName          = "notion"
 )
 
 var GmailCategories = [...]string{"social", "promotions", "updates", "forums"}

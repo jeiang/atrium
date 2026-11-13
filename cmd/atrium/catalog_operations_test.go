@@ -11,8 +11,10 @@ import (
 )
 
 type catalogOperationRow struct {
-	Name     string `json:"name"`
-	Bindings []struct {
+	Name      string   `json:"name"`
+	Area      string   `json:"area"`
+	Authority []string `json:"authority"`
+	Bindings  []struct {
 		Kind   string `json:"kind"`
 		Target string `json:"target"`
 	} `json:"bindings"`
@@ -61,7 +63,7 @@ func hasOperation(rows []catalogOperationRow, name string) (catalogOperationRow,
 	return rows[i], true
 }
 
-func TestCatalogOperationsRunsWithoutDatabase(t *testing.T) {
+func TestCatalogOperationsReportsAreasAndMissingAPI(t *testing.T) {
 	all, code := runCatalogOperations(t, "--json")
 	if code != 0 {
 		t.Fatalf("catalog operations --json exited %d", code)
@@ -78,6 +80,9 @@ func TestCatalogOperationsRunsWithoutDatabase(t *testing.T) {
 	}) {
 		t.Fatalf("auth.identity bindings = %+v, want api GET /me", identity.Bindings)
 	}
+	if identity.Area != "settings" {
+		t.Fatalf("auth.identity area = %q, want settings", identity.Area)
+	}
 
 	missing, code := runCatalogOperations(t, "--json", "--missing-api")
 	if code != 0 {
@@ -87,8 +92,13 @@ func TestCatalogOperationsRunsWithoutDatabase(t *testing.T) {
 		t.Fatal("--missing-api lists auth.identity, which has an API binding")
 	}
 	for _, row := range missing.Operations {
-		if len(row.APIRoutes) > 0 {
-			t.Errorf("--missing-api lists %s with API routes %v", row.Name, row.APIRoutes)
+		if row.Area != "" {
+			t.Errorf("--missing-api lists %s, which has a typed API binding in area %s", row.Name, row.Area)
+		}
+		if !slices.ContainsFunc(row.Authority, func(a string) bool {
+			return a == "operator" || a == "operator_send" || a == "approved"
+		}) {
+			t.Errorf("--missing-api lists %s with authorities %v, none of them operator", row.Name, row.Authority)
 		}
 	}
 

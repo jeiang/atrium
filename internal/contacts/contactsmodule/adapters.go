@@ -3,16 +3,15 @@ package contactsmodule
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"math"
 	"strconv"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	contactsapp "github.com/jeiang/atrium/internal/contacts/application"
-	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/passrun"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -98,9 +97,28 @@ func included(args tool.Args) ([]string, error) {
 }
 
 func syncCommand(env config.Env) *cli.Command {
-	return davmirror.SyncCommand("mirror the iCloud address books into the contacts directory (read-only)", passrun.CardDAV,
-		func(ctx context.Context, d *db.DB) (davmirror.Stats, error) {
-			change, err := contactsapp.New(d, env).Sync(ctx, contactsapp.SyncInput{})
-			return change.Data, err
-		})
+	return &cli.Command{Name: "sync", Help: "mirror the iCloud address books into the contacts directory (read-only)", Setup: func(*cli.Args) cli.Handler {
+		return func(e *cli.Env) int {
+			cfg, err := config.Load(env)
+			if err != nil {
+				return cli.Fail(e, err)
+			}
+			d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(e.Ctx).DBKey()))
+			if err != nil {
+				return cli.Fail(e, err)
+			}
+			defer func() { _ = d.Close() }()
+			if err := config.Boot(e.Ctx, env, d, cfg); err != nil {
+				return cli.Fail(e, err)
+			}
+			change, err := contactsapp.New(d, env).SyncManual(e.Ctx, cfg)
+			out := change
+			if err != nil {
+				return cli.Fail(e, err)
+			}
+			body, _ := json.Marshal(out)
+			_, _ = fmt.Fprintln(e.Stdout, string(body))
+			return cli.ExitOK
+		}
+	}}
 }

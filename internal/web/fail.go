@@ -55,14 +55,16 @@ func APIFail(w http.ResponseWriter, err error) {
 	if e.Code == application.Unauthenticated {
 		w.Header().Set("WWW-Authenticate", realm)
 	}
-	body := apiError{Code: string(e.Code), Message: e.Error(), EffectIDs: e.EffectIDs, DiagnosticID: e.DiagnosticID}
+	status := Status(e.Code)
+	body := newAPIError(w, status, string(e.Code), e.Error())
+	body.EffectIDs, body.DiagnosticID = e.EffectIDs, e.DiagnosticID
 	if e.RetryAfter > 0 {
 		body.RetryAfter = retryAfterSeconds(e)
 	}
 	for _, f := range e.Fields {
 		body.Fields = append(body.Fields, FieldError{Type: f.Code, Loc: []string{"body", f.Name}, Msg: f.Message})
 	}
-	JSON(w, Status(e.Code), map[string]apiError{"error": body})
+	JSON(w, status, map[string]apiError{"error": body})
 }
 
 func failHeaders(w http.ResponseWriter, e *application.Error) {

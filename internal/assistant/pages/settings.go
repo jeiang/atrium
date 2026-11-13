@@ -8,8 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/pricing"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/settings"
@@ -22,15 +21,12 @@ import (
 const settingsFrame = "settings"
 
 type AssistantData struct {
-	Models        []pricing.Model `json:"models"`
-	Defaults      threads.Options `json:"defaults"`
-	Efforts       []string        `json:"efforts"`
-	ContextLimits []int64         `json:"context_limits"`
-	Saved         string          `json:"saved"`
-	Error         string          `json:"error"`
-	Channels      []string        `json:"channels"`
-	Rows          []PermissionRow `json:"rows"`
-	Refused       string          `json:"refused"`
+	asstapp.Configuration
+	Saved    string          `json:"saved"`
+	Error    string          `json:"error"`
+	Channels []string        `json:"channels"`
+	Rows     []PermissionRow `json:"rows"`
+	Refused  string          `json:"refused"`
 }
 
 type PermissionRow struct {
@@ -97,8 +93,6 @@ func toasted(toast *tpl.Toast) func(*tpl.Frame) {
 }
 
 func (p *pages) assistantPage(w http.ResponseWriter, r *http.Request, status int, data AssistantData, mutate func(*tpl.Frame)) {
-	defaults, err := threads.Defaults(r.Context(), p.deps.DB.Read)
-	check(err)
 	read, err := settingsapp.Web(p.deps.DB).Read(r.Context(), settingsapp.ReadInput{Fields: permissionFields(settings.From(r.Context()))})
 	check(err)
 	views := read.Data.Fields
@@ -106,7 +100,7 @@ func (p *pages) assistantPage(w http.ResponseWriter, r *http.Request, status int
 	for s, label := range registry.PermissionSituationLabels {
 		data.Rows = append(data.Rows, PermissionRow{Label: label, Cells: views[s*channels : (s+1)*channels]})
 	}
-	data.Models, data.Defaults, data.Efforts, data.ContextLimits, data.Channels = pricing.Models(), defaults, pricing.Efforts, assistant.ContextLimits, registry.PermissionChannelLabels[:]
+	data.Configuration, data.Channels = p.configuration(r), registry.PermissionChannelLabels[:]
 	f, err := p.deps.Render.Frame(r, settingsFrame, data)
 	check(err)
 	mutate(f)

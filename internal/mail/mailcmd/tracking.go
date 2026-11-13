@@ -15,7 +15,7 @@ func TrackingJob(deps jobworker.Dependencies) scheduler.Definition {
 	return scheduler.Definition{
 		Module: module.Mail, Key: module.Mail + "/" + tracking.JobPackageTracking, Name: tracking.JobPackageTracking, Kind: scheduler.JobBuiltin,
 		Prompt:   "Hourly: refresh active Ship24 package trackers (no model run).",
-		Schedule: "0 * * * *", ScheduleSetting: tracking.KeySchedulePackageTracking, Timeout: 15 * time.Minute,
+		Schedule: "0 * * * *", ScheduleSetting: tracking.KeySchedulePackageTracking, Persistent: true, Timeout: 15 * time.Minute,
 		Spend: scheduler.ModelFree, Needs: []string{module.Mail},
 		Run: deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
 			_, err := tracking.Poll(ctx, e.Service.DB, e.Service.Env, e.Now())

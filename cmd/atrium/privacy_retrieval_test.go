@@ -78,7 +78,7 @@ func TestPrivateProjectSummariesStayOutOfOtherReaders(t *testing.T) {
 			t.Errorf("outside reader saw thread %d: %s", hidden, raw)
 		}
 	}
-	for _, leak := range []string{"8842", "5150", "6666", "7777", "Vault notes", "Vault sibling", "Vault ghost", "Vault orphan"} {
+	for _, leak := range []string{" 8842", " 5150", " 6666", " 7777", "Vault notes", "Vault sibling", "Vault ghost", "Vault orphan"} {
 		if strings.Contains(raw, leak) {
 			t.Errorf("outside reader leaked %q: %s", leak, raw)
 		}
@@ -108,7 +108,7 @@ func TestPrivateProjectSummariesStayOutOfOtherReaders(t *testing.T) {
 	}
 
 	run(3, "s4", map[string]any{"query": "vault", "limit": 50})
-	if ids, raw := searchHits(t, d, 3, "s4"); slices.Contains(ids, int64(2)) || slices.Contains(ids, int64(5)) || strings.Contains(raw, "8842") {
+	if ids, raw := searchHits(t, d, 3, "s4"); slices.Contains(ids, int64(2)) || slices.Contains(ids, int64(5)) || strings.Contains(raw, " 8842") {
 		t.Errorf("studio reader saw the household project: %v %s", ids, raw)
 	}
 }

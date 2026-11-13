@@ -75,6 +75,7 @@ type Binding struct {
 	Target    string
 	Uses      []Name
 	Composite bool
+	API       *APIShape
 }
 
 func Route(target string) (method, pattern string, ok bool) {

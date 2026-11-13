@@ -1,13 +1,17 @@
 package coremodule
 
 import (
+	"bytes"
 	"cmp"
 	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"text/tabwriter"
 
+	"github.com/jeiang/atrium/internal/apischema"
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/module"
@@ -28,6 +32,7 @@ type catalogOperation struct {
 	Authority []application.Authority `json:"authority"`
 	Effect    application.Effect      `json:"effect"`
 	Audit     bool                    `json:"audit"`
+	Area      application.Area        `json:"area,omitempty"`
 	Bindings  []catalogBinding        `json:"bindings"`
 	APIRoutes []string                `json:"api_routes"`
 }
@@ -49,9 +54,9 @@ func catalogCommand(mc module.Context) *cli.Command {
 		Help: "list application operations and their bindings",
 		Setup: func(a *cli.Args) cli.Handler {
 			asJSON := a.Bool("json", cli.Opt{Help: "print JSON"})
-			missing := a.Bool("missing-api", cli.Opt{Help: "list only operations without an API binding"})
+			missing := a.Bool("missing-api", cli.Opt{Help: "list only operator operations without a typed API binding"})
 			unbound := a.Bool("unbound", cli.Opt{Help: "also list mounted routes, commands, tools, jobs and services without a binding"})
-			require := a.Bool("require-api", cli.Opt{Help: "exit 1 when an operation has no API binding"})
+			require := a.Bool("require-api", cli.Opt{Help: "exit 1 when an operator operation has no typed API binding"})
 			return func(env *cli.Env) int {
 				cat := mc.Catalog()
 				report := catalogReport{Operations: catalogOperations(cat, *missing || *require)}
@@ -77,21 +82,60 @@ func catalogCommand(mc module.Context) *cli.Command {
 				return cli.ExitOK
 			}
 		},
+	}, {
+		Name: "openapi",
+		Help: "generate the OpenAPI document and API reach report",
+		Setup: func(a *cli.Args) cli.Handler {
+			output := a.String("output", "", cli.Opt{Help: "write openapi.json and reach.json into this directory"})
+			check := a.String("check", "", cli.Opt{Help: "exit 1 when the files in this directory differ from the generated ones"})
+			return func(env *cli.Env) int {
+				files, err := apischema.Generate(mc.Catalog())
+				if err != nil {
+					return cli.Fail(env, err)
+				}
+				switch {
+				case *check != "":
+					for _, name := range []string{apischema.OpenAPIFile, apischema.ReachFile} {
+						have, err := os.ReadFile(filepath.Join(*check, name))
+						if err != nil || !bytes.Equal(have, files[name]) {
+							_, _ = fmt.Fprintf(env.Stderr, "%s is out of date; regenerate it with: go run ./cmd/atrium catalog openapi --output %s\n", filepath.Join(*check, name), *check)
+							return cli.ExitError
+						}
+					}
+				case *output != "":
+					if err := os.MkdirAll(*output, 0o755); err != nil {
+						return cli.Fail(env, err)
+					}
+					for _, name := range []string{apischema.OpenAPIFile, apischema.ReachFile} {
+						if err := os.WriteFile(filepath.Join(*output, name), files[name], 0o644); err != nil {
+							return cli.Fail(env, err)
+						}
+					}
+				default:
+					_, _ = env.Stdout.Write(files[apischema.OpenAPIFile])
+				}
+				return cli.ExitOK
+			}
+		},
 	}}}
 }
 
 func catalogOperations(cat *module.Catalog, missingAPI bool) []catalogOperation {
 	bound := map[application.Name][]catalogBinding{}
+	areas := map[application.Name]application.Area{}
 	for _, b := range cat.Bindings() {
 		for _, name := range b.Uses {
 			bound[name] = append(bound[name], catalogBinding{Kind: b.Kind, Target: b.Target})
+			if _, ok := areas[name]; !ok && b.API != nil {
+				areas[name] = b.API.Area
+			}
 		}
 	}
 	out := []catalogOperation{}
 	for _, op := range cat.Operations() {
 		row := catalogOperation{
 			Module: op.Module, Name: op.Name, Kind: op.Kind, Input: op.Input.String(), Output: op.Output.String(),
-			Authority: op.Authority, Effect: op.Effect, Audit: op.Audit, Bindings: bound[op.Name], APIRoutes: []string{},
+			Authority: op.Authority, Effect: op.Effect, Audit: op.Audit, Area: areas[op.Name], Bindings: bound[op.Name], APIRoutes: []string{},
 		}
 		slices.SortFunc(row.Bindings, func(a, b catalogBinding) int {
 			return cmp.Or(cmp.Compare(a.Kind, b.Kind), cmp.Compare(a.Target, b.Target))
@@ -101,7 +145,7 @@ func catalogOperations(cat *module.Catalog, missingAPI bool) []catalogOperation 
 				row.APIRoutes = append(row.APIRoutes, b.Target)
 			}
 		}
-		if missingAPI && len(row.APIRoutes) > 0 {
+		if missingAPI && (row.Area != "" || !application.RequiresAPI(op.Authority)) {
 			continue
 		}
 		out = append(out, row)
@@ -128,7 +172,7 @@ func catalogUnboundItems(env *cli.Env, cat *module.Catalog) ([]catalogUnbound, e
 
 func printCatalog(env *cli.Env, report catalogReport) {
 	w := tabwriter.NewWriter(env.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "MODULE\tNAME\tKIND\tINPUT\tOUTPUT\tAUTHORITY\tEFFECT\tAUDIT\tBINDINGS")
+	_, _ = fmt.Fprintln(w, "MODULE\tNAME\tKIND\tAREA\tINPUT\tOUTPUT\tAUTHORITY\tEFFECT\tAUDIT\tBINDINGS")
 	for _, op := range report.Operations {
 		authority := make([]string, len(op.Authority))
 		for i, a := range op.Authority {
@@ -138,7 +182,7 @@ func printCatalog(env *cli.Env, report catalogReport) {
 		for i, b := range op.Bindings {
 			targets[i] = string(b.Kind) + ":" + b.Target
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%t\t%s\n", op.Module, op.Name, op.Kind, op.Input, op.Output,
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%t\t%s\n", op.Module, op.Name, op.Kind, cmp.Or(op.Area, "-"), op.Input, op.Output,
 			strings.Join(authority, ","), op.Effect, op.Audit, strings.Join(targets, " "))
 	}
 	if len(report.Unbound) > 0 {

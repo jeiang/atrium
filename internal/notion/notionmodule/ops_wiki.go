@@ -12,6 +12,7 @@ func wikiOperations() ([]application.Definition, []application.Binding) {
 	return notionapp.Describe(), []application.Binding{
 		bind(application.CLI, "notion search", notionapp.SearchName),
 		bind(application.CLI, "notion sync", notionapp.SyncName),
+		bind(application.Job, "notion/notion-sync", notionapp.SyncName),
 		bind(application.HTML, "GET /library/wiki", notionapp.ListName),
 		bind(application.HTML, "GET /notion/{page_id}", notionapp.DetailName),
 	}

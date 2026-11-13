@@ -17,6 +17,7 @@ func maintenanceOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.CLI, Target: "db rekey", Uses: []application.Name{maintenanceapp.RekeyName}},
 			{Kind: application.CLI, Target: "db import-v2", Uses: []application.Name{maintenanceapp.ImportV2Name}},
 			{Kind: application.CLI, Target: "db shell", Uses: []application.Name{maintenanceapp.SQLName}},
+			{Kind: application.Job, Target: "core/backup", Uses: []application.Name{maintenanceapp.BackupName}},
 			{Kind: application.CLI, Target: "backup", Uses: []application.Name{maintenanceapp.BackupName}},
 			{Kind: application.CLI, Target: "restore", Uses: []application.Name{maintenanceapp.VerifyArchiveName, maintenanceapp.RestoreName}},
 		}

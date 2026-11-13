@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -38,8 +39,8 @@ type apiApproval struct {
 	BlockedEffect bool            `json:"blocked_effect"`
 	BlockedUndo   bool            `json:"blocked_undo"`
 	Args          []reviewapp.Arg `json:"args"`
-	Preview       any             `json:"preview"`
-	Result        any             `json:"result"`
+	Preview       json.RawMessage `json:"preview"`
+	Result        json.RawMessage `json:"result"`
 }
 
 type apiDraft struct {
@@ -63,7 +64,7 @@ type apiDraft struct {
 
 func (s *service) apiRoutes(d *web.Deps) {
 	d.API(http.MethodGet, "/pending", s.apiPending)
-	d.API(http.MethodPost, "/approvals/{proposal_id}/approve", web.Idempotent(s.apiApprove))
+	d.API(http.MethodPost, "/approvals/{proposal_id}/approve", s.apiApprove)
 	d.API(http.MethodPost, "/approvals/{proposal_id}/deny", s.apiDeny)
 	d.API(http.MethodPost, "/approvals/{proposal_id}/resolve", s.apiResolve)
 	d.API(http.MethodGet, "/undo", s.apiUndoFeed)
@@ -77,7 +78,7 @@ func (s *service) apiRoutes(d *web.Deps) {
 func (s *service) mailAPIRoutes(d *web.Deps) {
 	d.API(http.MethodGet, "/drafts/{draft_id}", s.apiDraft)
 	d.API(http.MethodPatch, "/drafts/{draft_id}", bindMail(http.HandlerFunc(s.apiDraftUpdate)).ServeHTTP)
-	d.API(http.MethodPost, "/drafts/{draft_id}/send", bindMail(web.Idempotent(s.apiDraftSend)).ServeHTTP)
+	d.API(http.MethodPost, "/drafts/{draft_id}/send", bindMail(http.HandlerFunc(s.apiDraftSend)).ServeHTTP)
 	d.API(http.MethodPost, "/drafts/{draft_id}/discard", bindMail(http.HandlerFunc(s.apiDraftDiscard)).ServeHTTP)
 	d.API(http.MethodPost, "/drafts/{draft_id}/resolve", bindMail(http.HandlerFunc(s.apiDraftResolve)).ServeHTTP)
 }
@@ -87,7 +88,7 @@ func approvalOf(c reviewapp.Card) apiApproval {
 		ID: c.ID, Kind: c.Kind, KindLabel: c.KindLabel, Module: c.Module, Approval: c.Approval, Status: c.Status,
 		Account: c.Account, Title: c.Title, ThreadID: c.ThreadID, RunID: c.RunID, CreatedAt: c.CreatedAt, DecidedAt: c.DecidedAt,
 		AppliedAt: c.AppliedAt, UndoneAt: c.UndoneAt, Undoable: c.Undoable, Blocked: c.Blocked, BlockedEffect: c.BlockedEffect, BlockedUndo: c.BlockedUndo,
-		Args: c.Args, Preview: c.Preview, Result: c.Result,
+		Args: c.Args, Preview: apiRaw(c.Preview), Result: apiRaw(c.Result),
 	}
 }
 
@@ -638,4 +639,39 @@ func (s *service) apiDraftResolve(w http.ResponseWriter, r *http.Request) {
 	}
 	check(err)
 	web.JSON(w, http.StatusOK, map[string]any{"draft": s.currentDraft(ctx, row.ID)})
+}
+
+func apiRaw(v any) json.RawMessage {
+	raw, err := json.Marshal(v)
+	check(err)
+	return raw
+}
+
+type apiUndoRequest struct {
+	ThreadID string `query:"thread_id" json:"-"`
+	RunID    string `query:"run_id" json:"-"`
+	Limit    string `query:"limit" json:"-"`
+	Cursor   string `query:"cursor" json:"-"`
+}
+type apiEffectsRequest struct {
+	Origin     string `query:"origin" json:"-"`
+	Operation  string `query:"operation" json:"-"`
+	Blocked    string `query:"blocked" json:"-"`
+	ProposalID string `query:"proposal_id" json:"-"`
+	ThreadID   string `query:"thread_id" json:"-"`
+	RunID      string `query:"run_id" json:"-"`
+	Before     string `query:"before" json:"-"`
+	Limit      string `query:"limit" json:"-"`
+}
+type apiEffectRequest struct {
+	EffectID int64 `path:"effect_id" json:"-"`
+}
+
+func APIReadBindings() []application.Binding {
+	return []application.Binding{
+		{Kind: application.API, Target: "GET /pending", Uses: []application.Name{reviewapp.PendingName}, API: &application.APIShape{Area: "review", Request: reflect.TypeFor[struct{}](), Response: reflect.TypeFor[pendingBody](), Body: application.BodyNone, Success: 200}},
+		{Kind: application.API, Target: "GET /undo", Uses: []application.Name{reviewapp.UndoableName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[apiUndoRequest](), Response: reflect.TypeFor[web.List[reviewapp.UndoEntry]](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.Invalid}}},
+		{Kind: application.API, Target: "GET /effects", Uses: []application.Name{reviewapp.EffectsName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[apiEffectsRequest](), Response: reflect.TypeFor[web.List[ledger.Effect]](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.Invalid}}},
+		{Kind: application.API, Target: "GET /effects/{effect_id}", Uses: []application.Name{reviewapp.EffectName}, API: &application.APIShape{Area: "activity", Request: reflect.TypeFor[apiEffectRequest](), Response: reflect.TypeFor[ledger.Effect](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.NotFound}}},
+	}
 }

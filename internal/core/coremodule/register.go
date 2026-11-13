@@ -7,8 +7,13 @@ import (
 	"slices"
 	"time"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/jeiang/atrium/internal/about"
 	"github.com/jeiang/atrium/internal/actionlink"
+	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/application/commands"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/attention"
@@ -17,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/auth/bearercmd"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/auth/oidcconn"
+	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
@@ -91,8 +97,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, connectionOps...), append(bindings, connectionBindings...)
 	maintenanceOps, maintenanceBindings := maintenanceOperations()
 	operations, bindings = append(operations, maintenanceOps...), append(bindings, maintenanceBindings...)
+	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
 	maintenance := maintenanceapp.New(mc.Env, m.Now)
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)
+	commandOps, commandBindings := commandOperations()
+	operations, bindings = append(operations, commandOps...), append(bindings, commandBindings...)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
 		if err != nil {
@@ -108,10 +117,14 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		return s
 	}
 	return module.Declaration{
-		Name:              module.Core,
-		Core:              true,
-		Settings:          slices.Concat(config.Settings(), dbkey.Settings(), oidc.Settings(), secrets.Settings()),
-		Host:              slices.Concat(config.HostSettings(), secrets.HostSettings(), observability.HostSettings(), ops.HostSettings()),
+		Name:     module.Core,
+		Core:     true,
+		Settings: slices.Concat(config.Settings(), dbkey.Settings(), oidc.Settings(), secrets.Settings()),
+		Host:     slices.Concat(config.HostSettings(), backup.HostSettings(), secrets.HostSettings(), observability.HostSettings(), ops.HostSettings()),
+		Jobs: []scheduler.Definition{backup.Job(mc.Env, func(ctx context.Context, dest string, forget func(context.Context, db.Querier) error) error {
+			_, err := maintenance.Backup(ctx, maintenanceapp.BackupInput{Dest: dest, Forget: forget})
+			return err
+		})},
 		Attention:         AttentionSources(),
 		Metrics:           slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics(), scheduler.Metrics()),
 		Checks:            slices.Concat(ops.Checks(), passrun.Checks()),
@@ -132,6 +145,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}, OIDC: oidcconn.Source()},
 			connweb.Page(connectionService),
+			{Module: func(_ chi.Router, d *web.Deps) { authRoutes(d); commandRoutes(d) }},
 		},
 		Groups:     SettingGroups(),
 		Operations: operations,
@@ -179,7 +193,10 @@ func recoverProposals(ctx context.Context, d *db.DB, _ config.Config) error {
 	if n > 0 {
 		log.Warn("recovered interrupted approved proposals", "count", n)
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	return commands.New(d).Prune(ctx)
 }
 
 func (m Module) services(mc module.Context) []runtime.ServiceDefinition {

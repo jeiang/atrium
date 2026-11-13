@@ -11,6 +11,20 @@
   schema = lib.importJSON ../docs/config/atrium.schema.json;
   reference = "docs/config/reference.md";
 
+  backupScheduleValid = let
+    clock = "([01]?[0-9]|2[0-3]):[0-5][0-9]";
+    num = "[0-9*/,-]+";
+    named = "[0-9a-z*/,-]+";
+    s = "[[:space:]]+";
+    forms = [
+      "daily${s}${clock}"
+      "weekly${s}(mon|tue|wed|thu|fri|sat|sun)[^[:space:]]*${s}${clock}"
+      "${num}${s}${num}${s}${num}${s}${named}${s}${named}"
+    ];
+    value = lib.toLower cfg.backup.schedule;
+  in
+    builtins.any (form: builtins.match "[[:space:]]*${form}[[:space:]]*" value != null) forms;
+
   stateDirName = lib.removePrefix "/var/lib/" cfg.stateDir;
   cacheDir = "${cfg.stateDir}/cache";
   mirrorDir = "${cfg.stateDir}/mirrors";
@@ -71,12 +85,21 @@
   in {${k.table}."${k.name}" = "\${CREDENTIALS_DIRECTORY}/${key}";})
   (lib.filterAttrs (key: _: appKeyFiles ? ${key}) cfg.secretFiles));
 
+  coreHost =
+    lib.optionalAttrs (cfg.observability.tracesEndpoint != null) {otel_traces_endpoint = cfg.observability.tracesEndpoint;}
+    // lib.optionalAttrs cfg.backup.enable {
+      backup_directory = cfg.backup.directory;
+      backup_keep = cfg.backup.keep;
+      backup_keep_days = cfg.backup.keepDays;
+      backup_schedule = cfg.backup.schedule;
+    };
+
   renderedHost = lib.recursiveUpdate hostValues (
     {
       calendar.calendar_dir = "${mirrorDir}/calendars";
       contacts.contacts_dir = "${mirrorDir}/contacts";
     }
-    // lib.optionalAttrs (cfg.observability.tracesEndpoint != null) {core.otel_traces_endpoint = cfg.observability.tracesEndpoint;}
+    // lib.optionalAttrs (coreHost != {}) {core = coreHost;}
     // lib.optionalAttrs (cfg.web.trustedProxyCidrs != []) {web.trusted_proxy_cidrs = lib.concatStringsSep "," cfg.web.trustedProxyCidrs;}
     // lib.optionalAttrs (cfg.knowledgeExport.obsidianDirectory != null) {export.export_obsidian_dir = cfg.knowledgeExport.obsidianDirectory;}
     // lib.optionalAttrs (cfg.connections != {} || cfg.mailAccounts != {}) {connections = renderedConnections;}
@@ -238,34 +261,13 @@
   mediaWriter = lib.optionalAttrs cfg.media.enable {
     SupplementaryGroups = [cfg.media.group];
     UMask = "0002";
-    ReadWritePaths = [mediaRoot];
   };
 
-  exportWriter = lib.optionalAttrs (obsidianDir != null) {
-    ReadWritePaths = lib.optional cfg.media.enable mediaRoot ++ [obsidianDir];
-  };
+  writePaths = lib.optional cfg.media.enable mediaRoot ++ lib.optional (obsidianDir != null) obsidianDir ++ lib.optional cfg.backup.enable cfg.backup.directory;
 
   mediaPath = lib.optional cfg.media.enable pkgs.ffmpeg-headless;
 
   writeTimeout = "45min";
-
-  backupScript = pkgs.writeShellScript "atrium-backup" ''
-    set -euo pipefail
-    exec ${lib.getExe cfg.package} backup "${cfg.backup.directory}/atrium-$(${pkgs.coreutils}/bin/date -u +%Y%m%dT%H%M%SZ).backup"
-  '';
-
-  backupPruneScript = pkgs.writeShellScript "atrium-backup-prune" ''
-    set -euo pipefail
-    cutoff=$(( $(${pkgs.coreutils}/bin/date +%s) - ${toString (cfg.backup.keepDays * 86400)} ))
-    ${pkgs.findutils}/bin/find ${lib.escapeShellArg cfg.backup.directory} -maxdepth 1 -type f -name '*.backup' -printf '%T@ %p\0' \
-      | ${pkgs.coreutils}/bin/sort -z -rn \
-      | ${pkgs.coreutils}/bin/tail -z -n +${toString (cfg.backup.keep + 1)} \
-      | while IFS=' ' read -r -d "" stamp path; do
-        if (( ''${stamp%.*} < cutoff )); then
-          ${pkgs.coreutils}/bin/rm -f -- "$path"
-        fi
-      done
-  '';
 
   authArgs = auth: lib.concatMapStringsSep " " (mode: "--auth ${mode}") (lib.splitString "+" auth);
 
@@ -282,7 +284,7 @@
     path = mediaPath;
     serviceConfig =
       mediaWriter
-      // exportWriter
+      // lib.optionalAttrs (writePaths != []) {ReadWritePaths = writePaths;}
       // {
         ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} ${authArgs auth}" + lib.optionalString needsHost " --allowed-host ${cfg.web.allowedHost}" + lib.optionalString cfg.web.local.enable " --emergency-host 127.0.0.1 --emergency-port ${toString cfg.web.local.port}";
         Type = "notify";
@@ -303,110 +305,60 @@
     serviceConfig = hardening;
   };
 
-  units =
-    {
-      atrium-watch = {
-        description = "Watch the atrium mailboxes for new mail";
-        serviceConfig = {
-          ExecStart = "${lib.getExe cfg.package} watch";
-          Type = "notify";
-          WatchdogSec = writeTimeout;
-          TimeoutStartSec = writeTimeout;
-          TimeoutStopSec = writeTimeout;
-          Restart = "on-failure";
-          RestartSec = 10;
-        };
-        wantedBy = ["multi-user.target"];
+  units = {
+    atrium-watch = {
+      description = "Watch the atrium mailboxes for new mail";
+      serviceConfig = {
+        ExecStart = "${lib.getExe cfg.package} watch";
+        Type = "notify";
+        WatchdogSec = writeTimeout;
+        TimeoutStartSec = writeTimeout;
+        TimeoutStopSec = writeTimeout;
+        Restart = "on-failure";
+        RestartSec = 10;
       };
+      wantedBy = ["multi-user.target"];
+    };
 
-      atrium-web = webUnit {
-        description = "atrium web UI";
-        inherit (cfg.web) host auth;
-        inherit (cfg) port;
-      };
+    atrium-web = webUnit {
+      description = "atrium web UI";
+      inherit (cfg.web) host auth;
+      inherit (cfg) port;
+    };
 
-      atrium-sync = {
-        description = "Reconcile the atrium mail index";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = "${lib.getExe cfg.package} sync";
-          TimeoutStopSec = writeTimeout;
-        };
-        timer = {
-          wantedBy = ["timers.target"];
-          timerConfig = {
-            OnActiveSec = "2m";
-            OnUnitActiveSec = "15m";
-          };
-        };
+    atrium-sync = {
+      description = "Reconcile the atrium mail index";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${lib.getExe cfg.package} sync";
+        TimeoutStopSec = writeTimeout;
       };
-
-      atrium-notion-sync = {
-        description = "Mirror Notion into the atrium index";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = "${lib.getExe cfg.package} notion sync";
-        };
-        timer = {
-          wantedBy = ["timers.target"];
-          timerConfig = {
-            OnActiveSec = "3m";
-            OnUnitActiveSec = "15m";
-          };
-        };
-      };
-
-      atrium-scan = {
-        description = "Scan the mailboxes for rebalance, deletion and label proposals";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = "${lib.getExe cfg.package} proposals scan-all";
-          TimeoutStopSec = writeTimeout;
-          TimeoutStartSec = "2h";
-        };
-        timer = {
-          wantedBy = ["timers.target"];
-          timerConfig = {
-            OnCalendar = "monthly";
-            Persistent = true;
-          };
-        };
-      };
-
-      atrium-dav-sync = {
-        description = "Mirror the iCloud calendars and address books";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = ["${lib.getExe cfg.package} calendar sync" "${lib.getExe cfg.package} contacts sync"];
-        };
-        timer = {
-          wantedBy = ["timers.target"];
-          timerConfig = {
-            OnActiveSec = "1m";
-            OnUnitActiveSec = "15m";
-          };
-        };
-      };
-    }
-    // lib.optionalAttrs cfg.backup.enable {
-      atrium-backup = {
-        description = "Write an atrium backup archive";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = backupScript;
-          ExecStartPost = backupPruneScript;
-          ReadWritePaths = [cfg.backup.directory];
-          TimeoutStartSec = "2h";
-        };
-        timer = {
-          wantedBy = ["timers.target"];
-          timerConfig = {
-            OnCalendar = cfg.backup.onCalendar;
-            Persistent = true;
-          };
+      timer = {
+        wantedBy = ["timers.target"];
+        timerConfig = {
+          OnActiveSec = "2m";
+          OnUnitActiveSec = "15m";
         };
       };
     };
+
+    atrium-scan = {
+      description = "Scan the mailboxes for rebalance, deletion and label proposals";
+      serviceConfig = {
+        Type = "oneshot";
+        ExecStart = "${lib.getExe cfg.package} proposals scan-all";
+        TimeoutStopSec = writeTimeout;
+        TimeoutStartSec = "2h";
+      };
+      timer = {
+        wantedBy = ["timers.target"];
+        timerConfig = {
+          OnCalendar = "monthly";
+          Persistent = true;
+        };
+      };
+    };
+  };
 
   unitNames = let
     timers = lib.filterAttrs (_: unit: unit ? timer) units;
@@ -417,6 +369,7 @@
     );
 in {
   imports = [
+    (lib.mkRemovedOptionModule ["services" "atrium" "backup" "onCalendar"] "Use services.atrium.backup.schedule in the atrium schedule grammar (for example \"daily 03:00\"); translate a nondefault OnCalendar expression by hand.")
     (lib.mkRemovedOptionModule ["services" "atrium" "modelServerUnits"] "use services.atrium.embeddingServerUnits for the service/embedding server; the local chat server is retired and mail classification uses the service/anthropic connection under monthly_budget_usd")
   ];
 
@@ -641,7 +594,7 @@ in {
     };
 
     backup = {
-      enable = mkEnableOption "the atrium-backup timer that writes an `atrium backup` archive to backup.directory";
+      enable = mkEnableOption "the backup job in `atrium serve` that writes an `atrium backup` archive to backup.directory and prunes old archives";
 
       directory = mkOption {
         type = types.str;
@@ -649,22 +602,22 @@ in {
         description = "Directory that receives one timestamped archive per run; owned by the atrium user. Off-host copies are left to the host.";
       };
 
-      onCalendar = mkOption {
+      schedule = mkOption {
         type = types.str;
-        default = "daily";
-        description = "systemd OnCalendar expression of the backup timer.";
+        default = "daily 03:00";
+        description = "When the backup job runs, in the atrium schedule grammar (`daily HH:MM`, `weekly DOW HH:MM` or a 5-field cron expression, for example `daily 03:00`, `weekly mon 02:30`, `0 4 1 * *`), in the operator time zone. A missed run while atrium was down runs once at start. Evaluation refuses a value outside that grammar. Rendered as host key core.backup_schedule.";
       };
 
       keep = mkOption {
-        type = types.ints.positive;
+        type = types.ints.between 1 10000;
         default = 5;
-        description = "Number of newest `*.backup` archives in backup.directory that pruning always keeps, whatever their age.";
+        description = "Number of newest `atrium-*.backup` archives in backup.directory that pruning always keeps, whatever their age.";
       };
 
       keepDays = mkOption {
-        type = types.ints.unsigned;
+        type = types.ints.between 0 36500;
         default = 14;
-        description = "Archives modified within this many days are kept even beyond backup.keep; older ones are deleted after each successful run.";
+        description = "`atrium-*.backup` archives modified within this many days are kept even beyond backup.keep; older ones are deleted after each successful run.";
       };
     };
 
@@ -766,6 +719,10 @@ in {
         in
           builtins.elem listen ["" "off"] || (port != toString cfg.port && (!cfg.web.local.enable || port != toString cfg.web.local.port));
         message = "services.atrium.host.core.ops_listen must use a port other than services.atrium.port and services.atrium.web.local.port; all three listeners run in atrium-web";
+      }
+      {
+        assertion = !cfg.backup.enable || backupScheduleValid;
+        message = "services.atrium.backup.schedule \"${cfg.backup.schedule}\" is not in the atrium schedule grammar; use `daily HH:MM`, `weekly DOW HH:MM` or a 5-field cron expression";
       }
     ];
 

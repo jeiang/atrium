@@ -296,6 +296,14 @@ func copyFile(from, to string) error {
 }
 
 func DeleteOwned(ctx context.Context, q db.Querier, dir string, owner Owner) (int, error) {
+	n, err := DeleteOwnedRows(ctx, q, owner)
+	if err != nil {
+		return 0, err
+	}
+	return n, RemoveOwned(dir, owner)
+}
+
+func DeleteOwnedRows(ctx context.Context, q db.Querier, owner Owner) (int, error) {
 	column, id := owner.where()
 	var n int
 	if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM thread_files WHERE "+column+" = ?", id).Scan(&n); err != nil {
@@ -304,20 +312,34 @@ func DeleteOwned(ctx context.Context, q db.Querier, dir string, owner Owner) (in
 	if _, err := q.ExecContext(ctx, "DELETE FROM thread_files WHERE "+column+" = ?", id); err != nil {
 		return 0, err
 	}
-	if err := os.RemoveAll(filepath.Join(dir, owner.dirName())); err != nil {
-		return n, err
-	}
 	return n, nil
 }
 
-func DeleteOne(ctx context.Context, q db.Querier, fileID int64) (bool, error) {
+func RemoveOwned(dir string, owner Owner) error {
+	return os.RemoveAll(filepath.Join(dir, owner.dirName()))
+}
+
+func DeleteRow(ctx context.Context, q db.Querier, fileID int64) (string, bool, error) {
 	found, err := Get(ctx, q, fileID)
 	if err != nil || found == nil {
-		return false, err
+		return "", false, err
 	}
-	if err := os.Remove(found.Path); err != nil && !errors.Is(err, os.ErrNotExist) {
-		return false, err
+	if _, err := q.ExecContext(ctx, "DELETE FROM thread_files WHERE id = ?", fileID); err != nil {
+		return "", false, err
 	}
-	_, err = q.ExecContext(ctx, "DELETE FROM thread_files WHERE id = ?", fileID)
-	return err == nil, err
+	return found.Path, true, nil
+}
+
+func RemoveFile(path string) error {
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+func ProjectFileName(ctx context.Context, q db.Querier, fileID int64) (string, int64, error) {
+	var name string
+	var project int64
+	err := q.QueryRowContext(ctx, "SELECT name, project_id FROM thread_files WHERE id = ? AND project_id IS NOT NULL", fileID).Scan(&name, &project)
+	return name, project, err
 }
