@@ -4,8 +4,6 @@ import (
 	"context"
 	"time"
 
-	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-
 	"github.com/jeiang/atrium/internal/assistant"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
