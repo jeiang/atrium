@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/config"
@@ -132,6 +133,7 @@ func (e *Executor) execute(t tool.Tool) proposals.Executor {
 		if decision != registry.Allowed {
 			return nil, proposals.ProposalError(t.Name + " is not allowed in this thread by the permission table")
 		}
+		ctx = application.WithInvocation(ctx, application.Invocation{ThreadID: payload.ThreadID, RunID: payload.RunID, Fingerprint: p.Fingerprint})
 		value, err := t.Approval.Apply(ctx, tc, args)
 		if err != nil {
 			message, refused := tool.Message(err)

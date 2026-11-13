@@ -59,6 +59,7 @@ type Module struct {
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
+	operations, bindings := authOperations()
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
 		if err != nil {
@@ -97,9 +98,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			}, OIDC: oidcconn.Source()},
 			connweb.Page(),
 		},
-		Groups:   SettingGroups(),
-		Services: m.services(mc),
-		Recover:  recoverProposals,
+		Groups:     SettingGroups(),
+		Operations: operations,
+		Bindings:   bindings,
+		Services:   m.services(mc),
+		Recover:    recoverProposals,
 		Commands: []*cli.Command{
 			writescmd.Command(writescmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
 			ledgercmd.Command(ledgercmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
@@ -111,6 +114,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			kbcmd.Command(mc.Env),
 			backup.BackupCommand(),
 			backup.RestoreCommand(),
+			catalogCommand(mc),
 		},
 	}
 }

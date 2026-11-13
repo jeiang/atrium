@@ -531,6 +531,15 @@ behavior-parity target.
   Started effects finish their ledger settlement; unknown outcomes stay blocked.
   Dismissing a proposal remains possible while its owner is disabled.
   Settings transactions publish a new module snapshot only after commit.
+  Modules also declare typed application operations and the HTML, API, CLI,
+  tool, job and service entries bound to them; compiling the catalog rejects
+  a binding to an unknown or foreign operation or a missing entry, and `serve`
+  refuses to start when a declared HTML/API binding is not mounted by its
+  module. `atrium catalog operations [--json] [--missing-api] [--unbound]
+  [--require-api]` prints that catalog without a database or credentials;
+  `--unbound` adds mounted routes, commands, tools, jobs and services that no
+  operation binds, and `--require-api` exits 1 when an operation has no API
+  binding. `GET /api/v1/me` is bound to `auth.identity`.
   Routes mount once with their declaration owner and check that snapshot on
   each request, so changes committed by the running application take effect
   without remounting or restarting; disabled routes keep the rendered 404

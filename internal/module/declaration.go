@@ -3,6 +3,7 @@ package module
 import (
 	"context"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/cli"
@@ -68,6 +69,8 @@ type Declaration struct {
 	Recover           func(context.Context, *db.DB, config.Config) error
 	Metrics           []ops.Metric
 	Checks            []ops.Check
+	Operations        []application.Definition
+	Bindings          []application.Binding
 }
 
 type EffectDeps struct {
