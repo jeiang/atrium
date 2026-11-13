@@ -106,12 +106,17 @@ func connect(path string, opts []Option) (*DB, error) {
 		_ = w.Close()
 		return nil, fmt.Errorf("db: %s: %w", path, err)
 	}
+	if err := gateWrites(w, path); err != nil {
+		_ = w.Close()
+		return nil, err
+	}
 	r := newReader(readDSN, pragmas, smallCacheKiB)
 	k := newKNN(readDSN, pragmas)
 	return &DB{Write: w, Read: r, KNN: k, encrypted: !key.IsZero()}, nil
 }
 
 func (d *DB) Close() error {
+	ungateWrites(d.Write)
 	return errors.Join(d.KNN.Close(), d.Read.Close(), d.Write.Close())
 }
 
@@ -141,6 +146,11 @@ func (d *DB) WithTx(ctx context.Context, fn func(*sql.Tx) error) error {
 }
 
 func (d *DB) withTx(ctx context.Context, fn func(*sql.Tx) error) error {
+	release, err := admitWriter(ctx, d.Write)
+	if err != nil {
+		return err
+	}
+	defer release()
 	tx, err := d.Write.BeginTx(ctx, nil)
 	if err != nil {
 		return err
