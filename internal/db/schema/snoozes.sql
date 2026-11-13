@@ -13,3 +13,15 @@ CREATE TABLE IF NOT EXISTS snoozes (
     error TEXT
 );
 CREATE INDEX IF NOT EXISTS snoozes_due ON snoozes (state, due_ts);
+CREATE TRIGGER IF NOT EXISTS snoozes_read_insert AFTER INSERT ON snoozes BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS snoozes_read_update AFTER UPDATE ON snoozes BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS snoozes_read_delete AFTER DELETE ON snoozes BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;

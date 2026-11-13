@@ -2,6 +2,7 @@ package web
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
@@ -13,6 +14,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -38,6 +40,7 @@ type Page struct {
 	Home      string
 	Nav       []tpl.NavItem
 	OIDC      oidc.Source
+	Bindings  map[string][]application.Binding
 }
 
 type Resource struct {
@@ -173,6 +176,7 @@ func (p Plan) Build(site Site) (public, emergency *Server, err error) {
 	var nav []tpl.NavItem
 	home := ""
 	var oidcSource oidc.Source
+	bindings := map[string][]application.Binding{}
 	for _, page := range site.Pages {
 		if page.Module != nil {
 			modules = append(modules, page.Module)
@@ -190,6 +194,7 @@ func (p Plan) Build(site Site) (public, emergency *Server, err error) {
 			oidcSource = page.OIDC
 		}
 		maps.Copy(globals, page.Globals)
+		maps.Copy(bindings, page.Bindings)
 		nav = append(nav, page.Nav...)
 	}
 	build := func(e Endpoint, sessions *oidc.Service, start func(*Deps) error) (*Server, error) {
@@ -197,7 +202,7 @@ func (p Plan) Build(site Site) (public, emergency *Server, err error) {
 		if err != nil {
 			return nil, err
 		}
-		srv, err := New(Options{Ctx: site.Ctx, Cfg: site.Cfg, Env: site.Env, DB: site.DB, Settings: site.Settings, State: site.State, Policy: &e.policy, AllowedHosts: e.hosts, Trusted: trusted, Public: anyPublic(checks), Render: render, Modules: modules, OIDC: sessions, Home: home, OnReady: start})
+		srv, err := New(Options{Ctx: site.Ctx, Cfg: site.Cfg, Env: site.Env, DB: site.DB, Settings: site.Settings, State: site.State, Policy: &e.policy, AllowedHosts: e.hosts, Trusted: trusted, Public: anyPublic(checks), Render: render, Modules: modules, OIDC: sessions, Home: home, Bindings: bindings, OnReady: start})
 		if err != nil {
 			return nil, err
 		}
@@ -211,15 +216,24 @@ func (p Plan) Build(site Site) (public, emergency *Server, err error) {
 			log.Warn("oidc sign-in is not set up; nobody can sign in until it is", logx.Err, err.Error())
 		}
 	}
-	if public, err = build(p.Public, sessions, site.Start); err != nil {
+	var provided Provided
+	start := func(d *Deps) error {
+		if site.Start != nil {
+			if err := site.Start(d); err != nil {
+				return err
+			}
+		}
+		provided = d.Provided
+		return nil
+	}
+	if public, err = build(p.Public, sessions, start); err != nil {
 		return nil, nil, err
 	}
 	if p.Emergency == nil {
 		return public, nil, nil
 	}
-	if emergency, err = build(*p.Emergency, nil, nil); err != nil {
-		public.Close()
-		return nil, nil, err
+	if emergency, err = build(*p.Emergency, nil, func(d *Deps) error { d.Provided = provided; return nil }); err != nil {
+		return nil, nil, errors.Join(err, public.Close())
 	}
 	return public, emergency, nil
 }

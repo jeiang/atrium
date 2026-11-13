@@ -120,11 +120,11 @@ document.addEventListener("close-dialogs", () => {
   document.querySelectorAll("dialog[open]").forEach((dialog) => dialog.close());
 });
 
+const swapStatuses = new Set([403, 404, 409, 422, 429]);
 document.addEventListener("htmx:beforeSwap", (event) => {
   const xhr = event.detail.xhr;
   const html = (xhr.getResponseHeader("content-type") || "").startsWith("text/html");
-  const card = xhr.status === 409 && event.detail.target?.matches?.("[data-card]");
-  if (html && (xhr.status === 422 || card)) {
+  if (html && swapStatuses.has(xhr.status)) {
     event.detail.shouldSwap = true;
     event.detail.isError = false;
   }

@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -16,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/inference"
-	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/numx"
@@ -41,11 +41,10 @@ type Options struct {
 }
 
 type pages struct {
-	deps   *web.Deps
-	svc    *service.Service
-	now    func() float64
-	ledger *ledger.Store
-	jobs   []scheduler.Definition
+	deps *web.Deps
+	svc  func() *service.Service
+	now  func() float64
+	jobs []scheduler.Definition
 }
 
 const (
@@ -58,11 +57,14 @@ const (
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
 		r = r.With(bindAssistant)
-		svc, err := o.Service(d.Ctx)
-		if err != nil {
-			panic(err)
-		}
-		p := &pages{deps: d, svc: svc, now: assistant.Now, ledger: svc.Runner.Ledger, jobs: module.SetFrom(d.Ctx).Catalog().Jobs()}
+		svc := sync.OnceValue(func() *service.Service {
+			svc, err := o.Service(d.Ctx)
+			if err != nil {
+				panic(err)
+			}
+			return svc
+		})
+		p := &pages{deps: d, svc: svc, now: assistant.Now, jobs: module.SetFrom(d.Ctx).Catalog().Jobs()}
 		d.OnFrame(p.sidebar)
 
 		r.Get("/chat", p.chatIndex)

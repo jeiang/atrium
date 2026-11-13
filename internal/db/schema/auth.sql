@@ -44,3 +44,39 @@ CREATE TABLE IF NOT EXISTS auth_logins (
     draft TEXT NOT NULL DEFAULT '',
     passed_at REAL
 );
+CREATE TRIGGER IF NOT EXISTS auth_sessions_read_insert AFTER INSERT ON auth_sessions BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('auth',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS auth_sessions_read_update AFTER UPDATE ON auth_sessions BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('auth',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS auth_sessions_read_delete AFTER DELETE ON auth_sessions BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('auth',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS auth_bearers_read_insert AFTER INSERT ON auth_bearers BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('auth',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS auth_bearers_read_update AFTER UPDATE ON auth_bearers BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('auth',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS auth_bearers_read_delete AFTER DELETE ON auth_bearers BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('auth',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS auth_logins_read_insert AFTER INSERT ON auth_logins BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('auth',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS auth_logins_read_update AFTER UPDATE ON auth_logins BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('auth',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS auth_logins_read_delete AFTER DELETE ON auth_logins BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('auth',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;

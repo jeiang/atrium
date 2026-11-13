@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"net/http"
 	"net/netip"
 	"net/url"
@@ -22,6 +23,7 @@ import (
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/config"
@@ -50,21 +52,25 @@ type routeRule struct {
 	owner   string
 }
 
+type Provided struct {
+	ResumeRun func(ctx context.Context, runID int64) error
+}
+
 type SettingsRender func(w http.ResponseWriter, r *http.Request, status int, mutate func(*tpl.Frame))
 
 type Deps struct {
-	Ctx       context.Context
-	Cfg       config.Config
-	Env       config.Env
-	DB        *db.DB
-	Settings  *settings.Registry
-	State     *config.State
-	Render    *Renderer
-	Error     func(w http.ResponseWriter, r *http.Request, status int, detail string)
-	NotFound  http.HandlerFunc
-	OnFrame   func(FrameFunc)
-	Stopping  <-chan struct{}
-	ResumeRun func(ctx context.Context, runID int64) error
+	Ctx      context.Context
+	Cfg      config.Config
+	Env      config.Env
+	DB       *db.DB
+	Settings *settings.Registry
+	State    *config.State
+	Render   *Renderer
+	Error    func(w http.ResponseWriter, r *http.Request, status int, detail string)
+	NotFound http.HandlerFunc
+	OnFrame  func(FrameFunc)
+	Stopping <-chan struct{}
+	Provided
 
 	settingsPages map[string]SettingsRender
 
@@ -73,7 +79,7 @@ type Deps struct {
 	owner         string
 	registrations *registrations
 	coreRoutes    func(*Deps)
-	onClose       func(func())
+	onClose       func(func() error)
 }
 
 const drainTimeout = 15 * time.Second
@@ -82,12 +88,13 @@ func (d *Deps) DrainOnClose(drain func(context.Context) error) {
 	if d.onClose == nil {
 		return
 	}
-	d.onClose(func() {
+	d.onClose(func() error {
 		ctx, cancel := context.WithTimeout(context.Background(), drainTimeout)
 		defer cancel()
 		if err := drain(ctx); err != nil {
-			log.Warn("could not drain work before closing the database", logx.Err, err.Error())
+			return fmt.Errorf("could not drain work before closing the database: %w", err)
 		}
+		return nil
 	})
 }
 
@@ -138,6 +145,7 @@ type Options struct {
 	OIDC         *oidc.Service
 	Policy       *Policy
 	OnReady      func(*Deps) error
+	Bindings     map[string][]application.Binding
 }
 
 type Server struct {
@@ -154,7 +162,7 @@ type Server struct {
 	stop          chan struct{}
 	stopOnce      sync.Once
 	starting      atomic.Bool
-	closers       []func()
+	closers       []func() error
 	routes        []routeRule
 	registrations *registrations
 }
@@ -186,7 +194,7 @@ func New(o Options) (*Server, error) {
 		return nil, errors.New("oidc auth needs a session service, a renderer and a database")
 	}
 	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, base: o.Ctx, db: o.DB}
-	s.registrations = &registrations{seen: map[routeKey]string{}}
+	s.registrations = &registrations{seen: map[routeKey]string{}, bindings: o.Bindings}
 	core := &Registrar{Router: s.mux, owner: "core", state: s.registrations}
 	if o.DB != nil {
 		s.bearers = bearer.New(o.DB, o.OIDC)
@@ -222,7 +230,7 @@ func New(o Options) (*Server, error) {
 	deps := &Deps{
 		Ctx: o.Ctx, Cfg: o.Cfg, Env: o.Env, DB: o.DB, Settings: o.Settings, State: o.State, Render: o.Render, Error: s.Error, NotFound: s.missing, Stopping: s.stop,
 		OnFrame: func(FrameFunc) {}, settingsPages: map[string]SettingsRender{},
-		onClose: func(f func()) { s.closers = append(s.closers, f) },
+		onClose: func(f func() error) { s.closers = append(s.closers, f) },
 		router:  core, routes: &s.routes, owner: "core", registrations: s.registrations,
 	}
 	if o.Render != nil {
@@ -243,18 +251,14 @@ func New(o Options) (*Server, error) {
 	}
 	if o.OnReady != nil {
 		if err := o.OnReady(deps); err != nil {
-			for _, close := range s.closers {
-				close()
-			}
-			return nil, err
+			return nil, errors.Join(err, s.Close())
 		}
 	}
 	for _, register := range o.Modules {
 		register(s.mux, deps)
 	}
 	if err := (&Registrar{state: deps.registrations}).Seal(); err != nil {
-		s.Close()
-		return nil, err
+		return nil, errors.Join(err, s.Close())
 	}
 	guard := newGuard(auth, o.AllowedHosts, o.Trusted, o.Public, s.access)
 	guard.secure = s.secure
@@ -272,6 +276,28 @@ func New(o Options) (*Server, error) {
 		}),
 	)
 	return s, nil
+}
+
+func (s *Server) Unbound() []Route { return s.registrations.unbound() }
+
+func Unbound(ctx context.Context, pages []Page) ([]Route, error) {
+	var modules []Module
+	bindings := map[string][]application.Binding{}
+	for _, p := range pages {
+		if p.Module != nil {
+			modules = append(modules, p.Module)
+		}
+		maps.Copy(bindings, p.Bindings)
+	}
+	srv, err := New(Options{Ctx: ctx, Modules: modules, Bindings: bindings})
+	if err != nil {
+		return nil, err
+	}
+	unbound := srv.Unbound()
+	if err := srv.Close(); err != nil {
+		return nil, err
+	}
+	return unbound, nil
 }
 
 func instrument(next http.Handler) http.Handler {
@@ -342,12 +368,14 @@ func (s *Server) Release() { s.starting.Store(false) }
 
 func (s *Server) StopStreams() { s.stopOnce.Do(func() { close(s.stop) }) }
 
-func (s *Server) Close() {
+func (s *Server) Close() error {
 	s.StopStreams()
+	var err error
 	for i := len(s.closers) - 1; i >= 0; i-- {
-		s.closers[i]()
+		err = errors.Join(err, s.closers[i]())
 	}
 	s.closers = nil
+	return err
 }
 
 func IsPartial(r *http.Request) bool {

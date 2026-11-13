@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
@@ -196,8 +197,8 @@ func (s *Scheduler) start(ctx context.Context, claim Claim, locks *db.LockSet, f
 	s.active.Add(1)
 	job, release := s.detach(ctx)
 	s.wg.Go(func() {
-		defer s.finished(job)
 		defer release()
+		defer s.finished(job)
 		defer func() { _ = locks.Close() }()
 		s.execute(job, claim, fn)
 	})
@@ -345,7 +346,7 @@ func (s *Scheduler) call(ctx context.Context, claim Claim, fn func(context.Conte
 			result, err = Result{}, errors.New(text)
 		}
 	}()
-	return fn(ctx, Run{Claim: claim, Now: s.now})
+	return fn(application.WithInvocation(ctx, application.Invocation{JobRunID: claim.JobRunID}), Run{Claim: claim, Now: s.now})
 }
 
 func (s *Scheduler) renew(ctx context.Context, claim Claim, stop <-chan struct{}, lose func()) {

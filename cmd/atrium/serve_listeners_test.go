@@ -1,17 +1,21 @@
 package main
 
 import (
+	"fmt"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
 	"net/url"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/sdnotify/sdnotifytest"
 )
@@ -180,5 +184,71 @@ func TestServeBindCollisionsGiveNoReadyAndCloseEverySocket(t *testing.T) {
 				_ = l.Close()
 			}
 		})
+	}
+}
+
+func TestEmergencyListenerApprovesAndDismissesAPermissionRequest(t *testing.T) {
+	srv, pages := webPages(t)
+	dir, api, f := moduleFixture(t, flagsExcept("", ""))
+	warm(t, api)
+	thread := latestThread(t, dir)
+	port := freeLocalPort(t)
+	base, _, stop, err := startServeAppArgs(t, freshApp(f), &lockedBuffer{}, "--auth", "local", "--emergency-port", port)
+	if err != nil {
+		t.Fatalf("serve did not start: %v", err)
+	}
+	t.Cleanup(stop)
+	emergency := "http://127.0.0.1:" + port
+	public, local := jarClient(t), jarClient(t)
+	if status, _, _ := fetch(t, public, http.MethodGet, base+"/chat", nil); status != http.StatusOK {
+		t.Fatalf("GET /chat = %d", status)
+	}
+	if status, _, _ := fetch(t, local, http.MethodGet, emergency+"/review", nil); status != http.StatusOK {
+		t.Fatalf("GET /review on the emergency listener = %d", status)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+	decide := func(decision string, form url.Values, replies ...anthropictest.Response) []anthropictest.Request {
+		t.Helper()
+		start := len(api.Requests())
+		api.Push(replies...)
+		if status, body, _ := fetch(t, public, http.MethodPost, fmt.Sprintf("%s/chat/%d/messages", base, thread), url.Values{"text": {decision + ": read " + srv.URL + "/a then " + srv.URL + "/b"}}); status >= http.StatusBadRequest {
+			t.Fatalf("%s: POST message = %d: %s", decision, status, body)
+		}
+		proposal, _ := waitParkedPermission(t, d, thread)
+		code, body := hxFetch(t, local, http.MethodPost, emergency+fmt.Sprintf("/proposals/%d/%s", proposal, decision), form)
+		if code != http.StatusOK || strings.Contains(body, "the assistant module is not running") {
+			t.Fatalf("%s on the emergency listener = %d: %s", decision, code, body)
+		}
+		waitRunState(t, d, thread, "done")
+		var status string
+		if err := d.Read.QueryRow("SELECT status FROM proposals WHERE id = ?", proposal).Scan(&status); err != nil || status == "pending" {
+			t.Fatalf("%s: proposal status = %q, %v", decision, status, err)
+		}
+		return api.Requests()[start:]
+	}
+	approved := decide("approve", url.Values{"all": {"1"}},
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("f1", "web_fetch", map[string]any{"url": srv.URL + "/a"})),
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("f2", "web_fetch", map[string]any{"url": srv.URL + "/b"})),
+		anthropictest.Reply("end_turn", anthropictest.Text("approved")),
+	)
+	if len(approved) != 3 {
+		t.Fatalf("%d model requests around the approval, want 3", len(approved))
+	}
+	if result := toolResultFor(t, approved[2], "f2"); result["is_error"] == true || !strings.Contains(fmt.Sprint(result["content"]), pageBText) {
+		t.Fatalf("the approved fetch returned %v", result)
+	}
+	dismissed := decide("dismiss", url.Values{},
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("f3", "web_fetch", map[string]any{"url": srv.URL + "/a"})),
+		anthropictest.Reply("end_turn", anthropictest.Text("dismissed")),
+	)
+	if len(dismissed) != 2 {
+		t.Fatalf("%d model requests around the dismissal, want 2", len(dismissed))
+	}
+	if result := toolResultFor(t, dismissed[1], "f3"); result["is_error"] != true || !strings.Contains(fmt.Sprint(result["content"]), "the operator denied this request") {
+		t.Fatalf("the dismissed fetch returned %v", result)
+	}
+	if hits := pages.seen(); !slices.Equal(hits, []string{"/a", "/b"}) {
+		t.Fatalf("page fetches = %v, want /a then /b once", hits)
 	}
 }

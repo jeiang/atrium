@@ -86,3 +86,63 @@ CREATE TRIGGER IF NOT EXISTS kb_fts_delete AFTER DELETE ON kb_records BEGIN
     DELETE FROM kb_fts WHERE rowid = old.id;
 END;
 CREATE TABLE IF NOT EXISTS memory_state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+CREATE TRIGGER IF NOT EXISTS kb_records_read_insert AFTER INSERT ON kb_records BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('knowledge',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS kb_records_read_update AFTER UPDATE ON kb_records BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('knowledge',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS kb_records_read_delete AFTER DELETE ON kb_records BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('knowledge',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS memory_nodes_read_insert AFTER INSERT ON memory_nodes BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS memory_nodes_read_update AFTER UPDATE ON memory_nodes BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS memory_nodes_read_delete AFTER DELETE ON memory_nodes BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS memory_jobs_read_insert AFTER INSERT ON memory_jobs BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS memory_jobs_read_update AFTER UPDATE OF id, thread_id, node_id, level, idx, state, attempts, next_at, error, created_at ON memory_jobs BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS memory_jobs_read_delete AFTER DELETE ON memory_jobs BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS memory_views_read_insert AFTER INSERT ON memory_views BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS memory_views_read_update AFTER UPDATE ON memory_views BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS memory_views_read_delete AFTER DELETE ON memory_views BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS memory_state_read_insert AFTER INSERT ON memory_state BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS memory_state_read_update AFTER UPDATE ON memory_state BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS memory_state_read_delete AFTER DELETE ON memory_state BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('assistant',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;

@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
@@ -28,9 +29,12 @@ const (
 )
 
 type apiError struct {
-	Code    string       `json:"code"`
-	Message string       `json:"message"`
-	Fields  []FieldError `json:"fields,omitempty"`
+	Code         string       `json:"code"`
+	Message      string       `json:"message"`
+	Fields       []FieldError `json:"fields,omitempty"`
+	EffectIDs    []int64      `json:"effect_ids,omitempty"`
+	RetryAfter   int64        `json:"retry_after,omitempty"`
+	DiagnosticID string       `json:"diagnostic_id,omitempty"`
 }
 
 func isAPI(r *http.Request) bool {
@@ -38,14 +42,21 @@ func isAPI(r *http.Request) bool {
 }
 
 func withIdentity(ctx context.Context, who Identity) context.Context {
-	return context.WithValue(ctx, identityKey{}, who)
+	return authapp.WithPrincipal(ctx, who)
+}
+
+type meBody struct {
+	authapp.Principal
+	APIVersion int `json:"api_version"`
 }
 
 func me(w http.ResponseWriter, r *http.Request) {
-	who, _ := IdentityOf(r.Context())
-	JSON(w, http.StatusOK, map[string]any{
-		"subject": who.Subject, "email": who.Email, "name": who.Name, "api_version": 1,
-	})
+	read, err := authapp.Identity(r.Context())
+	if err != nil {
+		APIFail(w, err)
+		return
+	}
+	JSON(w, http.StatusOK, meBody{Principal: read.Data, APIVersion: 1})
 }
 
 const (

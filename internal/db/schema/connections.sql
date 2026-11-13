@@ -41,3 +41,39 @@ CREATE TABLE IF NOT EXISTS connection_credentials (
         OR (source='host_file' AND value IS NULL AND file_ref IS NOT NULL AND length(file_ref)>0)),
     PRIMARY KEY(connection_id,slot)
 );
+CREATE TRIGGER IF NOT EXISTS connections_read_insert AFTER INSERT ON connections BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('connections',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS connections_read_update AFTER UPDATE ON connections BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('connections',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS connections_read_delete AFTER DELETE ON connections BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('connections',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS connection_capabilities_read_insert AFTER INSERT ON connection_capabilities BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('connections',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS connection_capabilities_read_update AFTER UPDATE ON connection_capabilities BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('connections',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS connection_capabilities_read_delete AFTER DELETE ON connection_capabilities BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('connections',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS connection_credentials_read_insert AFTER INSERT ON connection_credentials BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('connections',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS connection_credentials_read_update AFTER UPDATE ON connection_credentials BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('connections',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS connection_credentials_read_delete AFTER DELETE ON connection_credentials BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('connections',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
