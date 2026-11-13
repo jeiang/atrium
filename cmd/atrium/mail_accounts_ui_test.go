@@ -44,11 +44,12 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	t.Cleanup(imapclient.UseDialer(func(_ context.Context, a config.AccountSpec, password string) (mail.Conn, error) {
 		seenMu.Lock()
 		lastPassword = password
+		want := passwords[a.Login]
 		seenMu.Unlock()
-		if passwords[a.Login] != password {
+		if want != password {
 			return nil, errors.New("AUTHENTICATIONFAILED Invalid credentials")
 		}
-		return mailtest.NewFakeClient(), nil
+		return mailtest.NewFakeClient().Conn(), nil
 	}))
 
 	ca := smtpCert(t)
@@ -130,7 +131,9 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 	if !strings.Contains(page(), `id="new-auth" name="auth_method"`) {
 		t.Error("the add form does not offer an auth method")
 	}
+	seenMu.Lock()
 	passwords["me@work2.test"] = "work-pass"
+	seenMu.Unlock()
 	relogin := url.Values{"label": {"Work"}, "login": {"me@work2.test"}, "enabled": {"1"}, "auth_method": {"password"}}
 	if code, body := post("/accounts/work", relogin); code != http.StatusOK {
 		t.Fatalf("a login change with the stored password: %d %.300s", code, body)
@@ -162,7 +165,9 @@ func TestMailAccountsAddedInTheUITestSyncAndRemoveWithoutLosingMail(t *testing.T
 		t.Errorf("removing a deployment account: %d", code)
 	}
 
+	seenMu.Lock()
 	passwords["me@icloud.test"] = "rotated"
+	seenMu.Unlock()
 	if code, body := post("/accounts/home/test", nil); code != http.StatusUnprocessableEntity || !strings.Contains(body, `data-account="home" data-state="needs_reauth"`) {
 		t.Errorf("a failing Test of the deployment account: %d", code)
 	}

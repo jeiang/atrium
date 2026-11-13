@@ -281,13 +281,13 @@ func TestPostEffectSyncInsideAPassDoesNotDeadlock(t *testing.T) {
 	entered, release := make(chan struct{}), make(chan struct{})
 	var armed atomic.Bool
 	armed.Store(true)
-	fake.StatusHook = func(_ string, messages uint32) uint32 {
+	fake.SetStatusHook(func(_ string, messages uint32) uint32 {
 		if armed.CompareAndSwap(true, false) {
 			close(entered)
 			<-release
 		}
 		return messages
-	}
+	})
 	t.Cleanup(func() {
 		if !isClosed(release) {
 			close(release)

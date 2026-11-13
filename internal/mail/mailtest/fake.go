@@ -100,30 +100,24 @@ type FakeAppend struct {
 }
 
 type FakeClient struct {
-	fakeConn
-
 	Boxes        map[string]*FakeMailbox
 	Order        []string
 	Gmail        bool
 	CategoryUIDs map[string][]uint32
 	FailWrite    func(FakeWrite) error
-	StatusHook   func(imapName string, messages uint32) uint32
 	Idle         bool
 
-	idle      sync.Mutex
-	idlers    int
-	signals   chan error
-	Selected  string
-	RW        string
-	Connected bool
-	Closed    bool
-	Noops     int
-	Searches  []mail.SearchCriteria
-	Fetches   []FakeFetch
-	Writes    []FakeWrite
-	Created   []string
-	Deleted   []string
-	Appended  []FakeAppend
+	hookMu     sync.Mutex
+	statusHook func(imapName string, messages uint32) uint32
+	idle       sync.Mutex
+	idlers     int
+	signals    chan error
+	Searches   []mail.SearchCriteria
+	Fetches    []FakeFetch
+	Writes     []FakeWrite
+	Created    []string
+	Deleted    []string
+	Appended   []FakeAppend
 }
 
 func NewFakeClient() *FakeClient {
@@ -131,12 +125,27 @@ func NewFakeClient() *FakeClient {
 		Boxes:        map[string]*FakeMailbox{},
 		CategoryUIDs: map[string][]uint32{},
 	}
-	f.fakeConn = fakeConn{f}
 	return f
 }
 
 func (f *FakeClient) Open(ctx context.Context, opts mail.OpenOptions) (mail.Client, error) {
-	return mail.Gated(ctx, opts, func() (mail.Conn, error) { return f, nil })
+	return mail.Gated(ctx, opts, func() (mail.Conn, error) { return f.Conn(), nil })
+}
+
+func (f *FakeClient) SetStatusHook(fn func(imapName string, messages uint32) uint32) {
+	f.hookMu.Lock()
+	f.statusHook = fn
+	f.hookMu.Unlock()
+}
+
+func (f *FakeClient) status(imapName string, count uint32) uint32 {
+	f.hookMu.Lock()
+	fn := f.statusHook
+	f.hookMu.Unlock()
+	if fn == nil {
+		return count
+	}
+	return fn(imapName, count)
 }
 
 func (f *FakeClient) AddBox(imapName string, box *FakeBox, flags ...string) *FakeBox {
@@ -175,7 +184,12 @@ func cloneOrNil(s []string) []string {
 	return slices.Clone(s)
 }
 
-type fakeConn struct{ f *FakeClient }
+func (f *FakeClient) Conn() mail.Conn { return fakeConn{f: f, selected: new(string)} }
+
+type fakeConn struct {
+	f        *FakeClient
+	selected *string
+}
 
 func (c fakeConn) box(imapName string) (*FakeBox, error) {
 	m, ok := c.f.Boxes[imapName]
@@ -185,12 +199,9 @@ func (c fakeConn) box(imapName string) (*FakeBox, error) {
 	return m.Box, nil
 }
 
-func (c fakeConn) Connect(context.Context) error {
-	c.f.Connected = true
-	return nil
-}
+func (fakeConn) Connect(context.Context) error { return nil }
 
-func (c fakeConn) Close() { c.f.Closed = true }
+func (fakeConn) Close() {}
 
 func (c fakeConn) HasCapability(name string) bool { return caps[strings.ToUpper(name)] }
 
@@ -207,9 +218,7 @@ func (c fakeConn) Status(_ context.Context, imapName string) (mail.Status, error
 	if !ok && c.f.Gmail {
 		one := uint64(1)
 		count := c.f.labelCount(c.f.name(imapName))
-		if c.f.StatusHook != nil {
-			count = c.f.StatusHook(imapName, count)
-		}
+		count = c.f.status(imapName, count)
 		return mail.Status{UIDValidity: 1, UIDNext: 1, HighestModSeq: &one, Messages: count}, nil
 	}
 	if !ok {
@@ -217,14 +226,12 @@ func (c fakeConn) Status(_ context.Context, imapName string) (mail.Status, error
 	}
 	modseq := m.Box.ModSeq
 	count := uint32(len(m.Box.Messages))
-	if c.f.StatusHook != nil {
-		count = c.f.StatusHook(imapName, count)
-	}
+	count = c.f.status(imapName, count)
 	return mail.Status{UIDValidity: m.Box.Validity, UIDNext: m.Box.NextUID, HighestModSeq: &modseq, Messages: count}, nil
 }
 
 func (c fakeConn) Select(_ context.Context, imapName string) error {
-	c.f.Selected = imapName
+	*c.selected = imapName
 	return nil
 }
 
@@ -257,7 +264,7 @@ func (c fakeConn) UIDSearch(_ context.Context, criteria mail.SearchCriteria) ([]
 		slices.Sort(uids)
 		return uids, nil
 	}
-	box, err := c.box(c.f.Selected)
+	box, err := c.box(*c.selected)
 	if err != nil {
 		return nil, err
 	}
@@ -277,7 +284,7 @@ func (c fakeConn) UIDSearch(_ context.Context, criteria mail.SearchCriteria) ([]
 }
 
 func (c fakeConn) UIDFetch(_ context.Context, uids mail.UIDSet, req mail.FetchRequest) ([]mail.Message, error) {
-	box, err := c.box(c.f.Selected)
+	box, err := c.box(*c.selected)
 	if err != nil {
 		return nil, err
 	}
@@ -365,14 +372,10 @@ func (f *FakeClient) signal(ctx context.Context, err error) error {
 	}
 }
 
-func (c fakeConn) Noop(context.Context) error {
-	c.f.Noops++
-	return nil
-}
+func (fakeConn) Noop(context.Context) error { return nil }
 
 func (c fakeConn) SelectRW(_ context.Context, imapName string) (uint32, error) {
-	c.f.Selected = imapName
-	c.f.RW = imapName
+	*c.selected = imapName
 	if m, ok := c.f.Boxes[imapName]; ok {
 		if m.RWValidity != nil {
 			return *m.RWValidity, nil
@@ -393,7 +396,7 @@ func (c fakeConn) record(w FakeWrite) error {
 }
 
 func (c fakeConn) messages(uids mail.UIDSet) (*FakeBox, []uint32, error) {
-	box, err := c.box(c.f.Selected)
+	box, err := c.box(*c.selected)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -402,7 +405,7 @@ func (c fakeConn) messages(uids mail.UIDSet) (*FakeBox, []uint32, error) {
 	}
 	for _, uid := range uids.List() {
 		if _, ok := box.Messages[uid]; !ok {
-			return nil, nil, fmt.Errorf("fake IMAP: no UID %d in %q", uid, c.f.Selected)
+			return nil, nil, fmt.Errorf("fake IMAP: no UID %d in %q", uid, *c.selected)
 		}
 	}
 	return box, uids.List(), nil
@@ -417,7 +420,7 @@ func (c fakeConn) Copy(_ context.Context, uids mail.UIDSet, destIMAPName string)
 	if err != nil {
 		return nil, err
 	}
-	if err := c.record(FakeWrite{Verb: "COPY", Mailbox: c.f.Selected, UIDs: list, Args: []string{destIMAPName}}); err != nil {
+	if err := c.record(FakeWrite{Verb: "COPY", Mailbox: *c.selected, UIDs: list, Args: []string{destIMAPName}}); err != nil {
 		return nil, err
 	}
 	mapping := make(map[uint32]uint32, len(list))
@@ -442,7 +445,7 @@ func (c fakeConn) store(uids mail.UIDSet, add, labels bool, names []string) erro
 	} else {
 		op += "FLAGS.SILENT"
 	}
-	if err := c.record(FakeWrite{Verb: "STORE", Mailbox: c.f.Selected, UIDs: list, Args: append([]string{op}, names...)}); err != nil {
+	if err := c.record(FakeWrite{Verb: "STORE", Mailbox: *c.selected, UIDs: list, Args: append([]string{op}, names...)}); err != nil {
 		return err
 	}
 	for _, uid := range list {
@@ -485,7 +488,7 @@ func (c fakeConn) UIDExpunge(_ context.Context, uids mail.UIDSet) error {
 	if err != nil {
 		return err
 	}
-	if err := c.record(FakeWrite{Verb: "EXPUNGE", Mailbox: c.f.Selected, UIDs: list}); err != nil {
+	if err := c.record(FakeWrite{Verb: "EXPUNGE", Mailbox: *c.selected, UIDs: list}); err != nil {
 		return err
 	}
 	for _, uid := range list {

@@ -266,8 +266,7 @@ capabilities = ["api"]
 		seedSettingsWith(t, appKey(t, env), filepath.Join(dir, "atrium.db"), map[string]string{"icloud_apple_id": apple})
 	}
 	f := &fixture{t: t, dir: dir, env: vars, app: app, settings: app.Settings, state: app.State, fakes: fakes, embedURL: embed.URL + "/v1", api: api}
-	fixturesByTest.Store(t, f)
-	fixturesByTest.Store(testKey(t), f)
+	registerFixture(t, f)
 	seedNotionVectors(t, filepath.Join(f.dir, "atrium.db"), appKey(t, env))
 	if code, _, stderr := f.Run(context.Background(), "reindex"); code != cli.ExitOK {
 		t.Fatalf("embed the seeded world: exit %d stderr %q", code, stderr)

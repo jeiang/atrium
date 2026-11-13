@@ -52,7 +52,7 @@ func TestAHostMailConnectionAndAnAccountAddedInTheUIBothSync(t *testing.T) {
 		if passwords[a.Login] != password {
 			return nil, fmt.Errorf("AUTHENTICATIONFAILED Invalid credentials")
 		}
-		return fakes[a.Name], nil
+		return fakes[a.Name].Conn(), nil
 	}))
 
 	ca := smtpCert(t)
