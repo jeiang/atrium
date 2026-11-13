@@ -59,13 +59,9 @@ type conflict struct {
 	marks  int64
 }
 
-func Run(ctx context.Context, svc *service.Service, nowFn func() float64, jobRunID int64, sources []attention.Source) (bool, error) {
+func Run(ctx context.Context, svc *service.Service, nowFn func() float64, jobRunID int64, result attention.Result) (bool, error) {
 	now := nowFn()
 	loc, err := config.From(ctx).Location(svc.Env)
-	if err != nil {
-		return false, err
-	}
-	result, err := attention.Query(ctx, svc.DB.Read, now, sources...)
 	if err != nil {
 		return false, err
 	}

@@ -559,7 +559,12 @@ behavior-parity target.
   `calendar.draft-candidates`, one `operation_audit` row per pass (`noop`
   for an empty candidate queue); the drafting run starts through
   `assistant.thread.start`, so a missing key or exhausted budget is refused
-  before a thread exists. A job row records its
+  before a thread exists. Nightly dreaming, the daily digest and every
+  scheduled prompt run (weekly review and cron jobs) run as
+  `assistant.dream`, `assistant.digest` (reading `attention.read`) and
+  `assistant.schedule.run`, one `operation_audit` row per pass; a scheduled
+  prompt run is refused for a missing key or the budget before its thread
+  exists, and its prompt does not resolve `@` references. A job row records its
   owning `module`; a declared job is matched by its unique
   `declaration_key` (`<module>/<name>`), never by name, and a cron job has
   none. Re-enabling a job sets `activated_at`. A run records the threads it

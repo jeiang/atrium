@@ -18,6 +18,7 @@ type Dependencies struct {
 	Classifier func(context.Context, *service.Service) (*classifier.Service, error)
 	Now        func() float64
 	Attention  func(context.Context) []attention.Source
+	Start      Starter
 }
 
 func (d Dependencies) Sources(ctx context.Context) []attention.Source {
@@ -99,6 +100,6 @@ func (d Dependencies) Prompt(text string) func(context.Context, scheduler.Run) (
 		if run.Now == nil {
 			run.Now = d.Now
 		}
-		return prompt(ctx, svc, run, text)
+		return prompt(ctx, svc, d.Start, run, text)
 	}
 }

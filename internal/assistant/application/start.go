@@ -282,9 +282,11 @@ func (s *Service) firstRun(ctx context.Context, threadID int64, kind threads.Kin
 	if err != nil || text == "" {
 		return 0, err
 	}
-	refs, err := references.Resolve(ctx, s.db.Read, threadID, operatorText)
-	if err != nil {
-		return 0, err
+	var refs []json.RawMessage
+	if in.Claim == nil {
+		if refs, err = references.Resolve(ctx, s.db.Read, threadID, operatorText); err != nil {
+			return 0, err
+		}
 	}
 	return s.begin(ctx, threadID, text, service.Start{Kind: kind, Operator: in.Operator, Files: append(attached, refs...)}, in.ToolChoice, in.Wait)
 }
