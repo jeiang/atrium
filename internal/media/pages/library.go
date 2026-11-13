@@ -6,7 +6,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/media"
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -27,7 +26,7 @@ func (s *service) libRender(w http.ResponseWriter, r *http.Request, name string,
 	}
 }
 
-func libEntries(found []media.Entry) []LibraryEntry {
+func libEntries(found []mediaapp.Entry) []LibraryEntry {
 	out := make([]LibraryEntry, len(found))
 	for i, e := range found {
 		out[i] = LibraryEntry{Kind: e.Kind, Dir: e.Dir, Title: e.Title, Year: e.Year}
@@ -63,7 +62,7 @@ func (s *service) libDetail(w http.ResponseWriter, r *http.Request, kind string)
 }
 
 func (s *service) libraryMovie(w http.ResponseWriter, r *http.Request) {
-	found, ok := s.libDetail(w, r, media.KindMovie)
+	found, ok := s.libDetail(w, r, mediaapp.KindMovie)
 	if !ok {
 		return
 	}
@@ -76,7 +75,7 @@ func (s *service) libraryMovie(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) libraryShow(w http.ResponseWriter, r *http.Request) {
-	found, ok := s.libDetail(w, r, media.KindShow)
+	found, ok := s.libDetail(w, r, mediaapp.KindShow)
 	if !ok {
 		return
 	}

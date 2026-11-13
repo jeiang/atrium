@@ -7,7 +7,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/media"
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -24,8 +23,8 @@ func (s *service) registerFiles(r chi.Router) {
 	r.Get("/apps/media/art/season/{name}/{number}", s.serveSeasonArt)
 	r.Get("/apps/media/art/{kind}/{name}", s.serveArt)
 	r.Get("/apps/media/thumb/*", s.serveThumb)
-	r.Get(media.FilePrefix+"*", s.serveFile)
-	r.Head(media.FilePrefix+"*", s.serveFile)
+	r.Get(mediaapp.FilePrefix+"*", s.serveFile)
+	r.Head(mediaapp.FilePrefix+"*", s.serveFile)
 }
 
 func writeArtPlaceholder(w http.ResponseWriter, cache string) {
@@ -60,7 +59,7 @@ func (s *service) serveArtOf(w http.ResponseWriter, r *http.Request, in mediaapp
 
 func (s *service) serveArt(w http.ResponseWriter, r *http.Request) {
 	kind := web.PathParam(r, "kind")
-	if kind != media.KindMovie && kind != media.KindShow {
+	if kind != mediaapp.KindMovie && kind != mediaapp.KindShow {
 		s.deps.Error(w, r, http.StatusNotFound, "not found")
 		return
 	}
@@ -74,7 +73,7 @@ func (s *service) serveSeasonArt(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, web.BadInt("path", "number", raw))
 		return
 	}
-	s.serveArtOf(w, r, mediaapp.ArtInput{Kind: media.KindSeason, Name: web.PathParam(r, "name"), Season: number})
+	s.serveArtOf(w, r, mediaapp.ArtInput{Kind: mediaapp.KindSeason, Name: web.PathParam(r, "name"), Season: number})
 }
 
 func (s *service) serveThumb(w http.ResponseWriter, r *http.Request) {
@@ -107,7 +106,7 @@ func (s *service) serveThumb(w http.ResponseWriter, r *http.Request) {
 func (s *service) serveFile(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	stream, err := s.app.File(r.Context(), mediaapp.FileInput{
-		Rel: web.PathParam(r, "*"), Exp: media.QueryValue(query["exp"]), Sig: media.QueryValue(query["sig"]), Method: r.Method,
+		Rel: web.PathParam(r, "*"), Exp: mediaapp.QueryValue(query["exp"]), Sig: mediaapp.QueryValue(query["sig"]), Method: r.Method,
 		Range: r.Header.Get("Range"), IfRange: r.Header.Get("If-Range"), IfNoneMatch: r.Header.Get("If-None-Match"), IfModifiedSince: r.Header.Get("If-Modified-Since"),
 	})
 	if err != nil {

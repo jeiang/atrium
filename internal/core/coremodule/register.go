@@ -12,7 +12,6 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/about"
-	"github.com/jeiang/atrium/internal/actionlink"
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/commands"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
@@ -121,6 +120,17 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		}
 		return s
 	}
+	openLedger := func(ctx context.Context) (*reviewapp.Service, func(), error) {
+		cfg, err := config.Load(mc.Env)
+		if err != nil {
+			return nil, nil, err
+		}
+		d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(ctx).DBKey()))
+		if err != nil {
+			return nil, nil, err
+		}
+		return reviewapp.New(reviewapp.Deps{DB: d, Ledger: store(d, cfg)}), func() { _ = d.Close() }, nil
+	}
 	return module.Declaration{
 		Name:     module.Core,
 		Core:     true,
@@ -144,7 +154,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			}},
 			{Module: reviewpages.Module(reviewpages.Options{Clients: m.Clients, Tools: mc.Tools, Enabled: enabled, Routes: func(d *web.Deps, svc *reviewapp.Service) {
 				reviewRoutes(d, func() *reviewapp.Service { return svc })
-			}}), Templates: reviewpages.Templates(), Public: actionlink.PublicCheck, Nav: []web.NavItem{
+			}}), Templates: reviewpages.Templates(), Public: actionlinkPublic, Nav: []web.NavItem{
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 			}},
@@ -166,8 +176,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Services:   m.services(mc),
 		Recover:    recoverProposals,
 		Commands: []*cli.Command{
-			writescmd.Command(writescmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
-			ledgercmd.Command(ledgercmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
+			writescmd.Command(writescmd.Options{Now: m.Now, Open: openLedger}),
+			ledgercmd.Command(ledgercmd.Options{Now: m.Now, Open: openLedger}),
 			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store, Namer: m.namer(mc.Env)}),
 			settingscmd.Command(openSettings),
 			connectionscmd.Command(connectionsapp.CLI(mc.Env)),

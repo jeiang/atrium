@@ -6,7 +6,6 @@ import (
 	"os"
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/assistant/pricing"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/jsonx"
 )
@@ -67,7 +66,7 @@ func subagentsSet(open OpenService) *cli.Command {
 			description := args.String("description", "", cli.Opt{})
 			prompt := args.String("prompt", "", cli.Opt{})
 			promptFile := args.String("prompt-file", "", cli.Opt{Metavar: "PATH"})
-			effort := args.String("effort", pricing.Medium, cli.Opt{Choices: pricing.Efforts})
+			effort := args.String("effort", asstapp.EffortMedium, cli.Opt{Choices: asstapp.EffortChoices})
 			toolNames := args.Repeated("tool", cli.Opt{Help: "read-only tool open to subagents; repeat for each"})
 			return func(env *cli.Env) int {
 				if args.Has("prompt") && args.Has("prompt-file") {

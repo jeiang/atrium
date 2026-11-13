@@ -5,27 +5,26 @@ import (
 	"slices"
 	"strconv"
 
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/settings"
+	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 )
 
-type Field = settings.Field
+type Field = settingsapp.Field
 
 type Section struct {
 	Name, Title, Module string
 	Template            string
-	Fields              []settings.Field
-	Validate            func(ctx context.Context, q db.Querier, values map[string]string) error
-	Data                func(ctx context.Context, q db.Querier) (any, error)
+	Fields              []settingsapp.Field
+	Validate            func(ctx context.Context, q settingsapp.Querier, values map[string]string) error
+	Data                func(ctx context.Context, q settingsapp.Querier) (any, error)
 }
 
 type SectionView struct {
-	Module   string               `json:"module"`
-	Name     string               `json:"name"`
-	Title    string               `json:"title"`
-	Template string               `json:"template"`
-	Fields   []settings.FieldView `json:"fields"`
-	Data     any                  `json:"data,omitempty"`
+	Module   string                  `json:"module"`
+	Name     string                  `json:"name"`
+	Title    string                  `json:"title"`
+	Template string                  `json:"template"`
+	Fields   []settingsapp.FieldView `json:"fields"`
+	Data     any                     `json:"data,omitempty"`
 }
 
 type Sections []Section
@@ -39,10 +38,10 @@ func (s Sections) Named(name string) (Section, bool) {
 	return Section{}, false
 }
 
-func (s Sections) Load(ctx context.Context, q db.Querier) ([]SectionView, error) {
+func (s Sections) Load(ctx context.Context, q settingsapp.Querier) ([]SectionView, error) {
 	var out []SectionView
 	for _, section := range s {
-		fields, err := settings.LoadFields(ctx, q, section.Fields)
+		fields, err := settingsapp.LoadFields(ctx, q, section.Fields)
 		if err != nil {
 			return nil, err
 		}

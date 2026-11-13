@@ -298,6 +298,10 @@ behavior-parity target.
   `operation_audit` row (`assistant.project-file.upload|delete`,
   `assistant.file.write` naming its effect); a project upload over the body
   cap is refused with 422 before the project is looked up.
+  Saving the chat defaults on `/settings/assistant` runs
+  `assistant.defaults-set`: the stored settings are unchanged, and it writes
+  one `operation_audit` row (`invalid` when the model, effort or context limit
+  is refused, still answered 422 with the same message).
   The catalog also records whether a model accepts a forced `tool_choice`
   (`any` or a named tool): only Haiku does, and the loop sends the request
   to Sonnet and Opus without it. The loop ends a run with a clear thread

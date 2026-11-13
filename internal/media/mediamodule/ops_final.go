@@ -9,8 +9,8 @@ func finalBindings() []application.Binding {
 		{Kind: application.ProtocolOnly, Target: "* /media", Reason: "redirect"},
 		{Kind: application.ProtocolOnly, Target: "* /media/*", Reason: "redirect"},
 		{Kind: application.ProtocolOnly, Target: "* /media/file/*", Reason: "redirect"},
-		{Kind: application.HTML, Target: "GET /media/file/*", Uses: []application.Name{"media.file"}},
-		{Kind: application.HTML, Target: "HEAD /media/file/*", Uses: []application.Name{"media.file"}},
+		{Kind: application.ProtocolOnly, Target: "GET /media/file/*", Reason: "redirect"},
+		{Kind: application.ProtocolOnly, Target: "HEAD /media/file/*", Reason: "redirect"},
 		{Kind: application.ProtocolOnly, Target: "media-catalogue", Reason: "lifecycle"},
 	}
 }

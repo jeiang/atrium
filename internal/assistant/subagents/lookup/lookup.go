@@ -10,7 +10,6 @@ import (
 	"unicode/utf8"
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/assistant/report"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
 )
@@ -60,7 +59,7 @@ func Definition() module.ToolDefinition {
 	return module.ToolDefinition{Tool: Metadata()}
 }
 
-func parse(args tool.Args) (string, string, []report.Field, error) {
+func parse(args tool.Args) (string, string, []asstapp.ReportField, error) {
 	source, _, err := tool.TextArg(args, "source", true)
 	if err != nil {
 		return "", "", nil, err
@@ -83,7 +82,7 @@ func parse(args tool.Args) (string, string, []report.Field, error) {
 	if !ok || len(list) < 1 || len(list) > 12 {
 		return "", "", nil, tool.Error("fields must hold between 1 and 12 fields")
 	}
-	fields := make([]report.Field, 0, len(list))
+	fields := make([]asstapp.ReportField, 0, len(list))
 	seen := make(map[string]struct{}, len(list))
 	for i, item := range list {
 		entry, ok := item.(map[string]any)
@@ -102,13 +101,13 @@ func parse(args tool.Args) (string, string, []report.Field, error) {
 		if !ok {
 			return "", "", nil, tool.Error(fmt.Sprintf("field %q type is required", name))
 		}
-		field := report.Field{Name: name, Type: report.Type(kind)}
+		field := asstapp.ReportField{Name: name, Type: asstapp.ReportType(kind)}
 		switch field.Type {
-		case report.Number, report.Date, report.Boolean, report.Text:
+		case asstapp.ReportNumber, asstapp.ReportDate, asstapp.ReportBoolean, asstapp.ReportText:
 			if entry["values"] != nil || entry["id_of"] != nil {
 				return "", "", nil, tool.Error(fmt.Sprintf("field %q: values and id_of are only for enum and id", name))
 			}
-		case report.Enum:
+		case asstapp.ReportEnum:
 			if entry["id_of"] != nil {
 				return "", "", nil, tool.Error(fmt.Sprintf("field %q: id_of is only for id", name))
 			}
@@ -124,7 +123,7 @@ func parse(args tool.Args) (string, string, []report.Field, error) {
 				}
 				field.Values = append(field.Values, value)
 			}
-		case report.ID:
+		case asstapp.ReportID:
 			if entry["values"] != nil {
 				return "", "", nil, tool.Error(fmt.Sprintf("field %q: values is only for enum", name))
 			}

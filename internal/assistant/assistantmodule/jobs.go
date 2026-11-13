@@ -8,7 +8,6 @@ import (
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/dreaming"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
-	"github.com/jeiang/atrium/internal/assistant/memory/memorycmd"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	kbapp "github.com/jeiang/atrium/internal/kb/application"
@@ -78,7 +77,7 @@ func Jobs(deps jobworker.Dependencies) []scheduler.Definition {
 		_, err := asstapp.New(e.Service.DB, e.Service.Env, e.Now).StreamRetention(ctx, asstapp.StreamRetentionInput{})
 		return jobworker.Result{}, err
 	})
-	return []scheduler.Definition{nightly, weekly, nudges, reminders, memorycmd.Job(deps), knowledgeExport, streams}
+	return []scheduler.Definition{nightly, weekly, nudges, reminders, memoryWorkJob(deps), knowledgeExport, streams}
 }
 
 func jobService(e jobworker.Env) *asstapp.Service {

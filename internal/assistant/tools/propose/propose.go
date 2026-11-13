@@ -8,16 +8,14 @@ import (
 	"strings"
 
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
 const Name = "propose"
 
-func definition(kinds []proposals.Definition) tool.Tool {
-	builders := make(map[string]*proposals.Builder, len(kinds))
+func definition(kinds []asstapp.ProposalDefinition) tool.Tool {
+	builders := make(map[string]*asstapp.ProposalBuilder, len(kinds))
 	names := make([]string, 0, len(kinds))
 	var parts []string
 	for _, d := range kinds {
@@ -53,9 +51,9 @@ func definition(kinds []proposals.Definition) tool.Tool {
 	}
 }
 
-func Definition(kinds []proposals.Definition) module.ToolDefinition {
-	return module.ToolDefinition{Tool: definition(kinds), Bind: func(ctx context.Context, _ db.Querier, _ tool.Tool) (tool.Tool, bool, error) {
-		var enabled []proposals.Definition
+func Definition(kinds []asstapp.ProposalDefinition) module.ToolDefinition {
+	return module.ToolDefinition{Tool: definition(kinds), Bind: func(ctx context.Context, _ asstapp.Querier, _ tool.Tool) (tool.Tool, bool, error) {
+		var enabled []asstapp.ProposalDefinition
 		for _, d := range kinds {
 			if module.IsEnabled(ctx, d.Kind.Module) {
 				enabled = append(enabled, d)

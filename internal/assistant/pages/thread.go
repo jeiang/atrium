@@ -9,9 +9,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/assistant/journal"
-	"github.com/jeiang/atrium/internal/assistant/service"
-	"github.com/jeiang/atrium/internal/assistant/threads"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -32,7 +29,7 @@ func (p *pages) loadThread(w http.ResponseWriter, r *http.Request, threadID int6
 	return &read.Data, true
 }
 
-func (p *pages) loadRun(w http.ResponseWriter, r *http.Request, threadID, runID int64) (*journal.Run, bool) {
+func (p *pages) loadRun(w http.ResponseWriter, r *http.Request, threadID, runID int64) (*asstapp.Run, bool) {
 	read, err := p.assistant().RunDetail(r.Context(), asstapp.RunInput{ThreadID: threadID, RunID: runID})
 	if err != nil {
 		p.readFailed(w, r, err)
@@ -41,13 +38,13 @@ func (p *pages) loadRun(w http.ResponseWriter, r *http.Request, threadID, runID 
 	return &read.Data, true
 }
 
-func threadOf(view *asstapp.Transcript) threads.Thread { return view.Thread }
+func threadOf(view *asstapp.Transcript) asstapp.Thread { return view.Thread }
 
-func itemsOf(view *asstapp.Transcript) []*service.Item { return view.Items }
+func itemsOf(view *asstapp.Transcript) []*asstapp.Item { return view.Items }
 
-func seqOf(item *service.Item) int64 { return item.Seq }
+func seqOf(item *asstapp.Item) int64 { return item.Seq }
 
-func runOf(item *service.Item) int64 {
+func runOf(item *asstapp.Item) int64 {
 	if item.RunID != nil {
 		return *item.RunID
 	}
@@ -61,7 +58,7 @@ func (p *pages) threadContext(w http.ResponseWriter, r *http.Request, threadID i
 	}
 	t := threadOf(view)
 	return &ThreadPage{View: view, ThreadID: threadID, History: view.History,
-		Composer: composerOf(r.Context(), t, threadID)}, true
+		Composer: asstapp.ThreadComposer(r.Context(), t, threadID)}, true
 }
 
 func (p *pages) transcript(w http.ResponseWriter, r *http.Request, threadID int64, reswap string) {
@@ -163,7 +160,7 @@ func (p *pages) chatMessage(w http.ResponseWriter, r *http.Request) {
 		p.fragment(w, r, http.StatusOK, "_queued.gohtml", QueuedData{Queued: queued})
 		return
 	}
-	items := []*service.Item{}
+	items := []*asstapp.Item{}
 	var after int64
 	for _, item := range itemsOf(view) {
 		if runOf(item) == sent.RunID {
@@ -217,7 +214,7 @@ func (p *pages) chatBranch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	branched, err := p.assistant().ThreadBranch(detached(r), asstapp.BranchInput{ThreadID: threadID, Seq: seq})
-	if errors.As(err, new(service.NothingToRedo)) {
+	if errors.As(err, new(asstapp.NothingToRedo)) {
 		p.fail(w, r, http.StatusNotFound, err.Error())
 		return
 	}
@@ -272,11 +269,11 @@ func (p *pages) chatRun(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	if found.State == journal.Running {
+	if found.State == asstapp.RunRunning {
 		p.fragment(w, r, http.StatusOK, "_run_live.gohtml", RunLive{View: view, ThreadID: threadID, RunID: runID, After: after})
 		return
 	}
-	items := []*service.Item{}
+	items := []*asstapp.Item{}
 	for _, item := range itemsOf(view) {
 		if seqOf(item) > after && runOf(item) == runID {
 			items = append(items, item)
@@ -336,9 +333,4 @@ func (p *pages) chatAnswer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	p.transcript(w, r, threadID, "")
-}
-
-func composerOf(ctx context.Context, t threads.Thread, live int64) asstapp.ComposerView {
-	return asstapp.Composer(ctx, asstapp.ComposerState{Model: t.Model, Effort: t.Effort, Thinking: t.Thinking,
-		ContextLimit: threads.ContextLimitOf(t), WebSearch: bool(t.WebSearch), CostCap: t.CostCapUSD, Live: live})
 }

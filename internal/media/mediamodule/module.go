@@ -9,7 +9,6 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/media"
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
-	"github.com/jeiang/atrium/internal/media/mediacmd"
 	"github.com/jeiang/atrium/internal/media/pages"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/runtime"
@@ -55,7 +54,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Bindings:   append(bindings, finalBindings()...),
 		Name:       module.Media,
 		Requires:   Requirements(),
-		Jobs:       mediacmd.Jobs(m.Jobs, openService),
+		Jobs:       mediaJobs(m.Jobs),
 		Services: []runtime.ServiceDefinition{{Name: "media-catalogue", Run: func(ctx context.Context, _ *runtime.Services) error {
 			d, _, err := m.Resources(ctx)
 			if err != nil {
@@ -76,11 +75,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			},
 		}},
 		Groups:   SettingGroups(),
-		Commands: []*cli.Command{mediacmd.Command(mc.Env, m.Now, openService)},
+		Commands: []*cli.Command{mediaCommand(mc.Env, m.Now)},
 		Tools:    ToolDefinitions(),
 		Effects: func(d module.EffectDeps) module.Effects {
 			return module.Effects{
-				Undo:    mediatools.Undo(d.Ledger, d.Env),
+				Undo:    mediaapp.Undo(d.Ledger, d.Env),
 				Resolve: media.Resolve(d.Ledger),
 			}
 		},

@@ -3,6 +3,7 @@ package assistantmodule
 import (
 	"context"
 	"slices"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 
@@ -23,6 +24,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant/prompts"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/assistant/report"
+	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/subagents/lookup"
 	"github.com/jeiang/atrium/internal/assistant/subagents/research"
 	"github.com/jeiang/atrium/internal/assistant/subagents/websearch"
@@ -56,6 +58,7 @@ import (
 	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/serverops"
 	"github.com/jeiang/atrium/internal/settings"
+	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 	"github.com/jeiang/atrium/internal/tasks"
 	tasksapp "github.com/jeiang/atrium/internal/tasks/application"
 	"github.com/jeiang/atrium/internal/tool"
@@ -67,7 +70,7 @@ type Module struct {
 	ProposeKinds []proposals.Definition
 	Now          func() float64
 	Jobs         jobworker.Dependencies
-	Open         agentcmd.Open
+	Open         func(context.Context) (context.Context, *service.Service, func(), error)
 	Start        func(context.Context) error
 }
 
@@ -103,7 +106,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			return module.Idle(ctx)
 		}}},
 		Pages: []web.Page{{
-			Module: chatpages.Module(chatpages.Options{Service: m.Jobs.Service, Knowledge: m.knowledgeService, Assistant: assistantService, API: threadAPI(mc.Tools), Home: func(d *web.Deps) func(context.Context) (any, any, error) {
+			Module: chatpages.Module(chatpages.Options{Now: assistant.Now, Knowledge: m.knowledgeService, Assistant: pageAssistant(m.Jobs.Service), Settings: func(d *web.Deps) *settingsapp.Service { return settingsapp.Web(d.DB) }, API: threadAPI(mc.Tools), Home: func(d *web.Deps) func(context.Context) (any, any, error) {
 				reader := reviewpages.Reads(d)
 				return func(ctx context.Context) (any, any, error) {
 					pending, err := reader.Pending(ctx, reviewapp.PendingInput{Limit: 3})
@@ -128,7 +131,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			},
 		}, {Module: func(_ chi.Router, d *web.Deps) { m.knowledgeRoutes(d); m.taskRoutes(d); attentionRoutes(d) }}},
 		Groups:   SettingGroups(),
-		Commands: []*cli.Command{agentcmd.Command(mc.Enabled, m.Open, subagentCLIService(mc.Env, mc.Tools, m.Now)), memorycmd.Command(memoryCLIService(mc.Env, m.Now)), kbcmd.Command(knowledgeCLIService(mc.Env))},
+		Commands: []*cli.Command{agentcmd.Command(mc.Enabled, agentOpen(m.Open), subagentCLIService(mc.Env, mc.Tools, m.Now), agentTick(m.Open)), memorycmd.Command(memoryCLIService(mc.Env, m.Now)), kbcmd.Command(knowledgeCLIService(mc.Env))},
 		Leaves:   map[string]module.Leaf{"kb import": {Always: true}},
 		Tools:    ToolDefinitions(m.ProposeKinds),
 		Effects: func(d module.EffectDeps) module.Effects {
@@ -140,6 +143,19 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			}
 		},
 		Connections: slices.Concat(anthropicconn.Connections(), webfetch.Connections(), weather.Connections()),
+	}
+}
+
+func pageAssistant(runs func(context.Context) (*service.Service, error)) func(*web.Deps) *asstapp.Service {
+	return func(d *web.Deps) *asstapp.Service {
+		svc := sync.OnceValue(func() *service.Service {
+			s, err := runs(d.Ctx)
+			if err != nil {
+				panic(err)
+			}
+			return s
+		})
+		return assistantService(d).WithRuns(svc)
 	}
 }
 

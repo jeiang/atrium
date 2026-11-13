@@ -24,8 +24,6 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	authapp "github.com/jeiang/atrium/internal/auth/application"
-	"github.com/jeiang/atrium/internal/auth/bearer"
-	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
@@ -135,7 +133,8 @@ type Options struct {
 	Render       *Renderer
 	Modules      []Module
 	Home         string
-	OIDC         *oidc.Service
+	OIDC         *authapp.Sessions
+	Account      *authapp.Service
 	Policy       *Policy
 	OnReady      func(*Deps) error
 	Bindings     map[string][]application.Binding
@@ -146,10 +145,7 @@ type Options struct {
 type Server struct {
 	base          context.Context
 	auth          Policy
-	oidc          *oidc.Service
-	bearers       *bearer.Service
 	account       *authapp.Service
-	db            *db.DB
 	render        *Renderer
 	secure        func(*http.Request) bool
 	handler       http.Handler
@@ -185,10 +181,10 @@ func New(o Options) (*Server, error) {
 	if o.State != nil {
 		o.Ctx = config.With(o.Ctx, o.State)
 	}
-	if auth.OIDC() && (o.OIDC == nil || o.Render == nil || o.DB == nil) {
+	if auth.OIDC() && (o.OIDC == nil || o.Render == nil || o.Account == nil) {
 		return nil, errors.New("oidc auth needs a session service, a renderer and a database")
 	}
-	s := &Server{mux: chi.NewRouter(), oidc: o.OIDC, render: o.Render, auth: auth, base: o.Ctx, db: o.DB}
+	s := &Server{mux: chi.NewRouter(), render: o.Render, auth: auth, base: o.Ctx, account: o.Account}
 	bindings := maps.Clone(o.Bindings)
 	if bindings == nil {
 		bindings = map[string][]application.Binding{}
@@ -196,10 +192,6 @@ func New(o Options) (*Server, error) {
 	bindings["core"] = append(BuiltinBindings(auth.OIDC()), bindings["core"]...)
 	s.registrations = &registrations{seen: map[routeKey]string{}, bindings: bindings}
 	core := &Registrar{Router: s.mux, owner: "core", state: s.registrations}
-	if o.DB != nil {
-		s.bearers = bearer.New(o.DB, o.OIDC)
-		s.account = authapp.New(o.DB, o.OIDC, s.bearers)
-	}
 	s.mux.Use(instrument)
 	if s.errPage == nil && o.Render != nil {
 		s.errPage = o.Render.ErrorPage
@@ -264,9 +256,9 @@ func New(o Options) (*Server, error) {
 	guard.apiShape = s.apiShape
 	guard.secure = s.secure
 	guard.sessions = o.OIDC
-	guard.bearers = s.bearers
+	guard.bearers = s.account
 	guard.errPage = s.errPage
-	if o.DB != nil {
+	if s.account != nil {
 		guard.bodyCap = func(context.Context) (int, error) {
 			return config.TuningBodyCapBytes, nil
 		}

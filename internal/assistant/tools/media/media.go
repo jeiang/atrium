@@ -8,19 +8,17 @@ import (
 	"math/big"
 	"time"
 
-	"github.com/jeiang/atrium/internal/assistant"
-	"github.com/jeiang/atrium/internal/assistant/approval"
-	"github.com/jeiang/atrium/internal/media"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
 const (
-	UndoTorrent        = "media_torrent_delete"
+	UndoTorrent        = mediaapp.UndoTorrent
 	UndoChannelDelete  = mediaapp.UndoChannelDelete
 	UndoChannelRestore = mediaapp.UndoChannelRestore
-	searchLimitCeiling = media.TuningMediaSearchLimit
+	searchLimitCeiling = mediaapp.TuningMediaSearchLimit
 )
 
 var (
@@ -67,7 +65,7 @@ func Tools() []tool.Tool {
 			Annotated:   true,
 			Contexts:    readKinds,
 		},
-		approval.Gate(tool.Tool{
+		asstapp.ApprovalGate(tool.Tool{
 			Name:        "media_add_magnet",
 			Description: "Ask the operator to approve adding a magnet link to qBittorrent; nothing is added until they approve the card. media=true (default) tags it for filing into the library with automatic video/subtitle selection; false adds a plain torrent. Undo deletes the torrent and its data unless it was already filed.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"magnet": {"type": "string"}, "media": {"type": "boolean"}}, "required": ["magnet"], "additionalProperties": false}`),
@@ -77,7 +75,7 @@ func Tools() []tool.Tool {
 			Contexts:  writeKinds,
 			Approval:  &tool.Approval{Apply: mediaAddMagnet, Check: checkAddMagnet, Label: "Add torrent", Icon: "download", Module: module.Media},
 		}),
-		approval.Gate(tool.Tool{
+		asstapp.ApprovalGate(tool.Tool{
 			Name:        "media_channel_add",
 			Description: "Ask the operator to approve watching a show on EZTV; nothing changes until they approve the card. Give imdb_id (tt1234567) or tmdb_id (needs TMDB) plus a regex over release titles; case_sensitive defaults to false. New matches are downloaded automatically after the first poll. Undo removes the channel.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"imdb_id": {"type": "string"}, "tmdb_id": {"type": "integer"}, "regex": {"type": "string"}, "case_sensitive": {"type": "boolean"}, "name": {"type": "string", "description": "Display name; defaults to the TMDB title or the IMDb id."}}, "required": ["regex"], "additionalProperties": false}`),
@@ -87,7 +85,7 @@ func Tools() []tool.Tool {
 			Contexts:  writeKinds,
 			Approval:  &tool.Approval{Apply: mediaChannelAdd, Label: "Watch show", Icon: "tv", Module: module.Media, Detail: "name"},
 		}),
-		approval.Gate(tool.Tool{
+		asstapp.ApprovalGate(tool.Tool{
 			Name:        "media_channel_remove",
 			Description: "Ask the operator to approve removing an EZTV channel by id (see media_channels); nothing changes until they approve the card. Undo restores it.",
 			InputSchema: json.RawMessage(`{"type": "object", "properties": {"id": {"type": "integer"}}, "required": ["id"], "additionalProperties": false}`),
@@ -135,7 +133,7 @@ func optionalInt(p *int64) any {
 	return *p
 }
 
-func channelDict(c media.Channel) map[string]any {
+func channelDict(c mediaapp.Channel) map[string]any {
 	return map[string]any{"id": c.ID, "name": c.Name, "imdb": c.IMDB, "tmdb_id": optionalInt(c.TMDBID), "pattern": c.Pattern, "case_sensitive": c.CaseSensitive, "primed": c.Primed, "created": c.Created}
 }
 
@@ -146,12 +144,12 @@ func kindOf(isMedia bool) string {
 	return "plain"
 }
 
-func torrentDict(t media.Torrent) map[string]any {
+func torrentDict(t mediaapp.QBitTorrent) map[string]any {
 	state := t.State
-	if label, ok := media.StateLabels[t.State]; ok {
+	if label, ok := mediaapp.StateLabels[t.State]; ok {
 		state = label
 	}
-	return map[string]any{"hash": t.Hash, "name": t.Name, "state": state, "progress_percent": int64(math.RoundToEven(t.Progress * 100)), "size_bytes": optionalInt(t.Size), "download_bytes_per_second": optionalInt(t.DLSpeed), "eta_seconds": optionalInt(t.ETA), "kind": kindOf(t.HasTag(media.TagMedia)), "filed": t.HasTag(media.TagFiled)}
+	return map[string]any{"hash": t.Hash, "name": t.Name, "state": state, "progress_percent": int64(math.RoundToEven(t.Progress * 100)), "size_bytes": optionalInt(t.Size), "download_bytes_per_second": optionalInt(t.DLSpeed), "eta_seconds": optionalInt(t.ETA), "kind": kindOf(t.HasTag(mediaapp.TagMedia)), "filed": t.HasTag(mediaapp.TagFiled)}
 }
 
 func mediaDownloads(ctx context.Context, tc *tool.Context, _ tool.Args) (any, error) {
@@ -163,7 +161,7 @@ func mediaDownloads(ctx context.Context, tc *tool.Context, _ tool.Args) (any, er
 		return nil, tool.Fail(read.Data.TorrentsError)
 	}
 	torrents := read.Data.Torrents
-	torrentLimit := assistant.TuningAgentMediaTorrentLimit
+	torrentLimit := asstapp.TuningAgentMediaTorrentLimit
 	shown := []any{}
 	for _, t := range torrents[:min(torrentLimit, len(torrents))] {
 		shown = append(shown, torrentDict(t))

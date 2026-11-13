@@ -7,16 +7,12 @@ import (
 	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/ledger"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 )
 
 type Options struct {
-	Env   config.Env
-	Now   func() float64
-	Store func(*db.DB, config.Config) *ledger.Store
+	Now  func() float64
+	Open func(context.Context) (*reviewapp.Service, func(), error)
 }
 
 func (o Options) now() float64 {
@@ -24,10 +20,6 @@ func (o Options) now() float64 {
 		return o.Now()
 	}
 	return float64(time.Now().UnixNano()) / 1e9
-}
-
-func (o Options) store(d *db.DB, cfg config.Config) *ledger.Store {
-	return o.Store(d, cfg)
 }
 
 func Command(o Options) *cli.Command {
@@ -52,19 +44,19 @@ func list(o Options) *cli.Command {
 			limit := a.Int("limit", 50, cli.Opt{Help: "maximum writes"})
 			blocked := a.Bool("blocked", cli.Opt{Help: "only unresolved writes"})
 			return func(e *cli.Env) int {
-				d, s, err := open(e.Ctx, o)
+				svc, done, err := o.Open(e.Ctx)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				defer func() { _ = d.Close() }()
-				if _, err := s.Recover(e.Ctx, o.now()-ledger.StuckSeconds); err != nil {
+				defer done()
+				if err := svc.RecoverStuck(e.Ctx, o.now()); err != nil {
 					return cli.Fail(e, err)
 				}
 				f := reviewapp.EffectsInput{Origins: reviewapp.DirectOrigins, Operation: *operation, Limit: *limit, BlockedOnly: *blocked}
 				if *origin != "" {
 					f.Origins = []string{*origin}
 				}
-				found, err := reviewapp.New(reviewapp.Deps{DB: d, Ledger: s}).Effects(e.Ctx, f)
+				found, err := svc.Effects(e.Ctx, f)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
@@ -84,19 +76,19 @@ func resolve(o Options) *cli.Command {
 				Help: "applied, not-applied or partial"})
 			evidence := a.String("evidence", "", cli.Opt{Help: "JSON evidence recorded with the resolution"})
 			return func(e *cli.Env) int {
-				d, s, err := open(e.Ctx, o)
+				svc, done, err := o.Open(e.Ctx)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				defer func() { _ = d.Close() }()
-				if _, err := s.Recover(e.Ctx, o.now()-ledger.StuckSeconds); err != nil {
+				defer done()
+				if err := svc.RecoverStuck(e.Ctx, o.now()); err != nil {
 					return cli.Fail(e, err)
 				}
-				r := ledger.Resolution{Outcome: *outcome}
+				var raw json.RawMessage
 				if *evidence != "" {
-					r.Evidence = json.RawMessage(*evidence)
+					raw = json.RawMessage(*evidence)
 				}
-				found, err := reviewapp.New(reviewapp.Deps{DB: d, Ledger: s}).Resolve(e.Ctx, reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: int64(*id)}, Outcome: r.Outcome, Evidence: r.Evidence})
+				found, err := svc.Resolve(e.Ctx, reviewapp.ResolveInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: int64(*id)}, Outcome: *outcome, Evidence: raw})
 				if err != nil {
 					return cli.Fail(e, err)
 				}
@@ -113,15 +105,15 @@ func undo(o Options) *cli.Command {
 		Setup: func(a *cli.Args) cli.Handler {
 			id := a.IntArg("id", cli.Opt{})
 			return func(e *cli.Env) int {
-				d, s, err := open(e.Ctx, o)
+				svc, done, err := o.Open(e.Ctx)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				defer func() { _ = d.Close() }()
-				if _, err := s.Recover(e.Ctx, o.now()-ledger.StuckSeconds); err != nil {
+				defer done()
+				if err := svc.RecoverStuck(e.Ctx, o.now()); err != nil {
 					return cli.Fail(e, err)
 				}
-				found, err := reviewapp.New(reviewapp.Deps{DB: d, Ledger: s}).Undo(e.Ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: int64(*id)}})
+				found, err := svc.Undo(e.Ctx, reviewapp.UndoInput{Target: reviewapp.Target{Kind: reviewapp.EffectTarget, ID: int64(*id)}})
 				if err != nil {
 					return cli.Fail(e, err)
 				}
@@ -129,18 +121,6 @@ func undo(o Options) *cli.Command {
 			}
 		},
 	}
-}
-
-func open(ctx context.Context, o Options) (*db.DB, *ledger.Store, error) {
-	cfg, err := config.Load(o.Env)
-	if err != nil {
-		return nil, nil, err
-	}
-	d, err := db.Connect(cfg.DBPath, db.WithKey(config.From(ctx).DBKey()))
-	if err != nil {
-		return nil, nil, err
-	}
-	return d, o.store(d, cfg), nil
 }
 
 func write(e *cli.Env, value any) int {

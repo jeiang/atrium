@@ -14,15 +14,11 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/assistant"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
-	"github.com/jeiang/atrium/internal/assistant/references"
-	"github.com/jeiang/atrium/internal/assistant/service"
-	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/inference"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/numx"
+	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -39,20 +35,21 @@ func Templates() fs.FS {
 }
 
 type Options struct {
-	Service   func(context.Context) (*service.Service, error)
 	Knowledge func(*web.Deps) *kbapp.Service
 	Assistant func(*web.Deps) *asstapp.Service
+	Settings  func(*web.Deps) *settingsapp.Service
 	API       func(*web.Deps, func() *asstapp.Service)
 	Home      func(*web.Deps) func(context.Context) (any, any, error)
+	Now       func() float64
 }
 
 type pages struct {
-	home      func(context.Context) (any, any, error)
-	deps      *web.Deps
-	svc       func() *service.Service
-	knowledge func() *kbapp.Service
-	assistant func() *asstapp.Service
-	now       func() float64
+	home        func(context.Context) (any, any, error)
+	deps        *web.Deps
+	knowledge   func() *kbapp.Service
+	assistant   func() *asstapp.Service
+	settingsSvc func() *settingsapp.Service
+	now         func() float64
 }
 
 const (
@@ -63,14 +60,7 @@ const (
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
 		r = r.With(bindAssistant)
-		svc := sync.OnceValue(func() *service.Service {
-			svc, err := o.Service(d.Ctx)
-			if err != nil {
-				panic(err)
-			}
-			return svc
-		})
-		p := &pages{home: o.Home(d), deps: d, svc: svc, knowledge: sync.OnceValue(func() *kbapp.Service { return o.Knowledge(d) }), assistant: sync.OnceValue(func() *asstapp.Service { return o.Assistant(d).WithRuns(svc) }), now: assistant.Now}
+		p := &pages{home: o.Home(d), deps: d, knowledge: sync.OnceValue(func() *kbapp.Service { return o.Knowledge(d) }), assistant: sync.OnceValue(func() *asstapp.Service { return o.Assistant(d) }), settingsSvc: func() *settingsapp.Service { return o.Settings(d) }, now: o.Now}
 		d.OnFrame(p.sidebar)
 
 		r.Get("/chat", p.chatIndex)
@@ -169,15 +159,15 @@ func (p *pages) failureStatus(w http.ResponseWriter, r *http.Request, status int
 }
 
 func (p *pages) refused(w http.ResponseWriter, r *http.Request, err error) bool {
-	var exceeded inference.BudgetExceeded
-	var active service.RunActive
-	var redo service.NothingToRedo
-	var unknown service.UnknownThread
-	var refused references.Refused
+	var exceeded asstapp.BudgetExceeded
+	var active asstapp.RunActive
+	var redo asstapp.NothingToRedo
+	var unknown asstapp.UnknownThread
+	var refused asstapp.Refused
 	var disabled *module.OwnerDisabled
 	var archived asstapp.ArchivedProject
 	var readOnly asstapp.ReadOnlyThread
-	var option threads.OptionError
+	var option asstapp.OptionError
 	var app *application.Error
 	switch {
 	case err == nil:
@@ -192,7 +182,7 @@ func (p *pages) refused(w http.ResponseWriter, r *http.Request, err error) bool 
 		p.fail(w, r, http.StatusConflict, "no run is running")
 	case errors.As(err, new(asstapp.NoQuestion)), errors.As(err, new(asstapp.NotAnswered)):
 		p.fail(w, r, http.StatusConflict, err.Error())
-	case errors.As(err, new(service.NotInterrupted)):
+	case errors.As(err, new(asstapp.NotInterrupted)):
 		p.fail(w, r, http.StatusConflict, "run is not interrupted")
 	case errors.As(err, &option):
 		p.failure(w, r, "Not started", err.Error())
