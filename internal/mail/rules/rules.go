@@ -629,25 +629,22 @@ func nullable(s *string) any {
 	return *s
 }
 
-func ImportRules(ctx context.Context, d *db.DB, document any) (int, error) {
+func ImportRulesTx(ctx context.Context, tx *sql.Tx, document any) (int, error) {
 	parsed, err := ParseRuleset(document)
 	if err != nil {
 		return 0, err
 	}
-	err = d.WithTx(ctx, func(tx *sql.Tx) error {
-		if _, err := tx.ExecContext(ctx, "DELETE FROM rules"); err != nil {
-			return err
+	if _, err := tx.ExecContext(ctx, "DELETE FROM rules"); err != nil {
+		return 0, err
+	}
+	for i, r := range parsed {
+		if _, err := tx.ExecContext(ctx,
+			"INSERT INTO rules (position, id, account, action, dest, conditions) VALUES (?, ?, ?, ?, ?, ?)",
+			i, r.ID, nullable(r.Account), string(r.Action), nullable(r.Dest), ConditionsJSON(r.Conditions)); err != nil {
+			return 0, err
 		}
-		for i, r := range parsed {
-			if _, err := tx.ExecContext(ctx,
-				"INSERT INTO rules (position, id, account, action, dest, conditions) VALUES (?, ?, ?, ?, ?, ?)",
-				i, r.ID, nullable(r.Account), string(r.Action), nullable(r.Dest), ConditionsJSON(r.Conditions)); err != nil {
-				return err
-			}
-		}
-		return nil
-	})
-	return len(parsed), err
+	}
+	return len(parsed), nil
 }
 
 type Execer interface {
@@ -874,14 +871,14 @@ type exportedRule struct {
 	When    []conditionJSON `json:"when"`
 }
 
-type exportedRules struct {
+type ExportedRules struct {
 	Rules []exportedRule `json:"rules"`
 }
 
-func ExportRules(ctx context.Context, q Querier) (exportedRules, error) {
+func ExportRules(ctx context.Context, q Querier) (ExportedRules, error) {
 	loaded, err := LoadAllRules(ctx, q)
 	if err != nil {
-		return exportedRules{}, err
+		return ExportedRules{}, err
 	}
 	out := make([]exportedRule, len(loaded))
 	for i, r := range loaded {
@@ -898,7 +895,7 @@ func ExportRules(ctx context.Context, q Querier) (exportedRules, error) {
 		}
 		out[i] = e
 	}
-	return exportedRules{Rules: out}, nil
+	return ExportedRules{Rules: out}, nil
 }
 
 type Picked struct {

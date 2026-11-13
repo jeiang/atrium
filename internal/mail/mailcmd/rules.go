@@ -10,6 +10,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/embed"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/report"
 	"github.com/jeiang/atrium/internal/mail/rules"
 )
@@ -22,11 +23,11 @@ func (o Options) RulesCommand() *cli.Command {
 		}),
 		o.leaf("export", func(*cli.Args) body {
 			return func(x *exec) error {
-				out, err := rules.ExportRules(x.Ctx, x.DB.Read)
+				read, err := x.opts.Application(x.Pass).RulesExport(x.Ctx, struct{}{})
 				if err != nil {
 					return err
 				}
-				b, err := json.MarshalIndent(out, "", "  ")
+				b, err := json.MarshalIndent(read.Data, "", "  ")
 				if err != nil {
 					return err
 				}
@@ -52,7 +53,7 @@ func importRules(x *exec, file string) error {
 	if err := json.Unmarshal(data, &document); err != nil {
 		return importJSONError(data, err)
 	}
-	count, err := rules.ImportRules(x.Ctx, x.DB, document)
+	done, err := x.opts.Application(x.Pass).RulesImport(x.Ctx, mailapp.RulesImportInput{Document: document})
 	if err != nil {
 		var ruleErr rules.RuleError
 		if errors.As(err, &ruleErr) {
@@ -60,7 +61,7 @@ func importRules(x *exec, file string) error {
 		}
 		return err
 	}
-	x.Print(fmt.Sprintf("imported %d rules\n", count))
+	x.Print(fmt.Sprintf("imported %d rules\n", done.Data.Count))
 	return nil
 }
 

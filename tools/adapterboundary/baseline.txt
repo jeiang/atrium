@@ -145,12 +145,9 @@ internal/mail/mailcmd/scans.go	github.com/jeiang/atrium/internal/mail/scanutil
 internal/mail/mailcmd/tracking.go	github.com/jeiang/atrium/internal/assistant/jobworker
 internal/mail/mailcmd/tracking.go	github.com/jeiang/atrium/internal/mail/tracking
 internal/mail/mailcmd/tracking.go	github.com/jeiang/atrium/internal/scheduler
-internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/db
-internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/mail
 internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/mail/corrections
 internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/mail/message
 internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/mail/triage
-internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/safety
 internal/mail/pages/pages.go	github.com/jeiang/atrium/internal/mail
 internal/mail/pages/pages.go	github.com/jeiang/atrium/internal/mail/applier
 internal/mail/pages/pages.go	github.com/jeiang/atrium/internal/mail/drafts

@@ -8,10 +8,12 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/mail/applier"
 	"github.com/jeiang/atrium/internal/mail/live"
 )
 
 type Service struct {
+	applier     *applier.Applier
 	draftLedger *ledger.Store
 	live        *live.Live
 	db          *db.DB
