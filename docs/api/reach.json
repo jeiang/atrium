@@ -55,9 +55,23 @@
     },
     {
       "area": "knowledge",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "knowledge.confirm",
+        "knowledge.confirm-matching",
+        "knowledge.confirm-selected",
+        "knowledge.create",
+        "knowledge.detail",
+        "knowledge.edit",
+        "knowledge.import",
+        "knowledge.list",
+        "knowledge.profile",
+        "knowledge.purge",
+        "knowledge.restore",
+        "knowledge.retract",
+        "knowledge.retract-run"
+      ],
+      "required": 13,
+      "bound": 13
     },
     {
       "area": "mail",
@@ -146,5 +160,5 @@
     }
   ],
   "total_required": 150,
-  "total_bound": 8
+  "total_bound": 21
 }
