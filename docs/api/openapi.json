@@ -4742,15 +4742,7 @@
     "/auth/tokens": {
       "get": {
         "operationId": "auth.bearer-list",
-        "parameters": [
-          {
-            "in": "header",
-            "name": "If-None-Match",
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
+        "parameters": [],
         "responses": {
           "200": {
             "content": {
@@ -4761,23 +4753,7 @@
               }
             },
             "description": "OK",
-            "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
-          },
-          "304": {
-            "description": "Not Modified",
-            "headers": {
-              "ETag": {
-                "schema": {
-                  "type": "string"
-                }
-              }
-            }
+            "headers": {}
           },
           "400": {
             "content": {

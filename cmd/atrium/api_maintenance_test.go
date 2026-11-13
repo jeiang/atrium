@@ -13,7 +13,7 @@ import (
 func TestMaintenanceAPI(t *testing.T) {
 	f := newFixture(t, goldenData{}, nil, "")
 	backups := t.TempDir()
-	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, f.dir, "host.toml", "[core]\nbackup_directory = \""+backups+"\"\n"))
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, f.dir, "host.toml", "[core]\nbackup_directory = \""+backups+"\"\nbackup_keep = 1\nbackup_keep_days = 0\n"))
 	old := mustConnect(t, filepath.Join(f.dir, "atrium.db"), keyFor(t))
 	if _, err := old.Write.Exec("INSERT INTO operation_audit (ts, operation, actor, source, outcome, target) VALUES (1, 'maintenance.backup', 'operator', 'cli', 'ok', ?)", filepath.Join(backups, "older.backup")); err != nil {
 		t.Fatal(err)
@@ -46,13 +46,38 @@ func TestMaintenanceAPI(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(f.dir, "elsewhere.db")); err == nil {
 		t.Fatal("a caller-chosen destination was written")
 	}
+	second := s.do(http.MethodPost, "/api/v1/maintenance/db-backups", token, nil)
+	noPath(second)
+	newer, _ := apiData(t, second, http.StatusCreated)["name"].(string)
+	if newer == name {
+		t.Fatalf("two database backups in one second share the name %s", name)
+	}
+	if found, _ := filepath.Glob(filepath.Join(backups, "atrium-*.db")); len(found) != 1 || filepath.Base(found[0]) != newer {
+		t.Fatalf("database backups beyond backup_keep remain: %v", found)
+	}
+	name = newer
 
 	archived := s.do(http.MethodPost, "/api/v1/maintenance/backups", token, nil)
 	noPath(archived)
+	first, _ := apiData(t, archived, http.StatusCreated)["name"].(string)
+	archived = s.do(http.MethodPost, "/api/v1/maintenance/backups", token, nil)
+	noPath(archived)
 	archive, _ := apiData(t, archived, http.StatusCreated)["name"].(string)
+	if found, _ := filepath.Glob(filepath.Join(backups, "atrium-*.backup")); archive == first || len(found) != 1 || filepath.Base(found[0]) != archive {
+		t.Fatalf("archives beyond backup_keep remain: %s %s %v", first, archive, found)
+	}
 	verified := s.do(http.MethodPost, "/api/v1/maintenance/backups/verify", token, map[string]any{"name": archive})
 	noPath(verified)
 	apiData(t, verified, http.StatusOK)
+	if err := os.WriteFile(filepath.Join(backups, "junk.backup"), []byte("not an archive"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	junk := s.do(http.MethodPost, "/api/v1/maintenance/backups/verify", token, map[string]any{"name": "junk.backup"})
+	noPath(junk)
+	if junk.status < 400 {
+		t.Fatalf("a junk archive verified: %s", junk.body)
+	}
+	_ = os.Remove(filepath.Join(backups, "junk.backup"))
 	for _, bad := range []string{"../atrium.db", "a/b", filepath.Join(f.dir, "atrium.db"), ""} {
 		expectField(t, s.do(http.MethodPost, "/api/v1/maintenance/backups/verify", token, map[string]any{"name": bad}), "name")
 	}
@@ -85,6 +110,7 @@ func TestMaintenanceAPI(t *testing.T) {
 	}
 	busy := s.do(http.MethodPost, "/api/v1/maintenance/db-backups", token, nil)
 	_ = held.Close()
+	noPath(busy)
 	expectAPI(t, busy, http.StatusConflict, "conflict")
 	if entries, _ := os.ReadDir(backups); len(entries) != 2 {
 		t.Fatalf("a refused backup wrote %d files", len(entries))

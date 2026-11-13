@@ -31,7 +31,7 @@ func Query[I, O any](d *web.Deps, def application.Definition, shape application.
 				web.APIFail(w, err)
 				return
 			}
-			if read.Revision != "" && notModified(w, r, read.Revision) {
+			if !shape.Fresh && read.Revision != "" && notModified(w, r, read.Revision) {
 				return
 			}
 			write(w, shape, reflect.TypeFor[O](), read.Data, read)

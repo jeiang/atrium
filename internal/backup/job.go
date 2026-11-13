@@ -3,6 +3,8 @@ package backup
 import (
 	"cmp"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -31,12 +33,13 @@ const (
 	DefaultSchedule = "daily 03:00"
 	defaultKeep     = 5
 	defaultKeepDays = 14
-	archivePattern  = "atrium-*.backup"
+	ArchiveExt      = ".backup"
+	archivePattern  = "atrium-*" + ArchiveExt
 	archiveStamp    = "20060102T150405Z"
 	jobTimeout      = 2 * time.Hour
 )
 
-var stagedName = regexp.MustCompile(`^\.atrium-(snapshot|\d{8}T\d{6}Z\.backup)\.\d+(-wal|-shm|-journal)?$`)
+var stagedName = regexp.MustCompile(`^\.atrium-(snapshot|\d{8}T\d{6}Z(-[0-9a-f]{8})?\.backup)\.\d+(-wal|-shm|-journal)?$`)
 
 func HostSettings() []settings.HostDef {
 	return []settings.HostDef{
@@ -78,7 +81,21 @@ func Directory(ctx context.Context) (string, error) {
 }
 
 func ArchiveName(now time.Time, ext string) string {
-	return "atrium-" + now.UTC().Format(archiveStamp) + ext
+	var suffix [4]byte
+	_, _ = rand.Read(suffix[:])
+	return "atrium-" + now.UTC().Format(archiveStamp) + "-" + hex.EncodeToString(suffix[:]) + ext
+}
+
+func Prune(ctx context.Context, ext string, now time.Time) error {
+	dir, err := Directory(ctx)
+	if err != nil {
+		return err
+	}
+	keep := hostInt(ctx, KeyKeep, defaultKeep)
+	if ext == ArchiveExt {
+		return prune(dir, archivePattern, keep, hostInt(ctx, KeyKeepDays, defaultKeepDays), now)
+	}
+	return prune(dir, "atrium-*"+ext, max(keep, 1), 0, now)
 }
 
 func scheduled(ctx context.Context, env config.Env, claim scheduler.Claim, now time.Time, create func(context.Context, string, func(context.Context, db.Querier) error) error) (scheduler.Result, error) {
@@ -112,7 +129,7 @@ func scheduled(ctx context.Context, env config.Env, claim scheduler.Claim, now t
 		if err := create(ctx, dest, claim.RemoveFrom); err != nil {
 			return err
 		}
-		return prune(dir, keep, keepDays, now)
+		return prune(dir, archivePattern, keep, keepDays, now)
 	})
 	if err != nil {
 		return scheduler.Result{}, err
@@ -169,7 +186,7 @@ func sweepStaged(dir string, before time.Time) error {
 	return errors.Join(errs...)
 }
 
-func prune(dir string, keep, keepDays int, now time.Time) error {
+func prune(dir, pattern string, keep, keepDays int, now time.Time) error {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return err
@@ -180,7 +197,7 @@ func prune(dir string, keep, keepDays int, now time.Time) error {
 	}
 	var archives []archive
 	for _, e := range entries {
-		if matched, _ := filepath.Match(archivePattern, e.Name()); !matched || !e.Type().IsRegular() {
+		if matched, _ := filepath.Match(pattern, e.Name()); !matched || !e.Type().IsRegular() {
 			continue
 		}
 		info, err := e.Info()
@@ -193,8 +210,11 @@ func prune(dir string, keep, keepDays int, now time.Time) error {
 	cutoff := now.Add(-time.Duration(keepDays) * 24 * time.Hour)
 	var errs []error
 	for _, a := range archives[min(keep, len(archives)):] {
-		if a.modified.Before(cutoff) {
-			errs = append(errs, os.Remove(a.path))
+		if !a.modified.Before(cutoff) {
+			continue
+		}
+		if err := os.Remove(a.path); err != nil && !errors.Is(err, os.ErrNotExist) {
+			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)

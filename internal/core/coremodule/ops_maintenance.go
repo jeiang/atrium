@@ -2,8 +2,10 @@ package coremodule
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"time"
 
@@ -85,6 +87,25 @@ func backupNamed(ctx context.Context, name string) (string, error) {
 	return filepath.Join(dir, name), nil
 }
 
+var absolutePath = regexp.MustCompile(`(^|[\s"'(=])(/[^\s"'():;,]+)`)
+
+func pathFree[T any](change T, err error) (T, error) {
+	var classified *application.Error
+	if !errors.As(err, &classified) {
+		return change, err
+	}
+	out := *classified
+	out.Message = absolutePath.ReplaceAllStringFunc(classified.Message, func(m string) string {
+		sub := absolutePath.FindStringSubmatch(m)
+		return sub[1] + filepath.Base(sub[2])
+	})
+	return change, &out
+}
+
+func pruneBackups(ctx context.Context, ext string) error {
+	return backup.Prune(ctx, ext, time.Now())
+}
+
 func notConfigured(err error) error {
 	return &application.Error{Code: application.NotConfigured, Message: err.Error(), Cause: err}
 }
@@ -112,11 +133,11 @@ func (m Module) maintenanceRoutes(d *web.Deps) []application.Binding {
 	return []application.Binding{
 		api.Command(d, maintenanceapp.DescribeCheck(), application.APIShape{Area: area, Errors: []application.Code{application.Conflict}},
 			"POST /maintenance/check", func(ctx context.Context, in maintenanceapp.CheckInput) (application.Change[DatabaseCheck], error) {
-				return exclusive(ctx, d.Cfg, func() (application.Change[DatabaseCheck], error) {
+				return pathFree(exclusive(ctx, d.Cfg, func() (application.Change[DatabaseCheck], error) {
 					read, err := svc().Check(ctx, in)
 					c := read.Data
 					return application.Change[DatabaseCheck]{Data: DatabaseCheck{Encryption: c.Encryption, Opened: c.Opened, Intact: c.Intact, Tables: c.Tables}}, err
-				})
+				}))
 			}),
 		api.Command(d, maintenanceapp.DescribeVerifyArchive(), application.APIShape{Area: area, Errors: refusable},
 			"POST /maintenance/backups/verify", func(ctx context.Context, in BackupRef) (application.Change[BackupVerified], error) {
@@ -124,7 +145,7 @@ func (m Module) maintenanceRoutes(d *web.Deps) []application.Binding {
 				if err != nil {
 					return application.Change[BackupVerified]{}, err
 				}
-				return exclusive(ctx, d.Cfg, func() (application.Change[BackupVerified], error) {
+				return pathFree(exclusive(ctx, d.Cfg, func() (application.Change[BackupVerified], error) {
 					read, err := svc().VerifyArchive(ctx, maintenanceapp.VerifyArchiveInput{Archive: path})
 					if err != nil {
 						return application.Change[BackupVerified]{}, err
@@ -132,15 +153,18 @@ func (m Module) maintenanceRoutes(d *web.Deps) []application.Binding {
 					a := read.Data
 					return application.Change[BackupVerified]{Data: BackupVerified{Name: in.Name, CreatedAt: a.CreatedAt, Encryption: a.Encryption, KeyIDs: a.KeyIDs,
 						From: a.From, To: a.To, Tables: a.Tables, KNN: a.KNN, Files: a.Files}}, nil
-				})
+				}))
 			}),
 		api.Command(d, maintenanceapp.DescribeBackup(), application.APIShape{Area: area, Success: http.StatusCreated, Errors: refusable},
 			"POST /maintenance/backups", func(ctx context.Context, _ struct{}) (application.Change[BackupCreated], error) {
-				dest, name, err := backupDestination(ctx, m.Now, ".backup")
+				dest, name, err := backupDestination(ctx, m.Now, backup.ArchiveExt)
 				if err != nil {
 					return application.Change[BackupCreated]{}, err
 				}
-				change, err := svc().Backup(ctx, maintenanceapp.BackupInput{Dest: dest})
+				change, err := pathFree(svc().Backup(ctx, maintenanceapp.BackupInput{Dest: dest}))
+				if err == nil {
+					err = pruneBackups(ctx, backup.ArchiveExt)
+				}
 				return created(name, change, err)
 			}),
 		api.Command(d, maintenanceapp.DescribeDBBackup(), application.APIShape{Area: area, Success: http.StatusCreated, Errors: refusable},
@@ -149,7 +173,10 @@ func (m Module) maintenanceRoutes(d *web.Deps) []application.Binding {
 				if err != nil {
 					return application.Change[BackupCreated]{}, err
 				}
-				change, err := svc().DBBackup(ctx, maintenanceapp.BackupInput{Dest: dest})
+				change, err := pathFree(svc().DBBackup(ctx, maintenanceapp.BackupInput{Dest: dest}))
+				if err == nil {
+					err = pruneBackups(ctx, ".db")
+				}
 				return created(name, change, err)
 			}),
 	}

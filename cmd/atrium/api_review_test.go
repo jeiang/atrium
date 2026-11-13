@@ -478,6 +478,22 @@ func TestProposalsAPIReadAndDecide(t *testing.T) {
 	if len(dav.Puts) != 1 {
 		t.Fatalf("a repeated approval wrote again: %d puts", len(dav.Puts))
 	}
+	if _, err := d.Write.Exec("UPDATE effects SET state = 'unknown' WHERE proposal_id = ?", approve); err != nil {
+		t.Fatal(err)
+	}
+	blockedDetail := anyStrings(apiData(t, s.do(http.MethodGet, detail, token, nil), http.StatusOK)["actions"])
+	var blockedListed []string
+	for _, it := range apiItems(t, apiData(t, s.do(http.MethodGet, "/api/v1/proposals?status=applied", token, nil), http.StatusOK)) {
+		if p := it.(map[string]any); strconv.FormatInt(number(t, p["id"]), 10) == approve {
+			blockedListed = anyStrings(p["actions"])
+		}
+	}
+	if !slices.Equal(blockedListed, blockedDetail) || !slices.Contains(blockedDetail, "resolve") {
+		t.Fatalf("blocked proposal actions: list %v, detail %v", blockedListed, blockedDetail)
+	}
+	if _, err := d.Write.Exec("UPDATE effects SET state = 'done' WHERE proposal_id = ?", approve); err != nil {
+		t.Fatal(err)
+	}
 	if after := expectChanged(t, s, token, detail, tag); after["status"] != "applied" {
 		t.Fatalf("approved detail: %v", after)
 	}

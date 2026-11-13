@@ -197,7 +197,7 @@ func reviewRoutes(d *web.Deps, svc func() *reviewapp.Service) []application.Bind
 						page.NextCursor = in.Cursor.Next(page.Items[len(page.Items)-1].ID)
 						break
 					}
-					page.Items = append(page.Items, ProposalItem{ProposalSummary: p, Actions: proposalActions(p.Kind, p.Status, p.Undoable, false)})
+					page.Items = append(page.Items, ProposalItem{ProposalSummary: p, Actions: proposalActions(p.Kind, p.Status, p.Undoable, p.Blocked)})
 				}
 				return application.Read[ProposalsPage]{Revision: found.Revision, Data: page}, nil
 			}),

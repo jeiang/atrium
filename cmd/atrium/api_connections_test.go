@@ -101,7 +101,9 @@ func TestConnectionsAndTokensAPI(t *testing.T) {
 	if got := s.do(http.MethodGet, "/api/v1/auth/tokens", secret, nil); got.status != http.StatusUnauthorized {
 		t.Fatalf("a revoked bearer: %d", got.status)
 	}
-	expectConditional(t, s, token, "/api/v1/auth/tokens")
+	if fresh := s.do(http.MethodGet, "/api/v1/auth/tokens", token, nil, "If-None-Match", "*"); fresh.status != http.StatusOK || fresh.header.Get("ETag") != "" {
+		t.Fatalf("token list answered a conditional read: %d %v", fresh.status, fresh.header)
+	}
 
 	hour := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
 	short := apiData(t, s.do(http.MethodPost, "/api/v1/auth/tokens", token, map[string]any{"name": "short", "expires_at": hour.Format(time.RFC3339)}), http.StatusCreated)
