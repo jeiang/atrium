@@ -46,11 +46,6 @@ internal/assistant/tools/grafana/connection.go	github.com/jeiang/atrium/internal
 internal/assistant/tools/grafana/grafana.go	github.com/jeiang/atrium/internal/assistant
 internal/assistant/tools/grafana/grafana.go	github.com/jeiang/atrium/internal/config
 internal/assistant/tools/grafana/grafana.go	github.com/jeiang/atrium/internal/db
-internal/assistant/tools/grafana/grafanamodule/register.go	github.com/jeiang/atrium/internal/assistant/jobworker
-internal/assistant/tools/grafana/grafanamodule/register.go	github.com/jeiang/atrium/internal/assistant/tools/grafana
-internal/assistant/tools/grafana/grafanamodule/register.go	github.com/jeiang/atrium/internal/config
-internal/assistant/tools/grafana/grafanamodule/register.go	github.com/jeiang/atrium/internal/scheduler
-internal/assistant/tools/grafana/grafanamodule/register.go	github.com/jeiang/atrium/internal/serverops
 internal/assistant/tools/grafana/importv2.go	github.com/jeiang/atrium/internal/connections
 internal/assistant/tools/kb/kb.go	github.com/jeiang/atrium/internal/kb
 internal/assistant/tools/mail/folders.go	github.com/jeiang/atrium/internal/mail/mailops

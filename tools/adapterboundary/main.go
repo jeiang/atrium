@@ -66,7 +66,6 @@ var adapters = []adapter{
 	{pattern: "internal/backup/*", marker: "cli.Command{"},
 	{pattern: "internal/ledger/ledgercmd/*"},
 	{pattern: "internal/writes/writescmd/*"},
-	{pattern: "internal/assistant/tools/grafana/*"},
 	{pattern: "internal/serverops/*", marker: "scheduler.Definition"},
 }
 
@@ -173,6 +172,9 @@ func scan() ([]string, error) {
 }
 
 func isAdapter(file string, src []byte) bool {
+	if matches("internal/assistant/tools/*/*module/register.go", file) {
+		return false
+	}
 	for _, a := range adapters {
 		if matches(a.pattern, file) && (a.marker == "" || bytes.Contains(src, []byte(a.marker))) {
 			return true
