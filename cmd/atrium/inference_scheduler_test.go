@@ -12,34 +12,43 @@ import (
 	"github.com/jeiang/atrium/internal/inference"
 )
 
-func schedulerSeed(t *testing.T, f *fixture, d *db.DB) {
+func serveUntil(t *testing.T, f *fixture, what string, finished func() bool) {
 	t.Helper()
 	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	done := make(chan appRun, 1)
 	go func() {
 		done <- runAppContext(t, f, ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
 	}()
-	for deadline := time.Now().Add(20 * time.Second); ; time.Sleep(50 * time.Millisecond) {
-		var n int
-		if err := d.Read.QueryRow("SELECT COUNT(*) FROM jobs").Scan(&n); err == nil && n >= 12 {
-			break
+	for deadline := time.Now().Add(60 * time.Second); !finished(); time.Sleep(50 * time.Millisecond) {
+		select {
+		case ran := <-done:
+			t.Fatalf("serve exited %d before %s: %s", ran.code, what, ran.stderr)
+		default:
 		}
 		if time.Now().After(deadline) {
 			cancel()
-			t.Fatal("the scheduler never seeded its jobs")
+			ran := <-done
+			t.Fatalf("serve did not reach %s; exit %d: %s", what, ran.code, ran.stderr)
 		}
 	}
 	cancel()
-	<-done
+	if ran := <-done; ran.code != cli.ExitOK {
+		t.Fatalf("serve exit %d after %s: %s", ran.code, what, ran.stderr)
+	}
+}
+
+func schedulerSeed(t *testing.T, f *fixture, d *db.DB) {
+	t.Helper()
+	serveUntil(t, f, "the seeded jobs", func() bool {
+		var n int
+		return d.Read.QueryRow("SELECT COUNT(*) FROM jobs").Scan(&n) == nil && n >= 12
+	})
 }
 
 func schedulerRun(t *testing.T, f *fixture, d *db.DB, finished func() bool) {
 	t.Helper()
-	ran := runAppContext(t, f, context.Background(), "agent", "tick")
-	if ran.code != cli.ExitOK {
-		t.Fatalf("agent tick exit %d: %s", ran.code, ran.stderr)
-	}
-	waitUntil(t, 30*time.Second, "the expected job runs", finished)
+	serveUntil(t, f, "the expected job runs", finished)
 }
 
 func schedulerDue(t *testing.T, d *db.DB, names ...string) {

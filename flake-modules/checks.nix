@@ -193,7 +193,8 @@
     assert builtins.attrNames (lib.filterAttrs (name: _: lib.hasPrefix "atrium" name) nixos.config.systemd.services) == ["atrium"];
     assert builtins.attrNames (lib.filterAttrs (name: _: lib.hasPrefix "atrium" name) nixos.config.systemd.timers) == [];
     assert !(builtins.any (name: nixos.config.systemd.units ? ${name} || defaults.config.systemd.units ? ${name}) ["atrium-web.service" "atrium-watch.service" "atrium-backup.service" "atrium-backup.timer"]);
-    assert builtins.all (line: lib.hasInfix line (unitText "atrium.service")) ["Type=notify" "Restart=on-failure" "RestartSec=5s" "WatchdogSec=1min" "TimeoutStartSec=45min" "TimeoutStopSec=150s" "KillMode=mixed" "KillSignal=SIGTERM"];
+    assert builtins.all (line: lib.hasInfix line (unitText "atrium.service")) ["Type=notify" "Restart=on-failure" "RestartSec=5s" "WatchdogSec=1min" "TimeoutStartSec=45min" "TimeoutStopSec=150s" "KillMode=mixed" "KillSignal=SIGTERM" "StartLimitIntervalSec=10min" "StartLimitBurst=5"];
+    assert lib.hasInfix "--allowed-host 'a b'" (host {web.allowedHost = "a b";}).config.systemd.units."atrium.service".text;
     assert !(lib.hasInfix "--no-services" (unitText "atrium.service"));
     assert !(nixos.config.systemd.units ? "atrium-web-local.service");
     assert !(defaults.config.systemd.units ? "atrium-web-local.service");

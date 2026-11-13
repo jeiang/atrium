@@ -95,7 +95,7 @@ func checkpoint(ctx context.Context, d *db.DB) error {
 		return fmt.Errorf("the final checkpoint failed: %w", err)
 	}
 	if c.Busy {
-		return errors.New("the final checkpoint is incomplete: the database was busy")
+		log.Warn("the final checkpoint is incomplete: the database was busy")
 	}
 	return nil
 }

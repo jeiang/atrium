@@ -277,6 +277,10 @@
     wants = ["network-online.target"] ++ cfg.embeddingServerUnits;
     environment = appEnvironment // lib.optionalAttrs needsPublicHost {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;};
     path = mediaPath;
+    unitConfig = {
+      StartLimitIntervalSec = "10min";
+      StartLimitBurst = 5;
+    };
     serviceConfig =
       hardening
       // mediaWriter

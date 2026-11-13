@@ -88,9 +88,11 @@ func TestScheduledHistoryKeepsRunThreadsAndTheDigestReportsTheNightlyOutcome(t *
 		t.Errorf("%d leases survived settlement", n)
 	}
 
-	w := asstBrowse(t, startServeIn(t, dir))
+	base, _, stop := startServeStoppable(t, dir)
+	w := asstBrowse(t, base)
 	code, page, _ := w.get("/scheduled", false)
 	w.want(code, http.StatusOK, page, fmt.Sprintf("href=\"/chat/%d\"", thread), "worker lost")
+	stop()
 
 	scheduledOnce(t, f, d, "daily-nudges")
 	if digest := scheduledDigest(t, d); !strings.Contains(digest, "Dreaming failed") {

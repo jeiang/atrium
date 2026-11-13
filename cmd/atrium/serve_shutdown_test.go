@@ -47,14 +47,6 @@ func weeklyRunID(t *testing.T, d *db.DB) int64 {
 	return id
 }
 
-func restartServe(t *testing.T, dir string) *serveProcess {
-	t.Helper()
-	if err := os.Remove(filepath.Join(dir, "serve-addr")); err != nil && !os.IsNotExist(err) {
-		t.Fatal(err)
-	}
-	return serveCLIProcess(t, dir)
-}
-
 func interruptTickDuringWeeklyReview(t *testing.T, api *modelLog, g *heldGates, seen *atomic.Int64, d *db.DB) int64 {
 	t.Helper()
 	tick, stderr := tickProcess(t)
@@ -124,7 +116,7 @@ func TestServeDrainsTheJobItRecoveredAtStartup(t *testing.T) {
 	released("the first serve", first)
 
 	api.Push(resume("second"))
-	second := restartServe(t, f.dir)
+	second := serveCLIProcess(t, f.dir)
 	waitUntil(t, 30*time.Second, "the recovered job request", func() bool { return seen.Load() == 2 })
 	if code := stopHoldingJob(t, second, g, 1, api); code != cli.ExitOK {
 		t.Fatalf("second serve exit %d: %s", code, second.stderr.String())
@@ -132,7 +124,7 @@ func TestServeDrainsTheJobItRecoveredAtStartup(t *testing.T) {
 	released("the serve that recovered the job", second)
 
 	api.Push(asstReply("reviewed"))
-	third := restartServe(t, f.dir)
+	third := serveCLIProcess(t, f.dir)
 	waitUntil(t, 60*time.Second, "the recovered weekly review to settle", schedulerTerminal(d, "weekly-review"))
 	if status, text := schedulerStatus(t, d, "weekly-review"); status != "ok" {
 		t.Fatalf("weekly review %s %s, want ok: %s", status, text, third.stderr.String())
@@ -200,7 +192,7 @@ func TestServeStopsClaimingAtSIGTERMWhileShutdownWaits(t *testing.T) {
 	}
 
 	api.Push(asstReply("reviewed"))
-	next := restartServe(t, f.dir)
+	next := serveCLIProcess(t, f.dir)
 	waitUntil(t, 60*time.Second, "the weekly review at the next start", schedulerTerminal(d, "weekly-review"))
 	if status, text := schedulerStatus(t, d, "weekly-review"); status != "ok" {
 		t.Fatalf("weekly review %s %s at the next start, want ok: %s", status, text, next.stderr.String())
@@ -405,6 +397,68 @@ func TestSchedulerTickAndServeStopCleanlyWhenCanceledDuringStartup(t *testing.T)
 	}
 }
 
+func TestServeExitsZeroOnSIGTERMBeforeItIsReady(t *testing.T) {
+	t.Parallel()
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	d := asstDB(t, dir)
+	conn, err := d.Write.Conn(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = conn.Close() }()
+	if _, err := conn.ExecContext(context.Background(), "BEGIN IMMEDIATE"); err != nil {
+		t.Fatal(err)
+	}
+	addrFile := filepath.Join(dir, "serve-addr")
+	cmd := cliExitProcessArgs(t, []string{"serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local"})
+	cmd.Env = append(envWithout(cmd.Env, "ATRIUM_SERVE_ADDR_FILE="), "ATRIUM_DB="+filepath.Join(dir, "atrium.db"), "ATRIUM_CACHE_DIR="+filepath.Join(dir, "cache"), "ATRIUM_PUBLIC_HOST=", "ATRIUM_SERVE_ADDR_FILE="+addrFile)
+	stderr := &lockedBuffer{}
+	cmd.Stdout, cmd.Stderr = io.Discard, stderr
+	if err := cmd.Start(); err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	time.Sleep(3 * time.Second)
+	if _, err := os.Stat(addrFile); !os.IsNotExist(err) {
+		t.Fatalf("serve reported its address while a writer held the database: %v", err)
+	}
+	if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if code := exitCode(err); code != cli.ExitOK || strings.Contains(stderr.String(), "error:") {
+			t.Fatalf("serve stopped before it was ready: exit %d, stderr %q", code, stderr.String())
+		}
+	case <-time.After(60 * time.Second):
+		_ = cmd.Process.Kill()
+		t.Fatalf("serve ignored SIGTERM before it was ready, stderr %q", stderr.String())
+	}
+	if _, err := conn.ExecContext(context.Background(), "ROLLBACK"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestServeExitsZeroWhenAReaderHoldsTheDatabaseAtStop(t *testing.T) {
+	t.Parallel()
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	d := asstDB(t, dir)
+	serve := serveCLIProcess(t, dir)
+	tx, err := d.Read.BeginTx(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = tx.Rollback() }()
+	var n int
+	if err := tx.QueryRow("SELECT COUNT(*) FROM jobs").Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if code := serve.stop(t, syscall.SIGTERM); code != cli.ExitOK || strings.Contains(serve.stderr.String(), "error:") {
+		t.Fatalf("serve stopped beside a reader: exit %d, stderr %q", code, serve.stderr.String())
+	}
+}
+
 func TestDisabledAssistantParksInterruptedCronUntilAClaimCanResumeIt(t *testing.T) {
 	t.Parallel()
 	d, api, f, before := startWeeklyReview(t, asstReply("reviewed"), asstReply("resumed"))
@@ -445,7 +499,7 @@ func TestDisabledAssistantParksInterruptedCronUntilAClaimCanResumeIt(t *testing.
 		t.Fatalf("disabled serve exit %d: %s", code, serve.stderr.String())
 	}
 	asstSet(t, "assistant_enabled", "true")
-	serve = restartServe(t, f.dir)
+	serve = serveCLIProcess(t, f.dir)
 	waitUntil(t, 60*time.Second, "the cron to resume through its job claim", func() bool {
 		return asstCount(t, d, "SELECT COUNT(*) FROM job_runs WHERE id = ? AND status = 'ok' AND ended_at IS NOT NULL", run) == 1
 	})

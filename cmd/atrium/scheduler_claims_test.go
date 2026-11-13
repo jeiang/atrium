@@ -289,14 +289,14 @@ func TestSchedulerResumesAnInterruptedJobRunUnderANewClaim(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan appRun, 1)
 	go func() {
-		done <- runAppContext(t, f, ctx, "agent", "tick")
+		done <- runAppContext(t, f, ctx, "serve", "--host", "127.0.0.1", "--port", "0", "--auth", "local")
 	}()
 	asstWaitCount(t, d, 1, weeklyRunning)
 	waitUntil(t, 20*time.Second, "the held weekly review request", func() bool { return len(api.Requests()) > before })
 	held := weeklyLeaseOf(t, d)
 	cancel()
 	if ran := <-done; ran.code != cli.ExitOK {
-		t.Fatalf("first scheduler exit %d: %s", ran.code, ran.stderr)
+		t.Fatalf("first serve exit %d: %s", ran.code, ran.stderr)
 	}
 	l := weeklyLeaseOf(t, d)
 	if l.run != held.run || l.owner == nil || *l.owner != *held.owner || l.leaseUntil == nil || *l.leaseUntil != 0 {

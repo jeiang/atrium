@@ -53,7 +53,8 @@ func TestSchedulerRunsCatalogJobsFromEveryOwner(t *testing.T) {
 		t.Errorf("daily-nudges schedule = %q, want the operator's", schedule)
 	}
 
-	w := asstBrowse(t, startServeIn(t, dir))
+	base, _, stop := startServeStoppable(t, dir)
+	w := asstBrowse(t, base)
 	reminders, _, _ := schedulerJob(t, d, "task-reminders")
 	code, body, _ := w.post("/scheduled/"+strconv.FormatInt(reminders, 10)+"/toggle", url.Values{}, true)
 	w.want(code, http.StatusOK, body, "Paused")
@@ -66,6 +67,7 @@ func TestSchedulerRunsCatalogJobsFromEveryOwner(t *testing.T) {
 	before := len(api.Requests())
 	due := []string{"nightly", "weekly-review", "calendar-candidates", "package-tracking"}
 	schedulerDue(t, d, due...)
+	stop()
 	schedulerRun(t, f, d, schedulerTerminal(d, due...))
 
 	for _, name := range []string{"nightly", "weekly-review"} {

@@ -37,16 +37,25 @@ func (b *Bindings) ServeCommand(pages ...web.Page) *cli.Command {
 					return cli.ExitError
 				}
 				if err := b.serve(env.Ctx, ListenOptions{Plan: plan, Pages: pages, Tools: b.tools, Now: b.now}); err != nil {
-					if env.Ctx.Err() != nil && !errors.As(err, new(*uncleanStop)) {
-						return cli.Fail(env, err)
-					}
-					log.Error("serve did not stop cleanly", logx.Err, err.Error())
-					return cli.ExitError
+					return serveExit(env, err)
 				}
 				return cli.ExitOK
 			}
 		},
 	}
+}
+
+func serveExit(env *cli.Env, err error) int {
+	if errors.As(err, new(*uncleanStop)) {
+		log.Error("serve did not stop cleanly", logx.Err, err.Error())
+		_, _ = fmt.Fprintf(env.Stderr, "error: serve did not stop cleanly: %s\n", err)
+		return cli.ExitError
+	}
+	if env.Ctx.Err() != nil {
+		log.Info("serve stopped on a signal", logx.Err, err.Error())
+		return cli.ExitOK
+	}
+	return cli.Fail(env, err)
 }
 
 func (b *Bindings) serve(ctx context.Context, o ListenOptions) error {

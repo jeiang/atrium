@@ -83,6 +83,9 @@ func startServeProcess(t *testing.T, cmd *exec.Cmd, addrFile string) *serveProce
 	t.Helper()
 	p := &serveProcess{stderr: &lockedBuffer{}, cmd: cmd, done: make(chan error, 1)}
 	cmd.Stdout, cmd.Stderr = &lockedBuffer{}, p.stderr
+	if err := os.Remove(addrFile); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
 	if err := cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
