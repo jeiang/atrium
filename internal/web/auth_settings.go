@@ -85,14 +85,11 @@ func (s *Server) tokenRevoke(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) authFailed(w http.ResponseWriter, r *http.Request, err error) {
-	Fail(w, r, err, func(status int) {
-		e := application.Classify(err)
+	e := application.Classify(err)
+	Fail(w, r, e, func(status int) {
 		if status == http.StatusNotFound {
 			s.Error(w, r, status, "Not Found")
 			return
-		}
-		if status >= http.StatusInternalServerError {
-			log.Error("token operation failed", logx.Err, err.Error())
 		}
 		s.renderAuth(w, r, status, authSettingsView{Error: Message(e)})
 	})

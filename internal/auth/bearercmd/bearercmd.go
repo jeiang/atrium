@@ -1,11 +1,13 @@
 package bearercmd
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/application"
 	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/cli"
 )
@@ -44,6 +46,10 @@ func (s *service) issue(a *cli.Args) cli.Handler {
 		}
 		defer closeDB()
 		issued, err := svc.BearerIssue(e.Ctx, in)
+		var refusal *application.Error
+		if errors.As(err, &refusal) && refusal.Code == application.Invalid && refusal.Cause != nil {
+			return e.UsageError("%v", refusal.Cause)
+		}
 		if err != nil {
 			return cli.Fail(e, err)
 		}

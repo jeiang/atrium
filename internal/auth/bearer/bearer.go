@@ -65,7 +65,7 @@ func New(d *db.DB, oidc *oidc.Service) *Service {
 
 type IssueCommit func(context.Context, *sql.Tx, Token) error
 
-type RevokeCommit func(ctx context.Context, tx *sql.Tx, changed bool) error
+type RevokeCommit func(ctx context.Context, tx *sql.Tx, tok Token, changed bool) error
 
 func (s *Service) Issue(ctx context.Context, name string, expiresAt *time.Time, commit IssueCommit) (Issued, error) {
 	name = strings.TrimSpace(name)
@@ -145,17 +145,16 @@ func (s *Service) Revoke(ctx context.Context, id int64, commit RevokeCommit) err
 		if err != nil {
 			return err
 		}
-		if n == 0 {
-			var exists int
-			if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM auth_bearers WHERE id = ?", id).Scan(&exists); err != nil {
-				return err
-			}
-			if exists == 0 {
-				return nil
-			}
+		tok := Token{ID: id}
+		err = tx.QueryRowContext(ctx, "SELECT kind, name FROM auth_bearers WHERE id = ?", id).Scan(&tok.Kind, &tok.Name)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
 		}
 		found = true
-		return commit(ctx, tx, n > 0)
+		return commit(ctx, tx, tok, n > 0)
 	})
 	if err != nil {
 		return err

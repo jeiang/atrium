@@ -5,12 +5,14 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strconv"
 	"time"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/auth/bearer"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 const (
@@ -76,6 +78,9 @@ func (s *Service) BearerIssue(ctx context.Context, in BearerIssueInput) (applica
 	var auditID int64
 	issued, err := s.bearers.Issue(ctx, in.Name, in.ExpiresAt, func(ctx context.Context, tx *sql.Tx, tok bearer.Token) error {
 		var err error
+		if err := history(ctx, tx, "auth_token.issue", tok); err != nil {
+			return err
+		}
 		auditID, err = s.audit(ctx, tx, BearerIssueName, state.OK, tok)
 		return err
 	})
@@ -99,10 +104,13 @@ func (s *Service) BearerIssue(ctx context.Context, in BearerIssueInput) (applica
 
 func (s *Service) BearerRevoke(ctx context.Context, in BearerRevokeInput) (application.Change[struct{}], error) {
 	var auditID int64
-	err := s.bearers.Revoke(ctx, in.ID, func(ctx context.Context, tx *sql.Tx, changed bool) error {
+	err := s.bearers.Revoke(ctx, in.ID, func(ctx context.Context, tx *sql.Tx, tok bearer.Token, changed bool) error {
 		outcome := state.OK
 		if !changed {
 			outcome = state.Noop
+		}
+		if err := history(ctx, tx, "auth_token.revoke", tok); err != nil {
+			return err
 		}
 		var err error
 		auditID, err = s.audit(ctx, tx, BearerRevokeName, outcome, bearer.Token{ID: in.ID})
@@ -111,7 +119,7 @@ func (s *Service) BearerRevoke(ctx context.Context, in BearerRevokeInput) (appli
 	if !errors.Is(err, bearer.ErrNotFound) {
 		return application.Change[struct{}]{AuditID: auditID}, err
 	}
-	missing := &application.Error{Code: application.NotFound, Message: "No token " + strconv.FormatInt(in.ID, 10) + ".", Cause: err}
+	missing := &application.Error{Code: application.NotFound, Message: "no token " + strconv.FormatInt(in.ID, 10), Cause: err}
 	if _, err := s.audit(ctx, nil, BearerRevokeName, state.NotFound, bearer.Token{ID: in.ID}); err != nil {
 		return application.Change[struct{}]{}, errors.Join(missing, err)
 	}
@@ -133,6 +141,11 @@ func (s *Service) audit(ctx context.Context, tx *sql.Tx, name application.Name, 
 		return 0, err
 	}
 	return s.state.Audit(ctx, tx, state.Entry{Operation: string(name), Target: target, DetailsJSON: string(raw), Outcome: outcome})
+}
+
+func history(ctx context.Context, tx *sql.Tx, key string, tok bearer.Token) error {
+	value := fmt.Sprintf("id=%d name=%s kind=%s", tok.ID, tok.Name, tok.Kind)
+	return audit.Record(ctx, tx, audit.Entry{Key: key, New: &value})
 }
 
 func token(tok bearer.Token) Token {
