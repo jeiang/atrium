@@ -510,10 +510,6 @@
         ++ ["--" (lib.getExe cfg.package) "settings" "set" "a b" "'quoted'" "\${HOME} $$ $X"]
       )
       + "\n");
-    keyedRuntime =
-      if pkgs.stdenv.hostPlatform.isLinux
-      then pkgs.callPackage ../nix/module-keyed-test.nix {inherit self;}
-      else null;
   in {
     checks =
       {
@@ -564,6 +560,7 @@
       }
       // lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") {
         api-client-swift = pkgs.callPackage ../nix/swift-api-check.nix {};
+        module-keyed = pkgs.callPackage ../nix/module-keyed-test.nix {inherit self;};
       }
       // lib.optionalAttrs (self'.packages ? atrium) {
         module-config = assert defaultAuth && credentialsMatch;
@@ -581,7 +578,6 @@
             printf 'app-password\n' >"$CREDENTIALS_DIRECTORY/mail-account-icloud"
             printf 'oidc-secret\n' >"$CREDENTIALS_DIRECTORY/connection-service-oidc-client_secret"
             head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/connection-service-media-agent-bearer"
-            ${lib.optionalString (keyedRuntime != null) "test -e ${keyedRuntime}"}
             if grep -Fq -- '--setenv=ATRIUM_DB_KEY_FILE=' ${runWrapper}/bin/atrium-run; then
               echo "transient credential path must be resolved inside the unit" >&2
               exit 1
