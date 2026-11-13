@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"sync/atomic"
-	"time"
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/registry"
@@ -18,12 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/scheduler"
-	"github.com/jeiang/atrium/internal/web"
-)
-
-const (
-	workDrainTimeout   = 15 * time.Second
-	ledgerDrainTimeout = 5 * time.Second
 )
 
 var (
@@ -56,12 +49,12 @@ func bound(ctx context.Context) (*App, error) {
 	return nil, errUnbound
 }
 
-func (b *Bindings) open(ctx context.Context) (*App, context.Context, error) {
+func (b *Bindings) open(ctx context.Context, mode Mode) (*App, context.Context, error) {
 	set := module.SetFrom(ctx)
 	if set == nil {
 		return nil, nil, module.ErrNotEvaluated
 	}
-	a, err := Open(ctx, b.env, set.Catalog())
+	a, err := Open(ctx, b.env, set.Catalog(), mode)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -99,7 +92,7 @@ func (b *Bindings) OpenAssistant(ctx context.Context) (context.Context, *service
 	if b == nil {
 		return nil, nil, nil, errUnbound
 	}
-	a, ctx, err := b.open(ctx)
+	a, ctx, err := b.open(ctx, OneShot)
 	if err != nil {
 		return nil, nil, nil, err
 	}
@@ -113,48 +106,6 @@ func (b *Bindings) OpenAssistant(ctx context.Context) (context.Context, *service
 	}, nil
 }
 
-func (b *Bindings) ServeBoot() web.Boot { return &serveBoot{b: b} }
-
-type serveBoot struct {
-	b   *Bindings
-	app *App
-}
-
-func (s *serveBoot) Open(ctx context.Context) (context.Context, *db.DB, config.Config, func() error, error) {
-	a, ctx, err := s.b.open(ctx)
-	if err != nil {
-		return nil, nil, config.Config{}, nil, err
-	}
-	s.app = a
-	return ctx, a.DB(), a.Config(), a.Close, nil
-}
-
-func (s *serveBoot) Alive() bool { return s.app == nil || s.app.alive() }
-
-func (s *serveBoot) Start(ctx context.Context, d *web.Deps, services bool) error {
-	a, err := bound(ctx)
-	if err != nil {
-		return err
-	}
-	set := module.SetFrom(ctx)
-	if err := set.Start(ctx, d); err != nil {
-		return err
-	}
-	if err := a.bindLive(ctx, s.b.tools, s.b.now); err != nil {
-		return err
-	}
-	svc := a.Assistant()
-	d.ResumeRun = func(ctx context.Context, runID int64) error {
-		err := svc.StartResume(ctx, runID)
-		var notInterrupted service.NotInterrupted
-		if errors.As(err, &notInterrupted) {
-			return nil
-		}
-		return err
-	}
-	return a.serve(ctx, set, services)
-}
-
 func (a *App) bindLive(ctx context.Context, tools registry.Source, now func() float64) error {
 	open := imapclient.Opener(a.config)
 	store, err := a.catalog.Ledger(a.db, a.env, open, assistant.Now)
@@ -165,7 +116,11 @@ func (a *App) bindLive(ctx context.Context, tools registry.Source, now func() fl
 	if err != nil {
 		return err
 	}
-	base, cancel := context.WithCancel(ctx)
+	parent := ctx
+	if a.work != nil {
+		parent = a.work
+	}
+	base, cancel := context.WithCancel(parent)
 	svc := service.New(base, a.db, a.config, a.env, run)
 	svc.Now = now
 	if svc.Now == nil {
@@ -197,16 +152,12 @@ func (a *App) startAssistant(ctx context.Context) error {
 	return nil
 }
 
-func (l *liveRun) drain() error {
-	work, stopWork := context.WithTimeout(context.Background(), workDrainTimeout)
-	defer stopWork()
+func (l *liveRun) drain(work context.Context) error {
 	err := l.svc.Drain(work)
 	l.cancel()
 	return err
 }
 
-func (l *liveRun) drainStore() error {
-	final, stopFinal := context.WithTimeout(context.Background(), ledgerDrainTimeout)
-	defer stopFinal()
-	return l.store.Drain(final)
+func (l *liveRun) drainStore(settle context.Context) error {
+	return l.store.Drain(settle)
 }

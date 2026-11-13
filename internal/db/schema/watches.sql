@@ -43,3 +43,39 @@ CREATE TABLE IF NOT EXISTS watch_dismissed (
     occurrence TEXT NOT NULL,
     ts REAL NOT NULL
 );
+CREATE TRIGGER IF NOT EXISTS packages_read_insert AFTER INSERT ON packages BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS packages_read_update AFTER UPDATE ON packages BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS packages_read_delete AFTER DELETE ON packages BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS package_events_read_insert AFTER INSERT ON package_events BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS package_events_read_update AFTER UPDATE ON package_events BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS package_events_read_delete AFTER DELETE ON package_events BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS watch_dismissed_read_insert AFTER INSERT ON watch_dismissed BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS watch_dismissed_read_update AFTER UPDATE ON watch_dismissed BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS watch_dismissed_read_delete AFTER DELETE ON watch_dismissed BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('mail',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;

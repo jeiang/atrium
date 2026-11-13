@@ -544,7 +544,7 @@ func TestImportV2KeysDeclaredJobsAndKeepsTheirOperatorState(t *testing.T) {
 }
 
 func TestImportV2RefusesASourceThatAlreadyHasClaimTables(t *testing.T) {
-	for _, table := range []string{"job_run_threads", "job_resource_leases"} {
+	for _, table := range []string{"job_run_threads", "job_resource_leases", "operation_audit", "read_revisions"} {
 		t.Run(table, func(t *testing.T) {
 			dir := t.TempDir()
 			source := copyV2Fixture(t, dir)
@@ -562,6 +562,82 @@ func TestImportV2RefusesASourceThatAlreadyHasClaimTables(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestImportV2LeavesApplicationStateNew(t *testing.T) {
+	t.Parallel()
+	clock := float64(time.Date(2026, 10, 20, 12, 0, 0, 0, time.UTC).Unix())
+	dir := t.TempDir()
+	source := copyV2Fixture(t, dir)
+	before := fileDigest(t, source)
+	got := runImportApp(t, importTestApp(t, dir, clock), "db", "import-v2", source)
+	if got.code != cli.ExitOK {
+		t.Fatalf("db import-v2: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+	}
+	if after := fileDigest(t, source); after != before {
+		t.Errorf("the import changed the source: %s -> %s", before, after)
+	}
+	for _, want := range []string{"operation_audit: kept empty 0", "read_revisions: derived "} {
+		if !strings.Contains(got.stdout, want) {
+			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
+		}
+	}
+
+	q, err := db.OpenSource(filepath.Join(dir, "atrium.db"), importKey(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = q.Close() }()
+	if n := importCount(t, q, "SELECT COUNT(*) FROM operation_audit"); n != 0 {
+		t.Errorf("operation_audit holds %d rows after the import", n)
+	}
+	for _, source := range []string{"ui", "cli"} {
+		if n := importCount(t, q, "SELECT COUNT(*) FROM effect_resolutions WHERE source = ?", source); n < 1 {
+			t.Errorf("no imported resolution kept its stored source %s", source)
+		}
+	}
+	for _, tc := range []struct {
+		scope  string
+		tables []string
+	}{
+		{"mail", []string{"messages", "mailboxes", "drafts"}},
+		{"review", []string{"proposals"}},
+		{"effects", []string{"effects", "effect_resolutions"}},
+		{"knowledge", []string{"kb_records"}},
+		{"tasks", []string{"tasks"}},
+		{"media", []string{"media_channels", "media_seen"}},
+		{"attention", []string{"attention_snoozes"}},
+		{"ops", []string{"ops_samples", "ops_findings", "pass_runs"}},
+	} {
+		var rows int64
+		for _, table := range tc.tables {
+			rows += importCount(t, q, "SELECT COUNT(*) FROM "+table)
+		}
+		value := importCount(t, q, "SELECT COALESCE((SELECT value FROM read_revisions WHERE scope = ?), 0)", tc.scope)
+		switch {
+		case rows == 0 && value != 0:
+			t.Errorf("scope %s counts %d with no rows in %v", tc.scope, value, tc.tables)
+		case rows > 0 && value < rows:
+			t.Errorf("scope %s counts %d for %d imported rows in %v", tc.scope, value, rows, tc.tables)
+		}
+	}
+
+	t.Run("a destination with an operation audit row is refused", func(t *testing.T) {
+		target := t.TempDir()
+		app := importTestApp(t, target, clock)
+		if got := runImportApp(t, app, "settings", "get", "tz"); got.code != cli.ExitOK {
+			t.Fatalf("settings get: exit %d stderr %q", got.code, got.stderr)
+		}
+		d := mustConnect(t, filepath.Join(target, "atrium.db"), importKey(t))
+		if _, err := d.Write.Exec("INSERT INTO operation_audit (ts, operation, actor, source, outcome) VALUES (1, 'tasks.add', 'operator', 'cli', 'ok')"); err != nil {
+			t.Fatal(err)
+		}
+		_ = d.Close()
+		got := runImportApp(t, app, "db", "import-v2", source)
+		if got.code == cli.ExitOK || !strings.Contains(got.stderr, "already holds rows") || !strings.Contains(got.stderr, "operation_audit=1") {
+			t.Fatalf("import into a destination with audit history: exit %d stdout %q stderr %q", got.code, got.stdout, got.stderr)
+		}
+	})
 }
 
 func TestImportV2MovesServiceCredentialsIntoConnections(t *testing.T) {

@@ -28,3 +28,51 @@ CREATE TRIGGER IF NOT EXISTS settings_audit_no_update BEFORE UPDATE ON settings_
 BEGIN SELECT RAISE(ABORT, 'settings_audit is append-only'); END;
 CREATE TRIGGER IF NOT EXISTS settings_audit_no_delete BEFORE DELETE ON settings_audit
 BEGIN SELECT RAISE(ABORT, 'settings_audit is append-only'); END;
+CREATE TRIGGER IF NOT EXISTS agent_profile_read_insert AFTER INSERT ON agent_profile BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('knowledge',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS agent_profile_read_update AFTER UPDATE ON agent_profile BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('knowledge',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS agent_profile_read_delete AFTER DELETE ON agent_profile BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('knowledge',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS settings_read_insert AFTER INSERT ON settings BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('settings',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS settings_read_update AFTER UPDATE ON settings BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('settings',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS settings_read_delete AFTER DELETE ON settings BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('settings',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS secrets_read_insert AFTER INSERT ON secrets BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('settings',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS secrets_read_update AFTER UPDATE ON secrets BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('settings',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS secrets_read_delete AFTER DELETE ON secrets BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('settings',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS settings_audit_read_insert AFTER INSERT ON settings_audit BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('settings',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS settings_audit_read_update AFTER UPDATE ON settings_audit BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('settings',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS settings_audit_read_delete AFTER DELETE ON settings_audit BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('settings',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;

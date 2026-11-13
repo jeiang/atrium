@@ -221,7 +221,10 @@ behavior-parity target.
   unset. One live-run service per process, built by the application with its
   effect ledger store and runner, serves chat pages, tools, jobs and the
   `agent run`/`tick`/`scheduler` commands; the application drains it, then
-  that store, before closing the database. The
+  that store, before closing the database. Serve stops in one bounded order
+  of 120 s (105 s for work to finish, 15 s to settle effects and interrupted
+  runs), then checkpoints and closes the database and releases the serve
+  lock last; any step that does not finish makes the exit nonzero. The
   monthly budget defaults to $150 with scheduled runs paused at 80% and chat at
   95%; the last 5% is reserved for classification. Every paid model call,
   memory summaries included, reserves its full cold prompt plus the request's
@@ -412,8 +415,13 @@ behavior-parity target.
   state and prompt override, loses any v2 lease, and is dropped
   (`drop-retired-job`) when no catalog job has that name; a stored schedule
   setting then replaces the carried schedule and recomputes `next_due`.
-  `job_run_threads` and `job_resource_leases` start empty, and a source that
-  already has either table is refused. The importer prints one line per table with its
+  `job_run_threads`, `job_resource_leases` and `operation_audit` start
+  empty (`kept empty 0`), `read_revisions` is `derived`: the destination's
+  revision triggers count the imported rows per scope and no counter comes
+  from the source; a source that already has any of these tables is
+  refused, and a destination with an `operation_audit` row is refused like
+  any other populated destination. Imported `effect_resolutions` keep their
+  stored `source`. The importer prints one line per table with its
   carried, rebuilt or dropped row count, one line per setting with its
   action (carried, dropped, renamed, moved to a host key or a compiled
   constant, or reset for cutover), one line per effective source pin and per
@@ -432,6 +440,12 @@ behavior-parity target.
   action touches no mailbox and appends actor, source, outcome and the prior
   error to the append-only `effect_resolutions` table (proposal approvals and
   the remaining proposal-action resolutions use the same audit table).
+  A resolution source is `cli`, `ui`, `api`, `tool`, `job`, `phone` or
+  `import`. Every readable table has insert, update and delete triggers
+  that bump one counter per scope in `read_revisions` (lease, heartbeat and
+  streamed run event writes do not); the append-only
+  `operation_audit` table records application commands. Both are owned by
+  `internal/application/state`.
 - Modules are toggled at runtime. The built-in modules are always compiled
   in. One compiled `module.Declaration` catalog supplies the registration
   path for module pages, commands, tools, settings, connections, hooks,
@@ -812,7 +826,10 @@ behavior-parity target.
   authority; no role distinguishes them. A separate local mode provides
   loopback access: it binds only a numeric loopback address, refuses any other
   bind at startup, and rejects a request whose socket peer is not loopback
-  regardless of forwarded address headers. There is no flag that serves
+  regardless of forwarded address headers. `serve --emergency-port` runs such a
+  listener beside the public one in the same process, sharing the database,
+  settings and API tokens but not the rate limiter; public, emergency and ops
+  listeners are all bound before readiness. There is no flag that serves
   without authentication on a non-loopback address. Public media file access requires an expiring signed
   link and still checks Host. The link signing key is a generated secret held in
   the database, or the host file's `app_keys.link_key_file`, whose bytes are

@@ -14,8 +14,21 @@ type Source string
 const (
 	CLI       Source = "cli"
 	UI        Source = "ui"
+	API       Source = "api"
+	Tool      Source = "tool"
+	Job       Source = "job"
+	Phone     Source = "phone"
+	Import    Source = "import"
 	Migration Source = "migration"
 )
+
+func (s Source) Valid() bool {
+	switch s {
+	case CLI, UI, API, Tool, Job, Phone, Import, Migration:
+		return true
+	}
+	return false
+}
 
 const Changed = "changed"
 
@@ -40,6 +53,11 @@ func HasActor(ctx context.Context) bool {
 func Actor(ctx context.Context) string {
 	o, _ := ctx.Value(originKey{}).(origin)
 	return o.actor
+}
+
+func SourceOf(ctx context.Context) Source {
+	o, _ := ctx.Value(originKey{}).(origin)
+	return o.source
 }
 
 type Entry struct {

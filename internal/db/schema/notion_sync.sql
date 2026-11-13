@@ -40,3 +40,51 @@ CREATE TABLE IF NOT EXISTS export_pages (
     updated_at REAL NOT NULL,
     PRIMARY KEY (target, record_id)
 );
+CREATE TRIGGER IF NOT EXISTS export_pages_read_insert AFTER INSERT ON export_pages BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('knowledge',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS export_pages_read_update AFTER UPDATE ON export_pages BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('knowledge',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS export_pages_read_delete AFTER DELETE ON export_pages BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('knowledge',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS notion_pages_read_insert AFTER INSERT ON notion_pages BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('notion',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS notion_pages_read_update AFTER UPDATE ON notion_pages BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('notion',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS notion_pages_read_delete AFTER DELETE ON notion_pages BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('notion',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS notion_sources_read_insert AFTER INSERT ON notion_sources BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('notion',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS notion_sources_read_update AFTER UPDATE ON notion_sources BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('notion',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS notion_sources_read_delete AFTER DELETE ON notion_sources BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('notion',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS notion_state_read_insert AFTER INSERT ON notion_state BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('notion',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS notion_state_read_update AFTER UPDATE ON notion_state BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('notion',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS notion_state_read_delete AFTER DELETE ON notion_state BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('notion',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
