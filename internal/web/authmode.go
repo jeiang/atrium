@@ -14,21 +14,21 @@ func isLoopbackBind(host string) bool {
 	return err == nil && addr.Unmap().IsLoopback()
 }
 
-func resolveAuth(stderr io.Writer, a serveArgs, hosts []string) (serveArgs, Policy, bool) {
-	policy, err := parseAuth(a.auth)
+func resolveAuth(stderr io.Writer, host string, modes, hosts []string) (Policy, bool) {
+	policy, err := parseAuth(modes)
 	if err != nil {
 		_, _ = fmt.Fprintf(stderr, "error: %v\n", err)
-		return a, Policy{}, false
+		return Policy{}, false
 	}
 	if policy.Local() {
-		if !isLoopbackBind(a.host) {
-			_, _ = fmt.Fprintf(stderr, "error: local auth mode needs a numeric loopback --host such as 127.0.0.1 or ::1; %q is not a loopback address\n", a.host)
-			return a, Policy{}, false
+		if !isLoopbackBind(host) {
+			_, _ = fmt.Fprintf(stderr, "error: local auth mode needs a numeric loopback --host such as 127.0.0.1 or ::1; %q is not a loopback address\n", host)
+			return Policy{}, false
 		}
-		return a, policy, true
+		return policy, true
 	}
 	if len(hosts) > 0 {
-		return a, policy, true
+		return policy, true
 	}
 	_, _ = fmt.Fprintln(stderr, authWarning)
 	name := AuthProxy
@@ -36,5 +36,5 @@ func resolveAuth(stderr io.Writer, a serveArgs, hosts []string) (serveArgs, Poli
 		name = AuthOIDC
 	}
 	_, _ = fmt.Fprintf(stderr, "%s mode needs --allowed-host or ATRIUM_PUBLIC_HOST\n", name)
-	return a, Policy{}, false
+	return Policy{}, false
 }

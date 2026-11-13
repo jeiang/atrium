@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"net/url"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -96,10 +95,8 @@ func TestAgentTickLeavesAnotherProcessLiveRunOnTheJobThread(t *testing.T) {
 	}
 	ownRun := asstLastRun(t, d, thread)
 
-	w := asstBrowse(t, startServeIn(t, dir))
 	api.Push(asstReply("reviewed in serve"))
-	code, body, _ := w.post(fmt.Sprintf("/chat/%d/runs/%d/resume", thread, ownRun), url.Values{}, true)
-	w.want(code, http.StatusOK, body)
+	w := asstBrowse(t, startServeIn(t, dir))
 	waitUntil(t, 20*time.Second, "serve's held resume", func() bool { return jobSeen.Load() == 2 })
 	resumer := liveRun(t, d, ownRun)
 
@@ -121,7 +118,7 @@ func TestAgentTickLeavesAnotherProcessLiveRunOnTheJobThread(t *testing.T) {
 	spent := asstReply("operator answer")
 	spent.Usage = json.RawMessage(`{"input_tokens":50000,"output_tokens":100}`)
 	api.Push(spent)
-	code, body, _ = w.upload(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": operatorMarker}, nil, true)
+	code, body, _ := w.upload(fmt.Sprintf("/chat/%d/messages", thread), map[string]string{"text": operatorMarker}, nil, true)
 	w.want(code, http.StatusOK, body)
 	waitUntil(t, 20*time.Second, "the held operator request", func() bool { return operatorSeen.Load() == 1 })
 	operatorRun := asstLastRun(t, d, thread)

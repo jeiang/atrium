@@ -2,8 +2,11 @@ package module
 
 import (
 	"errors"
+
 	"slices"
 	"strings"
+
+	"github.com/jeiang/atrium/internal/runtime"
 
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/cli"
@@ -57,6 +60,10 @@ func Compile(decls []Declaration) (*Catalog, error) {
 		return nil, err
 	}
 	jobs, err := compileJobs(decls, byName)
+	if err != nil {
+		return nil, err
+	}
+	services, err := compileServices(decls)
 	if err != nil {
 		return nil, err
 	}
@@ -120,7 +127,7 @@ func Compile(decls []Declaration) (*Catalog, error) {
 			commands[c.Name] = true
 		}
 		for _, p := range d.Pages {
-			if p.Module == nil && p.Start == nil && len(p.Globals) == 0 && p.Templates == nil && len(p.Nav) == 0 {
+			if p.Module == nil && len(p.Globals) == 0 && p.Templates == nil && len(p.Nav) == 0 {
 				return nil, &InvalidPage{Module: d.Name}
 			}
 		}
@@ -188,8 +195,13 @@ func Compile(decls []Declaration) (*Catalog, error) {
 	if err != nil {
 		return nil, err
 	}
+	operations, bindings, err := compileOperations(decls)
+	if err != nil {
+		return nil, err
+	}
 	return &Catalog{decls: slices.Clone(decls), optional: optional, settings: reg, sections: sections,
-		conns: conns, hooks: hooks, credential: credential, metrics: allMetrics, checks: allChecks, jobs: jobs}, nil
+		conns: conns, hooks: hooks, credential: credential, metrics: allMetrics, checks: allChecks, jobs: jobs, services: services,
+		operations: operations, bindings: bindings}, nil
 }
 
 func compileJobs(decls []Declaration, byName map[string]Declaration) ([]scheduler.Definition, error) {
@@ -317,4 +329,22 @@ func hasPath(cmds []*cli.Command, path []string) bool {
 		return hasPath(c.Commands, path[1:])
 	}
 	return false
+}
+
+func compileServices(decls []Declaration) ([]runtime.ServiceDefinition, error) {
+	var all []runtime.ServiceDefinition
+	owners := map[string]string{}
+	for _, d := range decls {
+		for _, def := range d.Services {
+			if prev, ok := owners[def.Name]; ok {
+				return nil, &DeclarationError{Module: d.Name, Field: "services", Err: errors.New("service " + def.Name + " is also declared by " + prev)}
+			}
+			owners[def.Name] = d.Name
+			if err := runtime.Validate([]runtime.ServiceDefinition{def}); err != nil {
+				return nil, &DeclarationError{Module: d.Name, Field: "services", Err: err}
+			}
+			all = append(all, def)
+		}
+	}
+	return all, nil
 }

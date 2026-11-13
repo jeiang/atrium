@@ -3,6 +3,7 @@ package module
 import (
 	"context"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/cli"
@@ -14,6 +15,7 @@ import (
 	mailsync "github.com/jeiang/atrium/internal/mail/sync"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settingspage"
@@ -63,8 +65,12 @@ type Declaration struct {
 	ConnectionNotice  connections.Notifier
 	Attention         []attention.Source
 	Jobs              []scheduler.Definition
+	Services          []runtime.ServiceDefinition
+	Recover           func(context.Context, *db.DB, config.Config) error
 	Metrics           []ops.Metric
 	Checks            []ops.Check
+	Operations        []application.Definition
+	Bindings          []application.Binding
 }
 
 type EffectDeps struct {
@@ -87,3 +93,10 @@ type Effects struct {
 }
 
 type Builder interface{ Declare(mc Context) Declaration }
+
+type Resources func(context.Context) (*db.DB, config.Config, error)
+
+func Idle(ctx context.Context) error {
+	<-ctx.Done()
+	return ctx.Err()
+}

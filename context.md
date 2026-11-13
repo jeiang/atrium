@@ -213,7 +213,18 @@ behavior-parity target.
   on each usage row, and a model outside the catalog fails closed. The API key is
   a write-only secret setting on the `service/anthropic` connection, or the
   connection's `credential_files.api_key` host file; `ANTHROPIC_API_KEY` is
-  refused at startup. The
+  refused at startup. The assistant module does not require the key: without
+  it the module stays on, chat and paid scheduled runs are refused as not
+  configured (jobs record `skipped_unconfigured`, with no model request or
+  reservation), model-free jobs and the Scheduled, settings and Export pages
+  keep working, and `/settings/connections` shows the Anthropic credential as
+  unset. One live-run service per process, built by the application with its
+  effect ledger store and runner, serves chat pages, tools, jobs and the
+  `agent run`/`tick`/`scheduler` commands; the application drains it, then
+  that store, before closing the database. Serve stops in one bounded order
+  of 120 s (105 s for work to finish, 15 s to settle effects and interrupted
+  runs), then checkpoints and closes the database and releases the serve
+  lock last; any step that does not finish makes the exit nonzero. The
   monthly budget defaults to $150 with scheduled runs paused at 80% and chat at
   95%; the last 5% is reserved for classification. Every paid model call,
   memory summaries included, reserves its full cold prompt plus the request's
@@ -520,6 +531,15 @@ behavior-parity target.
   Started effects finish their ledger settlement; unknown outcomes stay blocked.
   Dismissing a proposal remains possible while its owner is disabled.
   Settings transactions publish a new module snapshot only after commit.
+  Modules also declare typed application operations and the HTML, API, CLI,
+  tool, job and service entries bound to them; compiling the catalog rejects
+  a binding to an unknown or foreign operation or a missing entry, and `serve`
+  refuses to start when a declared HTML/API binding is not mounted by its
+  module. `atrium catalog operations [--json] [--missing-api] [--unbound]
+  [--require-api]` prints that catalog without a database or credentials;
+  `--unbound` adds mounted routes, commands, tools, jobs and services that no
+  operation binds, and `--require-api` exits 1 when an operation has no API
+  binding. `GET /api/v1/me` is bound to `auth.identity`.
   Routes mount once with their declaration owner and check that snapshot on
   each request, so changes committed by the running application take effect
   without remounting or restarting; disabled routes keep the rendered 404
@@ -804,7 +824,10 @@ behavior-parity target.
   authority; no role distinguishes them. A separate local mode provides
   loopback access: it binds only a numeric loopback address, refuses any other
   bind at startup, and rejects a request whose socket peer is not loopback
-  regardless of forwarded address headers. There is no flag that serves
+  regardless of forwarded address headers. `serve --emergency-port` runs such a
+  listener beside the public one in the same process, sharing the database,
+  settings and API tokens but not the rate limiter; public, emergency and ops
+  listeners are all bound before readiness. There is no flag that serves
   without authentication on a non-loopback address. Public media file access requires an expiring signed
   link and still checks Host. The link signing key is a generated secret held in
   the database, or the host file's `app_keys.link_key_file`, whose bytes are

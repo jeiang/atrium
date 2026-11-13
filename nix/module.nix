@@ -274,20 +274,22 @@
     host,
     port,
     auth,
-    environment ? {},
   }: let
     needsHost = auth != "local";
   in {
     inherit description;
-    environment = appEnvironment // environment // lib.optionalAttrs needsHost {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;};
+    environment = appEnvironment // lib.optionalAttrs needsHost {ATRIUM_PUBLIC_HOST = cfg.web.allowedHost;};
     path = mediaPath;
     serviceConfig =
       mediaWriter
+      // exportWriter
       // {
-        ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} ${authArgs auth}" + lib.optionalString needsHost " --allowed-host ${cfg.web.allowedHost}";
+        ExecStart = "${lib.getExe cfg.package} serve --host ${host} --port ${toString port} ${authArgs auth}" + lib.optionalString needsHost " --allowed-host ${cfg.web.allowedHost}" + lib.optionalString cfg.web.local.enable " --emergency-host 127.0.0.1 --emergency-port ${toString cfg.web.local.port}";
         Type = "notify";
         WatchdogSec = "1min";
         TimeoutStartSec = writeTimeout;
+        TimeoutStopSec = "150s";
+        KillMode = "mixed";
         Restart = "always";
         RestartSec = 5;
       };
@@ -314,23 +316,6 @@
           Restart = "on-failure";
           RestartSec = 10;
         };
-        wantedBy = ["multi-user.target"];
-      };
-
-      atrium-agent-scheduler = {
-        description = "Run atrium's scheduled and nightly agent jobs";
-        path = mediaPath;
-        serviceConfig =
-          mediaWriter
-          // exportWriter
-          // {
-            ExecStart = "${lib.getExe cfg.package} agent scheduler";
-            Type = "notify";
-            WatchdogSec = "10min";
-            TimeoutStartSec = writeTimeout;
-            Restart = "on-failure";
-            RestartSec = 10;
-          };
         wantedBy = ["multi-user.target"];
       };
 
@@ -420,15 +405,6 @@
             Persistent = true;
           };
         };
-      };
-    }
-    // lib.optionalAttrs cfg.web.local.enable {
-      atrium-web-local = webUnit {
-        description = "atrium web UI (loopback, no proxy auth)";
-        host = "127.0.0.1";
-        port = cfg.web.local.port;
-        auth = "local";
-        environment = {ATRIUM_CORE_OPS_LISTEN = "off";};
       };
     };
 
@@ -635,13 +611,13 @@ in {
         enable = mkOption {
           type = types.bool;
           default = true;
-          description = "Run the loopback listener with --auth local for emergency access over an SSH tunnel.";
+          description = "Serve the emergency listener on 127.0.0.1 from the atrium-web process (serve --emergency-port), trusting every loopback request like --auth local, for access over an SSH tunnel.";
         };
 
         port = mkOption {
           type = types.port;
           default = 8481;
-          description = "Port of the loopback listener.";
+          description = "Port of the emergency listener on 127.0.0.1; it must differ from services.atrium.port and from the port of host.core.ops_listen.";
         };
       };
     };
@@ -650,7 +626,7 @@ in {
       obsidianDirectory = mkOption {
         type = types.nullOr types.str;
         default = null;
-        description = "Folder that receives the generated Obsidian vault; the scheduler unit writes it and the operator syncs it. The one source for export.export_obsidian_dir and its ReadWritePaths grant.";
+        description = "Folder that receives the generated Obsidian vault; the web unit runs the export job that writes it, and the operator syncs it. The one source for export.export_obsidian_dir and its ReadWritePaths grant.";
       };
     };
 
@@ -660,7 +636,7 @@ in {
       group = mkOption {
         type = types.str;
         default = "media";
-        description = "Group that owns the media tree; the web and scheduler units write through it with umask 0002.";
+        description = "Group that owns the media tree; the web unit writes through it with umask 0002.";
       };
     };
 
@@ -778,6 +754,18 @@ in {
       {
         assertion = cfg.web.auth != "local" || lib.hasPrefix "127." cfg.web.host || builtins.elem cfg.web.host ["::1" "[::1]"];
         message = "services.atrium.web.auth = \"local\" needs a numeric loopback services.atrium.web.host such as 127.0.0.1 or ::1";
+      }
+      {
+        assertion = !cfg.web.local.enable || cfg.web.local.port != cfg.port;
+        message = "services.atrium.web.local.port must differ from services.atrium.port; both listeners run in atrium-web";
+      }
+      {
+        assertion = let
+          listen = toString (renderedHost.core.ops_listen or "127.0.0.1:9180");
+          port = lib.last (lib.splitString ":" listen);
+        in
+          builtins.elem listen ["" "off"] || (port != toString cfg.port && (!cfg.web.local.enable || port != toString cfg.web.local.port));
+        message = "services.atrium.host.core.ops_listen must use a port other than services.atrium.port and services.atrium.web.local.port; all three listeners run in atrium-web";
       }
     ];
 

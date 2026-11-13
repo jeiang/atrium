@@ -17,7 +17,6 @@ import (
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/notify"
-	"github.com/jeiang/atrium/internal/web"
 )
 
 var version = "dev"
@@ -55,13 +54,15 @@ func newAppWith(env config.Env, clients func(config.Config) mail.OpenFunc, now f
 	guard := func(ctx context.Context, q db.Querier, key, value string) error {
 		return set.Guard(ctx, q, key, value)
 	}
+	bind := app.NewBindings(env, mc.Tools, now)
 	cat, err := app.Catalog(app.Dependencies{
-		Version: version,
-		Guard:   guard,
-		Clients: clients,
-		Now:     now,
-		Env:     env,
-		Budget:  budgetStatus,
+		Version:  version,
+		Guard:    guard,
+		Clients:  clients,
+		Now:      now,
+		Env:      env,
+		Budget:   budgetStatus,
+		Bindings: bind,
 	}, mc)
 	if err != nil {
 		panic(err)
@@ -72,7 +73,7 @@ func newAppWith(env config.Env, clients func(config.Config) mail.OpenFunc, now f
 	st.SetAccountCredential(cat.AccountCredential())
 	st.SetHostAccounts(cat.HostAccounts())
 	set, err = module.NewSet(cat, reg, env, func(ctx context.Context) (*db.DB, config.Config, error) {
-		a, err := app.Open(ctx, env, cat)
+		a, err := app.Open(ctx, env, cat, app.OneShot)
 		if err != nil {
 			return nil, config.Config{}, err
 		}
@@ -88,7 +89,7 @@ func newAppWith(env config.Env, clients func(config.Config) mail.OpenFunc, now f
 	c.State = st
 	c.SetupContext = func(ctx context.Context) context.Context { return cat.Context(module.WithSet(ctx, set)) }
 	c.Bootstrap = bootstrap(env, reg)
-	c.Add(append(append(set.Commands(), connections.Command(env)), web.ServeCommand(set, set.Pages()...))...)
+	c.Add(append(append(set.Commands(), connections.Command(env)), bind.ServeCommand(set.Pages()...))...)
 	return c
 }
 

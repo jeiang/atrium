@@ -110,6 +110,16 @@ func importKey(t *testing.T) db.Key {
 	return key
 }
 
+func parkImportedJobs(t *testing.T, dir string) {
+	t.Helper()
+	d, err := db.Connect(filepath.Join(dir, "atrium.db"), db.WithKey(importKey(t)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = d.Close() }()
+	asstExec(t, d, "UPDATE jobs SET next_due = NULL")
+}
+
 func runImportApp(t *testing.T, app *cli.App, args ...string) appRun {
 	t.Helper()
 	var out, errs bytes.Buffer
@@ -808,6 +818,7 @@ capabilities = ["indexer"]
 		t.Fatal(err)
 	}
 	setEnv(t, "ATRIUM_HOST_CONFIG", hostPath)
+	parkImportedJobs(t, dir)
 	base := startServeIn(t, dir)
 	code, body, _ := fetch(t, &http.Client{}, http.MethodGet, base+"/apps/media/channels?q=Lanterns", nil)
 	if code != http.StatusOK || !strings.Contains(body, "Lanterns") {
@@ -1512,6 +1523,7 @@ func TestImportV2MapsProposalStatesToEffects(t *testing.T) {
 	}
 
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	parkImportedJobs(t, dir)
 	base := startServeIn(t, dir)
 	status, body, _ := fetch(t, http.DefaultClient, http.MethodGet, base+"/review", nil)
 	if status != http.StatusOK {
@@ -2076,6 +2088,7 @@ S: {t} OK
 	id, _ := res.LastInsertId()
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	setEnv(t, "ATRIUM_HOST_CONFIG", importHostConfig(t, dir, "http://127.0.0.1:9", "http://127.0.0.1:9", "http://127.0.0.1:9"))
+	parkImportedJobs(t, dir)
 	base := startServeIn(t, dir)
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}
@@ -2409,6 +2422,7 @@ func TestImportV2KeepsHostPinningAndRefusesARemovedAccount(t *testing.T) {
 	}
 	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
 	setEnv(t, "ATRIUM_HOST_CONFIG", removed)
+	parkImportedJobs(t, dir)
 	base := startServeIn(t, dir)
 	jar, _ := cookiejar.New(nil)
 	client := &http.Client{Jar: jar}

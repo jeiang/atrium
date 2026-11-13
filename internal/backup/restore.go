@@ -316,6 +316,11 @@ func chownLike(path string, info os.FileInfo) error {
 
 func install(ctx context.Context, cfg config.Config, configured, key db.Key, stage string, replaceUnopenable bool) ([]string, error) {
 	path := cfg.DBPath
+	exclusion, err := db.TryServeLock(ctx, path)
+	if err != nil {
+		return nil, fmt.Errorf("restore refused: %w; the database and files are unchanged", err)
+	}
+	defer func() { _ = exclusion.Close() }()
 	lock, err := db.Exclusive(ctx, path, db.ShortLockWait)
 	if err != nil {
 		var timeout *db.LockTimeout

@@ -7,6 +7,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/db"
@@ -14,6 +16,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/settingspage"
@@ -31,6 +34,9 @@ type Catalog struct {
 	metrics    []ops.Metric
 	checks     []ops.Check
 	jobs       []scheduler.Definition
+	services   []runtime.ServiceDefinition
+	operations []Operation
+	bindings   []Binding
 }
 
 func (c *Catalog) Declarations() []Declaration { return c.decls }
@@ -48,6 +54,68 @@ func (c *Catalog) Metrics() []ops.Metric { return slices.Clone(c.metrics) }
 func (c *Catalog) Checks() []ops.Check { return slices.Clone(c.checks) }
 
 func (c *Catalog) Jobs() []scheduler.Definition { return scheduler.Clone(c.jobs) }
+
+func (c *Catalog) Services() []runtime.ServiceDefinition { return slices.Clone(c.services) }
+
+func (c *Catalog) Operations() []Operation { return slices.Clone(c.operations) }
+
+func (c *Catalog) Bindings() []Binding { return slices.Clone(c.bindings) }
+
+func (c *Catalog) WebBindings() map[string][]application.Binding {
+	out := map[string][]application.Binding{}
+	for _, b := range c.bindings {
+		if b.Kind == application.HTML || b.Kind == application.API {
+			out[b.Module] = append(out[b.Module], b.Binding)
+		}
+	}
+	return out
+}
+
+func (c *Catalog) Unbound() []Binding {
+	type key struct {
+		module string
+		kind   application.BindingKind
+		target string
+	}
+	bound := map[key]bool{}
+	for _, b := range c.bindings {
+		bound[key{b.Module, b.Kind, b.Target}] = true
+	}
+	var out []Binding
+	add := func(module string, kind application.BindingKind, target string) {
+		if !bound[key{module, kind, target}] {
+			out = append(out, Binding{Module: module, Binding: application.Binding{Kind: kind, Target: target}})
+		}
+	}
+	for _, d := range c.decls {
+		for _, path := range leafPaths(d.Commands, "") {
+			add(d.Name, application.CLI, path)
+		}
+		for _, t := range d.Tools {
+			add(d.Name, application.Tool, t.Tool.Name)
+		}
+		for _, j := range d.Jobs {
+			add(d.Name, application.Job, j.Key)
+		}
+		for _, s := range d.Services {
+			add(d.Name, application.Service, s.Name)
+		}
+	}
+	return out
+}
+
+func leafPaths(cmds []*cli.Command, prefix string) []string {
+	var out []string
+	for _, c := range cmds {
+		path := strings.TrimSpace(prefix + " " + c.Name)
+		if len(c.Commands) == 0 {
+			out = append(out, path)
+			continue
+		}
+		out = append(out, leafPaths(c.Commands, path)...)
+	}
+	return out
+}
 
 func (c *Catalog) Connections() *connections.Registry { return c.conns }
 

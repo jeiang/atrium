@@ -3,10 +3,9 @@ package coremodule
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"time"
-
-	"github.com/go-chi/chi/v5"
 
 	"github.com/jeiang/atrium/internal/about"
 	"github.com/jeiang/atrium/internal/actionlink"
@@ -43,7 +42,9 @@ import (
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/ops/collectors"
 	"github.com/jeiang/atrium/internal/passrun"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/proposals/proposalscmd"
+	"github.com/jeiang/atrium/internal/runtime"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
@@ -55,11 +56,12 @@ import (
 )
 
 type Module struct {
-	Version string
-	Guard   settingscmd.Guard
-	Clients func(config.Config) mail.OpenFunc
-	Now     func() float64
-	Jobs    jobworker.Dependencies
+	Version   string
+	Guard     settingscmd.Guard
+	Clients   func(config.Config) mail.OpenFunc
+	Now       func() float64
+	Resources module.Resources
+	Jobs      jobworker.Dependencies
 }
 
 func (m Module) classifier(env config.Env) func(context.Context, *db.DB, config.Config) (*classifier.Service, error) {
@@ -74,6 +76,7 @@ func (m Module) classifier(env config.Env) func(context.Context, *db.DB, config.
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
+	operations, bindings := authOperations()
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
 		snap, err := mc.Evaluate(ctx, q)
 		if err != nil {
@@ -109,15 +112,17 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 			}},
-			{Start: func(ctx context.Context, d *web.Deps) error { return startOps(ctx, d, mc.Catalog()) }},
-			{Module: startEmbed},
 			{Module: actionlinkpages.Module, Templates: actionlinkpages.Templates()},
 			{Module: web.CoreModule, Nav: []web.NavItem{
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}, OIDC: oidcconn.Source()},
 			connweb.Page(),
 		},
-		Groups: SettingGroups(),
+		Groups:     SettingGroups(),
+		Operations: operations,
+		Bindings:   bindings,
+		Services:   m.services(mc),
+		Recover:    recoverProposals,
 		Commands: []*cli.Command{
 			writescmd.Command(writescmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
 			ledgercmd.Command(ledgercmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
@@ -129,6 +134,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			kbcmd.Command(mc.Env),
 			backup.BackupCommand(),
 			backup.RestoreCommand(),
+			catalogCommand(mc),
 		},
 	}
 }
@@ -146,17 +152,68 @@ func SettingGroups() []settings.Group {
 
 var log = logx.Logger("atrium.core")
 
-func startOps(ctx context.Context, d *web.Deps, cat *module.Catalog) error {
-	stop, err := ops.Start(ctx, d.DB, d.Env, cat.Metrics(), cat.Checks())
-	if err != nil {
-		log.Error("ops listener did not start", logx.Err, err.Error())
-		return nil
+const (
+	embedEvery       = time.Minute
+	embedStepTimeout = 20 * time.Minute
+	recoverInterval  = time.Minute
+	recoveryStall    = 5 * time.Minute
+)
+
+func recoverProposals(ctx context.Context, d *db.DB, _ config.Config) error {
+	n, err := proposals.RecoverStuck(ctx, d, float64(time.Now().UnixNano())/1e9)
+	if n > 0 {
+		log.Warn("recovered interrupted approved proposals", "count", n)
 	}
-	d.OnClose(stop)
-	return nil
+	return err
 }
 
-const embedEvery = time.Minute
+func (m Module) services(mc module.Context) []runtime.ServiceDefinition {
+	return []runtime.ServiceDefinition{
+		{Name: "recovery", Critical: true, Stall: recoveryStall, Run: func(ctx context.Context, s *runtime.Services) error {
+			d, cfg, err := m.Resources(ctx)
+			if err != nil {
+				return err
+			}
+			return recoverEvery(ctx, s, d, cfg, mc.Current)
+		}},
+		{Name: "embedding-index", Run: func(ctx context.Context, _ *runtime.Services) error {
+			d, _, err := m.Resources(ctx)
+			if err != nil {
+				return err
+			}
+			return embedIndex(ctx, d)
+		}},
+		{Name: "connection-health", Run: func(ctx context.Context, _ *runtime.Services) error {
+			d, _, err := m.Resources(ctx)
+			if err != nil {
+				return err
+			}
+			return connweb.Watch(ctx, d)
+		}},
+	}
+}
+
+func recoverEvery(ctx context.Context, s *runtime.Services, d *db.DB, cfg config.Config, current func() *module.Snapshot) error {
+	t := time.NewTicker(recoverInterval)
+	defer t.Stop()
+	s.Heartbeat("recovery")
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-t.C:
+		}
+		if err := db.Ready(ctx, d); err != nil && ctx.Err() == nil {
+			log.Error("database refresh failed", logx.Err, err.Error())
+		}
+		if snap := current(); snap != nil {
+			if err := snap.Recover(ctx, d, cfg); err != nil && ctx.Err() == nil {
+				log.Error("recovery failed", logx.Err, err.Error())
+			}
+		}
+		s.Heartbeat("recovery")
+	}
+}
 
 func kbPending(ctx context.Context, d *db.DB) error {
 	embedURL, err := embed.EmbedURL(ctx, d.Read)
@@ -175,30 +232,35 @@ func kbPending(ctx context.Context, d *db.DB) error {
 	return err
 }
 
-func startEmbed(_ chi.Router, d *web.Deps) {
-	ctx, cancel := context.WithCancel(d.Ctx)
-	done := make(chan struct{})
-	go func() {
-		defer close(done)
-		for ctx.Err() == nil {
-			more, err := mail.ReembedStep(ctx, d.DB)
-			if err != nil && ctx.Err() == nil {
-				log.Warn("embedding index rebuild failed", logx.Err, err.Error())
-			}
-			if more {
-				continue
-			}
-			if err := kbPending(ctx, d.DB); err != nil && ctx.Err() == nil {
-				log.Warn("knowledge embedding failed", logx.Err, err.Error())
-			}
-			select {
-			case <-ctx.Done():
-			case <-time.After(embedEvery):
-			}
+func embedIndex(ctx context.Context, d *db.DB) error {
+	for {
+		more, err := embedStep(ctx, d)
+		if err != nil {
+			return err
 		}
-	}()
-	d.OnClose(func() {
-		cancel()
-		<-done
-	})
+		if more {
+			continue
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(embedEvery):
+		}
+	}
+}
+
+func embedStep(ctx context.Context, d *db.DB) (bool, error) {
+	step, cancel := context.WithTimeout(ctx, embedStepTimeout)
+	defer cancel()
+	more, err := mail.ReembedStep(step, d)
+	if err != nil && ctx.Err() == nil {
+		return false, fmt.Errorf("embedding index rebuild failed: %w", err)
+	}
+	if more || ctx.Err() != nil {
+		return more, ctx.Err()
+	}
+	if err := kbPending(step, d); err != nil && ctx.Err() == nil {
+		return false, fmt.Errorf("knowledge embedding failed: %w", err)
+	}
+	return false, ctx.Err()
 }

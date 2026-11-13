@@ -12,7 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 )
 
-var log = logx.Logger("atrium.app.classifier")
+var classifierLog = logx.Logger("atrium.app.classifier")
 
 func classifierFor(ctx context.Context, svc *service.Service) (*classifier.Service, error) {
 	now := svc.Now
@@ -25,7 +25,7 @@ func classifierFor(ctx context.Context, svc *service.Service) (*classifier.Servi
 		client, err = nil, nil
 	}
 	if errors.Is(err, service.ErrTransport) {
-		log.Warn("paid classification waits: the Anthropic connection transport cannot be built", logx.Err, err.Error())
+		classifierLog.Warn("paid classification waits: the Anthropic connection transport cannot be built", logx.Err, err.Error())
 		client, unavailable, err = nil, config.NotConfigured(err.Error()), nil
 	}
 	if err != nil {

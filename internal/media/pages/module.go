@@ -66,6 +66,7 @@ func Module(o Options) web.Module {
 		if err != nil {
 			panic(err)
 		}
+		d.DrainOnClose(effects.Drain)
 		s := &service{deps: d, now: now, links: media.NewLinks(d.Settings, d.DB, d.Cfg.MediaLinkKeyPath()), effects: effects}
 		s.registerDownloads(r)
 		s.registerChannels(r)

@@ -10,6 +10,7 @@
       (root + "/tools/settingsgen")
       (root + "/tools/tableownership")
       (root + "/tools/registrationownership")
+      (root + "/tools/adapterboundary")
       (root + "/tools/e2e-loopback")
       (root + "/docs/config")
       (root + "/docs/tools.md")

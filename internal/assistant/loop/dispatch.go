@@ -11,6 +11,7 @@ import (
 
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant/block"
 	actx "github.com/jeiang/atrium/internal/assistant/context"
 	"github.com/jeiang/atrium/internal/assistant/journal"
@@ -242,6 +243,7 @@ func (x *dispatcher) call(ctx context.Context, t *tool.Tool, args tool.Args) (va
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	defer context.AfterFunc(x.lost, cancel)()
+	ctx = application.WithInvocation(ctx, application.Invocation{ThreadID: x.tc.ThreadID, RunID: x.tc.RunID})
 	return t.Handler(ctx, x.tc, args)
 }
 

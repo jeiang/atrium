@@ -43,7 +43,9 @@ func (k Key) Raw() []byte {
 	return raw
 }
 
-type options struct{ key Key }
+type options struct {
+	key Key
+}
 
 type Option func(*options)
 

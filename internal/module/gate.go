@@ -26,10 +26,10 @@ func (s *Set) enabled(name string) bool {
 }
 
 func (s *Set) Pages() []web.Page {
-	pages := []web.Page{{Globals: map[string]any{"module_enabled": s.enabled}}}
+	pages := []web.Page{{Globals: map[string]any{"module_enabled": s.enabled}, Bindings: s.cat.WebBindings()}}
 	for _, r := range s.decls {
 		for _, p := range r.Pages {
-			if p.Module == nil && p.Start == nil && len(p.Nav) == 0 {
+			if p.Module == nil && len(p.Nav) == 0 {
 				continue
 			}
 			if !r.Core {
@@ -239,8 +239,6 @@ func skip(path string, st Status, msg string) {
 	log.Info(msg, logx.Module, st.Name, logx.State, string(st.State), logx.Reason, st.Reason(), logx.Command, strings.TrimSpace(path))
 }
 
-// Open returns the application database from the opener the application
-// injected. It is the serve command's only path to the application database.
 func (s *Set) Open(ctx context.Context) (*db.DB, config.Config, error) {
 	return s.opener(ctx)
 }
@@ -258,7 +256,7 @@ func (s *Set) Start(ctx context.Context, d *web.Deps) error {
 	if err != nil {
 		return err
 	}
-	s.start(s.store(snap))
+	s.publishFirst(snap)
 	return nil
 }
 
@@ -279,6 +277,6 @@ func (s *Set) load(ctx context.Context) (*Snapshot, error) {
 	if err != nil {
 		return nil, err
 	}
-	s.start(s.store(snap))
+	s.publishFirst(snap)
 	return snap, nil
 }

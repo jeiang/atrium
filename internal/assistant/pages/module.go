@@ -2,7 +2,6 @@ package pages
 
 import (
 	"context"
-	"database/sql"
 	"embed"
 	"errors"
 	"io/fs"
@@ -15,15 +14,10 @@ import (
 
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/references"
-	"github.com/jeiang/atrium/internal/assistant/registry"
-	"github.com/jeiang/atrium/internal/assistant/runner"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
-	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/inference"
-	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/numx"
 	"github.com/jeiang/atrium/internal/scheduler"
@@ -43,15 +37,14 @@ func Templates() fs.FS {
 }
 
 type Options struct {
-	Tools registry.Source
+	Service func(context.Context) (*service.Service, error)
 }
 
 type pages struct {
-	deps   *web.Deps
-	svc    *service.Service
-	now    func() float64
-	ledger *ledger.Store
-	jobs   []scheduler.Definition
+	deps *web.Deps
+	svc  func() *service.Service
+	now  func() float64
+	jobs []scheduler.Definition
 }
 
 const (
@@ -64,62 +57,15 @@ const (
 func Module(o Options) web.Module {
 	return func(r chi.Router, d *web.Deps) {
 		r = r.With(bindAssistant)
-		open := imapclient.Opener(d.Cfg)
-		cat := module.SetFrom(d.Ctx).Catalog()
-		jobs := cat.Jobs()
-		store, err := cat.Ledger(d.DB, d.Env, open, assistant.Now)
-		if err != nil {
-			panic(err)
-		}
-		run, err := runner.New(o.Tools, store, open)
-		if err != nil {
-			panic(err)
-		}
-		base, cancel := context.WithCancel(d.Ctx)
-		svc := service.New(base, d.DB, d.Cfg, d.Env, run)
-		d.ResumeRun = func(ctx context.Context, runID int64) error {
-			err := svc.StartResume(ctx, runID)
-			var notInterrupted service.NotInterrupted
-			if errors.As(err, &notInterrupted) {
-				return nil
+		svc := sync.OnceValue(func() *service.Service {
+			svc, err := o.Service(d.Ctx)
+			if err != nil {
+				panic(err)
 			}
-			return err
-		}
-		var work sync.WaitGroup
-		var mu sync.Mutex
-		stopped := false
-		start := func() error {
-			mu.Lock()
-			defer mu.Unlock()
-			if stopped {
-				return nil
-			}
-			tz := config.From(base).TZName(d.Env)
-			stamp := assistant.Now()
-			if err := d.DB.WithTx(base, func(tx *sql.Tx) error {
-				return scheduler.Ensure(base, tx, jobs, tz, stamp)
-			}); err != nil && !errors.Is(err, context.Canceled) {
-				return err
-			}
-			work.Go(func() { svc.CheckCatalog(base) })
-			return nil
-		}
-		shutdown := func() {
-			mu.Lock()
-			stopped = true
-			mu.Unlock()
-			svc.Close()
-			cancel()
-			work.Wait()
-		}
-		if d.OnClose != nil {
-			d.OnClose(shutdown)
-		}
-		p := &pages{deps: d, svc: svc, now: assistant.Now, ledger: run.Ledger, jobs: jobs}
+			return svc
+		})
+		p := &pages{deps: d, svc: svc, now: assistant.Now, jobs: module.SetFrom(d.Ctx).Catalog().Jobs()}
 		d.OnFrame(p.sidebar)
-		if err := module.SetFrom(d.Ctx).OnEnable(module.Assistant, start); err != nil {
-			panic(err)
-		}
 
 		r.Get("/chat", p.chatIndex)
 		r.Post("/chat", p.chatNew)

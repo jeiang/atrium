@@ -94,6 +94,7 @@
     secretRefused = assert refusedWith "services.atrium.database.keyFile" {secretFiles."db.key" = "/run/x";}; assert refusedWith "connections.\"service/qbittorrent\".credential_files.api_key" {secretFiles."media.media_qbittorrent_api_key" = "/run/x";}; assert refusedWith "connections.\"service/notion\".credential_files.token" {secretFiles."notion.notion_token" = "/run/x";}; assert refusedWith "connections.\"service/anthropic\".credential_files.api_key" {secretFiles."anthropic.anthropic_api_key" = "/run/x";}; assert refusedWith "connections.\"service/oidc\".credential_files.client_secret" {secretFiles."auth.oidc_client_secret" = "/run/x";}; assert refusedWith "atrium settings set monthly_budget_usd" {secretFiles."assistant.monthly_budget_usd" = "/run/x";}; true;
     chatEndpointRefused = assert refusedWith "services.atrium.modelServerUnits" {modelServerUnits = ["llama.service"];}; assert refusedWith "mail.mail_chat_url is the service/anthropic connection" {host.mail.mail_chat_url = "http://127.0.0.1:8187/v1";}; assert refusedWith "mail.mail_chat_key is the service/anthropic connection" {host.mail.mail_chat_key_file = "/run/x";}; assert refusedWith "secretFiles.\"mail.mail_chat_key\" is the service/anthropic connection" {secretFiles."mail.mail_chat_key" = "/run/x";}; true;
     embeddingDependencyKept = assert builtins.all (name: let t = unitText name; in lib.hasInfix "After=" t && lib.hasInfix "llama-embed.service" t) appUnits; true;
+    opsPortRefused = assert refusedWith "services.atrium.host.core.ops_listen must use a port other than" {web.local.port = 9180;}; assert refusedWith "services.atrium.host.core.ops_listen must use a port other than" {host.core.ops_listen = "127.0.0.1:8480";}; assert !(refusedWith "services.atrium.host.core.ops_listen" {host.core.ops_listen = "off";}); true;
     connectionRefused = assert refusedWith "needs a kind" {connections."service/x" = {kind = "";};}; true;
     cfg = nixos.config.services.atrium;
     unitText = name: nixos.config.systemd.units.${name}.text;
@@ -112,14 +113,24 @@
     assert builtins.all (name: builtins.all (line: lib.hasInfix line (unitText name)) sharedLines) appUnits;
     assert builtins.length (builtins.filter (lib.hasPrefix "LoadCredential=") cfg.runProperties) == builtins.length credentialLines; true;
     backupAbsentByDefault = assert !(defaults.config.systemd.units ? "atrium-backup.service" || defaults.config.systemd.units ? "atrium-backup.timer"); true;
-    notifyUnits = ["atrium-web.service" "atrium-watch.service" "atrium-agent-scheduler.service"];
+    notifyUnits = ["atrium-web.service" "atrium-watch.service"];
+    schedulerInServe = assert !(nixos.config.systemd.units ? "atrium-agent-scheduler.service");
+    assert !(defaults.config.systemd.units ? "atrium-agent-scheduler.service");
+    assert !(lib.hasInfix "--no-services" (unitText "atrium-web.service"));
+    assert !(nixos.config.systemd.units ? "atrium-web-local.service");
+    assert !(defaults.config.systemd.units ? "atrium-web-local.service");
+    assert lib.hasInfix "--emergency-host 127.0.0.1 --emergency-port 8481" (unitText "atrium-web.service");
+    assert lib.hasInfix "--emergency-host 127.0.0.1 --emergency-port 8481" defaults.config.systemd.units."atrium-web.service".text;
+    assert !(lib.hasInfix "ATRIUM_CORE_OPS_LISTEN=off" (unitText "atrium-web.service"));
+    assert lib.hasInfix "TimeoutStopSec=150s" (unitText "atrium-web.service");
+    assert lib.hasInfix "KillMode=mixed" (unitText "atrium-web.service"); true;
     notifyOnLongRunning = let
       notifying = name: let t = unitText name; in lib.hasInfix "Type=notify" t && lib.hasInfix "WatchdogSec=" t;
     in
       assert builtins.all notifying notifyUnits;
       assert !(builtins.any notifying ["atrium-sync.service" "atrium-scan.service" "atrium-notion-sync.service" "atrium-backup.service"]); true;
     vaultExport = let
-      scheduler = unitText "atrium-agent-scheduler.service";
+      scheduler = unitText "atrium-web.service";
     in
       assert cfg.renderedHost.export.export_obsidian_dir == "/var/lib/atrium-vault";
       assert lib.hasInfix "ReadWritePaths=/var/lib/atrium-vault" scheduler;
@@ -150,7 +161,7 @@
           touch $out
         '';
 
-        module = assert exampleEvaluates && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && credentialsMatch && backupAbsentByDefault && notifyOnLongRunning && vaultExport && hostConfig;
+        module = assert exampleEvaluates && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && opsPortRefused && credentialsMatch && backupAbsentByDefault && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig;
           pkgs.linkFarm "atrium-units" (map (name: {
               inherit name;
               path = unit name;

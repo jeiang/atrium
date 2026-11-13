@@ -288,9 +288,9 @@ func (p *pages) apiNewThread(w http.ResponseWriter, r *http.Request) {
 	}
 	var runID *int64
 	if text := strings.TrimSpace(in.Text); text != "" {
-		id, err := p.svc.StartRun(ctx, threadID, text, service.Start{Kind: threads.Chat, Operator: true})
+		id, err := p.svc().StartRun(ctx, threadID, text, service.Start{Kind: threads.Chat, Operator: true})
 		if err != nil {
-			check(p.svc.DeleteThread(ctx, threadID))
+			check(p.svc().DeleteThread(ctx, threadID))
 		}
 		if p.apiRefused(w, err) {
 			return
@@ -372,14 +372,14 @@ func (p *pages) apiMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if in.Edit {
-		runID, err := p.svc.EditLast(ctx, threadID, text, nil)
+		runID, err := p.svc().EditLast(ctx, threadID, text, nil)
 		if p.apiRefused(w, err) {
 			return
 		}
 		web.JSON(w, http.StatusAccepted, map[string]any{"run_id": runID})
 		return
 	}
-	sent, err := p.svc.Send(ctx, threadID, text, nil)
+	sent, err := p.svc().Send(ctx, threadID, text, nil)
 	if p.apiRefused(w, err) {
 		return
 	}
@@ -436,7 +436,7 @@ func (p *pages) apiAnswer(w http.ResponseWriter, r *http.Request) {
 		web.APIError(w, http.StatusConflict, "no_question", "No question is waiting for an answer.")
 		return
 	}
-	if err := p.svc.Answer(ctx, threadID, in.Text); err != nil {
+	if err := p.svc().Answer(ctx, threadID, in.Text); err != nil {
 		web.APIError(w, http.StatusConflict, "not_answered", err.Error())
 		return
 	}
