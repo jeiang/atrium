@@ -6,7 +6,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -180,116 +179,6 @@ func TestMediaSweepDeleteDropDoesNotRepeat(t *testing.T) {
 	}
 	if outcome != "done" {
 		t.Fatalf("the delete resolution is %q, want done", outcome)
-	}
-}
-
-func TestMediaFilingPlanIsInspectableAndUndoable(t *testing.T) {
-	t.Parallel()
-	const hash = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
-	name := "Lanterns.S01E01.S01E02.1080p.WEB"
-	dir := t.TempDir()
-	root := mnpMediaRoot(t, dir)
-	qb, qbURL := mnpNewQbit(t)
-	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
-	content := filepath.Join(root, "downloads", name)
-	mnpWrite(t, filepath.Join(content, "Lanterns.S01E01.mkv"), []byte("one"))
-	mnpWrite(t, filepath.Join(content, "Lanterns.S01E02.mkv"), []byte("two"))
-	qb.put(mnpTorrent{hash: hash, name: name, tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: content})
-	if err := os.MkdirAll(filepath.Join(root, "tv", "Lanterns (2026)"), 0o775); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "tv", "Lanterns (2026)", "Season 02"), []byte("not a directory"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	form := url.Values{"id": {hash}, "action": {"file"}, "kind": {"tv"}, "title": {"Lanterns"}, "year": {"2026"},
-		"s0": {"1"}, "e0": {"1"}, "s1": {"2"}, "e1": {"1"}}
-	if code, body := b.do(http.MethodPost, "/apps/media/file", form); code != http.StatusBadGateway {
-		t.Fatalf("filing with a blocked second placement = %d, want 502: %.400s", code, body)
-	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
-	defer func() { _ = d.Close() }()
-	first := mediaEffectID(t, d, media.OpFile, hash, "done")
-	mediaEffectID(t, d, media.OpFile, hash, "failed")
-	if counts := mediaAudit(t, d, "media.file-item", "partial"); counts["placed"] != 1 {
-		t.Fatalf("filing counts %v", counts)
-	}
-	shown := runApp(t, "effects", "show", fmt.Sprint(first))
-	if shown.code != cli.ExitOK {
-		t.Fatalf("effects show: %d %s", shown.code, shown.stderr)
-	}
-	for _, dst := range []string{"Lanterns (2026) - S01E01.mkv", "Lanterns (2026) - S02E01.mkv"} {
-		if !strings.Contains(shown.stdout, dst) {
-			t.Errorf("the stored plan misses %s: %s", dst, shown.stdout)
-		}
-	}
-	placed := filepath.Join(root, "tv", "Lanterns (2026)", "Season 01", "Lanterns (2026) - S01E01.mkv")
-	src := filepath.Join(content, "Lanterns.S01E01.mkv")
-	link, err := os.Stat(placed)
-	if err != nil {
-		t.Fatal(err)
-	}
-	original, err := os.Stat(src)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !os.SameFile(link, original) {
-		t.Fatal("the first placement is not a hardlink to the download")
-	}
-	if ran := runApp(t, "effects", "undo", fmt.Sprint(first)); ran.code != cli.ExitOK {
-		t.Fatalf("effects undo: %d %s", ran.code, ran.stderr)
-	}
-	if _, err := os.Stat(placed); !os.IsNotExist(err) {
-		t.Fatalf("the undo left the filed link: %v", err)
-	}
-	if _, err := os.Stat(src); err != nil {
-		t.Fatalf("the undo removed the download: %v", err)
-	}
-}
-
-func TestMediaFilingUndoRefusesAChangedDestination(t *testing.T) {
-	t.Parallel()
-	name := "Movie.2020"
-	dir := t.TempDir()
-	root := mnpMediaRoot(t, dir)
-	_, qbURL := mnpNewQbit(t)
-	setEnv(t, "ATRIUM_HOST_CONFIG", mediaHost(t, dir, qbURL, "", "", ""))
-	src := filepath.Join(root, "import", name, name+".mkv")
-	mnpWrite(t, src, []byte("movie bytes"))
-	item := media.Import + "/" + name
-
-	seedAllFlagsIn(t, dir)
-	b := mnpNewBrowser(t, startServeIn(t, dir))
-	b.want(http.MethodGet, "/apps/media/downloads", nil, http.StatusOK)
-	form := url.Values{"id": {item}, "action": {"file"}, "kind": {"movie"}, "title": {"Movie"}, "year": {"2020"}}
-	b.want(http.MethodPost, "/apps/media/file", form, http.StatusOK, "Filed "+name)
-	placed := filepath.Join(root, "movies", "Movie (2020)", "Movie (2020).mkv")
-	if data, err := os.ReadFile(placed); err != nil || string(data) != "movie bytes" {
-		t.Fatalf("filed movie = %q, %v", data, err)
-	}
-	if _, err := os.Stat(src); !os.IsNotExist(err) {
-		t.Fatalf("the import source survived the rename: %v", err)
-	}
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
-	defer func() { _ = d.Close() }()
-	id := mediaEffectID(t, d, media.OpFile, item, "done")
-	if err := os.Remove(placed); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(placed, []byte("someone else"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if ran := runApp(t, "effects", "undo", fmt.Sprint(id)); ran.code == cli.ExitOK {
-		t.Fatalf("the undo removed a destination it did not create: %s", ran.stdout)
-	}
-	if data, err := os.ReadFile(placed); err != nil || string(data) != "someone else" {
-		t.Fatalf("the refused undo touched the destination: %q, %v", data, err)
-	}
-	if _, err := os.Stat(src); !os.IsNotExist(err) {
-		t.Fatalf("the refused undo restored the source: %v", err)
 	}
 }
 

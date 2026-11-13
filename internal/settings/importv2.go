@@ -42,6 +42,8 @@ type ImportEntry struct {
 	Cutover bool
 	Runtime bool
 	Secret  bool
+	Retired bool
+	Ignored bool
 	Note    string
 }
 
@@ -349,11 +351,11 @@ var importManifest = []ImportEntry{
 	{Module: "media", Key: "media_ffmpeg_nice", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/media/tuning.go:TuningMediaFfmpegNice", Default: "10", Type: Int, Choices: nil, Cutover: false},
 	{Module: "media", Key: "media_ffmpeg_timeout_seconds", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/media/tuning.go:TuningMediaFfmpegTimeoutSeconds", Default: "120", Type: Int, Choices: nil, Cutover: false},
 	{Module: "media", Key: "media_link_ttl_seconds", Class: ImportOperator, Action: ImportCarry, Target: "settings.media_link_ttl_seconds", Default: "43200", Type: Int, Choices: nil, Cutover: false},
-	{Module: "media", Key: "media_movies_url", Class: ImportHost, Action: ImportDropHost, Target: "host.media.media_movies_url", Default: "", Type: String, Choices: nil, Cutover: false},
+	{Module: "media", Key: "media_movies_url", Class: ImportHost, Action: ImportDropHost, Target: "host.media.media_vpn_base_url (choose explicitly)", Default: "", Type: String, Choices: nil, Cutover: false, Retired: true},
 	{Module: "media", Key: "media_qbittorrent_api_key", Class: ImportOperator, Action: ImportRename, Target: "service/qbittorrent credential api_key", Default: "", Type: String, Choices: nil, Cutover: true, Runtime: true},
 	{Module: "media", Key: "media_qbittorrent_timeout_seconds", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/media/tuning.go:TuningMediaQbittorrentTimeoutSeconds", Default: "15", Type: Int, Choices: nil, Cutover: true, Runtime: true},
 	{Module: "media", Key: "media_qbittorrent_url", Class: ImportHost, Action: ImportDropHost, Target: "service/qbittorrent.config.url", Default: "", Type: String, Choices: nil, Cutover: true, Runtime: true},
-	{Module: "media", Key: "media_root", Class: ImportHost, Action: ImportDropHost, Target: "host.media.media_root", Default: "", Type: String, Choices: nil, Cutover: false},
+	{Module: "media", Key: "media_root", Class: ImportHost, Action: ImportDropHost, Target: "services.atrium.mediaAgent.roots", Default: "", Type: String, Choices: nil, Cutover: false, Ignored: true},
 	{Module: "media", Key: "media_search_limit", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/media/tuning.go:TuningMediaSearchLimit", Default: "50", Type: Int, Choices: nil, Cutover: false},
 	{Module: "media", Key: "media_subtitle_extensions", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/media/tuning.go:TuningMediaSubtitleExtensions", Default: ".srt,.sub,.idx,.ass,.ssa,.vtt", Type: String, Choices: nil, Cutover: false},
 	{Module: "media", Key: "media_thumbnail_pass_limit", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/media/tuning.go:TuningMediaThumbnailPassLimit", Default: "200", Type: Int, Choices: nil, Cutover: false},
@@ -365,7 +367,7 @@ var importManifest = []ImportEntry{
 	{Module: "media", Key: "media_tmdb_token", Class: ImportOperator, Action: ImportRename, Target: "service/tmdb credential read_token", Default: "", Type: String, Choices: nil, Cutover: false},
 	{Module: "media", Key: "media_tmdb_url", Class: ImportHost, Action: ImportDropHost, Target: "service/tmdb.config.url", Default: "https://api.themoviedb.org/3", Type: String, Choices: nil, Cutover: false},
 	{Module: "media", Key: "media_torrent_upload_bytes", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/media/tuning.go:TuningMediaTorrentUploadBytes", Default: "1048576", Type: Int, Choices: nil, Cutover: false},
-	{Module: "media", Key: "media_tv_url", Class: ImportHost, Action: ImportDropHost, Target: "host.media.media_tv_url", Default: "", Type: String, Choices: nil, Cutover: false},
+	{Module: "media", Key: "media_tv_url", Class: ImportHost, Action: ImportDropHost, Target: "host.media.media_vpn_base_url (choose explicitly)", Default: "", Type: String, Choices: nil, Cutover: false, Retired: true},
 	{Module: "media", Key: "media_video_extensions", Class: ImportTuning, Action: ImportDropTuning, Target: "internal/media/tuning.go:TuningMediaVideoExtensions", Default: ".mkv,.mp4,.m4v,.avi,.mov,.ts,.wmv", Type: String, Choices: nil, Cutover: false},
 	{Module: "media", Key: "qbittorrent_ca_file", Class: ImportHost, Action: ImportDropHost, Target: "service/qbittorrent.transport.ca_file", Default: "", Type: String, Choices: nil, Cutover: true, Runtime: true},
 	{Module: "media", Key: "qbittorrent_proxy", Class: ImportHost, Action: ImportDropHost, Target: "service/qbittorrent.transport.proxy", Default: "", Type: String, Choices: nil, Cutover: true, Runtime: true},

@@ -5,54 +5,33 @@ import (
 	"database/sql"
 	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
 	"strings"
-	"syscall"
 
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/media/agentclient"
+	"github.com/jeiang/atrium/internal/mediaagent/protocol"
 )
 
 const (
-	OpAddMagnet = "media_add_magnet"
-	OpAddFile   = "media_add_file"
-	OpPriority  = "media_file_priority"
-	OpTagAdd    = "media_tag_add"
-	OpTagRemove = "media_tag_remove"
-	OpStart     = "media_start"
-	OpDelete    = "media_delete"
-	OpFile      = "media_file"
+	OpAddMagnet     = "media_add_magnet"
+	OpAddFile       = "media_add_file"
+	OpPriority      = "media_file_priority"
+	OpTagAdd        = "media_tag_add"
+	OpTagRemove     = "media_tag_remove"
+	OpStart         = "media_start"
+	OpDelete        = "media_delete"
+	OpFile          = "media_file"
+	OpImportCleanup = "media_import_cleanup"
 
-	UndoTorrent   = "media_torrent_delete"
-	UndoFilePlace = "media_file_place"
+	UndoTorrent     = "media_torrent_delete"
+	UndoFilePlace   = "media_file_place"
+	UndoAgentUnfile = "media_agent_unfile"
 )
 
 type torrentUndo struct {
 	Op   string `json:"op"`
 	Hash string `json:"hash"`
-}
-
-type fileStep struct {
-	Src  string `json:"src"`
-	Dst  string `json:"dst"`
-	Rel  string `json:"rel"`
-	Link bool   `json:"link"`
-	Dev  uint64 `json:"dev"`
-	Ino  uint64 `json:"ino"`
-	Size int64  `json:"size"`
-}
-
-type filePlan struct {
-	Item    string     `json:"item"`
-	Torrent bool       `json:"torrent"`
-	Root    string     `json:"root"`
-	Steps   []fileStep `json:"steps"`
-}
-
-type fileUndo struct {
-	Op   string   `json:"op"`
-	Step fileStep `json:"step"`
 }
 
 type Scope struct {
@@ -237,59 +216,6 @@ func (t Tuning) Delete(ctx context.Context, store *ledger.Store, set Settings, s
 	})
 }
 
-func place(step fileStep) error {
-	if err := os.MkdirAll(filepath.Dir(step.Dst), dirMode); err != nil {
-		return err
-	}
-	if step.Link {
-		return os.Link(step.Src, step.Dst)
-	}
-	return os.Rename(step.Src, step.Dst)
-}
-
-func sameIdentity(step fileStep, info os.FileInfo) bool {
-	st, ok := info.Sys().(*syscall.Stat_t)
-	return ok && uint64(st.Dev) == step.Dev && st.Ino == step.Ino && info.Size() == step.Size
-}
-
-func undoFilePlace(_ context.Context, raw json.RawMessage) (ledger.Result, error) {
-	var u fileUndo
-	if err := json.Unmarshal(raw, &u); err != nil || u.Step.Dst == "" {
-		return ledger.Result{}, ledger.Refused("media file undo payload is invalid")
-	}
-	step := u.Step
-	info, err := os.Lstat(step.Dst)
-	if errors.Is(err, os.ErrNotExist) {
-		return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"missing": step.Rel})}, nil
-	}
-	if err != nil {
-		return ledger.Result{State: ledger.Unknown, Error: err.Error()}, nil
-	}
-	if !sameIdentity(step, info) {
-		return ledger.Result{}, ledger.Refused("the destination changed since it was filed; not removing it")
-	}
-	if step.Link {
-		src, err := os.Stat(step.Src)
-		if err != nil || !os.SameFile(src, info) {
-			return ledger.Result{}, ledger.Refused("the filed link no longer matches its download; not removing it")
-		}
-		if err := os.Remove(step.Dst); err != nil {
-			return ledger.Result{State: ledger.Unknown, Error: err.Error()}, nil
-		}
-		return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"removed": step.Rel})}, nil
-	}
-	if _, err := os.Lstat(step.Src); err == nil {
-		return ledger.Result{}, ledger.Refused("the import source exists again; not overwriting it")
-	}
-	if err := os.MkdirAll(filepath.Dir(step.Src), dirMode); err != nil {
-		return ledger.Result{State: ledger.Unknown, Error: err.Error()}, nil
-	}
-	if err := os.Rename(step.Dst, step.Src); err != nil {
-		return ledger.Result{State: ledger.Unknown, Error: err.Error()}, nil
-	}
-	return ledger.Result{State: ledger.Done, After: jsonOf(map[string]any{"restored": step.Rel})}, nil
-}
-
 func undoTorrent(store *ledger.Store, env config.Env) ledger.Undoer {
 	return ledger.Undoer{
 		Validate: validateOp(UndoTorrent),
@@ -324,6 +250,85 @@ func undoTorrent(store *ledger.Store, env config.Env) ledger.Undoer {
 	}
 }
 
+type agentUndo struct {
+	Op         string `json:"op"`
+	AgentID    string `json:"agent_id"`
+	ForwardKey string `json:"forward_key"`
+}
+
+type AgentAction struct {
+	Item       string              `json:"item"`
+	Key        string              `json:"key"`
+	AgentID    string              `json:"agent_id"`
+	PlanDigest string              `json:"plan_digest"`
+	Plan       protocol.FilingPlan `json:"plan"`
+}
+
+func AgentUndo(agentID, key string) json.RawMessage {
+	return jsonOf(agentUndo{Op: UndoAgentUnfile, AgentID: agentID, ForwardKey: key})
+}
+
+func FilingState(r protocol.FilingResult, err error) (ledger.State, string) {
+	if err != nil {
+		var e *agentclient.Error
+		if errors.As(err, &e) {
+			switch e.Mutation {
+			case protocol.MutationNone:
+				return ledger.Failed, "the media agent refused the filing (" + e.Code + ")"
+			case protocol.MutationPartial:
+				return ledger.Partial, "the media agent completed part of the filing (" + e.Code + ")"
+			}
+		}
+		return ledger.Unknown, "the media agent did not report a result"
+	}
+	switch r.State {
+	case "done":
+		return ledger.Done, ""
+	case "failed":
+		return ledger.Failed, "the media agent could not file (" + r.ErrorCode + ")"
+	case "partial":
+		return ledger.Partial, "the media agent completed part of the filing (" + r.ErrorCode + ")"
+	}
+	return ledger.Unknown, "the media agent could not confirm the result"
+}
+
+func undoAgent(store *ledger.Store, env config.Env) ledger.Undoer {
+	return ledger.Undoer{
+		Validate: validateOp(UndoAgentUnfile),
+		External: func(ctx context.Context, raw json.RawMessage) (ledger.Result, error) {
+			var u agentUndo
+			if err := json.Unmarshal(raw, &u); err != nil || u.ForwardKey == "" || u.AgentID == "" {
+				return ledger.Result{}, ledger.Refused("media undo payload is invalid")
+			}
+			settings, err := Load(ctx, store.DB.Read, env)
+			if err != nil {
+				return ledger.Result{}, err
+			}
+			agent, err := settings.Agent(protocol.CapabilityFile)
+			if err != nil {
+				return ledger.Result{}, ledger.Refused(err.Error())
+			}
+			health, err := agent.Health(ctx)
+			if err != nil {
+				return ledger.Result{}, ledger.Refused("the media agent is unavailable")
+			}
+			if health.AgentID != u.AgentID {
+				return ledger.Result{}, ledger.Refused("the media agent changed since this filing; inspect the files and resolve this effect manually")
+			}
+			res, err := agent.File(ctx, protocol.FilingRequest{Key: protocol.UndoKey(u.ForwardKey), UndoOf: u.ForwardKey})
+			var e *agentclient.Error
+			if errors.As(err, &e) && e.Mutation == protocol.MutationNone && e.Code == protocol.CodeBusy {
+				return ledger.Result{}, ledger.Refused("the media agent has no confirmed result for this filing because it was resolved by hand; undo it by hand")
+			}
+			if errors.As(err, &e) && e.Mutation == protocol.MutationNone && e.Status != 503 {
+				return ledger.Result{}, ledger.Refused("the media agent cannot undo this filing (" + e.Code + ")")
+			}
+			state, text := FilingState(res, err)
+			return ledger.Result{State: state, After: jsonOf(res), Error: text}, nil
+		},
+	}
+}
+
 func addResolve(store *ledger.Store) ledger.ResolveHook {
 	return func(ctx context.Context, tx *sql.Tx, e ledger.Effect, r ledger.Resolution) error {
 		if r.Outcome != "applied" && r.Outcome != "partial" {
@@ -348,16 +353,34 @@ func fileResolve(_ context.Context, _ *sql.Tx, e ledger.Effect, r ledger.Resolut
 	if r.Outcome == "not-applied" {
 		return nil
 	}
-	var u fileUndo
-	if err := json.Unmarshal(e.Undo, &u); err != nil || u.Step.Rel == "" {
+	paths := map[string]bool{}
+	var action AgentAction
+	if json.Unmarshal(e.Action, &action) == nil {
+		for _, s := range action.Plan.Steps {
+			paths[s.Destination.Root+"/"+s.Destination.Rel] = true
+		}
+	}
+	var legacy struct {
+		Step struct {
+			Rel string `json:"rel"`
+		} `json:"step"`
+	}
+	if json.Unmarshal(e.Undo, &legacy) == nil && legacy.Step.Rel != "" {
+		paths[legacy.Step.Rel] = true
+	}
+	if len(paths) == 0 {
 		return ledger.Refused("the filing has no precise placement to confirm")
 	}
 	var evidence struct {
 		Confirmed []string `json:"confirmed"`
 	}
-	if len(r.Evidence) == 0 || json.Unmarshal(r.Evidence, &evidence) != nil ||
-		len(evidence.Confirmed) != 1 || evidence.Confirmed[0] != u.Step.Rel {
-		return ledger.Refused("resolving a media filing needs evidence naming the confirmed path " + u.Step.Rel)
+	if len(r.Evidence) == 0 || json.Unmarshal(r.Evidence, &evidence) != nil || len(evidence.Confirmed) == 0 {
+		return ledger.Refused("resolving a media filing needs evidence naming the confirmed paths")
+	}
+	for _, p := range evidence.Confirmed {
+		if !paths[p] {
+			return ledger.Refused("the evidence names a path the filing did not plan")
+		}
 	}
 	return nil
 }
@@ -365,9 +388,12 @@ func fileResolve(_ context.Context, _ *sql.Tx, e ledger.Effect, r ledger.Resolut
 func Undo(s *ledger.Store, env config.Env) []ledger.UndoDefinition {
 	return []ledger.UndoDefinition{
 		{Operation: UndoTorrent, Undoer: undoTorrent(s, env)},
+		{Operation: UndoAgentUnfile, Undoer: undoAgent(s, env)},
 		{Operation: UndoFilePlace, Undoer: ledger.Undoer{
 			Validate: validateOp(UndoFilePlace),
-			External: undoFilePlace,
+			External: func(context.Context, json.RawMessage) (ledger.Result, error) {
+				return ledger.Result{}, ledger.Refused("filed before the media agent; inspect the files and resolve this effect manually")
+			},
 		}},
 	}
 }
@@ -377,5 +403,6 @@ func Resolve(s *ledger.Store) []ledger.ResolveDefinition {
 		{Operation: OpAddMagnet, Hook: addResolve(s)},
 		{Operation: OpAddFile, Hook: addResolve(s)},
 		{Operation: OpFile, Hook: fileResolve},
+		{Operation: OpImportCleanup, Hook: fileResolve},
 	}
 }

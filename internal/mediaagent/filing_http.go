@@ -100,25 +100,29 @@ func (a *Agent) putFiling(w http.ResponseWriter, r *http.Request, key string) {
 		problem(w, 400, protocol.CodeInvalidRequest, "the URL and body keys must match")
 		return
 	}
+	a.receiptMu.Lock()
+	existing := a.receipts[key]
+	a.receiptMu.Unlock()
 	if req.UndoOf != "" {
 		if !keyValid(req.UndoOf) || key != protocol.UndoKey(req.UndoOf) || req.PlanDigest != "" || req.Plan.Version != 0 {
 			problem(w, 400, protocol.CodeInvalidRequest, "the undo request is invalid")
 			return
 		}
-		p, err := a.inverse(req.UndoOf)
-		if err != nil {
-			filingProblem(w, err)
-			return
+		if existing != nil {
+			req.Plan, req.PlanDigest = existing.request.Plan, existing.request.PlanDigest
+		} else {
+			p, err := a.inverse(req.UndoOf)
+			if err != nil {
+				filingProblem(w, err)
+				return
+			}
+			req.Plan = p
+			req.PlanDigest = protocol.CanonicalDigest(p)
 		}
-		req.Plan = p
-		req.PlanDigest = protocol.CanonicalDigest(p)
 	} else if protocol.CanonicalDigest(req.Plan) != req.PlanDigest {
 		problem(w, 400, protocol.CodeInvalidRequest, "the plan digest does not match")
 		return
 	}
-	a.receiptMu.Lock()
-	existing := a.receipts[key]
-	a.receiptMu.Unlock()
 	if existing == nil {
 		if err := a.validatePlan(req.Plan, req.UndoOf != ""); err != nil {
 			filingProblem(w, err)

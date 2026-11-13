@@ -8,6 +8,8 @@ import (
 	"unicode/utf8"
 
 	"regexp"
+
+	"github.com/jeiang/atrium/internal/mediaagent/protocol"
 )
 
 const (
@@ -53,7 +55,6 @@ var (
 	episodeRe = regexp.MustCompile(`(?i)\bS(\d{1,2}) ?E(\d{1,3})`)
 	yearRe    = regexp.MustCompile(`\b(19\d{2}|20\d{2})\b`)
 	leadTagRe = regexp.MustCompile(`^\s*\[[^\]]*\]\s*`)
-	sampleRe  = regexp.MustCompile(`(?i)\bsample\b`)
 
 	unsafe = strings.NewReplacer("/", "", "\\", "", ":", " -", "*", "", "?", "", `"`, "", "<", "", ">", "", "|", "")
 )
@@ -76,8 +77,8 @@ func Ext(name string) string {
 	return ""
 }
 
-func (t Tuning) IsVideo(name string) bool {
-	return t.VideoExts[strings.ToLower(Ext(name))] && !sampleRe.MatchString(name)
+func (t Tuning) IsVideo(rel string, size int64) bool {
+	return t.VideoExts[strings.ToLower(Ext(rel))] && !protocol.Sample(rel, size)
 }
 
 func (t Tuning) IsSubtitle(name string) bool { return t.SubtitleExts[strings.ToLower(Ext(name))] }

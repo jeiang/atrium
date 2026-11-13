@@ -48,12 +48,20 @@ func serveMediaAgent(ctx context.Context, path string, stdout, stderr io.Writer)
 	if err != nil {
 		return fail(err)
 	}
+	vpn, err := agent.ListenVPN()
+	if err != nil {
+		_ = ln.Close()
+		return fail(err)
+	}
 	n := sdnotify.New(os.Getenv)
 	stopWatch := n.Watch(ctx, nil)
 	defer stopWatch()
 	_, _ = fmt.Fprintf(stdout, "media agent listening on %s\n", ln.Addr())
+	if vpn != nil {
+		_, _ = fmt.Fprintf(stdout, "media agent VPN listening on %s\n", vpn.Addr())
+	}
 	n.Ready()
-	if err := agent.Serve(ctx, ln, n.Stopping); err != nil {
+	if err := agent.Serve(ctx, ln, vpn, n.Stopping); err != nil {
 		return fail(err)
 	}
 	if sig, _ := cli.Received(ctx); sig == syscall.SIGHUP {

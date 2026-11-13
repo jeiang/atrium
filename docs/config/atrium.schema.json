@@ -323,24 +323,25 @@
     "media": {
       "additionalProperties": false,
       "properties": {
-        "media_movies_url": {
+        "media_download_path_prefix": {
           "type": "string"
         },
-        "media_movies_url_file": {
+        "media_download_path_prefix_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
         "media_root": {
+          "description": "Accepted but ignored with a warning, replaced by services.atrium.mediaAgent.roots; refused once the NixOS module has services.atrium.mediaAgent.roots.",
           "type": "string"
         },
         "media_root_file": {
           "description": "path of a file holding the value",
           "type": "string"
         },
-        "media_tv_url": {
+        "media_vpn_base_url": {
           "type": "string"
         },
-        "media_tv_url_file": {
+        "media_vpn_base_url_file": {
           "description": "path of a file holding the value",
           "type": "string"
         }
@@ -645,6 +646,7 @@
     "media.media_channel_pattern_chars": "tuning",
     "media.media_channel_seen_ttl_seconds": "tuning",
     "media.media_child_limit": "tuning",
+    "media.media_download_path_prefix": "host",
     "media.media_eztv_limit": "tuning",
     "media.media_eztv_timeout_seconds": "tuning",
     "media.media_eztv_url": "host",
@@ -669,6 +671,7 @@
     "media.media_torrent_upload_bytes": "tuning",
     "media.media_tv_url": "host",
     "media.media_video_extensions": "tuning",
+    "media.media_vpn_base_url": "host",
     "media.qbittorrent_ca_file": "host",
     "media.qbittorrent_proxy": "host",
     "media.tmdb_ca_file": "host",
@@ -1264,6 +1267,7 @@
     "media.media_ffmpeg_nice": "the compiled constant internal/media/tuning.go:TuningMediaFfmpegNice",
     "media.media_ffmpeg_timeout_seconds": "the compiled constant internal/media/tuning.go:TuningMediaFfmpegTimeoutSeconds",
     "media.media_link_ttl_seconds": "atrium settings set media_link_ttl_seconds",
+    "media.media_movies_url": "host.media.media_vpn_base_url (choose explicitly)",
     "media.media_qbittorrent_api_key": "connections.\"service/qbittorrent\".credential_files.api_key",
     "media.media_qbittorrent_timeout_seconds": "the compiled constant internal/media/tuning.go:TuningMediaQbittorrentTimeoutSeconds",
     "media.media_qbittorrent_url": "connections.\"service/qbittorrent\".config.url",
@@ -1278,6 +1282,7 @@
     "media.media_tmdb_token": "connections.\"service/tmdb\".credential_files.read_token",
     "media.media_tmdb_url": "connections.\"service/tmdb\".config.url",
     "media.media_torrent_upload_bytes": "the compiled constant internal/media/tuning.go:TuningMediaTorrentUploadBytes",
+    "media.media_tv_url": "host.media.media_vpn_base_url (choose explicitly)",
     "media.media_video_extensions": "the compiled constant internal/media/tuning.go:TuningMediaVideoExtensions",
     "media.qbittorrent_ca_file": "connections.\"service/qbittorrent\".transport.ca_file",
     "media.qbittorrent_proxy": "connections.\"service/qbittorrent\".transport.proxy",

@@ -7,6 +7,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/mediaagent/protocol"
 )
 
 const (
@@ -100,10 +101,30 @@ func (s *Service) thumbnails(ctx context.Context) (Thumbnails, error) {
 	if err != nil {
 		return Thumbnails{}, err
 	}
-	root, err := set.NeedRoot()
+	snap, err := s.snapshot(ctx, set)
 	if err != nil {
 		return Thumbnails{}, classify(err)
 	}
-	generated, remaining := media.NewArtwork(s.d.CacheDir, nil, set.Tuning).ThumbnailPass(ctx, root, set.ThumbPassLimit)
-	return Thumbnails{Generated: generated, Remaining: remaining}, nil
+	client, err := set.Agent(protocol.CapabilityFile)
+	if err != nil {
+		return Thumbnails{}, classify(err)
+	}
+	paths := []protocol.Path{}
+	for _, rel := range set.EpisodeFiles(snap) {
+		if root, rest, ok := media.SplitRel(rel); ok {
+			paths = append(paths, protocol.Path{Root: root, Rel: rest})
+		}
+	}
+	var out Thumbnails
+	for len(paths) > 0 {
+		batch := paths[:min(len(paths), protocol.MaxThumbnailPaths)]
+		paths = paths[len(batch):]
+		result, err := client.ThumbnailPass(ctx, protocol.ThumbnailPass{Paths: batch, Limit: max(set.ThumbPassLimit-out.Generated, 0)})
+		if err != nil {
+			return out, &media.LibraryUnavailable{Cause: err}
+		}
+		out.Generated += result.Generated
+		out.Remaining += result.Remaining
+	}
+	return out, nil
 }

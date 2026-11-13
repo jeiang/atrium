@@ -38,18 +38,25 @@ func libEntries(found []media.Entry) []LibraryEntry {
 func (s *service) libraryIndex(w http.ResponseWriter, r *http.Request) {
 	read, err := s.app.Library(r.Context(), mediaapp.LibraryInput{})
 	if err != nil {
-		panic(err)
+		web.Fail(w, r, err, func(status int) { s.deps.Error(w, r, status, application.Classify(err).Error()) })
+		return
 	}
-	s.libRender(w, r, "media_library.gohtml", LibraryPage{Error: read.Data.Error, Movies: libEntries(read.Data.Movies), Shows: libEntries(read.Data.Shows)})
+	page := LibraryPage{Error: read.Data.Error, Catalogue: read.Data.Catalogue.State, Movies: libEntries(read.Data.Movies), Shows: libEntries(read.Data.Shows)}
+	page.Stale = staleNotice(read.Data.Catalogue)
+	s.libRender(w, r, "media_library.gohtml", page)
+}
+
+func staleNotice(c mediaapp.CatalogueStatus) string {
+	if c.State != "stale" {
+		return ""
+	}
+	return c.Problem + " Showing the library as of " + c.ObservedAt.Local().Format("2006-01-02 15:04") + "."
 }
 
 func (s *service) libDetail(w http.ResponseWriter, r *http.Request, kind string) (mediaapp.LibraryDetail, bool) {
 	read, err := s.app.LibraryDetail(r.Context(), mediaapp.LibraryDetailInput{Kind: kind, Name: web.PathParam(r, "name")})
 	if err != nil {
-		if application.Classify(err).Code != application.NotFound {
-			panic(err)
-		}
-		s.deps.Error(w, r, http.StatusNotFound, "not found")
+		web.Fail(w, r, err, func(status int) { s.deps.Error(w, r, status, application.Classify(err).Error()) })
 		return mediaapp.LibraryDetail{}, false
 	}
 	return read.Data, true
@@ -65,7 +72,7 @@ func (s *service) libraryMovie(w http.ResponseWriter, r *http.Request) {
 		files[i] = FileLink{Rel: f.Rel, Name: f.Name, Size: f.Size, Public: f.Public, VPN: f.VPN}
 	}
 	view := MovieView{Dir: found.Entry.Dir, Title: found.Entry.Title, Year: found.Entry.Year, Files: files}
-	s.libRender(w, r, "media_movie.gohtml", MoviePage{Movie: view, TTL: linkSpan(found.LinkTTL)})
+	s.libRender(w, r, "media_movie.gohtml", MoviePage{Movie: view, TTL: linkSpan(found.LinkTTL), Stale: staleNotice(found.Catalogue)})
 }
 
 func (s *service) libraryShow(w http.ResponseWriter, r *http.Request) {
@@ -85,5 +92,5 @@ func (s *service) libraryShow(w http.ResponseWriter, r *http.Request) {
 		seasons[i] = SeasonView{Number: season.Number, Dir: season.Dir, Episodes: episodes}
 	}
 	view := ShowView{Dir: found.Entry.Dir, Title: found.Entry.Title, Year: found.Entry.Year, Seasons: seasons}
-	s.libRender(w, r, "media_show.gohtml", ShowPage{Show: view, TTL: linkSpan(found.LinkTTL)})
+	s.libRender(w, r, "media_show.gohtml", ShowPage{Show: view, TTL: linkSpan(found.LinkTTL), Stale: staleNotice(found.Catalogue)})
 }

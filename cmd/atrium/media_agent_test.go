@@ -30,6 +30,7 @@ import (
 const mediaAgentHost = "media-agent.test"
 
 type mediaAgentOpts struct {
+	main    bool
 	group   string
 	tv      string
 	control string
@@ -111,6 +112,16 @@ import = "` + roots["import"] + `"
 ` + opts.extra
 	if opts.group != "" {
 		cfg = "group = " + strconv.Quote(opts.group) + "\n" + cfg
+	}
+	if opts.main {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		addr := listener.Addr().String()
+		_ = listener.Close()
+		cfg = strings.Replace(cfg, `listen = "127.0.0.1:0"`, "listen = "+strconv.Quote(addr), 1)
+		cfg = strings.Replace(cfg, `allowed_hosts = ["`+mediaAgentHost+`"]`, `allowed_hosts = ["`+mediaAgentHost+`", "`+addr+`"]`, 1)
 	}
 	path := filepath.Join(dir, "agent.toml")
 	if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {
@@ -400,8 +411,19 @@ allowed_hosts =`)
 	t.Run("loopback vpn without allow_loopback", func(t *testing.T) {
 		refuse(t, mediaAgentOpts{extra: vpn}, nil, "set vpn.allow_loopback")
 	})
-	t.Run("vpn is not served yet", func(t *testing.T) {
-		refuse(t, mediaAgentOpts{extra: vpn + "allow_loopback = true\n"}, nil, "vpn: unsupported")
+	t.Run("vpn certificate without a key", func(t *testing.T) {
+		refuse(t, mediaAgentOpts{extra: vpn + "allow_loopback = true\ntls_cert = \"/nonexistent/cert.pem\"\n"}, nil, "vpn.tls_cert and vpn.tls_key must be set together")
+	})
+	t.Run("vpn without peers", func(t *testing.T) {
+		refuse(t, mediaAgentOpts{extra: "\n[vpn]\nlisten = \"127.0.0.1:8483\"\nallowed_hosts = [\"media.vpn.test\"]\nallow_loopback = true\n"}, nil, "vpn.allowed_peers must list at least one peer prefix")
+	})
+	for _, peer := range []string{"0.0.0.0/0", "::/0"} {
+		t.Run("unbounded vpn peers "+peer, func(t *testing.T) {
+			refuse(t, mediaAgentOpts{extra: "\n[vpn]\nlisten = \"127.0.0.1:8483\"\nallowed_peers = [\"" + peer + "\"]\nallowed_hosts = [\"media.vpn.test\"]\nallow_loopback = true\n"}, nil, "vpn.allowed_peers must not contain 0.0.0.0/0 or ::/0")
+		})
+	}
+	t.Run("non-loopback vpn without tls", func(t *testing.T) {
+		refuse(t, mediaAgentOpts{extra: "\n[vpn]\nlisten = \"192.0.2.10:8483\"\nallowed_peers = [\"192.0.2.0/24\"]\nallowed_hosts = [\"media.vpn.test\"]\n"}, nil, "vpn.tls_cert and vpn.tls_key are required")
 	})
 	t.Run("wildcard vpn", func(t *testing.T) {
 		refuse(t, mediaAgentOpts{extra: "\n[vpn]\nlisten = \"0.0.0.0:8483\"\nallow_loopback = true\n"}, nil, "vpn.listen must not be a wildcard address")

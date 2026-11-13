@@ -43,7 +43,7 @@ kind = "service/eztv"
 label = "EZTV"
 config = { url = %q }
 capabilities = ["indexer"]
-`, qbURL, qbKey, tmdbURL, imagesURL, tmdbKey, eztvURL)
+`, qbURL, qbKey, tmdbURL, imagesURL, tmdbKey, eztvURL) + defaultAgentConnection
 	path := filepath.Join(dir, "media-host.toml")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)

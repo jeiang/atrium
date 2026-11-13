@@ -21,7 +21,6 @@ import (
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -51,6 +50,9 @@ func settingEnv(key string) string {
 	}
 	if entry, ok := settings.ImportEntryFor(key); ok {
 		return "ATRIUM_" + strings.ToUpper(entry.Module) + "_" + strings.ToUpper(entry.Key)
+	}
+	if d, ok := testSettings().HostDefOf(key); ok {
+		return "ATRIUM_" + strings.ToUpper(d.Module) + "_" + strings.ToUpper(d.Key)
 	}
 	panic("unregistered setting " + key)
 }
@@ -112,6 +114,15 @@ label = "qBittorrent"
 config = { url = "http://qbittorrent.invalid" }
 capabilities = ["api"]
 `
+
+var defaultAgentConnection = func() string {
+	dir := filepath.Join(testRoot, "host")
+	token := filepath.Join(dir, "media-agent.token")
+	if os.MkdirAll(dir, 0o700) != nil || os.WriteFile(token, []byte(strings.Repeat("t", 40)+"\n"), 0o600) != nil {
+		panic("cannot write the default media agent bearer")
+	}
+	return agentConnectionTOML("http://127.0.0.1:9", token)
+}()
 
 func hostConfigBody(webpush string) string {
 	return hostConfigBodyWith("", webpush, filepath.Join(testRoot, "host", "anthropic.key"))
@@ -209,7 +220,7 @@ var defaultHostConfig = func() string {
 		panic("cannot write the default host credentials")
 	}
 	path := filepath.Join(dir, "host.toml")
-	body := hostConfigBodyWith(defaultEmbeddingConnection, defaultWebPushConnection, anthropicKey) + defaultQbitConnection + mailConnection("icloud", "icloud", "operator@icloud.invalid", defaultMailPassword, true)
+	body := hostConfigBodyWith(defaultEmbeddingConnection, defaultWebPushConnection, anthropicKey) + defaultQbitConnection + defaultAgentConnection + mailConnection("icloud", "icloud", "operator@icloud.invalid", defaultMailPassword, true)
 	if os.WriteFile(path, []byte(body), 0o600) != nil {
 		panic("cannot write the default host configuration")
 	}
@@ -597,14 +608,12 @@ func grafanaHostWith(t *testing.T, dir, url, metricsUID, logsUID, logsType strin
 
 func moduleEnv(dir string) map[string]string {
 	return map[string]string{
-		settingEnv(media.KeyRoot):   filepath.Join(dir, "media"),
 		settingEnv(contacts.DirKey): filepath.Join(dir, "media-contacts"),
 	}
 }
 
 func requirementEnv(mediaRoot string) map[string]string {
 	return map[string]string{
-		settingEnv(media.KeyRoot):   mediaRoot,
 		settingEnv(contacts.DirKey): mediaRoot + "-contacts",
 		"ATRIUM_HOST_CONFIG":        defaultHostConfig,
 	}
