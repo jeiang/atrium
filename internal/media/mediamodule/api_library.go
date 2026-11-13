@@ -3,6 +3,7 @@ package mediamodule
 import (
 	"context"
 	"encoding/base64"
+	"errors"
 	"sort"
 	"strconv"
 	"strings"
@@ -10,8 +11,12 @@ import (
 
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/media"
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
+	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -66,34 +71,46 @@ type MediaFileLink struct {
 	Catalogue MediaCatalogue `json:"catalogue"`
 }
 type MediaFilingQuery struct {
-	Hash  string `path:"hash" json:"-"`
-	Kind  string `query:"kind" json:"-"`
+	Hash  string `path:"hash" json:"-" doc:"Torrent info hash, or Import/<name> for an import item (send the slash as %2F)."`
+	Kind  string `query:"kind" json:"-" api:"enum=movie|show"`
 	Title string `query:"title" json:"-"`
 	Year  string `query:"year" json:"-"`
+	Edits string `query:"episodes" json:"-" doc:"Episode overrides as comma-separated file:season:episode entries, where file is an id from the preview and an empty episode skips the file."`
 }
 type MediaFilingEpisode struct {
+	File    string `json:"file"`
 	Season  string `json:"season"`
 	Episode string `json:"episode"`
 }
-type MediaFilingInput struct {
-	Hash     string               `path:"hash" json:"-"`
-	Action   string               `json:"action"`
-	Kind     string               `json:"kind"`
+type MediaFilingPlan struct {
+	Hash     string               `path:"hash" json:"-" doc:"Torrent info hash, or Import/<name> for an import item (send the slash as %2F)."`
+	Kind     string               `json:"kind" api:"enum=movie|show"`
 	Title    string               `json:"title"`
 	Year     string               `json:"year"`
 	Episodes []MediaFilingEpisode `json:"episodes,omitempty"`
 }
+type MediaFilingInput struct {
+	MediaFilingPlan
+	Action string `json:"action" api:"enum=file"`
+}
 type MediaFilingHash struct {
-	Hash string `path:"hash" json:"-"`
+	Hash string `path:"hash" json:"-" doc:"Torrent info hash, or Import/<name> for an import item (send the slash as %2F)."`
+}
+type MediaFilingFile struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Season      string `json:"season,omitempty"`
+	Episode     string `json:"episode,omitempty"`
+	Destination string `json:"destination,omitempty"`
 }
 type MediaFilingPreview struct {
-	ID    string `json:"id"`
-	Kind  string `json:"kind"`
-	Title string `json:"title"`
-	Year  string `json:"year"`
-	Files int    `json:"files"`
-	Ready bool   `json:"ready"`
-	Error string `json:"error,omitempty"`
+	ID    string            `json:"id"`
+	Kind  string            `json:"kind" api:"enum=movie|show"`
+	Title string            `json:"title"`
+	Year  string            `json:"year"`
+	Files []MediaFilingFile `json:"files"`
+	Ready bool              `json:"ready"`
+	Error string            `json:"error,omitempty"`
 }
 type MediaFiled struct {
 	ID     string `json:"id"`
@@ -173,6 +190,8 @@ func mediaDetail(ctx context.Context, s *mediaapp.Service, kind, name string) (a
 }
 
 func mediaLibraryRoutes(d *web.Deps, s *mediaapp.Service) []application.Binding {
+	link := mediaShape[MediaFileLink]()
+	link.ID, link.Uncached = "media.file-link", true
 	return []application.Binding{
 		api.Query(d, mediaapp.DescribeLibrary(), mediaShape[MediaLibrary](), "GET /media/library", func(ctx context.Context, in MediaLibraryInput) (application.Read[MediaLibrary], error) {
 			r, err := s.Library(ctx, mediaapp.LibraryInput{Query: in.Query, Limit: int(^uint(0) >> 1)})
@@ -225,7 +244,7 @@ func mediaLibraryRoutes(d *web.Deps, s *mediaapp.Service) []application.Binding 
 			out.Items, out.Next, err = mediaPage(files, func(v MediaLibraryFile) string { return v.ID }, in.Cursor, in.Limit)
 			return mediaRead(r, out), err
 		}),
-		api.Query(d, mediaapp.DescribeLibraryDetail(), mediaShape[MediaFileLink](), "GET /media/files/{file_id}/link", func(ctx context.Context, in MediaFileID) (application.Read[MediaFileLink], error) {
+		api.Query(d, mediaapp.DescribeLibraryDetail(), link, "GET /media/files/{file_id}/link", func(ctx context.Context, in MediaFileID) (application.Read[MediaFileLink], error) {
 			rel, err := mediaDecode(in.ID)
 			if err != nil {
 				return application.Read[MediaFileLink]{}, err
@@ -260,7 +279,62 @@ func mediaLibraryRoutes(d *web.Deps, s *mediaapp.Service) []application.Binding 
 }
 
 func mediaFilingPreview(p mediaapp.FilingPreview) MediaFilingPreview {
-	return MediaFilingPreview{ID: p.Item.ID, Kind: p.View.Kind, Title: p.View.Title, Year: p.View.Year, Files: len(p.Ops), Ready: p.Error == "", Error: p.Error}
+	out := MediaFilingPreview{ID: p.Item.ID, Kind: p.View.Kind, Title: p.View.Title, Year: p.View.Year, Files: []MediaFilingFile{}, Ready: p.Error == "", Error: p.Error}
+	if out.Kind == media.KindTV {
+		out.Kind = media.KindShow
+	}
+	for _, f := range p.View.Files {
+		file := MediaFilingFile{ID: mediaID(f.Rel), Name: f.Rel}
+		switch {
+		case p.View.Kind == media.KindTV:
+			file.Season, file.Episode = f.Season, f.Episode
+			if f.Dest != media.Skipped {
+				file.Destination = f.Dest
+			}
+		case f.Rel == p.View.MovieFile:
+			file.Destination = p.View.MovieDest
+		}
+		out.Files = append(out.Files, file)
+	}
+	return out
+}
+
+func mediaFilingInput(hash, kind, title, year string, episodes []MediaFilingEpisode) (mediaapp.FilingInput, error) {
+	if kind == media.KindShow {
+		kind = media.KindTV
+	}
+	in := mediaapp.FilingInput{ID: hash, Form: map[string]string{"kind": kind, "title": title, "year": year}}
+	for i, ep := range episodes {
+		rel, err := base64.RawURLEncoding.DecodeString(ep.File)
+		if _, dup := in.Episodes[string(rel)]; err != nil || len(rel) == 0 || dup {
+			name := "episodes." + strconv.Itoa(i) + ".file"
+			return in, &application.Error{Code: application.Invalid, Message: "An episode must name one file from the preview.", Fields: []application.Field{{Name: name, Code: "invalid", Message: "Input should be a file id from the preview"}}}
+		}
+		if in.Episodes == nil {
+			in.Episodes = map[string]mediaapp.FilingEpisode{}
+		}
+		in.Episodes[string(rel)] = mediaapp.FilingEpisode{Season: ep.Season, Episode: ep.Episode}
+	}
+	return in, nil
+}
+
+func mediaEdits(raw string) ([]MediaFilingEpisode, error) {
+	var out []MediaFilingEpisode
+	if raw == "" {
+		return out, nil
+	}
+	for entry := range strings.SplitSeq(raw, ",") {
+		parts := strings.Split(entry, ":")
+		if len(parts) != 3 {
+			return nil, &application.Error{Code: application.Invalid, Message: "The episodes parameter is not valid.", Fields: []application.Field{{Name: "episodes", Code: "invalid", Message: "Input should be file:season:episode entries"}}}
+		}
+		out = append(out, MediaFilingEpisode{File: parts[0], Season: parts[1], Episode: parts[2]})
+	}
+	return out, nil
+}
+
+func mediaJobContext(ctx context.Context, d *web.Deps) context.Context {
+	return module.WithSet(config.With(ctx, d.State), module.SetFrom(d.Ctx))
 }
 
 func mediaFilingRoutes(d *web.Deps, s *mediaapp.Service) []application.Binding {
@@ -268,26 +342,33 @@ func mediaFilingRoutes(d *web.Deps, s *mediaapp.Service) []application.Binding {
 		shape.Body = application.BodyNone
 		return shape
 	}
+	preview := func(ctx context.Context, in mediaapp.FilingInput, err error) (application.Read[MediaFilingPreview], error) {
+		if err != nil {
+			return application.Read[MediaFilingPreview]{}, err
+		}
+		r, err := s.FilingPreview(ctx, in)
+		return mediaRead(r, mediaFilingPreview(r.Data)), err
+	}
 	return []application.Binding{
 		api.Query(d, mediaapp.DescribeFilingPreview(), mediaShape[MediaFilingPreview](), "GET /media/filings/{hash}", func(ctx context.Context, in MediaFilingQuery) (application.Read[MediaFilingPreview], error) {
-			r, err := s.FilingPreview(ctx, mediaapp.FilingInput{ID: in.Hash, Form: map[string]string{"kind": in.Kind, "title": in.Title, "year": in.Year}})
-			return mediaRead(r, mediaFilingPreview(r.Data)), err
+			episodes, err := mediaEdits(in.Edits)
+			if err != nil {
+				return application.Read[MediaFilingPreview]{}, err
+			}
+			input, err := mediaFilingInput(in.Hash, in.Kind, in.Title, in.Year, episodes)
+			return preview(ctx, input, err)
 		}),
 		api.Command(d, mediaapp.DescribeFileItem(), mediaShape[MediaFiled](), "POST /media/filings/{hash}", func(ctx context.Context, in MediaFilingInput) (application.Change[MediaFiled], error) {
-			if in.Action != "file" {
-				return application.Change[MediaFiled]{}, &application.Error{Code: application.Invalid, Message: "Confirm the filing with action file.", Fields: []application.Field{{Name: "action", Code: "invalid", Message: "Input should be file"}}}
-			}
-			form := map[string]string{"kind": in.Kind, "title": in.Title, "year": in.Year}
-			for i, ep := range in.Episodes {
-				form["s"+strconv.Itoa(i)], form["e"+strconv.Itoa(i)] = ep.Season, ep.Episode
-			}
-			input := mediaapp.FilingInput{ID: in.Hash, Form: form}
-			preview, err := s.FilingPreview(ctx, input)
+			input, err := mediaFilingInput(in.Hash, in.Kind, in.Title, in.Year, in.Episodes)
 			if err != nil {
 				return application.Change[MediaFiled]{}, err
 			}
-			if preview.Data.Error != "" {
-				return application.Change[MediaFiled]{}, &application.Error{Code: application.Invalid, Message: preview.Data.Error, Fields: []application.Field{{Name: "plan", Code: "invalid", Message: preview.Data.Error}}}
+			planned, err := s.FilingPreview(ctx, input)
+			if err != nil {
+				return application.Change[MediaFiled]{}, err
+			}
+			if planned.Data.Error != "" {
+				return application.Change[MediaFiled]{}, &application.Error{Code: application.Invalid, Message: planned.Data.Error, Fields: []application.Field{{Name: "plan", Code: "invalid", Message: planned.Data.Error}}}
 			}
 			r, err := s.FileItem(ctx, input)
 			return mediaChange(r, MediaFiled{ID: in.Hash, Placed: len(r.Data.Dests)}), err
@@ -297,7 +378,21 @@ func mediaFilingRoutes(d *web.Deps, s *mediaapp.Service) []application.Binding {
 			return mediaChange(r, MediaFiled{ID: r.Data.ID}), err
 		}),
 		api.Command(d, mediaapp.DescribeSweep(), mediaShape[MediaSwept](), "POST /media/sweep", func(ctx context.Context, _ struct{}) (application.Change[MediaSwept], error) {
-			r, err := s.Sweep(ctx, mediaapp.SweepInput{})
+			var r application.Change[mediaapp.Swept]
+			var swept error
+			_, err := module.Invoke(mediaJobContext(ctx, d), d.DB, d.Cfg, module.Media+"/"+media.JobSweep, db.ShortLockWait, func(ctx context.Context, _ scheduler.Run) (scheduler.Result, error) {
+				r, swept = s.Sweep(ctx, mediaapp.SweepInput{})
+				if missing, ok := errors.AsType[config.NotConfigured](swept); ok {
+					return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new(missing.Error())}, nil
+				}
+				return scheduler.Result{}, swept
+			})
+			if _, busy := errors.AsType[*db.LockBusy](err); busy {
+				err = &application.Error{Code: application.Conflict, Message: "A media sweep or channel poll is already running.", Cause: err}
+			}
+			if swept != nil {
+				err = swept
+			}
 			return mediaChange(r, MediaSwept{Selected: len(r.Data.Selected), Removed: len(r.Data.Removed), Errors: len(r.Data.Errors)}), err
 		}),
 	}

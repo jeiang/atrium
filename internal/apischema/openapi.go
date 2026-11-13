@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"cmp"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"reflect"
 	"regexp"
@@ -59,6 +60,7 @@ func openAPI(cat *module.Catalog) (object, error) {
 		kinds[op.Name] = op.Kind
 	}
 	paths := object{}
+	ids := map[string]string{}
 	bindings := cat.Bindings()
 	slices.SortFunc(bindings, func(a, b module.Binding) int { return cmp.Compare(a.Target, b.Target) })
 	for _, b := range bindings {
@@ -71,6 +73,11 @@ func openAPI(cat *module.Catalog) (object, error) {
 		if err != nil {
 			return nil, err
 		}
+		id := op["operationId"].(string)
+		if other, ok := ids[id]; ok {
+			return nil, fmt.Errorf("apischema: operationId %s is used by %s and %s", id, other, b.Target)
+		}
+		ids[id] = b.Target
 		item, _ := paths[pattern].(object)
 		if item == nil {
 			item = object{}
@@ -106,6 +113,9 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 				return nil, err
 			}
 			p := object{"name": name, "in": in, "schema": constrain(schema, f.Tag.Get("api"))}
+			if doc := f.Tag.Get("doc"); doc != "" {
+				p["description"] = doc
+			}
 			if in == "path" {
 				p["required"] = true
 			}
@@ -114,15 +124,22 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 	}
 	if unsafe {
 		params = append(params, object{"name": "Idempotency-Key", "in": "header", "schema": object{"type": "string", "minLength": 1, "maxLength": 255}})
-	} else if kind == application.Query && shape.Body != application.BodyEventStream {
+	} else if kind == application.Query && shape.Body != application.BodyEventStream && !shape.Uncached {
 		params = append(params, object{"name": "If-None-Match", "in": "header", "schema": object{"type": "string"}})
 	}
+	id := string(b.Uses[0])
+	if shape.ID != "" {
+		id = shape.ID
+	}
 	op := object{
-		"operationId":     string(b.Uses[0]),
+		"operationId":     id,
 		"tags":            []any{string(shape.Area)},
 		"x-atrium-area":   string(shape.Area),
 		"x-atrium-module": b.Module,
 		"parameters":      params,
+	}
+	if id != string(b.Uses[0]) {
+		op["x-atrium-operation"] = string(b.Uses[0])
 	}
 	switch shape.Body {
 	case application.BodyJSON:
@@ -139,7 +156,7 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 	headers := object{}
 	if unsafe {
 		headers["Atrium-Command-Id"] = object{"schema": object{"type": "string"}}
-	} else if kind == application.Query && shape.Body != application.BodyEventStream {
+	} else if kind == application.Query && shape.Body != application.BodyEventStream && !shape.Uncached {
 		headers["ETag"] = object{"schema": object{"type": "string"}}
 	}
 	success := object{"description": http.StatusText(shape.Success), "headers": headers}
@@ -160,7 +177,7 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 		responses["410"] = object{"description": http.StatusText(http.StatusGone), "content": object{"application/json": object{"schema": object{"allOf": []any{errorRef, object{
 			"type": "object", "required": []any{"run_id"}, "properties": object{"run_id": object{"type": "integer"}},
 		}}}}}}
-	} else if kind == application.Query && !unsafe {
+	} else if kind == application.Query && !unsafe && !shape.Uncached {
 		responses["304"] = object{"description": http.StatusText(http.StatusNotModified), "headers": object{"ETag": object{"schema": object{"type": "string"}}}}
 	}
 	statuses := slices.Clone(guardSafe)

@@ -1,7 +1,12 @@
 package api
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
+	"maps"
 	"net/http"
+	"net/url"
 	"reflect"
 	"slices"
 	"strconv"
@@ -13,9 +18,10 @@ import (
 )
 
 var (
-	limitType  = reflect.TypeFor[Limit]()
-	cursorType = reflect.TypeFor[Cursor]()
-	timeType   = reflect.TypeFor[time.Time]()
+	limitType     = reflect.TypeFor[Limit]()
+	cursorType    = reflect.TypeFor[Cursor]()
+	timeType      = reflect.TypeFor[time.Time]()
+	unmarshalType = reflect.TypeFor[json.Unmarshaler]()
 )
 
 type rules struct {
@@ -48,6 +54,15 @@ func parseRules(tag string) rules {
 func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, body application.BodyKind) bool {
 	rv := reflect.ValueOf(v).Elem()
 	query := r.URL.Query()
+	scope := maps.Clone(query)
+	if scope == nil {
+		scope = url.Values{}
+	}
+	for _, f := range reflect.VisibleFields(rv.Type()) {
+		if name, ok := f.Tag.Lookup("path"); ok {
+			scope.Set("{"+name+"}", web.PathParam(r, name))
+		}
+	}
 	for _, f := range reflect.VisibleFields(rv.Type()) {
 		if f.Anonymous || !f.IsExported() {
 			continue
@@ -75,7 +90,7 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 				}
 				field.SetInt(int64(n))
 			case cursorType:
-				c, ok := parseCursor(op, query, raw)
+				c, ok := parseCursor(op, scope, raw)
 				if !ok {
 					web.APIError(w, http.StatusBadRequest, "bad_cursor", "The cursor is not valid.")
 					return false
@@ -107,7 +122,7 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 	}
 	switch body {
 	case application.BodyJSON:
-		return web.DecodeJSON(w, r, v)
+		return decodeBody(w, r, v, rv.Type())
 	case application.BodyNone:
 		if r.ContentLength != 0 {
 			web.APIError(w, http.StatusBadRequest, "bad_request", "This request takes no body.")
@@ -115,6 +130,84 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 		}
 	}
 	return true
+}
+
+func decodeBody(w http.ResponseWriter, r *http.Request, v any, t reflect.Type) bool {
+	if len(checkBody(t, json.RawMessage("{}"), nil)) == 0 {
+		return web.DecodeJSON(w, r, v)
+	}
+	var raw bytes.Buffer
+	r.Body = struct {
+		io.Reader
+		io.Closer
+	}{io.TeeReader(r.Body, &raw), r.Body}
+	if !web.DecodeOptionalJSON(w, r, v) {
+		return false
+	}
+	body := bytes.TrimSpace(raw.Bytes())
+	if len(body) == 0 {
+		body = []byte("{}")
+	}
+	if errs := checkBody(t, body, []string{"body"}); len(errs) > 0 {
+		message := "A required field is missing."
+		if errs[0].Type != "missing" {
+			message = "A field is not valid."
+		}
+		web.APIError(w, http.StatusUnprocessableEntity, "invalid", message, errs...)
+		return false
+	}
+	return true
+}
+
+func checkBody(t reflect.Type, raw json.RawMessage, loc []string) []web.FieldError {
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	if t == timeType || reflect.PointerTo(t).Implements(unmarshalType) {
+		return nil
+	}
+	var out []web.FieldError
+	switch t.Kind() {
+	case reflect.Slice:
+		var items []json.RawMessage
+		if json.Unmarshal(raw, &items) != nil {
+			return nil
+		}
+		for i, item := range items {
+			out = append(out, checkBody(t.Elem(), item, append(slices.Clip(loc), strconv.Itoa(i)))...)
+		}
+	case reflect.Struct:
+		var fields map[string]json.RawMessage
+		if json.Unmarshal(raw, &fields) != nil {
+			return nil
+		}
+		for _, f := range reflect.VisibleFields(t) {
+			tag := f.Tag.Get("json")
+			if f.Anonymous || !f.IsExported() || tag == "-" {
+				continue
+			}
+			name, opts, _ := strings.Cut(tag, ",")
+			if name == "" {
+				name = f.Name
+			}
+			at := append(slices.Clip(loc), name)
+			value, ok := fields[name]
+			if !ok || string(value) == "null" {
+				if f.Type.Kind() != reflect.Pointer && !strings.Contains(","+opts+",", ",omitempty,") && !strings.Contains(","+opts+",", ",omitzero,") {
+					out = append(out, web.FieldError{Type: "missing", Loc: at, Msg: "Field required"})
+				}
+				continue
+			}
+			if enum := parseRules(f.Tag.Get("api")).enum; len(enum) > 0 {
+				var s string
+				if json.Unmarshal(value, &s) == nil && !slices.Contains(enum, s) {
+					out = append(out, web.FieldError{Type: "enum", Loc: at, Msg: "Input should be one of " + strings.Join(enum, ", "), Input: s})
+				}
+			}
+			out = append(out, checkBody(f.Type, value, at)...)
+		}
+	}
+	return out
 }
 
 func setValue(field reflect.Value, raw string, rule rules) string {

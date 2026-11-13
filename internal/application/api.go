@@ -33,6 +33,8 @@ type APIShape struct {
 	Body      BodyKind
 	Sensitive bool
 	Errors    []Code
+	ID        string
+	Uncached  bool
 }
 
 var Codes = []Code{Invalid, NotFound, Unauthenticated, Forbidden, Conflict, Refused, NotConfigured, RateLimited, Budget, Unavailable, Unknown, Partial, Canceled, Internal}

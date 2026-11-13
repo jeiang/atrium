@@ -158,7 +158,7 @@ func (t Tuning) Find(ctx context.Context, qb *Qbit, agent *agentclient.Client, p
 	if errText != "" {
 		return Item{}, PlanError(errText)
 	}
-	return Item{}, PlanError(itemID + " is no longer waiting")
+	return Item{}, NotFound(itemID + " is no longer waiting")
 }
 
 func Shows(ctx context.Context, agent *agentclient.Client) []string {

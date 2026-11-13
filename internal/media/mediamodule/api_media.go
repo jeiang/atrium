@@ -55,11 +55,11 @@ type MediaChannels struct {
 }
 type MediaChannelInput struct {
 	Name          string `json:"name"`
-	IMDB          string `json:"imdb"`
+	IMDB          string `json:"imdb,omitempty"`
 	TMDBID        *int64 `json:"tmdb_id,omitempty"`
-	Pattern       string `json:"pattern"`
-	CaseSensitive bool   `json:"case_sensitive"`
-	Backfill      bool   `json:"backfill"`
+	Pattern       string `json:"pattern,omitempty"`
+	CaseSensitive bool   `json:"case_sensitive,omitempty"`
+	Backfill      bool   `json:"backfill,omitempty"`
 }
 type MediaChannelID struct {
 	ID int64 `path:"channel_id" json:"-" api:"min=1"`

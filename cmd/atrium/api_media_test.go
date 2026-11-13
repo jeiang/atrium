@@ -3,6 +3,7 @@
 package main
 
 import (
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
+	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/media"
 )
 
@@ -74,6 +76,14 @@ func TestMediaDownloadsAPI(t *testing.T) {
 	qb.put(mnpTorrent{hash: hash, name: "Lanterns", tags: []string{media.TagMedia}, files: []mnpFile{{0, "Lanterns.mkv", 1}}})
 	files := get("/media/torrents/" + hash + "/files")
 	expectAPI(t, files, 200, "")
+	writes = qb.count("torrents/filePrio")
+	for _, body := range []any{nil, map[string]any{}, map[string]any{"wanted": true}} {
+		missing := s.do(http.MethodPut, "/api/v1/media/torrents/"+hash+"/files", token, body)
+		expectAPI(t, missing, 422, "invalid")
+		if !strings.Contains(missing.body, `"index"`) || qb.count("torrents/filePrio") != writes {
+			t.Fatalf("missing index: %s", missing.body)
+		}
+	}
 	expectAPI(t, s.do(http.MethodPut, "/api/v1/media/torrents/"+hash+"/files", token, map[string]any{"index": 0, "wanted": false}), 200, "")
 	selected := s.do(http.MethodGet, "/api/v1/media/torrents/"+hash+"/files", token, nil, "If-None-Match", files.header.Get("ETag"))
 	expectAPI(t, selected, 200, "")
@@ -116,6 +126,18 @@ func TestMediaDownloadsAPI(t *testing.T) {
 	}
 	expectAPI(t, get("/media/torrents?q=other&cursor="+url.QueryEscape(next)), 400, "bad_cursor")
 	expectAPI(t, get("/media/channels?limit=101"), 422, "invalid")
+	pair := []string{strings.Repeat("c", 40), strings.Repeat("e", 40)}
+	for _, h := range pair {
+		qb.put(mnpTorrent{hash: h, name: "Pair " + h[:4], tags: []string{media.TagMedia}, files: []mnpFile{{0, "a.mkv", 1}, {1, "b.mkv", 1}}})
+	}
+	onePage := get("/media/torrents/" + pair[0] + "/files?limit=1")
+	expectAPI(t, onePage, 200, "")
+	fileCursor, ok := onePage.json["next"].(string)
+	if !ok {
+		t.Fatalf("file page: %s", onePage.body)
+	}
+	expectAPI(t, get("/media/torrents/"+pair[0]+"/files?limit=1&cursor="+url.QueryEscape(fileCursor)), 200, "")
+	expectAPI(t, get("/media/torrents/"+pair[1]+"/files?limit=1&cursor="+url.QueryEscape(fileCursor)), 400, "bad_cursor")
 }
 
 func mediaAPIToken(t *testing.T) string {
@@ -131,6 +153,8 @@ func mediaAPIID(s string) string { return base64.RawURLEncoding.EncodeToString([
 
 func TestMediaLibraryAPILinksAndFiling(t *testing.T) {
 	const hash = "dddddddddddddddddddddddddddddddddddddddd"
+	const untagged = "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+	const skipped = "ffffffffffffffffffffffffffffffffffffffff"
 	const movie = "movies/" + libraryMovie + "/" + libraryMovie + ".mkv"
 	dir := t.TempDir()
 	qb, qbURL := mnpNewQbit(t)
@@ -142,6 +166,10 @@ func TestMediaLibraryAPILinksAndFiling(t *testing.T) {
 	content := filepath.Join(root, "downloads", "Arrival.2016.1080p.WEB")
 	mnpWrite(t, filepath.Join(content, "Arrival.2016.mkv"), []byte("arrival"))
 	qb.put(mnpTorrent{hash: hash, name: "Arrival.2016.1080p.WEB", tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: content})
+	heat := filepath.Join(root, "downloads", "Heat.1995.1080p.WEB")
+	mnpWrite(t, filepath.Join(heat, "Heat.1995.mkv"), []byte("heat"))
+	qb.put(mnpTorrent{hash: skipped, name: "Heat.1995.1080p.WEB", tags: []string{media.TagMedia}, state: media.StoppedUP, progress: 1, content: heat})
+	qb.put(mnpTorrent{hash: untagged, name: "Heat.1995.1080p.WEB", state: media.StoppedUP, progress: 1, content: heat})
 	setEnv(t, settingEnv(config.KeyPublicURL), "https://atrium.test")
 	setEnv(t, settingEnv(media.KeyVPNBaseURL), "https://artemis.vpn:8443")
 	seedAllFlagsIn(t, dir)
@@ -211,9 +239,27 @@ func TestMediaLibraryAPILinksAndFiling(t *testing.T) {
 		t.Fatalf("link: %s", link.body)
 	}
 	signed := strings.TrimPrefix(public, "https://atrium.test")
-	exp, err := strconv.ParseInt(signed[strings.Index(signed, "exp=")+4:strings.Index(signed, "&sig=")], 10, 64)
-	if err != nil || exp < minted.Unix()+59 || exp > time.Now().Unix()+61 {
-		t.Fatalf("expiry %d for a 60 s link minted at %d: %v", exp, minted.Unix(), err)
+	expiry := func(signed string) int64 {
+		t.Helper()
+		exp, err := strconv.ParseInt(signed[strings.Index(signed, "exp=")+4:strings.Index(signed, "&sig=")], 10, 64)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return exp
+	}
+	exp := expiry(signed)
+	if exp < minted.Unix()+59 || exp > time.Now().Unix()+61 {
+		t.Fatalf("expiry %d for a 60 s link minted at %d", exp, minted.Unix())
+	}
+	if link.header.Get("ETag") != "" || link.header.Get("Cache-Control") != "no-store" {
+		t.Fatalf("cacheable link: %v", link.header)
+	}
+	time.Sleep(time.Until(time.Unix(exp-59, 0)))
+	relinked := get("/media/files/"+mediaAPIID(movie)+"/link", "If-None-Match", detail.header.Get("ETag"))
+	expectAPI(t, relinked, 200, "")
+	fresh, _ := relinked.json["public"].(string)
+	if relinked.header.Get("ETag") != "" || fresh == "" || expiry(fresh) <= exp {
+		t.Fatalf("revalidated link: %v %s", relinked.header, relinked.body)
 	}
 	redeem := func(host string) (int, string) {
 		t.Helper()
@@ -256,33 +302,81 @@ func TestMediaLibraryAPILinksAndFiling(t *testing.T) {
 	}
 	expectAPI(t, get("/media/library/downloads/"+mediaAPIID("secret.mkv")), 404, "not_found")
 
-	preview := get("/media/filings/" + hash + "?kind=movie&title=Arrival&year=2016")
+	arrival := "/media/filings/" + hash + "?kind=movie&title=Arrival&year=2016"
+	preview := get(arrival)
 	expectAPI(t, preview, 200, "")
 	private(preview)
-	if preview.json["ready"] != true || preview.json["files"] != float64(1) {
+	planned, _ := preview.json["files"].([]any)
+	if preview.json["ready"] != true || preview.json["kind"] != "movie" || len(planned) != 1 {
 		t.Fatalf("filing preview: %s", preview.body)
 	}
-	plan := map[string]any{"kind": "movie", "title": "Arrival", "year": "2016"}
-	unconfirmed := s.do(http.MethodPost, "/api/v1/media/filings/"+hash, token, plan)
-	expectAPI(t, unconfirmed, 422, "invalid")
-	if !strings.Contains(unconfirmed.body, "action") || mediaEffectCount(t, d, media.OpFile, hash) != 0 {
-		t.Fatalf("unconfirmed filing: %s", unconfirmed.body)
+	if f := planned[0].(map[string]any); f["name"] != "Arrival.2016.mkv" || f["id"] != mediaAPIID("Arrival.2016.mkv") || f["destination"] != "movies/Arrival (2016)/Arrival (2016).mkv" {
+		t.Fatalf("filing preview file: %s", preview.body)
 	}
-	plan["action"] = "file"
-	filed := s.do(http.MethodPost, "/api/v1/media/filings/"+hash, token, plan)
+	expectAPI(t, get("/media/filings/"+hash+"?kind=tv&title=Arrival&year=2016"), 422, "invalid")
+	expectAPI(t, get(arrival+"&episodes=bogus"), 422, "invalid")
+	expectAPI(t, get(arrival+"&episodes="+mediaAPIID("Missing.mkv")+":1:1"), 422, "invalid")
+	expectAPI(t, get("/media/filings/"+untagged+"?kind=movie&title=Heat&year=1995"), 404, "not_found")
+	expectAPI(t, get("/media/filings/"+mediaAPIID("unknown")), 404, "not_found")
+	fileIt := func(body any, headers ...string) apiReply {
+		return s.do(http.MethodPost, "/api/v1/media/filings/"+hash, token, body, headers...)
+	}
+	for _, bad := range []struct {
+		body  map[string]any
+		field string
+	}{
+		{map[string]any{"kind": "movie", "title": "Arrival", "year": "2016"}, "action"},
+		{map[string]any{"action": "file", "title": "Arrival", "year": "2016"}, "kind"},
+		{map[string]any{"action": "file", "kind": "tv", "title": "Arrival", "year": "2016"}, "kind"},
+		{map[string]any{"action": "preview", "kind": "movie", "title": "Arrival", "year": "2016"}, "action"},
+		{map[string]any{"action": "file", "kind": "movie", "title": "Arrival", "year": "2016", "episodes": []any{map[string]any{"file": mediaAPIID("Missing.mkv"), "season": "1", "episode": "1"}}}, "episodes"},
+	} {
+		refused := fileIt(bad.body)
+		expectAPI(t, refused, 422, "invalid")
+		if !strings.Contains(refused.body, `"`+bad.field) || mediaEffectCount(t, d, media.OpFile, hash) != 0 {
+			t.Fatalf("filing without a valid %s: %s", bad.field, refused.body)
+		}
+	}
+	plan := map[string]any{"action": "file", "kind": "movie", "title": "Arrival", "year": "2016"}
+	filed := fileIt(plan, "Idempotency-Key", "file-arrival")
 	expectAPI(t, filed, 200, "")
 	private(filed)
 	if filed.json["placed"] != float64(1) {
 		t.Fatalf("filed: %s", filed.body)
 	}
-	if again := s.do(http.MethodPost, "/api/v1/media/filings/"+hash, token, plan); again.status == http.StatusOK {
-		t.Fatalf("second filing: %s", again.body)
+	replayed := fileIt(plan, "Idempotency-Key", "file-arrival")
+	expectAPI(t, replayed, 200, "")
+	if replayed.body != filed.body || replayed.header.Get("Atrium-Command-Id") != filed.header.Get("Atrium-Command-Id") {
+		t.Fatalf("replayed filing: %s", replayed.body)
 	}
+	expectAPI(t, fileIt(plan), 404, "not_found")
+	expectAPI(t, get(arrival), 404, "not_found")
 	if n := mediaEffectCount(t, d, media.OpFile, hash); n != 1 {
 		t.Fatalf("filing effects = %d", n)
 	}
 	if _, err := os.Stat(filepath.Join(root, "movies", "Arrival (2016)", "Arrival (2016).mkv")); err != nil {
 		t.Fatal(err)
+	}
+
+	post := func(path string) apiReply { return s.do(http.MethodPost, "/api/v1"+path, token, nil) }
+	expectAPI(t, post("/media/filings/"+untagged+"/ignore"), 404, "not_found")
+	expectAPI(t, post("/media/filings/"+skipped+"/ignore"), 200, "")
+	expectAPI(t, get("/media/filings/"+skipped+"?kind=movie&title=Heat&year=1995"), 404, "not_found")
+	expectAPI(t, post("/media/filings/"+skipped+"/ignore"), 404, "not_found")
+
+	lock, err := db.ResourceLocks(context.Background(), filepath.Join(dir, "atrium.db"), []string{"media-control"}, time.Second)
+	if err != nil {
+		t.Fatal(err)
+	}
+	expectAPI(t, post("/media/sweep"), 409, "conflict")
+	if qb.count("delete") != 0 {
+		t.Fatal("sweep ran while the media-control lock was held")
+	}
+	_ = lock.Close()
+	swept := post("/media/sweep")
+	expectAPI(t, swept, 200, "")
+	if swept.json["removed"] != float64(1) || swept.json["errors"] != float64(0) || qb.count("delete") != 1 {
+		t.Fatalf("sweep: %s", swept.body)
 	}
 
 	if err := os.RemoveAll(agent.roots["tv"]); err != nil {

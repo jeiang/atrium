@@ -26,6 +26,9 @@ func Query[I, O any](d *web.Deps, def application.Definition, shape application.
 				web.APIFail(w, err)
 				return
 			}
+			if shape.Uncached {
+				read.Revision = ""
+			}
 			if read.Revision != "" && notModified(w, r, read.Revision) {
 				return
 			}
