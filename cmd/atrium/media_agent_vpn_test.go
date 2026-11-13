@@ -219,6 +219,7 @@ func TestLibraryLinksUseOneVPNBase(t *testing.T) {
 	})
 
 	t.Run("refused bases", func(t *testing.T) {
+		moduleFixture(t, flagsExcept("", ""))
 		for _, value := range []string{"http://media.example.org", "https://media.example.org/library", "https://user@media.example.org", "https://media.example.org?x=1", "ftp://media.example.org", "https://media.example.org#", "https://media.example.org/#"} {
 			setEnv(t, settingEnv(media.KeyVPNBaseURL), value)
 			if got := runApp(t, "settings", "list"); got.code == cli.ExitOK || !strings.Contains(strings.ToLower(got.stderr), media.KeyVPNBaseURL) {
