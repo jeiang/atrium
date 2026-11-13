@@ -51,6 +51,12 @@ func parseRules(tag string) rules {
 func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, body application.BodyKind) bool {
 	rv := reflect.ValueOf(v).Elem()
 	query := r.URL.Query()
+	cursorQuery := r.URL.Query()
+	for _, f := range reflect.VisibleFields(rv.Type()) {
+		if name, ok := f.Tag.Lookup("path"); ok {
+			cursorQuery.Set("$path:"+name, web.PathParam(r, name))
+		}
+	}
 	for _, f := range reflect.VisibleFields(rv.Type()) {
 		if f.Anonymous || !f.IsExported() {
 			continue
@@ -78,7 +84,7 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 				}
 				field.SetInt(int64(n))
 			case cursorType:
-				c, ok := parseCursor(op, query, raw)
+				c, ok := parseCursor(op, cursorQuery, raw)
 				if !ok {
 					web.APIError(w, http.StatusBadRequest, "bad_cursor", "The cursor is not valid.")
 					return false

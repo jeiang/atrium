@@ -35,10 +35,12 @@
     {
       "area": "files",
       "operations": [
-        "assistant.file.download"
+        "assistant.file.download",
+        "assistant.file.list",
+        "assistant.file.preview"
       ],
-      "required": 1,
-      "bound": 1
+      "required": 3,
+      "bound": 3
     },
     {
       "area": "home",
@@ -89,10 +91,16 @@
     {
       "area": "projects",
       "operations": [
-        "assistant.project-file.upload"
+        "assistant.project-file.delete",
+        "assistant.project-file.upload",
+        "assistant.project.archive",
+        "assistant.project.create",
+        "assistant.project.detail",
+        "assistant.project.edit",
+        "assistant.project.list"
       ],
-      "required": 1,
-      "bound": 1
+      "required": 7,
+      "bound": 7
     },
     {
       "area": "proposals",
@@ -173,5 +181,5 @@
     }
   ],
   "total_required": 166,
-  "total_bound": 31
+  "total_bound": 39
 }

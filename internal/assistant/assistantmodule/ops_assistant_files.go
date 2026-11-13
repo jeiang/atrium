@@ -16,7 +16,7 @@ func fileOperations() ([]application.Definition, []application.Binding) {
 			asstapp.DescribeProjectFileUpload(), asstapp.DescribeProjectFileDelete(), asstapp.DescribeFileWrite(),
 			asstapp.DescribeFilePreview(), asstapp.DescribeFileDownload(), asstapp.DescribeFileList(),
 			asstapp.DescribeFileRead(), asstapp.DescribeFileSearch(),
-		}, append(fileTransportBindings(nil), []application.Binding{
+		}, append(fileAPIBindings(nil), []application.Binding{
 			{Kind: application.HTML, Target: "GET /chat/{thread_id}/files/{file_id}", Uses: uses(asstapp.FilePreviewName)},
 			{Kind: application.HTML, Target: "GET /chat/{thread_id}/files/{file_id}/download", Uses: uses(asstapp.FileDownloadName)},
 			{Kind: application.HTML, Target: "GET /chat/{thread_id}/files/{file_id}/raw", Uses: uses(asstapp.FileDownloadName)},

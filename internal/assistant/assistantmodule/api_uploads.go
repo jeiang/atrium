@@ -107,3 +107,19 @@ func uploadField(field reflect.Value, raw string) error {
 	}
 	return nil
 }
+
+func multipartJSONShape(area application.Area, status int, codes ...application.Code) application.APIShape {
+	shape := multipartShape(area, status, codes...)
+	shape.AllowJSON = true
+	return shape
+}
+func (in *apiNewThread) DecodeMultipart(reader *multipart.Reader) error {
+	uploads, err := decodeUploads(reader, in)
+	in.Uploads = uploads
+	return err
+}
+func (in *apiMessage) DecodeMultipart(reader *multipart.Reader) error {
+	uploads, err := decodeUploads(reader, in)
+	in.Uploads = uploads
+	return err
+}

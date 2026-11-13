@@ -33,7 +33,8 @@ type apiPages struct {
 func threadAPI(d *web.Deps, assistant func() *asstapp.Service) {
 	p := &apiPages{deps: d, assistant: assistant}
 	apiBindings(p)
-	fileTransportBindings(p)
+	fileAPIBindings(p)
+	projectAPIBindings(p)
 }
 
 func errorIs(err error, code application.Code) bool {
@@ -116,19 +117,21 @@ type apiTranscript struct {
 }
 
 type apiNewThread struct {
-	Text         string   `json:"text"`
-	Model        string   `json:"model"`
-	Effort       string   `json:"effort"`
-	ContextLimit *int64   `json:"context_limit"`
-	Thinking     string   `json:"thinking"`
-	WebSearch    *bool    `json:"web_search"`
-	CostCapUSD   *float64 `json:"cost_cap_usd"`
-	ProjectID    *int64   `json:"project_id"`
+	Uploads      []files.UploadedFile `json:"-"`
+	Text         string               `json:"text"`
+	Model        string               `json:"model"`
+	Effort       string               `json:"effort"`
+	ContextLimit *int64               `json:"context_limit"`
+	Thinking     string               `json:"thinking"`
+	WebSearch    *bool                `json:"web_search"`
+	CostCapUSD   *float64             `json:"cost_cap_usd"`
+	ProjectID    *int64               `json:"project_id"`
 }
 
 type apiMessage struct {
-	Text string `json:"text"`
-	Edit bool   `json:"edit"`
+	Uploads []files.UploadedFile `json:"-"`
+	Text    string               `json:"text"`
+	Edit    bool                 `json:"edit"`
 }
 
 type apiAnswer struct {
@@ -577,7 +580,7 @@ func apiBindings(p *apiPages) []application.Binding {
 				read, err := svc.RunDetail(ctx, asstapp.RunInput{ThreadID: in.ThreadID, RunID: in.RunID})
 				return readAs(read, err, func(r journal.Run) apiRun { return *runOut(&r) })
 			}),
-		apiCommand(p, asstapp.DescribeThreadStart(), application.APIShape{Area: "threads", Success: 201, Errors: sends}, "POST /threads",
+		apiCommand(p, asstapp.DescribeThreadStart(), multipartJSONShape("threads", 201, sends...), "POST /threads",
 			func(ctx context.Context, svc *asstapp.Service, in apiNewThread) (application.Change[apiStarted], error) {
 				webSearch := true
 				if in.WebSearch != nil {
@@ -585,7 +588,7 @@ func apiBindings(p *apiPages) []application.Binding {
 				}
 				start := asstapp.StartInput{
 					Kind: threads.Chat, Model: in.Model, Effort: in.Effort, Thinking: in.Thinking,
-					WebSearch: &webSearch, CostCapUSD: in.CostCapUSD, Text: in.Text, Operator: true,
+					WebSearch: &webSearch, CostCapUSD: in.CostCapUSD, Text: in.Text, Files: in.Uploads, Operator: true,
 				}
 				if in.ProjectID != nil {
 					start.ProjectID = *in.ProjectID
@@ -607,17 +610,17 @@ func apiBindings(p *apiPages) []application.Binding {
 				}
 				return application.Change[apiStarted]{Data: out, AuditID: started.AuditID}, nil
 			}),
-		apiCommand(p, asstapp.DescribeMessageSend(), accepted(sends...), "POST /threads/{thread_id}/messages",
+		apiCommand(p, asstapp.DescribeMessageSend(), multipartJSONShape("threads", 202, sends...), "POST /threads/{thread_id}/messages",
 			func(ctx context.Context, svc *asstapp.Service, in apiMessageRequest) (application.Change[apiSent], error) {
 				text := strings.TrimSpace(in.Text)
-				if text == "" {
+				if text == "" && len(in.Uploads) == 0 {
 					return application.Change[apiSent]{}, invalidField("text", "text is required.")
 				}
 				send := svc.MessageSend
 				if in.Edit {
 					send = svc.MessageEdit
 				}
-				change, err := send(ctx, asstapp.SendInput{ThreadID: in.ThreadID, Text: text, Operator: true})
+				change, err := send(ctx, asstapp.SendInput{ThreadID: in.ThreadID, Text: text, Files: in.Uploads, Operator: true})
 				return changeAs(change, err, func(s asstapp.Sent) apiSent {
 					if !in.Edit && s.QueuedID != 0 {
 						return apiSent{QueuedID: &s.QueuedID}

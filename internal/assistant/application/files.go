@@ -67,6 +67,7 @@ type DownloadInput struct {
 }
 
 type FileListInput struct {
+	ThreadID  int64
 	ProjectID int64
 }
 
@@ -223,7 +224,12 @@ func (s *Service) FilePreview(ctx context.Context, in FileInput) (application.Re
 }
 
 func (s *Service) FileDownload(ctx context.Context, in DownloadInput) (application.Read[FileStream], error) {
-	found, err := s.locate(ctx, s.db.Read, in.FileInput)
+	var found *files.Row
+	rev, err := s.snapshot(ctx, string(FileDownloadName), []string{"assistant"}, in, func(q db.Querier) error {
+		var err error
+		found, err = s.locate(ctx, q, in.FileInput)
+		return err
+	})
 	if err != nil {
 		return application.Read[FileStream]{}, err
 	}
@@ -239,12 +245,26 @@ func (s *Service) FileDownload(ctx context.Context, in DownloadInput) (applicati
 		_ = f.Close()
 		return application.Read[FileStream]{}, notFound(missingStorage)
 	}
-	return application.Read[FileStream]{Data: FileStream{Name: found.Name, MediaType: found.MediaType, ModTime: info.ModTime(), File: f}}, nil
+	return application.Read[FileStream]{Revision: rev, Data: FileStream{Name: found.Name, MediaType: found.MediaType, ModTime: info.ModTime(), File: f}}, nil
 }
 
 func (s *Service) FileList(ctx context.Context, in FileListInput) (application.Read[FileList], error) {
 	out := FileList{Files: []files.Row{}, Library: []LibraryEntry{}}
 	rev, err := s.snapshot(ctx, string(FileListName), []string{"assistant"}, in, func(q db.Querier) error {
+		if in.ThreadID != 0 {
+			thread, err := threads.Get(ctx, q, in.ThreadID)
+			if err != nil {
+				return err
+			}
+			if thread == nil {
+				return notFound("unknown thread")
+			}
+			rows, err := files.OfThread(ctx, q, in.ThreadID)
+			if rows != nil {
+				out.Files = rows
+			}
+			return err
+		}
 		if in.ProjectID == 0 {
 			rows, err := q.QueryContext(ctx, libraryFilesQuery, config.TuningWebPageSize)
 			if err != nil {

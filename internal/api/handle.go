@@ -26,11 +26,16 @@ func Query[I, O any](d *web.Deps, def application.Definition, shape application.
 				web.APIFail(w, err)
 				return
 			}
-			if read.Revision != "" && notModified(w, r, read.Revision) {
+			if shape.Body == application.BodyBinary {
+				body := any(read.Data).(Binary)
+				if read.Revision != "" && notModified(w, r, read.Revision) {
+					_ = body.File.Close()
+					return
+				}
+				serveBinary(w, r, body)
 				return
 			}
-			if shape.Body == application.BodyBinary {
-				serveBinary(w, r, any(read.Data).(Binary))
+			if read.Revision != "" && notModified(w, r, read.Revision) {
 				return
 			}
 			write(w, shape, reflect.TypeFor[O](), read.Data, read)

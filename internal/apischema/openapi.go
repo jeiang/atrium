@@ -132,7 +132,15 @@ func operation(w *walker, b module.Binding, kind application.Kind, method string
 		}
 		op["requestBody"] = object{"required": true, "content": object{"application/json": object{"schema": schema}}}
 	case application.BodyMultipart:
-		op["requestBody"] = object{"required": true, "content": object{"multipart/form-data": object{"schema": object{"type": "object"}}}}
+		schema, err := w.ref(shape.Request)
+		if err != nil {
+			return nil, err
+		}
+		content := object{"multipart/form-data": object{"schema": object{"allOf": []any{schema, object{"type": "object", "properties": object{"upload": object{"type": "array", "items": object{"type": "string", "format": "binary"}}}}}}}}
+		if shape.AllowJSON {
+			content["application/json"] = object{"schema": schema}
+		}
+		op["requestBody"] = object{"required": true, "content": content}
 	case application.BodyBinary:
 		if unsafe {
 			op["requestBody"] = object{"required": true, "content": object{"application/octet-stream": object{"schema": object{"type": "string", "contentMediaType": "application/octet-stream"}}}}
