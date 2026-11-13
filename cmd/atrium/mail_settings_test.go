@@ -60,7 +60,7 @@ func TestMailModeAndWriteCapFollowTheRegistryLive(t *testing.T) {
 		t.Errorf("stored mode shadow not read: %q", mode)
 	}
 
-	if r := runSettings(t, "set", "mail_mode", "bogus"); r.code != cli.ExitError || !strings.Contains(r.stderr, `must be one of ("shadow", "live"), got "bogus"`) {
+	if r := runSettings(t, "set", "mail_mode", "bogus"); r.code != cli.ExitUsage || !strings.Contains(r.stderr, `must be one of ("shadow", "live"), got "bogus"`) {
 		t.Errorf("set mail_mode bogus: exit %d stderr %q", r.code, r.stderr)
 	}
 	if mode, _, _ := liveMode(t); mode != "shadow" {
