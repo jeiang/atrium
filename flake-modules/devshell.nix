@@ -29,6 +29,7 @@
           config.treefmt.build.wrapper
           go
           pkgs.git
+          pkgs.jq
           pkgs.just
           pkgs.statix
           pkgs.golangci-lint

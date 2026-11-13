@@ -105,7 +105,20 @@ css:
   mkdir -p internal/web/assets/node_modules/basecoat-css
   tar -xzf "${ATRIUM_BASECOAT:?set by the dev shell}" --strip-components=1 -C internal/web/assets/node_modules/basecoat-css
   cd internal/web/assets
-  exec tailwindcss --input input.css --output ../static/app.css --watch
+  jq -r -f ../../../nix/webassets/tokens.jq tokens.json > tokens.generated.css
+  (
+    previous=$(cksum tokens.json)
+    while sleep 1; do
+      current=$(cksum tokens.json)
+      if [ "$current" != "$previous" ]; then
+        jq -r -f ../../../nix/webassets/tokens.jq tokens.json > tokens.generated.css.tmp && mv tokens.generated.css.tmp tokens.generated.css
+        previous=$current
+      fi
+    done
+  ) &
+  watcher=$!
+  trap 'kill "$watcher"' EXIT
+  tailwindcss --input input.css --output ../static/app.css --watch
 
 settingsgen:
   go run -tags modernc ./tools/settingsgen docs/config
