@@ -529,8 +529,13 @@ behavior-parity target.
   approval records `api` and a web one `ui`. Approve, dismiss, undo and
   resolve are the `review.*` operations shared by every entry point, each
   audited in `operation_audit` after the ledger settles, even after caller
-  cancellation. Audit provenance comes only from the trusted invocation. Phone
-  policy and changed-plan refusals are audited; invalid, expired and used tokens
+  cancellation. Audit provenance comes only from the trusted invocation.
+  Mail correction audits name only effects created under their own pass lock;
+  move, folder-create, draft-send and draft-resolve audits link their ledger
+  effects and retain unknown, partial and stale-revision conflict outcomes.
+  Phone approvals re-check the redeemed link inside the proposal claim, so
+  revocation during a pass-lock wait refuses the waiting tap.
+  Phone policy and changed-plan refusals are audited; invalid, expired and used tokens
   are not. Undo and resolve preserve the explicit proposal, effect or mail
   namespace, including unknown ids. A malformed
   approval selection is invalid input (`atrium proposals approve` exits 2,

@@ -34,7 +34,7 @@ type DraftResolveInput struct {
 type DraftResolveResult struct{ Status drafts.Status }
 
 func DescribeDraftSend() application.Definition {
-	return application.Describe[DraftSendInput, DraftSendResult](DraftSendName, application.Command, []application.Authority{application.Operator}, application.External, true)
+	return application.Describe[DraftSendInput, DraftSendResult](DraftSendName, application.Command, []application.Authority{application.OperatorSend}, application.External, true)
 }
 func DescribeDraftResolve() application.Definition {
 	return application.Describe[DraftResolveInput, DraftResolveResult](DraftResolveName, application.Command, []application.Authority{application.Operator}, application.NoEffect, true)
@@ -95,13 +95,21 @@ func (s *Service) DraftSend(ctx context.Context, in DraftSendInput) (application
 		switch {
 		case errors.As(err, &unknown):
 			outcome = state.Unknown
+		case result.Filed == drafts.FiledFailed:
+			outcome = state.Partial
+		case result.Stale:
+			outcome = state.Conflict
 		case errors.As(err, &refused):
 			outcome = state.Refused
 		}
-		s.writeAudit(ctx, DraftSendName, target, outcome, nil)
-		return application.Change[DraftSendResult]{}, err
+		id := s.writeAudit(ctx, DraftSendName, target, outcome, result.EffectIDs)
+		return application.Change[DraftSendResult]{EffectIDs: result.EffectIDs, AuditID: id}, err
 	}
-	return application.Change[DraftSendResult]{Data: DraftSendResult{Sent: result}, AuditID: s.writeAudit(ctx, DraftSendName, target, state.OK, nil)}, nil
+	outcome := state.OK
+	if result.Filed == drafts.FiledFailed {
+		outcome = state.Partial
+	}
+	return application.Change[DraftSendResult]{Data: DraftSendResult{Sent: result}, EffectIDs: result.EffectIDs, AuditID: s.writeAudit(ctx, DraftSendName, target, outcome, result.EffectIDs)}, nil
 }
 
 func (s *Service) DraftResolve(ctx context.Context, in DraftResolveInput) (application.Change[DraftResolveResult], error) {
@@ -121,7 +129,11 @@ func (s *Service) DraftResolve(ctx context.Context, in DraftResolveInput) (appli
 		s.writeAudit(ctx, DraftResolveName, target, state.Refused, nil)
 		return application.Change[DraftResolveResult]{}, &application.Error{Code: application.Forbidden, Message: "only the operator can resolve a draft"}
 	}
-	err := s.sender.ResolveUnknown(ctx, in.ID, verdict, ledger.Resolver{Actor: "operator", Source: "ui"})
+	effect, err := s.sender.ResolveUnknown(ctx, in.ID, verdict, ledger.Resolver{Actor: "operator", Source: "ui"})
+	var effects []int64
+	if effect != 0 {
+		effects = []int64{effect}
+	}
 	if err != nil {
 		var refused drafts.Error
 		var disabled *module.OwnerDisabled
@@ -129,8 +141,8 @@ func (s *Service) DraftResolve(ctx context.Context, in DraftResolveInput) (appli
 		if errors.As(err, &refused) || errors.As(err, &disabled) {
 			outcome = state.Refused
 		}
-		s.writeAudit(ctx, DraftResolveName, target, outcome, nil)
-		return application.Change[DraftResolveResult]{}, err
+		id := s.writeAudit(ctx, DraftResolveName, target, outcome, effects)
+		return application.Change[DraftResolveResult]{EffectIDs: effects, AuditID: id}, err
 	}
-	return application.Change[DraftResolveResult]{Data: DraftResolveResult{Status: verdict}, AuditID: s.writeAudit(ctx, DraftResolveName, target, state.OK, nil)}, nil
+	return application.Change[DraftResolveResult]{Data: DraftResolveResult{Status: verdict}, EffectIDs: effects, AuditID: s.writeAudit(ctx, DraftResolveName, target, state.OK, effects)}, nil
 }

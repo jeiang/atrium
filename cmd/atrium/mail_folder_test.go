@@ -214,6 +214,16 @@ S: {t} OK DELETE completed
 	if states[0] != "done" || states[1] != "done" {
 		t.Fatalf("write states = %v", states)
 	}
+	for i, operation := range []string{"mail.folder-create", "mail.move"} {
+		var outcome string
+		var effectID int64
+		if err := d.Read.QueryRow("SELECT outcome, json_extract(details_json, '$.effect_ids[0]') FROM operation_audit WHERE operation = ?", operation).Scan(&outcome, &effectID); err != nil {
+			t.Fatal(err)
+		}
+		if outcome != "ok" || effectID != ids[i] {
+			t.Fatalf("%s audit = %s effect %d, want ok effect %d", operation, outcome, effectID, ids[i])
+		}
+	}
 	if !strings.Contains(undos[0], `"op":"mail_folder_delete"`) || !strings.Contains(undos[0], `"imap_name":"News"`) {
 		t.Fatalf("folder undo = %s", undos[0])
 	}
@@ -426,6 +436,18 @@ S: {t} NO STORE refused
 	if state != "partial" {
 		t.Fatalf("move state = %q, want partial; after=%s undo=%s", state, after, undo)
 	}
+	var auditOutcome string
+	var auditedEffect int64
+	if err := d.Read.QueryRow("SELECT outcome, json_extract(details_json, '$.effect_ids[0]') FROM operation_audit WHERE operation = 'mail.move' ORDER BY id DESC LIMIT 1").Scan(&auditOutcome, &auditedEffect); err != nil {
+		t.Fatal(err)
+	}
+	var actualEffect int64
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'mail_move' AND direction = 'forward' ORDER BY id DESC LIMIT 1").Scan(&actualEffect); err != nil {
+		t.Fatal(err)
+	}
+	if auditOutcome != "partial" || auditedEffect != actualEffect {
+		t.Fatalf("partial move audit = %s effect %d, want partial effect %d", auditOutcome, auditedEffect, actualEffect)
+	}
 	if !strings.Contains(undo, `"op":"mail_move_back"`) || !strings.Contains(undo, `"dest_uid":900`) || !strings.Contains(undo, `"dest_uid":901`) {
 		t.Fatalf("the partial move dropped its inverse: %s", undo)
 	}
@@ -463,6 +485,13 @@ S: {t} NO SUBSCRIBE refused
 	}
 	if state != "partial" {
 		t.Fatalf("folder create state = %q, want partial; undo=%s", state, undo)
+	}
+	var auditOutcome string
+	if err := d.Read.QueryRow("SELECT outcome FROM operation_audit WHERE operation = 'mail.folder-create' ORDER BY id DESC LIMIT 1").Scan(&auditOutcome); err != nil {
+		t.Fatal(err)
+	}
+	if auditOutcome != "partial" {
+		t.Fatalf("folder create audit = %s, want partial", auditOutcome)
 	}
 	if !strings.Contains(undo, `"op":"mail_folder_delete"`) || !strings.Contains(undo, `"imap_name":"News"`) {
 		t.Fatalf("the created folder has no delete inverse: %s", undo)

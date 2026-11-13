@@ -78,6 +78,7 @@ func (s *Service) correctionEffects(ctx context.Context, id, after int64) ([]int
 	ids, unknown, err := ledger.AutoEffectsSince(ctx, s.db.Read, id, after)
 	if err != nil {
 		correctionLog.Error(fmt.Sprintf("reading the effects of corrected message %d failed", id), logx.Err, err.Error())
+		return nil, false
 	}
 	return ids, unknown
 }
@@ -98,20 +99,24 @@ func (s *Service) moveCorrection(ctx context.Context, account string, id int64) 
 	if mode != safety.Live {
 		return "", state.OK, nil
 	}
-	after, err := ledger.LastEffectID(ctx, s.db.Read)
-	if err != nil {
-		correctionLog.Error(fmt.Sprintf("reading the effect ledger before moving corrected message %d failed", id), logx.Err, err.Error())
-	}
+	var effects []int64
+	var unknown bool
 	out, err := func() (out appliedOutcome, err error) {
 		locks, err := db.ResourceLocks(ctx, s.cfg.DBPath, []string{mail.PassResource}, db.ShortLockWait)
 		if err != nil {
 			return out, err
 		}
 		defer func() { _ = locks.Close() }()
+		after, readErr := ledger.LastEffectID(ctx, s.db.Read)
+		if readErr != nil {
+			correctionLog.Error(fmt.Sprintf("reading the effect ledger before moving corrected message %d failed", id), logx.Err, readErr.Error())
+		}
+		if readErr == nil {
+			defer func() { effects, unknown = s.correctionEffects(ctx, id, after) }()
+		}
 		done, err := s.applier.ApplyCorrections(db.WithHeld(ctx, locks), account, []int64{id})
 		return appliedOutcome{done.Ran, done.Written, done.Failed + done.Skipped}, err
 	}()
-	effects, unknown := s.correctionEffects(ctx, id, after)
 	if err != nil {
 		correctionLog.Error(fmt.Sprintf("moving corrected message %d failed", id), logx.Err, err.Error())
 		outcome := state.Failed

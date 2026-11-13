@@ -11,7 +11,7 @@ import (
 func mailPageService(d *web.Deps) *mailapp.Service {
 	return mailapp.New(d.DB, d.Cfg, d.Env, mail.WallClock)
 }
-func ToolService(tc *tool.Context) *mailapp.Service {
+func mailToolService(tc *tool.Context) *mailapp.Service {
 	return mailapp.NewDrafts(tc.DB, tc.Cfg, tc.Env, tc.Now, tc.Ledger).WithOpen(tc.MailOpen)
 }
 func mailReadOperations() ([]application.Definition, []application.Binding) {

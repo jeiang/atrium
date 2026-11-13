@@ -118,6 +118,28 @@ func (s *Service) mailboxAudit(ctx context.Context, name application.Name, targe
 	if err != nil {
 		outcome = auditOutcome(err)
 	}
+	for _, effectID := range effects {
+		effect, readErr := s.effects.Get(context.WithoutCancel(ctx), effectID)
+		if readErr != nil {
+			continue
+		}
+		switch effect.State {
+		case ledger.Unknown:
+			outcome = state.Unknown
+		case ledger.Partial:
+			if outcome != state.Unknown {
+				outcome = state.Partial
+			}
+		}
+	}
+	if err != nil && outcome != state.Unknown && outcome != state.Partial && len(effects) > 0 {
+		for _, effectID := range effects {
+			if effect, readErr := s.effects.Get(context.WithoutCancel(ctx), effectID); readErr == nil && effect.State == ledger.Done {
+				outcome = state.Partial
+				break
+			}
+		}
+	}
 	return s.writeAudit(ctx, name, target, outcome, effects)
 }
 
@@ -238,35 +260,28 @@ func (s *Service) folderCreate(ctx context.Context, in FolderCreateInput) (Folde
 }
 
 func (s *Service) Move(ctx context.Context, in MoveInput) (application.Change[MoveResult], error) {
-	out, err := s.move(ctx, in)
-	id := s.mailboxAudit(ctx, MoveName, in.Account+":"+in.Folder, err, nil)
-	if err != nil {
-		return application.Change[MoveResult]{}, err
-	}
-	change := application.Change[MoveResult]{Data: out, AuditID: id}
-	if out.EffectID != 0 {
-		change.EffectIDs = []int64{out.EffectID}
-	}
-	return change, nil
+	out, effects, err := s.move(ctx, in)
+	id := s.mailboxAudit(ctx, MoveName, in.Account+":"+in.Folder, err, effects)
+	return application.Change[MoveResult]{Data: out, EffectIDs: effects, AuditID: id}, err
 }
 
-func (s *Service) move(ctx context.Context, in MoveInput) (MoveResult, error) {
+func (s *Service) move(ctx context.Context, in MoveInput) (MoveResult, []int64, error) {
 	account, ids := in.Account, in.MessageIDs
 	inv, _ := application.InvocationOf(ctx)
 	folder, err := validFolderName(in.Folder)
 	if err != nil {
-		return MoveResult{}, err
+		return MoveResult{}, nil, err
 	}
 	cap, err := writeCap(ctx, s.db.Read)
 	if err != nil {
-		return MoveResult{}, err
+		return MoveResult{}, nil, err
 	}
 	if len(ids) > cap {
-		return MoveResult{}, mailboxInvalid(fmt.Sprintf("at most %d messages per call (mail write cap); split the move", cap))
+		return MoveResult{}, nil, mailboxInvalid(fmt.Sprintf("at most %d messages per call (mail write cap); split the move", cap))
 	}
 	mode, err := mail.Mode(ctx, s.db.Read)
 	if err != nil {
-		return MoveResult{}, err
+		return MoveResult{}, nil, err
 	}
 	if mode != config.Live {
 		target := account + ":" + folder
@@ -277,25 +292,26 @@ func (s *Service) move(ctx context.Context, in MoveInput) (MoveResult, error) {
 			return ledger.Result{State: ledger.Skipped, Target: target, After: mailboxJSON(map[string]any{"account": account, "folder": folder, "message_ids": ids, "shadow": true})}, nil
 		})
 		if err != nil {
-			return MoveResult{}, err
+			return MoveResult{}, nil, err
 		}
-		return MoveResult{Shadow: true, Folder: folder, EffectID: effect.ID}, nil
+		return MoveResult{Shadow: true, Folder: folder, EffectID: effect.ID}, []int64{effect.ID}, nil
 	}
 	if s.mailWritesPaused() {
-		return MoveResult{}, &application.Error{Code: application.Refused, Message: "mail writes are paused; resume with 'atrium live resume' and retry"}
+		return MoveResult{}, nil, &application.Error{Code: application.Refused, Message: "mail writes are paused; resume with 'atrium live resume' and retry"}
 	}
 	open := s.open
 	if open == nil {
-		return MoveResult{}, &application.Error{Code: application.NotConfigured, Message: "the mail opener is not configured"}
+		return MoveResult{}, nil, &application.Error{Code: application.NotConfigured, Message: "the mail opener is not configured"}
 	}
 	snaps, err := mailops.Snapshots(ctx, s.db.Read, ids)
 	if err != nil {
-		return MoveResult{}, err
+		return MoveResult{}, nil, err
 	}
 	if len(snaps) != len(ids) {
-		return MoveResult{}, mailboxInvalid("one or more message ids are unknown; use mail_search to find current ids")
+		return MoveResult{}, nil, mailboxInvalid("one or more message ids are unknown; use mail_search to find current ids")
 	}
 	moved := 0
+	var effects []int64
 	var skipped []mailops.Skip
 	err = mailops.Session(ctx, open, s.db.Read, account, func(client mail.Client) error {
 		if s.mailWritesPaused() {
@@ -320,7 +336,8 @@ func (s *Service) move(ctx context.Context, in MoveInput) (MoveResult, error) {
 			return mailops.Error("none of the messages are still where they were; use mail_search to find them again")
 		}
 		for _, g := range mailops.GroupByMailbox(items) {
-			n, err := s.moveGroup(ctx, inv, in.ProposalID, client, account, g, imapName)
+			n, ids, err := s.moveGroup(ctx, inv, in.ProposalID, client, account, g, imapName)
+			effects = append(effects, ids...)
 			moved += n
 			if err != nil {
 				return err
@@ -329,9 +346,9 @@ func (s *Service) move(ctx context.Context, in MoveInput) (MoveResult, error) {
 		return nil
 	})
 	if err != nil {
-		return MoveResult{}, mailboxRefusal(err)
+		return MoveResult{}, effects, mailboxRefusal(err)
 	}
-	return MoveResult{Moved: moved, Folder: folder, Skipped: skipped}, nil
+	return MoveResult{Moved: moved, Folder: folder, Skipped: skipped}, effects, nil
 }
 
 func sortedUIDs(items []mailops.Verified) ([]uint32, map[uint32]mailops.Verified) {
@@ -364,11 +381,11 @@ func validityOrNil(copied *mail.CopyUID) any {
 	return copied.UIDValidity
 }
 
-func (s *Service) moveGroup(ctx context.Context, inv application.Invocation, proposalID *int64, client mail.Client, account string, g mailops.Group, destIMAP string) (moved int, err error) {
+func (s *Service) moveGroup(ctx context.Context, inv application.Invocation, proposalID *int64, client mail.Client, account string, g mailops.Group, destIMAP string) (moved int, effects []int64, err error) {
 	uids, byUID := sortedUIDs(g.Items)
 	size, err := mailops.BatchSize(ctx, client)
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
 	chunks := mailops.Chunks(uids, size)
 	target := account + ":" + g.IMAPName + "->" + destIMAP
@@ -381,8 +398,9 @@ func (s *Service) moveGroup(ctx context.Context, inv application.Invocation, pro
 	}
 	ticket, err := begin()
 	if err != nil {
-		return 0, err
+		return 0, nil, err
 	}
+	effects = append(effects, ticket.ID)
 	held := true
 	next := 0
 	err = mailops.MoveUIDs(ctx, client, g.IMAPName, destIMAP, g.UIDValidity, uids, size, func(batch []uint32, copied *mail.CopyUID) error {
@@ -408,6 +426,7 @@ func (s *Service) moveGroup(ctx context.Context, inv application.Invocation, pro
 				return herr
 			}
 			ticket = nextTicket
+			effects = append(effects, ticket.ID)
 			held = true
 		}
 		return nil
@@ -433,7 +452,7 @@ func (s *Service) moveGroup(ctx context.Context, inv application.Invocation, pro
 				_ = s.effects.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{
 					State: ledger.Partial, Target: target, After: mailboxJSON(after), Undo: mailboxJSON(undo), Error: partial.Error(),
 				}, nil)
-				return moved, err
+				return moved, effects, err
 			}
 			state := ledger.Failed
 			if mailops.OutcomeUnknown(err) {
@@ -441,9 +460,9 @@ func (s *Service) moveGroup(ctx context.Context, inv application.Invocation, pro
 			}
 			_ = s.effects.Settle(context.WithoutCancel(ctx), ticket, ledger.Result{State: state, Target: target, Error: err.Error()}, nil)
 		}
-		return moved, err
+		return moved, effects, err
 	}
-	return moved, nil
+	return moved, effects, nil
 }
 
 func mailboxJSON(v any) json.RawMessage {

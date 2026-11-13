@@ -643,9 +643,9 @@ func (s *Store) RecoverStuck(ctx context.Context) (int64, error) {
 		string(Unknown), "send interrupted; outcome unknown", s.now(), string(Sending), s.now()-SendingStaleSeconds)
 }
 
-func (s *Store) ResolveUnknown(ctx context.Context, id int64, status Status, who ledger.Resolver) error {
+func (s *Store) ResolveUnknown(ctx context.Context, id int64, status Status, who ledger.Resolver) (int64, error) {
 	if status != Sent && status != Draft {
-		return Error("an unknown draft can only be marked sent or returned to draft")
+		return 0, Error("an unknown draft can only be marked sent or returned to draft")
 	}
 	note := "returned to draft by operator"
 	outcome := "not-applied"
@@ -655,27 +655,27 @@ func (s *Store) ResolveUnknown(ctx context.Context, id int64, status Status, who
 	}
 	row, err := s.Get(ctx, id)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	if row == nil {
-		return Error("draft is not in the unknown state")
+		return 0, Error("draft is not in the unknown state")
 	}
 	store := s.ledgerStore()
 	if _, err := store.Recover(ctx, s.now()-ledger.StuckSeconds); err != nil {
-		return err
+		return 0, err
 	}
 	effect, err := ledger.BlockedEffectID(ctx, s.read(), SendOperation, SendTarget(row.Account, id))
 	if err != nil {
-		return err
+		return 0, err
 	}
 	apply := func(ctx context.Context, tx *sql.Tx) error {
 		return resolveDraftTx(ctx, tx, s.now(), id, status, note)
 	}
 	if effect == 0 {
-		return s.DB.WithTx(ctx, func(tx *sql.Tx) error { return apply(ctx, tx) })
+		return 0, s.DB.WithTx(ctx, func(tx *sql.Tx) error { return apply(ctx, tx) })
 	}
 	_, err = store.Resolve(ctx, effect, ledger.Resolution{Outcome: outcome}, who, apply)
-	return err
+	return effect, err
 }
 
 func resolveDraftTx(ctx context.Context, x db.Querier, now float64, id int64, status Status, note string) error {

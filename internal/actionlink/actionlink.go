@@ -192,6 +192,17 @@ func Release(ctx context.Context, q db.Querier, nonce string, used float64) erro
 	return err
 }
 
+func CheckRedemption(ctx context.Context, q db.Querier, nonce string, used float64) error {
+	var current bool
+	if err := q.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM action_links WHERE nonce = ? AND used_ts = ?)", nonce, used).Scan(&current); err != nil {
+		return err
+	}
+	if !current {
+		return ErrUsed
+	}
+	return nil
+}
+
 func sign(key []byte, claims Claims) (string, error) {
 	payload, err := json.Marshal(claims)
 	if err != nil {

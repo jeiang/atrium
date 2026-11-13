@@ -172,6 +172,11 @@ func TestPhoneApprovalRefusedByAHeldPassKeepsItsLink(t *testing.T) {
 }
 
 func TestRevokingLinksDuringABusyPhoneApprovalKeepsTheLinkRevoked(t *testing.T) {
+	t.Run("lock timeout", func(t *testing.T) { revokedPhoneApproval(t, false) })
+	t.Run("lock released before timeout", func(t *testing.T) { revokedPhoneApproval(t, true) })
+}
+
+func revokedPhoneApproval(t *testing.T, releaseEarly bool) {
 	m := mailSafetyFixture(t, "live")
 	keyPath := filepath.Join(m.dir, "action-link.key")
 	if err := os.WriteFile(keyPath, []byte(strings.Repeat("ab", 32)+"\n"), 0o600); err != nil {
@@ -232,14 +237,21 @@ func TestRevokingLinksDuringABusyPhoneApprovalKeepsTheLinkRevoked(t *testing.T) 
 	if err := actionlink.Rotate(ctx, d.Write); err != nil {
 		t.Fatalf("revoke links: %v", err)
 	}
-	if got := <-first; got.code != http.StatusServiceUnavailable || !strings.Contains(got.body, mail.PassResource) {
+	if releaseEarly {
+		release()
+		if got := <-first; got.code != http.StatusGone {
+			t.Fatalf("revoked phone approval after releasing mail-pass = %d %q; want 410", got.code, got.body)
+		}
+	} else if got := <-first; got.code != http.StatusServiceUnavailable || !strings.Contains(got.body, mail.PassResource) {
 		t.Fatalf("phone approval beside a pass held at its COPY = %d %q; want 503 naming %s", got.code, got.body, mail.PassResource)
 	}
 	if n := m.count(t, "SELECT COUNT(*) FROM action_links WHERE proposal_id = ? AND used_ts IS NULL", pid); n != 0 {
 		t.Fatalf("%d unused links after a revocation during the busy tap, want none", n)
 	}
 
-	release()
+	if !releaseEarly {
+		release()
+	}
 	waitUntil(t, 30*time.Second, "the scheduled mail sync run", scheduledRunEnded(d, passrun.Sync, manual))
 	if code, body := tap(); code != http.StatusGone {
 		t.Fatalf("the revoked link after the pass released mail-pass = %d %q, want 410", code, body)
@@ -288,5 +300,11 @@ func TestSentCopyIsFiledWhileAPassHoldsMailPass(t *testing.T) {
 	}
 	if n := len(m.fake.Boxes["Sent Messages"].Box.Messages); n != 1 {
 		t.Fatalf("Sent holds %d messages, want 1", n)
+	}
+	if outcome := mrvScalar(t, dbPath, "SELECT outcome FROM operation_audit WHERE operation = 'mail.draft-send' ORDER BY id DESC LIMIT 1"); outcome != "ok" {
+		t.Fatalf("send audit = %s, want ok", outcome)
+	}
+	if count := mrvScalar(t, dbPath, "SELECT CAST(COUNT(*) AS TEXT) FROM operation_audit a, json_each(a.details_json, '$.effect_ids') j JOIN effects e ON e.id = j.value WHERE a.operation = 'mail.draft-send' AND e.operation IN ('smtp_send', 'sent_append')"); count != "2" {
+		t.Fatalf("send audit names %s send/Sent-copy effects, want 2", count)
 	}
 }

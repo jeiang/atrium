@@ -81,9 +81,12 @@ func (s *Service) rebaseline(ctx context.Context) (RebaselineResult, error) {
 func (s *Service) ApplyDeletions(ctx context.Context, in ApplyDeletionsInput) (application.Change[ApplyDeletionsResult], error) {
 	var out ApplyDeletionsResult
 	var err error
+	var written, failed int
 	for _, account := range in.Accounts {
 		var done applier.Outcome
 		done, err = applier.New(s.live, s.open, s.syncer).DeletionPass(ctx, account, true)
+		written += done.Written
+		failed += done.Failed
 		if err != nil {
 			break
 		}
@@ -92,6 +95,11 @@ func (s *Service) ApplyDeletions(ctx context.Context, in ApplyDeletionsInput) (a
 	outcome := state.OK
 	if err != nil {
 		outcome = auditOutcome(err)
+	}
+	if written > 0 && (err != nil || failed > 0) {
+		outcome = state.Partial
+	} else if failed > 0 {
+		outcome = state.Failed
 	}
 	auditID := s.writeAudit(ctx, ApplyDeletionsName, "", outcome, nil)
 	if err != nil {

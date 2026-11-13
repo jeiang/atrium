@@ -27,6 +27,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
@@ -74,7 +75,11 @@ func SettingGroups() []settings.Group {
 }
 
 func ToolDefinitions() []module.ToolDefinition {
-	return mailtools.Definitions(ToolService)
+	return mailtools.Definitions(mailToolService)
+}
+
+func ProposeKinds() []proposals.Definition {
+	return mailtools.Proposals(mailToolService)
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
@@ -142,7 +147,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			"replay":      {Always: true},
 		},
 		Tools:        ToolDefinitions(),
-		ProposeKinds: mailtools.Proposals(ToolService),
+		ProposeKinds: ProposeKinds(),
 		Effects: func(d module.EffectDeps) module.Effects {
 			e := &executors.Executors{DB: d.DB, Ledger: d.Ledger, Open: d.Open, Now: d.Now}
 			r := &openloops.Reminders{DB: d.DB, Ledger: d.Ledger, Now: d.Now}
