@@ -61,7 +61,7 @@ func (s *Server) tokenIssue(w http.ResponseWriter, r *http.Request) {
 		}
 		at = &parsed
 	}
-	ctx := audit.With(r.Context(), "operator", audit.UI)
+	ctx := r.Context()
 	issued, err := s.bearers.Issue(ctx, form.Get("name"), at)
 	switch {
 	case errors.Is(err, bearer.ErrName):
@@ -91,7 +91,7 @@ func (s *Server) tokenRevoke(w http.ResponseWriter, r *http.Request) {
 		s.Error(w, r, http.StatusNotFound, "Not Found")
 		return
 	}
-	ctx := audit.With(r.Context(), "operator", audit.UI)
+	ctx := r.Context()
 	tokens, err := s.bearers.List(ctx)
 	if err != nil {
 		log.Error("token list failed", logx.Err, err.Error())

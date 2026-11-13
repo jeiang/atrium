@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"github.com/jeiang/atrium/internal/settings/audit"
 	"time"
 
 	"github.com/jeiang/atrium/internal/application"
@@ -134,6 +135,9 @@ func (e *Executor) execute(t tool.Tool) proposals.Executor {
 			return nil, proposals.ProposalError(t.Name + " is not allowed in this thread by the permission table")
 		}
 		ctx = application.WithInvocation(ctx, application.Invocation{ThreadID: payload.ThreadID, RunID: payload.RunID, Fingerprint: p.Fingerprint})
+		if !audit.HasActor(ctx) {
+			ctx = audit.With(ctx, "assistant", audit.Tool)
+		}
 		value, err := t.Approval.Apply(ctx, tc, args)
 		if err != nil {
 			message, refused := tool.Message(err)
