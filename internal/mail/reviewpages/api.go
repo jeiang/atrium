@@ -512,6 +512,11 @@ func (s *service) apiDraftUpdate(w http.ResponseWriter, r *http.Request) {
 	}
 	_, err := s.mail.DraftUpdate(detached(r), mailapp.DraftUpdateInput{ID: id, Revision: in.Revision, Fields: fields})
 	if err != nil {
+		var disabled *module.OwnerDisabled
+		if errors.As(err, &disabled) {
+			web.APIError(w, http.StatusConflict, "module_disabled", err.Error())
+			return
+		}
 		e := application.Classify(err)
 		switch e.Code {
 		case application.Conflict:
@@ -591,7 +596,7 @@ func (s *service) apiDraftDiscard(w http.ResponseWriter, r *http.Request) {
 	_, err := s.mail.DraftDiscard(detached(r), mailapp.DraftInput{ID: id})
 	if err != nil {
 		e := application.Classify(err)
-		if e.Code == application.Invalid || e.Code == application.Conflict {
+		if e.Code == application.Invalid || e.Code == application.Conflict || e.Code == application.Refused {
 			web.APIError(w, http.StatusConflict, "not_discarded", e.Message)
 		} else {
 			web.APIFail(w, err)

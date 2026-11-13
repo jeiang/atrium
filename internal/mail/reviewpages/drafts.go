@@ -140,26 +140,29 @@ func (s *service) draftUpdate(w http.ResponseWriter, r *http.Request) {
 	_, err := s.mail.DraftUpdate(detached(r), in)
 	var refused drafts.Error
 	var disabled *module.OwnerDisabled
-	if errors.As(err, &refused) || errors.As(err, &disabled) {
+	var stale drafts.Stale
+	code := http.StatusUnprocessableEntity
+	if errors.As(err, &stale) {
+		code = http.StatusConflict
+	}
+	if errors.As(err, &refused) || errors.As(err, &disabled) || errors.As(err, &stale) {
 		found, gerr := s.mail.Draft(detached(r), mailapp.DraftInput{ID: id, Submitted: &changes})
 		row := &found.Data.Row
 		if gerr == nil && row != nil {
 			view := draftView(*row, found.Data.Unexpected)
+			if errors.As(err, &stale) && in.Revision != nil {
+				view.Revision = *in.Revision
+			}
 			if web.IsPartial(r) {
-				s.renderDraftCard(w, r, view, http.StatusUnprocessableEntity, toast("error", "Not saved", err.Error()))
+				s.renderDraftCard(w, r, view, code, toast("error", "Not saved", err.Error()))
 			} else {
-				s.page(w, r, http.StatusUnprocessableEntity, "drafts", "drafts.gohtml",
+				s.page(w, r, code, "drafts", "drafts.gohtml",
 					draftsPage{Drafts: []DraftView{view}, Status: view.Status, Statuses: statusNames(), Configured: reviewapp.AccountConfigured(r.Context())},
 					toast("error", "Not saved", err.Error()))
 			}
 			return
 		}
-		s.reply(w, r, id, drafts.Draft, http.StatusUnprocessableEntity, toast("error", "Not saved", err.Error()))
-		return
-	}
-	var stale drafts.Stale
-	if errors.As(err, &stale) {
-		s.reply(w, r, id, drafts.Draft, http.StatusConflict, toast("error", "Not saved", err.Error()))
+		s.reply(w, r, id, drafts.Draft, code, toast("error", "Not saved", err.Error()))
 		return
 	}
 	if err != nil {

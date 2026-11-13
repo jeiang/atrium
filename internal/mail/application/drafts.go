@@ -15,6 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/drafts"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
@@ -174,7 +175,10 @@ func (f DraftFields) changes() map[string]any {
 func draftError(err error) error {
 	var stale drafts.Stale
 	var invalid drafts.Error
+	var disabled *module.OwnerDisabled
 	switch {
+	case errors.As(err, &disabled):
+		return &application.Error{Code: application.Refused, Message: err.Error(), Cause: err}
 	case errors.As(err, &stale):
 		return &application.Error{Code: application.Conflict, Message: err.Error(), Cause: err}
 	case errors.As(err, &invalid):
