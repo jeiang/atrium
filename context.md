@@ -577,6 +577,8 @@ behavior-parity target.
   persistence, and backups. Updating this repository does not update the
   host's pinned application input.
 
+- A standalone `atrium media-agent --config FILE` process now provides authenticated rooted streaming without opening the main database. Listener peers are checked before TLS/headers, connections are capped at 256, headers at 16 KiB, and ranges at 16 parts (larger range sets are ignored). Root/state/cache overlap is checked on resolved paths and filesystem identities. SIGHUP drains and exits non-zero. This does not yet move main-side media filesystem work or deploy an agent service.
+
 ## Current authority boundaries
 
 - The effect ledger (`internal/ledger`) owns the `effects`, `effect_resources`,

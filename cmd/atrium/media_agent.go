@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"syscall"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/mediaagent"
@@ -51,6 +52,9 @@ func serveMediaAgent(ctx context.Context, path string, stdout, stderr io.Writer)
 	n.Ready()
 	if err := agent.Serve(ctx, ln, n.Stopping); err != nil {
 		return fail(err)
+	}
+	if sig, _ := cli.Received(ctx); sig == syscall.SIGHUP {
+		return cli.ExitHangup
 	}
 	return cli.ExitOK
 }

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 )
 
 const MaxBody = 1 << 20
@@ -65,7 +66,7 @@ func Decode(r io.Reader, limit int64, v any) error {
 	}
 	walk := json.NewDecoder(bytes.NewReader(body))
 	walk.UseNumber()
-	if err := uniqueKeys(walk); err != nil {
+	if err := uniqueKeys(walk, 0); err != nil {
 		return err
 	}
 	if _, err := walk.Token(); !errors.Is(err, io.EOF) {
@@ -76,7 +77,10 @@ func Decode(r io.Reader, limit int64, v any) error {
 	return dec.Decode(v)
 }
 
-func uniqueKeys(dec *json.Decoder) error {
+func uniqueKeys(dec *json.Decoder, depth int) error {
+	if depth > 64 {
+		return errors.New("the request body is nested too deeply")
+	}
 	tok, err := dec.Token()
 	if err != nil {
 		return err
@@ -87,7 +91,7 @@ func uniqueKeys(dec *json.Decoder) error {
 	}
 	switch delim {
 	case '{':
-		seen := map[string]bool{}
+		var seen []string
 		for dec.More() {
 			key, err := dec.Token()
 			if err != nil {
@@ -97,17 +101,19 @@ func uniqueKeys(dec *json.Decoder) error {
 			if !ok {
 				return fmt.Errorf("the request body has a non-string key")
 			}
-			if seen[name] {
-				return fmt.Errorf("%w: %q", ErrDuplicateKey, name)
+			for _, prior := range seen {
+				if strings.EqualFold(prior, name) {
+					return fmt.Errorf("%w: %q", ErrDuplicateKey, name)
+				}
 			}
-			seen[name] = true
-			if err := uniqueKeys(dec); err != nil {
+			seen = append(seen, name)
+			if err := uniqueKeys(dec, depth+1); err != nil {
 				return err
 			}
 		}
 	case '[':
 		for dec.More() {
-			if err := uniqueKeys(dec); err != nil {
+			if err := uniqueKeys(dec, depth+1); err != nil {
 				return err
 			}
 		}

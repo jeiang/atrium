@@ -95,8 +95,18 @@ func (c Config) validate() error {
 	if !addr.Addr().IsLoopback() && c.Control.TLSCert == "" {
 		return errors.New("control.listen is not a loopback address, so control.tls_cert and control.tls_key are required")
 	}
-	if c.Control.TokenFile == "" {
-		return errors.New("control.token_file is required")
+	if err := absolute("control.token_file", c.Control.TokenFile); err != nil {
+		return err
+	}
+	for _, p := range [][2]string{{"control.tls_cert", c.Control.TLSCert}, {"control.tls_key", c.Control.TLSKey}} {
+		if p[1] != "" {
+			if err := absolute(p[0], p[1]); err != nil {
+				return err
+			}
+		}
+	}
+	if !addr.Addr().IsLoopback() && len(c.Control.AllowedPeers) == 0 {
+		return errors.New("control.allowed_peers is required for non-loopback listeners")
 	}
 	if len(c.Control.AllowedHosts) == 0 || slices.Contains(c.Control.AllowedHosts, "") {
 		return errors.New("control.allowed_hosts must list at least one host and no empty value")
@@ -127,6 +137,21 @@ func (c Config) validate() error {
 	}
 	if within(c.StateDirectory, c.CacheDirectory) || within(c.CacheDirectory, c.StateDirectory) {
 		return errors.New("state_directory and cache_directory overlap")
+	}
+	all := append(paths, [2]string{"state_directory", c.StateDirectory}, [2]string{"cache_directory", c.CacheDirectory})
+	for i, p := range all {
+		resolved, err := resolvePath(p[1])
+		if err != nil {
+			return err
+		}
+		all[i][1] = resolved
+	}
+	for i, p := range all {
+		for _, q := range all[i+1:] {
+			if within(p[1], q[1]) || within(q[1], p[1]) {
+				return fmt.Errorf("%s and %s overlap", p[0], q[0])
+			}
+		}
 	}
 	if c.Group != "" {
 		if _, err := lookupGroup(c.Group); err != nil {
@@ -161,7 +186,14 @@ func listenAddr(key, value string) (netip.AddrPort, error) {
 	if err != nil {
 		return netip.AddrPort{}, fmt.Errorf("%s must be an IP address and port", key)
 	}
-	if addr.Addr().IsUnspecified() {
+	ip := addr.Addr()
+	if ip.Is4In6() {
+		return netip.AddrPort{}, fmt.Errorf("%s must use the IPv4 form", key)
+	}
+	if ip.Zone() != "" && !ip.IsLinkLocalUnicast() {
+		return netip.AddrPort{}, fmt.Errorf("%s permits zones only on link-local addresses", key)
+	}
+	if ip.WithZone("").Unmap().IsUnspecified() {
 		return netip.AddrPort{}, fmt.Errorf("%s must not be a wildcard address", key)
 	}
 	return addr, nil
@@ -211,5 +243,24 @@ func readToken(path string) ([]byte, error) {
 	if len(b) == 0 {
 		return nil, errors.New("control.token_file is empty")
 	}
+	if len(b) < 32 {
+		return nil, errors.New("control.token_file must contain at least 32 bytes")
+	}
 	return b, nil
+}
+
+func resolvePath(path string) (string, error) {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err == nil {
+		return resolved, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return "", err
+	}
+	parent := filepath.Dir(path)
+	if parent == path {
+		return "", err
+	}
+	resolved, err = resolvePath(parent)
+	return filepath.Join(resolved, filepath.Base(path)), err
 }

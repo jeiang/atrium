@@ -3,8 +3,10 @@
 package mediaagent
 
 import (
+	"crypto/sha256"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/url"
 	"path"
@@ -70,7 +72,36 @@ func (a *Agent) serveFile(w http.ResponseWriter, r *http.Request) {
 	}
 	h := w.Header()
 	h.Set("Content-Type", kind)
-	h.Set("ETag", fmt.Sprintf(`"%d-%d-%d-%d"`, id.Device, id.Inode, id.Size, id.MTimeNS))
+	sum := sha256.Sum256(fmt.Appendf(nil, "%s:%d:%d:%d:%d", a.state.agentID, id.Device, id.Inode, id.Size, id.MTimeNS))
+	h.Set("ETag", fmt.Sprintf(`"%x"`, sum[:16]))
 	h.Set("X-Content-Type-Options", "nosniff")
-	http.ServeContent(w, r, "", time.Unix(0, id.MTimeNS), f)
+	if strings.Count(r.Header.Get("Range"), ",") >= 16 {
+		r.Header.Del("Range")
+	}
+	http.ServeContent(&contentWriter{ResponseWriter: w, method: r.Method}, r, "", time.Unix(0, id.MTimeNS), f)
 }
+
+type contentWriter struct {
+	http.ResponseWriter
+	method string
+	failed bool
+}
+
+func (w *contentWriter) WriteHeader(status int) {
+	if status >= 400 {
+		w.failed = true
+		w.Header().Del("Content-Length")
+		w.Header().Del("Content-Type")
+		problem(w.ResponseWriter, status, protocol.CodeInvalidRequest, "the content request could not be satisfied")
+		return
+	}
+	w.ResponseWriter.WriteHeader(status)
+}
+func (w *contentWriter) Write(b []byte) (int, error) {
+	if w.failed {
+		return len(b), nil
+	}
+	return w.ResponseWriter.Write(b)
+}
+
+var _ io.Writer = (*contentWriter)(nil)

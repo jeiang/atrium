@@ -49,6 +49,10 @@ func openRoots(c Config) (*roots, error) {
 		rs.byName[r.name] = r
 		_, _ = fmt.Fprintf(sum, "%s\x00%d\x00%d\n", r.name, r.dev, r.ino)
 	}
+	if err := rs.checkOverlap(c); err != nil {
+		rs.close()
+		return nil, err
+	}
 	rs.revision = hex.EncodeToString(sum.Sum(nil))
 	return rs, nil
 }
@@ -134,6 +138,18 @@ func (rs *roots) openFile(name, rel string) (*os.File, unix.Stat_t, error) {
 		}
 		dir = fd
 	}
+	if err := unix.Fstatat(dir, parts[len(parts)-1], &st, unix.AT_SYMLINK_NOFOLLOW); err != nil {
+		closeDir()
+		return nil, st, walkError(err)
+	}
+	if st.Mode&unix.S_IFMT == unix.S_IFLNK {
+		closeDir()
+		return nil, st, ErrSymlink
+	}
+	if st.Mode&unix.S_IFMT != unix.S_IFREG {
+		closeDir()
+		return nil, st, ErrNotRegular
+	}
 	fd, err := openat(dir, parts[len(parts)-1], unix.O_RDONLY|unix.O_NOFOLLOW|unix.O_NONBLOCK|unix.O_NOCTTY|unix.O_CLOEXEC)
 	closeDir()
 	if err != nil {
@@ -174,6 +190,10 @@ func walkError(err error) error {
 		return ErrSymlink
 	case errors.Is(err, unix.ENOENT), errors.Is(err, unix.ENOTDIR):
 		return ErrNotFound
+	case errors.Is(err, unix.ENAMETOOLONG):
+		return ErrUnsafePath
+	case errors.Is(err, unix.ENXIO), errors.Is(err, unix.EOPNOTSUPP), errors.Is(err, unix.EWOULDBLOCK):
+		return ErrNotRegular
 	case errors.Is(err, unix.EACCES), errors.Is(err, unix.EPERM):
 		return ErrDenied
 	}
@@ -182,4 +202,59 @@ func walkError(err error) error {
 
 func identity(st unix.Stat_t) protocol.Identity {
 	return protocol.Identity{Device: uint64(st.Dev), Inode: st.Ino, Size: st.Size, MTimeNS: st.Mtim.Nano()}
+}
+
+func (rs *roots) checkOverlap(c Config) error {
+	dirs := make([]*root, 0, 6)
+	for _, r := range rs.byName {
+		dirs = append(dirs, r)
+	}
+	for _, p := range [][2]string{{"state_directory", c.StateDirectory}, {"cache_directory", c.CacheDirectory}} {
+		r, err := openRoot(p[0], p[1])
+		if err != nil {
+			return err
+		}
+		defer func() { _ = unix.Close(r.fd) }()
+		dirs = append(dirs, r)
+	}
+	for i, r := range dirs {
+		for _, other := range dirs[i+1:] {
+			if r.dev == other.dev && r.ino == other.ino {
+				return fmt.Errorf("%s and %s overlap", r.name, other.name)
+			}
+		}
+		fd, err := unix.Dup(r.fd)
+		if err != nil {
+			return err
+		}
+		for {
+			parent, err := openat(fd, "..", unix.O_RDONLY|unix.O_DIRECTORY|unix.O_CLOEXEC)
+			if err != nil {
+				_ = unix.Close(fd)
+				return err
+			}
+			var st, prev unix.Stat_t
+			err = unix.Fstat(parent, &st)
+			if err == nil {
+				err = unix.Fstat(fd, &prev)
+			}
+			_ = unix.Close(fd)
+			if err != nil {
+				_ = unix.Close(parent)
+				return err
+			}
+			for _, other := range dirs {
+				if other != r && uint64(st.Dev) == other.dev && st.Ino == other.ino {
+					_ = unix.Close(parent)
+					return fmt.Errorf("%s and %s overlap", r.name, other.name)
+				}
+			}
+			if st.Dev == prev.Dev && st.Ino == prev.Ino {
+				_ = unix.Close(parent)
+				break
+			}
+			fd = parent
+		}
+	}
+	return nil
 }

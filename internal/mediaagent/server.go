@@ -75,11 +75,15 @@ func (a *Agent) Close() error {
 }
 
 func (a *Agent) Listen() (net.Listener, error) {
-	return net.Listen("tcp", a.cfg.Control.Listen)
+	ln, err := net.Listen("tcp", a.cfg.Control.Listen)
+	if err != nil {
+		return nil, err
+	}
+	return &boundedListener{Listener: ln, slots: make(chan struct{}, 256), done: make(chan struct{}), allowed: a.peerAllowed}, nil
 }
 
 func (a *Agent) Serve(ctx context.Context, ln net.Listener, stopping func()) error {
-	srv := &http.Server{Handler: a.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
+	srv := &http.Server{MaxHeaderBytes: 16 << 10, Handler: a.Handler(), ReadHeaderTimeout: 10 * time.Second, IdleTimeout: 2 * time.Minute}
 	errc := make(chan error, 1)
 	go func() {
 		if a.tls != nil {
