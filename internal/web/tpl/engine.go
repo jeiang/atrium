@@ -25,10 +25,10 @@ const (
 )
 
 type Config struct {
-	AssetVersion string
-	Globals      map[string]any
-	Modules      []fs.FS
-	State        *config.State
+	Assets  map[string]string
+	Globals map[string]any
+	Modules []fs.FS
+	State   *config.State
 }
 
 type Toast struct {
@@ -119,23 +119,19 @@ type ErrorView struct {
 }
 
 type Engine struct {
-	globals      map[string]any
-	assetVersion string
-	shared       *template.Template
-	pages        map[string]*template.Template
-	state        *config.State
-}
-
-func AssetURL(version, path string) string {
-	return "/static/" + path + "?v=" + version
+	globals map[string]any
+	assets  map[string]string
+	shared  *template.Template
+	pages   map[string]*template.Template
+	state   *config.State
 }
 
 func New(cfg Config) (*Engine, error) {
 	e := &Engine{
-		globals:      maps.Clone(cfg.Globals),
-		assetVersion: cfg.AssetVersion,
-		pages:        map[string]*template.Template{},
-		state:        cfg.State,
+		globals: maps.Clone(cfg.Globals),
+		assets:  cfg.Assets,
+		pages:   map[string]*template.Template{},
+		state:   cfg.State,
 	}
 	sources, err := collect(cfg)
 	if err != nil {

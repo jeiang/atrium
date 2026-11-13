@@ -208,7 +208,7 @@ func New(o Options) (*Server, error) {
 	if s.errPage == nil {
 		s.errPage = plainErrorPage
 	}
-	static := newStaticHandler(Static)
+	static := newStaticHandler(Static, Assets)
 	s.mux.NotFound(s.notFound)
 	s.mux.MethodNotAllowed(s.methodNotAllowed)
 	core.Get(healthPath, func(w http.ResponseWriter, _ *http.Request) {
