@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -30,9 +32,17 @@ func agentConnectionState(t *testing.T, dir string) string {
 
 func TestCancelledLibraryRequestsLeaveTheAgentConnectionOK(t *testing.T) {
 	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
-	agent := libraryAgent(t, dir)
+	bin := fakeFFmpeg(t, fakeThumbnailer)
+	agent := libraryAgent(t, dir, "PATH="+bin+string(os.PathListSeparator)+os.Getenv("PATH"))
 	for i := 2; i <= 6; i++ {
 		writeMediaFile(t, filepath.Join(agent.roots["tv"], libraryShow, "Season 01", fmt.Sprintf("Lanterns - S01E%02d.mkv", i)), "episode")
+	}
+	for i := 1; i <= 6; i++ {
+		path := filepath.Join(libraryShow, "Season 01", fmt.Sprintf("Lanterns - S01E%02d.mkv", i))
+		resp, image := agent.get(t, "/v1/thumbnail?"+url.Values{"root": {"tv"}, "path": {path}}.Encode(), nil)
+		if resp.StatusCode != http.StatusOK || string(image) != fakeJPEG {
+			t.Fatalf("prepare thumbnail = %d %q", resp.StatusCode, image)
+		}
 	}
 	if ran := runApp(t, "connections", "test", "service/media-agent", "--json"); ran.code != cli.ExitOK || !strings.Contains(ran.stdout, `"state": "ok"`) {
 		t.Fatalf("connection test = %d %s %s", ran.code, ran.stdout, ran.stderr)
@@ -108,9 +118,9 @@ func TestCancelledLibraryRequestsLeaveTheAgentConnectionOK(t *testing.T) {
 	}
 	wg.Wait()
 	resume()
-	code, _, err = request(context.Background(), thumbs[0][1])
-	if err != nil || code != http.StatusOK {
-		t.Fatalf("thumbnail after the cancelled burst = %d %v", code, err)
+	code, image, err := request(context.Background(), thumbs[0][1])
+	if err != nil || code != http.StatusOK || image != fakeJPEG {
+		t.Fatalf("thumbnail after the cancelled burst = %d %v %q", code, err, image)
 	}
 	if state := agentConnectionState(t, dir); state != "ok" {
 		t.Fatalf("cancelled requests left the agent connection %q", state)

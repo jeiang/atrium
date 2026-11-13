@@ -318,7 +318,7 @@ func TestFilingRefusesAFileFolderAndRecordsAPartialResult(t *testing.T) {
 	if err := os.Mkdir(show, 0o775); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(show, 0o775|os.ModeSetgid); err != nil {
+	if err := os.Chmod(show, 0o775); err != nil {
 		t.Fatal(err)
 	}
 	blocked := filepath.Join(show, "Season 02")
@@ -347,7 +347,7 @@ func TestFilingRefusesAFileFolderAndRecordsAPartialResult(t *testing.T) {
 	if err := os.Mkdir(blocked, 0o775); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Chmod(blocked, 0o575|os.ModeSetgid); err != nil {
+	if err := os.Chmod(blocked, 0o575); err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = os.Chmod(blocked, 0o775) })
