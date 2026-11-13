@@ -113,9 +113,6 @@ internal/assistant/tools/media/undo.go	database/sql
 internal/assistant/tools/media/undo.go	github.com/jeiang/atrium/internal/config
 internal/assistant/tools/media/undo.go	github.com/jeiang/atrium/internal/ledger
 internal/assistant/tools/media/undo.go	github.com/jeiang/atrium/internal/media
-internal/assistant/tools/ops/ops.go	github.com/jeiang/atrium/internal/assistant
-internal/assistant/tools/ops/ops.go	github.com/jeiang/atrium/internal/config
-internal/assistant/tools/ops/ops.go	github.com/jeiang/atrium/internal/db
 internal/assistant/tools/ops/ops.go	github.com/jeiang/atrium/internal/serverops
 internal/assistant/tools/propose/propose.go	github.com/jeiang/atrium/internal/db
 internal/assistant/tools/propose/propose.go	github.com/jeiang/atrium/internal/proposals
