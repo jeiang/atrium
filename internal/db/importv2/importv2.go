@@ -170,6 +170,7 @@ var importTables = []tablePlan{
 
 	{table: "runs", action: drop, why: "run history is not carried"},
 	{table: "run_events", action: drop, why: "run history is not carried"},
+	{table: "run_streams", action: fresh, why: "run history is not carried"},
 	{table: "tool_calls", action: drop, why: "run history is not carried"},
 	{table: "tool_results", action: drop, why: "run history is not carried"},
 	{table: "context_ledger", action: drop, why: "run history is not carried"},

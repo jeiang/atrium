@@ -20,6 +20,7 @@ import (
 	"github.com/jeiang/atrium/internal/assistant"
 	"github.com/jeiang/atrium/internal/assistant/block"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/assistant/progress"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/store"
 )
@@ -143,6 +144,10 @@ func StartRun(ctx context.Context, d *db.DB, threadID int64, kind, model, effort
 			return err
 		}
 		id, err = res.LastInsertId()
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, "INSERT INTO run_streams(run_id) VALUES(?)", id)
 		return err
 	})
 	return id, err
@@ -339,8 +344,12 @@ func classificationMeta(what, text string) error {
 }
 
 func FinishRun(ctx context.Context, q db.Querier, runID int64, state string, now float64, errText *string) error {
-	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ?, error = ?, ended_at = ? WHERE id = ?", state, errText, now, runID)
-	return err
+	return progress.Write(ctx, q, func(tx *sql.Tx) error {
+		if _, err := tx.ExecContext(ctx, "UPDATE runs SET state = ?, error = ?, ended_at = ? WHERE id = ?", state, errText, now, runID); err != nil {
+			return err
+		}
+		return progress.Finish(ctx, tx, runID, progress.Terminal{State: state, Time: now, Error: errText})
+	})
 }
 
 func RequestStop(ctx context.Context, q db.Querier, runID int64) (bool, error) {
@@ -357,6 +366,9 @@ func FinishUnlessQueued(ctx context.Context, d *db.DB, runID, threadID int64, st
 		finished = true
 		return FinishRun(ctx, tx, runID, state, now, nil)
 	})
+	if err == nil {
+		progress.Notify()
+	}
 	return finished && err == nil, err
 }
 
@@ -415,9 +427,23 @@ func FailUnsettled(ctx context.Context, q db.Querier, runs []int64, now float64,
 	for _, id := range runs {
 		args = append(args, id)
 	}
-	_, err := q.ExecContext(ctx, "UPDATE runs SET state = ?, error = ?, ended_at = ?, owner = NULL, lease_until = NULL WHERE state IN (?, ?) "+
-		"AND (owner IS NULL OR substr(owner, 1, length(?)) = ?) AND id IN (?"+strings.Repeat(", ?", len(runs)-1)+")", args...)
-	return err
+	return progress.Write(ctx, q, func(tx *sql.Tx) error {
+		rows, err := tx.QueryContext(ctx, "UPDATE runs SET state = ?, error = ?, ended_at = ?, owner = NULL, lease_until = NULL WHERE state IN (?, ?) "+
+			"AND (owner IS NULL OR substr(owner, 1, length(?)) = ?) AND id IN (?"+strings.Repeat(", ?", len(runs)-1)+") RETURNING id", args...)
+		if err != nil {
+			return err
+		}
+		ids, err := db.Collect(rows, func(r *sql.Rows) (int64, error) { var id int64; err := r.Scan(&id); return id, err })
+		if err != nil {
+			return err
+		}
+		for _, id := range ids {
+			if err := progress.Finish(ctx, tx, id, progress.Terminal{State: Failed, Time: now, Error: &text}); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
 }
 
 func ClaimResume(ctx context.Context, q db.Querier, runID int64, owner string, now float64) (bool, error) {

@@ -84,11 +84,11 @@ func (p *pages) stream(r *http.Request, w io.Writer, flusher *http.ResponseContr
 	ctx := r.Context()
 	quiet := time.Now()
 	for {
-		events, err := progress.Since(ctx, p.deps.DB.Read, runID, last)
+		batch, err := progress.Read(ctx, p.deps.DB.Read, runID, last, 100)
 		if err != nil {
 			return err
 		}
-		for _, e := range events {
+		for _, e := range batch.Events {
 			last = e.ID
 			frame, err := sseFrame(e)
 			if err != nil {
@@ -98,7 +98,7 @@ func (p *pages) stream(r *http.Request, w io.Writer, flusher *http.ResponseContr
 				return nil
 			}
 		}
-		if len(events) > 0 {
+		if len(batch.Events) > 0 {
 			quiet = time.Now()
 		}
 		found, err := journal.GetRun(ctx, p.deps.DB.Read, runID)
@@ -147,11 +147,11 @@ func (p *pages) drainRunDone(ctx context.Context, w io.Writer, runID, last int64
 		if err := p.deps.DB.Read.QueryRowContext(ctx, "SELECT COUNT(*) FROM run_events WHERE run_id = ? AND kind = ?", runID, progress.RunDone).Scan(&written); err != nil {
 			return last, err
 		}
-		events, err := progress.Since(ctx, p.deps.DB.Read, runID, last)
+		batch, err := progress.Read(ctx, p.deps.DB.Read, runID, last, 100)
 		if err != nil {
 			return last, err
 		}
-		for _, e := range events {
+		for _, e := range batch.Events {
 			last = e.ID
 			frame, err := sseFrame(e)
 			if err != nil {

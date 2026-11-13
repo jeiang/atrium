@@ -55,7 +55,7 @@ func (s *Service) PlanReplace(ctx context.Context, in PlanReplaceInput) (applica
 				out.Done++
 			}
 		}
-		if err := progress.Emit(ctx, tx, in.RunID, progress.Plan, map[string]any{"items": steps}, now); err != nil {
+		if err := progress.Append(ctx, tx, in.RunID, progress.Payload{Kind: progress.Plan, Data: map[string]any{"items": steps}, Time: now}); err != nil {
 			return err
 		}
 		auditID, err = s.audit(ctx, tx, PlanReplaceName, where, state.OK)
@@ -68,5 +68,6 @@ func (s *Service) PlanReplace(ctx context.Context, in PlanReplaceInput) (applica
 	if err != nil {
 		return application.Change[PlanReplaced]{}, s.reject(ctx, PlanReplaceName, where, err)
 	}
+	progress.Notify()
 	return application.Change[PlanReplaced]{Data: out, AuditID: auditID}, nil
 }
