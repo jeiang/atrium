@@ -239,7 +239,7 @@ func checkBody(t reflect.Type, raw json.RawMessage, loc []string) []web.FieldErr
 			}
 			if enum := parseRules(f.Tag.Get("api")).enum; len(enum) > 0 {
 				var s string
-				if json.Unmarshal(value, &s) == nil && !slices.Contains(enum, s) {
+				if json.Unmarshal(value, &s) == nil && !slices.Contains(enum, strings.TrimSpace(s)) {
 					out = append(out, web.FieldError{Type: "enum", Loc: at, Msg: "Input should be one of " + strings.Join(enum, ", "), Input: s})
 				}
 			}

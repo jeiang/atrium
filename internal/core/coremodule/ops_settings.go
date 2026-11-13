@@ -32,7 +32,7 @@ type SettingKey struct {
 
 type SettingSet struct {
 	Key   string `path:"key" json:"-"`
-	Value string `json:"value"`
+	Value string `json:"value,omitempty"`
 }
 
 type SettingChange struct {
@@ -45,7 +45,7 @@ type Secrets struct {
 
 type SecretSet struct {
 	Name  string `path:"key" json:"-"`
-	Value string `json:"value" api:"writeonly"`
+	Value string `json:"value,omitempty" api:"writeonly"`
 }
 
 func (m Module) settingsOperations() ([]application.Definition, []application.Binding) {

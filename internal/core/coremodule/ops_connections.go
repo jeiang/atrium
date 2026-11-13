@@ -91,8 +91,8 @@ type Connections struct {
 }
 
 type GoogleClient struct {
-	ClientID     string `json:"client_id"`
-	ClientSecret string `json:"client_secret" api:"writeonly"`
+	ClientID     string `json:"client_id,omitempty"`
+	ClientSecret string `json:"client_secret,omitempty" api:"writeonly"`
 }
 
 type GoogleStart struct {
