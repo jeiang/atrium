@@ -384,3 +384,224 @@ func TestReviewZeroTargetsKeepTheirNamespace(t *testing.T) {
 		}
 	}
 }
+
+func TestProposalsAPIReadAndDecide(t *testing.T) {
+	dir, dav := davFixture(t)
+	event := map[string]any{"calendar": "icloud", "title": "Dentist", "start": "2026-11-10T12:00:00", "end": "2026-11-10T13:00:00"}
+	var ids []string
+	for _, title := range []string{"Dentist", "Haircut", "Plumber"} {
+		event["title"] = title
+		ids = append(ids, proposalID(t, toolResult(t, "calendar_create", event)))
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	t.Cleanup(func() { _ = d.Close() })
+	insert := func(query string, args ...any) int64 {
+		t.Helper()
+		res, err := d.Write.Exec(query, args...)
+		if err != nil {
+			t.Fatal(err)
+		}
+		id, _ := res.LastInsertId()
+		return id
+	}
+	project := insert("INSERT INTO projects (name, instructions, effort, context_limit, private, created_at, updated_at) VALUES ('hidden', '', 'low', 90000, 1, 1, 1)")
+	thread := insert("INSERT INTO threads (kind, title, project_id, effort, model, context_limit, created_at, updated_at) VALUES ('chat', 'private', ?, 'low', 'claude-haiku-5-5', 90000, 1, 1)", project)
+	insert("INSERT INTO operation_audit (ts, operation, actor, source, thread_id, outcome, target) VALUES (2, 'tasks.add', 'agent', 'tool', ?, 'ok', 'private-marker')", thread)
+	insert("INSERT INTO operation_audit (ts, operation, actor, source, outcome, target) VALUES (2, 'tasks.add', 'agent', 'tool', 'ok', 'public-marker')")
+	token := localAPIToken(t, "api")
+	base, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, "--auth", "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(stop)
+	s := &apiSite{t: t, base: base}
+
+	listed := apiItems(t, apiData(t, s.do(http.MethodGet, "/api/v1/proposals?status=pending", token, nil), http.StatusOK))
+	if len(listed) != 3 {
+		t.Fatalf("pending proposals: %v", listed)
+	}
+	for _, it := range listed {
+		p := it.(map[string]any)
+		if p["kind"] != "calendar_event" || !slices.Equal(anyStrings(p["actions"]), []string{"approve", "deny"}) {
+			t.Fatalf("proposal summary: %v", p)
+		}
+	}
+	first := apiData(t, s.do(http.MethodGet, "/api/v1/proposals?status=pending&limit=2", token, nil), http.StatusOK)
+	cursor, _ := first["next_cursor"].(string)
+	if len(apiItems(t, first)) != 2 || cursor == "" {
+		t.Fatalf("first page: %v", first)
+	}
+	if rest := apiData(t, s.do(http.MethodGet, "/api/v1/proposals?status=pending&limit=2&cursor="+cursor, token, nil), http.StatusOK); len(apiItems(t, rest)) != 1 || rest["next_cursor"] != nil {
+		t.Fatalf("second page: %v", rest)
+	}
+	expectAPI(t, s.do(http.MethodGet, "/api/v1/proposals?status=applied&limit=2&cursor="+cursor, token, nil), http.StatusBadRequest, "bad_cursor")
+	bad := s.do(http.MethodGet, "/api/v1/proposals?status=bogus", token, nil)
+	if expectAPI(t, bad, http.StatusUnprocessableEntity, "invalid"); !strings.Contains(bad.body, `"status"`) {
+		t.Fatalf("bad status: %s", bad.body)
+	}
+
+	approve := ids[0]
+	detail := "/api/v1/proposals/" + approve
+	tag := expectConditional(t, s, token, detail)
+	shown := apiData(t, s.do(http.MethodGet, detail, token, nil), http.StatusOK)
+	payload, _ := shown["payload"].(map[string]any)
+	if payload["kind"] != "action" || payload["proposal_kind"] != "calendar_event" || shown["status"] != "pending" {
+		t.Fatalf("proposal detail: %v", shown)
+	}
+	expectAPI(t, s.do(http.MethodGet, "/api/v1/proposals/999999", token, nil), http.StatusNotFound, "not_found")
+
+	path := "/api/v1/approvals/" + approve + "/approve"
+	done := s.do(http.MethodPost, path, token, nil, "Idempotency-Key", "decide-1")
+	command := done.header.Get("Atrium-Command-Id")
+	if done.status != http.StatusOK || done.json["outcome"] != "applied" || command == "" {
+		t.Fatalf("approve: %d %v %s", done.status, done.header, done.body)
+	}
+	again := s.do(http.MethodPost, path, token, nil, "Idempotency-Key", "decide-1")
+	if again.status != http.StatusOK || again.header.Get("Idempotent-Replayed") != "true" || len(dav.Puts) != 1 {
+		t.Fatalf("approve replay: %d %s, %d puts", again.status, again.body, len(dav.Puts))
+	}
+	expectAPI(t, s.do(http.MethodPost, path, token, nil), http.StatusConflict, "not_approved")
+	if len(dav.Puts) != 1 {
+		t.Fatalf("a repeated approval wrote again: %d puts", len(dav.Puts))
+	}
+	if after := expectChanged(t, s, token, detail, tag); after["status"] != "applied" {
+		t.Fatalf("approved detail: %v", after)
+	}
+	var executions int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'review.approve' AND target = ?", "proposal:"+approve).Scan(&executions); err != nil || executions != 2 {
+		t.Fatalf("approve audits = %d, %v; want the approval and the refused retry", executions, err)
+	}
+
+	activity := s.do(http.MethodGet, "/api/v1/activity", token, nil)
+	items := apiItems(t, apiData(t, activity, http.StatusOK))
+	var audited map[string]any
+	for _, it := range items {
+		if e := it.(map[string]any); e["source"] == "operation" && e["command_id"] == command {
+			audited = e
+		}
+	}
+	if audited == nil || audited["operation"] != "review.approve" || audited["outcome"] != "ok" || audited["target"] != "proposal:"+approve {
+		t.Fatalf("no operation audit for command %s: %.2000s", command, activity.body)
+	}
+	effects := anyNumbers(t, audited["effect_ids"])
+	if len(effects) == 0 {
+		t.Fatalf("approval audit names no effect: %v", audited)
+	}
+	var effect map[string]any
+	for _, it := range items {
+		if e := it.(map[string]any); e["source"] == "effect" && number(t, e["id"]) == effects[0] {
+			effect = e
+		}
+	}
+	if effect == nil || effect["outcome"] == "" || effect["effective_outcome"] == "" {
+		t.Fatalf("approved effect missing from activity: %.2000s", activity.body)
+	}
+	if strings.Contains(activity.body, "private-marker") || !strings.Contains(activity.body, "public-marker") {
+		t.Fatalf("activity ignores private-project isolation: %.2000s", activity.body)
+	}
+	for _, leaked := range []string{`"before"`, `"after"`, `"body"`, `"prompt"`, `"details_json"`} {
+		if strings.Contains(activity.body, leaked) {
+			t.Fatalf("activity carries %s: %.2000s", leaked, activity.body)
+		}
+	}
+
+	rules := func() map[string]map[string]any {
+		t.Helper()
+		got := apiData(t, s.do(http.MethodGet, "/api/v1/permissions", token, nil), http.StatusOK)
+		out := map[string]map[string]any{}
+		for _, r := range got["rules"].([]any) {
+			out[r.(map[string]any)["key"].(string)] = r.(map[string]any)
+		}
+		if number(t, got["pending_requests"]) != 0 || len(out) != 24 {
+			t.Fatalf("permissions: %v", got)
+		}
+		return out
+	}
+	const floored, open = "permission_internet_untrusted_knowledge", "permission_internet_clean"
+	if r := rules()[floored]; r["floor"] != "ask" || !slices.Equal(anyStrings(r["choices"]), []string{"ask", "deny"}) {
+		t.Fatalf("floored rule: %v", r)
+	}
+	permTag := expectConditional(t, s, token, "/api/v1/permissions")
+	widen := s.do(http.MethodPut, "/api/v1/permissions", token, map[string]any{"changes": []any{map[string]any{"key": floored, "value": "allow"}}})
+	if expectAPI(t, widen, http.StatusUnprocessableEntity, "invalid"); !strings.Contains(widen.body, `"fields"`) {
+		t.Fatalf("below floor: %s", widen.body)
+	}
+	expectAPI(t, s.do(http.MethodPut, "/api/v1/permissions", token, map[string]any{"changes": []any{map[string]any{"key": "tool_budget", "value": "allow"}}}), http.StatusUnprocessableEntity, "invalid")
+	if r := rules()[floored]; r["effective"] != "ask" {
+		t.Fatalf("refused widening changed the rule: %v", r)
+	}
+	all := rules()
+	for i := range 5 {
+		var changes []any
+		for key := range all {
+			changes = append(changes, map[string]any{"key": key, "value": []string{"deny", "ask"}[i%2]})
+		}
+		if got := apiData(t, s.do(http.MethodPut, "/api/v1/permissions", token, map[string]any{"changes": changes}), http.StatusOK); len(got["keys"].([]any)) != len(all) {
+			t.Fatalf("permissions update: %v", got)
+		}
+	}
+	expectChanged(t, s, token, "/api/v1/permissions", permTag)
+	if r := rules()[open]; r["value"] != "deny" || r["effective"] != "deny" || r["source"] != "instance" {
+		t.Fatalf("updated rule: %v", r)
+	}
+
+	seen := map[string]bool{}
+	page := apiData(t, s.do(http.MethodGet, "/api/v1/activity?limit=100", token, nil), http.StatusOK)
+	next, _ := page["next_cursor"].(string)
+	if len(apiItems(t, page)) != 100 || next == "" {
+		t.Fatalf("activity first page: %d items, cursor %q", len(apiItems(t, page)), next)
+	}
+	for {
+		for _, it := range apiItems(t, page) {
+			e := it.(map[string]any)
+			key := e["source"].(string) + ":" + strconv.FormatInt(number(t, e["id"]), 10)
+			if seen[key] {
+				t.Fatalf("activity repeated %s", key)
+			}
+			seen[key] = true
+		}
+		if next == "" {
+			break
+		}
+		expectAPI(t, s.do(http.MethodGet, "/api/v1/activity?category=settings&limit=100&cursor="+next, token, nil), http.StatusBadRequest, "bad_cursor")
+		page = apiData(t, s.do(http.MethodGet, "/api/v1/activity?limit=100&cursor="+next, token, nil), http.StatusOK)
+		next, _ = page["next_cursor"].(string)
+	}
+	if len(seen) < 110 {
+		t.Fatalf("activity paged %d entries, want the permission changes too", len(seen))
+	}
+	expectAPI(t, s.do(http.MethodGet, "/api/v1/activity?category=bogus", token, nil), http.StatusUnprocessableEntity, "invalid")
+
+	queued := s.do(http.MethodGet, "/api/v1/review/items", token, nil)
+	groups, _ := apiData(t, queued, http.StatusOK)["groups"].([]any)
+	found := false
+	for _, g := range groups {
+		for _, it := range g.(map[string]any)["items"].([]any) {
+			if item := it.(map[string]any); item["source_id"] == ids[1] && g.(map[string]any)["group"] == "needs_decision" {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("pending proposal %s not queued for a decision: %.2000s", ids[1], queued.body)
+	}
+}
+
+func anyStrings(v any) []string {
+	items, _ := v.([]any)
+	out := make([]string, len(items))
+	for i, it := range items {
+		out[i], _ = it.(string)
+	}
+	return out
+}
+
+func anyNumbers(t *testing.T, v any) []int64 {
+	t.Helper()
+	items, _ := v.([]any)
+	out := make([]int64, len(items))
+	for i, it := range items {
+		out[i] = number(t, it)
+	}
+	return out
+}

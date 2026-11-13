@@ -92,3 +92,12 @@ func invalid(field, message string) error {
 func notFound(message string) error {
 	return &application.Error{Code: application.NotFound, Message: message}
 }
+
+func DescribeOne(name application.Name) application.Definition {
+	for _, def := range append(Describe(), DescribePermissions()...) {
+		if def.Name == name {
+			return def
+		}
+	}
+	panic("review: unknown operation " + string(name))
+}

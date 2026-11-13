@@ -134,6 +134,7 @@ func Module(o Options) web.Module {
 		r.Post("/activity/effect/{effect_id}/resolve", s.resolveEffect)
 
 		s.apiRoutes(d)
+		apiResources(d, func() *reviewapp.Service { return s.review })
 	}
 }
 

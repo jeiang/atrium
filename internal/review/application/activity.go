@@ -1,6 +1,7 @@
 package application
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -9,36 +10,52 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	"github.com/jeiang/atrium/internal/assistant/projects"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 const (
-	SourceMail        = "mail"
-	SourceWrite       = "write"
-	SourceSettings    = "settings"
-	CategoryMail      = "mail"
-	CategoryAssistant = "assistant"
-	CategoryWiki      = "wiki"
-	CategoryKnowledge = "knowledge"
-	CategoryMedia     = "media"
-	CategorySettings  = "settings"
-	ActivityPage      = 50
-	snippetLimit      = 800
+	SourceMail         = "mail"
+	SourceWrite        = "write"
+	SourceSettings     = "settings"
+	SourceOperation    = "operation"
+	CategoryMail       = "mail"
+	CategoryAssistant  = "assistant"
+	CategoryWiki       = "wiki"
+	CategoryKnowledge  = "knowledge"
+	CategoryMedia      = "media"
+	CategorySettings   = "settings"
+	CategoryOperations = "operations"
+	ActivityPage       = 50
+	snippetLimit       = 800
 )
 
 var Categories = []string{CategoryMail, CategoryAssistant, CategoryWiki, CategoryKnowledge, CategoryMedia, CategorySettings}
 
 type ActivityEntry struct {
-	Source   string            `json:"source"`
-	ID       int64             `json:"id"`
-	Category string            `json:"category"`
-	TS       float64           `json:"ts"`
-	Mail     *MailActivity     `json:"mail,omitempty"`
-	Write    *WriteActivity    `json:"write,omitempty"`
-	Settings *SettingsActivity `json:"settings,omitempty"`
-	Phone    *PhoneActivity    `json:"phone,omitempty"`
+	Source    string             `json:"source"`
+	ID        int64              `json:"id"`
+	Category  string             `json:"category"`
+	TS        float64            `json:"ts"`
+	Mail      *MailActivity      `json:"mail,omitempty"`
+	Write     *WriteActivity     `json:"write,omitempty"`
+	Settings  *SettingsActivity  `json:"settings,omitempty"`
+	Phone     *PhoneActivity     `json:"phone,omitempty"`
+	Operation *OperationActivity `json:"operation,omitempty"`
+}
+
+type OperationActivity struct {
+	Name      string  `json:"name"`
+	Actor     string  `json:"actor"`
+	Source    string  `json:"source"`
+	Outcome   string  `json:"outcome"`
+	Target    string  `json:"target"`
+	ThreadID  *int64  `json:"thread_id"`
+	RunID     *int64  `json:"run_id"`
+	CommandID *string `json:"command_id"`
+	EffectIDs []int64 `json:"effect_ids"`
 }
 
 type PhoneActivity struct {
@@ -80,6 +97,7 @@ type WriteActivity struct {
 	Error      *string  `json:"error"`
 	Undoable   bool     `json:"undoable"`
 	Resolved   bool     `json:"resolved"`
+	Effective  string   `json:"effective_outcome,omitempty"`
 }
 
 type SettingsActivity struct {
@@ -126,9 +144,11 @@ func (e ActivityEntry) Summary() string {
 }
 
 type ActivityInput struct {
-	Category string
-	Offset   int
-	Limit    int
+	Category    string
+	Offset      int
+	Limit       int
+	Operations  bool
+	HidePrivate bool
 }
 
 type Activity struct {
@@ -145,9 +165,67 @@ func (s *Service) Activity(ctx context.Context, in ActivityInput) (application.R
 		in.Limit = ActivityPage
 	}
 	return read(ctx, s, ActivityName, []string{state.Mail, state.Effects, state.Settings}, in, func() (Activity, error) {
-		entries, next, err := s.timeline(ctx, in.Category, in.Limit, in.Offset)
+		entries, next, err := s.timeline(ctx, in, in.Limit, in.Offset)
 		return Activity{Entries: entries, NextOffset: next}, err
-	}, mailMarks)
+	}, func(a Activity) any {
+		if in.Operations {
+			return a.Entries
+		}
+		return mailMarks(a)
+	})
+}
+
+func (s *Service) operationEntries(ctx context.Context, hidePrivate bool, limit int) ([]ActivityEntry, error) {
+	query := "SELECT id, ts, operation, actor, source, thread_id, run_id, outcome, target, details_json, command_id FROM operation_audit"
+	if hidePrivate {
+		query += " WHERE thread_id IS NULL OR thread_id NOT IN (" + privateThreadsSQL + ")"
+	}
+	rows, err := s.db.Read.QueryContext(ctx, query+" ORDER BY ts DESC, id DESC LIMIT ?", limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	var out []ActivityEntry
+	for rows.Next() {
+		var (
+			e       ActivityEntry
+			op      OperationActivity
+			details string
+		)
+		if err := rows.Scan(&e.ID, &e.TS, &op.Name, &op.Actor, &op.Source, &op.ThreadID, &op.RunID, &op.Outcome, &op.Target, &details, &op.CommandID); err != nil {
+			return nil, err
+		}
+		var linked struct {
+			EffectIDs []int64 `json:"effect_ids"`
+		}
+		_ = json.Unmarshal([]byte(details), &linked)
+		op.EffectIDs = linked.EffectIDs
+		if op.EffectIDs == nil {
+			op.EffectIDs = []int64{}
+		}
+		e.Source, e.Category, e.Operation = SourceOperation, CategoryOperations, &op
+		out = append(out, e)
+	}
+	return out, rows.Err()
+}
+
+var privateThreadsSQL = "SELECT id FROM threads WHERE project_id IN (" + projects.PrivateIDsSQL() + ")"
+
+func (s *Service) privateThreads(ctx context.Context) (map[int64]bool, error) {
+	rows, err := s.db.Read.QueryContext(ctx, privateThreadsSQL)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[int64]bool{}
+	for rows.Next() {
+		var id int64
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		out[id] = true
+	}
+	return out, rows.Err()
 }
 
 var writeCategoryPrefixes = []struct{ Prefix, Category string }{
@@ -211,10 +289,25 @@ func deref(s *string) string {
 	return *s
 }
 
-func (s *Service) timeline(ctx context.Context, category string, limit, offset int) ([]ActivityEntry, int, error) {
+func (s *Service) timeline(ctx context.Context, in ActivityInput, limit, offset int) ([]ActivityEntry, int, error) {
 	q := s.db.Read
+	category := in.Category
 	want := offset + limit + 1
 	var entries []ActivityEntry
+	if in.Operations && category == "" {
+		found, err := s.operationEntries(ctx, in.HidePrivate, want)
+		if err != nil {
+			return nil, 0, err
+		}
+		entries = append(entries, found...)
+	}
+	var private map[int64]bool
+	if in.HidePrivate {
+		var err error
+		if private, err = s.privateThreads(ctx); err != nil {
+			return nil, 0, err
+		}
+	}
 	if category == "" || category == CategoryMail {
 		actions, err := s.live.List(ctx, "", "", want, 0)
 		if err != nil {
@@ -251,7 +344,7 @@ func (s *Service) timeline(ctx context.Context, category string, limit, offset i
 			return nil, 0, err
 		}
 		for _, effect := range effects {
-			if effect.Direction != "forward" {
+			if effect.Direction != "forward" || effect.ThreadID != nil && private[*effect.ThreadID] {
 				continue
 			}
 			entries = append(entries, EffectEntry(effect))
@@ -317,7 +410,7 @@ func EffectEntry(e ledger.Effect) ActivityEntry {
 		Write: &WriteActivity{
 			Tool: e.Operation, Target: e.Target, ThreadID: e.ThreadID, UndoneAt: e.UndoneAt,
 			Before: before, After: after, State: string(e.State), Error: errorText, Undoable: e.Undoable,
-			Resolved: e.Resolution != nil,
+			Resolved: e.Resolution != nil, Effective: cmp.Or(e.EffectiveOutcome, string(e.State)),
 		},
 	}
 }

@@ -4,12 +4,13 @@
       "area": "activity",
       "operations": [
         "commands.status",
+        "review.activity",
         "review.effect",
         "review.effects",
         "review.undoable"
       ],
-      "required": 4,
-      "bound": 4
+      "required": 5,
+      "bound": 5
     },
     {
       "area": "composer",
@@ -103,9 +104,12 @@
     },
     {
       "area": "permissions",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "review.permissions",
+        "review.permissions-update"
+      ],
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "projects",
@@ -115,17 +119,21 @@
     },
     {
       "area": "proposals",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "review.proposal",
+        "review.proposals"
+      ],
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "review",
       "operations": [
+        "attention.read",
         "review.pending"
       ],
-      "required": 1,
-      "bound": 1
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "schedules",
@@ -198,6 +206,6 @@
       "bound": 3
     }
   ],
-  "total_required": 148,
-  "total_bound": 56
+  "total_required": 151,
+  "total_bound": 62
 }

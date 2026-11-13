@@ -111,7 +111,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Section: "library", Label: "Scheduled", URL: "/scheduled", Icon: "clock", Page: "scheduled", Order: 40},
 				{Label: "Assistant", URL: "/settings/assistant", Page: "assistant", Settings: true, Primary: true, PrimaryURL: "/settings", Order: 10},
 			},
-		}, {Module: func(_ chi.Router, d *web.Deps) { m.knowledgeRoutes(d); m.taskRoutes(d) }}},
+		}, {Module: func(_ chi.Router, d *web.Deps) { m.knowledgeRoutes(d); m.taskRoutes(d); attentionRoutes(d) }}},
 		Groups:   SettingGroups(),
 		Commands: []*cli.Command{agentcmd.Command(mc.Enabled, m.Open, subagentCLIService(mc.Env, mc.Tools, m.Now)), memorycmd.Command(memoryCLIService(mc.Env, m.Now)), kbcmd.Command(knowledgeCLIService(mc.Env))},
 		Leaves:   map[string]module.Leaf{"kb import": {Always: true}},
