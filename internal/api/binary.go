@@ -1,22 +1,48 @@
 package api
 
 import (
+	"io"
 	"mime"
 	"net/http"
-	"os"
 	"strings"
 	"time"
 )
 
 type Binary struct {
-	Name      string    `json:"-"`
-	MediaType string    `json:"-"`
-	ModTime   time.Time `json:"-"`
-	File      *os.File  `json:"-"`
+	Name      string            `json:"-"`
+	MediaType string            `json:"-"`
+	ModTime   time.Time         `json:"-"`
+	File      io.ReadSeekCloser `json:"-"`
+	Status    int               `json:"-"`
+	Header    http.Header       `json:"-"`
+	Body      io.ReadCloser     `json:"-"`
+}
+
+func (b Binary) close() {
+	if b.Body != nil {
+		_ = b.Body.Close()
+	} else if b.File != nil {
+		_ = b.File.Close()
+	}
 }
 
 func serveBinary(w http.ResponseWriter, r *http.Request, body Binary) {
-	defer func() { _ = body.File.Close() }()
+	defer body.close()
+	if body.Body != nil {
+		for _, name := range []string{"Content-Type", "Content-Length", "Content-Range", "Accept-Ranges", "ETag", "Last-Modified"} {
+			for _, value := range body.Header.Values(name) {
+				w.Header().Add(name, value)
+			}
+		}
+		w.Header().Set("X-Content-Type-Options", "nosniff")
+		w.WriteHeader(body.Status)
+		if r.Method != http.MethodHead && (body.Status == http.StatusOK || body.Status == http.StatusPartialContent) {
+			if _, err := io.Copy(w, body.Body); err != nil {
+				panic(http.ErrAbortHandler)
+			}
+		}
+		return
+	}
 	media, _, err := mime.ParseMediaType(body.MediaType)
 	if err != nil || media == "" {
 		media = "application/octet-stream"

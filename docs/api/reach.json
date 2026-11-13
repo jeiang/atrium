@@ -125,11 +125,14 @@
       "area": "media",
       "operations": [
         "media.add",
+        "media.art",
         "media.channel-add",
         "media.channel-remove",
         "media.channels",
         "media.downloads",
+        "media.file",
         "media.file-item",
+        "media.filing-inspect",
         "media.filing-preview",
         "media.ignore",
         "media.library",
@@ -140,10 +143,11 @@
         "media.show-lookup",
         "media.show-search",
         "media.sweep",
+        "media.thumbnail",
         "media.torrent-files"
       ],
-      "required": 17,
-      "bound": 17
+      "required": 21,
+      "bound": 21
     },
     {
       "area": "permissions",
@@ -289,6 +293,6 @@
       "bound": 3
     }
   ],
-  "total_required": 205,
-  "total_bound": 136
+  "total_required": 206,
+  "total_bound": 140
 }

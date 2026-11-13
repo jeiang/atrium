@@ -121,7 +121,9 @@ func (s *service) serveFile(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "private, no-store")
 	w.WriteHeader(stream.Status)
 	if r.Method != http.MethodHead {
-		_, _ = io.CopyBuffer(flushingWriter{w}, stream.Body, make([]byte, 32*1024))
+		if _, err := io.CopyBuffer(flushingWriter{w}, stream.Body, make([]byte, 32*1024)); err != nil {
+			panic(http.ErrAbortHandler)
+		}
 	}
 }
 
