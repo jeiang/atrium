@@ -81,7 +81,7 @@ Push registration is limited to 16 devices. Each notification has one 15-second 
 - Phone actions are off by default. `phone_actions_enabled` turns them on and `phone_actions_kinds` lists the proposal kinds that may be approved or dismissed from a notification; the web-only kinds (Gmail label merge, inbox backlog, rebalance split and merge, deletion rule) cannot be enabled.
 - When an allowed proposal is created, its notification on the assistant channel carries Approve and Dismiss actions. Each action is an HMAC-signed link valid for 12 hours and one use; at most 20 links are minted per hour. The link is the credential: `POST /actions/<token>` needs no session, but the Host check still applies and CSRF is skipped for that route.
 - Redeeming a link approves or dismisses the proposal and records the resolution with source `phone`; the Activity page shows "approved via phone". A used, expired, tampered or unknown link changes nothing.
-- The phone action section of the Notifications settings tab turns phone actions on, picks the allowed kinds, shows the outstanding link count and rotates the generated `action_link_key`; rotating invalidates every outstanding link. The section is shown while the notifications module is on.
+- The phone action section of the Notifications settings tab turns phone actions on, picks the allowed kinds, shows the outstanding link count and revokes all outstanding links. A generated `action_link_key` is rotated too; a host-file key is left unchanged and its outstanding link rows are deleted. The section is shown while the notifications module is on.
 
 ## Mail safety
 

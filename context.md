@@ -213,7 +213,7 @@ behavior-parity target.
   its bytes sign and verify links and are never copied into the database.
   Rotating the generated `action_link_key` invalidates
   outstanding links; the phone action section of the Notifications settings
-  tab shows the outstanding count and rotates the key.
+  tab shows the outstanding count and revokes links. With a host-file key, revocation deletes outstanding links without rewriting the key.
 - Mail synchronization, routing, flagging, and filing are application
   workflows. The assistant uses registered tools rather than choosing
   whether the mail pipeline runs. Mail accounts are records with a stable

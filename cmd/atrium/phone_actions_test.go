@@ -96,6 +96,9 @@ func TestPhoneActionsControlsLiveOnTheNotificationsPage(t *testing.T) {
 	s := newPhoneSite(t, dir, api)
 	db := filepath.Join(dir, "atrium.db")
 	s.page()
+	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/settings/phone-actions", nil); code != http.StatusMethodNotAllowed {
+		t.Fatalf("old phone page = %d", code)
+	}
 
 	noFollow := &http.Client{Jar: s.client.Jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
 	code, _, header := fetch(t, noFollow, http.MethodPost, s.base+"/settings/phone-actions", url.Values{"enabled": {"1"}, "kind": {"reminder", phoneKind, "gmail_label_merge"}})

@@ -57,11 +57,11 @@ func TestInboxListsNotificationsAndSettingsKeepsOnlyChannels(t *testing.T) {
 	if code, _, _ := fetch(t, client, http.MethodPost, base+"/settings/notifications/7/resend", url.Values{}); code != http.StatusNotFound && code != http.StatusMethodNotAllowed {
 		t.Errorf("old resend route = %d", code)
 	}
-	if code, _, _ := fetch(t, client, http.MethodPost, base+"/inbox/99/resend", url.Values{}); code != http.StatusUnprocessableEntity {
+	if code, _, _ := fetch(t, client, http.MethodPost, base+"/inbox/99/resend", url.Values{}); code != http.StatusNotFound {
 		t.Errorf("unknown resend = %d", code)
 	}
 	var operation, outcome string
-	if err := d.Read.QueryRow("SELECT operation,outcome FROM operation_audit ORDER BY id DESC LIMIT 1").Scan(&operation, &outcome); err != nil || operation != "notifications.resend" || outcome != "refused" {
+	if err := d.Read.QueryRow("SELECT operation,outcome FROM operation_audit ORDER BY id DESC LIMIT 1").Scan(&operation, &outcome); err != nil || operation != "notifications.resend" || outcome != "not_found" {
 		t.Fatalf("resend audit = %s %s, %v", operation, outcome, err)
 	}
 }

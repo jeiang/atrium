@@ -86,6 +86,10 @@ func (s *Service) finish(ctx context.Context, name application.Name, target stri
 		var disabled *module.OwnerDisabled
 		var te tool.Error
 		var unsupported notify.UnsupportedTransport
+		var invalid notify.DeviceInvalid
+		if errors.As(err, &invalid) {
+			err = &application.Error{Code: application.Invalid, Message: err.Error(), Fields: []application.Field{{Name: invalid.Field, Code: "invalid", Message: err.Error()}}, Cause: err}
+		}
 		if errors.As(err, &unsupported) {
 			err = &application.Error{Code: application.Invalid, Message: err.Error(), Fields: []application.Field{{Name: "transport", Code: "unsupported_transport", Message: err.Error()}}, Cause: err}
 		}

@@ -127,7 +127,7 @@ func notificationRoutes(d *web.Deps, svc *notifyapp.Service) []application.Bindi
 			func(ctx context.Context, in InboxReadState) (application.Change[notifyapp.Empty], error) {
 				return svc.Mark(ctx, notifyapp.MarkInput{ID: in.ID, Read: in.Read})
 			}),
-		api.Command(d, defs[notifyapp.ResendName], bodiless(shape("inbox", ResendResult{}, 0, application.Refused)), "POST /inbox/{id}/resend",
+		api.Command(d, defs[notifyapp.ResendName], bodiless(shape("inbox", ResendResult{}, 0, application.Refused, application.NotFound)), "POST /inbox/{id}/resend",
 			func(ctx context.Context, in InboxItem) (application.Change[ResendResult], error) {
 				change, err := svc.Resend(ctx, notifyapp.ResendInput{ID: in.ID})
 				sent := change.Data.Sent

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -63,8 +65,16 @@ func TestInboxAndDevicesAPI(t *testing.T) {
 		t.Fatalf("apns refusal %s", apns.body)
 	}
 	plain := s.do(http.MethodPost, "/api/v1/devices", token, with("endpoint", "http://push.example.test/device"))
-	if plain.status < 400 || plain.status >= 500 || !strings.Contains(plain.body, "push endpoint must be an https URL") {
+	if plain.status != http.StatusUnprocessableEntity || !strings.Contains(plain.body, "push endpoint must be an https URL") {
 		t.Fatalf("http endpoint = %d %s", plain.status, plain.body)
+	}
+	expectAPI(t, plain, http.StatusUnprocessableEntity, "invalid")
+	for _, field := range []string{"p256dh", "auth"} {
+		bad := s.do(http.MethodPost, "/api/v1/devices", token, with(field, "invalid"))
+		expectAPI(t, bad, http.StatusUnprocessableEntity, "invalid")
+		if !strings.Contains(bad.body, field) {
+			t.Fatalf("missing field %s: %s", field, bad.body)
+		}
 	}
 	if n := count("SELECT COUNT(*) FROM notification_devices"); n != 0 {
 		t.Fatalf("%d devices after refused registrations", n)
@@ -116,6 +126,15 @@ func TestInboxAndDevicesAPI(t *testing.T) {
 		t.Fatalf("second page = %d %s", rest.status, rest.body)
 	}
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/inbox?limit=100&channel=system&cursor="+cursor, token, nil), http.StatusBadRequest, "bad_cursor")
+	legacy := base64.RawURLEncoding.EncodeToString([]byte(`{"id":21}`))
+	malformed := base64.RawURLEncoding.EncodeToString([]byte(`{"id":21}{"id":2}`))
+	expectAPI(t, s.do(http.MethodGet, "/api/v1/inbox?cursor="+malformed, token, nil), http.StatusBadRequest, "bad_cursor")
+	old := s.do(http.MethodGet, "/api/v1/inbox?limit=100&cursor="+legacy, token, nil)
+	oldItems, _ := old.json["items"].([]any)
+	if old.status != http.StatusOK || len(oldItems) != 20 || number(t, oldItems[0].(map[string]any)["id"]) != 20 {
+		t.Fatalf("old cursor: %d %s", old.status, old.body)
+	}
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/inbox/999999/resend", token, nil), http.StatusNotFound, "not_found")
 
 	newest := number(t, top["id"])
 	readPath := "/api/v1/inbox/" + strconv.FormatInt(newest, 10) + "/read"
@@ -187,6 +206,22 @@ func TestInboxAndDevicesAPI(t *testing.T) {
 	}
 	if put := s.do(http.MethodPut, "/api/v1/permissions/phone", token, map[string]any{"enabled": true, "kinds": []string{"reminder"}}); put.status != http.StatusNoContent {
 		t.Fatalf("phone policy = %d %s", put.status, put.body)
+	}
+	configuration := s.do(http.MethodGet, "/api/v1/notifications", token, nil)
+	phoneState, _ := configuration.json["phone"].(map[string]any)
+	kinds, _ := phoneState["kinds"].([]any)
+	found := false
+	for _, raw := range kinds {
+		kind := raw.(map[string]any)
+		if kind["name"] == "triage_label" {
+			found = true
+			if kind["on"] != false {
+				t.Fatalf("unsaved kind is enabled: %v", kind)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("phone configuration omits the unsaved kind")
 	}
 	before = push.count()
 	phone.propose(1)
@@ -290,5 +325,95 @@ func TestDevicesCapAndCredentialRevocation(t *testing.T) {
 	var left, owned int
 	if err := d.Read.QueryRow("SELECT COUNT(*), COUNT(bearer_id) FROM notification_devices").Scan(&left, &owned); err != nil || left != 1 || owned != 0 {
 		t.Fatalf("after revoke devices %d owned %d: %v", left, owned, err)
+	}
+}
+
+func TestPhoneResendAfterDecisionRevokeAndWithoutDevices(t *testing.T) {
+	dir, model, _ := moduleFixture(t, flagsExcept("", ""))
+	push, browser := pushRig(t, dir)
+	keyPath := filepath.Join(dir, "action-link.key")
+	key := strings.Repeat("ab", 32) + "\n"
+	if err := os.WriteFile(keyPath, []byte(key), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	host, _ := fixtureFor(t).lookup("ATRIUM_HOST_CONFIG")
+	setEnv(t, "ATRIUM_HOST_CONFIG", hostConfigAppend(t, host, dir, "phone-host.toml", "\n[app_keys]\naction_link_key_file = "+strconv.Quote(keyPath)+"\n"))
+	phone := newPhoneSite(t, dir, model)
+	if code, _ := phone.post("/settings/notifications/push/subscriptions", browser.form()); code != http.StatusOK {
+		t.Fatalf("subscribe = %d", code)
+	}
+	phone.policy(phoneKind)
+	issued := runApp(t, "auth", "token", "issue", "--name", "resend")
+	if issued.code != cli.ExitOK {
+		t.Fatal(issued.stderr)
+	}
+	token := strings.TrimSpace(issued.stdout)
+	s := &apiSite{t: t, base: phone.base, dir: dir, api: model}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	countLinks := func() int {
+		t.Helper()
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM action_links").Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	latest := func() int64 {
+		t.Helper()
+		var n int64
+		if err := d.Read.QueryRow("SELECT MAX(id) FROM notifications").Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	actions := func() []any { t.Helper(); a, _ := browser.decrypt(t, push.last(t).body)["actions"].([]any); return a }
+	actionURL := func() string {
+		t.Helper()
+		a := actions()
+		if len(a) != 2 {
+			t.Fatalf("actions: %v", a)
+		}
+		return a[1].(map[string]any)["url"].(string)
+	}
+	resend := func(id int64) {
+		t.Helper()
+		expectAPI(t, s.do(http.MethodPost, fmt.Sprintf("/api/v1/inbox/%d/resend", id), token, nil), http.StatusConflict, "refused")
+	}
+	push.answer(http.StatusServiceUnavailable)
+	phone.propose(1)
+	id := latest()
+	old := actionURL()
+	if code := phone.action(strings.TrimPrefix(old, "/actions/")); code != http.StatusOK {
+		t.Fatalf("dismiss = %d", code)
+	}
+	minted := countLinks()
+	before := push.count()
+	resend(id)
+	if push.count() != before+1 || len(actions()) != 0 || countLinks() != minted {
+		t.Fatal("decided proposal resend minted or sent actions")
+	}
+	phone.propose(1)
+	id = latest()
+	old = actionURL()
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/permissions/phone/revoke-links", token, nil), http.StatusNoContent, "")
+	if code := phone.action(strings.TrimPrefix(old, "/actions/")); code != http.StatusBadRequest {
+		t.Fatalf("revoked file-key link = %d", code)
+	}
+	resend(id)
+	if actionURL() == old {
+		t.Fatal("resend reused a revoked link")
+	}
+	raw, err := os.ReadFile(keyPath)
+	if err != nil || string(raw) != key {
+		t.Fatalf("file key changed: %v", err)
+	}
+	if code, _ := phone.post("/settings/notifications/push/unsubscribe", browser.form()); code != http.StatusOK {
+		t.Fatalf("unsubscribe = %d", code)
+	}
+	before, minted = push.count(), countLinks()
+	resend(id)
+	if push.count() != before || countLinks() != minted {
+		t.Fatal("resend without devices pushed or minted links")
 	}
 }

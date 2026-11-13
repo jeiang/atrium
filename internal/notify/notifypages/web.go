@@ -147,6 +147,11 @@ func (h handlers) resend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err = h.service.Resend(h.ctx(r), notifyapp.ResendInput{ID: id})
+	var applicationError *application.Error
+	if errors.As(err, &applicationError) && applicationError.Code == application.NotFound {
+		http.NotFound(w, r)
+		return
+	}
 	if refused(err) {
 		h.renderInbox(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not resent", Description: err.Error()})
 		return

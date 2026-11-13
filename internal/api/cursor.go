@@ -73,6 +73,17 @@ func parseCursor(op application.Name, query url.Values, raw string) (Cursor, boo
 	if err != nil {
 		return Cursor{}, false
 	}
+	if op == "notifications.inbox" && c.filter == filterOf(url.Values{}) && json.Valid(data) {
+		var legacy struct {
+			ID int64 `json:"id"`
+		}
+		dec := json.NewDecoder(bytes.NewReader(data))
+		dec.DisallowUnknownFields()
+		if dec.Decode(&legacy) == nil && legacy.ID > 0 {
+			c.last = data
+			return c, true
+		}
+	}
 	dec := json.NewDecoder(bytes.NewReader(data))
 	dec.DisallowUnknownFields()
 	var wire cursorWire

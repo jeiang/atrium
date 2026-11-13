@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/jeiang/atrium/internal/application"
@@ -96,6 +97,9 @@ func (s *Service) Test(ctx context.Context, _ Empty) (application.Change[TestRes
 }
 func (s *Service) Resend(ctx context.Context, in ResendInput) (application.Change[Delivery], error) {
 	sent, err := notify.Resend(ctx, s.db, in.ID, s.present)
+	if errors.Is(err, sql.ErrNoRows) {
+		err = &application.Error{Code: application.NotFound, Message: "No such notification.", Cause: err}
+	}
 	outcome := "delivered"
 	if !sent.Delivered {
 		outcome = "not_delivered"

@@ -133,7 +133,7 @@ func Resend(ctx context.Context, d *db.DB, id int64, present Presenter) (Sent, e
 	err := d.Read.QueryRowContext(ctx, "SELECT title, body, thread_link, channel, click, priority, delivered, actions_json FROM notifications WHERE id = ?", id).
 		Scan(&title, &body, &link, &channel, &click, &priority, &delivered, &actions)
 	if errors.Is(err, sql.ErrNoRows) {
-		return Sent{}, ChannelError("no notification " + fmt.Sprint(id))
+		return Sent{}, sql.ErrNoRows
 	}
 	if err != nil {
 		return Sent{}, err

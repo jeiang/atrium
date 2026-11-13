@@ -36,6 +36,10 @@ type RegisterDeviceInput struct {
 	Label     string
 }
 
+type DeviceInvalid struct{ Field, Message string }
+
+func (e DeviceInvalid) Error() string { return e.Message }
+
 type webPushCredentials struct {
 	endpoint, key, secret string
 }
@@ -43,18 +47,18 @@ type webPushCredentials struct {
 func checkWebPush(endpoint, p256dh, auth string) (webPushCredentials, error) {
 	endpoint = strings.TrimSpace(endpoint)
 	if err := checkEndpoint(endpoint); err != nil {
-		return webPushCredentials{}, err
+		return webPushCredentials{}, DeviceInvalid{Field: "endpoint", Message: err.Error()}
 	}
 	public, err := pushKey(p256dh)
 	if err != nil {
-		return webPushCredentials{}, PushError("p256dh must be base64url")
+		return webPushCredentials{}, DeviceInvalid{Field: "p256dh", Message: "p256dh must be base64url"}
 	}
 	if _, err := ecdh.P256().NewPublicKey(public); err != nil {
-		return webPushCredentials{}, PushError("p256dh is not a P-256 public key")
+		return webPushCredentials{}, DeviceInvalid{Field: "p256dh", Message: "p256dh is not a P-256 public key"}
 	}
 	secret, err := pushKey(auth)
 	if err != nil || len(secret) != 16 {
-		return webPushCredentials{}, PushError("auth must be 16 bytes of base64url")
+		return webPushCredentials{}, DeviceInvalid{Field: "auth", Message: "auth must be 16 bytes of base64url"}
 	}
 	return webPushCredentials{endpoint: endpoint, key: base64.RawURLEncoding.EncodeToString(public), secret: base64.RawURLEncoding.EncodeToString(secret)}, nil
 }
