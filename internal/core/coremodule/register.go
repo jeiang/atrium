@@ -95,7 +95,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, settingOps...), append(bindings, settingBindings...)
 	connectionOps, connectionBindings := connectionsOperations()
 	operations, bindings = append(operations, connectionOps...), append(bindings, connectionBindings...)
-	maintenanceOps, maintenanceBindings := maintenanceOperations()
+	maintenanceOps, maintenanceBindings := m.maintenanceOperations()
 	operations, bindings = append(operations, maintenanceOps...), append(bindings, maintenanceBindings...)
 	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
 	maintenance := maintenanceapp.New(mc.Env, m.Now)
@@ -145,7 +145,13 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}, OIDC: oidcconn.Source()},
 			connweb.Page(connectionService),
-			{Module: func(_ chi.Router, d *web.Deps) { authRoutes(d); commandRoutes(d); m.settingsRoutes(d) }},
+			{Module: func(_ chi.Router, d *web.Deps) {
+				authRoutes(d)
+				commandRoutes(d)
+				m.settingsRoutes(d)
+				connectionRoutes(d)
+				m.maintenanceRoutes(d)
+			}},
 		},
 		Groups:     SettingGroups(),
 		Operations: operations,

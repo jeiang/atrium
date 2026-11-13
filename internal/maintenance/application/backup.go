@@ -52,7 +52,7 @@ func DescribeDBBackup() application.Definition {
 }
 
 func DescribeRestore() application.Definition {
-	return application.Describe[RestoreInput, Restored](RestoreName, application.Command, []application.Authority{application.Operator}, application.LocalUndoable, true)
+	return application.Describe[RestoreInput, Restored](RestoreName, application.Command, []application.Authority{application.Bootstrap}, application.LocalUndoable, true)
 }
 
 func (s *Service) Backup(ctx context.Context, in BackupInput) (application.Change[Backup], error) {

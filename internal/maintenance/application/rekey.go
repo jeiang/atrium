@@ -48,11 +48,11 @@ type Rekeyed struct {
 }
 
 func DescribeEncrypt() application.Definition {
-	return application.Describe[EncryptInput, Encrypted](EncryptName, application.Command, []application.Authority{application.Operator}, application.LocalUndoable, true)
+	return application.Describe[EncryptInput, Encrypted](EncryptName, application.Command, []application.Authority{application.Bootstrap}, application.LocalUndoable, true)
 }
 
 func DescribeRekey() application.Definition {
-	return application.Describe[RekeyInput, Rekeyed](RekeyName, application.Command, []application.Authority{application.Operator}, application.LocalUndoable, true)
+	return application.Describe[RekeyInput, Rekeyed](RekeyName, application.Command, []application.Authority{application.Bootstrap}, application.LocalUndoable, true)
 }
 
 func ParseKey(raw []byte) (db.Key, error) {

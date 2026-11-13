@@ -113,15 +113,15 @@ func DescribeConfiguration() application.Definition {
 }
 
 func DescribeSigninStart() application.Definition {
-	return application.Describe[SigninStartInput, Signin](SigninStartName, application.Command, []application.Authority{application.Bootstrap}, application.LocalUndoable, false)
+	return application.Describe[SigninStartInput, Signin](SigninStartName, application.Command, []application.Authority{application.PublicCapability}, application.LocalUndoable, false)
 }
 
 func DescribeSigninComplete() application.Definition {
-	return application.Describe[SigninCompleteInput, Session](SigninCompleteName, application.Command, []application.Authority{application.Bootstrap}, application.External, false)
+	return application.Describe[SigninCompleteInput, Session](SigninCompleteName, application.Command, []application.Authority{application.PublicCapability}, application.External, false)
 }
 
 func DescribeLogout() application.Definition {
-	return application.Describe[LogoutInput, struct{}](LogoutName, application.Command, []application.Authority{application.Operator}, application.LocalUndoable, false)
+	return application.Describe[LogoutInput, struct{}](LogoutName, application.Command, []application.Authority{application.PublicCapability}, application.LocalUndoable, false)
 }
 
 func (s *Service) Configuration(ctx context.Context) (application.Read[Configuration], error) {

@@ -55,11 +55,19 @@
       "operations": [
         "calendar.draft-candidates",
         "calendar.sync",
+        "connections.disconnect",
+        "connections.list",
+        "connections.oauth-complete",
+        "connections.oauth-configure",
+        "connections.oauth-setup",
+        "connections.oauth-start",
+        "connections.test",
+        "connections.test-save",
         "contacts.lookup",
         "contacts.sync"
       ],
-      "required": 4,
-      "bound": 4
+      "required": 12,
+      "bound": 12
     },
     {
       "area": "knowledge",
@@ -134,7 +142,15 @@
     {
       "area": "settings",
       "operations": [
+        "auth.bearer-issue",
+        "auth.bearer-list",
+        "auth.bearer-revoke",
+        "auth.configuration",
         "auth.identity",
+        "maintenance.backup",
+        "maintenance.check",
+        "maintenance.db-backup",
+        "maintenance.verify-archive",
         "settings.read",
         "settings.secret-delete",
         "settings.secret-set",
@@ -142,8 +158,8 @@
         "settings.set",
         "settings.unset"
       ],
-      "required": 7,
-      "bound": 7
+      "required": 15,
+      "bound": 15
     },
     {
       "area": "tasks",
@@ -182,6 +198,6 @@
       "bound": 3
     }
   ],
-  "total_required": 154,
-  "total_bound": 40
+  "total_required": 148,
+  "total_bound": 56
 }
