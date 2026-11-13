@@ -1,9 +1,11 @@
 package pages
 
 import (
+	"encoding/json"
 	"errors"
 	"math/big"
 	"net/http"
+	"reflect"
 	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
@@ -70,16 +72,16 @@ type apiQuestion struct {
 }
 
 type apiItem struct {
-	Seq        int64                `json:"seq"`
-	RunID      *int64               `json:"run_id"`
-	CreatedAt  float64              `json:"created_at"`
-	Kind       string               `json:"kind"`
-	Text       string               `json:"text"`
-	Files      []service.Attachment `json:"files"`
-	Steps      []*service.Step      `json:"steps"`
-	Citations  []service.Citation   `json:"citations"`
-	DraftID    *int64               `json:"draft_id,omitempty"`
-	ProposalID *int64               `json:"proposal_id,omitempty"`
+	Seq        int64              `json:"seq"`
+	RunID      *int64             `json:"run_id"`
+	CreatedAt  float64            `json:"created_at"`
+	Kind       string             `json:"kind"`
+	Text       string             `json:"text"`
+	Files      []apiAttachment    `json:"files"`
+	Steps      []*apiStep         `json:"steps"`
+	Citations  []service.Citation `json:"citations"`
+	DraftID    *int64             `json:"draft_id,omitempty"`
+	ProposalID *int64             `json:"proposal_id,omitempty"`
 }
 
 type apiTranscript struct {
@@ -157,7 +159,7 @@ func rowID(v any) *int64 {
 func itemOut(item *service.Item) apiItem {
 	out := apiItem{
 		Seq: item.Seq, RunID: item.RunID, CreatedAt: item.CreatedAt, Kind: item.Kind, Text: item.Text,
-		Files: item.Files, Steps: item.Steps, Citations: item.Citations,
+		Files: attachmentsOut(item.Files), Steps: stepsOut(item.Steps), Citations: item.Citations,
 	}
 	if item.Draft != nil {
 		out.DraftID = rowID(item.Draft["id"])
@@ -438,4 +440,84 @@ func transcriptOut(v asstapp.Transcript) apiTranscript {
 
 func errorIs(err error, code application.Code) bool {
 	return err != nil && application.Classify(err).Code == code
+}
+
+type apiAttachment struct {
+	ID        json.RawMessage `json:"id"`
+	Name      json.RawMessage `json:"name"`
+	MediaType json.RawMessage `json:"media_type"`
+	Kind      json.RawMessage `json:"kind"`
+}
+type apiSearchResult struct {
+	URL   json.RawMessage `json:"url"`
+	Title json.RawMessage `json:"title"`
+}
+type apiStep struct {
+	Kind          string            `json:"kind"`
+	Text          string            `json:"text"`
+	ID            json.RawMessage   `json:"id"`
+	Name          string            `json:"name"`
+	Args          string            `json:"args"`
+	State         *string           `json:"state"`
+	Result        *string           `json:"result"`
+	IsError       bool              `json:"is_error"`
+	ChildThreadID json.RawMessage   `json:"child_thread_id"`
+	Results       []apiSearchResult `json:"results"`
+	Error         json.RawMessage   `json:"error"`
+}
+
+func apiRaw(v any) json.RawMessage {
+	raw, err := json.Marshal(v)
+	check(err)
+	return raw
+}
+func attachmentsOut(in []service.Attachment) []apiAttachment {
+	if in == nil {
+		return nil
+	}
+	out := make([]apiAttachment, len(in))
+	for i, a := range in {
+		out[i] = apiAttachment{apiRaw(a.ID), apiRaw(a.Name), apiRaw(a.MediaType), apiRaw(a.Kind)}
+	}
+	return out
+}
+func stepsOut(in []*service.Step) []*apiStep {
+	if in == nil {
+		return nil
+	}
+	out := make([]*apiStep, len(in))
+	for i, s := range in {
+		if s == nil {
+			continue
+		}
+		var results []apiSearchResult
+		if s.Results != nil {
+			results = make([]apiSearchResult, len(s.Results))
+			for j, v := range s.Results {
+				results[j] = apiSearchResult{apiRaw(v.URL), apiRaw(v.Title)}
+			}
+		}
+		out[i] = &apiStep{Kind: s.Kind, Text: s.Text, ID: apiRaw(s.ID), Name: s.Name, Args: s.Args, State: s.State, Result: s.Result, IsError: s.IsError, ChildThreadID: apiRaw(s.ChildThreadID), Results: results, Error: apiRaw(s.Error)}
+	}
+	return out
+}
+
+type apiThreadListRequest struct {
+	Q         string `query:"q" json:"-"`
+	View      string `query:"view" json:"-"`
+	ProjectID string `query:"project_id" json:"-"`
+	Limit     string `query:"limit" json:"-"`
+	Cursor    string `query:"cursor" json:"-"`
+}
+type apiTranscriptRequest struct {
+	ThreadID int64  `path:"thread_id" json:"-"`
+	Limit    string `query:"limit" json:"-"`
+	Cursor   string `query:"cursor" json:"-"`
+}
+
+func APIReadBindings() []application.Binding {
+	return []application.Binding{
+		{Kind: application.API, Target: "GET /threads", Uses: []application.Name{asstapp.ThreadListName}, API: &application.APIShape{Area: "threads", Request: reflect.TypeFor[apiThreadListRequest](), Response: reflect.TypeFor[web.List[apiListedThread]](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.Invalid}}},
+		{Kind: application.API, Target: "GET /threads/{thread_id}", Uses: []application.Name{asstapp.ThreadTranscriptName}, API: &application.APIShape{Area: "threads", Request: reflect.TypeFor[apiTranscriptRequest](), Response: reflect.TypeFor[apiTranscript](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.NotFound, application.Invalid}}},
+	}
 }

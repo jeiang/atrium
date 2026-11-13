@@ -2,7 +2,6 @@ package web
 
 import (
 	"bytes"
-	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -14,7 +13,6 @@ import (
 	"strconv"
 	"strings"
 
-	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
@@ -50,10 +48,6 @@ func newAPIError(w http.ResponseWriter, status int, code, message string) apiErr
 
 func isAPI(r *http.Request) bool {
 	return strings.HasPrefix(r.URL.Path, apiPrefix) || r.URL.Path == strings.TrimSuffix(apiPrefix, "/")
-}
-
-func withIdentity(ctx context.Context, who Identity) context.Context {
-	return authapp.WithPrincipal(ctx, who)
 }
 
 const (
@@ -262,6 +256,6 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, int64(limit))
 	}
-	ctx := withIdentity(r.Context(), who)
+	ctx := withAPIIdentity(r.Context(), who)
 	next.ServeHTTP(w, r.WithContext(ctx))
 }

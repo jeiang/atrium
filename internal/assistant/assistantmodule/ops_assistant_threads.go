@@ -3,6 +3,7 @@ package assistantmodule
 import (
 	"github.com/jeiang/atrium/internal/application"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
+	"github.com/jeiang/atrium/internal/assistant/pages"
 )
 
 func threadOperations() ([]application.Definition, []application.Binding) {
@@ -14,7 +15,7 @@ func threadOperations() ([]application.Definition, []application.Binding) {
 			asstapp.DescribeReplyRegenerate(), asstapp.DescribeThreadBranch(), asstapp.DescribeThreadDelete(), asstapp.DescribeThreadPin(),
 			asstapp.DescribeThreadArchive(), asstapp.DescribeThreadProject(), asstapp.DescribeThreadOptions(),
 			asstapp.DescribeRunStop(), asstapp.DescribeRunResume(), asstapp.DescribeRunAnswer(),
-		}, []application.Binding{
+		}, append(pages.APIReadBindings(), []application.Binding{
 			{Kind: application.HTML, Target: "GET /chat", Uses: uses(asstapp.HomeName)},
 			{Kind: application.HTML, Target: "POST /chat", Uses: uses(asstapp.ThreadStartName)},
 			{Kind: application.HTML, Target: "POST /chat/{thread_id}/messages", Uses: uses(asstapp.MessageSendName, asstapp.MessageEditName, asstapp.ThreadTranscriptName)},
@@ -42,8 +43,7 @@ func threadOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.HTML, Target: "GET /chat/{thread_id}/history/{start}/{n}", Uses: uses(asstapp.ThreadHistoryName)},
 			{Kind: application.HTML, Target: "GET /chat/{thread_id}/events", Uses: uses(asstapp.RunEventsName)},
 			{Kind: application.HTML, Target: "GET /chat/{thread_id}/runs/{run_id}", Uses: uses(asstapp.RunDetailName, asstapp.ThreadTranscriptName)},
-			{Kind: application.API, Target: "GET /threads", Uses: uses(asstapp.ThreadListName)},
-			{Kind: application.API, Target: "GET /threads/{thread_id}", Uses: uses(asstapp.ThreadTranscriptName)},
+
 			{Kind: application.API, Target: "GET /threads/{thread_id}/runs/{run_id}/events", Uses: uses(asstapp.RunEventsName)},
-		}
+		}...)
 }
