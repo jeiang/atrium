@@ -141,6 +141,17 @@ func TestKnowledgeAPILifecycle(t *testing.T) {
 	expectField(t, s.do(http.MethodPost, "/api/v1/knowledge", token, map[string]any{"title": "", "body": "x", "scope": "work"}), "title")
 	expectField(t, s.do(http.MethodPost, "/api/v1/knowledge/confirm-matching", token, map[string]any{"state": "all"}), "state")
 
+	kept := apiData(t, s.do(http.MethodPost, "/api/v1/knowledge", token, map[string]any{
+		"title": "Locker code", "body": "The locker code is 1234.", "scope": "personal", "aliases": []string{"locker"}, "private": true, "marks": []string{"messages", "pii"}, "pinned": true,
+	}), http.StatusCreated)
+	keptPath := fmt.Sprintf("/api/v1/knowledge/%d", number(t, kept["id"]))
+	apiData(t, s.do(http.MethodPatch, keptPath, token, map[string]any{"title": "Gym locker code"}), http.StatusOK)
+	if rec := apiData(t, s.do(http.MethodGet, keptPath, token, nil), http.StatusOK)["record"].(map[string]any); rec["title"] != "Gym locker code" || rec["body"] != "The locker code is 1234." ||
+		rec["scope"] != "personal" || rec["private"] != true || rec["pinned"] != true || len(rec["marks"].([]any)) != 2 || len(rec["aliases"].([]any)) != 1 {
+		t.Fatalf("a title-only PATCH changed omitted fields: %v", rec)
+	}
+	apiData(t, s.do(http.MethodPost, keptPath+"/confirm", token, nil), http.StatusOK)
+
 	for i := range 104 {
 		scope := "work"
 		if i == 0 {

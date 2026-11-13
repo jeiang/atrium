@@ -36,8 +36,14 @@ type KnowledgeFields struct {
 }
 
 type KnowledgeEditRequest struct {
-	ID int64 `path:"record_id" json:"-"`
-	KnowledgeFields
+	ID      int64     `path:"record_id" json:"-"`
+	Title   *string   `json:"title,omitempty"`
+	Body    *string   `json:"body,omitempty"`
+	Aliases *[]string `json:"aliases,omitempty"`
+	Scope   *string   `json:"scope,omitempty" api:"enum=work|personal"`
+	Private *bool     `json:"private,omitempty"`
+	Marks   *[]string `json:"marks,omitempty"`
+	Pinned  *bool     `json:"pinned,omitempty"`
 }
 
 type KnowledgeSelectedRequest struct {
@@ -225,7 +231,11 @@ func (m Module) knowledgeRoutes(d *web.Deps) []application.Binding {
 			}),
 		api.Command(d, kbapp.DescribeEdit(), application.APIShape{Area: area, Errors: []application.Code{application.Invalid, application.NotFound, application.Refused}},
 			"PATCH /knowledge/{record_id}", func(ctx context.Context, in KnowledgeEditRequest) (application.Change[KnowledgeChanged], error) {
-				record, err := in.input()
+				stored, err := svc().Detail(ctx, kbapp.DetailInput{ID: in.ID})
+				if err != nil {
+					return application.Change[KnowledgeChanged]{}, err
+				}
+				record, err := in.merge(stored.Data.Record)
 				if err != nil {
 					return application.Change[KnowledgeChanged]{}, err
 				}
@@ -292,8 +302,46 @@ func knowledgeRecord(r kbapp.Record) KnowledgeRecord {
 }
 
 func (f KnowledgeFields) input() (kbapp.RecordInput, error) {
+	marks, err := marksOf(f.Marks)
+	if err != nil {
+		return kbapp.RecordInput{}, err
+	}
+	return kbapp.RecordInput{Title: f.Title, Body: f.Body, Aliases: f.Aliases, Scope: f.Scope, Private: f.Private, Marks: marks, Pinned: f.Pinned}, nil
+}
+
+func (in KnowledgeEditRequest) merge(rec kbapp.Record) (kbapp.RecordInput, error) {
+	out := kbapp.RecordInput{Title: rec.Title, Body: rec.Body, Aliases: rec.Aliases, Scope: rec.Scope, Private: rec.Private, Marks: rec.Marks, Pinned: rec.Pinned}
+	if in.Title != nil {
+		out.Title = *in.Title
+	}
+	if in.Body != nil {
+		out.Body = *in.Body
+	}
+	if in.Aliases != nil {
+		out.Aliases = *in.Aliases
+	}
+	if in.Scope != nil {
+		out.Scope = *in.Scope
+	}
+	if in.Private != nil {
+		out.Private = *in.Private
+	}
+	if in.Pinned != nil {
+		out.Pinned = *in.Pinned
+	}
+	if in.Marks != nil {
+		marks, err := marksOf(*in.Marks)
+		if err != nil {
+			return kbapp.RecordInput{}, err
+		}
+		out.Marks = marks
+	}
+	return out, nil
+}
+
+func marksOf(names []string) (tool.Marks, error) {
 	var marks tool.Marks
-	for _, name := range f.Marks {
+	for _, name := range names {
 		found := false
 		for _, m := range kbapp.Marks {
 			if m.Name == name {
@@ -302,11 +350,11 @@ func (f KnowledgeFields) input() (kbapp.RecordInput, error) {
 			}
 		}
 		if !found {
-			return kbapp.RecordInput{}, &application.Error{Code: application.Invalid, Message: "unknown mark " + name,
+			return 0, &application.Error{Code: application.Invalid, Message: "unknown mark " + name,
 				Fields: []application.Field{{Name: "marks", Code: "invalid", Message: "unknown mark " + name}}}
 		}
 	}
-	return kbapp.RecordInput{Title: f.Title, Body: f.Body, Aliases: f.Aliases, Scope: f.Scope, Private: f.Private, Marks: marks, Pinned: f.Pinned}, nil
+	return marks, nil
 }
 
 func knowledgeChange(c application.Change[kbapp.Changed], err error) (application.Change[KnowledgeChanged], error) {

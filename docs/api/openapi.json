@@ -1465,11 +1465,6 @@
             "type": "string"
           }
         },
-        "required": [
-          "title",
-          "body",
-          "scope"
-        ],
         "type": "object"
       },
       "AssistantmoduleKnowledgeFields": {
@@ -2759,14 +2754,10 @@
         "properties": {
           "capability": {
             "type": "string"
-          },
-          "redirect_uri": {
-            "type": "string"
           }
         },
         "required": [
-          "capability",
-          "redirect_uri"
+          "capability"
         ],
         "type": "object"
       },

@@ -74,18 +74,29 @@ func (s *Service) BearerList(ctx context.Context) (application.Read[[]Token], er
 	return application.Read[[]Token]{Data: out, Revision: rev}, nil
 }
 
+var errOutlivesIssuer = errors.New("auth: token would outlive its issuer")
+
 func (s *Service) BearerIssue(ctx context.Context, in BearerIssueInput) (application.Change[Issued], error) {
 	var auditID int64
-	issued, err := s.bearers.Issue(ctx, in.Name, in.ExpiresAt, func(ctx context.Context, tx *sql.Tx, tok bearer.Token) error {
-		var err error
-		if err := history(ctx, tx, "auth_token.issue", tok); err != nil {
+	var issued bearer.Issued
+	var err error
+	if p, ok := PrincipalOf(ctx); ok && p.Expires != nil && (in.ExpiresAt == nil || in.ExpiresAt.After(*p.Expires)) {
+		err = errOutlivesIssuer
+	} else {
+		issued, err = s.bearers.Issue(ctx, in.Name, in.ExpiresAt, func(ctx context.Context, tx *sql.Tx, tok bearer.Token) error {
+			var err error
+			if err := history(ctx, tx, "auth_token.issue", tok); err != nil {
+				return err
+			}
+			auditID, err = s.audit(ctx, tx, BearerIssueName, state.OK, tok)
 			return err
-		}
-		auditID, err = s.audit(ctx, tx, BearerIssueName, state.OK, tok)
-		return err
-	})
+		})
+	}
 	var message string
 	switch {
+	case errors.Is(err, errOutlivesIssuer):
+		p, _ := PrincipalOf(ctx)
+		message = "The expiry must be set and no later than the calling token's own expiry, " + p.Expires.UTC().Format(time.RFC3339) + "."
 	case errors.Is(err, bearer.ErrName):
 		message = "A name of at most 100 characters is required."
 	case errors.Is(err, bearer.ErrExpiry):

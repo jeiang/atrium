@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -233,7 +234,7 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		APIError(w, http.StatusServiceUnavailable, "auth_unavailable", "Sign-in is unavailable.")
 		return
 	}
-	who := Identity{Source: SourceBearer, Subject: tok.Subject, Email: tok.Email, Name: tok.DisplayName}
+	who := Identity{Source: SourceBearer, Subject: tok.Subject, Email: tok.Email, Name: tok.DisplayName, Expires: tok.ExpiresAt}
 	if isUnsafe(r.Method) {
 		if !sameOrigin(r) {
 			APIError(w, http.StatusForbidden, "cross_origin", "Cross-origin requests are refused.")
@@ -256,6 +257,21 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, int64(limit))
 	}
-	ctx := withAPIIdentity(r.Context(), who)
+	ctx := context.WithValue(withAPIIdentity(r.Context(), who), originKey{}, Origin(r))
 	next.ServeHTTP(w, r.WithContext(ctx))
+}
+
+type originKey struct{}
+
+func Origin(r *http.Request) string {
+	scheme := "https"
+	if r.TLS == nil && strings.HasPrefix(r.Host, "127.0.0.1") {
+		scheme = "http"
+	}
+	return scheme + "://" + r.Host
+}
+
+func RequestOrigin(ctx context.Context) string {
+	origin, _ := ctx.Value(originKey{}).(string)
+	return origin
 }

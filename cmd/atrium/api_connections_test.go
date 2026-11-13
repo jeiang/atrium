@@ -5,11 +5,13 @@ package main
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestConnectionsAndTokensAPI(t *testing.T) {
@@ -65,11 +67,12 @@ func TestConnectionsAndTokensAPI(t *testing.T) {
 	}
 
 	apiData(t, s.do(http.MethodPut, "/api/v1/connections/google/oauth", token, map[string]any{"client_id": "client-id", "client_secret": "client-secret"}), http.StatusOK)
-	started := apiData(t, s.do(http.MethodPost, "/api/v1/connections/google/oauth/start", token, map[string]any{"capability": "calendar", "redirect_uri": "http://127.0.0.1/callback"}), http.StatusOK)
+	started := apiData(t, s.do(http.MethodPost, "/api/v1/connections/google/oauth/start", token, map[string]any{"capability": "calendar"}), http.StatusOK)
 	state, _ := started["state"].(string)
-	if state == "" || !strings.Contains(started["authorize_url"].(string), "code_challenge_method=S256") {
+	if state == "" || !strings.Contains(started["authorize_url"].(string), "code_challenge_method=S256") || !strings.Contains(started["authorize_url"].(string), "redirect_uri="+url.QueryEscape(base+"/settings/connections/google/callback")) {
 		t.Fatalf("oauth start: %v", started)
 	}
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/connections/google/oauth/start", token, map[string]any{"capability": "calendar", "redirect_uri": "https://evil.example/cb"}), http.StatusBadRequest, "bad_request")
 	if got := apiData(t, s.do(http.MethodPost, "/api/v1/connections/google/oauth/complete", token, map[string]any{"state": state, "code": "code-1"}), http.StatusOK); got["name"] != "calendar" {
 		t.Fatalf("oauth complete: %v", got)
 	}
@@ -98,6 +101,21 @@ func TestConnectionsAndTokensAPI(t *testing.T) {
 	}
 	if got := s.do(http.MethodGet, "/api/v1/auth/tokens", secret, nil); got.status != http.StatusUnauthorized {
 		t.Fatalf("a revoked bearer: %d", got.status)
+	}
+	expectConditional(t, s, token, "/api/v1/auth/tokens")
+
+	hour := time.Now().Add(time.Hour).UTC().Truncate(time.Second)
+	short := apiData(t, s.do(http.MethodPost, "/api/v1/auth/tokens", token, map[string]any{"name": "short", "expires_at": hour.Format(time.RFC3339)}), http.StatusCreated)
+	shortSecret, _ := short["secret"].(string)
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/auth/tokens", shortSecret, map[string]any{"name": "forever"}), http.StatusUnprocessableEntity, "invalid")
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/auth/tokens", shortSecret, map[string]any{"name": "longer", "expires_at": hour.Add(time.Hour).Format(time.RFC3339)}), http.StatusUnprocessableEntity, "invalid")
+	child := apiData(t, s.do(http.MethodPost, "/api/v1/auth/tokens", shortSecret, map[string]any{"name": "child", "expires_at": hour.Add(-time.Minute).Format(time.RFC3339)}), http.StatusCreated)
+	if exp, _ := child["token"].(map[string]any)["expires_at"].(string); exp == "" {
+		t.Fatalf("a token minted by a short-lived bearer has no expiry: %v", child)
+	}
+	var minted int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM auth_bearers WHERE name IN ('forever', 'longer')").Scan(&minted); err != nil || minted != 0 {
+		t.Fatalf("refused tokens were stored: %d %v", minted, err)
 	}
 
 	dest := filepath.Join(t.TempDir(), "atrium-backup.db")

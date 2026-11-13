@@ -216,11 +216,12 @@ var revisionExempt = map[string]string{
 }
 
 var revisionColumnExempt = map[string][]string{
-	"effects":     {"lease_at"},
-	"job_runs":    {"heartbeat_at", "owner"},
-	"jobs":        {"lease_owner", "lease_until"},
-	"memory_jobs": {"lease_until"},
-	"runs":        {"owner", "lease_until"},
+	"auth_bearers": {"last_used_at"},
+	"effects":      {"lease_at"},
+	"job_runs":     {"heartbeat_at", "owner"},
+	"jobs":         {"lease_owner", "lease_until"},
+	"memory_jobs":  {"lease_until"},
+	"runs":         {"owner", "lease_until"},
 }
 
 var revisionWhen = map[string]string{}

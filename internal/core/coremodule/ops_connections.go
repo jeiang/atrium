@@ -10,6 +10,7 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/connections"
 	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
+	"github.com/jeiang/atrium/internal/connections/connweb"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/settings/audit"
@@ -96,7 +97,6 @@ type GoogleClient struct {
 
 type GoogleStart struct {
 	Capability string `json:"capability"`
-	Redirect   string `json:"redirect_uri"`
 }
 
 type GoogleConsent struct {
@@ -170,7 +170,7 @@ func connectionRoutes(d *web.Deps) []application.Binding {
 				if err != nil {
 					return application.Change[GoogleConsent]{}, err
 				}
-				change, err := s.OAuthStart(ctx, connectionsapp.OAuthStartInput{Capability: in.Capability, Redirect: in.Redirect})
+				change, err := s.OAuthStart(ctx, connectionsapp.OAuthStartInput{Capability: in.Capability, Redirect: connweb.GoogleRedirect(web.RequestOrigin(ctx))})
 				if err != nil {
 					return application.Change[GoogleConsent]{}, err
 				}
