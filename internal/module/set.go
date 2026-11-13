@@ -191,7 +191,7 @@ func (s *Set) Halt(owners []string) {
 	}
 }
 
-func (s *Set) halting(owner string) bool {
+func (s *Set) Halting(owner string) bool {
 	s.hooks.Lock()
 	defer s.hooks.Unlock()
 	return s.halted[owner]

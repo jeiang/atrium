@@ -198,7 +198,7 @@ func (a *App) health() runtime.Health {
 
 func (a *App) startOwner(owner string, snap *module.Snapshot) {
 	a.startServices(owner, snap)
-	a.refreshSets(owner, snap)
+	a.refreshSets(owner)
 }
 
 func (a *App) startServices(owner string, snap *module.Snapshot) {
@@ -232,22 +232,24 @@ func (a *App) refreshLoop() {
 		case <-rt.quit:
 			return
 		case <-rt.kick:
-			snap := rt.set.Current()
 			for _, d := range a.catalog.Declarations() {
 				if d.ServiceSets != nil {
-					a.refreshSets(d.Name, snap)
+					a.refreshSets(d.Name)
 				}
 			}
 		}
 	}
 }
 
-func (a *App) refreshSets(owner string, snap *module.Snapshot) {
+func (a *App) refreshSets(owner string) {
 	rt := a.rt
 	rt.setMu.Lock()
 	defer rt.setMu.Unlock()
+	if rt.set.Halting(owner) {
+		return
+	}
 	var want []module.SetService
-	if fn := snap.ServiceSetsOf(owner); fn != nil {
+	if fn := rt.set.Current().ServiceSetsOf(owner); fn != nil {
 		var err error
 		if want, err = fn(rt.ctx); err != nil {
 			log.Error("module service set is unavailable", logx.Module, owner, logx.Err, err.Error())

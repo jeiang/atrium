@@ -7,6 +7,7 @@ import (
 	"math/rand/v2"
 	"runtime/debug"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/jeiang/atrium/internal/logx"
@@ -49,6 +50,7 @@ type Services struct {
 	closers  []func() error
 	canceled bool
 	closed   chan struct{}
+	healthy  atomic.Bool
 }
 
 func New(defs []ServiceDefinition) (*Supervisor, error) {
@@ -99,12 +101,12 @@ func (s *Supervisor) loop(ctx context.Context, def ServiceDefinition, st *state)
 	for {
 		started := time.Now()
 		log.Info(fmt.Sprintf("service %s started", def.Name))
-		err := s.instance(ctx, def, st)
+		healthy, err := s.instance(ctx, def, st)
 		if ctx.Err() != nil {
 			st.set(StatusStopped)
 			return
 		}
-		if time.Since(started) >= def.Backoff.ResetAfter {
+		if healthy || (def.Backoff.ResetAfter > 0 && time.Since(started) >= def.Backoff.ResetAfter) {
 			attempt = 0
 		}
 		delay := backoffDelay(def.Backoff, attempt)
@@ -140,7 +142,7 @@ func backoffDelay(b Backoff, attempt int) time.Duration {
 	return half + rand.N(delay-half+1)
 }
 
-func (s *Supervisor) instance(ctx context.Context, def ServiceDefinition, st *state) error {
+func (s *Supervisor) instance(ctx context.Context, def ServiceDefinition, st *state) (bool, error) {
 	inst, cancel := context.WithCancelCause(ctx)
 	s.mu.Lock()
 	work := s.work
@@ -159,16 +161,17 @@ func (s *Supervisor) instance(ctx context.Context, def ServiceDefinition, st *st
 		<-svc.closed
 	}
 	svc.wg.Wait()
+	healthy := svc.healthy.Load()
 	if ctx.Err() != nil {
-		return nil
+		return healthy, nil
 	}
 	if cause := context.Cause(inst); cause != nil && !errors.Is(cause, context.Canceled) {
-		return cause
+		return healthy, cause
 	}
 	if err == nil {
 		err = errUnexpectedReturn
 	}
-	return err
+	return healthy, err
 }
 
 func guard(fn func() error) (err error) {
@@ -203,6 +206,10 @@ func (s *Services) Work(ctx context.Context) (context.Context, func(), error) {
 		return detached, func() {}, nil
 	}
 	return s.work(detached)
+}
+
+func (s *Services) Healthy() {
+	s.healthy.Store(true)
 }
 
 func (s *Services) Heartbeat(name string) {

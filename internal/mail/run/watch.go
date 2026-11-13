@@ -33,9 +33,8 @@ const (
 )
 
 var watchBackoff = runtime.Backoff{
-	Initial:    mail.TuningMailBackoffStartSeconds * time.Second,
-	Maximum:    mail.TuningMailBackoffMaxSeconds * time.Second,
-	ResetAfter: noIdleWait,
+	Initial: mail.TuningMailBackoffStartSeconds * time.Second,
+	Maximum: mail.TuningMailBackoffMaxSeconds * time.Second,
 }
 
 func ConnectionLost(err error) bool {
@@ -158,12 +157,14 @@ func (w *Watcher) run(ctx context.Context, s *runtime.Services, account string) 
 			return err
 		}
 		defer release()
-		return pass.Locked(ctx, work, []string{account})
+		waiting(beat, func() { err = pass.Locked(ctx, work, []string{account}) })
+		return err
 	}
 	if err := locked(); err != nil {
 		return err
 	}
 	return mailops.ReadSession(ctx, pass.Open, pass.DB.Read, account, func(client mail.Client) error {
+		s.Healthy()
 		for ctx.Err() == nil {
 			beat()
 			var changed bool

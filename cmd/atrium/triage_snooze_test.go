@@ -42,6 +42,7 @@ func TestMailTriageSnoozeRecordsReturnWhenMailIsDisabledAfterMove(t *testing.T) 
 		"VALUES (900, 'mail_triage', 'work', 'pending', ?, 'snooze receipt', ?, '{}', 'fp-snooze')", mail.WallClock(), string(payload))
 
 	startServeIn(t, m.dir)
+	waitUntil(t, 30*time.Second, "the serve watch to finish its first pass and idle", func() bool { return fake.Idling() == 1 })
 	arrived := make(chan struct{})
 	release := make(chan struct{})
 	var once sync.Once

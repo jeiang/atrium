@@ -31,8 +31,8 @@ func (b Backoff) orDefault() Backoff {
 }
 
 func (b Backoff) validate() error {
-	if b.Initial <= 0 || b.Maximum < b.Initial || b.ResetAfter <= 0 {
-		return errors.New("the backoff needs a positive initial delay, a maximum no smaller than it and a positive reset period")
+	if b.Initial <= 0 || b.Maximum < b.Initial || b.ResetAfter < 0 {
+		return errors.New("the backoff needs a positive initial delay, a maximum no smaller than it and a reset period that is not negative")
 	}
 	return nil
 }
