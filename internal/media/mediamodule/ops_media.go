@@ -62,3 +62,19 @@ func libraryOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.HTML, Target: "GET /apps/media/file/*", Uses: []application.Name{mediaapp.FileName}},
 		}
 }
+
+func filingOperations() ([]application.Definition, []application.Binding) {
+	return []application.Definition{
+			mediaapp.DescribeFilingPreview(),
+			mediaapp.DescribeFileItem(),
+			mediaapp.DescribeIgnore(),
+			mediaapp.DescribeSweep(),
+			mediaapp.DescribeThumbnails(),
+		}, []application.Binding{
+			{Kind: application.HTML, Target: "POST /apps/media/file", Uses: []application.Name{mediaapp.FilingPreviewName, mediaapp.FileItemName, mediaapp.DownloadsName}},
+			{Kind: application.HTML, Target: "POST /apps/media/ignore", Uses: []application.Name{mediaapp.IgnoreName, mediaapp.DownloadsName}},
+			{Kind: application.CLI, Target: "media sweep", Uses: []application.Name{mediaapp.SweepName}},
+			{Kind: application.Job, Target: "media/media-sweep", Uses: []application.Name{mediaapp.SweepName}},
+			{Kind: application.Job, Target: "media/media-thumbnails", Uses: []application.Name{mediaapp.ThumbnailsName}},
+		}
+}

@@ -42,18 +42,20 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings = append(operations, ops...), append(bindings, binds...)
 	ops, binds = libraryOperations()
 	operations, bindings = append(operations, ops...), append(bindings, binds...)
+	ops, binds = filingOperations()
+	operations, bindings = append(operations, ops...), append(bindings, binds...)
 	return module.Declaration{
 		Operations: operations,
 		Bindings:   bindings,
 		Name:       module.Media,
 		Requires:   Requirements(),
-		Jobs:       mediacmd.Jobs(m.Jobs),
+		Jobs:       mediacmd.Jobs(m.Jobs, openService),
 		Settings:   media.SettingsDefs(),
 		Host:       media.HostSettings(),
 		Pages: []web.Page{{
-			Module:    pages.Module(pages.Options{Now: m.Now}),
+			Module:    pages.Module(pages.Options{Service: pageService(m.Now)}),
 			Templates: pages.Templates(),
-			Public:    pages.PublicCheck,
+			Public:    publicCheck,
 			Nav: []web.NavItem{
 				{Section: "apps", Label: "Downloads", URL: "/apps/media/downloads", Icon: "download", Page: "media_downloads", Order: 10},
 				{Section: "apps", Label: "Channels", URL: "/apps/media/channels", Icon: "tv", Page: "media_channels", Order: 20},
@@ -61,7 +63,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			},
 		}},
 		Groups:   SettingGroups(),
-		Commands: []*cli.Command{mediacmd.Command(mc.Env, m.Now)},
+		Commands: []*cli.Command{mediacmd.Command(mc.Env, m.Now, openService)},
 		Tools:    ToolDefinitions(),
 		Effects: func(d module.EffectDeps) module.Effects {
 			return module.Effects{

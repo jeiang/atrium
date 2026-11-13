@@ -1,7 +1,6 @@
 package pages
 
 import (
-	"context"
 	"net/http"
 	"net/url"
 	"strings"
@@ -187,48 +186,38 @@ func (s *service) dlFilesToggle(w http.ResponseWriter, r *http.Request) {
 func (s *service) dlFilePost(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	form := dlLastValues(web.FormValues(r))
-	set, _, root, item, err := s.dlFind(ctx, form["id"])
+	in := mediaapp.FilingInput{ID: form["id"], Form: form}
+	found, err := s.app.FilingPreview(ctx, in)
 	if err != nil {
-		text, _ := mustClassify(err)
-		s.dlDownloads(w, r, &tpl.Toast{Category: "error", Title: "Not filed", Description: text}, http.StatusUnprocessableEntity, nil)
+		s.dlRefused(w, r, "Not filed", err)
 		return
 	}
-	plan := set.Plan(set.Edited(item, root, form), root)
-	view := plan.View
-	if plan.Error != "" {
-		view.Error = plan.Error
+	view := found.Data.View
+	if found.Data.Error != "" {
+		view.Error = found.Data.Error
 		s.dlDownloads(w, r, nil, http.StatusUnprocessableEntity, &view)
 		return
 	}
-	ops := plan.Ops
 	if form["action"] != "file" {
 		s.dlDownloads(w, r, nil, http.StatusOK, &view)
 		return
 	}
-	if err := set.Apply(ctx, s.effects, set, item, ops, root); err != nil {
+	filed, err := s.app.FileItem(ctx, in)
+	if err != nil {
 		view.Error = err.Error()
 		s.dlDownloads(w, r, nil, http.StatusBadGateway, &view)
 		return
 	}
-	dests := make([]string, len(ops))
-	for i, op := range ops {
-		dests[i] = op.Dst
-	}
-	s.dlDownloads(w, r, &tpl.Toast{Category: "success", Title: "Filed " + item.Name, Description: strings.Join(dests, "; ")}, http.StatusOK, nil)
+	s.dlDownloads(w, r, &tpl.Toast{Category: "success", Title: "Filed " + filed.Data.Item.Name, Description: strings.Join(filed.Data.Dests, "; ")}, http.StatusOK, nil)
 }
 
-func (s *service) dlFind(ctx context.Context, id string) (media.Settings, *media.Qbit, string, media.Item, error) {
-	set := s.settings(ctx)
-	client, err := set.Qbit()
-	if err != nil {
-		return set, nil, "", media.Item{}, err
+func (s *service) dlRefused(w http.ResponseWriter, r *http.Request, title string, err error) {
+	failure := application.Classify(err)
+	if failure.Code == application.Internal || failure.Code == application.Canceled {
+		web.Fail(w, r, err, func(status int) { s.deps.Error(w, r, status, failure.Error()) })
+		return
 	}
-	root, err := set.NeedRoot()
-	if err != nil {
-		return set, nil, "", media.Item{}, err
-	}
-	item, err := set.Find(ctx, client, root, id)
-	return set, client, root, item, err
+	s.dlDownloads(w, r, &tpl.Toast{Category: "error", Title: title, Description: failure.Error()}, http.StatusUnprocessableEntity, nil)
 }
 
 func (s *service) dlIgnorePost(w http.ResponseWriter, r *http.Request) {
@@ -238,13 +227,8 @@ func (s *service) dlIgnorePost(w http.ResponseWriter, r *http.Request) {
 		web.Unprocessable(w, web.Missing("body", "id"))
 		return
 	}
-	set, _, _, item, err := s.dlFind(r.Context(), id)
-	if err == nil {
-		err = media.Ignore(r.Context(), s.effects, set, item)
-	}
-	if err != nil {
-		text, _ := mustClassify(err)
-		s.dlDownloads(w, r, &tpl.Toast{Category: "error", Title: "Not ignored", Description: text}, http.StatusUnprocessableEntity, nil)
+	if _, err := s.app.Ignore(r.Context(), mediaapp.IgnoreInput{ID: id}); err != nil {
+		s.dlRefused(w, r, "Not ignored", err)
 		return
 	}
 	s.dlDownloads(w, r, &tpl.Toast{Category: "success", Title: "Ignored", Description: "The torrent keeps seeding and is left out of the queue."}, http.StatusOK, nil)

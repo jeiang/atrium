@@ -51,7 +51,9 @@ behavior-parity target.
   refuse a magnet without a v1 info hash (`xt=urn:btih:`) before anything is
   recorded; the tool refuses it before an approval card exists. A new channel
   backfills only when its "download what is already out" box is ticked; the
-  box starts unticked, so the first poll just records current releases. The Library section holds Knowledge
+  box starts unticked, so the first poll just records current releases. The
+  `media-sweep` job run ends in error when qBittorrent reports errors during
+  the pass; `atrium media sweep` still prints them in `errors` and exits 0. The Library section holds Knowledge
   (`/library/knowledge`): the operator's records with search, scope and
   state filters, checkboxes on unconfirmed rows with Confirm selected, a
   record page with confirm, edit, retract, restore and
