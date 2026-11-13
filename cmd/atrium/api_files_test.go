@@ -176,7 +176,7 @@ func TestDeclaredMultipartAndBinaryAPI(t *testing.T) {
 	}
 }
 
-func apiItems(t *testing.T, reply apiReply) []any {
+func apiReplyItems(t *testing.T, reply apiReply) []any {
 	t.Helper()
 	if reply.status != http.StatusOK {
 		t.Fatalf("list: %d %s", reply.status, reply.body)
@@ -252,7 +252,7 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 	}
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/projects/999999", token, nil), 404, "not_found")
 	empty := s.do(http.MethodGet, projectPath(project, "/files"), token, nil)
-	if len(apiItems(t, empty)) != 0 {
+	if len(apiReplyItems(t, empty)) != 0 {
 		t.Fatalf("new project has files: %s", empty.body)
 	}
 	fileETag := empty.header.Get("ETag")
@@ -268,7 +268,7 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 	file := number(t, uploaded.json["file_ids"].([]any)[0])
 	fileURL := projectPath(project, "/files/"+strconv.FormatInt(file, 10))
 	listed := s.do(http.MethodGet, projectPath(project, "/files"), token, nil, "If-None-Match", fileETag)
-	if len(apiItems(t, listed)) != 1 || listed.header.Get("ETag") == fileETag {
+	if len(apiReplyItems(t, listed)) != 1 || listed.header.Get("ETag") == fileETag {
 		t.Fatalf("file list did not change: %s", listed.body)
 	}
 	if strings.Contains(listed.body, dir) || strings.Contains(listed.body, fileText) || strings.Contains(listed.body, "FULL_FILE_TEXT_SECRET") {
@@ -299,7 +299,7 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 	if got := s.do(http.MethodGet, fileURL+"/content", token, nil, "Range", "bytes="+strconv.Itoa(len(fileText))+"-"); got.status != 416 {
 		t.Fatalf("bad range: %d", got.status)
 	}
-	if len(apiItems(t, s.do(http.MethodGet, projectPath(other, "/files"), token, nil))) != 0 {
+	if len(apiReplyItems(t, s.do(http.MethodGet, projectPath(other, "/files"), token, nil))) != 0 {
 		t.Fatal("private project's file leaked to other project list")
 	}
 	for _, suffix := range []string{"", "/content"} {
@@ -328,24 +328,24 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 		t.Fatalf("bulk files: %d %s", got.status, got.body)
 	}
 	first := s.do(http.MethodGet, projectPath(project, "/files?limit=100"), token, nil)
-	if len(apiItems(t, first)) != 100 {
+	if len(apiReplyItems(t, first)) != 100 {
 		t.Fatalf("file first page: %s", first.body)
 	}
 	cursor := first.json["next_cursor"].(string)
 	expectAPI(t, s.do(http.MethodGet, projectPath(project, "/files?limit=100&cursor="+url.QueryEscape(malformedLast(t, cursor))), token, nil), 400, "bad_cursor")
-	removed := number(t, apiItems(t, first)[1].(map[string]any)["id"])
+	removed := number(t, apiReplyItems(t, first)[1].(map[string]any)["id"])
 	if deleted := s.do(http.MethodDelete, projectPath(project, "/files/"+strconv.FormatInt(removed, 10)), token, nil); deleted.status != 204 {
 		t.Fatalf("delete paged file: %d %s", deleted.status, deleted.body)
 	}
 	next := s.do(http.MethodGet, projectPath(project, "/files?limit=100&cursor="+url.QueryEscape(cursor)), token, nil)
-	if len(apiItems(t, next)) != 6 || next.json["next_cursor"] != nil {
+	if len(apiReplyItems(t, next)) != 6 || next.json["next_cursor"] != nil {
 		t.Fatalf("file next page: %s", next.body)
 	}
 	expectAPI(t, s.do(http.MethodGet, projectPath(other, "/files?cursor="+url.QueryEscape(cursor)), token, nil), 400, "bad_cursor")
 	expectAPI(t, s.do(http.MethodGet, projectPath(project, "/files?limit=101"), token, nil), 422, "invalid")
 	seen := map[int64]bool{}
 	for _, page := range []apiReply{first, next} {
-		for _, raw := range apiItems(t, page) {
+		for _, raw := range apiReplyItems(t, page) {
 			id := number(t, raw.(map[string]any)["id"])
 			if seen[id] {
 				t.Fatalf("repeated file %d", id)
@@ -392,7 +392,7 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 	}
 	foreignThread := number(t, otherThread.json["thread"].(map[string]any)["id"])
 	attached := s.do(http.MethodGet, threadPath(thread, "/files"), token, nil)
-	items := apiItems(t, attached)
+	items := apiReplyItems(t, attached)
 	if len(items) != 1 {
 		t.Fatalf("multipart thread start file missing: %s", attached.body)
 	}
@@ -411,7 +411,7 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 	if read := s.do(http.MethodHead, threadURL+"/content", token, nil, "Range", "bytes=0-5"); read.status != 206 || read.body != "" || read.header.Get("Content-Length") != "6" {
 		t.Fatalf("thread HEAD Range: %d %s %v", read.status, read.body, read.header)
 	}
-	if len(apiItems(t, s.do(http.MethodGet, threadPath(foreignThread, "/files"), token, nil))) != 0 {
+	if len(apiReplyItems(t, s.do(http.MethodGet, threadPath(foreignThread, "/files"), token, nil))) != 0 {
 		t.Fatal("thread file leaked into foreign list")
 	}
 	for _, suffix := range []string{"", "/content"} {
@@ -426,7 +426,7 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 		t.Fatalf("multipart send: %d %s", sent.status, sent.body)
 	}
 	waitThreadSettled(t, s, token, thread)
-	if files := s.do(http.MethodGet, threadPath(thread, "/files"), token, nil); len(apiItems(t, files)) != 2 {
+	if files := s.do(http.MethodGet, threadPath(thread, "/files"), token, nil); len(apiReplyItems(t, files)) != 2 {
 		t.Fatalf("send attachment missing: %s", files.body)
 	}
 
@@ -450,22 +450,22 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 	}
 	token = localAPIToken(t, "project-pages")
 	first = s.do(http.MethodGet, "/api/v1/projects?limit=100", token, nil)
-	if len(apiItems(t, first)) != 100 {
+	if len(apiReplyItems(t, first)) != 100 {
 		t.Fatalf("project first page: %s", first.body)
 	}
 	cursor = first.json["next_cursor"].(string)
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/projects?limit=100&cursor="+url.QueryEscape(malformedLast(t, cursor)), token, nil), 400, "bad_cursor")
-	deletedProject := number(t, apiItems(t, first)[1].(map[string]any)["id"])
+	deletedProject := number(t, apiReplyItems(t, first)[1].(map[string]any)["id"])
 	if _, err := d.Write.Exec("DELETE FROM projects WHERE id = ?", deletedProject); err != nil {
 		t.Fatal(err)
 	}
 	next = s.do(http.MethodGet, "/api/v1/projects?limit=100&cursor="+url.QueryEscape(cursor), token, nil)
-	if len(apiItems(t, next)) != 6 || next.json["next_cursor"] != nil {
+	if len(apiReplyItems(t, next)) != 6 || next.json["next_cursor"] != nil {
 		t.Fatalf("project next page: %s", next.body)
 	}
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/projects?archived=true&cursor="+url.QueryEscape(cursor), token, nil), 400, "bad_cursor")
 	archivedList := s.do(http.MethodGet, "/api/v1/projects?archived=true", token, nil)
-	if len(apiItems(t, archivedList)) != 1 || number(t, apiItems(t, archivedList)[0].(map[string]any)["id"]) != project {
+	if len(apiReplyItems(t, archivedList)) != 1 || number(t, apiReplyItems(t, archivedList)[0].(map[string]any)["id"]) != project {
 		t.Fatalf("archived list: %s", archivedList.body)
 	}
 }
@@ -550,7 +550,7 @@ func TestMultipartUploadAdmission(t *testing.T) {
 			_ = resp.Body.Close()
 			results <- result{status: resp.StatusCode, body: string(data), err: err}
 		}()
-		if _, err := io.WriteString(writer, "--held\r\n"); err != nil {
+		if _, err := io.WriteString(writer, "--held\r\nContent-Disposition: form-data; name=\"upload\"; filename=\"held.txt\"\r\nContent-Type: text/plain\r\n\r\n"); err != nil {
 			t.Fatal(err)
 		}
 		deadline := time.Now().Add(10 * time.Second)
@@ -570,6 +570,12 @@ func TestMultipartUploadAdmission(t *testing.T) {
 	expectAPI(t, rejected, http.StatusTooManyRequests, "rate_limited")
 	if rejected.header.Get("Retry-After") == "" {
 		t.Fatalf("missing Retry-After: %v", rejected.header)
+	}
+	small, smallMedia := uploadBody(t, nil, "small.txt", "small")
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/projects/1/files", token, small, "Content-Type", smallMedia), http.StatusTooManyRequests, "rate_limited")
+	textOnly, textMedia := uploadBody(t, nil, "", "")
+	if reply := s.do(http.MethodPost, "/api/v1/threads", token, textOnly, "Content-Type", textMedia); reply.status != http.StatusCreated {
+		t.Fatalf("text-only multipart consumed upload admission: %d %s", reply.status, reply.body)
 	}
 	for _, writer := range writers {
 		_ = writer.Close()

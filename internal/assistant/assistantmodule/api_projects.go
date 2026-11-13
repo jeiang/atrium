@@ -13,10 +13,10 @@ import (
 
 type apiProjectFields struct {
 	Name         string `json:"name"`
-	Instructions string `json:"instructions"`
+	Instructions string `json:"instructions,omitempty"`
 	Effort       string `json:"effort"`
 	ContextLimit *int64 `json:"context_limit"`
-	Private      bool   `json:"private"`
+	Private      bool   `json:"private,omitempty"`
 }
 
 type apiProjectPatch struct {

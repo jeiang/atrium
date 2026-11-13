@@ -126,11 +126,11 @@ type apiTranscript struct {
 
 type apiNewThread struct {
 	Uploads      []files.UploadedFile `json:"-"`
-	Text         string               `json:"text"`
+	Text         string               `json:"text,omitempty"`
 	Model        string               `json:"model"`
 	Effort       string               `json:"effort"`
 	ContextLimit *int64               `json:"context_limit"`
-	Thinking     string               `json:"thinking"`
+	Thinking     string               `json:"thinking,omitempty"`
 	WebSearch    *bool                `json:"web_search"`
 	CostCapUSD   *float64             `json:"cost_cap_usd"`
 	ProjectID    *int64               `json:"project_id"`
@@ -139,7 +139,7 @@ type apiNewThread struct {
 type apiMessage struct {
 	Uploads []files.UploadedFile `json:"-"`
 	Text    string               `json:"text"`
-	Edit    bool                 `json:"edit"`
+	Edit    bool                 `json:"edit,omitempty"`
 }
 
 type apiAnswer struct {
@@ -720,14 +720,14 @@ func apiBindings(p *apiPages) []application.Binding {
 				return svc.ThreadOptions(ctx, opts)
 			}),
 		apiQuery(p, asstapp.DescribeConfiguration(), application.APIShape{Area: "composer", ID: "assistant.composer.options", Errors: errs(application.Invalid)}, "GET /composer-options",
-			func(ctx context.Context, svc *asstapp.Service, in apiComposerRequest) (application.Read[asstapp.Configuration], error) {
+			func(ctx context.Context, svc *asstapp.Service, in apiComposerRequest) (application.Read[asstapp.ModelConfiguration], error) {
 				return svc.Configuration(ctx, asstapp.ConfigurationInput{Composer: &asstapp.ComposerInput{
 					Model: in.Model, Effort: in.Effort, Thinking: in.Thinking, ContextLimit: in.ContextLimit,
 					WebSearch: in.WebSearch == nil || *in.WebSearch, CostCap: in.CostCap, Reset: in.Reset,
 				}})
 			}),
 		apiQuery(p, asstapp.DescribeConfiguration(), application.APIShape{Area: "composer"}, "GET /assistant/configuration",
-			func(ctx context.Context, svc *asstapp.Service, _ struct{}) (application.Read[asstapp.Configuration], error) {
+			func(ctx context.Context, svc *asstapp.Service, _ struct{}) (application.Read[asstapp.ModelConfiguration], error) {
 				return svc.Configuration(ctx, asstapp.ConfigurationInput{})
 			}),
 		apiQuery(p, asstapp.DescribeHome(), application.APIShape{Area: "home", Errors: errs(application.Invalid)}, "GET /home",

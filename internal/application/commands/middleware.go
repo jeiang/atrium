@@ -29,8 +29,6 @@ import (
 
 var log = logx.Logger("commands")
 
-var multipartSlots = make(chan struct{}, 4)
-
 const (
 	spoolFreeFloor = 256 << 20
 	envelopeMax    = 65 << 20
@@ -102,8 +100,38 @@ func (b *idleBody) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func carriesFiles(r *http.Request) bool {
-	return r.ContentLength < 0 || r.ContentLength > plainBodyMax
+func carriesFiles(r *http.Request) (bool, error) {
+	_, params, err := mime.ParseMediaType(r.Header.Get("Content-Type"))
+	if err != nil || params["boundary"] == "" {
+		return false, errors.New("invalid multipart boundary")
+	}
+	var prefix bytes.Buffer
+	body := r.Body
+	defer func() {
+		r.Body = struct {
+			io.Reader
+			io.Closer
+		}{io.MultiReader(&prefix, body), body}
+	}()
+	reader := multipart.NewReader(io.TeeReader(body, &prefix), params["boundary"])
+	for {
+		part, err := reader.NextPart()
+		if errors.Is(err, io.EOF) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+		if part.FileName() != "" {
+			return true, nil
+		}
+		if _, err := io.Copy(io.Discard, io.LimitReader(part, plainBodyMax+1)); err != nil {
+			return false, err
+		}
+		if prefix.Len() > plainBodyMax {
+			return false, &http.MaxBytesError{Limit: plainBodyMax}
+		}
+	}
 }
 
 func scoped(ctx context.Context, key string) string {
@@ -126,7 +154,21 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 		var fingerprint string
 		media, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		multipartForm := media == "multipart/form-data"
+		hasFiles := false
 		if multipartForm {
+			files, err := carriesFiles(r)
+			if err != nil {
+				var large *http.MaxBytesError
+				if errors.As(err, &large) {
+					web.APIError(w, http.StatusRequestEntityTooLarge, "too_large", "Request too large.")
+				} else {
+					web.APIError(w, http.StatusBadRequest, "bad_request", "Invalid multipart body.")
+				}
+				return
+			}
+			hasFiles = files
+		}
+		if hasFiles {
 			body := &idleBody{ReadCloser: r.Body, controller: http.NewResponseController(w)}
 			if err := body.extend(); err != nil {
 				web.APIFail(w, err)
@@ -134,28 +176,26 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 			}
 			defer body.lift()
 			r.Body = body
-			if carriesFiles(r) {
-				select {
-				case multipartSlots <- struct{}{}:
-					defer func() { <-multipartSlots }()
-				default:
-					w.Header().Set("Retry-After", "1")
-					web.APIFail(w, &application.Error{Code: application.RateLimited, Message: "Too many concurrent uploads."})
-					return
-				}
-				need := uint64(envelopeMax)
-				if r.ContentLength > 0 {
-					need = min(uint64(r.ContentLength), need)
-				}
-				var space unix.Statfs_t
-				if err := unix.Statfs(s.tempDir, &space); err != nil {
-					web.APIFail(w, err)
-					return
-				}
-				if uint64(space.Bavail)*uint64(space.Bsize) < spoolFreeFloor+need {
-					web.APIFail(w, &application.Error{Code: application.Unavailable, Message: "Upload storage is unavailable."})
-					return
-				}
+			select {
+			case s.multipartSlots <- struct{}{}:
+				defer func() { <-s.multipartSlots }()
+			default:
+				w.Header().Set("Retry-After", "1")
+				web.APIFail(w, &application.Error{Code: application.RateLimited, Message: "Too many concurrent uploads."})
+				return
+			}
+			need := uint64(envelopeMax)
+			if r.ContentLength > 0 {
+				need = min(uint64(r.ContentLength), need)
+			}
+			var space unix.Statfs_t
+			if err := unix.Statfs(s.tempDir, &space); err != nil {
+				web.APIFail(w, err)
+				return
+			}
+			if uint64(space.Bavail)*uint64(space.Bsize) < spoolFreeFloor+need {
+				web.APIFail(w, &application.Error{Code: application.Unavailable, Message: "Upload storage is unavailable."})
+				return
 			}
 		}
 		if key != "" {

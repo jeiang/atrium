@@ -49,18 +49,24 @@ func TestSearchAPI(t *testing.T) {
 	s := &apiSite{t: t, base: base}
 
 	first := s.do(http.MethodGet, "/api/v1/search?q=kestrel&limit=100", token, nil)
-	page := searchIDs(t, apiItems(t, first), true)
+	page := searchIDs(t, apiReplyItems(t, first), true)
 	cursor, _ := first.json["next_cursor"].(string)
 	if len(page) != 100 || cursor == "" {
 		t.Fatalf("first search page: %d %q", len(page), cursor)
 	}
 	rest := s.do(http.MethodGet, "/api/v1/search?q=kestrel&limit=100&cursor="+cursor, token, nil)
-	all := append(page, searchIDs(t, apiItems(t, rest), true)...)
+	all := append(page, searchIDs(t, apiReplyItems(t, rest), true)...)
 	listed := s.do(http.MethodGet, "/api/v1/threads?q=kestrel&limit=100", token, nil)
 	listedRest := s.do(http.MethodGet, "/api/v1/threads?q=kestrel&limit=100&cursor="+listed.json["next_cursor"].(string), token, nil)
-	threads := append(searchIDs(t, apiItems(t, listed), false), searchIDs(t, apiItems(t, listedRest), false)...)
+	threads := append(searchIDs(t, apiReplyItems(t, listed), false), searchIDs(t, apiReplyItems(t, listedRest), false)...)
 	if len(all) != 106 || fmt.Sprint(all) != fmt.Sprint(threads) {
 		t.Fatalf("search differs from the thread list:\n%v\n%v", all, threads)
+	}
+	sharedThreads := s.do(http.MethodGet, "/api/v1/threads?q=kestrel&limit=100&cursor="+cursor, token, nil)
+	sharedSearch := s.do(http.MethodGet, "/api/v1/search?q=kestrel&limit=100&cursor="+listed.json["next_cursor"].(string), token, nil)
+	if fmt.Sprint(searchIDs(t, apiReplyItems(t, sharedThreads), false)) != fmt.Sprint(searchIDs(t, apiReplyItems(t, rest), true)) ||
+		fmt.Sprint(searchIDs(t, apiReplyItems(t, sharedSearch), true)) != fmt.Sprint(searchIDs(t, apiReplyItems(t, listedRest), false)) {
+		t.Fatal("search and filtered threads did not share cursors")
 	}
 	if all[0] != 6000 {
 		t.Fatalf("search order: first %d, want the newest thread 6000", all[0])
@@ -71,14 +77,14 @@ func TestSearchAPI(t *testing.T) {
 		}
 	}
 	scoped := s.do(http.MethodGet, "/api/v1/search?q=kestrel&project_id=901", token, nil)
-	if got := searchIDs(t, apiItems(t, scoped), true); len(got) != 1 || got[0] != 6000 {
+	if got := searchIDs(t, apiReplyItems(t, scoped), true); len(got) != 1 || got[0] != 6000 {
 		t.Fatalf("project narrowing: %v", got)
 	}
-	if none := s.do(http.MethodGet, "/api/v1/search?q=heron&project_id=901", token, nil); len(apiItems(t, none)) != 0 {
+	if none := s.do(http.MethodGet, "/api/v1/search?q=heron&project_id=901", token, nil); len(apiReplyItems(t, none)) != 0 {
 		t.Fatalf("project narrowing widened: %s", none.body)
 	}
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/search?q=heron&limit=100&cursor="+cursor, token, nil), 400, "bad_cursor")
-	expectAPI(t, s.do(http.MethodGet, "/api/v1/threads?q=kestrel&limit=100&cursor="+cursor, token, nil), 400, "bad_cursor")
+	expectAPI(t, s.do(http.MethodGet, "/api/v1/projects?q=kestrel&limit=100&cursor="+cursor, token, nil), 400, "bad_cursor")
 	empty := s.do(http.MethodGet, "/api/v1/search?q=%20", token, nil)
 	expectAPI(t, empty, 422, "invalid")
 	if empty.json["error"].(map[string]any)["fields"] == nil {
@@ -86,7 +92,7 @@ func TestSearchAPI(t *testing.T) {
 	}
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/search?q="+strings.Repeat("k", 201), token, nil), 422, "invalid")
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/search?q=kestrel&limit=101", token, nil), 422, "invalid")
-	if punct := s.do(http.MethodGet, "/api/v1/search?q=%22%22", token, nil); punct.status != 200 || len(apiItems(t, punct)) != 0 {
+	if punct := s.do(http.MethodGet, "/api/v1/search?q=%22%22", token, nil); punct.status != 200 || len(apiReplyItems(t, punct)) != 0 {
 		t.Fatalf("query without terms: %d %s", punct.status, punct.body)
 	}
 	etag := first.header.Get("ETag")
@@ -100,7 +106,7 @@ func TestSearchAPI(t *testing.T) {
 	if changed.status != 200 || changed.header.Get("ETag") == etag {
 		t.Fatalf("search did not change after archiving: %d", changed.status)
 	}
-	if archivedHits := s.do(http.MethodGet, "/api/v1/search?q=kestrel&view=archived", token, nil); fmt.Sprint(searchIDs(t, apiItems(t, archivedHits), true)) != "[5000]" {
+	if archivedHits := s.do(http.MethodGet, "/api/v1/search?q=kestrel&view=archived", token, nil); fmt.Sprint(searchIDs(t, apiReplyItems(t, archivedHits), true)) != "[5000]" {
 		t.Fatalf("archived search: %s", archivedHits.body)
 	}
 

@@ -69,7 +69,7 @@ type apiSubagentSet struct {
 	Description *string  `json:"description"`
 	Prompt      *string  `json:"prompt"`
 	Effort      *string  `json:"effort"`
-	Tools       []string `json:"tools"`
+	Tools       []string `json:"tools,omitempty"`
 }
 
 type apiSubagentEnabled struct {

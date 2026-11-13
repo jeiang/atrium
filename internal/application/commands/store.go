@@ -33,15 +33,18 @@ const (
 )
 
 type Store struct {
-	db      *db.DB
-	now     func() time.Time
-	appKey  func() ([]byte, error)
-	mu      sync.Mutex
-	mac     []byte
-	tempDir string
+	db             *db.DB
+	now            func() time.Time
+	appKey         func() ([]byte, error)
+	mu             sync.Mutex
+	mac            []byte
+	tempDir        string
+	multipartSlots chan struct{}
 }
 
-func New(d *db.DB) *Store { return &Store{db: d, now: time.Now} }
+func New(d *db.DB) *Store {
+	return &Store{db: d, now: time.Now, multipartSlots: make(chan struct{}, 4)}
+}
 
 type record struct {
 	id          string

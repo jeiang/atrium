@@ -78,6 +78,9 @@ func filterOf(query url.Values) string {
 }
 
 func parseCursor(op application.Name, query url.Values, raw string) (Cursor, bool) {
+	if op == "assistant.search" || (op == "assistant.thread.list" && query.Get("q") != "") {
+		op = "assistant.thread.list"
+	}
 	c := Cursor{op: op, filter: filterOf(query)}
 	if raw == "" {
 		return c, true

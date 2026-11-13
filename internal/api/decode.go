@@ -229,7 +229,7 @@ func checkBody(t reflect.Type, raw json.RawMessage, loc []string) []web.FieldErr
 			at := append(slices.Clip(loc), name)
 			value, ok := fields[name]
 			if !ok || string(value) == "null" {
-				if f.Type.Kind() != reflect.Pointer && !strings.Contains(","+opts+",", ",omitempty,") && !strings.Contains(","+opts+",", ",omitzero,") {
+				if strings.Contains(","+f.Tag.Get("api")+",", ",required,") || f.Type.Kind() != reflect.Pointer && !strings.Contains(","+opts+",", ",omitempty,") && !strings.Contains(","+opts+",", ",omitzero,") {
 					out = append(out, web.FieldError{Type: "missing", Loc: at, Msg: "Field required"})
 				}
 				continue

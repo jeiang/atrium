@@ -67,7 +67,7 @@ func TestSchedulesUsageAPI(t *testing.T) {
 		path := "/api/v1/schedules?limit=100"
 		for {
 			reply := s.do(http.MethodGet, path, token, nil)
-			out = append(out, apiItems(t, reply)...)
+			out = append(out, apiReplyItems(t, reply)...)
 			next, _ := reply.json["next_cursor"].(string)
 			if next == "" {
 				return out
@@ -76,14 +76,14 @@ func TestSchedulesUsageAPI(t *testing.T) {
 		}
 	}
 	first := s.do(http.MethodGet, "/api/v1/schedules?limit=100", token, nil)
-	page := apiItems(t, first)
+	page := apiReplyItems(t, first)
 	cursor, _ := first.json["next_cursor"].(string)
 	if len(page) != 100 || cursor == "" || first.json["tz"] == nil {
 		t.Fatalf("first schedule page: %d %q %.300s", len(page), cursor, first.body)
 	}
 	rest := s.do(http.MethodGet, "/api/v1/schedules?limit=100&cursor="+cursor, token, nil)
 	seen := map[int64]bool{}
-	for _, item := range append(page, apiItems(t, rest)...) {
+	for _, item := range append(page, apiReplyItems(t, rest)...) {
 		id := number(t, item.(map[string]any)["id"])
 		if seen[id] {
 			t.Fatalf("schedule %d listed twice", id)
@@ -100,18 +100,18 @@ func TestSchedulesUsageAPI(t *testing.T) {
 	}
 
 	runs := s.do(http.MethodGet, jobURL+"/runs?limit=100", token, nil)
-	runPage := apiItems(t, runs)
+	runPage := apiReplyItems(t, runs)
 	runCursor, _ := runs.json["next_cursor"].(string)
 	if len(runPage) != 100 || runCursor == "" {
 		t.Fatalf("history page: %d %q", len(runPage), runCursor)
 	}
 	older := s.do(http.MethodGet, jobURL+"/runs?limit=100&cursor="+runCursor, token, nil)
-	if got := apiItems(t, older); len(got) != 5 || number(t, got[0].(map[string]any)["id"]) >= number(t, runPage[99].(map[string]any)["id"]) {
+	if got := apiReplyItems(t, older); len(got) != 5 || number(t, got[0].(map[string]any)["id"]) >= number(t, runPage[99].(map[string]any)["id"]) {
 		t.Fatalf("older history: %s", older.body)
 	}
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/schedules/"+strconv.FormatInt(other, 10)+"/runs?limit=100&cursor="+runCursor, token, nil), 400, "bad_cursor")
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/schedules/999999/runs", token, nil), 404, "not_found")
-	if empty := s.do(http.MethodGet, "/api/v1/schedules/"+strconv.FormatInt(other, 10)+"/runs", token, nil); len(apiItems(t, empty)) != 0 {
+	if empty := s.do(http.MethodGet, "/api/v1/schedules/"+strconv.FormatInt(other, 10)+"/runs", token, nil); len(apiReplyItems(t, empty)) != 0 {
 		t.Fatalf("other job has runs: %s", empty.body)
 	}
 
@@ -120,7 +120,7 @@ func TestSchedulesUsageAPI(t *testing.T) {
 		t.Fatalf("patch schedule: %d %s", patched.status, patched.body)
 	}
 	listed := s.do(http.MethodGet, "/api/v1/schedules?limit=100", token, nil, "If-None-Match", etag)
-	if row := scheduleByID(t, apiItems(t, listed), job); listed.header.Get("ETag") == etag || row == nil || row["schedule"] != moved || row["prompt"] != "Say hi" || row["name"] != "api-job-000" {
+	if row := scheduleByID(t, apiReplyItems(t, listed), job); listed.header.Get("ETag") == etag || row == nil || row["schedule"] != moved || row["prompt"] != "Say hi" || row["name"] != "api-job-000" {
 		t.Fatalf("patched schedule not shown: %s", listed.body)
 	}
 	invalid := s.do(http.MethodPatch, jobURL, token, map[string]any{"schedule": " "})
@@ -163,21 +163,21 @@ func TestSchedulesUsageAPI(t *testing.T) {
 		t.Fatalf("cancelled schedule still listed: %v", row)
 	}
 	expectAPI(t, s.do(http.MethodDelete, jobURL, token, nil), 404, "not_found")
-	if history := s.do(http.MethodGet, jobURL+"/runs?limit=100", token, nil); len(apiItems(t, history)) != 100 {
+	if history := s.do(http.MethodGet, jobURL+"/runs?limit=100", token, nil); len(apiReplyItems(t, history)) != 100 {
 		t.Fatalf("cancelled job lost its history: %s", history.body)
 	}
-	if history := s.do(http.MethodGet, jobURL+"/runs?limit=100&cursor="+runCursor, token, nil); len(apiItems(t, history)) != 5 {
+	if history := s.do(http.MethodGet, jobURL+"/runs?limit=100&cursor="+runCursor, token, nil); len(apiReplyItems(t, history)) != 5 {
 		t.Fatalf("cancelled job lost its older history: %s", history.body)
 	}
 	otherURL := "/api/v1/schedules/" + strconv.FormatInt(other, 10)
 	if cancelled := s.do(http.MethodDelete, otherURL, token, nil); cancelled.status != 204 {
 		t.Fatalf("cancel empty job: %d %s", cancelled.status, cancelled.body)
 	}
-	if history := s.do(http.MethodGet, otherURL+"/runs", token, nil); len(apiItems(t, history)) != 0 {
+	if history := s.do(http.MethodGet, otherURL+"/runs", token, nil); len(apiReplyItems(t, history)) != 0 {
 		t.Fatalf("cancelled empty job history: %s", history.body)
 	}
 	asstExec(t, d, "DELETE FROM job_runs WHERE job_id = ?", job)
-	if history := s.do(http.MethodGet, jobURL+"/runs?limit=100&cursor="+runCursor, token, nil); len(apiItems(t, history)) != 0 {
+	if history := s.do(http.MethodGet, jobURL+"/runs?limit=100&cursor="+runCursor, token, nil); len(apiReplyItems(t, history)) != 0 {
 		t.Fatalf("empty history with a cursor: %s", history.body)
 	}
 	asstExec(t, d, "DELETE FROM jobs WHERE id = ?", job)
@@ -238,7 +238,7 @@ func TestSubagentAPI(t *testing.T) {
 	s := &apiSite{t: t, base: base}
 
 	agents := s.do(http.MethodGet, "/api/v1/subagents", token, nil)
-	baseline := len(apiItems(t, agents))
+	baseline := len(apiReplyItems(t, agents))
 	created := s.do(http.MethodPut, "/api/v1/subagents/api-helper", token, map[string]any{"description": "Checks facts.", "prompt": "Check the facts.", "effort": "low", "tools": []string{"web_fetch"}})
 	if created.status != 200 || created.json["name"] != "api-helper" || created.json["enabled"] != true || created.json["effort"] != "low" {
 		t.Fatalf("subagent set: %d %s", created.status, created.body)
@@ -249,7 +249,7 @@ func TestSubagentAPI(t *testing.T) {
 		t.Fatalf("subagent update lost tools: %d %s", kept.status, kept.body)
 	}
 	listedAgents := s.do(http.MethodGet, "/api/v1/subagents", token, nil, "If-None-Match", agents.header.Get("ETag"))
-	if len(apiItems(t, listedAgents)) != baseline+1 {
+	if len(apiReplyItems(t, listedAgents)) != baseline+1 {
 		t.Fatalf("subagent list: %s", listedAgents.body)
 	}
 	if disabled := s.do(http.MethodPut, "/api/v1/subagents/api-helper/enabled", token, map[string]any{"enabled": false}); disabled.status != 200 || disabled.json["enabled"] != false {
@@ -262,7 +262,7 @@ func TestSubagentAPI(t *testing.T) {
 	}
 	expectAPI(t, s.do(http.MethodDelete, "/api/v1/subagents/api-helper", token, nil), 404, "not_found")
 	checkedBuiltin := false
-	for _, item := range apiItems(t, agents) {
+	for _, item := range apiReplyItems(t, agents) {
 		row := item.(map[string]any)
 		if row["builtin"] == true {
 			checkedBuiltin = true

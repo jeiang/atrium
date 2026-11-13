@@ -6,7 +6,7 @@
         "properties": {},
         "type": "object"
       },
-      "AssistantAbout": {
+      "ApplicationAbout": {
         "additionalProperties": false,
         "properties": {
           "label": {
@@ -22,17 +22,17 @@
         ],
         "type": "object"
       },
-      "AssistantAgenda": {
+      "ApplicationAgenda": {
         "additionalProperties": false,
         "properties": {
           "events": {
             "items": {
-              "$ref": "#/components/schemas/AssistantAgendaEvent"
+              "$ref": "#/components/schemas/ApplicationAgendaEvent"
             },
             "type": "array"
           },
           "next": {
-            "$ref": "#/components/schemas/AssistantAgendaEvent"
+            "$ref": "#/components/schemas/ApplicationAgendaEvent"
           }
         },
         "required": [
@@ -40,7 +40,7 @@
         ],
         "type": "object"
       },
-      "AssistantAgendaEvent": {
+      "ApplicationAgendaEvent": {
         "additionalProperties": false,
         "properties": {
           "ask": {
@@ -68,7 +68,453 @@
         ],
         "type": "object"
       },
-      "AssistantComposerView": {
+      "ApplicationArg": {
+        "additionalProperties": false,
+        "properties": {
+          "label": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "label",
+          "value"
+        ],
+        "type": "object"
+      },
+      "ApplicationBearerIssueInput": {
+        "additionalProperties": false,
+        "properties": {
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeApplicationIssued": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ApplicationIssued"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeApplicationPermissionsUpdated": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ApplicationPermissionsUpdated"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeApplicationSecretState": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ApplicationSecretState"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeApplicationSyncResult": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ApplicationSyncResult"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeAssistantmoduleKnowledgeBatch": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AssistantmoduleKnowledgeBatch"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeAssistantmoduleKnowledgeChanged": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AssistantmoduleKnowledgeChanged"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeAssistantmoduleTaskChanged": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/AssistantmoduleTaskChanged"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeCalendarmoduleCandidates": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CalendarmoduleCandidates"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeConnectionsGoogleGrant": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ConnectionsGoogleGrant"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeConnectionsView": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/ConnectionsView"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeCoremoduleBackupCreated": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleBackupCreated"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeCoremoduleBackupVerified": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleBackupVerified"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeCoremoduleConnections": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleConnections"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeCoremoduleDatabaseCheck": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleDatabaseCheck"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeCoremoduleGoogleConsent": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleGoogleConsent"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeCoremoduleSettingChange": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleSettingChange"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeDavmirrorStats": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/DavmirrorStats"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationChangeKbImportStats": {
+        "additionalProperties": false,
+        "properties": {
+          "audit_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "data": {
+            "$ref": "#/components/schemas/KbImportStats"
+          },
+          "effect_ids": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationComposerView": {
         "additionalProperties": false,
         "properties": {
           "cliff": {
@@ -99,7 +545,7 @@
           },
           "efforts": {
             "items": {
-              "$ref": "#/components/schemas/AssistantEffortOption"
+              "$ref": "#/components/schemas/ApplicationEffortOption"
             },
             "type": "array"
           },
@@ -150,45 +596,78 @@
         ],
         "type": "object"
       },
-      "AssistantConfiguration": {
+      "ApplicationConfiguration": {
         "additionalProperties": false,
         "properties": {
-          "composer": {
-            "$ref": "#/components/schemas/AssistantComposerView"
+          "active": {
+            "type": "boolean"
           },
-          "context_limits": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
+          "client_id": {
+            "type": "string"
           },
-          "defaults": {
-            "$ref": "#/components/schemas/ThreadsOptions"
+          "configured": {
+            "type": "boolean"
           },
-          "efforts": {
+          "display": {
+            "type": "string"
+          },
+          "issuer": {
+            "type": "string"
+          },
+          "origins": {
             "items": {
               "type": "string"
             },
             "type": "array"
           },
-          "models": {
-            "items": {
-              "$ref": "#/components/schemas/PricingModel"
-            },
-            "type": "array"
+          "provider": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "redirect_uri": {
+            "type": "string"
           }
         },
         "required": [
-          "models",
-          "defaults",
-          "efforts",
-          "context_limits",
-          "composer"
+          "configured",
+          "active",
+          "provider",
+          "display",
+          "issuer",
+          "client_id",
+          "redirect_uri",
+          "origins",
+          "reason"
         ],
         "type": "object"
       },
-      "AssistantEffortOption": {
+      "ApplicationDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "page": {
+            "$ref": "#/components/schemas/NotionView"
+          },
+          "related": {
+            "items": {
+              "$ref": "#/components/schemas/NotionRelated"
+            },
+            "type": "array"
+          },
+          "titles": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object"
+          }
+        },
+        "required": [
+          "titles"
+        ],
+        "type": "object"
+      },
+      "ApplicationEffortOption": {
         "additionalProperties": false,
         "properties": {
           "Disabled": {
@@ -204,7 +683,22 @@
         ],
         "type": "object"
       },
-      "AssistantFileChanged": {
+      "ApplicationEncryption": {
+        "additionalProperties": false,
+        "properties": {
+          "encrypted": {
+            "type": "boolean"
+          },
+          "key_id": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "encrypted"
+        ],
+        "type": "object"
+      },
+      "ApplicationFileChanged": {
         "additionalProperties": false,
         "properties": {
           "effect_id": {
@@ -225,7 +719,7 @@
         },
         "type": "object"
       },
-      "AssistantFileView": {
+      "ApplicationFileView": {
         "additionalProperties": false,
         "properties": {
           "body": {
@@ -259,7 +753,43 @@
         ],
         "type": "object"
       },
-      "AssistantMemoryWorked": {
+      "ApplicationIssued": {
+        "additionalProperties": false,
+        "properties": {
+          "secret": {
+            "type": "string"
+          },
+          "token": {
+            "$ref": "#/components/schemas/ApplicationToken"
+          }
+        },
+        "required": [
+          "token",
+          "secret"
+        ],
+        "type": "object"
+      },
+      "ApplicationKindRow": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "on": {
+            "type": "boolean"
+          },
+          "web_only": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "on",
+          "web_only"
+        ],
+        "type": "object"
+      },
+      "ApplicationMemoryWorked": {
         "additionalProperties": false,
         "properties": {
           "summarized": {
@@ -275,7 +805,45 @@
         ],
         "type": "object"
       },
-      "AssistantNeed": {
+      "ApplicationModelConfiguration": {
+        "additionalProperties": false,
+        "properties": {
+          "composer": {
+            "$ref": "#/components/schemas/ApplicationComposerView"
+          },
+          "context_limits": {
+            "items": {
+              "format": "int64",
+              "type": "integer"
+            },
+            "type": "array"
+          },
+          "defaults": {
+            "$ref": "#/components/schemas/ThreadsOptions"
+          },
+          "efforts": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "models": {
+            "items": {
+              "$ref": "#/components/schemas/PricingModel"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "models",
+          "defaults",
+          "efforts",
+          "context_limits",
+          "composer"
+        ],
+        "type": "object"
+      },
+      "ApplicationNeed": {
         "additionalProperties": false,
         "properties": {
           "id": {
@@ -300,7 +868,146 @@
         ],
         "type": "object"
       },
-      "AssistantProject": {
+      "ApplicationOAuthSetup": {
+        "additionalProperties": false,
+        "properties": {
+          "capabilities": {
+            "items": {
+              "$ref": "#/components/schemas/ConnectionsGoogleGrant"
+            },
+            "type": "array"
+          },
+          "client_id": {
+            "type": "string"
+          },
+          "client_secret_set": {
+            "type": "boolean"
+          },
+          "health": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "client_id",
+          "client_secret_set",
+          "capabilities",
+          "health",
+          "reason"
+        ],
+        "type": "object"
+      },
+      "ApplicationPermissionChange": {
+        "additionalProperties": false,
+        "properties": {
+          "key": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "value"
+        ],
+        "type": "object"
+      },
+      "ApplicationPermissionRule": {
+        "additionalProperties": false,
+        "properties": {
+          "channel": {
+            "type": "string"
+          },
+          "choices": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
+          "effective": {
+            "type": "string"
+          },
+          "floor": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "situation": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "channel",
+          "situation",
+          "value",
+          "source",
+          "floor",
+          "effective",
+          "choices"
+        ],
+        "type": "object"
+      },
+      "ApplicationPermissions": {
+        "additionalProperties": false,
+        "properties": {
+          "pending_requests": {
+            "type": "integer"
+          },
+          "rules": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationPermissionRule"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "rules",
+          "pending_requests"
+        ],
+        "type": "object"
+      },
+      "ApplicationPermissionsUpdateInput": {
+        "additionalProperties": false,
+        "properties": {
+          "changes": {
+            "items": {
+              "$ref": "#/components/schemas/ApplicationPermissionChange"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "changes"
+        ],
+        "type": "object"
+      },
+      "ApplicationPermissionsUpdated": {
+        "additionalProperties": false,
+        "properties": {
+          "keys": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          }
+        },
+        "required": [
+          "keys"
+        ],
+        "type": "object"
+      },
+      "ApplicationProject": {
         "additionalProperties": false,
         "properties": {
           "archived": {
@@ -357,17 +1064,17 @@
         ],
         "type": "object"
       },
-      "AssistantProjectDetail": {
+      "ApplicationProjectDetail": {
         "additionalProperties": false,
         "properties": {
           "files": {
             "items": {
-              "$ref": "#/components/schemas/AssistantProjectFile"
+              "$ref": "#/components/schemas/ApplicationProjectFile"
             },
             "type": "array"
           },
           "project": {
-            "$ref": "#/components/schemas/AssistantProject"
+            "$ref": "#/components/schemas/ApplicationProject"
           }
         },
         "required": [
@@ -376,7 +1083,7 @@
         ],
         "type": "object"
       },
-      "AssistantProjectFile": {
+      "ApplicationProjectFile": {
         "additionalProperties": false,
         "properties": {
           "bytes": {
@@ -434,7 +1141,366 @@
         ],
         "type": "object"
       },
-      "AssistantScheduleJob": {
+      "ApplicationPushConfiguration": {
+        "additionalProperties": false,
+        "properties": {
+          "devices": {
+            "items": {
+              "$ref": "#/components/schemas/NotifyPushDevice"
+            },
+            "type": "array"
+          },
+          "key": {
+            "type": "string"
+          },
+          "problem": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "problem",
+          "devices"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadApplicationConfiguration": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ApplicationConfiguration"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadApplicationDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ApplicationDetail"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadApplicationOAuthSetup": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ApplicationOAuthSetup"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadApplicationPermissions": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ApplicationPermissions"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadAssistantmoduleKnowledgeDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AssistantmoduleKnowledgeDetail"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadAssistantmoduleKnowledgePage": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AssistantmoduleKnowledgePage"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadAssistantmoduleKnowledgeProfile": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AssistantmoduleKnowledgeProfile"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadAssistantmoduleTaskPage": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AssistantmoduleTaskPage"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadAttentionResult": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/AttentionResult"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadCalendarmoduleEvents": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CalendarmoduleEvents"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadCalendarmoduleFreeSlots": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CalendarmoduleFreeSlots"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadCommandsStatus": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CommandsStatus"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadContactsmoduleContacts": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/ContactsmoduleContacts"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadCoremoduleActivityPage": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleActivityPage"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadCoremoduleConnections": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleConnections"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadCoremoduleProposalDetail": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleProposalDetail"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadCoremoduleProposalsPage": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleProposalsPage"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadCoremoduleSecrets": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleSecrets"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadCoremoduleSettingsPage": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleSettingsPage"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadCoremoduleTokens": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/CoremoduleTokens"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationReadNotionResult": {
+        "additionalProperties": false,
+        "properties": {
+          "data": {
+            "$ref": "#/components/schemas/NotionResult"
+          },
+          "revision": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "revision",
+          "data"
+        ],
+        "type": "object"
+      },
+      "ApplicationScheduleJob": {
         "additionalProperties": false,
         "properties": {
           "cadence": {
@@ -487,7 +1553,7 @@
         ],
         "type": "object"
       },
-      "AssistantScheduleRun": {
+      "ApplicationScheduleRun": {
         "additionalProperties": false,
         "properties": {
           "cost": {
@@ -522,7 +1588,48 @@
         ],
         "type": "object"
       },
-      "AssistantSubagent": {
+      "ApplicationSecretState": {
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ],
+        "type": "object"
+      },
+      "ApplicationSetting": {
+        "additionalProperties": false,
+        "properties": {
+          "class": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "pin_source": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "class"
+        ],
+        "type": "object"
+      },
+      "ApplicationSubagent": {
         "additionalProperties": false,
         "properties": {
           "builtin": {
@@ -553,7 +1660,85 @@
         ],
         "type": "object"
       },
-      "AssistantThreadChanged": {
+      "ApplicationSyncResult": {
+        "additionalProperties": false,
+        "properties": {
+          "embedded": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "failed": {
+            "type": "integer"
+          },
+          "live": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "new": {
+            "type": "integer"
+          },
+          "pages": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "private": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "seconds": {
+            "type": "number"
+          },
+          "sources": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "trashed": {
+            "type": "integer"
+          },
+          "unchanged": {
+            "type": "integer"
+          },
+          "updated": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sources",
+          "pages",
+          "new",
+          "updated",
+          "unchanged",
+          "trashed",
+          "failed",
+          "embedded",
+          "seconds",
+          "live",
+          "private"
+        ],
+        "type": "object"
+      },
+      "ApplicationTable": {
+        "additionalProperties": false,
+        "properties": {
+          "kind": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "rows": {
+            "format": "int64",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "rows"
+        ],
+        "type": "object"
+      },
+      "ApplicationThreadChanged": {
         "additionalProperties": false,
         "properties": {
           "run_id": {
@@ -570,7 +1755,107 @@
         ],
         "type": "object"
       },
-      "AssistantUsage": {
+      "ApplicationToken": {
+        "additionalProperties": false,
+        "properties": {
+          "created_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "expires_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "kind": {
+            "type": "string"
+          },
+          "last_used_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "revoked_at": {
+            "format": "date-time",
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "name",
+          "subject",
+          "created_at"
+        ],
+        "type": "object"
+      },
+      "ApplicationUndoEntry": {
+        "additionalProperties": false,
+        "properties": {
+          "after": {
+            "type": "string"
+          },
+          "before": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "run_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "source": {
+            "type": "string"
+          },
+          "state": {
+            "type": "string"
+          },
+          "target": {
+            "type": "string"
+          },
+          "thread_id": {
+            "format": "int64",
+            "type": "integer"
+          },
+          "tool": {
+            "type": "string"
+          },
+          "ts": {
+            "type": "number"
+          },
+          "undoable": {
+            "type": "boolean"
+          },
+          "undone_at": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "tool",
+          "target",
+          "before",
+          "after",
+          "ts",
+          "state",
+          "undoable"
+        ],
+        "type": "object"
+      },
+      "ApplicationUsage": {
         "additionalProperties": false,
         "properties": {
           "budget": {
@@ -1214,7 +2499,7 @@
         "additionalProperties": false,
         "properties": {
           "about": {
-            "$ref": "#/components/schemas/AssistantAbout"
+            "$ref": "#/components/schemas/ApplicationAbout"
           }
         },
         "type": "object"
@@ -1223,7 +2508,7 @@
         "additionalProperties": false,
         "properties": {
           "agenda": {
-            "$ref": "#/components/schemas/AssistantAgenda"
+            "$ref": "#/components/schemas/ApplicationAgenda"
           }
         },
         "type": "object"
@@ -1432,13 +2717,13 @@
         "additionalProperties": false,
         "properties": {
           "about": {
-            "$ref": "#/components/schemas/AssistantAbout"
+            "$ref": "#/components/schemas/ApplicationAbout"
           },
           "agenda": {
             "type": "boolean"
           },
           "composer": {
-            "$ref": "#/components/schemas/AssistantComposerView"
+            "$ref": "#/components/schemas/ApplicationComposerView"
           },
           "date": {
             "type": "string"
@@ -1744,8 +3029,7 @@
           }
         },
         "required": [
-          "text",
-          "edit"
+          "text"
         ],
         "type": "object"
       },
@@ -1790,10 +3074,8 @@
           }
         },
         "required": [
-          "text",
           "model",
-          "effort",
-          "thinking"
+          "effort"
         ],
         "type": "object"
       },
@@ -1873,9 +3155,7 @@
         },
         "required": [
           "name",
-          "instructions",
-          "effort",
-          "private"
+          "effort"
         ],
         "type": "object"
       },
@@ -2035,7 +3315,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/AssistantScheduleJob"
+              "$ref": "#/components/schemas/ApplicationScheduleJob"
             },
             "type": "array"
           },
@@ -2221,9 +3501,6 @@
             "type": "array"
           }
         },
-        "required": [
-          "tools"
-        ],
         "type": "object"
       },
       "AssistantmoduleapiThread": {
@@ -2369,7 +3646,7 @@
           },
           "needs": {
             "items": {
-              "$ref": "#/components/schemas/AssistantNeed"
+              "$ref": "#/components/schemas/ApplicationNeed"
             },
             "type": "array"
           },
@@ -2508,127 +3785,6 @@
           "items",
           "groups",
           "counts"
-        ],
-        "type": "object"
-      },
-      "AuthBearerIssueInput": {
-        "additionalProperties": false,
-        "properties": {
-          "expires_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "name"
-        ],
-        "type": "object"
-      },
-      "AuthConfiguration": {
-        "additionalProperties": false,
-        "properties": {
-          "active": {
-            "type": "boolean"
-          },
-          "client_id": {
-            "type": "string"
-          },
-          "configured": {
-            "type": "boolean"
-          },
-          "display": {
-            "type": "string"
-          },
-          "issuer": {
-            "type": "string"
-          },
-          "origins": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "provider": {
-            "type": "string"
-          },
-          "reason": {
-            "type": "string"
-          },
-          "redirect_uri": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "configured",
-          "active",
-          "provider",
-          "display",
-          "issuer",
-          "client_id",
-          "redirect_uri",
-          "origins",
-          "reason"
-        ],
-        "type": "object"
-      },
-      "AuthIssued": {
-        "additionalProperties": false,
-        "properties": {
-          "secret": {
-            "type": "string"
-          },
-          "token": {
-            "$ref": "#/components/schemas/AuthToken"
-          }
-        },
-        "required": [
-          "token",
-          "secret"
-        ],
-        "type": "object"
-      },
-      "AuthToken": {
-        "additionalProperties": false,
-        "properties": {
-          "created_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "expires_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "kind": {
-            "type": "string"
-          },
-          "last_used_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "revoked_at": {
-            "format": "date-time",
-            "type": "string"
-          },
-          "subject": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "kind",
-          "name",
-          "subject",
-          "created_at"
         ],
         "type": "object"
       },
@@ -2934,37 +4090,6 @@
         ],
         "type": "object"
       },
-      "ConnectionsOAuthSetup": {
-        "additionalProperties": false,
-        "properties": {
-          "capabilities": {
-            "items": {
-              "$ref": "#/components/schemas/ConnectionsGoogleGrant"
-            },
-            "type": "array"
-          },
-          "client_id": {
-            "type": "string"
-          },
-          "client_secret_set": {
-            "type": "boolean"
-          },
-          "health": {
-            "type": "string"
-          },
-          "reason": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "client_id",
-          "client_secret_set",
-          "capabilities",
-          "health",
-          "reason"
-        ],
-        "type": "object"
-      },
       "ConnectionsResult": {
         "additionalProperties": false,
         "properties": {
@@ -3151,7 +4276,7 @@
         "properties": {
           "args": {
             "items": {
-              "$ref": "#/components/schemas/ReviewArg"
+              "$ref": "#/components/schemas/ApplicationArg"
             },
             "type": "array"
           },
@@ -3289,7 +4414,7 @@
         "additionalProperties": false,
         "properties": {
           "encryption": {
-            "$ref": "#/components/schemas/MaintenanceEncryption"
+            "$ref": "#/components/schemas/ApplicationEncryption"
           },
           "files": {
             "type": "integer"
@@ -3324,7 +4449,7 @@
             "type": "string"
           },
           "encryption": {
-            "$ref": "#/components/schemas/MaintenanceEncryption"
+            "$ref": "#/components/schemas/ApplicationEncryption"
           },
           "files": {
             "type": "integer"
@@ -3349,7 +4474,7 @@
           },
           "tables": {
             "items": {
-              "$ref": "#/components/schemas/MaintenanceTable"
+              "$ref": "#/components/schemas/ApplicationTable"
             },
             "type": "array"
           },
@@ -3408,7 +4533,7 @@
         "additionalProperties": false,
         "properties": {
           "encryption": {
-            "$ref": "#/components/schemas/MaintenanceEncryption"
+            "$ref": "#/components/schemas/ApplicationEncryption"
           },
           "intact": {
             "type": "boolean"
@@ -3418,7 +4543,7 @@
           },
           "tables": {
             "items": {
-              "$ref": "#/components/schemas/MaintenanceTable"
+              "$ref": "#/components/schemas/ApplicationTable"
             },
             "type": "array"
           }
@@ -3521,7 +4646,7 @@
         "properties": {
           "args": {
             "items": {
-              "$ref": "#/components/schemas/ReviewArg"
+              "$ref": "#/components/schemas/ApplicationArg"
             },
             "type": "array"
           },
@@ -3756,7 +4881,7 @@
         "properties": {
           "secrets": {
             "items": {
-              "$ref": "#/components/schemas/SettingsSecretState"
+              "$ref": "#/components/schemas/ApplicationSecretState"
             },
             "type": "array"
           }
@@ -3798,7 +4923,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/SettingsSetting"
+              "$ref": "#/components/schemas/ApplicationSetting"
             },
             "type": "array"
           },
@@ -3823,7 +4948,7 @@
         "properties": {
           "tokens": {
             "items": {
-              "$ref": "#/components/schemas/AuthToken"
+              "$ref": "#/components/schemas/ApplicationToken"
             },
             "type": "array"
           }
@@ -4241,756 +5366,6 @@
         ],
         "type": "object"
       },
-      "InternalChangeApplicationIssued": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/AuthIssued"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeApplicationPermissionsUpdated": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/ReviewPermissionsUpdated"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeApplicationSecretState": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/SettingsSecretState"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeApplicationSyncResult": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/NotionSyncResult"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeAssistantmoduleKnowledgeBatch": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/AssistantmoduleKnowledgeBatch"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeAssistantmoduleKnowledgeChanged": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/AssistantmoduleKnowledgeChanged"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeAssistantmoduleTaskChanged": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/AssistantmoduleTaskChanged"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeCalendarmoduleCandidates": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/CalendarmoduleCandidates"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeConnectionsGoogleGrant": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/ConnectionsGoogleGrant"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeConnectionsView": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/ConnectionsView"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeCoremoduleBackupCreated": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/CoremoduleBackupCreated"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeCoremoduleBackupVerified": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/CoremoduleBackupVerified"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeCoremoduleConnections": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/CoremoduleConnections"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeCoremoduleDatabaseCheck": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/CoremoduleDatabaseCheck"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeCoremoduleGoogleConsent": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/CoremoduleGoogleConsent"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeCoremoduleSettingChange": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/CoremoduleSettingChange"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeDavmirrorStats": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/DavmirrorStats"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalChangeKbImportStats": {
-        "additionalProperties": false,
-        "properties": {
-          "audit_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "data": {
-            "$ref": "#/components/schemas/KbImportStats"
-          },
-          "effect_ids": {
-            "items": {
-              "format": "int64",
-              "type": "integer"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadApplicationConfiguration": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/AuthConfiguration"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadApplicationDetail": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/NotionDetail"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadApplicationOAuthSetup": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/ConnectionsOAuthSetup"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadApplicationPermissions": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/ReviewPermissions"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadAssistantmoduleKnowledgeDetail": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/AssistantmoduleKnowledgeDetail"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadAssistantmoduleKnowledgePage": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/AssistantmoduleKnowledgePage"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadAssistantmoduleKnowledgeProfile": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/AssistantmoduleKnowledgeProfile"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadAssistantmoduleTaskPage": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/AssistantmoduleTaskPage"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadAttentionResult": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/AttentionResult"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadCalendarmoduleEvents": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/CalendarmoduleEvents"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadCalendarmoduleFreeSlots": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/CalendarmoduleFreeSlots"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadCommandsStatus": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/CommandsStatus"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadContactsmoduleContacts": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/ContactsmoduleContacts"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadCoremoduleActivityPage": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/CoremoduleActivityPage"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadCoremoduleConnections": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/CoremoduleConnections"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadCoremoduleProposalDetail": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/CoremoduleProposalDetail"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadCoremoduleProposalsPage": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/CoremoduleProposalsPage"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadCoremoduleSecrets": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/CoremoduleSecrets"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadCoremoduleSettingsPage": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/CoremoduleSettingsPage"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadCoremoduleTokens": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/CoremoduleTokens"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
-      "InternalReadNotionResult": {
-        "additionalProperties": false,
-        "properties": {
-          "data": {
-            "$ref": "#/components/schemas/NotionResult"
-          },
-          "revision": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "revision",
-          "data"
-        ],
-        "type": "object"
-      },
       "KbImportStats": {
         "additionalProperties": false,
         "properties": {
@@ -5261,42 +5636,6 @@
           "effective_outcome",
           "prior_state",
           "prior_error"
-        ],
-        "type": "object"
-      },
-      "MaintenanceEncryption": {
-        "additionalProperties": false,
-        "properties": {
-          "encrypted": {
-            "type": "boolean"
-          },
-          "key_id": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "encrypted"
-        ],
-        "type": "object"
-      },
-      "MaintenanceTable": {
-        "additionalProperties": false,
-        "properties": {
-          "kind": {
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          },
-          "rows": {
-            "format": "int64",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "kind",
-          "name",
-          "rows"
         ],
         "type": "object"
       },
@@ -6058,26 +6397,6 @@
         ],
         "type": "object"
       },
-      "NotifyKindRow": {
-        "additionalProperties": false,
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "on": {
-            "type": "boolean"
-          },
-          "web_only": {
-            "type": "boolean"
-          }
-        },
-        "required": [
-          "name",
-          "on",
-          "web_only"
-        ],
-        "type": "object"
-      },
       "NotifyNotification": {
         "additionalProperties": false,
         "properties": {
@@ -6136,29 +6455,6 @@
           "channel",
           "delivered",
           "actions"
-        ],
-        "type": "object"
-      },
-      "NotifyPushConfiguration": {
-        "additionalProperties": false,
-        "properties": {
-          "devices": {
-            "items": {
-              "$ref": "#/components/schemas/NotifyPushDevice"
-            },
-            "type": "array"
-          },
-          "key": {
-            "type": "string"
-          },
-          "problem": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "key",
-          "problem",
-          "devices"
         ],
         "type": "object"
       },
@@ -6307,7 +6603,7 @@
             "$ref": "#/components/schemas/NotifymodulePhoneSettings"
           },
           "push": {
-            "$ref": "#/components/schemas/NotifyPushConfiguration"
+            "$ref": "#/components/schemas/ApplicationPushConfiguration"
           }
         },
         "required": [
@@ -6345,7 +6641,7 @@
           },
           "kinds": {
             "items": {
-              "$ref": "#/components/schemas/NotifyKindRow"
+              "$ref": "#/components/schemas/ApplicationKindRow"
             },
             "type": "array"
           },
@@ -6395,30 +6691,6 @@
           "delivered",
           "error",
           "outcome"
-        ],
-        "type": "object"
-      },
-      "NotionDetail": {
-        "additionalProperties": false,
-        "properties": {
-          "page": {
-            "$ref": "#/components/schemas/NotionView"
-          },
-          "related": {
-            "items": {
-              "$ref": "#/components/schemas/NotionRelated"
-            },
-            "type": "array"
-          },
-          "titles": {
-            "additionalProperties": {
-              "type": "string"
-            },
-            "type": "object"
-          }
-        },
-        "required": [
-          "titles"
         ],
         "type": "object"
       },
@@ -6560,63 +6832,6 @@
         "required": [
           "hits",
           "semantic"
-        ],
-        "type": "object"
-      },
-      "NotionSyncResult": {
-        "additionalProperties": false,
-        "properties": {
-          "embedded": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "failed": {
-            "type": "integer"
-          },
-          "live": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "new": {
-            "type": "integer"
-          },
-          "pages": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "private": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "seconds": {
-            "type": "number"
-          },
-          "sources": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "trashed": {
-            "type": "integer"
-          },
-          "unchanged": {
-            "type": "integer"
-          },
-          "updated": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "sources",
-          "pages",
-          "new",
-          "updated",
-          "unchanged",
-          "trashed",
-          "failed",
-          "embedded",
-          "seconds",
-          "live",
-          "private"
         ],
         "type": "object"
       },
@@ -6769,188 +6984,6 @@
         ],
         "type": "object"
       },
-      "ReviewArg": {
-        "additionalProperties": false,
-        "properties": {
-          "label": {
-            "type": "string"
-          },
-          "value": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "label",
-          "value"
-        ],
-        "type": "object"
-      },
-      "ReviewPermissionChange": {
-        "additionalProperties": false,
-        "properties": {
-          "key": {
-            "type": "string"
-          },
-          "value": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "key",
-          "value"
-        ],
-        "type": "object"
-      },
-      "ReviewPermissionRule": {
-        "additionalProperties": false,
-        "properties": {
-          "channel": {
-            "type": "string"
-          },
-          "choices": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          },
-          "effective": {
-            "type": "string"
-          },
-          "floor": {
-            "type": "string"
-          },
-          "key": {
-            "type": "string"
-          },
-          "situation": {
-            "type": "string"
-          },
-          "source": {
-            "type": "string"
-          },
-          "value": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "key",
-          "channel",
-          "situation",
-          "value",
-          "source",
-          "floor",
-          "effective",
-          "choices"
-        ],
-        "type": "object"
-      },
-      "ReviewPermissions": {
-        "additionalProperties": false,
-        "properties": {
-          "pending_requests": {
-            "type": "integer"
-          },
-          "rules": {
-            "items": {
-              "$ref": "#/components/schemas/ReviewPermissionRule"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "rules",
-          "pending_requests"
-        ],
-        "type": "object"
-      },
-      "ReviewPermissionsUpdateInput": {
-        "additionalProperties": false,
-        "properties": {
-          "changes": {
-            "items": {
-              "$ref": "#/components/schemas/ReviewPermissionChange"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "changes"
-        ],
-        "type": "object"
-      },
-      "ReviewPermissionsUpdated": {
-        "additionalProperties": false,
-        "properties": {
-          "keys": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array"
-          }
-        },
-        "required": [
-          "keys"
-        ],
-        "type": "object"
-      },
-      "ReviewUndoEntry": {
-        "additionalProperties": false,
-        "properties": {
-          "after": {
-            "type": "string"
-          },
-          "before": {
-            "type": "string"
-          },
-          "error": {
-            "type": "string"
-          },
-          "id": {
-            "type": "string"
-          },
-          "run_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "source": {
-            "type": "string"
-          },
-          "state": {
-            "type": "string"
-          },
-          "target": {
-            "type": "string"
-          },
-          "thread_id": {
-            "format": "int64",
-            "type": "integer"
-          },
-          "tool": {
-            "type": "string"
-          },
-          "ts": {
-            "type": "number"
-          },
-          "undoable": {
-            "type": "boolean"
-          },
-          "undone_at": {
-            "type": "number"
-          }
-        },
-        "required": [
-          "id",
-          "source",
-          "tool",
-          "target",
-          "before",
-          "after",
-          "ts",
-          "state",
-          "undoable"
-        ],
-        "type": "object"
-      },
       "ReviewpagesapiApproval": {
         "additionalProperties": false,
         "properties": {
@@ -6965,7 +6998,7 @@
           },
           "args": {
             "items": {
-              "$ref": "#/components/schemas/ReviewArg"
+              "$ref": "#/components/schemas/ApplicationArg"
             },
             "type": "array"
           },
@@ -7218,47 +7251,6 @@
         ],
         "type": "object"
       },
-      "SettingsSecretState": {
-        "additionalProperties": false,
-        "properties": {
-          "name": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "name",
-          "status"
-        ],
-        "type": "object"
-      },
-      "SettingsSetting": {
-        "additionalProperties": false,
-        "properties": {
-          "class": {
-            "type": "string"
-          },
-          "key": {
-            "type": "string"
-          },
-          "pin_source": {
-            "type": "string"
-          },
-          "source": {
-            "type": "string"
-          },
-          "value": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "key",
-          "class"
-        ],
-        "type": "object"
-      },
       "SubagentsCard": {
         "additionalProperties": false,
         "properties": {
@@ -7493,7 +7485,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/AssistantProject"
+              "$ref": "#/components/schemas/ApplicationProject"
             },
             "type": "array"
           },
@@ -7511,7 +7503,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/AssistantScheduleRun"
+              "$ref": "#/components/schemas/ApplicationScheduleRun"
             },
             "type": "array"
           },
@@ -7529,7 +7521,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/AssistantSubagent"
+              "$ref": "#/components/schemas/ApplicationSubagent"
             },
             "type": "array"
           },
@@ -7547,7 +7539,7 @@
         "properties": {
           "items": {
             "items": {
-              "$ref": "#/components/schemas/ReviewUndoEntry"
+              "$ref": "#/components/schemas/ApplicationUndoEntry"
             },
             "type": "array"
           },
@@ -7756,7 +7748,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadCoremoduleActivityPage"
+                  "$ref": "#/components/schemas/ApplicationReadCoremoduleActivityPage"
                 }
               }
             },
@@ -8011,7 +8003,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantConfiguration"
+                  "$ref": "#/components/schemas/ApplicationModelConfiguration"
                 }
               }
             },
@@ -8256,7 +8248,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadApplicationConfiguration"
+                  "$ref": "#/components/schemas/ApplicationReadApplicationConfiguration"
                 }
               }
             },
@@ -8370,7 +8362,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadCoremoduleTokens"
+                  "$ref": "#/components/schemas/ApplicationReadCoremoduleTokens"
                 }
               }
             },
@@ -8475,7 +8467,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/AuthBearerIssueInput"
+                "$ref": "#/components/schemas/ApplicationBearerIssueInput"
               }
             }
           },
@@ -8486,7 +8478,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeApplicationIssued"
+                  "$ref": "#/components/schemas/ApplicationChangeApplicationIssued"
                 }
               }
             },
@@ -8796,7 +8788,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeCalendarmoduleCandidates"
+                  "$ref": "#/components/schemas/ApplicationChangeCalendarmoduleCandidates"
                 }
               }
             },
@@ -8969,7 +8961,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadCalendarmoduleEvents"
+                  "$ref": "#/components/schemas/ApplicationReadCalendarmoduleEvents"
                 }
               }
             },
@@ -9131,7 +9123,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadCalendarmoduleFreeSlots"
+                  "$ref": "#/components/schemas/ApplicationReadCalendarmoduleFreeSlots"
                 }
               }
             },
@@ -9265,7 +9257,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeDavmirrorStats"
+                  "$ref": "#/components/schemas/ApplicationChangeDavmirrorStats"
                 }
               }
             },
@@ -9425,7 +9417,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadCommandsStatus"
+                  "$ref": "#/components/schemas/ApplicationReadCommandsStatus"
                 }
               }
             },
@@ -9596,7 +9588,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantConfiguration"
+                  "$ref": "#/components/schemas/ApplicationModelConfiguration"
                 }
               }
             },
@@ -9729,7 +9721,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadCoremoduleConnections"
+                  "$ref": "#/components/schemas/ApplicationReadCoremoduleConnections"
                 }
               }
             },
@@ -9851,7 +9843,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadApplicationOAuthSetup"
+                  "$ref": "#/components/schemas/ApplicationReadApplicationOAuthSetup"
                 }
               }
             },
@@ -9983,7 +9975,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeConnectionsView"
+                  "$ref": "#/components/schemas/ApplicationChangeConnectionsView"
                 }
               }
             },
@@ -10147,7 +10139,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeConnectionsGoogleGrant"
+                  "$ref": "#/components/schemas/ApplicationChangeConnectionsGoogleGrant"
                 }
               }
             },
@@ -10311,7 +10303,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeCoremoduleGoogleConsent"
+                  "$ref": "#/components/schemas/ApplicationChangeCoremoduleGoogleConsent"
                 }
               }
             },
@@ -10652,7 +10644,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeConnectionsView"
+                  "$ref": "#/components/schemas/ApplicationChangeConnectionsView"
                 }
               }
             },
@@ -10822,7 +10814,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeCoremoduleConnections"
+                  "$ref": "#/components/schemas/ApplicationChangeCoremoduleConnections"
                 }
               }
             },
@@ -10998,7 +10990,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadContactsmoduleContacts"
+                  "$ref": "#/components/schemas/ApplicationReadContactsmoduleContacts"
                 }
               }
             },
@@ -11132,7 +11124,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeDavmirrorStats"
+                  "$ref": "#/components/schemas/ApplicationChangeDavmirrorStats"
                 }
               }
             },
@@ -12878,7 +12870,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadAssistantmoduleKnowledgePage"
+                  "$ref": "#/components/schemas/ApplicationReadAssistantmoduleKnowledgePage"
                 }
               }
             },
@@ -13020,7 +13012,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeAssistantmoduleKnowledgeChanged"
+                  "$ref": "#/components/schemas/ApplicationChangeAssistantmoduleKnowledgeChanged"
                 }
               }
             },
@@ -13184,7 +13176,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeAssistantmoduleKnowledgeBatch"
+                  "$ref": "#/components/schemas/ApplicationChangeAssistantmoduleKnowledgeBatch"
                 }
               }
             },
@@ -13348,7 +13340,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeAssistantmoduleKnowledgeBatch"
+                  "$ref": "#/components/schemas/ApplicationChangeAssistantmoduleKnowledgeBatch"
                 }
               }
             },
@@ -13512,7 +13504,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeKbImportStats"
+                  "$ref": "#/components/schemas/ApplicationChangeKbImportStats"
                 }
               }
             },
@@ -13664,7 +13656,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadAssistantmoduleKnowledgeProfile"
+                  "$ref": "#/components/schemas/ApplicationReadAssistantmoduleKnowledgeProfile"
                 }
               }
             },
@@ -13798,7 +13790,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeAssistantmoduleKnowledgeBatch"
+                  "$ref": "#/components/schemas/ApplicationChangeAssistantmoduleKnowledgeBatch"
                 }
               }
             },
@@ -14113,7 +14105,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadAssistantmoduleKnowledgeDetail"
+                  "$ref": "#/components/schemas/ApplicationReadAssistantmoduleKnowledgeDetail"
                 }
               }
             },
@@ -14254,7 +14246,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeAssistantmoduleKnowledgeChanged"
+                  "$ref": "#/components/schemas/ApplicationChangeAssistantmoduleKnowledgeChanged"
                 }
               }
             },
@@ -14417,7 +14409,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeAssistantmoduleKnowledgeChanged"
+                  "$ref": "#/components/schemas/ApplicationChangeAssistantmoduleKnowledgeChanged"
                 }
               }
             },
@@ -14580,7 +14572,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeAssistantmoduleKnowledgeChanged"
+                  "$ref": "#/components/schemas/ApplicationChangeAssistantmoduleKnowledgeChanged"
                 }
               }
             },
@@ -14743,7 +14735,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeAssistantmoduleKnowledgeChanged"
+                  "$ref": "#/components/schemas/ApplicationChangeAssistantmoduleKnowledgeChanged"
                 }
               }
             },
@@ -14897,7 +14889,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeCoremoduleBackupCreated"
+                  "$ref": "#/components/schemas/ApplicationChangeCoremoduleBackupCreated"
                 }
               }
             },
@@ -15061,7 +15053,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeCoremoduleBackupVerified"
+                  "$ref": "#/components/schemas/ApplicationChangeCoremoduleBackupVerified"
                 }
               }
             },
@@ -15215,7 +15207,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeCoremoduleDatabaseCheck"
+                  "$ref": "#/components/schemas/ApplicationChangeCoremoduleDatabaseCheck"
                 }
               }
             },
@@ -15369,7 +15361,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeCoremoduleBackupCreated"
+                  "$ref": "#/components/schemas/ApplicationChangeCoremoduleBackupCreated"
                 }
               }
             },
@@ -18402,7 +18394,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantMemoryWorked"
+                  "$ref": "#/components/schemas/ApplicationMemoryWorked"
                 }
               }
             },
@@ -18952,7 +18944,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantMemoryWorked"
+                  "$ref": "#/components/schemas/ApplicationMemoryWorked"
                 }
               }
             },
@@ -19513,7 +19505,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadApplicationPermissions"
+                  "$ref": "#/components/schemas/ApplicationReadApplicationPermissions"
                 }
               }
             },
@@ -19634,7 +19626,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ReviewPermissionsUpdateInput"
+                "$ref": "#/components/schemas/ApplicationPermissionsUpdateInput"
               }
             }
           },
@@ -19645,7 +19637,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeApplicationPermissionsUpdated"
+                  "$ref": "#/components/schemas/ApplicationChangeApplicationPermissionsUpdated"
                 }
               }
             },
@@ -20440,7 +20432,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantProjectDetail"
+                  "$ref": "#/components/schemas/ApplicationProjectDetail"
                 }
               }
             },
@@ -21124,7 +21116,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantFileChanged"
+                  "$ref": "#/components/schemas/ApplicationFileChanged"
                 }
               }
             },
@@ -21462,7 +21454,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantFileView"
+                  "$ref": "#/components/schemas/ApplicationFileView"
                 }
               }
             },
@@ -21974,7 +21966,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadCoremoduleProposalsPage"
+                  "$ref": "#/components/schemas/ApplicationReadCoremoduleProposalsPage"
                 }
               }
             },
@@ -22115,7 +22107,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadCoremoduleProposalDetail"
+                  "$ref": "#/components/schemas/ApplicationReadCoremoduleProposalDetail"
                 }
               }
             },
@@ -22237,7 +22229,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadAttentionResult"
+                  "$ref": "#/components/schemas/ApplicationReadAttentionResult"
                 }
               }
             },
@@ -23373,7 +23365,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadCoremoduleSettingsPage"
+                  "$ref": "#/components/schemas/ApplicationReadCoremoduleSettingsPage"
                 }
               }
             },
@@ -23495,7 +23487,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadCoremoduleSecrets"
+                  "$ref": "#/components/schemas/ApplicationReadCoremoduleSecrets"
                 }
               }
             },
@@ -23627,7 +23619,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeApplicationSecretState"
+                  "$ref": "#/components/schemas/ApplicationChangeApplicationSecretState"
                 }
               }
             },
@@ -23797,7 +23789,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeApplicationSecretState"
+                  "$ref": "#/components/schemas/ApplicationChangeApplicationSecretState"
                 }
               }
             },
@@ -23959,7 +23951,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeCoremoduleSettingChange"
+                  "$ref": "#/components/schemas/ApplicationChangeCoremoduleSettingChange"
                 }
               }
             },
@@ -24129,7 +24121,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeCoremoduleSettingChange"
+                  "$ref": "#/components/schemas/ApplicationChangeCoremoduleSettingChange"
                 }
               }
             },
@@ -24604,7 +24596,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantSubagent"
+                  "$ref": "#/components/schemas/ApplicationSubagent"
                 }
               }
             },
@@ -24776,7 +24768,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantSubagent"
+                  "$ref": "#/components/schemas/ApplicationSubagent"
                 }
               }
             },
@@ -24957,7 +24949,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadAssistantmoduleTaskPage"
+                  "$ref": "#/components/schemas/ApplicationReadAssistantmoduleTaskPage"
                 }
               }
             },
@@ -25089,7 +25081,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeAssistantmoduleTaskChanged"
+                  "$ref": "#/components/schemas/ApplicationChangeAssistantmoduleTaskChanged"
                 }
               }
             },
@@ -25262,7 +25254,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeAssistantmoduleTaskChanged"
+                  "$ref": "#/components/schemas/ApplicationChangeAssistantmoduleTaskChanged"
                 }
               }
             },
@@ -25425,7 +25417,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeAssistantmoduleTaskChanged"
+                  "$ref": "#/components/schemas/ApplicationChangeAssistantmoduleTaskChanged"
                 }
               }
             },
@@ -26440,7 +26432,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantThreadChanged"
+                  "$ref": "#/components/schemas/ApplicationThreadChanged"
                 }
               }
             },
@@ -26613,7 +26605,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantThreadChanged"
+                  "$ref": "#/components/schemas/ApplicationThreadChanged"
                 }
               }
             },
@@ -26946,7 +26938,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantFileView"
+                  "$ref": "#/components/schemas/ApplicationFileView"
                 }
               }
             },
@@ -27997,7 +27989,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantThreadChanged"
+                  "$ref": "#/components/schemas/ApplicationThreadChanged"
                 }
               }
             },
@@ -28170,7 +28162,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantThreadChanged"
+                  "$ref": "#/components/schemas/ApplicationThreadChanged"
                 }
               }
             },
@@ -28343,7 +28335,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantThreadChanged"
+                  "$ref": "#/components/schemas/ApplicationThreadChanged"
                 }
               }
             },
@@ -28506,7 +28498,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantThreadChanged"
+                  "$ref": "#/components/schemas/ApplicationThreadChanged"
                 }
               }
             },
@@ -28977,7 +28969,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantThreadChanged"
+                  "$ref": "#/components/schemas/ApplicationThreadChanged"
                 }
               }
             },
@@ -29737,7 +29729,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AssistantUsage"
+                  "$ref": "#/components/schemas/ApplicationUsage"
                 }
               }
             },
@@ -29883,7 +29875,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadNotionResult"
+                  "$ref": "#/components/schemas/ApplicationReadNotionResult"
                 }
               }
             },
@@ -30017,7 +30009,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalChangeApplicationSyncResult"
+                  "$ref": "#/components/schemas/ApplicationChangeApplicationSyncResult"
                 }
               }
             },
@@ -30184,7 +30176,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/InternalReadApplicationDetail"
+                  "$ref": "#/components/schemas/ApplicationReadApplicationDetail"
                 }
               }
             },

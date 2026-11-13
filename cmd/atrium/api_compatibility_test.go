@@ -44,10 +44,10 @@ func TestAPILegacyCompatibility(t *testing.T) {
 		return base64.RawURLEncoding.EncodeToString(raw)
 	}
 	list := s.do(http.MethodGet, "/api/v1/threads?limit=1", token, nil)
-	items := apiItems(t, list)
+	items := apiReplyItems(t, list)
 	row := items[0].(map[string]any)
 	legacy := encode(map[string]any{"Pinned": row["pinned"], "UpdatedAt": row["updated_at"], "ID": row["id"]})
-	if next := s.do(http.MethodGet, "/api/v1/threads?limit=1&cursor="+legacy, token, nil); len(apiItems(t, next)) != 1 {
+	if next := s.do(http.MethodGet, "/api/v1/threads?limit=1&cursor="+legacy, token, nil); len(apiReplyItems(t, next)) != 1 {
 		t.Fatalf("legacy list: %s", next.body)
 	}
 	path := fmt.Sprintf("/api/v1/threads/%d", id)
