@@ -4,6 +4,8 @@ import (
 	"context"
 	"slices"
 
+	"github.com/go-chi/chi/v5"
+
 	"github.com/jeiang/atrium/internal/actionlink"
 	actionlinkpages "github.com/jeiang/atrium/internal/actionlink/pages"
 	"github.com/jeiang/atrium/internal/actionlink/policy"
@@ -39,7 +41,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := notificationOperations()
 	factory := func(d *web.Deps) *notifyapp.Service {
 		_ = notify.EnsurePush(audit.With(d.Ctx, "notifications-bootstrap", audit.Job), d.DB)
-		return notifyapp.New(d.DB)
+		return notifyapp.New(d.DB).WithPresenter(actionlink.Present)
 	}
 	return module.Declaration{
 		Operations: operations, Bindings: bindings,
@@ -48,7 +50,8 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Pages: []web.Page{{Module: notifypages.Module(factory), Templates: notifypages.Templates(), Nav: []web.NavItem{
 			{Section: "review", Label: "Inbox", URL: "/inbox", Icon: "inbox", Page: "inbox", Order: 50},
 			{Label: "Notifications", URL: "/settings/notifications", Page: "notifications", Settings: true, Primary: true, Order: 40},
-		}}, {Module: actionlinkpages.Module(factory), Templates: actionlinkpages.Templates()}},
+		}}, {Module: actionlinkpages.Module(factory), Templates: actionlinkpages.Templates()},
+			{Module: func(_ chi.Router, d *web.Deps) { notificationRoutes(d, factory(d)) }}},
 		Groups:      SettingGroups(),
 		Tools:       ToolDefinitions(),
 		Connections: notify.Connections(),

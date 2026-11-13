@@ -73,7 +73,8 @@ func Rotate(ctx context.Context, q db.Querier) error {
 	if _, ok, err := secrets.FileKey(ctx, secrets.ActionLinkKeyFile); err != nil {
 		return err
 	} else if ok {
-		return settings.AppKeyFile{Key: secrets.ActionLinkKey, File: "app_keys." + secrets.ActionLinkKeyFile}
+		_, err := q.ExecContext(ctx, "DELETE FROM action_links WHERE used_ts IS NULL")
+		return err
 	}
 	store := secrets.NewIn(settings.From(ctx), nil, q, nil)
 	var buf [32]byte

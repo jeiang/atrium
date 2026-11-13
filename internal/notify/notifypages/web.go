@@ -60,7 +60,6 @@ func serve(d *web.Deps, service *notifyapp.Service) {
 	d.Authenticated(http.MethodPost, page+"/push/{id}/remove", h.owned(h.removeDevice))
 	d.Authenticated(http.MethodGet, inboxPage, h.inbox)
 	d.Authenticated(http.MethodPost, inboxPage+"/{id}/resend", h.owned(h.resend))
-	d.API(http.MethodGet, "/inbox", h.apiInbox)
 }
 
 func (h handlers) ctx(r *http.Request) context.Context {
@@ -148,6 +147,11 @@ func (h handlers) resend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	_, err = h.service.Resend(h.ctx(r), notifyapp.ResendInput{ID: id})
+	var applicationError *application.Error
+	if errors.As(err, &applicationError) && applicationError.Code == application.NotFound {
+		http.NotFound(w, r)
+		return
+	}
 	if refused(err) {
 		h.renderInbox(w, r, http.StatusUnprocessableEntity, &tpl.Toast{Category: "error", Title: "Not resent", Description: err.Error()})
 		return

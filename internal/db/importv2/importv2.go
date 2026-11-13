@@ -116,7 +116,11 @@ var importTables = []tablePlan{
 	{table: "settings", action: carry},
 	{table: "secrets", action: carry},
 	{table: "ntfy_channels", action: carry, why: "operator notification channels and topics"},
-	{table: "push_subscriptions", action: carry, why: "operator device registrations; the VAPID key is carried in secrets"},
+	{table: "push_subscriptions", action: convert, why: "each valid registration becomes a web push device with the same id; malformed rows are reported and not carried; the VAPID key is carried in secrets", run: func(im *importer) (int64, error) {
+		n, notes, err := notify.ImportDevices(im.ctx, im.src, im.tx)
+		im.notes = append(im.notes, notes...)
+		return n, err
+	}},
 	{table: "attention_snoozes", action: carry, why: "operator snoozes keyed by carried item ids"},
 	{table: "projects", action: carry},
 	{table: "kb_records", action: carry, null: []string{"source_run_id"}, skip: []string{"embedded"}},

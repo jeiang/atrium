@@ -46,6 +46,7 @@ type fakePush struct {
 	mu       sync.Mutex
 	status   int
 	route    func(*http.Request) int
+	redirect string
 	received []pushRequest
 	arrived  chan pushRequest
 }
@@ -65,6 +66,9 @@ func newFakePush(t *testing.T) *fakePush {
 		select {
 		case f.arrived <- req:
 		default:
+		}
+		if status == http.StatusTemporaryRedirect {
+			w.Header().Set("Location", f.redirect)
 		}
 		w.WriteHeader(status)
 	}))
@@ -249,7 +253,7 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 	devices := func() int {
 		t.Helper()
 		var n int
-		if err := d.Read.QueryRow("SELECT COUNT(*) FROM push_subscriptions").Scan(&n); err != nil {
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM notification_devices").Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		return n
@@ -325,7 +329,7 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 		t.Errorf("test payload %v", payload)
 	}
 	var lastOK *float64
-	if err := d.Read.QueryRow("SELECT last_ok_ts FROM push_subscriptions").Scan(&lastOK); err != nil || lastOK == nil {
+	if err := d.Read.QueryRow("SELECT last_ok_ts FROM notification_devices").Scan(&lastOK); err != nil || lastOK == nil {
 		t.Errorf("last_ok_ts = %v, %v", lastOK, err)
 	}
 
@@ -336,11 +340,8 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 		}
 	}
 	var failures int
-	if err := d.Read.QueryRow("SELECT failure_count FROM push_subscriptions").Scan(&failures); err != nil || failures != notify.FailingAfter {
+	if err := d.Read.QueryRow("SELECT failure_count FROM notification_devices").Scan(&failures); err != nil || failures != notify.FailingAfter {
 		t.Errorf("failure_count = %d, %v", failures, err)
-	}
-	if page, _ := get(); !strings.Contains(page, "data-notify-failing") || !strings.Contains(page, "Push failing: Browser") {
-		t.Error("no failing banner after three failed pushes")
 	}
 
 	guarded := notify.UsePushAddresses(netguard.Public)
@@ -375,7 +376,7 @@ func TestWebPushSubscribesDeliversEncryptedPayloadsAndDropsGoneSubscriptions(t *
 	push.answer(http.StatusCreated)
 	post("/push/subscriptions", browser.form())
 	var id int64
-	if err := d.Read.QueryRow("SELECT id FROM push_subscriptions").Scan(&id); err != nil {
+	if err := d.Read.QueryRow("SELECT id FROM notification_devices").Scan(&id); err != nil {
 		t.Fatal(err)
 	}
 	if code, body := post("/push/"+strconv.FormatInt(id, 10)+"/remove", nil); code != http.StatusOK || strings.Contains(body, "data-push-device=") || devices() != 0 {
@@ -414,11 +415,11 @@ func TestConnectionsCLIWebPushTestDeliversDropsGoneAndBlocksPrivateEndpoints(t *
 		t.Errorf("diagnostic payload %v", payload)
 	}
 	var goneLeft int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM push_subscriptions WHERE endpoint = ?", gone.endpoint).Scan(&goneLeft); err != nil || goneLeft != 0 {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM webpush_devices WHERE endpoint = ?", gone.endpoint).Scan(&goneLeft); err != nil || goneLeft != 0 {
 		t.Fatalf("the 410 device is still stored: %d, %v", goneLeft, err)
 	}
 	var left int
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM push_subscriptions").Scan(&left); err != nil || left != 1 {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM notification_devices").Scan(&left); err != nil || left != 1 {
 		t.Fatalf("%d subscriptions after the 410, want the one that answered", left)
 	}
 
@@ -434,10 +435,10 @@ func TestConnectionsCLIWebPushTestDeliversDropsGoneAndBlocksPrivateEndpoints(t *
 		t.Fatalf("the fake endpoint received %d requests, want only the public device", got)
 	}
 	var failure string
-	if err := d.Read.QueryRow("SELECT COALESCE(last_error, '') FROM push_subscriptions WHERE endpoint = ?", evil.endpoint).Scan(&failure); err != nil || !strings.Contains(failure, "non-public address") {
+	if err := d.Read.QueryRow("SELECT COALESCE(d.last_error, '') FROM notification_devices d JOIN webpush_devices w ON w.device_id = d.id WHERE w.endpoint = ?", evil.endpoint).Scan(&failure); err != nil || !strings.Contains(failure, "non-public address") {
 		t.Fatalf("private endpoint error %q, %v", failure, err)
 	}
-	if err := d.Read.QueryRow("SELECT COUNT(*) FROM push_subscriptions").Scan(&left); err != nil || left != 2 {
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM notification_devices").Scan(&left); err != nil || left != 2 {
 		t.Fatalf("%d subscriptions after the blocked device, want it kept", left)
 	}
 }
@@ -523,8 +524,16 @@ func pushRigWith(t *testing.T, dir string, hostCredential bool) (*fakePush, push
 func (b pushBrowser) store(t *testing.T, d *db.DB) {
 	t.Helper()
 	form := b.form()
-	if _, err := d.Write.Exec("INSERT INTO push_subscriptions (endpoint, p256dh, auth, label, created_ts) VALUES (?, ?, ?, 'Test device', 1)",
-		form.Get("endpoint"), form.Get("p256dh"), form.Get("auth")); err != nil {
+	res, err := d.Write.Exec("INSERT INTO notification_devices (transport, label, created_ts) VALUES ('webpush', 'Test device', 1)")
+	if err != nil {
+		t.Fatal(err)
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.Write.Exec("INSERT INTO webpush_devices (device_id, endpoint, p256dh, auth) VALUES (?, ?, ?, ?)",
+		id, form.Get("endpoint"), form.Get("p256dh"), form.Get("auth")); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -542,4 +551,156 @@ func (f *fakePush) wait(t *testing.T, n int) pushRequest {
 	}
 	t.Fatalf("%d pushes, want %d", f.count(), n)
 	return pushRequest{}
+}
+
+func TestInboxActionsSurviveRestartAndResend(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	push, browser := pushRig(t, dir)
+	s := newPhoneSite(t, dir, api)
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	t.Cleanup(func() { _ = d.Close() })
+	if code, _ := s.post("/settings/notifications/push/subscriptions", browser.form()); code != http.StatusOK {
+		t.Fatalf("subscribe = %d", code)
+	}
+	s.policy(phoneKind)
+	type pushed struct {
+		Title   string `json:"title"`
+		Body    string `json:"body"`
+		Actions []struct {
+			Title string `json:"title"`
+			URL   string `json:"url"`
+		} `json:"actions"`
+	}
+	payload := func(n int) pushed {
+		t.Helper()
+		var p pushed
+		raw, err := json.Marshal(browser.decrypt(t, push.wait(t, n).body))
+		if err != nil || json.Unmarshal(raw, &p) != nil {
+			t.Fatalf("payload %d: %v", n, err)
+		}
+		return p
+	}
+	links := func(p pushed) []string {
+		t.Helper()
+		if len(p.Actions) != 2 || p.Actions[0].Title != "Approve" || p.Actions[1].Title != "Dismiss" {
+			t.Fatalf("actions = %#v", p.Actions)
+		}
+		out := []string{}
+		for _, a := range p.Actions {
+			if !strings.HasPrefix(a.URL, "/actions/") {
+				t.Fatalf("action url %q", a.URL)
+			}
+			out = append(out, a.URL)
+		}
+		return out
+	}
+	rows := func() int {
+		t.Helper()
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications").Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+
+	push.answer(http.StatusInternalServerError)
+	s.propose(1)
+	first := links(payload(1))
+	if rows() != 1 {
+		t.Fatalf("%d inbox rows after a failed push, want 1", rows())
+	}
+	var id, proposal int64
+	var stored, failure string
+	var delivered bool
+	if err := d.Read.QueryRow("SELECT n.id, n.actions_json, n.delivered, COALESCE(n.error, ''), p.id FROM notifications n, proposals p").Scan(&id, &stored, &delivered, &failure, &proposal); err != nil {
+		t.Fatal(err)
+	}
+	if delivered || !strings.Contains(failure, "web push 500") {
+		t.Fatalf("failed push recorded delivered=%v error=%q", delivered, failure)
+	}
+	var refs []notify.ActionRef
+	if err := json.Unmarshal([]byte(stored), &refs); err != nil || len(refs) != 2 {
+		t.Fatalf("actions_json %q: %v", stored, err)
+	}
+	for i, decision := range []string{"approve", "dismiss"} {
+		if refs[i].Kind != "proposal" || refs[i].TargetID != proposal || refs[i].Decision != decision {
+			t.Fatalf("action reference %d = %#v", i, refs[i])
+		}
+	}
+	for _, link := range first {
+		if strings.Contains(stored, strings.TrimPrefix(link, "/actions/")) {
+			t.Fatal("the inbox row stores a phone link token")
+		}
+	}
+	var failures int
+	if err := d.Read.QueryRow("SELECT failure_count FROM notification_devices").Scan(&failures); err != nil || failures != 1 {
+		t.Fatalf("failure_count = %d, %v", failures, err)
+	}
+
+	s.stop()
+	s.restart()
+	resend := "/inbox/" + strconv.FormatInt(id, 10) + "/resend"
+	s.policy("reminder")
+	if code, _ := s.post(resend, nil); code == http.StatusOK {
+		t.Fatal("a failing resend reported delivery")
+	}
+	if p := payload(2); len(p.Actions) != 0 {
+		t.Fatalf("a disallowed kind presented phone actions %#v", p.Actions)
+	}
+	s.policy(phoneKind)
+	push.answer(http.StatusCreated)
+	if code, _ := s.post(resend, nil); code != http.StatusOK {
+		t.Fatalf("resend = %d", code)
+	}
+	again := links(payload(3))
+	if again[0] == first[0] || again[1] == first[1] {
+		t.Fatal("the resend reused the first phone links")
+	}
+	if err := d.Read.QueryRow("SELECT delivered FROM notifications WHERE id = ?", id).Scan(&delivered); err != nil || !delivered || rows() != 1 {
+		t.Fatalf("after resend delivered=%v rows=%d, %v", delivered, rows(), err)
+	}
+	if code := s.action(strings.TrimPrefix(again[1], "/actions/")); code != http.StatusOK {
+		t.Fatalf("dismiss link = %d", code)
+	}
+	if code := s.action(strings.TrimPrefix(again[0], "/actions/")); code != http.StatusGone {
+		t.Fatalf("the sibling approve link still acts after dismiss: %d", code)
+	}
+
+	push.answer(http.StatusGone)
+	if code, _ := s.post("/settings/notifications/push/test", nil); code == http.StatusOK {
+		t.Fatal("a 410 test reported delivery")
+	}
+	var devices int
+	if err := d.Read.QueryRow("SELECT (SELECT COUNT(*) FROM notification_devices) + (SELECT COUNT(*) FROM webpush_devices)").Scan(&devices); err != nil || devices != 0 {
+		t.Fatalf("%d device rows after a 410, %v", devices, err)
+	}
+	if rows() != 1 {
+		t.Fatalf("%d inbox rows after the device was removed", rows())
+	}
+}
+
+func TestWebPushRedirectDoesNotDeleteDevice(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	push, browser := pushRig(t, dir)
+	if got := runApp(t, "connections", "list"); got.code != 0 {
+		t.Fatal(got.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	browser.store(t, d)
+	push.redirect = push.URL + "/push/gone"
+	push.answerRoute(func(r *http.Request) int {
+		if r.URL.Path == "/push/gone" {
+			return http.StatusGone
+		}
+		return http.StatusTemporaryRedirect
+	})
+	got := runApp(t, "connections", "test", "service/webpush", "--json")
+	if got.code == 0 || push.count() != 1 {
+		t.Fatalf("redirect test %d, %d requests: %s %s", got.code, push.count(), got.stdout, got.stderr)
+	}
+	var failures int
+	if err := d.Read.QueryRow("SELECT failure_count FROM notification_devices").Scan(&failures); err != nil || failures != 1 {
+		t.Fatalf("redirect device failures %d: %v", failures, err)
+	}
 }

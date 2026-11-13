@@ -10,9 +10,11 @@ CREATE TABLE IF NOT EXISTS notifications (
     error TEXT,
     channel TEXT,
     click TEXT,
-    priority INTEGER
+    priority INTEGER,
+    actions_json TEXT NOT NULL DEFAULT '[]',
+    read_at REAL
 );
-CREATE INDEX IF NOT EXISTS notifications_ts ON notifications (ts);
+CREATE INDEX IF NOT EXISTS notifications_ts ON notifications (ts, id);
 CREATE INDEX IF NOT EXISTS notifications_run ON notifications (run_id);
 CREATE TABLE IF NOT EXISTS ntfy_channels (
     name TEXT PRIMARY KEY,
@@ -25,16 +27,25 @@ CREATE TABLE IF NOT EXISTS ntfy_channels (
     last_ok_at REAL,
     created_at REAL NOT NULL
 );
-CREATE TABLE IF NOT EXISTS push_subscriptions (
+CREATE TABLE IF NOT EXISTS notification_devices (
     id INTEGER PRIMARY KEY,
-    endpoint TEXT NOT NULL UNIQUE,
-    p256dh TEXT NOT NULL,
-    auth TEXT NOT NULL,
+    transport TEXT NOT NULL CHECK (transport = 'webpush'),
     label TEXT NOT NULL DEFAULT '',
     created_ts REAL NOT NULL,
     last_ok_ts REAL,
     failure_count INTEGER NOT NULL DEFAULT 0,
-    last_error TEXT
+    last_error TEXT,
+    bearer_id INTEGER REFERENCES auth_bearers(id) ON DELETE CASCADE
+);
+CREATE TRIGGER IF NOT EXISTS notification_devices_bearer_revoke AFTER UPDATE OF revoked_at ON auth_bearers
+WHEN NEW.revoked_at IS NOT NULL BEGIN
+    DELETE FROM notification_devices WHERE bearer_id = NEW.id;
+END;
+CREATE TABLE IF NOT EXISTS webpush_devices (
+    device_id INTEGER PRIMARY KEY REFERENCES notification_devices (id) ON DELETE CASCADE,
+    endpoint TEXT NOT NULL UNIQUE,
+    p256dh TEXT NOT NULL,
+    auth TEXT NOT NULL
 );
 CREATE TRIGGER IF NOT EXISTS notifications_read_insert AFTER INSERT ON notifications BEGIN
     INSERT INTO read_revisions(scope,value) VALUES('notify',1)
@@ -60,15 +71,27 @@ CREATE TRIGGER IF NOT EXISTS ntfy_channels_read_delete AFTER DELETE ON ntfy_chan
     INSERT INTO read_revisions(scope,value) VALUES('notify',1)
     ON CONFLICT(scope) DO UPDATE SET value=value+1;
 END;
-CREATE TRIGGER IF NOT EXISTS push_subscriptions_read_insert AFTER INSERT ON push_subscriptions BEGIN
+CREATE TRIGGER IF NOT EXISTS notification_devices_read_insert AFTER INSERT ON notification_devices BEGIN
     INSERT INTO read_revisions(scope,value) VALUES('notify',1)
     ON CONFLICT(scope) DO UPDATE SET value=value+1;
 END;
-CREATE TRIGGER IF NOT EXISTS push_subscriptions_read_update AFTER UPDATE ON push_subscriptions BEGIN
+CREATE TRIGGER IF NOT EXISTS notification_devices_read_update AFTER UPDATE ON notification_devices BEGIN
     INSERT INTO read_revisions(scope,value) VALUES('notify',1)
     ON CONFLICT(scope) DO UPDATE SET value=value+1;
 END;
-CREATE TRIGGER IF NOT EXISTS push_subscriptions_read_delete AFTER DELETE ON push_subscriptions BEGIN
+CREATE TRIGGER IF NOT EXISTS notification_devices_read_delete AFTER DELETE ON notification_devices BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('notify',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS webpush_devices_read_insert AFTER INSERT ON webpush_devices BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('notify',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS webpush_devices_read_update AFTER UPDATE ON webpush_devices BEGIN
+    INSERT INTO read_revisions(scope,value) VALUES('notify',1)
+    ON CONFLICT(scope) DO UPDATE SET value=value+1;
+END;
+CREATE TRIGGER IF NOT EXISTS webpush_devices_read_delete AFTER DELETE ON webpush_devices BEGIN
     INSERT INTO read_revisions(scope,value) VALUES('notify',1)
     ON CONFLICT(scope) DO UPDATE SET value=value+1;
 END;
