@@ -558,7 +558,9 @@ const toolMarkup = (data) => `
   </details>`;
 
 const liveRuns = new Map();
+const refusedRuns = new Map();
 const RETRY_MS = 2000;
+const SLOW_RETRY_MS = 30000;
 
 const connectLive = (li) => {
   const runId = Number(li.dataset.liveRun);
@@ -661,15 +663,17 @@ const connectLive = (li) => {
     if (completed && announcer) announcer.textContent = "Reply ready.";
     if (li.isConnected) htmx.trigger(li, "run-done");
   };
+  on("complete", () => settle(true));
+  on("run_error", () => settle(true));
   on("done", () => settle(true));
+  source.onopen = () => refusedRuns.delete(runId);
   source.onerror = () => {
     if (source.readyState === EventSource.CLOSED) {
-      const last = Number(sessionStorage.getItem("atrium-sse-reload") || 0);
-      if (Date.now() - last > 60000) {
-        sessionStorage.setItem("atrium-sse-reload", String(Date.now()));
-        location.reload();
-        return;
-      }
+      const refused = (refusedRuns.get(runId) || 0) + 1;
+      refusedRuns.set(runId, refused);
+      label.textContent = "reconnecting…";
+      setTimeout(settle, refused === 1 ? 0 : SLOW_RETRY_MS);
+      return;
     }
     setTimeout(settle, RETRY_MS);
   };

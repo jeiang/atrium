@@ -269,11 +269,6 @@ func (s *Service) Prepare(ctx context.Context, threadID int64, text string, now 
 			return fail(err)
 		}
 	}
-	if o.ParentRunID == nil {
-		if err := progress.ClearThread(ctx, s.DB.Write, threadID); err != nil {
-			return fail(err)
-		}
-	}
 	if !emptyLimits(o.Limits) {
 		if err := journal.SetLimits(ctx, s.DB.Write, runID, o.Limits); err != nil {
 			return fail(err)
@@ -328,9 +323,6 @@ func (s *Service) knowledge(ctx context.Context, thread *threads.Thread, text st
 func (s *Service) PrepareRerun(ctx context.Context, threadID int64, now float64) (int64, error) {
 	thread, err := Load(ctx, s.DB.Read, s.Env, threadID, now)
 	if err != nil {
-		return 0, err
-	}
-	if err := progress.ClearThread(ctx, s.DB.Write, threadID); err != nil {
 		return 0, err
 	}
 	runID, err := journal.StartRun(ctx, s.DB, threadID, string(tool.Chat), thread.Model, thread.Effort, now, nil, new(journal.NewOwner()))

@@ -3,7 +3,6 @@ package pages
 import (
 	"encoding/json"
 	"errors"
-	"math/big"
 	"net/http"
 	"reflect"
 	"strings"
@@ -395,27 +394,13 @@ func (p *pages) apiEvents(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	var errs []web.FieldError
-	after := queryAfter(r, &errs)
-	if len(errs) > 0 {
-		web.APIError(w, http.StatusUnprocessableEntity, "invalid", "after must be an integer.", errs...)
-		return
-	}
-	if header := r.Header.Get("Last-Event-ID"); header != "" {
-		n, ok := new(big.Int).SetString(header, 10)
-		if !ok || !n.IsInt64() {
-			web.APIError(w, http.StatusBadRequest, "bad_request", "Last-Event-ID must be an integer.")
+	p.serveStream(w, r, threadID, runID, func(status int, code, message string, runID int64) {
+		if status == http.StatusGone {
+			web.APIErrorWith(w, status, code, message, map[string]any{"run_id": runID})
 			return
 		}
-		after = n.Int64()
-	}
-	read, err := p.assistant().RunEvents(r.Context(), asstapp.RunInput{ThreadID: threadID, RunID: runID, After: after})
-	if errorIs(err, application.NotFound) {
-		web.APIError(w, http.StatusNotFound, "not_found", "Unknown run.")
-		return
-	}
-	check(err)
-	p.serveStream(w, r, read.Data)
+		web.APIError(w, status, code, message)
+	})
 }
 
 func transcriptOut(v asstapp.Transcript) apiTranscript {
@@ -515,9 +500,22 @@ type apiTranscriptRequest struct {
 	Cursor   string `query:"cursor" json:"-"`
 }
 
+type apiEventsRequest struct {
+	ThreadID    int64  `path:"thread_id" json:"-"`
+	RunID       int64  `path:"run_id" json:"-"`
+	After       string `query:"after" json:"-"`
+	LastEventID string `header:"Last-Event-ID" json:"-"`
+}
+
+type apiStreamEvent struct {
+	RunID int64  `json:"run_id"`
+	State string `json:"state,omitempty"`
+}
+
 func APIReadBindings() []application.Binding {
 	return []application.Binding{
 		{Kind: application.API, Target: "GET /threads", Uses: []application.Name{asstapp.ThreadListName}, API: &application.APIShape{Area: "threads", Request: reflect.TypeFor[apiThreadListRequest](), Response: reflect.TypeFor[web.List[apiListedThread]](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.Invalid}}},
+		{Kind: application.API, Target: "GET /threads/{thread_id}/runs/{run_id}/events", Uses: []application.Name{asstapp.RunEventsName}, API: &application.APIShape{Area: "threads", Request: reflect.TypeFor[apiEventsRequest](), Response: reflect.TypeFor[apiStreamEvent](), Body: application.BodyEventStream, Success: 200, Errors: []application.Code{application.NotFound, application.RateLimited}}},
 		{Kind: application.API, Target: "GET /threads/{thread_id}", Uses: []application.Name{asstapp.ThreadTranscriptName}, API: &application.APIShape{Area: "threads", Request: reflect.TypeFor[apiTranscriptRequest](), Response: reflect.TypeFor[apiTranscript](), Body: application.BodyNone, Success: 200, Errors: []application.Code{application.NotFound, application.Invalid}}},
 	}
 }

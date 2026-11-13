@@ -480,7 +480,7 @@ behavior-parity target.
   store and its source `secrets` row is dropped; the connection keeps the
   source `set_at`/`set_by`.
   Rebuilt: `message_fts`, `thread_fts` and `kb_fts`. Not carried: run history
-  (`runs`, `run_events`, `tool_calls`, `tool_results`, `context_ledger`,
+  (`runs`, `run_streams`, `run_events`, `tool_calls`, `tool_results`, `context_ledger`,
   `context_projections`, `job_runs`), memory (rebuilt), Notion and wiki
   state (re-synced), knowledge and Notion
   vectors (rebuilt), notifications, auth sessions, pending sign-ins and login links, OAuth
