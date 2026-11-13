@@ -14,7 +14,7 @@ func taskToolService(tc *tool.Context) *tasksapp.Service {
 
 func taskOperations() ([]application.Definition, []application.Binding) {
 	return []application.Definition{
-			tasksapp.DescribeList(), tasksapp.DescribeAdd(), tasksapp.DescribeUpdate(), tasksapp.DescribeDone(), tasksapp.DescribeRemind(),
+			tasksapp.DescribeList(), tasksapp.DescribeAdd(), tasksapp.DescribeUpdate(), tasksapp.DescribeDone(), tasksapp.DescribeRemind(), tasksapp.DescribeProposeReminder(),
 		}, []application.Binding{
 			{Kind: application.Tool, Target: "task_list", Uses: []application.Name{tasksapp.ListName}},
 			{Kind: application.Tool, Target: "task_add", Uses: []application.Name{tasksapp.AddName}},

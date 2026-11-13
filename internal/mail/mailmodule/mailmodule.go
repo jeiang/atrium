@@ -103,6 +103,9 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	mailboxOps, mailboxBindings := mailMailboxOperations()
 	operations = append(operations, mailboxOps...)
 	bindings = append(bindings, mailboxBindings...)
+	loopOps, loopBindings := mailLoopOperations()
+	operations = append(operations, loopOps...)
+	bindings = append(bindings, loopBindings...)
 	return module.Declaration{
 		Name:        module.Mail,
 		Operations:  operations,

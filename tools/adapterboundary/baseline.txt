@@ -67,10 +67,8 @@ internal/assistant/tools/mail/openloops.go	github.com/jeiang/atrium/internal/ass
 internal/assistant/tools/mail/openloops.go	github.com/jeiang/atrium/internal/mail/openloops
 internal/assistant/tools/mail/tools.go	github.com/jeiang/atrium/internal/config
 internal/assistant/tools/mail/tools.go	github.com/jeiang/atrium/internal/scheduler
-internal/assistant/tools/mail/tracking.go	database/sql
 internal/assistant/tools/mail/tracking.go	github.com/jeiang/atrium/internal/assistant/approval
 internal/assistant/tools/mail/tracking.go	github.com/jeiang/atrium/internal/config
-internal/assistant/tools/mail/tracking.go	github.com/jeiang/atrium/internal/ledger
 internal/assistant/tools/mail/tracking.go	github.com/jeiang/atrium/internal/mail/tracking
 internal/assistant/tools/mail/triage.go	github.com/jeiang/atrium/internal/config
 internal/assistant/tools/mail/triage.go	github.com/jeiang/atrium/internal/mail
@@ -87,9 +85,7 @@ internal/assistant/tools/mail/undo.go	github.com/jeiang/atrium/internal/mail/liv
 internal/assistant/tools/mail/undo.go	github.com/jeiang/atrium/internal/mail/mailops
 internal/assistant/tools/mail/undo.go	github.com/jeiang/atrium/internal/mail/tracking
 internal/assistant/tools/mail/undo.go	github.com/jeiang/atrium/internal/safety
-internal/assistant/tools/mail/watches.go	github.com/jeiang/atrium/internal/contacts
 internal/assistant/tools/mail/watches.go	github.com/jeiang/atrium/internal/mail/birthdays
-internal/assistant/tools/mail/watches.go	github.com/jeiang/atrium/internal/mail/watches
 internal/assistant/tools/media/media.go	github.com/jeiang/atrium/internal/assistant
 internal/assistant/tools/media/media.go	github.com/jeiang/atrium/internal/assistant/approval
 internal/assistant/tools/media/media.go	github.com/jeiang/atrium/internal/media
@@ -118,8 +114,6 @@ internal/mail/mailcmd/mailcmd.go	github.com/jeiang/atrium/internal/db
 internal/mail/mailcmd/mailcmd.go	github.com/jeiang/atrium/internal/mail
 internal/mail/mailcmd/mailcmd.go	github.com/jeiang/atrium/internal/mail/imapclient
 internal/mail/mailcmd/mailcmd.go	github.com/jeiang/atrium/internal/mail/run
-internal/mail/mailcmd/refresh.go	github.com/jeiang/atrium/internal/mail/openloops
-internal/mail/mailcmd/refresh.go	github.com/jeiang/atrium/internal/mail/watches
 internal/mail/mailcmd/replay.go	database/sql
 internal/mail/mailcmd/replay.go	github.com/jeiang/atrium/internal/config
 internal/mail/mailcmd/replay.go	github.com/jeiang/atrium/internal/db
