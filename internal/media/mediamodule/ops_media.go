@@ -60,6 +60,7 @@ func libraryOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.HTML, Target: "GET /apps/media/art/{kind}/{name}", Uses: []application.Name{mediaapp.ArtName}},
 			{Kind: application.HTML, Target: "GET /apps/media/thumb/*", Uses: []application.Name{mediaapp.ArtName}},
 			{Kind: application.HTML, Target: "GET /apps/media/file/*", Uses: []application.Name{mediaapp.FileName}},
+			{Kind: application.HTML, Target: "HEAD /apps/media/file/*", Uses: []application.Name{mediaapp.FileName}},
 		}
 }
 

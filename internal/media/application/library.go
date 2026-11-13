@@ -3,13 +3,15 @@ package application
 import (
 	"context"
 	"io"
+	"net/http"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/media"
+	"github.com/jeiang/atrium/internal/media/agentclient"
+	"github.com/jeiang/atrium/internal/mediaagent/protocol"
 )
 
 const (
@@ -74,9 +76,14 @@ type ArtInput struct {
 }
 
 type FileInput struct {
-	Rel string
-	Exp string
-	Sig string
+	Rel             string
+	Exp             string
+	Sig             string
+	Method          string
+	Range           string
+	IfRange         string
+	IfNoneMatch     string
+	IfModifiedSince string
 }
 
 type FileStream struct {
@@ -84,6 +91,12 @@ type FileStream struct {
 	Name        string
 	ModTime     time.Time
 	ContentType string
+}
+
+type FileRelay struct {
+	Status int
+	Header http.Header
+	Body   io.ReadCloser
 }
 
 const KindThumb = "thumb"
@@ -101,7 +114,7 @@ func DescribeArt() application.Definition {
 }
 
 func DescribeFile() application.Definition {
-	return application.Describe[FileInput, *FileStream](FileName, application.Query, []application.Authority{application.PublicCapability}, application.NoEffect, false)
+	return application.Describe[FileInput, *FileRelay](FileName, application.Query, []application.Authority{application.PublicCapability}, application.NoEffect, false)
 }
 
 func (s *Service) Library(ctx context.Context, in LibraryInput) (application.Read[Library], error) {
@@ -248,43 +261,34 @@ func (s *Service) Art(ctx context.Context, in ArtInput) (*FileStream, error) {
 	return open(path, "image/jpeg"), nil
 }
 
-var videoTypes = map[string]string{
-	".mkv": "video/x-matroska",
-	".mp4": "video/mp4",
-	".m4v": "video/x-m4v",
-	".avi": "video/x-msvideo",
-	".mov": "video/quicktime",
-	".ts":  "video/mp2t",
-	".wmv": "video/x-ms-wmv",
-}
-
-func videoType(path string, video map[string]bool) string {
-	ext := strings.ToLower(filepath.Ext(path))
-	if kind, ok := videoTypes[ext]; ok && video[ext] {
-		return kind
-	}
-	return "application/octet-stream"
-}
-
-func (s *Service) OpenFile(ctx context.Context, in FileInput) (*FileStream, error) {
-	if !s.d.Links.Verify(ctx, in.Rel, in.Exp, in.Sig, s.d.Now()) {
+func (s *Service) File(ctx context.Context, in FileInput) (*FileRelay, error) {
+	if (in.Method != http.MethodGet && in.Method != http.MethodHead) || !s.d.Links.Verify(ctx, in.Rel, in.Exp, in.Sig, s.d.Now()) {
 		return nil, &application.Error{Code: application.Forbidden, Message: "the link is invalid or has expired"}
+	}
+	root, rel, ok := media.SplitRel(in.Rel)
+	if !ok {
+		return nil, notFound("not found")
 	}
 	set, err := s.settings(ctx)
 	if err != nil {
 		return nil, err
 	}
-	root, err := set.NeedRoot()
+	client, err := set.Agent()
 	if err != nil {
-		return nil, notFound(err.Error())
+		return nil, classify(err)
 	}
-	full, ok := media.SafeRel(root, in.Rel)
-	if !ok {
-		return nil, notFound("not found")
+	resp, err := client.Stream(ctx, agentclient.StreamRequest{
+		Resource: "file", Path: protocol.Path{Root: root, Rel: rel}, Method: in.Method,
+		Range: in.Range, IfRange: in.IfRange, IfNoneMatch: in.IfNoneMatch, IfModifiedSince: in.IfModifiedSince,
+	})
+	if err != nil {
+		return nil, &application.Error{Code: application.Unavailable, Message: "the media agent is unavailable", Cause: err}
 	}
-	stream := open(full, videoType(full, set.VideoExts))
-	if stream == nil {
-		return nil, notFound("not found")
+	h := make(http.Header)
+	for _, name := range []string{"Accept-Ranges", "Content-Range", "Content-Length", "Content-Type", "ETag", "Last-Modified", "Content-Disposition"} {
+		if values := resp.Header.Values(name); len(values) > 0 {
+			h[name] = values
+		}
 	}
-	return stream, nil
+	return &FileRelay{Status: resp.StatusCode, Header: h, Body: resp.Body}, nil
 }

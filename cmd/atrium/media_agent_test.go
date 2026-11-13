@@ -30,6 +30,7 @@ import (
 const mediaAgentHost = "media-agent.test"
 
 type mediaAgentOpts struct {
+	main    bool
 	group   string
 	tv      string
 	control string
@@ -111,6 +112,16 @@ import = "` + roots["import"] + `"
 ` + opts.extra
 	if opts.group != "" {
 		cfg = "group = " + strconv.Quote(opts.group) + "\n" + cfg
+	}
+	if opts.main {
+		listener, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		addr := listener.Addr().String()
+		_ = listener.Close()
+		cfg = strings.Replace(cfg, `listen = "127.0.0.1:0"`, "listen = "+strconv.Quote(addr), 1)
+		cfg = strings.Replace(cfg, `allowed_hosts = ["`+mediaAgentHost+`"]`, `allowed_hosts = ["`+mediaAgentHost+`", "`+addr+`"]`, 1)
 	}
 	path := filepath.Join(dir, "agent.toml")
 	if err := os.WriteFile(path, []byte(cfg), 0o600); err != nil {

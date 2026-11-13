@@ -46,6 +46,9 @@ behavior-parity target.
   reached at `/today`; the digest posts there and home does not show it. A
   ⌘K / Ctrl+K command palette searches threads, pages and actions. There
   is no tutorial text; guidance is `title` tooltips on controls.
+  Signed media file links relay GET/HEAD and range/conditional responses from the
+  configured `service/media-agent` connection; its bearer stays on that origin,
+  with no redirects or proxy, and links remain expiring and Host-guarded.
   Media is the app at `/apps/media`. Adding a torrent takes a magnet link or
   a `.torrent` file, never both, and the page and `media_add_magnet` both
   refuse a magnet without a v1 info hash (`xt=urn:btih:`) before any effect is

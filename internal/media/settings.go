@@ -106,15 +106,16 @@ type Tuning struct {
 
 type Settings struct {
 	Tuning
-	Root      string
-	QbitLease *connections.Lease
-	QbitStore *connections.Store
-	TMDBLease *connections.Lease
-	TMDBStore *connections.Store
-	EZTVLease *connections.Lease
-	MoviesURL string
-	TVURL     string
-	PublicURL string
+	Root       string
+	QbitLease  *connections.Lease
+	QbitStore  *connections.Store
+	TMDBLease  *connections.Lease
+	TMDBStore  *connections.Store
+	EZTVLease  *connections.Lease
+	AgentLease *connections.Lease
+	MoviesURL  string
+	TVURL      string
+	PublicURL  string
 }
 
 func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
@@ -162,6 +163,9 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		return Settings{}, failure
 	}
 	if out.EZTVLease, failure = lease(connections.ID(KindEZTV)); failure != nil {
+		return Settings{}, failure
+	}
+	if out.AgentLease, failure = lease(connections.ID(KindMediaAgent)); failure != nil {
 		return Settings{}, failure
 	}
 	out.QbitStore = connections.DefaultFor(q)

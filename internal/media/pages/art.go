@@ -1,6 +1,7 @@
 package pages
 
 import (
+	"io"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -22,6 +23,7 @@ func (s *service) registerFiles(r chi.Router) {
 	r.Get("/apps/media/art/{kind}/{name}", s.serveArt)
 	r.Get("/apps/media/thumb/*", s.serveThumb)
 	r.Get(media.FilePrefix+"*", s.serveFile)
+	r.Head(media.FilePrefix+"*", s.serveFile)
 }
 
 func writeArtPlaceholder(w http.ResponseWriter) {
@@ -79,10 +81,32 @@ func (s *service) serveThumb(w http.ResponseWriter, r *http.Request) {
 
 func (s *service) serveFile(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
-	stream, err := s.app.OpenFile(r.Context(), mediaapp.FileInput{Rel: web.PathParam(r, "*"), Exp: media.QueryValue(query["exp"]), Sig: media.QueryValue(query["sig"])})
+	stream, err := s.app.File(r.Context(), mediaapp.FileInput{
+		Rel: web.PathParam(r, "*"), Exp: media.QueryValue(query["exp"]), Sig: media.QueryValue(query["sig"]), Method: r.Method,
+		Range: r.Header.Get("Range"), IfRange: r.Header.Get("If-Range"), IfNoneMatch: r.Header.Get("If-None-Match"), IfModifiedSince: r.Header.Get("If-Modified-Since"),
+	})
 	if err != nil {
 		web.Fail(w, r, err, func(status int) { s.deps.Error(w, r, status, application.Classify(err).Error()) })
 		return
 	}
-	serveStream(w, r, stream)
+	defer func() { _ = stream.Body.Close() }()
+	for name, values := range stream.Header {
+		w.Header()[name] = values
+	}
+	w.Header().Del("Set-Cookie")
+	w.Header().Set("Cache-Control", "private, no-store")
+	w.WriteHeader(stream.Status)
+	if r.Method != http.MethodHead {
+		_, _ = io.CopyBuffer(flushingWriter{w}, stream.Body, make([]byte, 32*1024))
+	}
+}
+
+type flushingWriter struct{ http.ResponseWriter }
+
+func (w flushingWriter) Write(p []byte) (int, error) {
+	n, err := w.ResponseWriter.Write(p)
+	if err == nil {
+		err = http.NewResponseController(w.ResponseWriter).Flush()
+	}
+	return n, err
 }
