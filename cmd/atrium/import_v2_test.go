@@ -598,7 +598,7 @@ func TestImportV2LeavesApplicationStateNew(t *testing.T) {
 	if after := fileDigest(t, source); after != before {
 		t.Errorf("the import changed the source: %s -> %s", before, after)
 	}
-	for _, want := range []string{"operation_audit: kept empty 0", "commands: kept empty 0", "read_revisions: derived "} {
+	for _, want := range []string{"operation_audit: kept empty 0", "commands: kept empty 0", "run_streams: kept empty 0", "read_revisions: derived "} {
 		if !strings.Contains(got.stdout, want) {
 			t.Errorf("the report lacks %q:\n%s", want, got.stdout)
 		}
@@ -614,6 +614,11 @@ func TestImportV2LeavesApplicationStateNew(t *testing.T) {
 	}
 	if n := importCount(t, q, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'maintenance.import-v2' AND outcome = 'ok' AND source = 'cli'"); n != 1 {
 		t.Errorf("operation_audit holds %d completed import rows, want 1", n)
+	}
+	for _, table := range []string{"run_streams", "run_events"} {
+		if n := importCount(t, q, "SELECT COUNT(*) FROM "+table); n != 0 {
+			t.Errorf("%s holds %d rows after import", table, n)
+		}
 	}
 	if n := importCount(t, q, "SELECT COUNT(*) FROM commands"); n != 0 {
 		t.Errorf("commands holds %d rows after the import", n)

@@ -7,6 +7,7 @@ const (
 	TaskRemindersName   = "task-reminders"
 	MemoryWorkName      = "memory-work"
 	KnowledgeExportName = "knowledge-export"
+	StreamRetentionName = "stream-retention"
 
 	KeyNightlySchedule = "agent_schedule_nightly"
 	KeyWeeklyReview    = "agent_schedule_weekly_review"

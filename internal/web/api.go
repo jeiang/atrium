@@ -257,7 +257,10 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, int64(limit))
 	}
-	ctx := context.WithValue(withAPIIdentity(r.Context(), who), originKey{}, Origin(r))
+	ctx := withStreamAccess(context.WithValue(withAPIIdentity(r.Context(), who), originKey{}, Origin(r)), "bearer:"+tokenKey(token), func(ctx context.Context) error {
+		_, err := g.bearers.Authenticate(ctx, token)
+		return err
+	})
 	next.ServeHTTP(w, r.WithContext(ctx))
 }
 

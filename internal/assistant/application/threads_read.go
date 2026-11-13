@@ -6,6 +6,8 @@ import (
 	"math/bits"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/assistant/progress"
+
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
 	"github.com/jeiang/atrium/internal/assistant/block"
@@ -140,9 +142,10 @@ type RunInput struct {
 }
 
 type EventStream struct {
-	RunID int64
-	After int64
-	Run   journal.Run
+	RunID    int64
+	After    int64
+	Finished bool
+	Run      journal.Run
 }
 
 func describeRead[I, O any](name application.Name) application.Definition {
@@ -452,7 +455,11 @@ func (s *Service) RunEvents(ctx context.Context, in RunInput) (application.Read[
 	var out EventStream
 	rev, err := s.snapshot(ctx, string(RunEventsName), []string{state.Assistant}, in, func(q db.Querier) error {
 		run, err := runOf(ctx, q, in)
-		out = EventStream{RunID: in.RunID, After: in.After, Run: run}
+		if err != nil {
+			return err
+		}
+		stream, err := progress.Open(ctx, q, in.RunID, in.After)
+		out = EventStream{RunID: in.RunID, After: in.After, Finished: stream.Finished, Run: run}
 		return err
 	})
 	return application.Read[EventStream]{Revision: rev, Data: out}, err
