@@ -37,9 +37,12 @@
     },
     {
       "area": "home",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "calendar.find-slot",
+        "calendar.list"
+      ],
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "inbox",
@@ -49,9 +52,14 @@
     },
     {
       "area": "integrations",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "calendar.draft-candidates",
+        "calendar.sync",
+        "contacts.lookup",
+        "contacts.sync"
+      ],
+      "required": 4,
+      "bound": 4
     },
     {
       "area": "knowledge",
@@ -164,6 +172,6 @@
       "bound": 0
     }
   ],
-  "total_required": 151,
-  "total_bound": 25
+  "total_required": 154,
+  "total_bound": 31
 }

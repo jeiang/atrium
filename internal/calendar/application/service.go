@@ -40,9 +40,10 @@ func New(d *db.DB, env config.Env, l *ledger.Store, now func() float64) *Service
 
 func Describe() []application.Definition {
 	agent := []application.Authority{application.Agent}
+	reads := []application.Authority{application.Agent, application.Operator}
 	return []application.Definition{
-		application.Describe[ListInput, Listing](ListName, application.Query, agent, application.NoEffect, false),
-		application.Describe[FindSlotInput, Slots](FindSlotName, application.Query, agent, application.NoEffect, false),
+		application.Describe[ListInput, Listing](ListName, application.Query, reads, application.NoEffect, false),
+		application.Describe[FindSlotInput, Slots](FindSlotName, application.Query, reads, application.NoEffect, false),
 		application.Describe[EventInput, Proposed](ProposeCreateName, application.Command, agent, application.Conditional, true),
 		application.Describe[UpdateInput, Proposed](ProposeUpdateName, application.Command, agent, application.Conditional, true),
 		application.Describe[RSVPInput, Proposed](ProposeRSVPName, application.Command, agent, application.Conditional, true),
