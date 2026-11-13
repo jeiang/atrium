@@ -19,6 +19,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant/pricing"
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -714,9 +715,6 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 	if v, _ := asstRun(t, "--text", "schedule a weekly digest"); v.State != "done" {
 		t.Fatalf("schedule run %+v %q", v, v.err())
 	}
-	w := asstBrowse(t, startServeIn(t, dir))
-	code, page, _ := w.get("/scheduled", false)
-	w.want(code, http.StatusOK, page, "Digest", "Every Monday at 08:00", "weekly-review")
 	jobID := func(name string) string {
 		var id int64
 		if err := d.Read.QueryRow("SELECT id FROM jobs WHERE name = ?", name).Scan(&id); err != nil {
@@ -724,17 +722,53 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 		}
 		return strconv.FormatInt(id, 10)
 	}
-	state := func(id string) string {
-		var s string
-		if err := d.Read.QueryRow("SELECT state FROM jobs WHERE id = ?", id).Scan(&s); err != nil {
+	column := func(col, id string) string {
+		var out string
+		if err := d.Read.QueryRow("SELECT "+col+" FROM jobs WHERE id = ?", id).Scan(&out); err != nil {
 			t.Fatal(err)
 		}
-		return s
+		return out
 	}
-	digest := jobID("Digest")
+	state := func(id string) string { return column("state", id) }
+	audits := func(operation, outcome, target string) int {
+		return asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = ? AND outcome = ? AND target = ?", operation, outcome, target)
+	}
+	w := asstBrowse(t, startServeIn(t, dir))
+	code, page, _ := w.get("/scheduled", false)
+	w.want(code, http.StatusOK, page, "Digest", "weekly-review")
+	digest, nightly := jobID("Digest"), jobID("nightly")
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit a JOIN effects e ON a.details_json = '{\"effect_ids\":[' || e.id || ']}' "+
+		"WHERE a.operation = 'assistant.schedule.create' AND a.outcome = 'ok' AND a.target = ? AND e.operation = 'schedule_create'", "schedule:"+digest); n != 1 {
+		t.Errorf("schedule create audits naming its effect = %d, want 1", n)
+	}
+	digestID, _ := strconv.ParseInt(digest, 10, 64)
+	nightlyID, _ := strconv.ParseInt(nightly, 10, 64)
+	api.Push(
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("s2", "schedule_update", map[string]any{"id": digestID, "prompt": "Summarize mail and tasks."})),
+		anthropictest.Reply("tool_use", anthropictest.ToolUse("s3", "schedule_cancel", map[string]any{"id": nightlyID})),
+		asstReply("updated"))
+	if v, _ := asstRun(t, "--text", "widen the digest and stop the nightly run"); v.State != "done" {
+		t.Fatalf("update run %+v %q", v, v.err())
+	}
+	if column("prompt", digest) != "Summarize mail and tasks." || state(nightly) != "active" {
+		t.Errorf("agent update prompt %q, nightly %s", column("prompt", digest), state(nightly))
+	}
+	if audits("assistant.schedule.update", "ok", "schedule:"+digest) != 1 || audits("assistant.schedule.cancel", "refused", "schedule:"+nightly) != 1 {
+		t.Error("agent update and refused built-in cancel are not audited")
+	}
+	var updateEffect int64
+	if err := d.Read.QueryRow("SELECT id FROM effects WHERE operation = 'schedule_update' AND target = ?", "schedule:"+digest).Scan(&updateEffect); err != nil {
+		t.Fatal(err)
+	}
+	if got := runApp(t, "effects", "undo", strconv.FormatInt(updateEffect, 10)); got.code != cli.ExitOK {
+		t.Fatalf("effects undo: %d %q %q", got.code, got.stdout, got.stderr)
+	}
+	if column("prompt", digest) != "Summarize mail." {
+		t.Errorf("undo left prompt %q", column("prompt", digest))
+	}
 
 	code, body, _ := w.post("/scheduled/"+digest+"/toggle", url.Values{}, true)
-	w.want(code, http.StatusOK, body, "Paused")
+	w.want(code, http.StatusOK, body)
 	if state(digest) == "active" {
 		t.Error("toggle left the job active")
 	}
@@ -748,27 +782,20 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 
 	weekly := jobID("weekly-review")
 	code, body, _ = w.post("/scheduled/"+weekly+"/cancel", url.Values{}, true)
-	w.want(code, http.StatusUnprocessableEntity, body, "built-in runs cannot be cancelled; disable them instead")
+	w.want(code, http.StatusUnprocessableEntity, body)
 	if state(weekly) == "cancelled" {
 		t.Error("a built-in run was cancelled")
 	}
 
 	code, body, _ = w.post("/scheduled/"+digest+"/cancel", url.Values{}, true)
-	w.want(code, http.StatusOK, body, "Schedule deleted")
+	w.want(code, http.StatusOK, body)
 	if state(digest) != "cancelled" {
 		t.Errorf("cancelled job state %s", state(digest))
 	}
 	if code, _, _ := w.post("/scheduled/"+digest+"/toggle", url.Values{}, false); code != http.StatusNotFound {
 		t.Errorf("toggle of a cancelled job: %d, want 404", code)
 	}
-	nightly := jobID("nightly")
-	schedule := func(id string) string {
-		var out string
-		if err := d.Read.QueryRow("SELECT schedule FROM jobs WHERE id = ?", id).Scan(&out); err != nil {
-			t.Fatal(err)
-		}
-		return out
-	}
+	schedule := func(id string) string { return column("schedule", id) }
 	if code, body, _ := w.post("/scheduled/"+nightly+"/schedule", url.Values{"schedule": {"daily 03:15"}}, true); code != http.StatusOK || schedule(nightly) != "daily 03:15" {
 		t.Errorf("edit the nightly schedule = %d, stored %q: %.200s", code, schedule(nightly), body)
 	}
@@ -777,6 +804,24 @@ func TestAsstScheduledJobsToggleCancelAndProtectBuiltins(t *testing.T) {
 	}
 	if code, _, _ := w.post("/scheduled/"+nightly+"/schedule", url.Values{"schedule": {"whenever"}}, true); code != http.StatusUnprocessableEntity || schedule(nightly) != "daily 03:15" {
 		t.Errorf("an invalid schedule = %d, stored %q, want a refusal that keeps the old one", code, schedule(nightly))
+	}
+	for _, want := range []struct {
+		operation, outcome, target string
+		n                          int
+	}{
+		{"assistant.schedule.enabled", "ok", "schedule:" + digest, 2},
+		{"assistant.schedule.enabled", "not_found", "schedule:" + digest, 1},
+		{"assistant.schedule.cancel", "refused", "schedule:" + weekly, 1},
+		{"assistant.schedule.cancel", "ok", "schedule:" + digest, 1},
+		{"assistant.schedule.update", "ok", "schedule:" + nightly, 1},
+		{"assistant.schedule.update", "invalid", "schedule:" + nightly, 1},
+	} {
+		if n := audits(want.operation, want.outcome, want.target); n != want.n {
+			t.Errorf("%s %s %s audits = %d, want %d", want.operation, want.outcome, want.target, n, want.n)
+		}
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation LIKE 'assistant.schedule.%' AND source = 'ui' AND actor = 'operator'"); n != 7 {
+		t.Errorf("operator schedule audits = %d, want 7", n)
 	}
 }
 

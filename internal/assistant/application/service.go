@@ -12,6 +12,7 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
+	"github.com/jeiang/atrium/internal/scheduler"
 )
 
 type Service struct {
@@ -22,6 +23,7 @@ type Service struct {
 	runs     func() *service.Service
 	filesDir string
 	ledger   *ledger.Store
+	jobs     []scheduler.Definition
 }
 
 func New(d *db.DB, env config.Env, now func() float64) *Service {

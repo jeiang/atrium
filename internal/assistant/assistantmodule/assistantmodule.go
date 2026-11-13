@@ -72,10 +72,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	projectOps, projectBindings := projectOperations()
 	threadOps, threadBindings := threadOperations()
 	fileOps, fileBindings := fileOperations()
+	scheduleOps, scheduleBindings := scheduleOperations()
 	return module.Declaration{
 		Name:       module.Assistant,
-		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps),
-		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings),
+		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps),
+		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings),
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
 			prompts.Settings(), registry.Settings(), websearch.Settings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs()),
@@ -111,7 +112,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			a := &approval.Executor{DB: d.DB, Env: d.Env, Now: d.Now, MailOpen: d.Open, Ledger: d.Ledger, Tools: d.Approvals, Registry: d.Tools}
 			return module.Effects{
 				Proposals: slices.Concat(a.Proposals(), permissionProposals(d.Resume)),
-				Undo:      slices.Concat(asstapp.FileUndo(), kb.Undo(), tasksapp.Undo(), scheduletools.Undo(), serverops.Undo(), export.Undo(d.Ledger)),
+				Undo:      slices.Concat(asstapp.FileUndo(), kb.Undo(), tasksapp.Undo(), asstapp.ScheduleUndo(), serverops.Undo(), export.Undo(d.Ledger)),
 				Resolve:   export.Resolve(d.Ledger),
 			}
 		},
@@ -144,7 +145,7 @@ func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
 	for _, tools := range [][]tool.Tool{
 		askoperator.Tools(), attentiontool.Tools(), filetools.Tools(fileToolService), memorytools.Tools(),
 		webfetch.Tools(), recalltools.Tools(), plantools.Tools(),
-		scheduletools.Tools(), taskstools.Tools(taskToolService),
+		scheduletools.Tools(scheduleToolService), taskstools.Tools(taskToolService),
 		kbtools.Tools(knowledgeToolService), weathertools.Tools(), opstools.Tools(),
 	} {
 		for _, t := range tools {

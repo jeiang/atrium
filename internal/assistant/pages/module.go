@@ -24,7 +24,6 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/numx"
-	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -52,7 +51,6 @@ type pages struct {
 	knowledge func() *kbapp.Service
 	assistant func() *asstapp.Service
 	now       func() float64
-	jobs      []scheduler.Definition
 }
 
 const (
@@ -72,7 +70,7 @@ func Module(o Options) web.Module {
 			}
 			return svc
 		})
-		p := &pages{deps: d, svc: svc, knowledge: sync.OnceValue(func() *kbapp.Service { return o.Knowledge(d) }), assistant: sync.OnceValue(func() *asstapp.Service { return o.Assistant(d).WithRuns(svc) }), now: assistant.Now, jobs: module.SetFrom(d.Ctx).Catalog().Jobs()}
+		p := &pages{deps: d, svc: svc, knowledge: sync.OnceValue(func() *kbapp.Service { return o.Knowledge(d) }), assistant: sync.OnceValue(func() *asstapp.Service { return o.Assistant(d).WithRuns(svc) }), now: assistant.Now}
 		d.OnFrame(p.sidebar)
 
 		r.Get("/chat", p.chatIndex)

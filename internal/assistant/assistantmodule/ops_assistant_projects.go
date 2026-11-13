@@ -4,11 +4,12 @@ import (
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant"
 	asstapp "github.com/jeiang/atrium/internal/assistant/application"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/web"
 )
 
 func assistantService(d *web.Deps) *asstapp.Service {
-	return asstapp.New(d.DB, d.Env, assistant.Now).WithFiles(d.Cfg.FilesDir())
+	return asstapp.New(d.DB, d.Env, assistant.Now).WithFiles(d.Cfg.FilesDir()).WithJobs(module.SetFrom(d.Ctx).Catalog().Jobs())
 }
 
 func projectOperations() ([]application.Definition, []application.Binding) {
