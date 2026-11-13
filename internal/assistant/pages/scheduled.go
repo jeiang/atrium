@@ -35,6 +35,7 @@ type JobView struct {
 	LastStatus      *string `json:"last_status"`
 	LastError       *string `json:"last_error"`
 	LastStartedText *string `json:"last_started_text"`
+	Fixed           bool    `json:"-"`
 }
 
 type RunView struct {
@@ -62,10 +63,11 @@ func stamp(epoch *float64, loc *time.Location) *string {
 	return &text
 }
 
-func jobView(j scheduler.ListedJob, zone *time.Location) JobView {
+func jobView(j scheduler.ListedJob, zone *time.Location, fixed bool) JobView {
 	v := JobView{
 		ID: j.ID, Name: j.Name, Kind: j.Kind, CreatedBy: j.CreatedBy, Cadence: scheduler.Describe(j.Schedule, j.TZ), Schedule: j.Schedule,
 		Prompt: j.Prompt, Enabled: j.State.Active(), LastStatus: j.LastStatus, LastError: j.LastError, LastStartedText: stamp(j.LastStarted, zone),
+		Fixed: fixed,
 	}
 	if j.State.Active() {
 		v.NextDueText = stamp(j.NextDue, zone)
@@ -112,7 +114,8 @@ func (p *pages) scheduledData(r *http.Request) ScheduledData {
 	check(err)
 	views := make([]JobView, len(jobs))
 	for i, j := range jobs {
-		views[i] = jobView(j, zone)
+		def, declared := scheduler.Declared(p.jobs, j.Job)
+		views[i] = jobView(j, zone, declared && def.ScheduleSetting == "")
 	}
 	return ScheduledData{Jobs: views, Runs: runViews(runs, zone), TZ: tz}
 }
@@ -184,6 +187,9 @@ func (p *pages) scheduleEdit(w http.ResponseWriter, r *http.Request) {
 			return scheduler.Error("schedule is empty")
 		}
 		if def, known := scheduler.Declared(p.jobs, *job); known {
+			if def.ScheduleSetting == "" {
+				return scheduler.Error("the schedule of " + job.Name + " is fixed by its module")
+			}
 			if err := settings.From(ctx).Set(ctx, tx, def.ScheduleSetting, schedule); err != nil {
 				return err
 			}

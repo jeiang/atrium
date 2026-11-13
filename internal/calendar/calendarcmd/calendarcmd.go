@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/calendar"
 	"github.com/jeiang/atrium/internal/cli"
@@ -12,7 +13,9 @@ import (
 	"github.com/jeiang/atrium/internal/connections"
 	"github.com/jeiang/atrium/internal/davmirror"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/passrun"
+	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
@@ -21,14 +24,29 @@ func Command(env config.Env, tools registry.Source) *cli.Command {
 }
 
 func syncCommand(env config.Env) *cli.Command {
-	return davmirror.SyncCommand("mirror the iCloud calendars into the calendar directory (read-only)", passrun.CalDAV,
-		func(ctx context.Context, d *db.DB) (davmirror.Stats, error) {
-			set, err := calendar.LoadSettings(ctx, d.Read)
-			if err != nil {
-				return davmirror.Stats{}, err
-			}
-			return calendar.SyncCalendarMirror(ctx, env, set)
-		})
+	return davmirror.SyncCommand("mirror the iCloud calendars into the calendar directory (read-only)",
+		module.Calendar+"/"+passrun.CalDAV, passrun.CalDAV, mirrorCalendars(env))
+}
+
+func CalDAVJob(deps jobworker.Dependencies) scheduler.Definition {
+	return davmirror.Job(module.Calendar, passrun.CalDAV, "Every 15 minutes: mirror the iCloud calendars into the calendar directory (no model run).",
+		deps.Callable(func(ctx context.Context, e jobworker.Env) (jobworker.Result, error) {
+			_, err := davmirror.Pass(ctx, e.Service.DB, passrun.CalDAV, mirrorCalendars(e.Service.Env))
+			return jobworker.Result{}, err
+		}))
+}
+
+func mirrorCalendars(env config.Env) davmirror.Prepare {
+	return func(ctx context.Context, d *db.DB) (func(context.Context) (davmirror.Stats, error), error) {
+		set, err := calendar.LoadSettings(ctx, d.Read)
+		if err != nil {
+			return nil, err
+		}
+		if err := calendar.MirrorConfigured(ctx, set, set.CalendarDir); err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context) (davmirror.Stats, error) { return calendar.SyncCalendarMirror(ctx, env, set) }, nil
+	}
 }
 
 func googleAuth(env config.Env) *cli.Command {

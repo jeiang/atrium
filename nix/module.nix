@@ -372,21 +372,6 @@
           };
         };
       };
-
-      atrium-dav-sync = {
-        description = "Mirror the iCloud calendars and address books";
-        serviceConfig = {
-          Type = "oneshot";
-          ExecStart = ["${lib.getExe cfg.package} calendar sync" "${lib.getExe cfg.package} contacts sync"];
-        };
-        timer = {
-          wantedBy = ["timers.target"];
-          timerConfig = {
-            OnActiveSec = "1m";
-            OnUnitActiveSec = "15m";
-          };
-        };
-      };
     }
     // lib.optionalAttrs cfg.backup.enable {
       atrium-backup = {

@@ -36,7 +36,7 @@ func Builtins(d Dependencies) []module.Builder {
 	jobs := jobworker.Dependencies{Service: d.Bindings.Assistant, Now: d.Now, Attention: attentionSources}
 	return []module.Builder{
 		coremodule.Module{Version: d.Version, Guard: d.Guard, Clients: d.Clients, Now: d.Now, Resources: d.Bindings.Resources},
-		contactsmodule.Module{},
+		contactsmodule.Module{Jobs: jobs},
 		mailmodule.Module{Clients: d.Clients, Now: d.Now, Jobs: jobs},
 		calendarmodule.Module{Jobs: jobs},
 		notionmodule.Module{Env: d.Env},

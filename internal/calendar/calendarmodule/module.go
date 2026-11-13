@@ -42,7 +42,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Host:      calendar.HostSettings(),
 		Sections:  calendar.Sections(),
 		Attention: AttentionSources(),
-		Jobs:      []scheduler.Definition{calendarcmd.CandidatesJob(m.Jobs)},
+		Jobs:      []scheduler.Definition{calendarcmd.CandidatesJob(m.Jobs), calendarcmd.CalDAVJob(m.Jobs)},
 		Requires:  Requirements(),
 		Commands:  []*cli.Command{command},
 		Leaves: map[string]module.Leaf{
