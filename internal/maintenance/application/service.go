@@ -105,5 +105,14 @@ func audit(ctx context.Context, d *db.DB, name application.Name, outcome state.O
 	if err != nil {
 		return 0, err
 	}
+	if ok, err := hasAudit(ctx, d.Write); err != nil || !ok {
+		return 0, err
+	}
 	return state.New(d).Audit(ctx, nil, state.Entry{Operation: string(name), Target: target, DetailsJSON: string(raw), Outcome: outcome})
+}
+
+func hasAudit(ctx context.Context, q db.Querier) (bool, error) {
+	var n int
+	err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'operation_audit'").Scan(&n)
+	return n > 0, err
 }

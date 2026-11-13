@@ -65,13 +65,15 @@ func (s *service) check(*cli.Args) cli.Handler {
 		if c.Opened {
 			_, _ = fmt.Fprintf(e.Stdout, "database: %s\nencryption: %s\n", c.Database, encryption(c.Encryption))
 		}
-		if c.Opened && !c.Intact {
+		switch {
+		case c.Intact:
+			_, _ = fmt.Fprintf(e.Stdout, "integrity_check: ok\n")
+		case c.Opened:
 			_, _ = fmt.Fprintf(e.Stdout, "integrity_check: FAILED\n")
 		}
 		if err != nil {
 			return cli.Fail(e, err)
 		}
-		_, _ = fmt.Fprintf(e.Stdout, "integrity_check: ok\n")
 		for _, t := range c.Tables {
 			_, _ = fmt.Fprintf(e.Stdout, "%s %s: %d\n", t.Kind, t.Name, t.Rows)
 		}

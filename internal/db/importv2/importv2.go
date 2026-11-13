@@ -1518,8 +1518,12 @@ func refuseDestination(ctx context.Context, path string, key db.Key) error {
 		if (plan.action != carry && plan.action != fresh && plan.table != "jobs") || plan.table == "mail_accounts" || plan.table == "subagents" {
 			continue
 		}
+		query := "SELECT COUNT(*) FROM " + quoteName(plan.table)
+		if plan.table == "operation_audit" {
+			query += " WHERE operation NOT LIKE 'maintenance.%'"
+		}
 		var n int64
-		if err := q.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+quoteName(plan.table)).Scan(&n); err != nil {
+		if err := q.QueryRowContext(ctx, query).Scan(&n); err != nil {
 			return fmt.Errorf("db import-v2: destination: %w", err)
 		}
 		if n > 0 {

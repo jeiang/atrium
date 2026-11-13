@@ -286,8 +286,7 @@ func chownLike(path string, info os.FileInfo) error {
 }
 
 func auditStaged(ctx context.Context, tx *sql.Tx, e state.Entry) (int64, error) {
-	var n int
-	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'operation_audit'").Scan(&n); err != nil || n == 0 {
+	if ok, err := hasAudit(ctx, tx); err != nil || !ok {
 		return 0, err
 	}
 	return state.New(nil).Audit(ctx, tx, e)

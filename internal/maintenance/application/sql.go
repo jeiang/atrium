@@ -3,6 +3,7 @@ package application
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -49,9 +50,20 @@ func (s *Service) SQL(ctx context.Context, in SQLInput) (application.Change[SQLR
 	if err := db.RequireV3(ctx, d.Read); err != nil {
 		return application.Change[SQLResult]{}, err
 	}
-	sh := &shell{ctx: ctx, d: d, in: in}
+	conn, err := d.Write.Conn(ctx)
+	if err != nil {
+		return application.Change[SQLResult]{}, err
+	}
+	sh := &shell{ctx: ctx, conn: conn, in: in}
 	runErr := sh.loop()
 	out := SQLResult{Statements: sh.statements, Failed: sh.failed}
+	if err := errors.Join(rollbackOpen(ctx, conn), conn.Close()); err != nil {
+		return application.Change[SQLResult]{Data: out}, errors.Join(runErr, err)
+	}
+	ok, err := hasAudit(ctx, d.Write)
+	if err != nil || !ok {
+		return application.Change[SQLResult]{Data: out}, errors.Join(runErr, err)
+	}
 	outcome := state.OK
 	if runErr != nil || out.Failed > 0 {
 		outcome = state.Failed
@@ -60,9 +72,16 @@ func (s *Service) SQL(ctx context.Context, in SQLInput) (application.Change[SQLR
 	return application.Change[SQLResult]{Data: out, AuditID: auditID}, errors.Join(runErr, err)
 }
 
+func rollbackOpen(ctx context.Context, conn *sql.Conn) error {
+	if _, err := conn.ExecContext(ctx, "ROLLBACK"); err != nil && !strings.Contains(err.Error(), "no transaction is active") {
+		return err
+	}
+	return nil
+}
+
 type shell struct {
 	ctx        context.Context
-	d          *db.DB
+	conn       *sql.Conn
 	in         SQLInput
 	statements int
 	failed     int
@@ -131,7 +150,7 @@ func (sh *shell) meta(line string) (done bool) {
 }
 
 func (sh *shell) run(stmt string) error {
-	rows, err := sh.d.Write.QueryContext(sh.ctx, stmt)
+	rows, err := sh.conn.QueryContext(sh.ctx, stmt)
 	if err != nil {
 		return err
 	}

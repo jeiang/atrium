@@ -322,8 +322,11 @@ behavior-parity target.
   `maintenance.import-v2` row in the import transaction. A refused or failed
   encrypt, rekey or import writes nothing, so the database is unchanged and
   the import target stays fresh. Each `atrium db shell` session writes one
-  `maintenance.sql` row after the input ends: statement and failure counts
-  only, never the SQL. The outcome is `failed` if any statement failed.
+  `maintenance.sql` row after the input ends, once any transaction the session
+  left open is rolled back: statement and failure counts only, never the SQL.
+  The outcome is `failed` if any statement failed. Backup, restore and shell
+  audits are skipped on a database without `operation_audit`, and the import
+  freshness check ignores `maintenance.*` audit rows.
   Rebuildable message and media caches are separate.
 - Database connections: one write connection, a read pool, and one
   dedicated KNN reader (semantic search and mail routing) with a 192 MiB
