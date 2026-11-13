@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	"github.com/jeiang/atrium/internal/mail/live"
@@ -47,12 +48,14 @@ func RecoverDrafts(ctx context.Context, d *db.DB, cfg config.Config) error {
 }
 
 type Options struct {
-	Clients func(config.Config) mail.OpenFunc
-	Enabled func(context.Context, db.Querier, string) (bool, error)
-	Tools   registry.Source
+	Application func(*web.Deps) *mailapp.Service
+	Clients     func(config.Config) mail.OpenFunc
+	Enabled     func(context.Context, db.Querier, string) (bool, error)
+	Tools       registry.Source
 }
 
 type service struct {
+	mail     *mailapp.Service
 	deps     *web.Deps
 	now      func() float64
 	pipeline *proposals.Pipeline
@@ -91,7 +94,12 @@ func newService(o Options, d *web.Deps) *service {
 	liveSvc := &live.Live{DB: d.DB, Cfg: d.Cfg, Store: effects, Open: open, Registry: registry, Now: now}
 	draftStore := &drafts.Store{DB: d.DB, Cfg: d.Cfg, Ledger: effects, Open: open, Now: now}
 	pipeline := &proposals.Pipeline{DB: d.DB, Ledger: effects, Registry: registry, Now: now, Enabled: o.Enabled}
+	var mailService *mailapp.Service
+	if o.Application != nil {
+		mailService = o.Application(d)
+	}
 	return &service{
+		mail:     mailService,
 		deps:     d,
 		now:      now,
 		pipeline: pipeline,
