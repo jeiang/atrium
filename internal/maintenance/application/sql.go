@@ -38,6 +38,11 @@ func (s *Service) SQL(ctx context.Context, in SQLInput) (application.Change[SQLR
 	if err != nil {
 		return application.Change[SQLResult]{}, err
 	}
+	exclusion, err := db.TryServeLock(ctx, cfg.DBPath)
+	if err != nil {
+		return application.Change[SQLResult]{}, fmt.Errorf("db shell refused: %w", err)
+	}
+	defer func() { _ = exclusion.Close() }()
 	key, err := s.key(ctx)
 	if err != nil {
 		return application.Change[SQLResult]{}, err

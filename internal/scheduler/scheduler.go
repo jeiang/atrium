@@ -41,6 +41,7 @@ type Dependencies struct {
 	Active    func() bool
 	Beat      func()
 	Recovered func(error)
+	Work      context.Context
 }
 
 type Scheduler struct {
@@ -195,11 +196,25 @@ func (s *Scheduler) start(ctx context.Context, claim Claim, locks *db.LockSet, f
 	s.dirty.Store(true)
 	s.started.Add(1)
 	s.active.Add(1)
+	job, release := s.detach(ctx)
 	s.wg.Go(func() {
-		defer s.finished(ctx)
+		defer release()
+		defer s.finished(job)
 		defer func() { _ = locks.Close() }()
-		s.execute(ctx, claim, fn)
+		s.execute(job, claim, fn)
 	})
+}
+
+func (s *Scheduler) detach(ctx context.Context) (context.Context, func()) {
+	if s.deps.Work == nil {
+		return ctx, func() {}
+	}
+	job, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
+	stop := context.AfterFunc(s.deps.Work, func() { cancel(context.Cause(s.deps.Work)) })
+	return job, func() {
+		stop()
+		cancel(nil)
+	}
 }
 
 func (s *Scheduler) finished(ctx context.Context) {

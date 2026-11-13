@@ -45,6 +45,9 @@ type connectionSite struct {
 
 func (s *connectionSite) start() {
 	s.t.Helper()
+	if s.stop != nil {
+		s.stop()
+	}
 	s.base, _, s.stop = startServeStoppable(s.t, s.dir)
 	jar, _ := cookiejar.New(nil)
 	s.client = &http.Client{Jar: jar}

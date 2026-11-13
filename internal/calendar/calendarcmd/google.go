@@ -2,6 +2,7 @@ package calendarcmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -32,7 +33,7 @@ func googleAuthCommand(open connectionsapp.Open) *cli.Command {
 	}}
 }
 
-func runGoogleAuth(e *cli.Env, svc *connectionsapp.Service, port int) error {
+func runGoogleAuth(e *cli.Env, svc *connectionsapp.Service, port int) (err error) {
 	listener, err := net.Listen("tcp", net.JoinHostPort("127.0.0.1", strconv.Itoa(port)))
 	if err != nil {
 		return err
@@ -59,11 +60,15 @@ func runGoogleAuth(e *cli.Env, svc *connectionsapp.Service, port int) error {
 		default:
 		}
 	})}
-	go func() { _ = srv.Serve(listener) }()
+	serveDone := make(chan error, 1)
+	go func() { serveDone <- srv.Serve(listener) }()
 	defer func() {
 		ctx, cancel := context.WithTimeout(context.WithoutCancel(e.Ctx), time.Second)
 		defer cancel()
 		_ = srv.Shutdown(ctx)
+		if serveErr := <-serveDone; !errors.Is(serveErr, http.ErrServerClosed) {
+			err = errors.Join(err, serveErr)
+		}
 	}()
 	redirect := fmt.Sprintf("http://127.0.0.1:%d", listener.Addr().(*net.TCPAddr).Port)
 	started, err := svc.OAuthStart(e.Ctx, connectionsapp.OAuthStartInput{Capability: "calendar", Redirect: redirect, Loopback: true})

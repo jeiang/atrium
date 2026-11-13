@@ -75,6 +75,11 @@ func (s *Service) Encrypt(ctx context.Context, _ EncryptInput) (application.Chan
 		return application.Change[Encrypted]{}, err
 	}
 	path := cfg.DBPath
+	exclusion, err := db.TryServeLock(ctx, path)
+	if err != nil {
+		return application.Change[Encrypted]{}, fmt.Errorf("db encrypt refused: %w", err)
+	}
+	defer func() { _ = exclusion.Close() }()
 	lock, err := db.Exclusive(ctx, path, db.ShortLockWait)
 	if err != nil {
 		return application.Change[Encrypted]{}, err
@@ -164,6 +169,11 @@ func (s *Service) Rekey(ctx context.Context, in RekeyInput) (application.Change[
 		return application.Change[Rekeyed]{}, err
 	}
 	path := cfg.DBPath
+	exclusion, err := db.TryServeLock(ctx, path)
+	if err != nil {
+		return application.Change[Rekeyed]{}, fmt.Errorf("db rekey refused: %w", err)
+	}
+	defer func() { _ = exclusion.Close() }()
 	lock, err := db.Exclusive(ctx, path, db.ShortLockWait)
 	if err != nil {
 		return application.Change[Rekeyed]{}, err
