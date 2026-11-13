@@ -32,6 +32,9 @@ func newWalker() *walker {
 
 func componentName(t reflect.Type) string {
 	pkg := t.PkgPath()
+	if strings.HasSuffix(pkg, "/application") {
+		pkg = strings.TrimSuffix(pkg, "/application")
+	}
 	pkg = pkg[strings.LastIndex(pkg, "/")+1:]
 	base, args, generic := strings.Cut(t.Name(), "[")
 	name := capitalize(pkg) + base

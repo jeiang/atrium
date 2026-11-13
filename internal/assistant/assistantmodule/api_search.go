@@ -110,7 +110,7 @@ func searchAPIBindings(p *apiPages) []application.Binding {
 					return out
 				})
 			}),
-		api.Query(d, attentionapp.DescribeRead(), application.APIShape{Area: "review", Response: reflect.TypeFor[apiAttention]()}, "GET /attention",
+		api.Query(d, attentionapp.DescribeRead(), application.APIShape{Area: "review", ID: "attention.summary", Response: reflect.TypeFor[apiAttention]()}, "GET /attention",
 			func(ctx context.Context, _ struct{}) (application.Read[apiAttention], error) {
 				if module.SetFrom(ctx) == nil {
 					ctx = module.WithSet(ctx, module.SetFrom(d.Ctx))

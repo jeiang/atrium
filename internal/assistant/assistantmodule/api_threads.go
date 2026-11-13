@@ -719,7 +719,7 @@ func apiBindings(p *apiPages) []application.Binding {
 				}
 				return svc.ThreadOptions(ctx, opts)
 			}),
-		apiQuery(p, asstapp.DescribeConfiguration(), application.APIShape{Area: "composer", Errors: errs(application.Invalid)}, "GET /composer-options",
+		apiQuery(p, asstapp.DescribeConfiguration(), application.APIShape{Area: "composer", ID: "assistant.composer.options", Errors: errs(application.Invalid)}, "GET /composer-options",
 			func(ctx context.Context, svc *asstapp.Service, in apiComposerRequest) (application.Read[asstapp.Configuration], error) {
 				return svc.Configuration(ctx, asstapp.ConfigurationInput{Composer: &asstapp.ComposerInput{
 					Model: in.Model, Effort: in.Effort, Thinking: in.Thinking, ContextLimit: in.ContextLimit,
@@ -738,7 +738,7 @@ func apiBindings(p *apiPages) []application.Binding {
 						Agenda: h.Agenda, About: h.About, Defaults: h.Defaults, Composer: h.Composer}
 				})
 			}),
-		apiQuery(p, asstapp.DescribeHome(), application.APIShape{Area: "home"}, "GET /agenda",
+		apiQuery(p, asstapp.DescribeHome(), application.APIShape{Area: "home", ID: "assistant.agenda"}, "GET /agenda",
 			func(ctx context.Context, svc *asstapp.Service, _ struct{}) (application.Read[apiAgenda], error) {
 				read, err := svc.Home(ctx, asstapp.HomeInput{Agenda: true})
 				return readAs(read, err, func(h asstapp.Home) apiAgenda { return apiAgenda{Agenda: h.Day} })

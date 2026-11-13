@@ -36,7 +36,8 @@ type APIShape struct {
 	AllowJSON  bool
 	IgnoreBody bool
 	BeforeBody func(context.Context) error
-	Fresh      bool
+	ID         string
+	Uncached   bool
 	Sensitive  bool
 	Errors     []Code
 }

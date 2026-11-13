@@ -6,6 +6,8 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"maps"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,8 +26,14 @@ const (
 )
 
 type FilingInput struct {
-	ID   string
-	Form map[string]string
+	ID       string
+	Form     map[string]string
+	Episodes map[string]FilingEpisode
+}
+
+type FilingEpisode struct {
+	Season  string
+	Episode string
 }
 
 type FilingPreview struct {
@@ -53,7 +61,10 @@ func (s *Service) FilingPreview(ctx context.Context, in FilingInput) (applicatio
 	if err != nil {
 		return application.Read[FilingPreview]{}, err
 	}
-	out := at.preview(in.Form)
+	out, err := at.preview(in)
+	if err != nil {
+		return application.Read[FilingPreview]{}, err
+	}
 	if out.Error == "" {
 		if _, err := at.prepare(ctx, out.Ops); err != nil {
 			out.Error = prepareError(err).Error()
@@ -66,9 +77,26 @@ func (s *Service) FilingPreview(ctx context.Context, in FilingInput) (applicatio
 	return application.Read[FilingPreview]{Revision: rev, Data: out}, nil
 }
 
-func (at located) preview(form map[string]string) FilingPreview {
+func (at located) preview(in FilingInput) (FilingPreview, error) {
+	form := in.Form
+	if len(in.Episodes) > 0 {
+		form = maps.Clone(in.Form)
+		if form == nil {
+			form = map[string]string{}
+		}
+		matched := 0
+		for i, f := range at.set.Defaults(at.item, at.shows).Files {
+			if ep, ok := in.Episodes[f.Rel]; ok {
+				form["s"+strconv.Itoa(i)], form["e"+strconv.Itoa(i)] = ep.Season, ep.Episode
+				matched++
+			}
+		}
+		if matched != len(in.Episodes) {
+			return FilingPreview{}, invalid("episodes", "An episode names a file this item does not have.")
+		}
+	}
 	plan := at.set.Plan(at.set.Edited(at.item, at.shows, form))
-	return FilingPreview{Item: at.item, View: plan.View, Ops: plan.Ops, Error: plan.Error}
+	return FilingPreview{Item: at.item, View: plan.View, Ops: plan.Ops, Error: plan.Error}, nil
 }
 
 func (at located) prepare(ctx context.Context, ops []media.Op) (protocol.PrepareResponse, error) {
@@ -115,7 +143,10 @@ func (s *Service) fileItem(ctx context.Context, in FilingInput) (Filed, error) {
 	if err != nil {
 		return Filed{}, err
 	}
-	plan := at.preview(in.Form)
+	plan, err := at.preview(in)
+	if err != nil {
+		return Filed{}, err
+	}
 	if plan.Error != "" {
 		return Filed{}, invalid("plan", plan.Error)
 	}
@@ -331,6 +362,9 @@ func (s *Service) find(ctx context.Context, id string) (located, error) {
 		return at, classify(err)
 	}
 	if at.item, err = set.Find(ctx, at.qb, at.agent, set.DownloadPrefix, id); err != nil {
+		if _, ok := errors.AsType[media.PlanError](err); ok {
+			return at, &application.Error{Code: application.Unavailable, Message: "qBittorrent or the media agent could not list the waiting items.", Cause: err}
+		}
 		return at, classify(err)
 	}
 	at.shows = media.Shows(ctx, at.agent)

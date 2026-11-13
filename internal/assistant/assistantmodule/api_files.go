@@ -1,6 +1,7 @@
 package assistantmodule
 
 import (
+	"strings"
 	"context"
 	"mime/multipart"
 
@@ -72,6 +73,9 @@ func fileAPIBindings(p *apiPages) []application.Binding {
 	bodyless.Area = "projects"
 	bodyless.Body = application.BodyNone
 	bodyless.Success = 204
+	threadList, threadPreview := shape, shape
+	threadList.ID = "assistant.file.thread.list"
+	threadPreview.ID = "assistant.file.thread.preview"
 	out := []application.Binding{
 		apiCommand(p, asstapp.DescribeProjectFileUpload(), multipartShape("projects", 201, application.Invalid, application.NotFound, application.Conflict), "POST /projects/{project_id}/files", func(ctx context.Context, svc *asstapp.Service, in apiProjectUpload) (application.Change[asstapp.FileChanged], error) {
 			return svc.ProjectFileUpload(ctx, asstapp.ProjectUploadInput{ProjectID: in.ProjectID, Uploads: in.Uploads})
@@ -82,24 +86,27 @@ func fileAPIBindings(p *apiPages) []application.Binding {
 		apiQuery(p, asstapp.DescribeFileList(), shape, "GET /projects/{project_id}/files", func(ctx context.Context, svc *asstapp.Service, in apiProjectFiles) (application.Read[web.List[files.Summary]], error) {
 			return filePage(ctx, svc, asstapp.FileListInput{ProjectID: in.ProjectID}, in.Limit, in.Cursor)
 		}),
-		apiQuery(p, asstapp.DescribeFileList(), shape, "GET /threads/{thread_id}/files", func(ctx context.Context, svc *asstapp.Service, in apiThreadFiles) (application.Read[web.List[files.Summary]], error) {
+		apiQuery(p, asstapp.DescribeFileList(), threadList, "GET /threads/{thread_id}/files", func(ctx context.Context, svc *asstapp.Service, in apiThreadFiles) (application.Read[web.List[files.Summary]], error) {
 			return filePage(ctx, svc, asstapp.FileListInput{ThreadID: in.ThreadID}, in.Limit, in.Cursor)
 		}),
 		apiQuery(p, asstapp.DescribeFilePreview(), shape, "GET /projects/{project_id}/files/{file_id}", func(ctx context.Context, svc *asstapp.Service, in apiProjectFile) (application.Read[asstapp.FileView], error) {
 			return svc.FilePreview(ctx, asstapp.FileInput{ProjectID: in.ProjectID, FileID: in.FileID})
 		}),
-		apiQuery(p, asstapp.DescribeFilePreview(), shape, "GET /threads/{thread_id}/files/{file_id}", func(ctx context.Context, svc *asstapp.Service, in apiThreadFile) (application.Read[asstapp.FileView], error) {
+		apiQuery(p, asstapp.DescribeFilePreview(), threadPreview, "GET /threads/{thread_id}/files/{file_id}", func(ctx context.Context, svc *asstapp.Service, in apiThreadFile) (application.Read[asstapp.FileView], error) {
 			return svc.FilePreview(ctx, asstapp.FileInput{ThreadID: in.ThreadID, FileID: in.FileID})
 		}),
 	}
 	for _, method := range []string{"GET", "HEAD"} {
 		binary := shape
 		binary.Body = application.BodyBinary
+		projectBinary, threadBinary := binary, binary
+		projectBinary.ID = "assistant.file.project.download." + strings.ToLower(method)
+		threadBinary.ID = "assistant.file.thread.download." + strings.ToLower(method)
 		out = append(out,
-			apiQuery(p, asstapp.DescribeFileDownload(), binary, method+" /projects/{project_id}/files/{file_id}/content", func(ctx context.Context, svc *asstapp.Service, in apiProjectFile) (application.Read[api.Binary], error) {
+			apiQuery(p, asstapp.DescribeFileDownload(), projectBinary, method+" /projects/{project_id}/files/{file_id}/content", func(ctx context.Context, svc *asstapp.Service, in apiProjectFile) (application.Read[api.Binary], error) {
 				return downloadFile(ctx, svc, asstapp.FileInput{ProjectID: in.ProjectID, FileID: in.FileID})
 			}),
-			apiQuery(p, asstapp.DescribeFileDownload(), binary, method+" /threads/{thread_id}/files/{file_id}/content", func(ctx context.Context, svc *asstapp.Service, in apiThreadFile) (application.Read[api.Binary], error) {
+			apiQuery(p, asstapp.DescribeFileDownload(), threadBinary, method+" /threads/{thread_id}/files/{file_id}/content", func(ctx context.Context, svc *asstapp.Service, in apiThreadFile) (application.Read[api.Binary], error) {
 				return downloadFile(ctx, svc, asstapp.FileInput{ThreadID: in.ThreadID, FileID: in.FileID})
 			}),
 		)
