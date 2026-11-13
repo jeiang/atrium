@@ -34,8 +34,13 @@ CREATE TABLE IF NOT EXISTS notification_devices (
     created_ts REAL NOT NULL,
     last_ok_ts REAL,
     failure_count INTEGER NOT NULL DEFAULT 0,
-    last_error TEXT
+    last_error TEXT,
+    bearer_id INTEGER REFERENCES auth_bearers(id) ON DELETE CASCADE
 );
+CREATE TRIGGER IF NOT EXISTS notification_devices_bearer_revoke AFTER UPDATE OF revoked_at ON auth_bearers
+WHEN NEW.revoked_at IS NOT NULL BEGIN
+    DELETE FROM notification_devices WHERE bearer_id = NEW.id;
+END;
 CREATE TABLE IF NOT EXISTS webpush_devices (
     device_id INTEGER PRIMARY KEY REFERENCES notification_devices (id) ON DELETE CASCADE,
     endpoint TEXT NOT NULL UNIQUE,

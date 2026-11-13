@@ -46,6 +46,7 @@ type fakePush struct {
 	mu       sync.Mutex
 	status   int
 	route    func(*http.Request) int
+	redirect string
 	received []pushRequest
 	arrived  chan pushRequest
 }
@@ -65,6 +66,9 @@ func newFakePush(t *testing.T) *fakePush {
 		select {
 		case f.arrived <- req:
 		default:
+		}
+		if status == http.StatusTemporaryRedirect {
+			w.Header().Set("Location", f.redirect)
 		}
 		w.WriteHeader(status)
 	}))
@@ -672,5 +676,31 @@ func TestInboxActionsSurviveRestartAndResend(t *testing.T) {
 	}
 	if rows() != 1 {
 		t.Fatalf("%d inbox rows after the device was removed", rows())
+	}
+}
+
+func TestWebPushRedirectDoesNotDeleteDevice(t *testing.T) {
+	dir, _, _ := moduleFixture(t, flagsExcept("", ""))
+	push, browser := pushRig(t, dir)
+	if got := runApp(t, "connections", "list"); got.code != 0 {
+		t.Fatal(got.stderr)
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	browser.store(t, d)
+	push.redirect = push.URL + "/push/gone"
+	push.answerRoute(func(r *http.Request) int {
+		if r.URL.Path == "/push/gone" {
+			return http.StatusGone
+		}
+		return http.StatusTemporaryRedirect
+	})
+	got := runApp(t, "connections", "test", "service/webpush", "--json")
+	if got.code == 0 || push.count() != 1 {
+		t.Fatalf("redirect test %d, %d requests: %s %s", got.code, push.count(), got.stdout, got.stderr)
+	}
+	var failures int
+	if err := d.Read.QueryRow("SELECT failure_count FROM notification_devices").Scan(&failures); err != nil || failures != 1 {
+		t.Fatalf("redirect device failures %d: %v", failures, err)
 	}
 }

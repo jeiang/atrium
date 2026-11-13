@@ -1060,7 +1060,7 @@ func TestImportV2CarriesPushDevices(t *testing.T) {
 		failures             int64
 	}{{7, "Phone", push.URL + "/push/healthy", "", 0}, {9, "Old laptop", push.URL + "/push/gone", "web push 410", 2}} {
 		if n := importCount(t, q.Read, `SELECT COUNT(*) FROM notification_devices d JOIN webpush_devices w ON w.device_id = d.id
-			WHERE d.id = ? AND d.transport = 'webpush' AND d.label = ? AND w.endpoint = ? AND COALESCE(d.last_error, '') = ? AND d.failure_count = ? AND w.p256dh = ? AND w.auth = ?`,
+			WHERE d.id = ? AND d.transport = 'webpush' AND d.label = ? AND w.endpoint = ? AND COALESCE(d.last_error, '') = ? AND d.failure_count = ? AND w.p256dh = ? AND w.auth = ? AND d.bearer_id IS NULL AND d.created_ts = CASE d.id WHEN 7 THEN 1762000000 ELSE 1761000000 END AND d.last_ok_ts IS CASE d.id WHEN 7 THEN 1762000500 ELSE NULL END`,
 			want.id, want.label, want.endpoint, want.err, want.failures, p256dh, auth); n != 1 {
 			t.Errorf("device %d was not carried intact", want.id)
 		}

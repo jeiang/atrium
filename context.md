@@ -202,6 +202,7 @@ behavior-parity target.
   addressed to or requested of the operator; items meant for other
   recipients of a group message are ignored. Birthdays stay a
   contacts/calendar concern and are not an open-loop source.
+- Push registration is capped at 16 devices, with one 15-second fan-out budget and no redirects. Revoking a registering bearer removes its devices; browser devices remain. Link minting limits do not suppress proposal inbox rows or pushes.
 - Phone actions are HMAC-signed links in a notification that approve or
   dismiss a proposal: `phone_actions_enabled` (default off) and
   `phone_actions_kinds` choose the proposal kinds, and web-only kinds cannot

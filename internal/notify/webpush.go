@@ -295,14 +295,6 @@ func pushClient(lease *connections.Lease) (*http.Client, error) {
 		return nil
 	}}).DialContext
 	t.ForceAttemptHTTP2 = true
-	client.CheckRedirect = func(req *http.Request, via []*http.Request) error {
-		if len(via) >= 10 {
-			return pushBlocked("too many redirects")
-		}
-		if checkEndpoint(req.URL.String()) != nil {
-			return pushBlocked("redirect is not an https push endpoint")
-		}
-		return nil
-	}
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
 	return client, nil
 }

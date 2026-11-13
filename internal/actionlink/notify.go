@@ -35,11 +35,13 @@ func NotifyCreated(ctx context.Context, d *db.DB, p *proposals.Proposal) {
 	}
 	if allowed {
 		approve, dismiss, err := MintPair(ctx, d.Write, p.ID, p.Fingerprint, now)
-		if err != nil {
+		if err != nil && !errors.Is(err, ErrRate) {
 			return
 		}
 		msg.Refs = proposalRefs(p.ID)
-		msg.Actions = present(msg.Refs, p.ID, approve, dismiss)
+		if err == nil {
+			msg.Actions = present(msg.Refs, p.ID, approve, dismiss)
+		}
 	}
 	_, _ = notify.Send(ctx, d, msg)
 }

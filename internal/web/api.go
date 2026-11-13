@@ -256,6 +256,7 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, int64(limit))
 	}
+	who.BearerID = tok.ID
 	ctx := withAPIIdentity(r.Context(), who)
 	next.ServeHTTP(w, r.WithContext(ctx))
 }

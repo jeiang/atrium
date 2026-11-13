@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/ledger"
@@ -24,7 +25,10 @@ type PushDevice struct {
 	LastError *string  `json:"last_error"`
 }
 
+const DeviceLimit = 16
+
 type RegisterDeviceInput struct {
+	BearerID  int64
 	Transport string
 	Endpoint  string
 	P256DH    string
@@ -71,7 +75,14 @@ func RegisterDevice(ctx context.Context, q db.Querier, in RegisterDeviceInput) (
 	err = q.QueryRowContext(ctx, "SELECT device_id FROM webpush_devices WHERE endpoint = ?", creds.endpoint).Scan(&id)
 	switch {
 	case errors.Is(err, sql.ErrNoRows):
-		res, err := q.ExecContext(ctx, "INSERT INTO notification_devices (transport, label, created_ts) VALUES (?, ?, ?)", in.Transport, label, stamp())
+		n, err := deviceCount(ctx, q)
+		if err != nil {
+			return 0, err
+		}
+		if n >= DeviceLimit {
+			return 0, PushError("at most 16 push devices may be registered")
+		}
+		res, err := q.ExecContext(ctx, "INSERT INTO notification_devices (transport, label, created_ts, bearer_id) VALUES (?, ?, ?, ?)", in.Transport, label, stamp(), nullID(in.BearerID))
 		if err != nil {
 			return 0, err
 		}
@@ -86,7 +97,7 @@ func RegisterDevice(ctx context.Context, q db.Querier, in RegisterDeviceInput) (
 	if _, err := q.ExecContext(ctx, "UPDATE webpush_devices SET p256dh = ?, auth = ? WHERE device_id = ?", creds.key, creds.secret, id); err != nil {
 		return 0, err
 	}
-	_, err = q.ExecContext(ctx, "UPDATE notification_devices SET label = ?, failure_count = 0, last_error = NULL WHERE id = ?", label, id)
+	_, err = q.ExecContext(ctx, "UPDATE notification_devices SET label = ?, bearer_id = ?, failure_count = 0, last_error = NULL WHERE id = ?", label, nullID(in.BearerID), id)
 	return id, err
 }
 
@@ -140,6 +151,8 @@ func pushAll(ctx context.Context, d *db.DB, wake Wakeup) (sent int, failure stri
 	if err != nil || len(targets) == 0 {
 		return 0, "", err
 	}
+	deliveryCtx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	defer cancel()
 	open := map[string]PushTransport{}
 	var failures []string
 	for _, device := range targets {
@@ -167,9 +180,15 @@ func pushAll(ctx context.Context, d *db.DB, wake Wakeup) (sent int, failure stri
 		if t == nil {
 			continue
 		}
-		out, err := t.Send(ctx, device, wake)
+		out, err := t.Send(deliveryCtx, device, wake)
 		if err != nil {
-			return sent, "", err
+			if ctx.Err() != nil {
+				return sent, "", ctx.Err()
+			}
+			if deliveryCtx.Err() == nil {
+				return sent, "", err
+			}
+			out = Delivery{ErrorClass: "web push delivery deadline exceeded"}
 		}
 		if err := recordPush(ctx, d.Write, device.ID, out); err != nil {
 			return sent, "", err
@@ -257,7 +276,7 @@ func ImportDevices(ctx context.Context, src db.Querier, dst db.Querier) (int64, 
 			notes = append(notes, fmt.Sprintf("push_subscriptions row %d rejected: %s", l.id, err))
 			continue
 		}
-		if _, err := dst.ExecContext(ctx, "INSERT INTO notification_devices (id, transport, label, created_ts, last_ok_ts, failure_count, last_error) VALUES (?, ?, ?, ?, ?, ?, ?)",
+		if _, err := dst.ExecContext(ctx, "INSERT INTO notification_devices (id, transport, label, created_ts, last_ok_ts, failure_count, last_error, bearer_id) VALUES (?, ?, ?, ?, ?, ?, ?, NULL)",
 			l.id, TransportWebPush, Plain(l.label, pushLabelChars), l.created, l.lastOK, l.failures, l.lastError); err != nil {
 			return carried, notes, err
 		}

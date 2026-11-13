@@ -289,8 +289,8 @@ func TestPhoneNotificationActionLinksRefuseReplayAlterationRotationDisallowedKin
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications WHERE title = ?", "atrium: "+phoneKind+" proposal").Scan(&notified); err != nil {
 		t.Fatal(err)
 	}
-	if proposed != 4+actionlink.RateLimit || notified != 4+actionlink.RateLimit-spent {
-		t.Fatalf("%d proposals and %d phone notifications, want %d and %d", proposed, notified, 4+actionlink.RateLimit, 4+actionlink.RateLimit-spent)
+	if proposed != 4+actionlink.RateLimit || notified != 4+actionlink.RateLimit {
+		t.Fatalf("%d proposals and %d phone notifications, want %d and %d", proposed, notified, 4+actionlink.RateLimit, 4+actionlink.RateLimit)
 	}
 	var outstanding int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM action_links WHERE used_ts IS NULL").Scan(&outstanding); err != nil || outstanding != actionlink.RateLimit-spent {

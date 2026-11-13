@@ -9,8 +9,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/actionlink"
 	"github.com/jeiang/atrium/internal/actionlink/policy"
 	"github.com/jeiang/atrium/internal/cli"
+	"github.com/jeiang/atrium/internal/notify"
 )
 
 func TestInboxAndDevicesAPI(t *testing.T) {
@@ -209,4 +211,84 @@ func TestInboxAndDevicesAPI(t *testing.T) {
 		t.Fatalf("%d devices after removal", n)
 	}
 	expectAPI(t, s.do(http.MethodPost, "/api/v1/devices/test", token, nil), http.StatusConflict, "refused")
+}
+
+func TestInboxResendsCannotStarveProposalNotifications(t *testing.T) {
+	dir, model, _ := moduleFixture(t, flagsExcept("", ""))
+	push, browser := pushRig(t, dir)
+	phone := newPhoneSite(t, dir, model)
+	if code, _ := phone.post("/settings/notifications/push/subscriptions", browser.form()); code != http.StatusOK {
+		t.Fatalf("subscribe = %d", code)
+	}
+	phone.policy(phoneKind)
+	issued := runApp(t, "auth", "token", "issue", "--name", "phone")
+	if issued.code != cli.ExitOK {
+		t.Fatal(issued.stderr)
+	}
+	token := strings.TrimSpace(issued.stdout)
+	s := &apiSite{t: t, base: phone.base, dir: dir, api: model}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	push.answer(http.StatusServiceUnavailable)
+	phone.propose(1)
+	var id int64
+	if err := d.Read.QueryRow("SELECT MAX(id) FROM notifications").Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	for range actionlink.RateLimit {
+		expectAPI(t, s.do(http.MethodPost, fmt.Sprintf("/api/v1/inbox/%d/resend", id), token, nil), http.StatusConflict, "refused")
+	}
+	var minted int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM action_links").Scan(&minted); err != nil || minted != actionlink.RateLimit {
+		t.Fatalf("minted %d: %v", minted, err)
+	}
+	before := push.count()
+	push.answer(http.StatusCreated)
+	phone.propose(1)
+	var rows int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM notifications WHERE delivered = 1").Scan(&rows); err != nil || rows != 1 || push.count() != before+1 {
+		t.Fatalf("new proposal: inbox %d, pushes %d: %v", rows, push.count()-before, err)
+	}
+	if actions, _ := browser.decrypt(t, push.last(t).body)["actions"].([]any); len(actions) != 0 {
+		t.Fatalf("rate limited push has actions: %v", actions)
+	}
+}
+
+func TestDevicesCapAndCredentialRevocation(t *testing.T) {
+	dir, model, _ := moduleFixture(t, flagsExcept("", ""))
+	push, browser := pushRig(t, dir)
+	phone := newPhoneSite(t, dir, model)
+	if code, _ := phone.post("/settings/notifications/push/subscriptions", browser.form()); code != http.StatusOK {
+		t.Fatalf("browser subscribe = %d", code)
+	}
+	issued := runApp(t, "auth", "token", "issue", "--name", "devices")
+	if issued.code != cli.ExitOK {
+		t.Fatal(issued.stderr)
+	}
+	token := strings.TrimSpace(issued.stdout)
+	s := &apiSite{t: t, base: phone.base, dir: dir, api: model}
+	form := browser.form()
+	for i := 1; i <= notify.DeviceLimit; i++ {
+		got := s.do(http.MethodPost, "/api/v1/devices", token, map[string]any{"endpoint": fmt.Sprintf("%s/push/%d", push.URL, i), "p256dh": form.Get("p256dh"), "auth": form.Get("auth")})
+		if i < notify.DeviceLimit {
+			if got.status != http.StatusCreated {
+				t.Fatalf("register %d: %d %s", i, got.status, got.body)
+			}
+		} else {
+			expectAPI(t, got, http.StatusConflict, "refused")
+		}
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	var id int64
+	if err := d.Read.QueryRow("SELECT id FROM auth_bearers WHERE name = 'devices'").Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	if got := runApp(t, "auth", "token", "revoke", strconv.FormatInt(id, 10)); got.code != cli.ExitOK {
+		t.Fatal(got.stderr)
+	}
+	var left, owned int
+	if err := d.Read.QueryRow("SELECT COUNT(*), COUNT(bearer_id) FROM notification_devices").Scan(&left, &owned); err != nil || left != 1 || owned != 0 {
+		t.Fatalf("after revoke devices %d owned %d: %v", left, owned, err)
+	}
 }

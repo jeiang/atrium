@@ -155,7 +155,11 @@ func Resend(ctx context.Context, d *db.DB, id int64, present Presenter) (Sent, e
 	if err := json.Unmarshal([]byte(actions), &refs); err != nil {
 		return Sent{}, err
 	}
-	if len(refs) > 0 && present != nil {
+	n, err := deviceCount(ctx, d.Read)
+	if err != nil {
+		return Sent{}, err
+	}
+	if n > 0 && len(refs) > 0 && present != nil {
 		if m.actions, err = present(ctx, d, refs, stamp()); err != nil {
 			return Sent{}, err
 		}

@@ -7,6 +7,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/state"
+	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/tool"
@@ -60,10 +61,11 @@ func (s *Service) Subscribe(ctx context.Context, in SubscribeInput) (application
 	if in.Transport == "" {
 		in.Transport = notify.TransportWebPush
 	}
+	principal, _ := authapp.PrincipalOf(ctx)
 	var device int64
 	id, err := s.mutate(ctx, SubscribeName, "push-device", func(tx *sql.Tx) error {
 		var err error
-		device, err = notify.RegisterDevice(ctx, tx, notify.RegisterDeviceInput{Transport: in.Transport, Endpoint: in.Endpoint, P256DH: in.P256DH, Auth: in.Auth, Label: in.Label})
+		device, err = notify.RegisterDevice(ctx, tx, notify.RegisterDeviceInput{BearerID: principal.BearerID, Transport: in.Transport, Endpoint: in.Endpoint, P256DH: in.P256DH, Auth: in.Auth, Label: in.Label})
 		return err
 	})
 	return application.Change[Subscribed]{Data: Subscribed{ID: device}, AuditID: id}, err
