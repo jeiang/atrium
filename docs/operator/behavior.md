@@ -215,7 +215,7 @@ Consecutive disabled-module occurrences without assistant threads share one `ski
 
 ## Database
 
-- **Encryption at rest.** With a database key, every command opens the database encrypted with SQLCipher, and a database created under that key is encrypted. The key is 64 hexadecimal digits, supplied by `db.key_file` in the configuration file, by `ATRIUM_DB_KEY` or `ATRIUM_DB_KEY_FILE`, or by the `db_key` systemd credential. Without a key the database stays plaintext.
+- **Encryption at rest.** With a database key, every command opens the database encrypted with SQLCipher, and a database created under that key is encrypted. The key is 64 hexadecimal digits, supplied by `ATRIUM_DB_KEY` or `ATRIUM_DB_KEY_FILE`, or by the `db-key` systemd credential. An unreadable configured key file refuses startup before creating a database. Without a key the database stays plaintext.
 - **Refusals.** atrium refuses to start or run a command, and changes nothing, when:
   - a key is configured but the file is plaintext;
   - the file is encrypted but no key is configured;

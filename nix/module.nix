@@ -299,7 +299,7 @@
       ATRIUM_HOST_CONFIG = "${hostConfigFile}";
     }
     // lib.optionalAttrs (cfg.initialTimezone != null) {ATRIUM_INITIAL_TZ = cfg.initialTimezone;}
-    // lib.optionalAttrs (cfg.database.keyFile != null) {ATRIUM_DB_KEY_FILE = "\${CREDENTIALS_DIRECTORY}/db-key";};
+    // lib.optionalAttrs (cfg.database.keyFile != null) {ATRIUM_DB_KEY_FILE = "%d/db-key";};
 
   hostValueError = module: key: value: let
     props =
@@ -387,11 +387,15 @@
     ++ lib.optional (c.kind == "") "services.atrium.connections.\"${id}\" needs a kind")
   cfg.connections);
 
-  runPropertyNames = ["User" "Group" "StateDirectory" "StateDirectoryMode" "UMask" "EnvironmentFile" "LoadCredential"] ++ lib.optional agent.enable "InaccessiblePaths";
+  runPropertyNames = lib.attrNames hardening;
   runProperties = lib.concatMap (name: let
     value = hardening.${name};
   in
-    map (entry: "${name}=${entry}") (
+    map (entry: "${name}=${
+      if builtins.isBool entry
+      then lib.boolToString entry
+      else toString entry
+    }") (
       if builtins.isList value
       then value
       else [value]
@@ -400,11 +404,11 @@
 
   atriumRun = pkgs.writeShellApplication {
     name = "atrium-run";
-    runtimeInputs = [pkgs.systemd];
     text = ''
-      exec systemd-run --pipe --wait --collect --quiet \
+      export PATH="$PATH:${lib.makeBinPath [pkgs.systemd]}"
+      exec systemd-run --pipe --wait --collect --quiet --expand-environment=no \
         ${lib.concatMapStringsSep " \\\n          " (property: lib.escapeShellArg "--property=${property}") runProperties} \
-        ${lib.concatStringsSep " \\\n          " (lib.mapAttrsToList (name: value: ''"--setenv=${name}=${builtins.replaceStrings ["\\" "\"" "$" "`"] ["\\\\" "\\\"" "\\$" "\\`"] value}"'') appEnvironment)} \
+        ${lib.concatStringsSep " \\\n          " (lib.mapAttrsToList (name: value: ''"--setenv=${name}=${builtins.replaceStrings ["\\" "\"" "$" "`"] ["\\\\" "\\\"" "\\$" "\\`"] value}"'') (builtins.removeAttrs appEnvironment ["ATRIUM_DB_KEY_FILE"]))} \
         -- ${lib.getExe cfg.package} "$@"
     '';
   };
@@ -428,6 +432,7 @@
       RestrictSUIDSGID = true;
       LockPersonality = true;
     }
+    // lib.optionalAttrs (writePaths != []) {ReadWritePaths = writePaths;}
     // lib.optionalAttrs agent.enable {InaccessiblePaths = ["-${libraryDir}"];};
 
   writePaths = lib.optional (obsidianDir != null) obsidianDir ++ lib.optional cfg.backup.enable cfg.backup.directory;
@@ -447,7 +452,6 @@
     unitConfig.StartLimitIntervalSec = 0;
     serviceConfig =
       hardening
-      // lib.optionalAttrs (writePaths != []) {ReadWritePaths = writePaths;}
       // {
         ExecStart = lib.concatStringsSep " " ([(lib.getExe cfg.package) "serve" "--host" (lib.escapeShellArg cfg.web.host) "--port" (lib.escapeShellArg (toString cfg.port))]
           ++ lib.concatMap (mode: ["--auth" (lib.escapeShellArg mode)]) (lib.splitString "+" cfg.web.auth)
