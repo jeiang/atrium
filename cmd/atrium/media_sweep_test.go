@@ -77,7 +77,8 @@ func TestMediaSweepJobFailsWhenQbittorrentFails(t *testing.T) {
 	}
 	var outcome string
 	var jobRun sql.NullInt64
-	if err := d.Read.QueryRow("SELECT outcome, job_run_id FROM operation_audit WHERE operation = 'media.sweep' ORDER BY id DESC LIMIT 1").Scan(&outcome, &jobRun); err != nil {
+	var actor, source string
+	if err := d.Read.QueryRow("SELECT outcome, job_run_id, actor, source FROM operation_audit WHERE operation = 'media.sweep' ORDER BY id DESC LIMIT 1").Scan(&outcome, &jobRun, &actor, &source); err != nil {
 		t.Fatal(err)
 	}
 	if outcome == "ok" {
@@ -85,5 +86,8 @@ func TestMediaSweepJobFailsWhenQbittorrentFails(t *testing.T) {
 	}
 	if jobRun.Int64 != run {
 		t.Fatalf("media.sweep audit job run %v, want %d", jobRun, run)
+	}
+	if actor != "scheduler" || source != "job" {
+		t.Fatalf("media.sweep audit by %s/%s, want scheduler/job", actor, source)
 	}
 }

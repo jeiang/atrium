@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
@@ -288,6 +289,10 @@ func TestApprovalSourceAndInvalidSelection(t *testing.T) {
 	if code, body := hxFetch(t, client, http.MethodPost, base+"/proposals/"+viaHTML+"/approve", url.Values{"all": {"1"}}); code != http.StatusOK {
 		t.Fatalf("HTML approve: %d\n%s", code, body)
 	}
+	waitUntil(t, 10*time.Second, "the connection-health service audit", func() bool {
+		var n int
+		return d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'connections.observe-health' AND actor = 'service:connection-health' AND source = 'job'").Scan(&n) == nil && n > 0
+	})
 	stop()
 
 	s := startAPISite(t, dir, nil)
@@ -308,7 +313,7 @@ func TestApprovalSourceAndInvalidSelection(t *testing.T) {
 		if err := d.Read.QueryRow("SELECT source FROM effect_resolutions WHERE proposal_id = ? AND outcome = 'approved'", id).Scan(&resolution); err != nil {
 			t.Fatal(err)
 		}
-		if err := d.Read.QueryRow("SELECT source FROM operation_audit WHERE operation = 'review.approve' AND outcome = 'ok' AND target = ?", "proposal:"+id).Scan(&audited); err != nil {
+		if err := d.Read.QueryRow("SELECT source FROM operation_audit WHERE operation = 'review.approve' AND outcome = 'ok' AND actor = 'operator' AND target = ?", "proposal:"+id).Scan(&audited); err != nil {
 			t.Fatal(err)
 		}
 		if resolution != source || audited != source {

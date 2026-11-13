@@ -54,7 +54,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Connections: notify.Connections(),
 		ConnectionNotice: func(ctx context.Context, d *db.DB, title, body string) error {
 			if !audit.HasActor(ctx) {
-				ctx = audit.With(ctx, "connection-health", audit.Job)
+				ctx = audit.With(ctx, "service:connection-health", audit.Job)
 			}
 			return notifyapp.ConnectionNotice()(ctx, d, title, body)
 		},
@@ -64,7 +64,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			if err != nil {
 				return err
 			}
-			return notifyapp.Monitor(audit.With(ctx, "notifications-monitor", audit.Job), d, mc.Env, m.Budget)
+			return notifyapp.Monitor(ctx, d, mc.Env, m.Budget)
 		}}},
 	}
 }
