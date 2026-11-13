@@ -2,11 +2,9 @@ package web
 
 import (
 	"bytes"
-	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
-	"github.com/jeiang/atrium/internal/settings/audit"
 	"io"
 	"maps"
 	"mime"
@@ -40,10 +38,6 @@ type apiError struct {
 
 func isAPI(r *http.Request) bool {
 	return strings.HasPrefix(r.URL.Path, apiPrefix) || r.URL.Path == strings.TrimSuffix(apiPrefix, "/")
-}
-
-func withIdentity(ctx context.Context, who Identity, source audit.Source) context.Context {
-	return audit.With(authapp.WithPrincipal(ctx, who), "operator", source)
 }
 
 type meBody struct {
@@ -254,6 +248,6 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		}
 		r.Body = http.MaxBytesReader(w, r.Body, int64(limit))
 	}
-	ctx := withIdempotency(withIdentity(r.Context(), who, audit.API), g.idem)
+	ctx := withIdempotency(withAPIIdentity(r.Context(), who), g.idem)
 	next.ServeHTTP(w, r.WithContext(ctx))
 }
