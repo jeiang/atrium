@@ -724,7 +724,7 @@
       "--port",
       "1"
     ],
-    "exit_code": 1,
+    "exit_code": 78,
     "name": "serve-proxy-without-host",
     "stderr": "serve-proxy-without-host.stderr",
     "stdout": "serve-proxy-without-host.stdout"

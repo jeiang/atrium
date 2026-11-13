@@ -156,7 +156,7 @@ func TestServeRefusesAnEmergencyListenerOffLoopback(t *testing.T) {
 
 func TestServeExitsWithTheConfigCodeOnAPermanentRefusal(t *testing.T) {
 	moduleFixture(t, flagsExcept("", ""))
-	setEnv(t, "ATRIUM_DB_KEY", otherKeyHex)
+	setEnv(t, "ATRIUM_DB_KEY", "ffeeddccbbaa99887766554433221100ffeeddccbbaa99887766554433221100")
 	got := runApp(t, "serve", "--port", "0", "--auth", "local")
 	if got.code != cli.ExitConfig || !strings.Contains(got.stderr, "key") {
 		t.Fatalf("serve with a wrong database key: exit %d stderr %q; want %d (permanent, not restarted)", got.code, got.stderr, cli.ExitConfig)
