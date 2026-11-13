@@ -292,8 +292,9 @@ type apiMessageRequest struct {
 }
 
 type apiEditRequest struct {
-	ThreadID int64  `path:"thread_id" json:"-"`
-	Text     string `json:"text"`
+	ThreadID int64                `path:"thread_id" json:"-"`
+	Uploads  []files.UploadedFile `json:"-"`
+	Text     string               `json:"text"`
 }
 
 type apiAnswerRequest struct {
@@ -372,7 +373,7 @@ type apiWork struct {
 	Plan      *workspace.Plan    `json:"plan"`
 	Sources   []workspace.Source `json:"sources"`
 	Subagents []subagents.Card   `json:"subagents"`
-	Files     []files.Row        `json:"files"`
+	Files     []files.Summary    `json:"files"`
 	Drafts    []json.RawMessage  `json:"drafts"`
 	Code      []json.RawMessage  `json:"code"`
 }
@@ -582,6 +583,9 @@ func apiBindings(p *apiPages) []application.Binding {
 			}),
 		apiCommand(p, asstapp.DescribeThreadStart(), multipartJSONShape("threads", 201, sends...), "POST /threads",
 			func(ctx context.Context, svc *asstapp.Service, in apiNewThread) (application.Change[apiStarted], error) {
+				if len(in.Uploads) > 0 && strings.TrimSpace(in.Text) == "" {
+					return application.Change[apiStarted]{}, invalidField("text", "text is required.")
+				}
 				webSearch := true
 				if in.WebSearch != nil {
 					webSearch = *in.WebSearch
@@ -613,7 +617,7 @@ func apiBindings(p *apiPages) []application.Binding {
 		apiCommand(p, asstapp.DescribeMessageSend(), multipartJSONShape("threads", 202, sends...), "POST /threads/{thread_id}/messages",
 			func(ctx context.Context, svc *asstapp.Service, in apiMessageRequest) (application.Change[apiSent], error) {
 				text := strings.TrimSpace(in.Text)
-				if text == "" && len(in.Uploads) == 0 {
+				if text == "" {
 					return application.Change[apiSent]{}, invalidField("text", "text is required.")
 				}
 				send := svc.MessageSend
@@ -628,13 +632,13 @@ func apiBindings(p *apiPages) []application.Binding {
 					return apiSent{RunID: &s.RunID}
 				})
 			}),
-		apiCommand(p, asstapp.DescribeMessageEdit(), accepted(sends...), "PATCH /threads/{thread_id}/messages/latest",
+		apiCommand(p, asstapp.DescribeMessageEdit(), multipartJSONShape("threads", 202, sends...), "PATCH /threads/{thread_id}/messages/latest",
 			func(ctx context.Context, svc *asstapp.Service, in apiEditRequest) (application.Change[apiRunStarted], error) {
 				text := strings.TrimSpace(in.Text)
 				if text == "" {
 					return application.Change[apiRunStarted]{}, invalidField("text", "text is required.")
 				}
-				change, err := svc.MessageEdit(ctx, asstapp.SendInput{ThreadID: in.ThreadID, Text: text, Operator: true})
+				change, err := svc.MessageEdit(ctx, asstapp.SendInput{ThreadID: in.ThreadID, Text: text, Files: in.Uploads, Operator: true})
 				return changeAs(change, err, func(s asstapp.Sent) apiRunStarted { return apiRunStarted{RunID: s.RunID} })
 			}),
 		apiCommand(p, asstapp.DescribeRunStop(), bodiless(threadsArea(application.NotFound, application.Conflict)), "POST /threads/{thread_id}/stop",
@@ -757,7 +761,7 @@ func transcriptOut(v asstapp.Transcript, cursor api.Cursor) apiTranscript {
 }
 
 func workOut(v asstapp.Work) apiWork {
-	out := apiWork{Needs: v.Needs, Plan: v.Plan, Sources: v.Sources, Subagents: v.Subagents, Files: v.Files, Drafts: []json.RawMessage{}, Code: []json.RawMessage{}}
+	out := apiWork{Needs: v.Needs, Plan: v.Plan, Sources: v.Sources, Subagents: v.Subagents, Files: files.Summaries(v.Files), Drafts: []json.RawMessage{}, Code: []json.RawMessage{}}
 	for _, d := range v.Drafts {
 		out.Drafts = append(out.Drafts, apiRaw(d))
 	}

@@ -95,11 +95,11 @@ type FileWriteInput struct {
 }
 
 type FileView struct {
-	File      files.Row  `json:"file"`
-	Render    string     `json:"render"`
-	Body      string     `json:"body"`
-	Rows      [][]string `json:"rows"`
-	Truncated bool       `json:"truncated"`
+	File      files.Summary `json:"file"`
+	Render    string        `json:"render"`
+	Body      string        `json:"body"`
+	Rows      [][]string    `json:"rows"`
+	Truncated bool          `json:"truncated"`
 }
 
 type FileStream struct {
@@ -374,7 +374,7 @@ func (s *Service) ProjectFileDelete(ctx context.Context, in FileInput) (applicat
 }
 
 func previewOf(found files.Row, previewBytes int) (FileView, error) {
-	view := FileView{File: found, Rows: [][]string{}}
+	view := FileView{File: files.Summarize(found), Rows: [][]string{}}
 	media := found.MediaType
 	if files.IsImageType(media) {
 		view.Render = "image"

@@ -2,6 +2,7 @@ package api
 
 import (
 	"errors"
+	"io"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -136,6 +137,10 @@ func decode(w http.ResponseWriter, r *http.Request, op application.Name, v any, 
 			if errors.As(err, &appErr) {
 				web.APIFail(w, err)
 			} else {
+				if _, drainErr := io.Copy(io.Discard, r.Body); errors.As(drainErr, &large) {
+					web.APIError(w, 413, "too_large", "Request too large.")
+					return false
+				}
 				web.APIError(w, 400, "bad_request", "Invalid multipart body.")
 			}
 			return false

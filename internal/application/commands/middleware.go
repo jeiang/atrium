@@ -14,6 +14,10 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"syscall"
+	"time"
+
+	"golang.org/x/sys/unix"
 
 	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/logx"
@@ -21,6 +25,10 @@ import (
 )
 
 var log = logx.Logger("commands")
+
+var multipartSlots = make(chan struct{}, 4)
+
+const spoolFreeFloor = 256 << 20
 
 type control struct{ withhold bool }
 
@@ -66,30 +74,56 @@ func (s *Store) Middleware(pattern string, next http.Handler) http.Handler {
 		var fingerprint string
 		media, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type"))
 		if media == "multipart/form-data" {
-			spool, err := os.CreateTemp(s.tempDir, "command-body-")
-			if err != nil {
+			select {
+			case multipartSlots <- struct{}{}:
+				defer func() { <-multipartSlots }()
+			default:
+				w.Header().Set("Retry-After", "1")
+				web.APIFail(w, &application.Error{Code: application.RateLimited, Message: "Too many concurrent uploads."})
+				return
+			}
+			controller := http.NewResponseController(w)
+			if err := controller.SetReadDeadline(time.Now().Add(2 * time.Minute)); err != nil {
 				web.APIFail(w, err)
 				return
 			}
-			defer func() { _ = spool.Close(); _ = os.Remove(spool.Name()) }()
-			original := r.Body
-			_, err = io.Copy(spool, original)
-			_ = original.Close()
-			var large *http.MaxBytesError
-			if errors.As(err, &large) {
-				web.APIError(w, 413, "too_large", "Request too large.")
-				return
-			}
-			if err != nil {
-				web.APIError(w, 400, "bad_request", "The request body could not be read.")
-				return
-			}
-			if _, err := spool.Seek(0, io.SeekStart); err != nil {
+			defer func() { _ = controller.SetReadDeadline(time.Time{}) }()
+			var space unix.Statfs_t
+			if err := unix.Statfs(s.tempDir, &space); err != nil {
 				web.APIFail(w, err)
 				return
 			}
-			r.Body = io.NopCloser(spool)
+			if uint64(space.Bavail)*uint64(space.Bsize) < spoolFreeFloor+65<<20 {
+				web.APIFail(w, &application.Error{Code: application.Unavailable, Message: "Upload storage is unavailable."})
+				return
+			}
 			if key != "" {
+				spool, err := os.CreateTemp(s.tempDir, "command-body-")
+				if err != nil {
+					web.APIFail(w, &application.Error{Code: application.Unavailable, Message: "Upload storage is unavailable.", Cause: err})
+					return
+				}
+				defer func() { _ = spool.Close(); _ = os.Remove(spool.Name()) }()
+				original := r.Body
+				_, err = io.Copy(spool, original)
+				_ = original.Close()
+				var large *http.MaxBytesError
+				switch {
+				case errors.As(err, &large):
+					web.APIError(w, 413, "too_large", "Request too large.")
+					return
+				case errors.Is(err, syscall.ENOSPC), errors.Is(err, syscall.EDQUOT):
+					web.APIFail(w, &application.Error{Code: application.Unavailable, Message: "Upload storage is unavailable.", Cause: err})
+					return
+				case err != nil:
+					web.APIError(w, 400, "bad_request", "The request body could not be read.")
+					return
+				}
+				if _, err := spool.Seek(0, io.SeekStart); err != nil {
+					web.APIFail(w, err)
+					return
+				}
+				r.Body = io.NopCloser(spool)
 				mac, err := s.macKey()
 				if err != nil {
 					web.APIFail(w, err)

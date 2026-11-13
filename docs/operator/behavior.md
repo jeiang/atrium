@@ -260,3 +260,5 @@ These variables point the production binary at local fakes for the test entry po
 | `ATRIUM_CALENDAR_GOOGLE_API_URL` | Replaces the Google Calendar API base URL. |
 | `ATRIUM_GOOGLE_AUTH_URL` | Replaces the Google OAuth authorization endpoint. |
 | `ATRIUM_GOOGLE_TOKEN_URL` | Replaces the Google OAuth token endpoint. |
+
+- API multipart uploads share four in-process slots; excess uploads return 429 with `Retry-After: 1`. Each body has a two-minute read deadline and the declared route limit is checked against Content-Length before reading. Upload admission reserves a 256 MiB free-space floor plus one maximum-size envelope on the spool filesystem; unavailable storage returns a server error. Only keyed multipart requests spool for fingerprinting; all unsafe requests still pass durable command admission. Start/send/edit uploads require nonblank text before creating thread, file or message rows. API file lists, previews and Work expose file summaries without host paths or extracted text; previews return only the shortened body.

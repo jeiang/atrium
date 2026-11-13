@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 
@@ -233,7 +234,8 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 	if conditional := s.do(http.MethodGet, projectPath(project, "/files"), token, nil, "If-None-Match", fileETag); fileETag == "" || conditional.status != 304 {
 		t.Fatalf("files conditional: %q %d", fileETag, conditional.status)
 	}
-	body, media := uploadBody(t, nil, "note.txt", "first bytes of the note")
+	fileText := strings.Repeat("preview text ", 20000) + "FULL_FILE_TEXT_SECRET"
+	body, media := uploadBody(t, nil, "note.txt", fileText)
 	uploaded := s.do(http.MethodPost, projectPath(project, "/files"), token, body, "Content-Type", media)
 	if uploaded.status != 201 {
 		t.Fatalf("upload: %d %s", uploaded.status, uploaded.body)
@@ -244,15 +246,18 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 	if len(apiItems(t, listed)) != 1 || listed.header.Get("ETag") == fileETag {
 		t.Fatalf("file list did not change: %s", listed.body)
 	}
+	if strings.Contains(listed.body, dir) || strings.Contains(listed.body, fileText) || strings.Contains(listed.body, "FULL_FILE_TEXT_SECRET") {
+		t.Fatalf("file list exposed storage or full text: %s", listed.body)
+	}
 	preview := s.do(http.MethodGet, fileURL, token, nil)
-	if preview.status != 200 || preview.json["body"] != "first bytes of the note" {
+	if preview.status != 200 || strings.Contains(preview.body, dir) || strings.Contains(preview.body, fileText) || strings.Contains(preview.body, "FULL_FILE_TEXT_SECRET") {
 		t.Fatalf("preview: %d %s", preview.status, preview.body)
 	}
 	if again := s.do(http.MethodGet, fileURL, token, nil, "If-None-Match", preview.header.Get("ETag")); preview.header.Get("ETag") == "" || again.status != 304 {
 		t.Fatalf("preview conditional: %d", again.status)
 	}
 	full := s.do(http.MethodGet, fileURL+"/content", token, nil)
-	if full.status != 200 || full.body != "first bytes of the note" || full.header.Get("Content-Type") != "text/plain" || full.header.Get("X-Content-Type-Options") != "nosniff" {
+	if full.status != 200 || full.body != fileText || full.header.Get("Content-Type") != "text/plain" || full.header.Get("X-Content-Type-Options") != "nosniff" {
 		t.Fatalf("download: %d %s %v", full.status, full.body, full.header)
 	}
 	if conditional := s.do(http.MethodGet, fileURL+"/content", token, nil, "If-None-Match", full.header.Get("ETag")); full.header.Get("ETag") == "" || conditional.status != 304 {
@@ -263,10 +268,10 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 		t.Fatalf("HEAD: %d %q %v", head.status, head.body, head.header)
 	}
 	ranged := s.do(http.MethodGet, fileURL+"/content", token, nil, "Range", "bytes=6-10")
-	if ranged.status != 206 || ranged.body != "bytes" {
+	if ranged.status != 206 || ranged.body != "w tex" {
 		t.Fatalf("range: %d %q", ranged.status, ranged.body)
 	}
-	if got := s.do(http.MethodGet, fileURL+"/content", token, nil, "Range", "bytes=999-"); got.status != 416 {
+	if got := s.do(http.MethodGet, fileURL+"/content", token, nil, "Range", "bytes="+strconv.Itoa(len(fileText))+"-"); got.status != 416 {
 		t.Fatalf("bad range: %d", got.status)
 	}
 	if len(apiItems(t, s.do(http.MethodGet, projectPath(other, "/files"), token, nil))) != 0 {
@@ -320,12 +325,15 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 	}
 
 	token = localAPIToken(t, "thread-files")
-	body, media = uploadBody(t, map[string]string{"web_search": "false"}, "thread.txt", "thread A only")
+	model.Push(anthropictest.Reply("end_turn", anthropictest.Text("initial answer")))
+	threadText := strings.Repeat("thread attachment ", 12000) + "THREAD_FILE_TEXT_SECRET"
+	body, media = uploadBody(t, map[string]string{"text": "Read the attached note.", "web_search": "false"}, "thread.txt", threadText)
 	started := s.do(http.MethodPost, "/api/v1/threads", token, body, "Content-Type", media)
 	if started.status != 201 {
 		t.Fatalf("multipart start: %d %s", started.status, started.body)
 	}
 	thread := number(t, started.json["thread"].(map[string]any)["id"])
+	waitThreadSettled(t, s, token, thread)
 	otherThread := s.do(http.MethodPost, "/api/v1/threads", token, map[string]any{"web_search": false})
 	if otherThread.status != 201 {
 		t.Fatalf("JSON start: %d %s", otherThread.status, otherThread.body)
@@ -338,7 +346,14 @@ func TestFilesAndProjectsAPI(t *testing.T) {
 	}
 	threadFile := number(t, items[0].(map[string]any)["id"])
 	threadURL := threadPath(thread, "/files/"+strconv.FormatInt(threadFile, 10))
-	if read := s.do(http.MethodGet, threadURL+"/content", token, nil); read.status != 200 || read.body != "thread A only" {
+	threadPreview := s.do(http.MethodGet, threadURL, token, nil)
+	work := s.do(http.MethodGet, threadPath(thread, "/work"), token, nil)
+	for name, reply := range map[string]apiReply{"thread files": attached, "thread preview": threadPreview, "work": work} {
+		if reply.status != http.StatusOK || strings.Contains(reply.body, dir) || strings.Contains(reply.body, threadText) || strings.Contains(reply.body, "THREAD_FILE_TEXT_SECRET") {
+			t.Fatalf("%s exposed storage or full text: %d %s", name, reply.status, reply.body)
+		}
+	}
+	if read := s.do(http.MethodGet, threadURL+"/content", token, nil); read.status != 200 || read.body != threadText {
 		t.Fatalf("thread download: %d %s", read.status, read.body)
 	}
 	if read := s.do(http.MethodHead, threadURL+"/content", token, nil, "Range", "bytes=0-5"); read.status != 206 || read.body != "" || read.header.Get("Content-Length") != "6" {
@@ -432,5 +447,190 @@ func createHTMLProject(t *testing.T, base, name string) {
 	_ = resp.Body.Close()
 	if resp.StatusCode != http.StatusSeeOther {
 		t.Fatalf("bulk project fixture: %d %s", resp.StatusCode, data)
+	}
+}
+
+func TestMultipartUploadAdmission(t *testing.T) {
+	dir, _, f := moduleFixture(t, flagsExcept("", ""))
+	token := localAPIToken(t, "upload-admission")
+	base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	s := &apiSite{t: t, base: base}
+	temp := filepath.Join(dir, "temp")
+	client := &http.Client{Timeout: 15 * time.Second}
+	type result struct {
+		status int
+		body   string
+		err    error
+	}
+	results := make(chan result, 4)
+	var writers []*io.PipeWriter
+	defer func() {
+		for _, writer := range writers {
+			_ = writer.Close()
+		}
+	}()
+	for i := range 4 {
+		reader, writer := io.Pipe()
+		writers = append(writers, writer)
+		req, err := http.NewRequest(http.MethodPost, base+"/api/v1/threads", reader)
+		if err != nil {
+			t.Fatal(err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+		req.Header.Set("Content-Type", "multipart/form-data; boundary=held")
+		req.Header.Set("Idempotency-Key", fmt.Sprintf("held-%d", i))
+		go func() {
+			resp, err := client.Do(req)
+			if err != nil {
+				results <- result{err: err}
+				return
+			}
+			data, err := io.ReadAll(resp.Body)
+			_ = resp.Body.Close()
+			results <- result{status: resp.StatusCode, body: string(data), err: err}
+		}()
+		if _, err := io.WriteString(writer, "--held\r\n"); err != nil {
+			t.Fatal(err)
+		}
+		deadline := time.Now().Add(10 * time.Second)
+		for {
+			entries, err := os.ReadDir(temp)
+			if err == nil && len(entries) == i+1 {
+				break
+			}
+			if time.Now().After(deadline) {
+				t.Fatalf("waiting for %d held spools: %v %v", i+1, entries, err)
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}
+	body, media := uploadBody(t, map[string]string{"text": "fifth"}, "fifth.txt", "fifth")
+	rejected := s.do(http.MethodPost, "/api/v1/projects/1/files", token, body, "Content-Type", media, "Idempotency-Key", "fifth")
+	expectAPI(t, rejected, http.StatusTooManyRequests, "rate_limited")
+	if rejected.header.Get("Retry-After") == "" {
+		t.Fatalf("missing Retry-After: %v", rejected.header)
+	}
+	for _, writer := range writers {
+		_ = writer.Close()
+	}
+	for range writers {
+		select {
+		case got := <-results:
+			if got.err != nil {
+				t.Fatalf("held upload: %v", got.err)
+			}
+			if got.status == http.StatusTooManyRequests {
+				t.Fatalf("held upload unexpectedly rejected: %s", got.body)
+			}
+		case <-time.After(15 * time.Second):
+			t.Fatal("held upload did not finish")
+		}
+	}
+	entries, err := os.ReadDir(temp)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("held upload spools remain: %v %v", entries, err)
+	}
+	reader, writer := io.Pipe()
+	defer func() { _ = writer.Close() }()
+	req, err := http.NewRequest(http.MethodPost, base+"/api/v1/threads", reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.ContentLength = 66 << 20
+	req.Header.Set("Authorization", "Bearer "+token)
+	req.Header.Set("Content-Type", "multipart/form-data; boundary=large")
+	req.Header.Set("Idempotency-Key", "declared-large")
+	req.Header.Set("Expect", "100-continue")
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	data, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err != nil || resp.StatusCode != http.StatusRequestEntityTooLarge {
+		t.Fatalf("declared oversize: %d %s %v", resp.StatusCode, data, err)
+	}
+	entries, err = os.ReadDir(temp)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("declared oversize created spool: %v %v", entries, err)
+	}
+}
+
+func TestMultipartThreadTextRequired(t *testing.T) {
+	dir, model, f := moduleFixture(t, flagsExcept("", ""))
+	warm(t, model)
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
+	defer func() { _ = d.Close() }()
+	token := localAPIToken(t, "multipart-text")
+	base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer stop()
+	s := &apiSite{t: t, base: base}
+	model.Push(anthropictest.Reply("end_turn", anthropictest.Text("initial answer")))
+	started := s.do(http.MethodPost, "/api/v1/threads", token, map[string]any{"text": "existing message", "web_search": false})
+	if started.status != http.StatusCreated {
+		t.Fatalf("start: %d %s", started.status, started.body)
+	}
+	thread := number(t, started.json["thread"].(map[string]any)["id"])
+	waitThreadSettled(t, s, token, thread)
+	threadsBefore := s.do(http.MethodGet, "/api/v1/threads", token, nil)
+	viewBefore := s.do(http.MethodGet, threadPath(thread, ""), token, nil)
+	filesBefore := s.do(http.MethodGet, threadPath(thread, "/files"), token, nil)
+	counts := func() [3]int {
+		t.Helper()
+		var result [3]int
+		for i, table := range []string{"threads", "thread_files", "thread_messages"} {
+			if err := d.Read.QueryRow("SELECT count(*) FROM " + table).Scan(&result[i]); err != nil {
+				t.Fatal(err)
+			}
+		}
+		return result
+	}
+	beforeCounts := counts()
+	for _, target := range []struct {
+		method string
+		path   string
+	}{
+		{http.MethodPost, "/api/v1/threads"},
+		{http.MethodPost, threadPath(thread, "/messages")},
+		{http.MethodPatch, threadPath(thread, "/messages/latest")},
+	} {
+		for _, fields := range []map[string]string{nil, {"text": " \t\n"}} {
+			body, media := uploadBody(t, fields, "refused.txt", "must not persist")
+			reply := s.do(target.method, target.path, token, body, "Content-Type", media)
+			expectAPI(t, reply, http.StatusUnprocessableEntity, "invalid")
+			errorBody, _ := reply.json["error"].(map[string]any)
+			fieldErrors, _ := errorBody["fields"].([]any)
+			found := false
+			for _, raw := range fieldErrors {
+				field, _ := raw.(map[string]any)
+				loc, _ := field["loc"].([]any)
+				if len(loc) > 0 && loc[len(loc)-1] == "text" {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatalf("%s %s missing text field error: %s", target.method, target.path, reply.body)
+			}
+		}
+	}
+	threadsAfter := s.do(http.MethodGet, "/api/v1/threads", token, nil)
+	viewAfter := s.do(http.MethodGet, threadPath(thread, ""), token, nil)
+	filesAfter := s.do(http.MethodGet, threadPath(thread, "/files"), token, nil)
+	if threadsBefore.body != threadsAfter.body || viewBefore.body != viewAfter.body || filesBefore.body != filesAfter.body {
+		t.Fatalf("invalid uploads changed state: threads %s -> %s; view %s -> %s; files %s -> %s", threadsBefore.body, threadsAfter.body, viewBefore.body, viewAfter.body, filesBefore.body, filesAfter.body)
+	}
+	if afterCounts := counts(); afterCounts != beforeCounts {
+		t.Fatalf("invalid uploads persisted rows: %v -> %v", beforeCounts, afterCounts)
+	}
+	entries, err := os.ReadDir(filepath.Join(dir, "temp"))
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("invalid upload spools remain: %v %v", entries, err)
 	}
 }

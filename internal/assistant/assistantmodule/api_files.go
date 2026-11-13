@@ -41,13 +41,13 @@ type apiThreadFiles struct {
 	Cursor   api.Cursor `query:"cursor" json:"-"`
 }
 
-func filePage(ctx context.Context, svc *asstapp.Service, in asstapp.FileListInput, limit api.Limit, cursor api.Cursor) (application.Read[web.List[files.Row]], error) {
+func filePage(ctx context.Context, svc *asstapp.Service, in asstapp.FileListInput, limit api.Limit, cursor api.Cursor) (application.Read[web.List[files.Summary]], error) {
 	read, err := svc.FileList(ctx, in)
 	if err != nil {
-		return application.Read[web.List[files.Row]]{}, err
+		return application.Read[web.List[files.Summary]]{}, err
 	}
-	page, err := pageSlice(read.Data.Files, limit, cursor)
-	return application.Read[web.List[files.Row]]{Revision: read.Revision, Data: page}, err
+	page, err := pageSlice(files.Summaries(read.Data.Files), limit, cursor)
+	return application.Read[web.List[files.Summary]]{Revision: read.Revision, Data: page}, err
 }
 func downloadFile(ctx context.Context, svc *asstapp.Service, in asstapp.FileInput) (application.Read[api.Binary], error) {
 	read, err := svc.FileDownload(ctx, asstapp.DownloadInput{FileInput: in})
@@ -68,10 +68,10 @@ func fileAPIBindings(p *apiPages) []application.Binding {
 		apiCommand(p, asstapp.DescribeProjectFileDelete(), bodyless, "DELETE /projects/{project_id}/files/{file_id}", func(ctx context.Context, svc *asstapp.Service, in apiProjectFile) (application.Change[asstapp.FileChanged], error) {
 			return svc.ProjectFileDelete(ctx, asstapp.FileInput{ProjectID: in.ProjectID, FileID: in.FileID})
 		}),
-		apiQuery(p, asstapp.DescribeFileList(), shape, "GET /projects/{project_id}/files", func(ctx context.Context, svc *asstapp.Service, in apiProjectFiles) (application.Read[web.List[files.Row]], error) {
+		apiQuery(p, asstapp.DescribeFileList(), shape, "GET /projects/{project_id}/files", func(ctx context.Context, svc *asstapp.Service, in apiProjectFiles) (application.Read[web.List[files.Summary]], error) {
 			return filePage(ctx, svc, asstapp.FileListInput{ProjectID: in.ProjectID}, in.Limit, in.Cursor)
 		}),
-		apiQuery(p, asstapp.DescribeFileList(), shape, "GET /threads/{thread_id}/files", func(ctx context.Context, svc *asstapp.Service, in apiThreadFiles) (application.Read[web.List[files.Row]], error) {
+		apiQuery(p, asstapp.DescribeFileList(), shape, "GET /threads/{thread_id}/files", func(ctx context.Context, svc *asstapp.Service, in apiThreadFiles) (application.Read[web.List[files.Summary]], error) {
 			return filePage(ctx, svc, asstapp.FileListInput{ThreadID: in.ThreadID}, in.Limit, in.Cursor)
 		}),
 		apiQuery(p, asstapp.DescribeFilePreview(), shape, "GET /projects/{project_id}/files/{file_id}", func(ctx context.Context, svc *asstapp.Service, in apiProjectFile) (application.Read[asstapp.FileView], error) {

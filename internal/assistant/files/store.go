@@ -28,6 +28,41 @@ type Row struct {
 	ProjectID *int64  `json:"project_id"`
 }
 
+type Summary struct {
+	ID        int64   `json:"id"`
+	ThreadID  *int64  `json:"thread_id"`
+	RunID     *int64  `json:"run_id"`
+	Name      string  `json:"name"`
+	MediaType string  `json:"media_type"`
+	Bytes     int64   `json:"bytes"`
+	Origin    string  `json:"origin"`
+	CreatedAt float64 `json:"created_at"`
+	Tokens    int64   `json:"tokens"`
+	ProjectID *int64  `json:"project_id"`
+}
+
+func Summarize(f Row) Summary {
+	return Summary{ID: f.ID, ThreadID: f.ThreadID, RunID: f.RunID, Name: f.Name, MediaType: f.MediaType,
+		Bytes: f.Bytes, Origin: f.Origin, CreatedAt: f.CreatedAt, Tokens: f.Tokens, ProjectID: f.ProjectID}
+}
+
+func Summaries(rows []Row) []Summary {
+	out := make([]Summary, 0, len(rows))
+	for _, row := range rows {
+		out = append(out, Summarize(row))
+	}
+	return out
+}
+
+const summaryColumns = "id, thread_id, run_id, name, media_type, bytes, origin, created_at, tokens, project_id"
+
+func scanSummary(r interface{ Scan(...any) error }) (Row, error) {
+	var f Row
+	err := r.Scan(&f.ID, &f.ThreadID, &f.RunID, &f.Name, &f.MediaType, &f.Bytes, &f.Origin, &f.CreatedAt,
+		&f.Tokens, &f.ProjectID)
+	return f, err
+}
+
 const columns = "id, thread_id, run_id, name, media_type, bytes, path, origin, created_at, text, tokens, project_id"
 
 func scan(r interface{ Scan(...any) error }) (Row, error) {
@@ -108,19 +143,19 @@ func Get(ctx context.Context, q db.Querier, fileID int64) (*Row, error) {
 }
 
 func OfThread(ctx context.Context, q db.Querier, threadID int64) ([]Row, error) {
-	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM thread_files WHERE thread_id = ? ORDER BY id", threadID)
+	rows, err := q.QueryContext(ctx, "SELECT "+summaryColumns+" FROM thread_files WHERE thread_id = ? ORDER BY id", threadID)
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (Row, error) { return scan(r) })
+	return db.Collect(rows, func(r *sql.Rows) (Row, error) { return scanSummary(r) })
 }
 
 func OfProject(ctx context.Context, q db.Querier, projectID int64) ([]Row, error) {
-	rows, err := q.QueryContext(ctx, "SELECT "+columns+" FROM thread_files WHERE project_id = ? ORDER BY id", projectID)
+	rows, err := q.QueryContext(ctx, "SELECT "+summaryColumns+" FROM thread_files WHERE project_id = ? ORDER BY id", projectID)
 	if err != nil {
 		return nil, err
 	}
-	return db.Collect(rows, func(r *sql.Rows) (Row, error) { return scan(r) })
+	return db.Collect(rows, func(r *sql.Rows) (Row, error) { return scanSummary(r) })
 }
 
 type newFile struct {

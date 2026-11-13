@@ -270,6 +270,10 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		if multipart {
 			cap = shape.BodyLimit
 		}
+		if r.ContentLength > cap {
+			APIError(w, http.StatusRequestEntityTooLarge, "too_large", "Request too large.")
+			return
+		}
 		r.Body = http.MaxBytesReader(w, r.Body, cap)
 	}
 	ctx := withStreamAccess(withAPIIdentity(r.Context(), who), "bearer:"+tokenKey(token), func(ctx context.Context) error {

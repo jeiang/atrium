@@ -135,7 +135,7 @@ func (p *pages) chatFile(w http.ResponseWriter, r *http.Request) {
 	v := read.Data
 	f := v.File
 	preview := FilePreview{ID: f.ID, ThreadID: f.ThreadID, RunID: f.RunID, Name: f.Name, MediaType: f.MediaType,
-		Bytes: f.Bytes, Path: f.Path, Origin: f.Origin, CreatedAt: f.CreatedAt, Text: f.Text, Tokens: f.Tokens,
+		Bytes: f.Bytes, Origin: f.Origin, CreatedAt: f.CreatedAt, Text: &v.Body, Tokens: f.Tokens,
 		ProjectID: f.ProjectID, Render: v.Render, Body: v.Body, Rows: v.Rows, Truncated: v.Truncated}
 	p.fragment(w, r, http.StatusOK, "_file.gohtml", FileData{File: preview, FileURL: fmt.Sprintf("/chat/%d/files/%d", in.ThreadID, in.FileID)})
 }

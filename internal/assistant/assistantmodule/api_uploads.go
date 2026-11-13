@@ -123,3 +123,9 @@ func (in *apiMessage) DecodeMultipart(reader *multipart.Reader) error {
 	in.Uploads = uploads
 	return err
 }
+
+func (in *apiEditRequest) DecodeMultipart(reader *multipart.Reader) error {
+	uploads, err := decodeUploads(reader, in)
+	in.Uploads = uploads
+	return err
+}
