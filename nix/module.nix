@@ -404,7 +404,7 @@
     text = ''
       exec systemd-run --pipe --wait --collect --quiet \
         ${lib.concatMapStringsSep " \\\n          " (property: lib.escapeShellArg "--property=${property}") runProperties} \
-        ${lib.concatStringsSep " \\\n          " (lib.mapAttrsToList (name: value: lib.escapeShellArg "--setenv=${name}=${value}") appEnvironment)} \
+        ${lib.concatStringsSep " \\\n          " (lib.mapAttrsToList (name: value: ''"--setenv=${name}=${builtins.replaceStrings ["\\" "\"" "$" "`"] ["\\\\" "\\\"" "\\$" "\\`"] value}"'') appEnvironment)} \
         -- ${lib.getExe cfg.package} "$@"
     '';
   };
@@ -696,8 +696,8 @@ in {
 
       auth = mkOption {
         type = types.enum ["proxy" "oidc" "proxy+oidc" "local"];
-        default = "proxy";
-        description = "Auth modes of the public listener, rendered as one --auth flag per mode: proxy trusts Remote-Groups from the reverse proxy and needs allowedHost; oidc accepts OIDC sessions only and needs allowedHost; proxy+oidc accepts both; local trusts every request and needs a numeric loopback web.host.";
+        default = "oidc";
+        description = "Auth modes of the public listener, rendered as one --auth flag per mode. The default oidc keeps public operator access closed until OIDC is activated through the local bootstrap listener and needs allowedHost. proxy trusts Remote-Groups from the reverse proxy and needs allowedHost; proxy+oidc accepts both; local trusts every request and needs a numeric loopback web.host.";
       };
 
       allowedHost = mkOption {

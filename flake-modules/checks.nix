@@ -295,6 +295,20 @@
     credentialsMatch = assert builtins.all (line: builtins.elem line cfg.runProperties) sharedLines;
     assert builtins.all (name: builtins.all (line: lib.hasInfix line (unitText name)) sharedLines) appUnits;
     assert builtins.length (builtins.filter (lib.hasPrefix "LoadCredential=") cfg.runProperties) == builtins.length credentialLines; true;
+    defaultAuth = assert defaults.config.services.atrium.web.auth == "oidc";
+    assert lib.hasInfix "--auth oidc" defaults.config.systemd.units."atrium.service".text;
+    assert !(lib.hasInfix "--auth proxy" defaults.config.systemd.units."atrium.service".text);
+    assert builtins.all (mode: let
+      system = host {
+        web = {
+          auth = mode;
+          allowedHost = "atrium.example.org";
+          host = "127.0.0.1";
+        };
+      };
+      text = system.config.systemd.units."atrium.service".text;
+    in
+      builtins.all (auth: lib.hasInfix "--auth ${auth}" text) (lib.splitString "+" mode)) ["proxy" "proxy+oidc" "local"]; true;
     backupInServe = let
       defaultHost = defaults.config.services.atrium.renderedHost;
       web = unitText "atrium.service";
@@ -455,6 +469,7 @@
     unit = name: pkgs.writeText name (builtins.unsafeDiscardStringContext nixos.config.systemd.units.${name}.text);
     inherit (cfg) unitNames;
     configFile = (pkgs.formats.toml {}).generate "atrium-host.toml" cfg.renderedHost;
+    runWrapper = lib.findFirst (package: lib.getName package == "atrium-run") null nixos.config.environment.systemPackages;
     agentConfigFile = (pkgs.formats.toml {}).generate "atrium-media-agent.toml" cfg.renderedMediaAgent;
   in {
     checks =
@@ -466,7 +481,7 @@
           touch $out
         '';
 
-        module = assert exampleEvaluates && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && mediaAgentRefused && mainWithoutMedia && mediaAgentUnit && emergencyOptionsRefused && backupOptionsRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig;
+        module = assert exampleEvaluates && defaultAuth && hostKeyRefused && operatorKeyRefused && tuningKeyRefused && cutoverHostRefused && databaseKeyRefused && secretRefused && chatEndpointRefused && embeddingDependencyKept && connectionRefused && mediaAgentRefused && mainWithoutMedia && mediaAgentUnit && emergencyOptionsRefused && backupOptionsRefused && opsPortRefused && credentialsMatch && backupInServe && notifyOnLongRunning && schedulerInServe && vaultExport && hostConfig;
           pkgs.linkFarm "atrium-units" (map (name: {
               inherit name;
               path = unit name;
@@ -508,119 +523,127 @@
         api-client-swift = pkgs.callPackage ../nix/swift-api-check.nix {};
       }
       // lib.optionalAttrs (self'.packages ? atrium) {
-        module-config = pkgs.runCommand "atrium-module-config" {nativeBuildInputs = [self'.packages.atrium pkgs.gnugrep pkgs.gnused pkgs.openssl];} ''
-          set -euo pipefail
-          export HOME=$TMPDIR ATRIUM_DB=$TMPDIR/atrium.db ATRIUM_CACHE_DIR=$TMPDIR/cache
-          export ATRIUM_HOST_CONFIG=${configFile} ATRIUM_INITIAL_TZ=UTC
-          export CREDENTIALS_DIRECTORY=$TMPDIR/credentials
-          mkdir -p "$CREDENTIALS_DIRECTORY"
-          head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/action_links.action_link_key"
-          head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/media.link_key"
-          printf 'notion-token\n' >"$CREDENTIALS_DIRECTORY/connection-service-notion-token"
-          head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/db-key"
-          printf 'qbt-key\n' >"$CREDENTIALS_DIRECTORY/connection-service-qbittorrent-api_key"
-          printf 'app-password\n' >"$CREDENTIALS_DIRECTORY/mail-account-icloud"
-          printf 'oidc-secret\n' >"$CREDENTIALS_DIRECTORY/connection-service-oidc-client_secret"
-          head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/connection-service-media-agent-bearer"
-          atrium settings list >/dev/null
-          atrium settings get public_url | grep -q '"value": "https://atrium.example.org"'
-          atrium settings get tz | grep -q '"value": "UTC"'
-          atrium settings set tz Europe/Berlin >/dev/null
-          atrium settings get tz | grep -q '"value": "Europe/Berlin"'
-          if atrium settings set public_url https://other.example >/dev/null 2>&1; then
-            echo "a host setting was editable" >&2
-            exit 1
-          fi
-          if ANTHROPIC_API_KEY=sk-test atrium settings list >/dev/null 2>&1; then
-            echo "a raw Anthropic key was accepted" >&2
-            exit 1
-          fi
-          if ATRIUM_MAIL_MAIL_CHAT_KEY_FILE=/run/x atrium settings list >/dev/null 2>&1; then
-            echo "a removed chat key binding was accepted" >&2
-            exit 1
-          fi
-          if ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD=5 atrium settings list >/dev/null 2>&1; then
-            echo "an operator environment pin was accepted" >&2
-            exit 1
-          fi
-          if ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL=http://q.invalid atrium settings list >/dev/null 2>&1; then
-            echo "a connection host input was accepted" >&2
-            exit 1
-          fi
-          if ATRIUM_CONFIG=/run/atrium.toml atrium settings list >/dev/null 2>&1; then
-            echo "a legacy pin file was accepted" >&2
-            exit 1
-          fi
-          atrium connections list | grep -q 'service/qbittorrent'
-          atrium connections list | grep -q 'mail/icloud'
-          atrium connections list | grep -q 'service/media-agent'
-          code=0
-          ATRIUM_MEDIA_MEDIA_ROOT=/srv/media timeout 60 atrium serve --port 0 --auth local >/dev/null 2>"$TMPDIR/serve.err" || code=$?
-          if [ "$code" != 78 ] || ! grep -q 'ATRIUM_MEDIA_MEDIA_ROOT is no longer read; use services.atrium.mediaAgent.roots' "$TMPDIR/serve.err"; then
-            echo "ATRIUM_MEDIA_MEDIA_ROOT: exit $code, want 78 naming services.atrium.mediaAgent.roots" >&2
-            cat "$TMPDIR/serve.err" >&2
-            exit 1
-          fi
-          agent=$TMPDIR/agent
-          mkdir -p "$agent/credentials" "$agent/media/movies" "$agent/media/tv" "$agent/media/downloads" "$agent/media/import"
-          head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$agent/credentials/bearer"
-          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 -subj /CN=media.mesh.example \
-            -keyout "$agent/credentials/vpn-tls-key" -out "$agent/credentials/vpn-tls-cert" 2>/dev/null
-          sed -e "s|/run/credentials/atrium-media-agent.service/|$agent/credentials/|" \
-            -e "s|\"/srv/media/|\"$agent/media/|" \
-            -e "s|\"/var/lib/atrium-media-agent\"|\"$agent/state\"|" \
-            -e "s|\"/var/cache/atrium-media-agent\"|\"$agent/cache\"|" \
-            -e "s|^group = \"media\"\$|group = \"$(id -g)\"|" \
-            -e "s|^listen = \"100.64.0.10:8483\"\$|listen = \"127.0.0.1:8483\"\nallow_loopback = true|" \
-            ${agentConfigFile} >"$agent/agent.toml"
-          atrium media-agent --config "$agent/agent.toml" >"$agent/out" 2>"$agent/err" &
-          pid=$!
-          for _ in $(seq 300); do
-            if grep -q 'media agent VPN listening on 127.0.0.1:8483' "$agent/out" || ! kill -0 "$pid" 2>/dev/null; then
-              break
+        module-config = assert defaultAuth && credentialsMatch;
+          pkgs.runCommand "atrium-module-config" {nativeBuildInputs = [self'.packages.atrium pkgs.gnugrep pkgs.gnused pkgs.openssl];} ''
+            set -euo pipefail
+            export HOME=$TMPDIR ATRIUM_DB=$TMPDIR/atrium.db ATRIUM_CACHE_DIR=$TMPDIR/cache
+            export ATRIUM_HOST_CONFIG=${configFile} ATRIUM_INITIAL_TZ=UTC
+            export CREDENTIALS_DIRECTORY=$TMPDIR/credentials
+            mkdir -p "$CREDENTIALS_DIRECTORY"
+            head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/action_links.action_link_key"
+            head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/media.link_key"
+            printf 'notion-token\n' >"$CREDENTIALS_DIRECTORY/connection-service-notion-token"
+            head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/db-key"
+            printf 'qbt-key\n' >"$CREDENTIALS_DIRECTORY/connection-service-qbittorrent-api_key"
+            printf 'app-password\n' >"$CREDENTIALS_DIRECTORY/mail-account-icloud"
+            printf 'oidc-secret\n' >"$CREDENTIALS_DIRECTORY/connection-service-oidc-client_secret"
+            head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$CREDENTIALS_DIRECTORY/connection-service-media-agent-bearer"
+            grep -Fq -- '--property=LoadCredential=db-key:/run/secrets/db-key' ${runWrapper}/bin/atrium-run
+            grep -Fq -- '--setenv=ATRIUM_DB_KEY_FILE=\''${CREDENTIALS_DIRECTORY}/db-key' ${runWrapper}/bin/atrium-run
+            grep -Fq 'ATRIUM_DB_KEY_FILE=''${CREDENTIALS_DIRECTORY}/db-key' ${unit "atrium.service"}
+            if grep -Fq -f "$CREDENTIALS_DIRECTORY/db-key" ${configFile} ${unit "atrium.service"} ${runWrapper}/bin/atrium-run; then
+              echo "database key bytes were rendered" >&2
+              exit 1
             fi
-            sleep 0.1
-          done
-          if ! grep -q 'media agent listening on 127.0.0.1:8482' "$agent/out" || ! grep -q 'media agent VPN listening on 127.0.0.1:8483' "$agent/out"; then
-            echo "the media agent did not start on the rendered config" >&2
-            cat "$agent/agent.toml" "$agent/out" "$agent/err" >&2
-            exit 1
-          fi
-          kill -TERM "$pid"
-          code=0
-          wait "$pid" || code=$?
-          if [ "$code" != 0 ]; then
-            echo "media agent shutdown: exit $code" >&2
-            cat "$agent/err" >&2
-            exit 1
-          fi
-          printf 'short\n' >"$agent/credentials/bearer"
-          code=0
-          timeout 60 atrium media-agent --config "$agent/agent.toml" >/dev/null 2>"$agent/err" || code=$?
-          if [ "$code" != 78 ] || ! grep -q 'control.token_file must contain at least 32 bytes' "$agent/err"; then
-            echo "short media agent bearer: exit $code, want 78" >&2
-            cat "$agent/err" >&2
-            exit 1
-          fi
-          rm "$CREDENTIALS_DIRECTORY/mail-account-icloud"
-          if atrium settings list >/dev/null 2>&1; then
-            echo "a missing mail account password was accepted" >&2
-            exit 1
-          fi
-          printf 'app-password\n' >"$CREDENTIALS_DIRECTORY/mail-account-icloud"
-          rm "$CREDENTIALS_DIRECTORY/connection-service-qbittorrent-api_key"
-          if atrium settings list >/dev/null 2>&1; then
-            echo "a missing connection credential file was accepted" >&2
-            exit 1
-          fi
-          printf 'qbt-key\n' >"$CREDENTIALS_DIRECTORY/connection-service-qbittorrent-api_key"
-          rm "$CREDENTIALS_DIRECTORY/action_links.action_link_key"
-          if atrium settings list >/dev/null 2>&1; then
-            echo "a missing credential file was accepted" >&2
-            exit 1
-          fi
-          touch $out
-        '';
+            atrium settings list >/dev/null
+            atrium settings get public_url | grep -q '"value": "https://atrium.example.org"'
+            atrium settings get tz | grep -q '"value": "UTC"'
+            atrium settings set tz Europe/Berlin >/dev/null
+            atrium settings get tz | grep -q '"value": "Europe/Berlin"'
+            if atrium settings set public_url https://other.example >/dev/null 2>&1; then
+              echo "a host setting was editable" >&2
+              exit 1
+            fi
+            if ANTHROPIC_API_KEY=sk-test atrium settings list >/dev/null 2>&1; then
+              echo "a raw Anthropic key was accepted" >&2
+              exit 1
+            fi
+            if ATRIUM_MAIL_MAIL_CHAT_KEY_FILE=/run/x atrium settings list >/dev/null 2>&1; then
+              echo "a removed chat key binding was accepted" >&2
+              exit 1
+            fi
+            if ATRIUM_ASSISTANT_MONTHLY_BUDGET_USD=5 atrium settings list >/dev/null 2>&1; then
+              echo "an operator environment pin was accepted" >&2
+              exit 1
+            fi
+            if ATRIUM_MEDIA_MEDIA_QBITTORRENT_URL=http://q.invalid atrium settings list >/dev/null 2>&1; then
+              echo "a connection host input was accepted" >&2
+              exit 1
+            fi
+            if ATRIUM_CONFIG=/run/atrium.toml atrium settings list >/dev/null 2>&1; then
+              echo "a legacy pin file was accepted" >&2
+              exit 1
+            fi
+            atrium connections list | grep -q 'service/qbittorrent'
+            atrium connections list | grep -q 'mail/icloud'
+            atrium connections list | grep -q 'service/media-agent'
+            code=0
+            ATRIUM_MEDIA_MEDIA_ROOT=/srv/media timeout 60 atrium serve --port 0 --auth local >/dev/null 2>"$TMPDIR/serve.err" || code=$?
+            if [ "$code" != 78 ] || ! grep -q 'ATRIUM_MEDIA_MEDIA_ROOT is no longer read; use services.atrium.mediaAgent.roots' "$TMPDIR/serve.err"; then
+              echo "ATRIUM_MEDIA_MEDIA_ROOT: exit $code, want 78 naming services.atrium.mediaAgent.roots" >&2
+              cat "$TMPDIR/serve.err" >&2
+              exit 1
+            fi
+            agent=$TMPDIR/agent
+            mkdir -p "$agent/credentials" "$agent/media/movies" "$agent/media/tv" "$agent/media/downloads" "$agent/media/import"
+            head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$agent/credentials/bearer"
+            openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 -subj /CN=media.mesh.example \
+              -keyout "$agent/credentials/vpn-tls-key" -out "$agent/credentials/vpn-tls-cert" 2>/dev/null
+            sed -e "s|/run/credentials/atrium-media-agent.service/|$agent/credentials/|" \
+              -e "s|\"/srv/media/|\"$agent/media/|" \
+              -e "s|\"/var/lib/atrium-media-agent\"|\"$agent/state\"|" \
+              -e "s|\"/var/cache/atrium-media-agent\"|\"$agent/cache\"|" \
+              -e "s|^group = \"media\"\$|group = \"$(id -g)\"|" \
+              -e "s|^listen = \"100.64.0.10:8483\"\$|listen = \"127.0.0.1:8483\"\nallow_loopback = true|" \
+              ${agentConfigFile} >"$agent/agent.toml"
+            atrium media-agent --config "$agent/agent.toml" >"$agent/out" 2>"$agent/err" &
+            pid=$!
+            for _ in $(seq 300); do
+              if grep -q 'media agent VPN listening on 127.0.0.1:8483' "$agent/out" || ! kill -0 "$pid" 2>/dev/null; then
+                break
+              fi
+              sleep 0.1
+            done
+            if ! grep -q 'media agent listening on 127.0.0.1:8482' "$agent/out" || ! grep -q 'media agent VPN listening on 127.0.0.1:8483' "$agent/out"; then
+              echo "the media agent did not start on the rendered config" >&2
+              cat "$agent/agent.toml" "$agent/out" "$agent/err" >&2
+              exit 1
+            fi
+            kill -TERM "$pid"
+            code=0
+            wait "$pid" || code=$?
+            if [ "$code" != 0 ]; then
+              echo "media agent shutdown: exit $code" >&2
+              cat "$agent/err" >&2
+              exit 1
+            fi
+            printf 'short\n' >"$agent/credentials/bearer"
+            code=0
+            timeout 60 atrium media-agent --config "$agent/agent.toml" >/dev/null 2>"$agent/err" || code=$?
+            if [ "$code" != 78 ] || ! grep -q 'control.token_file must contain at least 32 bytes' "$agent/err"; then
+              echo "short media agent bearer: exit $code, want 78" >&2
+              cat "$agent/err" >&2
+              exit 1
+            fi
+            rm "$CREDENTIALS_DIRECTORY/mail-account-icloud"
+            if atrium settings list >/dev/null 2>&1; then
+              echo "a missing mail account password was accepted" >&2
+              exit 1
+            fi
+            printf 'app-password\n' >"$CREDENTIALS_DIRECTORY/mail-account-icloud"
+            rm "$CREDENTIALS_DIRECTORY/connection-service-qbittorrent-api_key"
+            if atrium settings list >/dev/null 2>&1; then
+              echo "a missing connection credential file was accepted" >&2
+              exit 1
+            fi
+            printf 'qbt-key\n' >"$CREDENTIALS_DIRECTORY/connection-service-qbittorrent-api_key"
+            rm "$CREDENTIALS_DIRECTORY/action_links.action_link_key"
+            if atrium settings list >/dev/null 2>&1; then
+              echo "a missing credential file was accepted" >&2
+              exit 1
+            fi
+            touch $out
+          '';
       };
   };
 }
