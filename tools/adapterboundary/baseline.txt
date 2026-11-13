@@ -58,15 +58,7 @@ internal/assistant/tools/grafana/grafanamodule/register.go	github.com/jeiang/atr
 internal/assistant/tools/grafana/grafanamodule/register.go	github.com/jeiang/atrium/internal/serverops
 internal/assistant/tools/grafana/importv2.go	github.com/jeiang/atrium/internal/connections
 internal/assistant/tools/kb/kb.go	github.com/jeiang/atrium/internal/kb
-internal/assistant/tools/mail/folders.go	database/sql
-internal/assistant/tools/mail/folders.go	github.com/jeiang/atrium/internal/config
-internal/assistant/tools/mail/folders.go	github.com/jeiang/atrium/internal/db
-internal/assistant/tools/mail/folders.go	github.com/jeiang/atrium/internal/endpoint
-internal/assistant/tools/mail/folders.go	github.com/jeiang/atrium/internal/ledger
-internal/assistant/tools/mail/folders.go	github.com/jeiang/atrium/internal/mail
-internal/assistant/tools/mail/folders.go	github.com/jeiang/atrium/internal/mail/executors
 internal/assistant/tools/mail/folders.go	github.com/jeiang/atrium/internal/mail/mailops
-internal/assistant/tools/mail/folders.go	github.com/jeiang/atrium/internal/safety
 internal/assistant/tools/mail/mail.go	github.com/jeiang/atrium/internal/assistant
 internal/assistant/tools/mail/mail.go	github.com/jeiang/atrium/internal/embed
 internal/assistant/tools/mail/mail.go	github.com/jeiang/atrium/internal/httpx
@@ -166,7 +158,6 @@ internal/mail/pages/views.go	github.com/jeiang/atrium/internal/mail/message
 internal/mail/pages/views.go	github.com/jeiang/atrium/internal/mail/triage
 internal/mail/reviewpages/api.go	github.com/jeiang/atrium/internal/ledger
 internal/mail/reviewpages/api.go	github.com/jeiang/atrium/internal/mail/drafts
-internal/mail/reviewpages/drafts.go	github.com/jeiang/atrium/internal/ledger
 internal/mail/reviewpages/drafts.go	github.com/jeiang/atrium/internal/mail/drafts
 internal/mail/reviewpages/loops.go	github.com/jeiang/atrium/internal/mail/openloops
 internal/mail/reviewpages/module.go	github.com/jeiang/atrium/internal/actionlink

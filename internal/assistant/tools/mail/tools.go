@@ -25,7 +25,7 @@ func Definitions(svc func(*tool.Context) *mailapp.Service) []module.ToolDefiniti
 
 func Tools(svc func(*tool.Context) *mailapp.Service) []tool.Tool {
 	var out []tool.Tool
-	for _, group := range [][]tool.Tool{mailTools(svc), folderTools(), draftTools(svc), openLoopTools(), watchTools(), trackingTools()} {
+	for _, group := range [][]tool.Tool{mailTools(svc), folderTools(svc), draftTools(svc), openLoopTools(), watchTools(), trackingTools()} {
 		out = append(out, group...)
 	}
 	return out

@@ -562,7 +562,8 @@ func (s *service) apiDraftSend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	result, err := s.drafts.Send(ctx, row.ID, *in.Revision)
+	done, err := s.mail.DraftSend(ctx, mailapp.DraftSendInput{ID: row.ID, Revision: *in.Revision})
+	result := done.Data.Sent
 	var unknown drafts.OutcomeUnknown
 	switch {
 	case errors.As(err, &unknown):
@@ -614,13 +615,7 @@ func (s *service) apiDraftResolve(w http.ResponseWriter, r *http.Request) {
 	if !web.DecodeJSON(w, r, &in) {
 		return
 	}
-	var verdict drafts.Status
-	switch in.Outcome {
-	case "sent":
-		verdict = drafts.Sent
-	case "draft":
-		verdict = drafts.Draft
-	default:
+	if in.Outcome != "sent" && in.Outcome != "draft" {
 		web.APIError(w, http.StatusUnprocessableEntity, "invalid", "outcome must be sent or draft.",
 			web.FieldError{Type: "enum", Loc: []string{"body", "outcome"}, Msg: "Input should be 'sent' or 'draft'", Input: in.Outcome})
 		return
@@ -630,7 +625,7 @@ func (s *service) apiDraftResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := detached(r)
-	err := s.drafts.ResolveUnknown(ctx, row.ID, verdict, ledger.Resolver{Actor: "operator", Source: "ui"})
+	_, err := s.mail.DraftResolve(ctx, mailapp.DraftResolveInput{ID: row.ID, Outcome: in.Outcome})
 	var refused drafts.Error
 	var disabled *module.OwnerDisabled
 	if errors.As(err, &refused) || errors.As(err, &disabled) {
