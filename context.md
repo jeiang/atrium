@@ -966,6 +966,7 @@ behavior-parity target.
   threads through `/chat/palette?ref=<thread_id>`, and each transcript
   message carries `id="m<seq>"` and a Reference action that copies
   `@thread/12/m<seq>`.
+- The NixOS public auth default is OIDC; first-hour bootstrap uses the keyed database from its first start and the same-process emergency listener, with host-declared OIDC configuration activated automatically when valid.
 - The public web service accepts an authenticating reverse proxy
   (`Remote-Groups`), native OIDC sessions, or both, and checks Host. Every
   admitted proxy request or OIDC session is the one operator with full

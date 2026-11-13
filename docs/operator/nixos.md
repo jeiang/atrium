@@ -45,10 +45,64 @@ services.atrium = {
     credentialFiles.token = config.sops.secrets.notion-token.path;
   };
   secretFiles."action_links.action_link_key" = config.sops.secrets.action-link-key.path;
-  database.keyFile = config.sops.secrets.db-key.path;
+  database.keyFile = config.sops.secrets.atrium-db-key.path;
   web.allowedHost = "atrium.example.org";
 };
 ```
+
+## First hour: keyed database and local bootstrap
+
+Before the first start, generate a 32-byte hex database key outside the Nix store:
+
+```sh
+(umask 077; openssl rand -hex 32 > atrium-db-key)
+```
+
+Import that file into the host's secret manager as `atrium-db-key`, keep an offline copy, and securely remove the temporary file after importing it. Set `database.keyFile = config.sops.secrets.atrium-db-key.path;` as in the example **before** starting `atrium.service`. Do not put the key bytes in Nix, an environment literal or a command argument. The unit and `atrium-run` both receive `LoadCredential=db-key:<host path>` and `ATRIUM_DB_KEY_FILE=${CREDENTIALS_DIRECTORY}/db-key`; rendered configuration contains paths, not key bytes. Never replace an existing database's key with a newly generated one: use the existing key, or the offline encryption/rekey workflow for an existing database.
+
+The public listener defaults to OIDC. Until its connection configuration validates, `/login` answers `200` in the closed, unconfigured state, `/chat` redirects to sign-in, and forged `Remote-User` or `Remote-Groups` headers grant no access. This does not disable health/static endpoints or change the bearer-only API contract.
+
+1. Start the configured `atrium.service`. With the default `web.emergency.enable = true`, the same process opens `127.0.0.1:8481` for local operator access to the same keyed database. Do not expose or reverse-proxy that listener.
+2. From the operator's computer, tunnel to the host (substitute its SSH name):
+
+   ```sh
+   ssh -N -L 8481:127.0.0.1:8481 operator@host
+   ```
+
+   Open `http://127.0.0.1:8481/settings/auth` for Sign-in and `http://127.0.0.1:8481/settings/connections` for connection health. Local access still enforces loopback peers, Host validation, CSRF and same-origin checks.
+3. Register an OIDC client with the provider, using the public HTTPS URL plus `/auth/callback` as its redirect URI. Declare `host.core.public_url` and the `service/oidc` host connection below with the actual issuer, client ID, admission selectors and secret-file path. Deliver the client secret through the host secret manager, not through a Nix string containing its value. Apply that host configuration through the host's normal deployment workflow; a restart loads the declaration. The local Sign-in page shows the effective configuration, not an OIDC setup wizard.
+
+   ```nix
+   services.atrium = {
+     host.core.public_url = "https://atrium.example.org";
+     connections."service/oidc" = {
+       kind = "service/oidc";
+       config = {
+         preset = "generic";
+         issuer = "https://idp.example.org";
+         client_id = "atrium";
+         groups_claim = "groups";
+         access_groups = "atrium_access";
+       };
+       capabilities = ["discovery" "client_auth"];
+       credentialFiles.client_secret = config.sops.secrets.atrium-oidc-client-secret.path;
+     };
+   };
+   ```
+
+   For a provider without groups, use its supported preset and explicit `access_emails` or `access_domains` instead of the group selector. Grant only the intended operator.
+4. Run `sudo atrium-run connections test service/oidc`. Discovery tests issuer endpoints and signing keys; client authentication remains untested until an interactive login succeeds. OIDC activates automatically when its configuration validates: there is no separate activate command or button. Visit the public HTTPS URL and complete a real sign-in with the admitted account. Keep the emergency tunnel available until that succeeds.
+5. To check the keyed database offline, run:
+
+   ```sh
+   sudo systemctl stop atrium.service
+   sudo atrium-run db check
+   sudo systemctl start atrium.service
+   ```
+
+   `db check` exits zero with the right credential. Without the key it refuses the encrypted database; it does not turn it into a plaintext database or create a missing database. Retain the key with the backups.
+
+If the emergency listener was explicitly disabled, stop `atrium.service` and run the same installed binary and credentials with `sudo atrium-run serve --host 127.0.0.1 --port 8481 --auth local`. Use the same tunnel and settings URLs, then stop that foreground serve before restarting `atrium.service`. A second concurrent serve on the same database is refused by the serve lock; do not start a second process beside the service for bootstrap. The emergency listener avoids that stop/start because it is part of the existing serve process.
 
 ## Removed and renamed options
 
