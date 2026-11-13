@@ -60,3 +60,15 @@ func IDByKindRole(ctx context.Context, q db.Querier, kind Kind, role string) (in
 	}
 	return id, err
 }
+
+func LatestUserContent(ctx context.Context, q db.Querier, threadID int64, contains string) (string, error) {
+	var raw string
+	err := q.QueryRowContext(ctx,
+		"SELECT content_json FROM thread_messages WHERE thread_id = ? AND role = 'user' AND superseded = 0 "+
+			"AND instr(content_json, ?) > 0 ORDER BY seq DESC LIMIT 1",
+		threadID, contains).Scan(&raw)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	return raw, err
+}

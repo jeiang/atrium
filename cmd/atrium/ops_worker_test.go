@@ -16,7 +16,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/assistant/prompts"
-	grafanatools "github.com/jeiang/atrium/internal/assistant/tools/grafana"
+	"github.com/jeiang/atrium/internal/assistant/tools/grafana/grafanamodule"
 	opstools "github.com/jeiang/atrium/internal/assistant/tools/ops"
 	"github.com/jeiang/atrium/internal/attention"
 	"github.com/jeiang/atrium/internal/cli"
@@ -89,11 +89,13 @@ func workerFinding(t *testing.T, d *db.DB, fact string) (id int64, resolved bool
 
 func workerToolNames() []string {
 	var names []string
-	for _, set := range [][]tool.Tool{opstools.Tools(), grafanatools.Tools()} {
-		for _, def := range set {
-			if def.Contexts.Has(tool.Worker) {
-				names = append(names, def.Name)
-			}
+	set := opstools.Tools(nil)
+	for _, def := range grafanamodule.ToolDefinitions() {
+		set = append(set, def.Tool)
+	}
+	for _, def := range set {
+		if def.Contexts.Has(tool.Worker) {
+			names = append(names, def.Name)
 		}
 	}
 	sort.Strings(names)

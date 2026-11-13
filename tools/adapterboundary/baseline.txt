@@ -59,7 +59,6 @@ internal/assistant/tools/grafana/grafanamodule/register.go	github.com/jeiang/atr
 internal/assistant/tools/grafana/grafanamodule/register.go	github.com/jeiang/atrium/internal/scheduler
 internal/assistant/tools/grafana/grafanamodule/register.go	github.com/jeiang/atrium/internal/serverops
 internal/assistant/tools/grafana/importv2.go	github.com/jeiang/atrium/internal/connections
-internal/assistant/tools/grafana/selfdiag.go	github.com/jeiang/atrium/internal/config
 internal/assistant/tools/kb/kb.go	github.com/jeiang/atrium/internal/kb
 internal/assistant/tools/mail/drafts.go	database/sql
 internal/assistant/tools/mail/drafts.go	github.com/jeiang/atrium/internal/ledger
@@ -114,7 +113,6 @@ internal/assistant/tools/media/undo.go	database/sql
 internal/assistant/tools/media/undo.go	github.com/jeiang/atrium/internal/config
 internal/assistant/tools/media/undo.go	github.com/jeiang/atrium/internal/ledger
 internal/assistant/tools/media/undo.go	github.com/jeiang/atrium/internal/media
-internal/assistant/tools/ops/ops.go	database/sql
 internal/assistant/tools/ops/ops.go	github.com/jeiang/atrium/internal/assistant
 internal/assistant/tools/ops/ops.go	github.com/jeiang/atrium/internal/config
 internal/assistant/tools/ops/ops.go	github.com/jeiang/atrium/internal/db
@@ -260,8 +258,6 @@ internal/proposals/proposalscmd/proposalscmd.go	github.com/jeiang/atrium/interna
 internal/proposals/proposalscmd/proposalscmd.go	github.com/jeiang/atrium/internal/settings
 internal/serverops/sampler.go	github.com/jeiang/atrium/internal/assistant/jobworker
 internal/serverops/sampler.go	github.com/jeiang/atrium/internal/assistant/tools/grafana
-internal/serverops/sampler.go	github.com/jeiang/atrium/internal/config
-internal/serverops/sampler.go	github.com/jeiang/atrium/internal/db
 internal/serverops/sampler.go	github.com/jeiang/atrium/internal/scheduler
 internal/settingspage/sections.go	github.com/jeiang/atrium/internal/db
 internal/settingspage/sections.go	github.com/jeiang/atrium/internal/settings

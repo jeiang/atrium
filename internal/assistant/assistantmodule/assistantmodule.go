@@ -78,10 +78,11 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	researchOps, researchBindings := researchOperations()
 	agentOps, agentBindings := agentOperations()
 	attentionOps, attentionBindings := attentionOperations()
+	opsOps, opsBindings := opsOperations()
 	return module.Declaration{
 		Name:       module.Assistant,
-		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps),
-		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings),
+		Operations: slices.Concat(knowledgeOps, taskOps, projectOps, threadOps, fileOps, scheduleOps, memoryOps, agentOps, researchOps, attentionOps, opsOps),
+		Bindings:   slices.Concat(knowledgeBindings, taskBindings, projectBindings, threadBindings, fileBindings, scheduleBindings, memoryBindings, agentBindings, researchBindings, attentionBindings, opsBindings),
 		Settings: slices.Concat(assistant.Settings(), loop.Settings(), digest.Settings(), memory.Settings(),
 			prompts.Settings(), registry.Settings(), asstapp.SearchWebSettings(), inference.Settings(),
 			export.Settings(), weather.SettingsDefs()),
@@ -151,7 +152,7 @@ func ToolDefinitions(kinds []proposals.Definition) []module.ToolDefinition {
 		askoperator.Tools(memoryToolService), attentiontool.Tools(attentionToolService), filetools.Tools(fileToolService), memorytools.Tools(memoryToolService),
 		webfetchtools.Tools(memoryToolService), recalltools.Tools(memoryToolService), plantools.Tools(memoryToolService),
 		scheduletools.Tools(scheduleToolService), taskstools.Tools(taskToolService),
-		kbtools.Tools(knowledgeToolService), weathertools.Tools(memoryToolService), opstools.Tools(),
+		kbtools.Tools(knowledgeToolService), weathertools.Tools(memoryToolService), opstools.Tools(opsToolService),
 	} {
 		for _, t := range tools {
 			defs = append(defs, module.ToolDefinition{Tool: t})
