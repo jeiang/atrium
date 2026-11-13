@@ -36,7 +36,6 @@ type Dependencies struct {
 	Notice    func(context.Context, Skipped, float64) error
 	RunCron   func(context.Context, Run) (Result, error)
 	Enabled   func(string) bool
-	Active    func() bool
 	Beat      func()
 	Recovered func(error)
 	Work      context.Context
@@ -55,6 +54,7 @@ type Scheduler struct {
 	claims  atomic.Int64
 	busy    atomic.Int64
 	started atomic.Int64
+	priming atomic.Bool
 }
 
 func New(d *db.DB, jobs []Definition, deps Dependencies) *Scheduler {
@@ -91,10 +91,17 @@ func (s *Scheduler) owner() string {
 func (s *Scheduler) Tick(ctx context.Context) error {
 	stamp := s.now()
 	tz := s.deps.Zone(ctx)
+	priming := s.priming.Load()
 	if err := s.db.WithTx(ctx, func(tx *sql.Tx) error {
-		return Ensure(ctx, tx, s.jobs, tz, stamp)
+		if err := Ensure(ctx, tx, s.jobs, tz, stamp); err != nil || !priming {
+			return err
+		}
+		return prime(ctx, tx, s.jobs, stamp)
 	}); err != nil {
 		return err
+	}
+	if priming {
+		s.priming.Store(false)
 	}
 	gate, err := s.deps.Gate(ctx, stamp)
 	if err != nil {
@@ -194,21 +201,31 @@ func (s *Scheduler) start(ctx context.Context, claim Claim, locks *db.LockSet, f
 	s.dirty.Store(true)
 	s.started.Add(1)
 	s.active.Add(1)
-	job, release := s.detach(ctx)
+	def, _ := Declared(s.jobs, claim.Job)
+	job, release := s.detach(ctx, def.Shutdown)
 	s.wg.Go(func() {
 		defer s.finished(job)
 		defer release()
 		defer func() { _ = locks.Close() }()
-		s.execute(job, claim, fn)
+		s.execute(db.WithHeld(job, locks), claim, fn)
 	})
 }
 
-func (s *Scheduler) detach(ctx context.Context) (context.Context, func()) {
+func (s *Scheduler) detach(ctx context.Context, policy ShutdownPolicy) (context.Context, func()) {
 	if s.deps.Work == nil {
 		return ctx, func() {}
 	}
 	job, cancel := context.WithCancelCause(context.WithoutCancel(ctx))
 	stop := context.AfterFunc(s.deps.Work, func() { cancel(context.Cause(s.deps.Work)) })
+	if policy == ShutdownCancel && s.stop != nil {
+		go func() {
+			select {
+			case <-s.stop:
+				cancel(ErrInterrupted)
+			case <-job.Done():
+			}
+		}()
+	}
 	return job, func() {
 		stop()
 		cancel(nil)
@@ -438,14 +455,10 @@ func (s *Scheduler) Run(ctx context.Context, stop <-chan struct{}) error {
 	log.Info(fmt.Sprintf("scheduler %s started", s.deps.Owner))
 	defer s.wg.Wait()
 	s.stop = stop
+	s.priming.Store(true)
 	recovered := false
 	for ctx.Err() == nil && !s.stopping() {
 		s.beat()
-		if s.deps.Active != nil && !s.deps.Active() {
-			s.recovered(nil)
-			s.wait(ctx)
-			continue
-		}
 		ok, err := s.safeCycle(ctx)
 		switch {
 		case ctx.Err() != nil || s.stopping():

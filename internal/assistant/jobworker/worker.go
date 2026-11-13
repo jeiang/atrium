@@ -35,7 +35,6 @@ type Own func(ctx context.Context, owner string) (context.Context, func(), error
 
 type Options struct {
 	Enabled   func(string) bool
-	Active    func() bool
 	Beat      func()
 	Recovered func(error)
 	Work      context.Context
@@ -79,7 +78,11 @@ func New(svc *service.Service, jobs []scheduler.Definition, o Options) *schedule
 			if err != nil {
 				return 0, err
 			}
-			return svc.ResumeInterrupted(ctx, true, claimed)
+			resumed, err := svc.ResumeInterrupted(ctx, true, claimed)
+			if errors.As(err, new(*module.OwnerDisabled)) {
+				return 0, nil
+			}
+			return resumed, err
 		},
 		Idle: func(ctx context.Context) bool { return idle(ctx, svc) },
 		Notice: func(ctx context.Context, skip scheduler.Skipped, at float64) error {
@@ -87,7 +90,6 @@ func New(svc *service.Service, jobs []scheduler.Definition, o Options) *schedule
 		},
 		RunCron:   runCron,
 		Enabled:   o.Enabled,
-		Active:    o.Active,
 		Beat:      o.Beat,
 		Recovered: o.Recovered,
 		Work:      o.Work,

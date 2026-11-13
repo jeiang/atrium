@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/runtime"
 )
 
 type InvalidJob struct {
@@ -44,8 +45,26 @@ func Compile(defs []Definition) ([]Definition, error) {
 			return nil, bad("has an unknown kind " + def.Kind)
 		case def.Kind == JobNightly && nightly:
 			return nil, bad("is a second nightly job")
-		case def.ScheduleSetting == "" || settingKeys[def.ScheduleSetting] || def.ScheduleSetting == KeyMinInterval:
+		case (def.Every > 0) == (def.Schedule != ""):
+			return nil, bad("needs exactly one of a fixed interval or a schedule")
+		case def.Every < 0 || def.InitialDelay < 0:
+			return nil, bad("has a negative interval or initial delay")
+		case def.InitialDelay > 0 && def.Every == 0:
+			return nil, bad("declares an initial delay without a fixed interval")
+		case def.ScheduleSetting != "" && def.ScheduleHost != "":
+			return nil, bad("takes its schedule from both a setting and the host")
+		case def.Every > 0 && (def.ScheduleSetting != "" || def.ScheduleHost != ""):
+			return nil, bad("has a fixed interval and a configurable schedule")
+		case def.Every == 0 && def.ScheduleHost == "" && def.ScheduleSetting == "":
 			return nil, bad("needs its own schedule setting")
+		case def.ScheduleSetting != "" && (settingKeys[def.ScheduleSetting] || def.ScheduleSetting == KeyMinInterval):
+			return nil, bad("needs its own schedule setting")
+		case def.Overlap:
+			return nil, bad("may not overlap itself")
+		case def.Shutdown != "" && def.Shutdown != ShutdownDrain && def.Shutdown != ShutdownCancel:
+			return nil, bad("has an unknown shutdown policy")
+		case def.Backoff != (runtime.Backoff{}) && (def.Backoff.Initial <= 0 || def.Backoff.Maximum < def.Backoff.Initial):
+			return nil, bad("needs a positive backoff no larger than its maximum")
 		case def.Timeout <= 0:
 			return nil, bad("needs a positive timeout")
 		case def.Spend > ConditionalSpends:
@@ -57,14 +76,15 @@ func Compile(defs []Definition) ([]Definition, error) {
 		case slices.ContainsFunc(def.Resources, invalidResource) || slices.Contains(def.Needs, ""):
 			return nil, bad("names an invalid resource or an empty module")
 		}
-		spec, err := Parse(def.Schedule, "UTC")
-		if err != nil {
-			return nil, bad("has an invalid schedule: " + err.Error())
+		if def.Schedule != "" {
+			if err := RecurringSchedule(def.Schedule); err != nil {
+				return nil, bad("has an invalid schedule: " + err.Error())
+			}
 		}
-		if !spec.Recurring() {
-			return nil, bad("must have a recurring schedule")
+		keys[def.Key], names[def.Name] = true, true
+		if def.ScheduleSetting != "" {
+			settingKeys[def.ScheduleSetting] = true
 		}
-		keys[def.Key], names[def.Name], settingKeys[def.ScheduleSetting] = true, true, true
 		nightly = nightly || def.Kind == JobNightly
 	}
 	return Clone(defs), nil

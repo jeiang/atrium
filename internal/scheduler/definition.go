@@ -43,7 +43,9 @@ type Definition struct {
 	Prompt          string
 	PromptRun       bool
 	Schedule        string
+	Every           time.Duration
 	ScheduleSetting string
+	ScheduleHost    string
 	InitialDelay    time.Duration
 	Persistent      bool
 	Overlap         bool

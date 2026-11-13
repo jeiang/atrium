@@ -201,10 +201,19 @@ func Compile(decls []Declaration) (*Catalog, error) {
 
 func compileJobs(decls []Declaration, byName map[string]Declaration) ([]scheduler.Definition, error) {
 	var jobs []scheduler.Definition
+	hosts := map[string]bool{}
+	for _, d := range decls {
+		for _, def := range d.Host {
+			hosts[def.Key] = true
+		}
+	}
 	for _, d := range decls {
 		for _, job := range d.Jobs {
 			if job.Module != d.Name {
 				return nil, &DeclarationError{Module: d.Name, Field: "jobs", Err: &scheduler.InvalidJob{Key: job.Key, Reason: "is owned by " + job.Module}}
+			}
+			if job.ScheduleHost != "" && !hosts[job.ScheduleHost] {
+				return nil, &DeclarationError{Module: d.Name, Field: "jobs", Err: &scheduler.InvalidJob{Key: job.Key, Reason: "takes its schedule from an unregistered host key " + job.ScheduleHost}}
 			}
 			for _, dep := range job.Needs {
 				if _, ok := byName[dep]; !ok {

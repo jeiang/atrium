@@ -505,10 +505,10 @@ func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 	if _, err := d.Write.Exec("INSERT INTO threads (kind, title, effort, created_at, updated_at) VALUES ('chat', 'Lifecycle thread', 'low', ?, ?)", now, now); err != nil {
 		t.Fatal(err)
 	}
-	jobs := func() int {
+	assistantRuns := func() int {
 		t.Helper()
 		var n int
-		if err := d.Read.QueryRow("SELECT COUNT(*) FROM jobs").Scan(&n); err != nil {
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM job_runs r JOIN jobs j ON j.id = r.job_id WHERE j.module = ? AND r.status != 'skipped_module'", module.Assistant).Scan(&n); err != nil {
 			t.Fatal(err)
 		}
 		return n
@@ -535,11 +535,10 @@ func TestDisabledAssistantDoesNoLifecycleWork(t *testing.T) {
 	if n := api.ModelLists(); n != 0 {
 		t.Fatalf("%d model catalog requests while the assistant is off", n)
 	}
-	if n := jobs(); n != 0 {
-		t.Fatalf("%d scheduler jobs seeded while the assistant is off", n)
+	if n := assistantRuns(); n != 0 {
+		t.Fatalf("%d assistant job runs while the assistant is off", n)
 	}
 	toggle("true")
-	waitFor(t, func() bool { return jobs() > 0 })
 	waitFor(t, func() bool { return api.ModelLists() > 0 })
 	if n := api.ModelLists(); n != 1 {
 		t.Fatalf("%d model catalog requests after enabling the assistant, want 1", n)

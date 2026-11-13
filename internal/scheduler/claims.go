@@ -9,6 +9,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/runtime"
 )
 
 type Claim struct {
@@ -21,6 +22,7 @@ type Claim struct {
 	Previous  string
 	resources []string
 	until     float64
+	manual    bool
 }
 
 var errLeaseHeld = errors.New("scheduler: a resource lease is still held")
@@ -78,7 +80,7 @@ func claimJob(ctx context.Context, d *db.DB, jobID int64, resources []string, no
 			return err
 		}
 		dueAt := *job.NextDue
-		spec, err := Parse(job.Schedule, job.TZ)
+		spec, err := parseJob(job.Schedule, job.TZ)
 		if err != nil {
 			var bad Error
 			if !errors.As(err, &bad) {
@@ -263,8 +265,32 @@ func (s *Scheduler) Finish(ctx context.Context, c Claim, o Result) error {
 		if !ok {
 			return ErrClaimLost
 		}
-		return clearClaim(ctx, tx, c, "lease_owner = NULL, lease_until = NULL")
+		if err := clearClaim(ctx, tx, c, "lease_owner = NULL, lease_until = NULL"); err != nil {
+			return err
+		}
+		def, declared := Declared(s.jobs, c.Job)
+		if o.Status != StatusError || c.manual || !declared || def.Backoff == (runtime.Backoff{}) {
+			return nil
+		}
+		return backOff(ctx, tx, c.Job.ID, def.Backoff, now)
 	})
+}
+
+func backOff(ctx context.Context, tx *sql.Tx, jobID int64, b runtime.Backoff, now float64) error {
+	var failures int
+	if err := tx.QueryRowContext(ctx, "SELECT COUNT(*) FROM job_runs WHERE job_id = ? AND status = ? AND id > "+
+		"COALESCE((SELECT MAX(id) FROM job_runs WHERE job_id = ? AND status NOT IN (?, ?)), 0)",
+		jobID, StatusError, jobID, StatusError, StatusRunning).Scan(&failures); err != nil {
+		return err
+	}
+	delay := b.Initial
+	for i := 1; i < failures && delay < b.Maximum; i++ {
+		delay *= 2
+	}
+	retry := now + min(delay, b.Maximum).Seconds()
+	_, err := tx.ExecContext(ctx, "UPDATE jobs SET next_due = ? WHERE id = ? AND state = ? AND (next_due IS NULL OR next_due > ?)",
+		retry, jobID, StateActive, retry)
+	return err
 }
 
 func (s *Scheduler) release(ctx context.Context, c Claim) error {

@@ -1,15 +1,18 @@
 package db
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"path/filepath"
 	"regexp"
 	"slices"
+	"time"
 )
 
 type LockBusy struct{ Resource string }
@@ -41,7 +44,60 @@ func CanonicalPath(path string) (string, error) {
 	return filepath.Join(dir, filepath.Base(abs)), nil
 }
 
-type LockSet struct{ files []*os.File }
+type LockSet struct {
+	files []*os.File
+	names []string
+}
+
+type heldKey struct{}
+
+func WithHeld(ctx context.Context, set *LockSet) context.Context {
+	if set == nil || len(set.names) == 0 {
+		return ctx
+	}
+	held := map[string]bool{}
+	if outer, ok := ctx.Value(heldKey{}).(map[string]bool); ok {
+		maps.Copy(held, outer)
+	}
+	for _, name := range set.names {
+		held[name] = true
+	}
+	return context.WithValue(ctx, heldKey{}, held)
+}
+
+func Held(ctx context.Context, resource string) bool {
+	held, _ := ctx.Value(heldKey{}).(map[string]bool)
+	return held[resource]
+}
+
+func ResourceLocks(ctx context.Context, path string, resources []string, wait time.Duration) (*LockSet, error) {
+	wanted := slices.DeleteFunc(slices.Clone(resources), func(r string) bool { return Held(ctx, r) })
+	ticker := time.NewTicker(lockPollInterval)
+	defer ticker.Stop()
+	var timeout <-chan time.Time
+	if wait > 0 {
+		timer := time.NewTimer(wait)
+		defer timer.Stop()
+		timeout = timer.C
+	}
+	for {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		set, err := TryResourceLocks(path, wanted)
+		var busy *LockBusy
+		if !errors.As(err, &busy) {
+			return set, err
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-timeout:
+			return nil, err
+		case <-ticker.C:
+		}
+	}
+}
 
 func TryResourceLocks(path string, resources []string) (*LockSet, error) {
 	canonical, err := CanonicalPath(path)
@@ -79,7 +135,7 @@ func TryResourceLocks(path string, resources []string) (*LockSet, error) {
 			}
 			return nil, &LockBusy{Resource: key}
 		}
-		set.files = append(set.files, f)
+		set.files, set.names = append(set.files, f), append(set.names, key)
 	}
 	return set, nil
 }
