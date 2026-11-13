@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
+
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
@@ -32,7 +34,7 @@ func (m Module) syncJob(env config.Env) scheduler.Definition {
 			if err != nil {
 				return scheduler.Result{}, err
 			}
-			if err := run.SyncPass(ctx, env, d, cfg, accounts, m.Clients(cfg), m.classifiers); err != nil {
+			if _, err := mailapp.New(d, cfg, env, mail.WallClock).WithOpen(m.Clients(cfg)).WithClassifiers(m.classifiers).Sync(ctx, mailapp.SyncInput{Accounts: accounts}); err != nil {
 				return scheduler.Result{}, err
 			}
 			return scheduler.Result{Status: scheduler.StatusOK}, nil
@@ -60,7 +62,7 @@ func (m Module) scanJob(env config.Env) scheduler.Definition {
 			if err != nil {
 				return scheduler.Result{}, err
 			}
-			if _, err := scans.ScanPass(ctx, d, now(), rebalance.SuggestName(c)); err != nil {
+			if _, err := scans.ScanPass(ctx, d, mailapp.New(d, cfg, env, now).WithNamer(rebalance.SuggestName(c)).Scans(now())); err != nil {
 				return scheduler.Result{}, err
 			}
 			return scheduler.Result{Status: scheduler.StatusOK}, nil
@@ -79,6 +81,10 @@ func (m Module) watchServices(env config.Env) func(context.Context) ([]module.Se
 			return nil, err
 		}
 		w := &run.Watcher{Env: env, Cfg: cfg, DB: d, Open: m.Clients(cfg), Classifiers: m.classifiers}
+		w.Sync = func(waitCtx, workCtx context.Context, pass *run.Pass, accounts []string) error {
+			_, err := mailapp.New(d, cfg, env, mail.WallClock).WithWatchPass(pass, workCtx).Sync(waitCtx, mailapp.SyncInput{Accounts: accounts})
+			return err
+		}
 		out := make([]module.SetService, 0, len(accounts))
 		for _, account := range accounts {
 			out = append(out, module.SetService{Service: w.AccountService(account), Revision: run.AccountRevision(ctx, account)})

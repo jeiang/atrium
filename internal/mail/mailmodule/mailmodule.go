@@ -24,9 +24,9 @@ import (
 	"github.com/jeiang/atrium/internal/mail/openloops"
 	"github.com/jeiang/atrium/internal/mail/pages"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
-	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/mail/tracking"
 	"github.com/jeiang/atrium/internal/module"
+	"github.com/jeiang/atrium/internal/proposals"
 	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/settings"
 	"github.com/jeiang/atrium/internal/web"
@@ -77,10 +77,14 @@ func ToolDefinitions() []module.ToolDefinition {
 	return mailtools.Definitions(mailToolService)
 }
 
+func ProposeKinds() []proposals.Definition {
+	return mailtools.Proposals(mailToolService)
+}
+
 func (m Module) Declare(mc module.Context) module.Declaration {
 	mailCmds := mailcmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Classifiers: m.classifiers, Application: mailCLIService(mc.Env)}
 	cmds := []*cli.Command{
-		run.SyncCommand(mc.Env, m.Clients, m.classifiers),
+		mailCmds.SyncCommand(),
 		mailCmds.RulesCommand(),
 		mailCmds.ShadowReportCommand(),
 		mailCmds.ReindexCommand(),
@@ -94,9 +98,24 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	accountOps, accountBindings := mailAccountOperations()
 	operations = append(operations, accountOps...)
 	bindings = append(bindings, accountBindings...)
+	ruleOps, ruleBindings := mailRuleOperations()
+	operations = append(operations, ruleOps...)
+	bindings = append(bindings, ruleBindings...)
 	draftOps, draftBindings := mailDraftOperations()
 	operations = append(operations, draftOps...)
 	bindings = append(bindings, draftBindings...)
+	mailboxOps, mailboxBindings := mailMailboxOperations()
+	operations = append(operations, mailboxOps...)
+	bindings = append(bindings, mailboxBindings...)
+	loopOps, loopBindings := mailLoopOperations()
+	operations = append(operations, loopOps...)
+	bindings = append(bindings, loopBindings...)
+	scanOps, scanBindings := mailScanOperations()
+	operations = append(operations, scanOps...)
+	bindings = append(bindings, scanBindings...)
+	passOps, passBindings := mailPassOperations()
+	operations = append(operations, passOps...)
+	bindings = append(bindings, passBindings...)
 	return module.Declaration{
 		Name:        module.Mail,
 		Operations:  operations,
@@ -130,7 +149,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 			"replay":      {Always: true},
 		},
 		Tools:        ToolDefinitions(),
-		ProposeKinds: mailtools.Proposals(),
+		ProposeKinds: ProposeKinds(),
 		Effects: func(d module.EffectDeps) module.Effects {
 			e := &executors.Executors{DB: d.DB, Ledger: d.Ledger, Open: d.Open, Now: d.Now}
 			r := &openloops.Reminders{DB: d.DB, Ledger: d.Ledger, Now: d.Now}

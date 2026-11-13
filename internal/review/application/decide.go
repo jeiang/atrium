@@ -75,11 +75,11 @@ func (s *Service) Approve(ctx context.Context, in ApproveInput) (application.Cha
 		}
 		in.Selection = chosen
 	}
-	return s.approve(ctx, in, who)
+	return s.approve(ctx, in, who, nil)
 }
 
-func (s *Service) approve(ctx context.Context, in ApproveInput, who proposals.Resolver) (application.Change[Decision], error) {
-	done, err := s.pipeline.ApproveAndApply(ctx, in.ProposalID, in.Selection, who)
+func (s *Service) approve(ctx context.Context, in ApproveInput, who proposals.Resolver, check func(context.Context, db.Querier) error) (application.Change[Decision], error) {
+	done, err := s.pipeline.ApproveAndApply(ctx, in.ProposalID, in.Selection, who, check)
 	target := proposalTarget(in.ProposalID)
 	var badSelection proposals.SelectionError
 	if errors.As(err, &badSelection) {
@@ -172,7 +172,9 @@ func (s *Service) Phone(ctx context.Context, in PhoneInput) (application.Change[
 		}
 		delegated = true
 		if claims.Action == actionlink.Approve {
-			out, err = s.approve(ctx, ApproveInput{ProposalID: prop.ID}, who)
+			out, err = s.approve(ctx, ApproveInput{ProposalID: prop.ID}, who, func(ctx context.Context, q db.Querier) error {
+				return actionlink.CheckRedemption(ctx, q, claims.Nonce, in.Now)
+			})
 			return err
 		}
 		out, err = s.dismiss(ctx, DismissInput{ProposalID: prop.ID}, who)
@@ -187,6 +189,11 @@ func (s *Service) Phone(ctx context.Context, in PhoneInput) (application.Change[
 			outcome = state.Refused
 		}
 		out.AuditID = s.audit(ctx, name, proposalTarget(claims.ProposalID), outcome, nil)
+	}
+	if delegated && out.Data.Proposal == nil && errors.As(err, new(*db.LockBusy)) {
+		if rerr := actionlink.Release(context.WithoutCancel(ctx), s.db.Write, claims.Nonce, in.Now); rerr != nil {
+			log.Error("restoring a phone link after a busy lock failed", "proposal_id", claims.ProposalID, logx.Err, rerr.Error())
+		}
 	}
 	return out, err
 }
@@ -219,8 +226,11 @@ func (s *Service) proposalEffects(ctx context.Context, id int64) []int64 {
 }
 
 func pipelineRefusal(err error) *application.Error {
+	if errors.Is(err, actionlink.ErrUsed) {
+		return &application.Error{Code: application.Refused, Message: err.Error(), Cause: err}
+	}
 	if errors.As(err, new(*db.LockBusy)) {
-		return &application.Error{Code: application.Unavailable, Message: err.Error() + "; try again shortly"}
+		return &application.Error{Code: application.Unavailable, Message: err.Error() + "; try again shortly", Cause: err}
 	}
 	var refused proposals.ProposalError
 	var disabled *module.OwnerDisabled

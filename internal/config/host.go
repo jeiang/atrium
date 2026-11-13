@@ -107,7 +107,7 @@ func (h *Host) validateAppKeys() error {
 			return fmt.Errorf("config: app_keys.%s: %w", key, err)
 		}
 		if strings.TrimSpace(string(raw)) == "" {
-			return fmt.Errorf("config: app_keys.%s: %s is empty", key, path)
+			return &FileContentError{Err: fmt.Errorf("config: app_keys.%s: %s is empty", key, path)}
 		}
 	}
 	return nil
@@ -147,7 +147,11 @@ func (h *Host) readEnv(env Env, reg *settings.Registry, d settings.HostDef) erro
 		return nil
 	}
 	if err := validateHostValue(reg, d, value); err != nil {
-		return fmt.Errorf("config: %s: %w", name, err)
+		err = fmt.Errorf("config: %s: %w", name, err)
+		if fileSet {
+			return &FileContentError{Err: err}
+		}
+		return err
 	}
 	h.Values[d.Key] = value
 	h.Sources[d.Key] = "env " + name
@@ -213,7 +217,11 @@ func (h *Host) readFile(env Env, reg *settings.Registry, defs []settings.HostDef
 				value = strings.TrimSpace(string(raw))
 			}
 			if err := validateHostValue(reg, d, value); err != nil {
-				return fmt.Errorf("config: %s: %s: %w", path, module+"."+name, err)
+				err = fmt.Errorf("config: %s: %s: %w", path, module+"."+name, err)
+				if isFile {
+					return &FileContentError{Err: err}
+				}
+				return err
 			}
 			h.Values[d.Key] = value
 			h.Sources[d.Key] = "host " + path + " " + module + "." + name
@@ -498,6 +506,11 @@ func CombinePins(host Host, legacy settings.PinSource) settings.PinSource {
 }
 
 type hostKey struct{}
+
+type FileContentError struct{ Err error }
+
+func (e *FileContentError) Error() string { return e.Err.Error() }
+func (e *FileContentError) Unwrap() error { return e.Err }
 
 func WithHost(ctx context.Context, h Host) context.Context {
 	return context.WithValue(ctx, hostKey{}, h)

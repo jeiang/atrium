@@ -9,15 +9,12 @@ import (
 	"strings"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/mail"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/corrections"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/triage"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
-	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/urlx"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
@@ -135,8 +132,13 @@ func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
 	if found == nil {
 		return
 	}
+	partial := web.IsPartial(r)
+	mode := mailapp.Deferred
+	if partial {
+		mode = mailapp.Immediate
+	}
 	var problem *string
-	recorded, err := corrections.Record(ctx, s.deps.DB, id, dest, corrections.Source, s.now())
+	done, err := s.reads.Correct(ctx, mailapp.CorrectInput{MessageID: id, Folder: dest, Mode: mode})
 	var rejected corrections.Error
 	switch {
 	case errors.As(err, &rejected):
@@ -146,14 +148,13 @@ func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
 		panic(err)
 	}
 	ok := problem == nil
-	partial := web.IsPartial(r)
 	if ok && !partial {
 		http.Redirect(w, r, "/messages/"+strconv.FormatInt(id, 10), http.StatusSeeOther)
 		return
 	}
 	var notice *tpl.Toast
 	if ok {
-		notice = toast("success", "Correction recorded", fmt.Sprintf("Corrected to %s.%s", recorded.Folder, s.moveCorrection(r, found, id)))
+		notice = toast("success", "Correction recorded", fmt.Sprintf("Corrected to %s.%s", done.Data.Correction.Folder, done.Data.Note))
 	}
 	fresh := s.loadMessage(w, r, id)
 	if fresh == nil {
@@ -186,46 +187,6 @@ func (s *service) correctSubmit(w http.ResponseWriter, r *http.Request) {
 		data := messageData{Message: fresh, Back: backTo(r), Correct: form_}
 		s.page(w, r, http.StatusOK, messagePage(data), "message.gohtml", data, nil)
 	}
-}
-
-func (s *service) moveCorrection(r *http.Request, found *message.View, id int64) string {
-	ctx := context.WithoutCancel(r.Context())
-	mode, err := mail.Mode(ctx, s.deps.DB.Read)
-	if err != nil {
-		log.Error(fmt.Sprintf("reading mail mode for corrected message %d failed", id), logx.Err, err.Error())
-		return ""
-	}
-	if mode != safety.Live {
-		return ""
-	}
-	out, err := func() (out appliedOutcome, err error) {
-		locks, err := db.ResourceLocks(ctx, s.deps.Cfg.DBPath, []string{mail.PassResource}, db.ShortLockWait)
-		if err != nil {
-			return out, err
-		}
-		defer func() { _ = locks.Close() }()
-		done, err := s.applier.ApplyCorrections(db.WithHeld(ctx, locks), found.Account, []int64{id})
-		return appliedOutcome{done.Ran, done.Written, done.Failed + done.Skipped}, err
-	}()
-	if err != nil {
-		log.Error(fmt.Sprintf("moving corrected message %d failed", id), logx.Err, err.Error())
-		return " It could not be moved yet: " + err.Error() + "."
-	}
-	switch {
-	case !out.ran:
-		return " Moving is paused; it will move after you resume."
-	case out.written > 0:
-		return " The message was moved."
-	case out.unmoved > 0:
-		return " It could not be moved; see Decisions."
-	}
-	return ""
-}
-
-type appliedOutcome struct {
-	ran     bool
-	written int
-	unmoved int
 }
 
 func (s *service) togglePause(w http.ResponseWriter, r *http.Request, paused bool) {

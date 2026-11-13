@@ -67,6 +67,7 @@ type Watcher struct {
 	DB          *db.DB
 	Open        mail.OpenFunc
 	Classifiers Classifier
+	Sync        func(waitCtx, workCtx context.Context, pass *Pass, accounts []string) error
 }
 
 func WatchServiceName(account string) string { return "mail-watch/" + account }
@@ -147,7 +148,7 @@ func waitForChange(ctx context.Context, client mail.Client) (bool, error) {
 func (w *Watcher) run(ctx context.Context, s *runtime.Services, account string) error {
 	beat := func() { s.Heartbeat(watchBeat) }
 	beat()
-	pass, err := prepare(ctx, w.Env, w.DB, w.Cfg, w.Open, nil, w.Classifiers)
+	pass, err := Prepare(ctx, w.Env, w.DB, w.Cfg, w.Open, nil, w.Classifiers)
 	if err != nil {
 		return err
 	}
@@ -157,7 +158,7 @@ func (w *Watcher) run(ctx context.Context, s *runtime.Services, account string) 
 			return err
 		}
 		defer release()
-		waiting(beat, func() { err = pass.Locked(ctx, work, []string{account}) })
+		waiting(beat, func() { err = w.Sync(ctx, work, pass, []string{account}) })
 		return err
 	}
 	if err := locked(); err != nil {

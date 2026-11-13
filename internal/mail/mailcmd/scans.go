@@ -24,7 +24,7 @@ func (o Options) ScanCommands() []*cli.Command {
 	out := make([]*cli.Command, len(scans.All))
 	for i, s := range scans.All {
 		out[i] = o.scanGroup(s.Command, func(x *exec) (scanutil.Result, error) {
-			return s.Run(x.Ctx, x.DB, x.Now(), rebalance.SuggestName(x.Classifier))
+			return x.opts.Application(x.Pass).WithNamer(rebalance.SuggestName(x.Classifier)).Scans(x.Now())(x.Ctx, s.Key)
 		})
 	}
 	return out

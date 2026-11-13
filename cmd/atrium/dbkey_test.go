@@ -38,15 +38,6 @@ func runProcess(t *testing.T, args string, env ...string) cliRun {
 	return cliRun{exitCode(cmd.Run()), stdout.String(), stderr.String()}
 }
 
-func writeKey(t *testing.T, dir, name, hex string) string {
-	t.Helper()
-	path := filepath.Join(dir, name)
-	if err := os.WriteFile(path, []byte(hex+"\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	return path
-}
-
 func isPlaintextSQLite(t *testing.T, path string) bool {
 	t.Helper()
 	raw, err := os.ReadFile(path)

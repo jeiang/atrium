@@ -79,12 +79,11 @@ func Globals() map[string]any {
 }
 
 type service struct {
-	reads   *mailapp.Service
-	deps    *web.Deps
-	now     func() float64
-	live    *live.Live
-	applier *applier.Applier
-	drafts  *drafts.Store
+	reads  *mailapp.Service
+	deps   *web.Deps
+	now    func() float64
+	live   *live.Live
+	drafts *drafts.Store
 }
 
 const pageSize = 50
@@ -109,7 +108,7 @@ func Module(reads func(*web.Deps) *mailapp.Service) func(chi.Router, *web.Deps) 
 			panic(err)
 		}
 		l := &live.Live{DB: d.DB, Cfg: d.Cfg, Store: store, Open: open, Registry: registry, Now: wallClock}
-		s := &service{reads: reads(d), deps: d, now: wallClock, live: l, applier: applier.New(l, open, syncer), drafts: &drafts.Store{DB: d.DB, Cfg: d.Cfg}}
+		s := &service{reads: reads(d).WithApplier(applier.New(l, open, syncer)), deps: d, now: wallClock, live: l, drafts: &drafts.Store{DB: d.DB, Cfg: d.Cfg}}
 
 		r.Get("/messages/{message_id}", s.messagePage)
 		r.Get("/messages/{message_id}/correct", s.correctForm)

@@ -96,6 +96,12 @@ type Args struct {
 
 func (a *Args) RejectExtras(message string) { a.extrasText = message }
 
+type ConfigRefusal struct{ Err error }
+
+func (e *ConfigRefusal) Error() string { return e.Err.Error() }
+
+func (e *ConfigRefusal) Unwrap() error { return e.Err }
+
 func (a *Args) option(name string, k kind, o Opt) *action {
 	act := &action{Opt: o, kind: k, name: name, dest: strings.ReplaceAll(name, "-", "_"), opts: []string{"--" + name}}
 	a.actions = append(a.actions, act)
@@ -225,7 +231,7 @@ func (a *App) Run(ctx context.Context, args []string, stdout, stderr io.Writer) 
 	if a.Bootstrap != nil {
 		if err := a.Bootstrap(ctx, stderr); err != nil {
 			_, _ = fmt.Fprintf(stderr, "error: %v\n", err)
-			if s.bootstrapExit != 0 {
+			if s.bootstrapExit != 0 && errors.As(err, new(*ConfigRefusal)) {
 				return s.bootstrapExit
 			}
 			return ExitError

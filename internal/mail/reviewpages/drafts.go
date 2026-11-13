@@ -9,7 +9,6 @@ import (
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 
 	"github.com/jeiang/atrium/internal/application"
-	"github.com/jeiang/atrium/internal/ledger"
 	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/module"
@@ -209,7 +208,9 @@ func (s *service) draftSend(w http.ResponseWriter, r *http.Request) {
 	var result drafts.Result
 	var err error
 	if rev, perr := strconv.ParseInt(revision, 10, 64); perr == nil {
-		result, err = s.drafts.Send(detached(r), id, rev)
+		var done application.Change[mailapp.DraftSendResult]
+		done, err = s.mail.DraftSend(detached(r), mailapp.DraftSendInput{ID: id, Revision: rev})
+		result = done.Data.Sent
 	} else {
 		err = drafts.Error("draft changed, review again")
 	}
@@ -247,17 +248,12 @@ func (s *service) draftResolve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	outcome, _ := web.Value(web.FormValues(r), "outcome")
-	var verdict drafts.Status
-	switch outcome {
-	case "sent":
-		verdict = drafts.Sent
-	case "draft":
-		verdict = drafts.Draft
-	default:
-		s.fail(w, r, http.StatusUnprocessableEntity, "outcome must be sent or draft")
+	done, err := s.mail.DraftResolve(detached(r), mailapp.DraftResolveInput{ID: id, Outcome: outcome})
+	if e, ok := errors.AsType[*application.Error](err); ok && e.Code == application.Invalid {
+		s.fail(w, r, http.StatusUnprocessableEntity, e.Message)
 		return
 	}
-	err := s.drafts.ResolveUnknown(detached(r), id, verdict, ledger.Resolver{Actor: "operator", Source: "ui"})
+	verdict := done.Data.Status
 	var refused drafts.Error
 	var disabled *module.OwnerDisabled
 	if errors.As(err, &refused) || errors.As(err, &disabled) {

@@ -42,6 +42,7 @@ import (
 	"github.com/jeiang/atrium/internal/ledger/ledgercmd"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
+	mailapp "github.com/jeiang/atrium/internal/mail/application"
 	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
 	maintenanceapp "github.com/jeiang/atrium/internal/maintenance/application"
@@ -100,6 +101,7 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 	maintenanceOps, maintenanceBindings := m.maintenanceOperations()
 	operations, bindings = append(operations, maintenanceOps...), append(bindings, maintenanceBindings...)
 	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
+	bindings = append(bindings, application.Binding{Kind: application.CLI, Target: "proposals scan-all", Uses: []application.Name{mailapp.ScanRebalanceName, mailapp.ScanDeletionsName, mailapp.ScanGmailLabelsName}, Composite: true})
 	maintenance := maintenanceapp.New(mc.Env, m.Now)
 	openSettings := settingsapp.CLI(mc.Env, m.Guard)
 	commandOps, commandBindings := commandOperations()
