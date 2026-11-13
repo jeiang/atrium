@@ -76,4 +76,33 @@ func TestMemoryBackfillIsIdempotentAndRefusesAfterDone(t *testing.T) {
 	if after != before {
 		t.Errorf("rerun duplicated nodes: %d -> %d", before, after)
 	}
+	audits := map[string]int{}
+	rows, err := d.Read.Query("SELECT outcome, target, actor, source FROM operation_audit WHERE operation = 'assistant.memory.backfill'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var outcome, target, actor, source string
+		if err := rows.Scan(&outcome, &target, &actor, &source); err != nil {
+			t.Fatal(err)
+		}
+		if actor != "operator" || source != "cli" {
+			t.Errorf("backfill audit stamped %s/%s", actor, source)
+		}
+		audits[outcome+" "+target]++
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if audits["ok "] != 1 || audits["refused "] != 1 || audits["ok thread:2"]+audits["noop thread:2"] != 1 || len(audits) != 3 {
+		t.Errorf("backfill audits: %v", audits)
+	}
+	var reads int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.memory.estimate'").Scan(&reads); err != nil {
+		t.Fatal(err)
+	}
+	if reads != 0 {
+		t.Errorf("estimate wrote %d audit rows", reads)
+	}
 }

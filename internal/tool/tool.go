@@ -48,6 +48,7 @@ func (m Marks) Kinds() Marks { return m &^ Untrusted }
 
 type Approval struct {
 	Apply  Handler
+	Check  func(ctx context.Context, tc *Context, args Args) error
 	Label  string
 	Icon   string
 	Module string

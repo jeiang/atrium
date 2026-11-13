@@ -134,6 +134,9 @@ func TestDatabaseEncryptCopiesAPlaintextDatabaseAndRefusesWhileItIsInUse(t *test
 	if err != nil {
 		t.Fatal(err)
 	}
+	if got := strings.Join(maintenanceAudits(t, path, k, "maintenance.encrypt"), ","); got != "ok:cli" {
+		t.Errorf("encrypt audits = %q, want the one completed encryption and no refusals", got)
+	}
 	encrypted, err := db.Connect(path, db.WithKey(k))
 	if err != nil {
 		t.Fatal(err)

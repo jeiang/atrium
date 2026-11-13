@@ -3,36 +3,20 @@ package notion
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
+	"path/filepath"
 
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/embed"
-	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/passrun"
 )
 
-const JobKey = module.Notion + "/" + passrun.NotionSync
+const JobKey = "notion/notion-sync"
 
 type Options struct {
-	Env   config.Env
-	Embed embed.TextsFunc
-}
-
-type Summary struct {
-	Sources   int64   `json:"sources"`
-	Pages     int64   `json:"pages"`
-	New       int     `json:"new"`
-	Updated   int     `json:"updated"`
-	Unchanged int     `json:"unchanged"`
-	Trashed   int     `json:"trashed"`
-	Failed    int     `json:"failed"`
-	Embedded  int64   `json:"embedded"`
-	Seconds   float64 `json:"seconds"`
-	Live      int64   `json:"live"`
-	Private   int64   `json:"private"`
+	Env    config.Env
+	Search func(ctx context.Context, d *db.DB, query string, private bool, limit int) (Result, error)
+	Sync   func(ctx context.Context, d *db.DB, lockDir string) (any, error)
 }
 
 func (o Options) env() config.Env {
@@ -55,7 +39,7 @@ func Command(o Options) *cli.Command {
 				limit := a.Int("limit", 10, cli.Opt{})
 				return func(env *cli.Env) int {
 					return run(env, o, func(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env) error {
-						return o.search(ctx, d, cfg, env, *query, *private, *limit)
+						return o.search(ctx, d, env, *query, *private, *limit)
 					})
 				}
 			}},
@@ -83,7 +67,7 @@ func run(env *cli.Env, o Options, fn func(context.Context, *db.DB, config.Config
 }
 
 func (o Options) sync(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env) error {
-	out, err := o.invokeSync(ctx, d, cfg)
+	out, err := o.Sync(ctx, d, filepath.Dir(cfg.DBPath))
 	if err != nil {
 		return err
 	}
@@ -95,33 +79,8 @@ func (o Options) sync(ctx context.Context, d *db.DB, cfg config.Config, env *cli
 	return nil
 }
 
-func (o Options) Pass(ctx context.Context, d *db.DB) (Summary, error) {
-	client, err := NewClient(ctx, d.Read)
-	if _, skip := errors.AsType[config.NotConfigured](err); skip {
-		return Summary{}, err
-	}
-	var out Summary
-	err = passrun.Track(ctx, d, passrun.NotionSync, func() error {
-		if err != nil {
-			return err
-		}
-		defer client.Close()
-		stats, err := Sync(ctx, d, client, o.Embed)
-		if err != nil {
-			return err
-		}
-		counts, err := Totals(ctx, d.Read)
-		if err != nil {
-			return err
-		}
-		out = Summary{counts.Sources, counts.Pages, stats.New, stats.Updated, stats.Unchanged, stats.Trashed, stats.Failed, counts.Embedded, stats.Seconds, counts.Live, counts.Private}
-		return nil
-	})
-	return out, err
-}
-
-func (o Options) search(ctx context.Context, d *db.DB, cfg config.Config, env *cli.Env, query string, private bool, limit int) error {
-	result, err := Search(ctx, d.KNN, query, private, limit, o.Embed)
+func (o Options) search(ctx context.Context, d *db.DB, env *cli.Env, query string, private bool, limit int) error {
+	result, err := o.Search(ctx, d, query, private, limit)
 	if err != nil {
 		return err
 	}

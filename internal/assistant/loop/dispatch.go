@@ -26,6 +26,7 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/obs"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -244,6 +245,7 @@ func (x *dispatcher) call(ctx context.Context, t *tool.Tool, args tool.Args) (va
 	defer cancel()
 	defer context.AfterFunc(x.lost, cancel)()
 	ctx = application.WithInvocation(ctx, application.Invocation{ThreadID: x.tc.ThreadID, RunID: x.tc.RunID})
+	ctx = audit.With(ctx, "assistant", audit.Tool)
 	return t.Handler(ctx, x.tc, args)
 }
 

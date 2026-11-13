@@ -11,20 +11,23 @@ import (
 
 	"github.com/jeiang/atrium/internal/about"
 	"github.com/jeiang/atrium/internal/actionlink"
-	actionlinkpages "github.com/jeiang/atrium/internal/actionlink/pages"
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/application/commands"
-	"github.com/jeiang/atrium/internal/assistant/classifier"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/jobworker"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/attention"
 	attentionsources "github.com/jeiang/atrium/internal/attention/sources"
-	"github.com/jeiang/atrium/internal/auth/bearer"
+	authapp "github.com/jeiang/atrium/internal/auth/application"
+	"github.com/jeiang/atrium/internal/auth/bearercmd"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/auth/oidcconn"
 	"github.com/jeiang/atrium/internal/backup"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/connections"
+	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
+	"github.com/jeiang/atrium/internal/connections/connectionscmd"
 	"github.com/jeiang/atrium/internal/connections/connweb"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/db/dbcmd"
@@ -33,12 +36,13 @@ import (
 	"github.com/jeiang/atrium/internal/endpoint"
 	"github.com/jeiang/atrium/internal/httpx"
 	"github.com/jeiang/atrium/internal/inference"
-	"github.com/jeiang/atrium/internal/kb/kbcmd"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/ledger/ledgercmd"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
+	"github.com/jeiang/atrium/internal/mail/rebalance"
 	"github.com/jeiang/atrium/internal/mail/reviewpages"
+	maintenanceapp "github.com/jeiang/atrium/internal/maintenance/application"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/obs/opsmetrics"
 	"github.com/jeiang/atrium/internal/observability"
@@ -52,6 +56,7 @@ import (
 	"github.com/jeiang/atrium/internal/secrets"
 	"github.com/jeiang/atrium/internal/secrets/secretscmd"
 	"github.com/jeiang/atrium/internal/settings"
+	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 	"github.com/jeiang/atrium/internal/settings/settingscmd"
 	"github.com/jeiang/atrium/internal/usagepages"
 	"github.com/jeiang/atrium/internal/web"
@@ -60,26 +65,41 @@ import (
 
 type Module struct {
 	Version   string
-	Guard     settingscmd.Guard
+	Guard     settingsapp.Guard
 	Clients   func(config.Config) mail.OpenFunc
 	Now       func() float64
 	Resources module.Resources
 	Jobs      jobworker.Dependencies
 }
 
-func (m Module) classifier(env config.Env) func(context.Context, *db.DB, config.Config) (*classifier.Service, error) {
-	return func(ctx context.Context, d *db.DB, cfg config.Config) (*classifier.Service, error) {
+func (m Module) namer(env config.Env) func(context.Context, *db.DB, config.Config) (rebalance.Namer, error) {
+	return func(ctx context.Context, d *db.DB, cfg config.Config) (rebalance.Namer, error) {
 		if m.Jobs.Classifier == nil {
 			return nil, errors.New("proposal scans are not bound to a classifier")
 		}
 		svc := service.New(ctx, d, cfg, env, nil)
 		svc.Now = m.Now
-		return m.Jobs.Classifier(ctx, svc)
+		c, err := m.Jobs.Classifier(ctx, svc)
+		if err != nil {
+			return nil, err
+		}
+		return rebalance.SuggestName(c), nil
 	}
 }
 
 func (m Module) Declare(mc module.Context) module.Declaration {
 	operations, bindings := authOperations()
+	reviewOps, reviewBindings := reviewOperations()
+	operations, bindings = append(operations, reviewOps...), append(bindings, reviewBindings...)
+	settingOps, settingBindings := settingsOperations()
+	operations, bindings = append(operations, settingOps...), append(bindings, settingBindings...)
+	connectionOps, connectionBindings := connectionsOperations()
+	operations, bindings = append(operations, connectionOps...), append(bindings, connectionBindings...)
+	maintenanceOps, maintenanceBindings := maintenanceOperations()
+	operations, bindings = append(operations, maintenanceOps...), append(bindings, maintenanceBindings...)
+	bindings = append(bindings, application.Binding{Kind: application.HTML, Target: "GET /settings/usage", Uses: []application.Name{asstapp.UsageName}, Composite: true})
+	maintenance := maintenanceapp.New(mc.Env, m.Now)
+	openSettings := settingsapp.CLI(mc.Env, m.Guard)
 	commandOps, commandBindings := commandOperations()
 	operations, bindings = append(operations, commandOps...), append(bindings, commandBindings...)
 	enabled := func(ctx context.Context, q db.Querier, name string) (bool, error) {
@@ -97,11 +117,14 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		return s
 	}
 	return module.Declaration{
-		Name:              module.Core,
-		Core:              true,
-		Settings:          slices.Concat(config.Settings(), dbkey.Settings(), oidc.Settings(), secrets.Settings()),
-		Host:              slices.Concat(config.HostSettings(), backup.HostSettings(), secrets.HostSettings(), observability.HostSettings(), ops.HostSettings()),
-		Jobs:              []scheduler.Definition{backup.Job(mc.Env)},
+		Name:     module.Core,
+		Core:     true,
+		Settings: slices.Concat(config.Settings(), dbkey.Settings(), oidc.Settings(), secrets.Settings()),
+		Host:     slices.Concat(config.HostSettings(), backup.HostSettings(), secrets.HostSettings(), observability.HostSettings(), ops.HostSettings()),
+		Jobs: []scheduler.Definition{backup.Job(mc.Env, func(ctx context.Context, dest string, forget func(context.Context, db.Querier) error) error {
+			_, err := maintenance.Backup(ctx, maintenanceapp.BackupInput{Dest: dest, Forget: forget})
+			return err
+		})},
 		Attention:         AttentionSources(),
 		Metrics:           slices.Concat(collectors.Metrics(), opsmetrics.Metrics(), passrun.Metrics(), scheduler.Metrics()),
 		Checks:            slices.Concat(ops.Checks(), passrun.Checks()),
@@ -118,11 +141,10 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 				{Section: "review", Label: "Needs you", URL: "/review", Icon: "list-checks", Page: "review_needs", Order: 10},
 				{Section: "review", Label: "Done", URL: "/activity", Icon: "history", Page: "activity", Order: 60},
 			}},
-			{Module: actionlinkpages.Module, Templates: actionlinkpages.Templates()},
 			{Module: web.CoreModule, Nav: []web.NavItem{
 				{Label: "Sign-in", URL: "/settings/auth", Page: "auth", Settings: true, Primary: true, Order: 50},
 			}, OIDC: oidcconn.Source()},
-			connweb.Page(),
+			connweb.Page(connectionService),
 			{Module: func(_ chi.Router, d *web.Deps) { authRoutes(d); commandRoutes(d) }},
 		},
 		Groups:     SettingGroups(),
@@ -133,14 +155,14 @@ func (m Module) Declare(mc module.Context) module.Declaration {
 		Commands: []*cli.Command{
 			writescmd.Command(writescmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
 			ledgercmd.Command(ledgercmd.Options{Env: mc.Env, Now: m.Now, Store: store}),
-			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store, Classifier: m.classifier(mc.Env)}),
-			settingscmd.Command(mc.Env, m.Guard),
-			bearer.Command(mc.Env),
-			secretscmd.Command(mc.Env),
-			dbcmd.Command(mc.Env, m.Now),
-			kbcmd.Command(mc.Env),
-			backup.BackupCommand(),
-			backup.RestoreCommand(),
+			proposalscmd.Command(proposalscmd.Options{Env: mc.Env, Clients: m.Clients, Now: m.Now, Enabled: enabled, Tools: mc.Tools, Store: store, Namer: m.namer(mc.Env)}),
+			settingscmd.Command(openSettings),
+			connectionscmd.Command(connectionsapp.CLI(mc.Env)),
+			bearercmd.Command(authapp.CLI(mc.Env)),
+			secretscmd.Command(openSettings),
+			dbcmd.Command(maintenance),
+			dbcmd.BackupCommand(maintenance),
+			dbcmd.RestoreCommand(maintenance),
 			catalogCommand(mc),
 		},
 	}
@@ -198,7 +220,7 @@ func (m Module) services(mc module.Context) []runtime.ServiceDefinition {
 			if err != nil {
 				return err
 			}
-			return connweb.Watch(ctx, d)
+			return watchConnections(ctx, d)
 		}},
 	}
 }

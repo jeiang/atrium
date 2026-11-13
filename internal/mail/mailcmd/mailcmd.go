@@ -15,10 +15,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
 	runpkg "github.com/jeiang/atrium/internal/mail/run"
-	"github.com/jeiang/atrium/internal/proposals"
 )
-
-var operator = proposals.Resolver{Actor: "operator", Source: "cli"}
 
 type Options struct {
 	Env         config.Env

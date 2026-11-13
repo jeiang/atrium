@@ -28,6 +28,9 @@ func TestAttentionListsParkedQuestionUntilAnswered(t *testing.T) {
 	if err := d.Read.QueryRow("SELECT thread_id FROM runs WHERE state = 'parked'").Scan(&threadID); err != nil {
 		t.Fatalf("parked run: %v", err)
 	}
+	if got := operationAudits(t, d, "assistant.question.ask"); len(got) != 1 || !strings.HasPrefix(got[0], "ok thread:"+strconv.FormatInt(threadID, 10)+" ") {
+		t.Errorf("question audits: %q", got)
+	}
 	attention := func() string {
 		t.Helper()
 		s.api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("a1", "attention", map[string]any{})))

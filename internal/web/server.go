@@ -24,6 +24,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/jeiang/atrium/internal/application"
+	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/config"
@@ -155,6 +156,7 @@ type Server struct {
 	auth          Policy
 	oidc          *oidc.Service
 	bearers       *bearer.Service
+	account       *authapp.Service
 	db            *db.DB
 	render        *Renderer
 	secure        func(*http.Request) bool
@@ -200,6 +202,7 @@ func New(o Options) (*Server, error) {
 	core := &Registrar{Router: s.mux, owner: "core", state: s.registrations}
 	if o.DB != nil {
 		s.bearers = bearer.New(o.DB, o.OIDC)
+		s.account = authapp.New(o.DB, o.OIDC, s.bearers)
 	}
 	s.mux.Use(instrument)
 	if s.errPage == nil && o.Render != nil {

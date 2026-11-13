@@ -3,7 +3,6 @@ package settingspage
 import (
 	"context"
 	"embed"
-	"errors"
 	"io/fs"
 	"net/http"
 	"net/url"
@@ -11,9 +10,10 @@ import (
 
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/settings"
-	"github.com/jeiang/atrium/internal/settings/audit"
+	settingsapp "github.com/jeiang/atrium/internal/settings/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -58,6 +58,7 @@ type connectionsView struct {
 
 type handlers struct {
 	d        *web.Deps
+	svc      *settingsapp.Service
 	groups   []Group
 	generic  []Generic
 	control  Control
@@ -79,7 +80,7 @@ func Page(groups []Group, generic []Generic, control Control, sections Sections)
 		nav[i] = tpl.NavItem{Label: title(g.Module), URL: g.URL, Page: g.Tab, Settings: true, Order: 45}
 	}
 	return web.Page{Templates: files, Nav: nav, Module: func(r chi.Router, d *web.Deps) {
-		h := handlers{d: d, groups: groups, generic: generic, control: control, sections: sections}
+		h := handlers{d: d, svc: settingsapp.Web(d.DB), groups: groups, generic: generic, control: control, sections: sections}
 		d.OnFrame(func(ctx context.Context, f *tpl.Frame) error {
 			if f.Page != "settings" {
 				return nil
@@ -100,7 +101,7 @@ func Page(groups []Group, generic []Generic, control Control, sections Sections)
 				view.Name, view.Title = m.Name, title(m.Name)
 				f.SettingModule = &view
 			}
-			views, err := h.views(ctx, d.DB.Read, f.Path)
+			views, err := h.views(ctx, f.Path)
 			for i := range views {
 				views[i].Saved = views[i].Module+"."+views[i].Name == f.Saved
 			}
@@ -150,7 +151,7 @@ func withSections(groups []Group, generic []Generic, sections Sections) []Generi
 	return generic
 }
 
-func (h handlers) views(ctx context.Context, q db.Querier, url string) ([]settings.GroupView, error) {
+func (h handlers) views(ctx context.Context, url string) ([]settings.GroupView, error) {
 	var out []settings.GroupView
 	for _, g := range h.groups {
 		if g.URL != url {
@@ -160,11 +161,11 @@ func (h handlers) views(ctx context.Context, q db.Querier, url string) ([]settin
 		if err != nil {
 			return nil, err
 		}
-		loaded, err := settings.LoadFields(ctx, q, fields)
+		read, err := h.svc.Read(ctx, settingsapp.ReadInput{Fields: fields})
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, settings.GroupView{Module: g.Module, Name: g.Name, Title: g.Title, Fields: loaded})
+		out = append(out, settings.GroupView{Module: g.Module, Name: g.Name, Title: g.Title, Fields: read.Data.Fields})
 	}
 	return out, nil
 }
@@ -195,48 +196,44 @@ func (h handlers) save(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	form := web.FormValues(r)
-	ctx := audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
+	ctx := context.WithoutCancel(r.Context())
 	fields, err := settings.From(ctx).Fields(group.Keys)
 	if err != nil {
 		panic(err)
 	}
-	current, err := settings.LoadFields(ctx, h.d.DB.Read, fields)
+	read, err := h.svc.Read(ctx, settingsapp.ReadInput{Fields: fields})
 	if err != nil {
 		panic(err)
 	}
 	values := make(map[string]string, len(group.Keys))
-	for _, f := range current {
+	for _, f := range read.Data.Fields {
 		if value, ok := web.Value(form, f.Key); ok && !f.Pinned && strings.TrimSpace(value) != f.Value {
 			values[f.Key] = value
 		}
 	}
-	err = settings.SaveFields(ctx, h.d.DB, fields, values)
-	var invalid settings.Invalid
-	var pinned *settings.PinnedError
-	var host settings.HostOwned
-	if errors.As(err, &invalid) || errors.As(err, &pinned) || errors.As(err, &host) {
-		views, loadErr := h.views(ctx, h.d.DB.Read, group.URL)
-		if loadErr != nil {
-			panic(loadErr)
-		}
-		for i := range views {
-			if views[i].Module == module && views[i].Name == name {
-				views[i].Error = err.Error()
-				for j, f := range views[i].Fields {
-					if value, ok := values[f.Key]; ok && !f.Pinned {
-						views[i].Fields[j].Value = value
+	if _, err := h.svc.Set(ctx, settingsapp.SetInput{Values: changes(fields, values)}); err != nil {
+		failure := application.Classify(err)
+		web.Fail(w, r, failure, func(status int) {
+			views, loadErr := h.views(ctx, group.URL)
+			if loadErr != nil {
+				panic(loadErr)
+			}
+			for i := range views {
+				if views[i].Module == module && views[i].Name == name {
+					views[i].Error = web.Message(failure)
+					for j, f := range views[i].Fields {
+						if value, ok := values[f.Key]; ok && !f.Pinned {
+							views[i].Fields[j].Value = value
+						}
 					}
 				}
 			}
-		}
-		shown := func(f *tpl.Frame) { f.SettingGroups = views }
-		if !h.d.SettingsPage(w, r, http.StatusUnprocessableEntity, group.URL, shown) {
-			h.render(w, r, http.StatusUnprocessableEntity, pageData{Title: title(module), Tab: group.Tab}, shown)
-		}
+			shown := func(f *tpl.Frame) { f.SettingGroups = views }
+			if !h.d.SettingsPage(w, r, status, group.URL, shown) {
+				h.render(w, r, status, pageData{Title: title(module), Tab: group.Tab}, shown)
+			}
+		})
 		return
-	}
-	if err != nil {
-		panic(err)
 	}
 	w.Header().Set("Location", group.URL+"?saved="+module+"."+name)
 	w.WriteHeader(http.StatusSeeOther)
@@ -261,6 +258,19 @@ func (h handlers) sectionViews(ctx context.Context, path, saved string) (connect
 		view.Saved = name
 	}
 	return view, nil
+}
+
+func changes(fields []settings.Field, values map[string]string) []settingsapp.Value {
+	out := make([]settingsapp.Value, 0, len(values))
+	for _, f := range fields {
+		value, ok := values[f.Key]
+		if !ok {
+			continue
+		}
+		value = strings.TrimSpace(value)
+		out = append(out, settingsapp.Value{Key: f.Key, Value: value, Unset: value == ""})
+	}
+	return out
 }
 
 func fieldValues(fields []settings.Field, form url.Values) map[string]string {
@@ -295,29 +305,17 @@ func (h handlers) saveSection(w http.ResponseWriter, r *http.Request) {
 	}
 	form := web.FormValues(r)
 	values := fieldValues(s.Fields, form)
-	ctx := audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
-	err := h.sections.Save(ctx, h.d.DB, name, values)
-	if err != nil {
-		var unknown UnknownSection
-		var invalid settings.Invalid
-		var pinned *settings.PinnedError
-		var host settings.HostOwned
-		var scope *settings.NotEditable
-		var encryption settings.EncryptionRequired
-		var empty settings.EmptyValue
-		var field settings.FieldInvalid
-		switch {
-		case errors.As(err, &unknown):
-			http.NotFound(w, r)
-		case errors.As(err, &invalid), errors.As(err, &pinned), errors.As(err, &host), errors.As(err, &scope),
-			errors.As(err, &encryption), errors.As(err, &empty), errors.As(err, &field):
+	ctx := context.WithoutCancel(r.Context())
+	if _, err := h.svc.Set(ctx, settingsapp.SetInput{Values: changes(s.Fields, values), Validate: s.Validate}); err != nil {
+		failure := application.Classify(err)
+		web.Fail(w, r, failure, func(status int) {
 			view, loadErr := h.sectionViews(ctx, "/settings/"+s.Module, "")
 			if loadErr != nil {
 				panic(loadErr)
 			}
-			view.Error = err.Error()
-			if errors.As(err, &field) {
-				view.FieldError = field.Key
+			view.Error = web.Message(failure)
+			if len(failure.Fields) > 0 {
+				view.FieldError = failure.Fields[0].Name
 			}
 			for i := range view.Sections {
 				if view.Sections[i].Name == name {
@@ -325,12 +323,10 @@ func (h handlers) saveSection(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			shown := func(f *tpl.Frame) { f.Connections = view }
-			if !h.d.SettingsPage(w, r, http.StatusUnprocessableEntity, "/settings/"+s.Module, shown) {
-				h.render(w, r, http.StatusUnprocessableEntity, pageData{Title: title(s.Module), Tab: "module:" + s.Module}, shown)
+			if !h.d.SettingsPage(w, r, status, "/settings/"+s.Module, shown) {
+				h.render(w, r, status, pageData{Title: title(s.Module), Tab: "module:" + s.Module}, shown)
 			}
-		default:
-			panic(err)
-		}
+		})
 		return
 	}
 	view, err := h.sectionViews(ctx, "/settings/"+s.Module, "connection."+name)

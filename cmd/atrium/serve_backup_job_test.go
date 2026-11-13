@@ -171,7 +171,7 @@ func TestBackupCommandSharesTheJobClaim(t *testing.T) {
 	release := make(chan struct{})
 	held := make(chan error, 1)
 	go func() {
-		_, err := scheduler.RunNow(context.Background(), d, filepath.Join(dir, "atrium.db"), "UTC", backup.Job(nil), 0, func(context.Context, scheduler.Run) (scheduler.Result, error) {
+		_, err := scheduler.RunNow(context.Background(), d, filepath.Join(dir, "atrium.db"), "UTC", backup.Job(nil, nil), 0, func(context.Context, scheduler.Run) (scheduler.Result, error) {
 			<-release
 			return scheduler.Result{}, nil
 		})

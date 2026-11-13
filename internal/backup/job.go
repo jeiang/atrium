@@ -54,7 +54,7 @@ func absoluteDir(value string) error {
 	return nil
 }
 
-func Job(env config.Env) scheduler.Definition {
+func Job(env config.Env, create func(context.Context, string, func(context.Context, db.Querier) error) error) scheduler.Definition {
 	if env == nil {
 		env = config.OS
 	}
@@ -64,12 +64,12 @@ func Job(env config.Env) scheduler.Definition {
 		Schedule: DefaultSchedule, ScheduleHost: KeySchedule, Persistent: true, RunsWhilePaused: true, Timeout: jobTimeout,
 		Spend: scheduler.ModelFree, Shutdown: scheduler.ShutdownDrain, Resources: []string{passrun.Backup},
 		Run: func(ctx context.Context, run scheduler.Run) (scheduler.Result, error) {
-			return scheduled(ctx, env, run.Claim, time.Now())
+			return scheduled(ctx, env, run.Claim, time.Now(), create)
 		},
 	}
 }
 
-func scheduled(ctx context.Context, env config.Env, claim scheduler.Claim, now time.Time) (scheduler.Result, error) {
+func scheduled(ctx context.Context, env config.Env, claim scheduler.Claim, now time.Time, create func(context.Context, string, func(context.Context, db.Querier) error) error) (scheduler.Result, error) {
 	dir := strings.TrimSpace(config.HostValueFrom(ctx, KeyDirectory))
 	if dir == "" {
 		return scheduler.Result{Status: scheduler.StatusSkippedUnconfigured, Error: new("no backup directory: set host key " + module.Core + "." + KeyDirectory)}, nil
@@ -97,7 +97,7 @@ func scheduled(ctx context.Context, env config.Env, claim scheduler.Claim, now t
 		if _, err := os.Lstat(dest); err == nil {
 			return fmt.Errorf("backup destination %s already exists", dest)
 		}
-		if _, err := writeBackup(ctx, d, cfg, key, dest, claim.RemoveFrom); err != nil {
+		if err := create(ctx, dest, claim.RemoveFrom); err != nil {
 			return err
 		}
 		return prune(dir, keep, keepDays, now)
@@ -108,15 +108,10 @@ func scheduled(ctx context.Context, env config.Env, claim scheduler.Claim, now t
 	return scheduler.Result{Status: scheduler.StatusOK}, nil
 }
 
-func manual(ctx context.Context, cfg config.Config, key db.Key, dest string) (int, error) {
-	d, err := db.Connect(cfg.DBPath, db.WithKey(key))
-	if err != nil {
-		return 0, err
-	}
-	defer func() { _ = d.Close() }()
+func manual(ctx context.Context, d *db.DB, cfg config.Config, key db.Key, dest string) (int, error) {
 	var count int
 	var runErr error
-	_, err = module.Invoke(ctx, d, cfg, JobKey, db.ShortLockWait, func(ctx context.Context, run scheduler.Run) (scheduler.Result, error) {
+	_, err := module.Invoke(ctx, d, cfg, JobKey, db.ShortLockWait, func(ctx context.Context, run scheduler.Run) (scheduler.Result, error) {
 		runErr = passrun.Track(ctx, d, passrun.Backup, func() error {
 			var err error
 			count, err = writeBackup(ctx, d, cfg, key, dest, run.Claim.RemoveFrom)

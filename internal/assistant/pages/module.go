@@ -10,9 +10,13 @@ import (
 	"sync"
 	"time"
 
+	kbapp "github.com/jeiang/atrium/internal/kb/application"
+
 	"github.com/go-chi/chi/v5"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant"
+	asstapp "github.com/jeiang/atrium/internal/assistant/application"
 	"github.com/jeiang/atrium/internal/assistant/references"
 	"github.com/jeiang/atrium/internal/assistant/service"
 	"github.com/jeiang/atrium/internal/assistant/threads"
@@ -20,7 +24,6 @@ import (
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/numx"
-	"github.com/jeiang/atrium/internal/scheduler"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -37,14 +40,17 @@ func Templates() fs.FS {
 }
 
 type Options struct {
-	Service func(context.Context) (*service.Service, error)
+	Service   func(context.Context) (*service.Service, error)
+	Knowledge func(*web.Deps) *kbapp.Service
+	Assistant func(*web.Deps) *asstapp.Service
 }
 
 type pages struct {
-	deps *web.Deps
-	svc  func() *service.Service
-	now  func() float64
-	jobs []scheduler.Definition
+	deps      *web.Deps
+	svc       func() *service.Service
+	knowledge func() *kbapp.Service
+	assistant func() *asstapp.Service
+	now       func() float64
 }
 
 const (
@@ -64,7 +70,7 @@ func Module(o Options) web.Module {
 			}
 			return svc
 		})
-		p := &pages{deps: d, svc: svc, now: assistant.Now, jobs: module.SetFrom(d.Ctx).Catalog().Jobs()}
+		p := &pages{deps: d, svc: svc, knowledge: sync.OnceValue(func() *kbapp.Service { return o.Knowledge(d) }), assistant: sync.OnceValue(func() *asstapp.Service { return o.Assistant(d).WithRuns(svc) }), now: assistant.Now}
 		d.OnFrame(p.sidebar)
 
 		r.Get("/chat", p.chatIndex)
@@ -73,8 +79,8 @@ func Module(o Options) web.Module {
 		r.Get("/chat/palette", p.palette)
 		r.Get("/today", p.today)
 		r.Get("/chat/agenda", p.agenda)
-		r.Post("/chat/{thread_id}/pin", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "pinned", threads.SetPinned) })
-		r.Post("/chat/{thread_id}/archive", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "archived", threads.SetArchived) })
+		r.Post("/chat/{thread_id}/pin", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "pinned", p.assistant().ThreadPin) })
+		r.Post("/chat/{thread_id}/archive", func(w http.ResponseWriter, r *http.Request) { p.setFlag(w, r, "archived", p.assistant().ThreadArchive) })
 		r.Get("/chat/{thread_id}", p.chatThread)
 		r.Post("/chat/{thread_id}/project", p.chatProject)
 		r.Post("/chat/{thread_id}/options", p.chatOptions)
@@ -150,15 +156,19 @@ func (p *pages) fail(w http.ResponseWriter, r *http.Request, status int, detail 
 }
 
 func (p *pages) failure(w http.ResponseWriter, r *http.Request, title, description string) {
+	p.failureStatus(w, r, http.StatusUnprocessableEntity, title, description)
+}
+
+func (p *pages) failureStatus(w http.ResponseWriter, r *http.Request, status int, title, description string) {
 	if !web.IsPartial(r) {
-		p.fail(w, r, http.StatusUnprocessableEntity, description)
+		p.fail(w, r, status, description)
 		return
 	}
 	f, err := p.deps.Render.Frame(r, "", nil)
 	check(err)
 	f.Toast = &tpl.Toast{Category: "error", Title: title, Description: description}
 	w.Header().Set("HX-Reswap", "none")
-	check(p.deps.Render.Fragment(w, r, http.StatusUnprocessableEntity, "_toast.gohtml", f))
+	check(p.deps.Render.Fragment(w, r, status, "_toast.gohtml", f))
 }
 
 func (p *pages) refused(w http.ResponseWriter, r *http.Request, err error) bool {
@@ -168,11 +178,29 @@ func (p *pages) refused(w http.ResponseWriter, r *http.Request, err error) bool 
 	var unknown service.UnknownThread
 	var refused references.Refused
 	var disabled *module.OwnerDisabled
+	var archived asstapp.ArchivedProject
+	var readOnly asstapp.ReadOnlyThread
+	var option threads.OptionError
+	var app *application.Error
 	switch {
 	case err == nil:
 		return false
 	case errors.As(err, &disabled):
 		p.failure(w, r, "Not available", err.Error())
+	case errors.As(err, &archived):
+		p.failure(w, r, "Project archived", err.Error())
+	case errors.As(err, &readOnly):
+		p.fail(w, r, http.StatusConflict, err.Error())
+	case errors.As(err, new(asstapp.NoActiveRun)):
+		p.fail(w, r, http.StatusConflict, "no run is running")
+	case errors.As(err, new(asstapp.NoQuestion)), errors.As(err, new(asstapp.NotAnswered)):
+		p.fail(w, r, http.StatusConflict, err.Error())
+	case errors.As(err, new(service.NotInterrupted)):
+		p.fail(w, r, http.StatusConflict, "run is not interrupted")
+	case errors.As(err, &option):
+		p.failure(w, r, "Not started", err.Error())
+	case errors.As(err, &app) && app.Code == application.Invalid:
+		p.failure(w, r, "Not attached", err.Error())
 	case errors.As(err, &exceeded):
 		p.failure(w, r, "Budget reached", err.Error())
 	case errors.As(err, &refused):
@@ -183,6 +211,10 @@ func (p *pages) refused(w http.ResponseWriter, r *http.Request, err error) bool 
 		p.failure(w, r, "Nothing to redo", err.Error())
 	case errors.As(err, &unknown):
 		p.fail(w, r, http.StatusNotFound, "unknown thread")
+	case errors.As(err, &app) && app.Code == application.NotConfigured:
+		p.failure(w, r, "Not available", err.Error())
+	case errors.As(err, &app) && app.Code == application.NotFound:
+		p.fail(w, r, http.StatusNotFound, app.Message)
 	default:
 		log.Error("request failed", logx.Err, err.Error())
 		p.failure(w, r, "Something went wrong", "Try again.")

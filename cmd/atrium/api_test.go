@@ -22,6 +22,7 @@ import (
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/db"
+	"github.com/jeiang/atrium/internal/inference"
 )
 
 const apiClient = "atrium-ios"
@@ -362,6 +363,44 @@ func TestAPIRefusesRequestsWithoutAValidBearer(t *testing.T) {
 	s.idp.RevokeAll = false
 }
 
+func TestThreadTranscriptRevision(t *testing.T) {
+	s := newAPISite(t)
+	owner := s.token("owner")
+	made := s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": "hello there"})
+	if made.status != http.StatusCreated {
+		t.Fatalf("create: %d %s", made.status, made.body)
+	}
+	thread, _ := made.json["thread"].(map[string]any)
+	threadID := number(t, thread["id"])
+	s.events(owner, threadID, number(t, made.json["run_id"]), "")
+	path := "/api/v1/threads/" + strconv.FormatInt(threadID, 10)
+
+	first := s.do(http.MethodGet, path, owner, nil)
+	tag := first.header.Get("ETag")
+	firstItems, _ := first.json["items"].([]any)
+	if first.status != http.StatusOK || tag == "" || len(firstItems) < 2 {
+		t.Fatalf("transcript: %d etag %q %s", first.status, tag, first.body)
+	}
+	if same := s.do(http.MethodGet, path, owner, nil, "If-None-Match", tag); same.status != http.StatusNotModified || same.body != "" || same.header.Get("ETag") != tag {
+		t.Fatalf("unchanged transcript with its ETag = %d %q %s", same.status, same.header.Get("ETag"), same.body)
+	}
+	if paged := s.do(http.MethodGet, path+"?limit=1", owner, nil, "If-None-Match", tag); paged.status != http.StatusOK {
+		t.Fatalf("a different page with the full transcript ETag = %d", paged.status)
+	}
+
+	s.api.Push(anthropictest.Reply("end_turn", anthropictest.Text("again")))
+	sent := s.do(http.MethodPost, path+"/messages", owner, map[string]any{"text": "once more"})
+	if sent.status != http.StatusAccepted {
+		t.Fatalf("send: %d %s", sent.status, sent.body)
+	}
+	s.events(owner, threadID, number(t, sent.json["run_id"]), "")
+	changed := s.do(http.MethodGet, path, owner, nil, "If-None-Match", tag)
+	items, _ := changed.json["items"].([]any)
+	if changed.status != http.StatusOK || changed.header.Get("ETag") == tag || len(items) <= len(firstItems) {
+		t.Fatalf("transcript after a new message with the old ETag = %d etag %q %s", changed.status, changed.header.Get("ETag"), changed.body)
+	}
+}
+
 func TestMeConditionalAndErrorMembers(t *testing.T) {
 	s := newAPISite(t)
 	owner := s.token("owner")
@@ -529,5 +568,95 @@ func TestAPIChatSendStreamsTheRun(t *testing.T) {
 	tailItems, _ := tail.json["items"].([]any)
 	if len(tailItems) == 0 || tailItems[0].(map[string]any)["title"] != "one" {
 		t.Fatalf("inbox page 2: %s", tail.body)
+	}
+}
+
+type proxyOwner struct{ next http.RoundTripper }
+
+func (p proxyOwner) RoundTrip(r *http.Request) (*http.Response, error) {
+	r = r.Clone(r.Context())
+	r.Header.Set("Remote-User", "owner")
+	r.Header.Set("Remote-Groups", "atrium_access,atrium_admin")
+	return p.next.RoundTrip(r)
+}
+
+func (s *apiSite) browser() *http.Client {
+	s.t.Helper()
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		s.t.Fatal(err)
+	}
+	client := &http.Client{Jar: jar, Transport: proxyOwner{http.DefaultTransport}, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	if status, body, _ := fetch(s.t, client, http.MethodGet, s.base+"/chat", nil); status != http.StatusOK {
+		s.t.Fatalf("GET /chat = %d: %s", status, body)
+	}
+	return client
+}
+
+func TestStartRefusalLeavesNoThreadInEveryInterface(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	warm(t, api)
+	if ran := runApp(t, "settings", "set", "monthly_budget_usd", "1"); ran.code != cli.ExitOK {
+		t.Fatalf("budget: %d %s", ran.code, ran.stderr)
+	}
+	d := asstDB(t, dir)
+	asstSpendAt(t, d, inference.SourceLoop, 5, float64(time.Now().Unix()))
+	s := startAPISite(t, dir, api)
+	owner := s.token("owner")
+	client := s.browser()
+	threads := func() int { return asstCount(t, d, "SELECT COUNT(*) FROM threads") }
+	before, requests := threads(), len(api.Requests())
+	listed := len(s.do(http.MethodGet, "/api/v1/threads", owner, nil).json["items"].([]any))
+
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": "x"}), http.StatusConflict, "budget_exceeded")
+	if after := s.do(http.MethodGet, "/api/v1/threads", owner, nil); len(after.json["items"].([]any)) != listed {
+		t.Fatalf("API refusal changed the thread list: %s", after.body)
+	}
+	if status, body, _ := fetch(t, client, http.MethodPost, s.base+"/chat", url.Values{"text": {"x"}}); status < http.StatusBadRequest {
+		t.Fatalf("HTML start under an exhausted budget = %d: %s", status, body)
+	}
+	if ran := runApp(t, "agent", "run", "--text", "x"); ran.code == cli.ExitOK {
+		t.Fatalf("CLI start under an exhausted budget: %d %s", ran.code, ran.stdout)
+	}
+	if after := threads(); after != before {
+		t.Fatalf("threads = %d after refused starts, want %d", after, before)
+	}
+	if sent := len(api.Requests()) - requests; sent != 0 {
+		t.Fatalf("%d provider requests after refused starts", sent)
+	}
+	if refused := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.thread.start' AND outcome = 'refused'"); refused != 3 {
+		t.Fatalf("refused start audits = %d, want 3", refused)
+	}
+}
+
+func TestStartRefusedAfterTheThreadRowLeavesNoThread(t *testing.T) {
+	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
+	warm(t, api)
+	d := asstDB(t, dir)
+	s := startAPISite(t, dir, api)
+	owner := s.token("owner")
+	client := s.browser()
+	threads := func() int { return asstCount(t, d, "SELECT COUNT(*) FROM threads") }
+	before, requests := threads(), len(api.Requests())
+	refusedRef := "@thread/999999 compare"
+
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/threads", owner, map[string]any{"text": refusedRef}), http.StatusUnprocessableEntity, "reference_refused")
+	if status, body, _ := fetch(t, client, http.MethodPost, s.base+"/chat", url.Values{"text": {refusedRef}}); status < http.StatusBadRequest {
+		t.Fatalf("HTML start with a refused reference = %d: %s", status, body)
+	}
+	if ran := runApp(t, "agent", "run", "--text", refusedRef); ran.code == cli.ExitOK {
+		t.Fatalf("CLI start with a refused reference: %d %s", ran.code, ran.stdout)
+	}
+	if ran := runApp(t, "agent", "run", "--text", "   "); ran.code != cli.ExitUsage {
+		t.Fatalf("CLI start with blank text = %d, want %d: %s", ran.code, cli.ExitUsage, ran.stderr)
+	}
+	if after := threads(); after != before {
+		t.Fatalf("threads = %d after starts refused once the thread existed, want %d (soft-deleted rows count)", after, before)
+	}
+	if sent := len(api.Requests()) - requests; sent != 0 {
+		t.Fatalf("%d provider requests after refused starts", sent)
+	}
+	if refused := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE operation = 'assistant.thread.start' AND outcome = 'refused' AND target = ''"); refused != 3 {
+		t.Fatalf("refused start audits without a removed thread target = %d, want 3", refused)
 	}
 }

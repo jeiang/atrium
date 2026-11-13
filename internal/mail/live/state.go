@@ -398,10 +398,11 @@ func (l *Live) List(ctx context.Context, account, kind string, limit, offset int
 }
 
 type UndoResult struct {
-	ID        int64   `json:"id"`
-	Undone    bool    `json:"undone"`
-	Detail    any     `json:"detail"`
-	SyncError *string `json:"sync_error"`
+	UndoEffectID int64   `json:"-"`
+	ID           int64   `json:"id"`
+	Undone       bool    `json:"undone"`
+	Detail       any     `json:"detail"`
+	SyncError    *string `json:"sync_error"`
 }
 
 func undoError(err error, id int64) error {
@@ -439,7 +440,7 @@ func (l *Live) Undo(ctx context.Context, id int64) (UndoResult, error) {
 		}
 		return UndoResult{}, UndoError(text)
 	}
-	out := UndoResult{ID: id, Undone: true, Detail: json.RawMessage(undo.After)}
+	out := UndoResult{UndoEffectID: undo.ID, ID: id, Undone: true, Detail: json.RawMessage(undo.After)}
 	if l.Registry != nil && l.Registry.Sync != nil {
 		if err := l.Registry.Sync(ctx, forward.Account); err != nil {
 			log.Error(fmt.Sprintf("post-undo sync failed for action %d", id), logx.Err, err.Error())

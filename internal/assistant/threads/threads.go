@@ -917,6 +917,27 @@ func SetArchived(ctx context.Context, q db.Querier, threadID int64, value bool) 
 		"UPDATE threads SET archived = ? WHERE id = ? AND kind = ? AND deleted_at IS NULL", store.Bit(value), threadID, Chat))
 }
 
+func Unused(ctx context.Context, q db.Querier, threadID int64) (bool, error) {
+	var used int
+	err := q.QueryRowContext(ctx, "SELECT (SELECT COUNT(*) FROM runs WHERE thread_id = ?1) + (SELECT COUNT(*) FROM thread_messages WHERE thread_id = ?1) + "+
+		"(SELECT COUNT(*) FROM thread_queue WHERE thread_id = ?1) + (SELECT COUNT(*) FROM threads WHERE parent_thread_id = ?1)", threadID).Scan(&used)
+	return used == 0, err
+}
+
+func Remove(ctx context.Context, q db.Querier, threadID int64) error {
+	for _, stmt := range []string{
+		"DELETE FROM context_projections WHERE thread_id = ?",
+		"DELETE FROM thread_plans WHERE thread_id = ?",
+		"DELETE FROM thread_fts WHERE thread_id = ?",
+		"DELETE FROM threads WHERE id = ?",
+	} {
+		if _, err := q.ExecContext(ctx, stmt, threadID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
 func Purge(ctx context.Context, q db.Querier, threadID int64, now float64) error {
 	const runs = "SELECT id FROM runs WHERE thread_id = ?"
 	for _, stmt := range []string{

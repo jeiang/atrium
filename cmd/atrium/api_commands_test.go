@@ -112,8 +112,15 @@ func TestUnkeyedCommandStatusShowsAudit(t *testing.T) {
 	data := commandStatus(t, s, token, command)
 	audit, _ := data["audit"].([]any)
 	effects, _ := data["effect_ids"].([]any)
-	if data["state"] != "succeeded" || data["status"] != float64(http.StatusOK) || audit == nil || effects == nil {
+	if data["state"] != "succeeded" || data["status"] != float64(http.StatusOK) || len(audit) != 1 || effects == nil {
 		t.Fatalf("command after deny: %v", data)
+	}
+	entry, _ := audit[0].(map[string]any)
+	if entry["operation"] != "review.dismiss" {
+		t.Fatalf("deny audit: %v", audit)
+	}
+	if n := asstCount(t, d, "SELECT COUNT(*) FROM operation_audit WHERE command_id = ? AND operation = 'review.dismiss' AND outcome = 'ok'", command); n != 1 {
+		t.Fatalf("linked deny audit rows: %d", n)
 	}
 	if n := asstCount(t, d, "SELECT COUNT(*) FROM commands WHERE id = ? AND idempotency_key IS NULL AND fingerprint = '' AND body IS NULL AND headers_json IS NULL AND status = 200 AND method = 'POST' AND pattern = '/api/v1/approvals/{proposal_id}/deny'", command); n != 1 {
 		t.Fatalf("command row for the deny: %d", n)

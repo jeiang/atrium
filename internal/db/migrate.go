@@ -183,5 +183,13 @@ func applyPending(ctx context.Context, d *DB, path string) error {
 	return nil
 }
 
-const KeyHistoryDDL = "CREATE TABLE IF NOT EXISTS db_key_history (" +
+const keyHistoryDDL = "CREATE TABLE IF NOT EXISTS db_key_history (" +
 	"id INTEGER PRIMARY KEY AUTOINCREMENT, key_id TEXT NOT NULL, replaced_by TEXT NOT NULL, retired_at REAL NOT NULL)"
+
+func RecordRetiredKey(ctx context.Context, tx *sql.Tx, oldID, newID string) error {
+	if _, err := tx.ExecContext(ctx, keyHistoryDDL); err != nil {
+		return err
+	}
+	_, err := tx.ExecContext(ctx, "INSERT INTO db_key_history (key_id, replaced_by, retired_at) VALUES (?, ?, CAST(strftime('%s','now') AS REAL))", oldID, newID)
+	return err
+}

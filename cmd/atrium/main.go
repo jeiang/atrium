@@ -95,7 +95,7 @@ func newAppWith(env config.Env, clients func(config.Config) mail.OpenFunc, now f
 	c.State = st
 	c.SetupContext = func(ctx context.Context) context.Context { return cat.Context(module.WithSet(ctx, set)) }
 	c.Bootstrap = bootstrap(env, reg)
-	c.Add(append(append(set.Commands(), connections.Command(env)), bind.ServeCommand(set.Pages()...))...)
+	c.Add(append(set.Commands(), bind.ServeCommand(set.Pages()...))...)
 	return c
 }
 

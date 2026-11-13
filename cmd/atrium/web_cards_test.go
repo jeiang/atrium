@@ -160,6 +160,14 @@ func TestCalendarCreateAsksInTheThreadAndWritesOnlyOnApproval(t *testing.T) {
 	if code, _, _ := fetch(t, client, http.MethodGet, base+"/proposals", nil); code != http.StatusNotFound {
 		t.Fatalf("GET /proposals = %d, want 404", code)
 	}
+	for _, path := range []string{"/proposals/0", "/proposals/0/card", "/proposals/-1/card"} {
+		if code, body := hxFetch(t, client, http.MethodGet, base+path, nil); code != http.StatusNotFound {
+			t.Fatalf("GET %s = %d, want 404\n%s", path, code, body)
+		}
+	}
+	if code, body := hxFetch(t, client, http.MethodGet, base+"/review/strip", nil); code != http.StatusOK || !strings.Contains(body, "Dentist") {
+		t.Fatalf("review strip: %d\n%s", code, body)
+	}
 	if code, page, _ := fetch(t, client, http.MethodGet, base+"/chat/"+thread, nil); code != http.StatusOK || !strings.Contains(page, `id="needs-`+id+`"`) ||
 		!strings.Contains(page, `hx-get="/proposals/`+id+`/card?view=row"`) {
 		t.Fatalf("the Work panel does not list the pending approval: %d", code)

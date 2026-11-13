@@ -17,6 +17,7 @@ import (
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/proposals"
+	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
@@ -51,6 +52,11 @@ func Title(a *tool.Approval, args tool.Args) string {
 }
 
 func request(ctx context.Context, tc *tool.Context, name string, a *tool.Approval, args tool.Args) (any, error) {
+	if a.Check != nil {
+		if err := a.Check(ctx, tc, args); err != nil {
+			return nil, err
+		}
+	}
 	raw, err := json.Marshal(args)
 	if err != nil {
 		return nil, err
@@ -134,6 +140,9 @@ func (e *Executor) execute(t tool.Tool) proposals.Executor {
 			return nil, proposals.ProposalError(t.Name + " is not allowed in this thread by the permission table")
 		}
 		ctx = application.WithInvocation(ctx, application.Invocation{ThreadID: payload.ThreadID, RunID: payload.RunID, Fingerprint: p.Fingerprint})
+		if !audit.HasActor(ctx) {
+			ctx = audit.With(ctx, "assistant", audit.Tool)
+		}
 		value, err := t.Approval.Apply(ctx, tc, args)
 		if err != nil {
 			message, refused := tool.Message(err)

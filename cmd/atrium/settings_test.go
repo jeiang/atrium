@@ -118,8 +118,8 @@ func TestSettingsCommandsRoundTripThroughTheDatabaseAndTheBudgetReader(t *testin
 			t.Fatalf("registry accepts %s=%s", tc.key, tc.value)
 		}
 		bad := runSettings(t, "set", tc.key, tc.value)
-		if bad.code != cli.ExitError || bad.stdout != "" || bad.stderr != "error: "+wantMessage.Error()+"\n" {
-			t.Errorf("set %s %s: exit %d stdout %q stderr %q, want exit 1 and %q", tc.key, tc.value, bad.code, bad.stdout, bad.stderr, wantMessage)
+		if bad.code != cli.ExitUsage || bad.stdout != "" || bad.stderr != "error: "+wantMessage.Error()+"\n" {
+			t.Errorf("set %s %s: exit %d stdout %q stderr %q, want exit 2 and %q", tc.key, tc.value, bad.code, bad.stdout, bad.stderr, wantMessage)
 		}
 	}
 	if v, ok := storedSetting(t, path, "monthly_budget_usd"); !ok || v != "200" {

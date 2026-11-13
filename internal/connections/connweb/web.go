@@ -4,19 +4,15 @@ import (
 	"context"
 	"embed"
 	"encoding/json"
-	"errors"
 	"io/fs"
 	"net/http"
 	"strings"
-	"time"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 
-	"github.com/jeiang/atrium/internal/config"
-	"github.com/jeiang/atrium/internal/connections"
-	"github.com/jeiang/atrium/internal/db"
-	"github.com/jeiang/atrium/internal/logx"
-	"github.com/jeiang/atrium/internal/settings/audit"
+	"github.com/jeiang/atrium/internal/application"
+	connectionsapp "github.com/jeiang/atrium/internal/connections/application"
 	"github.com/jeiang/atrium/internal/web"
 	"github.com/jeiang/atrium/internal/web/tpl"
 )
@@ -34,29 +30,22 @@ func Templates() fs.FS {
 
 const path = "/settings/connections"
 
-const (
-	checkEvery   = 24 * time.Hour
-	recheckAfter = 5 * time.Minute
-)
-
-var log = logx.Logger("atrium.connections.web")
-
 const googlePath = path + "/google"
 
 type pageData struct {
-	Connections []connections.View `json:"connections"`
-	Error       string             `json:"error"`
+	Connections []connectionsapp.View `json:"connections"`
+	Error       string                `json:"error"`
 }
 
-func (p pageData) URL(v connections.View) string {
+func (p pageData) URL(v connectionsapp.View) string {
 	var m map[string]string
 	_ = json.Unmarshal(v.Config, &m)
 	return m["url"]
 }
 
-func Page() web.Page {
+func Page(service func(*web.Deps) (*connectionsapp.Service, error)) web.Page {
 	return web.Page{
-		Module:    Module,
+		Module:    Module(service),
 		Templates: Templates(),
 		Nav: []tpl.NavItem{{
 			Label: "Connections", URL: path, Page: "connections", Settings: true, Order: 30,
@@ -64,72 +53,31 @@ func Page() web.Page {
 	}
 }
 
-func Module(r chi.Router, d *web.Deps) {
-	h := handlers{d: d}
-	d.Authenticated(http.MethodGet, path, h.index)
-	d.Authenticated(http.MethodPost, path+"/test", h.test)
-	d.Authenticated(http.MethodPost, path+"/disconnect", h.disconnect)
-	d.Authenticated(http.MethodGet, googlePath, h.google)
-	d.Authenticated(http.MethodPost, googlePath, h.googleSave)
-	d.Authenticated(http.MethodPost, googlePath+"/start", h.googleStart)
-	d.Authenticated(http.MethodGet, googlePath+"/callback", h.googleCallback)
-	d.Authenticated(http.MethodPost, googlePath+"/paste", h.googlePaste)
-	d.Authenticated(http.MethodPost, googlePath+"/test", h.googleTest)
-}
-
-func Watch(ctx context.Context, d *db.DB) error {
-	reg, err := connections.From(ctx)
-	if err != nil {
-		return err
-	}
-	store, err := connections.New(d, config.From(ctx).Host(), reg)
-	if err != nil {
-		return err
-	}
-	if err := store.CheckStale(ctx); err != nil && ctx.Err() == nil {
-		log.Warn("connection health check failed", logx.Err, err.Error())
-	}
-	t := time.NewTicker(checkEvery)
-	defer t.Stop()
-	for {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-t.C:
-			if err := store.CheckAll(ctx); err != nil && ctx.Err() == nil {
-				log.Warn("connection health check failed", logx.Err, err.Error())
+func Module(service func(*web.Deps) (*connectionsapp.Service, error)) func(chi.Router, *web.Deps) {
+	return func(r chi.Router, d *web.Deps) {
+		svc := sync.OnceValue(func() *connectionsapp.Service {
+			value, err := service(d)
+			if err != nil {
+				panic(err)
 			}
-		case failed := <-connections.Failed():
-			if !recheckable(ctx, store, failed.ID) {
-				continue
-			}
-			if _, err := store.CheckOne(ctx, failed.ID); err != nil && ctx.Err() == nil {
-				log.Warn("connection health check failed", logx.Integration, string(failed.ID), logx.Err, err.Error())
-			}
-		}
+			return value
+		})
+		h := handlers{d: d, svc: svc}
+		d.Authenticated(http.MethodGet, path, h.index)
+		d.Authenticated(http.MethodPost, path+"/test", h.test)
+		d.Authenticated(http.MethodPost, path+"/disconnect", h.disconnect)
+		d.Authenticated(http.MethodGet, googlePath, h.google)
+		d.Authenticated(http.MethodPost, googlePath, h.googleSave)
+		d.Authenticated(http.MethodPost, googlePath+"/start", h.googleStart)
+		d.Authenticated(http.MethodGet, googlePath+"/callback", h.googleCallback)
+		d.Authenticated(http.MethodPost, googlePath+"/paste", h.googlePaste)
+		d.Authenticated(http.MethodPost, googlePath+"/test", h.googleTest)
 	}
 }
 
-func recheckable(ctx context.Context, store *connections.Store, id connections.ID) bool {
-	view, err := store.Get(ctx, id)
-	if err != nil {
-		return false
-	}
-	switch view.State {
-	case connections.Failing, connections.NeedsReauth, connections.Disabled, connections.Unconfigured:
-		return false
-	}
-	return view.CheckedAt != nil && time.Since(*view.CheckedAt) >= recheckAfter
-}
-
-type handlers struct{ d *web.Deps }
-
-func (h handlers) store(ctx context.Context) (*connections.Store, error) {
-	reg, err := connections.From(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return connections.New(h.d.DB, h.d.State.Host(), reg)
+type handlers struct {
+	d   *web.Deps
+	svc func() *connectionsapp.Service
 }
 
 func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, data pageData, toast *tpl.Toast) {
@@ -149,12 +97,9 @@ func (h handlers) render(w http.ResponseWriter, r *http.Request, status int, dat
 	}
 }
 
-func (h handlers) list(ctx context.Context) ([]connections.View, error) {
-	s, err := h.store(ctx)
-	if err != nil {
-		return nil, err
-	}
-	return s.List(ctx)
+func (h handlers) list(ctx context.Context) ([]connectionsapp.View, error) {
+	read, err := h.svc().List(ctx, connectionsapp.ListInput{})
+	return read.Data, err
 }
 
 func (h handlers) index(w http.ResponseWriter, r *http.Request) {
@@ -163,83 +108,36 @@ func (h handlers) index(w http.ResponseWriter, r *http.Request) {
 
 func (h handlers) test(w http.ResponseWriter, r *http.Request) {
 	form := web.FormValues(r)
-	id := connections.ID(web.FormString(form, "id", ""))
-	ctx := audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
-	s, err := h.store(ctx)
-	if err != nil {
-		h.render(w, r, http.StatusInternalServerError, pageData{Error: err.Error()}, nil)
-		return
-	}
-	current, err := s.Get(ctx, id)
-	if err != nil {
-		http.NotFound(w, r)
-		return
-	}
-	cand := connections.Candidate{
-		Label:        web.FormString(form, "label", current.Label),
-		Config:       current.Config,
-		Capabilities: capabilitiesOf(current),
-	}
-	if url := web.FormString(form, "url", ""); url != "" {
-		cfg := map[string]string{}
-		if len(current.Config) > 0 {
-			if err := json.Unmarshal(current.Config, &cfg); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-		}
-		if cfg == nil {
-			cfg = map[string]string{}
-		}
-		cfg["url"] = url
-		raw, err := json.Marshal(cfg)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		cand.Config = raw
-	}
+	in := connectionsapp.TestSaveInput{ID: connectionsapp.ID(web.FormString(form, "id", "")), Label: web.FormString(form, "label", ""), URL: web.FormString(form, "url", ""), Credentials: map[string]string{}}
 	for key, values := range form {
 		slot, ok := strings.CutPrefix(key, "credential.")
-		if !ok || slot == "" || len(values) == 0 || values[0] == "" {
-			continue
+		if ok && slot != "" && len(values) > 0 && values[0] != "" {
+			in.Credentials[slot] = values[0]
 		}
-		cand.Credentials = append(cand.Credentials, connections.CredentialInput{Slot: slot, Value: values[0]})
 	}
 	if key := web.FormString(form, "api_key", ""); key != "" {
-		cand.Credentials = append(cand.Credentials, connections.CredentialInput{Slot: "api_key", Value: key})
+		in.Credentials["api_key"] = key
 	}
-	if _, err := s.TestAndSave(ctx, id, cand); err != nil {
-		var failed *connections.TestFailed
-		if errors.As(err, &failed) {
-			h.render(w, r, http.StatusUnprocessableEntity, pageData{Error: err.Error()}, &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()})
-			return
-		}
-		h.render(w, r, http.StatusUnprocessableEntity, pageData{Error: err.Error()}, &tpl.Toast{Category: "error", Title: "Not saved", Description: err.Error()})
+	if _, err := h.svc().TestSave(context.WithoutCancel(r.Context()), in); err != nil {
+		failure := application.Classify(err)
+		web.Fail(w, r, failure, func(status int) {
+			if failure.Code == application.Refused {
+				status = http.StatusUnprocessableEntity
+			}
+			message := web.Message(failure)
+			h.render(w, r, status, pageData{Error: message}, &tpl.Toast{Category: "error", Title: "Not saved", Description: message})
+		})
 		return
 	}
-	http.Redirect(w, r, path+"?saved="+string(id), http.StatusSeeOther)
+	http.Redirect(w, r, path+"?saved="+string(in.ID), http.StatusSeeOther)
 }
 
 func (h handlers) disconnect(w http.ResponseWriter, r *http.Request) {
-	id := connections.ID(web.FormString(web.FormValues(r), "id", ""))
-	ctx := audit.With(context.WithoutCancel(r.Context()), "operator", audit.UI)
-	s, err := h.store(ctx)
-	if err != nil {
-		h.render(w, r, http.StatusInternalServerError, pageData{Error: err.Error()}, nil)
-		return
-	}
-	if err := s.Disconnect(ctx, id); err != nil {
-		http.NotFound(w, r)
+	in := connectionsapp.DisconnectInput{ID: connectionsapp.ID(web.FormString(web.FormValues(r), "id", ""))}
+	if _, err := h.svc().Disconnect(context.WithoutCancel(r.Context()), in); err != nil {
+		failure := application.Classify(err)
+		web.Fail(w, r, failure, func(status int) { h.render(w, r, status, pageData{Error: web.Message(failure)}, nil) })
 		return
 	}
 	http.Redirect(w, r, path, http.StatusSeeOther)
-}
-
-func capabilitiesOf(v connections.View) []connections.Capability {
-	out := make([]connections.Capability, 0, len(v.Capabilities))
-	for _, c := range v.Capabilities {
-		out = append(out, connections.Capability(c))
-	}
-	return out
 }

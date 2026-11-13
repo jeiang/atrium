@@ -19,6 +19,7 @@ import (
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/sdnotify"
 	"github.com/jeiang/atrium/internal/settings"
+	"github.com/jeiang/atrium/internal/settings/audit"
 	"github.com/jeiang/atrium/internal/web"
 )
 
@@ -35,6 +36,7 @@ func (b *Bindings) ServeCommand(pages ...web.Page) *cli.Command {
 		Setup: func(args *cli.Args) cli.Handler {
 			flags := web.DefineServeFlags(args)
 			return func(env *cli.Env) int {
+				env.Ctx = audit.With(env.Ctx, "", "")
 				plan, ok := flags().Resolve(env.Stderr, env.Env)
 				if !ok {
 					return cli.ExitError

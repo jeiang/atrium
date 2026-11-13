@@ -3,10 +3,13 @@
     {
       "area": "activity",
       "operations": [
-        "commands.status"
+        "commands.status",
+        "review.effect",
+        "review.effects",
+        "review.undoable"
       ],
-      "required": 1,
-      "bound": 1
+      "required": 4,
+      "bound": 4
     },
     {
       "area": "composer",
@@ -88,9 +91,11 @@
     },
     {
       "area": "review",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "review.pending"
+      ],
+      "required": 1,
+      "bound": 1
     },
     {
       "area": "schedules",
@@ -120,9 +125,12 @@
     },
     {
       "area": "threads",
-      "operations": [],
-      "required": 0,
-      "bound": 0
+      "operations": [
+        "assistant.thread.list",
+        "assistant.thread.transcript"
+      ],
+      "required": 2,
+      "bound": 2
     },
     {
       "area": "usage",
@@ -137,6 +145,6 @@
       "bound": 0
     }
   ],
-  "total_required": 2,
-  "total_bound": 2
+  "total_required": 148,
+  "total_bound": 8
 }

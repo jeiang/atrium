@@ -8,38 +8,11 @@ import (
 	"github.com/jeiang/atrium/internal/config"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/media"
+	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
-type channelDeleteUndo struct {
-	Op string `json:"op"`
-	ID int64  `json:"id"`
-}
-
-type channelRestoreUndo struct {
-	Op  string      `json:"op"`
-	Row channelUndo `json:"row"`
-}
-
-type channelUndo struct {
-	ID            int64   `json:"id"`
-	Name          string  `json:"name"`
-	IMDB          string  `json:"imdb"`
-	Pattern       string  `json:"pattern"`
-	CaseSensitive bool    `json:"case_sensitive"`
-	Primed        bool    `json:"primed"`
-	Created       float64 `json:"created"`
-	TMDBID        *int64  `json:"tmdb_id"`
-}
-
-func channelUndoOf(c media.Channel) channelUndo {
-	return channelUndo{
-		ID: c.ID, Name: c.Name, IMDB: c.IMDB, Pattern: c.Pattern, CaseSensitive: c.CaseSensitive,
-		Primed: c.Primed, Created: c.Created, TMDBID: c.TMDBID,
-	}
-}
-
-func (c channelUndo) channel() media.Channel {
+func channelOf(c mediaapp.ChannelUndo) media.Channel {
 	return media.Channel{
 		ID: c.ID, Name: c.Name, IMDB: c.IMDB, Pattern: c.Pattern, CaseSensitive: c.CaseSensitive,
 		Primed: c.Primed, Created: c.Created, TMDBID: c.TMDBID,
@@ -74,7 +47,7 @@ func channelFailed(err error) error {
 }
 
 func undoChannelDelete(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (any, error) {
-	var u channelDeleteUndo
+	var u mediaapp.ChannelDeleteUndo
 	if err := json.Unmarshal(raw, &u); err != nil {
 		return nil, ledger.Refused("media undo payload is invalid")
 	}
@@ -86,11 +59,11 @@ func undoChannelDelete(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (an
 }
 
 func undoChannelRestore(ctx context.Context, tx *sql.Tx, raw json.RawMessage) (any, error) {
-	var u channelRestoreUndo
+	var u mediaapp.ChannelRestoreUndo
 	if err := json.Unmarshal(raw, &u); err != nil {
 		return nil, ledger.Refused("media undo payload is invalid")
 	}
-	if _, err := media.RestoreChannel(ctx, tx, u.Row.channel()); err != nil {
+	if _, err := media.RestoreChannel(ctx, tx, channelOf(u.Row)); err != nil {
 		return nil, channelFailed(err)
 	}
 	return map[string]any{"restored": u.Row.ID}, nil

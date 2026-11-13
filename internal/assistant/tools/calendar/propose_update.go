@@ -3,48 +3,27 @@ package calendartools
 import (
 	"context"
 
-	"github.com/jeiang/atrium/internal/calendar"
+	calapp "github.com/jeiang/atrium/internal/calendar/application"
 	"github.com/jeiang/atrium/internal/tool"
 )
 
-func proposed(id int64, created bool, err error) (any, error) {
-	if err != nil {
-		if converted := tool.Domain[calendar.ProposalError, tool.Error](err); converted != err {
-			return nil, converted
-		}
-		return nil, wrap(err)
-	}
-	if !created {
-		return map[string]any{"proposed": false, "reason": "an identical proposal already exists"}, nil
-	}
-	return map[string]any{"proposed": true, "proposal_id": id}, nil
-}
-
 func proposeUpdate(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	raw := map[string]any{}
-	for _, name := range []string{"uid", "title", "start", "end", "location", "notes"} {
-		v, err := optionalText(args, name)
-		if err != nil {
-			return nil, err
-		}
-		raw[name] = v
+	in := calapp.UpdateInput{Calendar: target(args)}
+	if err := texts(args, []string{"uid", "title", "start", "end", "location", "notes"},
+		[]**string{&in.UID, &in.Title, &in.Start, &in.End, &in.Location, &in.Notes}); err != nil {
+		return nil, err
 	}
 	flag, _ := args.Get("all_day")
-	target, _ := args.Get("calendar")
-	raw["all_day"], raw["calendar"] = truthy(flag), target
-	return proposed((&calendar.Proposals{DB: tc.DB, Now: tc.Now, Env: tc.Env}).ProposeUpdate(ctx, raw))
+	in.AllDay = truthy(flag)
+	return proposed(service(tc).ProposeUpdate(ctx, in))
 }
 
 func proposeRSVP(ctx context.Context, tc *tool.Context, args tool.Args) (any, error) {
-	raw := map[string]any{}
-	for _, name := range []string{"calendar", "uid", "response", "title"} {
-		v, err := optionalText(args, name)
-		if err != nil {
-			return nil, err
-		}
-		raw[name] = v
+	var in calapp.RSVPInput
+	if err := texts(args, []string{"calendar", "uid", "response", "title"}, []**string{&in.Calendar, &in.UID, &in.Response, &in.Title}); err != nil {
+		return nil, err
 	}
-	return proposed((&calendar.Proposals{DB: tc.DB, Now: tc.Now, Env: tc.Env}).ProposeRSVP(ctx, raw))
+	return proposed(service(tc).ProposeRSVP(ctx, in))
 }
 
 var updateTools = []tool.Tool{

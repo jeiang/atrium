@@ -7,6 +7,7 @@ import (
 	"net/http/cookiejar"
 	"net/url"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -14,7 +15,6 @@ import (
 	"github.com/jeiang/atrium/internal/actionlink/policy"
 	"github.com/jeiang/atrium/internal/anthropic/anthropictest"
 	"github.com/jeiang/atrium/internal/cli"
-	"github.com/jeiang/atrium/internal/db"
 )
 
 const phoneKind = "media_channel_add"
@@ -88,7 +88,7 @@ func TestPhoneActionsControlsLiveOnTheNotificationsPage(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	s := newPhoneSite(t, dir, api)
 	db := filepath.Join(dir, "atrium.db")
-	if body := s.page(); !strings.Contains(body, "0 outstanding") {
+	if body := s.page(); !strings.Contains(body, `data-phone-outstanding>0 `) {
 		t.Fatal("notifications page misses the zero outstanding count")
 	}
 
@@ -106,8 +106,8 @@ func TestPhoneActionsControlsLiveOnTheNotificationsPage(t *testing.T) {
 
 	s.propose(1)
 	body := s.page()
-	for _, want := range []string{`id="phone-actions"`, "1 outstanding link", "web only", "Revoke all", `action="/settings/phone-actions"`,
-		`name="enabled" value="1" checked`, `name="kind" value="reminder" checked`} {
+	for _, want := range []string{`id="phone-actions"`, `data-phone-outstanding>1 `, `action="/settings/phone-actions"`, `action="/settings/phone-actions/revoke"`,
+		`name="enabled" value="1" checked`, `name="kind" value="reminder" checked`, `name="kind" value="gmail_label_merge" disabled`} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("notifications page misses %q", want)
 		}
@@ -123,19 +123,23 @@ func TestPhoneActionsControlsLiveOnTheNotificationsPage(t *testing.T) {
 	}
 
 	code, body = s.post("/settings/phone-actions/revoke", nil)
-	if code != http.StatusOK || !strings.Contains(body, `id="phone-actions"`) {
-		t.Fatalf("revoke = %d, want the notifications page back", code)
+	if code != http.StatusOK || !strings.Contains(body, `id="phone-actions"`) || !strings.Contains(body, `data-phone-outstanding>0 `) {
+		t.Fatalf("revoke = %d, want the notifications page back with no outstanding links", code)
 	}
-	if !strings.Contains(body, "0 outstanding") {
-		t.Fatalf("notifications page after revoke misses the zero count")
+	d := mustConnect(t, db, keyFor(t))
+	defer func() { _ = d.Close() }()
+	var outstanding int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM action_links WHERE used_ts IS NULL").Scan(&outstanding); err != nil || outstanding != 0 {
+		t.Fatalf("outstanding links = %d, %v", outstanding, err)
 	}
+
 }
 
 func TestPhoneNotificationActionLinksRefuseReplayAlterationRotationDisallowedKindsAndRateLimit(t *testing.T) {
 	dir, api, _ := moduleFixture(t, flagsExcept("", ""))
 	push, browser := pushRig(t, dir)
 	s := newPhoneSite(t, dir, api)
-	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	t.Cleanup(func() { _ = d.Close() })
 	if code, _ := s.post("/settings/notifications/push/subscriptions", browser.form()); code != http.StatusOK {
 		t.Fatalf("subscribe = %d", code)
@@ -188,9 +192,6 @@ func TestPhoneNotificationActionLinksRefuseReplayAlterationRotationDisallowedKin
 	if st := status("Show 1"); st != "dismissed" {
 		t.Fatalf("status = %s", st)
 	}
-	if _, activity, _ := fetch(t, s.client, http.MethodGet, s.base+"/activity", nil); !strings.Contains(activity, "approved via phone") {
-		t.Fatalf("activity does not show the phone resolution")
-	}
 
 	s.propose(1)
 	approve, sibling := links()
@@ -211,7 +212,18 @@ func TestPhoneNotificationActionLinksRefuseReplayAlterationRotationDisallowedKin
 	}
 
 	s.propose(1)
-	rotated, _ := links()
+	changed, _ := links()
+	if _, err := d.Write.Exec("UPDATE proposals SET fingerprint = 'changed' WHERE title = 'Watch show: Show 3'"); err != nil {
+		t.Fatal(err)
+	}
+	if code := s.action(changed); code != http.StatusBadRequest {
+		t.Fatalf("changed plan = %d", code)
+	}
+	var changedAudit int
+	if err := d.Read.QueryRow("SELECT count(*) FROM operation_audit WHERE source = 'phone' AND operation = 'review.approve' AND outcome = 'invalid'").Scan(&changedAudit); err != nil || changedAudit != 1 {
+		t.Fatalf("changed plan audit = %d, %v", changedAudit, err)
+	}
+	rotated := changed
 	if code, _ := s.post("/settings/phone-actions/revoke", nil); code != http.StatusOK {
 		t.Fatalf("revoke = %d", code)
 	}
@@ -224,6 +236,20 @@ func TestPhoneNotificationActionLinksRefuseReplayAlterationRotationDisallowedKin
 
 	s.propose(1)
 	_, denied := links()
+	if _, err := d.Write.Exec("ALTER TABLE settings RENAME TO unavailable_settings"); err != nil {
+		t.Fatal(err)
+	}
+	code, body, _ := fetch(t, s.client, http.MethodPost, s.base+"/actions/"+denied, nil)
+	if _, err := d.Write.Exec("ALTER TABLE unavailable_settings RENAME TO settings"); err != nil {
+		t.Fatal(err)
+	}
+	if code != http.StatusInternalServerError || strings.TrimSpace(body) != "action link unavailable" {
+		t.Fatalf("policy failure = %d %q", code, body)
+	}
+	var failedAudit int
+	if err := d.Read.QueryRow("SELECT count(*) FROM operation_audit WHERE source = 'phone' AND operation = 'review.dismiss' AND outcome = 'failed'").Scan(&failedAudit); err != nil || failedAudit != 1 {
+		t.Fatalf("policy failure audit = %d, %v", failedAudit, err)
+	}
 	s.policy("reminder")
 	if code := s.action(denied); code != http.StatusForbidden {
 		t.Fatalf("disallowed kind = %d, want 403", code)
@@ -232,8 +258,39 @@ func TestPhoneNotificationActionLinksRefuseReplayAlterationRotationDisallowedKin
 		t.Fatalf("refused link changed the proposal to %s", st)
 	}
 
+	var auditName, outcome, target string
+	if err := d.Read.QueryRow("SELECT operation, outcome, target FROM operation_audit WHERE source = 'phone' ORDER BY id DESC LIMIT 1").Scan(&auditName, &outcome, &target); err != nil || auditName != "review.dismiss" || outcome != "refused" || !strings.HasPrefix(target, "proposal:") {
+		t.Fatalf("phone refusal audit = %q %q %q, %v", auditName, outcome, target, err)
+	}
+	if code := s.action(denied); code != http.StatusGone {
+		t.Fatalf("refused token replay = %d", code)
+	}
+	rows, err := d.Read.Query("SELECT operation || ' ' || outcome || ' ' || target FROM operation_audit WHERE source = 'phone' AND actor = 'phone' ORDER BY id")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var phoneAudit []string
+	for rows.Next() {
+		var row string
+		if err := rows.Scan(&row); err != nil {
+			t.Fatal(err)
+		}
+		phoneAudit = append(phoneAudit, row)
+	}
+	if err := rows.Close(); err != nil {
+		t.Fatal(err)
+	}
+	wantAudit := []string{"review.dismiss ok proposal:1", "media.channel-add ok channel:1", "review.approve ok proposal:2", "review.approve invalid proposal:3", "review.dismiss failed proposal:4", "review.dismiss refused proposal:4"}
+	if !slices.Equal(phoneAudit, wantAudit) {
+		t.Fatalf("phone audit = %q, want %q", phoneAudit, wantAudit)
+	}
+	var count int
+	if err := d.Read.QueryRow("SELECT count(*) FROM operation_audit WHERE source = 'phone'").Scan(&count); err != nil || count != len(wantAudit) {
+		t.Fatalf("phone audit count = %d, %v", count, err)
+	}
+
 	s.policy("reminder", phoneKind)
-	spent := 3
+	spent := 4
 	s.propose(actionlink.RateLimit)
 	var proposed, notified int
 	if err := d.Read.QueryRow("SELECT COUNT(*) FROM proposals WHERE kind = ?", phoneKind).Scan(&proposed); err != nil {
@@ -245,7 +302,12 @@ func TestPhoneNotificationActionLinksRefuseReplayAlterationRotationDisallowedKin
 	if proposed != 4+actionlink.RateLimit || notified != 4+actionlink.RateLimit-spent {
 		t.Fatalf("%d proposals and %d phone notifications, want %d and %d", proposed, notified, 4+actionlink.RateLimit, 4+actionlink.RateLimit-spent)
 	}
-	if body := s.page(); !strings.Contains(body, fmt.Sprintf("%d outstanding", actionlink.RateLimit-spent)) {
+	var outstanding int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM action_links WHERE used_ts IS NULL").Scan(&outstanding); err != nil || outstanding != actionlink.RateLimit-spent {
+		t.Fatalf("outstanding links = %d, %v", outstanding, err)
+	}
+	if body := s.page(); !strings.Contains(body, fmt.Sprintf("data-phone-outstanding>%d ", actionlink.RateLimit-spent)) {
 		t.Fatalf("notifications page misses %d outstanding links", actionlink.RateLimit-spent)
 	}
+
 }

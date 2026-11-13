@@ -56,19 +56,6 @@ func (s Sections) Load(ctx context.Context, q db.Querier) ([]SectionView, error)
 	return out, nil
 }
 
-func (s Sections) Save(ctx context.Context, d *db.DB, name string, values map[string]string) error {
-	section, ok := s.Named(name)
-	if !ok {
-		return UnknownSection(name)
-	}
-	if section.Validate != nil {
-		if err := section.Validate(ctx, d.Read, values); err != nil {
-			return err
-		}
-	}
-	return settings.SaveFields(ctx, d, section.Fields, values)
-}
-
 func (s Sections) Modules() map[string]bool {
 	out := make(map[string]bool, len(s))
 	for _, section := range s {
@@ -76,10 +63,6 @@ func (s Sections) Modules() map[string]bool {
 	}
 	return out
 }
-
-type UnknownSection string
-
-func (e UnknownSection) Error() string { return "unknown section " + strconv.Quote(string(e)) }
 
 type DuplicateSection string
 

@@ -305,3 +305,28 @@ func TestProposalsResolveRefusesAMixedDirectionOutcomeWithoutCommitting(t *testi
 		t.Fatalf("%d resolutions were recorded by a refused resolve", resolutions)
 	}
 }
+
+func TestCalendarDeleteRefusesUntrackedEvent(t *testing.T) {
+	dir, srv := davFixture(t)
+	path := caldavtest.CalendarPath(0) + "lunch.ics"
+	srv.SetObject(path, invite)
+	removed := proposalID(t, toolResult(t, "calendar_delete", map[string]any{"uid": "lunch"}))
+	got := runApp(t, "proposals", "approve", removed)
+	if got.code == cli.ExitOK || !strings.Contains(got.stdout+got.stderr, "only events created through atrium can be deleted") {
+		t.Fatalf("approve untracked delete = %d %q %q, want a refusal", got.code, got.stdout, got.stderr)
+	}
+	if _, ok := srv.Objects()[path]; !ok {
+		t.Fatalf("the refused delete removed the event: %v", srv.Objects())
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	var effects, refused int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE operation = 'calendar_delete'").Scan(&effects); err != nil {
+		t.Fatal(err)
+	}
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'calendar.request-delete' AND outcome = 'refused'").Scan(&refused); err != nil {
+		t.Fatal(err)
+	}
+	if effects != 0 || refused != 1 {
+		t.Fatalf("%d calendar_delete effects and %d refused audits, want 0 and 1", effects, refused)
+	}
+}

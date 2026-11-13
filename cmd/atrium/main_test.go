@@ -269,8 +269,10 @@ func TestServeRendersNotionPages(t *testing.T) {
 		t.Fatal(err)
 	}
 	client := &http.Client{Jar: jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
-	if status, body, _ := fetch(t, client, "GET", base+"/notion/missing", nil); status != http.StatusNotFound || !strings.Contains(body, "Nothing here") {
-		t.Errorf("GET /notion/missing = %d: %.300s", status, body)
+	for _, path := range []string{"/notion/missing", "/notion/11111111-1111-1111-1111-111111111111"} {
+		if status, body, _ := fetch(t, client, "GET", base+path, nil); status != http.StatusNotFound || !strings.Contains(body, "Nothing here") {
+			t.Errorf("GET %s = %d: %.300s", path, status, body)
+		}
 	}
 	for _, tc := range []struct {
 		path   string

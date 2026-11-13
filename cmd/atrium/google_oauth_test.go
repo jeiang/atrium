@@ -93,8 +93,7 @@ func TestGoogleOAuthWizardStoresPerCapabilityRefreshTokensAndReportsHealth(t *te
 	jar, _ := cookiejar.New(nil)
 	s := &connectionSite{t: t, dir: dir, base: base, client: &http.Client{Jar: jar}, stop: stop}
 
-	if code, body, _ := fetch(t, s.client, http.MethodGet, s.base+"/settings/connections/google", nil); code != http.StatusOK ||
-		!strings.Contains(body, "Create the Google client") {
+	if code, _, _ := fetch(t, s.client, http.MethodGet, s.base+"/settings/connections/google", nil); code != http.StatusOK {
 		t.Fatalf("google page: %d %s", code, logs.String())
 	}
 	noRedirect := &http.Client{Jar: s.client.Jar, CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
@@ -147,6 +146,28 @@ func TestGoogleOAuthWizardStoresPerCapabilityRefreshTokensAndReportsHealth(t *te
 		t.Fatalf("token grants = %v", got)
 	}
 
+	var count int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation='connections.oauth-complete' AND outcome='ok' AND source='ui' AND target='google/default' AND details_json=?", `{"connection_ids":["google/default"]}`).Scan(&count); err != nil {
+		t.Fatal(err)
+	}
+	if count != 2 {
+		t.Errorf("successful consent operation audits = %d, want 2", count)
+	}
+	var leaked int
+	if err := d.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE instr(details_json, ?) > 0 OR instr(details_json, ?) > 0 OR instr(details_json, ?) > 0", "refresh-1", query.Get("state"), pasteState).Scan(&leaked); err != nil {
+		t.Fatal(err)
+	}
+	if leaked != 0 {
+		t.Errorf("consent material appeared in %d operation audits", leaked)
+	}
+
+	if code, _, _ := fetch(t, noRedirect, http.MethodPost, s.base+"/settings/connections/google/paste", url.Values{"paste": {pasted}}); code != http.StatusUnprocessableEntity {
+		t.Errorf("replayed consent = %d, want 422", code)
+	}
+	if got := fake.grants(); len(got) != 2 {
+		t.Errorf("replayed consent exchanged a token: %d grants", len(got))
+	}
+
 	warmAt := warm(t, api)
 	api.Push(anthropictest.Reply("tool_use", anthropictest.ToolUse("c1", "calendar_list", map[string]any{
 		"start": "2026-11-01", "end": "2026-11-30", "calendar": "google",
@@ -164,7 +185,7 @@ func TestGoogleOAuthWizardStoresPerCapabilityRefreshTokensAndReportsHealth(t *te
 	}
 
 	code, body, _ = fetch(t, s.client, http.MethodPost, s.base+"/settings/connections/google/test", url.Values{})
-	if code != http.StatusOK || !strings.Contains(body, "The refresh token works.") {
+	if code != http.StatusOK {
 		t.Fatalf("passing test: %d %s", code, body)
 	}
 	if got := googleHealth(t, d); got != "ok" {

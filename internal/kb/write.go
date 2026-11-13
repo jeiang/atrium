@@ -177,156 +177,142 @@ func refused(r Record, verb string) error {
 	return nil
 }
 
-func Write(ctx context.Context, store *ledger.Store, w Writer, in WriteInput) (Record, int64, error) {
-	writer, err := w.name()
-	if err != nil {
-		return Record{}, 0, err
+func (w Writer) Effect(operation string, id int64) ledger.New {
+	target := "kb:new"
+	if id != 0 {
+		target = "kb:" + fmt.Sprint(id)
 	}
-	var out Record
-	effect, err := store.ApplyLocal(ctx, ledger.New{
-		Origin: "agent", Operation: "kb_write", OperationKey: "kb_write:" + ledger.NewKey(),
-		Target: "kb:new", ThreadID: &w.ThreadID, RunID: &w.RunID,
-	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
-		project, err := threadProject(ctx, tx, w.ThreadID)
-		if err != nil {
-			return ledger.Result{}, err
-		}
-		marks, err := threadMarks(ctx, tx, w.ThreadID)
-		if err != nil {
-			return ledger.Result{}, err
-		}
-		if in.ID != 0 {
-			rec, err := Get(ctx, tx, in.ID)
-			if err != nil {
-				return ledger.Result{}, err
-			}
-			if rec == nil {
-				return ledger.Result{}, tool.Error(fmt.Sprintf("%s is unknown", Cite(in.ID)))
-			}
-			if err := refused(*rec, "edited"); err != nil {
-				return ledger.Result{}, err
-			}
-			if projectOf(rec.ProjectID) != projectOf(project) {
-				return ledger.Result{}, tool.Error(fmt.Sprintf("%s belongs to another project", Cite(in.ID)))
-			}
-			next := *rec
-			if in.Title != "" {
-				next.Title = in.Title
-			}
-			if in.Body != "" {
-				next.Body = in.Body
-			}
-			if in.Aliases != nil {
-				next.Aliases = normalizeAliases(in.Aliases)
-			}
-			if in.Scope != "" {
-				next.Scope = in.Scope
-			}
-			next.Marks = rec.Marks | marks
-			next.UpdatedAt = w.Now
-			aliases, err := aliasesJSON(next.Aliases)
-			if err != nil {
-				return ledger.Result{}, err
-			}
-			if _, err := tx.ExecContext(ctx,
-				"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, marks = ?, updated_at = ? WHERE id = ?",
-				next.Title, aliases, next.Body, next.Scope, int64(next.Marks), next.UpdatedAt, next.ID); err != nil {
-				return ledger.Result{}, err
-			}
-			out = next
-			return writeResult(next, beforeOf(*rec)), nil
-		}
-		if in.Title == "" || in.Body == "" {
-			return ledger.Result{}, tool.Error("title and body are required to create a record")
-		}
-		scope := in.Scope
-		if scope == "" {
-			scope = ScopePersonal
-		}
-		if scope != ScopeWork && scope != ScopePersonal {
-			return ledger.Result{}, tool.Error("scope must be work or personal")
-		}
-		found, err := duplicate(ctx, tx, scope, projectOf(project), w.Now, in.Title, in.Aliases)
-		if err != nil {
-			return ledger.Result{}, err
-		}
-		if found != 0 {
-			return ledger.Result{}, tool.Error(fmt.Sprintf("%s exists; pass id to edit", Cite(found)))
-		}
-		sourceThread, sourceSeq, sourceRun, err := sourceOf(ctx, tx, w, in, project)
-		if err != nil {
-			return ledger.Result{}, err
-		}
-		aliases, err := aliasesJSON(in.Aliases)
-		if err != nil {
-			return ledger.Result{}, err
-		}
-		res, err := tx.ExecContext(ctx,
-			"INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, source_thread_id, source_seq, "+
-				"source_run_id, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, ?, ?)",
-			in.Title, aliases, in.Body, scope, project, int64(marks), writer, sourceThread, sourceSeq, sourceRun, w.Now, w.Now)
-		if err != nil {
-			return ledger.Result{}, err
-		}
-		id, err := res.LastInsertId()
-		if err != nil {
-			return ledger.Result{}, err
-		}
-		rec, err := Get(ctx, tx, id)
-		if err != nil {
-			return ledger.Result{}, err
-		}
-		out = *rec
-		return writeResult(*rec, nil), nil
-	})
-	if err != nil {
-		return Record{}, 0, err
-	}
-	return out, effect.ID, nil
+	return ledger.New{Origin: "agent", Operation: operation, OperationKey: operation + ":" + ledger.NewKey(),
+		Target: target, ThreadID: &w.ThreadID, RunID: &w.RunID}
 }
 
-func Retract(ctx context.Context, store *ledger.Store, w Writer, id int64, reason string) (Record, int64, error) {
-	var out Record
-	effect, err := store.ApplyLocal(ctx, ledger.New{
-		Origin: "agent", Operation: "kb_retract", OperationKey: "kb_retract:" + ledger.NewKey(),
-		Target: "kb:" + fmt.Sprint(id), ThreadID: &w.ThreadID, RunID: &w.RunID,
-	}, func(ctx context.Context, tx *sql.Tx) (ledger.Result, error) {
-		rec, err := Get(ctx, tx, id)
+func AgentWriteTx(ctx context.Context, tx *sql.Tx, w Writer, in WriteInput) (Record, ledger.Result, error) {
+	writer, err := w.name()
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	project, err := threadProject(ctx, tx, w.ThreadID)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	marks, err := threadMarks(ctx, tx, w.ThreadID)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	if in.ID != 0 {
+		rec, err := Get(ctx, tx, in.ID)
 		if err != nil {
-			return ledger.Result{}, err
+			return Record{}, ledger.Result{}, err
 		}
 		if rec == nil {
-			return ledger.Result{}, tool.Error(fmt.Sprintf("%s is unknown", Cite(id)))
+			return Record{}, ledger.Result{}, tool.Error(fmt.Sprintf("%s is unknown", Cite(in.ID)))
 		}
-		if err := refused(*rec, "retracted"); err != nil {
-			return ledger.Result{}, err
-		}
-		project, err := threadProject(ctx, tx, w.ThreadID)
-		if err != nil {
-			return ledger.Result{}, err
+		if err := refused(*rec, "edited"); err != nil {
+			return Record{}, ledger.Result{}, err
 		}
 		if projectOf(rec.ProjectID) != projectOf(project) {
-			return ledger.Result{}, tool.Error(fmt.Sprintf("%s belongs to another project", Cite(id)))
-		}
-		now := w.Now
-		if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?",
-			now, now, id); err != nil {
-			return ledger.Result{}, err
-		}
-		if err := embed.DeleteKB(ctx, tx, id); err != nil {
-			return ledger.Result{}, err
+			return Record{}, ledger.Result{}, tool.Error(fmt.Sprintf("%s belongs to another project", Cite(in.ID)))
 		}
 		next := *rec
-		next.RetractedAt, next.UpdatedAt = &now, now
-		out = next
-		r := writeResult(next, beforeOf(*rec))
-		r.After = jsonOf(map[string]any{"retracted_at": now, "reason": reason})
-		return r, nil
-	})
-	if err != nil {
-		return Record{}, 0, err
+		if in.Title != "" {
+			next.Title = in.Title
+		}
+		if in.Body != "" {
+			next.Body = in.Body
+		}
+		if in.Aliases != nil {
+			next.Aliases = normalizeAliases(in.Aliases)
+		}
+		if in.Scope != "" {
+			next.Scope = in.Scope
+		}
+		next.Marks = rec.Marks | marks
+		next.UpdatedAt = w.Now
+		aliases, err := aliasesJSON(next.Aliases)
+		if err != nil {
+			return Record{}, ledger.Result{}, err
+		}
+		if _, err := tx.ExecContext(ctx,
+			"UPDATE kb_records SET title = ?, aliases = ?, body = ?, scope = ?, marks = ?, updated_at = ? WHERE id = ?",
+			next.Title, aliases, next.Body, next.Scope, int64(next.Marks), next.UpdatedAt, next.ID); err != nil {
+			return Record{}, ledger.Result{}, err
+		}
+		return next, writeResult(next, beforeOf(*rec)), nil
 	}
-	return out, effect.ID, nil
+	if in.Title == "" || in.Body == "" {
+		return Record{}, ledger.Result{}, tool.Error("title and body are required to create a record")
+	}
+	scope := in.Scope
+	if scope == "" {
+		scope = ScopePersonal
+	}
+	if scope != ScopeWork && scope != ScopePersonal {
+		return Record{}, ledger.Result{}, tool.Error("scope must be work or personal")
+	}
+	found, err := duplicate(ctx, tx, scope, projectOf(project), w.Now, in.Title, in.Aliases)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	if found != 0 {
+		return Record{}, ledger.Result{}, tool.Error(fmt.Sprintf("%s exists; pass id to edit", Cite(found)))
+	}
+	sourceThread, sourceSeq, sourceRun, err := sourceOf(ctx, tx, w, in, project)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	aliases, err := aliasesJSON(in.Aliases)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	res, err := tx.ExecContext(ctx,
+		"INSERT INTO kb_records (title, aliases, body, scope, project_id, private, marks, writer, source_thread_id, source_seq, "+
+			"source_run_id, pinned, created_at, updated_at) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?, ?, ?, 0, ?, ?)",
+		in.Title, aliases, in.Body, scope, project, int64(marks), writer, sourceThread, sourceSeq, sourceRun, w.Now, w.Now)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	id, err := res.LastInsertId()
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	rec, err := Get(ctx, tx, id)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	return *rec, writeResult(*rec, nil), nil
+}
+
+func AgentRetractTx(ctx context.Context, tx *sql.Tx, w Writer, id int64, reason string) (Record, ledger.Result, error) {
+	rec, err := Get(ctx, tx, id)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	if rec == nil {
+		return Record{}, ledger.Result{}, tool.Error(fmt.Sprintf("%s is unknown", Cite(id)))
+	}
+	if err := refused(*rec, "retracted"); err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	project, err := threadProject(ctx, tx, w.ThreadID)
+	if err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	if projectOf(rec.ProjectID) != projectOf(project) {
+		return Record{}, ledger.Result{}, tool.Error(fmt.Sprintf("%s belongs to another project", Cite(id)))
+	}
+	now := w.Now
+	if _, err := tx.ExecContext(ctx, "UPDATE kb_records SET retracted_at = ?, embedded_hash = NULL, updated_at = ? WHERE id = ?",
+		now, now, id); err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	if err := embed.DeleteKB(ctx, tx, id); err != nil {
+		return Record{}, ledger.Result{}, err
+	}
+	next := *rec
+	next.RetractedAt, next.UpdatedAt = &now, now
+	r := writeResult(next, beforeOf(*rec))
+	r.After = jsonOf(map[string]any{"retracted_at": now, "reason": reason})
+	return next, r, nil
 }
 
 func b2i(b bool) int64 {

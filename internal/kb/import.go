@@ -322,7 +322,7 @@ func importOne(ctx context.Context, tx *sql.Tx, item importItem, rec *existingRe
 
 func notionRefToken(id string) string { return "\x1fkb:" + id + "\x1f" }
 
-func Import(ctx context.Context, d *db.DB, dryRun bool, now float64) (ImportStats, error) {
+func Import(ctx context.Context, d *db.DB, dryRun bool, now float64, settle func(context.Context, *sql.Tx, ImportStats) error) (ImportStats, error) {
 	stats := ImportStats{DryRun: dryRun, Notes: []string{}, ChangedInAtrium: []string{}, Missing: []string{}, FailedItems: []string{}}
 	sources := []struct {
 		counts *SourceCounts
@@ -463,7 +463,7 @@ func Import(ctx context.Context, d *db.DB, dryRun bool, now float64) (ImportStat
 			}
 		}
 		if dryRun {
-			return nil
+			return settle(ctx, tx, stats)
 		}
 		for _, item := range notionPages {
 			if !pending[item.Origin] {
@@ -485,7 +485,7 @@ func Import(ctx context.Context, d *db.DB, dryRun bool, now float64) (ImportStat
 				return err
 			}
 		}
-		return nil
+		return settle(ctx, tx, stats)
 	})
 	if err != nil {
 		return stats, err

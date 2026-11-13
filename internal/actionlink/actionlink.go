@@ -26,10 +26,11 @@ const (
 )
 
 var (
-	ErrInvalid = errors.New("action link is not valid")
-	ErrExpired = errors.New("action link expired")
-	ErrUsed    = errors.New("action link was already used")
-	ErrRate    = errors.New("too many action links in the last hour")
+	ErrUnavailable = errors.New("action link unavailable")
+	ErrInvalid     = errors.New("action link is not valid")
+	ErrExpired     = errors.New("action link expired")
+	ErrUsed        = errors.New("action link was already used")
+	ErrRate        = errors.New("too many action links in the last hour")
 )
 
 type Claims struct {
