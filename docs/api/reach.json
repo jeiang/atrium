@@ -130,6 +130,8 @@
         "mail.account-test",
         "mail.account-update",
         "mail.accounts",
+        "mail.apply-deletions",
+        "mail.backlog",
         "mail.commitment-dismiss",
         "mail.commitment-done",
         "mail.commitments",
@@ -145,8 +147,11 @@
         "mail.packages",
         "mail.pause",
         "mail.poll-trackers",
+        "mail.rebaseline",
         "mail.refresh-loops",
         "mail.refresh-watches",
+        "mail.reindex",
+        "mail.replay",
         "mail.resume",
         "mail.rule-create",
         "mail.rule-delete",
@@ -156,12 +161,17 @@
         "mail.rules",
         "mail.rules-export",
         "mail.rules-import",
+        "mail.scan-deletions",
+        "mail.scan-gmail-labels",
+        "mail.scan-rebalance",
         "mail.search",
+        "mail.shadow-report",
+        "mail.sync",
         "mail.triage",
         "mail.upcoming-birthdays"
       ],
-      "required": 34,
-      "bound": 34
+      "required": 44,
+      "bound": 44
     },
     {
       "area": "media",
@@ -332,5 +342,5 @@
     }
   ],
   "total_required": 206,
-  "total_bound": 176
+  "total_bound": 186
 }

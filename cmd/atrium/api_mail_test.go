@@ -5,9 +5,12 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/mailtest"
@@ -165,5 +168,141 @@ func TestMailRulesCorrectionAccountsAPI(t *testing.T) {
 	apiData(t, s.do(http.MethodPost, livePath+"/resume", token, nil), http.StatusOK)
 	if got := apiData(t, s.do(http.MethodGet, livePath, token, nil), http.StatusOK); got["paused"] != false {
 		t.Fatalf("resume: %v", got)
+	}
+}
+
+func TestMailPassesAPI(t *testing.T) {
+	const from = "statements@bank.test"
+	setEnv(t, "ATRIUM_DB_KEY", rightKeyHex)
+	m := mailSafetyFixture(t, "live")
+	m.add("Bills", "Old statement", from, "old", "Your statement is ready.", `\Seen`)
+	m.run(t, "sync")
+	rulesFile := filepath.Join(m.dir, "rules.json")
+	if err := os.WriteFile(rulesFile, []byte(`{"rules":[{"id":"old","account":"icloud","action":"delete","when":[{"field":"from_addr","op":"eq","value":"`+from+`"}]}]}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	m.run(t, "rules", "import", rulesFile)
+	d := mustConnect(t, m.path, keyFor(t))
+	t.Cleanup(func() { _ = d.Close() })
+	count := func(query string, args ...any) int {
+		t.Helper()
+		var n int
+		if err := d.Read.QueryRow(query, args...).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	token := localAPIToken(t, "api")
+	arrived, release := make(chan struct{}), make(chan struct{})
+	var arrivedOnce, releaseOnce sync.Once
+	var hooked sync.Mutex
+	statusCalls := 0
+	m.fake.SetStatusHook(func(_ string, n uint32) uint32 {
+		hooked.Lock()
+		statusCalls++
+		hooked.Unlock()
+		arrivedOnce.Do(func() {
+			close(arrived)
+			<-release
+		})
+		return n
+	})
+	logs := &lockedBuffer{}
+	base, _, stop, err := startServeAppArgs(t, m.app, logs, "--auth", "local")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { stop() })
+	t.Cleanup(func() { releaseOnce.Do(func() { close(release) }) })
+	s := &apiSite{t: t, base: base}
+	select {
+	case <-arrived:
+	case <-time.After(60 * time.Second):
+		t.Fatalf("the watch pass never reached IMAP: %s", logs.String())
+	}
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/sync", "", nil), http.StatusUnauthorized, "unauthenticated")
+	fetches, syncs := len(m.fake.Fetches), count("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.sync'")
+	busy := s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{})
+	expectAPI(t, busy, http.StatusConflict, "refused")
+	hooked.Lock()
+	calls := statusCalls
+	hooked.Unlock()
+	if calls != 1 || len(m.fake.Fetches) != fetches {
+		t.Fatalf("a busy sync reached IMAP: %d status calls, fetches %d -> %d", calls, fetches, len(m.fake.Fetches))
+	}
+	if n := count("SELECT COUNT(*) FROM operation_audit WHERE operation = 'mail.sync'"); n != syncs {
+		t.Fatalf("a busy sync was audited as a run: %d -> %d", syncs, n)
+	}
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/scans/rebalance", token, nil), http.StatusConflict, "refused")
+	m.fake.SetStatusHook(nil)
+	releaseOnce.Do(func() { close(release) })
+	waitUntil(t, 60*time.Second, "the watch pass to release mail-pass", func() bool {
+		got := s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{"account": "icloud"})
+		if got.status == http.StatusConflict && got.code() == "refused" {
+			return false
+		}
+		if data := apiData(t, got, http.StatusOK); data["outcome"] != "ok" {
+			t.Fatalf("sync: %v", data)
+		}
+		return true
+	})
+	expectAPI(t, s.do(http.MethodPost, "/api/v1/mail/sync", token, map[string]any{"account": "nope"}), http.StatusUnprocessableEntity, "invalid")
+
+	writes, fetches, searches, models := len(m.fake.Writes), len(m.fake.Fetches), len(m.fake.Searches), len(m.api.Requests())
+	replayed := apiData(t, s.do(http.MethodPost, "/api/v1/mail/replay", token, map[string]any{"account": "icloud"}), http.StatusOK)
+	if summary, _ := replayed["summary"].(map[string]any); summary == nil || summary["messages"] == nil {
+		t.Fatalf("replay: %v", replayed)
+	}
+	if got := s.do(http.MethodPost, "/api/v1/mail/replay", token, map[string]any{"model": true}); got.status/100 != 4 {
+		t.Fatalf("replay with the paid model mode: %d %s", got.status, got.body)
+	}
+	if len(m.fake.Writes) != writes || len(m.fake.Fetches) != fetches || len(m.fake.Searches) != searches || len(m.api.Requests()) != models {
+		t.Fatalf("replay made external calls: writes %d->%d fetches %d->%d searches %d->%d model %d->%d", writes, len(m.fake.Writes), fetches, len(m.fake.Fetches), searches, len(m.fake.Searches), models, len(m.api.Requests()))
+	}
+
+	apply := "/api/v1/mail/live/deletions/apply"
+	apiData(t, s.do(http.MethodPost, "/api/v1/mail/live/pause", token, nil), http.StatusOK)
+	paused := s.do(http.MethodPost, apply, token, nil)
+	expectAPI(t, paused, http.StatusConflict, "refused")
+	if len(m.fake.Writes) != writes || len(m.fake.Boxes["Bills"].Box.Messages) != 1 {
+		t.Fatalf("paused deletions wrote %v", m.verbs()[writes:])
+	}
+	apiData(t, s.do(http.MethodPost, "/api/v1/mail/live/resume", token, nil), http.StatusOK)
+	done := s.do(http.MethodPost, apply, token, nil)
+	data := apiData(t, done, http.StatusOK)
+	ids, _ := done.json["effect_ids"].([]any)
+	accounts, _ := data["accounts"].([]any)
+	if data["outcome"] != "ok" || len(ids) != 1 || len(accounts) != 1 || accounts[0].(map[string]any)["trashed"] != float64(1) {
+		t.Fatalf("apply deletions: %s", done.body)
+	}
+	if state := count("SELECT COUNT(*) FROM effects WHERE id = ? AND origin = 'mail_auto' AND operation = 'trash' AND state = 'done'", number(t, ids[0])); state != 1 {
+		t.Fatalf("trash effect %v not done", ids[0])
+	}
+	log := m.fake.Writes[writes:]
+	if len(log) != 3 || log[0].Verb != "COPY" || log[1].Verb != "STORE" || !strings.Contains(strings.Join(log[1].Args, " "), `\Deleted`) || log[2].Verb != "EXPUNGE" || len(m.fake.Boxes["Bills"].Box.Messages) != 0 {
+		t.Fatalf("apply deletions wrote %+v, want COPY, STORE \\Deleted, UID EXPUNGE", log)
+	}
+	writes = len(m.fake.Writes)
+	if again := apiData(t, s.do(http.MethodPost, apply, token, nil), http.StatusOK); again["outcome"] != "ok" || len(m.fake.Writes) != writes {
+		t.Fatalf("second deletion pass: %v, writes %v", again, m.verbs()[writes:])
+	}
+
+	for _, scan := range []string{"rebalance", "deletions", "gmail-labels"} {
+		if got := apiData(t, s.do(http.MethodPost, "/api/v1/mail/scans/"+scan, token, nil), http.StatusOK); got["outcome"] != "ok" {
+			t.Fatalf("scan %s: %v", scan, got)
+		}
+	}
+	if got := apiData(t, s.do(http.MethodPost, "/api/v1/mail/live/rebaseline", token, nil), http.StatusOK); got["outcome"] != "ok" {
+		t.Fatalf("rebaseline: %v", got)
+	}
+	if got := apiData(t, s.do(http.MethodPost, "/api/v1/mail/live/backlog", token, nil), http.StatusOK); got["outcome"] != "ok" {
+		t.Fatalf("backlog: %v", got)
+	}
+	if got := apiData(t, s.do(http.MethodGet, "/api/v1/mail/shadow-report?since=7d", token, nil), http.StatusOK); !strings.Contains(fmt.Sprint(got["report"]), "icloud") {
+		t.Fatalf("shadow report: %v", got)
+	}
+	expectAPI(t, s.do(http.MethodGet, "/api/v1/mail/shadow-report?since=bogus", token, nil), http.StatusUnprocessableEntity, "invalid")
+	if len(m.fake.Writes) != writes {
+		t.Fatalf("scans, rebaseline or backlog wrote %v", m.verbs()[writes:])
 	}
 }

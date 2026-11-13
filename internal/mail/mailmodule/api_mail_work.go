@@ -105,7 +105,7 @@ func (p mailPasses) locked(ctx context.Context, fn func(context.Context, *run.Pa
 
 func passBusy(err error) error {
 	if errors.As(err, new(*db.LockBusy)) {
-		return &application.Error{Code: application.Conflict, Message: "A mail pass is already running.", Cause: err}
+		return &application.Error{Code: application.Refused, Message: "A mail pass is already running.", Cause: err}
 	}
 	return err
 }
@@ -196,14 +196,14 @@ func mailWorkRoutes(d *web.Deps, m Module) []application.Binding {
 		api.Command(d, mailapp.DescribePackageDismiss(), application.APIShape{Area: area, Body: application.BodyNone, Errors: []application.Code{application.NotFound}}, "POST /mail/packages/{package_id}/dismiss", func(ctx context.Context, in MailPackageRef) (application.Change[struct{}], error) {
 			return svc().PackageDismiss(ctx, mailapp.PackageInput{ID: in.ID})
 		}),
-		api.Command(d, mailapp.DescribeRefreshLoops(), application.APIShape{Area: area, Errors: []application.Code{application.Conflict}}, "POST /mail/loops/refresh", func(ctx context.Context, _ struct{}) (out application.Change[MailRefreshed], err error) {
+		api.Command(d, mailapp.DescribeRefreshLoops(), application.APIShape{Area: area, Errors: []application.Code{application.Refused}}, "POST /mail/loops/refresh", func(ctx context.Context, _ struct{}) (out application.Change[MailRefreshed], err error) {
 			err = passes.locked(ctx, func(ctx context.Context, p *run.Pass) error {
 				out, err = mailRefreshed(mailCLIService(d.Env)(p).WithClassifier(p.Classifier).RefreshLoops(ctx, struct{}{}))
 				return err
 			})
 			return out, err
 		}),
-		api.Command(d, mailapp.DescribeRefreshWatches(), application.APIShape{Area: area, Errors: []application.Code{application.Conflict}}, "POST /mail/watches/refresh", func(ctx context.Context, _ struct{}) (out application.Change[MailRefreshed], err error) {
+		api.Command(d, mailapp.DescribeRefreshWatches(), application.APIShape{Area: area, Errors: []application.Code{application.Refused}}, "POST /mail/watches/refresh", func(ctx context.Context, _ struct{}) (out application.Change[MailRefreshed], err error) {
 			err = passes.locked(ctx, func(ctx context.Context, p *run.Pass) error {
 				out, err = mailRefreshed(mailCLIService(d.Env)(p).WithClassifier(p.Classifier).RefreshWatches(ctx, struct{}{}))
 				return err
