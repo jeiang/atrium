@@ -4,13 +4,16 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
+	"net/url"
 	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
 	"testing"
 
+	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/db"
 )
 
@@ -107,7 +110,7 @@ func TestAPIApprovesUndoesAndSendsThroughTheSameGates(t *testing.T) {
 		t.Fatalf("a second approval wrote again: %d puts", len(dav.Puts))
 	}
 	var source string
-	if err := d.Read.QueryRow("SELECT source FROM effect_resolutions WHERE proposal_id = ? AND effect_id IS NULL AND outcome = 'approved'", approve).Scan(&source); err != nil || source != "ui" {
+	if err := d.Read.QueryRow("SELECT source FROM effect_resolutions WHERE proposal_id = ? AND effect_id IS NULL AND outcome = 'approved'", approve).Scan(&source); err != nil || source != "api" {
 		t.Fatalf("approval resolution source = %q, %v", source, err)
 	}
 
@@ -249,5 +252,66 @@ func TestPendingRevisionChangesAfterDecision(t *testing.T) {
 	}
 	if same := s.do(http.MethodGet, "/api/v1/undo", owner, nil, "If-None-Match", undo.header.Get("ETag")); same.status != http.StatusNotModified {
 		t.Fatalf("unchanged undo feed: %d %s", same.status, same.body)
+	}
+}
+
+func TestApprovalSourceAndInvalidSelection(t *testing.T) {
+	dir, dav := davFixture(t)
+	reviewSMTP(t, dir)
+	event := map[string]any{"calendar": "icloud", "title": "Dentist", "start": "2026-11-10T12:00:00", "end": "2026-11-10T13:00:00"}
+	viaHTML := proposalID(t, toolResult(t, "calendar_create", event))
+	event["title"] = "Haircut"
+	viaAPI := proposalID(t, toolResult(t, "calendar_create", event))
+	effectsOf := func(d *db.DB, id string) int {
+		var n int
+		if err := d.Read.QueryRow("SELECT COUNT(*) FROM effects WHERE proposal_id = ?", id).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	d := mustConnect(t, filepath.Join(dir, "atrium.db"), db.Key{})
+	defer func() { _ = d.Close() }()
+
+	for _, bad := range []string{"{", "[1]"} {
+		if got := runApp(t, "proposals", "approve", viaAPI, "--selection", bad); got.code != cli.ExitUsage || effectsOf(d, viaAPI) != 0 {
+			t.Fatalf("CLI approve with selection %q: exit %d, %d effects: %s", bad, got.code, effectsOf(d, viaAPI), got.stderr)
+		}
+	}
+
+	base, _, stop := startServeStoppable(t, dir)
+	jar, _ := cookiejar.New(nil)
+	client := &http.Client{Jar: jar}
+	if code, _, _ := fetch(t, client, http.MethodGet, base+"/chat", nil); code != http.StatusOK {
+		t.Fatalf("GET /chat = %d", code)
+	}
+	if code, body := hxFetch(t, client, http.MethodPost, base+"/proposals/"+viaHTML+"/approve", url.Values{"all": {"1"}}); code != http.StatusOK || !strings.Contains(body, `data-status="applied"`) {
+		t.Fatalf("HTML approve: %d\n%s", code, body)
+	}
+	stop()
+
+	s := startAPISite(t, dir, nil)
+	owner := s.token("owner")
+	reply := s.do(http.MethodPost, "/api/v1/approvals/"+viaAPI+"/approve", owner, map[string]any{"selection": []any{1}})
+	expectAPI(t, reply, http.StatusUnprocessableEntity, "bad_selection")
+	if fields, _ := reply.json["error"].(map[string]any)["fields"].([]any); len(fields) != 1 || !strings.Contains(reply.body, `"selection"`) || effectsOf(d, viaAPI) != 0 {
+		t.Fatalf("API bad selection: %s, %d effects", reply.body, effectsOf(d, viaAPI))
+	}
+	if done := s.do(http.MethodPost, "/api/v1/approvals/"+viaAPI+"/approve", owner, nil); done.status != http.StatusOK || done.json["outcome"] != "applied" {
+		t.Fatalf("API approve: %d %s", done.status, done.body)
+	}
+	if len(dav.Puts) != 2 {
+		t.Fatalf("approvals wrote %d events, want 2", len(dav.Puts))
+	}
+	for id, source := range map[string]string{viaHTML: "ui", viaAPI: "api"} {
+		var resolution, audited string
+		if err := d.Read.QueryRow("SELECT source FROM effect_resolutions WHERE proposal_id = ? AND outcome = 'approved'", id).Scan(&resolution); err != nil {
+			t.Fatal(err)
+		}
+		if err := d.Read.QueryRow("SELECT source FROM operation_audit WHERE operation = 'review.approve' AND outcome = 'ok' AND target = ?", "proposal:"+id).Scan(&audited); err != nil {
+			t.Fatal(err)
+		}
+		if resolution != source || audited != source {
+			t.Errorf("proposal %s: resolution source %q, audit source %q, want %q", id, resolution, audited, source)
+		}
 	}
 }

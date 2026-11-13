@@ -13,6 +13,7 @@ import (
 	"github.com/jeiang/atrium/internal/mail/run"
 	"github.com/jeiang/atrium/internal/notify"
 	"github.com/jeiang/atrium/internal/proposals"
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
 )
 
 func (o Options) LiveCommand() *cli.Command {
@@ -130,28 +131,21 @@ func listActions(x *exec, limit int, kind string) error {
 }
 
 func undoAction(x *exec, id int64) error {
-	result, err := x.Live.Undo(x.Ctx, id)
+	done, err := reviewapp.New(reviewapp.Deps{DB: x.DB, Live: x.Live}).Undo(x.Ctx, reviewapp.UndoInput{ActionID: id})
 	if err != nil {
-		var undoErr live.UndoError
-		if errors.As(err, &undoErr) {
-			return failure(cli.ExitError, err)
-		}
 		return err
 	}
+	result := done.Data.Mail
 	x.JSON(undoJSON{ID: result.ID, Undone: result.Undone, Detail: result.Detail, SyncError: result.SyncError})
 	return nil
 }
 
 func resolveAction(x *exec, id int64, outcome string) error {
-	result, err := x.Live.Resolve(x.Ctx, id, outcome, operator)
+	done, err := reviewapp.New(reviewapp.Deps{DB: x.DB, Live: x.Live}).Resolve(x.Ctx, reviewapp.ResolveInput{ActionID: id, Outcome: outcome})
 	if err != nil {
-		var undoErr live.UndoError
-		if errors.As(err, &undoErr) {
-			return failure(cli.ExitError, err)
-		}
 		return err
 	}
-	x.JSON(map[string]any{"id": result.ID, "outcome": result.Outcome})
+	x.JSON(map[string]any{"id": done.Data.Mail.ID, "outcome": done.Data.Mail.Outcome})
 	return nil
 }
 

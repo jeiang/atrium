@@ -20,6 +20,10 @@ const (
 	UndoableName  application.Name = "review.undoable"
 	EffectsName   application.Name = "review.effects"
 	EffectName    application.Name = "review.effect"
+	ApproveName   application.Name = "review.approve"
+	DismissName   application.Name = "review.dismiss"
+	UndoName      application.Name = "review.undo"
+	ResolveName   application.Name = "review.resolve"
 )
 
 type Deps struct {
@@ -28,6 +32,7 @@ type Deps struct {
 	Drafts   *drafts.Store
 	Live     *live.Live
 	Registry *proposals.Registry
+	Pipeline *proposals.Pipeline
 }
 
 type Service struct {
@@ -37,10 +42,11 @@ type Service struct {
 	drafts   *drafts.Store
 	live     *live.Live
 	registry *proposals.Registry
+	pipeline *proposals.Pipeline
 }
 
 func New(d Deps) *Service {
-	return &Service{db: d.DB, state: state.New(d.DB), ledger: d.Ledger, drafts: d.Drafts, live: d.Live, registry: d.Registry}
+	return &Service{db: d.DB, state: state.New(d.DB), ledger: d.Ledger, drafts: d.Drafts, live: d.Live, registry: d.Registry, pipeline: d.Pipeline}
 }
 
 func Describe() []application.Definition {
@@ -53,6 +59,10 @@ func Describe() []application.Definition {
 		application.Describe[UndoableInput, Undoable](UndoableName, application.Query, operator, application.NoEffect, false),
 		application.Describe[EffectsInput, []ledger.Effect](EffectsName, application.Query, operator, application.NoEffect, false),
 		application.Describe[EffectInput, ledger.Effect](EffectName, application.Query, operator, application.NoEffect, false),
+		application.Describe[ApproveInput, Decision](ApproveName, application.Command, []application.Authority{application.Operator, application.PublicCapability}, application.Conditional, true),
+		application.Describe[DismissInput, Decision](DismissName, application.Command, []application.Authority{application.Operator, application.PublicCapability}, application.NoEffect, true),
+		application.Describe[UndoInput, UndoResult](UndoName, application.Command, operator, application.Conditional, true),
+		application.Describe[ResolveInput, ResolveResult](ResolveName, application.Command, operator, application.NoEffect, true),
 	}
 }
 

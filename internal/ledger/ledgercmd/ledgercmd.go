@@ -137,11 +137,15 @@ func resolve(o Options) *cli.Command {
 				if *evidence != "" {
 					r.Evidence = json.RawMessage(*evidence)
 				}
-				found, err := s.Resolve(e.Ctx, int64(*id), r, ledger.Resolver{Actor: *actor, Source: *source}, nil)
+				ctx, err := reviewapp.WithOrigin(e.Ctx, *actor, *source)
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				return write(e, found)
+				found, err := reviewapp.New(reviewapp.Deps{DB: d, Ledger: s}).Resolve(ctx, reviewapp.ResolveInput{EffectID: int64(*id), Outcome: r.Outcome, Evidence: r.Evidence})
+				if err != nil {
+					return cli.Fail(e, err)
+				}
+				return write(e, found.Data.Effect)
 			}
 		},
 	}
@@ -162,11 +166,11 @@ func undo(o Options) *cli.Command {
 				if _, err := s.Recover(e.Ctx, o.now()-ledger.StuckSeconds); err != nil {
 					return cli.Fail(e, err)
 				}
-				found, err := s.Undo(e.Ctx, int64(*id), ledger.Resolver{Actor: "operator", Source: "cli"})
+				found, err := reviewapp.New(reviewapp.Deps{DB: d, Ledger: s}).Undo(e.Ctx, reviewapp.UndoInput{EffectID: int64(*id)})
 				if err != nil {
 					return cli.Fail(e, err)
 				}
-				return write(e, found)
+				return write(e, found.Data.Undo)
 			}
 		},
 	}

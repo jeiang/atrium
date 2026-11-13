@@ -8,14 +8,15 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/logx"
 	"github.com/jeiang/atrium/internal/mail"
 	"github.com/jeiang/atrium/internal/mail/corrections"
-	"github.com/jeiang/atrium/internal/mail/live"
 	"github.com/jeiang/atrium/internal/mail/message"
 	"github.com/jeiang/atrium/internal/mail/triage"
 	"github.com/jeiang/atrium/internal/notify"
+	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/safety"
 	"github.com/jeiang/atrium/internal/urlx"
 	"github.com/jeiang/atrium/internal/web"
@@ -246,20 +247,21 @@ func (s *service) liveUndo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := context.WithoutCancel(r.Context())
-	found, err := s.live.Get(ctx, id)
-	check(err)
-	if found == nil {
+	notice := toast("success", "Undone", "")
+	_, err := reviewapp.New(reviewapp.Deps{DB: s.deps.DB, Live: s.live}).Undo(ctx, reviewapp.UndoInput{ActionID: id})
+	var e *application.Error
+	switch {
+	case err == nil:
+	case !errors.As(err, &e):
+		panic(err)
+	case e.Code == application.NotFound:
 		s.fail(w, r, http.StatusNotFound, "unknown action")
 		return
+	default:
+		notice = toast("error", "Not undone", e.Message)
 	}
-	notice := toast("success", "Undone", "")
-	var refused live.UndoError
-	switch _, err := s.live.Undo(ctx, id); {
-	case errors.As(err, &refused):
-		notice = toast("error", "Not undone", refused.Error())
-	case err != nil:
-		panic(err)
-	}
+	found, err := s.live.Get(ctx, id)
+	check(err)
 	row, err := triage.Get(ctx, s.deps.DB.Read, found.MessageID)
 	check(err)
 	if row == nil {

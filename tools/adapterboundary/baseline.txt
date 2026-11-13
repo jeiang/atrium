@@ -1,5 +1,3 @@
-internal/actionlink/handler.go	github.com/jeiang/atrium/internal/actionlink/policy
-internal/actionlink/handler.go	github.com/jeiang/atrium/internal/assistant/permission
 internal/actionlink/handler.go	github.com/jeiang/atrium/internal/config
 internal/actionlink/handler.go	github.com/jeiang/atrium/internal/db
 internal/actionlink/handler.go	github.com/jeiang/atrium/internal/proposals
@@ -388,7 +386,6 @@ internal/mail/mailcmd/mailcmd.go	github.com/jeiang/atrium/internal/db
 internal/mail/mailcmd/mailcmd.go	github.com/jeiang/atrium/internal/mail
 internal/mail/mailcmd/mailcmd.go	github.com/jeiang/atrium/internal/mail/imapclient
 internal/mail/mailcmd/mailcmd.go	github.com/jeiang/atrium/internal/mail/run
-internal/mail/mailcmd/mailcmd.go	github.com/jeiang/atrium/internal/proposals
 internal/mail/mailcmd/refresh.go	github.com/jeiang/atrium/internal/mail/openloops
 internal/mail/mailcmd/refresh.go	github.com/jeiang/atrium/internal/mail/watches
 internal/mail/mailcmd/replay.go	database/sql
@@ -411,7 +408,6 @@ internal/mail/mailcmd/tracking.go	github.com/jeiang/atrium/internal/scheduler
 internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/db
 internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/mail
 internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/mail/corrections
-internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/mail/live
 internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/mail/message
 internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/mail/triage
 internal/mail/pages/messages.go	github.com/jeiang/atrium/internal/notify
@@ -435,12 +431,8 @@ internal/mail/pages/views.go	github.com/jeiang/atrium/internal/mail/drafts
 internal/mail/pages/views.go	github.com/jeiang/atrium/internal/mail/message
 internal/mail/pages/views.go	github.com/jeiang/atrium/internal/mail/rules
 internal/mail/pages/views.go	github.com/jeiang/atrium/internal/mail/triage
-internal/mail/reviewpages/activity.go	github.com/jeiang/atrium/internal/ledger
-internal/mail/reviewpages/activity.go	github.com/jeiang/atrium/internal/mail/live
-internal/mail/reviewpages/activity.go	github.com/jeiang/atrium/internal/proposals
 internal/mail/reviewpages/api.go	github.com/jeiang/atrium/internal/ledger
 internal/mail/reviewpages/api.go	github.com/jeiang/atrium/internal/mail/drafts
-internal/mail/reviewpages/api.go	github.com/jeiang/atrium/internal/proposals
 internal/mail/reviewpages/drafts.go	github.com/jeiang/atrium/internal/ledger
 internal/mail/reviewpages/drafts.go	github.com/jeiang/atrium/internal/mail/drafts
 internal/mail/reviewpages/loops.go	github.com/jeiang/atrium/internal/mail/openloops

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/assistant/registry"
 	"github.com/jeiang/atrium/internal/cli"
 	"github.com/jeiang/atrium/internal/config"
@@ -26,8 +27,6 @@ import (
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/settings"
 )
-
-var operator = proposals.Resolver{Actor: "operator", Source: "cli"}
 
 func nullable[T any](v *T) any {
 	if v == nil {
@@ -126,6 +125,33 @@ func (x *exec) Pipeline() *proposals.Pipeline {
 	}
 }
 
+func (x *exec) review() *reviewapp.Service {
+	p := x.Pipeline()
+	return reviewapp.New(reviewapp.Deps{DB: x.DB, Ledger: p.Ledger, Registry: p.Registry, Pipeline: p})
+}
+
+func selectionOf(raw string) (reviewapp.Selection, error) {
+	invalid := func(message string) error {
+		return &application.Error{Code: application.Invalid, Message: message, Fields: []application.Field{{Name: "selection", Code: "invalid", Message: message}}}
+	}
+	parsed, err := jsonx.Loads([]byte(raw))
+	if err != nil {
+		if strings.TrimSpace(raw) == "{" {
+			return nil, invalid("Expecting property name enclosed in double quotes: line 1 column 2 (char 1)")
+		}
+		return nil, invalid(err.Error())
+	}
+	b, err := json.Marshal(parsed)
+	if err != nil {
+		return nil, err
+	}
+	var chosen reviewapp.Selection
+	if err := json.Unmarshal(b, &chosen); err != nil || chosen == nil {
+		return nil, invalid("selection must be an object.")
+	}
+	return chosen, nil
+}
+
 type body func(x *exec) error
 
 func (o Options) leaf(name string, declare func(a *cli.Args) body) *cli.Command {
@@ -186,32 +212,22 @@ func Command(o Options) *cli.Command {
 			id := a.IntArg("id", cli.Opt{})
 			selection := a.String("selection", "", cli.Opt{Help: "JSON selection document"})
 			return func(x *exec) error {
-				var chosen any
+				in := reviewapp.ApproveInput{ProposalID: int64(*id)}
 				if *selection != "" {
-					parsed, err := jsonx.Loads([]byte(*selection))
-					if err != nil {
-						if strings.TrimSpace(*selection) == "{" {
-							return errors.New("Expecting property name enclosed in double quotes: line 1 column 2 (char 1)") //nolint:staticcheck // the CLI contract keeps the py-compatible wording
-						}
-						return err
-					}
-					b, err := json.Marshal(parsed)
+					chosen, err := selectionOf(*selection)
 					if err != nil {
 						return err
 					}
-					if err := json.Unmarshal(b, &chosen); err != nil {
-						return err
-					}
+					in.Selection = chosen
 				}
-				approved, err := x.Pipeline().ApproveAndApply(x.Ctx, int64(*id), chosen, operator)
+				approved, err := x.review().Approve(x.Ctx, in)
+				if approved.Data.Proposal != nil {
+					x.JSON(approved.Data.Proposal.Dict())
+				}
 				if err != nil {
-					if approved != nil {
-						x.JSON(approved.Dict())
-					}
 					return err
 				}
-				x.JSON(approved.Dict())
-				if approved.Status == proposals.Failed {
+				if !approved.Data.Applied {
 					return failure(cli.ExitError, errors.New("the apply failed; see the result"))
 				}
 				return nil
@@ -221,11 +237,7 @@ func Command(o Options) *cli.Command {
 			id := a.IntArg("id", cli.Opt{})
 			forever := a.Bool("forever", cli.Opt{})
 			return func(x *exec) error {
-				status := proposals.Dismissed
-				if *forever {
-					status = proposals.Suppressed
-				}
-				if err := x.Pipeline().Dismiss(x.Ctx, int64(*id), status, operator); err != nil {
+				if _, err := x.review().Dismiss(x.Ctx, reviewapp.DismissInput{ProposalID: int64(*id), Suppress: *forever}); err != nil {
 					return err
 				}
 				x.JSON(dismissView{ID: int64(*id), Dismissed: true})
@@ -236,34 +248,27 @@ func Command(o Options) *cli.Command {
 			id := a.IntArg("id", cli.Opt{})
 			outcome := a.String("outcome", "", cli.Opt{Choices: proposals.Outcomes, Help: "what the operator found: applied, not-applied or partial for a write; undone or not-undone for an undo"})
 			return func(x *exec) error {
-				resolved, err := x.Pipeline().Resolve(x.Ctx, int64(*id), *outcome, operator)
-				var refused proposals.ProposalError
-				if errors.As(err, &refused) {
-					return failure(cli.ExitError, err)
-				}
+				resolved, err := x.review().Resolve(x.Ctx, reviewapp.ResolveInput{ProposalID: int64(*id), Outcome: *outcome})
 				if err != nil {
 					return err
 				}
-				settled := make([]any, len(resolved.Settled))
-				for i, n := range resolved.Settled {
+				settled := make([]any, len(resolved.Data.Proposal.Settled))
+				for i, n := range resolved.Data.Proposal.Settled {
 					settled[i] = n
 				}
-				x.JSON(map[string]any{"id": resolved.ID, "settled": settled})
+				x.JSON(map[string]any{"id": resolved.Data.Proposal.ID, "settled": settled})
 				return nil
 			}
 		}),
 		o.leaf("undo", func(a *cli.Args) body {
 			id := a.IntArg("id", cli.Opt{})
 			return func(x *exec) error {
-				result, err := x.Pipeline().Undo(x.Ctx, int64(*id), operator)
-				if err != nil {
-					if len(result.Outcomes) > 0 || result.SyncError != nil {
-						x.JSON(result.Dict())
-					}
-					return err
+				result, err := x.review().Undo(x.Ctx, reviewapp.UndoInput{ProposalID: int64(*id)})
+				outcome := result.Data.Outcome
+				if err == nil || len(outcome.Outcomes) > 0 || outcome.SyncError != nil {
+					x.JSON(outcome.Dict())
 				}
-				x.JSON(result.Dict())
-				return nil
+				return err
 			}
 		}),
 	}}

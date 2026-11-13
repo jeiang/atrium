@@ -90,16 +90,17 @@ func newService(o Options, d *web.Deps) *service {
 	}
 	liveSvc := &live.Live{DB: d.DB, Cfg: d.Cfg, Store: effects, Open: open, Registry: registry, Now: now}
 	draftStore := &drafts.Store{DB: d.DB, Cfg: d.Cfg, Ledger: effects, Open: open, Now: now}
+	pipeline := &proposals.Pipeline{DB: d.DB, Ledger: effects, Registry: registry, Now: now, Enabled: o.Enabled}
 	return &service{
 		deps:     d,
 		now:      now,
-		pipeline: &proposals.Pipeline{DB: d.DB, Ledger: effects, Registry: registry, Now: now, Enabled: o.Enabled},
+		pipeline: pipeline,
 		live:     liveSvc,
 		open:     open,
 		ledger:   effects,
 		drafts:   draftStore,
 		registry: registry,
-		review:   reviewapp.New(reviewapp.Deps{DB: d.DB, Ledger: effects, Drafts: draftStore, Live: liveSvc, Registry: registry}),
+		review:   reviewapp.New(reviewapp.Deps{DB: d.DB, Ledger: effects, Drafts: draftStore, Live: liveSvc, Registry: registry, Pipeline: pipeline}),
 	}
 }
 
@@ -122,7 +123,7 @@ func Module(o Options) web.Module {
 		r.Post("/proposals/{proposal_id}/dismiss", s.proposalDismiss)
 		r.Post("/proposals/{proposal_id}/undo", s.proposalUndo)
 		r.Post("/proposals/{proposal_id}/resolve", s.proposalResolve)
-		d.Public(http.MethodPost, "/actions/{token}", actionlink.Handler(s.pipeline, s.now))
+		d.Public(http.MethodPost, "/actions/{token}", actionlink.Handler(s.phone, s.now))
 
 		r.Get("/activity", s.activityPage)
 		r.Get("/activity/recent", s.recentActivity)

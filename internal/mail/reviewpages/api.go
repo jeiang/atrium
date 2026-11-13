@@ -8,16 +8,14 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/jeiang/atrium/internal/application"
 	"github.com/jeiang/atrium/internal/jsonx"
 	"github.com/jeiang/atrium/internal/ledger"
 	"github.com/jeiang/atrium/internal/mail/drafts"
 	"github.com/jeiang/atrium/internal/module"
-	"github.com/jeiang/atrium/internal/proposals"
 	reviewapp "github.com/jeiang/atrium/internal/review/application"
 	"github.com/jeiang/atrium/internal/web"
 )
-
-var appResolver = proposals.Resolver{Actor: "operator", Source: "ui"}
 
 type apiApproval struct {
 	ID            int64           `json:"id"`
@@ -153,18 +151,37 @@ func (s *service) apiPending(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *service) apiProposal(w http.ResponseWriter, r *http.Request) (*proposals.Proposal, bool) {
-	id, ok := web.PathID(w, r, "proposal_id")
-	if !ok {
-		return nil, false
+func apiRefused(w http.ResponseWriter, err error, code, missing string, extra map[string]any) bool {
+	if err == nil {
+		return false
 	}
-	found, err := proposals.Get(r.Context(), s.deps.DB.Read, id)
-	check(err)
-	if found == nil {
-		web.APIError(w, http.StatusNotFound, "not_found", "Unknown approval.")
-		return nil, false
+	var e *application.Error
+	if !errors.As(err, &e) {
+		panic(err)
 	}
-	return found, true
+	switch e.Code {
+	case application.NotFound:
+		web.APIError(w, http.StatusNotFound, "not_found", missing)
+	case application.Invalid:
+		fields := make([]web.FieldError, len(e.Fields))
+		code = "invalid"
+		for i, f := range e.Fields {
+			fields[i] = web.FieldError{Type: f.Code, Loc: []string{"body", f.Name}, Msg: f.Message}
+			if f.Name == "selection" {
+				code = "bad_selection"
+			}
+		}
+		web.APIError(w, http.StatusUnprocessableEntity, code, e.Message, fields...)
+	case application.Refused, application.Conflict:
+		if extra != nil {
+			web.APIErrorWith(w, http.StatusConflict, code, e.Message, extra)
+			return true
+		}
+		web.APIError(w, http.StatusConflict, code, e.Message)
+	default:
+		web.APIFail(w, err)
+	}
+	return true
 }
 
 func (s *service) currentApproval(ctx context.Context, id int64) apiApproval {
@@ -174,102 +191,82 @@ func (s *service) currentApproval(ctx context.Context, id int64) apiApproval {
 }
 
 func (s *service) apiApprove(w http.ResponseWriter, r *http.Request) {
+	id, ok := web.PathID(w, r, "proposal_id")
+	if !ok {
+		return
+	}
 	var in struct {
 		Selection json.RawMessage `json:"selection"`
 	}
 	if !web.DecodeOptionalJSON(w, r, &in) {
 		return
 	}
-	found, ok := s.apiProposal(w, r)
-	if !ok {
-		return
-	}
-	var selection any
+	input := reviewapp.ApproveInput{ProposalID: id}
 	if len(in.Selection) > 0 && string(in.Selection) != "null" {
 		picked, err := jsonx.Loads(in.Selection)
-		if _, isMap := picked.(map[string]any); err != nil || !isMap {
-			web.APIError(w, http.StatusUnprocessableEntity, "bad_selection", "selection must be an object.")
+		chosen, isMap := picked.(map[string]any)
+		if err != nil || !isMap {
+			const message = "selection must be an object."
+			web.APIError(w, http.StatusUnprocessableEntity, "bad_selection", message, web.FieldError{Type: "invalid", Loc: []string{"body", "selection"}, Msg: message})
 			return
 		}
-		selection = picked
+		input.Selection = chosen
 	}
-	ctx := detached(r)
-	done, err := s.pipeline.ApproveAndApply(ctx, found.ID, selection, appResolver)
-	var badSelection proposals.SelectionError
-	var refused proposals.ProposalError
-	var disabled *module.OwnerDisabled
-	switch {
-	case errors.As(err, &badSelection):
-		web.APIError(w, http.StatusUnprocessableEntity, "bad_selection", err.Error())
-		return
-	case errors.As(err, &refused) || errors.As(err, &disabled):
-		if done != nil {
-			web.APIErrorWith(w, http.StatusConflict, "not_approved", err.Error(), map[string]any{"approval": approvalOf(s.review.CardOf(done)), "outcome": "failed"})
-			return
-		}
-		web.APIError(w, http.StatusConflict, "not_approved", err.Error())
+	done, err := s.review.Approve(detached(r), input)
+	var extra map[string]any
+	if done.Data.Proposal != nil {
+		extra = map[string]any{"approval": approvalOf(s.review.CardOf(done.Data.Proposal)), "outcome": "failed"}
+	}
+	if apiRefused(w, err, "not_approved", "Unknown approval.", extra) {
 		return
 	}
-	check(err)
-	out := map[string]any{"approval": approvalOf(s.review.CardOf(done))}
-	if done.Status == proposals.Applied {
+	out := map[string]any{"approval": approvalOf(s.review.CardOf(done.Data.Proposal))}
+	if done.Data.Applied {
 		out["outcome"] = "applied"
-		out["summary"] = resultString(done.Result, "summary")
+		out["summary"] = resultString(done.Data.Proposal.Result, "summary")
 	} else {
 		out["outcome"] = "failed"
-		out["error"] = resultString(done.Result, "error")
+		out["error"] = resultString(done.Data.Proposal.Result, "error")
 	}
 	web.JSON(w, http.StatusOK, out)
 }
 
 func (s *service) apiDeny(w http.ResponseWriter, r *http.Request) {
+	id, ok := web.PathID(w, r, "proposal_id")
+	if !ok {
+		return
+	}
 	var in struct {
 		Forever bool `json:"forever"`
 	}
 	if !web.DecodeOptionalJSON(w, r, &in) {
 		return
 	}
-	found, ok := s.apiProposal(w, r)
-	if !ok {
-		return
-	}
-	status := proposals.Dismissed
-	if in.Forever {
-		status = proposals.Suppressed
-	}
 	ctx := detached(r)
-	err := s.pipeline.Dismiss(ctx, found.ID, status, appResolver)
-	var refused proposals.ProposalError
-	var disabled *module.OwnerDisabled
-	if errors.As(err, &refused) || errors.As(err, &disabled) {
-		web.APIError(w, http.StatusConflict, "not_dismissed", err.Error())
+	_, err := s.review.Dismiss(ctx, reviewapp.DismissInput{ProposalID: id, Suppress: in.Forever})
+	if apiRefused(w, err, "not_dismissed", "Unknown approval.", nil) {
 		return
 	}
-	check(err)
-	web.JSON(w, http.StatusOK, map[string]any{"approval": s.currentApproval(ctx, found.ID)})
+	web.JSON(w, http.StatusOK, map[string]any{"approval": s.currentApproval(ctx, id)})
 }
 
 func (s *service) apiResolve(w http.ResponseWriter, r *http.Request) {
+	id, ok := web.PathID(w, r, "proposal_id")
+	if !ok {
+		return
+	}
 	var in struct {
 		Outcome string `json:"outcome"`
 	}
 	if !web.DecodeOptionalJSON(w, r, &in) {
 		return
 	}
-	found, ok := s.apiProposal(w, r)
-	if !ok {
-		return
-	}
 	ctx := detached(r)
-	_, err := s.pipeline.Resolve(ctx, found.ID, in.Outcome, appResolver)
-	var refused proposals.ProposalError
-	var disabled *module.OwnerDisabled
-	if errors.As(err, &refused) || errors.As(err, &disabled) {
-		web.APIError(w, http.StatusConflict, "not_resolved", err.Error())
+	_, err := s.review.Resolve(ctx, reviewapp.ResolveInput{ProposalID: id, Outcome: in.Outcome})
+	if apiRefused(w, err, "not_resolved", "Unknown approval.", nil) {
 		return
 	}
-	check(err)
-	web.JSON(w, http.StatusOK, map[string]any{"approval": s.currentApproval(ctx, found.ID)})
+	web.JSON(w, http.StatusOK, map[string]any{"approval": s.currentApproval(ctx, id)})
 }
 
 func optionalID(w http.ResponseWriter, r *http.Request, name string) (*int64, bool) {
@@ -332,10 +329,11 @@ func (s *service) undoEffectEntry(ctx context.Context, id int64) (*reviewapp.Und
 }
 
 func (s *service) apiUndo(w http.ResponseWriter, r *http.Request) {
+	const missing = "Unknown undo entry."
 	source, raw, _ := strings.Cut(web.PathParam(r, "entry_id"), ":")
 	id, perr := strconv.ParseInt(raw, 10, 64)
 	if perr != nil || id < 1 {
-		web.APIError(w, http.StatusNotFound, "not_found", "Unknown undo entry.")
+		web.APIError(w, http.StatusNotFound, "not_found", missing)
 		return
 	}
 	ctx := detached(r)
@@ -344,47 +342,28 @@ func (s *service) apiUndo(w http.ResponseWriter, r *http.Request) {
 		known, err := s.undoEffectEntry(ctx, id)
 		check(err)
 		if known == nil {
-			web.APIError(w, http.StatusNotFound, "not_found", "Unknown undo entry.")
+			web.APIError(w, http.StatusNotFound, "not_found", missing)
 			return
 		}
-		_, err = s.ledger.Undo(ctx, id, ledger.Resolver{Actor: "operator", Source: "ui"})
-		var refused ledger.Refused
-		var conflict *ledger.Conflict
-		var settled *ledger.SettledMeanwhile
-		var disabled *module.OwnerDisabled
-		if errors.As(err, &refused) || errors.As(err, &conflict) || errors.As(err, &settled) || errors.As(err, &disabled) {
-			web.APIError(w, http.StatusConflict, "not_undone", err.Error())
+		_, err = s.review.Undo(ctx, reviewapp.UndoInput{EffectID: id})
+		if apiRefused(w, err, "not_undone", missing, nil) {
 			return
 		}
-		check(err)
 		entry, err := s.undoEffectEntry(ctx, id)
 		check(err)
 		web.JSON(w, http.StatusOK, map[string]any{"entry": entry, "undone": true})
 	case "proposal":
-		known, err := proposals.Get(ctx, s.deps.DB.Read, id)
-		check(err)
-		if known == nil {
-			web.APIError(w, http.StatusNotFound, "not_found", "Unknown undo entry.")
+		done, err := s.review.Undo(ctx, reviewapp.UndoInput{ProposalID: id})
+		outcome := done.Data.Outcome
+		var extra map[string]any
+		if done.Data.Proposal != nil && (len(outcome.Outcomes) > 0 || outcome.SyncError != nil) {
+			view := outcome.Dict()
+			extra = map[string]any{"entry": reviewapp.UndoProposalEntry(done.Data.Proposal), "outcomes": view.Outcomes, "sync_error": view.SyncError}
+		}
+		if apiRefused(w, err, "not_undone", missing, extra) {
 			return
 		}
-		outcome, err := s.pipeline.Undo(ctx, id, proposals.Resolver{Actor: "operator", Source: "ui"})
-		var refused proposals.ProposalError
-		var disabled *module.OwnerDisabled
-		if errors.As(err, &refused) || errors.As(err, &disabled) {
-			if len(outcome.Outcomes) > 0 || outcome.SyncError != nil {
-				after, gerr := proposals.Get(ctx, s.deps.DB.Read, id)
-				check(gerr)
-				view := outcome.Dict()
-				web.APIErrorWith(w, http.StatusConflict, "not_undone", err.Error(), map[string]any{"entry": reviewapp.UndoProposalEntry(after), "outcomes": view.Outcomes, "sync_error": view.SyncError})
-				return
-			}
-			web.APIError(w, http.StatusConflict, "not_undone", err.Error())
-			return
-		}
-		check(err)
-		after, err := proposals.Get(ctx, s.deps.DB.Read, id)
-		check(err)
-		out := map[string]any{"entry": reviewapp.UndoProposalEntry(after), "undone": outcome.Undone}
+		out := map[string]any{"entry": reviewapp.UndoProposalEntry(done.Data.Proposal), "undone": outcome.Undone}
 		if !outcome.Undone {
 			for _, o := range outcome.Outcomes {
 				if o["ok"] != true {
@@ -395,7 +374,7 @@ func (s *service) apiUndo(w http.ResponseWriter, r *http.Request) {
 		}
 		web.JSON(w, http.StatusOK, out)
 	default:
-		web.APIError(w, http.StatusNotFound, "not_found", "Unknown undo entry.")
+		web.APIError(w, http.StatusNotFound, "not_found", missing)
 	}
 }
 
@@ -461,21 +440,11 @@ func (s *service) apiEffectResolve(w http.ResponseWriter, r *http.Request) {
 	if !web.DecodeOptionalJSON(w, r, &in) {
 		return
 	}
-	ctx := detached(r)
-	found, err := s.ledger.Resolve(ctx, id, ledger.Resolution{Outcome: in.Outcome, Evidence: in.Evidence}, ledger.Resolver{Actor: "operator", Source: "ui"}, nil)
-	var refused ledger.Refused
-	var missing *ledger.NotFound
-	var disabled *module.OwnerDisabled
-	switch {
-	case errors.As(err, &missing):
-		web.APIError(w, http.StatusNotFound, "not_found", "Unknown effect.")
-		return
-	case errors.As(err, &refused) || errors.As(err, &disabled):
-		web.APIError(w, http.StatusConflict, "not_resolved", err.Error())
+	done, err := s.review.Resolve(detached(r), reviewapp.ResolveInput{EffectID: id, Outcome: in.Outcome, Evidence: in.Evidence})
+	if apiRefused(w, err, "not_resolved", "Unknown effect.", nil) {
 		return
 	}
-	check(err)
-	web.JSON(w, http.StatusOK, map[string]any{"effect": found})
+	web.JSON(w, http.StatusOK, map[string]any{"effect": done.Data.Effect})
 }
 
 func (s *service) apiEffectUndo(w http.ResponseWriter, r *http.Request) {
@@ -483,25 +452,11 @@ func (s *service) apiEffectUndo(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	ctx := detached(r)
-	effect, err := s.ledger.Undo(ctx, id, ledger.Resolver{Actor: "operator", Source: "ui"})
-	var refused ledger.Refused
-	var conflict *ledger.Conflict
-	var settled *ledger.SettledMeanwhile
-	var missing *ledger.NotFound
-	var disabled *module.OwnerDisabled
-	switch {
-	case errors.As(err, &missing):
-		web.APIError(w, http.StatusNotFound, "not_found", "Unknown effect.")
-		return
-	case errors.As(err, &refused) || errors.As(err, &conflict) || errors.As(err, &settled) || errors.As(err, &disabled):
-		web.APIError(w, http.StatusConflict, "not_undone", err.Error())
+	done, err := s.review.Undo(detached(r), reviewapp.UndoInput{EffectID: id})
+	if apiRefused(w, err, "not_undone", "Unknown effect.", nil) {
 		return
 	}
-	check(err)
-	forward, err := s.ledger.Get(ctx, id)
-	check(err)
-	web.JSON(w, http.StatusOK, map[string]any{"effect": forward, "undo": effect, "undone": true})
+	web.JSON(w, http.StatusOK, map[string]any{"effect": done.Data.Effect, "undo": done.Data.Undo, "undone": true})
 }
 
 func (s *service) apiDraftRow(w http.ResponseWriter, r *http.Request) (*drafts.Row, bool) {

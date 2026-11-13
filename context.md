@@ -438,7 +438,12 @@ behavior-parity target.
   error to the append-only `effect_resolutions` table (proposal approvals and
   the remaining proposal-action resolutions use the same audit table).
   A resolution source is `cli`, `ui`, `api`, `tool`, `job`, `phone` or
-  `import`. Every readable table has insert, update and delete triggers
+  `import`; it is the entry point that made the decision, so an `/api/v1`
+  approval records `api` and a web one `ui`. Approve, dismiss, undo and
+  resolve are the `review.*` operations shared by every entry point, each
+  audited in `operation_audit` after the ledger settles. A malformed
+  approval selection is invalid input (`atrium proposals approve` exits 2,
+  the API answers 422 `bad_selection`) and records no effect. Every readable table has insert, update and delete triggers
   that bump one counter per scope in `read_revisions` (lease, heartbeat and
   streamed run event writes do not); the append-only
   `operation_audit` table records application commands. Both are owned by
