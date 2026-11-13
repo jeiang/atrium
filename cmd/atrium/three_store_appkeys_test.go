@@ -46,7 +46,7 @@ func TestAppKeyFilesSignLinksAcrossRestarts(t *testing.T) {
 		t.Fatal(err)
 	}
 	agent := startMediaAgent(t, mediaAgentOpts{main: true, dir: dir})
-	body := string(host) + "\n[app_keys]\naction_link_key_file = " + strconv.Quote(actionPath) + "\nlink_key_file = " + strconv.Quote(linkPath) + "\n" + agentConnectionTOML(agent.base, filepath.Join(agent.dir, "token"))
+	body := withAgentConnection(string(host), agent.base, filepath.Join(agent.dir, "token")) + "\n[app_keys]\naction_link_key_file = " + strconv.Quote(actionPath) + "\nlink_key_file = " + strconv.Quote(linkPath) + "\n"
 	if err := os.WriteFile(hostPath, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -140,7 +140,7 @@ func TestMediaLinkRefreshKeepsHostKeyPrecedence(t *testing.T) {
 		t.Fatal(err)
 	}
 	agent := startMediaAgent(t, mediaAgentOpts{main: true, dir: dir})
-	body := string(host) + "\n[app_keys]\nlink_key_file = " + strconv.Quote(linkPath) + "\n" + agentConnectionTOML(agent.base, filepath.Join(agent.dir, "token"))
+	body := withAgentConnection(string(host), agent.base, filepath.Join(agent.dir, "token")) + "\n[app_keys]\nlink_key_file = " + strconv.Quote(linkPath) + "\n"
 	if err := os.WriteFile(hostPath, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}

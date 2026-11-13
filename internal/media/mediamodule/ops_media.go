@@ -50,6 +50,7 @@ func libraryOperations() ([]application.Definition, []application.Binding) {
 			mediaapp.DescribeLibrary(),
 			mediaapp.DescribeLibraryDetail(),
 			mediaapp.DescribeArt(),
+			mediaapp.DescribeThumbnail(),
 			mediaapp.DescribeFile(),
 		}, []application.Binding{
 			{Kind: application.HTML, Target: "GET /apps/media/library", Uses: []application.Name{mediaapp.LibraryName}},
@@ -58,7 +59,7 @@ func libraryOperations() ([]application.Definition, []application.Binding) {
 			{Kind: application.HTML, Target: "GET /apps/media/library/tv/{name}", Uses: []application.Name{mediaapp.LibraryDetailName}},
 			{Kind: application.HTML, Target: "GET /apps/media/art/season/{name}/{number}", Uses: []application.Name{mediaapp.ArtName}},
 			{Kind: application.HTML, Target: "GET /apps/media/art/{kind}/{name}", Uses: []application.Name{mediaapp.ArtName}},
-			{Kind: application.HTML, Target: "GET /apps/media/thumb/*", Uses: []application.Name{mediaapp.ArtName}},
+			{Kind: application.HTML, Target: "GET /apps/media/thumb/*", Uses: []application.Name{mediaapp.ThumbnailName}},
 			{Kind: application.HTML, Target: "GET /apps/media/file/*", Uses: []application.Name{mediaapp.FileName}},
 			{Kind: application.HTML, Target: "HEAD /apps/media/file/*", Uses: []application.Name{mediaapp.FileName}},
 		}

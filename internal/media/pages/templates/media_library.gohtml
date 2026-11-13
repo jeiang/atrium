@@ -17,6 +17,7 @@
 {{if .Data.Error}}
 {{template "empty_state" (dict "icon_name" "film" "title" "Library not configured" "body" .Data.Error)}}
 {{else}}
+{{if .Data.Stale}}<p class="text-sm text-muted-foreground" role="status">{{.Data.Stale}}</p>{{end}}
 <section class="flex flex-col gap-3" aria-labelledby="movies-h">
   <h2 id="movies-h" class="text-sm font-medium">Movies ({{len .Data.Movies}})</h2>
   {{if .Data.Movies}}{{template "media_grid" (dict "items" .Data.Movies "label" "Movies")}}{{else}}{{template "empty_state" (dict "icon_name" "film" "title" "No movies yet")}}{{end}}

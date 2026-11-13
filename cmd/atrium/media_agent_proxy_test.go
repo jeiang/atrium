@@ -21,6 +21,10 @@ func agentConnectionTOML(base, token string) string {
 	return "\n[connections.\"service/media-agent\"]\nkind = \"service/media-agent\"\nlabel = \"Media agent\"\nconfig = { url = " + strconv.Quote(base) + " }\ncapabilities = [\"file\", \"stream\"]\ncredential_files = { bearer = " + strconv.Quote(token) + " }\n"
 }
 
+func withAgentConnection(body, base, token string) string {
+	return strings.Replace(body, defaultAgentConnection, "", 1) + agentConnectionTOML(base, token)
+}
+
 func signedAgentServe(t *testing.T, dir, agentBase, token string) string {
 	t.Helper()
 	keyFile := filepath.Join(dir, "link.key")
@@ -127,6 +131,10 @@ func TestInvalidSignedLinksNeverReachTheAgent(t *testing.T) {
 		t.Fatal(err)
 	}
 	agent := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/files" {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 		count.Add(1)
 		if r.Header.Get("Authorization") != "Bearer "+strings.Repeat("s", 40) {
 			w.WriteHeader(401)

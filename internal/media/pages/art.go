@@ -76,7 +76,27 @@ func (s *service) serveSeasonArt(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *service) serveThumb(w http.ResponseWriter, r *http.Request) {
-	s.serveArtOf(w, r, mediaapp.ArtInput{Kind: mediaapp.KindThumb, Rel: web.PathParam(r, "*")})
+	stream, err := s.app.Thumbnail(r.Context(), mediaapp.ThumbnailInput{
+		Rel: web.PathParam(r, "*"), Method: r.Method, IfNoneMatch: r.Header.Get("If-None-Match"), IfModifiedSince: r.Header.Get("If-Modified-Since"),
+	})
+	if err != nil {
+		switch application.Classify(err).Code {
+		case application.NotFound, application.Unavailable, application.NotConfigured:
+			writeArtPlaceholder(w)
+			return
+		}
+		panic(err)
+	}
+	defer func() { _ = stream.Body.Close() }()
+	for name, values := range stream.Header {
+		w.Header()[name] = values
+	}
+	w.Header().Set("Cache-Control", artImageCache)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(stream.Status)
+	if r.Method != http.MethodHead {
+		_, _ = io.Copy(w, stream.Body)
+	}
 }
 
 func (s *service) serveFile(w http.ResponseWriter, r *http.Request) {

@@ -29,8 +29,7 @@ func useMediaAgent(t *testing.T, dir, qbURL, agentBase, token, root string) {
 		t.Fatal(err)
 	}
 	prefix := "\n[media]\n" + media.KeyDownloadPrefix + " = " + strconv.Quote(filepath.Join(root, "downloads")) + "\n"
-	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "host-agent.toml", string(raw)+agentConnectionTOML(agentBase, token)+prefix))
-	setEnv(t, settingEnv(media.KeyRoot), root)
+	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, dir, "host-agent.toml", withAgentConnection(string(raw), agentBase, token)+prefix))
 }
 
 func agentLibrary(t *testing.T, dir, qbURL string) (*mediaAgent, string) {

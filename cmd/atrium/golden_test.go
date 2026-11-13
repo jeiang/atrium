@@ -172,7 +172,6 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	vars["ATRIUM_DB"] = filepath.Join(dir, "atrium.db")
 	vars["ATRIUM_CACHE_DIR"] = filepath.Join(dir, "cache")
 	vars["ATRIUM_CONTACTS_DIR"] = filepath.Join(dir, "contacts")
-	vars["ATRIUM_MEDIA_ROOT"] = filepath.Join(dir, "media")
 	vars[anthropic.BaseURLEnv] = api.URL
 	vars[calendar.CalDAVEnv] = caldavURL
 	for k, v := range extraEnv {
@@ -182,7 +181,6 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	qbitURL := vars["QBITTORRENT_URL"]
 	eztvURL := vars["EZTV_URL"]
 	for phaseA, canonical := range map[string]string{
-		"ATRIUM_MEDIA_ROOT":       "ATRIUM_MEDIA_MEDIA_ROOT",
 		"ATRIUM_MEDIA_MOVIES_URL": "ATRIUM_MEDIA_MEDIA_MOVIES_URL", "ATRIUM_MEDIA_TV_URL": "ATRIUM_MEDIA_MEDIA_TV_URL",
 		"ATRIUM_CONTACTS_DIR": "ATRIUM_CONTACTS_CONTACTS_DIR",
 	} {
@@ -220,7 +218,7 @@ kind = "service/qbittorrent"
 label = "qBittorrent"
 config = { url = %q }
 capabilities = ["api"]
-`, qbitURL)
+`, qbitURL) + defaultAgentConnection
 		if err := os.WriteFile(hostPath, []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}

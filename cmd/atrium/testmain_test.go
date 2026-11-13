@@ -21,7 +21,6 @@ import (
 	"github.com/jeiang/atrium/internal/contacts"
 	"github.com/jeiang/atrium/internal/db"
 	"github.com/jeiang/atrium/internal/mail/imapclient"
-	"github.com/jeiang/atrium/internal/media"
 	"github.com/jeiang/atrium/internal/module"
 	"github.com/jeiang/atrium/internal/ops"
 	"github.com/jeiang/atrium/internal/proposals"
@@ -111,6 +110,14 @@ kind = "service/qbittorrent"
 label = "qBittorrent"
 config = { url = "http://qbittorrent.invalid" }
 capabilities = ["api"]
+`
+
+const defaultAgentConnection = `
+[connections."service/media-agent"]
+kind = "service/media-agent"
+label = "Media agent"
+config = { url = "http://127.0.0.1:9" }
+capabilities = ["file", "stream"]
 `
 
 func hostConfigBody(webpush string) string {
@@ -209,7 +216,7 @@ var defaultHostConfig = func() string {
 		panic("cannot write the default host credentials")
 	}
 	path := filepath.Join(dir, "host.toml")
-	body := hostConfigBodyWith(defaultEmbeddingConnection, defaultWebPushConnection, anthropicKey) + defaultQbitConnection + mailConnection("icloud", "icloud", "operator@icloud.invalid", defaultMailPassword, true)
+	body := hostConfigBodyWith(defaultEmbeddingConnection, defaultWebPushConnection, anthropicKey) + defaultQbitConnection + defaultAgentConnection + mailConnection("icloud", "icloud", "operator@icloud.invalid", defaultMailPassword, true)
 	if os.WriteFile(path, []byte(body), 0o600) != nil {
 		panic("cannot write the default host configuration")
 	}
@@ -587,14 +594,12 @@ func grafanaHostWith(t *testing.T, dir, url, metricsUID, logsUID, logsType strin
 
 func moduleEnv(dir string) map[string]string {
 	return map[string]string{
-		settingEnv(media.KeyRoot):   filepath.Join(dir, "media"),
 		settingEnv(contacts.DirKey): filepath.Join(dir, "media-contacts"),
 	}
 }
 
 func requirementEnv(mediaRoot string) map[string]string {
 	return map[string]string{
-		settingEnv(media.KeyRoot):   mediaRoot,
 		settingEnv(contacts.DirKey): mediaRoot + "-contacts",
 		"ATRIUM_HOST_CONFIG":        defaultHostConfig,
 	}

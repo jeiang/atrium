@@ -17,7 +17,6 @@ import (
 const module = "media"
 
 const (
-	KeyRoot           = "media_root"
 	KeyDownloadPrefix = "media_download_path_prefix"
 	KeyQbitURL        = "media_qbittorrent_url"
 	KeyMoviesURL      = "media_movies_url"
@@ -44,7 +43,6 @@ func SettingsDefs() []settings.Def {
 
 func HostSettings() []settings.HostDef {
 	return []settings.HostDef{
-		{Key: KeyRoot, Module: module, Type: settings.String},
 		{Key: KeyDownloadPrefix, Module: module, Type: settings.String},
 		{Key: KeyMoviesURL, Module: module, Type: settings.String, Check: httpURL},
 		{Key: KeyTVURL, Module: module, Type: settings.String, Check: httpURL},
@@ -108,7 +106,6 @@ type Tuning struct {
 
 type Settings struct {
 	Tuning
-	Root           string
 	DownloadPrefix string
 	QbitLease      *connections.Lease
 	QbitStore      *connections.Store
@@ -141,7 +138,6 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		failure = err
 		return n
 	}
-	out.Root = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyRoot)), "/")
 	out.DownloadPrefix = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyDownloadPrefix)), "/")
 	out.MoviesURL = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyMoviesURL)), "/")
 	out.TVURL = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyTVURL)), "/")
@@ -215,13 +211,6 @@ func (s Settings) TMDB() *TMDB {
 		}
 	}
 	return tmdb
-}
-
-func (s Settings) NeedRoot() (string, error) {
-	if s.Root == "" {
-		return "", config.NotConfigured("media_root is not set; set media.media_root in the host file")
-	}
-	return s.Root, nil
 }
 
 func (s Settings) NeedQbit() (string, error) {

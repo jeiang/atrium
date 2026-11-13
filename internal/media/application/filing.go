@@ -218,6 +218,7 @@ func (s *Service) runAgentFiling(ctx context.Context, at located, operation, pre
 		return "", protocol.FilingResult{}, classifyWrite(err)
 	}
 	result, ferr := s.execute(ctx, at.agent, ticket, protocol.FilingRequest{Key: key, PlanDigest: prep.PlanDigest, Plan: prep.Plan})
+	s.d.Catalogue.Nudge()
 	state, text := media.FilingState(result, ferr)
 	settle, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()

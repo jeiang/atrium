@@ -117,3 +117,25 @@ func (c *Client) Inspect(ctx context.Context, key string) (protocol.Inspection, 
 	var out protocol.Inspection
 	return out, c.call(ctx, nil, http.MethodPost, "/v1/filings/"+url.PathEscape(key)+"/inspect", nil, &out)
 }
+
+func (c *Client) Library(ctx context.Context, cursor string) (protocol.LibraryPage, error) {
+	var out protocol.LibraryPage
+	client, err := c.lease.StreamClient("url", 30*time.Second)
+	if err != nil {
+		return out, ErrUnavailable
+	}
+	target := "/v1/library"
+	if cursor != "" {
+		target += "?" + url.Values{"cursor": {cursor}}.Encode()
+	}
+	return out, c.call(ctx, client, http.MethodGet, target, nil, &out)
+}
+
+func (c *Client) ThumbnailPass(ctx context.Context, in protocol.ThumbnailPass) (protocol.ThumbnailResult, error) {
+	var out protocol.ThumbnailResult
+	client, err := c.lease.StreamClient("url", 2*time.Hour)
+	if err != nil {
+		return out, ErrUnavailable
+	}
+	return out, c.call(ctx, client, http.MethodPost, "/v1/thumbnails/pass", in, &out)
+}

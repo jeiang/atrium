@@ -17,12 +17,13 @@ import (
 )
 
 type Deps struct {
-	DB       *db.DB
-	Env      config.Env
-	Ledger   *ledger.Store
-	Now      func() float64
-	CacheDir string
-	Links    *media.Links
+	DB        *db.DB
+	Env       config.Env
+	Ledger    *ledger.Store
+	Now       func() float64
+	CacheDir  string
+	Links     *media.Links
+	Catalogue *media.Catalogue
 }
 
 type Service struct {
@@ -33,6 +34,9 @@ type Service struct {
 func New(d Deps) *Service {
 	if d.Now == nil {
 		d.Now = media.Now
+	}
+	if d.Catalogue == nil {
+		d.Catalogue = media.CatalogueFor(d.DB)
 	}
 	return &Service{d: d, state: state.New(d.DB)}
 }
@@ -114,9 +118,12 @@ func classify(err error) error {
 	var conflict *ledger.Conflict
 	var gone media.NotFound
 	var partial *media.PartialError
+	var down *media.LibraryUnavailable
 	switch {
 	case errors.As(err, &done):
 		return err
+	case errors.As(err, &down):
+		return &application.Error{Code: application.Unavailable, Message: err.Error(), Cause: err}
 	case errors.As(err, &partial):
 		return &application.Error{Code: application.Partial, Message: "Media change stopped after completing some work.", Cause: err}
 	case errors.As(err, &conflict):

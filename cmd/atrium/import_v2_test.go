@@ -93,7 +93,7 @@ kind = "service/notion"
 label = "Notion"
 config = { api = %q }
 capabilities = ["api"]
-`, anthropicURL, grafanaURL, notionURL)
+`, anthropicURL, grafanaURL, notionURL) + defaultAgentConnection
 	path := filepath.Join(dir, "host.toml")
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
@@ -928,7 +928,7 @@ kind = "service/eztv"
 label = "EZTV"
 config = { url = %q }
 capabilities = ["indexer"]
-`, tmdbFake.URL+"/3", tmdbImages.URL, eztvFake.URL)
+`, tmdbFake.URL+"/3", tmdbImages.URL, eztvFake.URL) + defaultAgentConnection
 	hostPath := filepath.Join(dir, "media-host.toml")
 	if err := os.WriteFile(hostPath, []byte(host), 0o600); err != nil {
 		t.Fatal(err)

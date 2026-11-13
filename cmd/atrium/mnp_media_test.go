@@ -339,7 +339,6 @@ func mnpMediaRoot(t *testing.T, dir string) string {
 			t.Fatal(err)
 		}
 	}
-	setEnv(t, settingEnv(media.KeyRoot), root)
 	return root
 }
 
@@ -505,7 +504,6 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 	mnpMediaRoot(t, dir)
 	agent := startMediaAgent(t, mediaAgentOpts{main: true, dir: dir})
 	root := filepath.Dir(agent.roots["movies"])
-	setEnv(t, settingEnv(media.KeyRoot), root)
 	body := strings.Repeat("abcdefghij", 10)
 	mnpWrite(t, filepath.Join(root, movie), []byte(body))
 	mnpWrite(t, filepath.Join(root, "downloads", "secret.mkv"), []byte("do not serve"))

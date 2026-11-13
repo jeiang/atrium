@@ -38,18 +38,20 @@ func libEntries(found []media.Entry) []LibraryEntry {
 func (s *service) libraryIndex(w http.ResponseWriter, r *http.Request) {
 	read, err := s.app.Library(r.Context(), mediaapp.LibraryInput{})
 	if err != nil {
-		panic(err)
+		web.Fail(w, r, err, func(status int) { s.deps.Error(w, r, status, application.Classify(err).Error()) })
+		return
 	}
-	s.libRender(w, r, "media_library.gohtml", LibraryPage{Error: read.Data.Error, Movies: libEntries(read.Data.Movies), Shows: libEntries(read.Data.Shows)})
+	page := LibraryPage{Error: read.Data.Error, Catalogue: read.Data.Catalogue.State, Movies: libEntries(read.Data.Movies), Shows: libEntries(read.Data.Shows)}
+	if read.Data.Catalogue.State == "stale" {
+		page.Stale = "The media agent is unavailable. Showing the library as of " + read.Data.Catalogue.ObservedAt.Local().Format("2006-01-02 15:04") + "."
+	}
+	s.libRender(w, r, "media_library.gohtml", page)
 }
 
 func (s *service) libDetail(w http.ResponseWriter, r *http.Request, kind string) (mediaapp.LibraryDetail, bool) {
 	read, err := s.app.LibraryDetail(r.Context(), mediaapp.LibraryDetailInput{Kind: kind, Name: web.PathParam(r, "name")})
 	if err != nil {
-		if application.Classify(err).Code != application.NotFound {
-			panic(err)
-		}
-		s.deps.Error(w, r, http.StatusNotFound, "not found")
+		web.Fail(w, r, err, func(status int) { s.deps.Error(w, r, status, application.Classify(err).Error()) })
 		return mediaapp.LibraryDetail{}, false
 	}
 	return read.Data, true
