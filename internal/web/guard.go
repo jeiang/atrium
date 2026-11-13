@@ -12,10 +12,10 @@ import (
 	"net/netip"
 	"strings"
 
-	authapp "github.com/jeiang/atrium/internal/auth/application"
 	"github.com/jeiang/atrium/internal/auth/bearer"
 	"github.com/jeiang/atrium/internal/auth/oidc"
 	"github.com/jeiang/atrium/internal/logx"
+	"github.com/jeiang/atrium/internal/settings/audit"
 )
 
 const (
@@ -203,7 +203,7 @@ func (g *Guard) Middleware(next http.Handler) http.Handler {
 			token = newToken()
 		}
 		if err == nil {
-			r = r.WithContext(authapp.WithPrincipal(r.Context(), who))
+			r = r.WithContext(withIdentity(r.Context(), who, audit.UI))
 		}
 		if isUnsafe(r.Method) && !strings.HasPrefix(r.URL.Path, "/actions/") {
 			limit := defaultBodyCap
