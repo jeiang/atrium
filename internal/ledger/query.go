@@ -271,11 +271,16 @@ func ListEffects(ctx context.Context, q db.Querier, f Filter, now float64) ([]Ef
 		where = append(where, "e.run_id = ?")
 		args = append(args, *f.RunID)
 	}
-	if f.BeforeID > 0 {
+	switch {
+	case f.ByTime && f.BeforeID > 0:
+		where = append(where, "(e.created_at, e.id) < (?, ?)")
+		args = append(args, f.BeforeTS, f.BeforeID)
+	case f.ByTime:
+	case f.BeforeID > 0:
 		where = append(where, "e.id < ?")
 		args = append(args, f.BeforeID)
 	}
-	if f.BeforeTS > 0 {
+	if f.BeforeTS > 0 && !f.ByTime {
 		if f.BeforeID > 0 {
 			where = append(where, "(e.created_at < ? OR (e.created_at = ? AND e.id < ?))")
 			args = append(args, f.BeforeTS, f.BeforeTS, f.BeforeID)
@@ -287,7 +292,11 @@ func ListEffects(ctx context.Context, q db.Querier, f Filter, now float64) ([]Ef
 	if f.BlockedOnly {
 		where = append(where, "e.state IN ('intent','unknown','partial') AND r.id IS NULL")
 	}
-	query := effectSelect + " WHERE " + strings.Join(where, " AND ") + " ORDER BY e.id DESC"
+	order := " ORDER BY e.id DESC"
+	if f.ByTime {
+		order = " ORDER BY e.created_at DESC, e.id DESC"
+	}
+	query := effectSelect + " WHERE " + strings.Join(where, " AND ") + order
 	if !f.All {
 		limit := f.Limit
 		if limit <= 0 {
@@ -584,11 +593,16 @@ type ResolutionRow struct {
 	ProposalID *int64
 }
 
-func ResolutionsSince(ctx context.Context, q db.Querier, source string, limit int) ([]ResolutionRow, error) {
+func ResolutionsBefore(ctx context.Context, q db.Querier, source string, beforeTS float64, beforeID int64, limit int) ([]ResolutionRow, error) {
+	where, args := "r.source = ?", []any{source}
+	if beforeID > 0 {
+		where += " AND (r.ts, r.id) < (?, ?)"
+		args = append(args, beforeTS, beforeID)
+	}
 	rows, err := q.QueryContext(ctx,
 		"SELECT r.id, r.ts, r.actor, r.source, r.outcome, COALESCE(e.origin, ''), COALESCE(e.operation, ''), "+
 			"COALESCE(e.target, ''), r.effect_id, r.proposal_id FROM effect_resolutions r "+
-			"LEFT JOIN effects e ON e.id = r.effect_id WHERE r.source = ? ORDER BY r.ts DESC, r.id DESC LIMIT ?", source, limit)
+			"LEFT JOIN effects e ON e.id = r.effect_id WHERE "+where+" ORDER BY r.ts DESC, r.id DESC LIMIT ?", append(args, limit)...)
 	if err != nil {
 		return nil, err
 	}

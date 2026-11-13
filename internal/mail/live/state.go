@@ -371,9 +371,19 @@ func (l *Live) Get(ctx context.Context, id int64) (*Action, error) {
 const DefaultLimit = 100
 
 func (l *Live) List(ctx context.Context, account, kind string, limit, offset int) ([]Action, error) {
-	effects, err := l.store().List(ctx, ledger.Filter{
+	return l.actions(ctx, ledger.Filter{
 		Origin: ledger.AutoOrigin, Account: account, Operation: kind, Direction: "forward", Limit: limit, Offset: offset,
 	})
+}
+
+func (l *Live) Before(ctx context.Context, beforeTS float64, beforeID int64, limit int) ([]Action, error) {
+	return l.actions(ctx, ledger.Filter{
+		Origin: ledger.AutoOrigin, Direction: "forward", ByTime: true, BeforeTS: beforeTS, BeforeID: beforeID, Limit: limit,
+	})
+}
+
+func (l *Live) actions(ctx context.Context, filter ledger.Filter) ([]Action, error) {
+	effects, err := l.store().List(ctx, filter)
 	if err != nil {
 		return nil, err
 	}

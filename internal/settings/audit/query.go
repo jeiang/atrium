@@ -17,9 +17,13 @@ type Row struct {
 	Source string
 }
 
-func Recent(ctx context.Context, q db.Querier, limit int) ([]Row, error) {
+func Before(ctx context.Context, q db.Querier, beforeTS float64, beforeID int64, limit int) ([]Row, error) {
+	where, args := "", []any{}
+	if beforeID > 0 {
+		where, args = " WHERE (ts, id) < (?, ?)", []any{beforeTS, beforeID}
+	}
 	rows, err := q.QueryContext(ctx,
-		"SELECT id, ts, key, old_value, new_value, actor, source FROM settings_audit ORDER BY ts DESC, id DESC LIMIT ?", limit)
+		"SELECT id, ts, key, old_value, new_value, actor, source FROM settings_audit"+where+" ORDER BY ts DESC, id DESC LIMIT ?", append(args, limit)...)
 	if err != nil {
 		return nil, err
 	}

@@ -2,7 +2,12 @@ package main
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/hex"
+	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
@@ -408,6 +413,15 @@ func TestProposalsAPIReadAndDecide(t *testing.T) {
 	thread := insert("INSERT INTO threads (kind, title, project_id, effort, model, context_limit, created_at, updated_at) VALUES ('chat', 'private', ?, 'low', 'claude-haiku-5-5', 90000, 1, 1)", project)
 	insert("INSERT INTO operation_audit (ts, operation, actor, source, thread_id, outcome, target) VALUES (2, 'tasks.add', 'agent', 'tool', ?, 'ok', 'private-marker')", thread)
 	insert("INSERT INTO operation_audit (ts, operation, actor, source, outcome, target) VALUES (2, 'tasks.add', 'agent', 'tool', 'ok', 'public-marker')")
+	insert("INSERT INTO operation_audit (ts, operation, actor, source, outcome, target) VALUES (2, 'projects.file-upload', 'operator', 'ui', 'ok', ?)", fmt.Sprintf("project:%d", project))
+	insert("INSERT INTO operation_audit (ts, operation, actor, source, outcome, target) VALUES (2, 'memory.work', 'job', 'job', 'ok', ?)", fmt.Sprintf("thread:%d", thread))
+	seeded := map[string]bool{}
+	for i := range 120 {
+		ts := 1 + float64(i/7)/100
+		seeded[fmt.Sprintf("operation:%d", insert("INSERT INTO operation_audit (ts, operation, actor, source, outcome, target) VALUES (?, 'tasks.add', 'agent', 'tool', 'ok', 'paged')", ts))] = true
+		seeded[fmt.Sprintf("settings:%d", insert("INSERT INTO settings_audit (ts, key, old_value, new_value, secret, actor, source) VALUES (?, 'paged', 'a', 'b', 0, 'operator', 'ui')", ts))] = true
+		seeded[fmt.Sprintf("phone:%d", insert("INSERT INTO effect_resolutions (ts, actor, source, outcome, prior_error, legacy_json) VALUES (?, 'operator', 'phone', 'done', '', '{}')", ts))] = true
+	}
 	token := localAPIToken(t, "api")
 	base, _, stop, err := startServeAppArgs(t, fixtureFor(t).app, &lockedBuffer{}, "--auth", "local")
 	if err != nil {
@@ -496,7 +510,8 @@ func TestProposalsAPIReadAndDecide(t *testing.T) {
 	if effect == nil || effect["outcome"] == "" || effect["effective_outcome"] == "" {
 		t.Fatalf("approved effect missing from activity: %.2000s", activity.body)
 	}
-	if strings.Contains(activity.body, "private-marker") || !strings.Contains(activity.body, "public-marker") {
+	if strings.Contains(activity.body, "private-marker") || !strings.Contains(activity.body, "public-marker") ||
+		strings.Contains(activity.body, fmt.Sprintf(`"project:%d"`, project)) || strings.Contains(activity.body, fmt.Sprintf(`"thread:%d"`, thread)) {
 		t.Fatalf("activity ignores private-project isolation: %.2000s", activity.body)
 	}
 	for _, leaked := range []string{`"before"`, `"after"`, `"body"`, `"prompt"`, `"details_json"`} {
@@ -551,6 +566,7 @@ func TestProposalsAPIReadAndDecide(t *testing.T) {
 	if len(apiItems(t, page)) != 100 || next == "" {
 		t.Fatalf("activity first page: %d items, cursor %q", len(apiItems(t, page)), next)
 	}
+	prev := []any{math.Inf(1), int64(math.MaxInt64), "~"}
 	for {
 		for _, it := range apiItems(t, page) {
 			e := it.(map[string]any)
@@ -559,6 +575,11 @@ func TestProposalsAPIReadAndDecide(t *testing.T) {
 				t.Fatalf("activity repeated %s", key)
 			}
 			seen[key] = true
+			ts, id, source := e["ts"].(float64), number(t, e["id"]), e["source"].(string)
+			if pts, pid, psource := prev[0].(float64), prev[1].(int64), prev[2].(string); ts > pts || ts == pts && (id > pid || id == pid && source >= psource) {
+				t.Fatalf("activity out of order: %s after %v", key, prev)
+			}
+			prev = []any{ts, id, source}
 		}
 		if next == "" {
 			break
@@ -569,6 +590,19 @@ func TestProposalsAPIReadAndDecide(t *testing.T) {
 	}
 	if len(seen) < 110 {
 		t.Fatalf("activity paged %d entries, want the permission changes too", len(seen))
+	}
+	for key := range seeded {
+		if !seen[key] {
+			t.Fatalf("activity paging skipped %s", key)
+		}
+	}
+	for _, forged := range []string{"bm90LWpzb24", base64.RawURLEncoding.EncodeToString([]byte(`{"v":1,"op":"review.activity","filter":"x","last":{"t":1,"i":1,"s":"mail"}}`))} {
+		expectAPI(t, s.do(http.MethodGet, "/api/v1/activity?cursor="+forged, token, nil), http.StatusBadRequest, "bad_cursor")
+	}
+	sum := sha256.Sum256(nil)
+	for _, last := range []string{`{"o":1000000000,"t":0,"s":"","i":0}`, `{"t":1,"i":0,"s":"mail"}`, `{"t":1,"i":1,"s":"nowhere"}`} {
+		forged := base64.RawURLEncoding.EncodeToString([]byte(`{"v":1,"op":"review.activity","filter":"` + hex.EncodeToString(sum[:]) + `","last":` + last + `}`))
+		expectAPI(t, s.do(http.MethodGet, "/api/v1/activity?cursor="+forged, token, nil), http.StatusBadRequest, "bad_cursor")
 	}
 	expectAPI(t, s.do(http.MethodGet, "/api/v1/activity?category=bogus", token, nil), http.StatusUnprocessableEntity, "invalid")
 

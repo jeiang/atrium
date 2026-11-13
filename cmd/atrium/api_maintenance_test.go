@@ -14,6 +14,11 @@ func TestMaintenanceAPI(t *testing.T) {
 	f := newFixture(t, goldenData{}, nil, "")
 	backups := t.TempDir()
 	setEnv(t, "ATRIUM_HOST_CONFIG", writeFile(t, f.dir, "host.toml", "[core]\nbackup_directory = \""+backups+"\"\n"))
+	old := mustConnect(t, filepath.Join(f.dir, "atrium.db"), keyFor(t))
+	if _, err := old.Write.Exec("INSERT INTO operation_audit (ts, operation, actor, source, outcome, target) VALUES (1, 'maintenance.backup', 'operator', 'cli', 'ok', ?)", filepath.Join(backups, "older.backup")); err != nil {
+		t.Fatal(err)
+	}
+	_ = old.Close()
 	token := localAPIToken(t, "api")
 	base, _, stop, err := startServeAppArgs(t, f.app, &lockedBuffer{}, "--auth", "local")
 	if err != nil {
@@ -50,6 +55,21 @@ func TestMaintenanceAPI(t *testing.T) {
 	apiData(t, verified, http.StatusOK)
 	for _, bad := range []string{"../atrium.db", "a/b", filepath.Join(f.dir, "atrium.db"), ""} {
 		expectField(t, s.do(http.MethodPost, "/api/v1/maintenance/backups/verify", token, map[string]any{"name": bad}), "name")
+	}
+
+	activity := s.do(http.MethodGet, "/api/v1/activity?limit=100", token, nil)
+	noPath(activity)
+	for _, it := range apiItems(t, apiData(t, activity, http.StatusOK)) {
+		for field, v := range it.(map[string]any) {
+			if text, ok := v.(string); ok && (strings.HasPrefix(text, "/") || strings.Contains(text, ":/")) {
+				t.Fatalf("activity field %s carries a path: %s", field, text)
+			}
+		}
+	}
+	for _, want := range []string{`"backup:` + name + `"`, `"backup:` + archive + `"`, `"older.backup"`} {
+		if !strings.Contains(activity.body, want) {
+			t.Fatalf("activity lacks %s: %.3000s", want, activity.body)
+		}
 	}
 
 	checked := s.do(http.MethodPost, "/api/v1/maintenance/check", token, nil)

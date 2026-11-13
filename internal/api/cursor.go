@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"net/url"
 
 	"github.com/jeiang/atrium/internal/application"
@@ -35,7 +36,19 @@ type cursorWire struct {
 
 func (c Cursor) Set() bool { return len(c.last) > 0 }
 
-func (c Cursor) Last(v any) error { return json.Unmarshal(c.last, v) }
+var ErrBadCursor = errors.New("bad cursor")
+
+func (c Cursor) Last(v any) error {
+	dec := json.NewDecoder(bytes.NewReader(c.last))
+	dec.DisallowUnknownFields()
+	if dec.Decode(v) != nil {
+		return ErrBadCursor
+	}
+	if valid, ok := v.(interface{ Valid() bool }); ok && !valid.Valid() {
+		return ErrBadCursor
+	}
+	return nil
+}
 
 func (c Cursor) Next(last any) *string {
 	raw, err := json.Marshal(last)

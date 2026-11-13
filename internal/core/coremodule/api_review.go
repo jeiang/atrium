@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strconv"
@@ -111,13 +112,6 @@ type ActivityPage struct {
 	NextCursor *string        `json:"next_cursor" api:"nullable"`
 }
 
-type activityMark struct {
-	Offset int     `json:"o"`
-	TS     float64 `json:"t"`
-	Source string  `json:"s"`
-	ID     int64   `json:"i"`
-}
-
 func proposalActions(kind, status string, undoable, blocked bool) []string {
 	out := []string{}
 	switch {
@@ -167,17 +161,15 @@ func activityItemOf(e reviewapp.ActivityEntry) ActivityItem {
 		out.Operation, out.Actor, out.Origin, out.Outcome, out.EffectiveOutcome = "settings.set", e.Settings.Actor, e.Settings.Origin, "ok", "ok"
 		out.Target = e.Settings.Tool
 	}
+	out.Target = pathless(out.Target)
 	return out
 }
 
-func after(e reviewapp.ActivityEntry, m activityMark) bool {
-	switch {
-	case e.TS != m.TS:
-		return e.TS < m.TS
-	case e.ID != m.ID:
-		return e.ID < m.ID
+func pathless(s string) string {
+	if filepath.IsAbs(s) {
+		return filepath.Base(s)
 	}
-	return e.Source != m.Source
+	return s
 }
 
 func reviewRoutes(d *web.Deps, svc func() *reviewapp.Service) []application.Binding {
@@ -216,28 +208,23 @@ func reviewRoutes(d *web.Deps, svc func() *reviewapp.Service) []application.Bind
 			}),
 		api.Query(d, reviewapp.DescribeOne(reviewapp.ActivityName), application.APIShape{Area: "activity", Errors: []application.Code{application.Invalid}},
 			"GET /activity", func(ctx context.Context, in ActivityRequest) (application.Read[ActivityPage], error) {
-				var mark activityMark
+				var after *reviewapp.ActivityKey
 				if in.Cursor.Set() {
-					if err := in.Cursor.Last(&mark); err != nil {
+					after = &reviewapp.ActivityKey{}
+					if err := in.Cursor.Last(after); err != nil {
 						return application.Read[ActivityPage]{}, err
 					}
 				}
-				found, err := svc().Activity(ctx, reviewapp.ActivityInput{Category: in.Category, Offset: mark.Offset, Limit: int(in.Limit), Operations: true, HidePrivate: true})
+				found, err := svc().Activity(ctx, reviewapp.ActivityInput{Category: in.Category, After: after, Limit: int(in.Limit), Operations: true, HidePrivate: true})
 				if err != nil {
 					return application.Read[ActivityPage]{}, err
 				}
 				page := ActivityPage{Items: []ActivityItem{}}
-				last := mark
 				for _, e := range found.Data.Entries {
-					if in.Cursor.Set() && !after(e, mark) {
-						continue
-					}
 					page.Items = append(page.Items, activityItemOf(e))
-					last = activityMark{TS: e.TS, Source: e.Source, ID: e.ID}
 				}
-				if found.Data.NextOffset > 0 {
-					last.Offset = found.Data.NextOffset
-					page.NextCursor = in.Cursor.Next(last)
+				if found.Data.Next != nil {
+					page.NextCursor = in.Cursor.Next(found.Data.Next)
 				}
 				return application.Read[ActivityPage]{Revision: found.Revision, Data: page}, nil
 			}),

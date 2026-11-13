@@ -235,8 +235,12 @@ type AuditRow struct {
 	CommandID   *string
 }
 
-func (s *Store) RecentAudit(ctx context.Context, limit int) ([]AuditRow, error) {
-	rows, err := s.db.Read.QueryContext(ctx, "SELECT id, ts, operation, actor, source, thread_id, run_id, outcome, target, details_json, command_id FROM operation_audit ORDER BY ts DESC, id DESC LIMIT ?", limit)
+func (s *Store) AuditBefore(ctx context.Context, beforeTS float64, beforeID int64, limit int) ([]AuditRow, error) {
+	where, args := "", []any{}
+	if beforeID > 0 {
+		where, args = " WHERE (ts, id) < (?, ?)", []any{beforeTS, beforeID}
+	}
+	rows, err := s.db.Read.QueryContext(ctx, "SELECT id, ts, operation, actor, source, thread_id, run_id, outcome, target, details_json, command_id FROM operation_audit"+where+" ORDER BY ts DESC, id DESC LIMIT ?", append(args, limit)...)
 	if err != nil {
 		return nil, err
 	}

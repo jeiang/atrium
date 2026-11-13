@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"reflect"
 
@@ -22,6 +23,10 @@ func Query[I, O any](d *web.Deps, def application.Definition, shape application.
 				return
 			}
 			read, err := run(audit.With(r.Context(), actor, audit.API), in)
+			if errors.Is(err, ErrBadCursor) {
+				web.APIError(w, http.StatusBadRequest, "bad_cursor", "The cursor is not valid.")
+				return
+			}
 			if err != nil {
 				web.APIFail(w, err)
 				return
