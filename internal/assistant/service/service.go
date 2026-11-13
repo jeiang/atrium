@@ -376,12 +376,27 @@ func (s *Service) RunOnce(ctx context.Context, threadID int64, text string, o St
 }
 
 func (s *Service) inBackground(runID int64) error {
+	done, err := s.reserve()
+	if err != nil {
+		return err
+	}
+	s.background(runID, done)
+	return nil
+}
+
+func (s *Service) reserve() (func(), error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.closed {
-		return ErrClosed
+		return nil, ErrClosed
 	}
-	s.wg.Go(func() {
+	s.wg.Add(1)
+	return s.wg.Done, nil
+}
+
+func (s *Service) background(runID int64, done func()) {
+	go func() {
+		defer done()
 		defer func() {
 			if p := recover(); p != nil {
 				log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, fmt.Sprintf("panic: %v\n%s", p, debug.Stack()))
@@ -392,8 +407,7 @@ func (s *Service) inBackground(runID int64) error {
 		} else if err != nil {
 			log.Error(fmt.Sprintf("background run %d crashed", runID), logx.RunID, runID, logx.Err, err)
 		}
-	})
-	return nil
+	}()
 }
 
 func (s *Service) launch(ctx context.Context, runID int64) error {
@@ -580,10 +594,16 @@ func (s *Service) StartResume(ctx context.Context, runID int64) error {
 	if err != nil {
 		return err
 	}
-	if err := s.claim(context.WithoutCancel(ctx), runID); err != nil {
+	done, err := s.reserve()
+	if err != nil {
 		return err
 	}
-	return s.inBackground(runID)
+	if err := s.claim(context.WithoutCancel(ctx), runID); err != nil {
+		done()
+		return err
+	}
+	s.background(runID, done)
+	return nil
 }
 
 func (s *Service) ResumeInterrupted(ctx context.Context, background bool, claimed map[int64]bool) (int, error) {
