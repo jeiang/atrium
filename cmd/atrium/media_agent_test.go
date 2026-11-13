@@ -332,7 +332,7 @@ func TestMediaAgentStartsWithoutAnyDatabase(t *testing.T) {
 
 func TestMediaAgentRefusesUnsafeConfig(t *testing.T) {
 	t.Parallel()
-	refuse := func(t *testing.T, opts mediaAgentOpts, prepare func(dir string), _ string) {
+	exitsWith := func(t *testing.T, code int, opts mediaAgentOpts, prepare func(dir string)) {
 		t.Helper()
 		dir := t.TempDir()
 		config, _, token := writeMediaAgentConfig(t, dir, opts)
@@ -344,13 +344,44 @@ func TestMediaAgentRefusesUnsafeConfig(t *testing.T) {
 		cmd.Stdout, cmd.Stderr = &stdout, &stderr
 		err := cmd.Run()
 		var exit *exec.ExitError
-		if !errors.As(err, &exit) || exit.ExitCode() != 1 {
-			t.Fatalf("exit = %v, stderr %q", err, stderr.String())
+		if !errors.As(err, &exit) || exit.ExitCode() != code {
+			t.Fatalf("exit = %v, want %d, stderr %q", err, code, stderr.String())
 		}
 		if stdout.Len() != 0 || strings.Contains(stderr.String(), token) {
 			t.Fatalf("stdout %q stderr %q", stdout.String(), stderr.String())
 		}
 	}
+	refuse := func(t *testing.T, opts mediaAgentOpts, prepare func(dir string), _ string) {
+		t.Helper()
+		exitsWith(t, 78, opts, prepare)
+	}
+	t.Run("peer without a prefix length", func(t *testing.T) {
+		refuse(t, mediaAgentOpts{extra: "\n[vpn]\nlisten = \"127.0.0.1:0\"\nallowed_peers = [\"100.89.0.1\"]\nallowed_hosts = [\"media.vpn.test\"]\nallow_loopback = true\n"}, nil, "")
+	})
+	t.Run("transient: token file missing", func(t *testing.T) {
+		exitsWith(t, 1, mediaAgentOpts{}, func(dir string) {
+			if err := os.Remove(filepath.Join(dir, "token")); err != nil {
+				t.Fatal(err)
+			}
+		})
+	})
+	t.Run("transient: config file missing", func(t *testing.T) {
+		exitsWith(t, 1, mediaAgentOpts{}, func(dir string) {
+			if err := os.Remove(filepath.Join(dir, "agent.toml")); err != nil {
+				t.Fatal(err)
+			}
+		})
+	})
+	t.Run("transient: control address in use", func(t *testing.T) {
+		held, err := net.Listen("tcp", "127.0.0.1:0")
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer func() { _ = held.Close() }()
+		exitsWith(t, 1, mediaAgentOpts{}, func(dir string) {
+			rewrite(t, filepath.Join(dir, "agent.toml"), `listen = "127.0.0.1:0"`, `listen = "`+held.Addr().String()+`"`)
+		})
+	})
 	for _, addr := range []string{"[::ffff:0.0.0.0]:0", "[::%1]:0", "[::ffff:127.0.0.1]:0"} {
 		for _, section := range []string{"control", "vpn"} {
 			t.Run(section+addr, func(t *testing.T) {

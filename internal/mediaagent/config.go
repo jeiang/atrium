@@ -5,6 +5,7 @@ package mediaagent
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"net/netip"
 	"os"
 	"os/user"
@@ -53,6 +54,20 @@ type VPN struct {
 
 const DefaultListen = "127.0.0.1:8482"
 
+type ConfigError struct{ err error }
+
+func (e *ConfigError) Error() string { return e.err.Error() }
+
+func (e *ConfigError) Unwrap() error { return e.err }
+
+func configError(err error) error {
+	var pathErr *fs.PathError
+	if err == nil || errors.As(err, &pathErr) {
+		return err
+	}
+	return &ConfigError{err: err}
+}
+
 func (r Roots) named() [][2]string {
 	return [][2]string{
 		{protocol.RootMovies, r.Movies},
@@ -66,20 +81,20 @@ func LoadConfig(path string) (Config, error) {
 	var c Config
 	md, err := toml.DecodeFile(path, &c)
 	if err != nil {
-		return Config{}, fmt.Errorf("read the media agent config: %w", err)
+		return Config{}, configError(fmt.Errorf("read the media agent config: %w", err))
 	}
 	if extra := md.Undecoded(); len(extra) > 0 {
 		keys := make([]string, len(extra))
 		for i, k := range extra {
 			keys[i] = k.String()
 		}
-		return Config{}, fmt.Errorf("the media agent config has unknown keys: %s", strings.Join(keys, ", "))
+		return Config{}, &ConfigError{err: fmt.Errorf("the media agent config has unknown keys: %s", strings.Join(keys, ", "))}
 	}
 	if c.Control.Listen == "" {
 		c.Control.Listen = DefaultListen
 	}
 	if err := c.validate(); err != nil {
-		return Config{}, err
+		return Config{}, configError(err)
 	}
 	return c, nil
 }

@@ -129,6 +129,40 @@
     ++ lib.concatMap (r: lib.optional (within "/home" r.path || within "/root" r.path) "services.atrium.mediaAgent.roots.${r.name} is under /home or /root, which ProtectHome hides from the agent") agentRoots
     ++ lib.optional (builtins.elem libraryDir broadDirs) "services.atrium.mediaAgent.roots must share one library directory below ${libraryDir} (filing hardlinks and renames between roots need one writable mount); their common parent is ${libraryDir}"
     ++ lib.optional (within libraryDir cfg.stateDir || within cfg.stateDir libraryDir) "services.atrium.mediaAgent.roots share ${libraryDir}, which overlaps services.atrium.stateDir";
+  vpnPort =
+    if vpnListen == null
+    then 443
+    else vpnListen.port;
+  parseAuthority = entry: let
+    m = builtins.match "(\\[[0-9A-Fa-f:.]+]|[^]:[/?#@]+)(:([0-9]+))?" entry;
+  in
+    if m == null
+    then null
+    else {
+      host = builtins.elemAt m 0;
+      port =
+        if builtins.elemAt m 2 == null
+        then null
+        else lib.toInt (builtins.elemAt m 2);
+    };
+  vpnHosts = map (entry: let
+    a = parseAuthority entry;
+  in
+    if a == null
+    then entry
+    else a.host + lib.optionalString (vpnPort != 443) ":${toString vpnPort}")
+  agent.vpn.allowedHosts;
+  baseAuthority = let
+    m = builtins.match "https://([^/?#]+)(/[^?#]*)?" agent.vpn.baseUrl;
+  in
+    if m == null
+    then null
+    else builtins.head m;
+  ipv4Prefix = p: let
+    m = builtins.match "(0|[1-9][0-9]{0,2})\\.(0|[1-9][0-9]{0,2})\\.(0|[1-9][0-9]{0,2})\\.(0|[1-9][0-9]{0,2})/(0|[1-9]|[12][0-9]|3[0-2])" p;
+  in
+    m != null && builtins.all (o: lib.toInt o <= 255) (lib.take 4 m);
+  ipv6Prefix = p: builtins.match "[0-9A-Fa-f:.]*:[0-9A-Fa-f:.]*/(0|[1-9][0-9]?|1[01][0-9]|12[0-8])" p != null;
   vpnErrors = let
     listenErr = listenError "services.atrium.mediaAgent.vpn.listen" agent.vpn.listen;
   in
@@ -137,7 +171,17 @@
     ++ lib.optional (agent.vpn.tls.certificateFile == null || agent.vpn.tls.keyFile == null) "services.atrium.mediaAgent.vpn needs tls.certificateFile and tls.keyFile; the VPN listener is not on loopback"
     ++ lib.optional (agent.vpn.allowedPeers == []) "services.atrium.mediaAgent.vpn.allowedPeers must list at least one peer prefix"
     ++ lib.optional (builtins.any (p: lib.hasSuffix "/0" p) agent.vpn.allowedPeers) "services.atrium.mediaAgent.vpn.allowedPeers must not contain 0.0.0.0/0 or ::/0"
+    ++ lib.concatMap (p: lib.optional (!(ipv4Prefix p || ipv6Prefix p)) "services.atrium.mediaAgent.vpn.allowedPeers entry \"${p}\" must be a CIDR prefix with a length, such as 100.64.0.0/10 or 100.64.0.7/32") agent.vpn.allowedPeers
     ++ lib.optional (agent.vpn.allowedHosts == [] || builtins.elem "" agent.vpn.allowedHosts) "services.atrium.mediaAgent.vpn.allowedHosts must list at least one host and no empty value"
+    ++ lib.concatMap (entry: let
+      a = parseAuthority entry;
+    in
+      if a == null
+      then lib.optional (entry != "") "services.atrium.mediaAgent.vpn.allowedHosts entry \"${entry}\" must be a host name or host:port"
+      else lib.optional (a.port != null && a.port != vpnPort) "services.atrium.mediaAgent.vpn.allowedHosts entry \"${entry}\" names port ${toString a.port}, but vpn.listen uses port ${toString vpnPort}; give the bare host name")
+    agent.vpn.allowedHosts
+    ++ lib.optional (baseAuthority == null) "services.atrium.mediaAgent.vpn.baseUrl must be an https URL"
+    ++ lib.optional (baseAuthority != null && agent.vpn.allowedHosts != [] && !(builtins.elem baseAuthority vpnHosts)) "services.atrium.mediaAgent.vpn.baseUrl authority ${baseAuthority} is not one of the rendered VPN allowed hosts (${lib.concatStringsSep ", " vpnHosts}); players would dial a host or port the listener refuses"
     ++ lib.optional (agent.vpn.interface == null) "services.atrium.mediaAgent.vpn.interface must name the mesh interface; the VPN port is opened only there"
     ++ lib.optional ((cfg.host.media or {}) ? media_vpn_base_url) "services.atrium.host.media.media_vpn_base_url is rendered from services.atrium.mediaAgent.vpn.baseUrl; set only that";
   agentErrors = let
@@ -148,6 +192,9 @@
     ++ lib.optional (listenErr == null && builtins.elem controlListen.port ([cfg.port] ++ lib.optional cfg.web.emergency.enable cfg.web.emergency.port)) "services.atrium.mediaAgent.listen must use a port other than services.atrium.port and services.atrium.web.emergency.port"
     ++ lib.optional (agent.bearerFile == null || !lib.hasPrefix "/" agent.bearerFile) "services.atrium.mediaAgent.bearerFile must be an absolute path to a host file holding at least 32 bytes"
     ++ lib.optional (agent.user == cfg.user) "services.atrium.mediaAgent.user must differ from services.atrium.user"
+    ++ lib.optional (agent.group == cfg.group || builtins.elem cfg.group config.users.users.${agent.user}.extraGroups || builtins.elem agent.user (config.users.groups.${cfg.group}.members or [])) "services.atrium.mediaAgent: the agent's primary and supplementary groups must differ from services.atrium.group (${cfg.group}); that group reads services.atrium.stateDir"
+    ++ lib.optional (cfg.backup.enable && (within libraryDir cfg.backup.directory || within cfg.backup.directory libraryDir)) "services.atrium.backup.directory overlaps the media library ${libraryDir}, which atrium.service cannot access"
+    ++ lib.optional (obsidianDir != null && (within libraryDir obsidianDir || within obsidianDir libraryDir)) "services.atrium.knowledgeExport.obsidianDirectory overlaps the media library ${libraryDir}, which atrium.service cannot access"
     ++ lib.optional (cfg.connections ? "service/media-agent") "services.atrium.connections.\"service/media-agent\" is rendered from services.atrium.mediaAgent; remove it"
     ++ rootErrors
     ++ lib.optionals agent.vpn.enable vpnErrors;
@@ -167,7 +214,7 @@
       vpn = {
         inherit (agent.vpn) listen;
         allowed_peers = agent.vpn.allowedPeers;
-        allowed_hosts = agent.vpn.allowedHosts;
+        allowed_hosts = vpnHosts;
         tls_cert = agentCredential "vpn-tls-cert";
         tls_key = agentCredential "vpn-tls-key";
       };
@@ -340,7 +387,7 @@
     ++ lib.optional (c.kind == "") "services.atrium.connections.\"${id}\" needs a kind")
   cfg.connections);
 
-  runPropertyNames = ["User" "Group" "StateDirectory" "StateDirectoryMode" "UMask" "EnvironmentFile" "LoadCredential"];
+  runPropertyNames = ["User" "Group" "StateDirectory" "StateDirectoryMode" "UMask" "EnvironmentFile" "LoadCredential"] ++ lib.optional agent.enable "InaccessiblePaths";
   runProperties = lib.concatMap (name: let
     value = hardening.${name};
   in
@@ -362,24 +409,26 @@
     '';
   };
 
-  hardening = {
-    User = cfg.user;
-    Group = cfg.group;
-    StateDirectory = stateDirName;
-    StateDirectoryMode = "0750";
-    UMask = "0027";
-    EnvironmentFile = cfg.environmentFiles;
-    LoadCredential = credentials;
-    NoNewPrivileges = true;
-    ProtectSystem = "strict";
-    ProtectHome = true;
-    PrivateTmp = true;
-    ProtectKernelModules = true;
-    ProtectKernelLogs = true;
-    ProtectClock = true;
-    RestrictSUIDSGID = true;
-    LockPersonality = true;
-  };
+  hardening =
+    {
+      User = cfg.user;
+      Group = cfg.group;
+      StateDirectory = stateDirName;
+      StateDirectoryMode = "0750";
+      UMask = "0027";
+      EnvironmentFile = cfg.environmentFiles;
+      LoadCredential = credentials;
+      NoNewPrivileges = true;
+      ProtectSystem = "strict";
+      ProtectHome = true;
+      PrivateTmp = true;
+      ProtectKernelModules = true;
+      ProtectKernelLogs = true;
+      ProtectClock = true;
+      RestrictSUIDSGID = true;
+      LockPersonality = true;
+    }
+    // lib.optionalAttrs agent.enable {InaccessiblePaths = ["-${libraryDir}"];};
 
   writePaths = lib.optional (obsidianDir != null) obsidianDir ++ lib.optional cfg.backup.enable cfg.backup.directory;
 
@@ -432,6 +481,7 @@
       KillSignal = "SIGTERM";
       Restart = "on-failure";
       RestartSec = "5s";
+      RestartPreventExitStatus = "78";
       User = agent.user;
       Group = agent.group;
       StateDirectory = lib.removePrefix "/var/lib/" agentStateDir;
@@ -790,15 +840,15 @@ in {
         allowedHosts = mkOption {
           type = types.listOf types.str;
           default = [];
-          example = ["media.mesh.example:8483"];
-          description = "Exact Host header values the VPN listener answers; the first one forms the default baseUrl.";
+          example = ["media.mesh.example"];
+          description = "Host names the VPN listener answers. Each is rendered as the agent's allowed_hosts entry with the vpn.listen port appended unless it is 443 (players send it in the Host header); an explicit host:port must use that port. The first one forms the default baseUrl.";
         };
 
         baseUrl = mkOption {
           type = types.str;
-          default = "https://${builtins.head (cfg.mediaAgent.vpn.allowedHosts ++ [""])}";
-          defaultText = lib.literalExpression "\"https://\${builtins.head config.services.atrium.mediaAgent.vpn.allowedHosts}\"";
-          description = "Origin that players use for VPN library links, rendered as host.media.media_vpn_base_url.";
+          default = "https://${builtins.head (vpnHosts ++ [""])}";
+          defaultText = lib.literalMD "`https://<first allowedHosts entry>`, with `:<port>` when the vpn.listen port is not 443";
+          description = "Origin that players use for VPN library links, rendered as host.media.media_vpn_base_url; its host and port must be one of the rendered allowed hosts.";
         };
 
         tls = {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -30,6 +31,9 @@ func runMediaAgent(ctx context.Context, args []string, stdout, stderr io.Writer)
 func serveMediaAgent(ctx context.Context, path string, stdout, stderr io.Writer) int {
 	fail := func(err error) int {
 		_, _ = fmt.Fprintf(stderr, "error: %v\n", err)
+		if _, permanent := errors.AsType[*mediaagent.ConfigError](err); permanent {
+			return cli.ExitConfig
+		}
 		return cli.ExitError
 	}
 	cfg, err := mediaagent.LoadConfig(path)

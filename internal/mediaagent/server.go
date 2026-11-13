@@ -58,7 +58,7 @@ type Agent struct {
 func New(c Config) (*Agent, error) {
 	token, err := readToken(c.Control.TokenFile)
 	if err != nil {
-		return nil, err
+		return nil, configError(err)
 	}
 	a := &Agent{cfg: c, token: sha256.Sum256(token), hosts: map[string]bool{}, peers: c.Control.AllowedPeers}
 	clear(token)
@@ -66,12 +66,12 @@ func New(c Config) (*Agent, error) {
 	if c.Group != "" {
 		a.gid, err = lookupGroup(c.Group)
 		if err != nil {
-			return nil, err
+			return nil, &ConfigError{err: err}
 		}
 		if a.gid != os.Getegid() {
 			groups, err := os.Getgroups()
 			if err != nil || !slices.Contains(groups, a.gid) {
-				return nil, fmt.Errorf("the media agent is not a member of group %q", c.Group)
+				return nil, &ConfigError{err: fmt.Errorf("the media agent is not a member of group %q", c.Group)}
 			}
 		}
 	}
@@ -81,14 +81,14 @@ func New(c Config) (*Agent, error) {
 	if c.Control.TLSCert != "" {
 		cert, err := tls.LoadX509KeyPair(c.Control.TLSCert, c.Control.TLSKey)
 		if err != nil {
-			return nil, fmt.Errorf("load control TLS certificate: %w", err)
+			return nil, configError(fmt.Errorf("load control TLS certificate: %w", err))
 		}
 		a.tls = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS13}
 	}
 	if c.VPN != nil && c.VPN.TLSCert != "" {
 		cert, err := tls.LoadX509KeyPair(c.VPN.TLSCert, c.VPN.TLSKey)
 		if err != nil {
-			return nil, fmt.Errorf("load VPN TLS certificate: %w", err)
+			return nil, configError(fmt.Errorf("load VPN TLS certificate: %w", err))
 		}
 		a.vpnTLS = &tls.Config{Certificates: []tls.Certificate{cert}, MinVersion: tls.VersionTLS12}
 	}

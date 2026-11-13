@@ -185,6 +185,28 @@
       assert refusedWith "vpn.allowedPeers must list at least one peer prefix" (vpn {allowedPeers = [];});
       assert refusedWith "vpn.allowedPeers must not contain" (vpn {allowedPeers = ["0.0.0.0/0"];});
       assert refusedWith "vpn.allowedHosts must list at least one host" (vpn {allowedHosts = [];});
+      assert builtins.all (peer: refusedWith "vpn.allowedPeers entry \"${peer}\" must be a CIDR prefix with a length" (vpn {allowedPeers = [peer];})) ["100.89.0.1" "100.64.0.0/33" "300.64.0.0/10" "100.64.0.0/010" "fd00::1" "fd00::/129" "media.mesh/24"];
+      assert !(refusedWith "services.atrium" (vpn {allowedPeers = ["100.89.0.7/32" "fd00:89::/48"];}));
+      assert refusedWith "vpn.allowedHosts entry \"media.mesh.example:9000\" names port 9000, but vpn.listen uses port 8483" (vpn {allowedHosts = ["media.mesh.example:9000"];});
+      assert refusedWith "vpn.allowedHosts entry \"https://media.mesh.example\" must be a host name or host:port" (vpn {allowedHosts = ["https://media.mesh.example"];});
+      assert refusedWith "vpn.baseUrl authority media.mesh.example is not one of the rendered VPN allowed hosts (media.mesh.example:8483)" (vpn {baseUrl = "https://media.mesh.example";});
+      assert refusedWith "vpn.baseUrl must be an https URL" (vpn {baseUrl = "http://media.mesh.example:8483";});
+      assert !(refusedWith "services.atrium" (vpn {baseUrl = "https://media.mesh.example:8483/";}));
+      assert refusedWith "the agent's primary and supplementary groups must differ from services.atrium.group" (agentWith {group = "atrium";});
+      assert refusedWith "the agent's primary and supplementary groups must differ from services.atrium.group" ((agentWith {}) // {group = "media";});
+      assert refusedWith "the agent's primary and supplementary groups must differ from services.atrium.group" ((agentWith {}) // {media.group = "atrium";});
+      assert builtins.any (lib.hasInfix "the agent's primary and supplementary groups must differ from services.atrium.group") (failing ((host {
+        web.allowedHost = "atrium.example.org";
+        mediaAgent = agentBase;
+      }).extendModules {modules = [{users.users.atrium-media-agent.extraGroups = ["atrium"];}];}));
+      assert refusedWith "services.atrium.backup.directory overlaps the media library /srv/media" ((agentWith {})
+        // {
+          backup = {
+            enable = true;
+            directory = "/srv/media/backups";
+          };
+        });
+      assert refusedWith "services.atrium.knowledgeExport.obsidianDirectory overlaps the media library /srv/media" ((agentWith {}) // {knowledgeExport.obsidianDirectory = "/srv/media/vault";});
       assert refusedWith "vpn.interface must name the mesh interface" (vpn {interface = null;});
       assert refusedWith "media_vpn_base_url is rendered from services.atrium.mediaAgent.vpn.baseUrl" ((vpn {}) // {host.media.media_vpn_base_url = "https://x.example";});
       assert !(refusedWith "services.atrium" (vpn {}));
@@ -256,6 +278,8 @@
       }); true;
     cfg = nixos.config.services.atrium;
     unitText = name: nixos.config.systemd.units.${name}.text;
+    unitLines = name: lib.splitString "\n" (unitText name);
+    hasLines = name: builtins.all (line: builtins.elem line (unitLines name));
     appUnits = ["atrium.service"];
     credentialLines = [
       "LoadCredential=action_links.action_link_key:/run/secrets/action-link-key"
@@ -286,19 +310,45 @@
     mainWithoutMedia = let
       web = unitText "atrium.service";
     in
-      assert !(builtins.any (text: lib.hasInfix text web) ["/srv/media" "/var/lib/media" "SupplementaryGroups=" "ffmpeg" "UMask=0002" "Group=media"]);
-      assert lib.hasInfix "After=" web && lib.hasInfix "atrium-media-agent.service" web;
+      assert !(builtins.any (text: lib.hasInfix text (builtins.replaceStrings ["InaccessiblePaths=-/srv/media\n"] [""] web)) ["/srv/media" "/var/lib/media" "SupplementaryGroups=" "ffmpeg" "UMask=0002" "Group=media"]);
+      assert hasLines "atrium.service" [
+        "User=atrium"
+        "Group=atrium"
+        "StateDirectory=atrium"
+        "StateDirectoryMode=0750"
+        "UMask=0027"
+        "NoNewPrivileges=true"
+        "ProtectSystem=strict"
+        "ProtectHome=true"
+        "PrivateTmp=true"
+        "ProtectKernelModules=true"
+        "ProtectKernelLogs=true"
+        "ProtectClock=true"
+        "RestrictSUIDSGID=true"
+        "LockPersonality=true"
+        "InaccessiblePaths=-/srv/media"
+      ];
+      assert builtins.elem "InaccessiblePaths=-/srv/media" cfg.runProperties;
+      assert !(builtins.any (lib.hasPrefix "InaccessiblePaths=") defaults.config.services.atrium.runProperties);
+      assert !(lib.hasInfix "InaccessiblePaths=" defaults.config.systemd.units."atrium.service".text);
+      assert builtins.any (line: lib.hasPrefix "After=" line && builtins.elem "atrium-media-agent.service" (lib.splitString " " (lib.removePrefix "After=" line))) (unitLines "atrium.service");
+      assert builtins.any (line: lib.hasPrefix "Wants=" line && builtins.elem "atrium-media-agent.service" (lib.splitString " " (lib.removePrefix "Wants=" line))) (unitLines "atrium.service");
       assert !(cfg.renderedHost.media ? media_root); true;
     mediaAgentUnit = let
       t = unitText "atrium-media-agent.service";
       agentCfg = cfg.renderedMediaAgent;
       conn = cfg.renderedHost.connections."service/media-agent";
     in
-      assert builtins.all (line: lib.hasInfix line t) [
+      assert builtins.all (text: lib.hasInfix text t) ["ffmpeg-headless" " media-agent --config "];
+      assert hasLines "atrium-media-agent.service" [
         "Type=notify"
         "WatchdogSec=1min"
         "Restart=on-failure"
+        "RestartSec=5s"
+        "RestartPreventExitStatus=78"
         "TimeoutStopSec=150s"
+        "KillMode=mixed"
+        "KillSignal=SIGTERM"
         "StartLimitIntervalSec=0"
         "User=atrium-media-agent"
         "Group=media"
@@ -318,14 +368,19 @@
         "PrivateDevices=true"
         "ProtectKernelTunables=true"
         "ProtectKernelModules=true"
+        "ProtectKernelLogs=true"
         "ProtectControlGroups=true"
+        "ProtectClock=true"
+        "ProtectHostname=true"
+        "ProtectProc=invisible"
         "RestrictNamespaces=true"
+        "RestrictRealtime=true"
+        "LockPersonality=true"
         "CapabilityBoundingSet="
+        "AmbientCapabilities="
         "RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX"
         "SystemCallArchitectures=native"
         "SystemCallFilter=@system-service"
-        "ffmpeg-headless"
-        " media-agent --config "
       ];
       assert !(builtins.any (text: lib.hasInfix text t) ["ATRIUM_DB" "ATRIUM_HOST_CONFIG" "EnvironmentFile=" "db-key" "action_link_key" "media.link_key" "/var/lib/atrium/" "/var/lib/atrium " "RestrictSUIDSGID" "ExecReload" "ReadOnlyPaths="]);
       assert agentCfg.control
@@ -400,6 +455,7 @@
     unit = name: pkgs.writeText name (builtins.unsafeDiscardStringContext nixos.config.systemd.units.${name}.text);
     inherit (cfg) unitNames;
     configFile = (pkgs.formats.toml {}).generate "atrium-host.toml" cfg.renderedHost;
+    agentConfigFile = (pkgs.formats.toml {}).generate "atrium-media-agent.toml" cfg.renderedMediaAgent;
   in {
     checks =
       {
@@ -452,7 +508,7 @@
         api-client-swift = pkgs.callPackage ../nix/swift-api-check.nix {};
       }
       // lib.optionalAttrs (self'.packages ? atrium) {
-        module-config = pkgs.runCommand "atrium-module-config" {nativeBuildInputs = [self'.packages.atrium pkgs.gnugrep];} ''
+        module-config = pkgs.runCommand "atrium-module-config" {nativeBuildInputs = [self'.packages.atrium pkgs.gnugrep pkgs.gnused pkgs.openssl];} ''
           set -euo pipefail
           export HOME=$TMPDIR ATRIUM_DB=$TMPDIR/atrium.db ATRIUM_CACHE_DIR=$TMPDIR/cache
           export ATRIUM_HOST_CONFIG=${configFile} ATRIUM_INITIAL_TZ=UTC
@@ -498,8 +554,52 @@
           atrium connections list | grep -q 'service/qbittorrent'
           atrium connections list | grep -q 'mail/icloud'
           atrium connections list | grep -q 'service/media-agent'
-          if ATRIUM_MEDIA_MEDIA_ROOT=/srv/media atrium settings list >/dev/null 2>&1; then
-            echo "the removed media_root host key was accepted" >&2
+          code=0
+          ATRIUM_MEDIA_MEDIA_ROOT=/srv/media timeout 60 atrium serve --port 0 --auth local >/dev/null 2>"$TMPDIR/serve.err" || code=$?
+          if [ "$code" != 78 ] || ! grep -q 'ATRIUM_MEDIA_MEDIA_ROOT is no longer read; use services.atrium.mediaAgent.roots' "$TMPDIR/serve.err"; then
+            echo "ATRIUM_MEDIA_MEDIA_ROOT: exit $code, want 78 naming services.atrium.mediaAgent.roots" >&2
+            cat "$TMPDIR/serve.err" >&2
+            exit 1
+          fi
+          agent=$TMPDIR/agent
+          mkdir -p "$agent/credentials" "$agent/media/movies" "$agent/media/tv" "$agent/media/downloads" "$agent/media/import"
+          head -c 32 /dev/urandom | od -An -tx1 | tr -d ' \n' >"$agent/credentials/bearer"
+          openssl req -x509 -newkey ec -pkeyopt ec_paramgen_curve:prime256v1 -nodes -days 1 -subj /CN=media.mesh.example \
+            -keyout "$agent/credentials/vpn-tls-key" -out "$agent/credentials/vpn-tls-cert" 2>/dev/null
+          sed -e "s|/run/credentials/atrium-media-agent.service/|$agent/credentials/|" \
+            -e "s|\"/srv/media/|\"$agent/media/|" \
+            -e "s|\"/var/lib/atrium-media-agent\"|\"$agent/state\"|" \
+            -e "s|\"/var/cache/atrium-media-agent\"|\"$agent/cache\"|" \
+            -e "s|^group = \"media\"\$|group = \"$(id -g)\"|" \
+            -e "s|^listen = \"100.64.0.10:8483\"\$|listen = \"127.0.0.1:8483\"\nallow_loopback = true|" \
+            ${agentConfigFile} >"$agent/agent.toml"
+          atrium media-agent --config "$agent/agent.toml" >"$agent/out" 2>"$agent/err" &
+          pid=$!
+          for _ in $(seq 300); do
+            if grep -q 'media agent VPN listening on 127.0.0.1:8483' "$agent/out" || ! kill -0 "$pid" 2>/dev/null; then
+              break
+            fi
+            sleep 0.1
+          done
+          if ! grep -q 'media agent listening on 127.0.0.1:8482' "$agent/out" || ! grep -q 'media agent VPN listening on 127.0.0.1:8483' "$agent/out"; then
+            echo "the media agent did not start on the rendered config" >&2
+            cat "$agent/agent.toml" "$agent/out" "$agent/err" >&2
+            exit 1
+          fi
+          kill -TERM "$pid"
+          code=0
+          wait "$pid" || code=$?
+          if [ "$code" != 0 ]; then
+            echo "media agent shutdown: exit $code" >&2
+            cat "$agent/err" >&2
+            exit 1
+          fi
+          printf 'short\n' >"$agent/credentials/bearer"
+          code=0
+          timeout 60 atrium media-agent --config "$agent/agent.toml" >/dev/null 2>"$agent/err" || code=$?
+          if [ "$code" != 78 ] || ! grep -q 'control.token_file must contain at least 32 bytes' "$agent/err"; then
+            echo "short media agent bearer: exit $code, want 78" >&2
+            cat "$agent/err" >&2
             exit 1
           fi
           rm "$CREDENTIALS_DIRECTORY/mail-account-icloud"
