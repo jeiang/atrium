@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -257,6 +258,9 @@ func (g *Guard) api(w http.ResponseWriter, r *http.Request, next http.Handler) {
 		r.Body = http.MaxBytesReader(w, r.Body, int64(limit))
 	}
 	who.BearerID = tok.ID
-	ctx := withAPIIdentity(r.Context(), who)
+	ctx := withStreamAccess(withAPIIdentity(r.Context(), who), "bearer:"+tokenKey(token), func(ctx context.Context) error {
+		_, err := g.bearers.Authenticate(ctx, token)
+		return err
+	})
 	next.ServeHTTP(w, r.WithContext(ctx))
 }

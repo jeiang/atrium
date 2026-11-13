@@ -230,6 +230,9 @@ func (s *apiSite) events(token string, threadID, runID int64, lastID string) (st
 		s.t.Fatal(err)
 	}
 	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode == http.StatusNoContent && lastID != "" {
+		return "", lastID
+	}
 	if resp.StatusCode != http.StatusOK || !strings.HasPrefix(resp.Header.Get("Content-Type"), "text/event-stream") {
 		s.t.Fatalf("event stream: %d %s", resp.StatusCode, resp.Header.Get("Content-Type"))
 	}
@@ -484,7 +487,7 @@ func TestAPIChatSendStreamsTheRun(t *testing.T) {
 		}
 	}
 	replay, _ := s.events(owner, threadID, runID, last)
-	if strings.Contains(replay, "event: text") || !strings.Contains(replay, "event: done") {
+	if replay != "" {
 		t.Fatalf("Last-Event-ID replayed earlier events:\n%s", replay)
 	}
 
