@@ -57,7 +57,7 @@
       shellHook = ''
         unset GOROOT GOPATH
         root=$(git rev-parse --show-toplevel 2>/dev/null) || root=$PWD
-        [ -e "$root/internal/web/static/app.css" ] || just --justfile "$root/justfile" assets
+        [ -e "$root/internal/web/static/assets.json" ] || just --justfile "$root/justfile" assets
       '';
     };
   };

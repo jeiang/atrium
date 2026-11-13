@@ -1,6 +1,8 @@
 set -euo pipefail
 stage=$(mktemp -d)
 cp -R "$out/." "$stage/"
+rm -rf "$out"
+mkdir -p "$out"
 printf '{}\n' > assets.json
 pack() {
   local name=$1 hash destination
@@ -34,4 +36,4 @@ while IFS= read -r file; do
       [ "$(wc -c < "$file.br")" -lt "$(wc -c < "$file")" ] || rm "$file.br"
       ;;
   esac
-done < <(find "$out" -type f | LC_ALL=C sort)
+done < <(find "$out" -type f ! -path "$out/assets.json" | LC_ALL=C sort)

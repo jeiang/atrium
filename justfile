@@ -101,7 +101,7 @@ assets:
 css:
   #!/usr/bin/env bash
   set -euo pipefail
-  [ -e internal/web/static/app.js ] || just assets
+  [ -e internal/web/static/assets.json ] || just assets
   mkdir -p internal/web/assets/node_modules/basecoat-css
   tar -xzf "${ATRIUM_BASECOAT:?set by the dev shell}" --strip-components=1 -C internal/web/assets/node_modules/basecoat-css
   cd internal/web/assets
@@ -118,7 +118,9 @@ css:
   ) &
   watcher=$!
   trap 'kill "$watcher"' EXIT
-  tailwindcss --input input.css --output ../static/app.css --watch
+  css=../static/$(jq -r '."app.css" | ltrimstr("/static/")' ../static/assets.json)
+  rm -f "$css" "$css.gz" "$css.br"
+  tailwindcss --input input.css --output "$css" --watch
 
 settingsgen:
   go run -tags modernc ./tools/settingsgen docs/config

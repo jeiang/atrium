@@ -1,9 +1,8 @@
 package web
 
 import (
-	"crypto/sha256"
 	"embed"
-	"encoding/hex"
+	"encoding/json"
 	"io/fs"
 )
 
@@ -12,7 +11,7 @@ var staticFiles embed.FS
 
 var Static = mustSub(staticFiles, "static")
 
-var AssetVersion = assetVersion(Static)
+var Assets = mustAssets(Static)
 
 func mustSub(fsys fs.FS, dir string) fs.FS {
 	sub, err := fs.Sub(fsys, dir)
@@ -22,21 +21,14 @@ func mustSub(fsys fs.FS, dir string) fs.FS {
 	return sub
 }
 
-func assetVersion(fsys fs.FS) string {
-	digest := sha256.New()
-	err := fs.WalkDir(fsys, ".", func(path string, d fs.DirEntry, err error) error {
-		if err != nil || d.IsDir() {
-			return err
-		}
-		b, err := fs.ReadFile(fsys, path)
-		if err != nil {
-			return err
-		}
-		digest.Write(b)
-		return nil
-	})
+func mustAssets(fsys fs.FS) map[string]string {
+	raw, err := fs.ReadFile(fsys, "assets.json")
 	if err != nil {
 		panic(err)
 	}
-	return hex.EncodeToString(digest.Sum(nil))[:12]
+	var assets map[string]string
+	if err := json.Unmarshal(raw, &assets); err != nil {
+		panic(err)
+	}
+	return assets
 }

@@ -19,6 +19,10 @@ const (
 
 func Gzip(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasPrefix(r.URL.Path, staticPrefix) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		g := &gzipWriter{ResponseWriter: w, accept: strings.Contains(r.Header.Get("Accept-Encoding"), "gzip")}
 		defer g.finish()
 		next.ServeHTTP(g, r)
