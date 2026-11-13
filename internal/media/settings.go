@@ -3,6 +3,7 @@ package media
 import (
 	"context"
 	"errors"
+	"net/netip"
 	"net/url"
 	"strconv"
 	"strings"
@@ -19,8 +20,7 @@ const module = "media"
 const (
 	KeyDownloadPrefix = "media_download_path_prefix"
 	KeyQbitURL        = "media_qbittorrent_url"
-	KeyMoviesURL      = "media_movies_url"
-	KeyTVURL          = "media_tv_url"
+	KeyVPNBaseURL     = "media_vpn_base_url"
 	KeyLinkTTL        = "media_link_ttl_seconds"
 	KeyEZTVURL        = "media_eztv_url"
 	KeyLinkKey        = "link_key"
@@ -44,17 +44,31 @@ func SettingsDefs() []settings.Def {
 func HostSettings() []settings.HostDef {
 	return []settings.HostDef{
 		{Key: KeyDownloadPrefix, Module: module, Type: settings.String},
-		{Key: KeyMoviesURL, Module: module, Type: settings.String, Check: httpURL},
-		{Key: KeyTVURL, Module: module, Type: settings.String, Check: httpURL},
+		{Key: KeyVPNBaseURL, Module: module, Type: settings.String, Check: vpnOrigin},
 	}
 }
 
-func httpURL(value string) error {
+func vpnOrigin(value string) error {
 	value = strings.TrimSpace(value)
 	if value == "" {
 		return nil
 	}
-	return requiredHTTPURL(value)
+	u, err := url.Parse(value)
+	if err != nil || u.Opaque != "" || u.User != nil || u.Hostname() == "" || (u.Path != "" && u.Path != "/") || u.RawQuery != "" || u.ForceQuery || u.Fragment != "" {
+		return settings.Invalid("must be an origin such as https://media.example.org:8443, with no path, query or credentials")
+	}
+	if u.Scheme == "https" || u.Scheme == "http" && loopbackHost(u.Hostname()) {
+		return nil
+	}
+	return settings.Invalid("must use https; http is allowed only for a loopback host")
+}
+
+func loopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip, err := netip.ParseAddr(host)
+	return err == nil && ip.Unmap().IsLoopback()
 }
 
 func requiredHTTPURL(value string) error {
@@ -113,8 +127,7 @@ type Settings struct {
 	TMDBStore      *connections.Store
 	EZTVLease      *connections.Lease
 	AgentLease     *connections.Lease
-	MoviesURL      string
-	TVURL          string
+	VPNBaseURL     string
 	PublicURL      string
 }
 
@@ -139,8 +152,7 @@ func Load(ctx context.Context, q db.Querier, env config.Env) (Settings, error) {
 		return n
 	}
 	out.DownloadPrefix = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyDownloadPrefix)), "/")
-	out.MoviesURL = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyMoviesURL)), "/")
-	out.TVURL = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyTVURL)), "/")
+	out.VPNBaseURL = strings.TrimRight(strings.TrimSpace(config.From(ctx).HostValue(KeyVPNBaseURL)), "/")
 	out.LinkTTL = whole(KeyLinkTTL)
 	if failure != nil {
 		return Settings{}, failure

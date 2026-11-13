@@ -55,6 +55,10 @@ func (a *Agent) serveFile(w http.ResponseWriter, r *http.Request) {
 		problem(w, http.StatusBadRequest, protocol.CodeInvalidRequest, "the root is unknown")
 		return
 	}
+	a.streamFile(w, r, root, rel)
+}
+
+func (a *Agent) streamFile(w http.ResponseWriter, r *http.Request, root, rel string) {
 	f, st, err := a.roots.openFile(root, rel)
 	switch {
 	case err == nil:

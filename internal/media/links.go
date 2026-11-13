@@ -198,18 +198,13 @@ func (l *Links) PublicURL(ctx context.Context, base, rel string, now float64, tt
 }
 
 func (s Settings) VPNURL(rel string) string {
-	top, rest, _ := strings.Cut(rel, "/")
-	base := ""
-	switch top {
-	case Movies:
-		base = s.MoviesURL
-	case TV:
-		base = s.TVURL
-	}
-	if base == "" {
+	if s.VPNBaseURL == "" {
 		return ""
 	}
-	return base + "/" + urlQuote(rest)
+	if _, _, ok := SplitRel(rel); !ok {
+		return ""
+	}
+	return s.VPNBaseURL + "/library/" + urlQuote(rel)
 }
 
 func QueryValue(values []string) string {

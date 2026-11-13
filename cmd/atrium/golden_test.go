@@ -181,7 +181,6 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 	qbitURL := vars["QBITTORRENT_URL"]
 	eztvURL := vars["EZTV_URL"]
 	for phaseA, canonical := range map[string]string{
-		"ATRIUM_MEDIA_MOVIES_URL": "ATRIUM_MEDIA_MEDIA_MOVIES_URL", "ATRIUM_MEDIA_TV_URL": "ATRIUM_MEDIA_MEDIA_TV_URL",
 		"ATRIUM_CONTACTS_DIR": "ATRIUM_CONTACTS_CONTACTS_DIR",
 	} {
 		if v, ok := vars[phaseA]; ok {
@@ -190,6 +189,8 @@ func newFixture(t *testing.T, data goldenData, extraEnv map[string]string, stdin
 		delete(vars, phaseA)
 	}
 	delete(vars, "ATRIUM_MODE")
+	delete(vars, "ATRIUM_MEDIA_MOVIES_URL")
+	delete(vars, "ATRIUM_MEDIA_TV_URL")
 	delete(vars, "QBITTORRENT_URL")
 	delete(vars, "EZTV_URL")
 	accounts := []mailAccount{

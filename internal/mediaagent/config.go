@@ -46,12 +46,12 @@ type VPN struct {
 	Listen        string         `toml:"listen"`
 	AllowedPeers  []netip.Prefix `toml:"allowed_peers"`
 	AllowedHosts  []string       `toml:"allowed_hosts"`
+	TLSCert       string         `toml:"tls_cert"`
+	TLSKey        string         `toml:"tls_key"`
 	AllowLoopback bool           `toml:"allow_loopback"`
 }
 
 const DefaultListen = "127.0.0.1:8482"
-
-var ErrUnsupported = errors.New("unsupported")
 
 func (r Roots) named() [][2]string {
 	return [][2]string{
@@ -178,7 +178,17 @@ func (v VPN) validate() error {
 	if len(v.AllowedHosts) == 0 || slices.Contains(v.AllowedHosts, "") {
 		return errors.New("vpn.allowed_hosts must list at least one host and no empty value")
 	}
-	return fmt.Errorf("vpn: %w by this media agent version", ErrUnsupported)
+	if (v.TLSCert == "") != (v.TLSKey == "") {
+		return errors.New("vpn.tls_cert and vpn.tls_key must be set together")
+	}
+	for _, p := range [][2]string{{"vpn.tls_cert", v.TLSCert}, {"vpn.tls_key", v.TLSKey}} {
+		if p[1] != "" {
+			if err := absolute(p[0], p[1]); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func listenAddr(key, value string) (netip.AddrPort, error) {

@@ -28,7 +28,7 @@ func HostDefsFrom(defs []HostDef) []HostDef {
 		out = append(out, d)
 	}
 	for _, e := range importManifest {
-		if e.Class != ImportHost || e.Action == ImportRename || e.Module == "db" && e.Key == "key" || ConnectionOwnedHostKey(e.Key) {
+		if e.Class != ImportHost || e.Retired || e.Action == ImportRename || e.Module == "db" && e.Key == "key" || ConnectionOwnedHostKey(e.Key) {
 			continue
 		}
 		if slices.ContainsFunc(out, func(d HostDef) bool { return d.Key == e.Key }) {

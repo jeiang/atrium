@@ -508,7 +508,7 @@ func TestMnpMediaSignedLinksAdmitOnlyValidSignaturesOnAllowedHosts(t *testing.T)
 	mnpWrite(t, filepath.Join(root, movie), []byte(body))
 	mnpWrite(t, filepath.Join(root, "downloads", "secret.mkv"), []byte("do not serve"))
 	setEnv(t, settingEnv(config.KeyPublicURL), "https://atrium.test")
-	setEnv(t, settingEnv(media.KeyMoviesURL), "http://artemis.vpn:8084")
+	setEnv(t, settingEnv(media.KeyVPNBaseURL), "https://artemis.vpn:8443")
 	keyFile := filepath.Join(dir, "link.key")
 	if err := os.WriteFile(keyFile, []byte(key+"\n"), 0o600); err != nil {
 		t.Fatal(err)

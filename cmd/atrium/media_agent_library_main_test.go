@@ -42,9 +42,10 @@ func libraryAgent(t *testing.T, dir string, env ...string) *mediaAgent {
 
 type librarySearch struct {
 	Results []struct {
-		Kind  string   `json:"kind"`
-		Title string   `json:"title"`
-		Files []string `json:"files"`
+		Kind    string   `json:"kind"`
+		Title   string   `json:"title"`
+		Files   []string `json:"files"`
+		VPNURLs []string `json:"vpn_urls"`
 	} `json:"results"`
 	Catalogue string `json:"catalogue"`
 	Code      string `json:"code"`

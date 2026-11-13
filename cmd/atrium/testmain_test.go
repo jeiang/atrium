@@ -51,6 +51,9 @@ func settingEnv(key string) string {
 	if entry, ok := settings.ImportEntryFor(key); ok {
 		return "ATRIUM_" + strings.ToUpper(entry.Module) + "_" + strings.ToUpper(entry.Key)
 	}
+	if d, ok := testSettings().HostDefOf(key); ok {
+		return "ATRIUM_" + strings.ToUpper(d.Module) + "_" + strings.ToUpper(d.Key)
+	}
 	panic("unregistered setting " + key)
 }
 
