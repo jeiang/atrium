@@ -21,7 +21,7 @@ func TestMediaLibraryAPIRange(t *testing.T) {
 	dir := t.TempDir()
 	qb, qbURL := mnpNewQbit(t)
 	agent, root := agentLibrary(t, dir, qbURL)
-	body := "0123456789abcdefghijklmnop"
+	body := strings.Repeat("0123456789abcdefghijklmnop", 3<<20)
 	mnpWrite(t, filepath.Join(root, rel), []byte(body))
 	seedAllFlagsIn(t, dir)
 	token := mediaAPIToken(t)
@@ -29,6 +29,7 @@ func TestMediaLibraryAPIRange(t *testing.T) {
 	d := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = d.Close() }()
 	path := "/api/v1/media/files/" + mediaAPIID(rel) + "/content"
+	client := &http.Client{Transport: &http.Transport{DisableCompression: true}}
 	request := func(method, path, bearer string, payload io.Reader, contentType string, headers ...string) apiReply {
 		t.Helper()
 		req, err := http.NewRequest(method, s.base+path, payload)
@@ -44,7 +45,7 @@ func TestMediaLibraryAPIRange(t *testing.T) {
 		for i := 0; i < len(headers); i += 2 {
 			req.Header.Set(headers[i], headers[i+1])
 		}
-		resp, err := http.DefaultClient.Do(req)
+		resp, err := client.Do(req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -66,13 +67,22 @@ func TestMediaLibraryAPIRange(t *testing.T) {
 	if get.status != 206 || get.body != body[3:9] || get.header.Get("Content-Range") != fmt.Sprintf("bytes 3-8/%d", len(body)) {
 		t.Fatalf("range: %+v", get)
 	}
-	bad := request("GET", path, token, nil, "", "Range", "bytes=999-")
+	bad := request("GET", path, token, nil, "", "Range", "bytes=999999999-")
 	if bad.status != 416 || bad.header.Get("Content-Range") != fmt.Sprintf("bytes */%d", len(body)) {
 		t.Fatalf("range refusal: %+v", bad)
 	}
-	head := request("HEAD", path, token, nil, "")
+	head := request("HEAD", path, token, nil, "", "Accept-Encoding", "gzip")
 	if head.status != 200 || head.body != "" || head.header.Get("Content-Length") != strconv.Itoa(len(body)) {
 		t.Fatalf("head: %+v", head)
+	}
+	full := request("GET", path, token, nil, "", "Accept-Encoding", "gzip")
+	if full.status != 200 || full.header.Get("Content-Encoding") != "" || full.header.Get("Content-Length") != head.header.Get("Content-Length") || full.body != body {
+		t.Fatalf("full file: status %d, encoding %q, length %q, %d bytes", full.status, full.header.Get("Content-Encoding"), full.header.Get("Content-Length"), len(full.body))
+	}
+	for _, art := range []string{"/api/v1/media/art/season/" + mediaAPIID(libraryMovie), "/api/v1/media/art/movie/" + mediaAPIID(libraryMovie) + "?season=1"} {
+		if got := request("GET", art, token, nil, ""); got.status != 422 || !strings.Contains(got.body, `"season"`) {
+			t.Fatalf("art season %s: %+v", art, got)
+		}
 	}
 	if got := request("GET", path, "", nil, "", "Remote-User", "operator"); got.status != 401 {
 		t.Fatalf("bearer-only: %+v", got)
@@ -124,12 +134,42 @@ func TestMediaLibraryAPIRange(t *testing.T) {
 	if got := upload(torrent, mediaMagnet(hash, "duplicate")); got.status != 422 || qb.count("add") != 1 {
 		t.Fatalf("xor: %+v", got)
 	}
+	if got := upload([]byte("d4:infod9:file treede12:meta versioni2e4:name8:test.mkv12:piece lengthi16384eee"), ""); got.status != 422 || !strings.Contains(got.body, "no v1 info hash") || qb.count("add") != 1 {
+		t.Fatalf("v2-only torrent: %+v", got)
+	}
+	hybrid := []byte("d4:infod9:file treede6:lengthi1e12:meta versioni2e4:name9:test2.mkv12:piece lengthi16384e6:pieces20:bbbbbbbbbbbbbbbbbbbbee")
+	hybridHash, err := media.TorrentHash(hybrid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := upload(hybrid, ""); got.status != 200 || qb.count("add") != 2 {
+		t.Fatalf("hybrid torrent: %+v, adds %d", got, qb.count("add"))
+	}
+	mediaEffectID(t, d, media.OpAddFile, hybridHash, "done")
 	for _, id := range []string{mediaAPIID("downloads/secret.mkv"), mediaAPIID("movies/../secret.mkv"), mediaAPIID("movies/" + libraryMovie + "/missing.mkv")} {
 		if got := request("GET", "/api/v1/media/files/"+id+"/content", token, nil, ""); got.status != 404 {
 			t.Fatalf("bad id: %+v", got)
 		}
 	}
-	agent.terminate(t)
+	stream, err := http.NewRequest("GET", s.base+path, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stream.Header.Set("Authorization", "Bearer "+token)
+	resp, err := client.Do(stream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := io.ReadFull(resp.Body, make([]byte, 1<<20)); err != nil {
+		t.Fatal(err)
+	}
+	_ = agent.cmd.Process.Kill()
+	<-agent.done
+	rest, err := io.ReadAll(resp.Body)
+	_ = resp.Body.Close()
+	if err == nil {
+		t.Fatalf("a broken stream completed: %d of %d bytes", 1<<20+len(rest), len(body))
+	}
 	down := request("GET", path, token, nil, "")
 	if down.status != 503 || strings.Contains(down.body, body) || strings.Contains(down.body, root) {
 		t.Fatalf("agent down: %+v", down)

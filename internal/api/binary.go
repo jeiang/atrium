@@ -37,7 +37,9 @@ func serveBinary(w http.ResponseWriter, r *http.Request, body Binary) {
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.WriteHeader(body.Status)
 		if r.Method != http.MethodHead && (body.Status == http.StatusOK || body.Status == http.StatusPartialContent) {
-			_, _ = io.Copy(w, body.Body)
+			if _, err := io.Copy(w, body.Body); err != nil {
+				panic(http.ErrAbortHandler)
+			}
 		}
 		return
 	}

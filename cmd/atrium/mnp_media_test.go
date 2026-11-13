@@ -3,6 +3,7 @@ package main
 import (
 	"crypto/hmac"
 	"crypto/sha256"
+	"encoding/base64"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
@@ -602,6 +603,10 @@ func TestMediaAddRefusesNonV1MagnetEverywhere(t *testing.T) {
 		"magnet":  {mediaMagnet(strings.Repeat("a", 40), "Lanterns")},
 		"torrent": {"ZDE6YWJl"}, "name": {"lanterns.torrent"}, "mode": {"media"},
 	}, http.StatusUnprocessableEntity)
+	b.want(http.MethodPost, "/apps/media/add", url.Values{
+		"torrent": {base64.StdEncoding.EncodeToString([]byte("d4:infod9:file treede12:meta versioni2e4:name8:test.mkv12:piece lengthi16384eee"))},
+		"name":    {"lanterns.torrent"}, "mode": {"media"},
+	}, http.StatusUnprocessableEntity)
 	webDB := mustConnect(t, filepath.Join(dir, "atrium.db"), keyFor(t))
 	defer func() { _ = webDB.Close() }()
 	var effects, invalid int
@@ -611,8 +616,8 @@ func TestMediaAddRefusesNonV1MagnetEverywhere(t *testing.T) {
 	if err := webDB.Read.QueryRow("SELECT COUNT(*) FROM operation_audit WHERE operation = 'media.add' AND outcome = 'invalid'").Scan(&invalid); err != nil {
 		t.Fatal(err)
 	}
-	if effects != 0 || invalid != 2 {
-		t.Fatalf("web refusals: %d effects, %d invalid audits; want 0, 2", effects, invalid)
+	if effects != 0 || invalid != 3 {
+		t.Fatalf("web refusals: %d effects, %d invalid audits; want 0, 3", effects, invalid)
 	}
 	if adds := qb.count("add"); adds != 0 {
 		t.Fatalf("the refused web add reached qBittorrent: %d adds", adds)

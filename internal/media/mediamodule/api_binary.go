@@ -6,6 +6,7 @@ import (
 
 	"github.com/jeiang/atrium/internal/api"
 	"github.com/jeiang/atrium/internal/application"
+	"github.com/jeiang/atrium/internal/media"
 	mediaapp "github.com/jeiang/atrium/internal/media/application"
 	"github.com/jeiang/atrium/internal/web"
 )
@@ -21,7 +22,7 @@ type MediaContentInput struct {
 type MediaArtInput struct {
 	Kind   string `path:"kind" json:"-" api:"enum=movie|show|season"`
 	ID     string `path:"id" json:"-"`
-	Season int64  `query:"season" json:"-" api:"min=0"`
+	Season *int64 `query:"season" json:"-" api:"min=0"`
 }
 
 type MediaInspectionInput struct {
@@ -89,7 +90,14 @@ func mediaBinaryRoutes(d *web.Deps, s *mediaapp.Service) []application.Binding {
 		if err != nil {
 			return application.Read[api.Binary]{}, err
 		}
-		stream, err := s.Art(ctx, mediaapp.ArtInput{Kind: in.Kind, Name: name, Season: in.Season})
+		if (in.Kind == media.KindSeason) != (in.Season != nil) {
+			return application.Read[api.Binary]{}, &application.Error{Code: application.Invalid, Message: "season is required for season art and only for season art.", Fields: []application.Field{{Name: "season", Code: "invalid", Message: "Input should be given only when kind is season"}}}
+		}
+		var season int64
+		if in.Season != nil {
+			season = *in.Season
+		}
+		stream, err := s.Art(ctx, mediaapp.ArtInput{Kind: in.Kind, Name: name, Season: season})
 		if err != nil {
 			return application.Read[api.Binary]{}, err
 		}
