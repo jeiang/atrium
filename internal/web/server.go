@@ -237,7 +237,6 @@ func New(o Options) (*Server, error) {
 		deps.OnFrame = o.Render.OnFrame
 	}
 	deps.coreRoutes = func(d *Deps) {
-		d.API(http.MethodGet, "/me", me)
 		d.Authenticated(http.MethodGet, authSettingsPath, s.signInPage)
 		d.Authenticated(http.MethodPost, authSettingsPath+"/tokens", s.tokenIssue)
 		d.Authenticated(http.MethodPost, authSettingsPath+"/tokens/{id}/revoke", s.tokenRevoke)

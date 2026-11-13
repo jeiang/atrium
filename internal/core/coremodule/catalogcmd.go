@@ -28,6 +28,7 @@ type catalogOperation struct {
 	Authority []application.Authority `json:"authority"`
 	Effect    application.Effect      `json:"effect"`
 	Audit     bool                    `json:"audit"`
+	Area      application.Area        `json:"area,omitempty"`
 	Bindings  []catalogBinding        `json:"bindings"`
 	APIRoutes []string                `json:"api_routes"`
 }
@@ -49,9 +50,9 @@ func catalogCommand(mc module.Context) *cli.Command {
 		Help: "list application operations and their bindings",
 		Setup: func(a *cli.Args) cli.Handler {
 			asJSON := a.Bool("json", cli.Opt{Help: "print JSON"})
-			missing := a.Bool("missing-api", cli.Opt{Help: "list only operations without an API binding"})
+			missing := a.Bool("missing-api", cli.Opt{Help: "list only operator operations without a typed API binding"})
 			unbound := a.Bool("unbound", cli.Opt{Help: "also list mounted routes, commands, tools, jobs and services without a binding"})
-			require := a.Bool("require-api", cli.Opt{Help: "exit 1 when an operation has no API binding"})
+			require := a.Bool("require-api", cli.Opt{Help: "exit 1 when an operator operation has no typed API binding"})
 			return func(env *cli.Env) int {
 				cat := mc.Catalog()
 				report := catalogReport{Operations: catalogOperations(cat, *missing || *require)}
@@ -82,16 +83,20 @@ func catalogCommand(mc module.Context) *cli.Command {
 
 func catalogOperations(cat *module.Catalog, missingAPI bool) []catalogOperation {
 	bound := map[application.Name][]catalogBinding{}
+	areas := map[application.Name]application.Area{}
 	for _, b := range cat.Bindings() {
 		for _, name := range b.Uses {
 			bound[name] = append(bound[name], catalogBinding{Kind: b.Kind, Target: b.Target})
+			if _, ok := areas[name]; !ok && b.API != nil {
+				areas[name] = b.API.Area
+			}
 		}
 	}
 	out := []catalogOperation{}
 	for _, op := range cat.Operations() {
 		row := catalogOperation{
 			Module: op.Module, Name: op.Name, Kind: op.Kind, Input: op.Input.String(), Output: op.Output.String(),
-			Authority: op.Authority, Effect: op.Effect, Audit: op.Audit, Bindings: bound[op.Name], APIRoutes: []string{},
+			Authority: op.Authority, Effect: op.Effect, Audit: op.Audit, Area: areas[op.Name], Bindings: bound[op.Name], APIRoutes: []string{},
 		}
 		slices.SortFunc(row.Bindings, func(a, b catalogBinding) int {
 			return cmp.Or(cmp.Compare(a.Kind, b.Kind), cmp.Compare(a.Target, b.Target))
@@ -101,12 +106,18 @@ func catalogOperations(cat *module.Catalog, missingAPI bool) []catalogOperation 
 				row.APIRoutes = append(row.APIRoutes, b.Target)
 			}
 		}
-		if missingAPI && len(row.APIRoutes) > 0 {
+		if missingAPI && (row.Area != "" || !operatorAuthority(op.Authority)) {
 			continue
 		}
 		out = append(out, row)
 	}
 	return out
+}
+
+func operatorAuthority(authority []application.Authority) bool {
+	return slices.ContainsFunc(authority, func(a application.Authority) bool {
+		return a == application.Operator || a == application.OperatorSend || a == application.Approved
+	})
 }
 
 func catalogUnboundItems(env *cli.Env, cat *module.Catalog) ([]catalogUnbound, error) {
@@ -128,7 +139,7 @@ func catalogUnboundItems(env *cli.Env, cat *module.Catalog) ([]catalogUnbound, e
 
 func printCatalog(env *cli.Env, report catalogReport) {
 	w := tabwriter.NewWriter(env.Stdout, 0, 0, 2, ' ', 0)
-	_, _ = fmt.Fprintln(w, "MODULE\tNAME\tKIND\tINPUT\tOUTPUT\tAUTHORITY\tEFFECT\tAUDIT\tBINDINGS")
+	_, _ = fmt.Fprintln(w, "MODULE\tNAME\tKIND\tAREA\tINPUT\tOUTPUT\tAUTHORITY\tEFFECT\tAUDIT\tBINDINGS")
 	for _, op := range report.Operations {
 		authority := make([]string, len(op.Authority))
 		for i, a := range op.Authority {
@@ -138,7 +149,7 @@ func printCatalog(env *cli.Env, report catalogReport) {
 		for i, b := range op.Bindings {
 			targets[i] = string(b.Kind) + ":" + b.Target
 		}
-		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%t\t%s\n", op.Module, op.Name, op.Kind, op.Input, op.Output,
+		_, _ = fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%t\t%s\n", op.Module, op.Name, op.Kind, cmp.Or(op.Area, "-"), op.Input, op.Output,
 			strings.Join(authority, ","), op.Effect, op.Audit, strings.Join(targets, " "))
 	}
 	if len(report.Unbound) > 0 {
